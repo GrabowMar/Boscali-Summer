@@ -14,8 +14,8 @@ namespace BoscaliSummer.Vanguard
     /// SKYWELL pit-stop sim hooks (tests/ingame/vg-skywell.json). Inert outside a nomodkit scenario, like the rest of Step.
     /// A receiver is named with <c>"rx": "&lt;registered id&gt;"</c> (the runner passes the live aircraft as <c>rxUnit</c>), so a
     /// scenario can queue several receivers on one tanker and read each one's own tally afterwards, with no timing guesses.
-    /// A hook that names an <c>rx</c> never falls back to the global <c>receiver</c>: only a call without <c>rx</c> (the legacy
-    /// skywell.json path) does.
+    /// A hook that names an <c>rx</c> never falls back to the global <c>receiver</c>: only a call without <c>rx</c> (the
+    /// vg-skywell-hold.json and vg-skywell-chimera.json path) does.
     /// </summary>
     public static partial class VanguardAutomation
     {
@@ -34,6 +34,34 @@ namespace BoscaliSummer.Vanguard
             foreach (StandardLoadout sl in a.definition.aircraftParameters.StandardLoadouts ?? Array.Empty<StandardLoadout>())
                 if (sl?.loadout?.weapons != null && sl.loadout.weapons.Exists(w => w != null)) return sl.loadout;
             return null;
+        }
+
+        /// <summary>
+        /// Give an addon aircraft's prefab (<c>type</c>: unit-name substring) a network prefab hash when it has none, before a scenario
+        /// spawns it. The Aryx MC-260 Chimera ships with hash 0 and Blueprinter assigns one while it loads, in the menu. Under the sim's
+        /// -autoHost the mission scene loads before Blueprinter is done: the prefab, not referenced by the encyclopedia yet, is unloaded
+        /// with the menu and comes back from its bundle with hash 0, and the spawner throws "Empty prefabHash and sceneId". Blueprinter's
+        /// own rule: the lowest free positive hash. Host only (a client would need the same hash registered), which is all a scenario is.
+        /// </summary>
+        private static Dictionary<string, object> NetPrefab(string type)
+        {
+            AircraftDefinition def = type == null ? null : Encyclopedia.i.aircraft.Find(d =>
+                d != null && d.unitPrefab != null && d.unitName.IndexOf(type, StringComparison.OrdinalIgnoreCase) >= 0);
+            if (def == null) return Failure("VanguardAutomation", "netprefab", "no aircraft type matches (is Blueprinter still loading?)");
+            var taken = new HashSet<int>();
+            foreach (Mirage.NetworkIdentity other in UnityEngine.Resources.FindObjectsOfTypeAll<Mirage.NetworkIdentity>()) taken.Add(other.PrefabHash);
+            int assigned = 0, free = 1, before = 0;
+            Mirage.NetworkIdentity[] identities = def.unitPrefab.GetComponentsInChildren<Mirage.NetworkIdentity>(true);
+            if (identities.Length > 0) before = identities[0].PrefabHash;
+            foreach (Mirage.NetworkIdentity identity in identities)
+            {
+                if (identity.PrefabHash != 0) continue;
+                while (!taken.Add(free)) free++;
+                identity.PrefabHash = free;
+                assigned++;
+            }
+            return new Dictionary<string, object> { ["ok"] = true, ["type"] = def.unitName, ["identities"] = identities.Length,
+                ["hashBefore"] = before, ["hash"] = identities.Length > 0 ? identities[0].PrefabHash : 0, ["assigned"] = assigned };
         }
 
         /// <summary>
@@ -88,7 +116,7 @@ namespace BoscaliSummer.Vanguard
         }
 
         /// <summary>
-        /// The SEATED jet flies itself to the box centre and holds it (<c>on</c> 1, default) through the same autopilot hold the AI receivers
+        /// The SEATED jet flies itself to the zone's hold slot and holds it (<c>on</c> 1, default) through the same flight hold the AI receivers
         /// use, or lets go (<c>on</c> 0). A scenario cannot press keys or fly the seated jet, so this is the sim's pilot; it writes controls
         /// only, never the airframe's body.
         /// </summary>
@@ -100,22 +128,33 @@ namespace BoscaliSummer.Vanguard
             return new Dictionary<string, object> { ["ok"] = true, ["flying"] = on ? 1 : 0 };
         }
 
-        /// <summary>One-shot: when the named receiver next enters Transfer, spawn the usual threat on it (hot-break check).</summary>
+        /// <summary>
+        /// One-shot: <c>delay</c> seconds after the named receiver next enters Transfer, spawn the usual threat on it (hot-break check; the delay
+        /// lets the stop commit a job first). An IR threat only tracks when the bandit's side has a track on the receiver (the seeker drops its
+        /// target at launch otherwise, and nothing is "inbound"); a radar threat launched inside 7 km finds it by itself.
+        /// </summary>
         private static Dictionary<string, object> SkywellThreatWhen(Aircraft bandit, Dictionary<string, object> args)
         {
             Aircraft victim = Rx(args);
             if (victim == null || bandit == null) return Failure("VanguardAutomation", "threatwhen", "need a registered rx and a bandit");
-            float range = Number(args, "range", 6000f), climb = Number(args, "climb", 0f);
+            float range = Number(args, "range", 6000f), climb = Number(args, "climb", 0f), delay = Number(args, "delay", 0f);
             string seeker = Text(args, "seeker") ?? "IR";
             Action<Aircraft, Aircraft> arm = null;
             arm = (t, r) =>
             {
                 if (r != victim) return;
                 SkywellService.TransferStarted -= arm;
-                Threat(bandit, victim, range, seeker, climb);
+                if (delay <= 0f) Threat(bandit, victim, range, seeker, climb);
+                else t.StartCoroutine(After(delay, () => Threat(bandit, victim, range, seeker, climb))); // the tanker hosts the timer
             };
             SkywellService.TransferStarted += arm;
             return new Dictionary<string, object> { ["ok"] = true };
+        }
+
+        private static System.Collections.IEnumerator After(float seconds, Action action)
+        {
+            yield return new UnityEngine.WaitForSeconds(seconds);
+            action();
         }
 
         /// <summary>
@@ -173,30 +212,40 @@ namespace BoscaliSummer.Vanguard
             state["pitHandoffs"] = VanguardStats.Get("skywell.handoff");
             state["pitFuelJobs"] = VanguardStats.Get("skywell.fuelJob");
             state["pitBreaks"] = VanguardStats.Get("skywell.hotBreak");
-            state["pitBoxLost"] = VanguardStats.Get("skywell.boxLost");
+            state["pitZoneLost"] = VanguardStats.Get("skywell.zoneLost");
             state["pitPriorityFirst"] = VanguardStats.Get("skywell.priorityFirst");
             state["pitSeconds"] = VanguardStats.Get("skywell.pitTenths") / 10f;
+            state["pitTimeouts"] = VanguardStats.Get("skywell.timeout");
+            state["pitAutoReel"] = VanguardStats.Get("skywell.autoReel");
+            state["pitRestocks"] = VanguardStats.Get("skywell.restock");
             // What the last hot-break victim held when it was released (the victim itself may be dead by the time anyone asks).
             state["pitBreakHandoffs"] = VanguardStats.Get("skywell.breakHandoffs");
             state["pitBreakFuelJobs"] = VanguardStats.Get("skywell.breakFuelJobs");
             state["pitBreakJobIndex"] = VanguardStats.Get("skywell.breakJobIndex");
-            state["kiteReach"] = SkywellVisuals.ProbeReach;
-            state["kiteNozzle"] = SkywellVisuals.ProbeNozzle;
-            state["kiteReachMax"] = SkywellVisuals.ProbeReachMax;
-            state["kiteNozzleMax"] = SkywellVisuals.ProbeNozzleMax;
-            state["kiteRoundMin"] = SkywellVisuals.ProbeRoundMin;
-            // Glider-to-airframe clearance while a stop is in its job phase (box distance to the receiver's bounds): it must sit under the belly.
+            state["holdProbe"] = SkywellVisuals.HoldProbe;
+            state["rigProbe"] = SkywellVisuals.Probe;
+            state["rigJoints"] = SkywellVisuals.ProbeJoints;
+            // What the player would see wrong, as numbers (SkywellVisuals probes): the tender root's distance to the receiver's airframe bounds
+            // while the host serves it, the joints really driven, and how close two friendly aircraft ever came.
             state["serveGapMax"] = SkywellVisuals.ServeGapMax;
             state["serveGapMin"] = SkywellVisuals.ServeGapMin;
             state["serveGapSamples"] = SkywellVisuals.ServeGapSamples;
+            state["armReachMax"] = SkywellVisuals.ProbeReachMax;
+            state["boomPlugMax"] = SkywellVisuals.ProbeBoomMax;
+            state["wingSpreadMax"] = SkywellVisuals.ProbeSpreadMax;
+            state["nacelleTiltMin"] = SkywellVisuals.ProbeTiltMin;
+            state["fanTurns"] = SkywellVisuals.ProbeFanTurns;
+            state["tetherMax"] = SkywellVisuals.ProbeTetherMax;
+            state["minSeparation"] = SkywellVisuals.ProbeMinSeparation;
             if (tanker != null && SkywellBoard.Views.TryGetValue(tanker.persistentID.Id, out SkywellView view))
             {
-                state["skywellPhaseN"] = (int)view.Phase;
+                state["skywellStateN"] = (int)view.State;
                 state["pitJobKindN"] = (int)view.Job;
                 state["pitJobIndex"] = view.JobIndex;
                 state["pitJobCount"] = view.JobCount;
                 state["pitFlags"] = view.Flags;
                 state["pitOrder"] = (int)view.Order;
+                state["skywellRoundsN"] = view.Rounds;
             }
         }
     }

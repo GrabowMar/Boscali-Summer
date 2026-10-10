@@ -79,15 +79,6 @@ namespace BoscaliSummer.Tests.Features.Vanguard
                 !SeductionRule.SeducesTowed("IR", 2000f, -0.8f, 0.01f) &&
                 !SeductionRule.SeducesTowed("ARH", 4000f, -0.8f, 0.01f), "towed decoy: radar, close, rear-biased");
 
-            TestAssert.That(SkywellContact.Captures(new Vector3(0f, 0f, -40f), 10f, true) &&
-                !SkywellContact.Captures(new Vector3(0f, 0f, -120f), 10f, true) &&
-                !SkywellContact.Captures(new Vector3(0f, 0f, -40f), 40f, true) &&
-                !SkywellContact.Captures(new Vector3(0f, 0f, -40f), 10f, false), "SKYWELL capture zone");
-            TestAssert.That(SkywellContact.TransferSeconds(8000f, 0) == 20f && SkywellContact.TransferSeconds(0f, 0) == 3f,
-                "transfer time clamps to 3..20 s");
-            TestAssert.That(SkywellContact.Aborts(30f, false) && SkywellContact.Aborts(0f, true) && !SkywellContact.Aborts(1f, false),
-                "contact aborts on distance or stick");
-
             float stock = 100f, funds = 0f;
             int[] rounds = RearmAllocation.Allocate(new List<RearmAllocation.StationNeed>
             {

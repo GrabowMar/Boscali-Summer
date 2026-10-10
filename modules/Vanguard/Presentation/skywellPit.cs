@@ -5,160 +5,120 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Vanguard.Presentation
 {
     /// <summary>
-    /// SKYWELL PIT STOP on every peer: job-change bookkeeping, the hot-swap round, latches, lamps and wingtip trails.
-    /// Everything is derived from the published <see cref="SkywellView"/>; no per-frame traffic.
+    /// SKYWELL PIT STOP on every peer: job-change bookkeeping, the tether, lamps. Everything is derived from the published
+    /// <see cref="SkywellView"/>; no per-frame traffic.
     /// </summary>
     internal sealed partial class SkywellVisuals
     {
-        private const float HotKiteSpeed = 28f;   // m/s snapping back to the tow position after a hot break
-
         private static readonly Color Teal = new Color(0.10f, 0.85f, 0.80f);
         private static readonly Color Amber = new Color(1f, 0.55f, 0.05f);
         private static readonly Color Green = new Color(0.10f, 1f, 0.25f);
         private static readonly Color Red = new Color(1f, 0.08f, 0.05f);
         private static readonly Color Blue = new Color(0.35f, 0.80f, 1f);
-        private static readonly Color NavRed = new Color(1f, 0.05f, 0.05f);
-        private static readonly Color NavGreen = new Color(0.05f, 1f, 0.20f);
 
-        // Sim diagnostics (status: kiteReach / kiteNozzle / ...Max / kiteRoundMin): the joints really were driven.
-        internal static float ProbeReach, ProbeNozzle, ProbeReachMax, ProbeNozzleMax, ProbeRoundMin = 1f;
-
-        private static Material trailMaterial;
         private static readonly MaterialPropertyBlock TetherBlock = new MaterialPropertyBlock();
+        private Material tetherMaterial;
 
         /// <summary>
-        /// A job (or receiver, or phase) just changed: restart the job clock and decide where the loader comes from.
-        /// The previous handoff having committed means its real missile is on the rail now, so the cradle round vanishes.
+        /// A job (or receiver, or state) just changed: restart the job clock, and pick the magazine slot a hand-off takes its round from.
+        /// A round handed over (the magazine count dropped) flashes the gripper's lamp.
         /// </summary>
         private static void PitSync(Rig rig, SkywellView v)
         {
             bool receiverChanged = v.Receiver != rig.LastReceiver;
-            if (v.Job != rig.LastJob || v.JobStation != rig.LastStation || v.JobIndex != rig.LastIndex || v.Phase != rig.LastPhase || receiverChanged)
+            if (v.Job != rig.LastJob || v.JobStation != rig.LastStation || v.JobIndex != rig.LastIndex || v.State != rig.LastState || receiverChanged)
             {
-                bool wasStation = rig.LastJob == PitJobKind.Handoff || rig.LastJob == PitJobKind.Cassette;
-                bool isStation = v.Job == PitJobKind.Handoff || v.Job == PitJobKind.Cassette;
-                bool committed = !receiverChanged && v.JobIndex > rig.LastIndex;
+                if (!receiverChanged && v.JobIndex > rig.LastIndex) rig.CommitFlash = Time.time;
                 rig.JobStart = Time.time;
-                rig.From = wasStation && !receiverChanged ? PitFrom.Again : PitFrom.Home;
-                rig.RoundHidden = wasStation && committed;
-                if (committed)
-                {
-                    rig.CommitFlash = Time.time;
-                    if (wasStation && !isStation) rig.RoundVis = 0f; // last handoff: the arm reloads its cradle on the way home
-                }
-                if (isStation)
-                {
-                    Aircraft r = Resolve(v.Receiver);
-                    WeaponInfo info = r != null && r.weaponStations != null && v.JobStation < r.weaponStations.Count ? r.weaponStations[v.JobStation]?.WeaponInfo : null;
-                    rig.RoundFactor = v.Job == PitJobKind.Cassette ? 0.55f
-                        : info != null ? Mathf.Clamp(Mathf.Pow(info.massPerRound / 120f, 1f / 3f), 0.55f, 1.5f) : 1f;
-                }
+                rig.ArmClock = 0f; // the arm's clock starts when the tender is in place for the new job
+                bool handoff = v.Job == PitJobKind.Handoff || v.Job == PitJobKind.Cassette;
+                int slot = SkywellMagazine.NextSlot(v.Rounds);
+                rig.CarrySlot = handoff && SkywellTender.Serving(v.State) && slot < SkywellMagazine.Rounds ? slot : -1;
                 rig.LastJob = v.Job;
                 rig.LastStation = v.JobStation;
                 rig.LastIndex = v.JobIndex;
-                rig.LastPhase = v.Phase;
+                rig.LastState = v.State;
                 rig.LastReceiver = v.Receiver;
             }
+            if (v.Rounds < rig.LastRounds) rig.CommitFlash = Time.time;
+            rig.LastRounds = v.Rounds;
         }
 
-        /// <summary>The round in the cradle: shown while reaching, gone at the commit, regrown from the belly magazine for the next.</summary>
-        private static void PoseRound(Rig rig, bool stationStage, float jobTime, float dt)
-        {
-            rig.RoundVis = stationStage ? PitStaging.RoundScale(jobTime, rig.RoundHidden) : Mathf.MoveTowards(rig.RoundVis, 1f, dt / 0.7f);
-            if (rig.RoundJ.T == null) return;
-            rig.RoundJ.T.localScale = rig.RoundJ.Scale * Mathf.Max(0.001f, rig.RoundVis * rig.RoundFactor);
-        }
-
-        /// <summary>Hold-down latches flop open as the kite lifts off and close when it is home.</summary>
-        private static void PoseLatches(Rig rig)
-        {
-            float w = Mathf.SmoothStep(0f, 1f, rig.Deploy >= 1f ? Mathf.Clamp01(rig.Launch / 0.06f) : 0f);
-            if (rig.LatchR.T != null) rig.LatchR.T.localRotation = rig.LatchR.Rot * Quaternion.AngleAxis(70f * w, Vector3.up);
-            if (rig.LatchL.T != null) rig.LatchL.T.localRotation = rig.LatchL.Rot * Quaternion.AngleAxis(-70f * w, Vector3.up);
-        }
-
-        /// <summary>Deck chase, kite pips, cradle lamps, boom ring and nav lights; red blink on a hot break.</summary>
-        private static void PoseGlow(Rig rig, SkywellView v, bool hot, float connected)
+        /// <summary>Deck chase, tender and fan lamps, boom tip and gripper; red blink on a hot break.</summary>
+        private static void PoseGlow(Rig rig, SkywellView v, bool hot)
         {
             float t = Time.time;
             bool blink4 = Mathf.Repeat(t * 4f, 1f) < 0.5f, blink2 = Mathf.Repeat(t * 2f, 1f) < 0.5f;
+            TenderState s = v.State;
+            bool moving = SkywellTender.Moving(s);
 
             if (hot) rig.GlowDeck.Set(Red, blink4 ? 1.8f : 0.2f);
-            else if (rig.Deploy > 0f && rig.Deploy < 1f) rig.GlowDeck.Set(Amber, blink2 ? 1.6f : 0.2f);
+            else if (moving) rig.GlowDeck.Set(Amber, blink2 ? 1.6f : 0.2f);
             else rig.GlowDeck.Clear();
 
-            if (hot) rig.GlowKite.Set(Red, blink4 ? 1.5f : 0.2f);
-            else if (v.Phase == SkywellPhase.Engage) rig.GlowKite.Set(Amber, 1.4f);
-            else if (v.Phase == SkywellPhase.Transfer) rig.GlowKite.Set(Amber, 1f + 0.4f * Mathf.Sin(t * Mathf.PI * 6f));
-            else if (v.Phase == SkywellPhase.Served) rig.GlowKite.Set(Green, 1.5f);
-            else rig.GlowKite.Set(Teal, 0.5f);
+            if (hot) rig.GlowTender.Set(Red, blink4 ? 1.5f : 0.2f);
+            else if (s == TenderState.Approach || s == TenderState.Station) rig.GlowTender.Set(Amber, 1.4f);
+            else if (s == TenderState.Service) rig.GlowTender.Set(Amber, 1f + 0.4f * Mathf.Sin(t * Mathf.PI * 6f));
+            else if (moving) rig.GlowTender.Set(Amber, blink2 ? 1.2f : 0.2f);
+            else if (s == TenderState.Stowed) rig.GlowTender.Clear();
+            else rig.GlowTender.Set(Teal, 0.5f);
 
-            if (t - rig.CommitFlash < 0.25f) rig.GlowCradle.Set(Green, 1.8f);
-            else if (rig.Reach >= 0.1f && rig.RoundVis > 0.5f) rig.GlowCradle.Set(Amber, 1.4f);
-            else rig.GlowCradle.Set(Teal, 0.15f);
+            float power = SkywellTender.FanPower(s, SkywellTender.Progress(s, v.StateAge));
+            bool strobe = Mathf.Repeat(t, 1f) < 0.1f; // 1 Hz strobe, 0.1 s on
+            for (int i = 0; i < 4; i++)
+            {
+                if (power < 0.05f) rig.GlowFans[i].Clear();
+                else if (hot) rig.GlowFans[i].Set(Red, blink4 ? 1.5f : 0.2f);
+                else if (strobe) rig.GlowFans[i].Set((i & 1) == 0 ? Red : Green, 1.5f);
+                else rig.GlowFans[i].Set(Teal, 0.2f + 0.6f * power);
+            }
 
-            if (connected > 0.5f) rig.GlowNozzle.Set(Blue, 1.2f + 0.6f * Mathf.Sin(t * Mathf.PI * 8f));
+            if (rig.Swing > 0.5f) rig.GlowNozzle.Set(Blue, 1.2f + 0.6f * Mathf.Sin(t * Mathf.PI * 8f));
             else rig.GlowNozzle.Set(Teal, 0.6f);
 
-            if (rig.Launch > 0.5f)
-            {
-                bool flash = Mathf.Repeat(t, 1f) < 0.1f; // 1 Hz strobe, 0.1 s on
-                rig.GlowTipL.Set(NavRed, flash ? 1.5f : 0.25f);
-                rig.GlowTipR.Set(NavGreen, flash ? 1.5f : 0.25f);
-            }
-            else
-            {
-                rig.GlowTipL.Clear();
-                rig.GlowTipR.Clear();
-            }
+            if (t - rig.CommitFlash < 0.25f) rig.GlowGripper.Set(Green, 1.8f);
+            else if (rig.Reach >= 0.1f) rig.GlowGripper.Set(Amber, 1.4f);
+            else rig.GlowGripper.Set(Teal, 0.15f);
         }
 
-        /// <summary>Vapour trails off the winglet fins once the glider is flying.</summary>
-        private void PoseTrails(Rig rig, bool on, Vector3 left, Vector3 right, float dt)
+        /// <summary>
+        /// Fuel + power tether from the deck winch to the tender's TetherPoint, with a catenary-ish sag (a taut tow barely sags, a slack
+        /// tether on station sags a few percent of its length). While a receiver is served the line sags until it comes level into the
+        /// tender's nose from ahead: under the receiver's nose, never across the airframe.
+        /// </summary>
+        /// <returns>The line's length, m (0 when it is not shown).</returns>
+        private float PoseTether(Rig rig, Transform tt, TenderState state, float p, Aircraft receiver, float attach, float dt)
         {
-            // A floating-origin shift (>= 1 km) moves the whole world but strands the trails' world-space points at the old
-            // coordinates, which would smear a streak across the screen for their 0.6 s life: wipe them on a jump no speed explains.
-            Vector3 anchor = rig.Tanker.transform.position;
-            float reach = Mathf.Max(rig.Tanker.rb != null ? rig.Tanker.rb.velocity.magnitude : 0f, 300f) * dt + 200f;
-            if ((anchor - rig.TrailAnchor).sqrMagnitude > reach * reach)
+            bool show = rig.Winch.Ok && state != TenderState.Stowed && attach < 0.99f;
+            if (rig.Tether == null)
             {
-                if (rig.TrailL != null) rig.TrailL.Clear();
-                if (rig.TrailR != null) rig.TrailR.Clear();
+                if (!show) return 0f;
+                if (tetherMaterial == null)
+                {
+                    Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+                    if (shader == null) shader = Shader.Find("Sprites/Default");
+                    tetherMaterial = new Material(shader) { color = new Color(0.08f, 0.085f, 0.09f) };
+                }
+                rig.Tether = new GameObject("SkywellTether").AddComponent<LineRenderer>();
+                rig.Tether.sharedMaterial = tetherMaterial;
+                rig.Tether.positionCount = TetherPoints;
+                rig.Tether.widthMultiplier = 0.07f;
+                rig.Tether.numCapVertices = 2;
+                rig.Tether.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             }
-            rig.TrailAnchor = anchor;
-            if (rig.TrailL == null)
-            {
-                if (!on) return;
-                rig.TrailL = NewTrail();
-                rig.TrailR = NewTrail();
-                if (rig.TrailL == null) return;
-            }
-            rig.TrailL.emitting = rig.TrailR.emitting = on;
-            rig.TrailL.transform.position = left;
-            rig.TrailR.transform.position = right;
-        }
-
-        private static TrailRenderer NewTrail()
-        {
-            if (trailMaterial == null)
-            {
-                Shader shader = Shader.Find("Sprites/Default");
-                if (shader == null) return null;
-                trailMaterial = new Material(shader);
-            }
-            TrailRenderer trail = new GameObject("SkywellTrail").AddComponent<TrailRenderer>();
-            trail.sharedMaterial = trailMaterial;
-            trail.time = 0.6f;
-            trail.widthMultiplier = 0.09f;
-            trail.widthCurve = AnimationCurve.Linear(0f, 1f, 1f, 0f);
-            trail.minVertexDistance = 0.3f;
-            trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            trail.colorGradient = new Gradient
-            {
-                colorKeys = new[] { new GradientColorKey(new Color(0.92f, 0.94f, 0.96f), 0f), new GradientColorKey(new Color(0.92f, 0.94f, 0.96f), 1f) },
-                alphaKeys = new[] { new GradientAlphaKey(0.30f, 0f), new GradientAlphaKey(0f, 1f) },
-            };
-            return trail;
+            rig.Tether.enabled = show;
+            if (!show) return 0f;
+            TintTether(rig, rig.Swing);
+            rig.TetherAvoid = Mathf.MoveTowards(rig.TetherAvoid, receiver != null ? 1f : 0f, dt / 0.5f);
+            Vector3 a = rig.Winch.T.position + tt.up * 0.15f;
+            Vector3 b = rig.TetherPoint != null ? rig.TetherPoint.position : rig.Tender.T.position;
+            float length = Vector3.Distance(a, b);
+            float tension = state == TenderState.Tow || state == TenderState.Deploying || state == TenderState.Stowing ? 1f
+                : state == TenderState.Return ? 0.8f : state == TenderState.Approach ? 0.55f : 0.25f;
+            Vector3 control = SkywellTender.TetherControl(a, b, tension, rig.TetherAvoid, Vector3.up);
+            for (int i = 0; i < TetherPoints; i++)
+                rig.Tether.SetPosition(i, SkywellTender.Bezier(a, control, b, i / (float)(TetherPoints - 1)));
+            return length;
         }
 
         /// <summary>The tether turns blue-steel while fuel flows.</summary>

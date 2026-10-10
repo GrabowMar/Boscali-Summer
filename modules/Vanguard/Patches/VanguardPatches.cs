@@ -103,6 +103,13 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
         private static void Postfix(Pilot __instance) => Presentation.SkywellVisuals.SteerAfterPilot(__instance);
     }
 
+    // SKYWELL: the pilot state's own fly-by-wire pass is skipped for a steered receiver; the hold runs the only one (SkywellVisuals.MayFilter).
+    [HarmonyPatch(typeof(Aircraft), nameof(Aircraft.FilterInputs))]
+    internal static class SkywellFilterPatch
+    {
+        private static bool Prefix(Aircraft __instance) => Presentation.SkywellVisuals.MayFilter(__instance);
+    }
+
     // LANCE: the trigger charges the capacitor instead of firing; LanceService fires on release.
     [HarmonyPatch(typeof(Gun), nameof(Gun.Fire))]
     internal static class LanceFirePatch

@@ -139,6 +139,8 @@ class Frame:
             off = rel - t[:, None] * d.astype(np.float32)
             perp2 = np.einsum("ij,ij->i", off, off)
             cand = (perp2 < tol * tol) & ((K.N if idx is None else K.N[idx]) @ d.astype(np.float32) > 0.2)
+            if K.real is not None:  # never anchor on a bake-margin texel: between islands they hold blended positions
+                cand &= K.real if idx is None else K.real[idx]
             if cand.any():
                 break
         else:
@@ -216,7 +218,8 @@ class Frame:
             ib -= ib.min()
             key = ia * (int(ib.max()) + 1) + ib
             top = np.full(int(key.max()) + 1, -np.inf)
-            np.maximum.at(top, key, h)
+            real = K.real[sel] if K.real is not None else slice(None)  # margin texels never occlude the skin
+            np.maximum.at(top, key[real], h[real])
             slack = 0.0015 + cs * 1.5 * np.sqrt(np.clip(1 - face ** 2, 0, 1)) / np.maximum(face, 0.2)
             vis = h >= top[key] - slack
             sel, a, b = sel[vis], a[vis], b[vis]
@@ -247,8 +250,10 @@ class Kit:
         ok &= (area > 0.05 * self.px ** 2) & (area < 6 * self.px ** 2)
         ok[-1, :] = ok[:, -1] = False
         self.area = np.where(ok, area, self.px ** 2).reshape(-1)[self.idx].astype(np.float32)
+        self.real = None  # texels inside UV triangles (no bake margin); None = unknown, every texel counts
         if inside is not None:  # bake-margin texels duplicate surface elsewhere: keep them out of the fit metric
-            self.area *= inside.reshape(-1)[self.idx]
+            self.real = inside.reshape(-1)[self.idx]
+            self.area *= self.real
         self.base = base.reshape(-1, 3)[self.idx].copy()
         self.metal = metal.reshape(-1)[self.idx].copy()
         self.smooth = smooth.reshape(-1)[self.idx].copy()
@@ -807,7 +812,7 @@ def apply(spec, pos, nrm, covered, base, metal, smooth, height, noise, masks=Non
     """Run every kit layer. Returns (base, metal, smooth, height, shade, info); shade multiplies the final albedo
     (relief crevices = the baked-AO look). `masks` = (H, W, 3) from the masks bake pass: R = bevel-normal . normal,
     G = short-range AO (outside), B = short-range AO (inside, convexity). `inside` = texels inside UV triangles
-    (no bake margin), only used by the decal fit check."""
+    (no bake margin): the decal fit check counts only those, and only those anchor a frame or occlude in its depth test."""
     K = Kit(pos, nrm, covered, base, metal, smooth, inside)
     for item in expand(spec.get("relief")):
         RELIEF[item["kind"]](K, item)

@@ -11,12 +11,25 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
     /// <summary>Bit flags the host publishes with the SKYWELL view.</summary>
     internal static class PitFlags
     {
-        public const byte HotBreak = 1;
-        public const byte Nothing = 2;
-        public const byte FuelStockOut = 4;
-        public const byte MunitionStockOut = 8;
-        public const byte Capped = 16;     // the plan hit the 30 s / 14 job cap and dropped jobs: fly the box again for the rest
-        public const byte BoxLost = 32;    // the receiver left the service box (3 s after the glider let go)
+        public const ushort HotBreak = 1;
+        public const ushort Nothing = 2;
+        public const ushort FuelStockOut = 4;
+        public const ushort MunitionStockOut = 8;  // the magazine is empty
+        public const ushort Capped = 16;           // the plan hit the time / job cap and dropped jobs: fly the zone again for the rest
+        public const ushort ZoneLost = 32;         // the receiver left the service zone (3 s after the tender let go)
+        public const ushort OverSpeed = 64;        // the tanker is faster than the tether limit
+        public const ushort Refused = 128;         // a deploy request was refused (too low or too fast)
+        public const ushort AutoReel = 256;        // the winch is reeling the tender in by itself (too fast or too low)
+    }
+
+    /// <summary>Why the server let a receiver go (published with the kit view, so the receiver's own HUD can say it).</summary>
+    internal static class PitRelease
+    {
+        public const byte None = 0;
+        public const byte Served = 1;
+        public const byte ZoneLost = 2;
+        public const byte HotBreak = 3;
+        public const byte Aborted = 4;   // timed out, left the sky, kit stowed, receiver gone
     }
 
     /// <summary>One weapon station of the receiver as the planner sees it (live ammo, no game types).</summary>
@@ -32,37 +45,36 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public PitJobKind Kind;
         public int Station, Rounds;
         public float Seconds;
+        public float Commit; // seconds after the job starts when it is committed to the receiver
     }
 
     /// <summary>
-    /// SKYWELL pit-stop planner: which jobs a receiver in the box gets, in what order, and how long each takes.
-    /// Pure and deterministic; the service re-plans from live state at every job boundary.
+    /// SKYWELL pit-stop planner: which jobs a receiver in the zone gets, in what order, and how long each takes. Fuel is the tanker's
+    /// stock; munitions come one hand-off at a time from the tender's 6-round magazine (a belt station swaps as one cassette, which
+    /// also takes one slot). Pure and deterministic; the service re-plans from live state at every job boundary.
     /// </summary>
     internal static class PitPlan
     {
-        public const float FuelFlowKgS = 400f, FuelPlug = 0.9f, FuelUnplug = 0.6f, FuelMinFlow = 1.2f, FuelMaxFlow = 12f;
-        public const float FirstHandoff = 1.7f, NextHandoff = 1.5f, CassetteSwap = 2.4f, FuelFirstBelow = 0.35f;
+        public const float FuelFlowKgS = 400f, FuelPlug = 0.9f, FuelUnplug = 0.6f, FuelMinFlow = 1.2f, FuelMaxFlow = 12f, FuelFirstBelow = 0.35f;
+        public const float HandoffSeconds = SkywellHandoff.Total;    // 2.5: lift 0.8, latch 0.4, release + lower 0.8, carousel index 0.5
+        public const float TravelSeconds = 1.3f;   // the tender flies to another station / the receptacle: lower the arm, fly a few metres, settle
         public const float MaxSeconds = 30f, HotBreakTti = 7f, HotBreakClosing = 20f, FuelNeedFloorKg = 50f;
-        public const int MaxJobs = 14;
+        public const int MaxJobs = 8;
 
         private static readonly List<PitStation> candidates = new List<PitStation>(16);
-        private static readonly List<PitJob> munitions = new List<PitJob>(32);
+        private static readonly List<PitJob> munitions = new List<PitJob>(16);
 
         public static float FuelSeconds(float needKg) =>
             FuelPlug + Mathf.Clamp(needKg / FuelFlowKgS, FuelMinFlow, FuelMaxFlow) + FuelUnplug;
 
-        public static float HandoffSeconds(bool firstOfRun, bool belt) => belt ? CassetteSwap : firstOfRun ? FirstHandoff : NextHandoff;
-
         public static bool FuelFirst(float fuelFraction) => fuelFraction < FuelFirstBelow;
 
-        /// <summary>Rounds a station can still take from the stock and funds (mass- and funds-limited, like the vanilla rearmer).</summary>
-        public static int Take(PitStation s, int want, ref float stockKg, ref float funds, bool free)
+        /// <summary>Rounds a station can still be paid for (players pay per round; AI receivers are free), charged to <paramref name="funds"/>.</summary>
+        public static int Afford(PitStation s, int want, ref float funds, bool free)
         {
             if (s.Skip || want <= 0 || s.MassPerRound <= 0f) return 0;
-            int byMass = Mathf.FloorToInt(stockKg / s.MassPerRound);
             int byFunds = free || s.CostPerRound <= 0f ? int.MaxValue : Mathf.FloorToInt(funds / s.CostPerRound);
-            int rounds = Mathf.Max(0, Mathf.Min(want, Mathf.Min(byMass, byFunds)));
-            stockKg -= rounds * s.MassPerRound;
+            int rounds = Mathf.Max(0, Mathf.Min(want, byFunds));
             if (!free) funds -= rounds * s.CostPerRound;
             return rounds;
         }
@@ -79,16 +91,17 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
 
         /// <summary>Fills <paramref name="into"/> with the job list for this order and returns its length.</summary>
         public static int Plan(PitOrder order, float fuelNeedKg, float fuelFraction, float fuelStockKg, IList<PitStation> stations,
-            int priority, float munitionStockKg, float funds, bool free, List<PitJob> into) =>
-            Plan(order, fuelNeedKg, fuelFraction, fuelStockKg, stations, priority, munitionStockKg, funds, free, into, out _);
+            int priority, int magazineRounds, float funds, bool free, List<PitJob> into) =>
+            Plan(order, fuelNeedKg, fuelFraction, fuelStockKg, stations, priority, magazineRounds, funds, free, into, out _);
 
-        /// <param name="capped">True when the 30 s / 14 job cap dropped jobs (the pilot flies the box again for them).</param>
+        /// <param name="capped">True when the time / job cap dropped jobs (the pilot flies the zone again for them).</param>
         public static int Plan(PitOrder order, float fuelNeedKg, float fuelFraction, float fuelStockKg, IList<PitStation> stations,
-            int priority, float munitionStockKg, float funds, bool free, List<PitJob> into, out bool capped)
+            int priority, int magazineRounds, float funds, bool free, List<PitJob> into, out bool capped)
         {
             into.Clear();
             bool wantFuel = order != PitOrder.Munitions && fuelStockKg >= 1f && fuelNeedKg >= FuelNeedFloorKg;
-            var fuel = new PitJob { Kind = PitJobKind.Fuel, Station = -1, Seconds = FuelSeconds(Mathf.Min(fuelNeedKg, fuelStockKg)) };
+            float fuelSeconds = FuelSeconds(Mathf.Min(fuelNeedKg, fuelStockKg));
+            var fuel = new PitJob { Kind = PitJobKind.Fuel, Station = -1, Seconds = fuelSeconds, Commit = fuelSeconds - FuelUnplug };
 
             munitions.Clear();
             if (order != PitOrder.Fuel)
@@ -102,22 +115,41 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
                     while (at > 0 && Compare(s, candidates[at - 1], priority) < 0) at--;
                     candidates.Insert(at, s);
                 }
-                float stockLeft = munitionStockKg, fundsLeft = funds;
+                int slots = Mathf.Clamp(magazineRounds, 0, SkywellMagazine.Rounds);
+                float fundsLeft = funds;
                 foreach (PitStation s in candidates)
                 {
-                    int take = Take(s, s.Missing, ref stockLeft, ref fundsLeft, free);
-                    if (take <= 0) continue;
+                    if (slots <= 0) break;
                     if (s.Belt)
-                        munitions.Add(new PitJob { Kind = PitJobKind.Cassette, Station = s.Index, Rounds = take, Seconds = CassetteSwap });
-                    else
-                        for (int k = 0; k < take; k++)
-                            munitions.Add(new PitJob { Kind = PitJobKind.Handoff, Station = s.Index, Rounds = 1, Seconds = HandoffSeconds(k == 0, false) });
+                    {
+                        int bullets = Afford(s, s.Missing, ref fundsLeft, free);
+                        if (bullets <= 0) continue;
+                        munitions.Add(new PitJob { Kind = PitJobKind.Cassette, Station = s.Index, Rounds = bullets, Seconds = HandoffSeconds, Commit = SkywellHandoff.CommitAt });
+                        slots--;
+                        continue;
+                    }
+                    int take = Afford(s, Mathf.Min(s.Missing, slots), ref fundsLeft, free);
+                    for (int k = 0; k < take; k++)
+                        munitions.Add(new PitJob { Kind = PitJobKind.Handoff, Station = s.Index, Rounds = 1, Seconds = HandoffSeconds, Commit = SkywellHandoff.CommitAt });
+                    slots -= take;
                 }
             }
 
-            if (wantFuel && order == PitOrder.Both && FuelFirst(fuelFraction)) into.Add(fuel);
+            bool fuelFirst = order == PitOrder.Both && FuelFirst(fuelFraction);
+            if (wantFuel && fuelFirst) into.Add(fuel);
             into.AddRange(munitions);
-            if (wantFuel && !(order == PitOrder.Both && FuelFirst(fuelFraction))) into.Add(fuel);
+            if (wantFuel && !fuelFirst) into.Add(fuel);
+            // The tender is already in place for the first job of a stop (it flew straight to it); every later job at another station,
+            // or at the receptacle, starts with a short flight the job has to leave time for.
+            for (int i = 1; i < into.Count; i++)
+            {
+                PitJob previous = into[i - 1], job = into[i];
+                bool moves = job.Kind == PitJobKind.Fuel ? previous.Kind != PitJobKind.Fuel : previous.Kind == PitJobKind.Fuel || previous.Station != job.Station;
+                if (!moves) continue;
+                job.Seconds += TravelSeconds;
+                job.Commit += TravelSeconds;
+                into[i] = job;
+            }
 
             float total = 0f;
             int keep = 0;
@@ -145,38 +177,6 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         }
     }
 
-    /// <summary>Where the loader starts a job: Home = arm already down (stop start, after fuel), Again = it just committed a round up at the rail.</summary>
-    internal enum PitFrom { Home, Again }
-
-    /// <summary>Client staging timelines, seconds since a job's state change; the visuals drive joints straight from these.</summary>
-    internal static class PitStaging
-    {
-        public const float Slide = 0.7f, Up = 0.6f, Latch = 0.3f, Down = 0.5f;
-
-        private static float S(float x) => Mathf.SmoothStep(0f, 1f, x);
-
-        /// <summary>
-        /// Loader lift 0..1 along the straight line from the glider's carousel up to the pylon: a job from Home waits for the glider
-        /// to slide under the station (0.7 s), then rises 0.6 s and latches 0.3 s before the commit; a follow-on first lowers the arm
-        /// 0.5 s to take the next round, rises 0.6 s and latches 0.3 s.
-        /// </summary>
-        public static float Reach(float t, PitFrom from)
-        {
-            if (from == PitFrom.Home) return S(Mathf.Clamp01((t - Slide) / Up));
-            return t < Down ? Mathf.Lerp(1f, 0f, S(t / Down)) : S(Mathf.Clamp01((t - Down - 0.05f) / Up));
-        }
-
-        /// <summary>Cradle round visibility: a follow-on job regrows it from the belly magazine.</summary>
-        public static float RoundScale(float t, bool hiddenAtStart) => hiddenAtStart ? S(Mathf.Clamp01((t - 0.30f) / 0.25f)) : 1f;
-
-        /// <summary>Refuel boom plugged-in weight: plug, hold through the flow, unplug.</summary>
-        public static float Connected(float t, float flowSeconds)
-        {
-            float held = PitPlan.FuelPlug + flowSeconds;
-            return t < held ? S(Mathf.Clamp01((t - 0.25f) / 0.65f)) : 1f - S(Mathf.Clamp01((t - held) / 0.40f));
-        }
-    }
-
     /// <summary>HUD wording that is worth pinning in a test.</summary>
     internal static class PitCopy
     {
@@ -193,5 +193,8 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public static string OrderLabel(PitOrder order) => order == PitOrder.Fuel ? "FUEL ONLY" : order == PitOrder.Munitions ? "MUNITIONS ONLY" : "BOTH";
 
         public static string Kg(float kg) => (Mathf.Round(kg / 10f) * 10f).ToString("N0", CultureInfo.InvariantCulture);
+
+        /// <summary>"RDS 4/6": rounds left in the tender's magazine.</summary>
+        public static string Rounds(int left) => "RDS " + Mathf.Clamp(left, 0, SkywellMagazine.Rounds) + "/" + SkywellMagazine.Rounds;
     }
 }

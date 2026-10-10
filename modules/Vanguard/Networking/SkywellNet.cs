@@ -15,8 +15,8 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
     internal struct SkywellIntent
     {
         public byte Protocol;
-        public byte Action; // SkywellNet.Toggle / OrderAction (protocol 4: the dock / undock intents are gone)
-        public uint Tanker; // reserved (the host finds receivers by the service box itself)
+        public byte Action; // SkywellNet.Toggle / OrderAction
+        public uint Tanker; // reserved (the host finds receivers by the service zone itself)
         public byte Value;   // Order: PitOrder
         public byte Station; // Order: priority station + 1 (0 = none / auto)
     }
@@ -26,28 +26,31 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
     {
         public byte Protocol;
         public uint Tanker;
-        public bool Active;
-        public uint Receiver;
-        public byte Phase;
-        public float FuelKg;
-        public float StockKg;
+        public byte State;      // TenderState
+        public uint Receiver;   // the receiver being served, else 0
+        public ushort FuelKg;   // tanker fuel stock
+        public byte Rounds;     // rounds left in the tender's magazine
         public byte Order;      // PitOrder of the current receiver
         public byte Job;        // PitJobKind in flight
         public byte JobStation; // receiver station index, 255 = none
         public byte JobIndex;   // jobs committed so far
         public byte JobCount;   // committed + remaining
         public byte JobTenths;  // seconds of the job in flight x10
-        public byte Flags;      // PitFlags
+        public byte StateTenths; // seconds in this state x10 (late joiners animate from it)
+        public ushort Flags;    // PitFlags
         public ushort PitTenths;
+        public uint Released;   // last receiver let go ...
+        public byte ReleaseKind; // ... why (PitRelease) ...
+        public byte Cooldown;   // ... and for how many more seconds the server refuses it
     }
 
     /// <summary>
     /// SKYWELL wire: client intents (toggle own kit, set the pit-stop order; the host resolves the aircraft from the
-    /// sender, never from the message; a receiver asks for service by flying into the box, which the host sees itself) and the host's per-tanker state for every peer's visuals and assist.
+    /// sender, never from the message; a receiver asks for service by flying into the service zone, which the host sees itself) and the host's per-tanker state for every peer's visuals and assist.
     /// </summary>
     internal sealed class SkywellNet : MonoBehaviour, ISceneService
     {
-        internal const byte ProtocolVersion = 4;
+        internal const byte ProtocolVersion = 6;
         internal const byte Toggle = 0;
         internal const byte OrderAction = 3;
         private const float IntentInterval = 0.5f;
@@ -85,19 +88,22 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
                 {
                     w.WriteByte(v.Protocol);
                     w.WritePackedUInt32(v.Tanker);
-                    w.WriteBoolean(v.Active);
+                    w.WriteByte(v.State);
                     w.WritePackedUInt32(v.Receiver);
-                    w.WriteByte(v.Phase);
-                    w.WriteSingle(v.FuelKg);
-                    w.WriteSingle(v.StockKg);
+                    w.WritePackedUInt32(v.FuelKg);
+                    w.WriteByte(v.Rounds);
                     w.WriteByte(v.Order);
                     w.WriteByte(v.Job);
                     w.WriteByte(v.JobStation);
                     w.WriteByte(v.JobIndex);
                     w.WriteByte(v.JobCount);
                     w.WriteByte(v.JobTenths);
-                    w.WriteByte(v.Flags);
+                    w.WriteByte(v.StateTenths);
+                    w.WritePackedUInt32(v.Flags);
                     w.WritePackedUInt32(v.PitTenths);
+                    w.WritePackedUInt32(v.Released);
+                    w.WriteByte(v.ReleaseKind);
+                    w.WriteByte(v.Cooldown);
                 }),
                 (Func<NetworkReader, SkywellState>)(r =>
                 {
@@ -107,19 +113,22 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
                     {
                         Protocol = protocol,
                         Tanker = r.ReadPackedUInt32(),
-                        Active = r.ReadBoolean(),
+                        State = r.ReadByte(),
                         Receiver = r.ReadPackedUInt32(),
-                        Phase = r.ReadByte(),
-                        FuelKg = r.ReadSingle(),
-                        StockKg = r.ReadSingle(),
+                        FuelKg = (ushort)Math.Min(r.ReadPackedUInt32(), ushort.MaxValue),
+                        Rounds = r.ReadByte(),
                         Order = r.ReadByte(),
                         Job = r.ReadByte(),
                         JobStation = r.ReadByte(),
                         JobIndex = r.ReadByte(),
                         JobCount = r.ReadByte(),
                         JobTenths = r.ReadByte(),
-                        Flags = r.ReadByte(),
+                        StateTenths = r.ReadByte(),
+                        Flags = (ushort)Math.Min(r.ReadPackedUInt32(), ushort.MaxValue),
                         PitTenths = (ushort)Math.Min(r.ReadPackedUInt32(), ushort.MaxValue),
+                        Released = r.ReadPackedUInt32(),
+                        ReleaseKind = r.ReadByte(),
+                        Cooldown = r.ReadByte(),
                     };
                 }));
         }
@@ -152,7 +161,12 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             if (Time.unscaledTime >= nextResend && GameAccess.IsServer())
             {
                 nextResend = Time.unscaledTime + ResendInterval;
-                foreach (SkywellView view in SkywellBoard.Views.Values) Broadcast(view);
+                foreach (SkywellView view in SkywellBoard.Views.Values)
+                {
+                    SkywellView fresh = view;
+                    fresh.StateTenths = (byte)Mathf.Clamp(Mathf.RoundToInt(view.StateAge * 10f), 0, 255); // a late joiner animates from the real age
+                    Broadcast(fresh);
+                }
             }
             if (Time.unscaledTime < nextRegistration) return;
             nextRegistration = Time.unscaledTime + 0.5f;
@@ -170,19 +184,22 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             {
                 Protocol = ProtocolVersion,
                 Tanker = view.Tanker,
-                Active = view.Active,
+                State = (byte)view.State,
                 Receiver = view.Receiver,
-                Phase = (byte)view.Phase,
                 FuelKg = view.FuelKg,
-                StockKg = view.StockKg,
+                Rounds = view.Rounds,
                 Order = (byte)view.Order,
                 Job = (byte)view.Job,
                 JobStation = view.JobStation,
                 JobIndex = view.JobIndex,
                 JobCount = view.JobCount,
                 JobTenths = view.JobTenths,
+                StateTenths = view.StateTenths,
                 Flags = view.Flags,
                 PitTenths = view.PitTenths,
+                Released = view.Released,
+                ReleaseKind = view.ReleaseKind,
+                Cooldown = view.Cooldown,
             }, authenticatedOnly: true, excludeLocalPlayer: true);
         }
 
@@ -209,19 +226,23 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             SkywellBoard.Views[message.Tanker] = new SkywellView
             {
                 Tanker = message.Tanker,
-                Active = message.Active,
+                State = message.State <= (byte)TenderState.Stowing ? (TenderState)message.State : TenderState.Stowed,
                 Receiver = message.Receiver,
-                Phase = (SkywellPhase)message.Phase,
                 FuelKg = message.FuelKg,
-                StockKg = message.StockKg,
+                Rounds = (byte)Math.Min((int)message.Rounds, SkywellMagazine.Rounds),
                 Order = message.Order <= (byte)PitOrder.Munitions ? (PitOrder)message.Order : PitOrder.Both,
                 Job = message.Job <= (byte)PitJobKind.Cassette ? (PitJobKind)message.Job : PitJobKind.None,
                 JobStation = message.JobStation,
                 JobIndex = message.JobIndex,
                 JobCount = message.JobCount,
                 JobTenths = message.JobTenths,
+                StateTenths = message.StateTenths,
                 Flags = message.Flags,
                 PitTenths = message.PitTenths,
+                Released = message.Released,
+                ReleaseKind = message.ReleaseKind,
+                Cooldown = message.Cooldown,
+                At = Time.timeSinceLevelLoad,
             };
         }
 

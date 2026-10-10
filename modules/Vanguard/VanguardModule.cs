@@ -37,6 +37,7 @@ namespace BoscaliSummer.Modules.Vanguard
             typeof(Patches.SkywellLaunchPatch),
             typeof(Patches.SkywellFirePatch),
             typeof(Patches.SkywellHoldPatch),
+            typeof(Patches.SkywellFilterPatch),
             typeof(Patches.AlexPressPatch),
             typeof(Patches.AlexLaunchPatch),
             typeof(Patches.AlexDeflectArhPatch),
