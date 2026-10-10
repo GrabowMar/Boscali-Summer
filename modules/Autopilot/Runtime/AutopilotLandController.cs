@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Autopilot.Configuration;
 using BoscaliSummer.Modules.Autopilot.Domain;
 using BoscaliSummer.Core.Lifecycle;
@@ -8,6 +9,17 @@ using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Autopilot.Runtime
 {
+    /// <summary>What the APPROACH page needs of a landing the autopilot is flying: the chain stage, the runway (or pad) and the speed it is flying to.</summary>
+    internal struct AutolandView
+    {
+        public ApproachStage Stage;
+        public bool Pad, HasTarget;
+        public Airbase.Runway.RunwayUsage Usage;
+        public Airbase Airbase;
+        public Transform PadPoint;
+        public float TargetSpeed, TouchdownS;
+    }
+
     internal sealed class AutopilotLandController : MonoBehaviour, ISceneService
     {
         private enum Phase
@@ -36,6 +48,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         private Airbase.VerticalLandingPoint pad;
         private Phase phase;
         private float adjustedLandingSpeed;
+        private float hudTarget;
         private float alignedTime;
         private float touchdownTime;
         private float hoverTargetHeight;
@@ -108,6 +121,35 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             try { radius = airbase.GetRadius(); }
             catch { radius = 0f; }
             return landingDir.sqrMagnitude > 0.01f;
+        }
+
+        /// <summary>
+        /// The landing chain for the APPROACH page: INTERCEPT (pattern, join, or flying to a pad), GLIDE (final, approach, the pad descent), FLARE (the last five seconds to the
+        /// touchdown, the vertical lander's hover touchdown, the last metres over a pad) and ROLLOUT, with the runway and the speed the autopilot is flying to. False when nothing is
+        /// engaged. The phase enum stays private; the page reads this and never re-derives the state machine.
+        /// </summary>
+        internal bool TryHudLanding(out AutolandView view)
+        {
+            view = default;
+            if (!IsEngaged || aircraft == null || airbase == null) return false;
+            ApproachStage stage;
+            switch (phase)
+            {
+                case Phase.Pattern:
+                case Phase.Join:
+                case Phase.PadApproach: stage = ApproachStage.Intercept; break;
+                case Phase.Final: stage = ApproachStage.Glide; break;
+                case Phase.Approach: stage = touchdownTime < 5f && aircraft.radarAlt < 150f ? ApproachStage.Flare : ApproachStage.Glide; break;
+                case Phase.HoverTouchdown: stage = ApproachStage.Flare; break;
+                case Phase.Rollout: stage = ApproachStage.Rollout; break;
+                default: stage = aircraft.radarAlt < 5f ? ApproachStage.Flare : ApproachStage.Glide; break;
+            }
+            view = new AutolandView
+            {
+                Stage = stage, Pad = padLanding, Usage = runwayUsage, Airbase = airbase, PadPoint = pad != null ? pad.point : null,
+                HasTarget = !padLanding && phase != Phase.Rollout && hudTarget > 0f, TargetSpeed = hudTarget, TouchdownS = touchdownTime,
+            };
+            return true;
         }
 
         /// <summary>Distance to the field's own anchor, or -1 when it cannot be read.</summary>
@@ -365,6 +407,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             float heading = Vector3.Angle(aircraft.transform.forward, toGate);
             ControlInputs inputs = aircraft.GetInputs();
             float target = parameters.cornerSpeed;
+            hudTarget = target;
             LandingEnergy.Result energy = LandingEnergy.Compute(
                 aircraft.speed, target, adjustedLandingSpeed, parameters.cruiseThrottle,
                 aircraft.radarAlt, false, false, true, severity);
@@ -414,6 +457,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             aim += Vector3.RotateTowards(-direction * offset, -toAim, Mathf.PI * 0.5f, 0f);
 
             float target = parameters.cornerSpeed + FastMath.Distance(aircraft.GlobalPosition(), aim) * 0.02f;
+            hudTarget = target;
             ControlInputs inputs = aircraft.GetInputs();
             LandingEnergy.Result energy = LandingEnergy.Compute(
                 aircraft.speed, target, adjustedLandingSpeed, parameters.cruiseThrottle,
@@ -440,6 +484,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             if (reachedFinal) aim = touchdown + distance * 0.05f * Vector3.up;
 
             float target = adjustedLandingSpeed + 0.015f * Mathf.Max(distance - 500f, 0f);
+            hudTarget = target;
             ControlInputs inputs = aircraft.GetInputs();
             LandingEnergy.Result energy = LandingEnergy.Compute(
                 aircraft.speed, target, adjustedLandingSpeed, parameters.cruiseThrottle,
@@ -507,6 +552,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             float forwardAirspeed = Vector3.Dot(aircraft.transform.forward, aircraft.rb.velocity - wind);
             ControlInputs inputs = aircraft.GetInputs();
             bool flare = touchdownTime < 5f;
+            hudTarget = adjustedLandingSpeed + 5f;
             LandingEnergy.Result energy = LandingEnergy.Compute(
                 forwardAirspeed, adjustedLandingSpeed + 5f, adjustedLandingSpeed, parameters.cruiseThrottle,
                 aircraft.radarAlt, flare, false, carrier, severity);
@@ -707,6 +753,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             runwayUsage = default;
             phase = Phase.None;
             adjustedLandingSpeed = 0f;
+            hudTarget = 0f;
             alignedTime = 0f;
             touchdownTime = 0f;
             hoverTargetHeight = 0f;
