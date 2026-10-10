@@ -8,6 +8,9 @@ namespace BoscaliSummer.Tests.Features.Hud
         public static void Run()
         {
             foreach (string channel in HudGlyphs.Channels) Drawable(channel);
+            // Every channel a publisher uses has its own symbol: SKYWELL and LANCE fell back to the diamond.
+            foreach (string channel in new[] { "autopilot", "ils", "ace-hunt", "radio", "support", "theater", "skywell", "lance", "missile", "contracts", "comms", "events", "session", "weather" })
+                TestAssert.That(System.Linq.Enumerable.Contains(HudGlyphs.Channels, channel), "A symbol of its own for " + channel);
             Drawable(null);
             Drawable("nobody-declared-this");
 
@@ -19,6 +22,20 @@ namespace BoscaliSummer.Tests.Features.Hud
             Split("CONTACT 9.4 KM", "CONTACT", "9.4 KM");
             Split("SINK -12 M/S", "SINK M/S", "-12");
             Split("", "", "");
+
+            Resolve("ILS", 0.4f, "ILS", "40%");
+            Resolve("ILS", 0.55f, "ILS", "55%");
+            Resolve("FUEL 38%", 0.9f, "FUEL", "38%");
+            Resolve("LANCE", 0f, "LANCE", "");
+            Resolve("RADIO · AGRAPOL FM", 1.4f, "RADIO", "100%");
+            TestAssert.That(HudCellText.Percent(-1f) == "0%" && HudCellText.Percent(0.005f) == "1%", "Percent is clamped and rounded");
+        }
+
+        /// <summary>A constant text keeps its label while the figure follows the bar: the board used to freeze it.</summary>
+        private static void Resolve(string text, float bar, string label, string value)
+        {
+            HudCellText.Resolve(text, bar, out string l, out string v);
+            TestAssert.That(l == label && v == value, "Resolve '" + text + "' at " + bar + " -> '" + l + "' + '" + v + "'");
         }
 
         private static void Drawable(string channel)

@@ -106,7 +106,6 @@ namespace BoscaliSummer.Modules.Comms.Runtime
         private float heardAt = float.NegativeInfinity;
         private bool wasEnabled;
         private float nextSound;
-        private bool hudDeclared;
 
         public CommsClientState State => client;
         public ulong LocalId => client.LocalId;
@@ -166,7 +165,6 @@ namespace BoscaliSummer.Modules.Comms.Runtime
             HostSilent = false;
             nextSync = 0f;
             lastSyncSent = heardAt = float.NegativeInfinity;
-            hudDeclared = false;
         }
 
         private void OnDestroy()
@@ -383,11 +381,7 @@ namespace BoscaliSummer.Modules.Comms.Runtime
 
             bool sound = false;
             IHudBoard board = null;
-            if (settings.HudNotices.Value && ModuleServices.TryGet(out board) && !hudDeclared)
-            {
-                board.DeclareChannel(HudChannel, "COMMS");
-                hudDeclared = true;
-            }
+            if (settings.HudNotices.Value) ModuleServices.TryGet(out board);
             bool fromAircraft = GameManager.GetLocalAircraft(out Aircraft aircraft) && aircraft != null;
             GlobalPosition self = fromAircraft ? aircraft.transform.position.ToGlobalPosition() : default;
             for (int i = 0; i < arrivals.Count; i++)

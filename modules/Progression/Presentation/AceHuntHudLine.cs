@@ -21,12 +21,10 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
         protected override string Owner => WidgetOwner;
         protected override string ChannelKey => "ace-hunt";
-        protected override string ChannelLabel => "Ace hunt";
 
         internal void Configure(ISquadView view)
         {
             squad = view;
-            DeclareFeed();
         }
 
         protected override bool WantsLine()

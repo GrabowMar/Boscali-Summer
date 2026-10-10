@@ -25,9 +25,6 @@ namespace BoscaliSummer.Core.Contracts
     /// </summary>
     internal interface IHudBoard
     {
-        /// <summary>Name a feed. Kept so publishers stay unchanged; the board shows every feed.</summary>
-        void DeclareChannel(string key, string label);
-
         /// <summary>
         /// The line for (owner, key), created on first call and the same line every call after,
         /// so a feature may call this every tick. Returns null once the board is at its ceiling
@@ -36,8 +33,9 @@ namespace BoscaliSummer.Core.Contracts
         IHudLine Acquire(string owner, string channel, string key);
 
         /// <summary>
-        /// Show one transient line for <see cref="HudLayout.NoticeSeconds"/>. Re-pushing the same
-        /// channel and text refreshes the dwell instead of stacking a duplicate.
+        /// Show one transient notice on the board's one-line ticker. How long it stays depends on its tone (a Warning is
+        /// sticky), and re-pushing the same channel and text bumps a count ("x3") and refreshes the dwell instead of
+        /// stacking a duplicate.
         /// </summary>
         void Notice(string channel, HudTone tone, string text, string detail = null);
     }

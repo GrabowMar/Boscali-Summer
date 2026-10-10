@@ -40,20 +40,49 @@ namespace BoscaliSummer.Tests.Features.Hud
         private static void Shots()
         {
             var ledger = new ShotLedger();
+            Func<int, bool> allFlying = _ => true, noneFlying = _ => false;
             ledger.Launch(1, false, 0f);
             ledger.Launch(2, true, 0f);
             ledger.Detonate(1, true, 5f);
             TestAssert.That(ledger.State(0) == ShotState.Hit && ledger.State(1) == ShotState.InFlight, "Hit resolves only its own pip");
             ledger.Detonate(99, false, 5f);
             TestAssert.That(ledger.State(1) == ShotState.InFlight, "Unknown detonation changes nothing");
-            ledger.Expire(8f);
+            ledger.Expire(8f, allFlying);
             TestAssert.That(ledger.State(0) == ShotState.Empty, "Resolved pip clears after its hold");
-            ledger.Expire(200f);
-            TestAssert.That(ledger.State(1) == ShotState.Miss, "Two minutes in flight counts as a miss");
-            for (int i = 0; i < ShotLedger.Capacity + 3; i++) ledger.Launch(10 + i, false, 210f);
+
+            // A cruise missile in the air for twenty minutes is still a pip; pausing the game cannot age it out.
+            ledger.Expire(1200f, allFlying);
+            TestAssert.That(ledger.State(1) == ShotState.InFlight, "A weapon the game still has airborne never times out");
+            ledger.Expire(1202f, noneFlying);
+            TestAssert.That(ledger.State(1) == ShotState.InFlight, "A brief gap before the detonation RPC lands keeps the pip");
+            ledger.Expire(1204f, noneFlying);
+            TestAssert.That(ledger.State(1) == ShotState.Miss, "Gone from the air for the grace period with no detonation: a miss");
+
+            for (int i = 0; i < ShotLedger.Capacity + 3; i++) ledger.Launch(10 + i, false, 1210f);
             int flying = 0;
             for (int i = 0; i < ShotLedger.Capacity; i++) if (ledger.State(i) == ShotState.InFlight) flying++;
             TestAssert.That(flying == ShotLedger.Capacity, "A full ring keeps every pip in flight");
+
+            var legend = new ShotLedger();
+            TestAssert.That(legend.Legend == "", "No pips, no legend");
+            legend.Launch(1, false, 0f);
+            TestAssert.That(legend.Legend == "SHOT", "A pip in flight reads SHOT");
+            legend.Detonate(1, true, 1f);
+            TestAssert.That(legend.Legend == "HIT", "The latest outcome reads HIT");
+            legend.Launch(2, false, 1.5f);
+            legend.Detonate(2, false, 2f);
+            TestAssert.That(legend.Legend == "MISS", "A later miss replaces it");
+            legend.Expire(10f, null);
+            TestAssert.That(legend.Legend == "", "Resolved pips clear and take the legend with them");
+
+            TestAssert.That(ShotRules.Hit(true, false), "A dumb bomb that struck armour is a hit even with no target");
+            TestAssert.That(ShotRules.Hit(false, true), "A burst within 200 m of its target is a hit (even when it also flags the ground, as a ground target's impact does)");
+            TestAssert.That(!ShotRules.Hit(false, false), "A terrain-only impact or a self-destruct with no target in reach is a miss");
+
+            TestAssert.That(!ShotRules.IsDelivery(1f, false) && !ShotRules.IsDelivery(2f, false), "MALD-X/J and ALE-X decoys earn no pip");
+            TestAssert.That(!ShotRules.IsDelivery(0.2f, false) && !ShotRules.IsDelivery(0f, false), "AEGIS darts and GLAIVE pods earn no pip");
+            TestAssert.That(ShotRules.IsDelivery(60f, false) && ShotRules.IsDelivery(450f, false), "REMORA and ORCA strikes earn a pip");
+            TestAssert.That(!ShotRules.IsDelivery(500f, true), "A jammer is never a delivery");
         }
 
         private static void Test()

@@ -37,9 +37,9 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             return Follow(cam, missiles, IndexOf(missiles, first));
         }
 
-        public bool Next(IReadOnlyList<Missile> missiles) => Step(missiles, 1);
+        public bool Next(IReadOnlyList<Missile> missiles) => Step(missiles, 1, index >= 0 ? index : 0);
 
-        public bool Prev(IReadOnlyList<Missile> missiles) => Step(missiles, -1);
+        public bool Prev(IReadOnlyList<Missile> missiles) => Step(missiles, -1, index >= 0 ? index : 0);
 
         public void Exit()
         {
@@ -73,19 +73,22 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 returnState = null;
                 return;
             }
-            if (current.disabled || IndexOf(missiles, current) < 0)
+            int at = IndexOf(missiles, current);
+            if (current.disabled || at < 0)
             {
-                if (!Step(missiles, 1)) Exit();
+                // The followed one is gone: the missile that slid into its slot is next, not the one after it.
+                if (!Step(missiles, 1, index - 1)) Exit();
+                return;
             }
+            index = at;   // the list can reorder or shrink under us; the index must never go stale
         }
 
-        private bool Step(IReadOnlyList<Missile> missiles, int delta)
+        private bool Step(IReadOnlyList<Missile> missiles, int delta, int start)
         {
             if (missiles == null || missiles.Count == 0) return false;
             CameraStateManager cam = SceneSingleton<CameraStateManager>.i;
             if (cam == null) return false;
             int count = missiles.Count;
-            int start = index >= 0 ? index : 0;
             for (int step = 1; step <= count; step++)
             {
                 int next = (start + delta * step) % count;

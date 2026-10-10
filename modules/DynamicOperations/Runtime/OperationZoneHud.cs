@@ -24,6 +24,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         private const string Channel = "contracts";
 
         private const int MaxRows = 1;
+        private static readonly string[] CardKeys = { "card0" };
         private const float ContentSeconds = 0.25f;
         private const float ServerRefreshSeconds = 2f;
 
@@ -99,7 +100,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             }
 
             if (!ModuleServices.TryGet(out board)) return;
-            board.DeclareChannel(Channel, "CONTRACTS");
 
             var self = aircraft.transform.position.ToGlobalPosition().AsVector3();
             int shown = ContractSelection.Select(cards, count, self.x, self.z, selected, distances, MaxRows, manager.SelectedForHud);
@@ -122,11 +122,9 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 
         private void Write(int row, in ContractCard card, float distance, bool isInside, bool metric)
         {
-            if (lines[row] == null)
-            {
-                lines[row] = board.Acquire(Owner, Channel, "card" + row);
-                if (lines[row] == null) return;
-            }
+            // Acquire is idempotent and re-creates a line the store evicted, so a cached handle can never go dead.
+            lines[row] = board.Acquire(Owner, Channel, CardKeys[row]);
+            if (lines[row] == null) return;
 
             if (!card.HasMarker)
             {

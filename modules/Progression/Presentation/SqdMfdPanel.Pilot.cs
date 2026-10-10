@@ -116,7 +116,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 bool disabled = playerAircraft.disabled;
                 sortieGrid.Set(sortieCondition, disabled ? "DISABLED" : playerAircraft.IsLanded() ? "LANDED" : "AIRBORNE",
                     disabled ? AvState.Danger : AvState.Ready);
-                float fuel = Mathf.Clamp01(playerAircraft.fuelLevel);
+                float fuel = BoscaliSummer.Core.Game.AircraftReadout.Fuel(playerAircraft);
                 tileFuel.Set(AvNum.Percent(fuel), fuel <= .15f ? AvState.Caution : AvState.Inert);
                 tileSortie.Set(AvNum.Thousands(playerAircraft.sortieScore));
             }

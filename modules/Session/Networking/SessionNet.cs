@@ -404,7 +404,6 @@ namespace BoscaliSummer.Modules.Session.Networking
         private static void Notice(HudTone tone, string text, string detail)
         {
             if (!ModuleServices.TryGet(out IHudBoard board)) return;
-            board.DeclareChannel(HudChannel, "SESSION");
             board.Notice(HudChannel, tone, text, detail);
         }
 

@@ -22,18 +22,19 @@ namespace BoscaliSummer.Modules.Hud.Runtime
     /// </summary>
     internal sealed class ThirdPersonHudCenter
     {
-        private static readonly FieldInfo MarkersField = AccessTools.Field(typeof(CombatHUD), "markers");
-        private static readonly FieldInfo CanvasField = AccessTools.Field(typeof(FlightHud), "canvas");
-        private static readonly FieldInfo JamAccumulationField = AccessTools.Field(typeof(CombatHUD), "jamAccumulation");
-        private static readonly FieldInfo ObjectiveOverlayField = AccessTools.Field(typeof(CombatHUD), "objectiveOverlay");
-        private static readonly FieldInfo ObjectiveAircraftField = AccessTools.Field(typeof(ObjectiveOverlayManager), "aircraft");
-        private static readonly FieldInfo ObjectiveItemsField = AccessTools.Field(typeof(ObjectiveOverlayManager), "overlays");
-        private static readonly FieldInfo ObjectiveResultsField = AccessTools.Field(typeof(ObjectiveOverlayManager), "resultCache");
-        private static readonly FieldInfo TargetInfoField = AccessTools.Field(typeof(CombatHUD), "targetInfo");
-        private static readonly FieldInfo TargetTextField = AccessTools.Field(typeof(CombatHUD), "targetText");
-        private static readonly FieldInfo TargetArrowTailField = AccessTools.Field(typeof(CombatHUD), "targetArrowTail");
-        private static readonly FieldInfo AllyInfoTextField = AccessTools.Field(typeof(AllyInfo), "hoveredAllyInfo");
-        private static readonly FieldInfo AllyInfoMarkerField = AccessTools.Field(typeof(AllyInfo), "hoveredAllyMarker");
+        // Cached field refs (no boxing, no per-call reflection): this runs on every canvas preparation.
+        private static readonly AccessTools.FieldRef<CombatHUD, List<HUDUnitMarker>> Markers = NativeRefs.Field<CombatHUD, List<HUDUnitMarker>>("markers");
+        private static readonly AccessTools.FieldRef<FlightHud, Canvas> HudCanvas = NativeRefs.Field<FlightHud, Canvas>("canvas");
+        private static readonly AccessTools.FieldRef<CombatHUD, float> JamAccumulation = NativeRefs.Field<CombatHUD, float>("jamAccumulation");
+        private static readonly AccessTools.FieldRef<CombatHUD, ObjectiveOverlayManager> ObjectiveOverlayRef = NativeRefs.Field<CombatHUD, ObjectiveOverlayManager>("objectiveOverlay");
+        private static readonly AccessTools.FieldRef<ObjectiveOverlayManager, Aircraft> ObjectiveAircraft = NativeRefs.Field<ObjectiveOverlayManager, Aircraft>("aircraft");
+        private static readonly AccessTools.FieldRef<ObjectiveOverlayManager, List<ObjectiveOverlay>> ObjectiveItems = NativeRefs.Field<ObjectiveOverlayManager, List<ObjectiveOverlay>>("overlays");
+        private static readonly AccessTools.FieldRef<ObjectiveOverlayManager, List<MissionPosition.PositionResult>> ObjectiveResults = NativeRefs.Field<ObjectiveOverlayManager, List<MissionPosition.PositionResult>>("resultCache");
+        private static readonly AccessTools.FieldRef<CombatHUD, TextMeshProUGUI> TargetInfo = NativeRefs.Field<CombatHUD, TextMeshProUGUI>("targetInfo");
+        private static readonly AccessTools.FieldRef<CombatHUD, TextMeshProUGUI> TargetText = NativeRefs.Field<CombatHUD, TextMeshProUGUI>("targetText");
+        private static readonly AccessTools.FieldRef<CombatHUD, Transform> TargetArrowTail = NativeRefs.Field<CombatHUD, Transform>("targetArrowTail");
+        private static readonly AccessTools.FieldRef<AllyInfo, TextMeshProUGUI> AllyInfoText = NativeRefs.Field<AllyInfo, TextMeshProUGUI>("hoveredAllyInfo");
+        private static readonly AccessTools.FieldRef<AllyInfo, HUDUnitMarker> AllyInfoMarker = NativeRefs.Field<AllyInfo, HUDUnitMarker>("hoveredAllyMarker");
         private static readonly Action<CombatHUD> UpdateHitMarkers = AccessTools.MethodDelegate<Action<CombatHUD>>(
             AccessTools.Method(typeof(CombatHUD), "UpdateHitMarkers"));
         private static readonly Func<CombatHUD, bool> ShowTargetInfo = AccessTools.MethodDelegate<Func<CombatHUD, bool>>(
@@ -125,7 +126,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 CameraStateManager cam = SceneSingleton<CameraStateManager>.i;
                 if (hud == null || cam == null || cam.mainCamera == null) return false;
                 Camera camera = cam.mainCamera;
-                Canvas canvas = CanvasField?.GetValue(hud) as Canvas;
+                Canvas canvas = NativeRefs.Get(HudCanvas, hud);
                 Matrix4x4 view = camera.worldToCameraMatrix, projection = camera.projectionMatrix;
                 bool newFrame = lastProjectionFrame != Time.frameCount;
                 if (!force && !newFrame && lastCamera == camera && lastAircraft == aircraft &&
@@ -168,8 +169,8 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 {
                     // Only native projection methods: CombatHUD.LateUpdate also reads input,
                     // updates target cameras and decays jamming, so it must never be replayed.
-                    var markers = MarkersField?.GetValue(combatHud) as List<HUDUnitMarker>;
-                    float jam = JamAccumulationField?.GetValue(combatHud) is float value ? value : 0f;
+                    List<HUDUnitMarker> markers = NativeRefs.Get(Markers, combatHud);
+                    float jam = NativeRefs.Get(JamAccumulation, combatHud);
                     GlobalPosition viewPosition = cam.transform.GlobalPosition();
                     if (markers != null)
                         foreach (HUDUnitMarker marker in markers)
@@ -226,29 +227,29 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         private void RefreshAllyCaption()
         {
             if (allyInfo == null || !allyInfo.isActiveAndEnabled) return;
-            var info = AllyInfoTextField?.GetValue(allyInfo) as TextMeshProUGUI;
-            var marker = AllyInfoMarkerField?.GetValue(allyInfo) as HUDUnitMarker;
+            TextMeshProUGUI info = NativeRefs.Get(AllyInfoText, allyInfo);
+            HUDUnitMarker marker = NativeRefs.Get(AllyInfoMarker, allyInfo);
             if (info != null && info.enabled && marker != null && marker.image != null)
                 info.transform.localPosition = marker.image.transform.localPosition;
         }
 
         private static void RefreshTargetCaptions(CombatHUD combatHud)
         {
-            var info = TargetInfoField?.GetValue(combatHud) as TextMeshProUGUI;
+            TextMeshProUGUI info = NativeRefs.Get(TargetInfo, combatHud);
             // Native's presentation-only seam validates the current known target/arrow,
             // refreshes caption content and restores the selected theme colour after jamming.
             if (info != null) info.enabled = ShowTargetInfo(combatHud);
-            var text = TargetTextField?.GetValue(combatHud) as TextMeshProUGUI;
-            var tail = TargetArrowTailField?.GetValue(combatHud) as Transform;
+            TextMeshProUGUI text = NativeRefs.Get(TargetText, combatHud);
+            Transform tail = NativeRefs.Get(TargetArrowTail, combatHud);
             if (text != null && text.enabled && tail != null) text.transform.position = tail.position;
         }
 
         private static void RefreshObjectives(CombatHUD combatHud, Aircraft aircraft)
         {
-            var manager = ObjectiveOverlayField?.GetValue(combatHud) as ObjectiveOverlayManager;
-            if (manager == null || !manager.isActiveAndEnabled || ObjectiveAircraftField?.GetValue(manager) as Aircraft != aircraft) return;
-            var overlays = ObjectiveItemsField?.GetValue(manager) as List<ObjectiveOverlay>;
-            var results = ObjectiveResultsField?.GetValue(manager) as List<MissionPosition.PositionResult>;
+            ObjectiveOverlayManager manager = NativeRefs.Get(ObjectiveOverlayRef, combatHud);
+            if (manager == null || !manager.isActiveAndEnabled || NativeRefs.Get(ObjectiveAircraft, manager) != aircraft) return;
+            List<ObjectiveOverlay> overlays = NativeRefs.Get(ObjectiveItems, manager);
+            List<MissionPosition.PositionResult> results = NativeRefs.Get(ObjectiveResults, manager);
             if (overlays == null || results == null) return;
             for (int i = 0; i < overlays.Count && i < results.Count; i++)
             {

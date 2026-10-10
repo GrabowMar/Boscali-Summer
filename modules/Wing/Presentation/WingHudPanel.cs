@@ -37,6 +37,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private RectTransform root;
         private Canvas canvas;
+        private CombatHUD canvasOwner;
+        private Canvas hudCanvas;
         private Image background;
         private Image rail;
         private TMP_Text title, autopilot;
@@ -73,7 +75,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 if (root != null && root.gameObject.activeSelf) root.gameObject.SetActive(false);
                 return;
             }
-            Canvas c = hud.GetComponentInParent<Canvas>();
+            if (hud != canvasOwner) { canvasOwner = hud; hudCanvas = hud.GetComponentInParent<Canvas>(); }
+            Canvas c = hudCanvas;
             if (c == null) return;
             if (root == null || canvas != c)
             {
