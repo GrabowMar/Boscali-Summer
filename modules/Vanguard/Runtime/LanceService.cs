@@ -160,7 +160,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private void Hud(float now)
         {
             if (board == null && !ModuleServices.TryGet(out board)) return;
-            board.DeclareChannel(Channel, "LANCE");
             if (!GameManager.GetLocalAircraft(out Aircraft me) || me == null || me.disabled)
             {
                 line?.Release();

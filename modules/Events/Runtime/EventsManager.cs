@@ -929,7 +929,6 @@ namespace BoscaliSummer.Modules.Events.Runtime
         private void Announce(EventDefinition definition)
         {
             if (!ModuleServices.TryGet(out IHudBoard board) || settings == null) return;
-            board.DeclareChannel("events", "World events");
             string aim = definition.Target == EventTarget.All
                 ? "ALL THEATER"
                 : NameOfHash(targetHash) ?? "A SIDE";

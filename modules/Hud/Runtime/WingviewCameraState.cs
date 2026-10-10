@@ -72,10 +72,9 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         /// own fields, injected by the caller) when recentring after idle free-look, and places
         /// <paramref name="cam"/>'s transform directly when Wingview owns the pose this frame.
         /// </summary>
-        public void Tick(bool enabled, bool lookAheadEnabled, CameraStateManager cam,
-            ref float panView, ref float tiltView, float viewDistAdjust, float lookAtTargetLerp)
+        public void Tick(CameraStateManager cam, ref float panView, ref float tiltView, float viewDistAdjust, float lookAtTargetLerp)
         {
-            if (!enabled || !GlobalGateOpen() || !TryGetEligibleAircraft(cam, out Aircraft aircraft))
+            if (!GlobalGateOpen() || !TryGetEligibleAircraft(cam, out Aircraft aircraft))
             {
                 Reset();
                 return;
@@ -110,7 +109,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
 
             Vector3 vanillaPosition = cam.transform.position;
             Quaternion vanillaRotation = cam.transform.rotation;
-            ApplyPose(cam, aircraft, viewDistAdjust, lookAheadEnabled, dt,
+            ApplyPose(cam, aircraft, viewDistAdjust, dt,
                 Mathf.DeltaAngle(0f, panView), tiltView - VanillaRestTilt);
 
             // Look-at-target: vanilla has already blended its own pose for this frame; blend from
@@ -146,7 +145,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         }
 
         private void ApplyPose(CameraStateManager cam, Aircraft aircraft, float viewDistAdjust,
-            bool lookAheadEnabled, float dt, float panOffsetDeg, float tiltOffsetDeg)
+            float dt, float panOffsetDeg, float tiltOffsetDeg)
         {
             Transform nose = aircraft.transform;
             Rigidbody rb = cam.followingRB;
@@ -155,20 +154,13 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             WVVec3 velocity = hasVelocity ? FromUnity(rb.velocity) : WVVec3.Zero;
             WVVec3 dir = WingviewMath.BlendDirection(noseDir, velocity, hasVelocity);
 
-            if (lookAheadEnabled)
-            {
-                float yawDeg = nose.eulerAngles.y;
-                float rawRate = hasPrevYaw ? Mathf.DeltaAngle(prevYawDeg, yawDeg) / dt : 0f;
-                prevYawDeg = yawDeg;
-                hasPrevYaw = true;
-                smoothedYawRate = WingviewMath.ExpSmooth(smoothedYawRate, rawRate, WingviewMath.YawRateSmoothingRate, dt);
-                float lead = WingviewMath.LookAheadYaw(smoothedYawRate);
-                dir = WingviewMath.ApplyYawOffset(dir, lead);
-            }
-            else
-            {
-                hasPrevYaw = false;
-            }
+            float yawDeg = nose.eulerAngles.y;
+            float rawRate = hasPrevYaw ? Mathf.DeltaAngle(prevYawDeg, yawDeg) / dt : 0f;
+            prevYawDeg = yawDeg;
+            hasPrevYaw = true;
+            smoothedYawRate = WingviewMath.ExpSmooth(smoothedYawRate, rawRate, WingviewMath.YawRateSmoothingRate, dt);
+            float lead = WingviewMath.LookAheadYaw(smoothedYawRate);
+            dir = WingviewMath.ApplyYawOffset(dir, lead);
 
             // The player's free-look, as offsets on our own direction (tilt positive = look down, as vanilla).
             dir = WingviewMath.ApplyYawOffset(dir, panOffsetDeg);

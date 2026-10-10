@@ -23,13 +23,11 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
 
         protected override string Owner => WidgetOwner;
         protected override string ChannelKey => "ils";
-        protected override string ChannelLabel => "ILS approach";
         protected override float RefreshSeconds => 0.2f;
 
         internal void Configure(AutopilotSettings config)
         {
             settings = config;
-            DeclareFeed();
         }
 
         protected override bool WantsLine()

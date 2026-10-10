@@ -102,6 +102,20 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 P(.58f, .30f, .74f, .12f, .74f, .30f, .58f, .30f),
                 P(.46f, .18f, .46f, .06f, .54f, .06f, .54f, .18f),
             },
+            // Tanker hose and drogue: the boom pod, the hose, the basket and the receiver's probe.
+            ["skywell"] = new[]
+            {
+                P(.10f, .72f, .40f, .72f, .40f, .90f, .10f, .90f, .10f, .72f),
+                P(.40f, .81f, .56f, .81f, .64f, .66f, .64f, .46f),
+                P(.52f, .46f, .76f, .46f, .70f, .22f, .58f, .22f, .52f, .46f),
+                P(.64f, .22f, .64f, .08f),
+            },
+            // Kinetic lance: spear head, long shaft, charge bands.
+            ["lance"] = new[]
+            {
+                P(.50f, .94f, .60f, .66f, .54f, .66f, .54f, .12f, .46f, .12f, .46f, .66f, .40f, .66f, .50f, .94f),
+                P(.34f, .22f, .66f, .22f), P(.34f, .32f, .66f, .32f), P(.34f, .42f, .66f, .42f),
+            },
             // Front line with opposing thrust arrows.
             ["theater"] = new[]
             {
@@ -156,6 +170,20 @@ namespace BoscaliSummer.Modules.Hud.Domain
     internal static class HudCellText
     {
         private static readonly string[] Separators = { " · ", " / ", " | " };
+
+        /// <summary>
+        /// <see cref="Split"/> plus the bar fallback: a line whose text carries no figure (a constant "ILS", "LANCE",
+        /// "RADIO") shows its progress as the figure, and that figure follows the bar every tick.
+        /// </summary>
+        public static void Resolve(string text, float bar, out string label, out string value)
+        {
+            Split(text, out label, out value);
+            if (value.Length == 0 && bar > 0f) value = Percent(bar);
+        }
+
+        /// <summary>A 0..1 bar as a whole percent ("40%"), clamped.</summary>
+        public static string Percent(float bar) =>
+            ((int)Math.Round((bar < 0f ? 0f : bar > 1f ? 1f : bar) * 100f, MidpointRounding.AwayFromZero)).ToString(System.Globalization.CultureInfo.InvariantCulture) + "%";
 
         public static void Split(string text, out string label, out string value)
         {

@@ -19,13 +19,11 @@ namespace BoscaliSummer.Modules.TheaterOps.Presentation
 
         protected override string Owner => WidgetOwner;
         protected override string ChannelKey => "theater";
-        protected override string ChannelLabel => "Theater effort";
         protected override float RefreshSeconds => 1f;
 
         internal void Configure(ITheaterWarView view)
         {
             war = view;
-            DeclareFeed();
         }
 
         protected override bool WantsLine()

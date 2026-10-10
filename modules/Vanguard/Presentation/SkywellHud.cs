@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using NOAvionics;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Services;
@@ -51,10 +52,27 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             {
                 if (!Local(out Aircraft a)) return "";
                 return SkywellBoard.Views.TryGetValue(a.persistentID.Id, out SkywellView v)
-                    ? $"FUEL {v.FuelKg / 1000f:0.0}T  AMMO {v.StockKg / 1000f:0.00}T"
-                    : $"FUEL {SkywellService.FuelStockKg / 1000f:0.0}T  AMMO {SkywellService.MunitionStockKg / 1000f:0.00}T";
+                    ? $"FUEL {Mass(v.FuelKg, 1)}  AMMO {Mass(v.StockKg, 2)}"
+                    : $"FUEL {Mass(SkywellService.FuelStockKg, 1)}  AMMO {Mass(SkywellService.MunitionStockKg, 2)}";
             }
         }
+
+        // The player's own unit system: the cues used to hard-code metres and tonnes.
+        private static readonly char[] Scratch = new char[24];
+
+        private static bool Imperial => PlayerSettings.unitSystem != PlayerSettings.UnitSystem.Metric;
+
+        /// <summary>A short distance in the player's units: "12m" or "39ft".</summary>
+        private static string Dist(float metres)
+        {
+            int len = AvUnitTable.AltitudeReading(Scratch, 0, metres, Imperial ? AvUnits.Imperial : AvUnits.Metric);
+            return new string(Scratch, 0, len);
+        }
+
+        /// <summary>A stock in the player's units: "12.3 t" or "27100 lb".</summary>
+        private static string Mass(float kg, int decimals) => Imperial
+            ? Mathf.Round(kg * 2.20462f / 100f) * 100f + " lb"
+            : (kg / 1000f).ToString(decimals == 1 ? "0.0" : "0.00", System.Globalization.CultureInfo.InvariantCulture) + " t";
 
         public void Toggle()
         {
@@ -70,7 +88,6 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             if (Time.unscaledTime < next) return;
             next = Time.unscaledTime + Refresh;
             if (board == null && !ModuleServices.TryGet(out board)) return;
-            board.DeclareChannel(Channel, "SKYWELL");
             if (!Local(out Aircraft me) || !(SkywellBoard.KitStation(me) != null ? Tanker(me) : Receiver(me)))
             {
                 line?.Release();
@@ -83,7 +100,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private bool Tanker(Aircraft me)
         {
             if (!SkywellBoard.Views.TryGetValue(me.persistentID.Id, out SkywellView v) || !v.Active) return false;
-            string stock = $"FUEL {v.FuelKg / 1000f:0.0} t  ·  MUNITIONS {v.StockKg / 1000f:0.00} t";
+            string stock = $"FUEL {Mass(v.FuelKg, 1)}  ·  MUNITIONS {Mass(v.StockKg, 2)}";
             string state = v.Receiver == 0 ? "DEPLOYED  ·  AWAITING RECEIVER"
                 : v.Phase == SkywellPhase.Engage ? "RECEIVER DOCKING"
                 : v.Phase == SkywellPhase.Transfer ? "TRANSFERRING" : "RECEIVER SERVED";
@@ -120,7 +137,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             switch (v.Phase)
             {
                 case SkywellPhase.Engage:
-                    Line()?.Set(HudTone.Caution, "SKYWELL  DOCKING", "HOLD BRAKE  ·  " + Mathf.RoundToInt(dist) + " m",
+                    Line()?.Set(HudTone.Caution, "SKYWELL  DOCKING", "HOLD BRAKE  ·  " + Dist(dist),
                         Mathf.Clamp01(1f - dist / engageFrom));
                     break;
                 case SkywellPhase.Transfer:
@@ -166,7 +183,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 Line()?.Set(HudTone.Warning, "SKYWELL  READY", "HOLD BRAKE TO DOCK", 1f);
                 return true;
             }
-            Line()?.Set(HudTone.Info, "SKYWELL  TANKER  " + Mathf.RoundToInt(bestDist) + " m", Director(rel),
+            Line()?.Set(HudTone.Info, "SKYWELL  TANKER  " + Dist(bestDist), Director(rel),
                 Mathf.Clamp01(1f - (bestDist - SkywellService.EngageRadius) / (CueRange - SkywellService.EngageRadius)));
             return true;
         }
@@ -174,14 +191,14 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         /// <summary>Tanker belly-light style cue: which way to move the jet, worst axis first.</summary>
         private static string Director(Vector3 rel)
         {
-            if (rel.z > 5f) return "DROP BACK  ·  AFT " + Mathf.RoundToInt(rel.z) + " m";
+            if (rel.z > 5f) return "DROP BACK  ·  AFT " + Dist(rel.z);
             var cue = new List<string>(3);
-            if (rel.y > 10f) cue.Add("DOWN " + Mathf.RoundToInt(rel.y));
-            else if (rel.y < -10f) cue.Add("UP " + Mathf.RoundToInt(-rel.y));
-            if (rel.x > 10f) cue.Add("LEFT " + Mathf.RoundToInt(rel.x));
-            else if (rel.x < -10f) cue.Add("RIGHT " + Mathf.RoundToInt(-rel.x));
-            cue.Add("FWD " + Mathf.RoundToInt(-rel.z));
-            return string.Join("  ·  ", cue) + " m";
+            if (rel.y > 10f) cue.Add("DOWN " + Dist(rel.y));
+            else if (rel.y < -10f) cue.Add("UP " + Dist(-rel.y));
+            if (rel.x > 10f) cue.Add("LEFT " + Dist(rel.x));
+            else if (rel.x < -10f) cue.Add("RIGHT " + Dist(-rel.x));
+            cue.Add("FWD " + Dist(-rel.z));
+            return string.Join("  ·  ", cue);
         }
 
         private void Notice(string text, HudTone tone) => board?.Notice(Channel, tone, text);

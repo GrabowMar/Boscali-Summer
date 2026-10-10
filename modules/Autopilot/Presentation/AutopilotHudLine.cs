@@ -21,12 +21,10 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
 
         protected override string Owner => WidgetOwner;
         protected override string ChannelKey => "autopilot";
-        protected override string ChannelLabel => "Landing autopilot";
 
         internal void Configure(AutopilotLandController source)
         {
             controller = source;
-            DeclareFeed();
         }
 
         protected override bool WantsLine()

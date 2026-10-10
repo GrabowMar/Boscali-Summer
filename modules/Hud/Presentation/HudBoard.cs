@@ -25,22 +25,31 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private readonly HudFeedStore store = new HudFeedStore(() => Time.unscaledTime);
         private readonly HudMessage[] snapshot = new HudMessage[HudLayout.MaxRows];
+        private readonly BoardFrame frame = new BoardFrame();
         private readonly ExternalHudEnabler externalHud = new ExternalHudEnabler();
         private readonly WingviewCameraState wingview = new WingviewCameraState();
         private readonly ThirdPersonHudCenter hudCenterProjection = new ThirdPersonHudCenter();
         private readonly NativeFlightNumberHider flightNumberHider = new NativeFlightNumberHider();
         private readonly ThreatWatch threats = new ThreatWatch();
+        private readonly CountermeasureWatch countermeasures = new CountermeasureWatch();
+        private readonly FuelWatch fuelWatch = new FuelWatch();
+        private readonly DamageWatch damageWatch = new DamageWatch();
         private readonly MissileTracker missileTracker = new MissileTracker();
         private readonly MissileView missileView = new MissileView();
         private readonly List<MissileTrack> missileTracks = new List<MissileTrack>(MissileTracks.MaxShown);
-        private readonly Dictionary<int, IHudLine> missileLines = new Dictionary<int, IHudLine>(MissileTracks.MaxShown);
-        private readonly List<int> missileDead = new List<int>(MissileTracks.MaxShown);
+        // One held line per displayed slot, keyed by slot and never by missile: a key per missile piled up dead lines in the
+        // 16-line store until it started evicting other features' lines.
+        private static readonly string[] MissileKeys = { "msl-0", "msl-1", "msl-2" };
+        private readonly IHudLine[] missileSlots = new IHudLine[MissileTracks.MaxShown];
         // Lamp test clock: restarts whenever the native HUD shows a different aircraft (spawn, swap).
         private Aircraft bootAircraft;
         private float bootStart;
         private StatusPanel panel;
         private ThirdPersonHudCluster cluster;
+        private MissileCamPanel missileCamPanel;
+        private MissileCamData camData;
         private float nextRead;
+        private System.Func<int, bool> missileFlying;
 
         // Target closure: range delta between 10 Hz reads of the same target.
         private Unit closureTarget;
@@ -48,27 +57,32 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private void Awake() => Instance = this;
 
+        /// <summary>The live own-missile set (the sim probe in <c>HudAutomation</c> reads it).</summary>
+        internal MissileTracker Tracker => missileTracker;
+
         private void OnEnable()
         {
+            missileTracker.Launched += OnOwnLaunch;
             hudCenterProjection.Subscribe(
-                () => isActiveAndEnabled && ExternalHudEnabler.CanShowExternalHud(true, ExternalHudEnabler.IsOwnAircraftExternalView(out _)),
-                () => ExternalHudEnabler.IsOwnAircraftExternalView(out Aircraft aircraft) ? aircraft : null);
+                () => isActiveAndEnabled && ExternalHudEnabler.CanShowExternalHud(OwnExternalView(out _)),
+                () => OwnExternalView(out Aircraft aircraft) ? aircraft : null);
         }
+
+        /// <summary>The camera shows the local pilot's own aircraft from outside, or rides one of its missiles: the native HUD is forced open.</summary>
+        private static bool OwnExternalView(out Aircraft aircraft) =>
+            ExternalHudEnabler.IsOwnAircraftExternalView(out aircraft) || MissileCam.IsOwnMissileView(out aircraft, out _);
 
         /// <summary>Called from <c>Patches/WingviewCameraPatch.cs</c>'s postfix every
         /// <c>CameraOrbitState.UpdateState</c> while installed.</summary>
         public void TickWingview(CameraStateManager cam, ref float panView, ref float tiltView,
             float viewDistAdjust, float lookAtTargetLerp)
         {
-            wingview.Tick(!Application.isBatchMode, true, cam, ref panView, ref tiltView, viewDistAdjust, lookAtTargetLerp);
+            wingview.Tick(cam, ref panView, ref tiltView, viewDistAdjust, lookAtTargetLerp);
         }
 
-        public void DeclareChannel(string key, string label) { }
         public IHudLine Acquire(string owner, string channel, string key) => store.Acquire(owner, channel, key);
         public void Notice(string channel, HudTone tone, string text, string detail = null) =>
-            store.Notice(channel, tone, text, detail, HudLayout.NoticeSeconds);
-
-        private static bool AllChannels(string channel) => true;
+            store.Notice(channel, tone, text, detail);
 
         private void LateUpdate()
         {
@@ -82,19 +96,27 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // Re-checked every tick: vanilla re-disables FlightHud's canvas on every orbit/chase
             // state entry, and a forced canvas must be released the instant the condition ends.
             bool viewingOwnExternally = ExternalHudEnabler.IsOwnAircraftExternalView(out Aircraft ownAircraft);
-            externalHud.Tick(true, viewingOwnExternally);
+            Missile ridden = null;
+            Aircraft missileOwner = null;
+            bool viewingMissile = !viewingOwnExternally && MissileCam.IsOwnMissileView(out missileOwner, out ridden);
+            externalHud.Tick(viewingOwnExternally || viewingMissile);
 
             // Same gate as the forced-canvas condition above: the third-person HUD (hidden
             // native numbers, screen-fixed cluster, releveled HUDCenter) only ever shows where
-            // the native HUDCanvas is actually up.
-            bool thirdPerson = ExternalHudEnabler.CanShowExternalHud(true, viewingOwnExternally);
-            flightNumberHider.Tick(thirdPerson, ownAircraft);
+            // the native HUDCanvas is actually up. Riding a missile gets the same canvas and its own readout.
+            bool canShow = ExternalHudEnabler.CanShowExternalHud(viewingOwnExternally || viewingMissile);
+            bool thirdPerson = canShow && viewingOwnExternally;
+            bool missileCam = canShow && viewingMissile;
+            flightNumberHider.Tick(thirdPerson || missileCam, thirdPerson ? ownAircraft : missileOwner);
             if (!thirdPerson) cluster?.Hide();
+            if (!missileCam) missileCamPanel?.Hide();
 
             if (panel == null) panel = new StatusPanel();
             if (!panel.Ensure()) return;
             if (cluster == null) cluster = new ThirdPersonHudCluster();
             cluster.Ensure();
+            if (missileCamPanel == null) missileCamPanel = new MissileCamPanel();
+            missileCamPanel.Ensure();
 
             if (Time.unscaledTime < nextRead) return;
             nextRead = Time.unscaledTime + .1f;
@@ -108,12 +130,23 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 bootStart = now;
                 ShotFeed.Ledger.Clear();
             }
-            ShotFeed.Ledger.Expire(now);
             PublishMissiles(hudAircraft);
+            ShotFeed.Ledger.Expire(now, missileFlying ??= missileTracker.IsLive);
             missileView.Tick(missileTracker.Missiles);
-            int count = store.Snapshot(snapshot, HudLayout.MaxRows, AllChannels, true);
-            panel.Present(snapshot, count, ReadSystems(combat), threats.Read(hudAircraft), ShotFeed.Ledger,
-                hudAircraft != null ? now - bootStart : -1f);
+            frame.Systems = ReadSystems(combat);
+            frame.Threat = threats.Read(hudAircraft, frame);
+            countermeasures.Read(hudAircraft, frame);
+            fuelWatch.Read(hudAircraft, frame);
+            damageWatch.Read(hudAircraft, frame);
+            frame.Now = now;
+            frame.Units = AvUnitsOf((int)PlayerSettings.unitSystem);
+            frame.BootAge = hudAircraft != null ? now - bootStart : -1f;
+            frame.HasTicker = store.Ticker(out frame.Ticker);
+            // The pilot's situation, read from which feeds are up and what is inbound, ranks the cells and the cue strip.
+            CueContext context = CuePriority.Detect(store.HasLive("ils"), store.HasLive("skywell"),
+                frame.Threat.Missiles > 0 || frame.Threat.SinceLock < HudThreats.LockHold || missileTracks.Count > 0 || store.HasLive("ace-hunt"), store.HasLive("autopilot"));
+            int count = store.Snapshot(snapshot, HudLayout.MaxRows, context);
+            panel.Present(snapshot, count, frame, ShotFeed.Ledger);
 
             // The cockpit already has its own native tac screen for this feed; the card only
             // earns its space in the external views this module can force the HUD into.
@@ -130,6 +163,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 ReadTarget(ownAircraft, out range, out closure);
             }
 
+            if (missileCam)
+            {
+                IReadOnlyList<Missile> list = missileTracker.Missiles;
+                int at = -1;
+                for (int i = 0; i < list.Count && at < 0; i++) if (ReferenceEquals(list[i], ridden)) at = i;
+                MissileCam.Read(ridden, at, list.Count, ref camData);
+                missileCamPanel.Present(true, camData, AvUnitsOf((int)PlayerSettings.unitSystem), ThirdPersonHudLayout.TextScale(PlayerSettings.hudTextSize));
+            }
+            else missileCamPanel?.Present(false, default, NOAvionics.AvUnits.Metric, 1f);
+
             if (thirdPerson && ownAircraft != null)
             {
                 Rigidbody rb = ownAircraft.rb;
@@ -140,7 +183,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 float heading = ownAircraft.transform.eulerAngles.y;
                 float soundSpeed = LevelInfo.GetSpeedOfSound(altitude);
                 float mach = soundSpeed > 0.01f ? speed / soundSpeed : 0f;
-                float fuel = Mathf.Clamp01(ownAircraft.fuelLevel);
+                float fuel = BoscaliSummer.Core.Game.AircraftReadout.Fuel(ownAircraft);
                 float throttle = Mathf.Clamp01(ownAircraft.GetInputs()?.throttle ?? 0f);
                 Transform t = ownAircraft.transform;
                 Vector3 localVelocity = rb != null ? t.InverseTransformDirection(rb.velocity) : Vector3.zero;
@@ -149,14 +192,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     new ThirdPersonHudCluster.Flight
                     {
                         SpeedMps = speed, AltitudeM = altitude, RadarAltM = ownAircraft.radarAlt, ClimbMps = climb,
-                        HeadingDeg = heading, Mach = mach, G = ownAircraft.gForce, Fuel = fuel, Throttle = throttle,
+                        HeadingDeg = heading, Mach = mach, G = BoscaliSummer.Core.Game.AircraftReadout.LoadFactor(ownAircraft),
+                        GLimit = BoscaliSummer.Core.Game.AircraftReadout.GLimit(ownAircraft), Fuel = fuel, Throttle = throttle,
                         BankDeg = Attitude.Bank(t.right.y, t.up.y), SlipDeg = Attitude.Slip(localVelocity.x, localVelocity.z),
+                        AoaDeg = BoscaliSummer.Core.Game.AircraftReadout.AngleOfAttack(ownAircraft),
+                        FuelBingo = frame.Fuel.Bingo, FuelJoker = frame.Fuel.Joker,
                     },
-                    cameraTexture, cameraCode, range, closure);
+                    cameraTexture, cameraCode, range, closure, ThirdPersonHudLayout.TextScale(PlayerSettings.hudTextSize));
             }
             else
             {
-                cluster.Present(false, NOAvionics.AvUnits.Metric, default, null, null, float.NaN, float.NaN);
+                cluster.Present(false, NOAvionics.AvUnits.Metric, default, null, null, float.NaN, float.NaN, 1f);
             }
         }
 
@@ -203,30 +249,27 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private static NOAvionics.AvUnits AvUnitsOf(int unitSystem) =>
             unitSystem == (int)NOAvionics.AvUnits.Imperial ? NOAvionics.AvUnits.Imperial : NOAvionics.AvUnits.Metric;
 
-        /// <summary>Own-missile preview lines: one held line per missile, released when it lands.</summary>
+        /// <summary>The shot tracker's launch hook: every own delivery the game registers earns one pip (decoys do not).</summary>
+        private void OnOwnLaunch(Missile missile)
+        {
+            WeaponInfo info = missile != null ? missile.GetWeaponInfo() : null;
+            if (info == null || !ShotRules.IsDelivery(info.blastDamage, info.jammer)) return;
+            ShotFeed.Ledger.Launch(missile.GetInstanceID(), info.bomb, Time.unscaledTime);
+        }
+
+        /// <summary>Own-missile preview lines: one held line per displayed slot, released when the slot empties.</summary>
         private void PublishMissiles(Aircraft hudAircraft)
         {
             AvUnits units = AvUnitsOf((int)PlayerSettings.unitSystem);
             missileTracker.Read(hudAircraft, missileTracks);
-            missileDead.Clear();
-            foreach (int id in missileLines.Keys) missileDead.Add(id);
-            for (int i = 0; i < missileTracks.Count; i++)
+            for (int i = 0; i < missileSlots.Length; i++)
             {
+                if (i >= missileTracks.Count) { missileSlots[i]?.Release(); continue; }
                 MissileTrack track = missileTracks[i];
-                missileDead.Remove(track.Id);
-                if (!missileLines.TryGetValue(track.Id, out IHudLine line) || line == null)
-                {
-                    line = store.Acquire("missile", "missile", "msl-" + track.Id);
-                    if (line == null) continue;
-                    missileLines[track.Id] = line;
-                }
-                line.Set(MissileTracks.ToneFor(track), MissileTracks.LineText(track, units),
+                // Acquire is idempotent and re-creates an evicted line, so a handle kept across ticks cannot go dead.
+                IHudLine line = missileSlots[i] = store.Acquire("missile", "missile", MissileKeys[i]);
+                line?.Set(MissileTracks.ToneFor(track), MissileTracks.LineText(track, units),
                     MissileTracks.DetailText(track), MissileTracks.BarFor(track));
-            }
-            for (int i = 0; i < missileDead.Count; i++)
-            {
-                if (missileLines.TryGetValue(missileDead[i], out IHudLine line)) line?.Release();
-                missileLines.Remove(missileDead[i]);
             }
         }
 
@@ -274,17 +317,22 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public void ResetForScene()
         {
             missileView.Exit();
-            missileLines.Clear();
+            missileTracker.Release();
+            System.Array.Clear(missileSlots, 0, missileSlots.Length);
             missileTracks.Clear();
             store.Reset();
             panel?.Destroy();
             panel = null;
             cluster?.Destroy();
             cluster = null;
+            missileCamPanel?.Destroy();
+            missileCamPanel = null;
             nextRead = 0;
             closureTarget = null;
             bootAircraft = null;
             threats.Release();
+            fuelWatch.Release();
+            damageWatch.Release();
             ShotFeed.Ledger.Clear();
             externalHud.Release();
             wingview.Reset();
@@ -292,14 +340,19 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
         private void OnDisable()
         {
+            missileTracker.Launched -= OnOwnLaunch;
+            missileTracker.Release();
             missileView.Exit();
             panel?.Hide();
             cluster?.Hide();
+            missileCamPanel?.Hide();
             externalHud.Release();
             wingview.Reset();
             flightNumberHider.Tick(false, null);
             hudCenterProjection.Unsubscribe();
             threats.Release();
+            fuelWatch.Release();
+            damageWatch.Release();
         }
         private void OnDestroy()
         {

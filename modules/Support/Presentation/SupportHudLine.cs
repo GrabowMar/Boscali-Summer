@@ -34,13 +34,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         protected override string Owner => WidgetOwner;
         protected override string ChannelKey => "support";
-        protected override string ChannelLabel => "Support net";
 
         internal void Configure(SupportManager manager, CallsController calls)
         {
             this.manager = manager;
             this.calls = calls;
-            DeclareFeed();
         }
 
         protected override bool WantsLine()

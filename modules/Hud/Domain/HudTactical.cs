@@ -6,7 +6,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
     internal struct ThreatPicture
     {
         public int Missiles;
-        public float SinceLock, SinceSpike, SinceNewMissile;
+        public float SinceLock, SinceSpike;
         /// <summary>Nearest inbound missile (else the last locking emitter): bearing off the nose, degrees, + = right.</summary>
         public bool HasBearing;
         public float BearingDeg, ElevationDeg;
@@ -14,7 +14,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         public static ThreatPicture Clear => new ThreatPicture
         {
-            SinceLock = float.PositiveInfinity, SinceSpike = float.PositiveInfinity, SinceNewMissile = float.PositiveInfinity,
+            SinceLock = float.PositiveInfinity, SinceSpike = float.PositiveInfinity,
         };
     }
 
@@ -54,31 +54,68 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
     internal enum ShotState { Empty, InFlight, Hit, Miss }
 
+    /// <summary>What counts as a delivery and what counts as a hit, pure.</summary>
+    internal static class ShotRules
+    {
+        /// <summary>
+        /// <c>WeaponInfo.blastDamage</c> below this is a decoy or a utility munition, not a delivery: MALD-X/J (1), ALE-X (2),
+        /// AEGIS darts (0.2) and GLAIVE gun pods (0) never earn a pip.
+        /// ponytail: a damage threshold stands in for a flag the game does not have; upgrade to an explicit per-weapon flag.
+        /// </summary>
+        public const float MinDeliveryBlast = 3f;
+
+        public static bool IsDelivery(float blastDamage, bool jammer) => !jammer && blastDamage >= MinDeliveryBlast;
+
+        /// <summary>
+        /// The detonation RPC's flags: it struck armour (a vehicle, building or ship), or it went off within 200 m of its
+        /// target (<c>useUnit</c>). A terrain-only impact has neither and is a miss; a ground target's own impact also flags
+        /// the terrain, so <c>hitTerrain</c> must not veto a hit (the spec's rule: <c>hitArmor || useUnit</c>).
+        /// </summary>
+        public static bool Hit(bool hitArmor, bool useUnit) => hitArmor || useUnit;
+    }
+
     /// <summary>
-    /// The shot tracker (after NO_Tactitools' delivery checker), pure: one pip per own weapon released, in flight until it
-    /// detonates (hit = struck armour) and kept 2.5 s after the outcome; a weapon still flying after two minutes counts as a
-    /// miss. Fixed ring of <see cref="Capacity"/>; the oldest resolved pip makes room first.
+    /// The shot tracker (after NO_Tactitools' delivery checker), pure: one pip per own delivery released, in flight until it
+    /// detonates (<see cref="ShotRules.Hit"/>) and kept 2.5 s after the outcome. A weapon the game no longer has in flight
+    /// for <see cref="LostGrace"/> without a detonation counts as a miss; a cruise missile in the air for twenty minutes
+    /// stays a pip. Fixed ring of <see cref="Capacity"/>; the oldest resolved pip makes room first.
     /// </summary>
     internal sealed class ShotLedger
     {
         public const int Capacity = 8;
-        public const float ShowAfter = 2.5f, Timeout = 120f;
+        public const float ShowAfter = 2.5f, LostGrace = 3f;
 
         private readonly int[] ids = new int[Capacity];
         private readonly ShotState[] states = new ShotState[Capacity];
         private readonly bool[] bombs = new bool[Capacity];
         private readonly float[] times = new float[Capacity];
+        private readonly float[] seen = new float[Capacity];
         public int Version { get; private set; }
 
         public ShotState State(int i) => states[i];
         public bool IsBomb(int i) => bombs[i];
+
+        /// <summary>The word beside the pips: SHOT while any is in flight, else the latest outcome (HIT or MISS); empty with no pips.</summary>
+        public string Legend
+        {
+            get
+            {
+                int latest = -1;
+                for (int i = 0; i < Capacity; i++)
+                {
+                    if (states[i] == ShotState.InFlight) return "SHOT";
+                    if ((states[i] == ShotState.Hit || states[i] == ShotState.Miss) && (latest < 0 || times[i] > times[latest])) latest = i;
+                }
+                return latest < 0 ? "" : states[latest] == ShotState.Hit ? "HIT" : "MISS";
+            }
+        }
 
         public void Launch(int id, bool bomb, float now)
         {
             int slot = Array.IndexOf(states, ShotState.Empty);
             if (slot < 0) slot = OldestResolved();
             if (slot < 0) return;
-            ids[slot] = id; bombs[slot] = bomb; states[slot] = ShotState.InFlight; times[slot] = now;
+            ids[slot] = id; bombs[slot] = bomb; states[slot] = ShotState.InFlight; times[slot] = now; seen[slot] = now;
             Version++;
         }
 
@@ -92,11 +129,16 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 }
         }
 
-        public void Expire(float now)
+        /// <summary><paramref name="flying"/> says whether the game still has the weapon with that id in the air.</summary>
+        public void Expire(float now, Func<int, bool> flying)
         {
             for (int i = 0; i < Capacity; i++)
             {
-                if (states[i] == ShotState.InFlight && now - times[i] > Timeout) { states[i] = ShotState.Miss; times[i] = now; Version++; }
+                if (states[i] == ShotState.InFlight)
+                {
+                    if (flying != null && flying(ids[i])) seen[i] = now;
+                    else if (now - seen[i] > LostGrace) { states[i] = ShotState.Miss; times[i] = now; Version++; }
+                }
                 else if ((states[i] == ShotState.Hit || states[i] == ShotState.Miss) && now - times[i] > ShowAfter) { states[i] = ShotState.Empty; Version++; }
             }
         }

@@ -253,7 +253,7 @@ public static class HudRenderUnityCheck
             Assert(ExternalHudEnabler.IsOwnAircraftExternalView(out var eligible) && eligible == aircraft, "Own live aircraft is eligible in orbit.");
             aircraft.cockpit.detached = true;
             Assert(!ExternalHudEnabler.IsOwnAircraftExternalView(out _), "Detached cockpit closes the external HUD gate.");
-            Assert(!ExternalHudEnabler.CanShowExternalHud(false, true) && !ExternalHudEnabler.CanShowExternalHud(true, false), "Disabled setting and foreign view close the presentation gate.");
+            Assert(!ExternalHudEnabler.CanShowExternalHud(false), "A foreign view closes the presentation gate.");
             File.WriteAllText("result.txt", "PASS: " + assertions + " production HUD render/transition assertions using real Unity camera/canvas and synthetic native data seams; no live game/input or native weapon acceptance.");
             EditorApplication.Exit(0);
         }

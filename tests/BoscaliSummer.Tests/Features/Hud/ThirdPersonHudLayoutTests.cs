@@ -20,9 +20,34 @@ namespace BoscaliSummer.Tests.Features.Hud
                 ClusterInsideAndClear(width, Height, aspect);
                 TargetCardInsideAndClear(width, Height, aspect);
             }
+            MissileCam();
             KeepClearIsIdempotent();
             CollapsedCardHasNoHeight();
             Cues();
+        }
+
+        private static RectF Screen(float width, float height) => new RectF(0f, 0f, width, height);
+
+        private static bool Inside(RectF r, RectF screen) =>
+            r.Left >= screen.Left - 0.01f && r.Right <= screen.Right + 0.01f &&
+            r.Bottom >= screen.Bottom - 0.01f && r.Top <= screen.Top + 0.01f;
+
+        private static void MissileCam()
+        {
+            TestAssert.That(ThirdPersonHudLayout.TextScale(40f) == 1f && ThirdPersonHudLayout.TextScale(60f) == 1.5f, "The player's text size scales the layout");
+            TestAssert.That(ThirdPersonHudLayout.TextScale(100f) == ThirdPersonHudLayout.MaxScale && ThirdPersonHudLayout.TextScale(10f) == ThirdPersonHudLayout.MinScale, "...within limits");
+            TestAssert.That(ThirdPersonHudLayout.TextScale(float.NaN) == 1f && ThirdPersonHudLayout.TextScale(0f) == 1f, "An unknown size is the default");
+            foreach (float aspect in AspectRatios)
+                foreach (float scale in new[] { ThirdPersonHudLayout.MinScale, 1f, ThirdPersonHudLayout.MaxScale })
+                {
+                    float width = Height * aspect;
+                    RectF box = ThirdPersonHudLayout.MissileCamBox(width, Height, scale);
+                    RectF screen = Screen(width, Height);
+                    TestAssert.That(Inside(box, screen), "The missile-cam box stays on screen at aspect " + aspect + ", scale " + scale);
+                    TestAssert.That(box.CenterX == 0f && box.CenterY < 0f, "It sits centred, below the middle at aspect " + aspect);
+                    TestAssert.That(!ThirdPersonHudLayout.Overlaps(box, ThirdPersonHudLayout.TargetCard(width, Height, visible: true)),
+                        "It never covers the target card at aspect " + aspect + ", scale " + scale);
+                }
         }
 
         private static void Cues()
@@ -38,9 +63,9 @@ namespace BoscaliSummer.Tests.Features.Hud
 
         private static void ClusterInsideAndClear(float width, float height, float aspect)
         {
-            RectF screen = ThirdPersonHudLayout.Screen(width, height);
+            RectF screen = Screen(width, height);
             RectF frame = ThirdPersonHudLayout.AircraftFrame(width, height);
-            TestAssert.That(ThirdPersonHudLayout.Inside(frame, screen), "Aircraft frame stays on screen at aspect " + aspect);
+            TestAssert.That(Inside(frame, screen), "Aircraft frame stays on screen at aspect " + aspect);
 
             RectF spd = ThirdPersonHudLayout.SpeedBox(width, height);
             RectF alt = ThirdPersonHudLayout.AltitudeBox(width, height);
@@ -48,7 +73,7 @@ namespace BoscaliSummer.Tests.Features.Hud
 
             foreach ((RectF rect, string name) in new[] { (spd, "SPD"), (alt, "ALT"), (hdg, "HDG") })
             {
-                TestAssert.That(ThirdPersonHudLayout.Inside(rect, screen),
+                TestAssert.That(Inside(rect, screen),
                     name + " box stays on screen at aspect " + aspect);
                 TestAssert.That(!ThirdPersonHudLayout.Overlaps(rect, frame),
                     name + " box never overlaps the aircraft frame at aspect " + aspect);
@@ -57,19 +82,17 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(spd.CenterX < 0f && alt.CenterX > 0f, "SPD sits left of centre, ALT sits right");
             TestAssert.That(hdg.CenterX == 0f, "HDG is horizontally centred");
 
-            RectF spdSub = ThirdPersonHudLayout.SubLine(spd);
             RectF spdBar = ThirdPersonHudLayout.SideBar(spd, outwardIsLeft: true);
-            TestAssert.That(ThirdPersonHudLayout.Inside(spdSub, screen), "SPD sub-line stays on screen at aspect " + aspect);
             TestAssert.That(!ThirdPersonHudLayout.Overlaps(spdBar, spd), "The side bar does not sit on top of its box");
         }
 
         private static void TargetCardInsideAndClear(float width, float height, float aspect)
         {
-            RectF screen = ThirdPersonHudLayout.Screen(width, height);
+            RectF screen = Screen(width, height);
             RectF frame = ThirdPersonHudLayout.AircraftFrame(width, height);
             RectF card = ThirdPersonHudLayout.TargetCard(width, height, visible: true);
 
-            TestAssert.That(ThirdPersonHudLayout.Inside(card, screen), "Target card stays on screen at aspect " + aspect);
+            TestAssert.That(Inside(card, screen), "Target card stays on screen at aspect " + aspect);
             TestAssert.That(!ThirdPersonHudLayout.Overlaps(card, frame), "Target card never overlaps the aircraft frame at aspect " + aspect);
             TestAssert.That(card.Right <= screen.Right - ThirdPersonHudLayout.SafeMargin + 0.5f &&
                 card.Bottom >= screen.Bottom + ThirdPersonHudLayout.SafeMargin - 0.5f,
