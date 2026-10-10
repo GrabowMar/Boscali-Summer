@@ -53,11 +53,17 @@
 ### In the cockpit
 - **AI wingmen** (formerly *Wing Command*, now built in): formations, orders, loadouts and
   routes from the WMC page and the **C** interaction menu.
-- **VANGUARD weapons** *(needs Blueprinter)*: near-future pods and stores (AEGIS-3, railgun,
-  GLAIVE-2 UGV carrier, ORCA water runner, ALE-X towed decoy) and the **SKYWELL** service
-  glider for air-to-air refuel and rearm.
-- **Restyled HUD**, threat and missile warnings, autopilot modes, and quality-of-life tweaks.
-- **Dynamic weather**: volumetric clouds, in-cloud whiteout, rain on the canopy, thunder.
+- **VANGUARD weapons** *(needs Blueprinter)*: LANCE railgun, AEGIS defence pod, MALD decoys,
+  REMORA escort drones, HAWC-X glide weapon, GLAIVE gun drones, ORCA glide torpedo, and ALE-X
+  towed decoy. Cargo holds also support the **SKYWELL** refuel/rearm tender, **KESTREL** recon
+  glider, and **HAMILCAR** cargo glider carrying a Hexhound.
+- **TAC BOARD HUD**: stores, countermeasures, warnings and gauges, with automatic pages for
+  threats, shots, missile camera, approach, wing, strikes, refuelling, objectives and systems.
+- **Squadron insignia**: edit your crest in SQD STUDIO and paint supported tail fins; crests
+  can be shared with other players.
+- **Weather**: 47 sky profiles, volumetric clouds, in-cloud whiteout, canopy rain and thunder.
+- **Cockpit immersion**: pilot body, native G-LOC-driven breathing, recorded pilot/effect
+  audio and kneeboard cards.
 - **Cockpit radio**: tune real stations across FM, AIR and MW bands, or play your own music.
 
 <p align="center">
