@@ -50,7 +50,9 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private EmblemDesign emblem = EmblemDesign.Default;
         private string squadronName = string.Empty;
         private Sprite emblemSprite;
-        private string emblemSpriteKey;
+        private readonly EmblemCanvas emblemCanvas = new EmblemCanvas();
+        private EmblemDesign emblemDrawn;
+        private string emblemDrawnFile;
         private string[] emblemFiles = Array.Empty<string>();
         private int emblemFileIndex = -1;
         private string cosmeticNameText;
@@ -91,7 +93,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             ResetPlanePage();
 
             emblemSprite = null;
-            emblemSpriteKey = null;
+            emblemDrawnFile = null;
             emblemFiles = Array.Empty<string>();
             emblemFileIndex = -1;
             cosmeticNameText = null;
@@ -299,13 +301,12 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                         break;
                     }
             }
-            string key = emblem.Encode() + "|" + wantedFile;
-            if (emblemSpriteKey != key || emblemSprite == null)
+            if (emblemSprite == null || emblemDrawn != emblem || emblemDrawnFile != wantedFile)
             {
-                emblemSpriteKey = key;
-                emblemSprite = string.IsNullOrEmpty(wantedFile)
-                    ? EmblemRenderer.Procedural(emblem)
-                    : EmblemRenderer.File(wantedFile) ?? EmblemRenderer.Procedural(emblem);
+                emblemDrawn = emblem;
+                emblemDrawnFile = wantedFile;
+                emblemSprite = (string.IsNullOrEmpty(wantedFile) ? null : EmblemRenderer.File(wantedFile))
+                    ?? emblemCanvas.Draw(emblem);
             }
 
             string profileKey = settings?.PilotProfile?.Value ?? string.Empty;

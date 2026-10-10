@@ -18,7 +18,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private int alertCount = -1, alertKey = int.MinValue, alertViewKey = int.MinValue;
         private string alertText;
         private AvRow alertStrip;
-        private WmcContext alertBinding;
 
         /// <summary>Alerts standing now (automation).</summary>
         public int AlertsShown => alertCount < 0 ? 0 : alertCount;
@@ -90,7 +89,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void RefreshAlertStrip(WmcContext c)
         {
-            alertBinding = c;
             for (int r = 0; r < alertLineIds.Length; r++) alertLineIds[r] = r < alertCount ? alerts[r].Id : 0u;
             // The strip only shows with the full table: a collapsed table's summary line says the same word.
             bool on = alertCount > 0 && !table.Collapsed;

@@ -192,6 +192,13 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <ItemGroup Label="Tail-fin insignia bake shader bundle">
+    <!-- Built by tools/Compile-EmblemAssets.ps1. Optional: without it the STUDIO PAINT setting stays inert. -->
+    <EmbeddedResource Include="modules\Progression\Assets\emblem.bundle" Condition="Exists('modules\Progression\Assets\emblem.bundle')">
+      <LogicalName>BoscaliSummer.Progression.emblem.bundle</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
   <ItemGroup Label="Cockpit pilot shader bundle">
     <EmbeddedResource Include="modules\Immersion\Assets\pilot.bundle" Condition="Exists('modules\Immersion\Assets\pilot.bundle')">
       <LogicalName>BoscaliSummer.Immersion.pilot.bundle</LogicalName>

@@ -344,7 +344,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             private readonly SqdBar fuelBar, throttleBar;
             private readonly AvChip stateChip;
             private float fuel, throttle;
-            private AvState state = AvState.Ready;
 
             public PlaneHero(RectTransform parent)
             {
@@ -370,7 +369,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             {
                 name.text = airframe ?? "";
                 stateChip.Set(stateWord, st);
-                state = st;
                 fuel = fuelFraction;
                 throttle = throttleFraction ?? 0f;
                 fuelValue.text = AvNum.Percent(fuelFraction);

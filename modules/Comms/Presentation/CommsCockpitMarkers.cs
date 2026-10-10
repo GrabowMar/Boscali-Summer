@@ -31,6 +31,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         private CommsManager manager;
         private GameObject root;
         private RectTransform canvasRect;
+        private Canvas canvas;
         private Marker[] markers;
         private readonly List<CommsItem> pings = new List<CommsItem>(16);
         private readonly Rect[] captions = new Rect[MaxMarkers];
@@ -50,6 +51,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             if (root != null) Destroy(root);
             root = null;
             canvasRect = null;
+            canvas = null;
             markers = null;
             pings.Clear();
             nextContent = 0f;
@@ -137,7 +139,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
             float now = Time.unscaledTime;
             bool metric = VanillaHudStyle.Metric;
-            float minimumFontSize = AvTypeScale.Floor / Mathf.Max(.1f, canvasRect.GetComponent<Canvas>().scaleFactor);
+            float minimumFontSize = AvTypeScale.Floor / Mathf.Max(.1f, canvas.scaleFactor);
             int captionCount = 0;
             // Reserve every fixed glyph before placing any caption, including older calls.
             for (int i = 0; i < markers.Length; i++)
@@ -247,7 +249,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         {
             root = new GameObject("Boscali Comms Markers", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
             root.transform.SetParent(transform, false);
-            Canvas canvas = root.GetComponent<Canvas>();
+            canvas = root.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 1;
             canvas.pixelPerfect = false;

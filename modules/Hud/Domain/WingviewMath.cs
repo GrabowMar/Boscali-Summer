@@ -109,9 +109,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             WVVec3 blend = WVVec3.Lerp(noseDir, courseDir, VelocityWeight).Normalized(noseDir);
 
             float horiz = (float)Math.Sqrt(blend.X * blend.X + blend.Z * blend.Z);
-            float azimuth = horiz < 1e-6f && Math.Abs(blend.Y) < 1e-6f
-                ? 0f
-                : (float)Math.Atan2(blend.X, blend.Z);
+            float azimuth = horiz < 1e-6f ? 0f : (float)Math.Atan2(blend.X, blend.Z);
 
             float clampedY = Math.Min(1f, Math.Max(-1f, blend.Y));
             float pitch = (float)Math.Asin(clampedY) * PitchWeight;

@@ -659,6 +659,10 @@ using (Stream pilotResource = pluginAssembly.GetManifestResourceStream("BoscaliS
     ,("BoscaliSummer.Modules.Progression.Networking.ProgressionSnapshot", "MaximumPoints", typeof(byte))
     ,("BoscaliSummer.Modules.Progression.Networking.PlaneTuneRequest", "AircraftId", typeof(uint))
     ,("BoscaliSummer.Modules.Progression.Networking.PlaneTuneState", "AircraftId", typeof(uint))
+    ,("BoscaliSummer.Modules.Progression.Networking.CrestSubmit", "Protocol", typeof(byte))
+    ,("BoscaliSummer.Modules.Progression.Networking.CrestSubmit", "Paint", typeof(byte))
+    ,("BoscaliSummer.Modules.Progression.Networking.CrestState", "Owner", typeof(ulong))
+    ,("BoscaliSummer.Modules.Progression.Networking.CrestState", "Paint", typeof(byte))
     ,("BoscaliSummer.Modules.Support.Networking.SupportRequestMessage", "RequestId", typeof(int))
     ,("BoscaliSummer.Modules.Support.Networking.SupportRequestMessage", "Protocol", typeof(byte))
     ,("BoscaliSummer.Modules.Support.Networking.SupportRequestMessage", "Action", typeof(byte))
@@ -964,6 +968,8 @@ foreach (var contract in new[] {
     ("BoscaliSummer.Modules.Progression.Networking.ProgressionSnapshot", new[] { "Protocol:System.Byte", "PerkMask:System.UInt32", "Score:System.Int32", "EarnedPoints:System.Byte", "Rank:System.Byte", "Result:System.Byte", "Generation:System.Int32", "Scene:System.UInt32", "Token:System.UInt32", "ScorePerPoint:System.Int32", "MaximumPoints:System.Byte", "PlaneId:System.UInt32", "EngineMap:System.Byte" }),
     ("BoscaliSummer.Modules.Progression.Networking.PlaneTuneRequest", new[] { "Protocol:System.Byte", "AircraftId:System.UInt32", "Mode:System.Byte" }),
     ("BoscaliSummer.Modules.Progression.Networking.PlaneTuneState", new[] { "Protocol:System.Byte", "AircraftId:System.UInt32", "Mode:System.Byte", "Accepted:System.Byte" }),
+    ("BoscaliSummer.Modules.Progression.Networking.CrestSubmit", new[] { "Protocol:System.Byte", "Shape:System.Byte", "Division:System.Byte", "Charge:System.Byte", "Accent:System.Byte", "Field:System.Byte", "Second:System.Byte", "Ink:System.Byte", "Number:System.Byte", "Paint:System.Byte" }),
+    ("BoscaliSummer.Modules.Progression.Networking.CrestState", new[] { "Protocol:System.Byte", "Owner:System.UInt64", "Shape:System.Byte", "Division:System.Byte", "Charge:System.Byte", "Accent:System.Byte", "Field:System.Byte", "Second:System.Byte", "Ink:System.Byte", "Number:System.Byte", "Paint:System.Byte" }),
     ("BoscaliSummer.Modules.Squad.Networking.SquadQuery", new[] { "Protocol:System.Byte", "Scene:System.UInt32", "Token:System.UInt32", "Revision:System.UInt32" }),
     ("BoscaliSummer.Modules.Squad.Networking.SquadSnapshot", new[] { "Protocol:System.Byte", "Scene:System.UInt32", "Token:System.UInt32", "Event:System.UInt32", "Pilot:BoscaliSummer.Core.Contracts.PilotView", "Hunt:System.Boolean", "Bonus:System.Int32", "Origin:System.Int32", "ActiveIndex:System.Int32", "HuntId:System.Int32", "Status:System.String", "Speaker:System.String", "Chatter:System.String", "Wings:BoscaliSummer.Core.Contracts.EnemyWingView[]", "Revision:System.UInt32", "Unchanged:System.Boolean" }),
     ("BoscaliSummer.Modules.Command.Networking.FactionMoraleChanged", new[] { "Protocol:System.Byte", "FactionHash:System.Int32", "Morale:System.Single" }),
@@ -1283,7 +1289,7 @@ static void ProbeSquadSerialization(Assembly plugin, Assembly mirage)
         throw new InvalidOperationException("Squad protocol changed without updating its probe");
     net.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
     Type progression = plugin.GetType("BoscaliSummer.Modules.Progression.Networking.ProgressionNet", true)!;
-    if ((byte)progression.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 5)
+    if ((byte)progression.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 6)
         throw new InvalidOperationException("Progression protocol changed without updating its probe");
     progression.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
     Type writerType = mirage.GetType("Mirage.Serialization.NetworkWriter", true)!;
@@ -1383,7 +1389,7 @@ static void ProbeSquadSerialization(Assembly plugin, Assembly mirage)
     Reject(excessiveCount);
     Type progressType = plugin.GetType("BoscaliSummer.Modules.Progression.Networking.ProgressionSnapshot", true)!;
     object progress = Activator.CreateInstance(progressType)!;
-    Set(progress, "Protocol", (byte)5); Set(progress, "Generation", 10001); Set(progress, "PerkMask", 123u);
+    Set(progress, "Protocol", (byte)6); Set(progress, "Generation", 10001); Set(progress, "PerkMask", 123u);
     Set(progress, "Score", 70000); Set(progress, "Scene", 456u); Set(progress, "Token", 789u);
     Set(progress, "ScorePerPoint", 10000); Set(progress, "MaximumPoints", (byte)20);
     object progressResult = Decode(progressType, Encode(progressType, progress));
@@ -1393,7 +1399,7 @@ static void ProbeSquadSerialization(Assembly plugin, Assembly mirage)
         throw new InvalidOperationException("Progression generation roundtrip failed");
     Type submitType = plugin.GetType("BoscaliSummer.Modules.Progression.Networking.ProgressionSubmit", true)!;
     object submit = Activator.CreateInstance(submitType)!;
-    Set(submit, "Protocol", (byte)5); Set(submit, "Perk", (byte)4); Set(submit, "Scene", 456u); Set(submit, "Token", 789u); Set(submit, "Generation", 10001);
+    Set(submit, "Protocol", (byte)6); Set(submit, "Perk", (byte)4); Set(submit, "Scene", 456u); Set(submit, "Token", 789u); Set(submit, "Generation", 10001);
     object submitResult = Decode(submitType, Encode(submitType, submit));
     foreach (FieldInfo field in submitType.GetFields(BindingFlags.Public | BindingFlags.Instance))
         if (!Equals(field.GetValue(submit), field.GetValue(submitResult))) throw new InvalidOperationException("Progression intent roundtrip changed " + field.Name);
@@ -1401,7 +1407,24 @@ static void ProbeSquadSerialization(Assembly plugin, Assembly mirage)
     object oldProgress = Decode(progressType, Encode(progressType, progress));
     if ((byte)Get(oldProgress, "Protocol") != 4 || (int)Get(oldProgress, "Generation") != 0)
         throw new InvalidOperationException("Progression reader must keep only the header of a foreign protocol");
-    Console.WriteLine("  Squad protocol-3 serializers: pilot/wing/query/revision roundtrip, header-only unchanged reply, 8-wing/192-char bounds, invalid strength/tier/return/header/count read as protocol 0; progression v5 foreign-header drop");
+    string[] crestLayers = { "Shape", "Division", "Charge", "Accent", "Field", "Second", "Ink", "Number" };
+    foreach (string crestType in new[] { "CrestSubmit", "CrestState" })
+    {
+        Type crest = plugin.GetType("BoscaliSummer.Modules.Progression.Networking." + crestType, true)!;
+        object sent = Activator.CreateInstance(crest)!;
+        Set(sent, "Protocol", (byte)6); Set(sent, "Paint", (byte)2);
+        for (int i = 0; i < crestLayers.Length; i++) Set(sent, crestLayers[i], (byte)(i + 3));
+        if (crestType == "CrestState") Set(sent, "Owner", 76561198000000000UL);
+        object received = Decode(crest, Encode(crest, sent));
+        foreach (FieldInfo field in crest.GetFields(BindingFlags.Public | BindingFlags.Instance))
+            if (!Equals(field.GetValue(sent), field.GetValue(received)))
+                throw new InvalidOperationException(crestType + " roundtrip changed " + field.Name);
+        Set(sent, "Protocol", (byte)5);
+        object foreignCrest = Decode(crest, Encode(crest, sent));
+        if ((byte)Get(foreignCrest, "Protocol") != 5 || (byte)Get(foreignCrest, "Paint") != 0 || (byte)Get(foreignCrest, "Shape") != 0)
+            throw new InvalidOperationException(crestType + " reader must keep only the header of a foreign protocol");
+    }
+    Console.WriteLine("  Squad protocol-3 serializers: pilot/wing/query/revision roundtrip, header-only unchanged reply, 8-wing/192-char bounds, invalid strength/tier/return/header/count read as protocol 0; progression v6 foreign-header drop, crest submit/state roundtrip");
 }
 
 static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)

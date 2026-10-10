@@ -216,7 +216,8 @@ namespace BoscaliSummer.Modules.Support.Visuals
         public static void Spin(ParticleSystem ps, float degreesPerSecond)
         {
             var r = ps.rotationOverLifetime; r.enabled = true;
-            r.z = new ParticleSystem.MinMaxCurve(-degreesPerSecond * Mathf.Deg2Rad, degreesPerSecond * Mathf.Deg2Rad);
+            float turn = degreesPerSecond * Mathf.Deg2Rad;
+            r.z = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.Linear(0f, 0f, 1f, turn));
         }
 
         public static void Drift(ParticleSystem ps, Vector3 velocity)

@@ -184,7 +184,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             for (int i = 0; i < tipList.Count; i++)
             {
                 AvHelpTip t = tipList[i];
-                if (t != null && t.isActiveAndEnabled && t.GetComponent<AvHit>() == null &&
+                if (t != null && t.isActiveAndEnabled &&
                     RectTransformUtility.RectangleContainsScreenPoint((RectTransform)t.transform, mouse, null))
                 { under = t; break; }
             }
@@ -345,6 +345,11 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
             hitList.AddRange(window.Root.GetComponentsInChildren<AvHit>(true));
             tipList.AddRange(window.Root.GetComponentsInChildren<AvHelpTip>(true));
+            // Tips on interactive controls are hovered through AvHit; the per-frame
+            // tip scan only needs the rest, so drop them here instead of asking
+            // GetComponent about every tip on every frame.
+            for (int i = tipList.Count - 1; i >= 0; i--)
+                if (tipList[i].GetComponent<AvHit>() != null) tipList.RemoveAt(i);
         }
 
         // ---- Live state ----------------------------------------------------------------------

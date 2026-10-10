@@ -153,7 +153,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 abilitySlots[i] = slot.gameObject;
                 Outline(slot, new Rect(0, 0, 62, 35), Caution.WithAlpha(0.35f));
                 Glyph(slot, new Rect(21, -2, 20, 20), (HuntMark)((int)HuntMark.Toughness + i));
-                TMP_Text badgeCaption = Label(slot, new Rect(0, -22, 62, 12), names[i], AvTextRole.Micro, Caution,
+                // A Micro line is 14 px tall: every Micro row here is 16.
+                TMP_Text badgeCaption = Label(slot, new Rect(0, -20, 62, 16), names[i], AvTextRole.Micro, Caution,
                     TextAlignmentOptions.Center);
             }
 
@@ -163,8 +164,10 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             crest = ImageBox(panel, new Rect(crestFrame.x + 2, crestFrame.y - 2, 56, 56));
             crest.enabled = false;
             Outline(panel, crestFrame, Caution.WithAlpha(0.35f));
-            crestCaption = Label(panel, new Rect(634, -105, 60, 14), "", AvTextRole.Micro, Secondary,
-                TextAlignmentOptions.Center);
+            // Two Micro lines across the free column beside the cards: a long wing name wraps instead of leaving the panel.
+            crestCaption = Label(panel, new Rect(626, -105, 76, 30), "", AvTextRole.Micro, Secondary,
+                TextAlignmentOptions.Top);
+            crestCaption.enableWordWrapping = true;
 
             // Three telemetry cards
             proficiency = SkillCard(panel, 126, 158, HuntMark.Skill, "COMBAT SKILL");
@@ -212,7 +215,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             RectTransform card = Panel(panel, new Rect(x, -109, width, 35), new Color32(22, 26, 30, 255));
             Outline(card, new Rect(0, 0, width, 35), Caution.WithAlpha(0.25f));
             Glyph(panel, new Rect(x + 6, -115, 22, 22), mark);
-            Label(panel, new Rect(x + 32, -111, width - 36, 12), caption, AvTextRole.Micro, Secondary);
+            Label(panel, new Rect(x + 32, -109, width - 36, 16), caption, AvTextRole.Micro, Secondary);
             return Label(panel, new Rect(x + 32, -123, width - 36, 18), "", AvTextRole.DataStrong, Caution);
         }
 

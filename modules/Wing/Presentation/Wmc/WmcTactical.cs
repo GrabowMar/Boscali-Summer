@@ -145,7 +145,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public void Shown(WmcContext c)
         {
-            profileShown = null;
             if (sub == SubFormation) form.Shown(c);
             else if (sub == SubRoute) route.Shown(c);
         }

@@ -72,7 +72,7 @@
     },
     {
       "op": "call",
-      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Menu",
+      "method": "BoscaliSummer.Modules.Autopilot.Runtime.AutopilotAutomation.Menu",
       "args": {},
       "store": "menu"
     },

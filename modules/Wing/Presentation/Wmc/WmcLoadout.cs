@@ -15,7 +15,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     {
         private readonly WmcControls ids;
         private AvFlow flow;
-        private AvTicker ticker;
         private bool relayout;
         private bool client;
 
@@ -43,7 +42,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public void Build(AvFlow pageFlow, AvTicker pageTicker, int index)
         {
             flow = pageFlow;
-            ticker = pageTicker;
             BuildCard(flow);
             BuildAirframeRow(flow);
             BuildTemplateBar(flow);

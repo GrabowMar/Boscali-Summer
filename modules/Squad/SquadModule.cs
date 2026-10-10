@@ -21,6 +21,7 @@ namespace BoscaliSummer.Modules.Squad
             SquadNet network = context.AddComponent<SquadNet>();
             manager.Configure(context.Settings.Squad, network, context.Services); network.Configure(manager);
             context.AddService<ISquadView>(manager);
+            context.AddService<IAceWingRoster>(manager);
             context.AddService<IAircraftTaskExclusion>(manager);
             context.Logger.LogInfo("[Squad] Wing Command API: " + (WingLink.SquadAvailable ? "ready" : WingLink.SquadUnavailableReason));
 

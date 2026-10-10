@@ -12,9 +12,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public float Blend { get; private set; }
         public float Braking { get; private set; } = WingTuning.FormationInitialBraking;
         public float ResponseSeconds { get; private set; } = WingTuning.SpeedLeadSeconds;
-        private float slowTime, readyTime, lastSpeed, lastThrottle, stableThrottle, responseTime;
+        private float lastSpeed, lastThrottle, stableThrottle, responseTime;
         private bool sampled, awaitingResponse;
-        private float burstRemaining, burstCooldown, reportElapsed;
 
         // Learn drag only from stable level flight at settled throttle; reset across manoeuvres and
         // reject collision-like discontinuities.

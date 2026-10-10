@@ -21,6 +21,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         public readonly string NextAction;
         public readonly string Blocker;
         public readonly string PhaseTitle;
+        private readonly string titleLine;
 
         /// <summary>The host could mark a position for it; a lost contact cannot be drawn.</summary>
         public readonly bool HasMarker;
@@ -41,6 +42,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
             Blocker = view.Tasking?.Blocker ?? string.Empty;
             int phase = view.Tasking?.CurrentPhase ?? -1;
             PhaseTitle = phase >= 0 ? view.Tasking.Phases[phase].Title : string.Empty;
+            titleLine = OperationMarkerCopy.Title(Id, Title);
         }
 
         public static bool TryRead(SecondaryObjectiveView view, out ContractCard card)
@@ -58,7 +60,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         public bool Inside(float distance) =>
             HasMarker && Radius > 0f && float.IsFinite(distance) && distance <= Radius;
 
-        public string TitleLine => OperationMarkerCopy.Title(Id, Title);
+        // default(ContractCard) never ran the constructor; build on demand there.
+        public string TitleLine => titleLine ?? OperationMarkerCopy.Title(Id, Title);
 
         /// <summary>The vanilla objective icon this contract's family borrows.</summary>
         public MarkerIconKind Icon => ContractMarkerLook.KindFor(Family);

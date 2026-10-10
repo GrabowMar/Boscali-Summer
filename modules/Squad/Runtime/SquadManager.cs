@@ -11,7 +11,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Squad.Runtime
 {
-    internal sealed class SquadManager : MonoBehaviour, ISceneService, ISquadView, IAircraftTaskExclusion
+    internal sealed class SquadManager : MonoBehaviour, ISceneService, ISquadView, IAircraftTaskExclusion, IAceWingRoster
     {
         private sealed class Career
         {
@@ -101,6 +101,19 @@ namespace BoscaliSummer.Modules.Squad.Runtime
                         return true;
             }
             return false;
+        }
+        /// <summary>Hunts hold aircraft on the host only, so a remote client appends nothing.</summary>
+        public void CopyAceAircraft(List<KeyValuePair<string, Aircraft>> destination)
+        {
+            if (destination == null) return;
+            for (int i = 0; i < hunts.Count; i++)
+            {
+                Aircraft[] wing = hunts[i].Aircraft;
+                if (wing == null) continue;
+                string identity = (hunts[i].Symbol ?? string.Empty) + "|" + (hunts[i].Wing ?? string.Empty);
+                for (int j = 0; j < wing.Length; j++)
+                    if (wing[j] != null && !wing[j].disabled) destination.Add(new KeyValuePair<string, Aircraft>(identity, wing[j]));
+            }
         }
         public int GetBonusPoints(ulong id) => GameAccess.IsServer()
             ? careers.TryGetValue(id, out Career c) ? c.Rules.BonusPoints : 0 : id == localIdentity ? localBonus : 0;

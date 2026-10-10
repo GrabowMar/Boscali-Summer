@@ -78,6 +78,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     {
         private const float InsigniaW = 34f, InsigniaH = 40f, MinH = 46f;
         private readonly AvVector art;
+        private readonly WingInsigniaImage mark;
         private readonly TMP_Text title, counts;
         private readonly Image rule;
 
@@ -85,6 +86,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             Rect = AvLay.Child(parent, "SquadronHead");
             art = AvVector.Create(Rect, "Insignia", 48);
+            mark = new WingInsigniaImage(Rect);
             title = AvText.Make(Rect, "Title", AvTextRole.Head, SquadronWords.SquadronTitle);
             AvText.Fit(title, false);
             counts = AvText.Make(Rect, "Counts", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
@@ -109,13 +111,14 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvLay.Place(title.rectTransform, InsigniaW + 12f, 0f, TextW(s.W), 22f);
             AvLay.Place(counts.rectTransform, InsigniaW + 12f, 22f, TextW(s.W), Mathf.Max(16f, AvText.Height(counts, TextW(s.W))));
             AvLay.Place(rule.rectTransform, 0f, s.H - 1f, s.W, 1f);
+            mark.Place(1f, 2f, InsigniaW, InsigniaH);
             Draw(s.H);
         }
 
         private void Draw(float h)
         {
             art.Buffer.Clear();
-            new WingInk(art.Buffer, h).Insignia(1f, 2f, InsigniaW, InsigniaH, AvStyleHost.FuiColor("frame", AvTheme.Frame), WmcState.Color("warn"));
+            if (!mark.Show()) new WingInk(art.Buffer, h).Insignia(1f, 2f, InsigniaW, InsigniaH, AvStyleHost.FuiColor("frame", AvTheme.Frame), WmcState.Color("warn"));
             art.Commit();
         }
 

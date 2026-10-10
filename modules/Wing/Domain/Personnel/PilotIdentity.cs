@@ -25,9 +25,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             Postings[next(Postings.Length)] + " " + Habits[next(Habits.Length)] + " " +
             RadioHabits[(int)persona][next(RadioHabits[(int)persona].Length)];
 
-        [ThreadStatic]
-        private static Random threadRandom;
-
         private static readonly string[] Surnames =
         {
             "Brennan", "Okonkwo", "Haldor", "Petrov", "Mancini", "Rask", "Oyelaran", "Steiner",

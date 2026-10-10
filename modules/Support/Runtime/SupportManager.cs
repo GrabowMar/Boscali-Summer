@@ -49,7 +49,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private CruiseTasking cruiseTasking;
         private readonly Dictionary<int, CruiseLegMirror> cruiseLegs = new Dictionary<int, CruiseLegMirror>();
         private int pendingWaypoint = -1;
-        private float pendingWaypointUntil;
 
         /// <summary>The live manager, or null; set in Configure, cleared only on destroy (survives scene resets).</summary>
         internal static SupportManager Active { get; private set; }
@@ -414,11 +413,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             mapGesture.Advance(Time.frameCount);
             // Transport timeouts run on wall time: a frozen or paused MP mission clock must not hold a request pending forever.
             float wall = Time.unscaledTime;
-            if (pendingWaypoint != -1 && wall > pendingWaypointUntil)
-            {
-                pendingWaypoint = -1;
-                Status = "No response from host.";
-            }
             if (pending && wall - pendingSince > ReplyTimeout)
             {
                 pending = false;

@@ -139,7 +139,6 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         protected const float Pad = 12f;
         private readonly AvFrame frame;
         private readonly string variant;
-        private readonly bool brackets;
         private readonly List<KeyValuePair<TMP_Text, string>> tints = new List<KeyValuePair<TMP_Text, string>>(16);
         protected EnvGraphic Art;
         protected float PlacedW, PlacedH;
@@ -148,7 +147,6 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         {
             Rect = AvLay.Child(parent, name);
             variant = cardVariant;
-            brackets = hasBrackets;
             frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(8f));
             AvLay.Fill(frame.rectTransform);
             frame.Bracket = hasBrackets ? 8f : 0f;

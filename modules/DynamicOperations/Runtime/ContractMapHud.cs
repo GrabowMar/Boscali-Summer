@@ -133,6 +133,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 return;
             }
 
+            bool projected = ModuleServices.TryGet(out IMapProjection projection);
             for (int i = 0; i < tags.Length; i++)
             {
                 shown[i] = false;
@@ -142,7 +143,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                     continue;
                 }
                 shown[i] = true;
-                if (ModuleServices.TryGet(out IMapProjection projection) &&
+                if (projected &&
                     projection.TryProject(cards[i].X, cards[i].Z, out float x, out float y))
                     positions[i] = new Vector2(x, y);
                 else

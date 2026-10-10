@@ -35,8 +35,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private const float OverG = 7f;
         /// <summary>Fuel fraction below this lights the fuel bar.</summary>
         private const float LowFuel = 0.2f;
-        /// <summary>Text on a lit (ink-filled) tag.</summary>
-        private static readonly Color LitText = new Color(0.02f, 0.05f, 0.05f, 1f);
 
         /// <summary>One tick of own-aircraft flight data.</summary>
         internal struct Flight
