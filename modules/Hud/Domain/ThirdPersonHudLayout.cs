@@ -55,7 +55,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const float SafeMargin = 24f;
 
         /// <summary>The missile-cam readout: centred, below the middle of the screen (the missile and its target own the centre).</summary>
-        public const float MissileCamWidth = 360f, MissileCamHeight = 96f, MissileCamYFraction = 0.34f;
 
         /// <summary>The native HUD text size slider's default; the cluster and the readout scale with the player's own setting.</summary>
         public const float NativeTextSize = 40f, MinScale = 0.75f, MaxScale = 1.6f;
@@ -92,9 +91,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
             float x = outwardIsLeft ? box.Left - BarGap - BarWidth * 0.5f : box.Right + BarGap + BarWidth * 0.5f;
             return new RectF(x, box.CenterY, BarWidth, BarHeight);
         }
-
-        public static RectF MissileCamBox(float width, float height, float scale) =>
-            new RectF(0f, -MissileCamYFraction * height, MissileCamWidth * scale, MissileCamHeight * scale);
 
         /// <summary>Bottom-right target-camera card, above the safe margin, width-capped and
         /// aspect-fit; collapses (zero height) when there is nothing to show.</summary>

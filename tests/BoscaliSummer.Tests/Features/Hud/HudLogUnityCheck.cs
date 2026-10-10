@@ -57,7 +57,6 @@ public static partial class HudLogUnityCheck
             typeof(ThemeManager).GetProperty("Active", All).SetValue(null, theme);
             string[] pages = ScopePagesArg();
             if (pages.Length == 0) {   // the whole check; with -pages only the scope fixtures of those pages run
-                foreach (Vector2 size in BoardSizes) MissileCam(size);
                 foreach (Vector2 size in new[] { new Vector2(1280,720), new Vector2(1920,1080), new Vector2(2560,1080) }) Cluster(size);
                 Contracts();
                 foreach (float height in new[] { 160f, 420f, 596f })
@@ -91,7 +90,6 @@ public static partial class HudLogUnityCheck
         }
     }
     private const string HudDomain = "BoscaliSummer.Modules.Hud.Domain.";
-    private static readonly Vector2[] BoardSizes = { new Vector2(1280, 720), new Vector2(1920, 1080) };
     private static object Boxed(string name) => Activator.CreateInstance(Type(HudDomain + name));
     private static object EnumOf(string name, string value) => Enum.Parse(Type(HudDomain + name), value);
     private static object Tone(string tone) => Enum.Parse(Type("BoscaliSummer.Core.Contracts.HudTone"), tone);
@@ -123,43 +121,6 @@ public static partial class HudLogUnityCheck
     {
         float width = t.preferredWidth, smallest = t.enableAutoSizing && t.fontSizeMax > 0f ? width * t.fontSizeMin / t.fontSizeMax : width;
         return smallest <= t.rectTransform.rect.width * tolerance;
-    }
-    /// <summary>The readout while the orbit camera rides one of our missiles: locked, blind, then the long and fast cases that need the figures to shrink to their columns.</summary>
-    private static void MissileCam(Vector2 size)
-    {
-        foreach (string state in new[] { "locked", "blind", "fast-metric", "fast-imperial", "cruise" }) {
-            Canvas canvas = MakeCanvas("MissileCam", size); CombatHUD hud = NativeDock(canvas);
-            Sky(canvas);
-            object panel = Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Presentation.MissileCamPanel"), true);
-            Call(panel, "Build", hud, canvas);
-            SyntheticFont((RectTransform)Field(panel, "root"));
-            object data = Boxed("MissileCamData");
-            Set(data, "Valid", true); Set(data, "Index", 0); Set(data, "Count", 2); Set(data, "Weapon", "AIM-120"); Set(data, "Seeker", "SARH");
-            Set(data, "State", EnumOf("SeekerState", state == "blind" ? "Search" : "Locked")); Set(data, "HasTarget", state != "blind"); Set(data, "Target", "MiG-29");
-            bool fast = state.StartsWith("fast"), blind = state == "blind";
-            Set(data, "RangeM", blind ? float.NaN : fast ? 18500f : state == "cruise" ? 300000f : 2400f);
-            Set(data, "ClosureMps", blind ? float.NaN : fast ? 700f : state == "cruise" ? 250f : 233f);
-            Set(data, "TtiS", blind ? float.NaN : fast ? 26.4f : state == "cruise" ? 1200f : 3.4f);
-            Call(panel, "Present", true, data, state == "fast-imperial" ? AvUnits.Imperial : AvUnits.Metric, 1f);
-            Canvas.ForceUpdateCanvases();
-            RectTransform root = (RectTransform)Field(panel, "root");
-            string tag = state + "-" + size.x + "x" + size.y;
-            Check(root.gameObject.activeSelf, "The readout shows while riding a missile.");
-            Check(root.Find("Header").GetComponent<TMP_Text>().text == "MSL 1/2 · AIM-120", "Header names the missile and its place in the list.");
-            Check(root.Find("Seeker").GetComponent<TMP_Text>().text == (blind ? "SARH · NO TGT" : "SARH · LOCKED"), "The seeker says what it is doing.");
-            if (state == "locked") Check(root.Find("Tti").GetComponent<TMP_Text>().text.Contains("3S"), "Time to impact is shown.");
-            if (state == "cruise") Check(root.Find("Tti").GetComponent<TMP_Text>().text.Contains("20:00"), "A cruise missile 20 minutes out reads M:SS: " + root.Find("Tti").GetComponent<TMP_Text>().text);
-            if (blind) Check(root.Find("Target").GetComponent<TMP_Text>().text == "NO TARGET", "A blind missile says NO TGT.");
-            foreach (string figure in new[] { "Range", "Closure", "Tti", "Header", "Seeker", "Target" }) {
-                TMP_Text label = root.Find(figure).GetComponent<TMP_Text>();
-                Check(Fits(label, .96f), "A missile-cam figure fits its column with room to spare: " + figure + " [" + label.text + "] " + label.preferredWidth + " > " + label.rectTransform.rect.width + " (" + tag + ")");
-            }
-            Capture(canvas, "HUD-missilecam-" + tag + ".png");
-            foreach (Graphic g in root.GetComponentsInChildren<Graphic>()) Check(!g.raycastTarget, "The missile-cam readout must not intercept pointer input.");
-            Call(panel, "Present", false, data, AvUnits.Metric, 1f);
-            Check(!root.gameObject.activeSelf, "The readout hides when the camera leaves the missile.");
-            Call(panel, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
-        }
     }
     private sealed class ClusterCase
     {

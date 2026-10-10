@@ -22,7 +22,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private const int Cap = 8;
 
         private ShotScope d;
-        private bool live, primed;
+        private bool live;
         private AvUnits units;
         private float now;
         private int lead = -1;
@@ -53,12 +53,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             now = env.Now;
             units = env.Units;
-            if (!ScopeFeeds.TryRead(out d)) { live = primed = false; lead = -1; Array.Clear(seenId, 0, Cap); Array.Clear(pitSaid, 0, Cap); Array.Clear(resultState, 0, resultState.Length); scale.Reset(); return false; }
+            if (!ScopeFeeds.TryRead(out d)) { live = false; lead = -1; Array.Clear(seenId, 0, Cap); Array.Clear(pitSaid, 0, Cap); Array.Clear(resultState, 0, resultState.Length); scale.Reset(); return false; }
             live = true;
             lead = ShotMath.Lead(d.Missiles, d.MissileCount);
             Edges(env);
             ReadHeadline();
-            primed = true;
             return true;
         }
 
