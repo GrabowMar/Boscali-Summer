@@ -30,6 +30,10 @@ public sealed class CloudBench : MonoBehaviour
         public string Name;
         public uint Seed = 90210u;
         public WeatherRegimeType State;
+        /// <summary>Library sky to pin (0-46), or -1 for the class state.</summary>
+        public int Sky = -1;
+        /// <summary>A grazing view (pitch 1 degree) of a sky: rendered and saved, never measured.</summary>
+        public bool Grazing;
         public byte Sets;
         public bool Anchor;
         public WeatherScenario? Preset;
@@ -114,6 +118,10 @@ public sealed class CloudBench : MonoBehaviour
         int measuredFrames = int.TryParse(Environment.GetEnvironmentVariable("CLOUD_BENCH_FRAMES"), out int measured) ? Math.Max(12, measured) : 48;
         // CLOUD_BENCH_TAPE: "" the field's own one-keyframe tape, "texture" the same sky as a 4096-texel tape (the texture path), "ladder" every rung half-way to the next, "ramp" a ramped tape, "mix" the slab worst case.
         string tapeMode = Environment.GetEnvironmentVariable("CLOUD_BENCH_TAPE") ?? "";
+        // CLOUD_BENCH_SKIES: the sky contact-sheet mode (see CloudBenchSkies).
+        CloudBenchSkies skies = CloudBenchSkies.FromEnvironment();
+        // CLOUD_BENCH_SKYCLASS=1 renders the same poses under the class state instead of the pin: the perf baseline of the sky run.
+        bool skyClass = Environment.GetEnvironmentVariable("CLOUD_BENCH_SKYCLASS") == "1";
         byte[] noiseBytes = CloudNoise3D.Generate(WeatherVolumeDressingNoise.Size, 47);
         int n3 = WeatherVolumeDressingNoise.Size;
         var pixels = new Color32[n3 * n3 * n3];
@@ -222,13 +230,29 @@ public sealed class CloudBench : MonoBehaviour
         // that the native aircraft can sustain flight at this altitude.
         if (Array.Exists(filters, filter => filter == "map" || filter.Contains("map-")))
             AddMapViews(scenes);
+        if (skies != null)
+        {
+            // The sky sheets run alone: one pose under each selected sky, from 300 m, the horizon at 65 % of the frame height; a sky whose
+            // cloud is a cumulus group or a storm cell (CloudBenchSkies.IsFeature) is framed from below at that feature instead (place 10).
+            scenes.Clear();
+            foreach (int sky in skies.Skies)
+                scenes.Add(new Scene { Name = CloudBenchSkies.SceneName(sky), Sky = sky, State = SkyLibrary.ClassOf(sky),
+                    Camera = new Vector3(0, 300, 0), Yaw = 30, Pitch = CloudBenchSkies.Pitch, Place = CloudBenchSkies.IsFeature(sky) ? 10 : 0 });
+            // Grazing views (spec 10.3 extra scenes): the ripple rows of sky 18 (AcUndulatus) at the horizon, where the ripple LOD of 4.3 is new in
+            // this slice, and the cirrus streaks of sky 2 edge-on (the high slab's longest chord). The same pose at a 1 degree pitch; saved, not measured.
+            foreach (int sky in new[] { 17, 1 })
+                if (skies.Includes(sky))
+                    scenes.Add(new Scene { Name = CloudBenchSkies.SceneName(sky) + "-grazing", Sky = sky, State = SkyLibrary.ClassOf(sky),
+                        Camera = new Vector3(0, 300, 0), Yaw = 30, Pitch = 1f, Grazing = true });
+        }
 
         var uniforms = new CloudVolumeUniforms();
         foreach (Scene s in scenes)
         {
             if (filters.Length > 0 && !Array.Exists(filters, filter => s.Name.Contains(filter))) continue;
             // INTERIM(slice 4): the key has no front turn; the three front-turn views render the unturned sky.
-            var key = new WeatherKey(s.Seed, 0f, false, (byte)s.State, s.Sets, s.Salt, s.Anchor, 0f, 25000f);
+            var key = new WeatherKey(s.Seed, 0f, false, (byte)s.State, s.Sets, s.Salt, s.Anchor, 0f, 25000f,
+                skyPin: s.Sky >= 0 && !skyClass ? (byte)s.Sky : WeatherKey.None);
             if (s.Preset.HasValue) key = WeatherScenarios.Apply(s.Preset.Value, key, true, 0f, 0f, 0f, 1f);
             const float time = 900f;
             var field = new WeatherField();
@@ -262,6 +286,25 @@ public sealed class CloudBench : MonoBehaviour
                 s.Camera = new Vector3(cloud.X - cloud.Radius * 0.9f, y, cloud.Z - cloud.Radius * 0.4f);
                 s.Yaw = Mathf.Atan2(cloud.X - s.Camera.x, cloud.Z - s.Camera.z) * Mathf.Rad2Deg;
                 s.Pitch = s.Name.Contains("high") ? -12f : 6f;
+            }
+            else if (s.Place == 10 && (field.CloudClusterCount > 0 || field.CellCount > 0))
+            {
+                // The sky sheets: a cumulus group seen from below at its edge, or - for a storm sky, or when there is no group - the
+                // first storm cell. The legacy layout places a handful of features; the lattice of slice 3 makes cover uniform.
+                if (field.CellCount > 0 && (field.CloudClusterCount == 0 || s.State >= WeatherRegimeType.RainSquall))
+                {
+                    StormCell cell = field.Cell(0);
+                    s.Camera = new Vector3(cell.X - cell.Radius * 5f, 600f, cell.Z);
+                    s.Yaw = 90f;
+                    s.Pitch = 8f;
+                }
+                else
+                {
+                    DryCloudCluster cloud = field.CloudCluster(0);
+                    s.Camera = new Vector3(cloud.X - cloud.Radius * 0.9f, Math.Max(400f, cloud.Base - 500f), cloud.Z - cloud.Radius * 0.4f);
+                    s.Yaw = Mathf.Atan2(cloud.X - s.Camera.x, cloud.Z - s.Camera.z) * Mathf.Rad2Deg;
+                    s.Pitch = 6f;
+                }
             }
             else if (s.Place == 4 && s.LookAtHero >= 0 && s.LookAtHero < field.SuperstructureCount)
             {
@@ -344,7 +387,7 @@ public sealed class CloudBench : MonoBehaviour
             Vector3 sun = new Vector3(0.35f, 0.55f, -0.65f).normalized;
 
             uniforms.Settle(field);
-            foreach (string mode in new[] { "old", "full", "half", "temporal" })
+            foreach (string mode in skies != null ? new[] { "temporal" } : new[] { "old", "full", "half", "temporal" })
             {
                 if (mode == "old" && old == null) continue;
                 if (moving && mode != "temporal") continue;
@@ -432,6 +475,7 @@ public sealed class CloudBench : MonoBehaviour
                 readback.Apply();
                 RenderTexture.active = null;
                 File.WriteAllBytes(s.Name + "-" + mode + ".png", readback.EncodeToPNG());
+                if (skies != null && !s.Grazing) skies.Capture(s.Sky, readback);
                 log.AppendLine(s.Name.PadRight(16) + mode.PadRight(5) + ms.ToString("0.00").PadLeft(8) + " ms/frame" +
                     "  (maps " + mapMs + " ms, cookie " + cookieMs + " ms, heroes " + field.SuperstructureCount + (moving ? "; route includes PNG capture overhead" : "") + ")");
             }
@@ -439,6 +483,15 @@ public sealed class CloudBench : MonoBehaviour
             camera.transform.rotation = Quaternion.Euler(-s.Pitch, yaw, 0f);
             camera.Render();
             Sync(target, readback);
+            if (skies != null && !s.Grazing)
+            {
+                // The same pose without clouds: the metrics compare the two.
+                RenderTexture.active = target;
+                readback.ReadPixels(new Rect(0, 0, Width, Height), 0, 0);
+                readback.Apply();
+                RenderTexture.active = null;
+                skies.Finish(s.Sky, readback, camera.fieldOfView / Height, log);
+            }
             watch.Restart();
             for (int i = 0; i < Frames; i++) camera.Render();
             Sync(target, readback);
