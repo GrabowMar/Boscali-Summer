@@ -188,6 +188,7 @@ public static class WeatherEnvUnityCheck
         Set(d, "Cover", cover); Set(d, "Deck", deck); Set(d, "Top", top); Set(d, "VisibilityKm", vis); Set(d, "Rain", rain);
         Set(d, "Turbulence", turb); Set(d, "WindKts", kts); Set(d, "WindFrom", from); Set(d, "WindTo", to);
         Set(d, "Next", "NEXT 03:12"); Set(d, "NextFrac", 0.36f);
+        Set(d, "Metar", regime == 6 ? "BKN012 OVC095 +RA TS" : regime >= 3 ? "BKN049 OVC138" : regime >= 1 ? "FEW049 SCT289" : "SKC");
         Set(d, "Footer", regime == 6 ? "Held by weather console (Ctrl+O) — Thunderstorm." : name + " holds — next step in 03:12.");
         Set(d, "FooterState", AvState.Info);
     }

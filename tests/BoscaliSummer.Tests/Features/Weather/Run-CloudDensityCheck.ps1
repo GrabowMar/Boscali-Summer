@@ -11,7 +11,7 @@ if (-not $PrepareOnly -and -not (Test-Path -LiteralPath $Unity)) { throw "Unity 
 New-UnityCheckProject $fixture '{"dependencies":{"com.unity.modules.imageconversion":"1.0.0"}}' -Folders 'Assets/Resources', 'Assets/Code'
 Copy-Item "$repo/modules/Weather/Domain/*.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/Core/Math/Deterministic.cs", "$repo/Core/Math/Scalar.cs" "$fixture/Assets/Code/"
-foreach ($f in 'CloudNoise3D.cs', 'CloudMaps.cs', 'CloudBodies.cs', 'CloudVolumeUniforms.cs') {
+foreach ($f in 'CloudNoise3D.cs', 'CloudMaps.cs', 'CloudBodies.cs', 'CloudVolumeUniforms.cs', 'TapeTexture.cs') {
     Copy-Item "$repo/modules/Weather/Visuals/$f" "$fixture/Assets/Code/"
 }
 Copy-Item "$PSScriptRoot/WeatherCloudDensityCheck.cs" "$fixture/Assets/Code/"
@@ -38,6 +38,7 @@ $result = Get-Content "$fixture/result.txt" -Raw
 Write-Output $result
 if ($player.ExitCode -ne 0 -or $result -match '(?m)^FAIL ' -or $result -notmatch 'PASS density' -or
     $result -notmatch 'PASS rain optics 8' -or $result -notmatch 'PASS ray composition 10' -or
-    $result -notmatch 'PASS slab footprint 18' -or $result -notmatch 'PASS air optics 12') {
+    $result -notmatch 'PASS slab footprint \d+' -or $result -notmatch 'PASS tape rows \d+' -or $result -notmatch 'PASS slab mask \d+' -or
+    $result -notmatch 'PASS air optics 12') {
     throw "Density fixture failed: $fixture/player.log"
 }

@@ -86,6 +86,7 @@
     <Compile Include="..\..\Core\Math\Deterministic.cs" Link="Core\Math\Deterministic.cs" />
     <Compile Include="..\..\Core\Math\Scalar.cs" Link="Core\Math\Scalar.cs" />
     <Compile Include="..\..\Core\Math\FlightLoad.cs" Link="Core\Math\FlightLoad.cs" />
+    <Compile Include="..\..\Core\Game\MissionClock.cs" Link="Framework\MissionClock.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Buildings\ImpactScorchPolicy.cs" Link="Features\FireAndDestruction\ImpactScorchPolicy.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Runtime\FireScorchPolicy.cs" Link="Features\FireAndDestruction\FireScorchPolicy.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Runtime\FireGroundSnapPolicy.cs" Link="Features\FireAndDestruction\FireGroundSnapPolicy.cs" />

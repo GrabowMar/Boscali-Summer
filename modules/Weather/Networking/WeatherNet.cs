@@ -15,7 +15,7 @@ namespace BoscaliSummer.Modules.Weather.Networking
     /// </summary>
     internal sealed class WeatherNet : MonoBehaviour
     {
-        public const byte ProtocolVersion = 7;
+        public const byte ProtocolVersion = 8;
 
         private WeatherManager manager;
         private HandlerSlot clientSlot;
@@ -32,6 +32,14 @@ namespace BoscaliSummer.Modules.Weather.Networking
         {
             manager = owner;
             InstallSerializers();
+        }
+
+        /// <summary>Two resends, one and four seconds out, cover a peer whose handler registers after the first one
+        /// lands. Called when a peer joins and when the host creates its key.</summary>
+        public void ArmResends()
+        {
+            resyncAt = Time.unscaledTime + 1f;
+            resyncsLeft = 2;
         }
 
         public void ResetScene()
@@ -60,11 +68,7 @@ namespace BoscaliSummer.Modules.Weather.Networking
         private void WatchPeers(NetworkServer server)
         {
             int peers = server?.AuthenticatedPlayers?.Count ?? 0;
-            if (peers > knownPeers)
-            {
-                resyncAt = Time.unscaledTime + 1f;
-                resyncsLeft = 2;
-            }
+            if (peers > knownPeers) ArmResends();
             knownPeers = peers;
             if (resyncsLeft > 0 && Time.unscaledTime >= resyncAt)
             {
@@ -103,22 +107,27 @@ namespace BoscaliSummer.Modules.Weather.Networking
                 w.WriteSingle(v.TargetWindX);
                 w.WriteSingle(v.TargetWindZ);
                 w.WriteSingle(v.TargetTurbulence);
-                w.WriteSingle(v.TransitionProgress);
                 w.WritePackedUInt32(v.MissionTimeSeconds);
                 w.WriteSingle(v.ForcedRain);
                 w.WritePackedUInt32(v.FieldSeed);
+                w.WriteByte(v.FieldStory);
+                w.WriteByte(v.FieldSkyPin);
+                w.WriteByte(v.FieldSalt);
+                w.WriteByte(v.FieldMissionClass);
+                w.WriteSingle(v.FieldOpeningBase);
+                w.WriteSingle(v.FieldHeading);
                 w.WriteSingle(v.FieldEpoch);
-                w.WriteByte(v.FieldStartRegime);
+                w.WriteSingle(v.FieldOffset);
+                w.WriteSingle(v.FieldSystemSpeed);
                 w.WriteByte((byte)(v.FieldDynamic ? 1 : 0));
                 w.WriteByte((byte)(v.FieldManual ? 1 : 0));
-                w.WriteSingle(v.HoldMinutes);
-                w.WriteSingle(v.BlendMinutes);
                 w.WriteByte(v.FieldSets);
-                w.WriteByte(v.FieldSalt);
                 w.WriteByte((byte)(v.FieldHasAnchor ? 1 : 0));
                 w.WriteSingle(v.FieldAnchorX);
                 w.WriteSingle(v.FieldAnchorZ);
-                w.WriteByte(v.FieldFrontTurn);
+                w.WriteSingle(v.FieldSetOriginSquall);
+                w.WriteSingle(v.FieldSetOriginSupercell);
+                w.WriteSingle(v.FieldSetOriginCell);
             }),
             (Func<NetworkReader, WeatherSyncMessage>)(r =>
             {
@@ -131,22 +140,27 @@ namespace BoscaliSummer.Modules.Weather.Networking
                 message.TargetWindX = r.ReadSingle();
                 message.TargetWindZ = r.ReadSingle();
                 message.TargetTurbulence = r.ReadSingle();
-                message.TransitionProgress = r.ReadSingle();
                 message.MissionTimeSeconds = r.ReadPackedUInt32();
                 message.ForcedRain = r.ReadSingle();
                 message.FieldSeed = r.ReadPackedUInt32();
+                message.FieldStory = r.ReadByte();
+                message.FieldSkyPin = r.ReadByte();
+                message.FieldSalt = r.ReadByte();
+                message.FieldMissionClass = r.ReadByte();
+                message.FieldOpeningBase = r.ReadSingle();
+                message.FieldHeading = r.ReadSingle();
                 message.FieldEpoch = r.ReadSingle();
-                message.FieldStartRegime = r.ReadByte();
+                message.FieldOffset = r.ReadSingle();
+                message.FieldSystemSpeed = r.ReadSingle();
                 message.FieldDynamic = r.ReadByte() != 0;
                 message.FieldManual = r.ReadByte() != 0;
-                message.HoldMinutes = r.ReadSingle();
-                message.BlendMinutes = r.ReadSingle();
                 message.FieldSets = r.ReadByte();
-                message.FieldSalt = r.ReadByte();
                 message.FieldHasAnchor = r.ReadByte() != 0;
                 message.FieldAnchorX = r.ReadSingle();
                 message.FieldAnchorZ = r.ReadSingle();
-                message.FieldFrontTurn = r.ReadByte();
+                message.FieldSetOriginSquall = r.ReadSingle();
+                message.FieldSetOriginSupercell = r.ReadSingle();
+                message.FieldSetOriginCell = r.ReadSingle();
                 return message;
             }));
 

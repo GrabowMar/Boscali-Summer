@@ -1,0 +1,58 @@
+{
+  "name": "weather-capture",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 240,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "at": {
+        "map": [
+          0,
+          0
+        ]
+      },
+      "altitude": 450,
+      "speed": 110,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "level": 60
+        }
+      ]
+    },
+    {
+      "op": "observe",
+      "follow": "lead"
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Readout",
+      "store": "capture"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    { "check": "status_ok" },
+    { "check": "result_above", "path": "capture.captured", "min": 0.5 },
+    { "check": "result_above", "path": "capture.captureMapLoaded", "min": 0.5 },
+    { "check": "result_below", "path": "capture.keySeedIsLegacy", "max": 0.5 },
+    { "check": "result_above", "path": "capture.keySeed", "min": 0.5 },
+    { "check": "result_above", "path": "capture.keyDynamic", "min": 0.5 },
+    { "check": "result_above", "path": "capture.keyEpoch", "min": -0.5 },
+    { "check": "result_above", "path": "capture.protocol", "min": 7.5 }
+  ]
+}

@@ -30,6 +30,10 @@ public sealed class CloudBench : MonoBehaviour
         public string Name;
         public uint Seed = 90210u;
         public WeatherRegimeType State;
+        /// <summary>Library sky to pin (0-46), or -1 for the class state.</summary>
+        public int Sky = -1;
+        /// <summary>A grazing view (pitch 1 degree) of a sky: rendered and saved, never measured.</summary>
+        public bool Grazing;
         public byte Sets;
         public bool Anchor;
         public WeatherScenario? Preset;
@@ -112,6 +116,12 @@ public sealed class CloudBench : MonoBehaviour
         File.WriteAllText("scene-poses.csv", "scene,x,y,z,yaw,pitch,travelX,travelY,travelZ\n");
         int settleFrames = int.TryParse(Environment.GetEnvironmentVariable("CLOUD_BENCH_SETTLE"), out int settle) ? Math.Max(4, settle) : 48;
         int measuredFrames = int.TryParse(Environment.GetEnvironmentVariable("CLOUD_BENCH_FRAMES"), out int measured) ? Math.Max(12, measured) : 48;
+        // CLOUD_BENCH_TAPE: "" the field's own one-keyframe tape, "texture" the same sky as a 4096-texel tape (the texture path), "ladder" every rung half-way to the next, "ramp" a ramped tape, "mix" the slab worst case.
+        string tapeMode = Environment.GetEnvironmentVariable("CLOUD_BENCH_TAPE") ?? "";
+        // CLOUD_BENCH_SKIES: the sky contact-sheet mode (see CloudBenchSkies).
+        CloudBenchSkies skies = CloudBenchSkies.FromEnvironment();
+        // CLOUD_BENCH_SKYCLASS=1 renders the same poses under the class state instead of the pin: the perf baseline of the sky run.
+        bool skyClass = Environment.GetEnvironmentVariable("CLOUD_BENCH_SKYCLASS") == "1";
         byte[] noiseBytes = CloudNoise3D.Generate(WeatherVolumeDressingNoise.Size, 47);
         int n3 = WeatherVolumeDressingNoise.Size;
         var pixels = new Color32[n3 * n3 * n3];
@@ -220,19 +230,39 @@ public sealed class CloudBench : MonoBehaviour
         // that the native aircraft can sustain flight at this altitude.
         if (Array.Exists(filters, filter => filter == "map" || filter.Contains("map-")))
             AddMapViews(scenes);
+        if (skies != null)
+        {
+            // The sky sheets run alone: one pose under each selected sky, from 300 m, the horizon at 65 % of the frame height; a sky whose
+            // cloud is a cumulus group or a storm cell (CloudBenchSkies.IsFeature) is framed from below at that feature instead (place 10).
+            scenes.Clear();
+            foreach (int sky in skies.Skies)
+                scenes.Add(new Scene { Name = CloudBenchSkies.SceneName(sky), Sky = sky, State = SkyLibrary.ClassOf(sky),
+                    Camera = new Vector3(0, 300, 0), Yaw = 30, Pitch = CloudBenchSkies.Pitch, Place = CloudBenchSkies.IsFeature(sky) ? 10 : 0 });
+            // Grazing views (spec 10.3 extra scenes): the ripple rows of sky 18 (AcUndulatus) at the horizon, where the ripple LOD of 4.3 is new in
+            // this slice, and the cirrus streaks of sky 2 edge-on (the high slab's longest chord). The same pose at a 1 degree pitch; saved, not measured.
+            foreach (int sky in new[] { 17, 1 })
+                if (skies.Includes(sky))
+                    scenes.Add(new Scene { Name = CloudBenchSkies.SceneName(sky) + "-grazing", Sky = sky, State = SkyLibrary.ClassOf(sky),
+                        Camera = new Vector3(0, 300, 0), Yaw = 30, Pitch = 1f, Grazing = true });
+        }
 
         var uniforms = new CloudVolumeUniforms();
         foreach (Scene s in scenes)
         {
             if (filters.Length > 0 && !Array.Exists(filters, filter => s.Name.Contains(filter))) continue;
-            var key = new WeatherKey(s.Seed, 0f, false, (byte)s.State, 5f, 60f, s.Sets, s.Salt, s.Anchor, 0f, 25000f, s.Turn);
+            // INTERIM(slice 4): the key has no front turn; the three front-turn views render the unturned sky.
+            var key = new WeatherKey(s.Seed, 0f, false, (byte)s.State, s.Sets, s.Salt, s.Anchor, 0f, 25000f,
+                skyPin: s.Sky >= 0 && !skyClass ? (byte)s.Sky : WeatherKey.None);
             if (s.Preset.HasValue) key = WeatherScenarios.Apply(s.Preset.Value, key, true, 0f, 0f, 0f, 1f);
             const float time = 900f;
             var field = new WeatherField();
             field.Build(key, time, HalfExtent, HalfExtent, 13f);
+            TapeFixture fixture = TapeVariant(tapeMode, field);
+            if (fixture != null) field.UseFixtureTape(fixture.Sampler, fixture.Frame);
             var watch = Stopwatch.StartNew();
-            CloudMaps maps = CloudMaps.Build(key, time, HalfExtent, HalfExtent, 13f, 105000f, 315000f);
+            CloudMaps maps = CloudMaps.Build(key, time, HalfExtent, HalfExtent, 13f, 105000f, 315000f, fixture);
             long mapMs = watch.ElapsedMilliseconds;
+            long cookieMs = CookieMs(noiseBytes, n3, field);
             Texture2D near = Map(maps.Near, CloudMaps.NearSize), nearProfiles = Map(maps.NearProfiles, CloudMaps.NearSize);
             Texture2D far = Map(maps.Far, CloudMaps.FarSize), farProfiles = Map(maps.FarProfiles, CloudMaps.FarSize);
             Texture2D envelope = Map(maps.Envelope, CloudMaps.EnvelopeSize);
@@ -256,6 +286,25 @@ public sealed class CloudBench : MonoBehaviour
                 s.Camera = new Vector3(cloud.X - cloud.Radius * 0.9f, y, cloud.Z - cloud.Radius * 0.4f);
                 s.Yaw = Mathf.Atan2(cloud.X - s.Camera.x, cloud.Z - s.Camera.z) * Mathf.Rad2Deg;
                 s.Pitch = s.Name.Contains("high") ? -12f : 6f;
+            }
+            else if (s.Place == 10 && (field.CloudClusterCount > 0 || field.CellCount > 0))
+            {
+                // The sky sheets: a cumulus group seen from below at its edge, or - for a storm sky, or when there is no group - the
+                // first storm cell. The legacy layout places a handful of features; the lattice of slice 3 makes cover uniform.
+                if (field.CellCount > 0 && (field.CloudClusterCount == 0 || s.State >= WeatherRegimeType.RainSquall))
+                {
+                    StormCell cell = field.Cell(0);
+                    s.Camera = new Vector3(cell.X - cell.Radius * 5f, 600f, cell.Z);
+                    s.Yaw = 90f;
+                    s.Pitch = 8f;
+                }
+                else
+                {
+                    DryCloudCluster cloud = field.CloudCluster(0);
+                    s.Camera = new Vector3(cloud.X - cloud.Radius * 0.9f, Math.Max(400f, cloud.Base - 500f), cloud.Z - cloud.Radius * 0.4f);
+                    s.Yaw = Mathf.Atan2(cloud.X - s.Camera.x, cloud.Z - s.Camera.z) * Mathf.Rad2Deg;
+                    s.Pitch = 6f;
+                }
             }
             else if (s.Place == 4 && s.LookAtHero >= 0 && s.LookAtHero < field.SuperstructureCount)
             {
@@ -331,14 +380,14 @@ public sealed class CloudBench : MonoBehaviour
                 outer.BackgroundCover *= farFade; outer.FrontCover *= farFade; outer.CellShape *= farFade;
                 return nearWeight <= 0f ? outer : CloudBodies.BlendMaps(outer, nearPoint, nearWeight);
             }
-            var bodies = new CloudBodies(noiseBytes, n3, field.Params, field.PrevailingHeading, field.Split, 0f,
+            var bodies = new CloudBodies(noiseBytes, n3, field.Tape, field.Frame, field.PrevailingHeading, field.Split, 0f,
                 field, null, true, SampleDisplayed);
             camera.transform.position = s.Camera;
             camera.transform.rotation = Quaternion.Euler(-s.Pitch, yaw, 0f);
             Vector3 sun = new Vector3(0.35f, 0.55f, -0.65f).normalized;
 
             uniforms.Settle(field);
-            foreach (string mode in new[] { "old", "full", "half", "temporal" })
+            foreach (string mode in skies != null ? new[] { "temporal" } : new[] { "old", "full", "half", "temporal" })
             {
                 if (mode == "old" && old == null) continue;
                 if (moving && mode != "temporal") continue;
@@ -426,13 +475,23 @@ public sealed class CloudBench : MonoBehaviour
                 readback.Apply();
                 RenderTexture.active = null;
                 File.WriteAllBytes(s.Name + "-" + mode + ".png", readback.EncodeToPNG());
+                if (skies != null && !s.Grazing) skies.Capture(s.Sky, readback);
                 log.AppendLine(s.Name.PadRight(16) + mode.PadRight(5) + ms.ToString("0.00").PadLeft(8) + " ms/frame" +
-                    "  (maps " + mapMs + " ms, heroes " + field.SuperstructureCount + (moving ? "; route includes PNG capture overhead" : "") + ")");
+                    "  (maps " + mapMs + " ms, cookie " + cookieMs + " ms, heroes " + field.SuperstructureCount + (moving ? "; route includes PNG capture overhead" : "") + ")");
             }
             cmd.Clear();
             camera.transform.rotation = Quaternion.Euler(-s.Pitch, yaw, 0f);
             camera.Render();
             Sync(target, readback);
+            if (skies != null && !s.Grazing)
+            {
+                // The same pose without clouds: the metrics compare the two.
+                RenderTexture.active = target;
+                readback.ReadPixels(new Rect(0, 0, Width, Height), 0, 0);
+                readback.Apply();
+                RenderTexture.active = null;
+                skies.Finish(s.Sky, readback, camera.fieldOfView / Height, log);
+            }
             watch.Restart();
             for (int i = 0; i < Frames; i++) camera.Render();
             Sync(target, readback);
@@ -440,6 +499,99 @@ public sealed class CloudBench : MonoBehaviour
             UnityEngine.Object.Destroy(near); UnityEngine.Object.Destroy(nearProfiles);
             UnityEngine.Object.Destroy(far); UnityEngine.Object.Destroy(farProfiles); UnityEngine.Object.Destroy(envelope);
         }
+    }
+
+    /// <summary>The shadow cookie build's CPU cost (WeatherCloudShadows.Queue; spec 10.3 gates "cookie worker time"): the same loop on every
+    /// fourth pixel of both axes, 14 density taps each, a fixed 45-degree sun, scaled by 16. A mirror of that loop; keep it in step.</summary>
+    private static long CookieMs(byte[] noise, int size, WeatherField field)
+    {
+        const int cookie = 256, stride = 4, samples = 14;
+        const float span = 48000f;
+        var body = new CloudBodies(noise, size, field.Tape, field.Frame, field.PrevailingHeading, field.Split, 0f, field);
+        Vector3 direction = new Vector3(0.35f, -0.72f, 0.6f).normalized;
+        Vector3 right = Vector3.Cross(Vector3.up, direction).normalized, up = Vector3.Cross(direction, right);
+        float baseY = field.Params.CloudBase;
+        float lower = Mathf.Max(0f, baseY - 800f), upper = 12000f, dy = (upper - lower) / samples;
+        float rayStep = dy / Mathf.Max(0.06f, -direction.y), sink = 0f;
+        var timer = Stopwatch.StartNew();
+        for (int y = stride / 2; y < cookie; y += stride)
+            for (int x = stride / 2; x < cookie; x += stride)
+            {
+                float u = ((x + 0.5f) / cookie - 0.5f) * span, v = ((y + 0.5f) / cookie - 0.5f) * span;
+                float px = right.x * u + up.x * v, py = right.y * u + up.y * v, pz = right.z * u + up.z * v;
+                float deckT = (baseY + 700f - py) / direction.y;
+                WeatherPoint p = field.Sample(px + direction.x * deckT, pz + direction.z * deckT);
+                float depth = 0f;
+                for (int s = 0; s < samples && depth < 4f; s++)
+                {
+                    float altitude = lower + (s + 0.5f) * dy;
+                    float t = (altitude - py) / direction.y;
+                    depth += body.Density(p, px + direction.x * t, altitude, pz + direction.z * t, 0f) * rayStep * 0.0021f;
+                }
+                sink += depth;
+            }
+        if (sink < 0f) UnityEngine.Debug.Log("cookie sink " + sink); // keeps the loop live
+        return (long)(timer.Elapsed.TotalMilliseconds * ((cookie / stride) * (cookie / stride) / 4096.0) * 16.0);
+    }
+
+    /// <summary>The tape the bench renders with. "" is the field's own one-keyframe tape (null here: its low genus rides in uniforms).
+    /// "texture" is the same sky as a 4096-texel tape with a 10 km meander, so the texture path runs. "ladder" is the same sky with
+    /// every rung half-way to the next, so the shader blends two rungs at every sample (the worst case of the feature ladder).
+    /// "ramp" is the scene's own sky joined to the same sky a rung or more away by a 12 km ramp through the origin, bent by a 10 km meander.
+    /// "mix" is the worst-case morphology mix: both thin layers carry all four morphologies at weight 0.25.</summary>
+    private static TapeFixture TapeVariant(string mode, WeatherField field)
+    {
+        if (mode == "texture")
+        {
+            // B': the sky B renders, as a 4096-texel tape of that one sky. IsConstant is false, so BindTape sends no uniforms and the shader
+            // fetches and lerps three low-genus rows per sample and evaluates TapeS with its sines. The origin sits inside the tape (s about
+            // 1500 km of 3000), so both texels of a lerp are fetched, as on a real tape.
+            SkyParams sky = field.Params;
+            return new TapeFixture(BakedTape.TwoKeyframes(sky, sky, 1500000f, 12000f), new TapeFrame(90f, 1500000f, 10000f, 80000f, 0.7f));
+        }
+        if (mode == "ladder")
+        {
+            SkyParams sky = field.Params;
+            sky.LobeRung += 0.5f;
+            sky.Mid.PeriodRung += 0.5f;
+            sky.High.PeriodRung += 0.5f;
+            var tape = new BakedTape(1);
+            tape.SetConstant(sky);
+            return new TapeFixture(tape, field.Frame);
+        }
+        if (mode == "ramp")
+        {
+            // The scene's own sky on one side and the same sky a rung or more away on the other (two lobe rungs, three period rungs,
+            // a 15 % higher base), joined by a 12 km ramp through the origin and bent by a 10 km meander.
+            SkyParams left = field.Params, right = left;
+            right.LobeRung += 2f;
+            right.Mid.PeriodRung += 3f;
+            right.High.PeriodRung += 3f;
+            right.CloudBase *= 1.15f;
+            // The thin layers' aspect and ripple wavelength change across the ramp too (the bake holds them at the nearer side, spec 6).
+            right.Mid.Aspect = left.Mid.Aspect * 0.6f; right.High.Aspect = left.High.Aspect * 0.6f;
+            right.Mid.RippleWavelength = left.Mid.RippleWavelength * 0.7f; right.High.RippleWavelength = left.High.RippleWavelength * 0.7f;
+            return new TapeFixture(BakedTape.TwoKeyframes(left, right, 1500000f, 12000f), new TapeFrame(90f, 1500000f, 10000f, 80000f, 0.7f));
+        }
+        if (mode == "mix")
+        {
+            // The worst-case morphology mix: both thin layers carry all four morphologies at weight 0.25 and a curl.
+            SkyParams sky = field.Params;
+            sky.Mid = SkyArchetypes.Layer(LayerKind.AcFloccus).ToLayer(0.6f);
+            sky.High = SkyArchetypes.Layer(LayerKind.CirrusSpissatus).ToLayer(0.5f);
+            for (int i = 0; i < 2; i++)
+            {
+                SkyLayer layer = sky.Layer(i);
+                layer.Cells = layer.Ripples = layer.Streaks = layer.Veil = 0.25f;
+                layer.Curl = 0.8f; layer.Aspect = 3f; layer.RippleWavelength = 900f;
+                if (i == 0) sky.Mid = layer; else sky.High = layer;
+            }
+            SkyDerived.Apply(ref sky);
+            var tape = new BakedTape(1);
+            tape.SetConstant(sky);
+            return new TapeFixture(tape, field.Frame);
+        }
+        return null;
     }
 
     private static void AddMapViews(List<Scene> scenes)

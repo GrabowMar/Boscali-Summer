@@ -18,7 +18,7 @@ Shader "Hidden/Boscali/CloudDensityProbe"
             #pragma vertex vert_img
             #pragma fragment Probe
             sampler2D _DensityProbePositions;
-            float _ProbeRainMode, _ProbeSlabMode, _ProbeAirMode;
+            float _ProbeRainMode, _ProbeSlabMode, _ProbeAirMode, _ProbeTapeMode, _ProbeMaskMode, _ProbeOverlapMode, _ProbeLayer;
             float _ProbeRayMode, _ProbeRaySceneDistance;
             float3 _ProbeRayOrigin, _ProbeRayDirection;
             float3 _ProbeRainOrigin, _ProbeRainRay;
@@ -46,12 +46,38 @@ Shader "Hidden/Boscali/CloudDensityProbe"
                     float3 p = tex2Dlod(_DensityProbePositions, float4(i.uv, 0, 0)).xyz;
                     return float4(AirTransmittance(p.x, p.y, p.z), 0, 0, 0);
                 }
+                if (_ProbeTapeMode > 0.5)
+                {
+                    // 1 = the low genus row, 2 = the middle layer, 3 = the high layer, at the tape position of a map point
+                    float3 p = tex2Dlod(_DensityProbePositions, float4(i.uv, 0, 0)).xyz;
+                    float s = TapeS(p.xz);
+                    if (_ProbeTapeMode < 1.5)
+                    {
+                        LowRow low = TapeLow(s);
+                        return float4(s, low.lobeRung, low.puffDepth, low.horizonCover);
+                    }
+                    LayerRow row = TapeLayer(s, _ProbeTapeMode < 2.5 ? 0.0 : 1.0);
+                    return float4(row.baseY, row.thick, row.cover, row.periodRung);
+                }
+                if (_ProbeMaskMode > 0.5)
+                {
+                    // body, cover, softness: the thin-layer mask and the old mask it replaces
+                    float3 p = tex2Dlod(_DensityProbePositions, float4(i.uv, 0, 0)).xyz;
+                    return float4(SlabCoverMask(p.x, p.y, p.z), CoverMask(p.x, p.y), 0, 0);
+                }
+                if (_ProbeOverlapMode > 0.5)
+                {
+                    // lo, hi, base, top: the optical weight of a ray sample, the profile at lo and its integral at hi
+                    float4 p = tex2Dlod(_DensityProbePositions, float4(i.uv, 0, 0));
+                    return float4(SlabOverlap(p.x, p.y, p.z, p.w), SlabProfile(p.x), SlabF(p.y), 0);
+                }
                 if (_ProbeSlabMode > 0.5)
                 {
+                    // The thin layer's 2D field at a map point, from the tape row there, at footprint zero.
                     float3 p = tex2Dlod(_DensityProbePositions, float4(i.uv, 0, 0)).xyz;
-                    float d = Slab(p, _MidCover, smoothstep(0.4, 1.0, _MidSheet),
-                        2600.0, 1.4, 0.7 * (1.0 - _MidSheet), 0.0, float2(1, 1)) * 0.42;
-                    return float4(d, 0, 0, 0);
+                    float s = TapeS(p.xz);
+                    LayerRow row = TapeLayer(s, _ProbeLayer);
+                    return float4(Slab2D(p, row, 0.0, float2(1.0, 1.0)), row.cover, row.baseY, s);
                 }
                 if (_ProbeRayMode > 0.5)
                 {

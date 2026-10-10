@@ -27,10 +27,13 @@ namespace BoscaliSummer.Modules.Weather.Domain
             float length = (float)Math.Sqrt(forwardX * forwardX + forwardZ * forwardZ);
             if (length < 0.001f) { forwardX = 0f; forwardZ = 1f; length = 1f; }
             bool anchor = hasCamera && ahead >= 0f;
-            return new WeatherKey(basis.Seed, basis.Epoch, scenario == WeatherScenario.ResetAll, (byte)state,
-                basis.IntervalMinutes, basis.FadeSeconds, sets, basis.LayoutSalt, anchor,
-                anchor ? x + forwardX / length * ahead : 0f,
-                anchor ? z + forwardZ / length * ahead : 0f, 0);
+            // One key edit: the tape fields and the frame survive; the dynamic flag goes through Rebased so the
+            // tape position is continuous. INTERIM(slice 4): the opener class is the scenario's state.
+            WeatherKey keyed = basis.WithMissionClass((byte)state).WithSets(sets);
+            keyed = anchor
+                ? keyed.WithAnchor(x + forwardX / length * ahead, z + forwardZ / length * ahead)
+                : keyed.WithoutAnchor();
+            return keyed.Rebased(basis.Epoch, scenario == WeatherScenario.ResetAll);
         }
     }
 }

@@ -169,7 +169,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public const int MaxCells = 12;
         public const int CellsPerCluster = 3;
 
-        public static int Fill(StormCell[] cells, uint layout, StateParams sky, float halfX, float halfZ,
+        public static int Fill(StormCell[] cells, uint layout, SkyParams sky, float halfX, float halfZ,
             float driftX, float driftZ, SkySplit spine = default)
         {
             int count = 0;

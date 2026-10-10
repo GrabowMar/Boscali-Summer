@@ -49,7 +49,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             byte[] noise = new byte[2 * 2 * 2 * 4];
             for (int i = 0; i < noise.Length; i += 4)
             { noise[i] = 255; noise[i + 1] = 128; noise[i + 2] = 255; noise[i + 3] = 255; }
-            var scud = new CloudBodies(noise, 2, new StateParams { LayerDepth = 1200f }, nearDetail: true);
+            var scud = new CloudBodies(noise, 2, new SkyParams { LobeRung = 3f, DeckDepth = 1200f }, nearDetail: true);
             var rainyColumn = new WeatherPoint { BackgroundCover = 1f, CloudBase = 1000f, CloudTop = 2500f, RainRate = 20f };
             TestAssert.That(scud.Density(rainyColumn, 0f, 500f, 0f, 0f) > 0.2f &&
                 scud.Density(rainyColumn, 0f, 200f, 0f, 0f) == 0f,
@@ -57,7 +57,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             TestAssert.That(scud.Density(rainyColumn, 0f, 1700f, 0f, 1200f) > 0.2f,
                 "Cloud altitude shift moves scud and its occupation together");
 
-            field.Build(new WeatherKey(73, 0f, false, (byte)WeatherRegimeType.Clear, 5f, 60f,
+            field.Build(new WeatherKey(73, 0f, false, (byte)WeatherRegimeType.Clear,
                 Superstructures.SupercellSet), 60f, 40000f, 40000f);
             Superstructure hero = field.SuperstructureAt(0);
             var settledHero = new CloudBodies(noise, 2, field.Params, field: field);
@@ -93,7 +93,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             CloudBodies.MapWeights(401f, 0f, 100f, 400f, out nearWeight, out farFade);
             TestAssert.That(farFade == 0f, "Outside displayed far maps cannot invent regular cloud occupation");
             float sampledX = float.NaN, sampledZ = float.NaN;
-            var heldWarp = new CloudBodies(noise, 2, new StateParams { LayerDepth = 1200f }, nearDetail: true,
+            var heldWarp = new CloudBodies(noise, 2, new SkyParams { LobeRung = 3f, DeckDepth = 1200f }, nearDetail: true,
                 weatherSampler: (x, z) => { sampledX = x; sampledZ = z; return rainyColumn; });
             TestAssert.That(heldWarp.Density(default, 100f, 500f, 200f, 0f) > 0.2f &&
                 Math.Abs(sampledX - 1500f) < 0.1f && sampledZ > 200f && sampledZ < 210f,

@@ -137,6 +137,11 @@ namespace BoscaliSummer.Core.Config
             BindAndRemove(config, "Weather", "DebugControlsEnabled", true);
             BindAndRemove(config, "Weather", "DebugKey", "F11");
             BindAndRemove(config, "Weather", "DebugKeyRequiresCtrl", false);
+            // The weather tape replaced the stepping timeline: TapeMoves supersedes DynamicWeatherEnabled (its
+            // stored false must not freeze the tape), and the step interval and fade became constants.
+            BindAndRemove(config, "Weather", "DynamicWeatherEnabled", true);
+            BindAndRemove(config, "Weather", "StateIntervalMinutes", 5.0f);
+            BindAndRemove(config, "Weather", "StateFadeSeconds", 60.0f);
 
             // The weather overhaul's own [WeatherFronts] section is gone with the module.
             BindAndRemove(config, "WeatherFronts", "Enabled", true);

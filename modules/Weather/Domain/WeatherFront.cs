@@ -85,7 +85,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// The layout's frontal bands. They never move: the state's frontal level strengthens
         /// the first band from OVERCAST and adds a second, parallel one in RAIN SQUALL and STORM.
         /// </summary>
-        public static int Fill(FrontState[] fronts, uint layout, StateParams sky, float halfX, float halfZ,
+        public static int Fill(FrontState[] fronts, uint layout, SkyParams sky, float halfX, float halfZ,
             float prevailingHeading, SkySplit split)
         {
             int count = 0;

@@ -308,7 +308,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public void ResetForScene()
         {
             sceneGeneration = sceneGeneration == int.MaxValue ? 1 : sceneGeneration + 1;
-            Clock.Reset();
+            MissionTimeSource.Reset();
             space?.ResetForScene();
             cyber?.ResetForScene();
             sof?.ResetForScene();
@@ -357,8 +357,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             SupportMapMode.GestureArmed = false;
         }
 
-        private static readonly MissionClock Clock = new MissionClock();
-        private static float nextClockWarning;
 
         /// <summary>
         /// Gameplay clock: pauses and acceleration follow the mission; MP uses its shared start. Guarded: a multiplayer
@@ -366,29 +364,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// value is lobby time) keeps the last good value; the result is finite, never decreases within a scene, and
         /// re-baselines if a transient ever latched high.
         /// </summary>
-        internal static float MissionNow()
-        {
-            float raw = 0f;
-            bool valid = false;
-            try
-            {
-                MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
-                if (GameManager.gameState != GameState.Multiplayer)
-                { raw = mission != null ? mission.MissionTime : Time.timeSinceLevelLoad; valid = true; }
-                else if (mission != null && mission.multiplayerStartTime > 0d)
-                { raw = mission.MissionTime; valid = true; }
-            }
-            catch (Exception e)
-            {
-                valid = false;
-                if (Time.unscaledTime >= nextClockWarning)
-                {
-                    nextClockWarning = Time.unscaledTime + 30f;
-                    Plugin.Logger?.LogWarning("[Support] Mission clock read failed; holding the last good time: " + e.Message);
-                }
-            }
-            return Clock.Read(raw, valid, Time.frameCount);
-        }
+        internal static float MissionNow() => MissionTimeSource.Now();
 
         private void Update()
         {

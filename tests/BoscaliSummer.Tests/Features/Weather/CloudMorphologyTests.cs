@@ -21,9 +21,9 @@ namespace BoscaliSummer.Tests.Features.Weather
         {
             var noise = new byte[4 * 4 * 4 * 4];
             Array.Fill(noise, (byte)255);
-            var sky = new StateParams { CloudBase = 1400f, PuffScale = 4600f, PuffDepth = 2000f,
-                LayerDepth = 1200f, BaseSharp = 65f, BaseWobble = 80f, Dome = 1.35f,
-                Billow = 0.75f, Anvil = 0.9f, LayerSmooth = 0.15f };
+            var sky = new SkyParams { CloudBase = 1400f, LobeRung = 5f, PuffDepth = 2000f,
+                DeckDepth = 1200f, BaseSharp = 65f, BaseWobble = 80f, Dome = 1.35f,
+                Billow = 0.75f, Anvil = 0.9f, DeckSmooth = 0.15f };
             var bodies = new CloudBodies(noise, 4, sky);
             var p = new WeatherPoint { CloudBase = 1400f, LowTop = 3500f, CloudTop = 10000f,
                 CellShape = 0.8f, FrontCover = 0.65f, FrontBase = 6500f, FrontTop = 10000f };
@@ -55,7 +55,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             const uint layout = 99;
             SkySplit bare = SkySplit.From(layout, 0f, 40000f, 40000f, 130f);
             SkySplit visible = SkySplit.From(layout, 0.6f, 40000f, 40000f, 130f);
-            var sky = new StateParams { Frontal = 1f };
+            var sky = new SkyParams { Frontal = 1f };
             var a = new FrontState[2]; var b = new FrontState[2];
             int na = WeatherFronts.Fill(a, layout, sky, 40000f, 40000f, 130f, bare);
             int nb = WeatherFronts.Fill(b, layout, sky, 40000f, 40000f, 130f, visible);
@@ -131,7 +131,7 @@ namespace BoscaliSummer.Tests.Features.Weather
         private static void DominantBodyHeight()
         {
             var noise = new byte[4 * 4 * 4 * 4]; Array.Fill(noise, (byte)255);
-            var sky = new StateParams { PuffScale = 4600f, PuffDepth = 2000f, LayerDepth = 1200f,
+            var sky = new SkyParams { LobeRung = 5f, PuffDepth = 2000f, DeckDepth = 1200f,
                 Dome = 1.35f, Anvil = 0.9f, BaseSharp = 65f, BaseWobble = 80f };
             var bodies = new CloudBodies(noise, 4, sky);
             var p = new WeatherPoint { CloudBase = 1400f, LowTop = 3500f, CloudTop = 10000f,
@@ -170,7 +170,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                     WeatherPoint truth = field.Sample((u * 2f - 1f) * 50000f, (v * 2f - 1f) * 50000f);
                     CloudGenus genus = CloudShape.Resolve(field.Params);
                     float lowTop = Math.Max(truth.LowTop, truth.CloudBase + Math.Max(genus.PuffDepth,
-                        field.Params.LayerDepth) + genus.BaseWobble * 0.5f);
+                        field.Params.DeckDepth) + genus.BaseWobble * 0.5f);
                     TestAssert.That(Math.Abs(actual.LowTop - lowTop) <= 16000f / 255f * 0.51f &&
                         Math.Abs(actual.FrontTop - truth.FrontTop) <= 16000f / 255f * 0.51f,
                         "Packed ordinary/front ceilings mirror field truth within half a height texel");

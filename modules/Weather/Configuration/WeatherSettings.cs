@@ -1,4 +1,5 @@
 using BepInEx.Configuration;
+using BoscaliSummer.Modules.Weather.Domain;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Weather.Configuration
@@ -9,9 +10,10 @@ namespace BoscaliSummer.Modules.Weather.Configuration
     internal sealed class WeatherSettings
     {
         public ConfigEntry<bool> Enabled { get; }
-        public ConfigEntry<bool> DynamicWeatherEnabled { get; }
-        public ConfigEntry<float> StateIntervalMinutes { get; }
-        public ConfigEntry<float> StateFadeSeconds { get; }
+        public ConfigEntry<bool> TapeMoves { get; }
+        public ConfigEntry<int> Pace { get; }
+        public ConfigEntry<WeatherSeedMode> SeedMode { get; }
+        public ConfigEntry<int> FixedSeed { get; }
         public ConfigEntry<float> MinConditions { get; }
         public ConfigEntry<float> MaxConditions { get; }
         public ConfigEntry<float> WindVariability { get; }
@@ -40,23 +42,26 @@ namespace BoscaliSummer.Modules.Weather.Configuration
             Enabled = config.Bind(section, "Enabled", true,
                 "Enable the Weather module: the ENV bezel screen, native weather transitions and local rain.");
 
-            DynamicWeatherEnabled = config.Bind(section, "DynamicWeatherEnabled", true,
-                "Step the weather between static states over mission time (clear, fair, scattered, " +
-                "broken, overcast, rain, storm). Off holds the mission's authored weather.");
+            // A new key on purpose: BepInEx keeps the player's stored DynamicWeatherEnabled=false, which
+            // must not freeze the new weather. LegacyConfigMigration purges the old key.
+            TapeMoves = config.Bind(section, "TapeMoves", true,
+                "Let weather systems cross the map over mission time. Off holds the sky where it is " +
+                "(the weather console can still change it).");
 
-            // New keys on purpose: the retired Transition* keys stored minutes for the old
-            // moving model, and an old stored value would override the new five-minute default.
-            StateIntervalMinutes = config.Bind(section, "StateIntervalMinutes", 5.0f,
+            Pace = config.Bind(section, "Pace", TapePace.DefaultPace,
                 new ConfigDescription(
-                    "Mission minutes each weather state holds before the next step (hold, one state " +
-                    "better or one state worse).",
-                    new AcceptableValueRange<float>(1.0f, 30.0f)));
+                    "How fast weather systems cross the map, 1 (slow) to 6 (fast). A stronger mission wind " +
+                    "speeds them up.",
+                    new AcceptableValueRange<int>(TapePace.MinPace, TapePace.MaxPace)));
 
-            StateFadeSeconds = config.Bind(section, "StateFadeSeconds", 60.0f,
+            SeedMode = config.Bind(section, "SeedMode", WeatherSeedMode.Random,
+                "Where the weather comes from: Random (a fresh sky every launch), Mission (the same sky " +
+                "for the same mission) or Fixed (FixedSeed). Host only.");
+
+            FixedSeed = config.Bind(section, "FixedSeed", 0,
                 new ConfigDescription(
-                    "Seconds a state change fades the sky, fog and wind. Storm cells grow more slowly " +
-                    "(up to five minutes) so rain and lightning build in.",
-                    new AcceptableValueRange<float>(10.0f, 300.0f)));
+                    "The seed used when SeedMode is Fixed, 1 to 16777215. 0 means Random.",
+                    new AcceptableValueRange<int>(0, WeatherSeed.MaxFixed)));
 
             MinConditions = config.Bind(section, "MinConditions", 0.05f,
                 new ConfigDescription(

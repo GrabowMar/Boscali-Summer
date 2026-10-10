@@ -34,15 +34,15 @@ namespace BoscaliSummer.Tests.Features.Weather
                     }
                 }
 
-            var dirty = new WeatherKey(90210u, 900f, false, 6, 5f, 60f, 63, 7, true, -12000f, 18000f, 5);
+            var dirty = new WeatherKey(90210u, 900f, false, 6, 63, 7, true, -12000f, 18000f);
             byte[] states = { 6, 5, 1, 0, 4, 6 }, setsWanted = { 8, 3, 16, 32, 0, 0 };
             foreach (WeatherScenario scenario in (WeatherScenario[])Enum.GetValues(typeof(WeatherScenario)))
             {
                 WeatherKey key = WeatherScenarios.Apply(scenario, dirty, true, 1000f, 2000f, 0f, 0.5f);
                 int i = (int)scenario;
-                TestAssert.That(key.StartState == states[i] && key.Sets == setsWanted[i], "scenario selects its exact state and force bits");
-                TestAssert.That(key.FrontTurn == 0 && key.Seed == dirty.Seed && key.LayoutSalt == dirty.LayoutSalt,
-                    "scenario resets front orientation and retains deterministic layout");
+                TestAssert.That(key.MissionClass == states[i] && key.Sets == setsWanted[i], "scenario selects its exact state and force bits");
+                TestAssert.That(key.Seed == dirty.Seed && key.LayoutSalt == dirty.LayoutSalt && key.HeadingDeg == dirty.HeadingDeg,
+                    "scenario retains the deterministic layout and the mission wind frame");
                 TestAssert.That(key.Dynamic == (scenario == WeatherScenario.ResetAll), "only reset resumes changing weather");
                 bool anchored = scenario == WeatherScenario.HurricaneEye || scenario == WeatherScenario.MountainWave;
                 TestAssert.That(key.HasAnchor == anchored, "scenario clears unrelated previous anchors");
@@ -58,7 +58,6 @@ namespace BoscaliSummer.Tests.Features.Weather
             TestAssert.That(Math.Abs(Math.Sqrt(lens.X * lens.X + (lens.Z - 25000f) * (lens.Z - 25000f)) - 30000f) < 1f,
                 "combined lenses sit beside the eye");
             TestAssert.That(!wave.WithoutAnchor().HasAnchor && wave.WithAnchor(12f, 34f).AnchorZ == 34f, "placement and default placement");
-            TestAssert.That(wave.WithFrontTurn(8).FrontTurn == 0 && wave.WithFrontTurn(4).FrontTurn == 4, "rotate wraps and flip turns half a circle");
             field.Build(wave, 900f, 60000f, 60000f, 13f);
             uint layout = field.Timeline.Layout;
             field.Build(wave.WithLayoutSalt(8), 900f, 60000f, 60000f, 13f);
