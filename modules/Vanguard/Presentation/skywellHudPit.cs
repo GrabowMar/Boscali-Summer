@@ -8,7 +8,7 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Vanguard.Presentation
 {
     /// <summary>
-    /// SKYWELL pit-stop words (SERVICE: FUEL n%, HANDOFF STA n, SERVICE COMPLETE, BOX LOST): the job line and pips while a receiver is served, commit and edge notices, and the
+    /// SKYWELL pit-stop words (SERVICE: FUEL n%, HANDOFF STA n, SERVICE COMPLETE, ZONE LOST): the service bars and pips while a receiver is served, commit and edge notices, and the
     /// ISkywellControl order / station-priority members the radial PIT STOP branch calls.
     /// </summary>
     internal sealed partial class SkywellHud
@@ -28,7 +28,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private readonly List<Slot> slots = new List<Slot>(MaxSlots);
         private int slotSignature;           // aircraft + servable stations + their ammo: the cache below is rebuilt only when it changes
         private Aircraft orderOwner;         // the aircraft the order / priority mirror belongs to
-        private readonly Dictionary<uint, byte> lastFlags = new Dictionary<uint, byte>();
+        private readonly Dictionary<uint, ushort> lastFlags = new Dictionary<uint, ushort>();
         private readonly Dictionary<int, int> runMissing = new Dictionary<int, int>(); // rounds missing when a station's run began
 
         // job in flight, as this HUD saw it begin
@@ -108,17 +108,21 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         }
 
         /// <summary>Rising edges of the published flags become notices (hot break for the tanker; the receiver sees it on contact loss).</summary>
-        private void Edges(SkywellView v, bool tanker)
+        private void Edges(SkywellView v, bool tanker, Aircraft me)
         {
-            lastFlags.TryGetValue(v.Tanker, out byte was);
-            byte rose = (byte)(v.Flags & ~was);
+            lastFlags.TryGetValue(v.Tanker, out ushort was);
+            int rose = v.Flags & ~was;
             lastFlags[v.Tanker] = v.Flags;
             if (tanker && (rose & PitFlags.HotBreak) != 0) Notice("SKYWELL  HOT BREAK  MISSILE INBOUND", HudTone.Warning);
             if ((rose & PitFlags.Nothing) != 0) Notice("SKYWELL  NOTHING TO SERVE", HudTone.Caution);
             if ((rose & PitFlags.FuelStockOut) != 0) Notice("SKYWELL  FUEL STOCK EMPTY", HudTone.Caution);
-            if ((rose & PitFlags.MunitionStockOut) != 0) Notice("SKYWELL  MUNITIONS STOCK EMPTY", HudTone.Caution);
-            if ((rose & PitFlags.Capped) != 0) Notice("SKYWELL  PIT STOP CAPPED  FLY THE BOX AGAIN", HudTone.Caution);
-            if ((rose & PitFlags.BoxLost) != 0 && tanker) Notice("SKYWELL  BOX LOST", HudTone.Warning);
+            if ((rose & PitFlags.MunitionStockOut) != 0) Notice("SKYWELL  MAGAZINE EMPTY", HudTone.Caution);
+            if ((rose & PitFlags.Capped) != 0) Notice("SKYWELL  PIT STOP CAPPED  FLY THE ZONE AGAIN", HudTone.Caution);
+            if (!tanker) return;
+            if ((rose & PitFlags.ZoneLost) != 0) Notice("SKYWELL  ZONE LOST", HudTone.Warning);
+            if ((rose & PitFlags.Refused) != 0)
+                Notice(me != null && me.radarAlt < SkywellZone.DeployAltitude ? "SKYWELL  DEPLOY ABOVE " + Mathf.RoundToInt(SkywellZone.DeployAltitude) + " M" : "SKYWELL  TOO FAST TO DEPLOY", HudTone.Caution);
+            if ((rose & PitFlags.AutoReel) != 0) Notice("SKYWELL  REELING IN  " + (me != null && me.radarAlt < SkywellZone.StowAltitude ? "TOO LOW" : "TOO FAST"), HudTone.Warning);
         }
 
         private static float TankerJobProgress(SkywellView v) =>
@@ -137,8 +141,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             orderOwner = me;
             order = 0;
             priority = -1;
-            docking = 0;
-            lastPhase.Clear();
+            serving = 0;
             lastFlags.Clear();
             ResetStop();
             pitLine?.Release();

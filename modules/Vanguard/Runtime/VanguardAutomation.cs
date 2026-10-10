@@ -68,9 +68,10 @@ namespace BoscaliSummer.Vanguard
                     if (lead != null && lead.radar != null) lead.radar.activated = true; // ARCHER fires only on a faction track
                     Modules.Vanguard.Runtime.DroneOrders.Order(lead, Text(args, "at") == "ground" ? groundTarget : bandit);
                     return Status(lead);
-                case "equip": return Equip(Text(args, "tanker") ?? "Tarantula", Has(args, "norx"));
+                case "equip": return Equip(Text(args, "tanker") ?? "Tarantula", Has(args, "norx"), Text(args, "rxType") ?? "FS-20");
                 case "skyview": return SkyView(Text(args, "angle") ?? "side");
                 case "drain": return Drain(Rx(args), Number(args, "fuel", 0.3f), (int)Number(args, "stations", 2f), (int)Number(args, "rounds", 1f));
+                case "netprefab": return NetPrefab(Text(args, "type"));
                 case "pitarm": return SkywellArm(args);
                 case "pit": return SkywellPit(args);
                 case "threatwhen": return SkywellThreatWhen(bandit, args);
@@ -161,14 +162,14 @@ namespace BoscaliSummer.Vanguard
         private static readonly System.Reflection.FieldInfo LeakRate =
             typeof(FuelTank).GetField("leakRate", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
 
-        private static Dictionary<string, object> Equip(string tankerType, bool noReceiver)
+        private static Dictionary<string, object> Equip(string tankerType, bool noReceiver, string receiverType)
         {
             tanker = receiver = null;
             foreach (Aircraft a in UnityEngine.Object.FindObjectsOfType<Aircraft>())
             {
                 if (a.disabled || a.definition == null) continue;
                 if (a.definition.unitName.IndexOf(tankerType, StringComparison.OrdinalIgnoreCase) >= 0) tanker = a;
-                else if (!noReceiver && a.definition.unitName.IndexOf("FS-20", StringComparison.OrdinalIgnoreCase) >= 0) receiver = a;
+                else if (!noReceiver && a.definition.unitName.IndexOf(receiverType, StringComparison.OrdinalIgnoreCase) >= 0) receiver = a;
             }
             WeaponMount kit = null;
             foreach (WeaponMount w in Encyclopedia.i.weaponMounts)
@@ -192,38 +193,57 @@ namespace BoscaliSummer.Vanguard
 
         private static Dictionary<string, object> SkyView(string angle)
         {
-            if (tanker == null) return Failure("VanguardAutomation", "skyview", "equip first");
-            // Offsets and look point are in tanker axes from the kit mount; the service box centre is (0, -15, -55), the glider hangs under the jet there.
+            CameraStateManager camera = SceneSingleton<CameraStateManager>.i;
+            if (tanker == null || camera == null) return Failure("VanguardAutomation", "skyview", "equip first");
+            // Eye offsets from the TENDER in tanker axes (x right, y up, z forward). The camera looks just above the tender, at the gap between
+            // it and the belly it works under, so both stay in frame wherever the receiver flies (a fixed point of the zone shows empty sky).
             SkyChase.Offset = angle == "off" ? (Vector3?)null
-                : angle == "rear" ? new Vector3(8f, -12f, -100f)
-                : angle == "close" ? new Vector3(16f, -24f, -44f)
-                : angle == "below" ? new Vector3(-14f, -38f, -48f) : new Vector3(40f, -12f, -58f);
-            SkyChase.Look = angle == "below" ? new Vector3(0f, -14f, -55f) : new Vector3(0f, -17f, -55f);
+                : angle == "rear" ? new Vector3(7f, -2f, -34f)
+                : angle == "close" ? new Vector3(11f, 0.5f, 8f)
+                : angle == "below" ? new Vector3(-10f, -13f, -15f) : new Vector3(27f, 1f, 2f);
             SkyChase.Target = tanker;
-            if (SkyChase.Offset != null && UnityEngine.Object.FindObjectOfType<SkyChase>() == null)
-                new GameObject("SkywellChase").AddComponent<SkyChase>();
+            if (SkyChase.Offset == null) camera.SetFollowingUnit(tanker); // back to the game's own follow camera
+            else
+            {
+                SkyChase.Free(camera);
+                camera.SetDesiredFoV(50f, 50f);
+                if (UnityEngine.Object.FindObjectOfType<SkyChase>() == null) new GameObject("SkywellChase").AddComponent<SkyChase>();
+            }
             return new Dictionary<string, object> { ["ok"] = true,
                 ["mountFromTanker"] = tanker.transform.InverseTransformPoint(Modules.Vanguard.Runtime.SkywellBoard.Mount(tanker).position).ToString("F1"),
                 ["rig"] = Modules.Vanguard.Presentation.SkywellVisuals.Probe };
         }
 
-        /// <summary>Sim-only chase camera, re-posed every frame after the floating-origin shift.</summary>
+        /// <summary>
+        /// Sim-only chase camera on the tender. The game's camera manager goes into its free state once (what the nomodkit camera op does;
+        /// SetCameraPosition every frame re-enters the state and rebuilds the reflection probe each time), then the pose is written every
+        /// frame after the manager's own LateUpdate, the floating-origin shift and the tender's pose.
+        /// </summary>
         [DefaultExecutionOrder(2000)]
         private sealed class SkyChase : MonoBehaviour
         {
             public static Aircraft Target;
             public static Vector3? Offset;
-            public static Vector3 Look = new Vector3(0f, -17f, -55f);
+            private const float LookUp = 1.5f; // above the tender root: the gap between it and the receiver's belly
+
+            public static void Free(CameraStateManager camera)
+            {
+                camera.GetCameraPosition(out GlobalPosition at, out Quaternion rotation);
+                camera.SetCameraPosition(at, rotation);
+                camera.cameraVelocity = Vector3.zero;
+                camera.allowInputs = false;
+            }
 
             private void LateUpdate()
             {
                 CameraStateManager camera = SceneSingleton<CameraStateManager>.i;
                 if (camera == null || Target == null || Offset == null) return;
+                if (camera.currentState != camera.freeState) Free(camera); // the game took the camera back
                 Transform t = Target.transform;
-                Vector3 mount = Modules.Vanguard.Runtime.SkywellBoard.Mount(Target).position;
-                Vector3 eye = mount + t.rotation * Offset.Value;
-                Vector3 look = mount + t.rotation * Look;
-                camera.SetCameraPosition(eye.ToGlobalPosition(), Quaternion.LookRotation(look - eye, t.up));
+                if (!Modules.Vanguard.Presentation.SkywellVisuals.TenderWorld(Target.persistentID.Id, out Vector3 tender))
+                    tender = Modules.Vanguard.Runtime.SkywellBoard.Mount(Target).position + t.rotation * SkywellZone.Tow;
+                Vector3 eye = tender + t.rotation * Offset.Value;
+                camera.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(tender + t.up * LookUp - eye, t.up));
                 camera.cameraVelocity = Vector3.zero;
             }
         }
@@ -392,7 +412,7 @@ namespace BoscaliSummer.Vanguard
             if (tanker != null)
             {
                 state["skywellFuelKg"] = Modules.Vanguard.Runtime.SkywellService.FuelKg(tanker);
-                state["skywellStockKg"] = Modules.Vanguard.Runtime.SkywellService.StockKg(tanker);
+                state["skywellRounds"] = Modules.Vanguard.Runtime.SkywellService.Rounds(tanker);
                 state["tankerAlive"] = tanker.disabled ? 0 : 1;
                 int tLeaks = 0, tDetached = 0;
                 foreach (FuelTank tank in tanker.GetFuelTanks())
@@ -412,14 +432,14 @@ namespace BoscaliSummer.Vanguard
                 if (Modules.Vanguard.Runtime.SkywellBoard.Views.TryGetValue(tanker.persistentID.Id, out var view))
                 {
                     state["skywellActive"] = view.Active ? 1 : 0;
-                    state["skywellPhase"] = view.Phase.ToString();
+                    state["skywellState"] = view.State.ToString();
                 }
                 if (receiver != null)
                 {
-                    Modules.Vanguard.Runtime.SkywellBoard.Rel(tanker, receiver, out Vector3 rel, out float relSpeed, out float roll);
-                    state["receiverBoxRel"] = rel.ToString("F1");
-                    state["receiverBoxInside"] = SkywellBox.Inside(rel, relSpeed, roll, true) ? 1 : 0;
-                    state["receiverBoxDist"] = (rel - SkywellBox.Centre).magnitude;
+                    Modules.Vanguard.Runtime.SkywellBoard.Rel(tanker, receiver, out Vector3 rel, out float relSpeed, out _, out float roll);
+                    state["receiverZoneRel"] = rel.ToString("F1");
+                    state["receiverZoneInside"] = SkywellZone.Contains(rel, relSpeed, roll) ? 1 : 0;
+                    state["receiverZoneDist"] = (rel - SkywellZone.Tow).magnitude;
                     state["receiverRelSpeed"] = relSpeed;
                 }
             }
@@ -437,7 +457,7 @@ namespace BoscaliSummer.Vanguard
                 state["receiverDetached"] = rDetached;
                 Bounds rb = Modules.Vanguard.Runtime.SkywellBoard.LocalBounds(receiver);
                 state["receiverBounds"] = rb.center.ToString("F1") + "/" + rb.size.ToString("F1");
-                state["kite"] = Modules.Vanguard.Presentation.SkywellVisuals.KiteProbe;
+                state["tender"] = Modules.Vanguard.Presentation.SkywellVisuals.TenderProbe;
                 state["receiverMissing"] = Modules.Vanguard.Runtime.SkywellService.MissingRounds(receiver);
             }
             foreach (KeyValuePair<string, float> death in Deaths) state[death.Key] = death.Value;

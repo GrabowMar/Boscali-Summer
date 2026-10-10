@@ -3,7 +3,7 @@
   "mods": [
     "boscalisummer"
   ],
-  "timeout_s": 240,
+  "timeout_s": 600,
   "ops": [
     {
       "op": "seat",
@@ -15,7 +15,7 @@
         0
       ],
       "altitude": 6000,
-      "speed": 120,
+      "speed": 130,
       "heading": 0,
       "view": "cockpit"
     },
@@ -58,21 +58,30 @@
           "id": "player",
           "offset": [
             0,
-            14,
-            -90
+            20,
+            -1500
           ]
         }
       },
-      "speed": 110
+      "speed": 130,
+      "heading": 0
     },
     {
       "op": "fly",
       "id": "tanker",
       "program": [
         {
-          "level": 240
+          "level": 400
         }
       ]
+    },
+    {
+      "op": "record",
+      "ids": [
+        "tanker",
+        "player"
+      ],
+      "hz": 2
     },
     {
       "op": "call",
@@ -123,20 +132,43 @@
     },
     {
       "op": "wait",
-      "seconds": 8
+      "seconds": 5
     },
     {
-      "op": "capture",
-      "name": "pit-hud-engage",
-      "hide_ui": false
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h00"
     },
     {
       "op": "wait",
-      "seconds": 4
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h01"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h02"
     },
     {
       "op": "capture",
-      "name": "pit-hud-job",
+      "name": "pit-hud-02",
       "hide_ui": false
     },
     {
@@ -144,13 +176,311 @@
       "seconds": 5
     },
     {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h03"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h04"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h05"
+    },
+    {
       "op": "capture",
-      "name": "pit-hud-served",
+      "name": "pit-hud-05",
       "hide_ui": false
     },
     {
       "op": "wait",
-      "seconds": 8
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h06"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h07"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h08"
+    },
+    {
+      "op": "capture",
+      "name": "pit-hud-08",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h09"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h10"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h11"
+    },
+    {
+      "op": "capture",
+      "name": "pit-hud-11",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h12"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h13"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h14"
+    },
+    {
+      "op": "capture",
+      "name": "pit-hud-14",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h15"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h16"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h17"
+    },
+    {
+      "op": "capture",
+      "name": "pit-hud-17",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h18"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h19"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h20"
+    },
+    {
+      "op": "capture",
+      "name": "pit-hud-20",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h21"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h22"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h23"
+    },
+    {
+      "op": "capture",
+      "name": "pit-hud-23",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h24"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "h25"
     },
     {
       "op": "call",
@@ -254,9 +584,14 @@
       "min": 1
     },
     {
+      "check": "result_above",
+      "path": "ready.skywellStateN",
+      "min": 0.5
+    },
+    {
       "check": "result_below",
-      "path": "ready.skywellPhaseN",
-      "max": 0.5
+      "path": "ready.skywellStateN",
+      "max": 2.5
     },
     {
       "check": "result_above",
@@ -299,6 +634,11 @@
       "max": 0.5
     },
     {
+      "check": "result_below",
+      "path": "seatA.rxStops",
+      "max": 1.5
+    },
+    {
       "check": "result_above",
       "path": "seatSt.pitStops",
       "min": 1
@@ -310,8 +650,13 @@
     },
     {
       "check": "result_below",
-      "path": "seatSt.pitBoxLost",
+      "path": "seatSt.pitZoneLost",
       "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "seatSt.skywellRoundsN",
+      "max": 3.5
     },
     {
       "check": "result_above",
@@ -326,12 +671,17 @@
     {
       "check": "result_above",
       "path": "seatSt.serveGapMin",
-      "min": 0.5
+      "min": 1.2
+    },
+    {
+      "check": "result_above",
+      "path": "seatStB.skywellStateN",
+      "min": 1.5
     },
     {
       "check": "result_below",
-      "path": "seatStB.skywellPhaseN",
-      "max": 0.5
+      "path": "seatStB.skywellStateN",
+      "max": 2.5
     },
     {
       "check": "result_above",

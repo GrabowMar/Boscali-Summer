@@ -9,15 +9,15 @@ namespace BoscaliSummer.Core.Contracts
         /// <summary>The local aircraft carries a SKYWELL kit.</summary>
         bool Carried { get; }
 
-        /// <summary>The kit is deployed (ramp open, deck out).</summary>
+        /// <summary>The kit is out (deploying, flying, or stowing): ramp open, deck out.</summary>
         bool Deployed { get; }
 
-        /// <summary>Remaining stock for the radial status, e.g. "FUEL 5.9T  AMMO 1.24T".</summary>
+        /// <summary>Remaining stock for the radial status, e.g. "FUEL 5.9T  RDS 4/6".</summary>
         string Stock { get; }
 
         void Toggle();
 
-        /// <summary>A deployed friendly kit is within 800 m of the local aircraft's probe, or the aircraft is docked to one.</summary>
+        /// <summary>A deployed friendly kit is within 800 m of the local aircraft, or the aircraft is being served by one.</summary>
         bool PitAvailable { get; }
 
         /// <summary>The local aircraft's standing pit-stop order: 0 BOTH, 1 FUEL ONLY, 2 MUNITIONS ONLY.</summary>

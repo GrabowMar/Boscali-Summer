@@ -344,16 +344,16 @@ namespace Vanguard
                 r.transform.SetParent(detail.transform, true);
             }
             if (renderers.Length != details.Count * 3) throw new Exception(model + " requires three meshes per LOD part");
-            Transform kite = model == "SkywellKit" ? details.Values.Single(r => r.name == "Kite").transform : null;
-            AddLods(visual.transform, renderers.Where(r => kite == null || !r.transform.IsChildOf(kite)).ToArray());
-            if (kite != null)
+            Transform tender = model == "SkywellKit" ? details.Values.Single(r => r.name == "Tender").transform : null;
+            AddLods(visual.transform, renderers.Where(r => tender == null || !r.transform.IsChildOf(tender)).ToArray());
+            if (tender != null)
             {
-                // Pallet movement and the kite's deployed wings/tail need separate, conservative bounds.
+                // Pallet movement and the tender's spread wings and raised arms need separate, conservative bounds.
                 var palletGroup = visual.GetComponent<LODGroup>();
                 palletGroup.size = Mathf.Max(palletGroup.size, 10f / LargestScale(visual.transform));
-                AddLods(kite, renderers.Where(r => r.transform.IsChildOf(kite)).ToArray());
-                var kiteGroup = kite.GetComponent<LODGroup>();
-                kiteGroup.size = Mathf.Max(kiteGroup.size, 18f / LargestScale(kite));
+                AddLods(tender, renderers.Where(r => r.transform.IsChildOf(tender)).ToArray());
+                var tenderGroup = tender.GetComponent<LODGroup>();
+                tenderGroup.size = Mathf.Max(tenderGroup.size, 10f / LargestScale(tender));
             }
         }
 
@@ -789,7 +789,7 @@ namespace Vanguard
             {
                 P(s, "weaponName").stringValue = "SKYWELL Pit-Stop Kit";
                 P(s, "shortName").stringValue = "SKYWELL";
-                P(s, "description").stringValue = "Roll-on service-glider kit. Fire to open the ramp and launch a tethered, folding-wing glider. Friendly pilots close astern and HOLD BRAKE; choose FUEL, MUNITIONS or BOTH (and which pylon goes first) under SUPPORT > PIT STOP. The glider plugs your probe and hot-swaps rounds station by station from an 8 t fuel / 1.5 t munitions stock. Fire again to recover.";
+                P(s, "description").stringValue = "Roll-on service-tender kit. Fire above 300 m to open the ramp and launch a tethered service glider with lift fans; keep the tanker under 140 m/s. Friendly pilots fly into the zone astern and HOLD STEADY; choose FUEL, MUNITIONS or BOTH (and which pylon goes first) under SUPPORT > PIT STOP. The tender comes up under your belly, plugs its boom and lifts rounds onto your pylons from an 8 t fuel / 6 round stock. Fire again to recover.";
                 P(s, "weaponIcon").objectReferenceValue = Icon("SkywellKit");
             });
             var mount = Copy<WeaponMount>(donor, "WM_" + json);
