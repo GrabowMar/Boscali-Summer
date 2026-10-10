@@ -35,6 +35,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly DamageWatch damageWatch = new DamageWatch();
         private readonly SystemsFeed systemsFeed = new SystemsFeed();
         private ScopeProvider<SystemsScope> systemsProvider;
+        private readonly StoresFeed storesFeed = new StoresFeed();
+        private ScopeProvider<StoresScope> storesProvider;
         private readonly MissileTracker missileTracker = new MissileTracker();
         private readonly ShotBook shotBook = new ShotBook(ShotFeed.Ledger);
         private ThreatScopeFeed threatFeed;
@@ -72,6 +74,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             ScopeFeeds.OnError = BoscaliSummer.Core.Diagnostics.PatchGuard.Report;
             ScopeFeeds.Register(systemsProvider ??= systemsFeed.Read);
+            ScopeFeeds.Register(storesProvider ??= storesFeed.Read);
             ScopeFeeds.Register(threatProvider ??= threatFeed.Read);
             ScopeFeeds.Register(shotProvider ??= shotFeed.Read);
             ScopeFeeds.Register(camProvider ??= camFeed.Read);
@@ -124,6 +127,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             if (panel == null) panel = new StatusPanel { Notice = Notice };
             if (!panel.Ensure()) return;
+            panel.TickNatives();
             if (cluster == null) cluster = new ThirdPersonHudCluster();
             cluster.Ensure();
 
@@ -159,6 +163,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             frame.BootAge = hudAircraft != null ? now - bootStart : -1f;
             frame.HasTicker = store.Ticker(out frame.Ticker);
             systemsFeed.Update(hudAircraft, frame, damageWatch.Rotary);
+            storesFeed.Update(hudAircraft, frame, combat);
             threatFeed.Update(hudAircraft, frame);
             shotFeed.Update(hudAircraft);
             panel.Present(frame);
@@ -326,6 +331,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             threatFeed?.Clear();
             shotFeed?.Clear();
             camFeed?.Clear();
+            storesFeed.Clear();
             externalHud.Release();
             wingview.Reset();
             flightNumberHider.Dispose();
@@ -333,10 +339,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void OnDisable()
         {
             ScopeFeeds.Unregister(systemsProvider);
+            ScopeFeeds.Unregister(storesProvider);
             ScopeFeeds.Unregister(threatProvider);
             ScopeFeeds.Unregister(shotProvider);
             ScopeFeeds.Unregister(camProvider);
             systemsFeed.Clear();
+            storesFeed.Clear();
             threatFeed.Clear();
             shotFeed.Clear();
             camFeed.Clear();

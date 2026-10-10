@@ -56,6 +56,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Line(x + w, y + h, x + w - len, y + h, tone, alpha, lw); Line(x + w, y + h, x + w, y + h - len, tone, alpha, lw);
         }
 
+        /// <summary>The scope's outline with an ink tick on each corner (the prototype's <c>HUD.frame</c>): the stores header's cells wear it too.</summary>
+        public void Frame(float x, float y, float w, float h)
+        {
+            Box(x, y, w, h, Dim, 0.75f);
+            Line(x + 0.5f, y + 0.5f, x + 7.5f, y + 0.5f, Ink); Line(x + 0.5f, y + 0.5f, x + 0.5f, y + 7.5f, Ink);
+            Line(x + w - 0.5f, y + 0.5f, x + w - 7.5f, y + 0.5f, Ink); Line(x + w - 0.5f, y + 0.5f, x + w - 0.5f, y + 7.5f, Ink);
+            Line(x + w - 0.5f, y + h - 0.5f, x + w - 7.5f, y + h - 0.5f, Ink); Line(x + w - 0.5f, y + h - 0.5f, x + w - 0.5f, y + h - 7.5f, Ink);
+            Line(x + 0.5f, y + h - 0.5f, x + 7.5f, y + h - 0.5f, Ink); Line(x + 0.5f, y + h - 0.5f, x + 0.5f, y + h - 7.5f, Ink);
+        }
+
         /// <summary>A drawn tick (the fonts lack one).</summary>
         public void Check(float x, float y, float size, ScopeTone tone = Ink, float alpha = 1f, float w = 1f)
         {

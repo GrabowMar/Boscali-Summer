@@ -11,14 +11,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// THREAT (prototype: <c>pages/threat.js</c>): "where is it, how long do I have, what do I do" in one glance. A heading-up polar scope with the aircraft in the middle and
     /// time-to-impact rings (5, 10, 20 s, square-root scaled so the 5 s ring is not a dot): every missile inbound on us as a red chevron at its real bearing and time, with its
     /// trail and a dashed line in, tagged with its seeker and seconds; every radar painting us as a spoke from the rim (a lock solid and red, a search dashed and amber, tagged
-    /// with its name and range); the notch wedge on the 3/9 line a radar missile is to be steered into and the arrow that turns you there. The column beside it says what to do
-    /// (BEAM, CHAFF, FLARE...), lights the dispenser that answers the nearest seeker with its dots draining, shows the jammer and one time bar per missile. A missile that lost us
-    /// stays a moment as a hollow ghost marked TRASHED. Fed by <see cref="ThreatScope"/> (Hud's own provider over <c>ThreatWatch</c>); live while anything is inbound, painting us or
+    /// with its name and range); the notch wedge on the 3/9 line a radar missile is to be steered into and the arrow that turns you there. Two boxes in the right-hand corners say what to
+    /// do (the call word: BEAM, CHAFF, FLARE...) and how long every missile has (one time bar each); while a dispenser is called for, the stores header pulses DISPENSE on it
+    /// (<see cref="CallMask"/>). A missile that lost us stays a moment as a hollow ghost marked TRASHED. Fed by <see cref="ThreatScope"/> (Hud's own provider over <c>ThreatWatch</c>); live while anything is inbound, painting us or
     /// has just lost us. Events (a launch, a lock, a defeat) go to the ticker once.
     /// </summary>
     internal sealed class ThreatPage : ScopePageBase
     {
-        private const float CX = 150f, CY = 168f, R = 116f, COL = 338f, CW = 94f;
+        // The plot is centred; the call box takes the top-right corner (COL..), the time bars the bottom-right; tags may reach RB.
+        private const float CX = 220f, CY = 164f, R = 130f, COL = 346f, CW = 90f, RB = 436f;
         private const float DefeatBannerS = 2.4f;
         private const int Numbers = 32;
 
@@ -26,15 +27,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private bool live, primed;
         private AvUnits units;
         private float now;
-        private int near = -1, ir = -1, rdr = -1, jam = -1, cueMissile, cueSide;
+        private int near = -1, ir = -1, rdr = -1, cueMissile, cueSide;
         private float cueOff;
         private ThreatCue cue;
         private bool recentDefeat;
         private int defeatedIdx = -1;
         private readonly bool[] seenNumber = new bool[Numbers], defeatSaid = new bool[Numbers];
         private readonly System.Collections.Generic.Dictionary<int, float> lockSaid = new System.Collections.Generic.Dictionary<int, float>(8), spikeSaid = new System.Collections.Generic.Dictionary<int, float>(8);
-        private readonly int[] lastAmmo = new int[HudCm.MaxStations], baseAmmo = new int[HudCm.MaxStations], fired = new int[HudCm.MaxStations];
-        private readonly float[] fireUntil = new float[HudCm.MaxStations];
+        private readonly int[] baseAmmo = new int[HudCm.MaxStations];
         private readonly KeepOut keep = new KeepOut();
         private readonly float[] segs = new float[4 * 14], trailXY = new float[2 * 12], wedge = new float[2 * 14];
         private int cueBaseFor = -1;
@@ -43,8 +43,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private int headlineKey = -1;
         private ScopeTone headlineTone = Dim;
         private bool headlineFlash;
-        private int cmKey = -1, rwrKey = int.MinValue;
-        private string cmText, cmSub, rwrText, rwrSub, jamWord;
+        private int mslKey = int.MinValue, rwrKey = int.MinValue;
+        private string mslText, mslSub, rwrText, rwrSub;
+
+        /// <summary>The seeker classes (<see cref="HudCm.IrMask"/> | <see cref="HudCm.RadarMask"/>) whose dispenser the page calls for right now and has not seen fire yet: the stores header pulses DISPENSE on it.</summary>
+        public byte CallMask { get; private set; }
 
         public override ScopePage Id => ScopePage.Threat;
 
@@ -60,7 +63,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             now = env.Now;
             units = env.Units;
-            if (!ScopeFeeds.TryRead(out d)) { live = primed = false; near = ir = rdr = jam = -1; Array.Clear(seenNumber, 0, Numbers); Array.Clear(defeatSaid, 0, Numbers); lockSaid.Clear(); spikeSaid.Clear(); return false; }
+            if (!ScopeFeeds.TryRead(out d)) { live = primed = false; CallMask = 0; near = ir = rdr = -1; Array.Clear(seenNumber, 0, Numbers); Array.Clear(defeatSaid, 0, Numbers); lockSaid.Clear(); spikeSaid.Clear(); return false; }
             live = true;
             Read();
             if (primed) Edges(env);
@@ -89,21 +92,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 cueSide = n.BeamSide == 0 ? ThreatMath.BeamSide(n.BearingDeg, 0) : n.BeamSide;
                 cueOff = ThreatMath.BeamOff(n.BearingDeg, cueSide);
             }
-            ir = rdr = jam = -1;
+            ir = rdr = -1;
             for (int i = 0; i < d.CmCount; i++)
             {
-                if (d.Cm[i].Chargeable) { if (jam < 0) jam = i; }
-                else if ((d.Cm[i].Mask & HudCm.IrMask) != 0) { if (ir < 0) ir = i; }
+                if (d.Cm[i].Chargeable) continue;
+                if ((d.Cm[i].Mask & HudCm.IrMask) != 0) { if (ir < 0) ir = i; }
                 else if ((d.Cm[i].Mask & HudCm.RadarMask) != 0) { if (rdr < 0) rdr = i; }
             }
             // Rounds dispensed since the nearest missile appeared: a cue that was answered reads "x5 FIRED", one that was not "DISPENSE".
             if (cueBaseFor != cueMissile) { cueBaseFor = cueMissile; for (int i = 0; i < d.CmCount && i < baseAmmo.Length; i++) baseAmmo[i] = d.Cm[i].Ammo; }
-            for (int i = 0; i < d.CmCount && i < lastAmmo.Length; i++)
-            {
-                int ammo = d.Cm[i].Ammo;
-                if (primed && ammo < lastAmmo[i] && !d.Cm[i].Chargeable) { fired[i] = lastAmmo[i] - ammo; fireUntil[i] = now + 0.45f; }
-                lastAmmo[i] = ammo;
-            }
+            int answer = cue == ThreatCue.Flare ? ir : cue == ThreatCue.Chaff ? rdr : -1;
+            CallMask = answer >= 0 && Dispensed(answer) == 0 ? (cue == ThreatCue.Flare ? HudCm.IrMask : HudCm.RadarMask) : (byte)0;
         }
 
         private int Dispensed(int station) => station >= 0 && station < d.CmCount && station < baseAmmo.Length ? Math.Max(0, baseAmmo[station] - d.Cm[station].Ammo) : 0;
@@ -180,7 +179,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public override ScopeHeadline Headline() => live ? new ScopeHeadline { Text = headlineText, Tone = headlineTone, Flash = headlineFlash } : default;
 
-        /// <summary>The nearest radar painting us as a needle, the dispenser that answers the nearest missile as a ring, the jammer's charge as an arc.</summary>
+        /// <summary>The nearest radar painting us as a needle and the nearest missile inbound as a needle (its bearing, seeker and seconds out).</summary>
         public override int Gauges(GaugeSpec[] into)
         {
             if (!live) return 0;
@@ -193,19 +192,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 if (key != rwrKey) { rwrKey = key; rwrText = Name(em); rwrSub = ScopeStr.Distance("", em.RangeM, units, 7).ToString(); }
                 into[n++] = new GaugeSpec { Id = "rwr", Label = "EMITTER", Kind = GaugeKind.Needle, Angle = em.BearingDeg, Text = rwrText, Sub = rwrSub, Tone = em.Lock ? Red : Amber };
             }
-            int st = cue == ThreatCue.Flare ? ir : cue == ThreatCue.Chaff ? rdr : -1;
-            if (st >= 0 && d.Cm[st].Max > 0)
+            if (near >= 0)
             {
-                CmStation s = d.Cm[st];
-                int key = s.Ammo * 100 + (int)cue;
-                if (key != cmKey) { cmKey = key; cmText = cue == ThreatCue.Flare ? "FLARE" : "CHAFF"; cmSub = s.Tag; }
-                into[n++] = new GaugeSpec { Id = "cm", Label = "CM", Kind = GaugeKind.Ring, Value = (float)s.Ammo / s.Max, Inner = ScopeStr.Int(s.Ammo), Text = cmText, Sub = cmSub, Tone = Ink };
-            }
-            if (jam >= 0)
-            {
-                CmStation s = d.Cm[jam];
-                jamWord = SystemsMath.JamWord(s);
-                into[n++] = new GaugeSpec { Id = "jam", Label = "JAMMER", Kind = GaugeKind.Arc, Value = s.Charge, Text = jamWord, Sub = "ECM", Tone = Ink };
+                ThreatMissile m = d.Missiles[near];
+                int s = Sec(m.TtiS), key = m.Number * 1000 + s;
+                if (key != mslKey) { mslKey = key; mslText = string.IsNullOrEmpty(m.Seeker) ? "MSL" : m.Seeker; mslSub = float.IsNaN(m.TtiS) ? "INBOUND" : ScopeStr.Cat("", s, "S OUT").ToString(); }
+                into[n++] = new GaugeSpec { Id = "msl", Label = "INBOUND", Kind = GaugeKind.Needle, Angle = m.BearingDeg, Text = mslText, Sub = mslSub, Tone = Red };
             }
             return n;
         }
@@ -246,6 +238,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             float t = now;
             keep.Clear();
             keep.Add(CX - 13f, CY - 13f, 26f, 26f);
+            keep.Add(COL - 4f, 30f, CW + 8f, 54f);          // the call box
+            keep.Add(COL - 4f, 230f, CW + 8f, 66f);         // the time bars
+            for (int i = 0; i < d.MissileCount; i++)
+            {
+                At(d.Missiles[i].BearingDeg, Rr(d.Missiles[i].TtiS), out float mx, out float my);
+                keep.Add(mx - 11f, my - 11f, 22f, 22f);
+            }
             Wedge(g);
             Rings(g);
             for (int i = 0; i < d.EmitterCount; i++) Spoke(g, d.Emitters[i]);
@@ -259,7 +258,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Text("TTI RINGS", 5f, 41f, Dim);
             g.Text("HDG UP", 5f, 56f, Faint);
             if (d.HasSam)
-                g.Text(ScopeStr.Cat("SAM ENV x", d.SamRings, null), 5f, 286f, d.SamRings > 0 ? Amber : Dim, 12f, ScopeAlign.Left, d.SamRings > 0);
+                g.Text(ScopeStr.Cat("SAM ENV x", d.SamRings, null), 5f, 288f, d.SamRings > 0 ? Amber : Dim, 12f, ScopeAlign.Left, d.SamRings > 0);
         }
 
         /// <summary>The notch wedge on the 3/9 line the nearest radar missile is to be steered into: hatched, dashed until it is beamed.</summary>
@@ -320,13 +319,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             string name = Name(e);
             ReadOnlySpan<char> range = ScopeStr.Distance("", e.RangeM, units, 8);
             float w = Math.Max(ScopeCanvas.TextW(name, 12f), ScopeCanvas.TextW(range, 12f)) + 8f, h = 31f;
-            At(b, R + 4f, out float anx, out float any);
-            float sb = Mathf.Sin(b * Mathf.Deg2Rad), cb = -Mathf.Cos(b * Mathf.Deg2Rad);
-            float bx = anx + sb * (w / 2f) - w / 2f, by = any + cb * (h / 2f) - h / 2f;
-            float cx2 = Mathf.Clamp(bx, 2f, COL - 10f - w), cy2 = Mathf.Clamp(by, 30f, 296f - h);
-            if (Math.Abs(cx2 - bx) + Math.Abs(cy2 - by) > 8f) { At(b, R - 22f, out float qx, out float qy); bx = qx - w / 2f; by = qy - h / 2f; }
-            else { bx = cx2; by = cy2; }
-            bx = Mathf.Round(bx); by = Mathf.Round(by);
+            Label(b, w, h, out float bx, out float by);
             keep.Add(bx, by, w, h);
             g.Fill(bx, by, w, h, Bg, a);
             g.Box(bx, by, w, h, tone, a, 1f, tone, lockOn ? 0.25f : 0.14f);
@@ -334,6 +327,36 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Text(range, bx + w / 2f, by + 22f, tone, 12f, ScopeAlign.Center, false, a * 0.95f);
             At(b, R + 1f, out float attx, out float atty);
             g.Line(attx, atty, Mathf.Clamp(attx, bx, bx + w), Mathf.Clamp(atty, by, by + h), tone, a * 0.7f);
+        }
+
+        /// <summary>
+        /// Where a radar's tag goes: the first of six spots that sits on no other label, marker or corner box (outside the rim at the spoke, nudged along the rim either way, then inside the
+        /// rim); each spot costs for how far the scope's edges moved it and for what it overlaps.
+        /// </summary>
+        private void Label(float bearing, float w, float h, out float x, out float y)
+        {
+            float best = float.MaxValue;
+            x = y = 0f;
+            for (int i = 0; i < 6; i++)
+            {
+                float cx, cy;
+                if (i < 5)
+                {
+                    float nudge = i == 0 ? 0f : i == 1 ? 14f : i == 2 ? -14f : i == 3 ? 28f : -28f, bb = bearing + nudge;
+                    At(bb, R + 4f, out float ax, out float ay);
+                    cx = ax + Mathf.Sin(bb * Mathf.Deg2Rad) * (w / 2f) - w / 2f;
+                    cy = ay - Mathf.Cos(bb * Mathf.Deg2Rad) * (h / 2f) - h / 2f;
+                }
+                else
+                {
+                    At(bearing, R - 22f, out float qx, out float qy);
+                    cx = qx - w / 2f;
+                    cy = qy - h / 2f;
+                }
+                float rx = Mathf.Round(Mathf.Clamp(cx, 2f, RB - w)), ry = Mathf.Round(Mathf.Clamp(cy, 30f, 296f - h));
+                float cost = i * 2f + (Math.Abs(rx - cx) + Math.Abs(ry - cy)) * 2f + keep.OverlapCost(rx, ry, w, h) * 0.5f;
+                if (cost < best) { best = cost; x = rx; y = ry; }
+            }
         }
 
         /// <summary>The rim arrow that turns the aircraft to put the missile on its wing line.</summary>
@@ -402,7 +425,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             ReadOnlySpan<char> label = nearest && !string.IsNullOrEmpty(m.Seeker) ? ScopeStr.Cat(m.Seeker, " ", s, "S") : ScopeStr.Cat("", s, "S");
             float tw = (float)Math.Round(ScopeCanvas.TextW(label, 12f) + 8f), th = 17f;
             keep.Add(px - 10f, py - 10f, 20f, 20f);
-            keep.Place(LabelSpots.Threat, px, py, tw, th, new ReadOnlySpan<float>(segs, 0, segCount), 2f, COL - 10f, 32f, 292f, out float x, out float y);
+            keep.Place(LabelSpots.Threat, px, py, tw, th, new ReadOnlySpan<float>(segs, 0, segCount), 2f, RB, 32f, 292f, out float x, out float y);
             if (nearest)
             {
                 g.Fill(x, y, tw, th, Red);
@@ -416,41 +439,31 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
         }
 
-        // ------------------------------------------------------------------------------------------------ the column
+        // ------------------------------------------------------------------------------------------------ the corner boxes
 
+        /// <summary>
+        /// Two boxes in the right-hand corners and nothing else: the call word at the top (BEAM, CHAFF, FLARE...; the matching dispenser in the stores header pulses DISPENSE at the same
+        /// time) and one time bar per missile at the bottom. The dispensers and the jammer live in the stores header, so the polar scope has the whole width.
+        /// </summary>
         private void Column(ScopeCanvas g)
         {
             float t = now, x0 = COL;
             bool pulseOn = ScopeCanvas.Blink(t, 2.5f, 0.55f);
-            g.Line(x0 - 7f, 34f, x0 - 7f, 296f, Faint);
 
-            // the action cue
             bool hot = cue == ThreatCue.Beam || cue == ThreatCue.Chaff || cue == ThreatCue.Flare;
             int st = cue == ThreatCue.Flare ? ir : cue == ThreatCue.Chaff ? rdr : -1;
             int firedNow = Dispensed(st);
             bool armed = hot && (cue == ThreatCue.Beam || firedNow == 0);
             bool inv = armed && pulseOn;
             ScopeTone tone = cue == ThreatCue.Clear ? Dim : cue == ThreatCue.Spike ? Amber : cue == ThreatCue.Lock ? Red : Hi;
+            g.Fill(x0 - 4f, 31f, CW + 8f, 52f, Bg, 0.92f);
             g.Box(x0, 34f, CW, 46f, tone, 1f, 1f, tone, inv ? 0.9f : hot ? 0.18f : 0.08f, chamTL: 8f);
             ScopeTone ink = inv ? Bg : tone;
             g.FitText(CueWord(), x0 + CW / 2f, 52f, CW - 8f, ink, 18f, 12f, ScopeAlign.Center, true);
             CueSub(g, x0 + CW / 2f, 70f, CW - 6f, inv ? Bg : cue == ThreatCue.Clear ? Dim : Ink, firedNow);
 
-            // the dispensers: the one that answers the nearest seeker is boxed and pulses
-            if (ir >= 0) Dispenser(g, ir, x0, 94f, 52f, cue == ThreatCue.Flare, pulseOn, false);
-            if (rdr >= 0) Dispenser(g, rdr, x0, 154f, 44f, cue == ThreatCue.Chaff, pulseOn, true);
-            if (jam >= 0)
-            {
-                CmStation s = d.Cm[jam];
-                float y3 = 206f;
-                bool on = s.Active;
-                g.Text("JAMMER", x0, y3, Dim);
-                g.Text(SystemsMath.JamWord(s), x0 + CW, y3, on ? Hi : Dim, 12f, ScopeAlign.Right, on);
-                g.Bar(x0, y3 + 8f, CW, 9f, s.Charge, Ink);
-            }
-            g.Line(x0, 232f, x0 + CW, 232f, Faint);
-
             // one time bar per missile: 20 s full scale with ticks at 5 and 10 s (the two soonest)
+            g.Fill(x0 - 4f, 231f, CW + 8f, 64f, Bg, 0.92f);
             int row = 0;
             for (int pass = 0; pass < 2 && row < 2; pass++)
                 for (int i = 0; i < d.MissileCount && row < 2; i++)
@@ -458,14 +471,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     ThreatMissile m = d.Missiles[i];
                     bool liveRow = m.Live;
                     if (liveRow != (pass == 0)) continue;
-                    float y = 244f + row * 26f;
+                    float y = 242f + row * 29f;
                     row++;
                     if (liveRow)
                     {
                         bool warn = ThreatMath.Warn(m.TtiS);
                         float lw = g.Text(ScopeStr.Cat("M", m.Number, " "), x0, y, Red, 12f, ScopeAlign.Left, true);
                         if (!string.IsNullOrEmpty(m.Seeker)) g.Text(m.Seeker, x0 + lw, y, Red, 12f, ScopeAlign.Left, true);
-                        g.Text(ScopeStr.Cat("", (int)Math.Ceiling(Math.Max(0f, m.TtiS)), "S"), x0 + CW, y, Red, 12f, ScopeAlign.Right, true, warn && !pulseOn ? 0.6f : 1f);
+                        g.Text(ScopeStr.Cat("", Sec(m.TtiS), "S"), x0 + CW, y, Red, 12f, ScopeAlign.Right, true, warn && !pulseOn ? 0.6f : 1f);
                         g.Bar(x0, y + 8f, CW, 9f, float.IsNaN(m.TtiS) ? 0f : m.TtiS / ThreatMath.RingSeconds, Red);
                         g.BarTick(x0, y + 8f, CW, 9f, 0.25f, Dim);
                         g.BarTick(x0, y + 8f, CW, 9f, 0.5f, Dim);
@@ -479,6 +492,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     }
                 }
         }
+
+        /// <summary>Whole seconds to go for a figure (never below 0); an unknown time reads 0.</summary>
+        private static int Sec(float ttiS) => float.IsNaN(ttiS) ? 0 : (int)Math.Ceiling(Math.Max(0f, ttiS));
 
         private string CueWord()
         {
@@ -524,20 +540,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     g.FitText("NO EMITTERS", x, y, w, tone, 12f, 12f, ScopeAlign.Center);
                     break;
             }
-        }
-
-        /// <summary>One dispenser: its name and count, its rounds as dots (the ones just fired flash), boxed and pulsing while it is the answer.</summary>
-        private void Dispenser(ScopeCanvas g, int s, float x0, float y, float boxH, bool answer, bool pulseOn, bool square)
-        {
-            CmStation c = d.Cm[s];
-            CmLevel level = HudCm.Level(c);
-            if (answer) g.Box(x0 - 4f, y - 9f, CW + 8f, boxH, Hi, pulseOn ? 1f : 0.45f, 1f, Ink, 0.08f);
-            g.Text(c.Tag == "IR" ? "IR FLARE" : c.Tag == "RDR" ? "RDR CHAFF" : c.Tag, x0, y, answer ? Hi : Dim, 12f, ScopeAlign.Left, answer);
-            g.Text(ScopeStr.Int(c.Ammo), x0 + CW, y, level != CmLevel.Ok ? Amber : answer ? Hi : Ink, 12f, ScopeAlign.Right, true);
-            SystemsMath.GridDims(c.Max > 0 ? c.Max : c.Ammo, out int cols, out int rows);
-            float pitch = Math.Min(7f, Math.Min((CW - 4f) / cols, (boxH - 18f) / rows));
-            int flash = s < fired.Length && now < fireUntil[s] ? fired[s] : 0;
-            g.DotGrid(x0 + 2f, y + 8f, cols, rows, c.Ammo, Ink, pitch, Math.Max(1f, pitch * 0.29f), square, flash);
         }
     }
 }

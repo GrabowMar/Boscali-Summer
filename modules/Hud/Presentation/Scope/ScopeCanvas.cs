@@ -269,6 +269,18 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             return n;
         }
 
+        /// <summary>Like <see cref="Load"/> but scaled by <paramref name="sx"/> across and <paramref name="sy"/> down (a store's silhouette: long and thin) with every vertex on a pixel centre, so its lines stay crisp.</summary>
+        public int LoadXY(float[] pts, int n, float x, float y, float sx, float sy)
+        {
+            n = Math.Min(n, MaxPoints);
+            for (int i = 0; i < n; i++)
+            {
+                px[i] = Mathf.Round(x + pts[2 * i] * sx - 0.5f) + 0.5f;
+                py[i] = Mathf.Round(y + pts[2 * i + 1] * sy - 0.5f) + 0.5f;
+            }
+            return n;
+        }
+
         /// <summary>Load raw points already in surface design units.</summary>
         public int Poly(float[] xy, int n) => Load(xy, n, 0f, 0f);
 

@@ -11,13 +11,16 @@ namespace BoscaliSummer.Core.Ui
     /// </summary>
     internal static class HudSprites
     {
-        private static Sprite chamfer;
+        private static Sprite chamfer, slab;
 
         /// <summary>The base game's HUD panel shape: a dark slab with its lower-left corner cut at 45°.
         /// 9-sliced so the cut stays 14 px at any size.</summary>
         public static Sprite Chamfer => chamfer != null ? chamfer : (chamfer = BakeChamfer("BoscaliHud_Chamfer", 40, 14f));
 
-        private static Sprite BakeChamfer(string name, int size, float cut)
+        /// <summary>The TAC BOARD's plate: an 8 px 45 degree cut on BOTH left corners (top and bottom), 9-sliced so the cuts keep their size at any plate size. Scale the cuts with <c>Image.pixelsPerUnitMultiplier</c>.</summary>
+        public static Sprite Slab => slab != null ? slab : (slab = BakeChamfer("BoscaliHud_Slab", 40, 8f, true));
+
+        private static Sprite BakeChamfer(string name, int size, float cut, bool top = false)
         {
             var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
             {
@@ -28,6 +31,7 @@ namespace BoscaliSummer.Core.Ui
                 {
                     // Signed distance (px) inside the diagonal x + y = cut, 1 px anti-aliased edge.
                     float d = ((x + 0.5f) + (y + 0.5f) - cut) * 0.70710678f;
+                    if (top) d = Mathf.Min(d, ((x + 0.5f) + (size - y - 0.5f) - cut) * 0.70710678f);
                     texture.SetPixel(x, y, new Color(1f, 1f, 1f, Mathf.Clamp01(d + 0.5f)));
                 }
             texture.Apply(false, true);

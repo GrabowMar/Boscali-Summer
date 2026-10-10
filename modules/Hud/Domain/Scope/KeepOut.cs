@@ -53,6 +53,14 @@ namespace BoscaliSummer.Modules.Hud.Domain
             Add(x, y, w, h);
         }
 
+        /// <summary>The total area the rectangle overlaps of everything placed so far (a label's cost where it sits).</summary>
+        public float OverlapCost(float x, float y, float w, float h)
+        {
+            float area = 0f;
+            for (int k = 0; k < count; k++) area += Overlap(x, y, w, h, box[k * 4], box[k * 4 + 1], box[k * 4 + 2], box[k * 4 + 3]);
+            return area;
+        }
+
         private static void Spot(bool shot, int i, float w, float h, out float dx, out float dy)
         {
             if (shot)

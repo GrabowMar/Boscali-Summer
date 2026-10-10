@@ -28,6 +28,18 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.Near(g.Ticker.Y, g.Gauges.Bottom + 4f, "Rows are a gap apart: ticker");
             TestAssert.Near(g.Height, g.Ticker.Bottom + 4f, "...and the board ends one pad below the last row");
 
+            var full = new BoardRows { StoresH = ScopeLayout.StoresHeight(true, true), Lamps = true, ScopeH = ScopeLayout.Full, Gauges = true, Ticker = true };
+            BoardGeometry s = ScopeLayout.Compute(full);
+            TestAssert.Near(ScopeLayout.StoresHeight(true, true), 135f, "Both cells and the capacitor row: 108 + 3 + 24");
+            TestAssert.Near(ScopeLayout.StoresHeight(true, false), 108f, "The cells alone are 108");
+            TestAssert.Near(ScopeLayout.StoresHeight(false, true), 24f, "A capacitor row alone has no gap above it");
+            TestAssert.Near(ScopeLayout.StoresHeight(false, false), 0f, "No header, no room");
+            TestAssert.Near(s.Height, 577f, "The worst case is the takeover prototype's 577, ending above y = 600 at 1080p with the 8 unit margin");
+            TestAssert.Near(s.Stores.Y, 4f, "The header sits one pad down");
+            TestAssert.Near(s.Lamps.Y, s.Stores.Bottom + 8f, "The lamp strip is 8 under the header, not 4");
+            TestAssert.That(8f + s.Height < 600f, "The full board ends above y = 600 at 1080p");
+            TestAssert.Near(ScopeLayout.Compute(new BoardRows { StoresH = 108f }).Height, 4f + 108f + 4f, "A header alone ends one pad below itself");
+
             var cruise = new BoardRows { Lamps = true, ScopeH = ScopeLayout.Compact, Gauges = true };
             TestAssert.Near(ScopeLayout.Compute(cruise).Height, 4f + 26f + 4f + 100f + 4f + 64f + 4f, "Compact scope, no ticker");
             var gaugesOnly = new BoardRows { Gauges = true };

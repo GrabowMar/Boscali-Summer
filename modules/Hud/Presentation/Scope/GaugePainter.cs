@@ -7,11 +7,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// <summary>Draws one <see cref="GaugeSpec"/> into its 109 x 64 cell of the gauge row (the prototype's <c>drawGauge</c>).</summary>
     internal static class GaugePainter
     {
-        public static void Draw(ScopeCanvas g, in GaugeSpec s, float x, float y, float w, float h, bool flashOn, float now, float chamBL = 0f)
+        public static void Draw(ScopeCanvas g, in GaugeSpec s, float x, float y, float w, float h, bool flashOn, float now)
         {
             ScopeTone tone = s.Tone;
             bool warn = tone == Amber || tone == Red, flash = s.Flash && flashOn;
-            g.Box(x, y, w, h, warn ? tone : Dim, warn ? 1f : 0.8f, 1f, warn ? tone : Bg, warn ? (flash ? 0.4f : 0.14f) : 0.5f, chamBL: chamBL);
+            g.Box(x, y, w, h, warn ? tone : Dim, warn ? 1f : 0.8f, 1f, warn ? tone : Bg, warn ? (flash ? 0.4f : 0.14f) : 0.5f);
             g.Text(s.Label, x + 6f, y + 10f, warn ? tone : Dim);
             float v = ScopeCanvas.Clamp01(s.Value), cx = x + 24f, cy = y + 41f, r = 15f;
             ScopeTone fig = warn ? tone : Hi;
