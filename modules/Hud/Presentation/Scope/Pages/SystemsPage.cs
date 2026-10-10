@@ -8,8 +8,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 {
     /// <summary>
     /// SYSTEMS (prototype: <c>pages/systems.js</c>, the style reference for every page): the cruise page. In the fixed AUTO scope it is the
-    /// compact strip: the airframe with its damage zones and condition tags, the fuel bar with BINGO / JOKER marks and the way home,
-    /// every countermeasure dispenser as a dot grid, the jammer and the wind. Its feed is <see cref="SystemsScope"/> (Hud's own provider
+    /// compact strip: the airframe with its damage zones and condition tags, the fuel bar with BINGO / JOKER marks and the way home
+    /// and the wind (the countermeasure dispensers and the jammer are the stores header's). Its feed is <see cref="SystemsScope"/> (Hud's own provider
     /// over the watchers). It is "live" (earns a pip on the other pages, selectable as the full page) only while something is wrong: a
     /// fuel mark, a leak, a fire, a dead engine or lost structure. Events (a mark crossed, a fire, a flameout) go to the ticker once.
     /// </summary>
@@ -50,11 +50,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private byte hitSide;
         private DamageState prev;
         private bool prevBingo, prevJoker;
-        private readonly int[] lastAmmo = new int[HudCm.MaxStations];
-        private readonly float[] fireUntil = new float[HudCm.MaxStations];
-        private readonly int[] fired = new int[HudCm.MaxStations];
-        private readonly string[] tiles = new string[HudCm.MaxStations];
-        private readonly int[] tileAmmo = new int[HudCm.MaxStations];
         private int gaugeKey = -1;
         private string gaugeText, gaugeSub;
 
@@ -94,7 +89,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
 
             if (primed) Edges(env);
-            TrackFired();
             prev = d.Damage;
             prevBingo = d.Fuel.Bingo;
             prevJoker = d.Fuel.Joker;
@@ -129,18 +123,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         private static string SideWord(byte mask) => (mask & (byte)ZoneSide.Left) != 0 ? "LEFT" : (mask & (byte)ZoneSide.Right) != 0 ? "RIGHT" : "CENTRE";
-
-        /// <summary>Rounds that left a dispenser since the last poll flash as hollow-hot dots for a moment (the game has no fire event).</summary>
-        private void TrackFired()
-        {
-            for (int i = 0; i < d.CmCount && i < lastAmmo.Length; i++)
-            {
-                int ammo = d.Cm[i].Ammo;
-                if (primed && ammo < lastAmmo[i] && !d.Cm[i].Chargeable) { fired[i] = lastAmmo[i] - ammo; fireUntil[i] = now + 0.45f; }
-                lastAmmo[i] = ammo;
-                if (tiles[i] == null || tileAmmo[i] != ammo) { tiles[i] = HudCm.Tile(d.Cm[i]); tileAmmo[i] = ammo; }
-            }
-        }
 
         public override ScopeHeadline Headline()
         {
@@ -199,7 +181,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             FuelBlock(g, 142f, 36f, 156f);
             if (d.Fuel.Field != null && !float.IsNaN(d.Fuel.FieldM)) BaseBlock(g, 142f, 88f, 156f, p.Units);
             g.Line(306f, 28f, 306f, 94f, Faint);
-            CmBlock(g, 314f, 36f, 124f, p.Now);
+            WeatherBlock(g, 314f, 38f);
         }
 
         private void PaintAirframe(ScopeCanvas g, float t, float cx, float cy, float s)
@@ -370,46 +352,27 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Text(ScopeStr.Distance(f.Field, f.FieldM, units, room), x + 18f, y, Ink);
         }
 
-        private void CmBlock(ScopeCanvas g, float x, float y, float w, float t)
+        /// <summary>
+        /// The wind: a dial turning with the nose (the arrow is where the air is going, relative to it) and the wind's direction and speed beside it, and IN CLOUD under it while the aircraft is in a deck.
+        /// Weather is optional: without it nothing is drawn (no wind reading, no dial).
+        /// </summary>
+        private void WeatherBlock(ScopeCanvas g, float x, float y)
         {
-            int grids = 0, jam = -1, cols = 0, rowsMax = 1;
-            for (int i = 0; i < d.CmCount; i++)
+            if (!d.HasWind && !(d.HasCloud && d.InCloud)) return;
+            float row = y + 6f;
+            if (d.HasWind)
             {
-                if (d.Cm[i].Chargeable) { if (jam < 0) jam = i; continue; }
-                SystemsMath.GridDims(d.Cm[i].Max > 0 ? d.Cm[i].Max : d.Cm[i].Ammo, out int c, out int r);
-                cols += c;
-                rowsMax = Math.Max(rowsMax, r);
-                grids++;
-            }
-            if (grids > 0)
-            {
-                float gap = 8f, pitch = Math.Min(5f, Math.Min((w - gap * (grids - 1)) / cols, 22f / rowsMax)), dot = Math.Max(1f, pitch * 0.3f), gx = x;
-                for (int i = 0; i < d.CmCount; i++)
-                {
-                    CmStation s = d.Cm[i];
-                    if (s.Chargeable) continue;
-                    SystemsMath.GridDims(s.Max > 0 ? s.Max : s.Ammo, out int c, out int r);
-                    CmLevel level = HudCm.Level(s);
-                    g.Text(tiles[i], gx, y, level == CmLevel.Ok ? Ink : level == CmLevel.Low ? Amber : Red, bold: level != CmLevel.Ok);
-                    int flash = i < fired.Length && t < fireUntil[i] ? fired[i] : 0;
-                    g.DotGrid(gx, y + 8f, c, r, s.Ammo, Ink, pitch, dot, (s.Mask & HudCm.RadarMask) != 0, flash);
-                    gx += c * pitch + gap;
-                }
-            }
-            if (jam >= 0)
-            {
-                CmStation s = d.Cm[jam];
-                g.Text("JAM", x, y + 38f, Ink);
-                g.Bar(x + 32f, y + 33f, 56f, 10f, s.Charge, Ink);
-                g.Text(SystemsMath.JamWord(s), x + w - 6f, y + 38f, s.Active ? Hi : Dim, align: ScopeAlign.Right, bold: s.Active);
-            }
-            if (d.HasCloud && d.InCloud) g.Text("IN CLOUD", x, y + 53f, Hi, bold: true);
-            else if (d.HasWind)
-            {
+                float cx = x + 18f, cy = y + 22f, a = d.WindFromDeg + 180f - d.HeadingDeg;
+                g.Ring(cx, cy, 17f, Faint);
+                g.Line(cx, cy - 19f, cx, cy - 15f, Dim);
+                ScopeCanvas.Polar(a, 13f, out float hx, out float hy);
+                ScopeCanvas.Polar(a + 180f, 13f, out float tx, out float ty);
+                g.Arrow(cx + tx, cy + ty, cx + hx, cy + hy, Ink, 1f, 1f, 5f);
                 int dir = SystemsMath.WindFromDegrees(d.WindFromDeg);
-                bool imperial = d.Units == NOAvionics.AvUnits.Imperial;
-                g.Text(ScopeStr.Cat(dir < 10 ? "WIND 00" : dir < 100 ? "WIND 0" : "WIND ", dir, "/", (int)Math.Round(NOAvionics.AvUnitTable.Speed(d.WindMps, d.Units)), imperial ? "KT" : "KM/H"), x, y + 53f, Dim);
+                g.Text(ScopeStr.Cat(dir < 10 ? "00" : dir < 100 ? "0" : "", dir, "/", (int)Math.Round(NOAvionics.AvUnitTable.Speed(d.WindMps, d.Units)), ScopeStr.SpeedUnit(d.Units)), x + 44f, row, Ink);
+                row += 18f;
             }
+            if (d.HasCloud && d.InCloud) g.Text("IN CLOUD", x + 44f, row, Hi, bold: true);
         }
     }
 }

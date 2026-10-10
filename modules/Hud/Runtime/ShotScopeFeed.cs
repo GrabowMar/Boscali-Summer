@@ -27,8 +27,6 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         private bool live;
         private int stamp = -1, targetCount, nameNext;
         private Aircraft aircraft;
-        private WeaponInfo weaponFor;
-        private string weaponShort, weaponFull;
 
         public ShotScopeFeed(ShotBook book, ShotLedger ledger)
         {
@@ -101,7 +99,6 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 Frame = frame, OwnAltM = og.y, MissileCount = n, Missiles = shots, TargetCount = targetCount, Targets = targets, ResultCount = rc, Results = results, CellCount = count, Cells = cells,
                 NeedKm = Math.Max(1f, needM / 1000f),
             };
-            Weapon();
             if (lead >= 0 && shots[lead].Target >= 0)
             {
                 ShotTarget t = targets[shots[lead].Target];
@@ -205,30 +202,6 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             if (rec == null || rec.Path.RecentCount == 0) return false;
             rec.Path.Recent(rec.Path.RecentCount - 1, out x, out y, out z);
             return true;
-        }
-
-        /// <summary>The selected weapon and how many of it are left over a full load of the stations that carry it (the rails).</summary>
-        private void Weapon()
-        {
-            WeaponManager wm = aircraft.weaponManager;
-            WeaponStation st = wm != null ? wm.currentWeaponStation : null;
-            WeaponInfo info = st != null ? st.WeaponInfo : null;
-            if (info == null) return;
-            if (!ReferenceEquals(info, weaponFor))
-            {
-                weaponFor = info;
-                weaponShort = ShotBook.Short(info);
-                weaponFull = string.IsNullOrEmpty(info.weaponName) ? weaponShort : info.weaponName.ToUpperInvariant();
-            }
-            int left = 0, full = 0;
-            if (aircraft.weaponStations != null)
-                foreach (WeaponStation s in aircraft.weaponStations)
-                    if (s != null && ReferenceEquals(s.WeaponInfo, info)) { left += s.GetAmmoTotal(); full += s.FullAmmo; }
-            cache.HasWeapon = true;
-            cache.WeaponShort = weaponShort;
-            cache.WeaponFull = weaponFull;
-            cache.Rounds = left;
-            cache.RoundsFull = full;
         }
 
         public void Clear()

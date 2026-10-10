@@ -33,10 +33,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly ShotState[] resultState = new ShotState[ShotLedger.Capacity];
         private float headlineAt = float.NegativeInfinity;
         private string headlineText = "";
-        private int headlineKey = -1, weaponKey = int.MinValue, railsKey = int.MinValue, targetKey = int.MinValue;
+        private int headlineKey = -1, impactKey = int.MinValue, hitsKey = int.MinValue, targetKey = int.MinValue;
         private ScopeTone headlineTone = Hi;
-        private string weaponSub, railsLabel, railsText, tgtText, tgtSub;
-        private readonly float[] railTick = { 0.34f };
+        private string impactInner, impactWord, hitsText, hitsSub, tgtText, tgtSub;
 
         public override ScopePage Id => ScopePage.Shot;
 
@@ -130,21 +129,30 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public override ScopeHeadline Headline() => live ? new ScopeHeadline { Text = headlineText, Tone = headlineTone } : default;
 
-        /// <summary>The selected weapon with the lead shot's progress, the rails left of it, and the lead shot's target as a needle.</summary>
+        /// <summary>The lead shot's flight (seconds to impact in the ring, its phase and weapon beside it), how the last shots ended, and the lead shot's target as a needle. The weapon and its rounds are the stores header's.</summary>
         public override int Gauges(GaugeSpec[] into)
         {
             if (!live) return 0;
             int n = 0;
-            if (d.HasWeapon)
+            if (lead >= 0)
             {
-                float progress = lead >= 0 ? d.Missiles[lead].Progress : 0f;
-                into[n++] = new GaugeSpec { Id = "wpn", Label = "WEAPON", Kind = GaugeKind.Mode, Text = d.WeaponShort, Sub = d.WeaponFull, Value = progress, Tone = Ink };
-                if (d.RoundsFull > 0)
-                {
-                    int key = d.Rounds * 1000 + d.RoundsFull;
-                    if (key != railsKey) { railsKey = key; railsLabel = d.WeaponShort + " x" + d.Rounds; railsText = d.Rounds + "/" + d.RoundsFull; }
-                    into[n++] = new GaugeSpec { Id = "rails", Label = railsLabel, Kind = GaugeKind.Bar, Value = (float)d.Rounds / d.RoundsFull, Text = railsText, Sub = "RAILS", Tone = d.Rounds == 0 ? Amber : Ink, Ticks = railTick, TickCount = 1, TickTone = Amber };
-                }
+                ShotMissile m = d.Missiles[lead];
+                int s = float.IsNaN(m.TtiS) ? -1 : (int)Math.Ceiling(Math.Max(0f, m.TtiS)), key = (int)m.Phase * 10000 + m.Id * 100 + Math.Min(s, 99);
+                if (key != impactKey) { impactKey = key; impactInner = s < 0 ? "--" : ScopeStr.Int(s); impactWord = ShotMath.PhaseWord(m.Phase); }
+                into[n++] = new GaugeSpec { Id = "lead", Label = "IMPACT", Kind = GaugeKind.Ring, Value = m.Progress, Inner = impactInner, Text = impactWord, Sub = m.Short, Tone = Ink };
+            }
+            int hits = 0, shots = 0;
+            for (int i = 0; i < d.CellCount; i++)
+            {
+                if (d.Cells[i].State == ShotState.InFlight || d.Cells[i].State == ShotState.Empty) continue;
+                shots++;
+                if (d.Cells[i].State == ShotState.Hit) hits++;
+            }
+            if (shots > 0)
+            {
+                int key = hits * 100 + shots;
+                if (key != hitsKey) { hitsKey = key; hitsText = ScopeStr.Cat("", hits, "/", shots, null).ToString(); hitsSub = ScopeStr.Cat("LAST ", shots, null).ToString(); }
+                into[n++] = new GaugeSpec { Id = "hits", Label = "HITS", Kind = GaugeKind.Bar, Value = (float)hits / shots, Text = hitsText, Sub = hitsSub, Tone = Ink };
             }
             if (d.HasLead)
             {

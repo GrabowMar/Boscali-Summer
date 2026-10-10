@@ -90,14 +90,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>The page has something to show beyond cruise: a fuel mark, a leak, a fire, a dead engine or lost structure (the pip on the other pages).</summary>
         public static bool Abnormal(in DamageState d, in FuelState f) => Headline(d, f) != SystemsHeadline.Nominal;
 
-        /// <summary>The columns and rows of a dispenser's dot grid: one dot per round, 10 or 12 across (a bigger magazine gets the wider grid).</summary>
-        public static void GridDims(int max, out int cols, out int rows)
-        {
-            max = Math.Max(1, max);
-            cols = max > 36 ? 12 : 10;
-            rows = (max + cols - 1) / cols;
-        }
-
         /// <summary>Which side of the airframe a part sits on: its lateral offset (metres, + = right) against a dead band for the centreline.</summary>
         public static byte SideOf(float lateralM, float centreBand) =>
             (byte)(lateralM < -centreBand ? ZoneSide.Left : lateralM > centreBand ? ZoneSide.Right : ZoneSide.Centre);

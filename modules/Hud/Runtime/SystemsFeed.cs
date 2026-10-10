@@ -9,7 +9,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
 {
     /// <summary>
     /// Hud's own provider of the SYSTEMS feed (<see cref="SystemsScope"/>): the watchers' reading of this tick (damage with its zones, fuel with
-    /// its marks and the way home, every countermeasure station) plus what the board adds itself: whether the airframe is a helicopter, the wind
+    /// its marks and the way home) plus what the board adds itself: whether the airframe is a helicopter, the wind
     /// (Weather's <see cref="IFlightEnvironmentView"/>), whether the aircraft is inside a cloud deck (<see cref="IWeatherView"/>) and the
     /// load factor. Refreshed at 10 Hz by <c>HudBoard</c>; the page reads the cache through <see cref="Read"/>. Weather is optional: without it
     /// the page shows no wind line and no cloud word (it never invents a calm clear sky). Client-local.
@@ -36,8 +36,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             cache.Rotary = rotary;
             cache.Damage = frame.Damage;
             cache.Fuel = frame.Fuel;
-            cache.Cm = frame.Cm;
-            cache.CmCount = frame.CmCount;
+            cache.HeadingDeg = aircraft.transform.eulerAngles.y;
             cache.Units = frame.Units;
             cache.G = AircraftReadout.LoadFactor(aircraft);
             cache.GLimit = AircraftReadout.GLimit(aircraft);

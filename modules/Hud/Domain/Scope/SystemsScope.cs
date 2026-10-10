@@ -5,8 +5,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
 {
     /// <summary>
     /// The SYSTEMS page's feed (Hud's own; read through <see cref="ScopeFeeds"/> like every page's): the airframe's damage zones, the fuel
-    /// state with its BINGO / JOKER marks and the way home, every countermeasure station, the wind and whether the aircraft is in cloud.
-    /// Always live while there is an aircraft. The <see cref="Cm"/> array is the provider's own, filled in place.
+    /// state with its BINGO / JOKER marks and the way home, the wind and whether the aircraft is in cloud (the countermeasure stations are the
+    /// stores header's). Always live while there is an aircraft.
     /// </summary>
     internal struct SystemsScope
     {
@@ -14,8 +14,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public bool Rotary;
         public DamageState Damage;
         public FuelState Fuel;
-        public CmStation[] Cm;
-        public int CmCount;
+        /// <summary>The nose's compass heading, degrees: the wind dial turns with it.</summary>
+        public float HeadingDeg;
         /// <summary>Wind the air is coming FROM (compass degrees) and its speed; <see cref="HasWind"/> false: the weather module has no reading.</summary>
         public bool HasWind;
         public float WindFromDeg, WindMps;

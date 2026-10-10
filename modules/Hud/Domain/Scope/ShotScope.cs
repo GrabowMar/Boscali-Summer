@@ -83,8 +83,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
     /// <summary>
     /// The SHOT page's feed (Hud's own, from <c>ShotWatch</c> and the <see cref="ShotLedger"/>): our own deliveries in the air with their
-    /// trails and aim points, their targets, the results of the last seconds, the timeline of the last eight shots and what the selected weapon
-    /// is. Positions are read per frame; arrays are the provider's, filled in place. Live while a shot is in the air or just resolved.
+    /// trails and aim points, their targets, the results of the last seconds and the timeline of the last eight shots (the selected weapon and its
+    /// rounds are the stores header's). Positions are read per frame; arrays are the provider's, filled in place. Live while a shot is in the air or just resolved.
     /// Client-local (the game's own missile events); a remote player's shots are not ours and never show.
     /// </summary>
     internal struct ShotScope
@@ -101,10 +101,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public ShotCell[] Cells;
         /// <summary>The farthest thing the plan has to hold, in km (the page's range scale follows it).</summary>
         public float NeedKm;
-        /// <summary>The selected weapon station: its name and the rounds of that weapon left over the full load (<see cref="HasWeapon"/> false: nothing selected).</summary>
-        public bool HasWeapon;
-        public string WeaponShort, WeaponFull;
-        public int Rounds, RoundsFull;
         /// <summary>The target that matters most (the lead shot's, else the first selected): its name, bearing off the nose and range.</summary>
         public bool HasLead;
         public string LeadName;

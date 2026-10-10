@@ -64,12 +64,6 @@ namespace BoscaliSummer.Tests.Features.Hud
         {
             TestAssert.That(SystemsMath.SideOf(-2f, 1f) == (byte)ZoneSide.Left && SystemsMath.SideOf(2f, 1f) == (byte)ZoneSide.Right && SystemsMath.SideOf(0.3f, 1f) == (byte)ZoneSide.Centre, "A part sits left, right or on the centreline");
             TestAssert.That(SystemsMath.SideOf(-1f, 1f) == (byte)ZoneSide.Centre, "The band edge is the centreline");
-            int[][] dims = { new[] { 48, 12, 4 }, new[] { 30, 10, 3 }, new[] { 72, 12, 6 }, new[] { 1, 10, 1 }, new[] { 0, 10, 1 } };
-            foreach (int[] d in dims)
-            {
-                SystemsMath.GridDims(d[0], out int cols, out int rows);
-                TestAssert.That(cols == d[1] && rows == d[2], "A magazine of " + d[0] + " is " + cols + "x" + rows);
-            }
             TestAssert.That(SystemsMath.JamWord(new CmStation { Active = true }) == "ON" && SystemsMath.JamWord(new CmStation { Charge = 1f }) == "RDY" && SystemsMath.JamWord(new CmStation { Charge = 0.5f }) == "CHG", "The jammer says ready, on or charging");
             DamageState a = Dmg(), b = Dmg();
             TestAssert.That(SystemsMath.SameDamage(a, b), "Equal readings are the same");
