@@ -1,0 +1,22 @@
+{
+  "status": "PASS",
+  "native_components": {
+    "ShipPart": 18,
+    "UnitCommand": 1,
+    "ShipPropulsion": 1,
+    "ShipNetworkTransform": 1,
+    "BuildingLights": 1,
+    "Ship": 1,
+    "WaterEffect": 1,
+    "NetworkIdentity": 1,
+    "ShipDefinition": 1,
+    "ShipAI": 1,
+    "SetGlobalParticles": 1
+  },
+  "mass_kg": 8000000,
+  "hull_compartments": 8,
+  "registration": "OpAddToEncyclopedia",
+  "native_shader_patches": 1,
+  "bundle_sha256": "0ff0219fcb6866ab4367906e0bbc86b94af94b15564b7c63aae40fec658333c7",
+  "live_acceptance": "not tested; no game deployment"
+}
