@@ -61,7 +61,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             for (int i = 0; i < stationCount; i++)
                 if (frame.Cm[i].Chargeable) frame.Cm[i].Charge = charge;
             // The pilot's selected dispenser is the group of the game's active countermeasure (stations group by display name).
-            Countermeasure active = aircraft.countermeasureManager != null ? aircraft.countermeasureManager.GetActiveCountermeasure() : null;
+            Countermeasure active = BoscaliSummer.Core.Game.AircraftReadout.ActiveCountermeasure(aircraft);
             for (int i = 0; active != null && i < stationCount; i++)
                 frame.Cm[i].Selected = names[i] == active.displayName;
             frame.CmCount = stationCount;

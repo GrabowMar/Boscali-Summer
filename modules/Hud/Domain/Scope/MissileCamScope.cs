@@ -60,20 +60,33 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return CamMode.Search;
         }
 
-        public static string ModeWord(CamMode mode)
+        /// <summary>The mode in a word. A weapon that never had a target (a dumb bomb, a round fired blind) is not BLIND, it has NO TGT.</summary>
+        public static string ModeWord(CamMode mode, bool hadTarget)
         {
             switch (mode)
             {
                 case CamMode.DataLink: return "DLINK";
                 case CamMode.Locked: return "LOCKED";
                 case CamMode.Search: return "SEARCH";
-                case CamMode.Blind: return "BLIND";
+                case CamMode.Blind: return hadTarget ? "BLIND" : "NO TGT";
                 default: return "LOST";
             }
         }
 
-        /// <summary>The seeker is not on its target although it should be: the caution states.</summary>
-        public static bool Caution(CamMode mode) => mode == CamMode.Blind || mode == CamMode.Search;
+        /// <summary>The seeker is not on the target it was given: the caution states. A weapon that never had one gives no caution.</summary>
+        public static bool Caution(CamMode mode, bool hadTarget) => hadTarget && (mode == CamMode.Blind || mode == CamMode.Search);
+
+        /// <summary>How the ride ended, in a word: the shot's result, or LOST while the game has not said (or never will: a decoy).</summary>
+        public static string ResultWord(ShotState result) =>
+            result == ShotState.Hit ? "HIT" : result == ShotState.Miss ? "MISS" : result == ShotState.Defeated ? "DEFEATED" : "LOST";
+
+        /// <summary>The spacing of the range tape's ticks: the smallest 1 / 2 / 5 step of the player's distance unit (<paramref name="unitM"/> metres: a km, a nautical mile) that puts at most 14 on the tape.</summary>
+        public static float TapeStep(float topM, float unitM)
+        {
+            float step = unitM * 0.1f;
+            for (int i = 0; topM / step > 14f && i < 15; i++) step *= i % 3 == 1 ? 2.5f : 2f;      // 0.1, 0.2, 0.5, 1, 2, 5, 10...
+            return step;
+        }
 
         /// <summary>The angle off the boresight in degrees of the page's two error angles.</summary>
         public static float OffBoresight(float exDeg, float eyDeg) => (float)Math.Sqrt(exDeg * exDeg + eyDeg * eyDeg);

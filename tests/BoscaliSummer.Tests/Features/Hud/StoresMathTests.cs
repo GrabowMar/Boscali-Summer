@@ -152,6 +152,9 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(!NativeTakeover.Hide(true, true, false, false, true), "HUD hidden: native shows");
             TestAssert.That(!NativeTakeover.Hide(true, true, true, true, true), "Batch mode: native shows");
             TestAssert.That(!NativeTakeover.Hide(true, true, true, false, false), "The header did not draw this box's replacement: native shows");
+            TestAssert.That(!NativeTakeover.Stale(10.4f, 10f) && !NativeTakeover.Stale(10.5f, 10f), "A board presented within the last 0.5 s is alive");
+            TestAssert.That(NativeTakeover.Stale(10.6f, 10f) && NativeTakeover.Stale(10f, -100f), "A board that stopped being presented is stale (and never presented is)");
+            TestAssert.That(!NativeTakeover.Hide(!NativeTakeover.Stale(10.6f, 10f), true, true, false, true), "A stale board hands the native box back");
         }
     }
 }

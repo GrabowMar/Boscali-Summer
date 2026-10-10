@@ -55,6 +55,25 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(MissileCamText.Tti(d) == "--" && float.IsNaN(MissileCamText.TimeToGo(5000f, -40f)), "Barely or not closing: --");
             d.Weapon = null; d.Seeker = null; d.HasTarget = true; d.State = SeekerState.Unknown;
             TestAssert.That(MissileCamText.Header(d) == "MSL 1/2" && MissileCamText.Seeker(d) == "SEEKER · TRACK", "Missing names degrade to plain words");
+            Words();
+        }
+
+        private static void Words()
+        {
+            TestAssert.That(MissileCamMath.ModeWord(CamMode.Blind, true) == "BLIND" && MissileCamMath.ModeWord(CamMode.Blind, false) == "NO TGT", "Blind is BLIND only for a weapon that had a target");
+            TestAssert.That(MissileCamMath.ModeWord(CamMode.DataLink, false) == "DLINK" && MissileCamMath.ModeWord(CamMode.Locked, true) == "LOCKED" &&
+                MissileCamMath.ModeWord(CamMode.Search, true) == "SEARCH" && MissileCamMath.ModeWord(CamMode.Lost, false) == "LOST", "The other modes keep their words");
+            TestAssert.That(MissileCamMath.Caution(CamMode.Blind, true) && MissileCamMath.Caution(CamMode.Search, true), "Blind or searching on a given target cautions");
+            TestAssert.That(!MissileCamMath.Caution(CamMode.Blind, false) && !MissileCamMath.Caution(CamMode.Search, false), "A weapon that never had a target gives no caution");
+            TestAssert.That(!MissileCamMath.Caution(CamMode.Locked, true) && !MissileCamMath.Caution(CamMode.DataLink, true) && !MissileCamMath.Caution(CamMode.Lost, true), "Locked, data-link and lost are not cautions");
+            TestAssert.That(MissileCamMath.ResultWord(ShotState.Hit) == "HIT" && MissileCamMath.ResultWord(ShotState.Miss) == "MISS" && MissileCamMath.ResultWord(ShotState.Defeated) == "DEFEATED", "The result is the shot's");
+            TestAssert.That(MissileCamMath.ResultWord(ShotState.InFlight) == "LOST" && MissileCamMath.ResultWord(ShotState.Empty) == "LOST", "No result from the game (or a decoy) reads LOST");
+            TestAssert.Near(MissileCamMath.TapeStep(12000f, 1000f), 1000f, "A 12 km tape ticks every km");
+            TestAssert.Near(MissileCamMath.TapeStep(14000f, 1000f), 1000f, "Fourteen ticks still fit");
+            TestAssert.Near(MissileCamMath.TapeStep(15000f, 1000f), 2000f, "Fifteen do not: 2 km");
+            TestAssert.Near(MissileCamMath.TapeStep(40000f, 1000f), 5000f, "A 40 km tape ticks every 5 km");
+            TestAssert.Near(MissileCamMath.TapeStep(300f, 1000f), 100f, "A short tape ticks every tenth of the unit");
+            TestAssert.Near(MissileCamMath.TapeStep(20000f, 1852f), 1852f, "A 20 km tape in nautical miles ticks every nm");
         }
     }
 }

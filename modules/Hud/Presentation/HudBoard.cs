@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using BoscaliSummer.Core.Diagnostics;
 using BoscaliSummer.Modules.Hud.Domain;
 using BoscaliSummer.Modules.Hud.Patches;
 using BoscaliSummer.Modules.Hud.Runtime;
@@ -100,10 +102,24 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public void Notice(string channel, HudTone tone, string text, string detail = null) =>
             store.Notice(channel, tone, text, detail);
 
+        /// <summary>The board's 10 Hz readers, in order (the stores and threat feeds read the frame the watchers before them filled): the sites a reader that throws is reported under.</summary>
+        private static readonly string[] ReadSites =
+        {
+            "Hud.Read.Missiles", "Hud.Read.Shots", "Hud.Read.Systems", "Hud.Read.Threats", "Hud.Read.Countermeasures", "Hud.Read.Fuel", "Hud.Read.Damage",
+            "Hud.Read.SystemsFeed", "Hud.Read.Stores", "Hud.Read.CombatFeeds",
+        };
+
         private void LateUpdate()
         {
             if (Application.isBatchMode) return;
+            try { Tick(); }
+            catch (Exception e) { PatchGuard.Report("Hud.Tick", e); }
+            // Every frame, whatever happened above (fail open): a board that is not up and fresh gives the native boxes it replaces back.
+            panel?.TickNatives();
+        }
 
+        private void Tick()
+        {
             CameraStateManager cam = SceneSingleton<CameraStateManager>.i;
             // Orbit state objects are reused. A trip through cockpit/chase must clear old pose
             // smoothing even though the orbit postfix does not run while that view is inactive.
@@ -127,7 +143,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             if (panel == null) panel = new StatusPanel { Notice = Notice };
             if (!panel.Ensure()) return;
-            panel.TickNatives();
             if (cluster == null) cluster = new ThirdPersonHudCluster();
             cluster.Ensure();
 
@@ -149,24 +164,43 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 ShotFeed.Ledger.Clear();
                 shotBook.Clear();
             }
-            missileTracker.Read(hudAircraft, missileTracks);
-            shotBook.Track(now);
-            ShotFeed.Ledger.Expire(now, missileFlying ??= missileTracker.IsLive);
-            missileView.Tick(missileTracker.Missiles);
-            frame.Systems = ReadSystems(combat);
-            frame.Threat = threats.Read(hudAircraft, frame);
-            countermeasures.Read(hudAircraft, frame);
-            fuelWatch.Read(hudAircraft, frame);
-            damageWatch.Read(hudAircraft, frame);
             frame.Now = now;
             frame.Units = AvUnitsOf((int)PlayerSettings.unitSystem);
             frame.BootAge = hudAircraft != null ? now - bootStart : -1f;
             frame.HasTicker = store.Ticker(out frame.Ticker);
-            systemsFeed.Update(hudAircraft, frame, damageWatch.Rotary);
-            storesFeed.Update(hudAircraft, frame, combat);
-            threatFeed.Update(hudAircraft, frame);
-            shotFeed.Update(hudAircraft);
-            panel.Present(frame);
+            frame.Systems = default;
+            frame.Threat = ThreatPicture.Clear;
+            // Each reader on its own: one that throws is reported once and leaves its own part of the board empty (every reader clears what it owns first), the others still run.
+            for (int step = 0; step < ReadSites.Length; step++)
+            {
+                try
+                {
+                    switch (step)
+                    {
+                        case 0: missileTracker.Read(hudAircraft, missileTracks); break;
+                        case 1:
+                            shotBook.Track(now);
+                            ShotFeed.Ledger.Expire(now, missileFlying ??= missileTracker.IsLive);
+                            missileView.Tick(missileTracker.Missiles);
+                            break;
+                        case 2: frame.Systems = ReadSystems(combat); break;
+                        case 3: frame.Threat = threats.Read(hudAircraft, frame); break;
+                        case 4: countermeasures.Read(hudAircraft, frame); break;
+                        case 5: fuelWatch.Read(hudAircraft, frame); break;
+                        case 6: damageWatch.Read(hudAircraft, frame); break;
+                        case 7: systemsFeed.Update(hudAircraft, frame, damageWatch.Rotary); break;
+                        case 8: storesFeed.Update(hudAircraft, frame, combat); break;
+                        default:
+                            threatFeed.Update(hudAircraft, frame);
+                            shotFeed.Update(hudAircraft);
+                            break;
+                    }
+                }
+                catch (Exception e) { PatchGuard.Report(ReadSites[step], e); }
+            }
+            // A board that cannot be presented must not take the third-person cluster below down with it (and TickNatives takes a board that stopped presenting off the screen).
+            try { panel.Present(frame); }
+            catch (Exception e) { PatchGuard.Report("Hud.Present", e); }
 
             // The cockpit already has its own native tac screen for this feed; the card only
             // earns its space in the external views this module can force the HUD into.

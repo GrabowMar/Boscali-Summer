@@ -31,6 +31,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly float[] Outline = new float[12];
         private int lampCount, gaugeCount, lastPhase = -1;
         private bool booting, shellBeat, scopeBeat, hasBoard;
+        /// <summary>When the last <see cref="Present"/> finished (<c>Time.unscaledTime</c>).</summary>
+        private float presentedAt;
 
         /// <summary>Something on the board blinks, so its flash phase is part of what it draws.</summary>
         private bool beat => shellBeat || scopeBeat || header.Beat;
@@ -90,7 +92,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             HudThreats.Fill(frame.Threat, threatLamps);
 
             MeasurePixel();
-            MeasureScreen();
             var env = new ScopeEnv(now, frame.Units, Notice);
             ushort live = 0;
             for (int i = 0; i < pages.Length; i++)
@@ -98,11 +99,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             selector.Update(live, now, pages[(int)ScopePage.Systems].Critical);
             page = pages[(int)selector.Page];
             header.Poll(now, ((ThreatPage)pages[(int)ScopePage.Threat]).CallMask);
+            MeasureScreen();      // after the header's read: where the board goes depends on what the header stands in for
 
             PresentLamps(frame);
             PresentGauges();
             hasBoard = true;
             Repaint(true);
+            presentedAt = Time.unscaledTime;
         }
 
         private bool PollPage(ScopePageBase p, in ScopeEnv env)
@@ -302,13 +305,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>
         /// Every frame, after <see cref="Ensure"/>: hide the native weapon, countermeasure and capacitor boxes whose replacement the header is drawing, show the rest (<see cref="NativeCorner"/>,
-        /// <see cref="NativeTakeover"/>). Fail open: no board, a hidden or inactive board, a header that threw, a hidden HUD or a batch run all give the native boxes back this frame.
+        /// <see cref="NativeTakeover"/>). Fail open: no board, a hidden or inactive board, a header that threw, a hidden HUD or a batch run all give the native boxes back this frame; and a
+        /// board that has stopped being presented (its update threw: what it shows is frozen) is taken off the screen, so the native boxes show live data in its place.
         /// </summary>
         public void TickNatives()
         {
+            bool stale = NativeTakeover.Stale(Time.unscaledTime, presentedAt);
+            if (stale && root != null && root.gameObject.activeSelf) root.gameObject.SetActive(false);      // Repaint shows it again when Present resumes
             if (corner == null) return;
             CombatHUD hud = SceneSingleton<CombatHUD>.i;
-            bool alive = root != null && hasBoard && !headerFault && root.gameObject.activeInHierarchy;
+            bool alive = root != null && hasBoard && !stale && !headerFault && root.gameObject.activeInHierarchy;
             bool hudUp = hud != null && hud.iconLayer != null && hud.iconLayer.gameObject.activeInHierarchy, batch = Application.isBatchMode;
             corner.Apply(NativeTakeover.Hide(alive, true, hudUp, batch, header.WeaponDrawn), NativeTakeover.Hide(alive, true, hudUp, batch, header.CmDrawn), NativeTakeover.Hide(alive, true, hudUp, batch, header.CapDrawn));
         }

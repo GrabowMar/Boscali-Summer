@@ -31,8 +31,8 @@ namespace BoscaliSummer.Modules.Hud.Runtime
 
         public void Update(Aircraft aircraft, BoardFrame frame, bool rotary)
         {
-            valid = aircraft != null && frame.Fuel.Valid;
-            if (!valid) return;
+            valid = false;      // set again at the end: a read that throws half way leaves no stale reading behind
+            if (aircraft == null || !frame.Fuel.Valid) return;
             cache.Rotary = rotary;
             cache.Damage = frame.Damage;
             cache.Fuel = frame.Fuel;
@@ -61,6 +61,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                     cache.InCloud = sky.Cover >= CloudCover && at.y >= sky.CloudBase && at.y <= sky.CloudTop;
                 }
             }
+            valid = true;
         }
 
         public void Clear() => valid = false;

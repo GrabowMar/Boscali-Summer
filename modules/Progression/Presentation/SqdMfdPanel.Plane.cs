@@ -195,7 +195,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
             planeSystems.Set(SystemGear, aircraft.gearDeployed ? "DOWN" : "UP");
             planeSystems.Set(SystemAssist, aircraft.flightAssist ? "ON" : "OFF");
-            Countermeasure countermeasure = aircraft.countermeasureManager?.GetActiveCountermeasure();
+            Countermeasure countermeasure = BoscaliSummer.Core.Game.AircraftReadout.ActiveCountermeasure(aircraft);
             planeSystems.Set(SystemCountermeasure, countermeasure != null ? AvNum.Thousands(countermeasure.ammo) + " READY" : "NONE");
             MissileWarning warning = aircraft.GetMissileWarningSystem();
             int inbound = warning?.knownMissiles != null ? warning.knownMissiles.Count : 0;

@@ -179,7 +179,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>
         /// The screen as the dock sees it: the board unit (one design unit is the screen's height over 1080 of a device pixel, never under <see cref="ScopeLayout.MinScale"/>) and the
-        /// dock-local place of the screen's top-right corner, <see cref="ScopeLayout.Margin"/> in. Needs <see cref="pixel"/> measured first.
+        /// dock-local place of the screen's top-right corner, <see cref="ScopeLayout.Margin"/> in. Needs <see cref="pixel"/> measured first. The board owns the corner only while it stands
+        /// in for what the native panel shows: with a native weapon box or capacitor bar up that the header does not draw (a header that threw, a station the feed could not read), it hangs
+        /// under the native panel as it did before the takeover, so the box the pilot is given back is not under the board's plate.
         /// </summary>
         private void MeasureScreen()
         {
@@ -197,6 +199,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             unit = Mathf.Max(scale, ScopeLayout.MinScale) * pixel;
             cornerX -= ScopeLayout.Margin * unit;
             cornerY -= ScopeLayout.Margin * unit;
+            if (headerFault || (corner != null && corner.Uncovered(header.HasWeapon, header.HasCap))) cornerY = Mathf.Min(cornerY, dock.rect.yMin);
         }
 
         /// <summary>Take our board out of view without destroying it, and give the native boxes back. Idempotent.</summary>

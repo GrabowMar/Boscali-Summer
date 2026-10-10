@@ -72,6 +72,14 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             if (group.alpha != alpha) group.alpha = alpha;
         }
 
+        /// <summary>
+        /// A native box is up that the header does not stand in for (the game deactivates its weapon panel with no station selected and its capacitor bar with no user; its
+        /// countermeasure box is always active, so that one cannot tell): the board must not cover it.
+        /// </summary>
+        public bool Uncovered(bool weaponDrawn, bool capacitorDrawn) => (!weaponDrawn && Up(weapon)) || (!capacitorDrawn && Up(capacitor));
+
+        private static bool Up(CanvasGroup group) => group != null && group.gameObject.activeInHierarchy;
+
         /// <summary>Show everything again (the groups stay, so hiding again needs no search).</summary>
         public void Release() => Apply(false, false, false);
 

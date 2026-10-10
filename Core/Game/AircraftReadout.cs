@@ -1,4 +1,8 @@
+using System;
+using System.Collections;
+using System.Reflection;
 using BoscaliSummer.Core.Math;
+using HarmonyLib;
 using UnityEngine;
 
 namespace BoscaliSummer.Core.Game
@@ -10,6 +14,21 @@ namespace BoscaliSummer.Core.Game
     /// </summary>
     internal static class AircraftReadout
     {
+        private static readonly FieldInfo CountermeasureStations = AccessTools.Field(typeof(CountermeasureManager), "countermeasureStations");
+
+        /// <summary>
+        /// The pilot's active countermeasure; null when there is none. The game's own <c>GetActiveCountermeasure</c> indexes its private station list with <c>activeIndex</c> unchecked,
+        /// and that index is 255 after the game auto-chose "none" for a seeker nothing counters and stale after a lost pod took its station out of the list: it throws then.
+        /// </summary>
+        public static Countermeasure ActiveCountermeasure(Aircraft aircraft)
+        {
+            CountermeasureManager manager = aircraft != null ? aircraft.countermeasureManager : null;
+            if (manager == null) return null;
+            if (CountermeasureStations?.GetValue(manager) is ICollection stations) return manager.activeIndex < stations.Count ? manager.GetActiveCountermeasure() : null;
+            try { return manager.GetActiveCountermeasure(); }     // the list was renamed: the game's own call, guarded
+            catch (ArgumentOutOfRangeException) { return null; }
+        }
+
         /// <summary>Live fuel, 0..1 (tank mass over tank capacity). Zero for no aircraft.</summary>
         public static float Fuel(Aircraft aircraft) => aircraft == null ? 0f : Mathf.Clamp01(aircraft.GetFuelLevel());
 

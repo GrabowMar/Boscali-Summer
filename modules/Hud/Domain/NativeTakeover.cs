@@ -14,5 +14,10 @@ namespace BoscaliSummer.Modules.Hud.Domain
     {
         public static bool Hide(bool boardAlive, bool painted, bool hudUp, bool batchMode, bool elementDrawn) =>
             boardAlive && painted && hudUp && !batchMode && elementDrawn;
+
+        /// <summary>A board whose last present is older than this (unscaled seconds; it is presented every 0.1 s) has stopped updating: what it shows is frozen.</summary>
+        public const float StaleSeconds = 0.5f;
+
+        public static bool Stale(float now, float presentedAt) => now - presentedAt > StaleSeconds;
     }
 }
