@@ -12,8 +12,12 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
         private static void Postfix(Missile __instance)
         {
             if (__instance == null || __instance.definition == null) return;
-            GlaiveTurret.Attach(__instance); // Cache deployed wing bases before launch presentation folds them.
+            if (SentinelDrone.Attach(__instance) == null) GlaiveDrone.Attach(__instance); // GLAIVE-2A gets its own rig
             WeaponArticulation.Attach(__instance);
+            OrcaVisuals.Attach(__instance);
+            RemoraVisuals.Attach(__instance);
+            MaldjEmitter.Attach(__instance);
+            HawcxVisuals.Attach(__instance);
             if (VanguardKeys.RoleOf(__instance.definition.jsonKey) == VanguardRole.Towed) TowAnchor.Capture(__instance);
         }
     }
@@ -55,17 +59,6 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
         }
     }
 
-    [HarmonyPatch(typeof(Missile), "ServerFixedUpdate")]
-    internal static class GlaiveSuspendedPhysicsPatch
-    {
-        private static bool Prefix(Missile __instance)
-        {
-            if (!VanguardRegistry.TryGet(__instance,out VanguardFlight flight) || !flight.GunDeployed) return true;
-            flight.TickGun();
-            return false;
-        }
-    }
-
     [HarmonyPatch(typeof(Aircraft), nameof(Aircraft.LockedByMissile))]
     internal static class AegisLockPatch
     {
@@ -100,6 +93,14 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
             if (owner is Aircraft aircraft && aircraft.LocalSim && aircraft.Player != null) Networking.SkywellNet.RequestToggle(aircraft);
             return true;
         }
+    }
+
+    // SKYWELL: an AI receiver the kit is serving (or the sim's seated jet) holds the service box on its own autopilot target. Pilot states
+    // write their inputs from this call, so the hold goes in a postfix and is the last writer of the step.
+    [HarmonyPatch(typeof(Pilot), nameof(Pilot.Pilot_OnAeroInputsApplied))]
+    internal static class SkywellHoldPatch
+    {
+        private static void Postfix(Pilot __instance) => Presentation.SkywellVisuals.SteerAfterPilot(__instance);
     }
 
     // LANCE: the trigger charges the capacitor instead of firing; LanceService fires on release.

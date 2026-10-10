@@ -182,14 +182,15 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 .Add(Leaf("radar", "RADAR", AceIcon.Radar, With(a => a.CmdToggleRadar()),
                     visible: When(a => a.radar != null),
                     status: Read(a => a.radar.activated ? new AceRadialStatus("EMITTING", AceTone.Caution) : new AceRadialStatus("SILENT"))))
-                .Add(Leaf("drone-strike", "DRONES: STRIKE", AceIcon.Strike, () => Service<IDroneCommand>()?.Strike(),
-                    visible: () => Service<IDroneCommand>() is IDroneCommand d && !d.Striking,
+                .Add(Leaf("drone-strike", "VANGUARD: DESIGNATE", AceIcon.Strike, () => Service<IDroneCommand>()?.Strike(),
+                    visible: () => Service<IDroneCommand>() != null, // stays up while Striking: a fresh cue re-aims the drones
                     enabled: () => Service<IDroneCommand>()?.CanStrike == true,
-                    status: () => Service<IDroneCommand>()?.CanStrike == true ? new AceRadialStatus("ON TARGET", AceTone.Active)
+                    status: () => Service<IDroneCommand>() is IDroneCommand d && d.CanStrike
+                        ? new AceRadialStatus(d.Striking ? "RE-DESIGNATE" : "ON TARGET", AceTone.Active)
                         : new AceRadialStatus("NO TARGET", AceTone.Caution)))
-                .Add(Leaf("drone-screen", "DRONES: SCREEN", AceIcon.Defence, () => Service<IDroneCommand>()?.Screen(),
+                .Add(Leaf("drone-screen", "VANGUARD: RELEASE", AceIcon.Defence, () => Service<IDroneCommand>()?.Screen(),
                     visible: () => Service<IDroneCommand>()?.Striking == true,
-                    status: () => new AceRadialStatus("STRIKING", AceTone.Caution)));
+                    status: () => new AceRadialStatus("DESIGNATED", AceTone.Caution)));
         }
 
         private static AceRadialStatus FlareStatus(Aircraft a)

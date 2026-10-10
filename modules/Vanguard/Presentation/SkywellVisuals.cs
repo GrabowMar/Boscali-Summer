@@ -3,19 +3,19 @@ using System.Reflection;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Vanguard.Domain;
-using BoscaliSummer.Modules.Vanguard.Networking;
 using BoscaliSummer.Modules.Vanguard.Runtime;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Vanguard.Presentation
 {
     /// <summary>
-    /// Every peer, from SkywellBoard: holds the tanker's cargo door open, launches and flies the service kite on its tether
-    /// (axis-agnostic world posing re-derived from rest each frame, so floating-origin shifts never smear it), and
-    /// docks receivers this peer simulates (AI on the host, a player on their own client; stick input aborts).
+    /// Every peer, from SkywellBoard: holds the tanker's cargo door open, launches and flies the service glider on its tether
+    /// (axis-agnostic world posing re-derived from rest each frame, so floating-origin shifts never smear it) and, when the
+    /// server serves a receiver, brings it under that receiver's belly (flying inverted, belly loader up) and works the boom and
+    /// loader from there. Nothing here ever touches a receiver's body; the AI receivers steer themselves (skywellFly.cs).
     /// </summary>
     [DefaultExecutionOrder(1000)]
-    internal sealed class SkywellVisuals : MonoBehaviour, ISceneService
+    internal sealed partial class SkywellVisuals : MonoBehaviour, ISceneService
     {
         private const float DeploySeconds = 2.5f;
         private const float DeckSlide = 3.2f;  // rear pallet travel out over the ramp
@@ -28,12 +28,14 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             public readonly Transform T;
             public readonly Vector3 Pos;
             public readonly Quaternion Rot;
+            public readonly Vector3 Scale; // FBX joints carry a 100x scale: always multiply, never assign 1
 
             public Joint(Transform t)
             {
                 T = t;
                 Pos = t != null ? t.localPosition : Vector3.zero;
                 Rot = t != null ? t.localRotation : Quaternion.identity;
+                Scale = t != null ? t.localScale : Vector3.one;
             }
 
             public void Reset()
@@ -41,6 +43,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 if (T == null) return;
                 T.localPosition = Pos;
                 T.localRotation = Rot;
+                T.localScale = Scale;
             }
         }
 
@@ -48,17 +51,40 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         {
             public Aircraft Tanker;
             public Joint Deck, Winch, Kite, Tail, Wing, OuterL, OuterR, TipL, TipR, Nozzle, Loader, LoaderFore, Cradle;
+            public Joint LatchL, LatchR, RoundJ;   // pit-stop additions: absent in older bundles, always null-safe
             public Joint[] All;
             public Quaternion BodyOffset;    // kite root rotation -> body frame (fwd, up), from the rest joints
-            public float Deploy, Launch, NextDoor, NozzleRun, Reach, PhaseStart, PhaseSeconds;
+            public Vector3 NozzleOff, LoaderOff; // joint offsets from the kite pivot, in the glider's rest body frame
+            public Quaternion CradleRel;     // cradle rotation relative to the body at rest: the round stays parallel to the airframe
+            public float Deploy, Launch, NextDoor, NozzleRun, Reach;
             public bool Flying;
             public Vector3 NozzleAim;
-            public float HingeBehind;
             public Vector3 KiteLocal;        // tanker space (floating-origin safe)
             public Quaternion KiteRotLocal;
+            public Vector3 KiteVel;          // glider velocity, tanker space
+            public Vector3 TargetLocal;      // last frame's glider target, tanker space
+            public int TargetKey;            // receiver + job + station: a change is a retarget, not the target moving
+            public float Gap;                // how far the glider is from where it wants to be
+            public LineRenderer Tether;
+            // Pit stop: job staging is client-driven from the moment the view's job tuple changes.
             public SkywellPhase LastPhase;
             public uint LastReceiver;
-            public LineRenderer Tether;
+            public PitJobKind LastJob;
+            public byte LastStation, LastIndex;
+            public float JobStart, RoundVis = 1f, RoundFactor = 1f, CommitFlash = -10f, TetherBlue;
+            public PitFrom From;
+            public bool RoundHidden;
+            public Vector3 ReachTarget;      // tanker space: the rail the loader last served
+            public SkywellGlow GlowDeck, GlowKite, GlowCradle, GlowNozzle, GlowTipL, GlowTipR;
+            public TrailRenderer TrailL, TrailR;
+            public Vector3 TrailAnchor;      // tanker world position last frame: a jump no flight speed explains is a floating-origin shift
+
+            public void Dispose()
+            {
+                if (Tether != null) UnityEngine.Object.Destroy(Tether.gameObject);
+                if (TrailL != null) UnityEngine.Object.Destroy(TrailL.gameObject);
+                if (TrailR != null) UnityEngine.Object.Destroy(TrailR.gameObject);
+            }
         }
 
         internal static string Probe = "none"; // sim diagnostics
@@ -68,8 +94,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
 
         public void ResetForScene()
         {
-            foreach (Rig rig in rigs.Values)
-                if (rig.Tether != null) Destroy(rig.Tether.gameObject);
+            foreach (Rig rig in rigs.Values) rig.Dispose();
             rigs.Clear();
             holds.Clear();
         }
@@ -77,90 +102,17 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private static Aircraft Resolve(uint id) =>
             id != 0 && UnitRegistry.TryGetUnit(new PersistentID { Id = id }, out Unit u) ? u as Aircraft : null;
 
-        // ---- docking, FS-41 CATOBAR style (on the peer that simulates the receiver)
+        /// <summary>How far this tanker's glider still has to go to its pose (m); 99 when it has no rig yet. The receiver's HUD counts this down.</summary>
+        internal static float GliderGap(uint tanker) =>
+            Instance != null && Instance.rigs.TryGetValue(tanker, out Rig rig) ? rig.Gap : 99f;
 
-        private const float RequiredBrake = 0.8f;
-        private const float EngageSpeed = 30f;      // m/s along the scripted path
-        private const float MinEngageSeconds = 2.5f;
-        private const float GrantGrace = 1.5f;      // seconds a player waits for the server's yes
+        private static SkywellVisuals Instance;
 
-        internal static string RailProbe = "none"; // sim diagnostics
+        private void Awake() => Instance = this;
 
-        private struct Body
+        private void OnDestroy()
         {
-            public Rigidbody Rb;
-            public Vector3 Pos;     // from the pivot, pivot space
-            public Quaternion Rot;
-        }
-
-        private sealed class Hold
-        {
-            public Aircraft Tanker;
-            public Vector3 StartPos;     // pivot, tanker space
-            public Quaternion StartRot;  // tanker space
-            public float Start, Duration;
-            public readonly List<Body> Bodies = new List<Body>();
-        }
-
-        private readonly Dictionary<Aircraft, Hold> holds = new Dictionary<Aircraft, Hold>();
-        private readonly List<Aircraft> released = new List<Aircraft>();
-
-        private void FixedUpdate()
-        {
-            float now = Time.timeSinceLevelLoad;
-            // A player engages by holding the brake near an idle, deployed kit; the script flies the rest.
-            if (GameManager.GetLocalAircraft(out Aircraft me) && me != null && !me.disabled && me.LocalSim &&
-                !holds.ContainsKey(me) && me.GetInputs().brake >= RequiredBrake && NearestKit(me, out Aircraft kitTanker))
-            {
-                Engage(me, kitTanker, now);
-                SkywellNet.RequestDock(me, kitTanker);
-            }
-            // The host flies the AI receivers the server docked.
-            if (GameAccess.IsServer())
-                foreach (SkywellView v in SkywellBoard.Views.Values)
-                {
-                    if (v.Receiver == 0 || v.Phase == SkywellPhase.Idle) continue;
-                    Aircraft ai = Resolve(v.Receiver);
-                    Aircraft tanker = Resolve(v.Tanker);
-                    if (ai != null && tanker != null && ai.Player == null && ai.LocalSim && !holds.ContainsKey(ai)) Engage(ai, tanker, now);
-                }
-
-            ReinforceRamps();
-
-            released.Clear();
-            foreach (KeyValuePair<Aircraft, Hold> pair in holds)
-            {
-                Aircraft r = pair.Key;
-                Hold hold = pair.Value;
-                if (r == null || r.disabled || hold.Tanker == null || hold.Tanker.disabled || !r.LocalSim)
-                {
-                    released.Add(r);
-                    continue;
-                }
-                bool granted = SkywellBoard.Views.TryGetValue(hold.Tanker.persistentID.Id, out SkywellView view) &&
-                               view.Receiver == r.persistentID.Id;
-                if (r.Player != null && GameManager.IsLocalAircraft(r))
-                {
-                    if (r.GetInputs().brake < RequiredBrake)
-                    {
-                        SkywellNet.RequestUndock(r);
-                        released.Add(r);
-                        continue;
-                    }
-                    if (!granted && now - hold.Start > GrantGrace)
-                    {
-                        released.Add(r);
-                        continue;
-                    }
-                }
-                else if (!granted)
-                {
-                    released.Add(r);
-                    continue;
-                }
-                Drive(r, hold, now);
-            }
-            for (int i = 0; i < released.Count; i++) holds.Remove(released[i]);
+            if (Instance == this) Instance = null;
         }
 
         /// <summary>
@@ -185,102 +137,15 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             }
         }
 
-        /// <summary>Closest deployed, unoccupied kit whose contact point is within reach astern of the tanker.</summary>
-        private static bool NearestKit(Aircraft me, out Aircraft best)
-        {
-            best = null;
-            float bestDist = SkywellService.EngageRadius;
-            foreach (SkywellView v in SkywellBoard.Views.Values)
-            {
-                if (!v.Active || v.Receiver != 0) continue;
-                Aircraft tanker = Resolve(v.Tanker);
-                if (tanker == null || tanker.disabled || tanker == me || tanker.NetworkHQ != me.NetworkHQ) continue;
-                Vector3 contact = SkywellBoard.ContactPoint(tanker);
-                Vector3 probe = SkywellBoard.ProbePoint(me);
-                float d = Vector3.Distance(probe, contact);
-                float astern = tanker.transform.InverseTransformPoint(probe).z - tanker.transform.InverseTransformPoint(contact).z;
-                if (d < bestDist && astern < 5f)
-                {
-                    bestDist = d;
-                    best = tanker;
-                }
-            }
-            return best != null;
-        }
-
-        private void Engage(Aircraft r, Aircraft tanker, float now)
-        {
-            Transform t = tanker.transform;
-            Vector3 pivot = r.rb.position;
-            Quaternion pivotRot = r.rb.rotation;
-            var hold = new Hold
-            {
-                Tanker = tanker,
-                StartPos = t.InverseTransformPoint(pivot),
-                StartRot = Quaternion.Inverse(t.rotation) * pivotRot,
-                Start = now,
-            };
-            hold.Duration = Mathf.Max(MinEngageSeconds, Vector3.Distance(hold.StartPos, DockPos(r, tanker)) / EngageSpeed);
-            // Every part body moves as one (they are jointed: moving only the root tears the airframe apart).
-            Quaternion inv = Quaternion.Inverse(pivotRot);
-            var seen = new HashSet<Rigidbody>();
-            foreach (UnitPart part in r.partLookup)
-                if (part != null && !part.IsDetached() && part.rb != null && seen.Add(part.rb))
-                    hold.Bodies.Add(new Body { Rb = part.rb, Pos = inv * (part.rb.position - pivot), Rot = inv * part.rb.rotation });
-            if (r.rb != null && seen.Add(r.rb))
-                hold.Bodies.Add(new Body { Rb = r.rb, Pos = Vector3.zero, Rot = Quaternion.identity });
-            holds[r] = hold;
-        }
-
-        /// <summary>Receiver pivot (rigidbody origin) that puts its probe on the contact point, tanker space.</summary>
-        private static Vector3 DockPos(Aircraft r, Aircraft tanker)
-        {
-            Vector3 probeFromPivot = Quaternion.Inverse(r.rb.rotation) * (SkywellBoard.ProbePoint(r) - r.rb.position);
-            return tanker.transform.InverseTransformPoint(SkywellBoard.ContactPoint(tanker)) - probeFromPivot;
-        }
-
-        private static void Drive(Aircraft r, Hold hold, float now)
-        {
-            Aircraft tanker = hold.Tanker;
-            Transform t = tanker.transform;
-            float s = Mathf.SmoothStep(0f, 1f, (now - hold.Start) / hold.Duration);
-            Vector3 pos = Vector3.Lerp(hold.StartPos, DockPos(r, tanker), s);
-            Quaternion rot = Quaternion.Slerp(hold.StartRot, Quaternion.identity, s);
-            Vector3 pivot = t.TransformPoint(pos);
-            Quaternion pivotRot = t.rotation * rot;
-            Vector3 velocity = tanker.rb != null ? tanker.rb.velocity : Vector3.zero;
-            Vector3 spin = tanker.rb != null ? tanker.rb.angularVelocity : Vector3.zero;
-            foreach (Body b in hold.Bodies)
-            {
-                if (b.Rb == null) continue;
-                b.Rb.MovePosition(pivot + pivotRot * b.Pos);
-                b.Rb.MoveRotation(pivotRot * b.Rot);
-                b.Rb.velocity = velocity + Vector3.Cross(spin, b.Rb.worldCenterOfMass - pivot);
-                b.Rb.angularVelocity = spin;
-            }
-            // Scripted motion is not flown: keep it out of the pilots' g (as the FS-41 catapult does).
-            if (r.pilots != null)
-                foreach (Pilot p in r.pilots)
-                {
-                    if (p == null || p.dead || p.ejected) continue;
-                    Rigidbody prb = p.GetRB();
-                    if (prb == null) continue;
-                    p.velocityPrev = prb.velocity;
-                    p.accel = Vector3.zero;
-                    p.gForce = 0f;
-                }
-            RailProbe = $"s={s:F2} dur={hold.Duration:F1} toDock={(t.InverseTransformPoint(r.rb.position) - DockPos(r, tanker)).magnitude:F1} bodies={hold.Bodies.Count}";
-        }
-
-        // ---- service kite and door (render peers)
+        // ---- service glider and door (render peers)
 
         private const float LaunchSeconds = 8f;
-        private const float KiteSpeed = 14f;          // m/s, tanker frame
-        private const float NozzleRun = 1.5f;         // refuel boom telescope travel
+        private const float KiteSpeed = 14f;          // m/s, tanker frame: tow and return
+        private const float NozzleRun = 2.0f;         // refuel boom telescope travel
         private const float BoomLength = 1.95f;       // hinge to nozzle tip (model)
         private const float NozzleSpeed = 1.6f;
-        private const float HingeAheadOfProbe = 1.5f; // refuel-boom hinge ahead of the receiver probe when plugged
         private const float TailRun = 2.6f;           // telescoping tail boom travel (model)
+        private const float GliderLeash = 140f;       // the glider flies out to a receiver no farther than this from the mount (the keep box reaches ~125 m)
         private const int TetherPoints = 16;
 
         private Material tetherMaterial;
@@ -305,7 +170,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 if (pair.Value.Tanker == null || !SkywellBoard.Views.ContainsKey(pair.Key)) gone.Add(pair.Key);
             for (int i = 0; i < gone.Count; i++)
             {
-                if (rigs[gone[i]].Tether != null) Destroy(rigs[gone[i]].Tether.gameObject);
+                rigs[gone[i]].Dispose();
                 rigs.Remove(gone[i]);
             }
         }
@@ -325,13 +190,28 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 Tail = J("Tail"), OuterL = J("WingOuterL"), OuterR = J("WingOuterR"), TipL = J("WingletL"), TipR = J("WingletR"),
                 Nozzle = J("Nozzle"),
                 Loader = J("Loader"), LoaderFore = J("LoaderFore"), Cradle = J("Cradle"),
+                LatchL = J("LatchL"), LatchR = J("LatchR"), RoundJ = J("Round"),
             };
             if (rig.Kite.T == null || rig.Wing.T == null || rig.Nozzle.T == null) return null;
-            rig.All = new[] { rig.Kite, rig.Tail, rig.Wing, rig.OuterL, rig.OuterR, rig.Nozzle, rig.Loader, rig.LoaderFore, rig.Cradle };
+            rig.All = new[] { rig.Kite, rig.Tail, rig.Wing, rig.OuterL, rig.OuterR, rig.Nozzle, rig.Loader, rig.LoaderFore, rig.Cradle,
+                rig.Winch, rig.LatchL, rig.LatchR, rig.RoundJ };
+            rig.GlowDeck = new SkywellGlow(rig.Deck.T);
+            rig.GlowKite = new SkywellGlow(rig.Kite.T);
+            rig.GlowCradle = new SkywellGlow(rig.Cradle.T);
+            rig.GlowNozzle = new SkywellGlow(rig.Nozzle.T);
+            rig.GlowTipL = new SkywellGlow(rig.TipL.T);
+            rig.GlowTipR = new SkywellGlow(rig.TipR.T);
             // Body frame from the joints (axis-agnostic): forward = tail nozzle -> kite pivot, up = kite -> wing pivot.
             Vector3 fwd = (rig.Kite.T.position - rig.Nozzle.T.position).normalized;
             Vector3 up = (rig.Wing.T.position - rig.Kite.T.position).normalized;
-            rig.BodyOffset = Quaternion.Inverse(rig.Kite.T.rotation) * Quaternion.LookRotation(fwd, up);
+            Quaternion rest = Quaternion.LookRotation(fwd, up);
+            rig.BodyOffset = Quaternion.Inverse(rig.Kite.T.rotation) * rest;
+            // Where the working joints sit on the glider, so the pose can put the boom hinge or the loader shoulder under a point
+            // on the receiver whatever way up the glider flies.
+            Quaternion inv = Quaternion.Inverse(rest);
+            rig.NozzleOff = inv * (rig.Nozzle.T.position - rig.Kite.T.position);
+            rig.LoaderOff = rig.Loader.T != null ? inv * (rig.Loader.T.position - rig.Kite.T.position) : Vector3.zero;
+            rig.CradleRel = rig.Cradle.T != null ? inv * rig.Cradle.T.rotation : Quaternion.identity;
             rig.NozzleAim = Vector3.zero;
             Transform tf = tanker.transform;
             Probe = $"root={root.name} kite={tf.InverseTransformPoint(rig.Kite.T.position).ToString("F1")} " +
@@ -342,13 +222,45 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private static Transform Find(Dictionary<string, Transform> names, string name) =>
             names.TryGetValue(name, out Transform t) ? t : null;
 
+        /// <summary>
+        /// Where the glider's pivot goes for a receiver under service, and how it sits. It flies belly up, aligned with the
+        /// receiver, so the loader on its belly faces the pylons and the boom rises at the receptacle; hand-offs slide it under
+        /// the rail being served, fuel under the receptacle, anything else under the belly's middle.
+        /// </summary>
+        private static void GliderPose(Rig rig, Aircraft r, SkywellView v, bool fuelStage, bool stationStage, out Vector3 want, out Quaternion wantRot)
+        {
+            Transform rt = r.transform;
+            Bounds b = SkywellBoard.LocalBounds(r);
+            wantRot = Quaternion.LookRotation(rt.forward, -rt.up);
+            float bellyY = b.min.y;
+            Vector3 local, off;
+            if (stationStage)
+            {
+                Vector3 rail = rt.InverseTransformPoint(SkywellStations.StationPoint(r, v.JobStation));
+                local = new Vector3(rail.x, SkywellGlider.ServeHeight(rail.y, bellyY), rail.z);
+                off = rig.LoaderOff;
+            }
+            else if (fuelStage)
+            {
+                Vector3 fuel = rt.InverseTransformPoint(SkywellBoard.FuelPoint(r));
+                local = new Vector3(fuel.x, bellyY - SkywellGlider.Under, fuel.z);
+                off = rig.NozzleOff;
+            }
+            else
+            {
+                local = new Vector3(b.center.x, bellyY - SkywellGlider.Under, b.center.z);
+                off = Vector3.zero;
+            }
+            want = rt.TransformPoint(local) - wantRot * off;
+        }
+
         private void Pose(Rig rig, SkywellView v, float dt)
         {
             Aircraft tanker = rig.Tanker;
             if (tanker == null) return;
             Transform tt = tanker.transform;
 
-            // Sequence: deck out, then the kite launches; stowing runs it backwards (kite home before the deck).
+            // Sequence: deck out, then the glider launches; stowing runs it backwards (glider home before the deck).
             if (v.Active)
             {
                 rig.Deploy = Mathf.MoveTowards(rig.Deploy, 1f, dt / DeploySeconds);
@@ -373,50 +285,50 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             Vector3 cradlePos = rig.Kite.T.position;
             Quaternion cradleRot = rig.Kite.T.rotation * rig.BodyOffset;
 
-            // Where the kite wants to be, and which receiver stage drives it.
-            if (v.Phase != rig.LastPhase || v.Receiver != rig.LastReceiver)
-            {
-                rig.LastPhase = v.Phase;
-                rig.LastReceiver = v.Receiver;
-                rig.PhaseStart = Time.time;
-                Aircraft rr = Resolve(v.Receiver);
-                rig.PhaseSeconds = rr != null && v.Phase == SkywellPhase.Transfer
-                    ? SkywellContact.TransferSeconds(SkywellService.FuelNeedKg(rr), SkywellService.MissingRounds(rr)) : 0f;
-            }
+            // Where the glider wants to be: the receiver under service decides (belly pose, then the job's working pose); with
+            // nobody to serve it loiters on its tether; after a hot break it snaps home.
+            PitSync(rig, v);
             Aircraft r = v.Phase != SkywellPhase.Idle ? Resolve(v.Receiver) : null;
-            Vector3 contact = SkywellBoard.ContactPoint(tanker);
-            bool close = r != null && Vector3.Distance(SkywellBoard.ProbePoint(r), contact) < 30f;
-            bool ammoStage = close && (v.Phase == SkywellPhase.Served ||
-                             (v.Phase == SkywellPhase.Transfer && Time.time - rig.PhaseStart > rig.PhaseSeconds * 0.5f));
-            bool fuelStage = close && !ammoStage;
+            bool hot = (v.Flags & PitFlags.HotBreak) != 0;
+            // A called-in AI still miles astern is not served yet: the glider only leaves its tow for a receiver within the tether's reach.
+            bool serving = r != null && !r.disabled && !hot && (r.transform.position - SkywellBoard.Anchor(tanker)).sqrMagnitude < GliderLeash * GliderLeash;
+            bool transfer = serving && v.Phase == SkywellPhase.Transfer;
+            bool stationStage = transfer && (v.Job == PitJobKind.Handoff || v.Job == PitJobKind.Cassette);
+            bool fuelStage = transfer && v.Job == PitJobKind.Fuel;
             Vector3 want;
             Quaternion wantRot;
-            if (fuelStage)
+            int key;
+            if (serving)
             {
-                Transform rt = r.transform;
-                want = SkywellBoard.ProbePoint(r) + rt.forward * (HingeAheadOfProbe + rig.HingeBehind) + rt.up * 2.0f;   // clear of the nose cone
-                wantRot = rt.rotation;
-            }
-            else if (ammoStage)
-            {
-                Transform rt = r.transform;
-                want = SkywellBoard.PylonPoint(r) - rt.right * 0.3f - rt.up * 2.7f - rt.forward * 1.6f;   // glider tucked under the jet
-                wantRot = rt.rotation;
+                GliderPose(rig, r, v, fuelStage, stationStage, out want, out wantRot);
+                key = (int)v.Receiver * 131 + (stationStage ? 100 + v.JobStation : fuelStage ? 99 : 1);
             }
             else
             {
                 float bob = Mathf.Sin(Time.time * 0.7f) * 0.6f;
-                want = contact + tt.up * (2.5f + bob) + tt.forward * 4f + tt.right * (Mathf.Sin(Time.time * 0.31f) * 1.2f);
+                want = SkywellBoard.Anchor(tanker) + tt.rotation * (SkywellGlider.Tow + new Vector3(Mathf.Sin(Time.time * 0.31f) * 1.2f, bob, 0f));
                 wantRot = tt.rotation;
+                key = 0;
             }
+            Vector3 wantLocal = tt.InverseTransformPoint(want);
             if (!rig.Flying)
             {
                 rig.KiteLocal = tt.InverseTransformPoint(cradlePos);
                 rig.KiteRotLocal = Quaternion.Inverse(tt.rotation) * cradleRot;
+                rig.KiteVel = Vector3.zero;
+                rig.TargetLocal = wantLocal;
+                rig.TargetKey = key;
                 rig.Flying = true;
             }
-            rig.KiteLocal = Vector3.MoveTowards(rig.KiteLocal, tt.InverseTransformPoint(want), KiteSpeed * dt);
-            rig.KiteRotLocal = Quaternion.RotateTowards(rig.KiteRotLocal, Quaternion.Inverse(tt.rotation) * wantRot, 60f * dt);
+            // Critically damped follow, at most MaxRelSpeed closing on the receiver; a new job or receiver is a retarget (it eases
+            // onto the new pose from its own velocity), a moving receiver is a moving target (no lag, no snapping).
+            Vector3 from = key == rig.TargetKey ? rig.TargetLocal : wantLocal;
+            float maxSpeed = hot ? HotKiteSpeed : serving ? SkywellGlider.MaxRelSpeed : KiteSpeed;
+            SkywellGlider.Follow(ref rig.KiteLocal, ref rig.KiteVel, from, wantLocal, dt, SkywellGlider.SmoothSeconds, maxSpeed);
+            rig.TargetLocal = wantLocal;
+            rig.TargetKey = key;
+            rig.Gap = Vector3.Distance(rig.KiteLocal, wantLocal);
+            rig.KiteRotLocal = Quaternion.RotateTowards(rig.KiteRotLocal, Quaternion.Inverse(tt.rotation) * wantRot, SkywellGlider.TurnDegPerSecond * dt);
             if (rig.Launch <= 0f) rig.Flying = false;
 
             float launch = Mathf.SmoothStep(0f, 1f, rig.Launch);
@@ -441,54 +353,102 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             }
             float unfold = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((rig.Launch - 0.5f) / 0.3f));
             if (unfold > 0f)
-                foreach ((Joint panel, Joint tip) in new[] { (rig.OuterL, rig.TipL), (rig.OuterR, rig.TipR) })
-                {
-                    if (panel.T == null || tip.T == null) continue;
-                    // swing through the trailing side (like a carrier wing fold), never through the fuselage
-                    Vector3 folded = tip.T.position - panel.T.position;
-                    float sign = Vector3.Dot(Quaternion.AngleAxis(90f, kUp) * folded, kFwd) < 0f ? 1f : -1f;
-                    panel.T.rotation = Quaternion.AngleAxis(sign * 180f * unfold, kUp) * panel.T.rotation;
-                }
-            rig.HingeBehind = Vector3.Distance(pos, rig.Nozzle.T.position);
+            {
+                UnfoldPanel(rig.OuterL, rig.TipL, kUp, kFwd, unfold);
+                UnfoldPanel(rig.OuterR, rig.TipR, kUp, kFwd, unfold);
+            }
 
-            // Mini flying boom: stowed pointing forward under the tail boom, swings down and back onto the probe,
-            // then telescopes the last metre (the slide is along the boom, so it reads as a telescope).
+            // Mini flying boom: stowed pointing forward along the tail boom. A fuel job swings it onto the receptacle, plugs (the
+            // slide is along the boom, so it reads as a telescope), holds through the flow, then unplugs.
             Vector3 boomWant = kFwd;
-            float runWant = 0f;
+            float runWant = 0f, connected = 0f;
             if (fuelStage && rig.Launch >= 1f)
             {
-                Vector3 toProbe = SkywellBoard.ProbePoint(r) - rig.Nozzle.T.position;
-                boomWant = toProbe.normalized;
-                runWant = Mathf.Clamp(toProbe.magnitude - BoomLength, 0f, NozzleRun);
+                Vector3 toProbe = SkywellBoard.FuelPoint(r) - rig.Nozzle.T.position;
+                connected = PitStaging.Connected(Time.time - rig.JobStart, Mathf.Max(0f, v.JobTenths / 10f - PitPlan.FuelPlug - PitPlan.FuelUnplug));
+                boomWant = Vector3.Slerp(kFwd, toProbe.normalized, connected);
+                runWant = Mathf.Clamp(toProbe.magnitude - BoomLength, 0f, NozzleRun) * connected;
             }
             if (rig.NozzleAim.sqrMagnitude < 0.5f) rig.NozzleAim = kFwd;
             rig.NozzleAim = Vector3.RotateTowards(rig.NozzleAim, boomWant, 70f * Mathf.Deg2Rad * dt, 0f);
-            rig.NozzleRun = Mathf.MoveTowards(rig.NozzleRun, Vector3.Angle(rig.NozzleAim, boomWant) < 5f ? runWant : 0f, NozzleSpeed * dt);
+            rig.NozzleRun = Mathf.MoveTowards(rig.NozzleRun, Vector3.Angle(rig.NozzleAim, boomWant) < 5f ? runWant : 0f,
+                (hot ? NozzleRun / 0.4f : NozzleSpeed) * dt);
             rig.Nozzle.T.rotation = Quaternion.FromToRotation(kFwd, rig.NozzleAim) * rig.Nozzle.T.rotation;
             if (rig.NozzleRun > 0f && rig.Nozzle.T.parent != null)
                 rig.Nozzle.T.localPosition = rig.Nozzle.Pos + rig.Nozzle.T.parent.InverseTransformVector(rig.NozzleAim * rig.NozzleRun);
 
-            // The loader lifts the round up to the receiver's pylon.
-            rig.Reach = Mathf.MoveTowards(rig.Reach, ammoStage && rig.Launch >= 1f ? 1f : 0f, dt / 1.5f);
-            if (rig.Reach > 0f && r != null) PoseLoader(rig, SkywellBoard.PylonPoint(r), -kFwd, rig.Reach);
+            // The loader hot-swaps: it lifts the round straight up from the glider to the rail (0.6 s), latches (0.3 s), the real
+            // missile appears at the commit, the arm drops back to the belly magazine (0.5 s) for the next one (PitStaging curves).
+            float jobTime = Time.time - rig.JobStart;
+            if (stationStage && rig.Launch >= 1f)
+            {
+                rig.Reach = PitStaging.Reach(jobTime, rig.From);
+                // A follow-on lowers the arm from the rail it just loaded; only once it is down does the target move to the next rail.
+                if (rig.From != PitFrom.Again || jobTime >= PitStaging.Down)
+                    rig.ReachTarget = tt.InverseTransformPoint(SkywellStations.StationPoint(r, v.JobStation));
+            }
+            else rig.Reach = Mathf.MoveTowards(rig.Reach, 0f, dt / (hot ? 0.3f : 0.6f));
+            if (rig.Reach > 0f) PoseLoader(rig, tt.TransformPoint(rig.ReachTarget), -kFwd, rig.Reach, body);
+            PoseRound(rig, stationStage, jobTime, dt);
 
-            Tether(rig, tt, pos, kUp, kFwd);
-            KiteProbe = $"launch={rig.Launch:F2} stage={(fuelStage ? "fuel" : ammoStage ? "ammo" : "loiter")} " +
-                        $"kite={tt.InverseTransformPoint(pos).ToString("F1")} nozzle={rig.NozzleRun:F1} reach={rig.Reach:F1}";
+            float tether = Tether(rig, tt, pos, kUp, kFwd, connected);
+            PoseLatches(rig);
+            if (rig.Winch.T != null && tether > 0f)
+                rig.Winch.T.localRotation = rig.Winch.Rot * Quaternion.AngleAxis(tether / 0.2f * Mathf.Rad2Deg, Vector3.right); // drum pays the line out
+            PoseGlow(rig, v, hot, connected);
+            PoseTrails(rig, rig.Launch > 0.85f, rig.TipL.T != null ? rig.TipL.T.position + kUp * 0.45f : pos,
+                rig.TipR.T != null ? rig.TipR.T.position + kUp * 0.45f : pos, dt);
+            ProbeReach = rig.Reach;
+            ProbeNozzle = rig.NozzleRun;
+            ProbeReachMax = Mathf.Max(ProbeReachMax, rig.Reach);
+            ProbeNozzleMax = Mathf.Max(ProbeNozzleMax, rig.NozzleRun);
+            ProbeRoundMin = Mathf.Min(ProbeRoundMin, rig.RoundVis);
+            if (transfer && rig.Launch >= 1f && jobTime > 0.5f) RecordGap(r, pos);
+            if (SimRun)
+                KiteProbe = $"launch={rig.Launch:F2} stage={(fuelStage ? "fuel" : stationStage ? "ammo" : serving ? "belly" : "tow")} job={v.Job}/{v.JobIndex}of{v.JobCount} " +
+                            $"kite={tt.InverseTransformPoint(pos).ToString("F1")} gap={rig.Gap:F1} nozzle={rig.NozzleRun:F1} reach={rig.Reach:F1} round={rig.RoundVis:F1}";
+        }
+
+        /// <summary>Sim diagnostics (status: serveGapMax / serveGapMin / serveGapSamples): glider to airframe-bounds distance while a job runs.</summary>
+        internal static float ServeGapMax, ServeGapMin = 999f;
+        internal static int ServeGapSamples;
+
+        private static void RecordGap(Aircraft r, Vector3 glider)
+        {
+            Bounds b = SkywellBoard.LocalBounds(r);
+            float gap = SkywellGlider.BoxDistance(r.transform.InverseTransformPoint(glider), b.center, b.extents);
+            ServeGapMax = Mathf.Max(ServeGapMax, gap);
+            ServeGapMin = Mathf.Min(ServeGapMin, gap);
+            ServeGapSamples++;
+        }
+
+        /// <summary>Swing an outer wing panel 180 deg out through the trailing side (like a carrier wing fold), never through the fuselage.</summary>
+        private static void UnfoldPanel(Joint panel, Joint tip, Vector3 kUp, Vector3 kFwd, float unfold)
+        {
+            if (panel.T == null || tip.T == null) return;
+            Vector3 folded = tip.T.position - panel.T.position;
+            float sign = Vector3.Dot(Quaternion.AngleAxis(90f, kUp) * folded, kFwd) < 0f ? 1f : -1f;
+            panel.T.rotation = Quaternion.AngleAxis(sign * 180f * unfold, kUp) * panel.T.rotation;
         }
 
         internal static string KiteProbe = "none";
+        private static readonly bool SimRun = !string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("NOMODKIT_SIM_SCENARIO"));
 
-        /// <summary>Two-link loader aimed at the pylon (world FromTo aiming, re-derived from rest every frame).</summary>
-        private static void PoseLoader(Rig rig, Vector3 target, Vector3 pole, float weight)
+        /// <summary>
+        /// Two-link loader reaching the pylon. The goal sweeps from the folded cradle to the rail by angle and length from the shoulder
+        /// (so the round rises out of the glider rather than swinging round it), the cradle keeps the airframe's attitude so the round
+        /// stays parallel to the rail, and the elbow trails aft. World FromTo aiming, re-derived from rest every frame.
+        /// </summary>
+        private static void PoseLoader(Rig rig, Vector3 target, Vector3 pole, float weight, Quaternion body)
         {
             if (rig.Loader.T == null || rig.LoaderFore.T == null || rig.Cradle.T == null) return;
             Vector3 s = rig.Loader.T.position, f = rig.LoaderFore.T.position, c0 = rig.Cradle.T.position;
             float upper = Vector3.Distance(s, f), lower = Vector3.Distance(f, c0);
-            Vector3 goal = Vector3.Lerp(c0, target, weight);
-            float d = Mathf.Min(Vector3.Distance(goal, s), upper + lower - 0.01f);
+            Vector3 home = c0 - s, aim = target - s;
+            float homeDist = home.magnitude, aimDist = aim.magnitude;
+            Vector3 dir = Vector3.Slerp(homeDist > 1e-3f ? home / homeDist : -pole, aimDist > 1e-3f ? aim / aimDist : -pole, weight);
+            float d = Mathf.Min(Mathf.Lerp(homeDist, aimDist, weight), upper + lower - 0.01f);
             ArmIK.Solve(upper, lower, new Vector3(0f, 0f, d), out float lift, out _);
-            Vector3 dir = (goal - s).normalized;
             Vector3 perp = pole - dir * Vector3.Dot(pole, dir);
             perp = perp.sqrMagnitude < 1e-4f ? Vector3.up : perp.normalized;
             float rad = lift * Mathf.Deg2Rad;
@@ -496,15 +456,16 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             rig.Loader.T.rotation = Quaternion.FromToRotation(f - s, elbow - s) * rig.Loader.T.rotation;
             Vector3 fNow = rig.LoaderFore.T.position;
             rig.LoaderFore.T.rotation = Quaternion.FromToRotation(rig.Cradle.T.position - fNow, s + dir * d - fNow) * rig.LoaderFore.T.rotation;
+            rig.Cradle.T.rotation = body * rig.CradleRel;
         }
 
-        /// <summary>Fuel + power tether from the deck winch to the kite's bridle, with a slight catenary sag.</summary>
-        private void Tether(Rig rig, Transform tt, Vector3 kite, Vector3 kUp, Vector3 kFwd)
+        /// <summary>Fuel + power tether from the deck winch to the glider's bridle, with a slight catenary sag.</summary>
+        private float Tether(Rig rig, Transform tt, Vector3 kite, Vector3 kUp, Vector3 kFwd, float connected)
         {
             bool show = rig.Launch > 0f && rig.Winch.T != null;
             if (rig.Tether == null)
             {
-                if (!show) return;
+                if (!show) return 0f;
                 if (tetherMaterial == null)
                 {
                     Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
@@ -519,15 +480,18 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 rig.Tether.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             }
             rig.Tether.enabled = show;
-            if (!show) return;
+            if (!show) return 0f;
+            TintTether(rig, connected);
             Vector3 a = rig.Winch.T.position + tt.up * 0.15f;
-            Vector3 b = kite + kUp * 0.42f + kFwd * 0.25f;
+            // The bridle sits on the glider's back; flying belly up that is underneath, so the line takes the side facing the tanker.
+            Vector3 b = kite + (Vector3.Dot(kUp, tt.up) >= 0f ? kUp : -kUp) * 0.42f + kFwd * 0.25f;
             Vector3 mid = (a + b) * 0.5f - tt.up * (0.035f * Vector3.Distance(a, b));
             for (int i = 0; i < TetherPoints; i++)
             {
                 float t = i / (float)(TetherPoints - 1);
                 rig.Tether.SetPosition(i, (1 - t) * (1 - t) * a + 2 * (1 - t) * t * mid + t * t * b);
             }
+            return Vector3.Distance(a, b);
         }
 
         private static void HoldDoor(Rig rig)

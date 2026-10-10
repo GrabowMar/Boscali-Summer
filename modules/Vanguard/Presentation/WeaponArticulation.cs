@@ -15,12 +15,13 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private Quaternion rightDeployed;
         private Vector3 leftAxis;
         private Vector3 rightAxis;
+        private float swing;
 
         public static void Attach(Missile missile)
         {
             VanguardRole role = VanguardKeys.RoleOf(missile.definition.jsonKey);
-            if (role != VanguardRole.Decoy && role != VanguardRole.Jammer &&
-                role != VanguardRole.Carrier && role != VanguardRole.Torpedo) return;
+            // MALD-J (Jammer) is animated by MaldjEmitter; REMORA (Drone) folds its wings here.
+            if (role != VanguardRole.Decoy && role != VanguardRole.Torpedo && role != VanguardRole.Drone) return;
             if (missile.GetComponent<WeaponArticulation>() != null) return;
             Transform visual = missile.transform.Find("VanguardVisual");
             if (visual == null) return;
@@ -35,12 +36,16 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             animation.missile = missile;
             animation.left = left;
             animation.right = right;
-            animation.leftDeployed = left.localRotation;
-            animation.rightDeployed = right.localRotation;
             // FBX bakes its axes and the visual root adds +90X. Use the weapon's physical up in each
             // parent frame, preserving imported joint rotations. LOD wing meshes are children of these joints.
             animation.leftAxis = left.parent.InverseTransformDirection(missile.transform.up);
             animation.rightAxis = right.parent.InverseTransformDirection(missile.transform.up);
+            // The MALD-X FBX holds the flight pose. ORCA and REMORA hold the stowed pose (MECHANICS.md part contract), so
+            // their deployed rotation is the rest pose swung open by the model's fold angle: Orca.py 90, Remora.py STOW_DEG 68.
+            animation.swing = role == VanguardRole.Drone ? 68f : 90f;
+            bool stowedRest = role != VanguardRole.Decoy;
+            animation.leftDeployed = stowedRest ? Quaternion.AngleAxis(animation.swing, animation.leftAxis) * left.localRotation : left.localRotation;
+            animation.rightDeployed = stowedRest ? Quaternion.AngleAxis(-animation.swing, animation.rightAxis) * right.localRotation : right.localRotation;
             animation.Apply();
         }
 
@@ -58,7 +63,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         {
             float deployment = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(DeployStart, DeployEnd, missile.timeSinceSpawn));
             // Port (-X) and starboard (+X) fold aft around Unity up; source Blender Z rotations reverse handedness.
-            float fold = 90f * (1f - deployment);
+            float fold = swing * (1f - deployment);
             left.localRotation = Quaternion.AngleAxis(-fold, leftAxis) * leftDeployed;
             right.localRotation = Quaternion.AngleAxis(fold, rightAxis) * rightDeployed;
             if (deployment >= 1f) enabled = false;

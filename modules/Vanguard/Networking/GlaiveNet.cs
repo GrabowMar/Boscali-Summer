@@ -15,14 +15,14 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
     {
         public byte Protocol;
         public uint MissileId, Shots;
-        public float Inflation;
-        public Vector3 Aim;
+        public byte Phase;
+        public float Yaw,Pitch,Slide;
     }
 
-    /// <summary>Server-to-client presentation only. No client can deploy, steer or fire a gun pod.</summary>
+    /// <summary>GLAIVE-2S server-to-client presentation only. No client can deploy, steer or fire the drone.</summary>
     internal sealed class GlaiveNet : MonoBehaviour, ISceneService
     {
-        internal const byte ProtocolVersion = 1;
+        internal const byte ProtocolVersion = 3; // 3: GLAIVE-2S SPECTRE adds the HAND-OFF slide
         private HandlerSlot slot;
         private HandlerSlot ClientHandlers => slot ??= HandlerSlot.Of<GlaiveState>(Receive);
         private float nextRegistration;
@@ -34,9 +34,10 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
                 {
                     w.WriteByte(v.Protocol);
                     w.WritePackedUInt32(v.MissileId);
-                    w.WriteSingle(v.Inflation);
-                    w.WriteSingle(v.Aim.x); w.WriteSingle(v.Aim.y); w.WriteSingle(v.Aim.z);
+                    w.WriteByte(v.Phase);
+                    w.WriteSingle(v.Yaw); w.WriteSingle(v.Pitch);
                     w.WritePackedUInt32(v.Shots);
+                    w.WriteSingle(v.Slide);
                 }),
                 (Func<NetworkReader,GlaiveState>)(r =>
                 {
@@ -44,13 +45,13 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
                     if (protocol != ProtocolVersion) return new GlaiveState { Protocol=protocol };
                     return new GlaiveState
                     {
-                        Protocol=protocol, MissileId=r.ReadPackedUInt32(), Inflation=r.ReadSingle(),
-                        Aim=new Vector3(r.ReadSingle(),r.ReadSingle(),r.ReadSingle()), Shots=r.ReadPackedUInt32(),
+                        Protocol=protocol, MissileId=r.ReadPackedUInt32(), Phase=r.ReadByte(),
+                        Yaw=r.ReadSingle(),Pitch=r.ReadSingle(),Shots=r.ReadPackedUInt32(),Slide=r.ReadSingle(),
                     };
                 }));
         }
 
-        public void ResetForScene() => GlaiveTurret.Active.Clear();
+        public void ResetForScene() => GlaiveDrone.ResetScene();
 
         private void Update()
         {
@@ -71,7 +72,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             if (state.Protocol != ProtocolVersion || GameAccess.IsServer() || state.Shots > Domain.GlaiveProfile.Rounds) return;
             if (!UnitRegistry.TryGetUnit(new PersistentID { Id=state.MissileId },out Unit unit) ||
                 !(unit is Missile missile) || missile.disabled || missile.definition == null) return;
-            GlaiveTurret.Attach(missile)?.Receive(state);
+            GlaiveDrone.Attach(missile)?.Receive(state);
         }
 
         private void OnDestroy() => ClientHandlers.Release();

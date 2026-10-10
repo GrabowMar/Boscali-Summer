@@ -10,8 +10,9 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const float ArmSeconds = .42f;
         public const float SensorConfirmSeconds = .15f;
 
-        public static float ContactRadius(float width, float height) =>
-            Mathf.Clamp(.07f + .5f * Mathf.Max(width,height), .15f, .75f);
+        // Defence darts score on a near pass. In game the closest pass under native steering measured 12-23 m
+        // (sim readout aegis.defencePassDm); a body-sized contact sphere never registered one.
+        public const float ProximityRadius = 40f;
 
         // Relative swept contact catches real high-speed crossings between physics frames.
         public static bool Contact(Vector3 previous, Vector3 current, float radius)

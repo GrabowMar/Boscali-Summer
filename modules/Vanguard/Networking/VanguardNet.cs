@@ -21,20 +21,24 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
     }
 
     /// <summary>
-    /// Client intent for REMORA orders. The host resolves the launcher from the sender's own
-    /// aircraft (never from the message) and the target from its persistent id.
+    /// Client intent for the Vanguard designation bus (DroneOrders). The host resolves the launcher from the
+    /// sender's own aircraft (never from the message) and the target from its persistent id.
     /// </summary>
     internal sealed class VanguardNet : MonoBehaviour, ISceneService, IDroneCommand
     {
         internal const byte ProtocolVersion = 1;
-        private const float OrderInterval = 0.5f;
+        private const float OrderInterval = 0.2f; // per aircraft; a re-designate right after DESIGNATE must not be eaten
 
         private readonly SenderThrottle throttle = new SenderThrottle();
         private HandlerSlot serverSlot;
         private HandlerSlot ServerHandlers => serverSlot ??= HandlerSlot.Of<VanguardDroneOrder>(Receive);
         private float nextRegistration;
 
-        public bool Striking { get; private set; }
+        private Unit designated; // local view of the last order; lapses when that target dies
+        private Aircraft designatedFrom; // the local aircraft that sent it: a respawn starts clean
+
+        public bool Striking => designated != null && !designated.disabled && designatedFrom != null && !designatedFrom.disabled &&
+            GameManager.GetLocalAircraft(out Aircraft me) && me == designatedFrom;
 
         public bool CanStrike => LocalTarget(out _, out _);
 
@@ -62,21 +66,24 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
 
         public void ResetForScene()
         {
-            Striking = false;
+            designated = null;
+            designatedFrom = null;
             throttle.Clear();
         }
 
         public void Strike()
         {
             if (!LocalTarget(out Aircraft aircraft, out Unit target)) return;
-            Striking = true;
+            designated = target;
+            designatedFrom = aircraft;
             Send(aircraft, true, target);
         }
 
         public void Screen()
         {
             if (!GameManager.GetLocalAircraft(out Aircraft aircraft) || aircraft == null) return;
-            Striking = false;
+            designated = null;
+            designatedFrom = null;
             Send(aircraft, false, null);
         }
 
@@ -123,6 +130,8 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             Unit target = null;
             if (message.Strike && !UnitRegistry.TryGetUnit(new PersistentID { Id = message.TargetId }, out target)) return;
             if (target != null && (target.disabled || target.NetworkHQ == aircraft.NetworkHQ)) return;
+            // Only a unit the pilot's faction already tracks: the drones fly to the target's true position.
+            if (target != null && (aircraft.NetworkHQ == null || !aircraft.NetworkHQ.TryGetKnownPosition(target, out _))) return;
             DroneOrders.Order(aircraft, target);
         }
 

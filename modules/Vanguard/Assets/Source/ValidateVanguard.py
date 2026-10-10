@@ -1,38 +1,36 @@
 """Independent offline Vanguard .blend/PBR/LOD audit; never writes model assets.
 
 blender -b --factory-startup --python-exit-code 1 --python ValidateVanguard.py --
-    <Models directory> <evidence.json> [--geometry-only]
+    <Models directory> <evidence.json> [--geometry-only] [--only Name,Name]
+
+Per-model expectations (atlas size, joints and pivots, triangle budget) come from models/<Name>.py.
 """
 import argparse
 import json
 import os
 import sys
 
+sys.dont_write_bytecode = True
 import bpy
 import numpy as np
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import models
 
-MODELS = ("Remora", "MaldX", "HawcX", "AegisInterceptor", "AegisPod", "Lance",
-          "Glaive", "GlaiveCanopy", "Orca", "AleX", "AleXPod", "SkywellKit")
-HIGH_RES = {"Remora", "HawcX", "Lance", "Glaive", "SkywellKit"}
-REQUIRED = {
-    "Remora": {"ElevonL": (None, (-1.2, -1.17, -0.01)), "ElevonR": (None, (1.2, -1.17, -0.01))},
-    "MaldX": {"WingL": (None, (-0.08, 0.17, 0.17)), "WingR": (None, (0.08, 0.17, 0.17))},
-    "HawcX": {"BodyFlapL": (None, (-0.22, -2.04, -0.08)), "BodyFlapR": (None, (0.22, -2.04, -0.08))},
-    "Glaive": {"WingL": (None, (-0.25, -0.18, 0.16)), "WingR": (None, (0.25, -0.18, 0.16)),
-               "GunYaw": (None, (0, -0.2, -0.22)), "GunPitch": ("GunYaw", (0, -0.12, -0.33))},
-    "Orca": {"WingL": (None, (-0.06, 0.39, 0.24)), "WingR": (None, (0.06, 0.39, 0.24)),
-             "Rotor": (None, (0, -1.54, 0))},
-    "SkywellKit": {
-        "Deck": (None, (0, -1.4, 0)), "Winch": ("Deck", (0, -0.4, 0.26)),
-        "Kite": ("Deck", (0, -1.25, 0.85)), "Tail": ("Kite", (0, -3.6, 0.95)),
-        "Wing": ("Kite", (0, -0.95, 1.32)), "WingOuterL": ("Wing", (0, -3.15, 1.48)),
-        "WingOuterR": ("Wing", (0, 1.25, 1.42)), "WingletL": ("WingOuterL", (0, 0.95, 1.48)),
-        "WingletR": ("WingOuterR", (0, -2.85, 1.42)), "Nozzle": ("Tail", (0, -3.8, 0.79)),
-        "Loader": ("Kite", (0.24, 0.65, 0.57)), "LoaderFore": ("Loader", (0.33, -1.3, 0.55)),
-        "Cradle": ("LoaderFore", (0.39, 0.4, 0.49)),
-    },
-}
+REGISTRY = models.discover()  # {name: module}
+MODELS = tuple(REGISTRY)
+REQUIRED = {name: mod.JOINTS for name, mod in REGISTRY.items()}  # {joint: (parent or None, pivot or None)}
+
+
+def load_hidden(names):
+    """models/_<Name>.py (kit demos) are skipped by discover(); validate them when named with --only."""
+    import importlib
+    for name in names or ():
+        if name not in REGISTRY and name.startswith("_") and                 os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(models.__file__)), name + ".py")):
+            mod = importlib.import_module("models." + name)
+            models._check(mod, name)
+            REGISTRY[name] = mod
+            REQUIRED[name] = mod.JOINTS
 
 
 def triangles(obj):
@@ -117,8 +115,28 @@ def atlas_mask(parts, size=256):
     return mask
 
 
+def texel_density(parts, size):
+    """Mean skin texel density in px per metre: sqrt(UV area * size^2 / surface area)."""
+    uv_area = area = 0.0
+    for obj in parts:
+        uv = obj.data.uv_layers.active
+        if uv is None:
+            continue
+        coords, tri_areas = triangles(obj)
+        values = np.empty(len(uv.data) * 2, np.float32)
+        uv.data.foreach_get("uv", values)
+        values = values.reshape(-1, 2)
+        loops = np.empty(len(obj.data.loop_triangles) * 3, np.int32)
+        obj.data.loop_triangles.foreach_get("loops", loops)
+        q = values[loops].reshape(-1, 3, 2)
+        e1, e2 = q[:, 1] - q[:, 0], q[:, 2] - q[:, 0]
+        uv_area += float(np.abs(e1[:, 0] * e2[:, 1] - e1[:, 1] * e2[:, 0]).sum() / 2)
+        area += float(tri_areas.sum())
+    return round(float(np.sqrt(uv_area * size * size / max(area, 1e-9))))
+
+
 def texture_check(model, directory, skin_parts, errors):
-    expected = 2048 if model in HIGH_RES else 1024
+    expected = REGISTRY[model].TEX
     images = {}
     for part in skin_parts:
         mat = part.data.materials[0]
@@ -130,7 +148,8 @@ def texture_check(model, directory, skin_parts, errors):
                 images[os.path.basename(bpy.path.abspath(node.image.filepath))] = node.image
     mask = atlas_mask(skin_parts)
     ys, xs = np.nonzero(mask)
-    result = {"atlas_coverage": float(mask.mean()), "sampled_covered_texels": len(xs), "maps": {}}
+    result = {"atlas_coverage": float(mask.mean()), "sampled_covered_texels": len(xs), "maps": {},
+              "texel_px_per_m": texel_density(skin_parts, expected)}
     if not len(xs):
         errors.append(model + ": no rasterized skin UV coverage")
         return result
@@ -162,6 +181,7 @@ def texture_check(model, directory, skin_parts, errors):
             normal = sample[:, :3] * 2 - 1
             unit_error = np.abs(np.linalg.norm(normal, axis=-1) - 1)
             info["unit_error_p99"] = float(np.percentile(unit_error, 99))
+            info["xy_std_sampled"] = float(normal[:, :2].std())  # relief energy on the 256^2 sample grid
             info["minimum_tangent_z"] = float(normal[:, 2].min())
             if info["unit_error_p99"] > 0.025 or normal[:, 2].min() < 0.50:
                 errors.append(filename + ": invalid tangent normal payload")
@@ -202,8 +222,9 @@ def validate_blend(model, directory):
         level = 1 if name.endswith("_LOD1") else 2 if name.endswith("_LOD2") else 0
         levels[level][name] = mesh_check(obj, errors, True)
     totals = [sum(p["triangles"] for p in parts.values()) for parts in levels]
-    if not 0 < totals[0] <= 16000:
-        errors.append("LOD0 triangle budget must be 1..16000")
+    budget = models.CLASS_TRIS[REGISTRY[model].CLASS]
+    if not 0 < totals[0] <= budget:
+        errors.append(f"LOD0 triangle budget must be 1..{budget} ({REGISTRY[model].CLASS})")
     if totals[1] >= totals[0] * 0.55 or totals[2] >= totals[0] * 0.25 or not 0 < totals[2] < totals[1]:
         errors.append("distance triangle totals exceed .55/.25 limits or do not descend")
     if len(meshes) != len(levels[0]) * 3:
@@ -243,20 +264,20 @@ def validate_blend(model, directory):
             "required_joints": joints, "textures": textures, "meshes": levels, "errors": errors}
 
 
-def raw_geometry():
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+def raw_geometry(names):
     import BuildVanguard as build
     rows = []
-    for model in MODELS:
+    for model in names:
         build.clear_scene()
-        build.MODELS[model](build.mats(model))
+        REGISTRY[model].build(build)
         bpy.context.view_layer.update()
         errors = []
         meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
         parts = {o.name: mesh_check(o, errors, False) for o in meshes}
         total = sum(p["triangles"] for p in parts.values())
-        if total > 16000:
-            errors.append(f"LOD0 budget exceeded: {total} > 16000")
+        budget = models.CLASS_TRIS[REGISTRY[model].CLASS]
+        if total > budget:
+            errors.append(f"LOD0 budget exceeded: {total} > {budget} ({REGISTRY[model].CLASS})")
         names = {segment["name"] for segment in build.SEGMENTS}
         missing = set(REQUIRED.get(model, {})) - names
         if missing:
@@ -272,9 +293,16 @@ def main():
     parser.add_argument("models_directory")
     parser.add_argument("evidence_json")
     parser.add_argument("--geometry-only", action="store_true")
+    parser.add_argument("--only", help="comma-separated model names (default: every model in models/)")
     args = parser.parse_args(sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else [])
     directory = os.path.abspath(args.models_directory)
-    rows = raw_geometry() if args.geometry_only else [validate_blend(name, directory) for name in MODELS]
+    names = args.only.split(",") if args.only else list(MODELS)
+    load_hidden(names)
+    models.require(args.only and names)  # every model unless --only; a broken model nobody asked for is ignored
+    unknown = [n for n in names if n not in REGISTRY]
+    if unknown:
+        raise SystemExit(f"unknown model(s) {unknown}; available: {', '.join(MODELS)}")
+    rows = raw_geometry(names) if args.geometry_only else [validate_blend(name, directory) for name in names]
     failed = [r["model"] for r in rows if r["errors"]]
     report = {"status": "FAIL" if failed else "PASS", "mode": "raw_geometry" if args.geometry_only else "final_assets",
               "blender_version": bpy.app.version_string, "models_directory": directory,
