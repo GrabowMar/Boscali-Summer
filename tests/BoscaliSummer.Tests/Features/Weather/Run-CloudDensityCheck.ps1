@@ -38,6 +38,7 @@ $result = Get-Content "$fixture/result.txt" -Raw
 Write-Output $result
 if ($player.ExitCode -ne 0 -or $result -match '(?m)^FAIL ' -or $result -notmatch 'PASS density' -or
     $result -notmatch 'PASS rain optics 8' -or $result -notmatch 'PASS ray composition 10' -or
-    $result -notmatch 'PASS tape rows \d+' -or $result -notmatch 'PASS air optics 12') {
+    $result -notmatch 'PASS slab footprint \d+' -or $result -notmatch 'PASS tape rows \d+' -or $result -notmatch 'PASS slab mask \d+' -or
+    $result -notmatch 'PASS air optics 12') {
     throw "Density fixture failed: $fixture/player.log"
 }

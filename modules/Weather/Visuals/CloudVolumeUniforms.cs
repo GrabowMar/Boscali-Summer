@@ -59,10 +59,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static readonly int FlashChangeId = Shader.PropertyToID("_CloudFlashChange");
         private static readonly int StormId = Shader.PropertyToID("_CloudStorm");
         private static readonly int RainVisualsId = Shader.PropertyToID("_CloudRainVisuals");
-        private static readonly int MidCoverId = Shader.PropertyToID("_MidCover");
-        private static readonly int MidSheetId = Shader.PropertyToID("_MidSheet");
-        private static readonly int HighCoverId = Shader.PropertyToID("_HighCover");
-        private static readonly int HighVeilId = Shader.PropertyToID("_HighVeil");
         // The weather tape (TapeTexture, BakedTape): the shader reads every per-sample genus and thin-layer column from it.
         private static readonly int TapeTexId = Shader.PropertyToID("_TapeTex");
         private static readonly int TapeInfoId = Shader.PropertyToID("_TapeInfo");
@@ -236,12 +232,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             material.SetFloat(RainVisualsId, frame.RainVisualsEnabled ? 1f : 0f);
             // The low genus of every sample is a row of the field's tape (it fades with the state).
             BindTape(material, field);
-            // INTERIM(until the shader reads the tape): the old uniforms, read back from the class sky's back-derived layer columns
-            // (SkyLayer.LegacyMid / LegacyHigh: base = 4200 - 900 * sheet, thickness = 500 + 400 * veil).
-            material.SetFloat(MidCoverId, sky.Mid.Cover);
-            material.SetFloat(MidSheetId, Mathf.Clamp01((4200f - sky.Mid.Base) / 900f));
-            material.SetFloat(HighCoverId, sky.High.Cover);
-            material.SetFloat(HighVeilId, Mathf.Clamp01((sky.High.Thick - 500f) / 400f));
+            // The thin layers are rows of the same tape (BindTape above).
 
             WeatherMath.HeadingToVector(field.PrevailingHeading, out float windX, out float windZ);
             material.SetVector(WindDirId, new Vector2(windX, windZ));
