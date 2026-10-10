@@ -329,10 +329,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 if (tag < 2)
                 {
                     float ly = 41f + tag * 17f;
-                    ReadOnlySpan<char> label = ScopeStr.Distance(m.TargetName, m.TargetRangeM, units, 16);
-                    float lw = ScopeCanvas.TextW(label, 12f);
-                    g.Line(238f - lw - 4f, ly, tx, ty, Dim, 0.6f, 1f, 2f, 3f);
-                    g.Text(label, 238f, ly, Hi, 12f, ScopeAlign.Right);
+                    ReadOnlySpan<char> range = ScopeStr.Distance(null, m.TargetRangeM, units, 10);
+                    float dw = ScopeCanvas.TextW(range, 12f);
+                    g.Text(range, 238f, ly, Hi, 12f, ScopeAlign.Right);
+                    float nw = g.FitText(m.TargetName ?? "", 238f - dw - ScopeText.DesignAdvance * 12f, ly, 90f, Hi, 12f, 12f, ScopeAlign.Right);
+                    g.Line(238f - dw - nw - 12f, ly, tx, ty, Dim, 0.6f, 1f, 2f, 3f);
                     tag++;
                 }
             }
@@ -468,13 +469,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     g.FitText(ScopeStr.Cat("REJOIN ", Round5(m.SlotErrM), units == AvUnits.Imperial ? " FT TO SLOT" : " M TO SLOT"), x, y, w, tone);
                     break;
                 case WingState.Engage:
-                    if (m.HasTarget) { g.Text("TGT", x, y, tone); g.FitText(ScopeStr.Distance(m.TargetName, m.TargetRangeM, units, 20), x + 31f, y, w - 31f, tone); }
+                    if (m.HasTarget) { g.Text("TGT", x, y, tone); NameThenRange(g, m.TargetName, m.TargetRangeM, x + 31f, y, w - 31f, tone); }
                     else g.Text("ENGAGED", x, y, tone);
                     break;
                 case WingState.Winch: g.Text("NO AMMUNITION", x, y, tone); break;
                 case WingState.Rtb:
                 case WingState.Refit:
-                    if (m.HasField) { g.Text(m.State == WingState.Rtb ? "RTB" : "REFIT", x, y, tone); float lw = m.State == WingState.Rtb ? 31f : 47f; g.FitText(ScopeStr.Distance(m.Field, m.FieldM, units, 22), x + lw, y, w - lw, tone); }
+                    if (m.HasField) { g.Text(m.State == WingState.Rtb ? "RTB" : "REFIT", x, y, tone); float lw = m.State == WingState.Rtb ? 31f : 47f; NameThenRange(g, m.Field, m.FieldM, x + lw, y, w - lw, tone); }
                     else g.Text(m.State == WingState.Rtb ? "RETURNING" : "REFIT", x, y, tone);
                     break;
                 case WingState.Damaged:
@@ -492,6 +493,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 case WingState.Ground: g.Text("ON THE GROUND", x, y, tone); break;
                 default: g.Text("LANDING", x, y, tone); break;
             }
+        }
+
+        /// <summary>"SU-30 6.9KM": the name (cut to fit) and the range in the player's units after it, drawn as two words so nothing is built per frame.</summary>
+        private void NameThenRange(ScopeCanvas g, string name, float metres, float x, float y, float maxW, ScopeTone tone)
+        {
+            ReadOnlySpan<char> range = ScopeStr.Distance(null, metres, units, 10);
+            float rw = ScopeCanvas.TextW(range, 12f), space = ScopeText.DesignAdvance * 12f;
+            float nw = g.FitText(name ?? "", x, y, Math.Max(space * 3f, maxW - rw - space), tone);
+            g.Text(range, x + nw + space, y, tone);
         }
 
         private int Round5(float metres) => (int)(Math.Round(AvUnitTable.Altitude(metres, units) / 5f) * 5f);

@@ -383,7 +383,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             // Range and time to contact.
             g.Text("RANGE", X0, 66f, Dim); g.Text("TTC", X0 + W, 66f, Dim, 12f, ScopeAlign.Right);
-            float rw = g.Text(ScopeStr.Int(Len(r)), X0, 86f, Hi, 22f, ScopeAlign.Left, true);
+            float rw = g.Text(ScopeStr.Cat("", Len(r), null), X0, 86f, Hi, 22f, ScopeAlign.Left, true);
             g.Text(units == AvUnits.Imperial ? "FT" : "M", X0 + rw + 4f, 88f, Dim);
             if (ttc > 0f)
             {

@@ -114,6 +114,8 @@ namespace BoscaliSummer.Tests.Features.Hud
 
             TestAssert.Near(ApproachMath.StageProgress(ApproachStage.Intercept, false, 5000f, 0f, 0f, 0f, 0f), 0.5f, "Intercept runs from ten kilometres");
             TestAssert.Near(ApproachMath.StageProgress(ApproachStage.Glide, false, 0f, 1500f, 0f, 0f, 0f), 0.75f, "Glide runs from six kilometres to touchdown");
+            TestAssert.Near(ApproachMath.StageProgress(ApproachStage.Glide, true, 0f, 30f, 0f, 0f, 0f), 0.5f, "Over a pad the descent runs the last 60 m of height");
+            TestAssert.Near(ApproachMath.StageProgress(ApproachStage.Intercept, true, 1000f, 0f, 0f, 0f, 0f), 0.5f, "A pad approach runs from two kilometres");
             TestAssert.Near(ApproachMath.StageProgress(ApproachStage.Flare, false, 0f, 0f, 2.5f, 0f, 0f), 0.5f, "Flare runs the last five seconds");
             TestAssert.Near(ApproachMath.StageProgress(ApproachStage.Rollout, false, 0f, 0f, 0f, 25f, 100f), 0.75f, "Roll-out is the speed bled off");
             TestAssert.Near(ApproachMath.StageProgress(ApproachStage.Rollout, false, 0f, 0f, 0f, 25f, 0f), 0f, "No reference speed, no progress");
