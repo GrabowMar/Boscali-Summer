@@ -191,19 +191,19 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 // Clear (7)
                 Sky("Blue CAVOK", Clear).High(CiFib, 0.05f).Roles(HighPress).Weight(0.1f),
                 Sky("Cirrus streaks", Clear).High(CiFib, 0.30f).Roles(Ridge, PreWarm, HighPress),
-                Sky("Cirrus hooks and clumps", Clear).High(CiUnc, 0.35f).Roles(PreWarm, HighPress),
+                Sky("Cirrus hooks and clumps", Clear).High(CiUnc, 0.50f).Roles(PreWarm, HighPress),
                 Sky("Cirrostratus veil, milky sun", Clear).High(CsNeb, 0.45f).Roles(PreWarm),
-                Sky("Mackerel sky", Clear).High(Cc, 0.45f).Roles(PreWarm, HighPress),
+                Sky("Mackerel sky", Clear).High(Cc, 0.80f).Roles(PreWarm, HighPress),
                 Sky("Summer haze", Clear).High(CiFib, 0.10f).HazeScale(2f).Weight(0.1f),
                 Sky("High altocumulus patches", Clear).Mid(AcFloc, 0.15f).High(CiFib, 0.10f).Roles(Ridge),
                 // Fair (7)
                 Sky("Fair-weather cumulus", Fair).Low(Hum, 1500f, cumulus: 0.15f).High(CiFib, 0.12f).Roles(Ridge, PostFrontal, HighPress),
                 Sky("Cumulus and cirrus", Fair).Low(Hum, 1700f, cumulus: 0.12f).High(CiSpi, 0.30f).Roles(Ridge),
-                Sky("Cloud streets", Fair).Low(Hum, 1400f, cumulus: 0.20f).Streets(0.8f).Roles(PostFrontal),
+                Sky("Cloud streets", Fair).Low(Hum, 1400f, cumulus: 0.22f).Streets(0.8f).Roles(PostFrontal),
                 Sky("Sparse popcorn", Fair).Low(Hum, 2000f, cumulus: 0.14f).Roles(Ridge, Build),
                 Sky("Altocumulus swarm", Fair).Low(Hum, 1800f, cumulus: 0.08f).Mid(AcFloc, 0.30f).Roles(Ridge, Build),
                 Sky("Humilis under cirrostratus", Fair).Low(Hum, 1500f, cumulus: 0.12f).High(CsNeb, 0.55f).Roles(PreWarm),
-                Sky("Post-frontal clear-air cumulus", Fair).Low(Hum, 2300f, cumulus: 0.15f).Roles(PostFrontal),
+                Sky("Post-frontal clear-air cumulus", Fair).Low(Med, 2400f, cumulus: 0.18f).Roles(PostFrontal),
                 // Scattered (7)
                 Sky("Cumulus mediocris", Scattered).Low(Med, 1500f, cumulus: 0.35f).High(CiFib, 0.10f).Roles(Build),
                 Sky("Towering cumulus with virga", Scattered).Low(Cng, 1400f, cumulus: 0.28f).Cells(0.15f).Roles(Build).Patchy(),
@@ -224,7 +224,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 Sky("Low stratus", Overcast).Low(Str, 450f, sheet: 0.95f).Roles(WarmSector, Marine),
                 Sky("Grey sheet, altostratus above", Overcast).Low(Scl, 900f, sheet: 0.85f).Mid(AsOp, 0.90f).Roles(WarmSector),
                 Sky("Double deck", Overcast).Low(Sc, 1000f, sheet: 0.80f).Mid(AsOp, 0.80f).Roles(WarmSector, Decay),
-                Sky("Sea of cloud, clear above", Overcast).Low(Str, 800f, sheet: 1.0f).Roles(Marine),
+                Sky("Sea of cloud, clear above", Overcast).Low(Scl, 800f, sheet: 1.0f).Roles(Marine),
                 Sky("Altostratus opacus", Overcast).Mid(AsOp, 1.0f).High(CsNeb, 0.70f).Roles(PreWarm),
                 Sky("Pre-frontal nimbostratus, no rain yet", Overcast).Low(Ns, 1400f, sheet: 0.95f).Mid(AsOp, 1.0f).Embedded().Roles(WarmBody),
                 // Rain (7)

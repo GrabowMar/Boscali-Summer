@@ -97,7 +97,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             new LayerArchetype(LayerKind.CirrusFibratus,         true,  8800f,  500f, 10f, 0.40f, 0.30f, 0.0f, 0.0f, 1.0f, 0.0f, 0.15f, 5.0f),
             new LayerArchetype(LayerKind.CirrusUncinus,          true,  8700f,  500f, 10f, 0.40f, 0.30f, 0.0f, 0.0f, 1.0f, 0.0f, 0.15f, 4.0f, 1f),
             new LayerArchetype(LayerKind.CirrusSpissatus,        true,  8600f,  700f, 9f, 0.50f, 0.40f, 0.4f, 0.0f, 0.6f, 0.0f, 0.20f, 3.0f),
-            new LayerArchetype(LayerKind.Cirrocumulus,           true,  7500f,  400f, 2f, 0.20f, 0.80f, 0.6f, 0.4f, 0.0f, 0.0f, 0.15f, 1.0f),
+            new LayerArchetype(LayerKind.Cirrocumulus,           true,  7500f,  400f, 2f, 0.20f, 0.80f, 1.00f, 0.00f, 0.0f, 0.0f, 0.15f, 1.0f),
             new LayerArchetype(LayerKind.CirrostratusNebulosus,  true,  8500f,  900f, 10f, 1.00f, 0.05f, 0.0f, 0.0f, 0.0f, 1.0f, 0.25f, 1.0f),
             new LayerArchetype(LayerKind.CirrostratusFibratus,   true,  8700f,  800f, 10f, 0.60f, 0.25f, 0.0f, 0.0f, 0.5f, 0.5f, 0.30f, 3.0f),
         };

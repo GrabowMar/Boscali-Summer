@@ -133,6 +133,12 @@ namespace BoscaliSummer.Tests.Features.Weather
             var clear = new SkyMetrics.Expectation { Cover = 0.0075f, Clear = true };
             TestAssert.That(SkyMetrics.Failures(new SkyMetrics.Result { CloudFraction = 0.04f }, clear).Count == 0 &&
                 SkyMetrics.Failures(new SkyMetrics.Result { CloudFraction = 0.4f }, clear).Count == 1, "a clear sky may show a little cloud, not a lot");
+            var streaks = new SkyMetrics.Expectation { Cover = 0.045f, Clear = true, ThinOnly = true, LayerCover = 0.30f };
+            TestAssert.That(SkyMetrics.Failures(new SkyMetrics.Result { CloudFraction = 0.19f, LayerFraction = 0.25f }, streaks).Count == 0 &&
+                SkyMetrics.Failures(new SkyMetrics.Result { CloudFraction = 0.45f, LayerFraction = 0.5f }, streaks).Count == 1,
+                "a clear sky of cirrus streaks may show about its layer's cover (0.30), not more");
+            SkyDef opacus = SkyLibrary.Get(32);
+            TestAssert.That(SkyMetrics.For(opacus.Nominal, opacus.HasLow, opacus.Genus.Genus).Sheet, "sky 33's full altostratus deck is a sheet");
         }
 
         private static void ExpectationsFollowTheLibrary()

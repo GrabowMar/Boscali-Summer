@@ -744,11 +744,13 @@ Shader "Boscali/FlightCloud"
             float scud = 0.0;
             float rain = profile.a;
             float floorY = lowFloor;
-            if (rain > 0.02 && g.y < floorY && g.y > floorY - 700.0)
+            // Bounded (Task 13): with rain everywhere (skies 35, 36, 39, 40) the band lay under the whole view and cost up to +50 %. It fades out
+            // from a pixel footprint of 30 m and is skipped from 60 m. gFoot is 0 in the density check and the cookie, so the CPU twin is unchanged.
+            if (rain > 0.02 && gFoot < 60.0 && g.y < floorY && g.y > floorY - 700.0)
             {
                 float frag = tex3Dlod(_CloudNoiseTex, float4(g.xz / 900.0 + 0.29, g.y / 420.0 + 0.61, lod)).r;
                 float band = smoothstep(floorY - 700.0, floorY - 450.0, g.y) * (1.0 - smoothstep(floorY - 180.0, floorY, g.y));
-                scud = smoothstep(0.62, 0.78, frag + rain * 0.35) * band * saturate(rain * 6.0);
+                scud = smoothstep(0.62, 0.78, frag + rain * 0.35) * band * saturate(rain * 6.0) * (1.0 - smoothstep(30.0, 60.0, gFoot));
             }
             float keep = EyeCloudKeep(g);
             float field = hero;
@@ -821,6 +823,15 @@ Shader "Boscali/FlightCloud"
             return w / (w.x + w.y + w.z + w.w);
         }
 
+        // The thin layers filter one step coarser than a pixel (Task 13): at the pixel's own footprint the cellular noise still held
+        // detail near the pixel grid, and cirrocumulus beat against it as concentric arcs (moire). The extra step rises with the
+        // footprint (none at zero, so the CPU twins are untouched).
+        float SlabLod(float foot, float period)
+        {
+            float l = LodFor(foot, period);
+            return min(5.0, l + saturate(l));
+        }
+
         // The weighted pattern value (about 0.52 on average) of a layer at one period. Streak and cell taps fade to their mean
         // once filtered past what the pixel resolves; a morphology with no weight is not fetched.
         float SlabPattern(float3 g, LayerRow row, float scale, float2 low, float foot, float3 wts)
@@ -840,7 +851,7 @@ Shader "Boscali/FlightCloud"
                     sw += bend * scale * 2.0 * row.curl;
                 }
                 float along = scale * row.aspect;
-                float lod1 = LodFor(foot, scale), lod2 = LodFor(foot, scale * 1.73);
+                float lod1 = SlabLod(foot, scale), lod2 = SlabLod(foot, scale * 1.73);
                 float s1 = tex3Dlod(_CloudNoiseTex, float4(sw.x / along, sw.y / scale, g.y / (scale * 0.6) + 0.17, lod1)).r;
                 float2 w2 = float2(sw.x * 0.982 - sw.y * 0.191, sw.x * 0.191 + sw.y * 0.982);
                 float fine2 = saturate(4.0 - lod2);
@@ -852,11 +863,11 @@ Shader "Boscali/FlightCloud"
             {
                 // Rounded cells from the smooth base channel, also at two scales.
                 float cs = scale * 0.45;
-                float lodC = LodFor(foot, cs);
+                float lodC = SlabLod(foot, cs);
                 float c1 = tex3Dlod(_CloudNoiseTex, float4(p / cs + 0.41, g.y / (cs * 0.8), lodC)).r;
                 float fineC = saturate(4.0 - lodC);
                 float c2 = fineC > 0.0 ? lerp(0.52, tex3Dlod(_CloudNoiseTex, float4(float2(p.y, -p.x) / (cs * 2.37) + 0.13,
-                    g.y / (cs * 1.9) + 0.77, LodFor(foot, cs * 2.37))).r, fineC) : 0.52;
+                    g.y / (cs * 1.9) + 0.77, SlabLod(foot, cs * 2.37))).r, fineC) : 0.52;
                 cells = c1 * 0.62 + c2 * 0.38;
             }
             float ripples = cells;
@@ -999,7 +1010,12 @@ Shader "Boscali/FlightCloud"
             float samples = clamp(ceil(span / 6000.0), 1.0, 24.0);
             float stepLength = span / samples;
             float slant = length(ray.xz);
-            float patternFoot = stepLength * 0.5 * slant;
+            // A one-sample chord is a 2D texture in effect (Task 13): it is read at the middle of the chord and filtered by the pixel
+            // footprint only. Blurring it by the chord's own horizontal extent (1 km at 10 degrees through a 400 m layer) averaged every cell
+            // under about 1 km to its mean, so cirrocumulus and altocumulus cells (periods 250-1000 m) drew nothing. Chords of several samples
+            // keep the blur to their step: the samples are that far apart.
+            bool single = samples < 1.5;
+            float patternFoot = single ? 0.0 : stepLength * 0.5 * slant;
             // INTERIM(slice 4): the legacy front thins the middle layer ahead of it and thickens the high one.
             float2 splitMul = layer < 0.5 ? float2(1.0 - 0.75 * _SplitB.x, 1.0)
                 : layer < 1.5 ? float2(1.0 + 0.4 * _SplitB.x, 1.0 - 0.3 * _SplitB.x) : float2(1.0, 1.0);
@@ -1007,7 +1023,7 @@ Shader "Boscali/FlightCloud"
             for (int n = 0; n < 24; n++)
             {
                 if (n >= samples) break;
-                float t = t0 + (n + jitter) * stepLength;
+                float t = t0 + (n + (single ? 0.5 : jitter)) * stepLength;
                 float3 g = ro + ray * t;
                 // (HLSL has no ?: on structs.)
                 LayerRow row;

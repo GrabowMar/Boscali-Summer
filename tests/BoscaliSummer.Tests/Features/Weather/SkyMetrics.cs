@@ -50,7 +50,8 @@ namespace BoscaliSummer.Tests.Features.Weather
         {
             float cover = SkyMath.SkyCover(SkyMath.LowCover(nominal), nominal.Mid.Cover, nominal.OpacityMid, nominal.High.Cover, nominal.OpacityHigh);
             bool cumuliform = hasLow && genus <= LowGenus.Cumulonimbus && SkyMath.LowCover(nominal) >= 0.12f;
-            bool sheet = SkyMath.ClassOf(nominal) >= WeatherRegimeType.Overcast && nominal.SheetCover >= 0.8f;
+            // A full thin deck (altostratus opacus, sky 33 and 38) is a sheet too: it covers the view completely, which is not a defect.
+            bool sheet = SkyMath.ClassOf(nominal) >= WeatherRegimeType.Overcast && Math.Max(nominal.SheetCover, nominal.Mid.Cover) >= 0.8f;
             bool feature = hasLow && (nominal.CumulusCover > 0f || nominal.Convective > 0.3f || genus == LowGenus.Cumulonimbus);
             return new Expectation { Cover = cover, Cumuliform = cumuliform, Sheet = sheet, Clear = cover < 0.05f, Faint = cover >= 0.05f && cover < 0.15f, Feature = feature,
                 ThinOnly = SkyMath.LowCover(nominal) < 0.05f, LayerCover = Math.Max(nominal.Mid.Cover, nominal.High.Cover) };
@@ -142,7 +143,10 @@ namespace BoscaliSummer.Tests.Features.Weather
                     e.LayerCover.ToString("0.00") + " (the visible area must be at least half the cover)");
             if (e.Clear)
             {
-                if (r.CloudFraction > 0.15f) failed.Add("a clear sky shows " + r.CloudFraction.ToString("0.00") + " cloud (limit 0.15)");
+                // The limit is for low cloud and stray patches. A thin layer is meant to show about its own cover (cirrus streaks, sky 2, cover 0.30),
+                // so where the sky has nothing else the limit is that cover.
+                float limit = e.ThinOnly ? Math.Max(0.15f, e.LayerCover) : 0.15f;
+                if (r.CloudFraction > limit) failed.Add("a clear sky shows " + r.CloudFraction.ToString("0.00") + " cloud (limit " + limit.ToString("0.00") + ")");
                 return failed;
             }
             if (e.Faint && !e.Feature) return failed;
