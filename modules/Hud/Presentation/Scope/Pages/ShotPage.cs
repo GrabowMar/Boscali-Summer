@@ -31,7 +31,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly float[] segs = new float[4 * 2], trailXY = new float[2 * (MissilePath.RecentSamples + 2)], ringKm = new float[8];
         private readonly int[] seenId = new int[Cap], pitSaid = new int[Cap];
         private readonly ShotState[] resultState = new ShotState[ShotLedger.Capacity];
-        private float headlineAt = float.NegativeInfinity;
         private string headlineText = "";
         private int headlineKey = -1, impactKey = int.MinValue, hitsKey = int.MinValue, targetKey = int.MinValue;
         private ScopeTone headlineTone = Hi;

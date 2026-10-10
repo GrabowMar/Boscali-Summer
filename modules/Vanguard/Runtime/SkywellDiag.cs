@@ -8,7 +8,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
     internal static class SkywellDiag
     {
         private static readonly bool On = !string.IsNullOrEmpty(System.Environment.GetEnvironmentVariable("NOMODKIT_SIM_SCENARIO"));
-        private static readonly Dictionary<Aircraft, int> detached = new Dictionary<Aircraft, int>();
         private static readonly Dictionary<Aircraft, HashSet<UnitPart>> seen = new Dictionary<Aircraft, HashSet<UnitPart>>();
         private static float nextTick, nextBeat;
         private static float nextDump = 15f;

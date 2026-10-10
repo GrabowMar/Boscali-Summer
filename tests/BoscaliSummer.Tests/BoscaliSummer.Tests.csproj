@@ -4,6 +4,9 @@
     <TargetFramework>net8.0</TargetFramework>
     <AssemblyName>BoscaliSummer.Tests</AssemblyName>
     <RootNamespace>BoscaliSummer.Tests</RootNamespace>
+    <!-- The isolated runner links telemetry DTOs and native stubs without their game/runtime writers.
+         Keep other diagnostics enabled, including the production dead-code tripwire. -->
+    <NoWarn>$(NoWarn);CS0649</NoWarn>
     <GameDir Condition="'$(GameDir)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Nuclear Option</GameDir>
     <ManagedDir>$(GameDir)\NuclearOption_Data\Managed</ManagedDir>
   </PropertyGroup>
