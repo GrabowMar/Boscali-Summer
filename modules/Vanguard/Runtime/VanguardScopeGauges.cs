@@ -71,7 +71,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             gauge = new GaugeSpec
             {
                 Id = "lance", Label = "LANCE", Kind = GaugeKind.Arc, Value = empty ? 0f : Mathf.Clamp01(value), Text = empty ? "EMPTY" : charging && value >= 1f ? "FIRE" : Percent(value),
-                Sub = Rounds(lance.Ammo, " RDS"), Tone = empty ? ScopeTone.Amber : recharging ? ScopeTone.Dim : ScopeTone.Ink, Ready = !empty && charging && value >= 1f, Rank = 50,
+                Sub = Rounds(lance.Ammo, " RDS"), Tone = empty ? ScopeTone.Amber : recharging ? ScopeTone.Dim : ScopeTone.Ink, Ready = !empty && charging && value >= 1f, Rank = 60,
             };
             return true;
         }
@@ -111,7 +111,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             gauge = new GaugeSpec
             {
                 Id = "aegis", Label = "AEGIS", Kind = GaugeKind.Arc, Value = aegis.FullAmmo > 0 ? Mathf.Clamp01((float)left / aegis.FullAmmo) : 0f, Text = left <= 0 ? "EMPTY" : Rounds(left, ""), Sub = "DARTS",
-                Tone = left <= 0 ? ScopeTone.Amber : ScopeTone.Ink, Rank = 45,
+                Tone = left <= 0 ? ScopeTone.Amber : ScopeTone.Ink, Rank = 48,
             };
             return true;
         }
@@ -123,7 +123,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             int ready = drones != null ? drones.Ready : 0;
             if (ready <= 0) return false;
             if (ready != droneKey) { droneKey = ready; droneSub = ready + " UP"; }
-            gauge = new GaugeSpec { Id = "remora", Label = "REMORA", Kind = GaugeKind.Mode, Text = drones.Striking ? "STRIKE" : "SCREEN", Sub = droneSub, Value = 0f, Tone = ScopeTone.Ink, Rank = 45 };
+            gauge = new GaugeSpec { Id = "remora", Label = "REMORA", Kind = GaugeKind.Mode, Text = drones.Striking ? "STRIKE" : "SCREEN", Sub = droneSub, Value = 0f, Tone = ScopeTone.Ink, Rank = 48 };
             return true;
         }
     }

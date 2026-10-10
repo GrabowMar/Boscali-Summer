@@ -30,7 +30,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             if (vkey != verticalKey) { verticalKey = vkey; vertical = VerticalWord(h); }
             gauge = new GaugeSpec
             {
-                Id = "ap", Label = "AUTOPILOT", Kind = GaugeKind.Mode, Text = lateral, Sub = vertical, Value = nav ? Math.Min(1f, (ap.Nav.Index + 0.5f) / ap.Nav.Count) : 0f, Tone = ScopeTone.Ink, Rank = 40,
+                Id = "ap", Label = "AUTOPILOT", Kind = GaugeKind.Mode, Text = lateral, Sub = vertical, Value = nav ? Math.Min(1f, (ap.Nav.Index + 0.5f) / ap.Nav.Count) : 0f, Tone = ScopeTone.Ink, Rank = 45,
             };
             return true;
         }

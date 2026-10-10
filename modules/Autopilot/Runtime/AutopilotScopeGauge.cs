@@ -21,7 +21,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             if (controller == null || !controller.IsEngaged) return false;
             string phase = controller.HudPhaseWord;
             if (phase == null) return false;
-            gauge = new GaugeSpec { Id = "land", Label = "AUTOPILOT", Kind = GaugeKind.Mode, Text = phase, Sub = controller.HudTargetName, Value = 0f, Tone = ScopeTone.Ink, Rank = 40 };
+            gauge = new GaugeSpec { Id = "land", Label = "AUTOPILOT", Kind = GaugeKind.Mode, Text = phase, Sub = controller.HudTargetName, Value = 0f, Tone = ScopeTone.Ink, Rank = 45 };
             return true;
         }
     }

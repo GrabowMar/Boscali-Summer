@@ -30,7 +30,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             gauge = new GaugeSpec
             {
                 Id = "radio", Label = "RADIO", Kind = GaugeKind.Bars, Value = quality, Text = m.CurrentChannelName, Sub = modelled ? reports[s] ?? (reports[s] = "S" + s) : "LOCAL",
-                Tone = ScopeTone.Ink, Rank = 30,
+                Tone = ScopeTone.Ink, Rank = 50,
             };
             return true;
         }

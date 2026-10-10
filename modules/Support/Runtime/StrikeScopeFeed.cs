@@ -289,7 +289,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             gauge = new GaugeSpec
             {
                 Id = "perk", Label = "PERK", Kind = GaugeKind.Ring, Value = armed ? 1f : Mathf.Clamp01(1f - cooldowns[best] / Mathf.Max(1f, totals[best])), Inner = armed ? "GO" : Seconds(cooldowns[best]),
-                Text = names[best], Sub = fronts[best], Tone = armed ? ScopeTone.Ink : ScopeTone.Dim, Ready = armed, Rank = 60,
+                Text = names[best], Sub = fronts[best], Tone = armed ? ScopeTone.Ink : ScopeTone.Dim, Ready = armed, Rank = 55,
             };
             return true;
         }
