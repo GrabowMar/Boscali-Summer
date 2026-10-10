@@ -43,8 +43,8 @@ namespace BoscaliSummer.Tests.Features.Immersion
             TestAssert.That(schedule.BeginBind() && !schedule.BeginBind(), "A bind is attempted once per cockpit entry, never every frame.");
             schedule.Bound(101);
             TestAssert.That(schedule.TakeRender() && !schedule.TakeRender(), "A new aircraft's card renders once.");
-            schedule.Recorded(6f);
-            TestAssert.That(schedule.UseCamera, "A cold first render (RT, TMP atlas, URP warm-up) does not latch the plain fallback.");
+            schedule.Recorded(45f);
+            TestAssert.That(schedule.UseCamera, "The first render pays the text system's one-off start-up and never latches the fallback.");
             schedule.Detach();
             TestAssert.That(schedule.BeginBind(), "Re-entering the cockpit may bind again.");
             schedule.Bound(101);

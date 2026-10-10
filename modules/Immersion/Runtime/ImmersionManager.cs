@@ -44,7 +44,8 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         private PilotBreathingAudio pilotBreathingAudio;
         private readonly PilotPhysiology physiology = new PilotPhysiology();
         private readonly PilotVitals vitals = new PilotVitals();
-        private float debugG, debugGUntil = -1f;
+        private float debugG, debugGUntil = -1f, debugLookUntil = -1f;
+        private Quaternion debugLook = Quaternion.identity;
         private Aircraft boundAircraft;
         private Camera boundCamera;
         private readonly CockpitCameraOffset cameraOffset = new CockpitCameraOffset();
@@ -90,6 +91,14 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         internal ImmersionSettings Settings => settings;
         internal PilotCue Cues { get; private set; }
         internal void OnPlayerHit() => vitals.AddHit();
+
+        /// <summary>Automation only: hold an extra cockpit look (degrees) for captures; the visor may ignore the hidden sim HUD.</summary>
+        internal void DebugLook(float pitch, float yaw, float seconds)
+        {
+            debugLook = Quaternion.Euler(pitch, yaw, 0f);
+            debugLookUntil = Time.unscaledTime + seconds;
+        }
+        internal void DebugVisorIgnoresHud(bool value) => visor.IgnoreHud = value;
 
         /// <summary>Automation only: drive pilot cues from a fixed G through the vanilla-equation fallback.</summary>
         internal void InjectG(float g, float seconds)
@@ -345,7 +354,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         {
             RemoveCameraOffset();
             if (!presenting || !IsEnabled || cameras == null || cameras.currentState != cameras.cockpitState || cameras.cameraPivot == null) return;
-            cameraOffset.Apply(cameras.cameraPivot, composedOffset);
+            cameraOffset.Apply(cameras.cameraPivot, Time.unscaledTime < debugLookUntil ? composedOffset * debugLook : composedOffset);
         }
 
         internal void RemoveCameraOffset()

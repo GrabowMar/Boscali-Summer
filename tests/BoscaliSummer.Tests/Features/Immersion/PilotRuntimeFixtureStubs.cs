@@ -126,6 +126,10 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         internal Renderer Renderer => null;
         internal bool TryBeginBind() => true;
         internal bool RightThigh => false;
+        internal float LastLayoutMs => -1f;
+        internal float LastDrawMs => -1f;
+        internal int Renders => 0;
+        internal void MarkDirty() { }
         internal void Detach() => Bound = false;
         internal void Bind(Transform thigh, Transform knee, Vector3 up, bool rightThigh, Aircraft owner, Shader shader) => Bound = thigh != null;
         internal void Tick() { }

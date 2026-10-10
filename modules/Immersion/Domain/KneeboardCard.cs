@@ -67,12 +67,12 @@ namespace BoscaliSummer.Modules.Immersion.Domain
 
     /// <summary>
     /// When the kneeboard binds and renders. One bind attempt per cockpit entry. One render per aircraft, plus one
-    /// after a rearm or loadout change, never per cockpit re-entry. The camera path is dropped only when a warm render
-    /// exceeds 2 ms (the first, cold render, which builds the texture and the font atlas, may take 8 ms).
+    /// after a rearm or loadout change, never per cockpit re-entry. Re-rendering stops only when a warm render exceeds
+    /// 2 ms; the first render pays the text system's one-off start-up and is exempt.
     /// </summary>
     internal sealed class KneeboardSchedule
     {
-        public const float WarmBudgetMs = 2f, ColdBudgetMs = 8f;
+        public const float WarmBudgetMs = 2f;
         private int aircraft, renders;
         private bool attempted, dirty;
 
@@ -106,7 +106,7 @@ namespace BoscaliSummer.Modules.Immersion.Domain
         public void Recorded(float milliseconds)
         {
             renders++;
-            if (!(milliseconds <= (renders == 1 ? ColdBudgetMs : WarmBudgetMs))) UseCamera = false;
+            if (renders > 1 && !(milliseconds <= WarmBudgetMs)) UseCamera = false;
         }
 
         public void Detach() => attempted = false;

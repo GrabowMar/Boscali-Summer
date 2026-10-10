@@ -29,6 +29,23 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             return Readout(manager);
         }
 
+        /// <summary>Hold an extra cockpit look for captures (args: pitch down-positive, yaw, seconds; degrees).</summary>
+        public static Dictionary<string, object> Look(Dictionary<string, object> args)
+        {
+            ImmersionManager manager = ImmersionManager.Live;
+            if (manager == null) return Failure("ImmersionAutomation", "Look", "no immersion manager in this scene");
+            float pitch, yaw, seconds;
+            try
+            {
+                pitch = System.Convert.ToSingle(Arg(args, "pitch") ?? 0f, System.Globalization.CultureInfo.InvariantCulture);
+                yaw = System.Convert.ToSingle(Arg(args, "yaw") ?? 0f, System.Globalization.CultureInfo.InvariantCulture);
+                seconds = System.Convert.ToSingle(Arg(args, "seconds") ?? 5f, System.Globalization.CultureInfo.InvariantCulture);
+            }
+            catch (System.Exception) { return Failure("ImmersionAutomation", "Look", "pitch, yaw and seconds must be numbers"); }
+            manager.DebugLook(Mathf.Clamp(pitch, -80f, 80f), Mathf.Clamp(yaw, -160f, 160f), Mathf.Clamp(seconds, 0f, 60f));
+            return Readout(manager);
+        }
+
         /// <summary>Per-feature A/B switches (args: body, reflection, visor, breathing - each optional bool).</summary>
         public static Dictionary<string, object> Configure(Dictionary<string, object> args)
         {
@@ -38,6 +55,8 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             if (Arg(args, "reflection") is bool reflection) manager.Settings.PilotReflectionEnabled.Value = reflection;
             if (Arg(args, "visor") is bool visor) manager.Settings.HelmetVisorEnabled.Value = visor;
             if (Arg(args, "breathing") is bool breathing) manager.Settings.PilotBreathingEnabled.Value = breathing;
+            if (Arg(args, "visorIgnoreHud") is bool ignoreHud) manager.DebugVisorIgnoresHud(ignoreHud);
+            if (Arg(args, "kneeboardRefresh") is bool refresh && refresh) CockpitPilot.Live?.DebugRefreshKneeboard();
             manager.LogAutomation("Configure: body=" + manager.Settings.PilotBodyEnabled.Value + " reflection=" + manager.Settings.PilotReflectionEnabled.Value +
                 " visor=" + manager.Settings.HelmetVisorEnabled.Value + " breathing=" + manager.Settings.PilotBreathingEnabled.Value);
             return Readout(manager);

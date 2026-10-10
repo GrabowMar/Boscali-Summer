@@ -26,6 +26,8 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private volatile byte[] mask;
         private int baking;
         private bool shaderWarned;
+        /// <summary>Automation only: scripted sim flight hides the vanilla HUD the visor normally follows.</summary>
+        internal bool IgnoreHud;
         private FogPulse fog;
         private float tint, brow, sunLit, wTint = -1f, wSun = -1f, wFog = -1f, wBrow = -1f, wLight = -1f;
 
@@ -52,7 +54,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             brow = VisorMath.Ease(brow, VisorMath.Brow(p.LoadG), dt, .4f);
             bool active = Mathf.Max(Mathf.Max(tint, sunLit), Mathf.Max(fog.Value, brow)) > VisorMath.Idle;
             if (!active || !Ensure()) { if (image != null && image.enabled) image.enabled = false; return; }
-            bool hudVisible = hud == null || hud.gameObject.activeInHierarchy;
+            bool hudVisible = IgnoreHud || hud == null || hud.gameObject.activeInHierarchy;
             if (image.enabled != hudVisible) image.enabled = hudVisible;
             if (!hudVisible) return;
             Write(TintId, tint, ref wTint);
