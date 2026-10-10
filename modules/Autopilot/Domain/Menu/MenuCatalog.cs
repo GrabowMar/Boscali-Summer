@@ -437,6 +437,25 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 c.Rows.Add(b.Reg(MenuRow.Toggle("support/skywell", "skywell", w.SkywellDeployed,
                     F("DEPLOY SKYWELL", Cut(w.SkywellStock, MaxState), "OPEN THE REFUEL AND REARM KIT", "SKYWELL DEPLOYED"),
                     F("STOW SKYWELL", Cut(w.SkywellStock, MaxState), "CLOSE THE REFUEL AND REARM KIT", "SKYWELL STOWED", MenuTone.Active), checkbox: false)));
+            if (w.PitAvailable)
+            {
+                string[] ids = { "both", "fuel", "mun" }, labels = { "BOTH", "FUEL ONLY", "MUNITIONS ONLY" };
+                var kids = new List<MenuRow>();
+                for (int i = 0; i < labels.Length; i++)
+                    kids.Add(MenuRow.Pick("support/pit/" + ids[i], i == 1 ? "engine" : "skywell", labels[i], "ORDER: " + labels[w.PitMode <= 2 ? w.PitMode : 0],
+                        "ACTIVE", w.PitMode == i, "SET THE STANDING SERVICE ORDER", "ORDER: " + labels[i]));
+                kids.Add(MenuRow.Action("support/pit/auto", "station-select", "AUTO ORDER", "EMPTIEST STATION FIRST", "CLEAR THE STATION PRIORITY", "AUTO ORDER"));
+                for (int i = 0, n = Math.Min(w.PitStations.Count, 8); i < n; i++)
+                {
+                    WorldPitStation station = w.PitStations[i];
+                    MenuRow row = MenuRow.Pick("support/pit/station/" + station.Index, "station-select", Cut(station.Label, 14), Cut(station.State, MaxState),
+                        "FIRST", station.First, "HAND THIS STATION ITS ROUNDS FIRST", "HANDOFF FIRST");
+                    row.Index = station.Index;
+                    kids.Add(row);
+                }
+                c.Rows.Add(b.Reg(MenuRow.Submenu("support/pit", "skywell", "PIT STOP", labels[w.PitMode <= 2 ? w.PitMode : 0],
+                    "SET THE ORDER AND FIRST STATION", "PIT STOP", "SERVICE", kids)));
+            }
             if (w.CanExfil)
                 c.Rows.Add(b.Reg(MenuRow.Action("support/exfil", "exfil", "REQUEST SQUAD EXFIL", "SQUAD: IN ROPE RANGE", "LIFT THE SQUAD OUT ON THE ROPES", "EXFIL REQUESTED")));
             if (armed > 0) Badge(c, armed + " ARMED", show: true, alert: true);

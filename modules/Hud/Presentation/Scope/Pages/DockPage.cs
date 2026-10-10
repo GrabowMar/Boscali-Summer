@@ -72,14 +72,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private bool TooFast => d.Phase < DockPhase.Transfer && DockMath.TooFast(d.ClosureMps, d.MaxClosingMps, d.RangeM) && d.RangeM <= DockMath.RibbonM;
 
-        private float Cone => DockMath.ConeM(d.RangeM);
+        private float Cone => d.ServiceZone ? d.CaptureM : DockMath.ConeM(d.RangeM);
 
         private float Err => DockMath.ErrM(d.RelX, d.RelY);
 
         private bool Near => d.RangeM <= DockMath.RibbonM;
 
         /// <summary>Outside the funnel (a caution only once the tanker is close: at the cue range nobody is lined up yet).</summary>
-        private bool Bad => Near && d.RangeM > 0f && !DockMath.Inside(Err, Cone);
+        private bool Bad => d.ServiceZone ? !d.ZoneReady && Near : Near && d.RangeM > 0f && !DockMath.Inside(Err, Cone);
 
         private bool Edge => Near && DockMath.NearEdge(Err, Cone, d.RangeM);
 
@@ -115,7 +115,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (d.Phase != lastPhase)
             {
                 enterAt[(int)d.Phase] = now;
-                if (d.Phase == DockPhase.Engage && lastPhase < DockPhase.Engage) env.Notice?.Invoke("skywell", HudTone.Info, "ENGAGED - HOLD BRAKE", null);
+                if (d.Phase == DockPhase.Engage && lastPhase < DockPhase.Engage) env.Notice?.Invoke("skywell", HudTone.Info, d.ServiceZone ? "SERVICE ZONE - HOLD STEADY" : "ENGAGED - HOLD BRAKE", null);
                 lastPhase = d.Phase;
             }
             bool fast = TooFast;
@@ -125,7 +125,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             lastFast = fast;
             bool edge = d.Phase < DockPhase.Engage && (Edge || Bad);
             if (edge && !lastEdge)
-                env.Notice?.Invoke("skywell", HudTone.Caution, "NEAR FUNNEL EDGE - " + (d.RelX < 0f ? "RIGHT " : "LEFT ") + Len(Math.Abs(d.RelX)) + LenUnit(), null);
+                env.Notice?.Invoke("skywell", HudTone.Caution, (d.ServiceZone ? "SERVICE ZONE - " : "NEAR FUNNEL EDGE - ") + (d.RelX < 0f ? "RIGHT " : "LEFT ") + Len(Math.Abs(d.RelX)) + LenUnit(), null);
             lastEdge = edge;
         }
 
@@ -154,8 +154,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             bool flash = false;
             if (TooFast) { key = 1; text = "TOO FAST"; tone = Amber; flash = true; }
             else if (d.Phase == DockPhase.Served) { key = 2; text = "SERVED"; }
-            else if (d.Phase == DockPhase.Transfer) { int p = (int)Math.Round(d.Fuel * 100f); key = 3000 + p; text = "FUEL " + p + "%"; }
-            else if (d.Phase == DockPhase.Engage) { key = 4; text = "HOLD BRAKE"; }
+            else if (d.Phase == DockPhase.Transfer) { int p = (int)Math.Round(d.Fuel * 100f); key = 3000 + p; text = d.ServiceZone ? d.JobName ?? "SERVICE" : "FUEL " + p + "%"; }
+            else if (d.Phase == DockPhase.Engage) { key = 4; text = d.ServiceZone ? "HOLD STEADY" : "HOLD BRAKE"; }
             else
             {
                 int v = Len(d.RangeM);
@@ -163,7 +163,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 text = v + LenUnit();
                 tone = Edge || Bad ? Amber : Hi;
             }
-            if (key != headlineKey) { headlineKey = key; headlineText = text; }
+            if (key != headlineKey || text != headlineText) { headlineKey = key; headlineText = text; }
             headlineTone = tone;
             headlineFlash = flash;
         }
@@ -173,12 +173,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public override int Gauges(GaugeSpec[] into)
         {
             if (!live || !d.HasStock) return 0;
-            int key = (int)(d.StockFuelKg / 10f) * 1000 + (int)(d.StockMunKg / 10f);
+            int key = (int)(d.StockFuelKg / 10f) * 1000 + (d.ServiceZone ? d.StockRounds : (int)(d.StockMunKg / 10f));
             if (key != gaugeKey || units != gaugeUnits)
             {
                 gaugeKey = key; gaugeUnits = units;
                 skyText = Mass(d.StockFuelKg);
-                skySub = "MUN " + Mass(d.StockMunKg);
+                skySub = d.ServiceZone ? "RDS " + d.StockRounds + "/6" : "MUN " + Mass(d.StockMunKg);
             }
             into[0] = new GaugeSpec { Id = "sky", Label = "SKYWELL", Kind = GaugeKind.Bar, Value = d.StockFuelMaxKg > 0f ? d.StockFuelKg / d.StockFuelMaxKg : 0f, Text = skyText, Sub = skySub, Tone = Ink };
             return 1;
@@ -423,16 +423,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 DirRow(g, X0 + 8f, py + 33f, d.RelY < 0f ? 0f : 180f, d.RelY < 0f ? "UP" : "DN", Math.Abs(d.RelY), off);
                 g.Line(X0 + 8f, py + 46f, X0 + W - 8f, py + 46f, Faint);
                 g.Text(ScopeStr.Cat("ERR ", Len(err), LenUnit()), X0 + 10f, py + 60f, edge || off ? Amber : Ink, 12f, ScopeAlign.Left, edge);
-                g.Text(!off ? (edge ? "NEAR EDGE" : "IN FUNNEL") : "FUNNEL OUT", X0 + W - 8f, py + 60f, edge || off ? Amber : Dim, 12f, ScopeAlign.Right, edge || off);
+                g.Text(d.ServiceZone ? d.ZoneReady ? "IN ZONE" : "JOIN ZONE" : !off ? (edge ? "NEAR EDGE" : "IN FUNNEL") : "FUNNEL OUT", X0 + W - 8f, py + 60f, edge || off ? Amber : Dim, 12f, ScopeAlign.Right, edge || off);
             }
             else if (phase == 2)
             {
-                g.PlateTag("HOLD BRAKE", cx, py + 22f, Hi, 16f, ScopeAlign.Center, 8f, flash ? 0.55f : 1f);
-                if (ttc > 0f) g.Text(ScopeStr.Cat("CONTACT IN ", Math.Max(1, (int)Math.Round(ttc)), " S"), cx, py + 46f, Dim, 12f, ScopeAlign.Center);
+                g.PlateTag(d.ServiceZone ? "HOLD STEADY" : "HOLD BRAKE", cx, py + 22f, Hi, 16f, ScopeAlign.Center, 8f, flash ? 0.55f : 1f);
+                if (d.ServiceZone) g.Text(d.Docked ? "TENDER INBOUND" : "FLY FORMATION", cx, py + 46f, Dim, 12f, ScopeAlign.Center);
+                else if (ttc > 0f) g.Text(ScopeStr.Cat("CONTACT IN ", Math.Max(1, (int)Math.Round(ttc)), " S"), cx, py + 46f, Dim, 12f, ScopeAlign.Center);
                 else g.Text(d.Docked ? "DOCKING" : "BRAKE TO DOCK", cx, py + 46f, Dim, 12f, ScopeAlign.Center);
                 if (DockMath.Inside(err, cone)) { g.Check(X0 + 18f, py + 62f, 9f, Ink, 1f, 1.5f); g.Text("ALIGNED", X0 + 30f, py + 62f, Ink); }
                 else { g.Cross(X0 + 18f, py + 62f, 8f, Amber, 1f, 1.5f); g.Text("OFF LINE", X0 + 30f, py + 62f, Amber, 12f, ScopeAlign.Left, true); }
-                g.Text(d.Brake ? "BRK ON" : "BRK OFF", X0 + W - 8f, py + 62f, d.Brake ? Hi : Amber, 12f, ScopeAlign.Right, true);
+                g.Text(d.ServiceZone ? d.ZoneReady ? "IN ZONE" : "ZONE LOST" : d.Brake ? "BRK ON" : "BRK OFF", X0 + W - 8f, py + 62f, d.ServiceZone ? d.ZoneReady ? Hi : Amber : d.Brake ? Hi : Amber, 12f, ScopeAlign.Right, true);
             }
             else if (phase == 3)
             {
@@ -445,13 +446,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 g.Text(needText, X0 + 10f, py + 50f, Ink);
                 int rounds = Math.Max(0, d.AmmoFull - d.Ammo);
                 g.Text(ScopeStr.Cat("RND +", rounds, null), X0 + W - 10f, py + 50f, Ink, 12f, ScopeAlign.Right);
-                g.Text("KEEP BRAKE ON", cx, py + 65f, Dim, 12f, ScopeAlign.Center);
+                g.Text(d.ServiceZone ? "HOLD FORMATION" : "KEEP BRAKE ON", cx, py + 65f, Dim, 12f, ScopeAlign.Center);
             }
             else
             {
                 g.Stamp("SERVED", cx, py + 24f, Hi, 16f);
                 g.Check(cx + 54f, py + 24f, 12f, Hi, 1f, 2f);
-                g.Text("RELEASE BRAKE", cx, py + 49f, Ink, 12f, ScopeAlign.Center, true, 0.6f + 0.4f * ScopeCanvas.Pulse(t, 2f));
+                g.Text(d.ServiceZone ? "CLEAR THE ZONE" : "RELEASE BRAKE", cx, py + 49f, Ink, 12f, ScopeAlign.Center, true, 0.6f + 0.4f * ScopeCanvas.Pulse(t, 2f));
                 if (d.HasMoved) g.FitText(movedText, cx, py + 65f, W - 12f, Dim, 12f, 12f, ScopeAlign.Center);
             }
         }

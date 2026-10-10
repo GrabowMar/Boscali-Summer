@@ -134,11 +134,11 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private void Draw()
         {
             if (board == null && !ModuleServices.TryGet(out board)) return;
-            board.DeclareChannel(Channel, "SHADOW");
+            VanguardHudFeeds.DeclareChannel(Channel, "SHADOW");
             if (state == ShadowState.Shadowed)
-                (pilotLine ??= board.Acquire(Owner, Channel, "pilot"))?.Set(HudTone.Info, "IN SHADOW", null, 0f);
+                (pilotLine ??= VanguardHudFeeds.Acquire(board, Owner, Channel, "pilot"))?.Set(HudTone.Info, "IN SHADOW", null, 0f);
             else if (state == ShadowState.BurnThrough)
-                (pilotLine ??= board.Acquire(Owner, Channel, "pilot"))?.Set(HudTone.Warning, "BURN-THROUGH",
+                (pilotLine ??= VanguardHudFeeds.Acquire(board, Owner, Channel, "pilot"))?.Set(HudTone.Warning, "BURN-THROUGH",
                     burnDetail, Mathf.Clamp01(burnRange / MaldjShadow.BurnThroughRange));
             else
             {
@@ -146,7 +146,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 pilotLine = null;
             }
             if (launcher)
-                (launcherLine ??= board.Acquire(Owner, Channel, "launcher"))?.Set(HudTone.Info, "SHADOW ACTIVE", blindDetail, 0f);
+                (launcherLine ??= VanguardHudFeeds.Acquire(board, Owner, Channel, "launcher"))?.Set(HudTone.Info, "SHADOW ACTIVE", blindDetail, 0f);
             else
             {
                 launcherLine?.Release();

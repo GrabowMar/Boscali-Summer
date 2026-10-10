@@ -16,7 +16,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         public static void Held(string gliderKey, float metres, HamilcarPhase phase)
         {
             if (Board(out IHudBoard board))
-                board.Acquire(Owner, Channel, gliderKey)?.Set(HudTone.Info, HamilcarProfile.HudText(metres), HamilcarProfile.HudDetail(phase), 0f);
+                VanguardHudFeeds.Acquire(board, Owner, Channel, gliderKey)?.Set(HudTone.Info, HamilcarProfile.HudText(metres), HamilcarProfile.HudDetail(phase), 0f);
         }
 
         public static void Notice(HudTone tone, string text, string detail)
@@ -27,7 +27,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private static bool Board(out IHudBoard board)
         {
             if (!ModuleServices.TryGet(out board)) return false;
-            board.DeclareChannel(Channel, "HAMILCAR");
+            VanguardHudFeeds.DeclareChannel(Channel, "HAMILCAR");
             return true;
         }
     }

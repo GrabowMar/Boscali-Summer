@@ -6,26 +6,19 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Vanguard.Presentation
 {
-    /// <summary>
-    /// Vanguard's provider of the DOCK page's feed (<see cref="DockScope"/>, HUD v8) and the SKYWELL stock gauge. A receiver pilot's probe against the tanker's contact point in the
-    /// tanker's own axes, the closing speed, the hook-up phase (SKYWELL's own: <see cref="SkywellBoard.Views"/> says it on every peer; before docking it is read from the range, as
-    /// <see cref="SkywellHud"/> does) and the receiver's REAL fuel and rounds. Live while the local aircraft is a receiver docked to a tanker or within cue range of a deployed friendly
-    /// one. Everything is read from the two synced aircraft and the board, so it works on clients too. The game moves the fuel and rounds in one step at the end of the transfer phase
-    /// (<c>SkywellService.Transfer</c>), so the feed reports the real value, the level it will be filled to, and how much of the transfer time has passed.
-    /// </summary>
+    /// <summary>Read-only TAC BOARD feed for the service zone, tender jobs and the tanker's fuel/magazine.</summary>
     internal sealed class SkywellScopeFeed : MonoBehaviour, ISceneService
     {
         private const float CueRange = 800f;
-
         private ScopeProvider<DockScope> provider;
         private GaugeProvider gauge;
+        private Aircraft trackedReceiver, namedTanker;
         private uint trackedTanker;
-        private SkywellPhase lastPhase;
-        private float transferStart, transferSeconds, fuelAtStart;
-        private int roundsAtStart;
         private bool transferSeen;
-        private Aircraft namedTanker;
-        private string tankerName;
+        private float fuelAtStart, jobStart;
+        private int roundsAtStart, jobIndex = -1, jobStation = -1;
+        private PitJobKind jobKind;
+        private string tankerName, jobName = "";
         private int gaugeKey = int.MinValue;
         private string gaugeText = "", gaugeSub = "";
         private bool gaugeImperial;
@@ -46,10 +39,13 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
 
         public void ResetForScene()
         {
+            trackedReceiver = namedTanker = null;
             trackedTanker = 0;
-            lastPhase = SkywellPhase.Idle;
             transferSeen = false;
-            namedTanker = null;
+            jobIndex = jobStation = -1;
+            jobKind = PitJobKind.None;
+            jobName = "";
+            gaugeKey = int.MinValue;
         }
 
         private static Aircraft Resolve(uint id) =>
@@ -60,80 +56,85 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             d = default;
             if (!GameManager.GetLocalAircraft(out Aircraft me) || me == null || me.disabled || SkywellBoard.KitStation(me) != null) return false;
             uint id = me.persistentID.Id;
-            Aircraft tanker = null;
             SkywellView view = default;
-            bool docked = false;
+            Aircraft tanker = null;
+            bool serving = false, served = false;
             foreach (SkywellView v in SkywellBoard.Views.Values)
-                if (v.Receiver == id) { view = v; docked = true; break; }
-            if (docked) tanker = Resolve(view.Tanker);
-            else
+                if (v.Receiver == id) { view = v; tanker = Resolve(v.Tanker); serving = true; break; }
+            if (!serving)
+                foreach (SkywellView v in SkywellBoard.Views.Values)
+                    if (v.Released == id && v.ReleaseKind == PitRelease.Served && v.StateAge < 8f)
+                    { view = v; tanker = Resolve(v.Tanker); served = true; break; }
+            if (tanker == null)
             {
                 float best = CueRange;
-                Vector3 probe = SkywellBoard.ProbePoint(me);
                 foreach (SkywellView v in SkywellBoard.Views.Values)
                 {
                     if (!v.Active || v.Receiver != 0) continue;
                     Aircraft t = Resolve(v.Tanker);
                     if (t == null || t.disabled || t == me || t.NetworkHQ != me.NetworkHQ) continue;
-                    float dist = Vector3.Distance(probe, SkywellBoard.ContactPoint(t));
-                    if (dist < best) { best = dist; tanker = t; view = v; }
+                    float distance = Vector3.Distance(me.transform.position, SkywellBoard.Anchor(t));
+                    if (distance < best) { best = distance; tanker = t; view = v; }
                 }
             }
             if (tanker == null || tanker.disabled) { trackedTanker = 0; return false; }
 
-            Vector3 probePoint = SkywellBoard.ProbePoint(me), contact = SkywellBoard.ContactPoint(tanker);
-            Vector3 rel = tanker.transform.InverseTransformPoint(probePoint) - tanker.transform.InverseTransformPoint(contact);
-            float range = Vector3.Distance(probePoint, contact);
-            Vector3 relVelocity = (me.rb != null ? me.rb.velocity : Vector3.zero) - (tanker.rb != null ? tanker.rb.velocity : Vector3.zero);
-
-            SkywellPhase phase = docked ? view.Phase : SkywellPhase.Idle;
+            SkywellBoard.Rel(tanker, me, out Vector3 rel, out float speed, out float forward, out float roll);
+            Vector3 error = rel - SkywellZone.HoldSlot;
+            bool inside = SkywellZone.Contains(rel, speed, roll);
             int rounds = 0, full = 0;
             if (me.weaponStations != null)
-                foreach (WeaponStation s in me.weaponStations)
-                    if (s?.WeaponInfo != null && !s.WeaponInfo.cargo && !s.WeaponInfo.nuclear && !s.WeaponInfo.gun && s.WeaponInfo.massPerRound > 0f)
-                    {
-                        rounds += s.GetAmmoTotal();
-                        full += s.FullAmmo;
-                    }
+                foreach (WeaponStation station in me.weaponStations)
+                    if (!SkywellStations.Skip(station)) { rounds += station.GetAmmoTotal(); full += station.FullAmmo; }
 
-            // The transfer's clock and what it moved: recorded when the phase begins, read back when it is served.
-            if (id != trackedTanker || !docked || phase != lastPhase)
+            if (trackedReceiver != me || trackedTanker != view.Tanker || (!serving && !served))
             {
-                if (docked && phase == SkywellPhase.Transfer)
+                trackedReceiver = me;
+                trackedTanker = view.Tanker;
+                transferSeen = false;
+                jobIndex = -1;
+            }
+            if (serving && view.State == TenderState.Service)
+            {
+                if (!transferSeen)
                 {
-                    transferStart = Time.time;
-                    transferSeconds = SkywellContact.TransferSeconds(SkywellService.FuelNeedKg(me), SkywellService.MissingRounds(me));
                     fuelAtStart = me.GetFuelQuantity();
                     roundsAtStart = rounds;
                     transferSeen = true;
                 }
-                else if (!docked || phase == SkywellPhase.Idle || phase == SkywellPhase.Engage) transferSeen = false;      // a new hook-up: nothing of an earlier service, or of one this feed was not polled through, is claimed
-                trackedTanker = docked ? id : 0;
-                lastPhase = phase;
+                if (jobIndex != view.JobIndex || jobKind != view.Job || jobStation != view.JobStation)
+                {
+                    jobIndex = view.JobIndex;
+                    jobKind = view.Job;
+                    jobStation = view.JobStation;
+                    jobStart = Time.timeSinceLevelLoad;
+                    jobName = view.Job == PitJobKind.Fuel ? "FUEL"
+                        : view.Job == PitJobKind.None ? "SERVICE" : "HANDOFF STA " + (view.JobStation + 1);
+                }
             }
+            else if (serving) { transferSeen = false; jobIndex = -1; }
 
-            d.Docked = docked;
-            d.Phase = docked ? (phase == SkywellPhase.Transfer ? DockPhase.Transfer : phase == SkywellPhase.Served ? DockPhase.Served : DockPhase.Engage)
-                : range <= SkywellService.EngageRadius && rel.z < 5f ? DockPhase.Engage : range <= SkywellContact.CaptureRadius ? DockPhase.Capture : DockPhase.Cue;
+            d.ServiceZone = true;
+            d.ZoneReady = inside;
+            d.Docked = serving;
+            d.Phase = served ? DockPhase.Served : serving && view.State == TenderState.Service ? DockPhase.Transfer
+                : serving || inside ? DockPhase.Engage : error.magnitude <= SkywellZone.Radius ? DockPhase.Capture : DockPhase.Cue;
             d.Tanker = TankerName(tanker);
-            d.RelX = rel.x;
-            d.RelY = rel.y;
-            d.RelZ = rel.z;
-            d.RangeM = range;
-            d.ClosureMps = Vector3.Dot(relVelocity, tanker.transform.forward);
+            d.RelX = error.x; d.RelY = error.y; d.RelZ = error.z;
+            d.RangeM = error.magnitude;
+            d.ClosureMps = forward;
             d.CueM = CueRange;
-            d.CaptureM = SkywellContact.CaptureRadius;
-            d.EngageM = SkywellService.EngageRadius;
-            d.MaxClosingMps = SkywellContact.MaxClosing;
-            ControlInputs inputs = me.GetInputs();
-            d.Brake = inputs != null && inputs.brake > 0.5f;
+            d.CaptureM = SkywellZone.Radius;
+            d.EngageM = SkywellZone.Radius;
+            d.MaxClosingMps = SkywellZone.MaxRelSpeed;
             d.Fuel = Mathf.Clamp01(me.GetFuelLevel());
             d.FuelTarget = Mathf.Clamp01(Mathf.Max(me.fuelLevel, d.Fuel));
             d.FuelNeedKg = SkywellService.FuelNeedKg(me);
-            d.Ammo = rounds;
-            d.AmmoFull = full;
-            if (d.Phase == DockPhase.Transfer) d.TransferT = Mathf.Clamp01((Time.time - transferStart) / Mathf.Max(transferSeconds, 0.1f));
-            if (d.Phase == DockPhase.Served)
+            d.Ammo = rounds; d.AmmoFull = full;
+            d.JobName = jobName;
+            if (d.Phase == DockPhase.Transfer)
+                d.TransferT = Mathf.Clamp01((Time.timeSinceLevelLoad - jobStart) / Mathf.Max(view.JobTenths / 10f, 0.1f));
+            if (served)
             {
                 d.TransferT = 1f;
                 d.HasMoved = transferSeen;
@@ -143,11 +144,10 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             d.HasStock = true;
             d.StockFuelKg = view.FuelKg;
             d.StockFuelMaxKg = SkywellService.FuelStockKg;
-            d.StockMunKg = view.StockKg;
+            d.StockRounds = view.Rounds;
             return true;
         }
 
-        /// <summary>The tanker's own name (upper case), cached by aircraft: <c>SKYWELL</c> when it has none.</summary>
         private string TankerName(Aircraft tanker)
         {
             if (!ReferenceEquals(tanker, namedTanker))
@@ -158,20 +158,18 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             return tankerName;
         }
 
-        /// <summary>The stock gauge for a pilot flying the kit: fuel left on the bar, the munitions beside it (the DOCK page brings its own for a receiver).</summary>
         private bool ReadGauge(out GaugeSpec spec)
         {
             spec = default;
             if (!GameManager.GetLocalAircraft(out Aircraft me) || me == null || me.disabled || SkywellBoard.KitStation(me) == null) return false;
             if (!SkywellBoard.Views.TryGetValue(me.persistentID.Id, out SkywellView v) || !v.Active) return false;
             bool imperial = PlayerSettings.unitSystem != PlayerSettings.UnitSystem.Metric;
-            int key = (int)(v.FuelKg / 10f) * 1000 + (int)(v.StockKg / 10f);
+            int key = (int)(v.FuelKg / 10f) * 10 + v.Rounds;
             if (key != gaugeKey || imperial != gaugeImperial)
             {
-                gaugeKey = key;
-                gaugeImperial = imperial;
+                gaugeKey = key; gaugeImperial = imperial;
                 gaugeText = Mass(v.FuelKg, imperial);
-                gaugeSub = "MUN " + Mass(v.StockKg, imperial);
+                gaugeSub = PitCopy.Rounds(v.Rounds);
             }
             spec = new GaugeSpec { Id = "sky", Label = "SKYWELL", Kind = GaugeKind.Bar, Value = Mathf.Clamp01(v.FuelKg / SkywellService.FuelStockKg), Text = gaugeText, Sub = gaugeSub, Tone = ScopeTone.Ink, Rank = 5 };
             return true;

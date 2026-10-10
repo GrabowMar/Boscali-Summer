@@ -28,24 +28,21 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         public static Dictionary<string, object> Menu(Dictionary<string, object> args)
         {
             if (!Guard(out Dictionary<string, object> failure)) return failure;
-            AceRadialNode root;
-            try { root = AceRadialNode.Collect(AceRadialCatalog.Build(), AceRadialMenuTree.MaxNodes, AceRadialMenuTree.MaxDepth); }
+            MenuModel model;
+            try { model = MenuGame.Build(); }
             catch (Exception e) { return Failure("AutopilotAutomation", "Menu", "catalog threw: " + e.Message); }
-            AceRadialNode view = null;
-            if (root != null)
-                foreach (AceRadialNode child in root.Children)
-                    if (child.Action != null && child.Action.Id == "view") view = child;
+            MenuCategory view = model.Category("view");
             var entries = new List<object>();
             if (view != null)
-                foreach (AceRadialNode leaf in view.Children)
+                foreach (MenuRow leaf in view.Rows)
                 {
-                    if (leaf.Action == null || !leaf.Action.Id.StartsWith("msl-", StringComparison.Ordinal)) continue;
+                    if (!leaf.Id.StartsWith("view/msl", StringComparison.Ordinal)) continue;
                     entries.Add(new Dictionary<string, object>
                     {
-                        { "id", leaf.Action.Id },
-                        { "label", leaf.Action.Label },
-                        { "enabled", leaf.Enabled },
-                        { "status", leaf.Status.Text ?? "" },
+                        { "id", leaf.Id },
+                        { "label", leaf.Label },
+                        { "enabled", !leaf.IsBlocked },
+                        { "status", leaf.State ?? "" },
                     });
                 }
             var result = new Dictionary<string, object>

@@ -38,6 +38,13 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public bool Active;
     }
 
+    internal sealed class WorldPitStation
+    {
+        public int Index;
+        public string Label = "", State = "";
+        public bool First;
+    }
+
     internal sealed class WorldFilter
     {
         public string Name = "";
@@ -128,6 +135,9 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public List<WorldPerk> Perks = new List<WorldPerk>();
         public bool SkywellCarried, SkywellDeployed;
         public string SkywellStock = "";
+        public bool PitAvailable;
+        public byte PitMode;
+        public List<WorldPitStation> PitStations = new List<WorldPitStation>();
         public bool CanExfil;
 
         // RADIO

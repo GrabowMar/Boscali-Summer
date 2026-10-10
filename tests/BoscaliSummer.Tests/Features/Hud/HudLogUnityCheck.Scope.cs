@@ -30,6 +30,7 @@ public static partial class HudLogUnityCheck
     /// <summary>(page, t, variant): one more 1080p shot of a page, its fixture branching on <c>s.Variant</c>.</summary>
     private static readonly (string page, float t, string variant)[] ScopeVariants =
     {
+        ("dock", 6f, "service-zone"), ("dock", 12f, "service-zone"), ("dock", 14f, "service-zone"),
         ("systems", 10f, "rotary"), ("strike", 6f, "solo"), ("strike", 6f, "sat"), ("objective", 6f, "far"), ("objective", 6f, "bare"), ("missilecam", 8f, "blind"),
         // The stores header alone over the cruise strip: the default loadout, a gun and flares running low (chaff gone), an empty weapon, a gun reload with another station reloading,
         // an airframe without a capacitor, a flare call (DISPENSE) with the chaff selected, a bare helicopter (one dispenser, no jammer) and a gun-only aircraft with no countermeasures.

@@ -1,3 +1,4 @@
+using BoscaliSummer.Modules.Vanguard.Presentation;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.Vanguard.Domain;
@@ -53,8 +54,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 ReleaseHud();
                 return;
             }
-            board.DeclareChannel(HudChannel, "SENTINEL");
-            line ??= board.Acquire(HudOwner, HudChannel, missile.persistentID.Id.ToString());
+            VanguardHudFeeds.DeclareChannel(HudChannel, "SENTINEL");
+            line ??= VanguardHudFeeds.Acquire(board, HudOwner, HudChannel, missile.persistentID.Id.ToString());
             if (line == null) return;
             float hold = Mathf.Clamp01(hoverLeft / SentinelProfile.HoverSeconds);
             switch (Phase)

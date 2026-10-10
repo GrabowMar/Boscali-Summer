@@ -12,6 +12,10 @@ namespace BoscaliSummer.Core.Contracts
     internal struct DockScope
     {
         public DockPhase Phase;
+        /// <summary>Service-zone mechanics: fly formation while the tender comes to the receiver.</summary>
+        public bool ServiceZone, ZoneReady;
+        public string JobName;
+        public int StockRounds;
         /// <summary>The server has docked this receiver (the airframe is being flown in); false while it is still being flown by hand.</summary>
         public bool Docked;
         /// <summary>The tanker's name (upper case).</summary>

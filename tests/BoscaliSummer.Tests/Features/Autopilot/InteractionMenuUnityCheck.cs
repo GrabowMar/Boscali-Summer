@@ -77,6 +77,7 @@ public static class InteractionMenuUnityCheck
         F("wing-formation", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(4); r.ToRow("wing/shape"); r.Click(); for (int i = 0; i < 5; i++) r.Wheel(1); r.ToRow("wing/shape/high-cover"); r.Adv(0.1f); }, One),
         // OPS PERKS: grouped by front with the front glyph, PRSM cooling down in place
         F("perk-cooldown", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(7); for (int i = 0; i < 4; i++) r.Down(); r.Enter(); r.ToRow("support/perks/prsm"); r.Adv(0.1f); }, One),
+        F("pit-stop", MenuWorlds.Pit, r => { r.LatchOpen(); r.PressDigit(7); r.ToRow("support/pit"); r.Enter(); r.ToRow("support/pit/station/9"); r.Adv(0.1f); }, Three),
         // the jammer is the active countermeasure: its name is the DEFENCE badge
         F("jammer-idle", MenuWorlds.Jammer, r => r.HoldOpen(), One),
         // a refused press (digit 9 in a 6-row dock): the row gutters flash amber for 180 ms (checked against the settled frame below)

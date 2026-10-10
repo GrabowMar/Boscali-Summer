@@ -24,7 +24,7 @@ namespace BoscaliSummer.Tests.Features.Vanguard
         {
             TestAssert.That(VanguardKeys.Hamilcar == "VG_Hamilcar", "the jsonKey is VG_Hamilcar");
             TestAssert.That(VanguardKeys.RoleOf(VanguardKeys.Hamilcar) == VanguardRole.Lander, "HAMILCAR is the lander");
-            TestAssert.That((int)VanguardRole.Lander == (int)VanguardRole.Gunship + 1, "Lander is appended at the end of the role enum");
+            TestAssert.That((int)VanguardRole.Lander == (int)VanguardRole.Scout + 1, "Lander is appended after Scout without renumbering existing roles");
             TestAssert.That(!VanguardKeys.IsGunDrone(VanguardRole.Lander), "a lander is not a gun drone");
         }
 

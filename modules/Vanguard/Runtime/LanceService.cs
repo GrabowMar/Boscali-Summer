@@ -251,15 +251,18 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         {
             value = 1f;
             charging = recharging = false;
-            foreach (Charge c in Charges.Values)
+            LancePod best = null;
+            foreach (LancePod pod in Pods.Values)
             {
-                if (c.Gun == null || c.Gun.attachedUnit != me) continue;
-                float now = Time.time;
-                if (c.LastHold > 0f && now - c.LastHold <= LanceCapacitor.ReleaseGap) { value = LanceCapacitor.Charge(now - c.Start); charging = true; }
-                else if (now < c.ReadyAt && c.RechargeTotal > 0f) { value = 1f - (c.ReadyAt - now) / c.RechargeTotal; recharging = true; }
-                return true;
+                if (pod.Gun == null || pod.Aircraft != me || me == null || me.disabled) continue;
+                if (best == null || pod.Rank > best.Rank) best = pod;
             }
-            return false;
+            if (best == null) return false;
+            LanceLook look = best.Look(Time.time);
+            charging = look.Charging;
+            recharging = look.Recharge01 >= 0f;
+            value = charging ? look.Charge : recharging ? look.Recharge01 : 1f;
+            return true;
         }
 
         /// <summary>One trigger-held tick from the Fire patch. Never fires; Update fires on release.</summary>
@@ -455,7 +458,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private void Hud(LancePod pod, float now)
         {
             if (board == null && !ModuleServices.TryGet(out board)) return;
-            board.DeclareChannel(Channel, "LANCE");
+            VanguardHudFeeds.DeclareChannel(Channel, "LANCE");
             if (pod == null || !pod.Owner || pod.Aircraft.Player == null || pod.Aircraft.disabled)
             {
                 ReleaseLines();
@@ -465,18 +468,18 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             // charge / recharge / fault line
             if (look.Charging)
             {
-                chargeLine ??= board.Acquire(Owner, Channel, "charge");
+                chargeLine ??= VanguardHudFeeds.Acquire(board, Owner, Channel, "charge");
                 if (look.Charge >= 0.995f) chargeLine?.Set(HudTone.Info, "LANCE READY", "RELEASE TO FIRE", 1f);
                 else chargeLine?.Set(HudTone.Caution, "LANCE CHARGE", TierWord(LanceCapacitor.TierOf(look.Charge)), look.Charge);
             }
             else if (pod.Phase == LancePhase.Fault)
             {
-                chargeLine ??= board.Acquire(Owner, Channel, "charge");
+                chargeLine ??= VanguardHudFeeds.Acquire(board, Owner, Channel, "charge");
                 chargeLine?.Set(HudTone.Warning, "RAIL FAULT", CoolingWord(pod.ReadyAt - now), Mathf.Max(0f, look.Recharge01));
             }
             else if (pod.Phase != LancePhase.Idle)
             {
-                chargeLine ??= board.Acquire(Owner, Channel, "charge");
+                chargeLine ??= VanguardHudFeeds.Acquire(board, Owner, Channel, "charge");
                 chargeLine?.Set(HudTone.Warning, "LANCE RECHARGE", "BANK PRIMING", Mathf.Max(0f, look.Recharge01));
             }
             else
@@ -487,7 +490,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             // rail heat line
             if (pod.Heat >= 0.12f || look.Charging)
             {
-                heatLine ??= board.Acquire(Owner, Channel, "heat");
+                heatLine ??= VanguardHudFeeds.Acquire(board, Owner, Channel, "heat");
                 HudTone tone = pod.Heat >= LanceHeat.DerateStart ? HudTone.Warning : pod.Heat >= LanceHeat.HotAt ? HudTone.Caution : HudTone.Info;
                 heatLine?.Set(tone, "RAIL HEAT", HeatWord(pod.Heat), Mathf.Min(pod.Heat, 1f));
             }
@@ -501,7 +504,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             float draw = pod.Draw(now);
             if (draw >= 0.05f)
             {
-                busLine ??= board.Acquire(Owner, Channel, "bus");
+                busLine ??= VanguardHudFeeds.Acquire(board, Owner, Channel, "bus");
                 int sagPct = Mathf.RoundToInt(sag * 100f); // the afterburner only drops out once the engines actually lose thrust
                 busLine?.Set(HudTone.Caution, "BUS DRAW", sagPct > 0 ? Cached(SagWords, sagPct, "AB OFFLINE  -", "% THRUST") : "BUS STANDBY", draw);
             }

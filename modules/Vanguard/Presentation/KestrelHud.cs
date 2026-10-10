@@ -14,8 +14,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         public static void Show(string droneKey, KestrelPhase phase, float stationLeft, string detail)
         {
             if (!ModuleServices.TryGet(out IHudBoard board)) return;
-            board.DeclareChannel(Channel, "KESTREL");
-            board.Acquire(Owner, Channel, droneKey)?.Set(phase == KestrelPhase.Depart ? HudTone.Caution : HudTone.Info,
+            VanguardHudFeeds.DeclareChannel(Channel, "KESTREL");
+            VanguardHudFeeds.Acquire(board, Owner, Channel, droneKey)?.Set(phase == KestrelPhase.Depart ? HudTone.Caution : HudTone.Info,
                 KestrelProfile.HudText(phase, stationLeft), detail, stationLeft / KestrelProfile.StationSeconds);
         }
     }

@@ -41,6 +41,19 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             }
             ISkywellControl kit = Service<ISkywellControl>();
             if (kit != null && kit.Carried) { w.SkywellCarried = true; w.SkywellDeployed = kit.Deployed; w.SkywellStock = kit.Stock ?? ""; }
+            if (kit != null && kit.PitAvailable)
+            {
+                w.PitAvailable = true;
+                w.PitMode = kit.PitMode;
+                for (int i = 0, n = Math.Min(kit.PitStationCount, 8); i < n; i++)
+                {
+                    int station = kit.PitStationAt(i);
+                    string label = kit.PitStationLabel(station);
+                    if (station < 0 || string.IsNullOrEmpty(label)) continue;
+                    string state = kit.PitStationStatus(station) ?? "";
+                    w.PitStations.Add(new WorldPitStation { Index = station, Label = label, State = state, First = state.EndsWith("FIRST", StringComparison.Ordinal) });
+                }
+            }
             w.CanExfil = Service<IAirAssaultOrders>()?.CanRequestExfil == true;
         }
 
@@ -131,6 +144,10 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "support/callmark": return () => Service<ICameraTargetService>()?.CallAtMark();
                 case "support/clearmark": return () => Service<ICameraTargetService>()?.Clear();
                 case "support/skywell": return () => Service<ISkywellControl>()?.Toggle();
+                case "support/pit/both": return () => Service<ISkywellControl>()?.SetPitMode(0);
+                case "support/pit/fuel": return () => Service<ISkywellControl>()?.SetPitMode(1);
+                case "support/pit/mun": return () => Service<ISkywellControl>()?.SetPitMode(2);
+                case "support/pit/auto": return () => Service<ISkywellControl>()?.PrioritiseStation(-1);
                 case "support/exfil": return () => Service<IAirAssaultOrders>()?.RequestExfil();
                 case "view/mslview": return () => Service<IMissileView>()?.Enter();
                 case "view/mslnext": return () => Service<IMissileView>()?.Next();
@@ -139,6 +156,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "defence/drones": return StrikeOrScreen;
             }
             if (row.Id.StartsWith("comms/c", StringComparison.Ordinal)) return () => Service<IQuickCalls>()?.Call(index);
+            if (row.Id.StartsWith("support/pit/station/", StringComparison.Ordinal)) return () => Service<ISkywellControl>()?.PrioritiseStation(index);
             const string Perks = "support/perks/", Filters = "targets/filters/", Shapes = "wing/shape/";
             if (row.Id.StartsWith(Perks, StringComparison.Ordinal)) return BySlug<IOpsPerks>(row.Id, Perks, p => p.PerkCount, (p, i) => p.PerkLabel(i), (p, i) => p.PerkPress(i));
             if (row.Id.StartsWith(Filters, StringComparison.Ordinal))

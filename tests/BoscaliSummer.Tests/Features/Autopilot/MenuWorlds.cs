@@ -109,6 +109,17 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             return w;
         }
 
+        public static MenuWorld Pit()
+        {
+            MenuWorld w = Default();
+            w.SkywellCarried = false;
+            w.PitAvailable = true;
+            w.PitMode = 2;
+            w.PitStations.Add(new WorldPitStation { Index = 4, Label = "AAM-4 SKYWAY", State = "X1/2" });
+            w.PitStations.Add(new WorldPitStation { Index = 9, Label = "AGM-48", State = "X0/2 FIRST", First = true });
+            return w;
+        }
+
         public static IEnumerable<KeyValuePair<string, MenuWorld>> All()
         {
             yield return new KeyValuePair<string, MenuWorld>("default", Default());
@@ -117,6 +128,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             yield return new KeyValuePair<string, MenuWorld>("missile", Missile());
             yield return new KeyValuePair<string, MenuWorld>("ibis", Ibis());
             yield return new KeyValuePair<string, MenuWorld>("jammer", Jammer());
+            yield return new KeyValuePair<string, MenuWorld>("pit", Pit());
         }
     }
 }

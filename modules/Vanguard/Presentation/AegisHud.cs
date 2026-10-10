@@ -31,7 +31,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private static bool Board()
         {
             if (board == null && !ModuleServices.TryGet(out board)) return false;
-            board.DeclareChannel(Channel, "AEGIS");
+            VanguardHudFeeds.DeclareChannel(Channel, "AEGIS");
             return true;
         }
 
@@ -60,7 +60,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 line = null;
                 return;
             }
-            line ??= board.Acquire(Owner, Channel, "ready");
+            line ??= VanguardHudFeeds.Acquire(board, Owner, Channel, "ready");
             float full = Mathf.Max(station.FullAmmo, 1);
             if (station.Ammo > 0)
             {

@@ -1,3 +1,4 @@
+using BoscaliSummer.Modules.Vanguard.Presentation;
 using System;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
@@ -88,7 +89,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
         {
             if (!GameManager.GetLocalAircraft(out Aircraft me) || me == null || me.persistentID.Id != notice.OwnerId) return;
             if (!ModuleServices.TryGet(out IHudBoard board)) return;
-            board.DeclareChannel(Channel, "ORCA");
+            VanguardHudFeeds.DeclareChannel(Channel, "ORCA");
             var call = (OrcaCall)notice.Call;
             string detail = notice.SubjectId != 0 && UnitRegistry.TryGetUnit(new PersistentID { Id = notice.SubjectId }, out Unit unit) && unit != null
                 ? unit.unitName : null;

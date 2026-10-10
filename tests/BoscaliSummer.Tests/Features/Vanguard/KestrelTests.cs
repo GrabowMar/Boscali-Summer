@@ -14,7 +14,8 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.That(VanguardKeys.Kestrel == "VG_Kestrel" && VanguardKeys.KestrelMount == "VG_Kestrel_Sled", "jsonKeys: VG_Kestrel on VG_Kestrel_Sled");
             TestAssert.That(VanguardKeys.RoleOf(VanguardKeys.Kestrel) == VanguardRole.Scout && !VanguardKeys.IsGunDrone(VanguardRole.Scout),
                 "KESTREL is the scout, not a gun drone");
-            TestAssert.That((int)VanguardRole.Scout == System.Enum.GetValues(typeof(VanguardRole)).Length - 1, "Scout is appended at the end of the role enum");
+            TestAssert.That((int)VanguardRole.Scout == (int)VanguardRole.Gunship + 1 && VanguardRole.Scout != VanguardRole.Lander,
+                "Scout preserves its appended value alongside the cargo lander");
 
             TestAssert.That(KestrelProfile.CruiseSpeed == 80f && KestrelProfile.OrbitRadius == 800f && KestrelProfile.OrbitHeight == 1000f &&
                 KestrelProfile.MinAgl == 300f, "80 m/s, 800 m circle, 1000 m above the target, 300 m terrain floor");

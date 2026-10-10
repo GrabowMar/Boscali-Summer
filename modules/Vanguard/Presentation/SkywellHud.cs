@@ -95,7 +95,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             if (Time.unscaledTime < next) return;
             next = Time.unscaledTime + Refresh;
             if (board == null && !ModuleServices.TryGet(out board)) return;
-            board.DeclareChannel(Channel, "SKYWELL");
+            VanguardHudFeeds.DeclareChannel(Channel, "SKYWELL");
             bool shown = false;
             pitAvailable = false;
             if (Local(out Aircraft me))
@@ -117,9 +117,9 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             }
         }
 
-        private IHudLine Line() => line ??= board.Acquire(Owner, Channel, "status");
+        private IHudLine Line() => line ??= VanguardHudFeeds.Acquire(board, Owner, Channel, "status");
 
-        private IHudLine PitLine() => pitLine ??= board.Acquire(Owner, Channel, "pit");
+        private IHudLine PitLine() => pitLine ??= VanguardHudFeeds.Acquire(board, Owner, Channel, "pit");
 
         private bool Tanker(Aircraft me)
         {

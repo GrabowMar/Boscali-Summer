@@ -63,6 +63,7 @@ public static partial class HudLogUnityCheck
                     foreach (bool merged in new[] { false, true }) Log(height, merged);
                 Wire();
             }
+            VanguardGauges();
             ScopeShots(pages);
             File.WriteAllText("result.txt", "PASS: " + captures + " production HUD/scope/log/wire renders, " + assertions +
                 " input-transparency/layout/lifecycle assertions. Synthetic native dock/font and telemetry; no native asset, live input or game adapter acceptance.");

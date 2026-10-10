@@ -17,7 +17,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         {
             if (board == null && !ModuleServices.TryGet(out board)) return;
             if (!GameManager.GetLocalAircraft(out Aircraft me) || me == null || me.disabled) return;
-            board.DeclareChannel(Channel, "MALD-X");
+            VanguardHudFeeds.DeclareChannel(Channel, "MALD-X");
             bool mine = e.Launcher != 0u && me.persistentID.Id == e.Launcher;
             switch (e.Kind)
             {

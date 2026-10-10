@@ -48,6 +48,12 @@ public static partial class HudLogUnityCheck
             "Brake", t >= tEng - 0.2f && t < tServed, "Fuel", 0.34f + 0.66f * fx, "FuelTarget", 1f, "FuelNeedKg", 1840f * (1f - fx), "Ammo", 2 + rounds, "AmmoFull", 6,
             "TransferT", fx, "MovedFuelKg", 1840f, "MovedRounds", 4, "HasStock", true, "StockFuelKg", 6200f - fuelKg, "StockFuelMaxKg", 8000f, "StockMunKg", 1500f);
         if (s.Variant == "imperial") s.SetFrame("Units", NOAvionics.AvUnits.Imperial);     // add ("dock", 6f, "imperial") to ScopeVariants to render it
+        if (s.Variant == "service-zone")
+        {
+            s.Fill(d, "ServiceZone", true, "ZoneReady", true, "JobName", "HANDOFF STA 5", "StockRounds", 4,
+                "Phase", s.ContractEnum("DockPhase", t < 11f ? "Engage" : t < 13.8f ? "Transfer" : "Served"),
+                "ClosureMps", 2f, "RelX", 8f, "RelY", -3f, "RelZ", -12f, "RangeM", 15f, "CaptureM", 120f, "EngageM", 120f);
+        }
         s.Publish(d);
 
         s.SetFrame("Systems", s.Fill(s.Domain("SystemStates"), "Gear", s.DomainEnum("GearLamp", "Up"), "FlightAssist", true, "AutoHover", false,

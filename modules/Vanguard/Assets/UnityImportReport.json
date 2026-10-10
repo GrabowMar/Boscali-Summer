@@ -145,6 +145,22 @@
             }
         },
         {
+            "model": "Kestrel",
+            "triangles": [
+                7002,
+                2923,
+                962
+            ],
+            "renderersPerLod": 25,
+            "lodGroups": 2,
+            "textureSize": 2048,
+            "dimensions": {
+                "x": 2.240000009536743,
+                "y": 1.1282238960266114,
+                "z": 2.905000686645508
+            }
+        },
+        {
             "model": "Hamilcar",
             "triangles": [
                 10561,
@@ -195,17 +211,17 @@
         {
             "model": "SkywellKit",
             "triangles": [
-                14884,
-                6223,
-                2064
+                11317,
+                4710,
+                1639
             ],
-            "renderersPerLod": 34,
+            "renderersPerLod": 43,
             "lodGroups": 2,
             "textureSize": 2048,
             "dimensions": {
                 "x": 2.240000009536743,
-                "y": 2.063621997833252,
-                "z": 7.094000816345215
+                "y": 1.718001127243042,
+                "z": 6.830000877380371
             }
         },
         {

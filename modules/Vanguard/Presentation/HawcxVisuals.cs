@@ -133,13 +133,13 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         {
             if (!UnitRegistry.TryGetUnit(missile.ownerID, out Unit owner) || !GameManager.GetLocalAircraft(out Aircraft me) || me != owner) return;
             if (!ModuleServices.TryGet(out IHudBoard board)) return;
-            board.DeclareChannel(Channel, "HAWC-X");
+            VanguardHudFeeds.DeclareChannel(Channel, "HAWC-X");
             uint id = missile.targetID.Id;
             if (terminal && targetId != 0 && id != targetId)
                 board.Notice(Channel, HudTone.Info, GlideProfile.ShiftText(FastMath.Distance(lastAim, aim)), "FINAL DIVE");
             targetId = id;
             lastAim = aim;
-            line ??= board.Acquire(Owner, Channel, missile.persistentID.Id.ToString());
+            line ??= VanguardHudFeeds.Acquire(board, Owner, Channel, missile.persistentID.Id.ToString());
             if (glow) line?.Set(HudTone.Caution, SkipText[GlideProfile.SkipAt(age)], "NO UPDATES", GlideProfile.SheathGlow(missile.speed));
             else if (phase == GlidePhase.Terminal) line?.Set(HudTone.Info, "FINAL - DESIGNATE TO SHIFT", "REACH 20 km", 1f);
             else if (phase == GlidePhase.Boost) line?.Set(HudTone.Info, "HAWC-X BOOST", null, age / GlideProfile.BoostTime);

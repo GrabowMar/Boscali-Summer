@@ -15,10 +15,10 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         {
             roundsLeft=System.Math.Max(0,System.Math.Min(roundsLeft,GlaiveProfile.Rounds));
             if (!ModuleServices.TryGet(out IHudBoard board)) return;
-            board.DeclareChannel(Channel,"SPECTRE");
+            VanguardHudFeeds.DeclareChannel(Channel,"SPECTRE");
             HudTone tone=phase == GlaivePhase.Depart ? (roundsLeft <= 0 ? HudTone.Warning : HudTone.Caution)
                 : phase == GlaivePhase.Orbit && slide >= GlaiveProfile.HandOffShown ? HudTone.Caution : HudTone.Info;
-            board.Acquire(Owner,Channel,droneKey)?.Set(tone,GlaiveProfile.HudText(phase,roundsLeft,slide),
+            VanguardHudFeeds.Acquire(board, Owner,Channel,droneKey)?.Set(tone,GlaiveProfile.HudText(phase,roundsLeft,slide),
                 Ammo[roundsLeft] ??= "30MM " + roundsLeft,roundsLeft/(float)GlaiveProfile.Rounds);
         }
     }

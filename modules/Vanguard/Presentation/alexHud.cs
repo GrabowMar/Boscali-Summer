@@ -37,7 +37,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             if (Time.unscaledTime < next) return;
             next = Time.unscaledTime + Refresh;
             if (board == null && !ModuleServices.TryGet(out board)) return;
-            board.DeclareChannel(Channel, "KITE");
+            VanguardHudFeeds.DeclareChannel(Channel, "KITE");
             if (!GameManager.GetLocalAircraft(out Aircraft me) || me == null || me.disabled)
             {
                 Drop();
@@ -78,7 +78,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
 
         private void ShowTowed(AlexView view, Aircraft me)
         {
-            line ??= board.Acquire(Owner, Channel, "status");
+            line ??= VanguardHudFeeds.Acquire(board, Owner, Channel, "status");
             // The fire press only cuts with the pod selected, so only then is it offered.
             bool podSelected = AlexFire.IsPod(me.weaponManager != null ? me.weaponManager.currentWeaponStation : null);
             int severity = AlexKite.Severity(view.Pips, view.Captured);
@@ -89,7 +89,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
 
         private void ShowAdrift(AlexView view)
         {
-            adrift ??= board.Acquire(Owner, Channel, "adrift");
+            adrift ??= VanguardHudFeeds.Acquire(board, Owner, Channel, "adrift");
             float left = Mathf.Max(0f, view.FreeLeft - (Time.unscaledTime - view.Stamp));
             adrift?.Set(HudTone.Info, "KITE ADRIFT", "SELF-DESTRUCT " + Mathf.CeilToInt(left) + " s", left / AlexKite.FreeSeconds);
         }

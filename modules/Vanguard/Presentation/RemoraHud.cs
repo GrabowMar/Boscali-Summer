@@ -36,7 +36,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             next = Time.unscaledTime + Interval;
             Prune();
             if (board == null && !ModuleServices.TryGet(out board)) return;
-            board.DeclareChannel(Channel, "REMORA");
+            VanguardHudFeeds.DeclareChannel(Channel, "REMORA");
             if (!GameManager.GetLocalAircraft(out Aircraft me) || me == null || me.disabled)
             {
                 Drop();
@@ -64,7 +64,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 Drop();
                 return;
             }
-            line ??= board.Acquire(Owner, Channel, "archer");
+            line ??= VanguardHudFeeds.Acquire(board, Owner, Channel, "archer");
             HudTone tone = worst == RemoraPhase.Ram ? HudTone.Warning : worst == RemoraPhase.Engage ? HudTone.Caution : HudTone.Info;
             string detail = worst == RemoraPhase.Ram ? "DRONE ON COLLISION COURSE"
                 : worst == RemoraPhase.Engage ? "CLOSING TO 12 KM"

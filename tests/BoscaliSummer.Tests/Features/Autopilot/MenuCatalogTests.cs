@@ -22,6 +22,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             PerksGroupByFrontAndCool();
             DefenceNamesTheOutcome();
             ViewRowsKeepTheirPlace();
+            PitKeepsStationIdentityWhileTheListShrinks();
         }
 
         internal static IEnumerable<MenuRow> AllRows(MenuModel model)
@@ -344,6 +345,21 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             m = MenuCatalog.Build(two);
             TestAssert.That(m.Row("view/mslnext").State == "NEXT: MSL 3/3" && m.Row("view/mslprev").State == "PREV: MSL 1/3", "the steps wrap around the list");
             TestAssert.Eq(MenuCatalog.Build(MenuWorlds.Default()).Row("targets/filters/sam-sites").State, "SLOT 2", "a filter names its quick slot");
+        }
+
+        private static void PitKeepsStationIdentityWhileTheListShrinks()
+        {
+            MenuWorld world = MenuWorlds.Pit();
+            MenuModel live = MenuCatalog.Build(world);
+            TestAssert.That(live.Row("support/pit/mun").Selected && !live.Row("support/pit/fuel").Selected, "the host service order is shown");
+            TestAssert.Eq(live.Row("support/pit/station/9").Index, 9, "priority addresses the real pylon, not its list position");
+            world.PitStations.RemoveAt(0);
+            live.Reconcile(MenuCatalog.Build(world));
+            TestAssert.That(live.Row("support/pit/station/4").Gone, "a station that filled is unavailable until the menu closes");
+            TestAssert.Eq(live.Row("support/pit/station/9").Index, 9, "the surviving station never changes its target index");
+            world.PitAvailable = false;
+            live.Reconcile(MenuCatalog.Build(world));
+            TestAssert.That(live.Row("support/pit").Gone, "leaving service range makes the branch unavailable");
         }
 
         private static void BindAttachesRunToRunnableRows()
