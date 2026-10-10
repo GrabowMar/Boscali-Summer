@@ -206,7 +206,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 trackImage = trackObject.GetComponent<Image>();
                 trackImage.raycastTarget = false;
                 trackImage.sprite = AvSprites.White;
-                trackImage.color = Color.clear;
+                trackImage.color = Scrim(null);   // the scale sits on a plate, not straight on the sky
 
                 // The fill is a solid 3 px line up the middle of the tick scale drawn in PaintSymbols.
                 bar = HudSprites.Child(track, "Bar", AvSprites.White, sliced: false);
@@ -223,14 +223,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 var scrim = (RectTransform)scrimObject.transform;
                 scrim.SetParent(track, false);
                 scrim.anchorMin = scrim.anchorMax = new Vector2(0.5f, 0f);
-                scrim.offsetMin = new Vector2(-27f, -19f);
-                scrim.offsetMax = new Vector2(27f, -1f);
+                scrim.offsetMin = new Vector2(-36f, -19f);
+                scrim.offsetMax = new Vector2(36f, -1f);
                 Image scrimImage = scrimObject.GetComponent<Image>();
                 scrimImage.raycastTarget = false;
                 scrimImage.sprite = AvSprites.White;
                 scrimImage.color = Scrim(null);
                 barLabel = Label(track, "BarLabel", TextAlignmentOptions.Top, 12f,
-                    new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-26f, -18f), new Vector2(26f, -2f));
+                    new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-35f, -18f), new Vector2(35f, -2f));
             }
 
             return new Box
@@ -378,12 +378,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             PaintSymbols(screenW, screenH, ink, spdLit, altLit, fuelColor, cameraTexture != null, pullUpFlash,
                 f.BankDeg, f.SlipDeg);
 
+            WriteSpeedCaption(overG);
             WriteSpeed(f.SpeedMps, units);
             WriteAltitude(f.AltitudeM, units);
             WriteAltCaption(f.RadarAltM, terrain, units);
             WriteHeading(f.HeadingDeg);
             WriteMachG(f.Mach, f.G);
-            WriteAoa(f.AoaDeg);
+            WriteAoa(overG ? float.NaN : f.AoaDeg);   // the 106 px caption row holds OVER-G or the AoA beside SPD, not both
             WriteClimb(f.ClimbMps, units);
 
             PresentTargetCard(cameraTexture, cameraCode, rangeM, closureMps, screenW, screenH, ink, units);
@@ -396,8 +397,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>A dark scrim so thin ink survives bright haze (a lit cue tints it toward its colour).</summary>
         private static Color Scrim(Color? lit) => lit.HasValue
-            ? new Color(0.01f + lit.Value.r * 0.10f, 0.02f + lit.Value.g * 0.10f, 0.03f + lit.Value.b * 0.10f, 0.72f)
-            : new Color(0.01f, 0.02f, 0.03f, 0.58f);
+            ? new Color(0.01f + lit.Value.r * 0.10f, 0.02f + lit.Value.g * 0.10f, 0.03f + lit.Value.b * 0.10f, 0.88f)
+            : new Color(0.01f, 0.02f, 0.03f, 0.72f);
 
         /// <summary>Normal: ink on the scrim. Lit: value, caption and sub-line in <paramref name="lit"/>, on a scrim tinted with
         /// it so the cue survives a bright sky (brackets light in PaintSymbols).</summary>
@@ -459,6 +460,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             symbols.Commit();
         }
 
+        private static readonly float[] BankTicks = { -45f, -30f, -20f, -10f, 0f, 10f, 20f, 30f, 45f };
+
         /// <summary>
         /// Bank &amp; slip under the HDG box (after NO_Tactitools): a ±45° tick arc with a pointer swung to the bank side
         /// (clamped at 50°), and a slip ball between cage marks that rolls away from the slip like a real inclinometer.
@@ -468,8 +471,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             const float R = 64f, MaxBank = 45f, BallTravel = 22f, SlipFull = 10f;
             float cx = hdg.CenterX, top = hdg.Bottom - 12f, cy = top - R;
             Rgba dim = ink.WithAlpha(0.7f);
+            // A dark plate behind the arc, ticks and tube so the thin ink survives a bright haze.
+            float plateBottom = top - R * (1f - Mathf.Cos(MaxBank * Mathf.Deg2Rad)) - 24f;
+            AvStrokes.Fill(b, cx - R * 0.72f - 12f, plateBottom, R * 1.44f + 24f, top + 12f - plateBottom, new Rgba(0.01f, 0.02f, 0.03f, 0.72f));
             AvStrokes.Arc(b, cx, cy, R, 90f - MaxBank, 90f + MaxBank, 24, 1.5f, dim);
-            foreach (float tick in new[] { -45f, -30f, -20f, -10f, 0f, 10f, 20f, 30f, 45f })
+            foreach (float tick in BankTicks)
             {
                 float a = (90f - tick) * Mathf.Deg2Rad, len = tick == 0f || Mathf.Abs(tick) == 45f ? 10f : 6f;
                 AvStrokes.Line(b, cx + Mathf.Cos(a) * R, cy + Mathf.Sin(a) * R, cx + Mathf.Cos(a) * (R + len), cy + Mathf.Sin(a) * (R + len), 1.5f, dim);
@@ -555,19 +561,28 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             alt.Initialized = true;
         }
 
-        /// <summary>"ALT" normally; "R 120ft" under <see cref="HudCues.ShowRadarBelowM"/>;
+        /// <summary>"SPD" normally, "OVER-G" while the load factor cautions (the amber box says why).</summary>
+        private void WriteSpeedCaption(bool overG)
+        {
+            float key = overG ? -2f : -1f;
+            if (spd.LastCaption == key) return;
+            spd.Caption.text = overG ? "OVER-G" : "SPD";
+            spd.LastCaption = key;
+        }
+
+        /// <summary>"ALT" normally; "R 120ft" under <see cref="HudCues.ShowRadarBelowM"/>, "LOW R 120ft" when sinking low;
         /// "PULL UP" when the ground is seconds away.</summary>
         private void WriteAltCaption(float radarAltM, TerrainCue terrain, AvUnits units)
         {
-            bool showRadar = float.IsFinite(radarAltM) && radarAltM < HudCues.ShowRadarBelowM;
-            float key = terrain == TerrainCue.PullUp ? -2f : showRadar ? Mathf.Round(AvUnitTable.Altitude(radarAltM, units) / 10f) : -1f;
+            bool showRadar = float.IsFinite(radarAltM) && radarAltM < HudCues.ShowRadarBelowM, low = terrain == TerrainCue.Low;
+            float key = terrain == TerrainCue.PullUp ? -2f : showRadar ? Mathf.Round(AvUnitTable.Altitude(radarAltM, units) / 10f) + (low ? 1e6f : 0f) : -1f;
             if (alt.LastCaption == key) return;
             int len;
             if (key == -2f) len = AvNumFormat.Append(buf, 0, "PULL UP");
             else if (key == -1f) len = AvNumFormat.Append(buf, 0, "ALT");
             else
             {
-                len = AvNumFormat.Append(buf, 0, "R ");
+                len = AvNumFormat.Append(buf, 0, low ? "LOW R " : "R ");
                 len = AvUnitTable.AltitudeReading(buf, len, radarAltM, units);
             }
             alt.Caption.text = new string(buf, 0, len);
@@ -606,7 +621,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             spd.LastSub = key;
         }
 
-        /// <summary>"AOA 4.2°" at the right end of the SPD caption row; blank while the native readout is off (slow or no data).</summary>
+        /// <summary>"AOA 4.2°" at the right end of the SPD caption row; blank while the native readout is off (slow or no data) and while OVER-G fills the row.</summary>
         private void WriteAoa(float aoaDeg)
         {
             if (spd.CaptionRight == null) return;
