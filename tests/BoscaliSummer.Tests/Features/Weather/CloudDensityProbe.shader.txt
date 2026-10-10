@@ -18,7 +18,7 @@ Shader "Hidden/Boscali/CloudDensityProbe"
             #pragma vertex vert_img
             #pragma fragment Probe
             sampler2D _DensityProbePositions;
-            float _ProbeRainMode, _ProbeSlabMode, _ProbeAirMode;
+            float _ProbeRainMode, _ProbeSlabMode, _ProbeAirMode, _ProbeTapeMode;
             float _ProbeRayMode, _ProbeRaySceneDistance;
             float3 _ProbeRayOrigin, _ProbeRayDirection;
             float3 _ProbeRainOrigin, _ProbeRainRay;
@@ -45,6 +45,19 @@ Shader "Hidden/Boscali/CloudDensityProbe"
                 {
                     float3 p = tex2Dlod(_DensityProbePositions, float4(i.uv, 0, 0)).xyz;
                     return float4(AirTransmittance(p.x, p.y, p.z), 0, 0, 0);
+                }
+                if (_ProbeTapeMode > 0.5)
+                {
+                    // 1 = the low genus row, 2 = the middle layer, 3 = the high layer, at the tape position of a map point
+                    float3 p = tex2Dlod(_DensityProbePositions, float4(i.uv, 0, 0)).xyz;
+                    float s = TapeS(p.xz);
+                    if (_ProbeTapeMode < 1.5)
+                    {
+                        LowRow low = TapeLow(s);
+                        return float4(s, low.lobeRung, low.puffDepth, low.horizonCover);
+                    }
+                    LayerRow row = TapeLayer(s, _ProbeTapeMode < 2.5 ? 0.0 : 1.0);
+                    return float4(row.baseY, row.thick, row.cover, row.periodRung);
                 }
                 if (_ProbeSlabMode > 0.5)
                 {

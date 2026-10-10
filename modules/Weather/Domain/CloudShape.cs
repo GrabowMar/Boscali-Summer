@@ -15,7 +15,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
             float dome, float billow, float anvil, float sheetBlend)
         {
             LobeRung = lobeRung;
-            PuffScale = Ladder.LobeMetres(lobeRung);
             PuffDepth = puffDepth;
             BaseSharp = baseSharp;
             BaseWobble = baseWobble;
@@ -27,9 +26,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         /// <summary>Lobe size on the ladder (Ladder.LobeMetres); fractional only inside a ramp, where the shader blends two rungs.</summary>
         public float LobeRung { get; }
-        /// <summary>INTERIM(until Task 9 removes the _PuffScale uniform and this property): metres of the lobe rung (the ladder formula at a fractional
-        /// index, not the lower rung's size). Nothing on the CPU reads it any more; the field and the shader use <see cref="LobeRung"/>.</summary>
-        public float PuffScale { get; }
         public float PuffDepth { get; }
         /// <summary>Metres of the base transition. Small is a flat cumulus base.</summary>
         public float BaseSharp { get; }
