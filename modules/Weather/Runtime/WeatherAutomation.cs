@@ -85,6 +85,22 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             return Readout(manager);
         }
 
+        /// <summary>Pin the whole sky to one of the 47 library skies: <c>sky</c> is 1-47, or 0 to unpin and resume the changing
+        /// weather. Host only; it goes through the same key path as the console, so clients receive the pin.</summary>
+        public static Dictionary<string, object> PinSky(Dictionary<string, object> args)
+        {
+            WeatherManager manager = Find();
+            if (manager == null) return Fail("PinSky", "no weather manager in this scene");
+            if (!BoscaliSummer.Core.Game.GameAccess.IsServer()) return Fail("PinSky", "pinning a sky is host-only");
+            float number = Number(args, "sky", 0f);
+            if (!(number >= 0f && number <= SkyLibrary.Count)) return Fail("PinSky", "sky must be 0 (unpin) or 1.." + SkyLibrary.Count);
+            int sky = Mathf.RoundToInt(number);
+            if (!manager.PinSky(sky == 0 ? WeatherKey.None : (byte)(sky - 1)))
+                return Fail("PinSky", "the weather has not started or has no valid mission clock yet");
+            manager.LogAutomation("PinSky: " + sky);
+            return Readout(manager);
+        }
+
         /// <summary>Apply an existing console preset through its native host-authoritative path.</summary>
         public static Dictionary<string, object> ApplyScenario(Dictionary<string, object> args)
         {

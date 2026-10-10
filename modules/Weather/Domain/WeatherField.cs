@@ -135,9 +135,15 @@ namespace BoscaliSummer.Modules.Weather.Domain
             HourOfDay = hourOfDay;
             HazeScale = Scalar.Clamp(hazeScale, 0.05f, 1f);
 
-            TimelineState timeline = WeatherTimeline.Evaluate(key, time);
+            // INTERIM(slice 4): a pinned sky holds one library instance; otherwise the legacy timeline walks the class skies.
+            bool pinned = key.SkyPin < SkyLibrary.Count;
+            TimelineState timeline = pinned
+                ? WeatherTimeline.Held(key, SkyLibrary.ClassOf(key.SkyPin))
+                : WeatherTimeline.Evaluate(key, time);
             Timeline = timeline;
-            SkyParams sky = StateTable.At(timeline.Level);
+            SkyParams sky = pinned
+                ? SkyLibrary.Instance(key.SkyPin, SkyLibrary.PinSeed(key), key.OpeningBase)
+                : StateTable.At(timeline.Level);
             Params = sky;
             constantTape.SetConstant(sky);
             Tape = new TapeSampler(constantTape);
@@ -147,7 +153,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
             Split = SkySplit.From(timeline.Layout, sky.Split, HalfX, HalfZ, PrevailingHeading, 0); // INTERIM(slice 4): no front turn
             FrontCount = WeatherFronts.Fill(fronts, timeline.Layout, sky, HalfX, HalfZ, PrevailingHeading, Split);
-            SkyParams convection = StateTable.At(timeline.GrowthLevel);
+            SkyParams convection = pinned ? sky : StateTable.At(timeline.GrowthLevel);
             CellCount = StormCells.Fill(cells, timeline.Layout, convection, HalfX, HalfZ, driftX, driftZ, Split);
             CloudClusterCount = 0;
             for (int i = 0; i < cloudClusters.Length; i++)

@@ -56,18 +56,21 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>INTERIM(slice 4): were key fields; the key no longer carries them.</summary>
         public const float IntervalMinutes = 5f, FadeSeconds = 60f;
 
+        /// <summary>A timeline that holds one state for ever. A pinned sky and a held key both use it.</summary>
+        public static TimelineState Held(WeatherKey key, WeatherRegimeType state)
+        {
+            return new TimelineState
+            {
+                From = state, To = state, Blend = 1f, Level = (int)state, GrowthLevel = (int)state,
+                StepStart = key.Epoch, NextChangeAt = float.PositiveInfinity, Next = state,
+                Layout = LayoutSeed(key, 0),
+            };
+        }
+
         public static TimelineState Evaluate(WeatherKey key, float time)
         {
             WeatherRegimeType start = key.OpeningState();
-            if (!key.Dynamic)
-            {
-                return new TimelineState
-                {
-                    From = start, To = start, Blend = 1f, Level = (int)start, GrowthLevel = (int)start,
-                    StepStart = key.Epoch, NextChangeAt = float.PositiveInfinity, Next = start,
-                    Layout = LayoutSeed(key, 0),
-                };
-            }
+            if (!key.Dynamic) return Held(key, start);
 
             float interval = IntervalMinutes * 60f;
             float fade = Math.Min(FadeSeconds, interval * 0.5f);

@@ -884,6 +884,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 { "weatherLevel", Field != null ? Field.Timeline.Level : -1f },
                 { "weatherStep", Field != null ? Field.Timeline.Step : -1 },
                 { "fieldCover", localWeather.Cover },
+                { "skyPin", fieldKey != null && fieldKey.SkyPin < SkyLibrary.Count ? fieldKey.SkyPin + 1 : 0 },
+                { "skyName", fieldKey != null && fieldKey.SkyPin < SkyLibrary.Count ? SkyLibrary.Get(fieldKey.SkyPin).Name : "-" },
                 { "frontCount", Field?.FrontCount ?? 0 },
                 { "frontKind", Field != null && Field.FrontCount > 0 ? (int)Field.Front(0).Kind : -1 },
                 { "cellCount", Field?.CellCount ?? 0 },
@@ -1434,6 +1436,24 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             fieldKey = fieldKey.Rebased(now, false).WithMissionClass((byte)state); // INTERIM(slice 4): the held state is the opener
             RekeyAndSync(now);
             NotifyPlayer("HOLD " + RegimeSnapshot.FromType(state).Name, forcedRainIntensity);
+        }
+
+        /// <summary>
+        /// Pins the whole sky to one library sky (index 0-46, spec 4.4) or, with <see cref="WeatherKey.None"/>, unpins it and resumes the
+        /// changing weather from the class on screen. INTERIM(slice 4): the tape console's Pin sky replaces this entry point; the sims
+        /// call it through WeatherAutomation.PinSky. Host only; the pin travels in the key like any other edit.
+        /// </summary>
+        internal bool PinSky(byte sky)
+        {
+            if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return false;
+            if (sky != WeatherKey.None && sky >= SkyLibrary.Count) return false;
+            if (sky == WeatherKey.None) { ResumeChanging(); return true; }
+            isManualOverride = true;
+            explicitTargets = false;
+            fieldKey = fieldKey.Rebased(now, false).WithSkyPin(sky);
+            RekeyAndSync(now);
+            NotifyPlayer("SKY " + (sky + 1) + " " + SkyLibrary.Get(sky).Name.ToUpperInvariant(), forcedRainIntensity);
+            return true;
         }
 
         /// <summary>Back to changing weather, starting from the state on screen.</summary>

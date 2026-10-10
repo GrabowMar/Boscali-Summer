@@ -167,6 +167,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public static SkyParams Nominal(int index) => Defs[index].Nominal;
         public static WeatherRegimeType ClassOf(int index) => Defs[index].Class;
 
+        /// <summary>The seed a pinned sky is jittered with: the tape seed and the layout salt, so Re-roll gives another instance of the same sky.</summary>
+        public static uint PinSeed(WeatherKey key) => unchecked(key.Seed ^ (key.LayoutSalt * 0x9E3779B1u));
+
         private static SkyBuilder Sky(string name, WeatherRegimeType cls) => new SkyBuilder(name, cls);
 
         private static SkyDef[] BuildAll()

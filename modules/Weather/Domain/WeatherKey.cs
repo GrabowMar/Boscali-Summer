@@ -114,13 +114,17 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public WeatherKey WithoutAnchor() => Copy(anchor: false);
 
         /// <summary>INTERIM(slice 4): the legacy timeline needs an opener; the tape never re-keys its class.</summary>
-        public WeatherKey WithMissionClass(byte missionClass) => Copy(missionClass: missionClass);
+        public WeatherKey WithMissionClass(byte missionClass) => Copy(missionClass: missionClass, skyPin: None);
+
+        /// <summary>Pins the whole sky to one library sky (index 0-46), or unpins it with <see cref="None"/>. A pin changes the tape identity, so it is a cut.
+        /// INTERIM(slice 4): a held or scenario state unpins (<see cref="WithMissionClass"/>), the tape console's Pin sky arrives in slice 4.</summary>
+        public WeatherKey WithSkyPin(byte skyPin) => Copy(skyPin: skyPin);
 
         private WeatherKey Copy(byte? missionClass = null, byte? sets = null, byte? salt = null, bool? anchor = null,
             float? x = null, float? z = null, float? epoch = null, float? offset = null, bool? dynamic = null,
-            float? systemSpeed = null) =>
+            float? systemSpeed = null, byte? skyPin = null) =>
             new WeatherKey(Seed, epoch ?? Epoch, dynamic ?? Dynamic, missionClass ?? MissionClass, sets ?? Sets,
-                salt ?? LayoutSalt, anchor ?? HasAnchor, x ?? AnchorX, z ?? AnchorZ, Story, SkyPin, OpeningBase,
+                salt ?? LayoutSalt, anchor ?? HasAnchor, x ?? AnchorX, z ?? AnchorZ, Story, skyPin ?? SkyPin, OpeningBase,
                 HeadingDeg, offset ?? Offset, systemSpeed ?? SystemSpeed, SetOriginSquall, SetOriginSupercell, SetOriginCell);
 
         /// <summary>The state the legacy timeline opens with. INTERIM(slice 4).</summary>
