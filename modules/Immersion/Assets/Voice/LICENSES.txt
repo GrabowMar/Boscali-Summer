@@ -2,7 +2,7 @@ Recorded pilot voices: sources and licences
 ===========================================
 
 Every clip in this folder is cut and filtered from a Creative Commons 0 (public domain) recording by
-tools/Build-PilotVoices.py. Licences were checked on the source pages on 2026-10-10. CC0 needs no credit;
+tools/Build-SoundClips.py. Licences were checked on the source pages on 2026-10-10. CC0 needs no credit;
 the authors are named here as thanks and so the clips can be rebuilt.
 
 keh0-keh4.wav   "strenuous_grunts" by takareads

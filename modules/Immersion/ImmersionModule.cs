@@ -31,7 +31,8 @@ namespace BoscaliSummer.Modules.Immersion
             CockpitPilot pilot = context.AddSceneService<CockpitPilot>(48);
             pilot.Configure(context.Settings.Immersion, context.Logger);
             context.AddClientEffect(pilot);
-            var gallery = new Visuals.KneeboardGallery(context.Settings.Immersion, pilot.DebugRefreshKneeboard);
+            var gallery = new Visuals.KneeboardGallery(context.Settings.Immersion,
+                () => { pilot.DebugRefreshKneeboard(); ImmersionManager.Live?.PageFlip(); });
             pilot.SetKneeboardGallery(gallery);
             context.AddService<IKneeboardGallery>(gallery);
 

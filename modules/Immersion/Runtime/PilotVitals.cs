@@ -14,8 +14,6 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         private static readonly AccessTools.FieldRef<GLOC, float> BloodPressure = Ref<float>("bloodPressure");
         private static readonly AccessTools.FieldRef<GLOC, float> Stamina = Ref<float>("stamina");
         private static readonly AccessTools.FieldRef<GLOC, bool> Conscious = Ref<bool>("conscious");
-        // Net blast (hit points on one part) that marks a warhead rather than a cannon shell. A rough line on purpose.
-        private const float WarheadBlast = 10f;
         private readonly List<GLOC> found = new List<GLOC>(2);
         private Pilot pilot;
         private Aircraft aircraft;
@@ -31,7 +29,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         {
             hits++;
             struck = true;
-            if (blastDamage >= WarheadBlast) blast = true;
+            if (blastDamage >= FoleyMath.WarheadBlast) blast = true;
         }
         /// <summary>Clear hit pulses once a physiology step actually consumed them.</summary>
         internal void ConsumeHits() { hits = 0; blast = false; }

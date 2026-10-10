@@ -73,7 +73,7 @@ namespace BoscaliSummer.Modules.Immersion.Patches
         private static void Postfix(Aircraft __instance, DamageInfo __1)
         {
             if (ImmersionManager.IsCockpitActive && ReferenceEquals(__instance, ImmersionManager.FollowingUnit))
-                ImmersionManager.Live?.OnPlayerHit(__1.blastDamage.Decompress());
+                ImmersionManager.Live?.OnPlayerHit(__1.pierceDamage.Decompress(), __1.blastDamage.Decompress());
         }
     }
 }

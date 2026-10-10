@@ -42,6 +42,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         private AirframeAudio airframeAudio;
         private CanopyWindAudio windAudio;
         private PilotBreathingAudio pilotBreathingAudio;
+        private CockpitFoley foley;
         private readonly PilotPhysiology physiology = new PilotPhysiology();
         private readonly PilotVitals vitals = new PilotVitals();
         private float debugG, debugGUntil = -1f, debugLookUntil = -1f;
@@ -65,7 +66,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         }
 
         public string EffectId => "immersion";
-        public FxBudget Budget => new FxBudget(0, 1, 5, true);
+        public FxBudget Budget => new FxBudget(0, 1, 6, true);
 
         public void ReleaseFx()
         {
@@ -75,9 +76,11 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             if (airframeAudio != null) { airframeAudio.Release(); Object.Destroy(airframeAudio); }
             if (windAudio != null) { windAudio.Release(); Object.Destroy(windAudio); }
             if (pilotBreathingAudio != null) { pilotBreathingAudio.Release(); Object.Destroy(pilotBreathingAudio); }
+            foley?.Release();
             airframeAudio = null;
             windAudio = null;
             pilotBreathingAudio = null;
+            foley = null;
         }
 
         public void DescribeFx(IDictionary<string, object> state)
@@ -90,7 +93,19 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         internal PilotPhysiology Physiology => physiology;
         internal ImmersionSettings Settings => settings;
         internal PilotCue Cues { get; private set; }
-        internal void OnPlayerHit(float blastDamage) => vitals.AddHit(blastDamage);
+        internal void OnPlayerHit(float pierceDamage, float blastDamage)
+        {
+            vitals.AddHit(blastDamage);
+            if (settings.AirframeAudioEnabled.Value) foley?.Hit(pierceDamage, blastDamage);
+        }
+
+        /// <summary>The kneeboard card changed (SQD STUDIO): paper noise, in or out of the cockpit view.</summary>
+        internal void PageFlip()
+        {
+            if (settings == null || !settings.Enabled.Value || Application.isBatchMode) return;
+            EnsureFoley();
+            foley.PageFlip();
+        }
 
         /// <summary>Automation only: hold an extra cockpit look (degrees) for captures; the visor may ignore the hidden sim HUD.</summary>
         internal void DebugLook(float pitch, float yaw, float seconds)
@@ -204,6 +219,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             if (airframeAudio != null) airframeAudio.Silence();
             if (windAudio != null) windAudio.Silence();
             if (pilotBreathingAudio != null) pilotBreathingAudio.Silence(true);
+            foley?.Reset();
             IsCockpitActive = false;
             FollowingUnit = null;
             physiology.Reset();
@@ -333,6 +349,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
                 airframeAudio.TryRoute();
                 airframeAudio.Tick(head.ForceG, dt, true, 0.55f, settings.AirframeAudioEnabled.Value);
             }
+            foley.Tick(physiology.LoadG, dt, settings.AirframeAudioEnabled.Value);
             if (windAudio != null)
             {
                 windAudio.TryRoute();
@@ -362,8 +379,16 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             cameraOffset.Remove();
         }
 
+        private void EnsureFoley()
+        {
+            if (foley != null) return;
+            foley = new CockpitFoley();
+            foley.Initialize(gameObject);
+        }
+
         private void EnsureAudioComponents()
         {
+            EnsureFoley();
             if (airframeAudio == null)
             {
                 airframeAudio = gameObject.AddComponent<AirframeAudio>();
@@ -442,6 +467,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             state["immersionBreathPlaying"] = pilotBreathingAudio != null && pilotBreathingAudio.IsPlaying;
             state["immersionBreathPlayed"] = pilotBreathingAudio != null ? pilotBreathingAudio.Played : 0;
             state["immersionRecordedVoices"] = pilotBreathingAudio != null ? pilotBreathingAudio.RecordedVoices : 0;
+            state["immersionFoleyPlayed"] = foley != null ? foley.Played : 0;
             state["visorVisible"] = visor.Visible;
             state["visorTint"] = visor.Tint;
             state["visorSunLit"] = visor.SunLit;

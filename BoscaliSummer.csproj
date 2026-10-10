@@ -202,6 +202,9 @@
     <EmbeddedResource Include="modules\Immersion\Assets\Voice\*.wav">
       <LogicalName>BoscaliSummer.Immersion.Voice.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Core\Fx\Sfx\*.wav">
+      <LogicalName>BoscaliSummer.Sfx.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup Label="Superevent posters">

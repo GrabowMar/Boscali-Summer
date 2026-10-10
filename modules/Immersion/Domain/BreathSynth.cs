@@ -11,7 +11,7 @@ namespace BoscaliSummer.Modules.Immersion.Domain
     /// <summary>
     /// Deterministic one-time synthesis of oxygen-mask and body sounds (no Unity types; baked off the main thread).
     /// Mask sounds are genuinely shaped noise through a valve; voiced effort sounds are formant-filtered
-    /// pulse trains and stand in wherever no recorded clip ships (see <see cref="PcmWav"/>, tools/Build-PilotVoices.py).
+    /// pulse trains and stand in wherever no recorded clip ships (Assets/Voice, cut by tools/Build-SoundClips.py).
     /// </summary>
     internal static class BreathSynth
     {

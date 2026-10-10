@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text;
+using BoscaliSummer.Core.Util;
 using BoscaliSummer.Modules.Immersion.Domain;
 
 namespace BoscaliSummer.Tests.Features.Immersion

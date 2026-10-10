@@ -60,9 +60,12 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             object card = Arg(args, "kneeboardCard");
             if (card != null)
             {
-                try { manager.Settings.KneeboardCard.Value = System.Math.Max(0, System.Convert.ToInt32(card, System.Globalization.CultureInfo.InvariantCulture)); }
+                int index;
+                try { index = System.Math.Max(0, System.Convert.ToInt32(card, System.Globalization.CultureInfo.InvariantCulture)); }
                 catch (System.Exception) { return Failure("ImmersionAutomation", "Configure", "kneeboardCard must be a number"); }
-                CockpitPilot.Live?.DebugRefreshKneeboard();
+                // Through the gallery, as SQD STUDIO does, so the card refresh and the page flip both run.
+                if (BoscaliSummer.Core.Services.ModuleServices.TryGet(out BoscaliSummer.Core.Contracts.IKneeboardGallery gallery)) gallery.Selected = index;
+                else { manager.Settings.KneeboardCard.Value = index; CockpitPilot.Live?.DebugRefreshKneeboard(); }
             }
             manager.LogAutomation("Configure: body=" + manager.Settings.PilotBodyEnabled.Value + " reflection=" + manager.Settings.PilotReflectionEnabled.Value +
                 " visor=" + manager.Settings.HelmetVisorEnabled.Value + " breathing=" + manager.Settings.PilotBreathingEnabled.Value);
@@ -89,8 +92,8 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         }
 
         /// <summary>
-        /// Deal real blast damage to the followed aircraft (args: blast per part, parts counted from the end of its part
-        /// list) so the hit hook, the warhead test and the crippled check run end to end. Host only; it does break the aircraft.
+        /// Deal real damage to the followed aircraft (args: blast and pierce per part, parts counted from the end of its
+        /// part list) so the hit hook, the warhead test and the crippled check run end to end. Host only; it does break the aircraft.
         /// </summary>
         public static Dictionary<string, object> InjectHit(Dictionary<string, object> args)
         {
@@ -99,25 +102,26 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             Aircraft aircraft = cameras != null ? cameras.followingUnit as Aircraft : null;
             if (manager == null || aircraft == null || aircraft.partLookup == null)
                 return Failure("ImmersionAutomation", "InjectHit", "no followed aircraft in this scene");
-            float blast;
+            float blast, pierce;
             int count;
             try
             {
                 blast = System.Convert.ToSingle(Arg(args, "blast") ?? 50f, System.Globalization.CultureInfo.InvariantCulture);
+                pierce = System.Convert.ToSingle(Arg(args, "pierce") ?? 0f, System.Globalization.CultureInfo.InvariantCulture);
                 count = System.Convert.ToInt32(Arg(args, "parts") ?? 1, System.Globalization.CultureInfo.InvariantCulture);
             }
-            catch (System.Exception) { return Failure("ImmersionAutomation", "InjectHit", "blast and parts must be numbers"); }
-            if (float.IsNaN(blast) || blast < 0f || blast > 5000f || count < 1 || count > 64)
-                return Failure("ImmersionAutomation", "InjectHit", "blast must be 0..5000 and parts 1..64");
+            catch (System.Exception) { return Failure("ImmersionAutomation", "InjectHit", "blast, pierce and parts must be numbers"); }
+            if (float.IsNaN(blast) || blast < 0f || blast > 5000f || float.IsNaN(pierce) || pierce < 0f || pierce > 5000f || count < 1 || count > 64)
+                return Failure("ImmersionAutomation", "InjectHit", "blast and pierce must be 0..5000 and parts 1..64");
             int struck = 0;
             for (int i = aircraft.partLookup.Count - 1; i >= 0 && struck < count; i--)
             {
                 UnitPart part = aircraft.partLookup[i];
                 if (part == null || part == aircraft.cockpit) continue;
-                part.TakeDamage(0f, blast, 1f, 0f, 0f, PersistentID.None);
+                part.TakeDamage(pierce, blast, 1f, 0f, 0f, PersistentID.None);
                 struck++;
             }
-            manager.LogAutomation("InjectHit: blast " + blast + " on " + struck + " parts");
+            manager.LogAutomation("InjectHit: blast " + blast + " pierce " + pierce + " on " + struck + " parts");
             Dictionary<string, object> state = Readout(manager);
             state["partsStruck"] = struck;
             return state;

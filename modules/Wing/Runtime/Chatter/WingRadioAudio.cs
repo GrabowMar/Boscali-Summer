@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 
+using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Modules.Wing.Configuration;
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
@@ -26,6 +27,40 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         private static AudioClip threatClip;
         private static AudioClip splashClip;
+        private static readonly string[] Tails = { "radio-tail-0", "radio-tail-1" };
+        private static AudioSource tailSource;
+
+        /// <summary>Rough time to say a line when no clip length is known.</summary>
+        public static float SpokenSeconds(string text) => string.IsNullOrEmpty(text) ? .6f : .5f + text.Length * .055f;
+
+        /// <summary>Close a transmission with a recorded squelch tail once the line has been spoken.
+        /// A new line re-times the pending tail, so an interrupted line gets none.</summary>
+        public static void Tail(float afterSeconds)
+        {
+            if (unavailable || WingSettings.Instance == null || WingSettings.Instance.Radio.Value == RadioLevel.Off) return;
+            try
+            {
+                SoundManager sound = SoundManager.i;
+                AudioClip clip = SfxClips.Get(Tails[UnityEngine.Random.Range(0, Tails.Length)]);
+                if (sound == null || clip == null) return;
+                if (tailSource == null)
+                {
+                    var go = new GameObject("BoscaliRadioTail") { hideFlags = HideFlags.HideAndDontSave };
+                    UnityEngine.Object.DontDestroyOnLoad(go);
+                    tailSource = go.AddComponent<AudioSource>();
+                    tailSource.spatialBlend = 0f; tailSource.playOnAwake = false; tailSource.volume = .45f;
+                }
+                tailSource.outputAudioMixerGroup = sound.InterfaceMixer;
+                tailSource.Stop();
+                tailSource.clip = clip;
+                tailSource.PlayDelayed(Mathf.Clamp(afterSeconds, .3f, 8f));
+            }
+            catch (Exception e)
+            {
+                unavailable = true;
+                WingLog.Verbose("[Comms] audio playback unavailable: " + e.Message);
+            }
+        }
 
         /// <summary>Play a distinct avionics earcon.</summary>
         public static void Play(Earcon earcon)

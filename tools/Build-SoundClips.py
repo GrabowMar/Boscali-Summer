@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Cut the recorded pilot voices (anti-G grunts, ragged mask breaths, wake-up gasp, heartbeat) from CC0 recordings.
+"""Cut the mod's recorded sounds from CC0 recordings: pilot voices and one-shot effects.
 
-Sources (all CC0, see modules/Immersion/Assets/Voice/LICENSES.txt) are not kept in the repo; download them into a
-new empty folder. Decoding FLAC/MP3 needs Blender (its `aud` module); everything else is numpy + PIL.
+Sources (all CC0, listed in the LICENSES.txt beside each output folder) are not kept in the repo; download them
+into a new empty folder. Decoding FLAC/MP3/OGG needs Blender (its `aud` module); everything else is numpy + PIL.
 
-  "<blender>" -b --python tools/Build-PilotVoices.py -- decode --src <downloads> --out <pcm dir>
-  python -I tools/Build-PilotVoices.py analyze --pcm <pcm dir> --sheet overview.png [--floor -12]   (find the cut points)
-  python -I tools/Build-PilotVoices.py build --pcm <pcm dir> [--sheet voices.png]
+  "<blender>" -b --python tools/Build-SoundClips.py -- decode --src <downloads> --out <pcm dir>
+  python -I tools/Build-SoundClips.py analyze --pcm <pcm dir> --sheet overview.png [--floor -12]   (find the cut points)
+  python -I tools/Build-SoundClips.py build --pcm <pcm dir> [--sheet clips.png]
 
-Output: modules/Immersion/Assets/Voice/<breath sound>.wav, mono 16-bit 22050 Hz. A file is named after the
-BreathSound it replaces (keh0.wav ...); sounds without a file keep their synthesized version.
+Output, all mono 16-bit 22050 Hz:
+  modules/Immersion/Assets/Voice/<breath sound>.wav  named after the BreathSound it replaces (keh0.wav ...)
+  Core/Fx/Sfx/<name>.wav                              loaded by name through Core/Fx/SfxClips
+`build` writes the clips whose source is in the pcm folder and leaves the others alone.
 """
 from __future__ import annotations
 
@@ -21,21 +23,37 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / 'modules/Immersion/Assets/Voice'
+VOICE = ROOT / 'modules/Immersion/Assets/Voice'
+SFX = ROOT / 'Core/Fx/Sfx'
 RATE = 22050
 # file-name prefix of a download -> short key
-SOURCES = {'558618': 'exertion', '841313': 'grunts', '788055': 'mask', 'heartbeat_fast': 'heart_fast', 'heartbeat_slow': 'heart_slow'}
-# output name -> (source key, start s, end s, treatment, speed); times are in the decoded mono signal (see `analyze`)
-PICKS: dict[str, tuple[str, float, float, str, float]] = {
-    'keh0': ('grunts', 2.845, 3.25, 'mask', 1.0),        # five short strain grunts, one voice
-    'keh1': ('grunts', 4.495, 4.83, 'mask', 1.0),
-    'keh2': ('grunts', 6.265, 6.60, 'mask', 1.0),
-    'keh3': ('grunts', 7.955, 8.31, 'mask', 1.0),
-    'keh4': ('grunts', 9.695, 10.09, 'mask', 1.0),
-    'gasp0': ('exertion', 0.19, 0.97, 'mask', 1.0),       # a longer, spent effort
-    'gasp1': ('mask', 0.78, 2.22, 'mask', 1.9),           # a raspy breath snatched quickly
-    'recovery': ('mask', 8.82, 11.05, 'mask', 1.2),       # the deep breath on waking
-    'heart': ('heart_fast', 0.545, 0.99, 'body', 1.0),    # one lub-dub
+SOURCES = {'558618': 'exertion', '841313': 'grunts', '788055': 'mask', 'heartbeat_fast': 'heart_fast', 'heartbeat_slow': 'heart_slow',
+           '262516': 'metal', '30932': 'ricochet', '536187': 'leather', '536769': 'tyre', '136778': 'page',
+           '712918': 'collapse', '47646': 'radio_end', '524205': 'radio_off'}
+# output name -> (folder, source key, start s, end s, treatment, speed); times are in the decoded mono signal (see `analyze`)
+PICKS: dict[str, tuple[Path, str, float, float, str, float]] = {
+    'keh0': (VOICE, 'grunts', 2.845, 3.25, 'mask', 1.0),        # five short strain grunts, one voice
+    'keh1': (VOICE, 'grunts', 4.495, 4.83, 'mask', 1.0),
+    'keh2': (VOICE, 'grunts', 6.265, 6.60, 'mask', 1.0),
+    'keh3': (VOICE, 'grunts', 7.955, 8.31, 'mask', 1.0),
+    'keh4': (VOICE, 'grunts', 9.695, 10.09, 'mask', 1.0),
+    'gasp0': (VOICE, 'exertion', 0.19, 0.97, 'mask', 1.0),       # a longer, spent effort
+    'gasp1': (VOICE, 'mask', 0.78, 2.22, 'mask', 1.9),           # a raspy breath snatched quickly
+    'recovery': (VOICE, 'mask', 8.82, 11.05, 'mask', 1.2),       # the deep breath on waking
+    'heart': (VOICE, 'heart_fast', 0.545, 0.99, 'body', 1.0),    # one lub-dub
+    'hull-thud': (SFX, 'metal', 0.0, 0.55, 'dry', 0.55),         # a warhead on the airframe: the sheet hit, slowed
+    'hit-ping-0': (SFX, 'metal', 0.0, 0.30, 'dry', 1.25),        # bullet strikes: one tink, three ricochets
+    'hit-ping-1': (SFX, 'ricochet', 0.01, 0.60, 'dry', 1.0),
+    'hit-ping-2': (SFX, 'ricochet', 0.98, 1.58, 'dry', 1.0),
+    'hit-ping-3': (SFX, 'ricochet', 1.61, 2.25, 'dry', 1.0),
+    'harness-creak-0': (SFX, 'leather', 0.86, 1.80, 'dry', 1.0),
+    'harness-creak-1': (SFX, 'leather', 2.90, 3.68, 'dry', 1.0),
+    'harness-creak-2': (SFX, 'leather', 7.70, 8.73, 'dry', 1.0),
+    'page-flip': (SFX, 'page', 0.50, 1.45, 'dry', 1.0),
+    'building-collapse': (SFX, 'collapse', 0.0, 3.0, 'dry', 1.0),
+    'radio-tail-0': (SFX, 'radio_end', 0.0, 0.37, 'dry', 1.0),
+    'radio-tail-1': (SFX, 'radio_off', 0.0, 0.30, 'dry', 1.0),
+    # 'tyre' (536769) is decoded but unused: the game's own skid loop already squeals at touchdown.
 }
 
 
@@ -102,9 +120,12 @@ def centroid(x: np.ndarray) -> float:
 
 
 def shape(x: np.ndarray, treatment: str) -> np.ndarray:
-    """mask = heard through an oxygen mask (band-limited, a short resonance); body = heard inside the head."""
+    """mask = heard through an oxygen mask (band-limited, a short resonance); body = heard inside the head;
+    dry = as recorded, minus rumble below 40 Hz."""
     spectrum, f = np.fft.rfft(x), np.fft.rfftfreq(len(x), 1 / RATE)
-    if treatment == 'mask':
+    if treatment == 'dry':
+        y = np.fft.irfft(spectrum * (f / 40) ** 2 / np.sqrt(1 + (f / 40) ** 4), len(x))
+    elif treatment == 'mask':
         high_pass = (f / 180) ** 2 / np.sqrt(1 + (f / 180) ** 4)
         low_pass = 1 / np.sqrt(1 + (f / 6500) ** 8)
         presence = 1 + (10 ** (4 / 20) - 1) * np.exp(-.5 * (np.log2(np.maximum(f, 1) / 1200) / .5) ** 2)
@@ -113,9 +134,8 @@ def shape(x: np.ndarray, treatment: str) -> np.ndarray:
         y[delay:] = y[delay:] + .35 * y[:-delay].copy()
     else:
         y = np.fft.irfft(spectrum * (f / 25) ** 2 / np.sqrt(1 + (f / 25) ** 4) / np.sqrt(1 + (f / 400) ** 4), len(x))
-    fade = int(.005 * RATE)
-    ramp = np.linspace(0, 1, fade)
-    y[:fade] *= ramp; y[-fade:] *= ramp[::-1]
+    fade, tail = int(.005 * RATE), int((.03 if treatment == 'dry' else .005) * RATE)   # dry cuts often end mid-sound
+    y[:fade] *= np.linspace(0, 1, fade); y[-tail:] *= np.linspace(1, 0, tail)
     return (y * (10 ** (-3 / 20) / max(np.abs(y).max(), 1e-9))).astype(np.float32)
 
 
@@ -163,20 +183,24 @@ def analyze(pcm: Path, sheet: Path | None, floor_db: float) -> None:
 
 
 def build(pcm: Path, sheet: Path | None) -> None:
-    OUT.mkdir(parents=True, exist_ok=True)
-    rows, total = [], 0
-    for name, (key, start, end, treatment, speed) in PICKS.items():
-        cut = load(pcm, key)[int(start * RATE):int(end * RATE)]
+    rows, total, loaded = [], 0, {}
+    for name, (folder, key, start, end, treatment, speed) in PICKS.items():
+        if not (pcm / f'{key}.npy').exists():
+            continue
+        if key not in loaded:
+            loaded[key] = load(pcm, key)
+        cut = loaded[key][int(start * RATE):int(end * RATE)]
         y = shape(resample(cut, int(round(len(cut) / speed))), treatment)
-        with wave.open(str(OUT / f'{name}.wav'), 'wb') as out:
+        folder.mkdir(parents=True, exist_ok=True)
+        with wave.open(str(folder / f'{name}.wav'), 'wb') as out:
             out.setnchannels(1); out.setsampwidth(2); out.setframerate(RATE)
             out.writeframes((np.clip(y, -1, 1) * 32767).astype('<i2').tobytes())
-        total += (OUT / f'{name}.wav').stat().st_size
+        total += (folder / f'{name}.wav').stat().st_size
         rows.append((f'{name} <- {key} {start:.2f}-{end:.2f} x{speed} ({treatment})', y, []))
         print(f'{name}.wav  {len(y) / RATE:.2f} s  peak {db(np.abs(y).max()):.1f}  rms {db(np.sqrt((y ** 2).mean())):.1f} dB  centroid {centroid(y):.0f} Hz')
-    if sheet:
+    if sheet and rows:
         draw(rows, sheet)
-    print('PASS', len(PICKS), 'voices,', total // 1024, 'KB ->', OUT)
+    print('PASS', len(rows), 'of', len(PICKS), 'clips written,', total // 1024, 'KB')
 
 
 def main() -> None:

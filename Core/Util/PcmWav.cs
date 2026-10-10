@@ -1,7 +1,7 @@
-namespace BoscaliSummer.Modules.Immersion.Domain
+namespace BoscaliSummer.Core.Util
 {
     /// <summary>
-    /// Reads a mono 16-bit PCM WAV into floats. That is the only shape tools/Build-PilotVoices.py writes;
+    /// Reads a mono 16-bit PCM WAV into floats. That is the only shape tools/Build-SoundClips.py writes;
     /// any other channel count, depth or rate, or a damaged file, decodes to null and the caller keeps its fallback.
     /// </summary>
     internal static class PcmWav

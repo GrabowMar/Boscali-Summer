@@ -14,6 +14,7 @@ namespace BoscaliSummer.Fire
         {
             internal GameObject Root;
             internal ParticleSystem Dust, Grit;
+            internal AudioSource Sound;
             internal GlobalPosition Position;
             internal float Expires;
         }
@@ -51,6 +52,7 @@ namespace BoscaliSummer.Fire
             burst.Root.transform.position = position.ToLocalPosition(); burst.Root.SetActive(true);
             burst.Dust.Clear(); burst.Grit.Clear();
             burst.Dust.Play(); burst.Grit.Play();
+            if (collapse) Rumble(burst);
             normal = normal.sqrMagnitude < 0.001f ? Vector3.up : normal.normalized;
             Vector3 tangent = Vector3.Cross(normal, Mathf.Abs(normal.y) > 0.85f ? Vector3.forward : Vector3.up).normalized;
             Vector3 other = Vector3.Cross(normal, tangent).normalized;
@@ -91,6 +93,26 @@ namespace BoscaliSummer.Fire
                 burst.Grit.Emit(parameters, 1);
             }
         }
+
+        // One recorded rumble per collapse, positional, capped by the voice bus. The weapon already made the bang.
+        private static void Rumble(Burst burst)
+        {
+            AudioClip clip = SfxClips.Get("building-collapse");
+            if (clip == null || !FxVoiceBus.TryOneShot(clip.length)) return;
+            if (burst.Sound == null)
+            {
+                burst.Sound = burst.Root.AddComponent<AudioSource>();
+                burst.Sound.playOnAwake = false; burst.Sound.spatialBlend = 1f; burst.Sound.dopplerLevel = 0f;
+                burst.Sound.rolloffMode = AudioRolloffMode.Linear; burst.Sound.minDistance = 150f; burst.Sound.maxDistance = 4000f;
+            }
+            SoundManager sound = SoundManager.i;
+            if (sound != null) burst.Sound.outputAudioMixerGroup = sound.EffectsMixer;
+            burst.Sound.PlayOneShot(clip);
+            Rumbles++;
+        }
+
+        /// <summary>Collapse rumbles played since load (automation readout).</summary>
+        internal static int Rumbles { get; private set; }
 
         internal void EmitLanding(GlobalPosition position, Vector3 normal, float size)
         {
