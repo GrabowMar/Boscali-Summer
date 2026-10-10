@@ -266,20 +266,26 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             foreach (WingMember m in Members)
             {
                 if (n >= into.Length || m.Released || !m.Alive) continue;
-                MemberDuty duty = m.Engaged ? MemberDuty.Engaged
-                    : m.Recovery != null ? MemberDuty.Recovering
-                    : m.Brain.Mind.Current == BehaviourId.Defend ? MemberDuty.Defending
-                    : m.Settle != null ? MemberDuty.Settled
-                    : m.OnGround ? MemberDuty.Grounded
-                    : MemberDuty.Formation;
-                float ammo = AmmoFraction(m.Aircraft);
-                Station(m, duty == MemberDuty.Formation, out byte err10, out sbyte closure, out byte phase);
-                into[n++] = SnapshotBuilder.Member(m.Aircraft.persistentID.Id, m.Seat, (byte)m.Brain.Mind.Current, duty,
-                    m.Aircraft.GetFuelLevel(), ammo, m.Brain.LastRejoin.FallingBehind, m.Bingo.Bingo, m.Bingo.Joker, ammo <= 0f, ElementOf(m),
-                    m.Damage.Damaged, err10, closure, phase);
+                into[n++] = SnapshotOf(m);
             }
             PruneStation();
             return n;
+        }
+
+        /// <summary>One member as its snapshot entry: what the clients' mirror and the WING page's state words are built from (the caller has checked it is alive and in the wing).</summary>
+        internal SnapshotMember SnapshotOf(WingMember m)
+        {
+            MemberDuty duty = m.Engaged ? MemberDuty.Engaged
+                : m.Recovery != null ? MemberDuty.Recovering
+                : m.Brain.Mind.Current == BehaviourId.Defend ? MemberDuty.Defending
+                : m.Settle != null ? MemberDuty.Settled
+                : m.OnGround ? MemberDuty.Grounded
+                : MemberDuty.Formation;
+            float ammo = AmmoFraction(m.Aircraft);
+            Station(m, duty == MemberDuty.Formation, out byte err10, out sbyte closure, out byte phase);
+            return SnapshotBuilder.Member(m.Aircraft.persistentID.Id, m.Seat, (byte)m.Brain.Mind.Current, duty,
+                m.Aircraft.GetFuelLevel(), ammo, m.Brain.LastRejoin.FallingBehind, m.Bingo.Bingo, m.Bingo.Joker, ammo <= 0f, ElementOf(m),
+                m.Damage.Damaged, err10, closure, phase);
         }
 
         /// <summary>Members per settle phase (automation reads it).</summary>
