@@ -16,8 +16,8 @@ namespace BoscaliSummer.Tests.Features.Hud
             Words();
         }
 
-        private static StrikeTrack Track(StrikeKind kind, float eta, float lead = 15f, int rounds = 1, float gap = 0f, int legs = 0, float linger = 0f, float range = 6400f) =>
-            new StrikeTrack { Kind = kind, Eta = eta, Lead = lead, Rounds = rounds, RoundGap = gap, Legs = legs, Linger = linger, RangeM = range };
+        private static StrikeTrack Track(StrikeKind kind, float eta, float lead = 15f, int legs = 0, float linger = 0f, float range = 6400f, float radius = 0f) =>
+            new StrikeTrack { Kind = kind, Eta = eta, Lead = lead, Legs = legs, Linger = linger, RangeM = range, RadiusM = radius };
 
         private static void Phases()
         {
@@ -27,9 +27,6 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.Eq(StrikeMath.Phase(Track(StrikeKind.Rod, -1f)), StrikePhase.Impact, "A landing stays on the track as IMPACT");
             TestAssert.Eq(StrikeMath.Phase(Track(StrikeKind.Rod, -3.3f)), StrikePhase.Done, "...for the hold, then the track is DONE");
             TestAssert.Eq(StrikeMath.Phase(Track(StrikeKind.Prsm, 6f, 6.5f)), StrikePhase.Flight, "PRSM flies");
-            TestAssert.Eq(StrikeMath.Phase(Track(StrikeKind.Prsm, -1f, 6.5f, 6, 0.35f)), StrikePhase.Impact, "A salvo keeps landing");
-            TestAssert.Eq(StrikeMath.Phase(Track(StrikeKind.Prsm, -3.9f, 6.5f, 6, 0.35f)), StrikePhase.Impact, "...past the hold of its first round, while the last one has not had its turn");
-            TestAssert.Eq(StrikeMath.Phase(Track(StrikeKind.Prsm, -5.1f, 6.5f, 6, 0.35f)), StrikePhase.Done, "...until the last round's hold is over");
             TestAssert.Eq(StrikeMath.Phase(Track(StrikeKind.Emp, -5f, 3f, linger: 30f)), StrikePhase.Effect, "An EMP's effect runs on after the impact");
             TestAssert.Eq(StrikeMath.Phase(Track(StrikeKind.Emp, -31f, 3f, linger: 30f)), StrikePhase.Done, "...and ends");
             TestAssert.That(StrikeMath.Live(Track(StrikeKind.Decoy, -9f, 5.5f, linger: 20f)) && !StrikeMath.Live(Track(StrikeKind.Rod, -9f)), "Live while in the air, landing or in effect");
@@ -52,11 +49,6 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.Eq(StrikeMath.Leg(Track(StrikeKind.Cruise, 2f, 22f, legs: 2)), 3, "...and flies the last run to the target");
             TestAssert.Eq(StrikeMath.LegCount(Track(StrikeKind.Cruise, 2f, legs: 2)), 3, "Two waypoints make three legs");
             TestAssert.Eq(StrikeMath.LegCount(Track(StrikeKind.Cruise, 2f)), 1, "A direct cruise is one leg");
-            TestAssert.Eq(StrikeMath.Splashes(Track(StrikeKind.Prsm, 1f, rounds: 6, gap: 0.35f)), 0, "Nothing has landed yet");
-            TestAssert.Eq(StrikeMath.Splashes(Track(StrikeKind.Prsm, -0.4f, rounds: 6, gap: 0.35f)), 2, "A round lands every gap");
-            TestAssert.Eq(StrikeMath.Splashes(Track(StrikeKind.Prsm, -9f, rounds: 6, gap: 0.35f)), 6, "...up to the salvo");
-            TestAssert.Eq(StrikeMath.Splashes(Track(StrikeKind.Prsm, -0.1f)), 1, "A single round is one splash");
-            TestAssert.Near(StrikeMath.SinceLast(Track(StrikeKind.Prsm, -2f, rounds: 6, gap: 0.35f)), 0.25f, "Seconds since the last round landed");
         }
 
         private static void Selection()
@@ -69,6 +61,8 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(!StrikeMath.Close(Track(StrikeKind.Prsm, 6f, range: 6400f)), "...6 km out it is not");
             TestAssert.That(!StrikeMath.Close(Track(StrikeKind.Prsm, -1f, range: 900f)), "...and once landed it is over");
             TestAssert.That(!StrikeMath.Close(Track(StrikeKind.Emp, 3f, range: 500f)), "An EMP over you is not a blast");
+            TestAssert.That(!StrikeMath.Close(Track(StrikeKind.Prsm, 6f, range: 2500f)) && StrikeMath.Close(Track(StrikeKind.Prsm, 6f, range: 2500f, radius: 900f)), "A wide effect widens danger close to three radii");
+            TestAssert.That(StrikeMath.Close(Track(StrikeKind.Rod, 6f, range: 1400f, radius: 420f)) && !StrikeMath.Close(Track(StrikeKind.Rod, 6f, range: 1600f, radius: 420f)), "...and a rod keeps the flat 1.5 km");
             TestAssert.That(StrikeMath.Kinetic(StrikeKind.Rod) && StrikeMath.Kinetic(StrikeKind.Cruise) && !StrikeMath.Kinetic(StrikeKind.Decoy), "Kinetic kinds");
             TestAssert.That(StrikeMath.TraceTone(59f) == ScopeTone.Ink && StrikeMath.TraceTone(60f) == ScopeTone.Amber && StrikeMath.TraceTone(84f) == ScopeTone.Amber && StrikeMath.TraceTone(85f) == ScopeTone.Red, "Trace cautions at 60 and warns at 85");
             var cooling = new PerkTile { State = PerkPhase.Cooling, Cooldown = 150f, Total = 300f };

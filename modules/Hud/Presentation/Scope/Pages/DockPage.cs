@@ -350,7 +350,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 g.Text(ScopeStr.Pct((int)Math.Round(fr * 100f)), Cx, Cy - 6f, Hi, 22f, ScopeAlign.Center, true);
                 g.Text("FUEL", Cx, Cy + 12f, Dim, 12f, ScopeAlign.Center);
-                g.Text(ScopeStr.Cat("AMMO ", d.Ammo, "/", d.AmmoFull, null), Cx, Cy + 28f, Ink, 12f, ScopeAlign.Center);
+                // n/m while the load is a few weapons; a long gun belt or a rocket pod would not fit the ring, so it reads as a share.
+                g.FitText(d.AmmoFull <= AmmoCountMax ? ScopeStr.Cat("AMMO ", d.Ammo, "/", d.AmmoFull, null) : ScopeStr.Cat("AMMO ", (int)Math.Round(100.0 * d.Ammo / full), "%"), Cx, Cy + 28f, 84f, Ink, 12f, 12f, ScopeAlign.Center);
             }
         }
 
@@ -451,7 +452,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 g.Stamp("SERVED", cx, py + 24f, Hi, 16f);
                 g.Check(cx + 54f, py + 24f, 12f, Hi, 1f, 2f);
                 g.Text("RELEASE BRAKE", cx, py + 49f, Ink, 12f, ScopeAlign.Center, true, 0.6f + 0.4f * ScopeCanvas.Pulse(t, 2f));
-                g.Text(movedText, cx, py + 65f, Dim, 12f, ScopeAlign.Center);
+                if (d.HasMoved) g.FitText(movedText, cx, py + 65f, W - 12f, Dim, 12f, 12f, ScopeAlign.Center);
             }
         }
 
@@ -476,8 +477,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Half(g, 4f, "FUEL", d.Fuel, ScopeStr.Pct((int)Math.Round(d.Fuel * 100f)), 0, xfer, done, p.Now);
             g.Line(218f, 4f, 218f, 22f, Faint);
             int full = Math.Max(1, d.AmmoFull);
-            Half(g, 226f, "AMMO", (float)d.Ammo / full, ScopeStr.Cat("", d.Ammo, "/", d.AmmoFull, null), full <= 8 ? full : 0, xfer, done, p.Now);
+            Half(g, 226f, "AMMO", (float)d.Ammo / full, d.AmmoFull <= AmmoCountMax ? ScopeStr.Cat("", d.Ammo, "/", d.AmmoFull, null) : ScopeStr.Cat("", (int)Math.Round(100.0 * d.Ammo / full), "%"), full <= 8 ? full : 0, xfer, done, p.Now);
         }
+
+        /// <summary>A load of more rounds than this reads as a percentage (the strip leaves six characters for the figure).</summary>
+        private const int AmmoCountMax = 99;
 
         private static void Half(ScopeCanvas g, float x, string label, float frac, ReadOnlySpan<char> text, int segs, bool xfer, bool done, float t)
         {
@@ -489,7 +493,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 float u = (t * 1.5f) % 1f, sx = bx + 2f + (bw - 4f) * Math.Max(0f, Math.Min(1f, frac)) - 3f;
                 g.Fill(Mathf.Round(sx), 9f, 3f, 8f, Hi, 0.9f * (1f - u));
             }
-            g.Text(text, bx + bw + 6f, 13f, xfer || done ? Hi : Ink, 12f, ScopeAlign.Left, xfer || done);
+            g.FitText(text, bx + bw + 6f, 13f, 436f - (bx + bw + 6f), xfer || done ? Hi : Ink, 12f, 12f, ScopeAlign.Left, xfer || done);
         }
     }
 }

@@ -1,4 +1,5 @@
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Modules.Hud.Domain;
 using static BoscaliSummer.Core.Contracts.ScopeTone;
 
 namespace BoscaliSummer.Modules.Hud.Presentation
@@ -60,7 +61,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     g.FitText(s.Text, x + 6f, y + 30f, w - 12f, warn ? tone : Hi, 18f, 12f, ScopeAlign.Left, true);
                     float ry = y + 44f;
                     g.Dashed(x + 6f, ry, x + w - 22f, ry, Dim, 1f, 1f, -now * 10f);
-                    g.Chevron(x + 6f + (w - 28f) * (v * 3f % 1f), ry, 90f, 4f, tone, true);
+                    g.Chevron(GaugeRow.RailX(x, w, v), ry, 90f, 4f, tone, true);
                     g.Diamond(x + w - 14f, ry, 4f, Hi);
                     g.FitText(s.Sub, x + 6f, y + 57f, w - 12f, Dim);
                     break;

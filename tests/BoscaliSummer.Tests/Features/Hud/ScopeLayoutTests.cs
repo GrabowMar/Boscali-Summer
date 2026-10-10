@@ -100,6 +100,18 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(n == 4 && lances == 1 && into[0].Id == "lance", "A page gauge displaces the registered one of the same id");
             TestAssert.Eq(GaugeRow.Merge(page, 0, reg, 0, into), 0, "No gauges, no row");
             TestAssert.Eq(GaugeRow.Merge(page, 1, reg, 0, into), 1, "A lone page gauge fills one slot");
+
+            // A Mode gauge's progress rail is a plain 0..1 (a NAV leg 0.1, 0.3, 0.5...): the chevron only ever moves right as the progress grows.
+            float prev = float.NegativeInfinity;
+            for (float v = 0.1f; v < 0.95f; v += 0.2f)
+            {
+                float x = GaugeRow.RailX(10f, 109f, v);
+                TestAssert.That(x > prev, "The progress chevron is monotonic in the progress: " + v);
+                prev = x;
+            }
+            TestAssert.Near(GaugeRow.RailX(10f, 109f, 0f), 16f, "No progress sits at the rail's start");
+            TestAssert.Near(GaugeRow.RailX(10f, 109f, 1f), 97f, "Full progress sits at the diamond");
+            TestAssert.Near(GaugeRow.RailX(10f, 109f, 2f), 97f, "Progress beyond 1 is clamped");
         }
     }
 }

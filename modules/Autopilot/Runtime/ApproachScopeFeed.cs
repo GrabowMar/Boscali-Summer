@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Autopilot.Configuration;
 using BoscaliSummer.Modules.Autopilot.Domain;
@@ -194,6 +195,12 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         /// <summary>The nearest friendly field's landing runway with its nearer end as the threshold, re-picked once a second (the end only flips when the other is clearly nearer).</summary>
         private bool PickRunway(Aircraft a, out Airbase.Runway.RunwayUsage use)
         {
+            // On the ground the pick is frozen: re-picking mid roll-out would flip the threshold end once the aircraft is past ~61 % of the runway.
+            if (hasPick && runway != null && field != null && a.IsLanded())
+            {
+                use = new Airbase.Runway.RunwayUsage(runway, reverse);
+                return true;
+            }
             float now = Time.unscaledTime;
             if (now >= nextPick)
             {
@@ -232,7 +239,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             if (!ReferenceEquals(f, namedField))
             {
                 namedField = f;
-                fieldName = string.IsNullOrWhiteSpace(f.name) ? null : f.name.Trim().ToUpperInvariant();
+                fieldName = string.IsNullOrWhiteSpace(f.name) ? null : MfdAirbaseFormatter.Format(f).ToUpperInvariant();
             }
             return fieldName;
         }

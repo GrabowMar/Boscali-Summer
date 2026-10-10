@@ -24,7 +24,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         private StrikeScope d;
-        private bool live, strip, primed;
+        private bool live, strip, primed, danger;
         private float now;
         private readonly Memo[] memos = new Memo[Remembered];
         private int memoNext;
@@ -61,6 +61,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             for (int i = 0; i < d.PerkCount; i++) live |= d.Perks[i].State == PerkPhase.Armed;
             if (!live) { Forget(); return false; }
             strip = d.PerkCount > 0;
+            danger = false;
+            for (int i = 0; i < d.TrackCount; i++) danger |= StrikeMath.Close(d.Tracks[i]);
 
             Edges(env);
             ReadHeadline();
@@ -68,9 +70,22 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             return true;
         }
 
+        /// <summary>A friendly kinetic strike about to land close: the MSL lamp reads DNGR, amber and flashing (the prototype's strike page).</summary>
+        public override bool Lamp(string legend, out LampState state, out bool flash, out string text)
+        {
+            state = LampState.Caution;
+            flash = true;
+            text = "DNGR";
+            if (live && danger && legend == "MSL") return true;
+            state = LampState.Dark;
+            flash = false;
+            text = null;
+            return false;
+        }
+
         private void Forget()
         {
-            live = strip = primed = false;
+            live = strip = primed = danger = false;
             Array.Clear(memos, 0, memos.Length);
             lastTrace = 0f;
             lastHeld = 0;
@@ -129,32 +144,22 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         // ------------------------------------------------------------------------------------------------ headline
 
-        /// <summary>The one figure at the tab, by what matters most now: a salvo landing, the soonest strike, an impact, an effect, the SAT window, the trace, an armed perk.</summary>
+        /// <summary>The one figure at the tab, by what matters most now: the soonest strike, an impact, an effect, the SAT window, the trace, an armed perk.</summary>
         private void ReadHeadline()
         {
             int soon = StrikeMath.Soonest(d.Tracks, d.TrackCount), key;
             ScopeTone tone = Hi;
             bool flash = false;
             string text = null;
-            int salvo = -1, impact = -1, effect = -1;
+            int impact = -1, effect = -1;
             for (int i = 0; i < d.TrackCount; i++)
             {
-                StrikeTrack t = d.Tracks[i];
-                StrikePhase ph = StrikeMath.Phase(t);
-                if (t.Rounds > 1 && ph == StrikePhase.Impact && StrikeMath.Splashes(t) < t.Rounds && salvo < 0) salvo = i;
+                StrikePhase ph = StrikeMath.Phase(d.Tracks[i]);
                 if (ph == StrikePhase.Impact && impact < 0) impact = i;
                 if (ph == StrikePhase.Effect && effect < 0) effect = i;
             }
 
-            if (salvo >= 0)
-            {
-                StrikeTrack t = d.Tracks[salvo];
-                key = 1000000 + StrikeMath.Splashes(t) * 100 + t.Rounds;
-                if (key != headlineKey) text = ScopeStr.Cat(OpsScopeWords.Short(t.Kind) + " ", StrikeMath.Splashes(t), "/", t.Rounds, null).ToString();
-                tone = Amber;
-                flash = true;
-            }
-            else if (soon >= 0)
+            if (soon >= 0)
             {
                 StrikeTrack t = d.Tracks[soon];
                 int n = (int)Math.Ceiling(t.Eta);

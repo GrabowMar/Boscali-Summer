@@ -173,20 +173,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 }
             if (arc)
             {
-                int rounds = Math.Max(1, m.Rounds);
-                for (int k = 0; k < rounds; k++)
+                if (flying && along > 0f)
                 {
-                    float uk = ScopeCanvas.Clamp01((elapsed - k * Math.Max(0f, m.RoundGap)) / Math.Max(0.1f, m.Lead));
-                    if (uk <= 0f) continue;
-                    Pos(m, y0, th, uk, out float px, out float py);
-                    if (uk < 1f)
-                    {
-                        np = Samples(m, y0, th, 6, Math.Max(0f, uk - 0.1f), uk);
-                        g.Trail(pts, np, tone, 1f, 1f, 4);
-                        ScopeTone dot = soon ? Hi : Ink;
-                        g.Ring(px, py, 1.8f, dot, 1f, 1f, dot, 1f);
-                    }
-                    else Burst(g, tx + (k % 2 == 1 ? 4f : -4f), ty + (k % 3 - 1) * 3f, since - k * Math.Max(0f, m.RoundGap), Hi);
+                    Pos(m, y0, th, along, out float px, out float py);
+                    np = Samples(m, y0, th, 6, Math.Max(0f, along - 0.1f), along);
+                    g.Trail(pts, np, tone, 1f, 1f, 4);
+                    ScopeTone dot = soon ? Hi : Ink;
+                    g.Ring(px, py, 1.8f, dot, 1f, 1f, dot, 1f);
                 }
                 if (flying)
                 {
@@ -230,20 +223,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Line(X0, gy, gx, gy, tone, 1f, 2f);
             g.Line(gx, gy, X1, gy, Faint);
 
-            // the target: a diamond until every round has landed, then a cross; the danger ring, the closing ring, the burst
-            float last = StrikeMath.SinceLast(m);
-            if (!flying && last >= 0f) g.Cross(tx, ty, 8f, idle ? Dim : Hi);
+            // the target: a diamond until it has landed, then a cross; the danger ring, the closing ring, the burst
+            if (!flying) g.Cross(tx, ty, 8f, idle ? Dim : Hi);
             else g.Diamond(tx, ty, 5f, soon ? Hi : idle ? Dim : Ink);
             if (StrikeMath.Close(m)) g.Ring(tx, ty, 11f, Amber, 0.6f + 0.4f * ScopeCanvas.Pulse(t, 2f), 1f, Ink, 0f, 2f, 2f);
             if (soon && m.Eta > 0f && m.Eta <= StrikeMath.ConvergeSeconds) g.Ring(tx, ty, 6f + 14f * (m.Eta / StrikeMath.ConvergeSeconds), Hi, 0.9f);
-            if (!arc && !flying) Burst(g, tx, ty, since, Hi);
-            if (last >= 0f && last < StrikeMath.Hold + 1f && !(cruise && since < 0.9f))
-                g.Stamp(StrikeMath.Kinetic(m.Kind) ? "IMPACT" : "BURST", 292f, y0 + 22f + dy, Hi, 12f, 0f, last < 0.25f ? last / 0.25f : 1f);
+            if (!flying) Burst(g, tx, ty, since, Hi);
+            if (!flying && since < StrikeMath.Hold + 1f && !(cruise && since < 0.9f))
+                g.Stamp(StrikeMath.Kinetic(m.Kind) ? "IMPACT" : "BURST", 292f, y0 + 22f + dy, Hi, 12f, 0f, since < 0.25f ? since / 0.25f : 1f);
 
             // right column: the countdown and the phase word
-            if (ph == StrikePhase.Impact && m.Rounds > 1 && StrikeMath.Splashes(m) < m.Rounds)
-                g.Text(ScopeStr.Cat("", StrikeMath.Splashes(m), "/", m.Rounds, null), 435f, y0 + 19f + dy, Hi, 20f, ScopeAlign.Right, true);
-            else if (ph == StrikePhase.Impact || ph == StrikePhase.Done) g.Check(417f, y0 + 19f + dy, 11f, ph == StrikePhase.Done ? Dim : Hi, 1f, 2f);
+            if (ph == StrikePhase.Impact || ph == StrikePhase.Done) g.Check(417f, y0 + 19f + dy, 11f, ph == StrikePhase.Done ? Dim : Hi, 1f, 2f);
             else
             {
                 int secs = (int)Math.Ceiling(ph == StrikePhase.Effect ? Math.Max(0f, m.Linger - since) : m.Eta);
@@ -268,10 +258,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Path(n, tone, dashed ? 0.6f : 1f, 1f, true, dashed ? 2f : 0f, dashed ? 3f : 0f);
         }
 
-        /// <summary>The window the own RECON PASS or SAT CAMERA opened: the bird parked on the belt, the wedge down to its footprint, the scan line, the contacts and the countdown.</summary>
+        /// <summary>
+        /// The window the own RECON PASS or SAT CAMERA opened: the bird parked on the belt, the wedge down to its footprint (a diagram, not the footprint's real place), the contacts the
+        /// reply counted as an evenly spaced row (the reply carries a count and no bearings, so there is no scan line and no latching) and the countdown.
+        /// </summary>
         private void Sat(ScopeCanvas g)
         {
-            float t = now, rem = d.SatLeft, total = d.SatTotal, period = 8f, elapsed = Math.Max(0f, total - rem), cx = 184f, cy = 224f;
+            float t = now, rem = d.SatLeft, total = d.SatTotal, cx = 184f, cy = 224f;
             bool late = StrikeMath.SatLate(rem);
             ScopeTone tone = late ? Amber : Ink;
             g.Text(d.SatCamera ? "SAT OPTICAL" : "SAT RADAR", 8f, 186f, Ink, 12f, ScopeAlign.Left, true);
@@ -292,18 +285,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Line(10f, gyL + 8f, 150f, gyL + 8f, Faint);
             Ellipse(g, xf, gyL + 1f, rw, 6f, tone, 0.1f, false);
 
-            // the scan line sweeps the footprint; each contact of the window latches as it passes
-            float sw = elapsed % period / period, sx = xf - rw + 2f * rw * sw;
-            g.Line(sx, gyL - 9f, sx, gyL + 9f, Hi, 0.8f);
+            // the contacts the window revealed: a tally of the count, one diamond each
             int shown = Math.Min(contacts, 6);
-            for (int k = 0; k < shown; k++)
-            {
-                float ct = period * (k + 0.5f) / shown;
-                if (elapsed < ct) continue;
-                float px = xf + ((k + 0.5f) / shown - 0.5f) * 2f * rw * 0.9f, py = gyL + 1f + (k % 2 == 1 ? 2f : -2f), pk = elapsed - ct;
-                g.Diamond(px, py, 3f, Ink, true);
-                if (pk < 0.5f) g.Ring(px, py, 3f + 9f * ScopeCanvas.EaseOut(pk / 0.5f), Hi, 1f - pk / 0.5f);
-            }
+            for (int k = 0; k < shown; k++) g.Diamond(xf + ((k + 0.5f) / shown - 0.5f) * 2f * rw * 0.9f, gyL + 1f, 3f, Ink, true);
 
             // the window's countdown
             float frac = StrikeMath.SatFill(rem, total);

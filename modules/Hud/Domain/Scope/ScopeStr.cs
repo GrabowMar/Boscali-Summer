@@ -13,6 +13,13 @@ namespace BoscaliSummer.Modules.Hud.Domain
         private static readonly string[] Pcts = new string[101];
         private static readonly char[] Scratch = new char[128];
 
+        private static readonly string[] SpeedUnits = { "KM/H", "KT" }, SpeedUnitsSp = { " KM/H", " KT" };
+
+        /// <summary>The speed unit in capitals ("KM/H", "KT") and with a leading space; cached, so a per-frame caller builds nothing.</summary>
+        public static string SpeedUnit(NOAvionics.AvUnits units) => SpeedUnits[units == NOAvionics.AvUnits.Imperial ? 1 : 0];
+
+        public static string SpeedUnitSp(NOAvionics.AvUnits units) => SpeedUnitsSp[units == NOAvionics.AvUnits.Imperial ? 1 : 0];
+
         /// <summary>"7", cached for 0..999.</summary>
         public static string Int(int n)
         {
@@ -33,6 +40,16 @@ namespace BoscaliSummer.Modules.Hud.Domain
         {
             int n = Put(0, a);
             n = Put(n, b);
+            n = Put(n, c);
+            return new ReadOnlySpan<char>(Scratch, 0, n);
+        }
+
+        /// <summary>"a" + "b" + value + "c" (a seeker word, a space and a figure, without joining strings first).</summary>
+        public static ReadOnlySpan<char> Cat(string a, string b, int value, string c)
+        {
+            int n = Put(0, a);
+            n = Put(n, b);
+            n = PutInt(n, value);
             n = Put(n, c);
             return new ReadOnlySpan<char>(Scratch, 0, n);
         }

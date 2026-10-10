@@ -7,6 +7,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
     {
         public const int Slots = 4;
 
+        /// <summary>Where the chevron of a Mode gauge's progress rail sits for <paramref name="progress"/> (0..1, <see cref="GaugeSpec.Value"/>): the rail runs from the cell's left pad to the diamond.</summary>
+        public static float RailX(float cellX, float cellW, float progress) => cellX + 6f + (cellW - 28f) * (progress < 0f ? 0f : progress > 1f ? 1f : progress);
+
         /// <summary>
         /// The page's own gauges first (in its order), then the registered ones by rank (registration order among equals), skipping any
         /// whose id the page already shows, at most <see cref="Slots"/>. Returns how many slots are filled.

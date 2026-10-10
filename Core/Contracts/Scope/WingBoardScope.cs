@@ -19,6 +19,8 @@ namespace BoscaliSummer.Core.Contracts
         /// <summary>Fuel and munitions as 0..1 fractions; <see cref="Bingo"/> / <see cref="Joker"/> as the wing's own fuel rule says.</summary>
         public float Fuel, Ammo;
         public bool Bingo, Joker;
+        /// <summary>The wing's damage flag: a part is lost or the hull is under 90 % (latched until it is mended, so it says "was hit", not "is being hit"). The state word is not DAMAGED; the page words a fresh hit.</summary>
+        public bool Damaged;
         /// <summary>Hull as a 0..1 fraction (1 = whole); <see cref="HasHull"/> false: unknown.</summary>
         public bool HasHull;
         public float Hull;

@@ -98,10 +98,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 }
             }
             bool cSpd = CautionSpeed;
-            if (cSpd && !lastCautionSpeed)
+            // By hand the target is a reference (a blend of the airframe's approach and landing speeds, not a game rule): only the autopilot's own target is announced.
+            if (cSpd && !lastCautionSpeed && d.Autoland)
             {
                 float dv = d.SpeedMps - d.TargetMps;
-                env.Notice?.Invoke("spd", HudTone.Caution, (dv > 0f ? "FAST +" : "SLOW -") + (int)Math.Round(Math.Abs(AvUnitTable.Speed(dv, env.Units))) + " " + AvUnitTable.SpeedUnit(env.Units).ToUpperInvariant(),
+                env.Notice?.Invoke("spd", HudTone.Caution, (dv > 0f ? "FAST +" : "SLOW -") + (int)Math.Round(Math.Abs(AvUnitTable.Speed(dv, env.Units))) + ScopeStr.SpeedUnitSp(env.Units),
                     dv > 0f ? (d.Airbrake ? "AIRBRAKE OUT" : "REDUCE POWER") : "ADD POWER");
             }
             lastCautionSpeed = cSpd;
@@ -171,14 +172,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 float overall = ((int)d.Stage + Progress()) / (d.Pad ? 3f : 4f);
                 string name = d.Pad ? d.Field : d.Runway ?? d.Field;
                 if (!ReferenceEquals(name, apFor)) { apFor = name; apSub = name ?? ""; }
-                into[n++] = new GaugeSpec { Id = "land", Label = "AUTOPILOT", Kind = GaugeKind.Mode, Text = "LAND", Sub = apSub, Value = overall / 3f, Tone = Ink };
+                into[n++] = new GaugeSpec { Id = "land", Label = "AUTOPILOT", Kind = GaugeKind.Mode, Text = "LAND", Sub = apSub, Value = overall, Tone = Ink };
             }
             {
                 int key = (int)Math.Round(d.SinkMps * 10f);
                 if (key != gaugeKey || units != gaugeUnits) { gaugeKey = key; gaugeUnits = units; sinkText = ScopeStr.Cat("", AvUnitTable.Climb(-d.SinkMps, units), units == AvUnits.Imperial ? 0 : 1, units == AvUnits.Imperial ? " FPM" : " M/S").ToString(); }
                 into[n++] = new GaugeSpec
                 {
-                    Id = "sink", Label = "SINK RATE", Kind = GaugeKind.Bar, Value = ApproachMath.Clamp(d.SinkMps / 10f, 0f, 1f), Text = sinkText, Sub = "MAX 8",
+                    Id = "sink", Label = "SINK RATE", Kind = GaugeKind.Bar, Value = ApproachMath.Clamp(d.SinkMps / 10f, 0f, 1f), Text = sinkText, Sub = units == AvUnits.Imperial ? "MAX 1575" : "MAX 8",
                     Tone = d.SinkMps > ApproachMath.SinkCautionMps ? Amber : Ink, Ticks = SinkTick, TickCount = 1, TickTone = d.SinkMps > 7f ? Amber : Dim,
                 };
             }
@@ -468,7 +469,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (key == xwKey) return;
             xwKey = key;
             xwValue = (d.CrosswindMps >= 0f ? "L" : "R") + v;
-            xwFull = xwValue + AvUnitTable.SpeedUnit(units).ToUpperInvariant();
+            xwFull = xwValue + ScopeStr.SpeedUnit(units);
         }
 
         // ---------------------------------------------------------------- right column
@@ -506,18 +507,18 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             g.Line(lx - 10f, ly, lx + 10f, ly, Hi, 1f, 2f);
             g.Text(d.Pad ? "GND" : "THR", lx + 14f, ly, Dim);
-            g.Chevron(lx, ym - 1f, 180f, 6f, Hi, true);
+            if (d.Stage != ApproachStage.Rollout) g.Chevron(lx, ym - 1f, 180f, 6f, Hi, true);      // on the runway the marker means nothing and would overprint the ground speed word
 
             // Stats right of the ladder: radar altitude, sink rate, crosswind.
             Stat(g, "RA", ScopeStr.Cat("", (int)Math.Max(0f, Math.Round(AvUnitTable.Altitude(d.RadarAltM, units))), null), imperial ? "FT" : "M", sx, 70f);
             Stat(g, "V/S", ScopeStr.Cat("", AvUnitTable.Climb(-d.SinkMps, units), imperial ? 0 : 1, null), imperial ? "FPM" : "M/S", sx, 108f);
-            if (d.HasWind) { Crosswind(); Stat(g, "XW", xwValue, AvUnitTable.SpeedUnit(units).ToUpperInvariant(), sx, 146f); }
+            if (d.HasWind) { Crosswind(); Stat(g, "XW", xwValue, ScopeStr.SpeedUnit(units), sx, 146f); }
             g.Line(346f, 66f, 346f, 176f, Faint);
 
             // Speed block: the delta bar around the speed the approach wants (centre = target, +-20 km/h); on the ground the ground speed and the brakes.
             g.Line(x0, 188f, xr, 188f, Faint);
             float by = 206f + extra, bw = 128f, bx = x0 + 2f, labelY = 224f + extra;
-            string speedUnit = " " + AvUnitTable.SpeedUnit(units).ToUpperInvariant();
+            string speedUnit = ScopeStr.SpeedUnitSp(units);
             if (d.Stage != ApproachStage.Rollout)
             {
                 g.Text("SPD", x0 + 2f, 197f, Dim);
@@ -526,7 +527,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     float dv = d.SpeedMps - d.TargetMps;
                     bool caution = CautionSpeed, on = ApproachMath.OnSpeed(dv);
                     ScopeTone tone = caution ? Amber : Ink;
-                    g.Text(on ? "ON SPD" : ScopeStr.Cat(dv > 0f ? "FAST " : "SLOW ", AvUnitTable.Speed(dv, units), 0, null, true), xr - 4f, 197f, on ? Hi : tone, 12f, ScopeAlign.Right, caution);
+                    g.Text(on ? (d.Autoland ? "ON SPD" : "ON REF") : ScopeStr.Cat(dv > 0f ? "FAST " : "SLOW ", AvUnitTable.Speed(dv, units), 0, null, true), xr - 4f, 197f, on ? Hi : tone, 12f, ScopeAlign.Right, caution);
                     g.Box(bx, by, bw, 10f, Dim, 0.85f);
                     g.Fill(bx + 2f + Mathf.Round((bw - 4f) * 0.375f), by + 2f, Mathf.Round((bw - 4f) * 0.25f), 6f, Faint, 0.8f);
                     float cx = bx + bw / 2f, vx = cx + ApproachMath.Clamp(dv / ApproachMath.SpeedBarMps, -1f, 1f) * (bw / 2f - 3f);

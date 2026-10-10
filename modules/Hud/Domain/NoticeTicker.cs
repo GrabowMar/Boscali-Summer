@@ -26,8 +26,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
     /// <item><b>Sticky warnings</b>: a Warning stays <see cref="WarningSeconds"/> (an Info only <see cref="InfoSeconds"/>) and
     /// every repeat extends it, so a warning is not gone before the pilot could read it.</item>
     /// <item><b>Paging</b>: the line is one row wide, so a longer text or detail is cut at spaces into pages of at most
-    /// <see cref="PageChars"/> characters that follow each other every <see cref="PhaseSeconds"/>; the dwell grows to give every
-    /// page its turn, so a long notice is read in full instead of elided.</item>
+    /// <see cref="PageChars"/> characters (<see cref="WarningPageChars"/> under a Warning's "WARNING · " prefix) that follow each other every
+    /// <see cref="PhaseSeconds"/>; the dwell grows to give every page its turn, so a long notice is read in full instead of elided. A page never
+    /// ends on a bare separator ("ROLLOUT 101 KM/H -").</item>
     /// <item>A notice waits at most <see cref="QueueSeconds"/> for the ticker; bounded at <see cref="Capacity"/> entries,
     /// the quietest, oldest one makes room.</item>
     /// </list>
@@ -42,8 +43,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const float FreshSeconds = 1.2f;
         /// <summary>A notice with a detail line shows its text, then its detail, each for this long, alternating.</summary>
         public const float PhaseSeconds = 3f;
-        /// <summary>The longest page of a long text or detail: the board's ticker row holds about 43 characters of the mono face at 12 px beside its channel chip, and a warning's prefix takes ten.</summary>
-        public const int PageChars = 34;
+        /// <summary>The longest page of a long text or detail: the board's ticker row holds about 45 characters of the mono face at 12 px beside its channel chip; a warning's "WARNING · " prefix takes ten of them.</summary>
+        public const int PageChars = 44, WarningPageChars = 34;
         public const int MaxCount = 99;
 
         private struct Entry
@@ -74,7 +75,10 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         /// <summary>How long a notice stays once shown: its tone's dwell, or every page of its text and detail for <see cref="PhaseSeconds"/>, whichever is longer.</summary>
         private static float Hold(HudTone tone, string text, string detail) =>
-            Math.Max(Dwell(tone), (PageCount(text) + (string.IsNullOrEmpty(detail) ? 0 : PageCount(detail))) * PhaseSeconds);
+            Math.Max(Dwell(tone), (PageCount(text, Budget(tone)) + (string.IsNullOrEmpty(detail) ? 0 : PageCount(detail, Budget(tone)))) * PhaseSeconds);
+
+        /// <summary>The characters a page may hold under this tone: a Warning's words are drawn after a ten-character prefix.</summary>
+        public static int Budget(HudTone tone) => tone == HudTone.Warning ? WarningPageChars : PageChars;
 
         public void Push(string channel, HudTone tone, string text, string detail, float now)
         {
@@ -151,7 +155,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// </summary>
         public static int Phase(in TickerLine line)
         {
-            int pages = PageCount(TextWords(line)) + (string.IsNullOrEmpty(line.Detail) ? 0 : PageCount(line.Detail));
+            int budget = Budget(line.Tone), pages = PageCount(TextWords(line), budget) + (string.IsNullOrEmpty(line.Detail) ? 0 : PageCount(line.Detail, budget));
             return pages <= 1 ? 0 : (int)(line.Age / PhaseSeconds) % pages;
         }
 
@@ -159,32 +163,45 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static string Words(in TickerLine line)
         {
             string text = TextWords(line);
-            int phase = Phase(line), textPages = PageCount(text);
-            return phase < textPages ? Page(text, phase) : Page(line.Detail, phase - textPages);
+            int budget = Budget(line.Tone), phase = Phase(line), textPages = PageCount(text, budget);
+            return phase < textPages ? Page(text, phase, budget) : Page(line.Detail, phase - textPages, budget);
         }
 
         /// <summary>How many pages <paramref name="s"/> needs (at least 1).</summary>
-        public static int PageCount(string s)
+        public static int PageCount(string s, int budget = PageChars)
         {
             int n = 0;
-            for (int at = 0; s != null && at < s.Length; at = SkipSpaces(s, Cut(s, at))) n++;
+            for (int at = 0; s != null && at < s.Length; at = Next(s, Cut(s, at, budget))) n++;
             return Math.Max(1, n);
         }
 
-        /// <summary>Page <paramref name="index"/> of <paramref name="s"/>: cut at the last space within <see cref="PageChars"/> (a longer word is cut where it falls).</summary>
-        public static string Page(string s, int index)
+        /// <summary>Page <paramref name="index"/> of <paramref name="s"/>: cut at the last space within <paramref name="budget"/> characters (a longer word is cut where it falls).</summary>
+        public static string Page(string s, int index, int budget = PageChars)
         {
             int n = 0;
-            for (int at = 0; s != null && at < s.Length; at = SkipSpaces(s, Cut(s, at)), n++)
-                if (n == index) return s.Substring(at, Cut(s, at) - at);
+            for (int at = 0; s != null && at < s.Length; at = Next(s, Cut(s, at, budget)), n++)
+                if (n == index) return s.Substring(at, Cut(s, at, budget) - at);
             return "";
         }
 
-        private static int Cut(string s, int at)
+        /// <summary>Where the page that starts at <paramref name="at"/> ends: the last space within the budget, and never after a bare separator (" -" or " ·" is left for the next page to open on its words).</summary>
+        private static int Cut(string s, int at, int budget)
         {
-            if (s.Length - at <= PageChars) return s.Length;
-            int cut = at + PageChars, space = s.LastIndexOf(' ', cut);
-            return space > at ? space : cut;
+            if (s.Length - at <= budget) return s.Length;
+            int cut = at + budget, space = s.LastIndexOf(' ', cut);
+            cut = space > at ? space : cut;
+            while (cut - at > 2 && IsSeparator(s[cut - 1]) && s[cut - 2] == ' ') cut -= 2;
+            return cut;
+        }
+
+        private static bool IsSeparator(char c) => c == '-' || c == '·';
+
+        /// <summary>The start of the next page: past the spaces and past a separator that stands alone between pages.</summary>
+        private static int Next(string s, int at)
+        {
+            at = SkipSpaces(s, at);
+            if (at < s.Length && IsSeparator(s[at]) && (at + 1 == s.Length || s[at + 1] == ' ')) at = SkipSpaces(s, at + 1);
+            return at;
         }
 
         private static int SkipSpaces(string s, int at)

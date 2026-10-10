@@ -129,6 +129,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
     internal sealed class LabelPlacer
     {
         private static readonly float[] Steps = { 0f, 15f, -15f, 30f, -30f };
+        /// <summary>Two labels this close sideways read as one run (1.9KM#2 1.8KM): they count as overlapping.</summary>
+        private const float Gap = 6f;
         private readonly float[] left = new float[32], right = new float[32], top = new float[32];
         private int n;
 
@@ -142,7 +144,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             {
                 use = y + Steps[s];
                 bool hit = false;
-                for (int i = 0; i < n && !hit; i++) hit = x0 < right[i] && x1 > left[i] && Math.Abs(use - top[i]) < 15f;
+                for (int i = 0; i < n && !hit; i++) hit = x0 < right[i] + Gap && x1 > left[i] - Gap && Math.Abs(use - top[i]) < 15f;
                 if (!hit) break;
             }
             if (n < left.Length) { left[n] = x0; right[n] = x1; top[n] = use; n++; }

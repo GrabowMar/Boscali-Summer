@@ -82,6 +82,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>Repaint every frame (something moves or pulses) instead of at 10 Hz.</summary>
         public virtual bool Fast => false;
 
+        /// <summary>What the page has to say cannot wait for a glance at a pip (a fire, an engine out, BINGO): while live and critical it ranks above the pages that only inform (<see cref="CuePriority.CriticalSystemsRank"/>). Only SYSTEMS uses it.</summary>
+        public virtual bool Critical => false;
+
         /// <summary>The headline figure (read after <see cref="Poll"/>). Default: none.</summary>
         public virtual ScopeHeadline Headline() => default;
 
@@ -96,11 +99,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>This page's own gauges for the row (at most <see cref="GaugeRow.Slots"/>), written into <paramref name="into"/>; the registered gauges fill the rest. Returns the count.</summary>
         public virtual int Gauges(GaugeSpec[] into) => 0;
 
-        /// <summary>A lamp this page overrides (by its legend, e.g. <c>ENG</c>); false = the lamp shows its own state.</summary>
-        public virtual bool Lamp(string legend, out LampState state, out bool flash)
+        /// <summary>
+        /// A lamp this page overrides (by its legend, e.g. <c>ENG</c>, <c>MSL</c>, <c>SPKE</c>): its state, whether it flashes and the word it shows instead of its own legend
+        /// (<paramref name="text"/> null keeps the legend: an engine out lights ENG, a strike landing close lights MSL as DNGR). False = the lamp shows its own state.
+        /// A threat lamp that is lit by a real threat keeps that; a page only fills a dark one.
+        /// </summary>
+        public virtual bool Lamp(string legend, out LampState state, out bool flash, out string text)
         {
             state = LampState.Dark;
             flash = false;
+            text = null;
             return false;
         }
     }

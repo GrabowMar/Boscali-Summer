@@ -130,6 +130,17 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
         /// <summary>The trace burn in percent per second: a hop adds its own rate, every held node adds the held rate (<see cref="CyberRules"/>).</summary>
         public static float TraceRate(bool hopping, int held) => (hopping ? CyberRules.HopTraceRate(NodeKind.Radar) : 0f) + CyberRules.HeldTraceRate * Math.Max(0, held);
 
+        /// <summary>A window of at least this many seconds between two snapshots is long enough to tell the real trace rate from the rules' (the trace is a whole percent on the wire).</summary>
+        public const float TraceWindow = 3f;
+
+        /// <summary>The host's pace against the rules': what the trace gained over <paramref name="seconds"/> against what <paramref name="ruleRate"/> predicts, within the host's 0.25 to 3; <paramref name="previous"/> when nothing can be said (no time, no burn expected).</summary>
+        public static float TraceFactor(float gained, float seconds, float ruleRate, float previous)
+        {
+            if (seconds <= 0f || ruleRate <= 0f) return previous;
+            float f = Math.Max(0f, gained) / (ruleRate * seconds);
+            return f < 0.25f ? 0.25f : f > 3f ? 3f : f;
+        }
+
         /// <summary>The trace a snapshot of <paramref name="trace"/> percent has reached <paramref name="age"/> seconds later at <paramref name="rate"/> percent per second.</summary>
         public static float TraceNow(float trace, float rate, float age) => Math.Min(CyberRules.TraceMax, trace + rate * Math.Max(0f, Math.Min(age, TraceHorizon)));
 

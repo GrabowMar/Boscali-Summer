@@ -27,19 +27,26 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly ScopeText text;
         private readonly float[] px = new float[MaxPoints], py = new float[MaxPoints];
         private readonly float[] ysort = new float[MaxPoints + 2], cx0 = new float[MaxPoints], cx1 = new float[MaxPoints], cxm = new float[MaxPoints];
+        private readonly string surface;
         private ScopePalette pal;
-        private float u = 1f, height, ox, oy;
+        private float u = 1f, height, ox, oy, pixel = 1f;
 
-        public ScopeCanvas(AvQuadBuffer quads, ScopeText words) { q = quads; text = words; }
+        /// <summary><paramref name="name"/> names the surface in the buffer-overflow log (one line per surface: the shell, the page, the overlay and the frame each fill their own buffer).</summary>
+        public ScopeCanvas(AvQuadBuffer quads, ScopeText words, string name = "scope") { q = quads; text = words; surface = name; }
 
         /// <summary>The board unit: canvas pixels per design unit.</summary>
         public float Unit => u;
 
-        /// <summary>Start a frame: clear the buffer and the word pool. <paramref name="heightPx"/> is the surface's height in pixels.</summary>
-        public void Begin(in ScopePalette palette, float unit, float heightPx)
+        /// <summary>
+        /// Start a frame: clear the buffer and the word pool. <paramref name="heightPx"/> is the surface's height in canvas units and <paramref name="devicePixel"/> the size of one
+        /// DEVICE pixel in the same units (1 when the canvas is drawn 1:1; a CanvasScaler or a camera makes it something else). Hairlines, dashes and rectangle edges are laid on
+        /// that grid, so a 1 px line is one device pixel wide and does not shimmer. The surface's own origin is on the grid (the board rounds where it puts it).
+        /// </summary>
+        public void Begin(in ScopePalette palette, float unit, float heightPx, float devicePixel = 1f)
         {
             pal = palette;
             u = unit;
+            pixel = devicePixel > 0.001f ? devicePixel : 1f;
             height = heightPx;
             ox = oy = 0f;
             q.Clear();
@@ -49,7 +56,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public void End()
         {
             text?.End();
-            BufferGuard.Check(q, "scope");
+            BufferGuard.Check(q, surface);
         }
 
         /// <summary>Move the origin (design units from the surface's top-left): a page strip or a gauge cell draws as if at (0, 0).</summary>
@@ -100,10 +107,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private Rgba C(ScopeTone tone, float alpha) => pal.Of(tone, alpha);
 
-        private float Lw(float w) => Math.Max(1f, w * u);
+        /// <summary>A stroke width in canvas units: whole device pixels, at least one.</summary>
+        private float Lw(float w) => Math.Max(pixel, Mathf.Round(w * u / pixel) * pixel);
 
-        /// <summary>A coordinate of an axis-aligned line snapped to the pixel grid (odd widths to a pixel centre).</summary>
-        private static float Snap(float v, float lw) => Math.Abs(lw % 2f - 1f) < 0.01f ? Mathf.Floor(v) + 0.5f : Mathf.Round(v);
+        /// <summary>A coordinate of an axis-aligned line snapped to the device pixel grid (an odd number of pixels wide to a pixel centre).</summary>
+        private float Snap(float v, float lw) => ((int)Math.Round(lw / pixel) & 1) == 1 ? Mathf.Floor(v / pixel) * pixel + pixel * 0.5f : Mathf.Round(v / pixel) * pixel;
+
+        /// <summary>An edge of a rectangle on the device pixel grid.</summary>
+        private float Edge(float v) => Mathf.Round(v / pixel) * pixel;
 
         // ------------------------------------------------------------------------------------------------ lines
 
@@ -116,7 +127,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             else if (ay == by) ay = by = Snap(ay, lw);
             Rgba c = C(tone, alpha);
             if (dash <= 0f) { AvStrokes.Line(q, ax, ay, bx, by, lw, c); return; }
-            DashedPx(ax, ay, bx, by, dash * u, gap * u, offset * u, lw, c);
+            DashedPx(ax, ay, bx, by, Math.Max(pixel, Edge(dash * u)), Math.Max(pixel, Edge(gap * u)), Edge(offset * u), lw, c);      // whole pixels: a 1 px dash never lands half on a pixel and drops out
         }
 
         /// <summary>A line with the prototype's default dash (4 on, 3 off).</summary>
@@ -162,7 +173,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public void Fill(float x, float y, float w, float h, ScopeTone tone = Ink, float alpha = 1f)
         {
             if (w <= 0f || h <= 0f) return;
-            AvStrokes.Fill(q, X(x), Y(y + h), w * u, h * u, C(tone, alpha));
+            float x0 = Edge(X(x)), y0 = Edge(Y(y + h)), x1 = Math.Max(Edge(X(x + w)), x0 + pixel), y1 = Math.Max(Edge(Y(y)), y0 + pixel);
+            AvStrokes.Fill(q, x0, y0, x1 - x0, y1 - y0, C(tone, alpha));
         }
 
         /// <summary>

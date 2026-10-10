@@ -47,7 +47,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private StrikeScope cache;
         private bool live;
         private int frame = -1, radarSerial = -1, cameraSerial = -1, satContacts, rodCost;
-        private float satOpenedAt = float.NegativeInfinity, nextCosts;
+        private float satOpenedAt = float.NegativeInfinity, nextCosts, lastNow;
+        // The own intrusion's trace rate, measured from the mirror: the snapshot the window began at, and the host's pace against the rules' (the trace factor).
+        private int traceFor = -1, traceSig;
+        private float traceBase, traceBaseAt, traceFactor = 1f;
         private bool satCamera;
         private string armedSource, armedSub, markText;
         private int markAge = -1;
@@ -86,6 +89,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (m == null || !GameManager.GetLocalAircraft(out Aircraft me) || me == null || me.disabled) return false;
             GlobalPosition at = me.transform.position.ToGlobalPosition();
             float now = SupportManager.MissionNow();
+            if (now < lastNow - 1f)      // the mission clock restarted (a new mission, a scene reset): nothing of the last one is open any more
+            {
+                satOpenedAt = float.NegativeInfinity;
+                satContacts = 0;
+                nextCosts = 0f;
+                traceFor = -1;
+                Array.Clear(sofPeak, 0, sofPeak.Length);
+            }
+            lastNow = now;
             var scope = new StrikeScope { Tracks = tracks, Perks = tiles, Chain = chain, AllocCosts = costs };
 
             scope.TrackCount = Strikes(m, at, now);
@@ -121,12 +133,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 ActiveStrikeInfo s = list[source[picks[k]]];
                 StrikeScopeRules.TryKind(s.ActionId, out StrikeKind kind);
                 float dx = s.Target.x - at.x, dz = s.Target.z - at.z;
-                if (!labels.TryGetValue(s.RequestId, out string label)) labels[s.RequestId] = label = TheaterGrid.Km(s.Target.x) + " / " + TheaterGrid.Km(s.Target.z);
+                if (!labels.TryGetValue(s.RequestId, out string label)) labels[s.RequestId] = label = "GRID " + TheaterGrid.Km(s.Target.x) + "/" + TheaterGrid.Km(s.Target.z);
                 tracks[k] = new StrikeTrack
                 {
                     Id = s.RequestId, Kind = kind, Eta = s.ImpactTime - now, Lead = Math.Max(0.1f, s.ImpactTime - s.StartTime),
                     Linger = StrikeScopeRules.Linger(kind, s.ImpactTime, s.ExpiryTime), RangeM = Mathf.Sqrt(dx * dx + dz * dz),
-                    BearingDeg = (Mathf.Atan2(dx, dz) * Mathf.Rad2Deg + 360f) % 360f, Rounds = 1, RoundGap = 0f,
+                    BearingDeg = (Mathf.Atan2(dx, dz) * Mathf.Rad2Deg + 360f) % 360f, RadiusM = s.Radius,
                     Legs = kind == StrikeKind.Cruise ? m.CruiseLegCount(s.RequestId) : 0, Target = label,
                 };
             }
@@ -200,7 +212,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 bool hopping = row.Phase == IntrusionPhase.Hopping && row.HopTarget != 0;
                 if (hopping && Kind(mirror.State.Nodes, row.HopTarget, out NodeKind target) && n < chain.Length) chain[n++] = StrikeScopeRules.Chain(target);
                 else hopping = false;
-                float left = row.HopEndsAt - now, rate = StrikeScopeRules.TraceRate(hopping, held);
+                float left = row.HopEndsAt - now, rate = StrikeScopeRules.TraceRate(hopping, held) * MeasureTrace(row, hopping, held, mirror.State.Now);
                 scope.CyberLive = true;
                 scope.CyberHopping = hopping;
                 scope.ChainCount = n;
@@ -211,6 +223,24 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 scope.TraceRate = rate;
                 return;
             }
+        }
+
+        /// <summary>
+        /// How much faster (or slower) than the rules' own rates the host's trace really burns (the data center, enemy and effect boosts scale it, 0.25 to 3): the trace of the snapshots
+        /// the mirror has delivered over a window of a few seconds against what the rules say it should have gained. 1 until the first window is complete.
+        /// </summary>
+        private float MeasureTrace(in CyberIntrusionRow row, bool hopping, int held, float snapshotAt)
+        {
+            int sig = (hopping ? 16 : 0) + held;
+            if (row.Id != traceFor) { traceFor = row.Id; traceFactor = 1f; traceSig = sig; traceBase = row.Trace; traceBaseAt = snapshotAt; }
+            else if (sig != traceSig) { traceSig = sig; traceBase = row.Trace; traceBaseAt = snapshotAt; }      // the rules' rate changed: start a new window
+            else if (snapshotAt - traceBaseAt >= StrikeScopeRules.TraceWindow)
+            {
+                traceFactor = StrikeScopeRules.TraceFactor(row.Trace - traceBase, snapshotAt - traceBaseAt, StrikeScopeRules.TraceRate(hopping, held), traceFactor);
+                traceBase = row.Trace;
+                traceBaseAt = snapshotAt;
+            }
+            return traceFactor;
         }
 
         private static bool Kind(List<CyberNodeRow> nodes, int id, out NodeKind kind)

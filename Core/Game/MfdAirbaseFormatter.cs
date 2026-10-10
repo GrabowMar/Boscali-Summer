@@ -1,7 +1,7 @@
 using System;
 using System.Text.RegularExpressions;
 
-namespace BoscaliSummer.Modules.Command.Presentation.MapUi
+namespace BoscaliSummer.Core.Game
 {
     /// <summary>
     /// Converts raw airbase scene object names and unit keys into clean, immersion-friendly

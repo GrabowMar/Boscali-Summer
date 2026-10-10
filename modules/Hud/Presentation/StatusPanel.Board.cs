@@ -27,7 +27,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly Lamp[] threatLamps = new Lamp[HudThreats.Count];
         private readonly bool[] recent = new bool[HudLamps.Count];
         private readonly int[] lampOrder = new int[HudLamps.Count];
-        private readonly GaugeSpec[] pageGauges = new GaugeSpec[GaugeRow.Slots], registered = new GaugeSpec[8], shown = new GaugeSpec[GaugeRow.Slots];
+        private readonly GaugeSpec[] pageGauges = new GaugeSpec[GaugeRow.Slots], registered = new GaugeSpec[16], shown = new GaugeSpec[GaugeRow.Slots];
         private readonly System.Collections.Generic.HashSet<int> failed = new System.Collections.Generic.HashSet<int>();
         private BoardFrame board;
         private int lampCount, gaugeCount, lastPhase = -1;
@@ -36,6 +36,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>Something on the board blinks, so its flash phase is part of what it draws.</summary>
         private bool beat => shellBeat || scopeBeat;
         private float now, bootAge, contentRight, contentBottom;
+        // One device pixel in the board's own units, and where the dock's origin falls inside a device pixel: what every edge is laid on (see ScopeCanvas.Begin).
+        private float pixel = 1f, phaseX, phaseY;
         private AvUnits units;
         private string tickerWords, tickerSourceText;
         private int tickerSourceCount, tickerSourcePhase;
@@ -87,11 +89,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             HudLamps.Fill(systems, lamps);
             HudThreats.Fill(frame.Threat, threatLamps);
 
+            MeasurePixel();
             var env = new ScopeEnv(now, frame.Units, Notice);
             ushort live = 0;
             for (int i = 0; i < pages.Length; i++)
                 if (PollPage(pages[i], env)) live |= CuePriority.Bit((ScopePage)i);
-            selector.Update(live, now);
+            selector.Update(live, now, pages[(int)ScopePage.Systems].Critical);
             page = pages[(int)selector.Page];
 
             PresentLamps(frame);
@@ -107,6 +110,38 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             catch (Exception e) { ReportOnce(p, e); return false; }
         }
 
+        private ScopeHeadline HeadlineOf(ScopePageBase p)
+        {
+            try { return p.Headline(); }
+            catch (Exception e) { ReportOnce(p, e); return default; }
+        }
+
+        /// <summary>
+        /// How big one DEVICE pixel is in the dock's units, and the fraction of a pixel the dock's origin sits at, from where the dock really lands on the screen (any canvas mode:
+        /// overlay, camera, a CanvasScaler or a scaled parent). 1 and 0 when it cannot be told.
+        /// </summary>
+        private void MeasurePixel()
+        {
+            pixel = 1f;
+            phaseX = phaseY = 0f;
+            if (dock == null || rootCanvas == null) return;
+            Camera cam = rootCanvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : rootCanvas.worldCamera;
+            if (cam == null && rootCanvas.renderMode != RenderMode.ScreenSpaceOverlay) return;
+            Vector2 origin = RectTransformUtility.WorldToScreenPoint(cam, dock.TransformPoint(Vector3.zero));
+            Vector2 across = RectTransformUtility.WorldToScreenPoint(cam, dock.TransformPoint(new Vector3(100f, 0f, 0f)));
+            float perUnit = Mathf.Abs(across.x - origin.x) / 100f;
+            if (!(perUnit > 0.05f && perUnit < 20f)) return;
+            pixel = 1f / perUnit;
+            phaseX = (Mathf.Ceil(origin.x - 0.001f) - origin.x) * pixel;
+            phaseY = (Mathf.Ceil(origin.y - 0.001f) - origin.y) * pixel;
+        }
+
+        /// <summary>A dock-local coordinate on the device pixel grid: x (or y) of the dock's origin plus a whole number of pixels.</summary>
+        private float OnGrid(float v, float phase) => phase + Mathf.Round((v - phase) / pixel) * pixel;
+
+        /// <summary>A length rounded UP to whole device pixels (a surface's size: its mesh must reach the edge the next surface starts at).</summary>
+        private float Whole(float v) => Mathf.Ceil(v / pixel - 0.001f) * pixel;
+
         private void ReportOnce(ScopePageBase p, Exception e)
         {
             if (failed.Add((int)p.Id)) BoscaliSummer.Core.Diagnostics.PatchGuard.Report("Hud.Scope." + p.Title, e);
@@ -119,18 +154,39 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             for (int i = 0; i < lamps.Length; i++)
             {
                 if (!lamps[i].Present) { lampChange.Forget(i); recent[i] = false; continue; }
-                for (int p = 0; p < pages.Length; p++)
-                    if (pages[p].Lamp(lamps[i].Legend, out LampState state, out bool flash)) { lamps[i].State = state; lamps[i].Flash = flash; break; }
+                OverrideLamp(ref lamps[i], false);
                 recent[i] = lampChange.Recent(i, lamps[i].State, now);
                 lampOrder[lampCount++] = i;
             }
+            // The threat lamps too (a strike landing close lights MSL as DNGR, a SAM envelope lights SPKE); a real threat keeps its own lamp.
+            for (int i = 0; i < threatLamps.Length; i++) OverrideLamp(ref threatLamps[i], true);
             bootAge = frame.BootAge;
             booting = lampCount > 0 && LampTest.Running(bootAge);
         }
 
+        /// <summary>The first page that overrides this lamp (by its legend) sets its state, flash and, if it has one, its word.</summary>
+        private void OverrideLamp(ref Lamp lamp, bool onlyDark)
+        {
+            if (onlyDark && lamp.State != LampState.Dark) return;
+            for (int p = 0; p < pages.Length; p++)
+            {
+                LampState state;
+                bool flash;
+                string text;
+                try { if (!pages[p].Lamp(lamp.Legend, out state, out flash, out text)) continue; }
+                catch (Exception e) { ReportOnce(pages[p], e); continue; }
+                lamp.State = state;
+                lamp.Flash = flash;
+                if (text != null) lamp.Legend = text;
+                return;
+            }
+        }
+
         private void PresentGauges()
         {
-            int own = Math.Min(page.Gauges(pageGauges), GaugeRow.Slots), reg = 0;
+            int own = 0, reg = 0;
+            try { own = Math.Min(page.Gauges(pageGauges), GaugeRow.Slots); }
+            catch (Exception e) { ReportOnce(page, e); }
             for (int i = 0; i < ScopeGauges.Count && reg < registered.Length; i++)
                 if (ScopeGauges.TryRead(i, out GaugeSpec spec)) registered[reg++] = spec;
             gaugeCount = GaugeRow.Merge(pageGauges, own, registered, reg, shown);
@@ -164,9 +220,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             Show(root, true);
 
-            Vector2 rootPosition = new Vector2(contentRight - dock.rect.xMin, contentBottom - dock.rect.yMin);
+            // The board sits on the device pixel grid (position and size in whole pixels), so every edge drawn inside it can too.
+            Vector2 rootPosition = new Vector2(OnGrid(contentRight - dock.rect.xMin, phaseX), OnGrid(contentBottom - dock.rect.yMin, phaseY));
             if (root.anchoredPosition != rootPosition) root.anchoredPosition = rootPosition;
-            Vector2 rootSize = new Vector2(geo.Width * unit, geo.Height * unit);
+            Vector2 rootSize = new Vector2(Whole(geo.Width * unit), Whole(geo.Height * unit));
             if (root.sizeDelta != rootSize) root.sizeDelta = rootSize;
 
             ScopePalette pal = Palette();
@@ -182,7 +239,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             ScopeCanvas g = shellCanvas;
             shellBeat = false;
-            g.Begin(pal, unit, geo.Height * unit);
+            g.Begin(pal, unit, Whole(geo.Height * unit), pixel);
             g.Line(0.5f, 0.5f, geo.Width - 0.5f, 0.5f, Ink, 0.25f);
             if (geo.Lamps.H > 0f) PaintLamps(g, geo.Lamps.Y, flashOn, last == Row.Lamps);
             if (geo.Gauges.H > 0f)
@@ -191,6 +248,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     if (shown[i].Flash || shown[i].Ready) shellBeat = true;
                     GaugePainter.Draw(g, shown[i], ScopeLayout.GaugeX(i), geo.Gauges.Y, ScopeLayout.GaugeW, ScopeLayout.GaugeH, flashOn, now, i == 0 && last == Row.Gauges ? BoxCut : 0f);
                 }
+                // The slots with nothing live stay as faint outlines: the row reads finished and the board's edge stays square (an outline is not data).
+                for (int i = gaugeCount; i < GaugeRow.Slots; i++)
+                    g.Box(ScopeLayout.GaugeX(i), geo.Gauges.Y, ScopeLayout.GaugeW, ScopeLayout.GaugeH, Faint, 0.7f);
             if (geo.Ticker.H > 0f) PaintTicker(g, geo.Ticker.Y, flashOn, last == Row.Ticker);
             g.End();
             shellVector.Commit();
@@ -280,14 +340,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             float hS = geo.Scope.H, body = ScopeLayout.Body(compact, strip), w = ScopeLayout.Inner;
             Show(scopeRect, true);
             scopeBeat = false;
-            Place(scopeRect, ScopeLayout.Pad * unit, geo.Scope.Y * unit, w * unit, hS * unit);
-            Place(pageRect, 0f, 0f, w * unit, body * unit);
-            Place(overlayRect, 0f, 0f, w * unit, hS * unit);
-            Place(frameRect, 0f, 0f, w * unit, hS * unit);
+            float wp = Whole(w * unit), hp = Whole(hS * unit), bp = Whole(body * unit);
+            PlaceOnGrid(scopeRect, ScopeLayout.Pad * unit, geo.Scope.Y * unit, wp, hp);
+            PlaceOnGrid(pageRect, 0f, 0f, wp, bp);
+            PlaceOnGrid(overlayRect, 0f, 0f, wp, hp);
+            PlaceOnGrid(frameRect, 0f, 0f, wp, hp);
 
             // The page body: the glass, its grid, then the page.
             ScopeCanvas g = pageCanvas;
-            g.Begin(pal, unit, body * unit);
+            g.Begin(pal, unit, bp, pixel);
             g.Fill(0f, 0f, w, body, Bg);
             g.Grid(w, body);
             try { page.Paint(g, new PagePaint(w, body, compact, ScopeLayout.SafeTop(compact), now, units)); }
@@ -301,7 +362,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             // The header band (tab, pips, headline) and the page strip, above the page.
             g = overlayCanvas;
-            g.Begin(pal, unit, hS * unit);
+            g.Begin(pal, unit, hp, pixel);
             PaintHeader(g, w, compact, flashOn);
             if (strip)
             {
@@ -317,7 +378,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             // The wipe edge (the new page is revealed left to right behind it) and the frame.
             g = frameCanvas;
-            g.Begin(pal, unit, hS * unit);
+            g.Begin(pal, unit, hp, pixel);
             if (transition.Wipe < 1f)
             {
                 float wx = Mathf.Round(transition.Wipe * w);
@@ -351,17 +412,30 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             for (int i = 0; i < pages.Length && pips < 5; i++)
             {
                 if (!CuePriority.Has(selector.Others, (ScopePage)i)) continue;
-                ScopeHeadline other = pages[i].Headline();
+                ScopeHeadline other = HeadlineOf(pages[i]);
                 ScopeTone tone = other.Tone == Red ? Red : other.Tone == Amber ? Amber : Ink;
                 float py = Mathf.Round((hh - 16f) / 2f);
-                g.Box(x, py, 16f, 16f, tone, 1f, 1f, tone, 0.16f);
-                code[0] = pages[i].Code;
-                g.Text(code, x + 8f, py + 9f, tone, 12f, ScopeAlign.Center, true);
-                x += 19f;
+                if (tone == Red && !string.IsNullOrEmpty(other.Text))
+                {
+                    // A warning on a page the pilot is not looking at says WHAT in words (FIRE, BINGO, ENG 1 OUT, 7 S), not only a letter in red.
+                    float pw = Math.Min((float)Math.Ceiling(ScopeCanvas.TextW(other.Text, 12f)) + 10f, 96f);
+                    bool lit = other.Flash && flashOn;
+                    if (other.Flash) scopeBeat = true;
+                    g.Box(x, py, pw, 16f, Red, 1f, 1f, Red, lit ? 0.5f : 0.18f);
+                    g.FitText(other.Text, x + pw / 2f, py + 9f, pw - 6f, lit ? Bg : Red, 12f, 12f, ScopeAlign.Center, true);
+                    x += pw + 3f;
+                }
+                else
+                {
+                    g.Box(x, py, 16f, 16f, tone, 1f, 1f, tone, 0.16f);
+                    code[0] = pages[i].Code;
+                    g.Text(code, x + 8f, py + 9f, tone, 12f, ScopeAlign.Center, true);
+                    x += 19f;
+                }
                 pips++;
             }
 
-            ScopeHeadline hl = page.Headline();
+            ScopeHeadline hl = HeadlineOf(page);
             if (string.IsNullOrEmpty(hl.Text)) return;
             float size = compact ? 14f : 16f, hw = (float)Math.Ceiling(ScopeCanvas.TextW(hl.Text, size)) + 12f, hx = w - 4f - hw;
             if (hl.Tone == Amber || hl.Tone == Red)

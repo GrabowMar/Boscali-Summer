@@ -23,6 +23,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!ScopeFeeds.TryRead(out d) || d.Id == 0) return;      // fresh numbers every frame: the page is Fast
             now = p.Now;
             units = p.Units;
+            if (!d.HasMarker)
+            {
+                // The contact is lost: no zone to plot, no range, no gates, no air defence about it. The plate, the deadline and the payout stay.
+                LostPlate(g);
+                Timer(g);
+                Payout(g, -34);
+                return;
+            }
             float ownDist = ObjectiveMath.Distance(d.OwnX, d.OwnZ, d.X, d.Z);
             bool inZone = ownDist <= d.Radius;
             rangeKm = ObjectiveMath.Range(rangeKm, ObjectiveMath.Need(d.Radius / 1000f, ownDist / 1000f));
@@ -91,6 +99,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void Plot(ScopeCanvas g, float sc, float ownDist, bool inZone)
         {
             float t = now;
+            labelCount = 0;
+            placer.Reset();
             g.Box(PX, PY, PW, PH, Faint, 1f, 1f, Bg, 0.35f);
 
             // known air defence: the maximum range (dashed) and, for a radar, the reach at the pilot's height (solid, filled while he is inside)
@@ -108,12 +118,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     if (hot) Disc(g, sx, sy, reach, Amber, 0.07f);
                     Circle(g, sx, sy, reach, tone, hot ? 1f : 0.9f);
                     if (Inside(sx, sy, 6f)) g.Tri(sx, sy, 0f, 5f, hot ? Amber : Ink, false);
-                    if (Inside(sx - 6f, sy + 16f, 0f) && sx + 40f < WinR) g.Text(ScopeStr.Distance("SAM", e.DistanceM, units, 12), sx - 6f, sy + 16f, hot ? Amber : Dim, 12f, ScopeAlign.Left, hot);
+                    if (Inside(sx - 6f, sy + 16f, 0f) && sx + 40f < WinR) Label(ScopeStr.Distance("SAM", e.DistanceM, units, 12), sx - 6f, sy + 16f, hot ? Amber : Dim, hot, ScopeAlign.Left);
                 }
                 else if (Inside(sx, sy, 4f))
                 {
                     g.Box(sx - 3f, sy - 3f, 6f, 6f, hot ? Amber : Ink);
-                    if (sx + 60f < WinR) g.Text(ObjectiveMath.Kind(ring.Kind), sx + 8f, sy, hot ? Amber : Dim, 12f, ScopeAlign.Left, hot);
+                    if (sx + 60f < WinR) Label(ObjectiveMath.Kind(ring.Kind), sx + 8f, sy, hot ? Amber : Dim, hot, ScopeAlign.Left);
                 }
             }
 
@@ -123,7 +133,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Ring(CX, CY, zr, zt, inZone ? 1f : 0.9f, 1f, Ink, inZone ? 0.1f : 0.05f);
             if (zr >= 12f)
             {
-                if (Inside(CX, CY + zr + 12f, 0f)) g.Text(zoneWord(), CX, CY + zr + 12f, inZone ? Ink : Dim, 12f, ScopeAlign.Center);
+                if (Inside(CX, CY + zr + 12f, 0f)) Label(zoneWord(), CX, CY + zr + 12f, inZone ? Ink : Dim, false, ScopeAlign.Center);
                 for (int a = 0; a < 360; a += 30)
                 {
                     ScopeCanvas.Polar(a, zr, out float ox, out float oy);
@@ -173,6 +183,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Cut(g, ox0, oy0, ox0 + hx, oy0 + hy, Dim, 1f, 1f, 3f, 3f);
             if (inSam || inGun) g.Ring(ox0, oy0, 11f + 2f * ScopeCanvas.Pulse(t, 2f), Amber, 0.75f);
             g.Chevron(ox0, oy0, d.OwnHeading, 7f, Hi, true);
+            FlushLabels(g);      // the words last, each on a plate: no ring, chevron or glyph strikes one through
 
             // north, the scale bar, and the plate of the contract
             g.Text("N", PX + PW - 12f, PY + 11f, Dim, 12f, ScopeAlign.Center);
@@ -182,6 +193,39 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Line(PX + 8f, by - 3f, PX + 8f, by + 3f, Dim);
             g.Line(PX + 8f + barPx, by - 3f, PX + 8f + barPx, by + 3f, Dim);
             g.Text(ScopeStr.Distance("", barM, units, 8), PX + 14f + barPx, by, Dim);
+        }
+
+        // ---------------------------------------------------------------- deferred labels
+
+        private const int LabelCap = 12, LabelChars = 24;
+        private readonly char[] labelChars = new char[LabelCap * LabelChars];
+        private readonly int[] labelLen = new int[LabelCap];
+        private readonly float[] labelX = new float[LabelCap], labelY = new float[LabelCap];
+        private readonly ScopeTone[] labelTone = new ScopeTone[LabelCap];
+        private readonly bool[] labelBold = new bool[LabelCap];
+        private readonly ScopeAlign[] labelAlign = new ScopeAlign[LabelCap];
+        private readonly LabelPlacer placer = new LabelPlacer();
+        private int labelCount;
+
+        /// <summary>Queue a plot word (copied out of the shared scratch): it is placed clear of the words before it and drawn on a plate after everything else of the plot.</summary>
+        private void Label(ReadOnlySpan<char> text, float x, float y, ScopeTone tone, bool bold, ScopeAlign align)
+        {
+            if (labelCount >= LabelCap) return;
+            int l = labelCount++, len = Math.Min(text.Length, LabelChars);
+            text.Slice(0, len).CopyTo(new Span<char>(labelChars, l * LabelChars, len));
+            labelLen[l] = len; labelX[l] = x; labelY[l] = y; labelTone[l] = tone; labelBold[l] = bold; labelAlign[l] = align;
+        }
+
+        private void FlushLabels(ScopeCanvas g)
+        {
+            for (int i = 0; i < labelCount; i++)
+            {
+                var text = new ReadOnlySpan<char>(labelChars, i * LabelChars, labelLen[i]);
+                float w = ScopeCanvas.TextW(text, 12f), x0 = labelAlign[i] == ScopeAlign.Right ? labelX[i] - w : labelAlign[i] == ScopeAlign.Center ? labelX[i] - w / 2f : labelX[i];
+                float y = Mathf.Clamp(placer.Place(x0, x0 + w, labelY[i]), WinT + 9f, WinB - 9f);
+                g.Fill(Mathf.Round(x0) - 2f, Mathf.Round(y) - 8f, (float)Math.Ceiling(w) + 4f, 16f, Bg, 0.85f);
+                g.Text(text, labelX[i], y, labelTone[i], 12f, labelAlign[i], labelBold[i]);
+            }
         }
 
         /// <summary>"ZONE 1.5KM": the zone's radius, cached (it changes only with the contract or the player's units).</summary>
@@ -229,21 +273,45 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.FitText(word, PX + 8f, PY + 41f, 178f, warn ? Amber : Ink, 12f, 12f, ScopeAlign.Left, warn);
         }
 
+        /// <summary>The lost contact's plate where the plot would be: the contract, CONTACT LOST and what the host says is wrong, all in caution amber.</summary>
+        private void LostPlate(ScopeCanvas g)
+        {
+            g.Box(PX, PY, PW, PH, Amber, 0.6f, 1f, Amber, 0.05f);
+            g.FitText(d.Title, PX + 12f, PY + 20f, PW - 24f, Amber, 14f, 12f, ScopeAlign.Left, true);
+            int sk = d.Id * 8 + (int)d.Contact;
+            if (sk != subKey)
+            {
+                subKey = sk;
+                subText = string.IsNullOrEmpty(d.Target) ? null : d.Target.ToUpperInvariant();
+            }
+            if (subText != null) g.FitText(subText, PX + 12f, PY + 38f, PW - 24f, Dim);
+            g.Text(ObjectiveMath.LineWord(ObjectiveLine.ContactLost), PX + 12f, PY + 70f, Amber, 18f, ScopeAlign.Left, true);
+            if (!ReferenceEquals(d.Blocker, lostSource))
+            {
+                lostSource = d.Blocker;
+                for (int i = 0; i < lostLines.Length; i++) lostLines[i] = null;
+                lostCount = ObjectiveMath.Wrap(d.Blocker?.ToUpperInvariant(), 31, lostLines);
+            }
+            for (int i = 0; i < lostCount; i++) g.Text(lostLines[i], PX + 12f, PY + 98f + i * 16f, Amber);
+        }
+
         // ------------------------------------------------------------------------------------------------ the column
 
         private void Timer(ScopeCanvas g)
         {
             if (d.Total <= 0f || d.Left <= 0f) return;
-            float cx = RX + 23f, cy = 55f, frac = ScopeCanvas.Clamp01(d.Left / d.Total);
+            string clock = OpsScopeWords.Clock(d.Left);
+            bool wide = clock.Length > 4;        // 10:00 and up: the 12 px bold clock is wider than the 34 px inside the ring
+            float r = wide ? 22f : 19f, cx = RX + (wide ? 26f : 23f), cy = 55f, frac = ScopeCanvas.Clamp01(d.Left / d.Total), lx = RX + (wide ? 56f : 52f);
             bool low = ObjectiveMath.DeadlineLow(d.Left);
-            g.Ring(cx, cy, 19f, Faint, 1f, 4f);
-            if (frac > 0.003f) g.Arc(cx, cy, 19f, 0f, 360f * frac - 0.01f, low ? Amber : Ink, 1f, 4f);
-            g.Line(cx, cy - 22f, cx, cy - 17f, Dim);
-            g.Text(OpsScopeWords.Clock(d.Left), cx, cy + 1f, low ? Amber : Hi, 12f, ScopeAlign.Center, true);
-            g.Text("DEADLINE", RX + 52f, 46f, Dim);
+            g.Ring(cx, cy, r, Faint, 1f, 4f);
+            if (frac > 0.003f) g.Arc(cx, cy, r, 0f, 360f * frac - 0.01f, low ? Amber : Ink, 1f, 4f);
+            g.Line(cx, cy - r - 3f, cx, cy - r + 2f, Dim);
+            g.Text(clock, cx, cy + 1f, low ? Amber : Hi, 12f, ScopeAlign.Center, true);
+            g.Text("DEADLINE", lx, 46f, Dim);
             int tk = (int)Math.Ceiling(d.Total);
             if (tk != totalKey) { totalKey = tk; totalText = "OF " + OpsScopeWords.Clock(d.Total); }
-            g.Text(totalText, RX + 52f, 64f, Dim);
+            g.Text(totalText, lx, 64f, Dim);
         }
 
         private void Range(ScopeCanvas g, float ownDist, bool inZone)

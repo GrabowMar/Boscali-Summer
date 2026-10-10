@@ -29,7 +29,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         // cached words (rebuilt when what they say changes, never per frame)
         private string subText, lineText, moneyText, xpText, multText, totalText, zoneText, headlineText;
-        private readonly string[] nextLines = new string[3];
+        private readonly string[] nextLines = new string[3], lostLines = new string[5];
+        private string lostSource;
+        private int lostCount;
         private int subKey = -1, lineKey = -1, moneyKey = -1, xpKey = -1, totalKey = -1, zoneKey = -1, headlineKey = -1, nextCount;
         private string nextSource;
         private float multKey = -1f;
@@ -67,6 +69,18 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             ReadHeadline(env.Units);
             primed = true;
             return true;
+        }
+
+        /// <summary>Inside a radar SAM's envelope the SPKE lamp lights amber and flashes (the prototype's objective page); a real spike keeps its own state.</summary>
+        public override bool Lamp(string legend, out LampState state, out bool flash, out string text)
+        {
+            state = LampState.Caution;
+            flash = true;
+            text = null;
+            if (live && inSam && legend == "SPKE") return true;
+            state = LampState.Dark;
+            flash = false;
+            return false;
         }
 
         private void Forget()
@@ -153,7 +167,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void ReadHeadline(AvUnits units)
         {
             ObjectiveLine line = ObjectiveMath.Line(d);
-            float edge = Math.Max(0f, ObjectiveMath.Distance(d.OwnX, d.OwnZ, d.X, d.Z) - d.Radius);
+            float edge = d.HasMarker ? Math.Max(0f, ObjectiveMath.Distance(d.OwnX, d.OwnZ, d.X, d.Z) - d.Radius) : 0f;
             bool inZone = edge <= 0f;
             string text;
             int key;

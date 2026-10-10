@@ -36,7 +36,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         }
 
         /// <summary>Drops samplers of members no longer in the wing (called once per snapshot fill).</summary>
-        private void PruneStation()
+        internal void PruneStation()
         {
             if (stationPrev.Count <= Members.Count) return;
             var gone = new List<WingMember>();

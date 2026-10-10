@@ -37,8 +37,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         {
             if (t.Eta > 0f)
                 return t.Kind == StrikeKind.Rod && t.Eta > RodFall ? StrikePhase.Warn : t.Kind == StrikeKind.Rod ? StrikePhase.Fall : StrikePhase.Flight;
-            float since = -t.Eta, landing = Hold + Math.Max(0, t.Rounds - 1) * Math.Max(0f, t.RoundGap);
-            if (since < landing) return StrikePhase.Impact;
+            float since = -t.Eta;
+            if (since < Hold) return StrikePhase.Impact;
             return since < t.Linger ? StrikePhase.Effect : StrikePhase.Done;
         }
 
@@ -71,18 +71,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         public static int LegCount(in StrikeTrack t) => Math.Max(0, t.Legs) + 1;
 
-        /// <summary>How many of the flight's rounds have landed.</summary>
-        public static int Splashes(in StrikeTrack t)
-        {
-            if (t.Eta > 0f) return 0;
-            int rounds = Math.Max(1, t.Rounds);
-            if (t.RoundGap <= 0f) return rounds;
-            return Math.Min(rounds, (int)Math.Floor(-t.Eta / t.RoundGap) + 1);
-        }
-
-        /// <summary>Seconds since the last round of the flight landed (negative while rounds are still falling).</summary>
-        public static float SinceLast(in StrikeTrack t) => -t.Eta - Math.Max(0, t.Rounds - 1) * Math.Max(0f, t.RoundGap);
-
         /// <summary>Index of the track that lands first among those still in the air, -1 when none is.</summary>
         public static int Soonest(StrikeTrack[] tracks, int count)
         {
@@ -92,8 +80,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return best;
         }
 
-        /// <summary>A friendly kinetic strike lands within <see cref="DangerCloseM"/> of the pilot and has not landed yet.</summary>
-        public static bool Close(in StrikeTrack t) => Kinetic(t.Kind) && InFlight(t) && t.RangeM <= DangerCloseM;
+        /// <summary>A friendly kinetic strike lands within <see cref="DangerCloseM"/> of the pilot (or three times its own effect radius, if that is wider) and has not landed yet.</summary>
+        public static bool Close(in StrikeTrack t) => Kinetic(t.Kind) && InFlight(t) && t.RangeM <= Math.Max(DangerCloseM, 3f * t.RadiusM);
 
         // ------------------------------------------------------------------------------------------------ layout
 

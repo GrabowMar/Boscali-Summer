@@ -13,6 +13,8 @@ namespace BoscaliSummer.Core.Contracts
         /// <summary>"DAMAGE ASSESSMENT": the contract's title without its number, and its target's name ("FUEL DEPOT 3"; empty when the host names none).</summary>
         public string Title, Target;
         public ObjectiveContact Contact;
+        /// <summary>The zone has a place on the map. False when the host has lost the contact: <see cref="X"/> and <see cref="Z"/> are then zero and the page draws no plot, only the plate (CONTACT LOST and the host's blocker).</summary>
+        public bool HasMarker;
         /// <summary>The zone: global x, z and radius in metres.</summary>
         public float X, Z, Radius;
         /// <summary>The pilot: global x, z, true heading in degrees and the radar height above ground in metres.</summary>

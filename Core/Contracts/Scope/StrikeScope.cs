@@ -27,10 +27,9 @@ namespace BoscaliSummer.Core.Contracts
         public float RangeM, BearingDeg;
         /// <summary>CRUISE: waypoint legs confirmed on the way (the route's diamonds).</summary>
         public int Legs;
-        /// <summary>Payloads in the flight (PRSM and the rod are one) and the seconds between their impacts.</summary>
-        public int Rounds;
-        public float RoundGap;
-        /// <summary>The aim point on the theatre grid ("12.4 / -3.1 KM"), cached by the provider; null when unknown.</summary>
+        /// <summary>The effect's own radius in metres (the blast, the EMP, the barrage): danger close is judged against it.</summary>
+        public float RadiusM;
+        /// <summary>The aim point on the theatre grid ("GRID 12.4/-3.1"), cached by the provider; null when unknown.</summary>
         public string Target;
     }
 

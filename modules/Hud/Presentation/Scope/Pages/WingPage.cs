@@ -28,6 +28,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private float now, lastSample = -1000f, flashUntil, flashFor = -1f, holdUntil;
         private readonly int[] seen = new int[Cap];
         private readonly WingState[] prev = new WingState[Cap];
+        private readonly bool[] wasDamaged = new bool[Cap];
+        private readonly float[] damagedUntil = new float[Cap];
+        private int defenders;
+        private static readonly string[] MslWords = { "MSL", "MSL 1", "MSL 2", "MSL 3", "MSL 4", "MSL 5", "MSL 6", "MSL 7", "MSL 8" };
         private readonly float[] trailX = new float[Cap * TrailLen], trailY = new float[Cap * TrailLen], trailXY = new float[TrailLen * 2];
         private readonly string[] seekerPre = new string[Cap], replyPost = new string[Cap], seekerFor = new string[Cap], replyFor = new string[Cap];
         private readonly float[] slotX = new float[Cap], slotY = new float[Cap];
@@ -67,9 +71,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             now = env.Now;
             units = env.Units;
             bool have = ScopeFeeds.TryRead(out d) && d.Count > 0;
-            if (!have) { live = false; primed = false; return false; }
+            if (!have) { live = false; primed = false; defenders = 0; return false; }
             Edges(env);
             primed = true;
+            defenders = 0;
+            for (int i = 0; i < d.Count && i < Cap; i++) if (d.Members[i].State == WingState.Defend) defenders++;
             live = d.Engaged || WingBoardMath.NeedsAttention(d.Members, d.Count) || now < holdUntil;
             if (live) UpdateHeadline();
             return live;
@@ -82,15 +88,18 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             for (int i = 0; i < n; i++)
             {
                 WingBoardMember m = d.Members[i];
-                if (primed && seen[i] == m.Number && prev[i] != m.State)
+                bool same = primed && seen[i] == m.Number;
+                string who = m.Name ?? "WINGMAN";
+                if (same && m.Damaged && !wasDamaged[i])        // a fresh hit: worded DAMAGED for a few seconds, then an amber suffix on the row
                 {
-                    string who = m.Name ?? "WINGMAN";
+                    env.Notice?.Invoke("wing", HudTone.Warning, who + " HIT", m.HasHull ? "HULL " + (int)Math.Round(m.Hull * 100f) + "%" : null);
+                    flashUntil = now + 1.5f; flashFor = m.Number; holdUntil = damagedUntil[i] = now + HoldSeconds;
+                }
+                wasDamaged[i] = m.Damaged;
+                if (same && prev[i] != m.State)
+                {
                     switch (m.State)
                     {
-                        case WingState.Damaged:
-                            env.Notice?.Invoke("wing", HudTone.Warning, who + " HIT", m.HasHull ? "HULL " + (int)Math.Round(m.Hull * 100f) + "%" : null);
-                            flashUntil = now + 1.5f; flashFor = m.Number; holdUntil = now + HoldSeconds;
-                            break;
                         case WingState.Defend:
                             env.Notice?.Invoke("wing", HudTone.Caution, who + " DEFENDING", m.HasThreat ? (m.ThreatSeeker ?? "MISSILE") + " INBOUND" : "MISSILE INBOUND");
                             flashUntil = now + 1.2f; flashFor = m.Number;
@@ -123,7 +132,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void UpdateHeadline()
         {
             int who = -1, kind = 0;
-            for (int i = 0; i < d.Count && kind == 0; i++) if (d.Members[i].State == WingState.Damaged) { who = i; kind = 1; }
+            for (int i = 0; i < d.Count && i < Cap && kind == 0; i++) if (now < damagedUntil[i] && d.Members[i].Damaged) { who = i; kind = 1; }
             for (int i = 0; i < d.Count && kind == 0; i++) if (d.Members[i].State == WingState.Defend) { who = i; kind = 2; }
             for (int i = 0; i < d.Count && kind == 0; i++) if (d.Members[i].State == WingState.Winch) { who = i; kind = 3; }
             int out_ = WingBoardMath.OutCount(d.Members, d.Count);
@@ -148,6 +157,21 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public override ScopeHeadline Headline() => live ? new ScopeHeadline { Text = headlineText, Tone = headlineTone, Flash = headlineFlash } : default;
 
+        /// <summary>A wingman defending: the MSL lamp lights amber and flashes as "MSL n" (the prototype's wing page); a missile on the player keeps its own lamp.</summary>
+        public override bool Lamp(string legend, out LampState state, out bool flash, out string text)
+        {
+            state = LampState.Caution;
+            flash = true;
+            text = null;
+            if (live && defenders > 0 && legend == "MSL") { text = MslWords[Math.Min(defenders, MslWords.Length - 1)]; return true; }
+            state = LampState.Dark;
+            flash = false;
+            return false;
+        }
+
+        /// <summary>The state the row and the marker word: a fresh hit reads DAMAGED for a few seconds (unless a missile is on the wingman), else its state. The rays and tethers go by the true state.</summary>
+        private WingState Shown(int i, in WingBoardMember m) => i < Cap && now < damagedUntil[i] && m.Damaged && m.State != WingState.Defend ? WingState.Damaged : m.State;
+
         public override int Gauges(GaugeSpec[] into)
         {
             if (d.Count <= 0 || d.Members == null) return 0;
@@ -162,7 +186,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             if (d.HasAutopilot)
             {
-                into[n++] = new GaugeSpec { Id = "ap", Label = "AUTOPILOT", Kind = GaugeKind.Mode, Text = d.ApText, Sub = d.ApSub, Value = d.ApProgress / 3f, Tone = Ink };
+                into[n++] = new GaugeSpec { Id = "ap", Label = "AUTOPILOT", Kind = GaugeKind.Mode, Text = d.ApText, Sub = d.ApSub, Value = d.ApProgress, Tone = Ink };
             }
             WingBoardMember lowest = d.Members[low];
             int fk = (int)Math.Round(minFuel * 100f) * 100 + lowest.Number * 3 + (lowest.Bingo ? 1 : lowest.Joker ? 2 : 0);
@@ -357,15 +381,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 WingBoardMember m = d.Members[i];
                 WingBoardMath.Place(m.X, m.Y, out float ax, out float ay, out bool rim);
-                ScopeTone tone = WingBoardMath.ToneOf(m.State);
-                bool hollow = WingBoardMath.Hollow(m.State);
+                WingState shown = Shown(i, m);
+                ScopeTone tone = m.Damaged && WingBoardMath.ToneOf(shown) == Ink ? Amber : WingBoardMath.ToneOf(shown);       // a hit wingman keeps an amber chevron after the DAMAGED word is gone
+                bool hollow = WingBoardMath.Hollow(shown);
                 if (!rim)
                 {
                     int o = i * TrailLen;
                     for (int k = 0; k < TrailLen; k++) { WingBoardMath.At(trailX[o + k], trailY[o + k], out trailXY[2 * k], out trailXY[2 * k + 1]); }
                     g.Trail(trailXY, TrailLen, tone, 0.7f, 1f, 5);
                     g.Chevron(ax, ay, m.HeadingDeg, 7f, tone, !hollow, 1f);
-                    if (m.State == WingState.Damaged)
+                    if (shown == WingState.Damaged)
                         for (int k = 0; k < 5; k++)
                         {
                             float u = (t * 1.4f + k / 5f) % 1f;
@@ -433,34 +458,45 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private void Row(ScopeCanvas g, in WingBoardMember m, int index, float x, float y, float h, bool taskLine, float t)
         {
-            ScopeTone tone = WingBoardMath.ToneOf(m.State);
-            bool sev = tone == Amber, flash = m.State == WingState.Damaged && (int)(t * 3f) % 2 == 0;
+            WingState st = Shown(index, m);
+            ScopeTone tone = WingBoardMath.ToneOf(st);
+            bool sev = tone == Amber, flash = st == WingState.Damaged && (int)(t * 3f) % 2 == 0;
             g.Box(x, y, RowW, h, sev ? Amber : Dim, sev ? 1f : 0.8f, 1f, Amber, sev ? (flash ? 0.28f : 0.1f) : 0f, chamTL: 6f);
-            g.Chevron(x + 13f, y + 14f, m.HeadingDeg > 90f || m.HeadingDeg < -90f ? 180f : 0f, 5f, tone, !WingBoardMath.Hollow(m.State), 1f);
-            string word = WingBoardMath.Word(m.State);
+            g.Chevron(x + 13f, y + 14f, m.HeadingDeg > 90f || m.HeadingDeg < -90f ? 180f : 0f, 5f, m.Damaged && tone == Ink ? Amber : tone, !WingBoardMath.Hollow(st), 1f);
+            string word = WingBoardMath.Word(st);
             float wordW = ScopeCanvas.TextW(word, 12f) + 6f;
             g.FitText(m.Name ?? "", x + 24f, y + 13f, RowW - 24f - 8f - wordW, Hi, 12f, 12f, ScopeAlign.Left, true);
-            ScopeTone wordTone = tone == Ink ? (m.State == WingState.Engage ? Hi : Ink) : tone;
-            g.Text(word, x + RowW - 8f, y + 13f, wordTone, 12f, ScopeAlign.Right, m.State != WingState.Form, m.State == WingState.Rtb ? 0.85f : 1f);
+            ScopeTone wordTone = tone == Ink ? (st == WingState.Engage ? Hi : Ink) : tone;
+            g.Text(word, x + RowW - 8f, y + 13f, wordTone, 12f, ScopeAlign.Right, st != WingState.Form, st == WingState.Rtb ? 0.85f : 1f);
 
             float by = y + (taskLine ? 26f : Math.Max(20f, Math.Min(26f, h - 18f)));
             bool low = m.Fuel < 0.25f || m.Bingo || m.Joker;
             ScopeTone fuelTone = low ? Amber : Ink, ammoTone = m.Ammo <= 0f ? Amber : Ink;
             g.Text("F", x + 8f, by + 5f, Dim);
             g.Bar(x + 17f, by, 36f, 10f, m.Fuel, fuelTone, 8);
-            g.Text(ScopeStr.Pct((int)Math.Round(m.Fuel * 100f)), x + 58f, by + 5f, low ? Amber : Hi, 12f, ScopeAlign.Left, low);
+            g.BarTick(x + 17f, by, 36f, 10f, 0.25f, m.Fuel < 0.25f ? Amber : Dim);        // the quarter mark every caution below it is read against
+            if (m.Bingo) g.Text("BINGO", x + 58f, by + 5f, Amber, 12f, ScopeAlign.Left, true);
+            else g.Text(ScopeStr.Pct((int)Math.Round(m.Fuel * 100f)), x + 58f, by + 5f, low ? Amber : Hi, 12f, ScopeAlign.Left, low);
             g.Text("A", x + 92f, by + 5f, Dim);
             g.Bar(x + 101f, by, 36f, 10f, m.Ammo, ammoTone, 4);
             if (ammoTone == Amber) g.Text("WINCH", x + 142f, by + 5f, Amber, 12f, ScopeAlign.Left, true);
             else g.Text(ScopeStr.Pct((int)Math.Round(m.Ammo * 100f)), x + 142f, by + 5f, Hi);
-            if (taskLine) TaskLine(g, m, index, x + 8f, y + 49f, RowW - 14f, sev ? Amber : Dim);
+            if (taskLine) TaskLine(g, m, st, index, x + 8f, y + 49f, RowW - 14f, sev ? Amber : Dim);
         }
 
         /// <summary>The row's third line: what the wingman is doing, from what is known of it.</summary>
-        private void TaskLine(ScopeCanvas g, in WingBoardMember m, int index, float x, float y, float w, ScopeTone tone)
+        private void TaskLine(ScopeCanvas g, in WingBoardMember m, WingState st, int index, float x, float y, float w, ScopeTone tone)
         {
             string unit = units == AvUnits.Imperial ? " FT" : " M";
-            switch (m.State)
+            if (m.Damaged && st != WingState.Damaged)
+            {
+                // Hit earlier and not mended: an amber suffix at the end of the line, the task cut to leave it room.
+                ReadOnlySpan<char> hit = m.HasHull ? ScopeStr.Cat("HIT - HULL ", (int)Math.Round(m.Hull * 100f), "%") : "HIT";
+                float hw = ScopeCanvas.TextW(hit, 12f);
+                g.Text(hit, x + w, y, Amber, 12f, ScopeAlign.Right, true);
+                w -= hw + 8f;
+            }
+            switch (st)
             {
                 case WingState.Form:
                     g.FitText(ScopeStr.Cat("SLOT ", m.Number, " - ERR ", Round5(m.SlotErrM), unit), x, y, w, tone);

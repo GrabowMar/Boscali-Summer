@@ -58,7 +58,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             if (count == 0) return false;
 
             GlobalPosition at = me.transform.position.ToGlobalPosition();
-            if (ContractSelection.Select(cards, count, at.x, at.z, selected, distances, 1, manager.SelectedForHud) == 0 || !selected[0].HasMarker) return false;
+            if (ContractSelection.Select(cards, count, at.x, at.z, selected, distances, 1, manager.SelectedForHud) == 0) return false;
             ContractCard c = selected[0];
             SecondaryObjectiveView view = null;
             for (int i = 0; i < views.Count; i++) if (views[i].Id == c.Id) view = views[i];
@@ -66,18 +66,24 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 
             ObjectiveTasking tasking = view.Tasking;
             Vector3 forward = me.transform.forward;
-            float agl = me.radarAlt, distance = ContractMarkerMath.Distance(at.x, at.z, c.X, c.Z);
+            // A selected contract whose contact is lost has no place (HasMarker false): it stays, as a plate, so the pilot reads CONTACT LOST and the host's blocker instead of the page vanishing.
+            bool marker = c.HasMarker;
+            float agl = me.radarAlt, distance = marker ? ContractMarkerMath.Distance(at.x, at.z, c.X, c.Z) : 0f;
             ObjectivePhase[] phases = tasking != null ? tasking.Phases : null;
             int current = tasking != null ? tasking.CurrentPhase : -1;
             ObjectiveContact contact = tasking != null ? tasking.Contact : ObjectiveContact.Fixed;
             string blocker = tasking != null ? tasking.Blocker : "";
-            bool gated = phases != null && current >= 0 && current < phases.Length && ObjectiveScopeRules.GatedPhase(phases[current].Title);
-            ObjectiveScopeRules.Gates(distance, c.Radius, agl, contact, blocker, out bool range, out bool alt, out bool los, out bool track);
-
-            Rings(me, c, at);
+            bool gated = marker && phases != null && current >= 0 && current < phases.Length && ObjectiveScopeRules.GatedPhase(phases[current].Title);
+            bool range = false, alt = false, los = false, track = false;
+            if (marker)
+            {
+                ObjectiveScopeRules.Gates(distance, c.Radius, agl, contact, blocker, out range, out alt, out los, out track);
+                Rings(me, c, at);
+            }
+            else ringCount = 0;
             cache = new ObjectiveScope
             {
-                Id = c.Id, Title = c.Title, Target = view.Target, Contact = contact,
+                Id = c.Id, Title = c.Title, Target = view.Target, Contact = contact, HasMarker = marker,
                 X = c.X, Z = c.Z, Radius = c.Radius, OwnX = at.x, OwnZ = at.z, OwnHeading = ObjectiveScopeRules.Heading(forward.x, forward.z), OwnAgl = agl,
                 Left = c.Seconds, Total = Math.Max(c.Seconds, ObjectiveScopeRules.DeadlineSeconds(view.Title)), Money = view.Money, Xp = view.Xp, Multiplier = Multiplier(me),
                 Phases = phases, PhaseCount = phases != null ? phases.Length : 0, Current = current,

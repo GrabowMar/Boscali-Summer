@@ -29,7 +29,8 @@ namespace BoscaliSummer.Core.Contracts
         public int Ammo, AmmoFull;
         /// <summary>Transfer phase only: 0..1 of the transfer time that has passed (the game moves the fuel and rounds at its end).</summary>
         public float TransferT;
-        /// <summary>Served: what the transfer moved (kilograms of fuel, rounds).</summary>
+        /// <summary>Served: what the transfer moved (kilograms of fuel, rounds); <see cref="HasMoved"/> false when the feed did not see the transfer begin (the board was not polled, or the hook-up began before it), so there is no total to claim.</summary>
+        public bool HasMoved;
         public float MovedFuelKg;
         public int MovedRounds;
         /// <summary>The tanker kit's remaining fuel and munitions in kilograms (<see cref="HasStock"/> false: not known).</summary>

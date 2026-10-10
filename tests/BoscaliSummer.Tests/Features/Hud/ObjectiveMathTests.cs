@@ -82,10 +82,10 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(ObjectiveMath.Kind(AirDefenceKind.RadarSam) == "SAM" && ObjectiveMath.Kind(AirDefenceKind.Gun) == "GUN" && ObjectiveMath.Kind(AirDefenceKind.IrSam) == "IR SAM", "Ring words");
         }
 
-        private static ObjectiveScope Scope(ObjectiveContact contact = ObjectiveContact.Fixed, bool gates = true, bool range = true, bool alt = true, bool los = true, bool track = true, float progress = 0f)
+        private static ObjectiveScope Scope(ObjectiveContact contact = ObjectiveContact.Fixed, bool gates = true, bool range = true, bool alt = true, bool los = true, bool track = true, float progress = 0f, bool marker = true)
         {
             var phases = new[] { new ObjectivePhase(0, "STRIKE", "", ObjectivePhaseStatus.Done, 1f), new ObjectivePhase(1, "SURVEY", "", ObjectivePhaseStatus.Current, progress) };
-            return new ObjectiveScope { Contact = contact, HasGates = gates, GateRange = range, GateAlt = alt, GateLos = los, GateTrack = track, Phases = phases, PhaseCount = 2, Current = 1 };
+            return new ObjectiveScope { Contact = contact, HasMarker = marker, HasGates = gates, GateRange = range, GateAlt = alt, GateLos = los, GateTrack = track, Phases = phases, PhaseCount = 2, Current = 1 };
         }
 
         private static void Plate()
@@ -93,6 +93,7 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.Eq(ObjectiveMath.Line(Scope()), ObjectiveLine.Next, "Nothing wrong and nothing counted: the next step");
             TestAssert.Eq(ObjectiveMath.Line(Scope(progress: 0.4f)), ObjectiveLine.Progress, "A hold that counts says so");
             TestAssert.Eq(ObjectiveMath.Line(Scope(contact: ObjectiveContact.Lost)), ObjectiveLine.ContactLost, "A lost contact comes first");
+            TestAssert.Eq(ObjectiveMath.Line(Scope(marker: false)), ObjectiveLine.ContactLost, "A contract with no place on the map reads CONTACT LOST whatever the contact word says");
             TestAssert.Eq(ObjectiveMath.Line(Scope(los: false)), ObjectiveLine.NoSightline, "In the zone, high, tracked and still not counting: no sightline");
             TestAssert.Eq(ObjectiveMath.Line(Scope(alt: false, los: false)), ObjectiveLine.TooLow, "Too low outranks the sightline");
             TestAssert.Eq(ObjectiveMath.Line(Scope(track: false, los: false)), ObjectiveLine.NoTrack, "...and so does a stale contact");

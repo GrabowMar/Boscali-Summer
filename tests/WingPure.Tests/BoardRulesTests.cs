@@ -7,9 +7,9 @@ namespace WingPure.Tests
     /// <summary>The WING page's state words (HUD v8) from a snapshot entry's facts.</summary>
     internal static class BoardRulesTests
     {
-        private static WingState S(bool defending = false, bool damaged = false, bool recovering = false, bool refit = false, bool engaged = false, bool dry = false,
+        private static WingState S(bool defending = false, bool recovering = false, bool refit = false, bool engaged = false, bool dry = false,
             bool grounded = false, bool settled = false, bool behind = false, float err = 5f) =>
-            BoardRules.State(defending, damaged, recovering, refit, engaged, dry, grounded, settled, behind, err);
+            BoardRules.State(defending, recovering, refit, engaged, dry, grounded, settled, behind, err);
 
         public static void Run()
         {
@@ -20,8 +20,8 @@ namespace WingPure.Tests
             TestAssert.That(S(dry: true) == WingState.Winch, "Out of weapons in formation reads WINCH");
             TestAssert.That(S(recovering: true, dry: true) == WingState.Rtb, "A dry member going home reads RTB");
             TestAssert.That(S(recovering: true, refit: true) == WingState.Refit, "Going home to rearm reads REFIT");
-            TestAssert.That(S(damaged: true, engaged: true) == WingState.Damaged, "A hit outranks a fight");
-            TestAssert.That(S(defending: true, damaged: true) == WingState.Defend, "A missile on it outranks a hit");
+            TestAssert.That(S(engaged: true, recovering: true) == WingState.Engage, "A fight outranks the way home");
+            TestAssert.That(S(defending: true, engaged: true) == WingState.Defend && S(defending: true, recovering: true) == WingState.Defend, "A missile on it outranks a fight and the way home");
             TestAssert.That(S(grounded: true) == WingState.Ground && S(settled: true) == WingState.Land, "Ground and landing");
             TestAssert.That(S(grounded: true, err: 5000f) == WingState.Ground, "A member on the ground is never out of slot");
 

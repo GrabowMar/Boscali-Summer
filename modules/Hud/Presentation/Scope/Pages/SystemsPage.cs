@@ -38,7 +38,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private const float FlashSeconds = 2f, FireFlash = 3f, DripCount = 6f;
 
         private SystemsScope d;
-        private bool ready, primed, abnormal, fast;
+        private bool ready, primed, abnormal, fast, critical;
         private float now;
         private readonly Lamp[] rows = new Lamp[HudDamage.MaxLamps];
         private int rowCount;
@@ -68,13 +68,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public override bool Fast => fast;
 
+        public override bool Critical => critical;
+
         // ------------------------------------------------------------------------------------------------ poll
 
         public override bool Poll(in ScopeEnv env)
         {
             now = env.Now;
             ready = ScopeFeeds.TryRead(out d) && d.Fuel.Valid;
-            if (!ready) { primed = false; fast = abnormal = false; return false; }
+            if (!ready) { primed = false; fast = abnormal = critical = false; return false; }
 
             if (!primed || !SystemsMath.SameDamage(rowsFor, d.Damage))
             {
@@ -99,6 +101,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             primed = true;
 
             abnormal = h != SystemsHeadline.Nominal;
+            critical = SystemsMath.HeadlineTone(h, d.Damage) == Red;      // fire, an engine out, BINGO, lost structure
             fast = (d.Damage.Flags & (DamageFlags.Fire | DamageFlags.FuelLeak)) != 0 || now < hitAt + 1f || h == SystemsHeadline.Fire || h == SystemsHeadline.Bingo ||
                    (abnormal && now < headlineAt + FlashSeconds);
             return abnormal;
@@ -147,10 +150,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             return new ScopeHeadline { Text = headlineText, Tone = tone, Flash = tone == Red && (headline == SystemsHeadline.Fire || headline == SystemsHeadline.Bingo) || tone != Dim && fresh };
         }
 
-        public override bool Lamp(string legend, out LampState state, out bool flash)
+        public override bool Lamp(string legend, out LampState state, out bool flash, out string text)
         {
             state = LampState.Dark;
             flash = false;
+            text = null;
             if (!ready || legend != "ENG" || d.Damage.EnginesOut <= 0) return false;
             state = LampState.Warning;
             flash = now < engineOutAt + FireFlash;

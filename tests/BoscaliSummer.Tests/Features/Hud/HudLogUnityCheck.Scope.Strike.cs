@@ -10,9 +10,9 @@ using UnityEngine;
 // Variants (1080p, t = 6): "solo" = one rod and nothing else (the track takes the room); "sat" = a PRSM and a SAT CAMERA window, an armed perk, no intrusion.
 public static partial class HudLogUnityCheck
 {
-    private static object StrikeTrackOf(ScopeScene s, string kind, int id, float eta, float lead, float rangeM, float bearing, string target, int rounds = 1, float gap = 0f, int legs = 0) =>
+    private static object StrikeTrackOf(ScopeScene s, string kind, int id, float eta, float lead, float rangeM, float bearing, string target, int legs = 0, float radius = 420f) =>
         s.Fill(s.Contract("StrikeTrack"), "Id", id, "Kind", s.ContractEnum("StrikeKind", kind), "Eta", eta, "Lead", lead, "RangeM", rangeM, "BearingDeg", bearing, "Target", target,
-            "Rounds", rounds, "RoundGap", gap, "Legs", legs);
+            "Legs", legs, "RadiusM", radius);
 
     private static object PerkTileOf(ScopeScene s, string name, string front, string state, float cooldown, float total) =>
         s.Fill(s.Contract("PerkTile"), "Name", name, "Front", s.ContractEnum("PerkFront", front), "State", s.ContractEnum("PerkPhase", state), "Cooldown", cooldown, "Total", total);
@@ -21,7 +21,7 @@ public static partial class HudLogUnityCheck
     {
         bool solo = s.Variant == "solo";
         Array tracks = Array.CreateInstance(Type("BoscaliSummer.Core.Contracts.StrikeTrack"), 1);
-        tracks.SetValue(solo ? StrikeTrackOf(s, "Rod", 1, 14f - t, 15f, 6400f, 47f, "12.4 / -3.1") : StrikeTrackOf(s, "Prsm", 2, 12f - t, 14f, 4200f, 262f, "-3.9 / 0.7"), 0);
+        tracks.SetValue(solo ? StrikeTrackOf(s, "Rod", 1, 14f - t, 15f, 6400f, 47f, "GRID 12.4/-3.1") : StrikeTrackOf(s, "Prsm", 2, 12f - t, 14f, 4200f, 262f, "GRID -3.9/0.7"), 0);
         Array perks = Array.CreateInstance(Type("BoscaliSummer.Core.Contracts.PerkTile"), solo ? 1 : 2);
         perks.SetValue(solo ? PerkTileOf(s, "ROD", "Space", "Cooling", 300f - t, 300f) : PerkTileOf(s, "SAM NET", "Cyber", "Armed", 0f, 120f), 0);
         if (!solo) perks.SetValue(PerkTileOf(s, "PRSM", "Space", "Cooling", 60f - t, 60f), 1);
@@ -42,9 +42,9 @@ public static partial class HudLogUnityCheck
         // the three strikes, in the order they were called
         Type track = Type("BoscaliSummer.Core.Contracts.StrikeTrack");
         Array tracks = Array.CreateInstance(track, 3);
-        tracks.SetValue(StrikeTrackOf(s, "Rod", 1, 12f - t, 15f, 6400f, 47f, "12.4 / -3.1"), 0);
-        tracks.SetValue(StrikeTrackOf(s, "Prsm", 2, 8.5f - t, 6.5f, 900f, 312f, "-0.6 / 0.9", rounds: 6, gap: 0.35f), 1);
-        tracks.SetValue(StrikeTrackOf(s, "Cruise", 3, 16f - t, 22f, 31000f, 12f, "-8.2 / 30.4", legs: 2), 2);
+        tracks.SetValue(StrikeTrackOf(s, "Rod", 1, 12f - t, 15f, 6400f, 47f, "GRID 12.4/-3.1"), 0);
+        tracks.SetValue(StrikeTrackOf(s, "Prsm", 2, 8.5f - t, 6.5f, 900f, 312f, "GRID -0.6/0.9"), 1);
+        tracks.SetValue(StrikeTrackOf(s, "Cruise", 3, 16f - t, 22f, 31000f, 12f, "GRID -8.2/30.4", legs: 2), 2);
         s.Expect(t < 20f, "The fixture's clock stays inside the loop");
 
         // perks: ROD cooling, SAM NET ready / armed / cooling, JTAC LASE finishing its cooldown

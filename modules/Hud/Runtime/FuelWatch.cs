@@ -42,15 +42,16 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 if (field != namedField)
                 {
                     namedField = field;
-                    fieldName = field != null ? field.name : null;
+                    fieldName = field != null ? MfdAirbaseFormatter.Format(field).ToUpperInvariant() : null;       // "HIGHWAYSTRIP2" reads HIGHWAY STRIP 02
                 }
             }
             float distance = float.NaN, relative = 0f;
             if (field != null && field.center != null)
             {
-                distance = Vector3.Distance(aircraft.transform.position, field.center.position);
-                Vector3 local = aircraft.transform.InverseTransformPoint(field.center.position);
-                relative = (Mathf.Atan2(local.x, local.z) * Mathf.Rad2Deg + 360f) % 360f;
+                Vector3 to = field.center.position - aircraft.transform.position, nose = aircraft.transform.forward;
+                distance = to.magnitude;
+                // Bearing minus heading on the horizontal plane (the base arrow is drawn against the compass, so a banked, pitched or inverted aircraft still sees it on the right side).
+                relative = (((Mathf.Atan2(to.x, to.z) - Mathf.Atan2(nose.x, nose.z)) * Mathf.Rad2Deg) % 360f + 360f) % 360f;
             }
 
             float game = Time.time;

@@ -23,6 +23,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private SkywellPhase lastPhase;
         private float transferStart, transferSeconds, fuelAtStart;
         private int roundsAtStart;
+        private bool transferSeen;
         private Aircraft namedTanker;
         private string tankerName;
         private int gaugeKey = int.MinValue;
@@ -47,6 +48,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         {
             trackedTanker = 0;
             lastPhase = SkywellPhase.Idle;
+            transferSeen = false;
             namedTanker = null;
         }
 
@@ -88,7 +90,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             int rounds = 0, full = 0;
             if (me.weaponStations != null)
                 foreach (WeaponStation s in me.weaponStations)
-                    if (s?.WeaponInfo != null && !s.WeaponInfo.cargo && !s.WeaponInfo.nuclear && s.WeaponInfo.massPerRound > 0f)
+                    if (s?.WeaponInfo != null && !s.WeaponInfo.cargo && !s.WeaponInfo.nuclear && !s.WeaponInfo.gun && s.WeaponInfo.massPerRound > 0f)
                     {
                         rounds += s.GetAmmoTotal();
                         full += s.FullAmmo;
@@ -103,7 +105,9 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                     transferSeconds = SkywellContact.TransferSeconds(SkywellService.FuelNeedKg(me), SkywellService.MissingRounds(me));
                     fuelAtStart = me.GetFuelQuantity();
                     roundsAtStart = rounds;
+                    transferSeen = true;
                 }
+                else if (!docked || phase == SkywellPhase.Idle || phase == SkywellPhase.Engage) transferSeen = false;      // a new hook-up: nothing of an earlier service, or of one this feed was not polled through, is claimed
                 trackedTanker = docked ? id : 0;
                 lastPhase = phase;
             }
@@ -132,8 +136,9 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             if (d.Phase == DockPhase.Served)
             {
                 d.TransferT = 1f;
-                d.MovedFuelKg = Mathf.Max(0f, me.GetFuelQuantity() - fuelAtStart);
-                d.MovedRounds = Mathf.Max(0, rounds - roundsAtStart);
+                d.HasMoved = transferSeen;
+                d.MovedFuelKg = transferSeen ? Mathf.Max(0f, me.GetFuelQuantity() - fuelAtStart) : 0f;
+                d.MovedRounds = transferSeen ? Mathf.Max(0, rounds - roundsAtStart) : 0;
             }
             d.HasStock = true;
             d.StockFuelKg = view.FuelKg;

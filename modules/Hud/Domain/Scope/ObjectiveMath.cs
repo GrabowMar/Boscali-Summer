@@ -118,7 +118,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         public static ObjectiveLine Line(in ObjectiveScope d)
         {
-            if (d.Contact == ObjectiveContact.Lost || d.Contact == ObjectiveContact.Unavailable) return ObjectiveLine.ContactLost;
+            if (!d.HasMarker || d.Contact == ObjectiveContact.Lost || d.Contact == ObjectiveContact.Unavailable) return ObjectiveLine.ContactLost;
             if (d.HasGates && d.GateRange)
             {
                 if (!d.GateAlt) return ObjectiveLine.TooLow;

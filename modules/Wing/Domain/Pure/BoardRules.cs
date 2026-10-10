@@ -9,15 +9,16 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
         public const float OutOfSlotM = 60f;
 
         /// <summary>
-        /// The state word's rule, most urgent first: a missile on it (DEFEND), a hit (DAMAGED), going home (RTB, or REFIT to rearm), fighting (ENGAGE), out of weapons (WINCH),
-        /// on the ground or landing, then in formation: JOIN when it is falling behind or out of its slot, else FORM.
+        /// The state word's rule, most urgent first: a missile on it (DEFEND), fighting (ENGAGE), going home (RTB, or REFIT to rearm), out of weapons (WINCH),
+        /// on the ground or landing, then in formation: JOIN when it is falling behind or out of its slot, else FORM. A hit is not a state: the damage flag is latched until the
+        /// hull is mended (a wingman that ever lost a part would read DAMAGED for the rest of the sortie and hide what it is doing), so the page words it for a few seconds
+        /// after the hit (<see cref="WingBoardMember.Damaged"/>) and keeps it as an amber suffix after that.
         /// </summary>
-        public static WingState State(bool defending, bool damaged, bool recovering, bool refit, bool engaged, bool dry, bool grounded, bool settled, bool behind, float slotErrorM)
+        public static WingState State(bool defending, bool recovering, bool refit, bool engaged, bool dry, bool grounded, bool settled, bool behind, float slotErrorM)
         {
             if (defending) return WingState.Defend;
-            if (damaged) return WingState.Damaged;
-            if (recovering) return refit ? WingState.Refit : WingState.Rtb;
             if (engaged) return WingState.Engage;
+            if (recovering) return refit ? WingState.Refit : WingState.Rtb;
             if (dry) return WingState.Winch;
             if (grounded) return WingState.Ground;
             if (settled) return WingState.Land;

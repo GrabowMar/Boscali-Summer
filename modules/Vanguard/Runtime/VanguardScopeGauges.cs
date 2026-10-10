@@ -12,7 +12,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
     internal sealed class VanguardScopeGauges
     {
         private readonly IDroneCommand drones;
-        private readonly string[] percents = new string[101], rounds = new string[100];
+        private readonly string[] percents = new string[101], lanceRounds = new string[100], dartRounds = new string[100];
         private Aircraft stationsFor;
         private WeaponStation lance, aegis;
         private int droneKey = -1;
@@ -50,10 +50,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             return percents[n] ?? (percents[n] = n + "%");
         }
 
-        private string Rounds(int n, string tail)
+        private static string Rounds(int n, string[] cache, string tail)
         {
-            n = Mathf.Clamp(n, 0, rounds.Length - 1);
-            return rounds[n] ?? (rounds[n] = n + tail);
+            n = Mathf.Clamp(n, 0, cache.Length - 1);
+            return cache[n] ?? (cache[n] = n + tail);
         }
 
         /// <summary>LANCE: the capacitor as an arc, the pod's rounds under it; empty reads EMPTY in amber.</summary>
@@ -68,7 +68,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             gauge = new GaugeSpec
             {
                 Id = "lance", Label = "LANCE", Kind = GaugeKind.Arc, Value = empty ? 0f : Mathf.Clamp01(value), Text = empty ? "EMPTY" : charging && value >= 1f ? "FIRE" : Percent(value),
-                Sub = Rounds(lance.Ammo, " RDS"), Tone = empty ? ScopeTone.Amber : recharging ? ScopeTone.Dim : ScopeTone.Ink, Ready = !empty && charging && value >= 1f, Rank = 60,
+                Sub = Rounds(lance.Ammo, lanceRounds, " RDS"), Tone = empty ? ScopeTone.Amber : recharging ? ScopeTone.Dim : ScopeTone.Ink, Ready = !empty && charging && value >= 1f, Rank = 60,
             };
             return true;
         }
@@ -83,7 +83,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             int left = aegis.Ammo;
             gauge = new GaugeSpec
             {
-                Id = "aegis", Label = "AEGIS", Kind = GaugeKind.Arc, Value = aegis.FullAmmo > 0 ? Mathf.Clamp01((float)left / aegis.FullAmmo) : 0f, Text = left <= 0 ? "EMPTY" : Rounds(left, ""), Sub = "DARTS",
+                Id = "aegis", Label = "AEGIS", Kind = GaugeKind.Arc, Value = aegis.FullAmmo > 0 ? Mathf.Clamp01((float)left / aegis.FullAmmo) : 0f, Text = left <= 0 ? "EMPTY" : Rounds(left, dartRounds, ""), Sub = "DARTS",
                 Tone = left <= 0 ? ScopeTone.Amber : ScopeTone.Ink, Rank = 48,
             };
             return true;

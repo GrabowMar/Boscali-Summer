@@ -80,6 +80,12 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.Near(StrikeScopeRules.TraceNow(40f, 2f, 10f), 45f, "...but only as far as the next snapshot is due");
             TestAssert.Near(StrikeScopeRules.TraceNow(99f, 3f, 2f), 100f, "...and never past the end");
             TestAssert.Near(StrikeScopeRules.TraceNow(40f, 2f, -3f), 40f, "A snapshot from the future does not run backwards");
+            TestAssert.Near(StrikeScopeRules.TraceFactor(4.8f, 4f, 1.5f, 1f), 0.8f, "A data center slows the burn to 0.8 of the rules' rate");
+            TestAssert.Near(StrikeScopeRules.TraceFactor(12f, 4f, 1.5f, 1f), 2f, "...and a boosted trace burns twice as fast");
+            TestAssert.Near(StrikeScopeRules.TraceFactor(60f, 4f, 1.5f, 1f), 3f, "...within the host's 0.25 to 3");
+            TestAssert.Near(StrikeScopeRules.TraceFactor(0f, 4f, 1.5f, 1f), 0.25f, "...and a frozen trace reads the floor");
+            TestAssert.Near(StrikeScopeRules.TraceFactor(3f, 0f, 1.5f, 1.3f), 1.3f, "No time between the snapshots: the last factor stands");
+            TestAssert.Near(StrikeScopeRules.TraceFactor(3f, 4f, 0f, 1.3f), 1.3f, "No burn expected: the last factor stands");
             for (int k = 0; k < 5; k++) TestAssert.Eq((int)StrikeScopeRules.Chain((NodeKind)k), k, "The chain's node kinds match the wire's: " + k);
             TestAssert.That(StrikeScopeRules.OnMission(TeamState.OnSite, MissionKind.Recon) && StrikeScopeRules.OnMission(TeamState.Moving, MissionKind.Sabotage) && StrikeScopeRules.OnMission(TeamState.Returning, MissionKind.Lase), "A team on its way, on site or coming home is on a mission");
             TestAssert.That(!StrikeScopeRules.OnMission(TeamState.Ready, MissionKind.Recon) && !StrikeScopeRules.OnMission(TeamState.OnSite, MissionKind.None) && !StrikeScopeRules.OnMission(TeamState.Lost, MissionKind.Recon), "A waiting, idle or lost team is not");

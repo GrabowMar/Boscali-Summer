@@ -132,7 +132,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     SnapshotMember s = wing.SnapshotOf(m);
                     var duty = (MemberDuty)s.Duty;
                     var flags = (SnapshotFlags)s.Flags;
-                    states[n] = BoardRules.State(duty == MemberDuty.Defending, (flags & SnapshotFlags.Damaged) != 0, duty == MemberDuty.Recovering, m.Recovery != null && m.Recovery.Intent == RecoveryIntent.Refit,
+                    // The snapshot's duty names ONE thing (engaged before recovering before defending): the word asks the live member, so a fighting or homeward wingman with a missile on it still reads DEFEND.
+                    states[n] = BoardRules.State(m.Brain.Mind.Current == BehaviourId.Defend || m.ThreatMissile != null, duty == MemberDuty.Recovering, m.Recovery != null && m.Recovery.Intent == RecoveryIntent.Refit,
                         duty == MemberDuty.Engaged, (flags & SnapshotFlags.Winchester) != 0, duty == MemberDuty.Grounded, duty == MemberDuty.Settled, (flags & SnapshotFlags.FallingBehind) != 0, StationMath.Error(s.Err10));
                     WingBoardMember row = members[n];
                     row.Number = m.Number;
@@ -141,12 +142,14 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     row.Ammo = BoardRules.Fraction(s.Ammo);
                     row.Bingo = (flags & SnapshotFlags.Bingo) != 0;
                     row.Joker = (flags & SnapshotFlags.Joker) != 0;
+                    row.Damaged = (flags & SnapshotFlags.Damaged) != 0;
                     row.HasHull = true;
                     row.Hull = m.Damage.Hull;
                     members[n] = row;
                     n++;
                 }
                 used = n;
+                wing.PruneStation();      // SnapshotOf samples every wingman's closure; with no WMC panel open nothing else forgets the ones that left
             }
             FormationSelection selection = wing.Selection;
             if (selection != null)
@@ -233,8 +236,10 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 row.Number = s.Slot + 2;
                 if (nameNumber[n] != row.Number || names[n] == null) { nameNumber[n] = row.Number; names[n] = "#" + row.Number; callsignFor[n] = null; }
                 row.Name = names[n];
-                row.State = BoardRules.State(duty == MemberDuty.Defending, (flags & SnapshotFlags.Damaged) != 0, duty == MemberDuty.Recovering, false, duty == MemberDuty.Engaged,
+                // A client sees the snapshot's single duty only: DEFEND is reported when nothing outranks it there.
+                row.State = BoardRules.State(duty == MemberDuty.Defending, duty == MemberDuty.Recovering, false, duty == MemberDuty.Engaged,
                     (flags & SnapshotFlags.Winchester) != 0, duty == MemberDuty.Grounded, duty == MemberDuty.Settled, (flags & SnapshotFlags.FallingBehind) != 0, StationMath.Error(s.Err10));
+                row.Damaged = (flags & SnapshotFlags.Damaged) != 0;
                 Vec3 pos = aircraft.GlobalPosition().ToVec3();
                 Relative(pos - at, fwd, right, out row.X, out row.Y);
                 row.HeadingDeg = Heading(aircraft.transform.forward.ToVec3(), fwd, right);

@@ -57,7 +57,7 @@ public static partial class HudLogUnityCheck
         else { phases.SetValue(PhaseOf("STRIKE", killed ? "Done" : "Current", killed ? 1f : 0f), 0); phases.SetValue(PhaseOf("SURVEY", killed ? "Current" : "Pending", sec / holdSeconds), 1); }
 
         string title = bare ? "INTERDICT" : far ? "DAMAGE ASSESSMENT" : "DAMAGE ASSESSMENT";
-        object scope = s.Fill(s.Contract("ObjectiveScope"), "Id", 7, "Title", title, "Target", bare ? "SUPPLY TRUCK 12" : "FUEL DEPOT 3", "Contact", s.ContractEnum("ObjectiveContact", bare ? "Known" : "Fixed"),
+        object scope = s.Fill(s.Contract("ObjectiveScope"), "Id", 7, "Title", title, "Target", bare ? "SUPPLY TRUCK 12" : "FUEL DEPOT 3", "Contact", s.ContractEnum("ObjectiveContact", bare ? "Known" : "Fixed"), "HasMarker", true,
             "X", ObjZoneX, "Z", ObjZoneZ, "Radius", bare ? 400f : 1500f,
             "OwnX", ObjZoneX + ownX * 1000f, "OwnZ", ObjZoneZ + ownY * 1000f, "OwnHeading", hdg, "OwnAgl", agl,
             "Left", far ? 701f : 342f - t, "Total", far ? 720f : deadline, "Money", bare ? 8900 : 14200, "Xp", bare ? 210 : 340, "Multiplier", bare ? 0f : 1.15f,

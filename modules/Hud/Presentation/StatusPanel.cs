@@ -35,6 +35,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private static readonly FieldInfo SafetyField = AccessTools.Field(typeof(WeaponStatus), "safetyImage");
 
         private RectTransform dock;
+        private Canvas rootCanvas;
         private RectTransform canvasRect;
         private RectTransform root;
         private Image plate;
@@ -93,7 +94,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             dock = panelRect;
             Canvas canvas = dock.GetComponentInParent<Canvas>();
-            canvasRect = canvas != null ? canvas.rootCanvas.transform as RectTransform : null;
+            rootCanvas = canvas != null ? canvas.rootCanvas : null;
+            canvasRect = rootCanvas != null ? rootCanvas.transform as RectTransform : null;
 
             nativeCell = cell;
             nativeSafety = safety;
@@ -113,7 +115,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             plate.color = new Color(ScopePalette.PlateColor.R, ScopePalette.PlateColor.G, ScopePalette.PlateColor.B, 1f);
             shellVector = AvVector.Create(root, "Shell", ShellQuads);
             shellText = new ScopeText(Holder(root, "ShellWords"), font, fontMaterial);
-            shellCanvas = new ScopeCanvas(shellVector.Buffer, shellText);
+            shellCanvas = new ScopeCanvas(shellVector.Buffer, shellText, "scope.shell");
 
             // The scope: a mask of its own (the page's strokes and words are clipped to it), the page body inside a second mask, then the header
             // and strip overlay, then the frame and the wipe edge on top of everything.
@@ -121,14 +123,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             pageRect = Pinned(scopeRect, "Page", true);
             pageVector = AvVector.Create(pageRect, "Strokes", PageQuads);
             pageText = new ScopeText(Holder(pageRect, "Words"), font, fontMaterial);
-            pageCanvas = new ScopeCanvas(pageVector.Buffer, pageText);
+            pageCanvas = new ScopeCanvas(pageVector.Buffer, pageText, "scope.page");
             overlayRect = Pinned(scopeRect, "Overlay", false);
             overlayVector = AvVector.Create(overlayRect, "Strokes", OverlayQuads);
             overlayText = new ScopeText(Holder(overlayRect, "Words"), font, fontMaterial);
-            overlayCanvas = new ScopeCanvas(overlayVector.Buffer, overlayText);
+            overlayCanvas = new ScopeCanvas(overlayVector.Buffer, overlayText, "scope.overlay");
             frameRect = Pinned(scopeRect, "Frame", false);
             frameVector = AvVector.Create(frameRect, "Strokes", FrameQuads);
-            frameCanvas = new ScopeCanvas(frameVector.Buffer, null);
+            frameCanvas = new ScopeCanvas(frameVector.Buffer, null, "scope.frame");
 
             BuildBoard();
             graphicCache.Clear();
@@ -164,9 +166,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             return rect;
         }
 
-        private static void Place(RectTransform rect, float x, float y, float w, float h)
+        /// <summary>Place a surface: its top-left offset from its parent's top-left on the device pixel grid, its size already in whole pixels.</summary>
+        private void PlaceOnGrid(RectTransform rect, float x, float y, float w, float h)
         {
-            Vector2 position = new Vector2(x, -y), size = new Vector2(w, h);
+            Vector2 position = new Vector2(Mathf.Round(x / pixel) * pixel, -Mathf.Round(y / pixel) * pixel), size = new Vector2(w, h);
             if (rect.anchoredPosition != position) rect.anchoredPosition = position;
             if (rect.sizeDelta != size) rect.sizeDelta = size;
         }
@@ -248,6 +251,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (root != null) UnityEngine.Object.Destroy(root.gameObject);
             root = null;
             dock = null;
+            rootCanvas = null;
             canvasRect = null;
             plate = null;
             scopeRect = pageRect = overlayRect = frameRect = null;
