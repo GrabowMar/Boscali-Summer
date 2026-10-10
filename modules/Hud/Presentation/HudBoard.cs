@@ -144,7 +144,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             frame.HasTicker = store.Ticker(out frame.Ticker);
             // The pilot's situation, read from which feeds are up and what is inbound, ranks the cells and the cue strip.
             CueContext context = CuePriority.Detect(store.HasLive("ils"), store.HasLive("skywell"),
-                frame.Threat.Missiles > 0 || frame.Threat.SinceLock < HudThreats.LockHold || missileTracks.Count > 0 || store.HasLive("ace-hunt"));
+                frame.Threat.Missiles > 0 || frame.Threat.SinceLock < HudThreats.LockHold || missileTracks.Count > 0 || store.HasLive("ace-hunt"), store.HasLive("autopilot"));
             int count = store.Snapshot(snapshot, HudLayout.MaxRows, context);
             panel.Present(snapshot, count, frame, ShotFeed.Ledger);
 

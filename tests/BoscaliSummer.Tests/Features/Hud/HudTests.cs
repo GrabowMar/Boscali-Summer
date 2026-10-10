@@ -68,15 +68,15 @@ namespace BoscaliSummer.Tests.Features.Hud
             store.Snapshot(output, 4, CueContext.None);
             TestAssert.That(output[0].Channel == "theater" && output[1].Channel == "ils" && output[2].Channel == "radio",
                 "With no context the default ranks decide, not who acquired first");
-            store.Snapshot(output, 4, CuePriority.Detect(true, false, false));
+            store.Snapshot(output, 4, CuePriority.Detect(true, false, false, false));
             TestAssert.That(output[0].Channel == "ils", "On approach the ILS line leads and owns the cue strip");
 
             store.Acquire("v", "skywell", "s").Set(HudTone.Info, "SKYWELL", "DOWN 12 · LEFT 14", 0.5f);
-            store.Snapshot(output, 4, CuePriority.Detect(false, true, false));
+            store.Snapshot(output, 4, CuePriority.Detect(false, true, false, false));
             TestAssert.That(output[0].Channel == "skywell", "At the boom the SKYWELL cues lead");
 
             store.Acquire("wx", "weather", "w").Set(HudTone.Caution, "ICING", "FREEZING LEVEL 1500", 0f);
-            store.Snapshot(output, 4, CuePriority.Detect(true, false, false));
+            store.Snapshot(output, 4, CuePriority.Detect(true, false, false, false));
             TestAssert.That(output[0].Channel == "weather", "A Caution still beats an Info, whatever the context");
 
             store.Acquire("a", "autopilot", "x").Set(HudTone.Info, "AP", null, 0f);
