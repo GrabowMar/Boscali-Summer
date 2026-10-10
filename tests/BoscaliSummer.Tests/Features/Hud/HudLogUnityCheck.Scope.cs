@@ -27,7 +27,7 @@ public static partial class HudLogUnityCheck
     private static readonly (float t, int w, int h)[] ScopeShotTimes = { (2f, 1920, 1080), (6f, 1920, 1080), (10f, 1920, 1080), (14f, 1920, 1080), (6f, 1280, 720) };
 
     /// <summary>(page, t, variant): one more 1080p shot of a page, its fixture branching on <c>s.Variant</c>.</summary>
-    private static readonly (string page, float t, string variant)[] ScopeVariants = { ("systems", 10f, "rotary") };
+    private static readonly (string page, float t, string variant)[] ScopeVariants = { ("systems", 10f, "rotary"), ("strike", 6f, "solo"), ("strike", 6f, "sat"), ("objective", 6f, "far"), ("objective", 6f, "bare") };
 
     static partial void FixtureSystems(float t, ScopeScene s);
     static partial void FixtureThreat(float t, ScopeScene s);
