@@ -12,13 +12,13 @@
       "faction": "Boscali",
       "at": {
         "map": [
-          0,
-          0
+          28800,
+          30300
         ]
       },
       "altitude": 1200,
       "speed": 200,
-      "heading": 180
+      "heading": 60
     },
     {
       "op": "spawn",
@@ -54,7 +54,9 @@
       "conditions": 0.05,
       "cloud_height": 6000,
       "wind_speed": 0,
-      "wind_turbulence": 0
+      "wind_turbulence": 0,
+      "wind_heading": 0,
+      "moon_phase": 14
     },
     {
       "op": "wait",

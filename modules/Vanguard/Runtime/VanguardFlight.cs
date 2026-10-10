@@ -90,6 +90,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             {
                 if (missile.timeSinceSpawn >= AegisEnvelope.DropClearSeconds && missile.timeSinceSpawn < DropPhase) SlewDuringDrop();
                 CheckIntercept();
+                if (missile.disabled) return;
+                // Hit-to-kill needs sub-metre contact at ~1.5 km/s of closure: the dart re-aims every tick, not at the 5 Hz plan.
+                if (missile.IsServer && missile.timeSinceSpawn >= DropPhase) PlanIntercept(missile.GlobalPosition());
             }
             if (role == VanguardRole.Drone)
             {

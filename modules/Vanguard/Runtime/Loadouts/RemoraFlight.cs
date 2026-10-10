@@ -46,6 +46,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private Unit volleyTarget;
         private int volleyCue = -1;
         private Unit ramWatched;
+        private bool ramHoming;
+        private bool ramDeathWatched, ramFused;
 
         public int Slot => slot;
 
@@ -64,7 +66,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 if (phase == RemoraPhase.Ram) missile.SetTarget(cued);
                 GlobalPosition aim = TargetPosition(out Vector3 vel);
                 missile.SetThrottle(1f);
-                missile.SetAimpoint(aim, vel);
+                if (!ramHoming) missile.SetAimpoint(aim, vel);
                 if (phase == RemoraPhase.Engage) TryArcherShot(aim - pos, cue);
                 return;
             }
@@ -101,6 +103,17 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                     };
                 }
                 missile.Arm(); // the replaced cruise seeker never arms it; unarmed it would only fizzle
+                if (!ramDeathWatched)
+                {
+                    ramDeathWatched = true;
+                    // A hull-to-hull collision ends the drone before the fuse radius (centre to centre) is reached: a hit too.
+                    missile.onDisableUnit += _ =>
+                    {
+                        if (!ramFused && archerPhase == RemoraPhase.Ram && target != null &&
+                            FastMath.InRange(missile.GlobalPosition(), target.GlobalPosition(), RemoraArcher.HitRadius))
+                            VanguardStats.Bump("remora.ramHits");
+                    };
+                }
                 Plugin.Logger?.LogInfo("[Vanguard] REMORA ram on " + (cued != null ? cued.unitName : "?"));
             }
             archerPhase = phase;
@@ -153,12 +166,21 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         // Every physics tick while ramming: the 5 Hz plan would step straight past a fighter-sized target.
         private void RamFuse()
         {
+            ramHoming = false;
             if (archerPhase != RemoraPhase.Ram || target == null || target.disabled) return;
             Vector3 to = target.GlobalPosition() - missile.GlobalPosition();
             float dist = to.magnitude;
-            Vector3 rel = missile.rb.velocity - (target.rb != null ? target.rb.velocity : Vector3.zero);
+            Vector3 targetVel = target.rb != null ? target.rb.velocity : Vector3.zero;
+            Vector3 rel = missile.rb.velocity - targetVel;
             float closing = dist > 0.01f ? Vector3.Dot(rel, to / dist) : 0f;
+            // Terminal homing: the faction track and the 5 Hz plan are metres stale at a 500 m/s head-on closure (the
+            // pass used to miss by ~14 m), so close in the drone flies a collision course on the target itself.
+            ramHoming = dist < RemoraArcher.RamHoming && closing > 1f;
+            if (ramHoming) missile.SetAimpoint(target.GlobalPosition() + targetVel * (dist / closing), targetVel);
+            // Sim readout: closest approach of the ram in metres (a miss by 20 m and one by 2 km read the same otherwise).
+            if (!VanguardStats.Counters.TryGetValue("remora.ramMin", out int best) || dist < best) VanguardStats.Counters["remora.ramMin"] = (int)dist;
             if (dist > RemoraArcher.FuseRadius(closing, Time.fixedDeltaTime)) return;
+            ramFused = true;
             VanguardStats.Bump("remora.ramHits");
             Detonate();
         }

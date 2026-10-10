@@ -107,6 +107,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (!missile.IsServer || configured) return;
             configured=true; objective=centre=aim;
             objectiveUnit=GroundHostile(requested) ? requested : null;
+            // A designation carries where its target stands, on the faction picture or not (else: 100 km straight ahead).
+            if (objectiveUnit != null) objective=centre=objectiveUnit.GlobalPosition();
             lastOrder=Order(); // only a CHANGE of designation after launch hands the drone off
             Phase=GlaivePhase.Launch;
             VanguardStats.Bump("glaive2s.launch");
@@ -194,6 +196,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             lastOrder=order;
             if (order == objectiveUnit || !GroundHostile(order)) return;
             objectiveUnit=order;
+            objective=order.GlobalPosition();
             VanguardStats.Bump("glaive2s.handoff");
         }
 

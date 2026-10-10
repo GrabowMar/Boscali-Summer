@@ -12,8 +12,7 @@ namespace Vanguard
         // close air targets and fires it through WeaponManager.Fire (AegisSnapPatch); the automatic missile defence
         // (AegisService) launches through LaunchMount and ignores these fields. Each cell holds its dart for
         // AegisSnap.DoorLead so the cell cover (Door<i>) is open before the rail drops it. That delay also holds back every
-        // automatic defence dart, so InterceptPicker.MaxRange carries ~150 m of it (closing speed x DoorLead); if the sim's
-        // defence.threatsGone checks still show late launches, raise MaxRange further or give defence cells a shorter lead.
+        // automatic defence dart; InterceptPicker.EngageSeconds (launch timed on seconds to impact) covers it.
         const float AegisSnapRange = 2500f, AegisSnapAlignment = 70f, AegisDoorLead = .15f;
 
         static void AegisSnapSetup(WeaponInfo info)

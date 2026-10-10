@@ -36,6 +36,13 @@
       "heading": 180
     },
     {
+      "op": "record",
+      "ids": [
+        "lead"
+      ],
+      "hz": 2
+    },
+    {
       "op": "observe",
       "follow": "lead"
     },

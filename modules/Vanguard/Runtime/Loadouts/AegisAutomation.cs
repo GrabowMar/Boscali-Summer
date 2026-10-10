@@ -39,11 +39,22 @@ namespace BoscaliSummer.Vanguard
         }
 
         // `aegisfit`: put the pod on the lead before the first snap; weapon stations rebuild a frame later, so wait ~2 s.
-        private static Dictionary<string, object> AegisFit(Aircraft lead)
+        // A second call with `darts` empties the cells past that count: a hardpoint set mounts a pair of pods (6 darts),
+        // and the last-dart rules are reached sooner from 3.
+        private static Dictionary<string, object> AegisFit(Aircraft lead, int darts)
         {
             if (lead == null || lead.weaponManager == null) return Failure("VanguardAutomation", "aegisfit", "no friendly aircraft");
-            if (AegisStation(lead) == null && FitAegis(lead) == null && lead.Networkloadout?.weapons?.Exists(w => w != null && w.jsonKey == AegisMount) != true)
+            WeaponStation station = AegisStation(lead);
+            if (station == null && FitAegis(lead) == null && lead.Networkloadout?.weapons?.Exists(w => w != null && w.jsonKey == AegisMount) != true)
                 return Failure("VanguardAutomation", "aegisfit", "no hardpoint set offers " + AegisMount);
+            for (int i = station != null && darts > 0 ? station.Weapons.Count - 1 : -1; i >= darts; i--)
+            {
+                Weapon cell = station.Weapons[i];
+                if (cell is MountedMissile mounted) Modules.Vanguard.Networking.AegisNet.Cells.Fired(mounted) = true;
+                cell.ammo = 0;
+                cell.gameObject.SetActive(false);
+            }
+            station?.AccountAmmo();
             return Status(lead);
         }
 
@@ -59,6 +70,7 @@ namespace BoscaliSummer.Vanguard
             WeaponMount pod = null;
             foreach (WeaponMount w in Encyclopedia.i.weaponMounts)
                 if (w != null && w.jsonKey == AegisMount) pod = w;
+            AdoptPrefabOptions(lead);
             HardpointSet[] sets = lead.weaponManager.hardpointSets;
             int set = pod == null ? -1 : Array.FindIndex(sets, h => h.weaponOptions.Contains(pod));
             if (set < 0) return null;

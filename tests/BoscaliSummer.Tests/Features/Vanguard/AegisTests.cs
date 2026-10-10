@@ -35,9 +35,14 @@ namespace BoscaliSummer.Tests.Features.Vanguard
 
             var picker = new InterceptPicker();
             var fast = new List<ThreatView> { new ThreatView(7, 1200f, 600f) };
-            TestAssert.That(InterceptPicker.MaxRange >= 1100f + 100f && picker.Pick(0f, fast) == 7 &&
+            TestAssert.That(new InterceptPicker().Pick(0f, new List<ThreatView> { new ThreatView(9, 3000f, 600f), new ThreatView(-41234, 900f, 600f) }) == 1,
+                "a missile spawned at runtime has a negative instance id and is still picked (the pick is its index)");
+            TestAssert.That(InterceptPicker.MaxRange >= 1100f + 100f && picker.Pick(0f, fast) == 0 &&
                 new InterceptPicker().Pick(0f, new List<ThreatView> { new ThreatView(8, InterceptPicker.MaxRange + 50f, 600f) }) == -1,
                 "defence window carries the cover's 0.15 s rail delay and still ends at MaxRange");
+            TestAssert.That(new InterceptPicker().Pick(0f, new List<ThreatView> { new ThreatView(1, 2800f, 1300f) }) == 0 &&
+                new InterceptPicker().Pick(0f, new List<ThreatView> { new ThreatView(1, 2800f, 600f) }) == -1,
+                "the launch is timed on seconds to impact: a fast closer is engaged far out, a slow one at the same range waits");
 
             TestAssert.That(AegisSnap.Damage(50f, 600f, AegisSnap.DamageScale) == 200f && AegisSnap.Damage(50f, 100f, 2f) == 100f &&
                 AegisSnap.Damage(50f, 3000f, 2f) == 400f && AegisSnap.Damage(50f, 600f, 1f) == 100f, "snap damage = defence dart x2, closure 1..4x");

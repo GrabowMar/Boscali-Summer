@@ -18,6 +18,7 @@ namespace BoscaliSummer.Vanguard
             WeaponMount pod = null;
             foreach (WeaponMount mount in Encyclopedia.i.weaponMounts)
                 if (mount != null && mount.jsonKey == AlexKite.MountKey) pod = mount;
+            AdoptPrefabOptions(lead);
             HardpointSet[] sets = lead.weaponManager.hardpointSets;
             int slot = pod == null ? -1 : Array.FindIndex(sets, set => set.weaponOptions.Contains(pod));
             if (slot < 0) return Failure("VanguardAutomation", "alexfit", pod == null ? "no " + AlexKite.MountKey + " mount in the Encyclopedia" : "no hardpoint set offers the pod");

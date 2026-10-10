@@ -79,6 +79,19 @@
     },
     {
       "op": "mark",
+      "text": "a hardpoint pair mounts two pods (6 darts): keep 3 so the last-dart rules are reached"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "aegisfit",
+        "darts": 3
+      },
+      "store": "trim"
+    },
+    {
+      "op": "mark",
       "text": "dry trigger: pod fitted, no lock -> SNAP NO SOLUTION, no dart"
     },
     {
@@ -205,6 +218,11 @@
       "check": "status_ok"
     },
     {
+      "check": "result_below",
+      "path": "dry.aegis.ammoBefore",
+      "max": 3
+    },
+    {
       "check": "result_above",
       "path": "dry.aegis.ammoBefore",
       "min": 3
@@ -222,6 +240,11 @@
     {
       "check": "result_above",
       "path": "defence.aegis.defenceLaunch",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "defence.aegis.defenceContact",
       "min": 1
     },
     {

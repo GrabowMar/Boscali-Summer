@@ -12,13 +12,13 @@
       "faction": "Boscali",
       "at": {
         "map": [
-          0,
-          0
+          -145000,
+          -17000
         ]
       },
       "altitude": 6000,
       "speed": 230,
-      "heading": 0
+      "heading": 150
     },
     {
       "op": "spawn",

@@ -302,6 +302,58 @@
       "op": "call",
       "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
       "args": {
+        "action": "alexpress",
+        "calls": 20
+      },
+      "store": "p5"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "alexpress",
+        "calls": 20
+      },
+      "store": "p6"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "alexpress",
+        "calls": 20
+      },
+      "store": "p7"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "alexpress",
+        "calls": 20
+      },
+      "store": "p8"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
         "action": "status"
       },
       "store": "pressed2"
@@ -319,12 +371,12 @@
     {
       "check": "result_above",
       "path": "p1.press_ammoBefore",
-      "min": 1.9
+      "min": 3.9
     },
     {
       "check": "result_below",
       "path": "p1.press_ammoBefore",
-      "max": 2.1
+      "max": 4.1
     },
     {
       "check": "result_below",
@@ -348,7 +400,7 @@
     },
     {
       "check": "result_below",
-      "path": "p4.press_ready",
+      "path": "p8.press_ready",
       "max": 0.5
     },
     {
@@ -393,12 +445,42 @@
     },
     {
       "check": "result_below",
-      "path": "p4.press_ammoBefore",
+      "path": "p8.press_ammoBefore",
       "max": 0.5
     },
     {
       "check": "result_below",
       "path": "p4.press_used",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "p5.press_used",
+      "min": 0.9
+    },
+    {
+      "check": "result_below",
+      "path": "p6.press_used",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "p7.press_used",
+      "min": 0.9
+    },
+    {
+      "check": "result_above",
+      "path": "p8.press_towedBefore",
+      "min": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "p8.press_towedAfter",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "p8.press_used",
       "max": 0.5
     }
   ]

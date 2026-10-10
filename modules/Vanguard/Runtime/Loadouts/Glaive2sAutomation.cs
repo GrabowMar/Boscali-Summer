@@ -80,11 +80,13 @@ namespace BoscaliSummer.Vanguard
             public static Dictionary<string, object> HandOff(Aircraft lead, float offset)
             {
                 enemyHq ??= FindAircraft("Primeva")?.NetworkHQ;
-                if (lead == null || enemyHq == null || groundTarget == null)
-                    return Failure("VanguardAutomation", "handoff", "need lead, an enemy HQ and a first ground target");
+                GlaiveDrone drone = Spectre();
+                if (lead == null || enemyHq == null || (groundTarget == null && drone == null))
+                    return Failure("VanguardAutomation", "handoff", "need lead, an enemy HQ and a first ground target or a drone on station");
                 if (!Encyclopedia.Lookup.TryGetValue("UGV1_grenade", out UnitDefinition def))
                     return Failure("VanguardAutomation", "handoff", "UGV1_grenade not in Encyclopedia.Lookup");
-                Vector3 origin = groundTarget.transform.position;
+                // The drone may have destroyed the first target and the game despawned its wreck: the orbit centre stands in.
+                Vector3 origin = groundTarget != null ? groundTarget.transform.position : drone.Centre.ToLocalPosition();
                 for (int b = 0; b < 360; b += 30)
                 {
                     Vector3 dir = Quaternion.Euler(0f, b, 0f) * Vector3.forward;

@@ -18,6 +18,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const float AiLeash = 20000f;    // AI launchers: engage only targets this close to the launcher
         public const float RamFuseMin = 6f;     // m to the rammed target centre (blast frags fall off with the cube of range)
         public const float RamFuseMax = 12f;
+        public const float RamHoming = 2500f;   // m: inside this the ram steers on the target itself every physics tick
         public const float HitRadius = 40f;     // an AAM that dies this close to its target scored
         public const float ElevonLimit = 25f;   // deg
         public const float LaunchTurn = 30f;    // deg a fired round is turned from the drone's nose toward its target

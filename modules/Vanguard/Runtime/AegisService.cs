@@ -18,6 +18,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private readonly Dictionary<Aircraft, InterceptPicker> watched = new Dictionary<Aircraft, InterceptPicker>();
         private readonly List<ThreatView> views = new List<ThreatView>();
         private readonly List<Missile> threats = new List<Missile>();
+        private readonly List<Missile> candidates = new List<Missile>(); // parallel to views
         private readonly List<Aircraft> drop = new List<Aircraft>();
         private float nextScan;
         private readonly Dictionary<Missile,float> confirmed = new Dictionary<Missile,float>();
@@ -39,7 +40,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         public static void Watch(Aircraft aircraft)
         {
             if (instance == null || aircraft == null || instance.watched.ContainsKey(aircraft)) return;
-            if (AegisStation(aircraft) != null) instance.watched[aircraft] = new InterceptPicker();
+            if (AegisStation(aircraft) == null) return;
+            instance.watched[aircraft] = new InterceptPicker();
+            VanguardStats.Bump("aegis.watch");
         }
 
         private static WeaponStation AegisStation(Aircraft aircraft)
@@ -75,6 +78,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (station == null) return false;
 
             views.Clear();
+            candidates.Clear();
             ThreatScan.Inbound(aircraft, threats); // Server warning lists can be empty for client-owned aircraft.
             if (threats.Count == 0) return false;
             GlobalPosition self = aircraft.GlobalPosition();
@@ -89,20 +93,22 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 bool visible=range <= InterceptPicker.MaxRange && !Physics.Linecast(
                     aircraft.transform.position-aircraft.transform.up*.5f,m.transform.position,(int)PhysicsLayers.StaticsMask);
                 if (!visible) { confirmed.Remove(m); continue; }
-                if (!confirmed.TryGetValue(m,out float acquired)) { confirmed[m]=now; continue; }
+                if (!confirmed.TryGetValue(m,out float acquired)) { confirmed[m]=now; VanguardStats.Bump("aegis.acquired"); continue; }
                 if (now-acquired < AegisEnvelope.SensorConfirmSeconds) continue;
                 views.Add(new ThreatView(m.GetInstanceID(), range, closing));
+                candidates.Add(m);
             }
             int pick = picker.Pick(now, views);
             if (pick < 0) return true;
-            Missile threat = null;
-            for (int i = 0; i < threats.Count; i++)
-                if (threats[i] != null && threats[i].GetInstanceID() == pick) threat = threats[i];
-            if (threat == null) return true;
+            Missile threat = candidates[pick];
             int ammo = station.Ammo;
             station.LaunchMount(aircraft, threat, threat.GlobalPosition());
-            if (station.Ammo >= ammo) return true;
-            picker.Fired(now, pick);
+            if (station.Ammo >= ammo)
+            {
+                VanguardStats.Bump("aegis.defenceBlocked"); // picked a threat but nothing left the rail
+                return true;
+            }
+            picker.Fired(now, views[pick].Id);
             VanguardStats.Bump("aegis.defenceLaunch");
             Networking.AegisNet.Raise(aircraft, Networking.AegisCue.Intercept, station); // owner client mirrors the launch
             return true;

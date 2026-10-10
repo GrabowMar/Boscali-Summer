@@ -30,19 +30,21 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.That(Mathf.Abs(DecoyRoute.Lateral(0f)) <= DecoyRoute.WeaveAmplitude, "weave stays inside its amplitude");
 
             var picker = new InterceptPicker();
-            var threats = new List<ThreatView> { new ThreatView(1, 950f, 300f), new ThreatView(2, 800f, 700f),
+            var threats = new List<ThreatView> { new ThreatView(1, 700f, 300f), new ThreatView(2, 800f, 700f),
                 new ThreatView(3, 900f, -50f), new ThreatView(4, 90f, 900f), new ThreatView(5, 2500f, 900f) };
-            TestAssert.That(picker.Pick(0f, threats) == 2, "soonest impact in the close-range reaction envelope wins");
+            // Pick answers with the index into the list (ids 1..5 sit at 0..4): a runtime missile's instance id is negative.
+            TestAssert.That(picker.Pick(0f, threats) == 1, "soonest impact in the close-range reaction envelope wins");
             picker.Fired(0f, 2);
             TestAssert.That(picker.Pick(2f, threats) == -1, "cooldown holds the next shot");
-            TestAssert.That(picker.Pick(4f, threats) == 1, "an engaged threat is not double-tapped");
-            TestAssert.That(picker.Pick(9f, threats) == 2, "a survivor is re-engaged after the memory lapses");
+            TestAssert.That(picker.Pick(4f, threats) == 0, "an engaged threat is not double-tapped");
+            TestAssert.That(picker.Pick(9f, threats) == 1, "a survivor is re-engaged after the memory lapses");
             TestAssert.That(AegisEnvelope.Contact(new Vector3(1,0,0),new Vector3(-1,0,0),.2f) &&
                 !AegisEnvelope.Contact(new Vector3(1,1,0),new Vector3(-1,1,0),.2f),
                 "swept contact catches a real high-speed hit and rejects a nearby miss");
-            TestAssert.That(AegisEnvelope.ContactRadius(.2f,.2f) < .3f &&
-                AegisEnvelope.ContactRadius(10f,10f) <= .75f && AegisEnvelope.ArmSeconds > AegisEnvelope.DropClearSeconds,
-                "physical contact has bounded geometry and cannot kill during launch clearance");
+            TestAssert.That(AegisEnvelope.Contact(new Vector3(100,12,0),new Vector3(-100,12,0),AegisEnvelope.ProximityRadius) &&
+                !AegisEnvelope.Contact(new Vector3(100,60,0),new Vector3(-100,60,0),AegisEnvelope.ProximityRadius) &&
+                AegisEnvelope.ArmSeconds > AegisEnvelope.DropClearSeconds,
+                "a near pass scores, a wide one does not, and nothing scores during launch clearance");
 
             TestAssert.That(SeductionRule.Seduces("ARH", 3000f, 0.1f) && !SeductionRule.Seduces("IR", 3000f, 0.1f),
                 "only radar seekers are seduced");

@@ -103,7 +103,7 @@
     },
     {
       "op": "wait",
-      "seconds": 40
+      "seconds": 70
     },
     {
       "op": "call",

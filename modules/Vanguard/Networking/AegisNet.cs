@@ -110,7 +110,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
         }
 
         // Private WeaponStation/MountedMissile handles, resolved on first use so a rename only costs the sync.
-        private static class Cells
+        internal static class Cells
         {
             public static readonly AccessTools.FieldRef<WeaponStation, int> Index = AccessTools.FieldRefAccess<WeaponStation, int>("weaponIndex");
             public static readonly AccessTools.FieldRef<MountedMissile, bool> Fired = AccessTools.FieldRefAccess<MountedMissile, bool>("fired");

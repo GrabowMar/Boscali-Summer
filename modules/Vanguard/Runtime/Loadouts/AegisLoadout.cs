@@ -90,6 +90,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
     internal sealed partial class VanguardFlight
     {
         private bool snap; // manual SNAP at an air unit, as opposed to the automatic missile defence
+        private int passDm = int.MaxValue;
 
         private void InitAegis()
         {
@@ -155,8 +156,15 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (missile.IsServer && missile.timeSinceSpawn >= AegisEnvelope.ArmSeconds && hasInterceptSample)
             {
                 Vector3 closing = (target.rb != null ? target.rb.velocity : Vector3.zero) - missile.rb.velocity;
-                if (target is Missile threat && AegisEnvelope.Contact(previousInterceptRelative, relative,
-                        AegisEnvelope.ContactRadius(threat.definition.width, threat.definition.height)))
+                if (!snap)
+                {
+                    // Sim readout: closest pass of the latest defence dart to its threat, in decimetres (swept over the tick).
+                    Vector3 step = relative - previousInterceptRelative;
+                    float along = step.sqrMagnitude < 1e-8f ? 0f : Mathf.Clamp01(-Vector3.Dot(previousInterceptRelative, step) / step.sqrMagnitude);
+                    int pass = (int)((previousInterceptRelative + step * along).magnitude * 10f);
+                    if (pass < passDm) VanguardStats.Counters["aegis.defencePassDm"] = passDm = pass;
+                }
+                if (target is Missile threat && AegisEnvelope.Contact(previousInterceptRelative, relative, AegisEnvelope.ProximityRadius))
                 {
                     threat.TakeDamage(AegisSnap.Damage(PierceDamage(missile), closing.magnitude, 1f), 0f, 1f, 0f, 0f, Dealer());
                     VanguardStats.Bump("aegis.defenceContact");

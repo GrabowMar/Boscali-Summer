@@ -56,6 +56,17 @@ namespace BoscaliSummer.Vanguard
             return any;
         }
 
+        // Blueprinter adds the carrier options to the aircraft PREFAB once its bundles are loaded. Under -autoHost the mission
+        // is ready first, so a sim aircraft can predate that: give its sets whatever its prefab's sets offer by now.
+        private static void AdoptPrefabOptions(Aircraft lead)
+        {
+            WeaponManager prefab = lead.definition.unitPrefab.GetComponentInChildren<WeaponManager>(true);
+            HardpointSet[] sets = lead.weaponManager.hardpointSets;
+            for (int i = 0; prefab != null && i < sets.Length && i < prefab.hardpointSets.Length; i++)
+                foreach (WeaponMount option in prefab.hardpointSets[i].weaponOptions)
+                    if (!sets[i].weaponOptions.Contains(option)) sets[i].weaponOptions.Add(option);
+        }
+
         // Gives the lead the pod alone on the first matching set; the station list rebuilds over the next seconds.
         private static Dictionary<string, object> LanceEquip(Aircraft lead, string pylon)
         {
@@ -64,11 +75,18 @@ namespace BoscaliSummer.Vanguard
             foreach (WeaponMount w in Encyclopedia.i.weaponMounts)
                 if (w != null && w.jsonKey == LanceMount) mount = w;
             if (mount == null) return Failure("VanguardAutomation", "lance_equip", LanceMount + " is not in the Encyclopedia");
+            AdoptPrefabOptions(lead);
             HardpointSet[] sets = lead.weaponManager.hardpointSets;
             int set = -1;
             for (int i = 0; i < sets.Length && set < 0; i++)
                 if (sets[i].weaponOptions.Contains(mount) && (string.IsNullOrEmpty(pylon) || sets[i].name.IndexOf(pylon, StringComparison.OrdinalIgnoreCase) >= 0)) set = i;
-            if (set < 0) return Failure("VanguardAutomation", "lance_equip", "no hardpoint set on " + lead.definition.unitName + " offers the pod for '" + pylon + "'");
+            if (set < 0)
+            {
+                var seen = new List<string>();
+                for (int i = 0; i < sets.Length; i++) seen.Add(i + ":" + sets[i].name + (sets[i].weaponOptions.Contains(mount) ? "*" : ""));
+                return Failure("VanguardAutomation", "lance_equip", "no hardpoint set on " + lead.definition.unitName + " offers the pod for '" + pylon
+                    + "' (sets, * = offers the pod: " + string.Join(", ", seen) + ")");
+            }
             var loadout = new NuclearOption.SavedMission.Loadout { weapons = new List<WeaponMount>() };
             for (int i = 0; i < sets.Length; i++) loadout.weapons.Add(i == set ? mount : null);
             lead.Networkloadout = loadout;
@@ -133,21 +151,22 @@ namespace BoscaliSummer.Vanguard
             if (lead == null || enemyHq == null) return Failure("VanguardAutomation", "lance_chain", "need lead and an enemy HQ");
             if (!Encyclopedia.Lookup.TryGetValue("UGV1_grenade", out UnitDefinition def))
                 return Failure("VanguardAutomation", "lance_chain", "UGV1_grenade not in Encyclopedia.Lookup");
-            foreach (float range in new[] { 1200f, 1700f })
+            // The sim lead is usually over the sea: sweep outward until a level stretch of land turns up (as `ground` does).
+            for (float range = 1200f; range <= 20000f; range += 400f)
                 for (int b = -60; b <= 60; b += 15)
                 {
                     if (!PlaceLine(lead, def, b, range, count, spacing, out Vector3[] points, out Vector3 dir)) continue;
-                    float top = points[0].y;
+                    var spawned = new Unit[count];
                     for (int k = 0; k < count; k++)
                     {
-                        top = Mathf.Max(top, points[k].y);
-                        NetworkSceneSingleton<Spawner>.i.SpawnVehicle(def.unitPrefab, points[k].ToGlobalPosition(), Quaternion.LookRotation(dir), Vector3.zero,
+                        spawned[k] = NetworkSceneSingleton<Spawner>.i.SpawnVehicle(def.unitPrefab, points[k].ToGlobalPosition(), Quaternion.LookRotation(dir), Vector3.zero,
                             k == friend ? lead.NetworkHQ : enemyHq, "VG_ChainTarget", 1f, true, null);
                     }
                     Physics.SyncTransforms();
-                    Vector3 start = points[0] - dir * 5f;
-                    start.y = top + 1.1f;
-                    LanceServer.Penetrate(start, dir * 2900f, power, lead, lead.persistentID);
+                    // Through the spawned hulls themselves, first to last: a guessed height skims over or under a low hull.
+                    Vector3 first0 = HullCentre(spawned[0], points[0]),
+                        shot = count > 1 ? (HullCentre(spawned[count - 1], points[count - 1]) - first0).normalized : dir;
+                    LanceServer.Penetrate(first0 - shot * 5f, shot * 2900f, power, lead, lead.persistentID);
                     float first = LanceServer.LastFirstUnit, last = LanceServer.LastLastUnit;
                     return new Dictionary<string, object>
                     {
@@ -157,6 +176,22 @@ namespace BoscaliSummer.Vanguard
                     };
                 }
             return new Dictionary<string, object> { ["ok"] = true, ["placed"] = 0 };
+        }
+
+        // Centre of the unit's solid colliders (its placement point while it has none).
+        private static Vector3 HullCentre(Unit unit, Vector3 placed)
+        {
+            bool any = false;
+            Bounds bounds = default;
+            if (unit != null)
+                foreach (Collider c in unit.GetComponentsInChildren<Collider>())
+                {
+                    if (c.isTrigger || !c.enabled) continue;
+                    if (any) bounds.Encapsulate(c.bounds);
+                    else bounds = c.bounds;
+                    any = true;
+                }
+            return any ? bounds.center : placed;
         }
 
         // `count` targets on one level line `spacing` apart, `range` out along `bearing` degrees off the lead's heading.
@@ -190,17 +225,24 @@ namespace BoscaliSummer.Vanguard
             var lines = new List<Vector3[]>();
             var dirs = new List<Vector3>();
             var bearings = new List<float>();
-            for (int b = -60; b <= 60 && lines.Count < 2; b += 15)
+            for (float range = 900f; range <= 20000f && lines.Count < 2; range += 400f) // outward until two targets fit on land
             {
-                if (bearings.Count > 0 && b - bearings[0] < 30f) continue; // two lines at least 30 degrees apart: ~470 m between the targets
-                if (!PlaceLine(lead, def, b, 900f, 1, 0f, out Vector3[] points, out Vector3 dir)) continue;
-                lines.Add(points);
-                dirs.Add(dir);
-                bearings.Add(b);
+                lines.Clear();
+                dirs.Clear();
+                bearings.Clear();
+                for (int b = -60; b <= 60 && lines.Count < 2; b += 15)
+                {
+                    if (bearings.Count > 0 && b - bearings[0] < 30f) continue; // two lines at least 30 degrees apart: 470 m or more between the targets
+                    if (!PlaceLine(lead, def, b, range, 1, 0f, out Vector3[] points, out Vector3 dir)) continue;
+                    lines.Add(points);
+                    dirs.Add(dir);
+                    bearings.Add(b);
+                }
             }
             if (lines.Count < 2) return new Dictionary<string, object> { ["ok"] = true, ["placed"] = 0, ["found"] = 1 };
+            var twins = new Unit[2];
             for (int i = 0; i < 2; i++)
-                NetworkSceneSingleton<Spawner>.i.SpawnVehicle(def.unitPrefab, lines[i][0].ToGlobalPosition(), Quaternion.LookRotation(dirs[i]), Vector3.zero,
+                twins[i] = NetworkSceneSingleton<Spawner>.i.SpawnVehicle(def.unitPrefab, lines[i][0].ToGlobalPosition(), Quaternion.LookRotation(dirs[i]), Vector3.zero,
                     enemyHq, "VG_TwinTarget", 1f, true, null);
             Physics.SyncTransforms();
             int unmatched0 = VanguardStats.Get("lance.unmatched"), duplicates0 = VanguardStats.Get("lance.duplicates"),
@@ -210,16 +252,14 @@ namespace BoscaliSummer.Vanguard
             var result = new Dictionary<string, object> { ["ok"] = true, ["placed"] = 1, ["found"] = 1, ["released"] = released ? 1 : 0, ["power"] = power, ["pending"] = pending };
             for (int i = 0; i < 2; i++)
             {
-                Vector3 start = lines[i][0] - dirs[i] * 5f;
-                start.y = lines[i][0].y + 1.1f;
-                LanceServer.Resolve(start, dirs[i] * 2900f, lead.persistentID);
+                LanceServer.Resolve(HullCentre(twins[i], lines[i][0]) - dirs[i] * 5f, dirs[i] * 2900f, lead.persistentID);
                 result["line" + i + "Units"] = LanceServer.LastUnits;
                 result["line" + i + "First"] = LanceServer.LastFirstUnit; // damage the first part of that line's target took
             }
             result["unmatched"] = VanguardStats.Get("lance.unmatched") - unmatched0;
             result["duplicates"] = VanguardStats.Get("lance.duplicates") - duplicates0;
             result["chains"] = VanguardStats.Get("lance.chains") - chains0;
-            LanceServer.Resolve(lines[0][0] - dirs[0] * 5f + Vector3.up * 1.1f, dirs[0] * 2900f, lead.persistentID); // nothing left: a ricochet
+            LanceServer.Resolve(HullCentre(twins[0], lines[0][0]) - dirs[0] * 5f, dirs[0] * 2900f, lead.persistentID); // nothing left: a ricochet
             result["duplicatesAfterExtra"] = VanguardStats.Get("lance.duplicates") - duplicates0;
             return result;
         }
