@@ -22,7 +22,7 @@ namespace BoscaliSummer.Modules.Immersion.Audio
         private float[][] baked;
         private volatile int bakeState; // 0 pending, 1 ready, 2 failed
         private volatile bool released;
-        private bool ready, routed;
+        private bool ready, routed, silent = true;
 
         internal int Played { get; private set; }
         internal bool IsPlaying => (breath != null && breath.isPlaying) || (effort != null && effort.isPlaying) || (body != null && body.isPlaying);
@@ -73,9 +73,12 @@ namespace BoscaliSummer.Modules.Immersion.Audio
             routed = true;
         }
 
-        public void Silence()
+        /// <summary>Stop all voices once; <paramref name="unroute"/> on scene reset, when the mixer may change.</summary>
+        public void Silence(bool unroute = false)
         {
-            routed = false;
+            if (unroute) routed = false;
+            if (silent) return;
+            silent = true;
             if (breath != null && breath.isPlaying) breath.Stop();
             if (effort != null && effort.isPlaying) effort.Stop();
             if (body != null && body.isPlaying) body.Stop();
@@ -84,7 +87,8 @@ namespace BoscaliSummer.Modules.Immersion.Audio
         public void Release()
         {
             released = true;
-            Silence();
+            silent = false;
+            Silence(true);
             if (breath != null) Destroy(breath);
             if (effort != null) Destroy(effort);
             if (body != null) Destroy(body);
@@ -99,9 +103,12 @@ namespace BoscaliSummer.Modules.Immersion.Audio
             AudioClip clip = clips[(int)sound];
             if (clip == null || volume <= .001f) return;
             // Fit a breath into its clock segment so the sound and the chest move together.
-            source.pitch = fitSeconds > 0f ? Mathf.Clamp(clip.length / fitSeconds, .85f, 1.3f) : pitch;
-            if (!FxVoiceBus.TryOneShot(clip.length / source.pitch)) return;
+            float fitted = fitSeconds > 0f ? Mathf.Clamp(clip.length / fitSeconds, .85f, 1.3f) : pitch;
+            // A refused voice must not re-pitch the clip already playing on this source.
+            if (!FxVoiceBus.TryOneShot(clip.length / fitted)) return;
+            source.pitch = fitted;
             source.PlayOneShot(clip, volume);
+            silent = false;
             Played++;
         }
 

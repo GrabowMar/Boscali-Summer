@@ -20,7 +20,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
     {
         private const int Size = 512, CardLayer = 31;
         private const float Width = .16f, Height = .22f;
-        private static readonly Color Paper = new Color(.86f, .84f, .76f), Ink = new Color(.1f, .11f, .1f), Stamp = new Color(.62f, .1f, .08f, .55f);
+        private static readonly Color Paper = new Color(.86f, .84f, .76f), Ink = new Color(.1f, .11f, .1f);
         private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap"), LightId = Shader.PropertyToID("_LightLevel");
         private readonly List<KeyValuePair<string, int>> loadout = new List<KeyValuePair<string, int>>(12);
         private readonly Action markDirty;
@@ -39,6 +39,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         internal Renderer Renderer { get; private set; }
         internal float LastRenderMs { get; private set; } = -1f;
         internal string Side { get; private set; } = "none";
+        internal bool RightThigh { get; private set; }
 
         /// <summary>True once per cockpit entry: a failed bind is not retried every frame.</summary>
         internal bool TryBeginBind() => schedule.BeginBind();
@@ -64,6 +65,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             }
             schedule.Bound(owner.GetInstanceID());
             Side = rightThigh ? "right" : "left";
+            RightThigh = rightThigh;
             quad = new GameObject("Boscali.Kneeboard") { layer = 3 }; // PhysicsLayers.Cockpit, like the body
             quad.transform.SetPositionAndRotation(thigh.position + along * .62f + top * .095f, Quaternion.LookRotation(-top, forward));
             quad.transform.SetParent(thigh, true);
@@ -170,7 +172,6 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                 Image(root.transform, "Paper", Paper, Vector2.zero, Vector2.one);
                 Image(root.transform, "Clip", new Color(.22f, .23f, .22f), new Vector2(.3f, .94f), new Vector2(.7f, 1f));
                 Text(root.transform, "<mspace=0.58em>" + string.Join("\n", lines) + "</mspace>", font, 25f, Ink, new Vector2(.06f, .04f), new Vector2(.97f, .92f), 0f);
-                Text(root.transform, "TRAINING", font, 44f, Stamp, new Vector2(.45f, .04f), new Vector2(.98f, .2f), 12f);
                 holder = new GameObject("Boscali.KneeboardCamera");
                 var camera = holder.AddComponent<Camera>();
                 camera.enabled = false;

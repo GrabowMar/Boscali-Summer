@@ -48,8 +48,13 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         {
             ImmersionManager manager = ImmersionManager.Live;
             if (manager == null) return Failure("ImmersionAutomation", "InjectG", "no immersion manager in this scene");
-            float g = System.Convert.ToSingle(Arg(args, "g") ?? 1f);
-            float seconds = System.Convert.ToSingle(Arg(args, "seconds") ?? 5f);
+            float g, seconds;
+            try
+            {
+                g = System.Convert.ToSingle(Arg(args, "g") ?? 1f, System.Globalization.CultureInfo.InvariantCulture);
+                seconds = System.Convert.ToSingle(Arg(args, "seconds") ?? 5f, System.Globalization.CultureInfo.InvariantCulture);
+            }
+            catch (System.Exception) { return Failure("ImmersionAutomation", "InjectG", "g and seconds must be numbers"); }
             if (float.IsNaN(g) || g < -5f || g > 12f || float.IsNaN(seconds) || seconds < 0f || seconds > 30f)
                 return Failure("ImmersionAutomation", "InjectG", "g must be -5..12 and seconds 0..30");
             manager.InjectG(g, seconds);

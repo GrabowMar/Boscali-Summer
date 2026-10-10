@@ -194,7 +194,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             surface.Reset();
             if (airframeAudio != null) airframeAudio.Silence();
             if (windAudio != null) windAudio.Silence();
-            if (pilotBreathingAudio != null) pilotBreathingAudio.Silence();
+            if (pilotBreathingAudio != null) pilotBreathingAudio.Silence(true);
             IsCockpitActive = false;
             FollowingUnit = null;
             physiology.Reset();
@@ -235,8 +235,10 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             Aircraft aircraft = cameras != null ? cameras.followingUnit as Aircraft : null;
             Camera camera = cameras != null ? cameras.mainCamera : null;
             bool cockpit = cameras != null && CameraStateManager.cameraMode == CameraMode.cockpit && cameras.currentState == cameras.cockpitState;
+            Pilot seated = aircraft != null && aircraft.pilots != null && aircraft.pilots.Length > 0 ? aircraft.pilots[0] : null;
             if (Application.isBatchMode || !settings.Enabled.Value || !cockpit ||
-                camera == null || aircraft == null || aircraft.disabled || aircraft.rb == null)
+                camera == null || aircraft == null || aircraft.disabled || aircraft.rb == null ||
+                (seated != null && (seated.dead || seated.ejected)))
             {
                 if (presenting) ResetForScene();
                 return;
@@ -283,6 +285,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             PilotVitalsSample sample = vitals.Read(aircraft);
             if (Time.unscaledTime < debugGUntil) { sample.G = debugG; sample.HasVanilla = false; }
             Cues = physiology.Step(sample, loadDt);
+            if (loadDt > 0f) vitals.ConsumeHits();
             bool comfort = settings.ComfortMotionEnabled.Value;
             head.Step(dt, settings.HeadMotionStrength.Value, settings.HeadMotionEnabled.Value,
                 physiology.Exertion01, physiology.ChestLift01, comfort);
@@ -362,7 +365,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
                 windAudio = gameObject.AddComponent<CanopyWindAudio>();
                 windAudio.Initialize();
             }
-            if (pilotBreathingAudio == null)
+            if (pilotBreathingAudio == null && settings.PilotBreathingEnabled.Value)
             {
                 pilotBreathingAudio = gameObject.AddComponent<PilotBreathingAudio>();
                 pilotBreathingAudio.Initialize();

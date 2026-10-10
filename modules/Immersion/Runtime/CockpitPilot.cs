@@ -91,7 +91,10 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
                 rig.SetLight(light);
                 rig.SetBodyVisible(settings.PilotBodyEnabled.Value);
                 // Handedness is known once controls bind (or after a short grace for control-less layouts).
-                if (!kneeboard.Bound && (controlsBound || Time.frameCount > bindFrame + 30) && kneeboard.TryBeginBind()) BindKneeboard();
+                // Re-seat the card if control handedness resolved after it was placed; no card while the body is hidden.
+                if (kneeboard.Bound && kneeboard.RightThigh == rig.StickOnRight) kneeboard.Detach();
+                if (!kneeboard.Bound && settings.PilotBodyEnabled.Value && (controlsBound || Time.frameCount > bindFrame + 30) &&
+                    kneeboard.TryBeginBind()) BindKneeboard();
                 kneeboard.SetVisible(settings.PilotBodyEnabled.Value);
                 kneeboard.SetLight(Mathf.Clamp(light, .06f, 1f));
                 kneeboard.Tick();

@@ -21,6 +21,8 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
 
         internal bool HasVanilla => gloc != null;
         internal void AddHit() => hits++;
+        /// <summary>Clear hit pulses once a physiology step actually consumed them.</summary>
+        internal void ConsumeHits() => hits = 0;
 
         internal PilotVitalsSample Read(Aircraft followed)
         {
@@ -28,7 +30,6 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             if (followed != aircraft || current != pilot) Bind(followed, current);
             if (pilot != null && Time.unscaledTime >= resolveAt) Resolve();
             var s = new PilotVitalsSample { G = pilot != null ? pilot.gForce : 1f, Hits = hits };
-            hits = 0;
             if (gloc != null && BloodPressure != null && Stamina != null && Conscious != null)
             {
                 s.HasVanilla = true;
@@ -60,6 +61,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             gloc = null;
             for (int i = found.Count - 1; i >= 0 && gloc == null; i--) if (found[i] != null && found[i].enabled) gloc = found[i];
             found.Clear();
+            if (gloc == null) resolveAt = Time.unscaledTime + .25f;
         }
 
         private static AccessTools.FieldRef<GLOC, T> Ref<T>(string name)
