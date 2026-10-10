@@ -1,0 +1,340 @@
+{
+  "name": "ops-panels",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 400,
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "altitude": 1500,
+      "speed": 180,
+      "heading": 0
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "boot",
+      "args": {}
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Open",
+      "store": "cap",
+      "args": {
+        "tab": 1
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "cap"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Open",
+      "store": "orbit",
+      "args": {
+        "tab": 2
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "capture",
+      "name": "orbit"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "scan",
+      "args": {
+        "verb": "scan",
+        "unit": "player"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 8
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "after_scan",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "orbit_scan"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "mark",
+      "args": {
+        "verb": "mark"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "after_mark",
+      "args": {}
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "send",
+      "args": {
+        "verb": "send"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "after_send",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "orbit_send"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Open",
+      "store": "net",
+      "args": {
+        "tab": 3
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "net_state",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "net"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "hop",
+      "args": {
+        "verb": "hop"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "after_hop",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "net_hop"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "plan",
+      "args": {
+        "verb": "plan"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "after_plan",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "net_plan"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "fund",
+      "args": {
+        "verb": "fund"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "after_fund",
+      "args": {}
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Open",
+      "store": "sof",
+      "args": {
+        "tab": 4
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "sof_state",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "sof"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "raise",
+      "args": {
+        "verb": "raise"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "after_raise",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "sof_raise"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Open",
+      "store": "board",
+      "args": {
+        "tab": 5
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "board_state",
+      "args": {}
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "claim",
+      "args": {
+        "verb": "claim"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "after_claim",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "board_claim"
+    },
+    {
+      "op": "capture",
+      "name": "board"
+    },
+    {
+      "op": "wait",
+      "seconds": 60
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "claim_resolved",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "board_resolved"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "after_scan.spaceContacts",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "after_mark.spaceMarks",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "after_send.spacePosts",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "after_plan.opsRows",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "after_raise.sofTeams",
+      "min": 0
+    }
+  ]
+}

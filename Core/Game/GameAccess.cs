@@ -11,6 +11,8 @@ namespace BoscaliSummer.Core.Game
     internal static class GameAccess
     {
         private static FieldInfo mapBuildingHitPoints;
+        private static ResourcesAsyncLoader<NetworkManagerNuclearOption> networkLoader;
+        private static ResourcesAsyncLoader<Encyclopedia> encyclopediaLoader;
         private static AccessTools.FieldRef<MapBuilding, float> mapBuildingHitPointsRef;
         private static FieldInfo mapBuildingSetBuildings;
         private static AccessTools.FieldRef<VirtualMFD, List<Button>> leftMfdButtonsRef;
@@ -51,6 +53,20 @@ namespace BoscaliSummer.Core.Game
 
         public static void Initialise()
         {
+            try
+            {
+                networkLoader = AccessTools.Field(typeof(NetworkManagerNuclearOption), "loader")?.GetValue(null)
+                    as ResourcesAsyncLoader<NetworkManagerNuclearOption>;
+                if (networkLoader == null) Plugin.Logger?.LogWarning("Native network preload access unavailable.");
+                encyclopediaLoader = AccessTools.Field(typeof(Encyclopedia), "loader")?.GetValue(null)
+                    as ResourcesAsyncLoader<Encyclopedia>;
+                if (encyclopediaLoader == null) Plugin.Logger?.LogWarning("Native encyclopedia preload access unavailable.");
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger?.LogWarning("Native network preload access unavailable: " + e.Message);
+            }
+
             try
             {
                 mapBuildingHitPoints = AccessTools.Field(typeof(MapBuilding), "hitPoints");
@@ -314,9 +330,17 @@ namespace BoscaliSummer.Core.Game
 
         public static bool IsServer()
         {
-            try { return NetworkManagerNuclearOption.i != null && NetworkManagerNuclearOption.i.Server.Active; }
+            try { return NetworkManagerOrNull?.Server?.Active == true; }
             catch { return false; }
         }
+
+        // The native singleton getter logs an error until MainMenu finishes its async preload.
+        // Poll readiness without invoking that getter during startup or early scene callbacks.
+        public static NetworkManagerNuclearOption NetworkManagerOrNull =>
+            networkLoader != null && networkLoader.IsLoaded ? NetworkManagerNuclearOption.i : null;
+
+        public static Encyclopedia EncyclopediaOrNull =>
+            encyclopediaLoader != null && encyclopediaLoader.IsLoaded ? Encyclopedia.i : null;
 
         /// <summary>The local player's faction HQ, only once it has a faction assigned.</summary>
         public static bool TryGetLocalFaction(out FactionHQ hq)

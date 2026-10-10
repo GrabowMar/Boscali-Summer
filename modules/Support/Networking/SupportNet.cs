@@ -149,7 +149,7 @@ namespace BoscaliSummer.Modules.Support.Networking
         {
             if (Time.unscaledTime < nextRegistration) return;
             nextRegistration = Time.unscaledTime + 0.5f;
-            NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
+            NetworkManagerNuclearOption network = GameAccess.NetworkManagerOrNull;
             if (network == null) return;
             if (network.Server != null && network.Server.Active &&
                 network.Server.MessageHandler != null && network.Server.MessageHandler != serverHandler)
@@ -229,7 +229,7 @@ namespace BoscaliSummer.Modules.Support.Networking
                 return;
             }
 
-            NetworkClient client = NetworkManagerNuclearOption.i?.Client;
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
             if (client == null || !client.Active)
             {
                 manager.ReportOffline();
@@ -295,7 +295,7 @@ namespace BoscaliSummer.Modules.Support.Networking
         internal void SendActivityPulse()
         {
             if (Time.unscaledTime < nextActivityPulse) return;
-            NetworkClient client = NetworkManagerNuclearOption.i?.Client;
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
             if (client == null || !client.Active) return;
             nextActivityPulse = Time.unscaledTime + 1f;
             client.Send(new ActivityPulseMessage { Protocol = ProtocolVersion });
@@ -335,7 +335,7 @@ namespace BoscaliSummer.Modules.Support.Networking
                 manager.SpaceNet?.Receive(local, command);
                 return true;
             }
-            NetworkClient client = NetworkManagerNuclearOption.i?.Client;
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
             if (client == null || !client.Active) return false;
             client.Send(new SpaceCommandMessage { Command = command });
             return true;
@@ -406,7 +406,7 @@ namespace BoscaliSummer.Modules.Support.Networking
         public void BroadcastCruiseLegs(CruiseLegsMessage message)
         {
             if (!GameAccess.IsServer()) return;
-            NetworkServer server = NetworkManagerNuclearOption.i?.Server;
+            NetworkServer server = GameAccess.NetworkManagerOrNull?.Server;
             if (server == null || !server.Active) return;
             server.SendToAll(message, authenticatedOnly: true, excludeLocalPlayer: true);
         }

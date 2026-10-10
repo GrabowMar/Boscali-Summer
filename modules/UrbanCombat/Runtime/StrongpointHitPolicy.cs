@@ -1,39 +1,37 @@
 namespace BoscaliSummer.Garrisons
 {
     /// <summary>
-    /// Pure hit counting for occupied strongpoints: which damage calls wear a garrisoned
-    /// shell down, when it falls, and which stepped HP value the server asserts so the
-    /// existing shell staging sees progress. Unity-free so tests can compile it.
+    /// Pure damage rules for occupied strongpoints: a garrisoned shell has a structure pool
+    /// sized by its roof, each explosion wears it by a weight from the warhead's blast power
+    /// (vanilla's yield^(1/3), handed to TakeShockwave), so bombs level buildings and
+    /// missiles barely scratch them. Unity-free so tests can compile it.
     /// </summary>
     internal static class StrongpointHitPolicy
     {
-        /// <summary>Separate explosive hits to kill an occupied shell.</summary>
-        internal const int HitsToKill = 4;
+        /// <summary>Blast power of the 125 kg bomb (yield 100): exactly one unit of structure.</summary>
+        internal const float BombPower = 4.64f;
 
         /// <summary>
-        /// A call counts only when its vanilla blast term
-        /// (max(blast - blastArmor, 0) * amountAffected / blastTolerance) reaches this.
-        /// Bullets, cannon plinking, fire ticks and impact never wear a strongpoint down.
+        /// Below this power (yield ~50: AGMs 8-9, rockets, ARMs, SAM/AAM warheads) a warhead
+        /// counts half, on top of its already small square-law weight.
         /// </summary>
-        internal const float ExplosiveBlastTerm = 20f;
+        internal const float LightWarheadPower = 3.7f;
 
-        /// <summary>Per-shell debounce: a salvo landing together is one hit.</summary>
-        internal const float DebounceSeconds = 0.5f;
+        /// <summary>Vanilla only sends a shockwave from this power up; bullets never do.</summary>
+        internal const float MinBlastPower = 0.5f;
 
-        /// <summary>
-        /// A total vanilla damage estimate at or above this is shockwave/nuclear scale
-        /// and kills outright, bypassing the hit count and the debounce.
-        /// </summary>
-        internal const float OverkillEstimate = 1000f;
+        /// <summary>Power 20 = yield 8000: demolition bombs and nukes still flatten outright.</summary>
+        internal const float OverkillPower = 20f;
 
         internal const float BaseHitPoints = 100f;
 
-        /// <summary>
-        /// Impact damage dealt to the nest's dugout part per counted hit. Three non-final
-        /// hits take it 100 -&gt; 75 -&gt; 50 -&gt; 25; the fourth hit kills the shell instead
-        /// of ticking the carrier, so the carrier never reaches zero.
-        /// </summary>
-        internal const float CarrierTickDamage = 25f;
+        /// <summary>Roof area per unit of structure, and the pool's clamp.</summary>
+        internal const float AreaPerStructure = 250f;
+        internal const float MinStructure = 3f;
+        internal const float MaxStructure = 8f;
+
+        /// <summary>Lowest carrier HP before the kill, so the dugout part never dies first.</summary>
+        internal const float CarrierFloor = 5f;
 
         internal enum Verdict
         {
@@ -43,53 +41,55 @@ namespace BoscaliSummer.Garrisons
             Overkill
         }
 
-        /// <summary>Mirrors vanilla's blast term exactly, including the 0.01 tolerance floor.</summary>
-        internal static float BlastTerm(float blast, float armor, float amount, float tolerance) =>
-            Max(blast - armor, 0f) * amount / Max(tolerance, 0.01f);
-
         /// <summary>
-        /// Mirrors vanilla MapBuilding.TakeDamage's total exactly: pierce term plus blast
-        /// term plus fire term plus raw impact, with the 0.01 tolerance floors.
+        /// Structure units an explosion of this blast power removes: square law around the
+        /// 125 kg bomb (250 kg ~1.6, 500 kg ~2.5, penetrator ~4), halved for light warheads
+        /// (AGM ~0.1, heavy AGM ~1.2). Zero for anything with no shockwave.
         /// </summary>
-        internal static float TotalEstimate(
-            float pierce, float blast, float amount, float fire, float impact,
-            float pierceArmor, float pierceTolerance,
-            float blastArmor, float blastTolerance,
-            float fireArmor, float fireTolerance)
+        internal static float HitWeight(float blastPower)
         {
-            float pierceTerm = Max(pierce - pierceArmor, 0f) / Max(pierceTolerance, 0.01f);
-            float fireTerm = Max(fire - fireArmor, 0f) / Max(fireTolerance, 0.01f);
-            return pierceTerm + BlastTerm(blast, blastArmor, amount, blastTolerance) +
-                fireTerm + impact;
+            if (blastPower < MinBlastPower) return 0f;
+            float ratio = blastPower / BombPower;
+            float weight = ratio * ratio;
+            return blastPower < LightWarheadPower ? weight * 0.5f : weight;
         }
 
-        /// <summary>
-        /// Decide what one TakeDamage call does to a strongpoint with the given counted
-        /// hits and last counted hit time. Overkill bypasses the debounce.
-        /// </summary>
-        internal static Verdict Decide(
-            int hits, float lastHitAt, float now, float blastTerm, float total)
+        /// <summary>Structure pool from the roof footprint: a small block takes 3 bombs, a mall 8.</summary>
+        internal static float Structure(float roofArea)
         {
-            if (total >= OverkillEstimate) return Verdict.Overkill;
-            if (now - lastHitAt < DebounceSeconds) return Verdict.Ignore;
-            if (blastTerm < ExplosiveBlastTerm) return Verdict.Ignore;
-            return hits + 1 >= HitsToKill ? Verdict.Final : Verdict.Count;
+            float units = roofArea / AreaPerStructure;
+            if (units < MinStructure) return MinStructure;
+            if (units > MaxStructure) return MaxStructure;
+            return (float)System.Math.Round(units);
         }
 
-        /// <summary>
-        /// Stepped HP the server asserts after a counted hit: 75/50/25. Ignored hits
-        /// leave HP untouched; the final hit runs vanilla with HP already at zero.
-        /// </summary>
-        internal static float SteppedHitPoints(int countedHits) =>
-            Max(0f, BaseHitPoints - CarrierTickDamage * countedHits);
+        internal static Verdict Decide(float damage, float structure, float blastPower)
+        {
+            if (blastPower >= OverkillPower) return Verdict.Overkill;
+            float weight = HitWeight(blastPower);
+            if (weight <= 0f) return Verdict.Ignore;
+            return damage + weight >= structure ? Verdict.Final : Verdict.Count;
+        }
+
+        internal static float Fraction(float damage, float structure) =>
+            structure <= 0f ? 1f : Clamp01(damage / structure);
+
+        /// <summary>Shell HP the server asserts for a worn fraction of the occupy-time HP.</summary>
+        internal static float SteppedHitPoints(float fraction, float maxHp = BaseHitPoints) =>
+            Max(0f, maxHp * (1f - Clamp01(fraction)));
+
+        /// <summary>Dugout-carrier HP that replicates the fraction to every peer.</summary>
+        internal static float CarrierHitPoints(float fraction) =>
+            Max(CarrierFloor, BaseHitPoints * (1f - Clamp01(fraction)));
 
         /// <summary>
         /// Dugout-carrier HP back to a 0-3 stage every peer derives identically. Partial
-        /// splash damage between the exact 25 HP ticks stages monotonically.
+        /// splash damage between ticks stages monotonically.
         /// </summary>
         internal static int DugoutStage(float hitPoints) =>
             hitPoints > 75f ? 0 : hitPoints > 50f ? 1 : hitPoints > 25f ? 2 : 3;
 
         private static float Max(float a, float b) => a > b ? a : b;
+        private static float Clamp01(float v) => v < 0f ? 0f : v > 1f ? 1f : v;
     }
 }

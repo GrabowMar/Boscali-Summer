@@ -35,16 +35,15 @@ namespace BoscaliSummer.Modules.Performance.Runtime
 
         public void ResetForScene()
         {
-            // Scene loads may reset quality behind our back, so drop the applied flags
-            // without restoring: ApplyWanted then re-captures the fresh game values as
-            // the new originals and re-asserts enabled knobs. Cleanup runs on the
-            // transition itself, never during flight.
-            lodApplied = shadowApplied = frameApplied = false;
+            // Undo values we still own before re-capturing. Otherwise a scene that
+            // preserves quality would replace the originals with our capped values.
+            RestoreAll();
             ApplyWanted();
             if (settings != null && settings.CleanupOnSceneChange.Value && Usable)
                 RunCleanup();
         }
 
+        private void OnDisable() => RestoreAll();
         private void OnDestroy() => RestoreAll();
 
         private void Update() => ApplyWanted();
@@ -80,10 +79,10 @@ namespace BoscaliSummer.Modules.Performance.Runtime
                 }
                 else
                 {
-                    QualitySettings.lodBias = lodOriginal;
+                    QualitySettings.lodBias = ClientTuningMath.RestoreLodBias(lodOriginal, QualitySettings.lodBias);
                     lodApplied = false;
                     Plugin.Logger?.LogInfo("Performance: LOD bias restored to " +
-                        lodOriginal.ToString("F2") + ".");
+                        QualitySettings.lodBias.ToString("F2") + ".");
                 }
             }
             catch (Exception error)
@@ -109,10 +108,10 @@ namespace BoscaliSummer.Modules.Performance.Runtime
                 }
                 else
                 {
-                    QualitySettings.shadowDistance = shadowOriginal;
+                    QualitySettings.shadowDistance = ClientTuningMath.RestoreShadowDistance(shadowOriginal, QualitySettings.shadowDistance);
                     shadowApplied = false;
                     Plugin.Logger?.LogInfo("Performance: shadow distance restored to " +
-                        shadowOriginal.ToString("F0") + " m.");
+                        QualitySettings.shadowDistance.ToString("F0") + " m.");
                 }
             }
             catch (Exception error)
@@ -137,9 +136,9 @@ namespace BoscaliSummer.Modules.Performance.Runtime
                 }
                 else
                 {
-                    Application.targetFrameRate = frameOriginal;
+                    Application.targetFrameRate = ClientTuningMath.RestoreFrameRate(frameOriginal, Application.targetFrameRate);
                     frameApplied = false;
-                    Plugin.Logger?.LogInfo("Performance: frame rate restored to " + frameOriginal + ".");
+                    Plugin.Logger?.LogInfo("Performance: frame rate restored to " + Application.targetFrameRate + ".");
                 }
             }
             catch (Exception error)

@@ -5,6 +5,7 @@ using NOAvionics;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using static UnityCheckHarness;
 
 /// <summary>The current C2 CAP geometry/readability gate; model facts are checked in the other partial.</summary>
 public static partial class SupportPanelUnityCheck
@@ -59,16 +60,6 @@ public static partial class SupportPanelUnityCheck
                 if (w > 1f && h > 1.5f)
                     Fail(where + ": texts overlap: '" + placed[i].Key.text + "' (" + placed[i].Key.name + ") and '" + placed[j].Key.text + "' (" + placed[j].Key.name + ")");
             }
-    }
-
-    private static bool CanvasOn(Component c)
-    {
-        for (Transform x = c.transform; x != null; x = x.parent)
-        {
-            var canvas = x.GetComponent<Canvas>();
-            if (canvas != null && !canvas.enabled) return false;
-        }
-        return true;
     }
 
     private static Rect InSpace(RectTransform space, RectTransform rt)

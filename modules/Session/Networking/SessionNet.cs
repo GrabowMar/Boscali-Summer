@@ -94,6 +94,7 @@ namespace BoscaliSummer.Modules.Session.Networking
         private bool hostSilentShown;
         private bool versionShown;
         private bool savedSaveOnSet;
+        private bool sessionActive;
         private bool applying;
         private static bool serializersInstalled;
 
@@ -130,7 +131,7 @@ namespace BoscaliSummer.Modules.Session.Networking
             if (server)
             {
                 // This peer became the host (or never left it): its own values are the ones that count.
-                if (ledger.Active) EndSession("now hosting");
+                if (sessionActive) EndSession("now hosting");
                 if (dirty.Count > 0 && now >= nextFlush)
                 {
                     nextFlush = now + FlushInterval;
@@ -142,7 +143,7 @@ namespace BoscaliSummer.Modules.Session.Networking
             NetworkClient client = ClientOrNull();
             if (client == null || !client.Active)
             {
-                if (ledger.Active) EndSession("left the server");
+                if (sessionActive) EndSession("left the server");
                 ResetHandshake();
                 return;
             }
@@ -168,7 +169,7 @@ namespace BoscaliSummer.Modules.Session.Networking
         private void Register()
         {
             NetworkManagerNuclearOption network;
-            try { network = NetworkManagerNuclearOption.i; }
+            try { network = GameAccess.NetworkManagerOrNull; }
             catch { return; }
 
             MessageHandler server = network?.Server != null && network.Server.Active ? network.Server.MessageHandler : null;
@@ -178,7 +179,7 @@ namespace BoscaliSummer.Modules.Session.Networking
             if (ClientHandlers.Swap(client))
             {
                 // A new connection is a new session: forget the last host and say hello again.
-                if (ledger.Active) EndSession("changed server");
+                if (sessionActive) EndSession("changed server");
                 ResetHandshake();
             }
         }
@@ -195,7 +196,7 @@ namespace BoscaliSummer.Modules.Session.Networking
 
         private static NetworkClient ClientOrNull()
         {
-            try { return NetworkManagerNuclearOption.i?.Client; }
+            try { return GameAccess.NetworkManagerOrNull?.Client; }
             catch { return null; }
         }
 
@@ -328,7 +329,7 @@ namespace BoscaliSummer.Modules.Session.Networking
                 }
             }
 
-            if (!ledger.Active) BeginSession();
+            if (!sessionActive) BeginSession();
             int changed = 0;
             applying = true;
             try
@@ -363,14 +364,16 @@ namespace BoscaliSummer.Modules.Session.Networking
 
         private void BeginSession()
         {
+            if (sessionActive) return;
             savedSaveOnSet = config.SaveOnConfigSet;
+            sessionActive = true;
             config.SaveOnConfigSet = false;
             ConfigMenu.SetReadOnly(entries, true);
         }
 
         private void EndSession(string reason)
         {
-            if (!ledger.Active || config == null) return;
+            if (!sessionActive || config == null) return;
             applying = true;
             try
             {
@@ -382,6 +385,7 @@ namespace BoscaliSummer.Modules.Session.Networking
             }
             ConfigMenu.SetReadOnly(entries, false);
             config.SaveOnConfigSet = savedSaveOnSet;
+            sessionActive = false;
             try { config.Save(); }
             catch (Exception e) { Plugin.Logger?.LogWarning("[Session] Could not save settings: " + e.Message); }
             Plugin.Logger?.LogInfo("[Session] Restored your own settings (" + reason + ").");

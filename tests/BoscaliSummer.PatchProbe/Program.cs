@@ -453,10 +453,6 @@ if (!priorityDistanceNames.SequenceEqual(new[] { "factionHQ", "transform", "dist
     throw new MissingMemberException(
         "MissionPosition.TryGetClosestDistance parameters changed: " + string.Join(", ", priorityDistanceNames));
 
-// The Chimera paratrooper mount registers after vanilla indexing; AfterLoad is overloaded
-// (a static Action<Encyclopedia> wrapper), so pin the parameterless instance method.
-if (gameAssembly.GetType("Encyclopedia", true)!.GetMethod("AfterLoad", AllMembers, null, Type.EmptyTypes, null) is not { IsStatic: false })
-    throw new MissingMethodException("Encyclopedia", "AfterLoad()");
 Type levelInfo = gameAssembly.GetType("LevelInfo", true)!;
 if (levelInfo.GetProperty("LoadedMapSettings", AllMembers) == null)
     throw new MissingMemberException("LevelInfo.LoadedMapSettings");
@@ -510,9 +506,11 @@ string[] patchTypes =
     "BoscaliSummer.Garrisons.ShellDamagePatch",
     "BoscaliSummer.Garrisons.ShellDestructPatch",
     "BoscaliSummer.Garrisons.StrongpointDamagePatch",
+    "BoscaliSummer.Garrisons.ShellShockwavePatch",
+    "BoscaliSummer.Garrisons.PartShockwavePatch",
+    "BoscaliSummer.Garrisons.NestDamageRedirectPatch",
     "BoscaliSummer.Garrisons.StrongpointClientGuardPatch",
     "BoscaliSummer.Garrisons.DestroyCommandGuardPatch",
-    "BoscaliSummer.Garrisons.ChimeraMountRegistrationPatch",
     "BoscaliSummer.Modules.Radio.Patches.VanillaPlayMusicPatch",
     "BoscaliSummer.Modules.Radio.Patches.VanillaCrossFadeMusicPatch",
     "BoscaliSummer.Modules.Radio.Patches.VanillaQueueMusicPatch",

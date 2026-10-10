@@ -1,0 +1,9 @@
+{
+    "name": "Vanguard.Editor",
+    "rootNamespace": "Vanguard",
+    "references": ["Blueprinter.Editor"],
+    "includePlatforms": ["Editor"],
+    "overrideReferences": true,
+    "precompiledReferences": ["Assembly-CSharp.dll", "Assembly-CSharp-firstpass.dll", "Mirage.dll", "UniTask.dll"],
+    "autoReferenced": false
+}

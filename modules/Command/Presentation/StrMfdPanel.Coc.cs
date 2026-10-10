@@ -88,7 +88,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
             cocLogSection = p.Section(AvIcon.ListDetails, "STAFF LOG", "");
             cocLog = p.Add(new StrLogBoard(p.Content, CocLogRows, LogRowClicked, 4), 1f);
-            cocLogNote = p.Add(new StrNote(p.Content, AvIcon.ListDetails), 1f);
+            cocLogNote = p.Add(new StrNote(p.Content, AvIcon.ListDetails));
         }
 
         private void LogRowClicked(int slot)
@@ -189,8 +189,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
                         : view.IsKnown
                             ? "Confirmed contact: " + view.Name + "  ·  " + view.Role
                             : "Unconfirmed post: " + view.Name + " — no local intel.") +
-                        (string.IsNullOrEmpty(bonus) ? "" : "  ·  " + bonus) +
-                        (view.Id == cocSelectedId ? "  ·  Bracketed on the map." : ""),
+                        (string.IsNullOrEmpty(bonus) ? "" : "  ·  " + bonus),
                 };
             }
             cocChart.SetNodes(cocNodes, ordered);
@@ -244,8 +243,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
             cocLog.SetShown(shown > 0);
             cocLogNote.SetShown(shown == 0);
-            if (shown == 0) cocLogNote.Set("NO TRAFFIC", "");
-            cocLogSection.SetCaption(count == 0 ? "NO TRAFFIC" : count + (count == 1 ? " ENTRY" : " ENTRIES"));
+            if (shown == 0) cocLogNote.Set("NO TRAFFIC YET", "Posts, losses and pay events appear here.", AvState.Inert);
+            cocLogSection.SetCaption(count == 0 ? "QUIET" : count + (count == 1 ? " ENTRY" : " ENTRIES"));
         }
 
         /// <summary>A log line is clickable only when its subject is on the side the tree is
@@ -277,9 +276,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
             cocFileNote.SetShown(false);
             bool sealedFile = !view.IsFriendly && !view.IsKnown;
             cocDossier.Help = view.IsFriendly
-                ? "Allied personnel file. The map brackets this post while its file is open."
+                ? "Allied personnel file."
                 : view.IsKnown
-                    ? "Identity confirmed by local intel. The map brackets this post while its file is open."
+                    ? "Identity confirmed by local intel."
                     : "Identity unconfirmed: the file stays sealed until local intel identifies this post.";
 
             int traits = sealedFile ? 0 : ParseBonus(view.Bonus);

@@ -52,9 +52,7 @@ public static class HudLogUnityCheck
             Set(colors, "alert", new Color(1f, .3f, .25f));
             var theme = ScriptableObject.CreateInstance<ThemeGroup>(); theme.SetColorTheme(colors);
             typeof(ThemeManager).GetProperty("Active", All).SetValue(null, theme);
-            foreach (float width in new[] { 320f, 440f })
-                foreach (bool details in new[] { false, true })
-                    foreach (float scale in new[] { .85f, 1f, 1.2f, 1.45f }) Status(width, details, scale);
+            foreach (float width in new[] { 320f, 440f }) Status(width);
             foreach (Vector2 size in new[] { new Vector2(1280,720), new Vector2(1920,1080), new Vector2(2560,1080) }) Cluster(size);
             Contracts();
             foreach (float height in new[] { 160f, 420f, 596f })
@@ -85,7 +83,7 @@ public static class HudLogUnityCheck
             label.font = font; label.fontSharedMaterial = font.material;
         }
     }
-    private static void Status(float width, bool details, float scale)
+    private static void Status(float width)
     {
         Canvas canvas = MakeCanvas("Status", new Vector2(640, 600)); CombatHUD hud = NativeDock(canvas);
         var dock = new GameObject("WeaponsDock", typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
@@ -103,20 +101,20 @@ public static class HudLogUnityCheck
             Set(row, "Tone", Enum.Parse(tone, i == 0 ? "Warning" : i == 2 ? "Caution" : "Info"));
             Set(row, "Bar", .3f + i * .15f); rows.SetValue(row, i);
         }
-        Call(status, "Present", rows, rows.Length, details, 1, 1, scale, 0, 0);
+        Call(status, "Present", rows, rows.Length, Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Domain.SystemStates")), Type("BoscaliSummer.Modules.Hud.Domain.ThreatPicture").GetProperty("Clear").GetValue(null), Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Domain.ShotLedger")), -1f);
         Canvas.ForceUpdateCanvases();
-        Check(((CanvasGroup)Field(status, "group")).alpha > .2f, "Visible status opacity.");
+        Check(((TMP_Text)Field(status, "stripLabel")).text == detail[0].ToUpperInvariant(), "Capacitor bar carries the most severe line's detail.");
+        Check(((RectTransform)Field(status, "root")).Find("Label0").GetComponent<TMP_Text>().text == "MISSILE WARNING", "Cell label is the line head.");
         foreach (Graphic g in ((RectTransform)Field(status, "root")).GetComponentsInChildren<Graphic>())
             Check(!g.raycastTarget, "HUD must not intercept pointer input.");
-        Capture(canvas, "HUD-status-" + width + "-" + details + "-" + scale.ToString("0.0") + ".png");
+        Capture(canvas, "HUD-status-" + width + ".png");
         foreach (var label in ((RectTransform)Field(status, "root")).GetComponentsInChildren<TextMeshProUGUI>())
             Check(!label.isTextOverflowing, "Status text remains readable: " + label.text);
-        Call(status, "Present", rows, rows.Length, !details, 1, 1, scale, 0, 0);
         int detailCount = 0;
         foreach (var label in ((RectTransform)Field(status, "root")).GetComponentsInChildren<TextMeshProUGUI>())
             if (label.name == "Detail") detailCount++;
-        Check(detailCount == (details ? 0 : rows.Length), "Detail toggling updates the existing rows.");
-        Call(status, "Present", rows, 0, details, 1, 1, scale, 0, 0);
+        Check(detailCount == 1, "One detail line, under the cells.");
+        Call(status, "Present", rows, 0, Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Domain.SystemStates")), Type("BoscaliSummer.Modules.Hud.Domain.ThreatPicture").GetProperty("Clear").GetValue(null), Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Domain.ShotLedger")), -1f);
         Check(!((RectTransform)Field(status, "root")).gameObject.activeSelf, "Empty status hides owned tree.");
         Call(status, "Destroy"); Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
     }
@@ -126,15 +124,20 @@ public static class HudLogUnityCheck
         object cluster = Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Presentation.ThirdPersonHudCluster"), true);
         Call(cluster, "Build", hud, canvas);
         SyntheticFont((RectTransform)Field(cluster, "root"));
-        Call(cluster, "Present", true, AvUnits.Imperial, 240f, 1800f, -12f, 359.6f, .72f, 5.1f, .15f, .8f,
-            true, Texture2D.whiteTexture, "SAM SITE", "9.4 KM");
+        Type flightType = Type("BoscaliSummer.Modules.Hud.Presentation.ThirdPersonHudCluster+Flight");
+        object flight = Activator.CreateInstance(flightType);
+        foreach (var kv in new[] { ("SpeedMps", 240f), ("AltitudeM", 1800f), ("RadarAltM", 120f), ("ClimbMps", -12f),
+            ("HeadingDeg", 359.6f), ("Mach", .72f), ("G", 5.1f), ("Fuel", .15f), ("Throttle", .8f) })
+            Set(flight, kv.Item1, kv.Item2);
+        Call(cluster, "Present", true, AvUnits.Imperial, flight, Texture2D.whiteTexture, "SAM SITE", 9400f, 120f);
         Capture(canvas, "HUD-cluster-" + size.x + "x" + size.y + ".png");
         object heading = Field(cluster, "hdg");
-        Check(((TMP_Text)Field(heading, "Value")).text == "000°", "Rounded north wraps to 000 degrees.");
+        Check(((TMP_Text)Field(heading, "Value")).text.StartsWith("000°"), "Rounded north wraps to 000 degrees.");
         Call(cluster, "WriteHeading", -1f);
-        Check(((TMP_Text)Field(Field(cluster, "hdg"), "Value")).text == "359°", "Negative heading normalizes.");
+        Check(((TMP_Text)Field(Field(cluster, "hdg"), "Value")).text.StartsWith("359°"), "Negative heading normalizes.");
         Call(cluster, "WriteHeading", 5f);
-        Check(((TMP_Text)Field(Field(cluster, "hdg"), "Value")).text == "005°", "Heading retains three digits.");
+        Check(((TMP_Text)Field(Field(cluster, "hdg"), "Value")).text.StartsWith("005°"), "Heading retains three digits.");
+        Check(((TMP_Text)Field(Field(cluster, "alt"), "Caption")).text.StartsWith("R "), "Low radar altitude replaces the ALT caption.");
         foreach (Graphic g in ((RectTransform)Field(cluster, "root")).GetComponentsInChildren<Graphic>())
             Check(!g.raycastTarget, "Flight cluster must not intercept pointer input.");
         Call(cluster, "Destroy"); Object.DestroyImmediate(canvas.gameObject);

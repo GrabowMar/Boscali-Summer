@@ -18,6 +18,7 @@ namespace BoscaliSummer.Modules.FireAndDestruction
             typeof(GroundVehicleDestructionPatch),
             typeof(BuildingHitPatch),
             typeof(BuildingDestructPatch),
+            typeof(BuildingDestructPatch.NativeRubbleCapture),
             typeof(AircraftWreckPersistencePatch)
         };
 
@@ -29,6 +30,7 @@ namespace BoscaliSummer.Modules.FireAndDestruction
             ImpactFireManager fires = context.AddSceneService<ImpactFireManager>(10);
             fires.Configure(context.Services);
             context.AddSceneService<ImpactScorchManager>(15);
+            context.AddSceneService<BuildingCarver>(16);
             context.AddSceneService<BuildingHitLedger>(17);
             context.AddSceneService<RuinAftermathManager>(20);
             context.AddSceneService<ModNet>(100);

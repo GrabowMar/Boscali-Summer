@@ -88,7 +88,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             if (now < nextRegistration) return;
             nextRegistration = now + 0.5f;
 
-            NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
+            NetworkManagerNuclearOption network = GameAccess.NetworkManagerOrNull;
             MessageHandler server = network?.Server?.Active == true ? network.Server.MessageHandler : null;
             MessageHandler client = network?.Client?.Active == true ? network.Client.MessageHandler : null;
 
@@ -110,7 +110,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             if (ClientHandlers.Current != null && !queried && !GameAccess.IsServer() &&
                 now - lastClientQuery >= ClientQueryInterval)
             {
-                NetworkClient transport = NetworkManagerNuclearOption.i?.Client;
+                NetworkClient transport = GameAccess.NetworkManagerOrNull?.Client;
                 if (transport != null && transport.Active)
                 {
                     queried = true;
@@ -149,7 +149,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
         internal void BroadcastState(string faction, PriorityDirective? directive)
         {
             if (!GameAccess.IsServer()) return;
-            NetworkServer server = NetworkManagerNuclearOption.i?.Server;
+            NetworkServer server = GameAccess.NetworkManagerOrNull?.Server;
             if (server == null || !server.Active) return;
             SendToFaction(server, faction, StateOf(faction, directive));
         }

@@ -41,10 +41,10 @@ namespace BoscaliSummer.Modules.Hud.Domain
     /// </summary>
     internal static class ThirdPersonHudLayout
     {
-        public const float BoxWidth = 110f, BoxHeight = 44f;
-        public const float HdgWidth = 72f, HdgHeight = 28f;
+        public const float BoxWidth = 120f, BoxHeight = 56f;
+        public const float HdgWidth = 100f, HdgHeight = 32f;
         public const float SubLineHeight = 14f;
-        public const float BarWidth = 5f, BarHeight = 44f, BarGap = 4f;
+        public const float BarWidth = 6f, BarHeight = 56f, BarGap = 5f;
 
         public const float BoxOffsetXFraction = 0.17f;
         public const float HdgOffsetYFraction = 0.30f;
@@ -57,7 +57,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         public const float TargetCardWidth = 240f;
         public const float TargetCardAspect = 16f / 9f;
-        public const float TargetCardHeaderHeight = 16f;
+        public const float TargetCardHeaderHeight = 22f;
 
         public static RectF Screen(float width, float height) => new RectF(0f, 0f, width, height);
 
@@ -119,6 +119,38 @@ namespace BoscaliSummer.Modules.Hud.Domain
             if (!Overlaps(r, frame)) return r;
             float clearY = frame.Top + GuardMargin + r.Height * 0.5f;
             return r.WithCenter(r.CenterX, clearY);
+        }
+    }
+
+    /// <summary>How close the ground is, from radar altitude and sink rate.</summary>
+    internal enum TerrainCue { None, Low, PullUp }
+
+    /// <summary>Pure cue rules for the third-person cluster (2026-10-07). No UnityEngine.</summary>
+    internal static class HudCues
+    {
+        /// <summary>Radar altitude below this is shown on the ALT box instead of its caption.</summary>
+        public const float ShowRadarBelowM = 300f;
+        /// <summary>LOW: under this AGL while sinking faster than <see cref="LowSinkMps"/>.</summary>
+        public const float LowAglM = 150f;
+        public const float LowSinkMps = 5f;
+        /// <summary>PULL UP: ground reached in under this many seconds at the current sink rate.</summary>
+        public const float PullUpSeconds = 5f;
+
+        public static TerrainCue Terrain(float radarAltM, float climbMps)
+        {
+            if (float.IsNaN(radarAltM) || float.IsNaN(climbMps) || radarAltM >= ShowRadarBelowM || climbMps >= 0f)
+                return TerrainCue.None;
+            if (radarAltM / -climbMps < PullUpSeconds) return TerrainCue.PullUp;
+            return radarAltM < LowAglM && -climbMps > LowSinkMps ? TerrainCue.Low : TerrainCue.None;
+        }
+
+        private static readonly string[] Points = { "N", "NE", "E", "SE", "S", "SW", "W", "NW" };
+
+        /// <summary>The nearest of the eight compass points for a heading in degrees.</summary>
+        public static string Cardinal(float headingDeg)
+        {
+            float h = ((headingDeg % 360f) + 360f) % 360f;
+            return Points[(int)((h + 22.5f) / 45f) % 8];
         }
     }
 }

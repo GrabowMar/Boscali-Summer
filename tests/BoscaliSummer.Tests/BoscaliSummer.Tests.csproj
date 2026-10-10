@@ -8,9 +8,11 @@
     <ManagedDir>$(GameDir)\NuclearOption_Data\Managed</ManagedDir>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\..\Core\Storage\AtomicFile.cs" Link="Framework\AtomicFile.cs" />
     <Compile Include="..\..\Core\Contracts\PortraitRole.cs" Link="Framework\PortraitRole.cs" />
     <Compile Include="..\..\modules\Wing\Domain\Personnel\PilotPortraitGenerator.cs" Link="Features\Wing\PilotPortraitGenerator.cs" />
     <Compile Include="..\..\modules\Weather\Domain\*.cs" LinkBase="Features\Weather" />
+    <Compile Include="..\..\modules\Vanguard\Domain\*.cs" LinkBase="Features\Vanguard" />
     <Compile Include="..\..\modules\Weather\Audio\EnvironmentAudioMath.cs" Link="Features\Weather\EnvironmentAudioMath.cs" />
     <Compile Include="..\..\modules\Immersion\Audio\CanopyWindMath.cs" Link="Features\Immersion\CanopyWindMath.cs" />
     <Compile Include="..\..\modules\Support\Domain\Calls\*.cs" LinkBase="Features\Support\Calls" />
@@ -110,6 +112,8 @@
     <Compile Include="..\..\modules\Support\Runtime\JtacResolve.cs" Link="Features\Support\JtacResolve.cs" />
     <Compile Include="..\..\modules\Support\Runtime\StrikeBallistics.cs" Link="Features\Support\StrikeBallistics.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Runtime\TroopDeploymentMath.cs" Link="Features\UrbanCombat\TroopDeploymentMath.cs" />
+    <Compile Include="..\..\modules\UrbanCombat\Runtime\HaloGlidePlan.cs" Link="Features\UrbanCombat\HaloGlidePlan.cs" />
+    <Compile Include="..\..\modules\UrbanCombat\Runtime\FastRopePlan.cs" Link="Features\UrbanCombat\FastRopePlan.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Runtime\GarrisonMarkerInfo.cs" Link="Features\UrbanCombat\GarrisonMarkerInfo.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Runtime\SiegeMath.cs" Link="Features\UrbanCombat\SiegeMath.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Runtime\GarrisonComposition.cs" Link="Features\UrbanCombat\GarrisonComposition.cs" />
@@ -159,9 +163,11 @@
     <Compile Include="..\..\modules\Hud\Domain\HudNoticeQueue.cs" Link="Features\Hud\HudNoticeQueue.cs" />
     <Compile Include="..\..\modules\Autopilot\Domain\AutopilotHudCopy.cs" Link="Features\Autopilot\AutopilotHudCopy.cs" />
     <Compile Include="..\..\modules\QoL\Domain\FuelHudCopy.cs" Link="Features\QoL\FuelHudCopy.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\ChannelFilter.cs" Link="Features\Hud\ChannelFilter.cs" />
     <Compile Include="..\..\modules\Hud\Domain\WingviewMath.cs" Link="Features\Hud\WingviewMath.cs" />
     <Compile Include="..\..\modules\Hud\Domain\ThirdPersonHudLayout.cs" Link="Features\Hud\ThirdPersonHudLayout.cs" />
+    <Compile Include="..\..\modules\Hud\Domain\HudSymbols.cs" Link="Features\Hud\HudSymbols.cs" />
+    <Compile Include="..\..\modules\Hud\Domain\HudLamps.cs" Link="Features\Hud\HudLamps.cs" />
+    <Compile Include="..\..\modules\Hud\Domain\HudTactical.cs" Link="Features\Hud\HudTactical.cs" />
     <Compile Include="..\..\modules\Progression\Domain\AceHuntHudCopy.cs" Link="Features\Progression\AceHuntHudCopy.cs" />
     <Compile Include="..\..\modules\Radio\Domain\RadioHudCopy.cs" Link="Features\Radio\RadioHudCopy.cs" />
     <Compile Include="..\..\modules\Weather\Visuals\CloudNoise3D.cs" Link="Features\Weather\CloudNoise3D.cs" />
@@ -188,7 +194,6 @@
     <EmbeddedResource Include="..\..\AvionicsUi\Assets\avionics-ui.manifest.json" LogicalName="BoscaliSummer.Tests.avionics-ui.manifest.json" Condition="Exists('..\..\AvionicsUi\Assets\avionics-ui.manifest.json')" />
   </ItemGroup>
   <ItemGroup Label="Concurrent weather and immersion tests">
-    <Compile Include="..\*Tests.cs" />
     <Compile Include="..\..\modules\Immersion\Domain\*.cs" LinkBase="Features\Immersion" />
     <Compile Include="..\..\Core\Contracts\IFlightEnvironmentView.cs" Link="Core\IFlightEnvironmentView.cs" Condition="Exists('..\..\Core\Contracts\IFlightEnvironmentView.cs')" />
     <Reference Include="UnityEngine.CoreModule"><HintPath>$(ManagedDir)\UnityEngine.CoreModule.dll</HintPath><Private>true</Private></Reference>

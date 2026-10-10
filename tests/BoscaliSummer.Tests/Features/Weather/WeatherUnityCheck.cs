@@ -519,9 +519,9 @@ public sealed class WeatherUnityCheck : MonoBehaviour
         Check(!rain.IsPlaying && !rushSource.isPlaying && !patterSource.isPlaying &&
             rain.RushVolume == 0f && rain.PatterVolume == 0f && LoopCount() == 0,
             "Audio-off stops rain immediately and frees its voice");
-        rain.UpdateAudio(0f, 1f, 1f, true, true);
-        Check(!rain.IsPlaying && !rushSource.isPlaying && !patterSource.isPlaying,
-            "Dry cloud condensation does not create falling-rain audio");
+        rain.UpdateAudio(0f, 1f, 1f, true, true, 200f);
+        Check(patterSource.isPlaying && !rushSource.isPlaying && LoopCount() == 1,
+            "Cockpit cloud at speed owns exactly one audible patter loop");
         rain.Release(); rain.Release(); SoundManager.i = null;
         Check(LoopCount() == 0, "Repeated rain release leaves no voice reservation");
     }

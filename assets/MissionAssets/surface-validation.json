@@ -1,0 +1,27 @@
+{
+  "bundle": "MissionAssets.nobp",
+  "verified_pbr_materials": [
+    "Canvas",
+    "Concrete",
+    "Dark",
+    "Earth",
+    "Glass",
+    "Medical",
+    "Olive",
+    "Red",
+    "Safety",
+    "SolarBlue",
+    "SolarDark",
+    "SpaceGold",
+    "Steel",
+    "ThermalWhite",
+    "White",
+    "Wreck"
+  ],
+  "channels": [
+    "albedo",
+    "normal",
+    "metallic_smoothness"
+  ],
+  "reference_art_included": false
+}

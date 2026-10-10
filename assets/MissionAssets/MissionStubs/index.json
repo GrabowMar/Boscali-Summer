@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "status": "design_stubs_not_runtime",
+  "missions": [
+    "cut_the_signal",
+    "quiet_horizon",
+    "broken_wing",
+    "fuse_box",
+    "sealed_manifest",
+    "logistics_window",
+    "last_light",
+    "lost_packet",
+    "orbital_handshake"
+  ]
+}

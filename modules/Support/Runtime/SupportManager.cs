@@ -583,7 +583,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         /// <summary>True when this peer is the host or has a live client link to one.</summary>
-        public bool Online => GameAccess.IsServer() || NetworkManagerNuclearOption.i?.Client?.Active == true;
+        public bool Online => GameAccess.IsServer() || GameAccess.NetworkManagerOrNull?.Client?.Active == true;
 
         /// <summary>The local faction's next tier goal in words, or "" when everything is open.</summary>
         public string NextUnlockText()

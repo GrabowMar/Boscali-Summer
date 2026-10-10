@@ -22,6 +22,18 @@ namespace BoscaliSummer.Tests.Features.Hud
             }
             KeepClearIsIdempotent();
             CollapsedCardHasNoHeight();
+            Cues();
+        }
+
+        private static void Cues()
+        {
+            TestAssert.That(HudCues.Terrain(1000f, -50f) == TerrainCue.None, "High above the ground: no cue");
+            TestAssert.That(HudCues.Terrain(100f, 2f) == TerrainCue.None, "Climbing low: no cue");
+            TestAssert.That(HudCues.Terrain(100f, -10f) == TerrainCue.Low, "Low and sinking: LOW");
+            TestAssert.That(HudCues.Terrain(100f, -30f) == TerrainCue.PullUp, "Impact in 3.3 s: PULL UP");
+            TestAssert.That(HudCues.Terrain(float.NaN, -30f) == TerrainCue.None, "Unknown radar altitude: no cue");
+            TestAssert.That(HudCues.Cardinal(0f) == "N" && HudCues.Cardinal(359f) == "N" && HudCues.Cardinal(87f) == "E" &&
+                HudCues.Cardinal(-90f) == "W" && HudCues.Cardinal(225f) == "SW", "Compass points round to the nearest of eight");
         }
 
         private static void ClusterInsideAndClear(float width, float height, float aspect)

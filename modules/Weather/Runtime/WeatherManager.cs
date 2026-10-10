@@ -98,10 +98,15 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private bool canopyShaderActive;
         private int canopyDrawnFrames;
         private readonly CanopyShaderDressing canopyShader = new CanopyShaderDressing();
+        private readonly CanopySceneCopy canopyScene = new CanopySceneCopy();
         private bool canopyShaderLogged;
         private readonly RaycastHit[] shelterHits = new RaycastHit[8];
         private float nextShelterCheck;
         private float rainExposure = 1f;
+        private float cloudBuffet, cloudPunch;
+        private bool wasInCloud;
+        private bool lastAudioCockpit;
+        private float lastAudioSpeed;
         private float heightAboveGround;
         private float lastVisualIntensity;
         private bool sheltered;
@@ -214,6 +219,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             cloudMoisture = 0f;
             canopyAircraftId = 0;
             canopyShader.Detach();
+            canopyScene.Dispose();
             canopyShaderLogged = false;
             canopyDrawnFrames = 0;
             nextShelterCheck = 0f;
@@ -279,6 +285,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private void TeardownRainSystems()
         {
             canopyShader.Detach();
+            canopyScene.Dispose();
             canopyWetness = 0f;
             cloudMoisture = 0f;
             canopyShaderActive = false;
@@ -583,6 +590,28 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                     heightAboveGround = Mathf.Min(heightAboveGround, groundHit.distance);
             }
             rainExposure = Mathf.MoveTowards(rainExposure, sheltered ? 0f : 1f, Time.deltaTime * 2f);
+            // Cloud buffet: view-only cockpit shake (vanilla AddShake, which also drives the
+            // cockpit rattle). Adding target * decay * dt settles at target against vanilla's
+            // 5/s and 4/s decay; dense cloud, airspeed and storm turbulence scale it.
+            cloudBuffet = 0f;
+            // Punching through a cloud face: a short patter swell and one jolt, both ways.
+            bool inCloud = wasInCloud ? viewDensity > 0.03f : viewDensity > 0.06f;
+            if (inCloud != wasInCloud && isCockpit && localAircraft != null && ias > 60f)
+            {
+                cloudPunch = Mathf.Clamp01(ias / 200f) * (inCloud ? 1f : 0.75f);
+                cameras.cockpitState.AddShake(cloudPunch * 0.44f, cloudPunch * 0.31f);
+            }
+            wasInCloud = inCloud;
+            cloudPunch = Mathf.MoveTowards(cloudPunch, 0f, Time.deltaTime * 1.2f);
+            if (isCockpit && localAircraft != null && Time.deltaTime > 0f)
+            {
+                float bump = 0.6f + 0.8f * Mathf.PerlinNoise(missionTime * 1.3f, 0.37f);
+                float buffet = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.05f, 0.5f, viewDensity)) *
+                    Mathf.Clamp01(ias / 200f) * (0.33f + 0.45f * Mathf.Clamp01(localWeather.Turbulence)) * bump;
+                cloudBuffet = buffet;
+                if (buffet > 0.005f)
+                    cameras.cockpitState.AddShake(buffet * 5f * Time.deltaTime, buffet * 0.8f * 4f * Time.deltaTime);
+            }
             rainIntensity *= rainExposure;
             visualIntensity *= rainExposure;
             viewPrecipitation = rainIntensity;
@@ -603,9 +632,10 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                     settings.RainAudioEnabled.Value, isCockpit);
             else lightning.Reset();
 
-            bool wantSystems = visualIntensity > 0.02f || canopyWetness > 0.001f ||
+            float cloudMist = RainVisualsEnabled ? cloudMoisture * rainExposure : 0f;
+            bool wantSystems = visualIntensity > 0.02f || canopyWetness > 0.001f || cloudMist > 0.02f ||
                 (RainVisualsEnabled && settings.CanopyRainEnabled.Value && glassMoisture > 0.001f) ||
-                (settings.RainAudioEnabled.Value && incomingRain > 0.02f);
+                (settings.RainAudioEnabled.Value && (incomingRain > 0.02f || (isCockpit && cloudMoisture > 0.02f)));
             if (rainRoot == null && !wantSystems) return;
             if (rainRoot == null) EnsureRainSystems();
 
@@ -632,17 +662,21 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             {
                 rainEmitter.SetTint(RenderSettings.fogColor);
                 rainEmitter.UpdateRain(isCockpit ? airVel : Vector3.zero, currentWind, visualIntensity, currentCam,
-                    settings != null ? settings.RainDensity.Value : 1f, 1f, lightLevel);
+                    settings != null ? settings.RainDensity.Value : 1f, 1f, lightLevel, cloudMist);
             }
             // Impact sound follows incoming water, independently of optional glass rendering.
-            rainSound?.UpdateAudio(incomingRain, 0f, rainIntensity, isCockpit,
+            lastAudioCockpit = isCockpit;
+            lastAudioSpeed = cameras.followingUnit is Aircraft ? ias : 0f;
+            rainSound?.UpdateAudio(incomingRain, Mathf.Max(cloudMoisture, cloudPunch), glassMoisture, isCockpit,
                 settings.RainAudioEnabled.Value && !underwaterView, cameras.followingUnit is Aircraft ? ias : 0f,
                 heightAboveGround, rainExposure);
             // The sim remains current outside cockpit view, but submits at most 30 blits/s per pane.
             float speedNorm = Mathf.Clamp01(ias / 250f);
             if (!shaderRequested || canopyWetness <= 0.001f) canopyShader.ClearWater();
             else
-                canopyShader.UpdateSim(canopySurfaces, glassMoisture, speedNorm,
+                // Cloud droplets wet the glass as film, not a field of fixed beads (in cloud
+                // that read as grain); only rain seeds beads at full rate.
+                canopyShader.UpdateSim(canopySurfaces, Mathf.Max(rainIntensity, glassMoisture * 0.35f), speedNorm,
                     currentWind - airVel, Time.deltaTime);
             bool shaderDrawn = false;
             if (shaderRequested)
@@ -651,12 +685,15 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             if (isCockpit && shaderRequested)
             {
                 canopyShader.SetLighting(sunDirection, sunColor, RenderSettings.fogColor, sceneRefraction);
+                canopyScene.Arm(glassCamera);
+                canopyShader.SetScene(canopyScene.Ready(glassCamera) ? canopyScene.Texture : null);
 
                 shaderDrawn = canopyShader.Draw(canopySurfaces, glassCamera, canopyWetness, lightLevel);
 
                 if (shaderDrawn && !canopyShaderLogged) LogCanopyShaderOnce("Canopy rain active on " + canopySurfaces.Count + " glass submeshes; native materials preserved.");
             }
             canopyShaderActive = shaderDrawn;
+            if (!shaderDrawn) canopyScene.Dispose(); // dry or outside: no per-frame copy
             if (shaderDrawn && canopyDrawnFrames < int.MaxValue) canopyDrawnFrames++;
             if (canopyDrops != null)
                 canopyDrops.UpdateDrops(hasGlass ? canopySurfaces[0] : default,
@@ -740,6 +777,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 { "cellCount", Field?.CellCount ?? 0 },
                 { "clusterCount", Field?.CloudClusterCount ?? 0 },
                 { "cloudImmersion", cloudMoisture },
+                { "cloudBuffet", cloudBuffet },
                 { "viewCloudDensity", viewDensity },
                 { "viewPrecipitation", viewPrecipitation },
                 { "viewCondensation", viewCondensation },
@@ -1085,7 +1123,13 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 " | local cover " + localWeather.Cover.ToString("0.00") + " front " + localWeather.FrontCover.ToString("0.00") +
                 " rain " + EffectiveRainIntensity().ToString("0.00") +
                 " | fronts " + (live?.FrontCount ?? 0) + " cells " + (live?.CellCount ?? 0) +
-                " | maps " + (flightClouds?.MapUpdates ?? 0));
+                " | maps " + (flightClouds?.MapUpdates ?? 0) +
+                " | precip " + viewPrecipitation.ToString("0.00") + " expo " + rainExposure.ToString("0.00") +
+                " cock " + (lastAudioCockpit ? 1 : 0) + " spd " + Mathf.RoundToInt(lastAudioSpeed) +
+                (rainSound == null ? " audio none" :
+                " audio play " + (rainSound.IsPlaying ? 1 : 0) +
+                " vol " + Mathf.Max(rainSound.PatterVolume, rainSound.RushVolume).ToString("0.00") +
+                " route " + (rainSound.IsRouted ? 1 : 0) + " clips " + (rainSound.ClipsReady ? 1 : 0)));
         }
 
         private static bool TryMissionTime(out float time)

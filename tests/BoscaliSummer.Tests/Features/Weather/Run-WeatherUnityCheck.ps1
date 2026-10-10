@@ -7,7 +7,7 @@ if (Test-Path -LiteralPath $fixture) { throw "Evidence directory already exists:
 if (-not (Test-Path -LiteralPath $Unity)) { throw "Unity Editor not found: $Unity" }
 New-UnityCheckProject $fixture '{"dependencies":{"com.unity.modules.audio":"1.0.0","com.unity.modules.assetbundle":"1.0.0","com.unity.modules.particlesystem":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.physics":"1.0.0"}}' -Folders 'Assets/Resources', 'Assets/Code'
 Get-ChildItem "$repo/modules/Weather/Visuals/*.cs" |
-    Where-Object { $_.Name -notin @('WeatherVolumeDressing.cs', 'WeatherCloudShadows.cs', 'WeatherCloudPass.cs') } |
+    Where-Object { $_.Name -notin @('WeatherVolumeDressing.cs', 'WeatherCloudShadows.cs', 'WeatherCloudPass.cs', 'CanopySceneCopy.cs') } |
     Copy-Item -Destination "$fixture/Assets/Code/"
 Copy-Item "$repo/modules/Weather/Audio/*.cs" "$fixture/Assets/Code/"
 Copy-Item "$PSScriptRoot/CloudDressingStubs.cs" "$fixture/Assets/Code/"

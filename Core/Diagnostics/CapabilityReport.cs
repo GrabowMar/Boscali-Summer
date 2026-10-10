@@ -83,12 +83,13 @@ namespace BoscaliSummer.Core.Diagnostics
 
             try
             {
-                if (Encyclopedia.i != null)
+                Encyclopedia encyclopedia = GameAccess.EncyclopediaOrNull;
+                if (encyclopedia?.buildings != null)
                 {
                     var labels = new List<string>();
-                    for (int i = 0; i < Encyclopedia.i.buildings.Count; i++)
+                    for (int i = 0; i < encyclopedia.buildings.Count; i++)
                     {
-                        BuildingDefinition definition = Encyclopedia.i.buildings[i];
+                        BuildingDefinition definition = encyclopedia.buildings[i];
                         if (definition != null && definition.buildingType == BuildingType.DEF)
                             labels.Add(definition.jsonKey + " (" + definition.unitName + ")");
                     }

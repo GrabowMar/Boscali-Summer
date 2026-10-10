@@ -1,0 +1,50 @@
+{
+  "name": "airborne-rope",
+  "mods": ["boscalisummer"],
+  "timeout_s": 240,
+  "ops": [
+    { "op": "spawn", "id": "lead", "type": "UH-90 Ibis", "faction": "Boscali", "at": { "map": [0, 0] }, "altitude": 600, "speed": 40, "heading": 0 },
+    { "op": "observe", "follow": "lead" },
+    { "op": "atmosphere", "time_of_day": 12, "conditions": 0.1, "cloud_height": 6000, "wind_speed": 2, "wind_turbulence": 0, "wind_heading": 90, "moon_phase": 14 },
+    { "op": "wait", "seconds": 6 },
+
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "hover", "height": 25, "over": "building" }, "store": "roof_hover" },
+    { "op": "wait", "seconds": 2 },
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "rope", "surface": "roof" }, "store": "fastrope" },
+    { "op": "wait", "seconds": 2.5 },
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "watch", "op": "BoscaliSummer.RopeInsertion", "child": "Trooper_1", "distance": 12, "height": 2 }, "store": "w_slide" },
+    { "op": "capture", "name": "rope-fast-slide", "hide_ui": true },
+    { "op": "wait", "seconds": 9 },
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "watch", "op": "BoscaliSummer.RopeInsertion", "child": "Trooper_2", "distance": 16, "height": 6 }, "store": "w_roof" },
+    { "op": "capture", "name": "rope-roof-overwatch", "hide_ui": true },
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "status" }, "store": "after_fast" },
+    { "op": "wait", "seconds": 12 },
+
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "hover", "height": 80 }, "store": "high_hover" },
+    { "op": "wait", "seconds": 2 },
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "rope" }, "store": "rappel" },
+    { "op": "wait", "seconds": 12 },
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "watch", "op": "BoscaliSummer.RopeInsertion", "child": "Trooper_1", "distance": 12, "height": 2 }, "store": "w_rappel" },
+    { "op": "capture", "name": "rope-rappel", "hide_ui": true },
+    { "op": "wait", "seconds": 45 },
+
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "hover", "height": 30 }, "store": "exfil_hover" },
+    { "op": "wait", "seconds": 2 },
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "exfil" }, "store": "exfil" },
+    { "op": "wait", "seconds": 7 },
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "watch", "op": "BoscaliSummer.RopeExtraction", "child": "Trooper_1", "distance": 14, "height": 2 }, "store": "w_clip" },
+    { "op": "capture", "name": "rope-exfil-clip", "hide_ui": true },
+    { "op": "wait", "seconds": 6 },
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "watch", "op": "BoscaliSummer.RopeExtraction", "child": "Trooper_3", "distance": 18, "height": -4 }, "store": "w_ride" },
+    { "op": "capture", "name": "rope-exfil-ride", "hide_ui": true },
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "status" }, "store": "riding" },
+    { "op": "end" }
+  ],
+  "checks": [
+    { "check": "status_ok" },
+    { "check": "result_below", "path": "fastrope.rappel", "max": 0.5 },
+    { "check": "result_above", "path": "rappel.rappel", "min": 0.5 },
+    { "check": "result_above", "path": "after_fast.inserting", "min": 3.5 },
+    { "check": "result_above", "path": "riding.extracting", "min": 1.5 }
+  ]
+}

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Autopilot.Domain;
 using BoscaliSummer.Core.Contracts;
@@ -25,6 +26,9 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                     status: CallStatus))
                 .Add(Leaf("clear", "CLEAR MARK", AceIcon.Clear, () => Service<ICameraTargetService>()?.Clear(),
                     visible: () => Service<ICameraTargetService>()?.HasMark == true))
+                // Ibis hovering over a friendly squad position: lift the squad out on the ropes.
+                .Add(Leaf("exfil", "SQUAD EXFIL", AceIcon.Hover, () => Service<IAirAssaultOrders>()?.RequestExfil(),
+                    visible: () => Service<IAirAssaultOrders>()?.CanRequestExfil == true))
                 .WithChildren(ContributedPage);
         }
 
@@ -96,6 +100,25 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 yield return Leaf("c" + index, Upper(label), AceIcon.Comms, () => calls.Call(index),
                     enabled: () => calls.CanCall);
             }
+        }
+
+        // ------------------------------------------------------------------ WING
+
+        /// <summary>Whole-wing orders through <see cref="IWingOrders"/> (the Wing module's own order path); hidden without a wing.</summary>
+        private static AceRadialAction Wing()
+        {
+            Func<bool> hasWing = () => (Service<IWingOrders>()?.Members ?? 0) > 0;
+            Func<AceRadialStatus> size = () => new AceRadialStatus((Service<IWingOrders>()?.Members ?? 0) + " WINGMEN", AceTone.Active);
+            Func<AceRadialStatus> shape = () => Upper(Service<IWingOrders>()?.Shape, 18);
+            return Branch("wing", "WING", AceIcon.Wing)
+                .Add(Leaf("formup", "FORM UP", AceIcon.Wing, () => Service<IWingOrders>()?.FormUp(), visible: hasWing, status: shape))
+                .Add(Leaf("engage", "ENGAGE", AceIcon.Strike, () => Service<IWingOrders>()?.Engage(), visible: hasWing, status: size))
+                .Add(Leaf("breakoff", "BREAK OFF", AceIcon.Clear, () => Service<IWingOrders>()?.BreakOff(), visible: hasWing))
+                .Add(Leaf("six", "CLEAR MY SIX", AceIcon.Defence, () => Service<IWingOrders>()?.ClearMySix(), visible: hasWing))
+                .Add(Leaf("dope", "BOGEY DOPE", AceIcon.Radar, () => Service<IWingOrders>()?.BogeyDope(), visible: hasWing))
+                .Add(Leaf("escort", "ESCORT ME", AceIcon.Wing, () => Service<IWingOrders>()?.EscortMe(), visible: hasWing))
+                .Add(Leaf("shape", "NEXT SHAPE", AceIcon.Cycle, () => Service<IWingOrders>()?.NextShape(), visible: hasWing, status: shape))
+                .Add(Leaf("rtb", "WING RTB", AceIcon.Map, () => Service<IWingOrders>()?.ReturnToBase(), visible: hasWing));
         }
     }
 }

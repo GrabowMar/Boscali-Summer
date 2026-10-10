@@ -16,7 +16,6 @@ namespace BoscaliSummer.Modules.UrbanCombat
             typeof(AirbaseCapturePatch),
             typeof(GarrisonClientVisualPatch),
             typeof(MountedTroopsFirePatch),
-            typeof(ChimeraMountRegistrationPatch),
             typeof(UrbanDefensePatch),
             typeof(SiegeFloorPatch),
             typeof(UrbanArmorPatch),
@@ -37,6 +36,7 @@ namespace BoscaliSummer.Modules.UrbanCombat
             ZoneGarrisonManager garrisons = context.AddSceneService<ZoneGarrisonManager>(30);
             AirAssaultController assault = context.AddSceneService<AirAssaultController>(31);
             context.AddService<IAirAssaultObservation>(assault);
+            context.AddService<IAirAssaultOrders>(context.AddSceneService<AirAssaultNet>(33));
             BaseDefenseAlarmService alarm = context.AddSceneService<BaseDefenseAlarmService>(32);
             context.AddSceneService<WarzoneDressingService>(34);
             context.AddService<IBuildingOccupancy>(garrisons);

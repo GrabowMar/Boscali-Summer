@@ -58,6 +58,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private int sceneGeneration;
 
         private float nextRefresh, failedUntil;
+        private bool refreshFaulted;
         private int factionEpoch;
         private Canvas pageCanvas;
         private int aimCellX = int.MinValue, aimCellZ;
@@ -139,11 +140,13 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (!visible || consoleRoot == null || Time.unscaledTime < nextRefresh) return;
 
             nextRefresh = Time.unscaledTime + RefreshInterval;
-            try { Refresh(); }
+            try { Refresh(); refreshFaulted = false; }
             catch (Exception e)
             {
-                installer.Failed = true; // a refresh fault must not throw every frame
-                logger?.LogError("OPS CALLS refresh failed: " + e);
+                // A paint fault on one tab backs the page off (like the console above) instead of killing all five tabs for the mission; logged once per streak.
+                failedUntil = Time.unscaledTime + 2f;
+                if (!refreshFaulted) logger?.LogError("OPS CALLS refresh failed: " + e);
+                refreshFaulted = true;
             }
         }
 
@@ -282,6 +285,18 @@ namespace BoscaliSummer.Modules.Support.Presentation
             nextRefresh = 0f;
             if (chrome != null) PaintChrome(tab, view);
         }
+        /// <summary>Maximize the map, press the OPS bezel and latch <paramref name="next"/>, as the player would (automation).</summary>
+        internal void OpenForAutomation(C2Tab next)
+        {
+            DynamicMap map = SceneSingleton<DynamicMap>.i;
+            if (map != null && !DynamicMap.mapMaximized) map.Maximize();
+            if (screen != null && !screen.isActive && installer.Bezel != null) installer.Bezel.onClick.Invoke();
+            if (consoleRoot != null) SelectTab(next);
+        }
+
+        internal bool Installed => screen != null;
+        internal bool ScreenActive => screen != null && screen.isActive;
+        internal C2Tab Tab => tab;
         internal BoardPage Board => boardPage;
         internal AvTicker Ticker => ticker;
         internal RectTransform ConsoleRoot => consoleRoot;

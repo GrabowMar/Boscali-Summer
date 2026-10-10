@@ -1,0 +1,8 @@
+{
+  "name": "CargoShip.Editor",
+  "references": ["Blueprinter.Editor", "Unity.RenderPipelines.Universal.Runtime", "Unity.RenderPipelines.Core.Runtime"],
+  "includePlatforms": ["Editor"],
+  "overrideReferences": true,
+  "precompiledReferences": ["Assembly-CSharp.dll", "Assembly-CSharp-firstpass.dll", "Mirage.dll", "UniTask.dll"],
+  "autoReferenced": false
+}

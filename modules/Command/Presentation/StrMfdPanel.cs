@@ -87,6 +87,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             CommandSettings config, CommandManager manager, ComMapOverlay mapOverlay,
             ManualLogSource log)
         {
+            Active = this;
             settings = config;
             command = manager;
             overlay = mapOverlay;
@@ -127,6 +128,20 @@ namespace BoscaliSummer.Modules.Command.Presentation
         }
 
         private void OnDestroy() => ResetForScene();
+
+        /// <summary>Automation: the bezel press plus a page switch, the way a player opens the tab (map already maximized).</summary>
+        internal void OpenForAutomation(int page)
+        {
+            if (screen != null && !screen.isActive && installer.Bezel != null) installer.Bezel.onClick.Invoke();
+            if (console != null) console.SetPage(page);
+            nextRefresh = 0f;
+        }
+
+        /// <summary>The scene's STR panel, for the automation hooks.</summary>
+        internal static StrMfdPanel Active { get; private set; }
+
+        internal bool ScreenActiveForAutomation => screen != null && screen.isActive;
+        internal int PageForAutomation => console != null ? console.CurrentPage : -1;
 
         private void Update()
         {

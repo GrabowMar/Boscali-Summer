@@ -82,6 +82,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private CyberService cyber;
         private float nextTick, nextCleanup, nextWarning;
         private bool loggedNoCampKeys;
+        private readonly HashSet<FactionHQ> loggedNoSite = new HashSet<FactionHQ>();
 
         // Optional hooks: each is implemented by exactly one of the other files (the call is removed when it is not).
         partial void TickEffects(FactionSof f, float now);
@@ -109,6 +110,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             nextAttempt.Clear();
             nextTick = 0f;
             loggedNoCampKeys = false;
+            loggedNoSite.Clear();
             spawner.ResetForScene();
         }
 
@@ -159,7 +161,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (Time.unscaledTime >= nextCleanup) { nextCleanup = Time.unscaledTime + 1f; spawner.RetryCleanup(); }
                 return;
             }
-            if (!GameAccess.IsServer() || (GameManager.gameState != GameState.SinglePlayer && GameManager.gameState != GameState.Multiplayer)) return;
+            if (!GameAccess.IsServer() || !MissionManager.IsRunning ||
+                (GameManager.gameState != GameState.SinglePlayer && GameManager.gameState != GameState.Multiplayer)) return;
             float now = SupportManager.MissionNow();
             if (now < nextTick) return;
             nextTick = now + 1f;
@@ -316,7 +319,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (!spawner.TryCreateCamp(owner, slots.Count, sites[id].Anchor, sites[id].Parent, out Unit camp)) continue;
                 slots.Add(new CampSlot(slots.Count, camp, sites[id].Anchor, sites[id].Parent));
             }
-            if (slots.Count == 0) return false;
+            if (slots.Count == 0)
+            {
+                // Once per faction per mission: an offline SOF must say why (no held airbase, no legal ground on the rings, or the spawn failed).
+                if (loggedNoSite.Add(owner))
+                    Plugin.Logger?.LogWarning("[Support.Sof] " + owner.name + ": no camp placed (" + cands.Count + " legal site(s) on the 6.5/7.5 km airbase rings, " +
+                        picks.Count + " picked): SOF stays offline, retrying every " + (int)RelocateRetrySeconds + " s.");
+                return false;
+            }
             var camps = new SofCampSet(slots.Count);
             made = new FactionSof { Owner = owner, Key = manager.FactionKeyOf(owner), Camps = camps, Rng = new System.Random(unchecked(owner.GetInstanceID() * 7919 + 17)) };
             made.Slots.AddRange(slots);

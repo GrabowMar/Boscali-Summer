@@ -1,0 +1,47 @@
+CONTAINER FEEDER REMAKE — SCOPE / COVERAGE
+
+Replace the original static cargo mesh from scratch with an original detailed
+coastal container feeder. Keep all other FutureOps assets intact.
+
+Model: fair hull stations, bulbous bow, raised forecastle and bulwarks, stern,
+shaft/propeller/rudder assemblies, cambered deck, hatch coamings, cellular cargo
+stowage and lashing bridges, accommodation/bridge, stairs and railings, lifeboats
+and davits, anchors/windlasses/bollards, navigation equipment, baked weathered
+surface maps, section-aligned damage geometry, purpose-built LODs and colliders.
+
+Native unit: a new stable ShipDefinition/jsonKey using cloned native ship systems;
+buoyancy compartments, propulsion, native command/pathfinding AI, host authority,
+network identity/transform, damage/flooding/sinking, wake/sound references.
+Unarmed cargo configuration; no invented custom ship simulation.
+
+Deliverables: editable Blender source, FBX/material textures, visual comparison
+views, static asset-pack replacement, native Blueprinter .nobp registration,
+mod resource integration, export/prefab/reference/assembly verification.
+
+Evidence boundary: offline model/bundle/native graph checks are mandatory.
+Deployment, actual sailing, impacts/sinking, save/reload and multiplayer must be
+reported separately; no claim of live acceptance from static checks.
+
+Reference direction: original coastal feeder informed by working-vessel layout;
+not a reproduction of a copyrighted ship drawing.
+https://www.damen.com/vessels/cargo/container-feeders/container-feeder-1100
+
+STATUS: IMPLEMENTED / OFFLINE VERIFIED
+  Original detailed 126.6 m model, original 2048-pixel texture set, editable pieces.
+  72,016 / 28,680 / 8,641 static model triangles across three LODs.
+  Native unit: 18 damage parts, eight buoyant hull compartments, 8,000 tonne mass,
+  twin screw animation, native command AI, network transform/identity and shaders.
+  Native WaterJob_Math lift/weight ratio at nominal waterline: 1.0012.
+  Blueprinter bundle reopened, definition graph and registration independently parsed.
+  Static library rebuilt and all 13 prefabs rendered from the exported bundle.
+  Release DLL built with no errors; extracted embedded cargo bundle matches delivery.
+  No game deployment or live sailing, sinking, save/reload or multiplayer acceptance.
+
+ARYX REVIEW
+  Inspected released 1.0.4 DLL and its embedded .nobp (July 30, 2026).
+  Native Ship/ShipPart/ShipPropulsion/ShipAI/networking form the base architecture.
+  Custom code is limited to additional behaviours/patches; no custom basic flotation.
+  Atlas supply-ship container spawning is disabled in 1.0.4 after game 0.34 rearm changes.
+  Used section-based collision and buoyancy as design guidance. No Aryx models,
+  textures, source code, or runtime dependency are included in this implementation.
+  https://github.com/Aryx3D/Aryx-Naval-Expansion/releases/tag/1.0.4

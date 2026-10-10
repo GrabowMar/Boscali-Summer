@@ -133,7 +133,10 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 float blend = Mathf.Clamp01((now - blendStart) / BlendSeconds);
                 // The cookie is static between weather steps: rebuild its 64k pixels only
                 // while a new map fades in or the strength has moved.
-                bool changed = blend != uploadedBlend || Mathf.Abs(strength - uploadedStrength) > 0.004f;
+                // 2 % strength steps are invisible on ground shadows; finer steps rebuilt all
+                // 64k pixels at every 4 Hz tick while climbing through a deck.
+                bool changed = blend != uploadedBlend || Mathf.Abs(strength - uploadedStrength) > 0.02f ||
+                    (strength != uploadedStrength && (strength <= 0f || strength >= 1f));
                 uploadedBlend = blend;
                 if (changed) uploadedStrength = strength;
                 if (changed)

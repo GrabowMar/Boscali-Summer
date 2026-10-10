@@ -69,6 +69,8 @@ namespace BoscaliSummer.Modules.Wing.Networking
         /// <summary>Once, at plugin start: the serializers, and the ids checked against the game's own messages.</summary>
         public static void Init()
         {
+            Release();
+            Disabled = false;
             Writer<WcToClient>.Write = (w, m) => w.WriteBytesAndSize(m.Payload, 0, m.Count);
             Reader<WcToClient>.Read = r => Payload<WcToClient>(r.ReadBytesAndSize(Protocol.MaxMessage), (b, n) => new WcToClient { Payload = b, Count = n });
             Writer<WcToHost>.Write = (w, m) => w.WriteBytesAndSize(m.Payload, 0, m.Count);
@@ -129,9 +131,36 @@ namespace BoscaliSummer.Modules.Wing.Networking
         private static NetworkManagerNuclearOption Manager(float dt)
         {
             if (manager != null) return manager;
+            if (hooked) Release(); // a destroyed manager must not suppress the next manager's hooks
             if ((findClock += dt) < 1f) return null;
             findClock = 0f;
             return manager = UnityEngine.Object.FindObjectOfType<NetworkManagerNuclearOption>();
+        }
+
+        internal static void Release()
+        {
+            if (manager != null && hooked)
+            {
+                if (manager.Server != null)
+                {
+                    manager.Server.Started.RemoveListener(OnServerStarted);
+                    manager.Server.Stopped.RemoveListener(ClearPlayers);
+                    manager.Server.Disconnected.RemoveListener(Forget);
+                    manager.Server.MessageHandler?.UnregisterHandler<WcToHost>();
+                }
+                if (manager.Client != null)
+                {
+                    manager.Client.Started.RemoveListener(OnClientStarted);
+                    manager.Client.MessageHandler?.UnregisterHandler<WcToClient>();
+                }
+            }
+            hooked = false;
+            manager = null;
+            ClearPlayers();
+            HostGreeted = false;
+            Mirror = null;
+            helloClock = snapshotClock = 0f;
+            findClock = float.MaxValue;
         }
 
         /// <summary>A fault in the transport turns Wing Command networking off (review M6c I2): the AI keeps ticking.</summary>

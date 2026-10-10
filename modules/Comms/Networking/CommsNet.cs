@@ -90,7 +90,7 @@ namespace BoscaliSummer.Modules.Comms.Networking
             {
                 try
                 {
-                    NetworkClient client = NetworkManagerNuclearOption.i?.Client;
+                    NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
                     return client != null && client.Active;
                 }
                 catch { return false; }
@@ -112,7 +112,7 @@ namespace BoscaliSummer.Modules.Comms.Networking
             nextRegistration = Time.unscaledTime + 0.5f;
 
             NetworkManagerNuclearOption network;
-            try { network = NetworkManagerNuclearOption.i; }
+            try { network = GameAccess.NetworkManagerOrNull; }
             catch { return; }
 
             MessageHandler server = network?.Server != null && network.Server.Active ? network.Server.MessageHandler : null;
@@ -127,7 +127,7 @@ namespace BoscaliSummer.Modules.Comms.Networking
         public bool SendUp(CommsIntent intent)
         {
             NetworkClient client;
-            try { client = NetworkManagerNuclearOption.i?.Client; }
+            try { client = GameAccess.NetworkManagerOrNull?.Client; }
             catch { return false; }
             if (client == null || !client.Active) return false;
             client.Send(new CommsUpMessage

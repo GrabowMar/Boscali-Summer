@@ -194,7 +194,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (nearDetail && density > 0.03f && density < 0.98f)
             {
                 float cavity = Sample(x / 900f + 0.71f, z / 900f + 0.71f, y / 760f + 0.29f, 1);
-                density = Scalar.Clamp01(density - (cavity - 0.48f) * 1.1f);
+                // Mirrors the shader's carveKeep: dense interiors keep most of their body.
+                float keep = 1f - 0.7f * Scalar.SmoothStep(0.25f, 0.6f, density);
+                density = Scalar.Clamp01(density - (cavity - 0.48f) * 1.1f * keep);
             }
             if (mid > density) { density = mid; localLightingHeight = midHeight; }
             if (density <= 0f) localLightingHeight = 0f;

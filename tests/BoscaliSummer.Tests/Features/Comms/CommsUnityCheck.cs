@@ -249,16 +249,6 @@ public static class CommsUnityCheck
                 Failures.Add(where + ": section without icon " + s.name);
     }
 
-    private static bool CanvasOn(TMP_Text t)
-    {
-        for (Transform x = t.transform; x != null; x = x.parent)
-        {
-            var c = x.GetComponent<Canvas>();
-            if (c != null && !c.enabled) return false;
-        }
-        return true;
-    }
-
     private static Color BackgroundOf(TMP_Text t, Color ground)
     {
         for (Transform x = t.transform.parent; x != null; x = x.parent)

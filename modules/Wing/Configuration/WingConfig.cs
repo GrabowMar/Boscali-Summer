@@ -39,12 +39,9 @@ namespace BoscaliSummer.Modules.Wing.Configuration
         public ConfigEntry<SpacingPreset> DefaultSpacing { get; }
         public ConfigEntry<int> MaxWingmen { get; }
         public ConfigEntry<string> CallAirframe { get; }
-        public ConfigEntry<bool> ShowHud { get; }
         public ConfigEntry<bool> ShowWmc { get; }
         public ConfigEntry<bool> ReduceMotion { get; }
         public ConfigEntry<HighlightMode> MapMarkers { get; }
-        public ConfigEntry<float> HudX { get; }
-        public ConfigEntry<float> HudY { get; }
         public ConfigEntry<KeyboardShortcut> KeyCallWingman { get; }
         public ConfigEntry<KeyboardShortcut> KeyFormUp { get; }
         public ConfigEntry<KeyboardShortcut> KeyNextShape { get; }
@@ -176,16 +173,6 @@ namespace BoscaliSummer.Modules.Wing.Configuration
                 "The livery each airframe's wingmen wear (airframe|token; B = built in, A = app-data skin, W = workshop item). " +
                 "Clear it for every faction's standard livery.", null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 59 }));
 
-            ShowHud = c.Bind("Hud", "Show", true, new ConfigDescription(
-                "Show the wing strip and autopilot annunciator.", null, new ConfigurationManagerAttributes { Order = 80 }));
-            // Renamed from OffsetX/OffsetY: the shared file already has Hud/OffsetX as an int,
-            // and a same-key re-bind with another type throws.
-            HudX = c.Bind("Hud", "WingOffsetX", 0f, new ConfigDescription(
-                "Move the wing strip right (+) or left (-), in HUD pixels.", new AcceptableValueRange<float>(-1500f, 1500f),
-                new ConfigurationManagerAttributes { Order = 79 }));
-            HudY = c.Bind("Hud", "WingOffsetY", 0f, new ConfigDescription(
-                "Move the wing strip up (+) or down (-), in HUD pixels.", new AcceptableValueRange<float>(-1000f, 1000f),
-                new ConfigurationManagerAttributes { Order = 78 }));
             ShowWmc = c.Bind("Wmc", "Show", true, new ConfigDescription(
                 "Show the WMC panel on a map bezel button (maximized map).", null, new ConfigurationManagerAttributes { Order = 70 }));
             ReduceMotion = c.Bind("Wmc", "ReduceMotion", false, new ConfigDescription(

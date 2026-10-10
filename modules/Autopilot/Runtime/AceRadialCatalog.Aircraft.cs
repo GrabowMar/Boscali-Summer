@@ -181,7 +181,15 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                     status: Read(a => Upper(a.countermeasureManager.GetActiveCountermeasure()?.displayName, 16))))
                 .Add(Leaf("radar", "RADAR", AceIcon.Radar, With(a => a.CmdToggleRadar()),
                     visible: When(a => a.radar != null),
-                    status: Read(a => a.radar.activated ? new AceRadialStatus("EMITTING", AceTone.Caution) : new AceRadialStatus("SILENT"))));
+                    status: Read(a => a.radar.activated ? new AceRadialStatus("EMITTING", AceTone.Caution) : new AceRadialStatus("SILENT"))))
+                .Add(Leaf("drone-strike", "DRONES: STRIKE", AceIcon.Strike, () => Service<IDroneCommand>()?.Strike(),
+                    visible: () => Service<IDroneCommand>() is IDroneCommand d && !d.Striking,
+                    enabled: () => Service<IDroneCommand>()?.CanStrike == true,
+                    status: () => Service<IDroneCommand>()?.CanStrike == true ? new AceRadialStatus("ON TARGET", AceTone.Active)
+                        : new AceRadialStatus("NO TARGET", AceTone.Caution)))
+                .Add(Leaf("drone-screen", "DRONES: SCREEN", AceIcon.Defence, () => Service<IDroneCommand>()?.Screen(),
+                    visible: () => Service<IDroneCommand>()?.Striking == true,
+                    status: () => new AceRadialStatus("STRIKING", AceTone.Caution)));
         }
 
         private static AceRadialStatus FlareStatus(Aircraft a)
@@ -206,13 +214,47 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 .Add(Leaf("mark", "MARK CAMERA POINT", AceIcon.Mark, () => Service<IObservationSource>()?.Capture(),
                     visible: () => Service<IObservationSource>() != null,
                     enabled: () => Service<IObservationSource>()?.CanCapture == true,
-                    status: () => Upper(Service<IObservationSource>()?.Status, 18)))
-                .Add(Leaf("hud", "STATUS PANEL", AceIcon.Hud, ToggleHudPanel,
-                    visible: () => Service<IHudBoard>() != null,
-                    status: () => AceRadialStatus.OnOff(Service<IHudBoard>()?.Enabled == true)))
-                .Add(Leaf("feed", "TARGET CAM FEED", AceIcon.Camera, ToggleCameraFeed,
-                    visible: () => Service<IHudBoard>() != null,
-                    status: () => AceRadialStatus.OnOff(Service<IHudBoard>()?.CameraFeedEnabled == true)));
+                    status: () => Upper(Service<IObservationSource>()?.Status, 18)));
+        }
+
+        // ------------------------------------------------------------------ TARGETS
+
+        /// <summary>The native target list, trimmed with the same calls the target-list keys make (selection is client-local).</summary>
+        private static AceRadialAction Targets()
+        {
+            return Branch("targets", "TARGETS", AceIcon.Target)
+                .Add(Leaf("nearest", "KEEP NEAREST", AceIcon.Target, With(KeepNearest),
+                    visible: () => CombatHUD.i != null, enabled: () => TargetCount() > 1, status: TargetStatus))
+                .Add(Leaf("droplast", "DROP LAST", AceIcon.Previous, () => CombatHUD.i?.DeselectLast(),
+                    visible: () => CombatHUD.i != null, enabled: () => TargetCount() > 0))
+                .Add(Leaf("clear", "CLEAR TARGETS", AceIcon.Clear, () => CombatHUD.i?.DeselectAll(true),
+                    visible: () => CombatHUD.i != null, enabled: () => TargetCount() > 0, status: TargetStatus));
+        }
+
+        private static int TargetCount() => CombatHUD.i != null ? CombatHUD.i.GetTargetList()?.Count ?? 0 : 0;
+
+        private static AceRadialStatus TargetStatus()
+        {
+            int n = TargetCount();
+            return n > 0 ? new AceRadialStatus(n + " SELECTED", AceTone.Active) : "NONE";
+        }
+
+        /// <summary>Keeps only the selected target nearest the aircraft.</summary>
+        private static void KeepNearest(Aircraft a)
+        {
+            CombatHUD hud = CombatHUD.i;
+            var targets = hud != null ? hud.GetTargetList() : null;
+            if (targets == null || targets.Count < 2) return;
+            Unit nearest = null;
+            float best = float.MaxValue;
+            foreach (Unit t in targets)
+            {
+                if (t == null) continue;
+                float d = (t.transform.position - a.transform.position).sqrMagnitude;
+                if (d < best) { best = d; nearest = t; }
+            }
+            foreach (Unit t in targets.ToArray())
+                if (t != null && t != nearest) hud.DeSelectUnit(t);
         }
 
         private static CameraStateManager Cameras => SceneSingleton<CameraStateManager>.i;
@@ -235,18 +277,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         {
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             if (map != null && !DynamicMap.mapMaximized) map.Maximize();
-        }
-
-        private static void ToggleHudPanel()
-        {
-            IHudBoard board = Service<IHudBoard>();
-            if (board != null) board.Enabled = !board.Enabled;
-        }
-
-        private static void ToggleCameraFeed()
-        {
-            IHudBoard board = Service<IHudBoard>();
-            if (board != null) board.CameraFeedEnabled = !board.CameraFeedEnabled;
         }
     }
 }

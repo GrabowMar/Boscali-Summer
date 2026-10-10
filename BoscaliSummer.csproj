@@ -27,7 +27,7 @@
 
   <ItemGroup Label="Source roots">
     <Compile Include="Core\**\*.cs" />
-    <Compile Include="modules\**\*.cs" />
+    <Compile Include="modules\**\*.cs" Exclude="modules\**\Assets\Editor\**" />
     <!-- Vendored avionics protocol, widget kit, and pure design tokens (namespace
          NOAvionics, engine-free sources under Pure/). Wing Command was merged in as modules/Wing/, so this
          is the only copy: the bezel registry and map-input picker coordinate panels
@@ -113,6 +113,23 @@
     <EmbeddedResource Include="AvionicsUi\avionics.nightops.avss"><LogicalName>NOAvionics.avionics.nightops.avss</LogicalName></EmbeddedResource>
   </ItemGroup>
 
+  <ItemGroup Label="Vanguard Blueprinter bundle">
+    <!-- Built by modules/Vanguard/Assets/Editor/VanguardBuilder.cs; Blueprinter loads any *.nobp resource. -->
+    <EmbeddedResource Include="modules\Vanguard\Assets\Vanguard.nobp" Condition="Exists('modules\Vanguard\Assets\Vanguard.nobp')">
+      <LogicalName>BoscaliSummer.Vanguard.nobp</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup Label="Airborne Blueprinter bundle">
+    <!-- HALO paratrooper mount + models, built by modules/UrbanCombat/Assets/Editor/AirborneBuilder.cs. -->
+    <EmbeddedResource Include="modules\UrbanCombat\Assets\Airborne.nobp" Condition="Exists('modules\UrbanCombat\Assets\Airborne.nobp')">
+      <LogicalName>BoscaliSummer.Airborne.nobp</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup Label="Container feeder Blueprinter bundle">
+    <EmbeddedResource Include="assets\FutureOps\CargoShip.nobp" Condition="Exists('assets\FutureOps\CargoShip.nobp')">
+      <LogicalName>BoscaliSummer.CargoShip.nobp</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
   <ItemGroup Label="Avionics UI bundle">
     <!-- FUI fonts, icon font and UI shaders, built by tools/Compile-AvionicsUiAssets.ps1
          (Unity 2022.3.62f3). Optional at build time: without it the kit uses vanilla fonts
@@ -153,6 +170,16 @@
          tools/Compile-WeatherAssets.ps1 (Unity 2022.3.62f2, the exact game version).
          Optional at build time: without the bundle the build passes and the canopy
          dressing fails closed to droplet particles at runtime. -->
+
+    <EmbeddedResource Include="modules\FireAndDestruction\Assets\buildings.mesh.gz">
+      <LogicalName>BoscaliSummer.Destruction.buildings.mesh.gz</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="modules\FireAndDestruction\Assets\forestfire.bundle" Condition="Exists('modules\FireAndDestruction\Assets\forestfire.bundle')">
+      <LogicalName>BoscaliSummer.Fire.forestfire.bundle</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="modules\FireAndDestruction\Assets\structure.bundle" Condition="Exists('modules\FireAndDestruction\Assets\structure.bundle')">
+      <LogicalName>BoscaliSummer.Destruction.structure.bundle</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="modules\Weather\Assets\weatherrain.bundle" Condition="Exists('modules\Weather\Assets\weatherrain.bundle')">
       <LogicalName>BoscaliSummer.Weather.weatherrain.bundle</LogicalName>
     </EmbeddedResource>
@@ -165,7 +192,7 @@
   </ItemGroup>
 
   <ItemGroup Label="Superevent posters">
-    <EmbeddedResource Include="modules\Events\Assets\event_atlas.png">
+    <EmbeddedResource Include="modules\Events\Assets\Posters\*.png">
       <LogicalName>BoscaliSummer.EventsArt.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
   </ItemGroup>

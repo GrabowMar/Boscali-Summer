@@ -1,20 +1,10 @@
 using System;
+using BoscaliSummer.Tests;
 using System.Linq;
 using System.Reflection;
 
 namespace WingPure.Tests
 {
-    internal static class TestAssert
-    {
-        public static int Count { get; private set; }
-
-        public static void That(bool condition, string message)
-        {
-            Count++;
-            if (!condition) throw new InvalidOperationException(message);
-        }
-    }
-
     /// <summary>Runs every static Run() in a *Tests type, optionally filtered by name (same pattern as BoscaliSummer.Tests).</summary>
     internal static class Program
     {

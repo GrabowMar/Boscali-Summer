@@ -1,0 +1,60 @@
+{
+  "id": "cut_the_signal",
+  "title": "Cut the Signal",
+  "kind": "ElectronicWarfare",
+  "modules": [
+    "DynamicOperations",
+    "Support",
+    "Intel"
+  ],
+  "assets": [
+    {
+      "pack": "MissionAssets",
+      "key": "BS_Mission_RadioRelay",
+      "anchor": "Uplink",
+      "purpose": "enemy relay"
+    },
+    {
+      "pack": "MissionAssets",
+      "key": "BS_Mission_MobileJammer",
+      "anchor": "Emitter",
+      "purpose": "confirmed jammer"
+    }
+  ],
+  "briefing": "Identify the jammer protecting a relay site, suppress it and verify the emitter has stopped.",
+  "phases": [
+    {
+      "id": "1",
+      "label": "Locate",
+      "completion_observation": "Observe an enemy contact already known to the faction."
+    },
+    {
+      "id": "2",
+      "label": "Suppress",
+      "completion_observation": "Disable the native jammer unit or complete an authorized CYBER action."
+    },
+    {
+      "id": "3",
+      "label": "Confirm",
+      "completion_observation": "Host confirms native emission loss for 15 continuous seconds."
+    }
+  ],
+  "native_binding": "Jammer contact must bind to a native Unit; the truck model alone cannot emit or jam.",
+  "proposed_follow_on": "quiet_horizon",
+  "schema_version": 1,
+  "status": "design_stub",
+  "enabled": false,
+  "automatic_registration": false,
+  "authority": "host",
+  "reward_policy": "existing accepted reward; one completion award",
+  "visibility": "faction-known contacts only; no hidden enemy coordinates",
+  "limits": {
+    "board_cards": 3,
+    "accepted_per_faction": 2,
+    "poll_hz": 1,
+    "max_scene_assets": 12,
+    "max_tracked_units": 8,
+    "max_chain_depth": 2
+  },
+  "reset": "cancel on scene generation change; release presentation objects"
+}

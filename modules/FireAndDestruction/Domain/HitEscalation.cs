@@ -31,7 +31,7 @@ namespace BoscaliSummer.Modules.FireAndDestruction.Domain
         /// of yield, ~1-6 for conventional weapons), so guns carry no power term of their
         /// own and always stamp the small mark.
         /// </summary>
-        internal const float GunBreachSize = 2.5f;
+        internal const float GunBreachSize = 0.8f;
 
         /// <summary>How long a pooled dust burst stays visible after a counted hit.</summary>
         internal const float DustSeconds = 2.5f;

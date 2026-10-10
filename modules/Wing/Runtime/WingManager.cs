@@ -71,12 +71,17 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         private void OnDestroy()
         {
+            ResetForScene();
             if (settings != null)
                 settings.VerboseLogging.SettingChanged -= OnLoggingChanged;
             settings = null;
             if (WingLog.Logger != null)
                 WingLogExport.Stop();
-            if (ReferenceEquals(Instance, this)) Instance = null;
+            if (ReferenceEquals(Instance, this))
+            {
+                WingNet.Release();
+                Instance = null;
+            }
         }
 
         private void OnLoggingChanged(object sender, EventArgs e)
@@ -146,7 +151,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         // Dispatch by phase rather than delegate so the per-frame path allocates nothing.
         private void Run(IWingService service, Phase phase, float dt)
         {
-            if (faulted.Contains(service)) return;
+            // A fault stops simulation, but must never suppress resource teardown.
+            if (phase != Phase.Deactivate && faulted.Contains(service)) return;
             try
             {
                 switch (phase)

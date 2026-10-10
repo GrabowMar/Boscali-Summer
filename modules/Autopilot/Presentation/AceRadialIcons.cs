@@ -120,6 +120,19 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
                     AvStrokes.Arc(b, x, y, s * 0.75f, 30f, 300f, 12, w, c);
                     AvStrokes.Chevron(b, x + (s * 0.65f), y + (s * 0.4f), s * 0.5f, 90f, w, c);
                     break;
+                case AceIcon.Wing:
+                    // Three aircraft in a vic: the wing.
+                    AvStrokes.Chevron(b, x, y + (s * 0.45f), s * 0.75f, 90f, w, c);
+                    AvStrokes.Chevron(b, x - (s * 0.7f), y - (s * 0.4f), s * 0.6f, 90f, w, c);
+                    AvStrokes.Chevron(b, x + (s * 0.7f), y - (s * 0.4f), s * 0.6f, 90f, w, c);
+                    break;
+                case AceIcon.Target:
+                    AvStrokes.Ring(b, x, y, s * 0.62f, 14, w, c);
+                    AvStrokes.Line(b, x, y + (s * 0.35f), x, y + s, w, c);
+                    AvStrokes.Line(b, x, y - (s * 0.35f), x, y - s, w, c);
+                    AvStrokes.Line(b, x + (s * 0.35f), y, x + s, y, w, c);
+                    AvStrokes.Line(b, x - (s * 0.35f), y, x - s, y, w, c);
+                    break;
                 case AceIcon.Radar:
                     AvStrokes.Arc(b, x - (s * 0.6f), y - (s * 0.6f), s * 0.6f, 0f, 90f, 5, w, c);
                     AvStrokes.Arc(b, x - (s * 0.6f), y - (s * 0.6f), s * 1.2f, 0f, 90f, 8, w, c);

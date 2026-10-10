@@ -20,8 +20,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
     internal readonly struct OpChoice
     {
         public readonly int Id;
-        public readonly string Label;
-        public OpChoice(int id, string label) { Id = id; Label = label ?? ""; }
+        private readonly string label;
+        /// <summary>Never null, also for <c>default(OpChoice)</c> (an empty target list: an idle FOB before any building is held).</summary>
+        public string Label => label ?? "";
+        public OpChoice(int id, string label) { Id = id; this.label = label; }
     }
 
     /// <summary>The hairline frame of the compact OPERATION strip (no header: the 596 page has no room for one).</summary>

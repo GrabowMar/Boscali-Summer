@@ -70,12 +70,12 @@ namespace BoscaliSummer.Core.Config
                 settings.UrbanCombat.GarrisonsEnabled,
                 settings.FireAndDestruction.FiresEnabled,
                 settings.Radio.Enabled,
-                settings.Hud.Enabled,
                 settings.Autopilot.Enabled,
                 settings.QoL.Enabled,
                 settings.Immersion.Enabled,
                 settings.Weather.Enabled,
                 settings.Performance.Enabled,
+                settings.Cinematography.Enabled,
             };
             string[] names =
             {
@@ -92,12 +92,12 @@ namespace BoscaliSummer.Core.Config
                 "Zone garrisons",
                 "Fire ignition and spread",
                 "Cockpit radio",
-                "Common HUD element",
                 "Autopilot",
                 "Quality of life",
                 "Cockpit immersion & effects",
                 "Dynamic weather and ENV screen",
-                "Adaptive cosmetic performance"
+                "Adaptive cosmetic performance",
+                "Private cinematic shot tools"
             };
 
             var hints = new Dictionary<ConfigEntryBase, ConfigurationManagerAttributes>(ordered.Length);

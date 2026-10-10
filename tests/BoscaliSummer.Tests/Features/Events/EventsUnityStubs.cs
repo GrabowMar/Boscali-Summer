@@ -34,11 +34,9 @@ public class Encyclopedia
     public List<AircraftDefinition> aircraft = new List<AircraftDefinition>();
 }
 
-namespace NuclearOption.Networking
-{
-    public class MissionManager { public float MissionTime; }
-    public static class NetworkSceneSingleton<T> where T : class { public static T i; }
-}
+public class MissionManager { public float MissionTime; }
+public static class NetworkSceneSingleton<T> where T : class { public static T i; }
+namespace NuclearOption.Networking { internal static class FixtureNetworkNamespace { } }
 
 namespace BoscaliSummer.Core.Ui { internal static class FixtureUiNamespace { } }
 

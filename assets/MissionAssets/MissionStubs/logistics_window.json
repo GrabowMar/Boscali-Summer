@@ -1,0 +1,64 @@
+{
+  "id": "logistics_window",
+  "title": "Logistics Window",
+  "kind": "SupplyEscort",
+  "modules": [
+    "DynamicOperations",
+    "TheaterOps"
+  ],
+  "assets": [
+    {
+      "pack": "MissionAssets",
+      "key": "BS_Mission_AmmunitionDepot",
+      "anchor": "CargoPickup",
+      "purpose": "objective scenery"
+    },
+    {
+      "pack": "MissionAssets",
+      "key": "BS_Mission_RepairStation",
+      "anchor": "Service",
+      "purpose": "objective scenery"
+    },
+    {
+      "pack": "MissionAssets",
+      "key": "BS_Mission_RadioRelay",
+      "anchor": "Interact",
+      "purpose": "objective scenery"
+    }
+  ],
+  "briefing": "Cover a resupply convoy during its exposed depot-to-repair-station leg.",
+  "phases": [
+    {
+      "id": "1",
+      "label": "Rendezvous",
+      "completion_observation": "Bind to a real friendly GroundVehicle with Rearmer capacity."
+    },
+    {
+      "id": "2",
+      "label": "Escort",
+      "completion_observation": "Existing SupplyEscort rules track the convoy; native/player orders remain authoritative."
+    },
+    {
+      "id": "3",
+      "label": "Arrive",
+      "completion_observation": "Native convoy reaches its destination with usable capacity."
+    }
+  ],
+  "native_binding": "No spawned static truck counts as a functioning convoy.",
+  "schema_version": 1,
+  "status": "design_stub",
+  "enabled": false,
+  "automatic_registration": false,
+  "authority": "host",
+  "reward_policy": "existing accepted reward; one completion award",
+  "visibility": "faction-known contacts only; no hidden enemy coordinates",
+  "limits": {
+    "board_cards": 3,
+    "accepted_per_faction": 2,
+    "poll_hz": 1,
+    "max_scene_assets": 12,
+    "max_tracked_units": 8,
+    "max_chain_depth": 2
+  },
+  "reset": "cancel on scene generation change; release presentation objects"
+}

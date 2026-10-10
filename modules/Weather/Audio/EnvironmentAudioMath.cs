@@ -6,16 +6,23 @@ namespace BoscaliSummer.Modules.Weather.Audio
     internal static class EnvironmentAudioMath
     {
         internal static (float gain, float cutoff) Rain(float rain, bool cockpit, float speedMps,
-            float heightAboveGroundM, float exposure, float time)
+            float heightAboveGroundM, float exposure, float time, float cloudMoisture = 0f)
         {
-            rain = Unit(rain); exposure = Unit(exposure);
+            rain = Unit(rain); exposure = Unit(exposure); cloudMoisture = Unit(cloudMoisture);
             float variation = 1f + 0.055f * (float)Math.Sin((float.IsFinite(time) ? time : 0f) * 0.37f)
                 + 0.025f * (float)Math.Sin((float.IsFinite(time) ? time : 0f) * 1.13f + 2.1f);
             if (cockpit)
             {
                 // Impact energy changes with slipstream; falling water never changes pitch.
+                // Suspended cloud droplets strike only with forward speed: hovering in cloud
+                // is silent, while fast flight through it patters like light rain.
+                // The base sits above engine/rotor masking: hover in heavy rain peaks near
+                // -12 dBFS through the 0.78-capped patter clip instead of vanishing at -19.
                 float speed = Unit((float.IsFinite(speedMps) ? speedMps : 0f) / 250f);
-                return ((float)Math.Pow(rain, 0.7f) * (0.15f + speed * 0.12f) * exposure * variation,
+                float rainGain = (float)Math.Pow(rain, 0.7f) * (0.40f + speed * 0.14f);
+                float cloudGain = (float)Math.Pow(cloudMoisture, 0.7f) * speed * 0.38f;
+                float water = Math.Max(rainGain, cloudGain);
+                return (water * exposure * variation,
                     4200f + speed * 1100f);
             }
             // Most audible rainfall strikes nearby surfaces. The free-air bed is quieter;

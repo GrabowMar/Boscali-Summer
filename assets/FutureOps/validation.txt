@@ -1,0 +1,16 @@
+PASS: Blueprinter 0.1.0 bundle reopened and rendered; 13 main prefabs; verified metre scale and anchors; 3 LODs each; static colliders; URP materials; no missing scripts or magenta pixels. Articulated rigs checked when present.
+Asset library only: no BuildingDefinition, ship simulation, damage logic, network identity or registration operations.
+Offline evidence only; game loading and placement remain unverified.
+BS_Future_LaunchSite | LOD tris 4884/1922/576 | static collider tris 60
+BS_Future_FieldCamp | LOD tris 6836/2700/820 | static collider tris 96
+BS_Future_FOB | LOD tris 7744/3044/928 | static collider tris 648
+BS_Future_DataCenter | LOD tris 6200/2326/730 | static collider tris 48
+BS_Future_CargoShip | LOD tris 71216/27880/7841 | static collider tris 5856
+BS_Future_TrenchStraight | LOD tris 2952/1180/354 | static collider tris 48
+BS_Future_TrenchCorner | LOD tris 2844/1136/340 | static collider tris 96
+BS_Future_TrenchDugout | LOD tris 884/352/106 | static collider tris 72
+BS_Future_SandbagWall | LOD tris 2112/844/252 | static collider tris 12
+BS_Future_RadarPost | LOD tris 1956/754/234 | static collider tris 24
+BS_Future_FuelDepot | LOD tris 3784/1496/398 | static collider tris 48
+BS_Future_Checkpoint | LOD tris 3060/1200/358 | static collider tris 24
+BS_Future_Helipad | LOD tris 844/292/88 | static collider tris 12

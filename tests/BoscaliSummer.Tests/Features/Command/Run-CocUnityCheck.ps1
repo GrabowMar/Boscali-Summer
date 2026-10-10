@@ -14,7 +14,6 @@ Copy-Item -LiteralPath `
     "$repo/modules/Command/Presentation/StrMfdPanel.cs", `
     "$repo/modules/Command/Presentation/StrMfdPanel.Coc.cs", `
     "$repo/modules/Command/Presentation/StrMfdPanel.Cmd.cs", `
-    "$repo/modules/Command/Presentation/StrPlanningWindow.cs", `
     "$repo/modules/Command/Presentation/StrConsoleParts.cs", `
     "$repo/modules/Command/Presentation/StrSituationParts.cs", `
     "$repo/modules/Command/Presentation/StrCommandParts.cs", `

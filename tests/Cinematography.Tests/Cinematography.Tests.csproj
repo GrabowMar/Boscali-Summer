@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../modules/Cinematography/Domain/*.cs" Link="Domain/%(Filename)%(Extension)" />
+    <Compile Include="../../modules/Cinematography/ShotStore.cs" Link="ShotStore.cs" />
+    <Compile Include="../../modules/Cinematography/Runtime/CinematicCameraState.cs" Link="CinematicCameraState.cs" />
+    <Compile Include="../../modules/Cinematography/Runtime/SimulationClockLease.cs" Link="SimulationClockLease.cs" />
+    <Compile Include="../../modules/Cinematography/Runtime/CinematicDirector.cs" Link="CinematicDirector.cs" />
+    <Compile Include="../../modules/Cinematography/Runtime/CinematicCommands.cs" Link="CinematicCommands.cs" />
+    <Compile Include="../../modules/Cinematography/Runtime/CinematicInbox.cs" Link="CinematicInbox.cs" />
+    <Compile Include="../../modules/Cinematography/Configuration/CinematographySettings.cs" Link="CinematographySettings.cs" />
+    <Compile Include="../../modules/Cinematography/CinematicAutomation.cs" Link="CinematicAutomation.cs" />
+    <Compile Include="../../modules/Cinematography/CinematicSchema.cs" Link="CinematicSchema.cs" />
+    <Compile Include="../../Core/Diagnostics/AutomationArgs.cs" Link="AutomationArgs.cs" />
+    <Compile Include="../../Core/Lifecycle/ISceneService.cs" Link="ISceneService.cs" />
+    <Compile Include="../../Core/Storage/AtomicFile.cs" Link="AtomicFile.cs" />
+  </ItemGroup>
+</Project>
