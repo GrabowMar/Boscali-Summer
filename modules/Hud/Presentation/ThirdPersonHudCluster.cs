@@ -1,5 +1,6 @@
 using NOAvionics;
 using System.Reflection;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Hud.Domain;
 using HarmonyLib;
@@ -25,21 +26,24 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// the native flight HUD, no plates. Cues light brackets and text like annunciators: SPD on
     /// over-G, ALT on low ground (radar altitude replaces its caption under 300 m; PULL UP in alert
     /// colour), the fuel scale on low fuel. HDG adds the compass point; the card shows range and closure.
+    /// Legibility (2026-10-10): a dark scrim behind every box and bar label so thin ink survives bright haze, captions at
+    /// 12-13 pt, the whole cluster scaled by the player's own HUD text size (the layout runs in a virtual screen of
+    /// screen / scale and the root is scaled back up), AoA in the SPD caption row, the real load factor against the airframe's
+    /// limit, and the fuel scale on the same 25 % / 10 % thresholds as the board's fuel row.
     /// </summary>
     internal sealed class ThirdPersonHudCluster
     {
         private static readonly FieldInfo WeaponStatusField = AccessTools.Field(typeof(CombatHUD), "weaponStatus");
         private static readonly FieldInfo NameTextField = AccessTools.Field(typeof(WeaponStatus), "nameText");
 
-        /// <summary>Fuel fraction below this lights the fuel bar.</summary>
-        private const float LowFuel = 0.2f;
-        /// <summary>Text on a lit (ink-filled) tag.</summary>
-        private static readonly Color LitText = new Color(0.02f, 0.05f, 0.05f, 1f);
-
         /// <summary>One tick of own-aircraft flight data.</summary>
         internal struct Flight
         {
             public float SpeedMps, AltitudeM, RadarAltM, ClimbMps, HeadingDeg, Mach, G, GLimit, Fuel, Throttle, BankDeg, SlipDeg;
+            /// <summary>Angle of attack in degrees; NaN below the native readout's speed gate.</summary>
+            public float AoaDeg;
+            /// <summary>The fuel row's BINGO / JOKER flags, so the fuel scale says the same thing as the board.</summary>
+            public bool FuelBingo, FuelJoker;
         }
 
         private readonly char[] buf = new char[48];
@@ -57,12 +61,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private AvVector symbols;
         private int lastSymbols;
         private const float Bracket = 9f, Stroke = 1.5f;
+        private float lastScale = 1f;
 
         private struct Box
         {
             public RectTransform Root;
             public Image Backing;
             public TextMeshProUGUI Caption;
+            /// <summary>Right end of the caption row (the SPD box's AoA).</summary>
+            public TextMeshProUGUI CaptionRight;
             public TextMeshProUGUI Value;
             public TextMeshProUGUI SubLine;
             public RectTransform Track;
@@ -72,6 +79,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             public float LastValue;
             public float LastSub;
             public float LastCaption;
+            public float LastRight;
             public float LastBar;
             public bool Initialized;
         }
@@ -128,6 +136,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             root.pivot = new Vector2(0.5f, 0.5f);
             root.anchoredPosition = Vector2.zero;
             root.sizeDelta = Vector2.zero;
+            lastScale = 1f;
 
             spd = BuildBox("SPD", "SPD");
             alt = BuildBox("ALT", "ALT");
@@ -164,18 +173,20 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             backing.color = Color.clear;
 
             bool hasSub = caption != null;
-            TextMeshProUGUI captionText = null;
+            TextMeshProUGUI captionText = null, captionRight = null;
             if (hasSub)
             {
-                captionText = Label(rect, "Caption", TextAlignmentOptions.TopLeft, 11f,
-                    new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(7f, -17f), new Vector2(-7f, -4f));
-                captionText.characterSpacing = 8f;
+                captionText = Label(rect, "Caption", TextAlignmentOptions.TopLeft, 13f,
+                    new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(7f, -19f), new Vector2(-7f, -4f));
+                captionText.characterSpacing = 6f;
                 captionText.text = caption;
+                captionRight = Label(rect, "CaptionRight", TextAlignmentOptions.TopRight, 13f,
+                    new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(7f, -19f), new Vector2(-7f, -4f));
             }
 
-            // Caption owns the top 14 px; the value sits between it and the sub-line (mono faces run wide).
-            TextMeshProUGUI value = Label(rect, "Value", TextAlignmentOptions.Center, hasSub ? 21f : 20f,
-                new Vector2(0f, hasSub ? 0.3f : 0f), new Vector2(1f, 1f), Vector2.zero, new Vector2(0f, hasSub ? -15f : 0f));
+            // Caption owns the top 16 px; the value sits between it and the sub-line (mono faces run wide).
+            TextMeshProUGUI value = Label(rect, "Value", TextAlignmentOptions.Center, hasSub ? 22f : 21f,
+                new Vector2(0f, hasSub ? 0.3f : 0f), new Vector2(1f, 1f), Vector2.zero, new Vector2(0f, hasSub ? -17f : 0f));
 
             TextMeshProUGUI sub = Label(rect, "SubLine", TextAlignmentOptions.Center, 13f,
                 Vector2.zero, new Vector2(1f, 0.34f), new Vector2(0f, 3f), Vector2.zero);
@@ -207,16 +218,26 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 bar.fillOrigin = 0;
                 bar.fillAmount = 0f;
 
-                // Live percentage under the track, wider than the bar itself.
-                barLabel = Label(track, "BarLabel", TextAlignmentOptions.Top, 10f,
-                    new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-22f, -15f), new Vector2(22f, -2f));
+                // Live percentage under the track, wider than the bar itself, on its own scrim (it sits outside the box's).
+                var scrimObject = new GameObject("LabelScrim", typeof(RectTransform), typeof(Image));
+                var scrim = (RectTransform)scrimObject.transform;
+                scrim.SetParent(track, false);
+                scrim.anchorMin = scrim.anchorMax = new Vector2(0.5f, 0f);
+                scrim.offsetMin = new Vector2(-27f, -19f);
+                scrim.offsetMax = new Vector2(27f, -1f);
+                Image scrimImage = scrimObject.GetComponent<Image>();
+                scrimImage.raycastTarget = false;
+                scrimImage.sprite = AvSprites.White;
+                scrimImage.color = Scrim(null);
+                barLabel = Label(track, "BarLabel", TextAlignmentOptions.Top, 12f,
+                    new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-26f, -18f), new Vector2(26f, -2f));
             }
 
             return new Box
             {
-                Root = rect, Backing = backing, Caption = captionText, Value = value, SubLine = sub,
+                Root = rect, Backing = backing, Caption = captionText, CaptionRight = captionRight, Value = value, SubLine = sub,
                 Track = track, TrackImage = trackImage, Bar = bar, BarLabel = barLabel,
-                LastValue = float.NaN, LastSub = float.NaN, LastCaption = float.NaN, LastBar = float.NaN
+                LastValue = float.NaN, LastSub = float.NaN, LastCaption = float.NaN, LastRight = float.NaN, LastBar = float.NaN
             };
         }
 
@@ -305,7 +326,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// target card; <paramref name="rangeM"/>/<paramref name="closureMps"/> NaN show "--".
         /// Colour writes are no-ops when unchanged (Graphic only dirties on a different value).</summary>
         public void Present(bool active, AvUnits units, in Flight f,
-            Texture cameraTexture, string cameraCode, float rangeM, float closureMps)
+            Texture cameraTexture, string cameraCode, float rangeM, float closureMps, float scale)
         {
             if (root == null) return;
             if (active != builtActive)
@@ -317,8 +338,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             // Reference frame is the HUD canvas's own local rect, not raw Screen.width/height:
             // anchoredPosition under this canvas is in the canvas's own (possibly scaled) units.
-            float screenW = canvasRoot.rect.width;
-            float screenH = canvasRoot.rect.height;
+            // The layout runs in a virtual screen of screen / scale and the root is scaled back up, so every box, text and stroke
+            // follows the player's own HUD text size and the cluster still lands where the screen edges are.
+            scale = float.IsFinite(scale) && scale > 0.1f ? scale : 1f;
+            if (scale != lastScale)
+            {
+                root.localScale = new Vector3(scale, scale, 1f);
+                lastScale = scale;
+            }
+            float screenW = canvasRoot.rect.width / scale;
+            float screenH = canvasRoot.rect.height / scale;
             if (screenW <= 0f || screenH <= 0f) return;
 
             ColorTheme theme = ThemeManager.Active.ColorTheme;
@@ -336,16 +365,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             bool overG = float.IsFinite(f.G) && Mathf.Abs(f.G) >= BoscaliSummer.Core.Math.FlightLoad.CautionAt(f.GLimit);
             TerrainCue terrain = HudCues.Terrain(f.RadarAltM, f.ClimbMps);
-            bool lowFuel = f.Fuel < LowFuel;
+            HudTone fuelTone = FuelEndurance.Tone(f.Fuel, f.FuelBingo, f.FuelJoker);
+            Color fuelColor = fuelTone == HudTone.Warning ? alert : fuelTone == HudTone.Caution ? caution : ink;
             Color? spdLit = overG ? caution : (Color?)null;
             Color? altLit = terrain == TerrainCue.PullUp ? alert : terrain == TerrainCue.Low ? caution : (Color?)null;
             Style(spd, ink, spdLit);
             Style(alt, ink, altLit);
             Style(hdg, ink, null);
             Fill(ref spd, Mathf.Clamp01(f.Throttle), ink, "THR ");
-            Fill(ref alt, Mathf.Clamp01(f.Fuel), lowFuel ? caution : ink, lowFuel ? "BINGO " : "FUEL ");
+            Fill(ref alt, Mathf.Clamp01(f.Fuel), fuelColor, FuelText.Legend(f.FuelBingo, f.FuelJoker, fuelTone) + " ");
             bool pullUpFlash = terrain == TerrainCue.PullUp && (int)(Time.unscaledTime * 4f) % 2 == 0;
-            PaintSymbols(screenW, screenH, ink, spdLit, altLit, lowFuel ? caution : ink, cameraTexture != null, pullUpFlash,
+            PaintSymbols(screenW, screenH, ink, spdLit, altLit, fuelColor, cameraTexture != null, pullUpFlash,
                 f.BankDeg, f.SlipDeg);
 
             WriteSpeed(f.SpeedMps, units);
@@ -353,6 +383,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             WriteAltCaption(f.RadarAltM, terrain, units);
             WriteHeading(f.HeadingDeg);
             WriteMachG(f.Mach, f.G);
+            WriteAoa(f.AoaDeg);
             WriteClimb(f.ClimbMps, units);
 
             PresentTargetCard(cameraTexture, cameraCode, rangeM, closureMps, screenW, screenH, ink, units);
@@ -363,14 +394,20 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private static Color WithAlpha(Color c, float a) => new Color(c.r, c.g, c.b, a);
 
-        /// <summary>Normal: bare ink. Lit: value, caption and sub-line in <paramref name="lit"/>, over a
-        /// faint wash of it so the cue survives a bright sky (brackets light in PaintSymbols).</summary>
+        /// <summary>A dark scrim so thin ink survives bright haze (a lit cue tints it toward its colour).</summary>
+        private static Color Scrim(Color? lit) => lit.HasValue
+            ? new Color(0.01f + lit.Value.r * 0.10f, 0.02f + lit.Value.g * 0.10f, 0.03f + lit.Value.b * 0.10f, 0.72f)
+            : new Color(0.01f, 0.02f, 0.03f, 0.58f);
+
+        /// <summary>Normal: ink on the scrim. Lit: value, caption and sub-line in <paramref name="lit"/>, on a scrim tinted with
+        /// it so the cue survives a bright sky (brackets light in PaintSymbols).</summary>
         private static void Style(Box box, Color ink, Color? lit)
         {
-            box.Backing.color = lit.HasValue ? WithAlpha(lit.Value, 0.14f) : Color.clear;
+            box.Backing.color = Scrim(lit);
             box.Value.color = lit.HasValue ? lit.Value : ink;
-            if (box.Caption != null) box.Caption.color = lit.HasValue ? lit.Value : WithAlpha(ink, 0.6f);
-            box.SubLine.color = lit.HasValue ? lit.Value : WithAlpha(ink, 0.85f);
+            if (box.Caption != null) box.Caption.color = lit.HasValue ? lit.Value : WithAlpha(ink, 0.75f);
+            if (box.CaptionRight != null) box.CaptionRight.color = lit.HasValue ? lit.Value : ink;
+            box.SubLine.color = lit.HasValue ? lit.Value : WithAlpha(ink, 0.9f);
         }
 
         private void Fill(ref Box box, float amount, Color color, string prefix)
@@ -393,7 +430,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             bool cardShown, bool flash, float bankDeg, float slipDeg)
         {
             // Bank in 2 degree steps and slip in whole degrees: finer motion is not visible and would rebuild the mesh every tick in a turn.
-            int key = (int)screenW * 7919 + (int)screenH * 31 + Code(spdLit) * 5 + Code(altLit) * 3 + Code(fuel) + Code(ink) * 17 +
+            int key = (int)screenW * 7919 + (int)screenH * 31 + (int)(lastScale * 100f) * 977 + Code(spdLit) * 5 + Code(altLit) * 3 + Code(fuel) + Code(ink) * 17 +
                 (cardShown ? 11 : 0) + (flash ? 13 : 0) + Mathf.RoundToInt(bankDeg / 2f) * 104729 + Mathf.RoundToInt(slipDeg) * 7;
             if (key == lastSymbols) return;
             lastSymbols = key;
@@ -428,24 +465,24 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// </summary>
         private static void BankAndSlip(AvQuadBuffer b, RectF hdg, float bankDeg, float slipDeg, Rgba ink)
         {
-            const float R = 46f, MaxBank = 45f, BallTravel = 16f, SlipFull = 10f;
+            const float R = 64f, MaxBank = 45f, BallTravel = 22f, SlipFull = 10f;
             float cx = hdg.CenterX, top = hdg.Bottom - 12f, cy = top - R;
-            Rgba dim = ink.WithAlpha(0.55f);
-            AvStrokes.Arc(b, cx, cy, R, 90f - MaxBank, 90f + MaxBank, 18, 1f, dim);
+            Rgba dim = ink.WithAlpha(0.7f);
+            AvStrokes.Arc(b, cx, cy, R, 90f - MaxBank, 90f + MaxBank, 24, 1.5f, dim);
             foreach (float tick in new[] { -45f, -30f, -20f, -10f, 0f, 10f, 20f, 30f, 45f })
             {
-                float a = (90f - tick) * Mathf.Deg2Rad, len = tick == 0f || Mathf.Abs(tick) == 45f ? 7f : 4f;
-                AvStrokes.Line(b, cx + Mathf.Cos(a) * R, cy + Mathf.Sin(a) * R, cx + Mathf.Cos(a) * (R + len), cy + Mathf.Sin(a) * (R + len), 1f, dim);
+                float a = (90f - tick) * Mathf.Deg2Rad, len = tick == 0f || Mathf.Abs(tick) == 45f ? 10f : 6f;
+                AvStrokes.Line(b, cx + Mathf.Cos(a) * R, cy + Mathf.Sin(a) * R, cx + Mathf.Cos(a) * (R + len), cy + Mathf.Sin(a) * (R + len), 1.5f, dim);
             }
             float p = (90f - Mathf.Clamp(bankDeg, -50f, 50f)) * Mathf.Deg2Rad;
             float px = cx + Mathf.Cos(p) * (R - 2f), py = cy + Mathf.Sin(p) * (R - 2f);
-            AvStrokes.Chevron(b, px, py, 7f, p * Mathf.Rad2Deg, 1.75f, ink);
+            AvStrokes.Chevron(b, px, py, 9f, p * Mathf.Rad2Deg, 2f, ink);
 
-            float tubeY = top - 18f, ballX = cx - Mathf.Clamp(slipDeg / SlipFull, -1f, 1f) * BallTravel;
-            AvStrokes.Line(b, cx - BallTravel - 4f, tubeY, cx + BallTravel + 4f, tubeY, 1f, dim);
-            AvStrokes.Line(b, cx - 5f, tubeY - 5f, cx - 5f, tubeY + 5f, 1f, dim);
-            AvStrokes.Line(b, cx + 5f, tubeY - 5f, cx + 5f, tubeY + 5f, 1f, dim);
-            AvStrokes.Ring(b, ballX, tubeY, 1.6f, 10, 3.2f, ink);
+            float tubeY = top - R * (1f - Mathf.Cos(MaxBank * Mathf.Deg2Rad)) - 12f, ballX = cx - Mathf.Clamp(slipDeg / SlipFull, -1f, 1f) * BallTravel;
+            AvStrokes.Line(b, cx - BallTravel - 6f, tubeY, cx + BallTravel + 6f, tubeY, 1.5f, dim);
+            AvStrokes.Line(b, cx - 7f, tubeY - 6f, cx - 7f, tubeY + 6f, 1.5f, dim);
+            AvStrokes.Line(b, cx + 7f, tubeY - 6f, cx + 7f, tubeY + 6f, 1.5f, dim);
+            AvStrokes.Ring(b, ballX, tubeY, 2.2f, 10, 4.4f, ink);
         }
 
         private static int Code(Color? c) => c.HasValue ? Code(c.Value) : 0;
@@ -567,6 +604,23 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             len = AvNumFormat.Write(buf, len, gForce, 1);
             spd.SubLine.text = new string(buf, 0, len);
             spd.LastSub = key;
+        }
+
+        /// <summary>"AOA 4.2°" at the right end of the SPD caption row; blank while the native readout is off (slow or no data).</summary>
+        private void WriteAoa(float aoaDeg)
+        {
+            if (spd.CaptionRight == null) return;
+            float key = float.IsFinite(aoaDeg) ? Mathf.Round(aoaDeg * 10f) : float.NaN;
+            if (spd.LastRight == key || (float.IsNaN(spd.LastRight) && float.IsNaN(key))) return;
+            if (float.IsNaN(key)) spd.CaptionRight.text = "";
+            else
+            {
+                int len = AvNumFormat.Append(buf, 0, "AOA ");
+                len = AvNumFormat.Write(buf, len, aoaDeg, 1);
+                buf[len++] = '°';
+                spd.CaptionRight.text = new string(buf, 0, len);
+            }
+            spd.LastRight = key;
         }
 
         private void WriteClimb(float climbMps, AvUnits units)

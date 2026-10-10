@@ -60,7 +60,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         private void Update()
         {
             if (settings == null || manager == null || !settings.Enabled.Value || !settings.CockpitPingMarkers.Value ||
-                Application.isBatchMode || DynamicMap.mapMaximized ||
+                !CockpitOverlayGate.Open() ||
                 !GameManager.GetLocalAircraft(out Aircraft aircraft) || aircraft == null || aircraft.disabled)
             {
                 Hide();

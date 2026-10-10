@@ -20,6 +20,15 @@ namespace BoscaliSummer.Core.Game
             return parameters != null && parameters.aircraftGLimit > 1f ? parameters.aircraftGLimit : FlightLoad.DefaultLimit;
         }
 
+        /// <summary>The native AoA readout's value (<c>AoADisplay</c>): the cockpit-frame velocity's angle; NaN while slower than <see cref="FlightLoad.AoaMinSpeed"/> or without a cockpit.</summary>
+        public static float AngleOfAttack(Aircraft aircraft)
+        {
+            UnitPart cockpit = aircraft != null ? aircraft.cockpit : null;
+            if (cockpit == null || cockpit.rb == null || aircraft.speed <= FlightLoad.AoaMinSpeed) return float.NaN;
+            Vector3 v = cockpit.transform.InverseTransformDirection(cockpit.rb.velocity);
+            return FlightLoad.AngleOfAttackDeg(v.y, v.z);
+        }
+
         /// <summary>The native G-meter reading: seat acceleration plus gravity along the aircraft's up axis.</summary>
         public static float LoadFactor(Aircraft aircraft)
         {

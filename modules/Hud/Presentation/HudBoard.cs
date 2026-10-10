@@ -138,6 +138,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             countermeasures.Read(hudAircraft, frame);
             fuelWatch.Read(hudAircraft, frame);
             damageWatch.Read(hudAircraft, frame);
+            frame.Now = now;
             frame.Units = AvUnitsOf((int)PlayerSettings.unitSystem);
             frame.BootAge = hudAircraft != null ? now - bootStart : -1f;
             frame.HasTicker = store.Ticker(out frame.Ticker);
@@ -194,12 +195,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                         HeadingDeg = heading, Mach = mach, G = BoscaliSummer.Core.Game.AircraftReadout.LoadFactor(ownAircraft),
                         GLimit = BoscaliSummer.Core.Game.AircraftReadout.GLimit(ownAircraft), Fuel = fuel, Throttle = throttle,
                         BankDeg = Attitude.Bank(t.right.y, t.up.y), SlipDeg = Attitude.Slip(localVelocity.x, localVelocity.z),
+                        AoaDeg = BoscaliSummer.Core.Game.AircraftReadout.AngleOfAttack(ownAircraft),
+                        FuelBingo = frame.Fuel.Bingo, FuelJoker = frame.Fuel.Joker,
                     },
-                    cameraTexture, cameraCode, range, closure);
+                    cameraTexture, cameraCode, range, closure, ThirdPersonHudLayout.TextScale(PlayerSettings.hudTextSize));
             }
             else
             {
-                cluster.Present(false, NOAvionics.AvUnits.Metric, default, null, null, float.NaN, float.NaN);
+                cluster.Present(false, NOAvionics.AvUnits.Metric, default, null, null, float.NaN, float.NaN, 1f);
             }
         }
 

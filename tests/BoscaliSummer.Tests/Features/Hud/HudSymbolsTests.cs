@@ -8,6 +8,9 @@ namespace BoscaliSummer.Tests.Features.Hud
         public static void Run()
         {
             foreach (string channel in HudGlyphs.Channels) Drawable(channel);
+            // Every channel a publisher uses has its own symbol: SKYWELL and LANCE fell back to the diamond.
+            foreach (string channel in new[] { "autopilot", "ils", "ace-hunt", "radio", "support", "theater", "skywell", "lance", "missile", "contracts", "comms", "events", "session", "weather" })
+                TestAssert.That(System.Linq.Enumerable.Contains(HudGlyphs.Channels, channel), "A symbol of its own for " + channel);
             Drawable(null);
             Drawable("nobody-declared-this");
 

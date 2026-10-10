@@ -15,6 +15,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>The top threat's lamps, dial bearing and ages.</summary>
         public ThreatPicture Threat = ThreatPicture.Clear;
 
+        /// <summary>The board's clock (unscaled seconds): flash phase, new-contact pulses and the flash-on-warning timer run on it, so a render can pin it.</summary>
+        public float Now;
+
         /// <summary>Seconds since the HUD's aircraft appeared (negative: no lamp test).</summary>
         public float BootAge = -1f;
 
@@ -41,20 +44,5 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>The notice the ticker shows now (<see cref="HasTicker"/> false: no notice).</summary>
         public bool HasTicker;
         public TickerLine Ticker;
-
-        /// <summary>Back to "nothing to say" without allocating.</summary>
-        public void Clear()
-        {
-            Systems = default;
-            Threat = ThreatPicture.Clear;
-            BootAge = -1f;
-            ContactCount = 0;
-            InboundMask = 0;
-            CmCount = 0;
-            Fuel = default;
-            Damage = default;
-            HasTicker = false;
-            Ticker = default;
-        }
     }
 }

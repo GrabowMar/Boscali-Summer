@@ -23,7 +23,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private static readonly FieldInfo WeaponStatusField = AccessTools.Field(typeof(CombatHUD), "weaponStatus");
         private static readonly FieldInfo NameTextField = AccessTools.Field(typeof(WeaponStatus), "nameText");
         private const float Bracket = 10f, Stroke = 1.5f;
-        private static readonly Color Plate = new Color(0.020f, 0.039f, 0.059f, 0.62f);
+        private static readonly Color Plate = new Color(0.010f, 0.020f, 0.035f, 0.76f);
 
         private RectTransform canvasRoot, root;
         private TMP_FontAsset font;
@@ -127,7 +127,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Write(tti, ref lastTti, "<size=55%>TTI </size>" + MissileCamText.Tti(d));
             string targetWords = d.HasTarget ? "TGT " + (string.IsNullOrEmpty(d.Target) ? "--" : d.Target.ToUpperInvariant()) : "NO TARGET";
             Write(target, ref lastTarget, targetWords);
-            foreach (TextMeshProUGUI t in new[] { header, seeker, range, closure, tti, target }) t.color = ink;
+            header.color = seeker.color = range.color = closure.color = tti.color = target.color = ink;
 
             int key = (int)screenW * 31 + (int)screenH + (int)MissileCamText.Tone(d) * 7 + (int)(scale * 100f) * 13;
             if (key == lastKey) return;

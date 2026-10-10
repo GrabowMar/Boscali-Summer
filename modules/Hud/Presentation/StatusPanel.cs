@@ -282,7 +282,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             HudLamps.Fill(systems, lamps);
             HudThreats.Fill(frame.Threat, threatLamps);
 
-            f = new Frame { Now = Time.unscaledTime, BootAge = frame.BootAge, U = unit };
+            f = new Frame { Now = frame.Now, BootAge = frame.BootAge, U = unit };
             for (int i = 0; i < lamps.Length; i++) if (lamps[i].Present) lampOrder[f.LampCount++] = i;
             f.Count = Mathf.Min(count, cells.Length);
             f.Threats = f.LampCount > 0;

@@ -16,6 +16,12 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.Near(FlightLoad.CautionAt(9f), 7.2f, "Over-G cautions at 80 % of a 9 g limit");
             TestAssert.Near(FlightLoad.CautionAt(5f), 4f, "A 5 g airframe cautions at 4 g");
             TestAssert.Near(FlightLoad.CautionAt(0f), 7.2f, "An unknown limit falls back to the 9 g default");
+
+            // Angle of attack as the native AoADisplay takes it: atan2(up, forward) of the cockpit-frame velocity, negated.
+            TestAssert.Near(FlightLoad.AngleOfAttackDeg(0f, 100f), 0f, "Flying along the nose is 0 degrees");
+            TestAssert.Near(FlightLoad.AngleOfAttackDeg(-10f, 100f), 5.7106f, "Air coming from below the nose is positive alpha: nose above the flight path");
+            TestAssert.Near(FlightLoad.AngleOfAttackDeg(10f, 100f), -5.7106f, "Air from above is negative");
+            TestAssert.Near(FlightLoad.AngleOfAttackDeg(-100f, 100f), 45f, "45 degrees at equal sink and speed");
         }
     }
 }

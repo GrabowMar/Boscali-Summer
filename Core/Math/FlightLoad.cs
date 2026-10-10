@@ -18,6 +18,13 @@ namespace BoscaliSummer.Core.Math
         public static float Factor(float ax, float ay, float az, float upX, float upY, float upZ) =>
             ax * upX + (ay + 1f) * upY + az * upZ;
 
+        /// <summary>The native AoA readout shows nothing at or below this airspeed (<c>AoADisplay.velocityThreshold</c>), m/s.</summary>
+        public const float AoaMinSpeed = 10f;
+
+        /// <summary>Angle of attack, degrees, the way the native readout takes it: the velocity in the cockpit's frame (up, forward), nose above the flight path positive.</summary>
+        public static float AngleOfAttackDeg(float velocityUp, float velocityForward) =>
+            -(float)(System.Math.Atan2(velocityUp, velocityForward) * 180.0 / System.Math.PI);
+
         /// <summary>The load factor at which the over-G caution lights for an airframe limit (default limit when unknown).</summary>
         public static float CautionAt(float limit) => (limit > 1f ? limit : DefaultLimit) * CautionShare;
     }

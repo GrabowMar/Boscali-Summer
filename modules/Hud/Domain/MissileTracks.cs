@@ -91,13 +91,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return next;
         }
 
-        /// <summary>
-        /// Which slot to follow after the followed missile at <paramref name="vanishedIndex"/> left a list that now holds
-        /// <paramref name="count"/>: the missile that slid into its slot, else the first; -1 when nothing is left.
-        /// </summary>
-        public static int Successor(int vanishedIndex, int count) =>
-            count <= 0 ? -1 : vanishedIndex >= 0 && vanishedIndex < count ? vanishedIndex : 0;
-
         private static string Clip(string value, int max)
         {
             if (string.IsNullOrEmpty(value)) return "--";

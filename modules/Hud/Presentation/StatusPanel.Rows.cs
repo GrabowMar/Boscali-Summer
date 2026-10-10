@@ -36,15 +36,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             dialLabel = Text("HiLo", TextAlignmentOptions.MidlineLeft, legendSize, TextOverflowModes.Overflow);
             shotLegend = Text("ShotLegend", TextAlignmentOptions.MidlineLeft, legendSize, TextOverflowModes.Overflow);
 
-            // Capacitor-style readout: a rounded bar with its fill, the words under it.
+            // Capacitor-style readout: a square track with its fill, the words under it (square ends: the HUD has no capsules).
             var trackObject = new GameObject("Bar", typeof(RectTransform), typeof(Image));
             barTrack = (RectTransform)trackObject.transform;
             barTrack.SetParent(root, false);
             Pin(barTrack);
             barTrackImage = trackObject.GetComponent<Image>();
             barTrackImage.raycastTarget = false;
-            HudSprites.Slice(barTrackImage, HudSprites.Plate);
-            barFill = HudSprites.Child(barTrack, "Fill", HudSprites.Plate, sliced: true);
+            barTrackImage.sprite = AvSprites.White;
+            barFill = HudSprites.Child(barTrack, "Fill", AvSprites.White, sliced: false);
             barFill.rectTransform.offsetMin = new Vector2(1.5f, 1.5f);
             stripLabel = Text("Detail", TextAlignmentOptions.Center, detailSize, TextOverflowModes.Ellipsis);
             stripLabel.characterSpacing = 4f;
@@ -257,8 +257,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 // MFD card rail: 2 px tone strip across the cell top, the green-glass idiom.
                 AvStrokes.Fill(b, x0, y1 - 2f * u, cw, 2f * u, ink);
 
-                float size = Mathf.Min(cw - 26f * u, (HudBoardLayout.CellH - 38f) * u);
-                float gx = x0 + (cw - size) * 0.5f + 6f * u, gy = y0 + 18f * u;
+                // The symbol sits between the figure above and the label below, as in the native cells: it never runs under the figure.
+                float size = Mathf.Min(cw - 26f * u, 20f * u);
+                float gx = x0 + (cw - size) * 0.5f, gy = y0 + 21f * u;
                 foreach (float[] poly in HudGlyphs.For(m.Channel))
                     for (int p = 0; p + 3 < poly.Length; p += 2)
                         AvStrokes.Line(b, gx + poly[p] * size, gy + poly[p + 1] * size,

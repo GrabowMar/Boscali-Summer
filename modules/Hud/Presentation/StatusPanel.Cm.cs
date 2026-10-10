@@ -79,7 +79,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     AvStrokes.Fill(b, x0, y0, tileW, h, tone.ToRgba().WithAlpha(counters ? 0.20f : 0.14f));
                 Rect4(b, x0, y0, x1, y1, (counters ? 2f : 1f) * u,
                     tone.ToRgba().WithAlpha(counters || level != CmLevel.Ok ? 1f : 0.3f));
-                if (counters) AvStrokes.Bracket(b, x0 - 2f * u, y0 - 2f * u, tileW + 4f * u, h + 4f * u, 5f * u, 1.5f * u, tone.ToRgba());
+                if (counters) AvStrokes.Bracket(b, x0 + 1.5f * u, y0 + 1.5f * u, tileW - 3f * u, h - 3f * u, 5f * u, 1.5f * u, tone.ToRgba());
             }
         }
     }

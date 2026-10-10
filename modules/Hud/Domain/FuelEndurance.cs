@@ -139,5 +139,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
         }
 
         public static string State(bool bingo, bool joker) => bingo ? "BINGO" : joker ? "JOKER" : "";
+
+        /// <summary>The word on the third-person fuel scale: BINGO or JOKER as the board says it, LOW when the tank is, else FUEL.</summary>
+        public static string Legend(bool bingo, bool joker, HudTone tone) =>
+            bingo ? "BINGO" : joker ? "JOKER" : tone != HudTone.Info ? "LOW" : "FUEL";
     }
 }

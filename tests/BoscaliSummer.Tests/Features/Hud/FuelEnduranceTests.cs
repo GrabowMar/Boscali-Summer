@@ -103,6 +103,8 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(FuelText.Home("highwaystrip2", 23000f, AvUnits.Metric) == "RTB HIGHWAYSTRIP2 23KM", "Home reads the field and its range: " + FuelText.Home("highwaystrip2", 23000f, AvUnits.Metric));
             TestAssert.That(FuelText.Home(null, float.NaN, AvUnits.Metric) == "RTB --" && FuelText.Home("ALPHA", float.NaN, AvUnits.Metric) == "RTB --", "No field, no range");
             TestAssert.That(FuelText.State(true, true) == "BINGO" && FuelText.State(false, true) == "JOKER" && FuelText.State(false, false) == "", "BINGO outranks JOKER");
+            TestAssert.That(FuelText.Legend(true, false, HudTone.Warning) == "BINGO" && FuelText.Legend(false, true, HudTone.Caution) == "JOKER", "The third-person fuel scale says BINGO and JOKER as the board does");
+            TestAssert.That(FuelText.Legend(false, false, HudTone.Caution) == "LOW" && FuelText.Legend(false, false, HudTone.Info) == "FUEL", "...LOW when only the tank is low, else FUEL");
         }
     }
 }
