@@ -43,7 +43,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private static void Cut(ScopeCanvas g, float x0, float y0, float x1, float y1, ScopeTone tone, float alpha = 1f, float w = 1f, float dash = 0f, float gap = 0f, float offset = 0f)
         {
-            if (ScopeClip.Segment(WinL, WinT, WinR, WinB, ref x0, ref y0, ref x1, ref y1)) g.Line(x0, y0, x1, y1, tone, alpha, w, dash, gap, offset);
+            if (ScreenClip.Line(ref x0, ref y0, ref x1, ref y1, WinL, WinT, WinR, WinB)) g.Line(x0, y0, x1, y1, tone, alpha, w, dash, gap, offset);
         }
 
         /// <summary>A circle cut to the plot; dashed with the prototype's pattern when <paramref name="dash"/> is above zero (the pattern slides with <paramref name="offset"/>).</summary>
@@ -80,7 +80,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 poly[2 * i] = cx + Mathf.Cos(a) * r;
                 poly[2 * i + 1] = cy + Mathf.Sin(a) * r;
             }
-            int m = ScopeClip.Rect(poly, n, clipA, clipB, WinL, WinT, WinR, WinB);
+            int m = ScreenClip.Polygon(poly, n, clipB, clipA, WinL, WinT, WinR, WinB);
             if (m < 3) return;
             g.Poly(clipB, m);
             g.FillPoly(m, tone, alpha);
@@ -374,7 +374,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!pending) g.FillPoly(n, tone, done ? 0.18f : 0.08f);
             g.Path(n, tone, pending ? 0.55f : 1f);
             if (prog <= 0f) return;
-            int m = ScopeClip.Half(pennant, 5, clipA, 1, x + (w - 2f) * prog);
+            int m = ScreenClip.Half(pennant, 5, clipA, 1, x + (w - 2f) * prog);
             if (m < 3) return;
             g.Poly(clipA, m);
             g.FillPoly(m, Hi, 0.3f);

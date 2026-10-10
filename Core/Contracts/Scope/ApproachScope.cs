@@ -6,6 +6,15 @@ namespace BoscaliSummer.Core.Contracts
     /// </summary>
     internal enum ApproachStage : byte { Intercept, Glide, Flare, Rollout }
 
+    /// <summary>The chain's words, in stage order: the runway landing's four and the pad landing's three.</summary>
+    internal static class ApproachWords
+    {
+        public static readonly string[] Runway = { "INTERCEPT", "GLIDE", "FLARE", "ROLLOUT" };
+        public static readonly string[] Pad = { "APPROACH", "DESCENT", "TOUCHDOWN" };
+
+        public static string Of(ApproachStage stage, bool pad) => pad ? Pad[(int)stage < Pad.Length ? (int)stage : Pad.Length - 1] : Runway[(int)stage];
+    }
+
     /// <summary>
     /// The APPROACH page's feed (HUD v8), served by the Autopilot module: where the aircraft is against the runway it is landing on (the landing
     /// autopilot's own, or the nearest landing runway of the nearest friendly field when the pilot flies it by hand), the ILS deviations, the speed

@@ -27,7 +27,7 @@ namespace BoscaliSummer.Modules.Autopilot
             AutopilotLandController controller = context.AddSceneService<AutopilotLandController>(48);
             controller.Configure(settings);
             context.AddSceneService<ApproachScopeFeed>(49).Configure(settings, controller);
-            new AutopilotScopeGauge(controller).Register();      // the TAC BOARD's AUTOPILOT gauge while it flies the landing
+            new AutopilotScopeGauge().Register();      // the TAC BOARD's AUTOPILOT gauge while it flies the landing
             context.AddSceneService<Presentation.AceRadialMenuUi>(50).Configure(settings);
             context.AddSceneService<LandingLight>(51);
             CockpitStateProbe.Initialise();

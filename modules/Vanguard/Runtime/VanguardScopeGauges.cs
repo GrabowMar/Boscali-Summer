@@ -1,4 +1,3 @@
-using System;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Vanguard.Domain;
 using UnityEngine;
@@ -7,9 +6,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 {
     /// <summary>
     /// Vanguard's gauges of the TAC BOARD's row (HUD v8), each answering from state the module already holds and showing only while it has something to say:
-    /// LANCE (the RG-12 capacitor: charge while the trigger is held, recharge after a shot), SKYWELL (the fuel the receiver has taken, or what the tanker has left),
-    /// AEGIS (darts left) and REMORA (drones flying, on STRIKE or SCREEN). SKYWELL's views reach every peer; the LANCE, AEGIS and station figures are the local
-    /// aircraft's own; the REMORA count is the server's registry, so it shows on the host and in solo only.
+    /// LANCE (the RG-12 capacitor: charge while the trigger is held, recharge after a shot), AEGIS (darts left) and REMORA (drones flying, on STRIKE or SCREEN). The LANCE and AEGIS
+    /// figures are the local aircraft's own; the REMORA count is the server's registry, so it shows on the host and in solo only. SKYWELL's gauge is <see cref="Presentation.SkywellScopeFeed"/>'s.
     /// </summary>
     internal sealed class VanguardScopeGauges
     {
@@ -25,7 +23,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         public void Register()
         {
             ScopeGauges.Register("lance", ReadLance);
-            ScopeGauges.Register("skywell", ReadSkywell);
             ScopeGauges.Register("aegis", ReadAegis);
             ScopeGauges.Register("remora", ReadRemora);
         }
@@ -75,30 +72,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             };
             return true;
         }
-
-        /// <summary>SKYWELL: a receiver docked to a tanker sees its own fuel filling; a tanker with its kit out sees the fuel it has left to give. The phase is the word under it.</summary>
-        public bool ReadSkywell(out GaugeSpec gauge)
-        {
-            gauge = default;
-            if (!Local(out Aircraft me)) return false;
-            uint id = me.persistentID.Id;
-            foreach (SkywellView v in SkywellBoard.Views.Values)
-            {
-                if (!v.Active) continue;
-                bool receiver = v.Receiver == id, tanker = v.Tanker == id;
-                if (!receiver && !tanker) continue;
-                float level = receiver ? me.GetFuelLevel() : v.FuelKg / SkywellService.FuelStockKg;
-                gauge = new GaugeSpec
-                {
-                    Id = "skywell", Label = "SKYWELL", Kind = GaugeKind.Bar, Value = Mathf.Clamp01(level), Text = Percent(level), Sub = Phase(v, receiver), Tone = ScopeTone.Ink, Rank = 90,
-                };
-                return true;
-            }
-            return false;
-        }
-
-        private static string Phase(in SkywellView v, bool receiver) =>
-            v.Phase == SkywellPhase.Engage ? "DOCKING" : v.Phase == SkywellPhase.Transfer ? "FUELING" : v.Phase == SkywellPhase.Served ? "SERVED" : receiver ? "WAIT" : v.Receiver == 0 ? "READY" : "DOCKED";
 
         /// <summary>AEGIS: the darts left of the pod, as an arc of what it was loaded with.</summary>
         public bool ReadAegis(out GaugeSpec gauge)

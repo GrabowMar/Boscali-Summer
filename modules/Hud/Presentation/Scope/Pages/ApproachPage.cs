@@ -23,8 +23,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private const float FbX = 4f, FbY = 32f, FbW = 292f, FbH = 236f, BodyStd = 274f;
         private const float VpX0 = FbX, VpX1 = FbX + 266f, VpY0 = FbY + 34f, CenterX = 137f, CenterY = 156f;
         private const float Gw = 70f, Gh = 30f;
-        private static readonly string[] RunwayChain = { "INTERCEPT", "GLIDE", "FLARE", "ROLLOUT" };
-        private static readonly string[] PadChain = { "APPROACH", "DESCENT", "TOUCHDOWN" };
         private static readonly float[] SinkTick = { 0.8f };
         private static readonly char[] Scratch = new char[24];
 
@@ -173,7 +171,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 float overall = ((int)d.Stage + Progress()) / (d.Pad ? 3f : 4f);
                 string name = d.Pad ? d.Field : d.Runway ?? d.Field;
                 if (!ReferenceEquals(name, apFor)) { apFor = name; apSub = name ?? ""; }
-                into[n++] = new GaugeSpec { Id = "ap", Label = "AUTOPILOT", Kind = GaugeKind.Mode, Text = "LAND", Sub = apSub, Value = overall / 3f, Tone = Ink };
+                into[n++] = new GaugeSpec { Id = "land", Label = "AUTOPILOT", Kind = GaugeKind.Mode, Text = "LAND", Sub = apSub, Value = overall / 3f, Tone = Ink };
             }
             {
                 int key = (int)Math.Round(d.SinkMps * 10f);
@@ -567,7 +565,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public override void PaintStrip(ScopeCanvas g, in PagePaint p)
         {
             if (!live || !d.Autoland) return;
-            string[] names = d.Pad ? PadChain : RunwayChain;
+            string[] names = d.Pad ? ApproachWords.Pad : ApproachWords.Runway;
             g.PlateTag("AUTO", 4f, 13f, Ink);
             float x0 = 46f, cw = (p.W - x0 - 4f) / names.Length, prog = Progress();
             for (int i = 0; i < names.Length; i++)

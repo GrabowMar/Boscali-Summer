@@ -45,8 +45,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         private float nextSlow;
         private FormationDefinition shapeFor;
         private string shapeName;
-        private int apKey = int.MinValue;
-        private string apText = "", apSub = "";
 
         public void Activate()
         {
@@ -300,32 +298,13 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             cache.AckCount = n;
         }
 
-        /// <summary>The player's autopilot as two short words (<c>NAV 2/5</c>, <c>ALT 450</c>), built only when it changes.</summary>
+        /// <summary>The player's autopilot as two short words (<c>NAV 2/5</c>, <c>ALT5000</c>): the Wing module's own gauge (<see cref="PlayerAutopilotGauge"/>), read for the page.</summary>
         private void Autopilot()
         {
-            PlayerAutopilot ap = PlayerAutopilot.Instance;
-            cache.HasAutopilot = ap != null && ap.Session.Engaged;
-            cache.ApProgress = 0f;
-            if (!cache.HasAutopilot) return;
-            HoldSpec h = ap.Session.Spec;
-            int nav = ap.Nav.Count, index = ap.Nav.Index;
-            int hdg = ((int)Math.Round(h.HeadingDeg) % 360 + 360) % 360, alt = (int)Math.Round(h.AltitudeM), vs = (int)Math.Round(h.VerticalSpeedMps * 10f), spd = (int)Math.Round(h.SpeedMps * 3.6f);
-            int key = ((int)h.Lateral * 3 + (int)h.Vertical) * 1000003 + (h.Lateral == LateralHold.Nav ? nav * 100 + index : hdg) * 31 + alt * 7 + vs + (h.Speed ? spd * 13 : 0);
-            if (key != apKey)
-            {
-                apKey = key;
-                string lateral = h.Lateral == LateralHold.Level ? "LVL"
-                    : h.Lateral == LateralHold.Nav ? (nav > 0 && index >= 0 ? "NAV " + (index + 1) + "/" + nav : "NAV")
-                    : h.Lateral == LateralHold.Heading ? "HDG " + hdg.ToString("000", System.Globalization.CultureInfo.InvariantCulture) : null;
-                string vertical = h.Vertical == VerticalHold.Altitude ? "ALT " + alt
-                    : h.Vertical == VerticalHold.VerticalSpeed ? "VS " + (vs / 10f).ToString("+0.0;-0.0;0.0", System.Globalization.CultureInfo.InvariantCulture)
-                    : h.Speed ? "SPD " + spd : null;
-                apText = lateral ?? vertical ?? "AP";
-                apSub = lateral != null ? vertical ?? "" : "";
-            }
-            cache.ApText = apText;
-            cache.ApSub = apSub;
-            if (h.Lateral == LateralHold.Nav && nav > 0 && index >= 0) cache.ApProgress = Mathf.Clamp01((float)index / nav);
+            cache.HasAutopilot = PlayerAutopilotGauge.Read(out GaugeSpec g);
+            cache.ApText = g.Text;
+            cache.ApSub = g.Sub;
+            cache.ApProgress = g.Value;
         }
     }
 }

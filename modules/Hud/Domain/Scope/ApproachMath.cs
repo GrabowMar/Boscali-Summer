@@ -91,7 +91,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         }
     }
 
-    /// <summary>Clipping to the funnel panel (the prototype clips the canvas; the scope canvas does not): Liang-Barsky for a segment, Sutherland-Hodgman for a polygon.</summary>
+    /// <summary>Clipping to a page's window (the funnel, the OBJECTIVE plot, the pennants, the DOCK bullseye): the prototype clips the canvas, the scope canvas has no clip stack. Liang-Barsky for a segment, Sutherland-Hodgman for a polygon.</summary>
     internal static class ScreenClip
     {
         /// <summary>Clip the segment to the rectangle in place; false when nothing of it is inside.</summary>
@@ -112,33 +112,36 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return true;
         }
 
+        /// <summary>Sutherland-Hodgman against one half-plane: edge 0 keeps x &gt;= v, 1 keeps x &lt;= v, 2 keeps y &gt;= v, 3 keeps y &lt;= v. Writes the cut polygon to
+        /// <paramref name="dst"/> (room for <c>2 * (n + 1)</c> floats) and returns its point count.</summary>
+        public static int Half(float[] src, int n, float[] dst, int edge, float v)
+        {
+            int m = 0;
+            for (int i = 0; i < n; i++)
+            {
+                int j = (i + 1) % n;
+                float ax = src[2 * i], ay = src[2 * i + 1], bx = src[2 * j], by = src[2 * j + 1];
+                float da = Dist(edge, ax, ay, v), db = Dist(edge, bx, by, v);
+                if (da >= 0f && m < dst.Length / 2) { dst[2 * m] = ax; dst[2 * m + 1] = ay; m++; }
+                if ((da >= 0f) != (db >= 0f) && m < dst.Length / 2)
+                {
+                    float u = da / (da - db);
+                    dst[2 * m] = ax + (bx - ax) * u;
+                    dst[2 * m + 1] = ay + (by - ay) * u;
+                    m++;
+                }
+            }
+            return m;
+        }
+
         /// <summary>Clip the polygon <paramref name="xy"/> (<paramref name="n"/> points) to the rectangle into <paramref name="dst"/> (room for <c>2 * (n + 4)</c> floats)
         /// using <paramref name="tmp"/> (the same size) as scratch. Returns the point count (0 when outside).</summary>
         public static int Polygon(float[] xy, int n, float[] dst, float[] tmp, float left, float top, float right, float bottom)
         {
-            float[] a = xy;
-            int count = n;
-            for (int edge = 0; edge < 4 && count > 0; edge++)
-            {
-                float[] to = edge % 2 == 0 ? dst : tmp;
-                int m = 0;
-                for (int i = 0; i < count; i++)
-                {
-                    int j = (i + 1) % count;
-                    float x0 = a[2 * i], y0 = a[2 * i + 1], x1 = a[2 * j], y1 = a[2 * j + 1];
-                    bool in0 = Inside(edge, x0, y0, left, top, right, bottom), in1 = Inside(edge, x1, y1, left, top, right, bottom);
-                    if (in0) { to[2 * m] = x0; to[2 * m + 1] = y0; m++; }
-                    if (in0 != in1)
-                    {
-                        Cross(edge, x0, y0, x1, y1, left, top, right, bottom, out float cx, out float cy);
-                        to[2 * m] = cx; to[2 * m + 1] = cy; m++;
-                    }
-                }
-                a = to;
-                count = m;
-            }
-            if (count > 0 && !ReferenceEquals(a, dst)) Array.Copy(a, dst, count * 2);
-            return count;
+            int m = Half(xy, n, tmp, 0, left);
+            m = Half(tmp, m, dst, 1, right);
+            m = Half(dst, m, tmp, 2, top);
+            return Half(tmp, m, dst, 3, bottom);
         }
 
         /// <summary>Clip the polygon <paramref name="xy"/> to a convex clip polygon <paramref name="clip"/> (<paramref name="m"/> points, clockwise on screen, y down) into
@@ -174,22 +177,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return count;
         }
 
-        private static bool Inside(int edge, float x, float y, float l, float t, float r, float b) =>
-            edge == 0 ? x >= l : edge == 1 ? x <= r : edge == 2 ? y >= t : y <= b;
-
-        private static void Cross(int edge, float x0, float y0, float x1, float y1, float l, float t, float r, float b, out float x, out float y)
-        {
-            if (edge < 2)
-            {
-                x = edge == 0 ? l : r;
-                y = y0 + (y1 - y0) * (x - x0) / (x1 - x0);
-            }
-            else
-            {
-                y = edge == 2 ? t : b;
-                x = x0 + (x1 - x0) * (y - y0) / (y1 - y0);
-            }
-        }
+        private static float Dist(int edge, float x, float y, float v) => edge == 0 ? x - v : edge == 1 ? v - x : edge == 2 ? y - v : v - y;
     }
 
     /// <summary>The APPROACH page's rules (HUD v8), pure: the dot scales, the cautions, the speed words, the chain progress, the roll-out numbers.</summary>
