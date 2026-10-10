@@ -39,7 +39,10 @@ namespace Vanguard
                     return;
                 }
                 Handed("Wing", wingL, wingR);
-                float span = VisualBounds(flight.transform.Find("VanguardVisual").gameObject).size.x;
+                // The FBX holds the stowed pose: open the flight copy as WeaponArticulation does (Remora.py STOW_DEG, 68 deg).
+                GameObject flightVisual = flight.transform.Find("VanguardVisual").gameObject;
+                StowWings(flightVisual, flight.transform, -68f);
+                float span = VisualBounds(flightVisual).size.x;
                 var station = mounted.GetComponentInChildren<MountedMissile>(true) ?? throw new Exception("VG_Remora rack lost its station");
                 float stowed = VisualBounds(station.transform.Find("VanguardVisual").gameObject).size.x;
                 if (stowed >= span * 0.9f) throw new Exception("VG_Remora wings do not fold on the rack: " + stowed + " vs " + span);

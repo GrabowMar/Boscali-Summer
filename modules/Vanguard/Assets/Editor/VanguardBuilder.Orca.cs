@@ -18,7 +18,8 @@ namespace Vanguard
             foreach (string name in new[] { "WingL", "WingR", "Rotor" })
                 if (Node(name) == null) throw new Exception("VG_Orca missing rig node " + name);
             Vector3 hub = prefab.transform.InverseTransformPoint(Node("Rotor").position);
-            if (new Vector2(hub.x, hub.y).magnitude > 0.05f || hub.z >= 0f)
+            // The torpedo axis hangs below the station origin so the wing kit meets the launch rail (Orca.py ZC, 0.085 m).
+            if (Mathf.Abs(hub.x) > 0.05f || Mathf.Abs(hub.y) > 0.15f || hub.z >= 0f)
                 throw new Exception("VG_Orca Rotor pivot must sit on the body axis at the tail, got " + hub);
             Transform kit = Node("WingKit");
             if (kit == null) Debug.LogWarning("[Vanguard] VG_Orca has no WingKit joint: the splash sheds WingL/WingR instead");

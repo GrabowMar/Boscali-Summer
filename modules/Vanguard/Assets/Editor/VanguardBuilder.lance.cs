@@ -21,12 +21,11 @@ namespace Vanguard
             new KeyValuePair<string, string[]>("Fighter1", new[] { "Wing Pylons" }),
             new KeyValuePair<string, string[]>("SmallFighter1", new[] { "Inner wing pylons", "Outer wing pylons" }),
             new KeyValuePair<string, string[]>("CAS1", new[] { "Center Pylon", "Inner Fuselage Pylons" }),
-            new KeyValuePair<string, string[]>("trainer", new[] { "Inner Wing Pylons", "Middle Wing Pylons" }),
-            new KeyValuePair<string, string[]>("VTOLTrainer1", new[] { "Center Pylon", "Inner wing pylons", "Outer wing pylons" }),
         };
 
-        // Stowed pod must fit the tightest of those sets (VT-7 outer: 3.63 m long, 0.67 m wide, 0.58 m deep).
-        static readonly Vector3 LanceMaxSize = new Vector3(0.67f, 0.58f, 3.63f);
+        // The pod is 4.07 m long (models/Lance.py), so the T/A-30 Compass and VT-7 Vagrant pylons (3.63-3.85 m stores) are out.
+        // Stowed pod must fit the tightest of the sets above: 4.44 m long and 0.58 m wide (FS-20 outer), 0.68 m deep (A-19 inner).
+        static readonly Vector3 LanceMaxSize = new Vector3(0.58f, 0.68f, 4.44f);
 
         static void Lance(Dictionary<string, Material> materials)
         {

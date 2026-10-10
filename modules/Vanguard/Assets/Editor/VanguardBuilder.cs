@@ -372,13 +372,17 @@ namespace Vanguard
             group.RecalculateBounds();
         }
 
-        static void StowWings(GameObject visual, Transform station)
+        // Models whose FBX holds the stowed pose (MECHANICS.md part contract); MaldX and Glaive2S ship in the flight pose.
+        static bool StowedInFbx(string model) => model == "MaldJ" || model == "Orca" || model == "Remora";
+
+        // Folds WingL/WingR aft about the station's up axis; a negative angle swings a stowed-pose model open instead.
+        static void StowWings(GameObject visual, Transform station, float degrees = 90f)
         {
             foreach (Transform joint in visual.GetComponentsInChildren<Transform>(true))
                 if (joint.name == "WingL" || joint.name == "WingR")
                 {
                     Vector3 axis = joint.parent.InverseTransformDirection(station.up);
-                    joint.localRotation = Quaternion.AngleAxis(joint.name == "WingL" ? -90f : 90f, axis) * joint.localRotation;
+                    joint.localRotation = Quaternion.AngleAxis(joint.name == "WingL" ? -degrees : degrees, axis) * joint.localRotation;
                 }
         }
 
@@ -460,12 +464,25 @@ namespace Vanguard
                     Transform left = renderers.Single(r => r.name == "WingL").transform;
                     Transform right = renderers.Single(r => r.name == "WingR").transform;
                     if (left.position.x >= 0 || right.position.x <= 0) throw new Exception(model + " wing pivot handedness");
-                    float deployedWidth = VisualBounds(visual).size.x;
-                    StowWings(visual, wrapper.transform);
-                    if (VisualBounds(visual).size.x >= deployedWidth * 0.65f) throw new Exception(model + " mounted wings do not fold along body");
-                    // Rebuild the deployed check object so the preview represents the flight asset.
-                    UnityEngine.Object.DestroyImmediate(visual);
-                    visual = Visual(wrapper.transform, model, materials);
+                    // Swing to the pose the FBX does not hold and compare the two widths.
+                    bool stowedRest = StowedInFbx(model);
+                    float restWidth = VisualBounds(visual).size.x;
+                    StowWings(visual, wrapper.transform, stowedRest ? -90f : 90f);
+                    float swungWidth = VisualBounds(visual).size.x;
+                    if ((stowedRest ? restWidth : swungWidth) >= (stowedRest ? swungWidth : restWidth) * 0.65f)
+                        throw new Exception(model + " mounted wings do not fold along body");
+                    if (stowedRest)
+                    {
+                        // Now deployed, as WeaponArticulation opens it: each wing must have swung out to its own side.
+                        if (left.GetComponent<Renderer>().bounds.center.x >= 0 || right.GetComponent<Renderer>().bounds.center.x <= 0)
+                            throw new Exception(model + " wings deploy to the wrong side");
+                    }
+                    else
+                    {
+                        // Rebuild the deployed check object so the preview represents the flight asset.
+                        UnityEngine.Object.DestroyImmediate(visual);
+                        visual = Visual(wrapper.transform, model, materials);
+                    }
                 }
                 var check = new ModelCheck { model = model, triangles = triangles, renderersPerLod = renderers.Length / 3,
                     lodGroups = visual.GetComponentsInChildren<LODGroup>(true).Length, dimensions = VisualBounds(visual).size,
@@ -672,7 +689,7 @@ namespace Vanguard
             foreach (var station in g.GetComponentsInChildren<MountedMissile>(true))
             {
                 GameObject rackVisual = Visual(station.transform, spec.Model, materials);
-                if (spec.Model != "MaldJ") StowWings(rackVisual, station.transform); // the MaldJ FBX already holds the stowed pose
+                if (!StowedInFbx(spec.Model)) StowWings(rackVisual, station.transform); // those FBX files already hold the stowed pose
                 Edit(station, s => P(s, "info").objectReferenceValue = info);
             }
             SaveMount(g, mount, json, info, donor);
