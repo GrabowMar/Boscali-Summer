@@ -234,7 +234,12 @@ foreach ((string typeName, string methodName) in targets)
     ("WeaponInfo", "muzzleVelocity"),
     ("CombatHUD", "iconLayer"),
     ("CombatHUD", "topRightPanel"),
-    ("CombatHUD", "weaponStatus")
+    ("CombatHUD", "weaponStatus"),
+    // TAC BOARD seeker cones and the countermeasure bank (ShotBook, MenuGame.Aircraft): private members read by name through AccessTools.
+    ("ARHSeeker", "maxTrackingAngle"),
+    ("ARHSeeker", "terminalRange"),
+    ("SARHSeeker", "seekerAngle"),
+    ("CountermeasureManager", "countermeasureStations")
 };
 
 foreach ((string typeName, string fieldName) in fields)
