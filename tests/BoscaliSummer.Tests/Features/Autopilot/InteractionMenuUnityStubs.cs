@@ -1,67 +1,16 @@
 #if UNITY_EDITOR
 using UnityEngine;
 
-// Game adapters only, scoped to this fixture's own temp project (never shared with the HUD
-// fixture's stubs). The interaction menu's presentation (AceRadialMenuUi, Domain/*) is
-// production source; these are just enough to let that file compile and construct off the
-// game's own types, which are never exercised here (Update() never runs outside Play mode).
-public class Aircraft : MonoBehaviour { }
-public static class GameManager
-{
-    public static Aircraft aircraft;
-    public static bool GetLocalAircraft(out Aircraft a) { a = aircraft; return a != null; }
-}
-public static class GameplayUI { public static bool GameIsPaused; }
-public class DynamicMap { public static bool mapMaximized; }
-[System.Flags]
-public enum CursorFlags { None = 0, GameMenu = 1, Dialogue = 2, Chat = 4, SelectionMenu = 8 }
-public static class CursorManager { public static CursorFlags GetFlags() => CursorFlags.None; }
-public static class RadialMenuMain { public static bool IsInUse() => false; }
+// Game adapters only, scoped to this fixture's own temp project (never shared with the HUD fixture's stubs). The v7 menu's presentation
+// (MenuPainter, MenuTextPool, MenuPalette) and every Domain/Menu file are production source; the game host (AceRadialMenuUi), the input source and
+// the game adapters (MenuGame) are not part of this check. These are just enough for the kit and the palette to compile and construct.
 public class MFDScreen : MonoBehaviour { public TMPro.TMP_Text label; }
-
-namespace BoscaliSummer
-{
-    public sealed class StubLogger
-    {
-        public void LogInfo(string message) { }
-        public void LogWarning(string message) { }
-        public void LogError(string message) { }
-    }
-    public static class Plugin
-    {
-        public static readonly StubLogger Logger = new StubLogger();
-    }
-}
-
-namespace BoscaliSummer.Core.Ui { internal static class FixtureUiNamespace { } }
-
-namespace BoscaliSummer.Core.Lifecycle
-{
-    internal interface ISceneService { void ResetForScene(); }
-}
-
-namespace BoscaliSummer.Modules.Autopilot.Configuration
-{
-    internal sealed class KeyHolder { public KeyCode Value = KeyCode.C; }
-    internal sealed class AutopilotSettings { public KeyHolder AceRadialKey = new KeyHolder(); }
-}
-
-namespace BoscaliSummer.Modules.Autopilot.Runtime
-{
-    using BoscaliSummer.Modules.Autopilot.Domain;
-    internal static class AceRadialCatalog { public static AceRadialAction Build() => new AceRadialAction("root", string.Empty); }
-    internal static class AceRadialInputGuard
-    {
-        public static void Acquire() { }
-        public static void Release() { }
-    }
-    internal static class CockpitStateProbe { public static void Reset() { } }
-}
 
 namespace NuclearOption.UIStyleSystem
 {
     using System;
     using System.Collections.Generic;
+    /// <summary>Active throws, exactly like the game's theme before a scene exists: MenuPalette falls back to the base game's green, amber and red.</summary>
     public static class ThemeManager
     {
         public static Theme Active => throw new InvalidOperationException();
@@ -76,6 +25,7 @@ namespace NuclearOption.UIStyleSystem
 
 namespace Rewired
 {
+    // The kit's keyboard guard (AvInput) compiles against these; the check never switches a keyboard.
     public sealed class Keyboard { public bool enabled; }
     public sealed class Controllers { public Keyboard Keyboard => null; }
     public static class ReInput

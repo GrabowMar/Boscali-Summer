@@ -1,9 +1,10 @@
 #if UNITY_EDITOR
 using System;
+using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
 using BoscaliSummer.Modules.Autopilot.Domain;
 using BoscaliSummer.Modules.Autopilot.Presentation;
+using BoscaliSummer.Tests.Features.Autopilot;
 using NOAvionics;
 using TMPro;
 using UnityEditor;
@@ -13,32 +14,87 @@ using Object = UnityEngine.Object;
 using static UnityCheckHarness;
 
 /// <summary>
-/// Offline visual check for the interaction menu's presentation: drives
-/// <see cref="AceRadialMenuUi"/>'s internal tree/render pipeline directly (Update() never runs
-/// outside Play mode, so the game-dependent input/gating code in that file is never touched)
-/// to render the open menu over the approved backdrop at compact, standard and wide sizes.
+/// Offline visual check of the v7 interaction menu: runs the production <see cref="MenuPainter"/> and <see cref="MenuTextPool"/> on the shared
+/// AvionicsUi kit over the REAL catalog (<see cref="MenuCatalog"/> over the prototype's scenario worlds), puts the pure controller into each gallery
+/// state of the prototype with the same input rig the unit tests use, and renders PNGs at 1920x1080 (every state) and 1280x720 / 2560x1080 (root-idle,
+/// flight-dock, comms-calls, left-dock) over a real cockpit backdrop. Assertions run with the real TMP font: the shared geometry matrix
+/// (<see cref="MenuGeometryChecks"/>), no label truncated, text at least 12 px, no vector quad dropped. A PASS is not visual acceptance:
+/// read the PNGs against the prototype shots (Compare-MenuShots.py puts them side by side). The game host (AceRadialMenuUi), input and game
+/// adapters are never run here.
 /// </summary>
 public static class InteractionMenuUnityCheck
 {
-    private const BindingFlags Private = BindingFlags.NonPublic | BindingFlags.Instance;
+    private const int Capacity = 7000;
+    /// <summary>Every failed assertion, reported together at the end so one run shows all the defects and still renders every state.</summary>
+    private static readonly List<string> Failures = new List<string>();
+
+    private static void Check(bool ok, string message)
+    {
+        if (ok) return;
+        Failures.Add(message);
+        Debug.LogError(message);
+    }
+
+    private static readonly int[][] One = { new[] { 1920, 1080 } };
+    private static readonly int[][] Three = { new[] { 1920, 1080 }, new[] { 1280, 720 }, new[] { 2560, 1080 } };
+
+    private sealed class Frame
+    {
+        public string Id;
+        public Func<MenuWorld> World;
+        public Action<MenuRig> Setup;
+        public int[][] Screens;
+    }
+
+    private static Frame F(string id, Func<MenuWorld> world, Action<MenuRig> setup, int[][] screens) =>
+        new Frame { Id = id, World = world, Setup = setup, Screens = screens };
+
+    private static void FlickTo(MenuRig r, float angle, float frac)
+    {
+        float[] p = r.Polar(angle, frac * r.L.R);
+        r.Mouse(p[0], p[1]);
+    }
+
+    private static readonly Frame[] Gallery =
+    {
+        F("root-idle", MenuWorlds.Default, r => r.HoldOpen(), Three),
+        F("peek-weapons", MenuWorlds.Default, r => { r.HoldOpen(); FlickTo(r, 18f, 0.8f); }, One),
+        F("flight-dock", MenuWorlds.Default, r => { r.HoldOpen(); FlickTo(r, 90f, 0.87f); r.ToRow("flight/gear"); r.Adv(0.1f); }, Three),
+        F("weapons-select", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(1); r.Down(); r.Down(); r.Down(); r.Enter(); }, One),
+        F("comms-calls", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(5); r.Wheel(1); r.Wheel(1); r.ToRow("comms/con-my-way"); }, Three),
+        F("defence-latched", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(9); r.ToRow("defence/flares", 0.55f); }, One),
+        F("eject-hold", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(3); for (int i = 0; i < 6; i++) r.Down(); r.EnterDown(); r.Adv(0.48f); }, One),
+        F("wing-nowing", MenuWorlds.NoWing, r => r.HoldOpen(), One),
+        F("wing-empty", MenuWorlds.NoWing, r => { r.HoldOpen(); FlickTo(r, 126f, 0.8f); }, One),
+        F("left-dock", MenuWorlds.Default, r => { r.HoldOpen(); FlickTo(r, 306f, 0.87f); r.ToRow("defence/radar"); r.Adv(0.1f); }, Three),
+        F("toast", MenuWorlds.Default, r => { r.HoldOpen(); FlickTo(r, 90f, 0.87f); r.ToRow("flight/gear"); r.Adv(0.1f); r.CUp(); }, One),
+        F("hat-nav", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(2); r.Down(); r.Down(); }, One),
+        F("support-perks", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(7); for (int i = 0; i < 4; i++) r.Down(); r.Enter(); r.Down(); }, One),
+        F("view-missile", MenuWorlds.Missile, r => { r.HoldOpen(); FlickTo(r, 270f, 0.87f); r.ToRow("view/mslnext"); r.Adv(0.1f); }, One),
+        F("ground-flight", MenuWorlds.Ground, r => { r.LatchOpen(); r.PressDigit(3); r.Down(); }, One),
+    };
 
     public static void Run()
     {
         try
         {
             if (!EnsureTmpEssentials(Run)) return;
-
             AvBundle.LoadFromBytes(File.ReadAllBytes("avionics-ui.bundle"), Debug.Log);
             if (!AvBundle.Available || !AvIcons.Available) throw new Exception("Production fonts and icons must load.");
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
-            RenderMenu(1920f,1080f);
-            RenderMenu(1280f,720f);
-            RenderMenu(2560f,1080f);
 
+            string only = Arg("-menuStates");
+            int renders = 0;
+            foreach (Frame frame in Gallery)
+            {
+                if (!string.IsNullOrEmpty(only) && Array.IndexOf(only.Split(','), frame.Id) < 0) continue;
+                foreach (int[] s in frame.Screens) { RenderFrame(frame, s[0], s[1]); renders++; }
+            }
+            if (Failures.Count > 0) throw new Exception(Failures.Count + " failed check(s):\n" + string.Join("\n", Failures));
             File.WriteAllText("result.txt",
-                "PASS: interaction menu presentation renders the category ring + expanded branch + icons + tone state lines + disabled option " +
-                "+ hovered action on the shared AvionicsUi kit at 1280x720, 1920x1080 and 2560x1080; bold text fits measured tags and physical labels remain at least 11px. Game adapters are fixtures; " +
-                "in-game acceptance remains required.");
+                "PASS: " + renders + " renders of the v7 ring + dock menu (production painter, text pool and catalog on the shared AvionicsUi kit); the shared geometry " +
+                "matrix, no truncated label, 12 px text floor and no dropped vector quad held with the real TMP font. Game host and adapters are not run here; " +
+                "compare the PNGs with the prototype shots and check in game.");
             EditorApplication.Exit(0);
         }
         catch (Exception error)
@@ -49,77 +105,34 @@ public static class InteractionMenuUnityCheck
         }
     }
 
-    private static void RenderMenu(float screenW, float screenH)
+    private static string Arg(string name)
     {
-        float unit = Mathf.Min(screenW/1920f,screenH/1080f);
-        var center = new AceVec2(screenW * 0.5f, screenH * 0.5f);
+        string[] args = Environment.GetCommandLineArgs();
+        for (int i = 0; i < args.Length - 1; i++) if (args[i] == name) return args[i + 1];
+        return null;
+    }
 
-        var owner = new GameObject("Interaction menu fixture");
-        var menu = owner.AddComponent<AceRadialMenuUi>();
-        // This editor fixture never enters Play mode, so Unity never calls Awake() on its own.
-        typeof(AceRadialMenuUi).GetMethod("Awake", Private).Invoke(menu, null);
-
-        FieldInfo treeField = typeof(AceRadialMenuUi).GetField("tree", Private);
-        FieldInfo hostField = typeof(AceRadialMenuUi).GetField("host", Private);
-        MethodInfo renderMethod = typeof(AceRadialMenuUi).GetMethod("Render", Private);
-
-        var tree = (AceRadialMenuTree)treeField.GetValue(menu);
-        var host = (AvHudHost)hostField.GetValue(menu);
+    private static void RenderFrame(Frame frame, int w, int h)
+    {
+        AvHudHost host = AvHudHost.Create("Menu check " + frame.Id, null, 4);
         host.Canvas.renderMode = RenderMode.WorldSpace;
-        ((RectTransform)host.Root.transform).sizeDelta = new Vector2(screenW/unit,screenH/unit);
+        ((RectTransform)host.Root.transform).sizeDelta = new Vector2(w, h);
+        AvVector surface = AvVector.Create(host.Static, "Menu", Capacity);
+        var text = new MenuTextPool(host.Data);
+        var painter = new MenuPainter(surface.Buffer, text);
 
-        // A synthetic catalog shaped like the real one: the eight-category ring, one open
-        // category with icons, state lines in every tone, a disabled option and a sub-branch.
-        var root = new AceRadialAction("root", "CI-22 CRICKET").WithIcon(AceIcon.Aircraft);
-        var flight = new AceRadialAction("flight", "FLIGHT").WithIcon(AceIcon.Flight);
-        flight.Add(new AceRadialAction("land", "AUTOLAND", () => { }).WithIcon(AceIcon.Autopilot))
-            .Add(new AceRadialAction("assist", "FLIGHT ASSIST", () => { }).WithIcon(AceIcon.Assist)
-                .WithStatus(() => AceRadialStatus.OnOff(true)))
-            .Add(new AceRadialAction("gear", "LANDING GEAR", () => { }).WithIcon(AceIcon.Gear)
-                .WithStatus(() => new AceRadialStatus("UP")))
-            .Add(new AceRadialAction("engine", "ENGINE", () => { }, enabled: () => false).WithIcon(AceIcon.Engine)
-                .WithStatus(() => new AceRadialStatus("SHUT DOWN", AceTone.Caution)))
-            .Add(new AceRadialAction("eject", "EJECT").WithIcon(AceIcon.Eject)
-                .Add(new AceRadialAction("confirm", "CONFIRM EJECT", () => { }).WithIcon(AceIcon.Confirm)
-                    .WithStatus(() => new AceRadialStatus("NO UNDO", AceTone.Danger))));
-        root.Add(flight);
-        foreach (var category in new[]
-        {
-            ("lights", "LIGHTS", AceIcon.Lights), ("weapons", "WEAPONS", AceIcon.Weapons),
-            ("defence", "DEFENCE", AceIcon.Defence), ("view", "VIEW", AceIcon.View),
-            ("support", "SUPPORT", AceIcon.Support), ("radio", "RADIO", AceIcon.Radio),
-            ("comms", "COMMS", AceIcon.Comms),
-        })
-        {
-            root.Add(new AceRadialAction(category.Item1, category.Item2).WithIcon(category.Item3)
-                .Add(new AceRadialAction("x", "X", () => { })));
-        }
+        var rig = new MenuRig(frame.World(), w, h, text);
+        string at = " " + frame.Id + " @" + w + "x" + h;
+        MenuGeometryChecks.All((ok, message) => Check(ok, message + at), rig.Model, rig.L, text);
+        frame.Setup(rig);
+        float now = rig.Time;
+        painter.Paint(rig.C, rig.L, now);          // first paint starts the dock slide ...
+        painter.Paint(rig.C, rig.L, now + 1f);     // ... the second one is the settled frame
+        surface.Commit();
+        Check(!surface.Buffer.Overflowed, "vector buffer overflowed" + at + " (" + surface.Buffer.Capacity + " quads)");
 
-        tree.Open(root, 0f);
-        tree.Tick(center, center, unit, 0f);
-
-        // Hover the branch, expand it immediately (skip the dwell), then settle the pop-out
-        // animation so the screenshot shows it fully open.
-        AceVec2 branchAt = FindNodePosition(tree, "root/flight");
-        tree.Tick(branchAt, center, unit, 0f);
-        tree.ExpandHovered(0f);
-        tree.Tick(branchAt, center, unit, AceRadialMenuTree.ExpandSec + 0.05f);
-
-        // Hover one of the newly expanded children.
-        AceVec2 gearAt = FindNodePosition(tree, "root/flight/gear");
-        tree.Tick(gearAt, center, unit, AceRadialMenuTree.ExpandSec + 0.05f);
-
-        host.SetVisible(true);
-        renderMethod.Invoke(menu, new object[] { unit });
-
-        // This editor fixture never enters Play mode, so the vector layers' engine-driven
-        // OnEnable (CanvasRenderer registration) never runs either; force it so the geometry
-        // actually rebuilds into a mesh. Scoped to AvVector only: TMP labels already render
-        // correctly via the explicit ForceMeshUpdate() call below. (Known fixture limitation:
-        // the selector bracket's own nested AvVector still does not flush its mesh through this
-        // path in batch mode, so its highlight is not visible in this offline render even
-        // though its geometry/position are independently verified correct.)
-        MethodInfo graphicOnEnable = typeof(UnityEngine.UI.Graphic).GetMethod("OnEnable", Private);
+        // Offline the vector layers' engine-driven OnEnable never runs: force it so the geometry flushes into a mesh.
+        var graphicOnEnable = typeof(Graphic).GetMethod("OnEnable", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
         foreach (AvVector av in host.Root.GetComponentsInChildren<AvVector>(true))
         {
             if (av.GetComponent<CanvasRenderer>() == null) av.gameObject.AddComponent<CanvasRenderer>();
@@ -127,73 +140,56 @@ public static class InteractionMenuUnityCheck
             av.Commit();
         }
         Canvas.ForceUpdateCanvases();
-
-        // A backdrop behind the menu, exactly like the HUD fixture's own -hudBackdrop convention.
-        AddBackdrop(host, screenW, screenH);
+        AddBackdrop(host, w, h);
         Canvas.ForceUpdateCanvases();
-        foreach (TMP_Text text in host.Root.GetComponentsInChildren<TMP_Text>(true)) text.ForceMeshUpdate();
+        int labels = 0;
+        foreach (TMP_Text label in host.Data.GetComponentsInChildren<TMP_Text>(false))
+        {
+            if (string.IsNullOrEmpty(label.text)) continue;
+            label.ForceMeshUpdate();
+            labels++;
+            Check(!label.isTextTruncated, "label truncated" + at + ": " + label.text + " (rect " + label.rectTransform.rect.width + "x" + label.rectTransform.rect.height + ", preferred " + label.preferredWidth + ", bounds " + label.textBounds.size.x + ", size " + label.fontSize + ", spacing " + label.characterSpacing + ", font " + (label.font != null ? label.font.name : "none") + ")");
+            Check(label.fontSize >= 11.95f, "text below the 12 px floor" + at + ": " + label.text + " (" + label.fontSize + ")");
+        }
+        Check(labels > 0, "nothing was drawn" + at);
 
         var focus = new GameObject("Focus", typeof(RectTransform)).GetComponent<RectTransform>();
         focus.SetParent(host.Static, false);
-        AvHudHost.Place(focus, 0f, 0f, screenW/unit, screenH/unit);
-        Render(host.Canvas, focus, "interaction-menu-"+screenW+"x"+screenH+".png",(int)screenW,(int)screenH);
-
-        foreach (TMP_Text text in host.Root.GetComponentsInChildren<TMP_Text>()) {
-            if (string.IsNullOrEmpty(text.text)) continue;
-            text.ForceMeshUpdate();
-            if (text.textBounds.size.x > text.rectTransform.rect.width + 1f)
-                throw new Exception("Radial label spills outside its measured tag: " + text.text);
-            if(text.fontSize*unit < 11f-.01f) throw new Exception("Radial text below readable physical size: "+text.text);
-        }
-
-        Object.DestroyImmediate(owner);
-    }
-
-    private static AceVec2 FindNodePosition(AceRadialMenuTree tree, string path)
-    {
-        foreach (var node in tree.Layout)
-            if (node.Node.Path == path) return node.Position;
-        throw new Exception("Fixture catalog is missing expected node '" + path + "'.");
+        AvHudHost.Place(focus, 0f, 0f, w, h);
+        RenderPng(host.Canvas, focus, frame.Id + "-" + w + "x" + h + ".png", w, h);
+        Object.DestroyImmediate(host.Root);
     }
 
     private static Texture2D backdropTexture;
 
-    private static string BackdropPath()
+    private static void AddBackdrop(AvHudHost host, float w, float h)
     {
-        string[] args = Environment.GetCommandLineArgs();
-        for (int i = 0; i < args.Length - 1; i++)
-            if (args[i] == "-menuBackdrop") return args[i + 1];
-        return null;
-    }
-
-    private static void AddBackdrop(AvHudHost host, float width, float height)
-    {
-        string path = BackdropPath();
-        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
-        if (backdropTexture == null) { backdropTexture = new Texture2D(2, 2); backdropTexture.LoadImage(File.ReadAllBytes(path)); }
-        var go = new GameObject("Backdrop", typeof(RectTransform), typeof(RawImage));
-        var rt = (RectTransform)go.transform;
+        string path = Arg("-menuBackdrop");
+        var bar = new GameObject("Backdrop", typeof(RectTransform), typeof(RawImage));
+        var rt = (RectTransform)bar.transform;
         rt.SetParent(host.Static, false);
         rt.SetAsFirstSibling();
-        AvHudHost.Place(rt, 0f, 0f, width, height);
-        var image = go.GetComponent<RawImage>();
-        image.texture = backdropTexture; image.raycastTarget = false;
+        AvHudHost.Place(rt, 0f, 0f, w, h);
+        var image = bar.GetComponent<RawImage>();
+        image.raycastTarget = false;
+        if (string.IsNullOrEmpty(path) || !File.Exists(path)) { image.color = new Color(0.02f, 0.03f, 0.04f); return; }
+        if (backdropTexture == null) { backdropTexture = new Texture2D(2, 2); backdropTexture.LoadImage(File.ReadAllBytes(path)); }
+        // the 16:9 plate at full height, centred; a wider screen gets dark bars either side (a stretched cockpit would mislead)
+        float plate = Mathf.Min(w, h * 16f / 9f);
+        AvHudHost.Place(rt, (w - plate) / 2f, 0f, plate, h);
+        image.texture = backdropTexture;
     }
 
-    private static void Render(Canvas canvas, RectTransform focus, string path, int pixelWidth, int pixelHeight)
+    private static void RenderPng(Canvas canvas, RectTransform focus, string path, int pixelWidth, int pixelHeight)
     {
-        var originalMode = canvas.renderMode;
-        canvas.renderMode = RenderMode.WorldSpace;
         canvas.transform.localScale = Vector3.one;
         Canvas.ForceUpdateCanvases();
         foreach (TMP_Text text in canvas.GetComponentsInChildren<TMP_Text>()) text.ForceMeshUpdate();
-        Vector3[] corners = new Vector3[4]; focus.GetWorldCorners(corners);
-        int width = Mathf.CeilToInt(focus.rect.width);
-        int height = Mathf.CeilToInt(focus.rect.height);
-        var camera = OrthoCamera("Render camera", height / 2f, new Color(.12f, .16f, .2f), (corners[0] + corners[2]) * .5f + new Vector3(0, 0, -10));
+        var corners = new Vector3[4];
+        focus.GetWorldCorners(corners);
+        var camera = OrthoCamera("Render camera", pixelHeight / 2f, new Color(0.02f, 0.03f, 0.04f), (corners[0] + corners[2]) * 0.5f + new Vector3(0f, 0f, -10f));
         CapturePng(camera, pixelWidth, pixelHeight, path);
         Object.DestroyImmediate(camera.gameObject);
-        canvas.renderMode = originalMode;
     }
 }
 #endif
