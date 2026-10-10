@@ -489,7 +489,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             float rungM = imperial ? 1852f : 1000f;
 
             // Distance to the threshold (or the pad): the big figure, and the ladder.
-            float toThr = d.Pad ? d.DistanceM : -d.AlongM, steps = toThr / rungM;
+            float toThr = d.Pad ? d.DistanceM : -d.AlongM, steps = d.Pad ? d.RadarAltM / (imperial ? 9.144f : 10f) : toThr / rungM;   // over a pad the ladder is the height: 10 m (30 ft) a rung
             double figure = imperial ? Math.Abs(toThr) * 0.000539957 : Math.Abs(toThr) / 1000.0;
             float dw = g.Text(ScopeStr.Cat("", figure, 1, null), x0 + 2f, 46f, Hi, 22f, ScopeAlign.Left, true);
             g.Text(imperial ? "NM" : "KM", x0 + 6f + dw, 49f, Dim);
@@ -504,10 +504,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 float y = ly - ppk * k;
                 bool passed = steps < k - 0.02f;
                 g.Ring(lx, y, 3f, passed ? Ink : Dim, passed ? 1f : 0.9f, 1f, Ink, passed ? 1f : 0f);
-                g.Text(ScopeStr.Int(k), lx + 11f, y, passed ? Ink : Dim, 12f, ScopeAlign.Left, false, passed ? 0.8f : 1f);
+                g.Text(ScopeStr.Int(d.Pad ? k * (imperial ? 30 : 10) : k), lx + 11f, y, passed ? Ink : Dim, 12f, ScopeAlign.Left, false, passed ? 0.8f : 1f);
             }
             g.Line(lx - 10f, ly, lx + 10f, ly, Hi, 1f, 2f);
-            g.Text(d.Pad ? "PAD" : "THR", lx + 14f, ly, Dim);
+            g.Text(d.Pad ? "GND" : "THR", lx + 14f, ly, Dim);
             g.Chevron(lx, ym - 1f, 180f, 6f, Hi, true);
 
             // Stats right of the ladder: radar altitude, sink rate, crosswind.

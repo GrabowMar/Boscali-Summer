@@ -461,7 +461,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             float gx = X0 + 2f + (W - 4f) * DockMath.RibbonAt(m);
             bool passed = r < m;
             g.Line(gx, ry - 5f, gx, ry + 5f, passed ? Ink : Dim);
-            g.Text(ScopeStr.Int(Len(m)), gx, ry + 15f, passed ? Ink : Dim, 12f, ScopeAlign.Center, false, passed ? 0.85f : 1f);
+            // Three-figure feet would touch each other under the close capture and engage ticks: those two hang either side of theirs.
+            ScopeAlign at = word == "CAPT" && units == AvUnits.Imperial ? ScopeAlign.Right : word == "ENG" && units == AvUnits.Imperial ? ScopeAlign.Left : ScopeAlign.Center;
+            g.Text(ScopeStr.Int(Len(m)), gx, ry + 15f, passed ? Ink : Dim, 12f, at, false, passed ? 0.85f : 1f);
             if (word != null) g.Text(word, gx + (word == "ENG" ? 14f : 0f), ry - 13f, passed ? Hi : Dim, 12f, ScopeAlign.Center, false, passed ? 1f : 0.8f);
         }
 

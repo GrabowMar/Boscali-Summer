@@ -26,8 +26,6 @@ namespace BoscaliSummer.Modules.Autopilot
             AutopilotSettings settings = context.Settings.Autopilot;
             AutopilotLandController controller = context.AddSceneService<AutopilotLandController>(48);
             controller.Configure(settings);
-            context.AddSceneService<Presentation.AutopilotHudLine>(49).Configure(controller);
-            context.AddSceneService<Presentation.IlsHudLine>(49).Configure(settings);
             context.AddSceneService<ApproachScopeFeed>(49).Configure(settings, controller);
             context.AddSceneService<Presentation.AceRadialMenuUi>(50).Configure(settings);
             context.AddSceneService<LandingLight>(51);

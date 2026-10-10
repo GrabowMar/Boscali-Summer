@@ -45,7 +45,6 @@
     <Compile Include="..\..\modules\Autopilot\Domain\CarrierPattern.cs" Link="Features\Autopilot\CarrierPattern.cs" />
     <Compile Include="..\..\modules\Autopilot\Domain\AirframeSeverity.cs" Link="Features\Autopilot\AirframeSeverity.cs" />
     <Compile Include="..\..\modules\Autopilot\Domain\IlsGuidance.cs" Link="Features\Autopilot\IlsGuidance.cs" />
-    <Compile Include="..\..\modules\Autopilot\Domain\IlsHudCopy.cs" Link="Features\Autopilot\IlsHudCopy.cs" />
     <Compile Include="..\..\modules\Autopilot\Domain\Menu\*.cs" LinkBase="Features\Autopilot\Menu" />
     <Compile Include="..\..\modules\FireAndDestruction\Domain\CookoffPolicy.cs" Link="Features\FireAndDestruction\CookoffPolicy.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Domain\HitEscalation.cs" Link="Features\FireAndDestruction\HitEscalation.cs" />
@@ -161,7 +160,6 @@
     <!-- Everything under modules/Hud/Domain and Core/Contracts/Scope is pure and compiles into the tests by wildcard: a page group adds files without touching this project. -->
     <Compile Include="..\..\modules\Hud\Domain\**\*.cs" LinkBase="Features\Hud" />
     <Compile Include="..\..\Core\Contracts\Scope\**\*.cs" LinkBase="Framework\Scope" />
-    <Compile Include="..\..\modules\Autopilot\Domain\AutopilotHudCopy.cs" Link="Features\Autopilot\AutopilotHudCopy.cs" />
     <Compile Include="..\..\modules\Wing\Domain\Ai\RecoveryRules.cs" Link="Features\Wing\RecoveryRules.cs" />
     <Compile Include="..\..\modules\Progression\Domain\AceHuntHudCopy.cs" Link="Features\Progression\AceHuntHudCopy.cs" />
     <Compile Include="..\..\modules\Radio\Domain\RadioHudCopy.cs" Link="Features\Radio\RadioHudCopy.cs" />

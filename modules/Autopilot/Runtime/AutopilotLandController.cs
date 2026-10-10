@@ -74,56 +74,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         public bool IsEngaged => phase != Phase.None;
 
         /// <summary>
-        /// The current phase as a word for the HUD widget, or null when not engaged. The phase
-        /// enum stays private; the widget reads this and never re-derives the state machine.
-        /// </summary>
-        internal string HudPhaseWord
-        {
-            get
-            {
-                switch (phase)
-                {
-                    case Phase.Pattern: return CarrierPattern.Word(patternLeg);
-                    case Phase.Join: return "JOINING";
-                    case Phase.Final: return "FINAL";
-                    case Phase.Approach: return "APPROACH";
-                    case Phase.HoverTouchdown: return "TOUCHDOWN";
-                    case Phase.Rollout: return "ROLLOUT";
-                    case Phase.PadApproach: return "PAD APPROACH";
-                    case Phase.PadDescent: return "PAD DESCENT";
-                    default: return null;
-                }
-            }
-        }
-
-        /// <summary>The runway or pad being flown to, or null when nothing is engaged.</summary>
-        internal string HudTargetName
-        {
-            get
-            {
-                if (!IsEngaged || airbase == null) return null;
-                return padLanding ? airbase.name : runwayUsage.GetName();
-            }
-        }
-
-        /// <summary>
-        /// Landing-direction ILS frame while engaged: origin at the touchdown, direction
-        /// along the runway, radius of the field. False when nothing is being flown to.
-        /// </summary>
-        internal bool TryIlsFrame(out Vector3 origin, out Vector3 landingDir, out float radius)
-        {
-            origin = default;
-            landingDir = default;
-            radius = 0f;
-            if (!IsEngaged || airbase == null || padLanding) return false;
-            origin = runwayUsage.GetTouchdownPoint().ToLocalPosition();
-            landingDir = runwayUsage.GetDirection();
-            try { radius = airbase.GetRadius(); }
-            catch { radius = 0f; }
-            return landingDir.sqrMagnitude > 0.01f;
-        }
-
-        /// <summary>
         /// The landing chain for the APPROACH page: INTERCEPT (pattern, join, or flying to a pad), GLIDE (final, approach, the pad descent), FLARE (the last five seconds to the
         /// touchdown, the vertical lander's hover touchdown, the last metres over a pad) and ROLLOUT, with the runway and the speed the autopilot is flying to. False when nothing is
         /// engaged. The phase enum stays private; the page reads this and never re-derives the state machine.
@@ -150,16 +100,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 HasTarget = !padLanding && phase != Phase.Rollout && hudTarget > 0f, TargetSpeed = hudTarget, TouchdownS = touchdownTime,
             };
             return true;
-        }
-
-        /// <summary>Distance to the field's own anchor, or -1 when it cannot be read.</summary>
-        internal float HudDistanceMeters
-        {
-            get
-            {
-                if (!IsEngaged || airbase == null || airbase.center == null) return -1f;
-                return FastMath.Distance(aircraft.GlobalPosition(), airbase.center.GlobalPosition());
-            }
         }
 
         private void Awake() => Instance = this;

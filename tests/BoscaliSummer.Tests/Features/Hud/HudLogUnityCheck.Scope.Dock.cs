@@ -47,6 +47,7 @@ public static partial class HudLogUnityCheck
             "RelX", ex, "RelY", ey, "RelZ", -r, "RangeM", r, "ClosureMps", c, "CueM", 800f, "CaptureM", 90f, "EngageM", 60f, "MaxClosingMps", 30f,
             "Brake", t >= tEng - 0.2f && t < tServed, "Fuel", 0.34f + 0.66f * fx, "FuelTarget", 1f, "FuelNeedKg", 1840f * (1f - fx), "Ammo", 2 + rounds, "AmmoFull", 6,
             "TransferT", fx, "MovedFuelKg", 1840f, "MovedRounds", 4, "HasStock", true, "StockFuelKg", 6200f - fuelKg, "StockFuelMaxKg", 8000f, "StockMunKg", 1500f);
+        if (s.Variant == "imperial") s.SetFrame("Units", NOAvionics.AvUnits.Imperial);     // add ("dock", 6f, "imperial") to ScopeVariants to render it
         s.Publish(d);
 
         s.SetFrame("Systems", s.Fill(s.Domain("SystemStates"), "Gear", s.DomainEnum("GearLamp", "Up"), "FlightAssist", true, "AutoHover", false,

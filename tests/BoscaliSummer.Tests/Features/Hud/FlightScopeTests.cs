@@ -206,7 +206,13 @@ namespace BoscaliSummer.Tests.Features.Hud
             m[1].State = WingState.Ground;
             TestAssert.That(!WingBoardMath.NeedsAttention(m, 3), "A member on the ground is not the page's business");
             m[2].State = WingState.Rtb;
-            TestAssert.That(WingBoardMath.NeedsAttention(m, 3) && WingBoardMath.OutCount(m, 3) == 0, "A member going home calls the page but is not out of slot");
+            TestAssert.That(!WingBoardMath.NeedsAttention(m, 3) && WingBoardMath.OutCount(m, 3) == 0, "A member going home is an event, not a standing reason to show the page");
+            m[2].State = WingState.Damaged;
+            TestAssert.That(!WingBoardMath.NeedsAttention(m, 3), "A hit stays on the roster but does not hold the page up for the sortie");
+            m[0].State = WingState.Engage;
+            TestAssert.That(WingBoardMath.NeedsAttention(m, 3), "A fight calls the page");
+            m[0].State = WingState.Defend;
+            TestAssert.That(WingBoardMath.NeedsAttention(m, 3), "A missile on a wingman calls the page");
         }
     }
 }

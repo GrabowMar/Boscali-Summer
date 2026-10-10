@@ -32,6 +32,13 @@ public static partial class HudLogUnityCheck
             "SpeedMps", speed * kmh, "GroundMps", speed * kmh, "SinkMps", -vs, "HasTarget", air, "TargetMps", vApp * kmh,
             "TouchdownS", Mathf.Clamp(air ? (tTouch - t) * 2.5f : 0f, 0f, 30f), "HasWind", true, "CrosswindMps", 6f / 1.94384f,
             "GearDown", t >= tGear, "GearMoving", t < tGear, "Airbrake", t < tBrake, "DistanceM", Mathf.Abs(d));
+        // Variants (add ("approach", 6f, "manual") etc. to ScopeVariants to render them): by hand with no strip, a vertical lander over a pad, an imperial player.
+        if (s.Variant == "manual")
+            s.Fill(a, "Autoland", false, "Occupied", false, "HasTarget", true, "TargetMps", 66f, "SpeedMps", 69f, "Airbrake", false, "GearDown", true, "GearMoving", false);
+        else if (s.Variant == "pad")
+            s.Fill(a, "Pad", true, "Field", "FOB CHAPEL", "Runway", null, "PadX", -35f, "PadY", 60f, "DistanceM", 70f, "RadarAltM", 22f, "HeightM", 22f, "SinkMps", 2.5f, "GroundMps", 6f, "HasTarget", false,
+                "Stage", s.ContractEnum("ApproachStage", "Glide"), "HasIls", false, "GearDown", true, "GearMoving", false, "Airbrake", false);
+        else if (s.Variant == "imperial") s.SetFrame("Units", NOAvionics.AvUnits.Imperial);
         s.Publish(a);
 
         s.SetFrame("Systems", s.Fill(s.Domain("SystemStates"), "Gear", s.DomainEnum("GearLamp", t < tGear ? "Moving" : "Down"), "FlightAssist", true, "AutoHover", false,

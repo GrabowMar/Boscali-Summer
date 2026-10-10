@@ -17,11 +17,11 @@ namespace BoscaliSummer.Modules.Autopilot.Configuration
                 "Autopilot). Client-local: flies only your aircraft with the game's own autopilot, " +
                 "never commands other aircraft, and yields to manual stick input.");
             IlsHud = config.Bind("Autopilot", "IlsHud", true,
-                "When landing gear is down, show localizer / glideslope and the field safe ring " +
-                "as a line on the common HUD element.");
+                "When landing gear is down near a field, show the APPROACH page (runway funnel, " +
+                "localizer / glideslope, speed) on the HUD's TAC BOARD while you fly the approach by hand.");
             GlideslopeDegrees = config.Bind("Autopilot", "GlideslopeDegrees", IlsGuidance.DefaultSlope,
                 new ConfigDescription(
-                    "ILS glideslope angle in degrees for the gear-down HUD and the landing autopilot.",
+                    "ILS glideslope angle in degrees for the hand-flown APPROACH page (the landing autopilot flies its own slope).",
                     new AcceptableValueRange<float>(IlsGuidance.MinSlope, IlsGuidance.MaxSlope)));
             AceRadialKey = config.Bind("Autopilot", "AceRadialKey", UnityEngine.KeyCode.C,
                 "Key for the ACE3-style interaction menu (default C; None disables it). Hold it, " +

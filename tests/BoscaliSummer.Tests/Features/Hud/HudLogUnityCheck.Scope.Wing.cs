@@ -53,7 +53,8 @@ public static partial class HudLogUnityCheck
         state[1] = t < 4.6f ? "Join" : t < 6.5f ? "Form" : t < tHit3 ? "Engage" : "Damaged";
         state[2] = t >= tDef0 && t < 15.4f ? "Defend" : "Form";
 
-        Array members = Array.CreateInstance(s.Contract("WingBoardMember").GetType(), 3);
+        bool five = s.Variant == "five", client = s.Variant == "client";     // add ("wing", 10f, "five") / ("wing", 10f, "client") to ScopeVariants to render them
+        Array members = Array.CreateInstance(s.Contract("WingBoardMember").GetType(), five ? 5 : 3);
         Vector2 v4 = WingPos(2, t);
         for (int i = 0; i < 3; i++)
         {
@@ -76,8 +77,17 @@ public static partial class HudLogUnityCheck
                 float d = Mathf.Lerp(1400f, 80f, Seg01(t, 9.6f, tMslEnd));
                 s.Fill(m, "HasThreat", true, "ThreatX", v4.x - 0.77f * d, "ThreatY", v4.y - 0.64f * d, "ThreatTtiS", Mathf.Max(0f, (d - 80f) / 350f), "ThreatSeeker", "SARH", "ThreatReply", "CHAFF");
             }
+            if (client) s.Fill(m, "HasSlot", false, "HasTarget", false, "HasThreat", false, "HasHull", false, "HasField", false);
             members.SetValue(m, i);
         }
+        if (five)
+            for (int i = 3; i < 5; i++)
+            {
+                object m = s.Contract("WingBoardMember");
+                s.Fill(m, "Number", i + 2, "Name", "#" + (i + 2) + (i == 3 ? " GHOST" : " RAVEN"), "State", s.ContractEnum("WingState", i == 3 ? "Form" : "Join"), "X", i == 3 ? 560f : -700f, "Y", i == 3 ? -380f : -420f, "HeadingDeg", 4f,
+                    "HasSlot", true, "SlotX", i == 3 ? 630f : -840f, "SlotY", i == 3 ? -420f : -560f, "SlotErrM", i == 3 ? 40f : 190f, "Fuel", i == 3 ? 0.91f : 0.22f, "Ammo", 1f, "Joker", i == 4);
+                members.SetValue(m, i);
+            }
 
         // The player's own order acknowledgements, newest first (the prototype's radio log).
         var acks = new[]
@@ -97,7 +107,7 @@ public static partial class HudLogUnityCheck
         }
 
         object wing = s.Contract("WingBoardScope");
-        s.Fill(wing, "Count", 3, "Members", members, "Shape", "FINGER FOUR", "Engaged", t >= tOrder && t < 15.6f, "AckCount", count, "Acks", ackArray,
+        s.Fill(wing, "Count", five ? 5 : 3, "Members", members, "Shape", client ? null : "FINGER FOUR", "Client", client, "Engaged", t >= tOrder && t < 15.6f, "AckCount", count, "Acks", ackArray,
             "HasAutopilot", true, "ApText", "NAV 2/5", "ApSub", "K92 STRIP", "ApProgress", (t * 0.2f) % 1f);
         s.Publish(wing);
 

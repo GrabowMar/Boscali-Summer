@@ -13,17 +13,19 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// the rim clamped onto it with a range tag, engaging wingmen with a dashed ray to a target diamond on the rim, a missile guiding on a wingman with a line to it. Right: one
     /// row per wingman (state word, fuel and ammunition bars, a task line) and the order acknowledgements. Top-left: the order (FORM / ENGAGE) with a pictogram of the formation.
     /// Feed: <see cref="WingBoardScope"/> (the Wing module's provider: the live wing on the host and solo, the snapshot mirror on a client). Live while the wing has something to
-    /// say: someone out of slot, fighting, defending, hit, out of weapons or going home. Events (hit, a missile on a wingman, winchester, an order acknowledged) go to the ticker once.
+    /// say: someone out of slot, fighting or defending (and for a few seconds after a hit, running dry or a turn for home). Events (hit, a missile on a wingman, winchester, an order acknowledged) go to the ticker once.
     /// </summary>
     internal sealed class WingPage : ScopePageBase
     {
+        /// <summary>The page stays up this long after a hit, running dry or a turn for home.</summary>
+        private const float HoldSeconds = 8f;
         private const float RowX = 244f, RowW = 192f, AckY = 234f, InSlotFilledM = 40f;
         private const int Cap = 8, TrailLen = 6, LabelCap = 24, LabelChars = 28;
 
         private WingBoardScope d;
         private bool live, primed;
         private AvUnits units;
-        private float now, lastSample = -1000f, flashUntil, flashFor = -1f;
+        private float now, lastSample = -1000f, flashUntil, flashFor = -1f, holdUntil;
         private readonly int[] seen = new int[Cap];
         private readonly WingState[] prev = new WingState[Cap];
         private readonly float[] trailX = new float[Cap * TrailLen], trailY = new float[Cap * TrailLen], trailXY = new float[TrailLen * 2];
@@ -68,7 +70,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!have) { live = false; primed = false; return false; }
             Edges(env);
             primed = true;
-            live = WingBoardMath.NeedsAttention(d.Members, d.Count);
+            live = d.Engaged || WingBoardMath.NeedsAttention(d.Members, d.Count) || now < holdUntil;
             if (live) UpdateHeadline();
             return live;
         }
@@ -87,7 +89,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     {
                         case WingState.Damaged:
                             env.Notice?.Invoke("wing", HudTone.Warning, who + " HIT", m.HasHull ? "HULL " + (int)Math.Round(m.Hull * 100f) + "%" : null);
-                            flashUntil = now + 1.5f; flashFor = m.Number;
+                            flashUntil = now + 1.5f; flashFor = m.Number; holdUntil = now + HoldSeconds;
                             break;
                         case WingState.Defend:
                             env.Notice?.Invoke("wing", HudTone.Caution, who + " DEFENDING", m.HasThreat ? (m.ThreatSeeker ?? "MISSILE") + " INBOUND" : "MISSILE INBOUND");
@@ -95,10 +97,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                             break;
                         case WingState.Winch:
                             env.Notice?.Invoke("wing", HudTone.Caution, who + " WINCHESTER", "NO AMMUNITION");
-                            flashUntil = now + 1.5f; flashFor = m.Number;
+                            flashUntil = now + 1.5f; flashFor = m.Number; holdUntil = now + HoldSeconds;
                             break;
                         case WingState.Rtb: case WingState.Refit:
                             env.Notice?.Invoke("wing", HudTone.Info, who + (m.State == WingState.Rtb ? " RTB" : " REFIT"), m.HasField ? m.Field : null);
+                            holdUntil = now + HoldSeconds;
                             break;
                     }
                 }
@@ -439,15 +442,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             ScopeTone wordTone = tone == Ink ? (m.State == WingState.Engage ? Hi : Ink) : tone;
             g.Text(word, x + RowW - 8f, y + 13f, wordTone, 12f, ScopeAlign.Right, m.State != WingState.Form, m.State == WingState.Rtb ? 0.85f : 1f);
 
-            float by = y + (taskLine ? 26f : 20f);
+            float by = y + (taskLine ? 26f : Math.Max(20f, Math.Min(26f, h - 18f)));
             bool low = m.Fuel < 0.25f || m.Bingo || m.Joker;
             ScopeTone fuelTone = low ? Amber : Ink, ammoTone = m.Ammo <= 0f ? Amber : Ink;
             g.Text("F", x + 8f, by + 5f, Dim);
-            g.Bar(x + 17f, by, 44f, 10f, m.Fuel, fuelTone, 8);
-            g.Text(ScopeStr.Pct((int)Math.Round(m.Fuel * 100f)), x + 66f, by + 5f, low ? Amber : Hi, 12f, ScopeAlign.Left, low);
-            g.Text("A", x + 100f, by + 5f, Dim);
-            g.Bar(x + 109f, by, 44f, 10f, m.Ammo, ammoTone, 4);
-            g.Text(ScopeStr.Pct((int)Math.Round(m.Ammo * 100f)), x + 158f, by + 5f, ammoTone == Amber ? Amber : Hi, 12f, ScopeAlign.Left, ammoTone == Amber);
+            g.Bar(x + 17f, by, 36f, 10f, m.Fuel, fuelTone, 8);
+            g.Text(ScopeStr.Pct((int)Math.Round(m.Fuel * 100f)), x + 58f, by + 5f, low ? Amber : Hi, 12f, ScopeAlign.Left, low);
+            g.Text("A", x + 92f, by + 5f, Dim);
+            g.Bar(x + 101f, by, 36f, 10f, m.Ammo, ammoTone, 4);
+            if (ammoTone == Amber) g.Text("WINCH", x + 142f, by + 5f, Amber, 12f, ScopeAlign.Left, true);
+            else g.Text(ScopeStr.Pct((int)Math.Round(m.Ammo * 100f)), x + 142f, by + 5f, Hi);
             if (taskLine) TaskLine(g, m, index, x + 8f, y + 49f, RowW - 14f, sev ? Amber : Dim);
         }
 

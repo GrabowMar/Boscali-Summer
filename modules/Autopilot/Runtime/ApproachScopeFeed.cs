@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
     /// </summary>
     internal sealed class ApproachScopeFeed : MonoBehaviour, ISceneService
     {
-        private const float PickSeconds = 1f, NearM = 12000f, RollMinMps = 8f, RollGraceSeconds = 60f, ClimbMps = 2f;
+        private const float PickSeconds = 1f, NearM = 12000f, RollMinMps = 8f, RollGraceSeconds = 60f, ClimbMps = 2f, ForwardFlightMps = 25f;
 
         private AutopilotSettings settings;
         private AutopilotLandController controller;
@@ -106,6 +106,9 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 {
                     airborneAt = Time.unscaledTime;
                     if (flat > NearM || vel.y > ClimbMps) return false;
+                    // A helicopter hovering about a field is not on an approach: a vertical lander only gets the runway funnel in forward flight.
+                    AircraftParameters flown = a.GetAircraftParameters();
+                    if (flown != null && flown.verticalLanding && ground < ForwardFlightMps) return false;
                 }
             }
 
@@ -242,7 +245,8 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 namedReverse = use.Reverse;
                 namedRunwayField = f;
                 string n = use.GetName();
-                runwayName = string.IsNullOrWhiteSpace(n) ? null : n.Trim().ToUpperInvariant();
+                n = string.IsNullOrWhiteSpace(n) ? null : n.Trim().ToUpperInvariant();
+                runwayName = n != null && n.StartsWith("RUNWAY ", StringComparison.Ordinal) ? "RWY " + n.Substring(7) : n;     // the game's "Runway 27" as the board's "RWY 27"
             }
             return runwayName;
         }

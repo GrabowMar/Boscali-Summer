@@ -71,11 +71,12 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return n;
         }
 
-        /// <summary>The page has something to show: someone is out of slot, fighting, defending, hit, out of weapons or going home.</summary>
+        /// <summary>The page has something to show on its own account: someone is out of slot, fighting or has a missile on it. (A hit, running dry and turning for home are
+        /// events: the page holds for a few seconds after each, it does not stay up for the rest of the sortie.)</summary>
         public static bool NeedsAttention(WingBoardMember[] m, int count)
         {
             for (int i = 0; i < count; i++)
-                if (m[i].State != WingState.Form && m[i].State != WingState.Ground && m[i].State != WingState.Land) return true;
+                if (m[i].State == WingState.Join || m[i].State == WingState.Engage || m[i].State == WingState.Defend) return true;
             return false;
         }
 

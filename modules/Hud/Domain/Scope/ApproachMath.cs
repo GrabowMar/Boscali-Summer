@@ -58,7 +58,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public int Polygon(float[] xyz, int n, float[] dst)
         {
             int m = 0;
-            float px = 0f, py = 0f, pz = 0f;
+            float px, py;
             for (int i = 0; i < n; i++)
             {
                 int j = (i + 1) % n;
