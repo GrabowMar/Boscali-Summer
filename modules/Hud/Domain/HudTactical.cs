@@ -94,6 +94,21 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public ShotState State(int i) => states[i];
         public bool IsBomb(int i) => bombs[i];
 
+        /// <summary>The word beside the pips: SHOT while any is in flight, else the latest outcome (HIT or MISS); empty with no pips.</summary>
+        public string Legend
+        {
+            get
+            {
+                int latest = -1;
+                for (int i = 0; i < Capacity; i++)
+                {
+                    if (states[i] == ShotState.InFlight) return "SHOT";
+                    if ((states[i] == ShotState.Hit || states[i] == ShotState.Miss) && (latest < 0 || times[i] > times[latest])) latest = i;
+                }
+                return latest < 0 ? "" : states[latest] == ShotState.Hit ? "HIT" : "MISS";
+            }
+        }
+
         public void Launch(int id, bool bomb, float now)
         {
             int slot = Array.IndexOf(states, ShotState.Empty);

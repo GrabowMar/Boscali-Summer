@@ -53,6 +53,7 @@ public static class HudLogUnityCheck
             var theme = ScriptableObject.CreateInstance<ThemeGroup>(); theme.SetColorTheme(colors);
             typeof(ThemeManager).GetProperty("Active", All).SetValue(null, theme);
             foreach (float width in new[] { 320f, 440f }) Status(width);
+            foreach (float width in new[] { 320f, 440f }) StatusRich(width);
             foreach (Vector2 size in new[] { new Vector2(1280,720), new Vector2(1920,1080), new Vector2(2560,1080) }) Cluster(size);
             Contracts();
             foreach (float height in new[] { 160f, 420f, 596f })
@@ -101,7 +102,9 @@ public static class HudLogUnityCheck
             Set(row, "Tone", Enum.Parse(tone, i == 0 ? "Warning" : i == 2 ? "Caution" : "Info"));
             Set(row, "Bar", .3f + i * .15f); rows.SetValue(row, i);
         }
-        Call(status, "Present", rows, rows.Length, Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Domain.SystemStates")), Type("BoscaliSummer.Modules.Hud.Domain.ThreatPicture").GetProperty("Clear").GetValue(null), Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Domain.ShotLedger")), -1f);
+        object frame = Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Domain.BoardFrame"));
+        object ledger = Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Domain.ShotLedger"));
+        Call(status, "Present", rows, rows.Length, frame, ledger);
         Canvas.ForceUpdateCanvases();
         Check(((TMP_Text)Field(status, "stripLabel")).text == detail[0].ToUpperInvariant(), "Capacitor bar carries the most severe line's detail.");
         Check(((RectTransform)Field(status, "root")).Find("Label0").GetComponent<TMP_Text>().text == "MISSILE WARNING", "Cell label is the line head.");
@@ -114,9 +117,60 @@ public static class HudLogUnityCheck
         foreach (var label in ((RectTransform)Field(status, "root")).GetComponentsInChildren<TextMeshProUGUI>())
             if (label.name == "Detail") detailCount++;
         Check(detailCount == 1, "One detail line, under the cells.");
-        Call(status, "Present", rows, 0, Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Domain.SystemStates")), Type("BoscaliSummer.Modules.Hud.Domain.ThreatPicture").GetProperty("Clear").GetValue(null), Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Domain.ShotLedger")), -1f);
+        Call(status, "Present", rows, 0, frame, ledger);
         Check(!((RectTransform)Field(status, "root")).gameObject.activeSelf, "Empty status hides owned tree.");
         Call(status, "Destroy"); Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
+    }
+    private const string HudDomain = "BoscaliSummer.Modules.Hud.Domain.";
+    private static object Boxed(string name) => Activator.CreateInstance(Type(HudDomain + name));
+    private static object EnumOf(string name, string value) => Enum.Parse(Type(HudDomain + name), value);
+    private static object Msg(string channel, string text, string detail, string tone, float bar)
+    {
+        object m = Boxed("HudMessage");
+        Set(m, "Channel", channel); Set(m, "Text", text); Set(m, "Detail", detail); Set(m, "Bar", bar);
+        Set(m, "Tone", Enum.Parse(Type("BoscaliSummer.Core.Contracts.HudTone"), tone));
+        return m;
+    }
+    /// <summary>The board with every system lamp, a hot threat row (inbound missile, lock, spike) and the shot pips.</summary>
+    private static void StatusRich(float width)
+    {
+        Canvas canvas = MakeCanvas("StatusRich", new Vector2(640, 600)); CombatHUD hud = NativeDock(canvas);
+        var dock = new GameObject("WeaponsDock", typeof(RectTransform), typeof(Image)).GetComponent<RectTransform>();
+        dock.SetParent(canvas.transform, false); dock.sizeDelta = new Vector2(width, 40); dock.anchoredPosition = new Vector2(0, 230);
+        dock.GetComponent<Image>().color = Color.black; dock.GetComponent<Image>().raycastTarget = false;
+        object status = Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Presentation.StatusPanel"), true);
+        Call(status, "Build", hud, dock);
+        SyntheticFont((RectTransform)Field(status, "root"));
+
+        object systems = Boxed("SystemStates");
+        Set(systems, "Gear", EnumOf("GearLamp", "Down")); Set(systems, "FlightAssist", true); Set(systems, "AutoHover", false);
+        Set(systems, "RadarEmitting", true); Set(systems, "NightVision", false); Set(systems, "WeaponSafe", true); Set(systems, "EngineRunning", true);
+        object threat = Type(HudDomain + "ThreatPicture").GetProperty("Clear").GetValue(null);
+        Set(threat, "Missiles", 2); Set(threat, "SinceLock", 0.4f); Set(threat, "SinceSpike", 0.2f); Set(threat, "SinceNewMissile", 0.5f);
+        Set(threat, "HasBearing", true); Set(threat, "BearingDeg", 65f); Set(threat, "ElevationDeg", 20f); Set(threat, "BearingIsMissile", true);
+        object frame = Boxed("BoardFrame");
+        Set(frame, "Systems", systems); Set(frame, "Threat", threat); Set(frame, "BootAge", -1f);
+
+        object ledger = Boxed("ShotLedger");
+        Call(ledger, "Launch", 1, false, 0f); Call(ledger, "Launch", 2, true, 0f); Call(ledger, "Launch", 3, false, 0f);
+        Call(ledger, "Detonate", 1, true, 1f); Call(ledger, "Launch", 4, true, 1f); Call(ledger, "Detonate", 3, false, 1.2f);
+
+        Type message = Type(HudDomain + "HudMessage");
+        Array rows = Array.CreateInstance(message, 4);
+        rows.SetValue(Msg("missile", "MSL 800m · TGT 2.1km", "AIM-120 → MIG-29", "Info", .28f), 0);
+        rows.SetValue(Msg("ils", "ILS", "LOCALIZER LEFT 2 · GLIDESLOPE HIGH", "Caution", .45f), 1);
+        rows.SetValue(Msg("skywell", "SKYWELL", "DOWN 12 · LEFT 14 · FWD 40 m", "Info", .6f), 2);
+        rows.SetValue(Msg("lance", "LANCE", "RG-12 CHARGE", "Warning", .8f), 3);
+        Call(status, "Present", rows, rows.Length, frame, ledger);
+        Canvas.ForceUpdateCanvases();
+        Check(((RectTransform)Field(status, "root")).Find("ShotLegend").GetComponent<TMP_Text>().text == "SHOT", "Pips in flight carry the SHOT legend.");
+        Check(((RectTransform)Field(status, "root")).Find("HiLo").GetComponent<TMP_Text>().text == "HI", "A threat 20 degrees up reads HI.");
+        Check(((RectTransform)Field(status, "root")).Find("Value1").GetComponent<TMP_Text>().text == "45%", "A constant-text cell shows its bar as the figure.");
+        rows.SetValue(Msg("ils", "ILS", "LOCALIZER LEFT 2 · GLIDESLOPE HIGH", "Caution", .7f), 1);
+        Call(status, "Present", rows, rows.Length, frame, ledger);
+        Check(((RectTransform)Field(status, "root")).Find("Value1").GetComponent<TMP_Text>().text == "70%", "The figure follows the bar when the text is constant.");
+        Capture(canvas, "HUD-status-rich-" + width + ".png");
+        Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
     }
     private static void Cluster(Vector2 size)
     {

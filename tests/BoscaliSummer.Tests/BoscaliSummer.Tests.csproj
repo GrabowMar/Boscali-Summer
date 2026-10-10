@@ -172,6 +172,8 @@
     <Compile Include="..\..\modules\Hud\Domain\HudTactical.cs" Link="Features\Hud\HudTactical.cs" />
     <Compile Include="..\..\modules\Hud\Domain\MissileTracks.cs" Link="Features\Hud\MissileTracks.cs" />
     <Compile Include="..\..\modules\Hud\Domain\DiscoveryGate.cs" Link="Features\Hud\DiscoveryGate.cs" />
+    <Compile Include="..\..\modules\Hud\Domain\HudBoardLayout.cs" Link="Features\Hud\HudBoardLayout.cs" />
+    <Compile Include="..\..\modules\Hud\Domain\BoardFrame.cs" Link="Features\Hud\BoardFrame.cs" />
     <Compile Include="..\..\modules\Progression\Domain\AceHuntHudCopy.cs" Link="Features\Progression\AceHuntHudCopy.cs" />
     <Compile Include="..\..\modules\Radio\Domain\RadioHudCopy.cs" Link="Features\Radio\RadioHudCopy.cs" />
     <Compile Include="..\..\modules\Weather\Visuals\CloudNoise3D.cs" Link="Features\Weather\CloudNoise3D.cs" />

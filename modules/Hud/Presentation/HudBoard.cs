@@ -25,6 +25,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private readonly HudFeedStore store = new HudFeedStore(() => Time.unscaledTime);
         private readonly HudMessage[] snapshot = new HudMessage[HudLayout.MaxRows];
+        private readonly BoardFrame frame = new BoardFrame();
         private readonly ExternalHudEnabler externalHud = new ExternalHudEnabler();
         private readonly WingviewCameraState wingview = new WingviewCameraState();
         private readonly ThirdPersonHudCenter hudCenterProjection = new ThirdPersonHudCenter();
@@ -118,8 +119,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             ShotFeed.Ledger.Expire(now, missileFlying ??= missileTracker.IsLive);
             missileView.Tick(missileTracker.Missiles);
             int count = store.Snapshot(snapshot, HudLayout.MaxRows, AllChannels, true);
-            panel.Present(snapshot, count, ReadSystems(combat), threats.Read(hudAircraft), ShotFeed.Ledger,
-                hudAircraft != null ? now - bootStart : -1f);
+            frame.Systems = ReadSystems(combat);
+            frame.Threat = threats.Read(hudAircraft);
+            frame.BootAge = hudAircraft != null ? now - bootStart : -1f;
+            panel.Present(snapshot, count, frame, ShotFeed.Ledger);
 
             // The cockpit already has its own native tac screen for this feed; the card only
             // earns its space in the external views this module can force the HUD into.

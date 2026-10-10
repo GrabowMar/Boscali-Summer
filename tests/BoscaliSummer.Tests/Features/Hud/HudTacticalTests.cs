@@ -63,6 +63,18 @@ namespace BoscaliSummer.Tests.Features.Hud
             for (int i = 0; i < ShotLedger.Capacity; i++) if (ledger.State(i) == ShotState.InFlight) flying++;
             TestAssert.That(flying == ShotLedger.Capacity, "A full ring keeps every pip in flight");
 
+            var legend = new ShotLedger();
+            TestAssert.That(legend.Legend == "", "No pips, no legend");
+            legend.Launch(1, false, 0f);
+            TestAssert.That(legend.Legend == "SHOT", "A pip in flight reads SHOT");
+            legend.Detonate(1, true, 1f);
+            TestAssert.That(legend.Legend == "HIT", "The latest outcome reads HIT");
+            legend.Launch(2, false, 1.5f);
+            legend.Detonate(2, false, 2f);
+            TestAssert.That(legend.Legend == "MISS", "A later miss replaces it");
+            legend.Expire(10f, null);
+            TestAssert.That(legend.Legend == "", "Resolved pips clear and take the legend with them");
+
             TestAssert.That(ShotRules.Hit(true, false, false), "A dumb bomb that struck armour is a hit even with no target");
             TestAssert.That(ShotRules.Hit(false, true, false), "A proximity burst within 200 m of its target is a hit");
             TestAssert.That(!ShotRules.Hit(false, false, true), "A terrain-only impact is a miss");

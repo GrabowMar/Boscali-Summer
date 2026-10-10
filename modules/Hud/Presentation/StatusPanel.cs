@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Reflection;
 using BoscaliSummer.Modules.Hud.Domain;
 using BoscaliSummer.Core.Contracts;
@@ -13,38 +14,29 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 {
     /// <summary>
     /// The status board under the native weapons panel (<c>HUDCanvas/HMDCenter/TopRightPanel</c>), drawn in the base
-    /// game's own cell language and sized from the native panel itself (2026-10-07):
+    /// game's own cell language and sized from the native panel itself (2026-10-07). Rows, top to bottom, each present only
+    /// when it has something to say (<see cref="HudBoardLayout"/> places them):
     /// <list type="bullet">
-    /// <item>systems row: always-on annunciator lamps of the aircraft's switches (<see cref="HudLamps"/>);</item>
-    /// <item>threat row (after KaceyTronic-RWR): LOCK / SPKE / MSL lamps (<see cref="HudThreats"/>), a threat dial with a
-    /// chevron at the nearest inbound missile (else the locking emitter) and HI/LO, and the shot tracker's pips (after
-    /// NO_Tactitools: in flight, green hit, red miss; <see cref="ShotLedger"/>);</item>
-    /// <item>one outlined cell per live feed: figure, line-art symbol (<see cref="HudGlyphs"/>), label;</item>
-    /// <item>a capacitor-style bar carrying the most severe line's detail and progress.</item>
+    /// <item>systems: always-on annunciator lamps of the aircraft's switches (<see cref="HudLamps"/>);</item>
+    /// <item>threat: LOCK / SPKE / MSL lamps (<see cref="HudThreats"/>), a threat dial with a chevron at the nearest inbound
+    /// missile (else the locking emitter) and HI/LO, and the shot tracker's pips (<see cref="ShotLedger"/>);</item>
+    /// <item>feed cells: one outlined cell per live feed, figure, line-art symbol (<see cref="HudGlyphs"/>), label;</item>
+    /// <item>cue strip: a capacitor-style bar carrying the most relevant line's detail and progress.</item>
     /// </list>
-    /// Every new aircraft gets a lamp test (<see cref="LampTest"/>): lamps sweep on, flash together, then go live, with
-    /// LAMP TEST / SYSTEMS ONLINE on the bar. Sized from the native weapon cell and labels, right-aligned to the visible
-    /// screen edge, flush under the visible native block (cells, capacitor bar) with no gap and
-    /// spanning it edge to edge (content bounds measured live; the container carries
-    /// padding); native's own child, never touches a native object.
+    /// Each tick the board is handed one <see cref="BoardFrame"/>. Every new aircraft gets a lamp test
+    /// (<see cref="LampTest"/>). Sized from the native weapon cell and labels, right-aligned to the visible screen edge,
+    /// flush under the visible native block (content bounds measured live); native's own child, never touches a native
+    /// object. The class is partial: <c>StatusPanel.Rows.cs</c> holds the row writers and painters.
     /// </summary>
-    internal sealed class StatusPanel
+    internal sealed partial class StatusPanel
     {
-        // Design units at native scale 1 (native weapon cell 95 tall).
+        // Design units at native scale 1 (native weapon cell 95 tall); row sizes live in HudBoardLayout.
         private const float NativeCellRef = 95f;
-        private const float Pad = 4f;
-        private const float LampHeight = 24f;
-        private const float LampGap = 3f;
-        private const float CellHeight = 68f;
-        private const float CellGap = 4f;
         private const float CellLine = 1.5f;
-        private const float BarHeight = 6f;
-        private const float StripTextHeight = 20f;
-        private const float PipSize = 11f;
         private const float FlashSeconds = 1.6f;
         /// <summary>One text line is about this many times its point size tall.</summary>
         private const float LineShare = 1.35f;
-        private const int VectorCapacity = 4000;
+        private const int VectorCapacity = 6000;
         // Green-glass ground (AvTokens.Ground) at HUD transparency: the MFD plate hue, see-through.
         private static readonly Color PlateColor = new Color(0.020f, 0.039f, 0.059f, 0.88f);
 
@@ -66,9 +58,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private AvVector vector;
         private RectTransform barTrack;
         private Image barTrackImage, barFill;
-        private TextMeshProUGUI stripLabel, dialLabel;
+        private TextMeshProUGUI stripLabel, dialLabel, shotLegend;
         private TMP_FontAsset font;
         private Material fontMaterial;
+        private float legendSize;
         private RectTransform nativeCell;
         private Image nativeSafety;
         private float unit = 1f;
@@ -81,7 +74,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly Lamp[] threatLamps = new Lamp[HudThreats.Count];
         private readonly int[] lampOrder = new int[HudLamps.Count];
         private readonly Vector3[] corners = new Vector3[4];
-        private readonly System.Collections.Generic.Dictionary<int, bool> graphicCache = new System.Collections.Generic.Dictionary<int, bool>();
+        private readonly Dictionary<int, bool> graphicCache = new Dictionary<int, bool>();
 
         private struct Cell
         {
@@ -93,14 +86,23 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             public float FlashUntil;
         }
 
-        /// <summary>One tick's geometry, shared by Present (text) and Paint (mesh).</summary>
+        /// <summary>One tick's derived state, shared by the row writers (text) and the painters (mesh).</summary>
         private struct Frame
         {
-            public float Width, Height, LampsY, ThreatY, CellsY, LampW, CellW;
+            public BoardGeometry G;
             public int LampCount, Count;
-            public bool Threats, Booting, FlashOn;
-            public float Now, BootAge;
+            public bool Threats, Booting, FlashOn, Strip;
+            public float Now, BootAge, U;
+            public string Caption;
+            public HudMessage Top;
         }
+
+        // Per-tick working state, set by Present and read by the row writers in the partial files.
+        private Frame f;
+        private BoardFrame board;
+        private ShotLedger shots;
+        private int signature;
+        private bool beat;   // something on the board blinks, so the flash phase is part of what it draws
 
         public bool Available => root != null;
 
@@ -144,7 +146,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             float valueSize = Share(ammoLabel != null ? ammoLabel : nameLabel, ValueShare, FallbackValue);
             float labelSize = Share(nameLabel, LabelShare, FallbackLabel);
-            float legendSize = Share(nameLabel, LegendShare, FallbackLegend);
+            legendSize = Share(nameLabel, LegendShare, FallbackLegend);
             float detailSize = Share(nameLabel, DetailShare, FallbackDetail);
 
             var rootObject = new GameObject("BoscaliStatusPanel", typeof(RectTransform));
@@ -158,39 +160,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             plate.color = PlateColor;
             vector = AvVector.Create(root, "Symbols", VectorCapacity);
 
-            for (int i = 0; i < cells.Length; i++)
-            {
-                cells[i].Value = Text("Value" + i, TextAlignmentOptions.TopLeft, valueSize, TextOverflowModes.Overflow);
-                cells[i].Label = Text("Label" + i, TextAlignmentOptions.Bottom, labelSize, TextOverflowModes.Ellipsis);
-                Shrink(cells[i].Label, labelSize);
-                cells[i].Value.gameObject.SetActive(false);
-                cells[i].Label.gameObject.SetActive(false);
-            }
-            for (int i = 0; i < legends.Length; i++)
-            {
-                legends[i] = Text("Lamp" + i, TextAlignmentOptions.Center, legendSize, TextOverflowModes.Overflow);
-                legends[i].gameObject.SetActive(false);
-            }
-            for (int i = 0; i < threatLegends.Length; i++)
-            {
-                threatLegends[i] = Text("Threat" + i, TextAlignmentOptions.Center, legendSize, TextOverflowModes.Overflow);
-                threatLegends[i].gameObject.SetActive(false);
-            }
-            dialLabel = Text("HiLo", TextAlignmentOptions.MidlineLeft, legendSize, TextOverflowModes.Overflow);
-
-            // Capacitor-style readout: a rounded bar with its fill, the words under it.
-            var trackObject = new GameObject("Bar", typeof(RectTransform), typeof(Image));
-            barTrack = (RectTransform)trackObject.transform;
-            barTrack.SetParent(root, false);
-            Pin(barTrack);
-            barTrackImage = trackObject.GetComponent<Image>();
-            barTrackImage.raycastTarget = false;
-            HudSprites.Slice(barTrackImage, HudSprites.Plate);
-            barFill = HudSprites.Child(barTrack, "Fill", HudSprites.Plate, sliced: true);
-            barFill.rectTransform.offsetMin = new Vector2(1.5f, 1.5f);
-            stripLabel = Text("Detail", TextAlignmentOptions.Center, detailSize, TextOverflowModes.Ellipsis);
-            stripLabel.characterSpacing = 4f;
-            Shrink(stripLabel, detailSize);
+            BuildRows(valueSize, labelSize, detailSize);
             lastSignature = 0;
             graphicCache.Clear();
         }
@@ -290,154 +260,66 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (right - left < 10f) { left = dock.rect.xMin; right = Mathf.Min(dock.rect.xMax, VisibleRight()); }
         }
 
+        /// <summary>Whether a dock child draws anything, looked up once per child instead of every tick.</summary>
+        private bool HasGraphic(RectTransform child)
+        {
+            int id = child.GetInstanceID();
+            if (!graphicCache.TryGetValue(id, out bool has)) graphicCache[id] = has = child.GetComponentInChildren<Graphic>() != null;
+            return has;
+        }
+
         /// <summary>
-        /// Refresh the board (10 Hz from the board service). <paramref name="bootAge"/> is seconds since the current
-        /// aircraft appeared (negative = no test). Text writes only on change; the symbol mesh is rebuilt only when
-        /// something it draws changed.
+        /// Refresh the board (10 Hz from the board service). Text writes only on change; the symbol mesh is rebuilt only
+        /// when something it draws changed.
         /// </summary>
-        public void Present(HudMessage[] snapshot, int count, SystemStates systems, in ThreatPicture threat,
-            ShotLedger shots, float bootAge)
+        public void Present(HudMessage[] snapshot, int count, BoardFrame frame, ShotLedger shotLedger)
         {
             if (root == null) return;
+            board = frame;
+            shots = shotLedger;
+            SystemStates systems = frame.Systems;
             if (nativeSafety != null) systems.WeaponSafe = nativeSafety.enabled;
             HudLamps.Fill(systems, lamps);
-            HudThreats.Fill(threat, threatLamps);
-            var f = new Frame { Now = Time.unscaledTime, BootAge = bootAge };
+            HudThreats.Fill(frame.Threat, threatLamps);
+
+            f = new Frame { Now = Time.unscaledTime, BootAge = frame.BootAge, U = unit };
             for (int i = 0; i < lamps.Length; i++) if (lamps[i].Present) lampOrder[f.LampCount++] = i;
             f.Count = Mathf.Min(count, cells.Length);
             f.Threats = f.LampCount > 0;
-            f.Booting = f.Threats && LampTest.Running(bootAge);
-            string caption = f.Threats ? LampTest.Caption(bootAge) : null;
-            if (f.Count <= 0 && !f.Threats)
+            f.Booting = f.Threats && LampTest.Running(f.BootAge);
+            f.Caption = f.Threats ? LampTest.Caption(f.BootAge) : null;
+            f.Top = f.Count > 0 ? snapshot[0] : default;
+            f.Strip = f.Caption != null || (f.Count > 0 && (!string.IsNullOrEmpty(f.Top.Detail) || f.Top.Bar > 0f));
+            f.FlashOn = (int)(f.Now * 5f) % 2 == 0;
+
+            var rows = new BoardRows { Systems = f.LampCount > 0, Threat = f.Threats, Cells = f.Count > 0, Strip = f.Strip };
+            ContentBounds(out float contentLeft, out float contentRight, out float contentBottom);
+            f.G = HudBoardLayout.Compute(rows, contentRight - contentLeft, unit);
+            if (f.G.Height <= 0f)
             {
                 Show(root, false);
                 return;
             }
             Show(root, true);
 
-            float u = unit, pad = Pad * u;
-            f.FlashOn = (int)(f.Now * 5f) % 2 == 0;
-            ContentBounds(out float contentLeft, out float contentRight, out float contentBottom);
-            f.Width = contentRight - contentLeft;
-            HudMessage top = f.Count > 0 ? snapshot[0] : default;
-            bool strip = caption != null || (f.Count > 0 && (!string.IsNullOrEmpty(top.Detail) || top.Bar > 0f));
-
-            float row = (LampHeight + CellGap) * u;
-            f.LampsY = pad;
-            f.ThreatY = f.LampsY + (f.LampCount > 0 ? row : 0f);
-            f.CellsY = f.ThreatY + (f.Threats ? row : 0f);
-            float stripY = f.CellsY + (f.Count > 0 ? (CellHeight + CellGap) * u : 0f);
-            f.Height = stripY + (strip ? (BarHeight + StripTextHeight) * u : 0f) + pad - CellGap * u;
             Vector2 rootPosition = new Vector2(contentRight - dock.rect.xMin, contentBottom - dock.rect.yMin);
             if (root.anchoredPosition != rootPosition) root.anchoredPosition = rootPosition;
-            Vector2 rootSize = new Vector2(f.Width, f.Height);
+            Vector2 rootSize = new Vector2(f.G.Width, f.G.Height);
             if (root.sizeDelta != rootSize) root.sizeDelta = rootSize;
-            f.LampW = f.LampCount > 0 ? (f.Width - pad * 2f - LampGap * u * (f.LampCount - 1)) / f.LampCount : 0f;
 
-            int signature = (int)f.Width * 31 + f.Count * 7 + f.LampCount + (strip ? 3 : 0) +
-                (f.Booting ? (int)(bootAge * 20f) * 101 : 0) + shots.Version * 7919 + ThemeKey();
-            bool beat = false;   // something on the board blinks, so the flash phase is part of what it draws
+            signature = (int)f.G.Width * 31 + f.Count * 7 + f.LampCount + (f.Strip ? 3 : 0) +
+                (f.Booting ? (int)(f.BootAge * 20f) * 101 : 0) + shots.Version * 7919 + ThemeKey();
+            beat = false;
 
-            // Systems row.
-            int total = f.LampCount + HudThreats.Count;
-            for (int i = 0; i < legends.Length; i++)
-            {
-                bool on = i < f.LampCount;
-                Show(legends[i], on);
-                if (!on) continue;
-                Lamp lamp = lamps[lampOrder[i]];
-                if (legends[i].text != lamp.Legend) legends[i].text = lamp.Legend;
-                legends[i].color = LampInk(lamp, LampOn(f, lamp, i, total), f.Booting);
-                beat |= Blinks(lamp);
-                Place(legends[i].rectTransform, pad + i * (f.LampW + LampGap * u), f.LampsY, f.LampW, LampHeight * u);
-                signature = signature * 13 + (int)lamp.State * 5 + lampOrder[i];
-            }
-
-            // Threat row: three lamps the width of system lamps, then the dial, then shot pips.
-            for (int i = 0; i < threatLegends.Length; i++)
-            {
-                Show(threatLegends[i], f.Threats);
-                if (!f.Threats) continue;
-                Lamp lamp = threatLamps[i];
-                if (threatLegends[i].text != lamp.Legend) threatLegends[i].text = lamp.Legend;
-                threatLegends[i].color = LampInk(lamp, LampOn(f, lamp, f.LampCount + i, total), f.Booting);
-                beat |= Blinks(lamp);
-                Place(threatLegends[i].rectTransform, pad + i * (f.LampW + LampGap * u), f.ThreatY, f.LampW, LampHeight * u);
-                signature = signature * 13 + (int)lamp.State * 5 + lamp.Legend.Length;
-            }
-            string hiLo = f.Threats && threat.HasBearing ? HudThreats.HighLow(threat.ElevationDeg) : "";
-            Show(dialLabel, hiLo.Length > 0);
-            if (hiLo.Length > 0)
-            {
-                if (dialLabel.text != hiLo) dialLabel.text = hiLo;
-                dialLabel.color = ThreatColor(threat);
-                Place(dialLabel.rectTransform, DialX(f) + LampHeight * u * 0.5f + 3f * u, f.ThreatY, 26f * u, LampHeight * u);
-            }
-            if (f.Threats && threat.HasBearing)
-                signature = signature * 7 + Mathf.RoundToInt(threat.BearingDeg / 5f) * 3 + (threat.BearingIsMissile ? 1 : 0);
-
-            // Feed cells.
-            f.CellW = f.Count > 0 ? (f.Width - pad * 2f - CellGap * u * (f.Count - 1)) / f.Count : 0f;
-            for (int i = 0; i < cells.Length; i++)
-            {
-                bool on = i < f.Count;
-                Show(cells[i].Value, on);
-                Show(cells[i].Label, on);
-                if (!on) continue;
-
-                HudMessage m = snapshot[i];
-                if (m.Tone == HudTone.Warning && (cells[i].LastTone != HudTone.Warning || cells[i].LastText != m.Text))
-                    cells[i].FlashUntil = f.Now + FlashSeconds;
-                // The figure follows the bar every tick: a constant text ("ILS", "LANCE") must not freeze it.
-                int barPct = Mathf.RoundToInt(Mathf.Clamp01(m.Bar) * 100f);
-                if (cells[i].LastText != m.Text || cells[i].LastBarPct != barPct)
-                {
-                    HudCellText.Resolve(m.Text, m.Bar, out string label, out string value);
-                    cells[i].Value.text = value;
-                    cells[i].Label.text = label;
-                    cells[i].LastText = m.Text;
-                    cells[i].LastBarPct = barPct;
-                }
-                cells[i].LastTone = m.Tone;
-                Color tone = ToneColor(m.Tone);
-                cells[i].Value.color = tone;
-                cells[i].Label.color = tone;
-                float x = pad + i * (f.CellW + CellGap * u);
-                // Boxes are at least one line of their own font tall: a box shorter than its line elides the whole text.
-                float valueH = Mathf.Max(24f * u, cells[i].Value.fontSize * LineShare);
-                float labelH = Mathf.Max(17f * u, cells[i].Label.fontSize * LineShare);
-                Place(cells[i].Value.rectTransform, x + 5f * u, f.CellsY + 2f * u, f.CellW - 8f * u, valueH);
-                Place(cells[i].Label.rectTransform, x + 3f * u, f.CellsY + (CellHeight - 2f) * u - labelH, f.CellW - 6f * u, labelH);
-
-                bool flashing = f.Now < cells[i].FlashUntil;
-                beat |= flashing;
-                signature = signature * 17 + (m.Text?.GetHashCode() ?? 0) + (int)m.Tone * 3 + (m.Notice ? 1 : 0)
-                    + (m.Channel?.GetHashCode() ?? 0) + (flashing ? 5 : 0);
-            }
-
-            // Capacitor bar: the lamp test caption while it runs, else the top line's detail.
-            Show(barTrack, strip);
-            Show(stripLabel, strip);
-            if (strip)
-            {
-                Place(barTrack, pad, stripY, f.Width - pad * 2f, BarHeight * u);
-                Place(stripLabel.rectTransform, pad, stripY + BarHeight * u, f.Width - pad * 2f, StripTextHeight * u);
-                Color tone = caption != null ? Ink : ToneColor(top.Tone);
-                barTrackImage.color = new Color(tone.r * 0.12f, tone.g * 0.12f, tone.b * 0.12f, 0.9f);
-                float fill = caption != null ? Mathf.Clamp01(bootAge / LampTest.Online) : Mathf.Clamp01(top.Bar);
-                barFill.enabled = fill > 0f;
-                barFill.rectTransform.anchorMax = new Vector2(Mathf.Max(fill, 0.02f), 1f);
-                barFill.rectTransform.offsetMax = new Vector2(-1.5f, -1.5f);
-                barFill.color = new Color(tone.r, tone.g, tone.b, 0.85f);
-                string words = caption ?? (string.IsNullOrEmpty(top.Detail) ? "" : top.Detail.ToUpperInvariant());
-                if (stripLabel.text != words) stripLabel.text = words;
-                stripLabel.color = tone;
-            }
+            PresentSystems();
+            PresentThreat();
+            PresentCells(snapshot);
+            PresentStrip();
 
             if (beat) signature = signature * 3 + (f.FlashOn ? 1 : 2);
             if (signature == lastSignature) return;
             lastSignature = signature;
-            Paint(snapshot, f, threat, shots);
+            Paint(snapshot);
         }
 
         /// <summary>A lit lamp that flashes (state in transition, or a warning) needs the beat in the mesh key.</summary>
@@ -447,128 +329,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private static int ThemeKey()
         {
             unchecked { return Ink.GetHashCode() * 31 + ThemeManager.Active.ColorTheme.Warning.GetHashCode() * 7 + Alert.GetHashCode(); }
-        }
-
-        /// <summary>Whether a dock child draws anything, looked up once per child instead of every tick.</summary>
-        private bool HasGraphic(RectTransform child)
-        {
-            int id = child.GetInstanceID();
-            if (!graphicCache.TryGetValue(id, out bool has)) graphicCache[id] = has = child.GetComponentInChildren<Graphic>() != null;
-            return has;
-        }
-
-        private float DialX(in Frame f) => Pad * unit + 3f * (f.LampW + LampGap * unit) + LampHeight * unit * 0.5f + 2f * unit;
-
-        /// <summary>Lamp tiles, threat dial, shot pips, cell outlines and line-art in one mesh. Origin bottom-left, +Y up.</summary>
-        private void Paint(HudMessage[] snapshot, in Frame f, in ThreatPicture threat, ShotLedger shots)
-        {
-            float u = unit, pad = Pad * u;
-            AvQuadBuffer b = vector.Buffer;
-            b.Clear();
-            int total = f.LampCount + HudThreats.Count;
-
-            for (int i = 0; i < f.LampCount; i++)
-                LampTile(b, lamps[lampOrder[i]], LampOn(f, lamps[lampOrder[i]], i, total), f.Booting,
-                    pad + i * (f.LampW + LampGap * u), f.Height - f.LampsY, f.LampW);
-
-            if (f.Threats)
-            {
-                float rowTop = f.Height - f.ThreatY, rowMid = rowTop - LampHeight * u * 0.5f;
-                for (int i = 0; i < HudThreats.Count; i++)
-                    LampTile(b, threatLamps[i], LampOn(f, threatLamps[i], f.LampCount + i, total), f.Booting,
-                        pad + i * (f.LampW + LampGap * u), rowTop, f.LampW);
-
-                // Threat dial: own aircraft at the centre, nose up, a chevron on the rim at the threat's bearing.
-                float cx = DialX(f), r = LampHeight * u * 0.46f;
-                AvStrokes.Ring(b, cx, rowMid, r, 24, 1f * u, Ink.ToRgba().WithAlpha(0.45f));
-                AvStrokes.Line(b, cx, rowMid - r * 0.35f, cx, rowMid + r * 0.35f, 1f * u, Ink.ToRgba().WithAlpha(0.6f));
-                AvStrokes.Line(b, cx - r * 0.3f, rowMid + r * 0.05f, cx + r * 0.3f, rowMid + r * 0.05f, 1f * u, Ink.ToRgba().WithAlpha(0.6f));
-                if (threat.HasBearing)
-                {
-                    float a = threat.BearingDeg * Mathf.Deg2Rad;
-                    float px = cx + Mathf.Sin(a) * r, py = rowMid + Mathf.Cos(a) * r;
-                    AvStrokes.Chevron(b, px, py, 7f * u, 270f - threat.BearingDeg, 1.75f * u, ThreatColor(threat).ToRgba()); // tip inward
-                }
-
-                // Shot pips: diamonds for missiles, circles for bombs; hollow in flight, filled green hit, red cross miss.
-                float pipX = DialX(f) + r + 30f * u, step = PipSize * u + 3f * u;
-                int slot = 0;
-                for (int i = 0; i < ShotLedger.Capacity && pipX + slot * step < f.Width - pad; i++)
-                {
-                    ShotState state = shots.State(i);
-                    if (state == ShotState.Empty) continue;
-                    float x = pipX + slot * step + PipSize * u * 0.5f, s = PipSize * u * 0.5f;
-                    Color c = state == ShotState.Hit ? Ink : state == ShotState.Miss ? Alert : Ink;
-                    Rgba ink = c.ToRgba();
-                    if (shots.IsBomb(i)) AvStrokes.Ring(b, x, rowMid, s * 0.8f, 12, (state == ShotState.Hit ? s * 0.8f : 1.25f * u), ink);
-                    else if (state == ShotState.Hit) AvStrokes.Fill(b, x - s * 0.55f, rowMid - s * 0.55f, s * 1.1f, s * 1.1f, ink);
-                    else AvStrokes.Diamond(b, x, rowMid, s, 1.25f * u, ink);
-                    if (state == ShotState.Miss)
-                    {
-                        AvStrokes.Line(b, x - s * 0.7f, rowMid - s * 0.7f, x + s * 0.7f, rowMid + s * 0.7f, 1.5f * u, ink);
-                        AvStrokes.Line(b, x - s * 0.7f, rowMid + s * 0.7f, x + s * 0.7f, rowMid - s * 0.7f, 1.5f * u, ink);
-                    }
-                    slot++;
-                }
-            }
-
-            float top = f.Height - f.CellsY;
-            for (int i = 0; i < f.Count; i++)
-            {
-                HudMessage m = snapshot[i];
-                Color toneColor = ToneColor(m.Tone);
-                bool flashing = f.Now < cells[i].FlashUntil;
-                Rgba ink = toneColor.ToRgba().WithAlpha(flashing && !f.FlashOn ? 0.3f : 1f);
-                float x0 = pad + i * (f.CellW + CellGap * u), x1 = x0 + f.CellW;
-                float y1 = top, y0 = top - CellHeight * u;
-
-                if (m.Tone != HudTone.Info)
-                    AvStrokes.Fill(b, x0, y0, f.CellW, CellHeight * u, toneColor.ToRgba().WithAlpha(flashing && f.FlashOn ? 0.28f : 0.12f));
-                float line = (m.Tone == HudTone.Warning ? CellLine + 1f : CellLine) * u;
-                if (m.Notice) DashedRect(b, x0, y0, x1, y1, line, ink, u);
-                else Rect4(b, x0, y0, x1, y1, line, ink);
-                // MFD card rail: 2 px tone strip across the cell top, the green-glass idiom.
-                AvStrokes.Fill(b, x0, y1 - 2f * u, f.CellW, 2f * u, ink);
-
-                float size = Mathf.Min(f.CellW - 26f * u, (CellHeight - 38f) * u);
-                float gx = x0 + (f.CellW - size) * 0.5f + 6f * u, gy = y0 + 18f * u;
-                foreach (float[] poly in HudGlyphs.For(m.Channel))
-                    for (int p = 0; p + 3 < poly.Length; p += 2)
-                        AvStrokes.Line(b, gx + poly[p] * size, gy + poly[p + 1] * size,
-                            gx + poly[p + 2] * size, gy + poly[p + 3] * size, 1.75f * u, ink, 0.6f * u);
-            }
-            BufferGuard.Check(b, "status board");
-            vector.Commit();
-        }
-
-        private void LampTile(AvQuadBuffer b, Lamp lamp, bool lit, bool booting, float x0, float y1, float w)
-        {
-            float u = unit, y0 = y1 - LampHeight * u;
-            Color tone = booting ? Ink : LampTone(lamp.State);
-            if (lit) AvStrokes.Fill(b, x0, y0, w, LampHeight * u, tone.ToRgba().WithAlpha(0.30f));
-            Rect4(b, x0, y0, x0 + w, y1, 1f * u, (lit ? tone : Ink).ToRgba().WithAlpha(lit ? 0.95f : 0.3f));
-        }
-
-        /// <summary>Lit for the lamp test's pattern while it runs, else by its own state (blinking on the off beat when flashing).</summary>
-        private static bool LampOn(in Frame f, Lamp lamp, int index, int total) =>
-            f.Booting ? LampTest.Lit(index, total, f.BootAge)
-            : lamp.State != LampState.Dark && !((lamp.Flash || lamp.State == LampState.Warning) && !f.FlashOn);
-
-        private static void Rect4(AvQuadBuffer b, float x0, float y0, float x1, float y1, float w, Rgba c)
-        {
-            AvStrokes.Line(b, x0, y0, x1, y0, w, c);
-            AvStrokes.Line(b, x1, y0, x1, y1, w, c);
-            AvStrokes.Line(b, x1, y1, x0, y1, w, c);
-            AvStrokes.Line(b, x0, y1, x0, y0, w, c);
-        }
-
-        private static void DashedRect(AvQuadBuffer b, float x0, float y0, float x1, float y1, float width, Rgba c, float u)
-        {
-            float dash = 6f * u, gap = 4f * u;
-            AvStrokes.DashedLine(b, x0, y0, x1, y0, dash, gap, width, c);
-            AvStrokes.DashedLine(b, x1, y0, x1, y1, dash, gap, width, c);
-            AvStrokes.DashedLine(b, x1, y1, x0, y1, dash, gap, width, c);
-            AvStrokes.DashedLine(b, x0, y1, x0, y0, dash, gap, width, c);
         }
 
         private static Color Ink => ThemeManager.Active.ColorTheme.AllClear;
@@ -617,16 +377,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             canvasRect = null;
             plate = null;
             vector = null;
-            barTrack = null;
-            barTrackImage = barFill = null;
-            stripLabel = dialLabel = null;
             nativeCell = null;
             nativeSafety = null;
+            board = null;
+            shots = null;
             lastSignature = 0;
             graphicCache.Clear();
-            for (int i = 0; i < cells.Length; i++) cells[i] = default;
-            for (int i = 0; i < legends.Length; i++) legends[i] = null;
-            for (int i = 0; i < threatLegends.Length; i++) threatLegends[i] = null;
+            DestroyRows();
         }
     }
 }
