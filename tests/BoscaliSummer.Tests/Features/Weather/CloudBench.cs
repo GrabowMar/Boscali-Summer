@@ -112,6 +112,8 @@ public sealed class CloudBench : MonoBehaviour
         File.WriteAllText("scene-poses.csv", "scene,x,y,z,yaw,pitch,travelX,travelY,travelZ\n");
         int settleFrames = int.TryParse(Environment.GetEnvironmentVariable("CLOUD_BENCH_SETTLE"), out int settle) ? Math.Max(4, settle) : 48;
         int measuredFrames = int.TryParse(Environment.GetEnvironmentVariable("CLOUD_BENCH_FRAMES"), out int measured) ? Math.Max(12, measured) : 48;
+        // CLOUD_BENCH_TAPE: "" the field's own one-keyframe tape, "texture" the same sky as a 4096-texel tape (the texture path), "ladder" every rung half-way to the next, "ramp" a ramped tape, "mix" the slab worst case.
+        string tapeMode = Environment.GetEnvironmentVariable("CLOUD_BENCH_TAPE") ?? "";
         byte[] noiseBytes = CloudNoise3D.Generate(WeatherVolumeDressingNoise.Size, 47);
         int n3 = WeatherVolumeDressingNoise.Size;
         var pixels = new Color32[n3 * n3 * n3];
@@ -231,8 +233,10 @@ public sealed class CloudBench : MonoBehaviour
             const float time = 900f;
             var field = new WeatherField();
             field.Build(key, time, HalfExtent, HalfExtent, 13f);
+            TapeFixture fixture = TapeVariant(tapeMode, field);
+            if (fixture != null) field.UseFixtureTape(fixture.Sampler, fixture.Frame);
             var watch = Stopwatch.StartNew();
-            CloudMaps maps = CloudMaps.Build(key, time, HalfExtent, HalfExtent, 13f, 105000f, 315000f);
+            CloudMaps maps = CloudMaps.Build(key, time, HalfExtent, HalfExtent, 13f, 105000f, 315000f, fixture);
             long mapMs = watch.ElapsedMilliseconds;
             long cookieMs = CookieMs(noiseBytes, n3, field);
             Texture2D near = Map(maps.Near, CloudMaps.NearSize), nearProfiles = Map(maps.NearProfiles, CloudMaps.NearSize);
@@ -333,7 +337,7 @@ public sealed class CloudBench : MonoBehaviour
                 outer.BackgroundCover *= farFade; outer.FrontCover *= farFade; outer.CellShape *= farFade;
                 return nearWeight <= 0f ? outer : CloudBodies.BlendMaps(outer, nearPoint, nearWeight);
             }
-            var bodies = new CloudBodies(noiseBytes, n3, field.Params, field.PrevailingHeading, field.Split, 0f,
+            var bodies = new CloudBodies(noiseBytes, n3, field.Tape, field.Frame, field.PrevailingHeading, field.Split, 0f,
                 field, null, true, SampleDisplayed);
             camera.transform.position = s.Camera;
             camera.transform.rotation = Quaternion.Euler(-s.Pitch, yaw, 0f);
@@ -450,7 +454,7 @@ public sealed class CloudBench : MonoBehaviour
     {
         const int cookie = 256, stride = 4, samples = 14;
         const float span = 48000f;
-        var body = new CloudBodies(noise, size, field.Params, field.PrevailingHeading, field.Split, 0f, field);
+        var body = new CloudBodies(noise, size, field.Tape, field.Frame, field.PrevailingHeading, field.Split, 0f, field);
         Vector3 direction = new Vector3(0.35f, -0.72f, 0.6f).normalized;
         Vector3 right = Vector3.Cross(Vector3.up, direction).normalized, up = Vector3.Cross(direction, right);
         float baseY = field.Params.CloudBase;
@@ -475,6 +479,66 @@ public sealed class CloudBench : MonoBehaviour
             }
         if (sink < 0f) UnityEngine.Debug.Log("cookie sink " + sink); // keeps the loop live
         return (long)(timer.Elapsed.TotalMilliseconds * ((cookie / stride) * (cookie / stride) / 4096.0) * 16.0);
+    }
+
+    /// <summary>The tape the bench renders with. "" is the field's own one-keyframe tape (null here: its low genus rides in uniforms).
+    /// "texture" is the same sky as a 4096-texel tape with a 10 km meander, so the texture path runs. "ladder" is the same sky with
+    /// every rung half-way to the next, so the shader blends two rungs at every sample (the worst case of the feature ladder).
+    /// "ramp" is the scene's own sky joined to the same sky a rung or more away by a 12 km ramp through the origin, bent by a 10 km meander.
+    /// "mix" is the worst-case morphology mix: both thin layers carry all four morphologies at weight 0.25.</summary>
+    private static TapeFixture TapeVariant(string mode, WeatherField field)
+    {
+        if (mode == "texture")
+        {
+            // B': the sky B renders, as a 4096-texel tape of that one sky. IsConstant is false, so BindTape sends no uniforms and the shader
+            // fetches and lerps three low-genus rows per sample and evaluates TapeS with its sines. The origin sits inside the tape (s about
+            // 1500 km of 3000), so both texels of a lerp are fetched, as on a real tape.
+            SkyParams sky = field.Params;
+            return new TapeFixture(BakedTape.TwoKeyframes(sky, sky, 1500000f, 12000f), new TapeFrame(90f, 1500000f, 10000f, 80000f, 0.7f));
+        }
+        if (mode == "ladder")
+        {
+            SkyParams sky = field.Params;
+            sky.LobeRung += 0.5f;
+            sky.Mid.PeriodRung += 0.5f;
+            sky.High.PeriodRung += 0.5f;
+            var tape = new BakedTape(1);
+            tape.SetConstant(sky);
+            return new TapeFixture(tape, field.Frame);
+        }
+        if (mode == "ramp")
+        {
+            // The scene's own sky on one side and the same sky a rung or more away on the other (two lobe rungs, three period rungs,
+            // a 15 % higher base), joined by a 12 km ramp through the origin and bent by a 10 km meander.
+            SkyParams left = field.Params, right = left;
+            right.LobeRung += 2f;
+            right.Mid.PeriodRung += 3f;
+            right.High.PeriodRung += 3f;
+            right.CloudBase *= 1.15f;
+            // The thin layers' aspect and ripple wavelength change across the ramp too (the bake holds them at the nearer side, spec 6).
+            right.Mid.Aspect = left.Mid.Aspect * 0.6f; right.High.Aspect = left.High.Aspect * 0.6f;
+            right.Mid.RippleWavelength = left.Mid.RippleWavelength * 0.7f; right.High.RippleWavelength = left.High.RippleWavelength * 0.7f;
+            return new TapeFixture(BakedTape.TwoKeyframes(left, right, 1500000f, 12000f), new TapeFrame(90f, 1500000f, 10000f, 80000f, 0.7f));
+        }
+        if (mode == "mix")
+        {
+            // The worst-case morphology mix: both thin layers carry all four morphologies at weight 0.25 and a curl.
+            SkyParams sky = field.Params;
+            sky.Mid = SkyArchetypes.Layer(LayerKind.AcFloccus).ToLayer(0.6f);
+            sky.High = SkyArchetypes.Layer(LayerKind.CirrusSpissatus).ToLayer(0.5f);
+            for (int i = 0; i < 2; i++)
+            {
+                SkyLayer layer = sky.Layer(i);
+                layer.Cells = layer.Ripples = layer.Streaks = layer.Veil = 0.25f;
+                layer.Curl = 0.8f; layer.Aspect = 3f; layer.RippleWavelength = 900f;
+                if (i == 0) sky.Mid = layer; else sky.High = layer;
+            }
+            SkyDerived.Apply(ref sky);
+            var tape = new BakedTape(1);
+            tape.SetConstant(sky);
+            return new TapeFixture(tape, field.Frame);
+        }
+        return null;
     }
 
     private static void AddMapViews(List<Scene> scenes)

@@ -2,12 +2,17 @@
 # builder, the uniforms and the shipped cloud shaders (render-pipeline tag stripped so the
 # built-in pipeline runs them), renders fixed scenes, and prints GPU-synchronized wall ms per mode.
 # -OldShader: a previous FlightCloud.shader to time as "old" beside the current one.
+# -Tape: "" the field's own one-keyframe tape (the perf baseline B, live path), "texture" the same sky as a 4096-texel tape (B', the texture path),
+#   "ladder" every rung half-way to the next (the baseline C),
+#   "ramp" a tape whose genus and layers change across a 12 km ramp,
+#   "mix" both thin layers with all four morphologies at weight 0.25 (the worst case of the slab).
 param(
     [string]$Unity = 'C:/Program Files/Unity/Hub/Editor/2022.3.62f3/Editor/Unity.exe',
     [string]$OldShader = '',
     [string]$Only = '',
     [switch]$Variant,
     [switch]$Static,
+    [ValidateSet('', 'texture', 'ladder', 'ramp', 'mix')][string]$Tape = '',
     [int]$SettleFrames = 48,
     [int]$MeasuredFrames = 48,
     [string]$EvidenceDir = '',
@@ -51,6 +56,7 @@ $env:CLOUD_BENCH_STATIC = if ($Static) { '1' } else { '' }
 $env:CLOUD_BENCH_SETTLE = [string]$SettleFrames
 $env:CLOUD_BENCH_FRAMES = [string]$MeasuredFrames
 $env:CLOUD_BENCH_POSES = $PoseFile
+$env:CLOUD_BENCH_TAPE = $Tape
 if ($Variant) { $env:CLOUD_BENCH_VARIANT = "1" } else { $env:CLOUD_BENCH_VARIANT = "" }
 $player = Invoke-UnityPlayer "$fixture/Player/CloudBench.exe" @('-batchmode', '-logFile', ('"' + "$fixture/player.log" + '"')) $fixture `
     -TimeoutSeconds 900 -TimeoutMessage "Bench timeout: $fixture/player.log"
