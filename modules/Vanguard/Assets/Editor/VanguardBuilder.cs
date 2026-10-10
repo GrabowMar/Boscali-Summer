@@ -67,6 +67,10 @@ namespace Vanguard
                 Description = "Fiber-towed decoy on an automatic reel: 60 m of line, 150 m or 250 m once a radar missile tracks you. SUPPRESS slows turret locks, DEFLECT bends missile aimpoints toward it, SEDUCE takes missiles over. Fire again to CUT it loose: it keeps them for 20 s. The fiber snaps above 7 g or below 50 m.",
                 Mass = 20, Yield = 2, Cost = 0.05f, Value = 3, RadarSize = 1.5f, Thrust = 0, BurnTime = 1, GLimit = 30, TurnRate = 200,
                 Racks = new string[0] }, // ALE-X gets its own two-decoy pod, see AleXPod()
+            new Spec { Key = "VG_Kestrel", Name = "KS-01 KESTREL Recon Glider", Short = "KESTREL", Model = "Kestrel",
+                Description = "Unarmed recon glider launched from a cargo hold on a sled. Flies at 80 m/s to your designated target (else a point ahead) and orbits 800 m around it, 1000 m above, for five minutes. Enemy ground units and ships within 5 km of the orbit stay on your side's map, and its laser holds your target so laser-guided weapons can home on it. Designate a new ground target to move the orbit.",
+                Mass = 80, Yield = 0, Cost = 0.8f, Value = 20, RadarSize = 0.05f, Thrust = 600, BurnTime = 900, GLimit = 4, TurnRate = 30,
+                Racks = new string[0] }, // hold-only sled mount "VG_Kestrel_Sled", see Kestrel() in VanguardBuilder.kestrel.cs
         };
 
         public static void Run()
@@ -84,6 +88,7 @@ namespace Vanguard
             AleXPod(infos["VG_AleX"], materials);
             AlexDress(materials);
             SkywellKit(materials);
+            Kestrel(infos["VG_Kestrel"], materials); // VanguardBuilder.kestrel.cs
             Lance(materials);
             AssetDatabase.SaveAssets();
             ValidateOperationalPrefabs();
@@ -344,7 +349,7 @@ namespace Vanguard
                 r.transform.SetParent(detail.transform, true);
             }
             if (renderers.Length != details.Count * 3) throw new Exception(model + " requires three meshes per LOD part");
-            Transform kite = model == "SkywellKit" ? details.Values.Single(r => r.name == "Kite").transform : null;
+            Transform kite = model == "SkywellKit" || model == "Kestrel" ? details.Values.Single(r => r.name == "Kite").transform : null;
             AddLods(visual.transform, renderers.Where(r => kite == null || !r.transform.IsChildOf(kite)).ToArray());
             if (kite != null)
             {
@@ -353,7 +358,7 @@ namespace Vanguard
                 palletGroup.size = Mathf.Max(palletGroup.size, 10f / LargestScale(visual.transform));
                 AddLods(kite, renderers.Where(r => r.transform.IsChildOf(kite)).ToArray());
                 var kiteGroup = kite.GetComponent<LODGroup>();
-                kiteGroup.size = Mathf.Max(kiteGroup.size, 18f / LargestScale(kite));
+                kiteGroup.size = Mathf.Max(kiteGroup.size, (model == "Kestrel" ? 8f : 18f) / LargestScale(kite));
             }
         }
 
@@ -435,7 +440,7 @@ namespace Vanguard
                 RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
                 RenderSettings.ambientLight = new Color(0.40f, 0.44f, 0.50f);
             }
-            // Every Spec model (MaldX, MaldJ, Remora, HawcX, AegisInterceptor, Glaive2A, Glaive2S, Orca, AleX) plus the bespoke pods.
+            // Every Spec model (MaldX, MaldJ, Remora, HawcX, AegisInterceptor, Glaive2A, Glaive2S, Orca, AleX, Kestrel) plus the bespoke pods.
             var models = Missiles.Select(s => s.Model).Concat(new[] { "AegisPod", "AleXPod", "SkywellKit", "Lance" }).Distinct().ToArray();
             var reports = new List<ModelCheck>();
             foreach (string model in models)
@@ -459,6 +464,7 @@ namespace Vanguard
                     if (texture.width != atlas || texture.height != atlas) throw new Exception(model + " texture density: " + channel);
                 }
                 if (model == "SkywellKit") ValidateSkywellKit(visual); // VanguardBuilder.skywell.cs
+                if (model == "Kestrel") ValidateKestrel(visual); // VanguardBuilder.kestrel.cs
                 if (model == "MaldX" || model == "Glaive2S" || model == "Orca") // MaldJ: ValidateMaldJ; Glaive2A: ValidateSentinel
                 {
                     Transform left = renderers.Single(r => r.name == "WingL").transform;
@@ -801,8 +807,14 @@ namespace Vanguard
             Edit(station, s => P(s, "info").objectReferenceValue = info);
             Edit(mount, s => P(s, "ammo").intValue = 1);
             SaveMount(g, mount, json, info, donor);
-            // Third-party Aryx MC-260 Chimera cargo bays (as AirborneBuilder); Blueprinter only warns if it is absent.
-            // Carriers are exactly the VL-49 Tarantula's cargo / mission bays and the Aryx Chimera (not the donor's Ibis).
+            CargoHoldCarriers(json, "SKYWELL");
+        }
+
+        // Third-party Aryx MC-260 Chimera cargo bays (as AirborneBuilder); Blueprinter only warns if it is absent.
+        // Carriers are exactly the VL-49 Tarantula's cargo / mission bays and the Aryx Chimera (not the donor's Ibis).
+        // Replaces the Op SaveMount() generated for the donor rack; shared by SKYWELL and HAMILCAR (hold-only stores).
+        static void CargoHoldCarriers(string json, string label)
+        {
             var op = Load<OpAddWeaponToHardpoint>(R + "Op_" + json + ".asset");
             op.aircraft.Clear();
             var tarantula = Load<AircraftDefinition>(D + "MonoBehaviour/QuadVTOL1_PLACEHOLDER.asset");
@@ -814,7 +826,7 @@ namespace Vanguard
             if (!op.aircraft.Any(a => a.aircraftJsonKey == "Aryx_CargoPlane1"))
                 op.aircraft.Add(new OpAddWeaponToHardpoint.AircraftTarget { aircraftJsonKey = "Aryx_CargoPlane1", hardpointIndices = new List<int> { 1, 2, 3 } });
             EditorUtility.SetDirty(op);
-            Debug.Log("[Vanguard] SKYWELL carriers: " + string.Join(", ", op.aircraft.Select(a => a.aircraftJsonKey + ":" + string.Join("/", a.hardpointIndices))));
+            Debug.Log("[Vanguard] " + label + " carriers: " + string.Join(", ", op.aircraft.Select(a => a.aircraftJsonKey + ":" + string.Join("/", a.hardpointIndices))));
         }
 
         static void SaveMount(GameObject g, WeaponMount mount, string json, WeaponInfo info, params string[] donors)

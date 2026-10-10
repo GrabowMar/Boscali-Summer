@@ -78,6 +78,7 @@ namespace BoscaliSummer.Vanguard
                 case "rxstatus": return SkywellRxStatus(args);
                 case "status": return Status(lead);
                 case "orca": return Orca(args, lead);
+                case "kestrel": return Kestrel(args, lead);
                 case "showcase": return Showcase(lead);
                 case "view": return View(Text(args, "angle") ?? "front");
                 default: return Failure("VanguardAutomation", "Step", "unknown action");
