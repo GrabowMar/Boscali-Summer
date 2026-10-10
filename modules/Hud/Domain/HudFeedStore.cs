@@ -14,9 +14,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
     }
 
     /// <summary>
-    /// Bounded data handles. Acquiring or updating a feed never creates Unity objects. Held lines are ranked by tone, then by
-    /// <see cref="CuePriority"/> for the pilot's situation, then by when they were acquired; transient notices go to the
-    /// <see cref="NoticeTicker"/>, never to the cells.
+    /// Bounded data handles. Acquiring or updating a feed never creates Unity objects. Since the TAC BOARD (HUD v8) nothing draws
+    /// held lines: they are signals that a feed is live (<see cref="HasLive"/>) until each owner publishes a typed scope feed
+    /// instead; transient notices go to the <see cref="NoticeTicker"/>.
     /// </summary>
     internal sealed class HudFeedStore
     {
@@ -56,39 +56,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>The notice the ticker shows now, if any.</summary>
         public bool Ticker(out TickerLine line) => ticker.Peek(clock(), out line);
 
-        /// <summary>
-        /// The live held lines, most important first: severity, then the context rank, then acquisition order.
-        /// Returns how many were written (at most <paramref name="limit"/>).
-        /// </summary>
-        public int Snapshot(HudMessage[] output, int limit, CueContext context)
-        {
-            int count = 0;
-            limit = Math.Min(output.Length, Math.Max(0, limit));
-            float now = clock();
-            foreach (Line line in lines)
-                if (line.Live(now))
-                {
-                    HudMessage message = line.Message;
-                    message.Channel = line.Channel;
-                    Insert(output, ref count, limit, message, CuePriority.Rank(line.Channel, context), context);
-                }
-            return count;
-        }
-        private static void Insert(HudMessage[] output, ref int count, int limit, HudMessage message, int rank, CueContext context)
-        {
-            int index = 0;
-            while (index < count && Before(output[index], message, rank, context)) index++;
-            if (index >= limit) return;
-            count = Math.Min(limit, count + 1);
-            for (int i = count - 1; i > index; i--) output[i] = output[i - 1];
-            output[index] = message;
-        }
-        /// <summary>True when the already-placed <paramref name="placed"/> stays ahead of <paramref name="incoming"/> (ties keep acquisition order).</summary>
-        private static bool Before(in HudMessage placed, in HudMessage incoming, int incomingRank, CueContext context)
-        {
-            if (placed.Tone != incoming.Tone) return placed.Tone > incoming.Tone;
-            return CuePriority.Rank(placed.Channel, context) >= incomingRank;
-        }
         private static string Clip(string value, int max) => string.IsNullOrEmpty(value) ? "" : value.Length <= max ? value : value.Substring(0, max - 1) + "…";
         private sealed class Line : IHudLine
         {

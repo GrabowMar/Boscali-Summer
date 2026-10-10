@@ -45,8 +45,13 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                     fieldName = field != null ? field.name : null;
                 }
             }
-            float distance = field != null && field.center != null
-                ? Vector3.Distance(aircraft.transform.position, field.center.position) : float.NaN;
+            float distance = float.NaN, relative = 0f;
+            if (field != null && field.center != null)
+            {
+                distance = Vector3.Distance(aircraft.transform.position, field.center.position);
+                Vector3 local = aircraft.transform.InverseTransformPoint(field.center.position);
+                relative = (Mathf.Atan2(local.x, local.z) * Mathf.Rad2Deg + 360f) % 360f;
+            }
 
             float game = Time.time;
             float dt = float.IsNaN(lastTime) ? 0f : Mathf.Min(game - lastTime, 1f);
@@ -65,6 +70,9 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 Joker = endurance.Joker,
                 Field = fieldName,
                 FieldM = distance,
+                FieldRelDeg = relative,
+                HasNeed = endurance.HasNeed,
+                Need = endurance.Need,
                 Tone = FuelEndurance.Tone(level, endurance.Bingo, endurance.Joker),
             };
         }

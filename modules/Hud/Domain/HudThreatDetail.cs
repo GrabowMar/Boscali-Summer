@@ -32,7 +32,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
     internal static class ThreatRank
     {
         /// <summary>Detail lines the board shows.</summary>
-        public const int MaxRows = HudBoardLayout.MaxDetailRows;
+        public const int MaxRows = 2;
         /// <summary>Closing slower than this has no meaningful time to impact.</summary>
         public const float MinClosureMps = 15f;
         /// <summary>A time to impact beyond this is not shown.</summary>

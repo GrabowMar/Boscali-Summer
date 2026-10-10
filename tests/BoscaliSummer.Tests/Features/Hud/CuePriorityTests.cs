@@ -2,45 +2,53 @@ using BoscaliSummer.Modules.Hud.Domain;
 
 namespace BoscaliSummer.Tests.Features.Hud
 {
-    /// <summary>Which feed wins the cue strip in which situation.</summary>
+    /// <summary>Which page the TAC BOARD scope shows: priority, the missile cam, the dwell and the pips.</summary>
     internal static class CuePriorityTests
     {
+        private static ushort Live(params ScopePage[] pages)
+        {
+            ushort mask = 0;
+            foreach (ScopePage p in pages) mask |= CuePriority.Bit(p);
+            return mask;
+        }
+
         public static void Run()
         {
-            CueContext none = CueContext.None;
-            TestAssert.That(CuePriority.Rank("missile", none) > CuePriority.Rank("radio", none), "Without a context a missile preview outranks the radio line");
-            TestAssert.That(CuePriority.Rank("nobody-declared-this", none) == CuePriority.Default, "An unknown feed ranks at the default");
+            TestAssert.Eq((int)ScopePage.Systems, CuePriority.PageCount - 1, "SYSTEMS is the lowest page");
+            TestAssert.Eq(CuePriority.Rank(ScopePage.Threat), 90, "THREAT ranks 90");
+            TestAssert.Eq(CuePriority.Rank(ScopePage.Systems), 10, "SYSTEMS ranks 10");
+            TestAssert.That(CuePriority.Rank(ScopePage.Shot) > CuePriority.Rank(ScopePage.MissileCam) && CuePriority.Rank(ScopePage.MissileCam) > CuePriority.Rank(ScopePage.Approach), "The prototype order: shot, cam, approach");
 
-            CueContext approach = CuePriority.Detect(true, false, false, false);
-            TestAssert.That(CuePriority.Rank("ils", approach) > CuePriority.Rank("theater", approach) &&
-                CuePriority.Rank("ils", approach) > CuePriority.Rank("support", approach) &&
-                CuePriority.Rank("autopilot", approach) > CuePriority.Rank("radio", approach), "On approach the ILS words win, then the autopilot");
-            TestAssert.That(CuePriority.Rank("ils", none) < CuePriority.Rank("ils", approach), "...and only on approach");
+            TestAssert.Eq(CuePriority.Best(0), ScopePage.Systems, "Nothing live: SYSTEMS");
+            TestAssert.Eq(CuePriority.Best(Live(ScopePage.Dock, ScopePage.Approach)), ScopePage.Approach, "The higher-ranked live page wins");
+            TestAssert.Eq(CuePriority.Best(Live(ScopePage.Threat, ScopePage.Shot)), ScopePage.Threat, "THREAT beats SHOT");
+            TestAssert.Eq(CuePriority.Best(Live(ScopePage.Threat, ScopePage.MissileCam)), ScopePage.MissileCam, "Riding a missile wins whatever else is live");
+            TestAssert.That(CuePriority.Outranks(ScopePage.MissileCam, ScopePage.Threat) && !CuePriority.Outranks(ScopePage.Threat, ScopePage.MissileCam), "The cam outranks everything");
+            TestAssert.That(CuePriority.Outranks(ScopePage.Strike, ScopePage.Systems) && !CuePriority.Outranks(ScopePage.Systems, ScopePage.Strike), "Everything outranks SYSTEMS");
 
-            CueContext dock = CuePriority.Detect(false, true, false, false);
-            TestAssert.That(CuePriority.Rank("skywell", dock) > CuePriority.Rank("missile", dock) && CuePriority.Rank("skywell", dock) > CuePriority.Rank("ace-hunt", dock),
-                "At the boom the SKYWELL director cues win");
-
-            CueContext combat = CuePriority.Detect(false, false, true, false);
-            TestAssert.That(CuePriority.Rank("missile", combat) > CuePriority.Rank("ils", combat) && CuePriority.Rank("ace-hunt", combat) > CuePriority.Rank("radio", combat) &&
-                CuePriority.Rank("lance", combat) > CuePriority.Rank("support", combat), "In combat the missile, then strike lines win");
-
-            CueContext both = CuePriority.Detect(true, false, true, false);
-            TestAssert.That(both == (CueContext.Approach | CueContext.Combat), "Contexts combine");
-            TestAssert.That(CuePriority.Rank("ils", both) == 100 && CuePriority.Rank("missile", both) == 100, "Overlapping contexts take the best boost, never the sum");
-            TestAssert.That(CuePriority.Detect(false, false, false, false) == CueContext.None, "Nothing special: no context");
-
-            // An engaged autopilot alone (cruise) lifts its own line above contracts, radio and the default.
-            CueContext autopilot = CuePriority.Detect(false, false, false, true);
-            TestAssert.That(autopilot == CueContext.Autopilot, "The autopilot is a context of its own");
-            TestAssert.That(CuePriority.Rank("autopilot", autopilot) > CuePriority.Rank("contracts", autopilot) &&
-                CuePriority.Rank("autopilot", autopilot) > CuePriority.Rank("radio", autopilot) &&
-                CuePriority.Rank("autopilot", autopilot) > CuePriority.Rank("support", autopilot) &&
-                CuePriority.Rank("autopilot", autopilot) > CuePriority.Default, "Engaged, the autopilot line wins the strip over contracts and radio");
-            TestAssert.That(CuePriority.Rank("autopilot", none) < CuePriority.Rank("contracts", none), "...and only while it is engaged");
-            CueContext fight = CuePriority.Detect(false, false, true, true);
-            TestAssert.That(CuePriority.Rank("missile", fight) > CuePriority.Rank("autopilot", fight) && CuePriority.Rank("ace-hunt", fight) > CuePriority.Rank("autopilot", fight),
-                "A missile or strike line still beats the autopilot in combat");
+            var s = new ScopeSelector();
+            TestAssert.That(s.Compact && s.Page == ScopePage.Systems, "Cruise: the compact SYSTEMS strip");
+            s.Update(0, 0f);
+            TestAssert.That(s.Compact && s.Others == 0, "Still cruise with nothing live");
+            s.Update(Live(ScopePage.Shot), 1f);
+            TestAssert.That(s.Page == ScopePage.Shot && !s.Compact, "A live page unfolds the scope at once");
+            s.Update(Live(ScopePage.Shot, ScopePage.Wing), 1.1f);
+            TestAssert.That(s.Page == ScopePage.Shot && s.Others == Live(ScopePage.Wing), "The other live page earns a pip, the current one does not");
+            s.Update(0, 1.5f);
+            TestAssert.That(s.Page == ScopePage.Shot, "A page that blinked out keeps the scope for its dwell");
+            s.Update(0, 2.6f);
+            TestAssert.That(s.Page == ScopePage.Systems && s.Compact, "...then the scope folds back to SYSTEMS");
+            s.Update(Live(ScopePage.Approach), 3f);
+            s.Update(Live(ScopePage.Approach, ScopePage.Threat), 3.1f);
+            TestAssert.That(s.Page == ScopePage.Threat && s.Others == Live(ScopePage.Approach), "A higher-priority page takes over inside the dwell");
+            s.Update(Live(ScopePage.Approach, ScopePage.Threat, ScopePage.MissileCam), 3.2f);
+            TestAssert.That(s.Page == ScopePage.MissileCam && s.Others == Live(ScopePage.Approach, ScopePage.Threat), "The cam takes over and the rest are pips");
+            s.Update(Live(ScopePage.Approach), 3.3f);
+            TestAssert.That(s.Page == ScopePage.MissileCam, "The cam holds its dwell after the missile is gone");
+            s.Update(Live(ScopePage.Approach), 5f);
+            TestAssert.That(s.Page == ScopePage.Approach, "...then the scope falls to the best remaining page");
+            s.Reset();
+            TestAssert.That(s.Page == ScopePage.Systems && s.Others == 0, "Reset returns to cruise");
         }
     }
 }

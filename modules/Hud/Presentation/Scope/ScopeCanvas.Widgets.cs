@@ -1,0 +1,166 @@
+using System;
+using BoscaliSummer.Core.Contracts;
+using UnityEngine;
+using static BoscaliSummer.Core.Contracts.ScopeTone;
+
+namespace BoscaliSummer.Modules.Hud.Presentation
+{
+    /// <summary>A rectangle in design units (what <see cref="ScopeCanvas.PlateTag"/> returns, so a line can start at its edge).</summary>
+    internal readonly struct ScopeRect
+    {
+        public readonly float X, Y, W, H;
+        public ScopeRect(float x, float y, float w, float h) { X = x; Y = y; W = w; H = h; }
+    }
+
+    // The prototype's markers and widgets on top of the primitives: chevron, diamond, brackets, tag, stamp, bar, dot grid, grid.
+    internal sealed partial class ScopeCanvas
+    {
+        /// <summary>An arrowhead marker (a missile, a contact) with its tip <paramref name="size"/> from (x, y) toward compass <paramref name="hdg"/>.</summary>
+        public void Chevron(float x, float y, float hdg, float size, ScopeTone tone = Ink, bool fill = false, float alpha = 1f, float w = 1f)
+        {
+            int n = Load(ScopeShapes.Chevron, 4, x, y, size, hdg);
+            if (fill) FillPoly(n, tone, alpha);
+            Path(n, tone, alpha, w);
+        }
+
+        /// <summary>A target or waypoint diamond.</summary>
+        public void Diamond(float x, float y, float r, ScopeTone tone = Ink, bool fill = false, float alpha = 1f, float w = 1f)
+        {
+            int n = Load(ScopeShapes.Diamond, 4, x, y, r);
+            if (fill) FillPoly(n, tone, alpha);
+            Path(n, tone, alpha, w);
+        }
+
+        /// <summary>A solid triangle pointing at compass <paramref name="dirDeg"/>.</summary>
+        public void Tri(float x, float y, float dirDeg, float size, ScopeTone tone = Ink, bool fill = true, float alpha = 1f, float w = 1f)
+        {
+            int n = Load(ScopeShapes.Triangle, 3, x, y, size, dirDeg);
+            if (fill) FillPoly(n, tone, alpha);
+            Path(n, tone, alpha, w);
+        }
+
+        /// <summary>The airframe outline, nose toward compass <paramref name="hdg"/>, <paramref name="halfLength"/> from centre to nose.</summary>
+        public void Jet(float x, float y, float hdg, float halfLength, ScopeTone tone = Ink, bool fill = false, float fillAlpha = 1f, float alpha = 1f, float w = 1f)
+        {
+            int n = Load(ScopeShapes.Jet, ScopeShapes.JetPoints, x, y, halfLength, hdg);
+            if (fill) FillPoly(n, tone, fillAlpha);
+            Path(n, tone, alpha, w);
+        }
+
+        /// <summary>Four corner brackets (target boxes).</summary>
+        public void Brackets(float x, float y, float w, float h, float len = 8f, ScopeTone tone = Ink, float alpha = 1f, float lw = 1f)
+        {
+            Line(x, y, x + len, y, tone, alpha, lw); Line(x, y, x, y + len, tone, alpha, lw);
+            Line(x + w, y, x + w - len, y, tone, alpha, lw); Line(x + w, y, x + w, y + len, tone, alpha, lw);
+            Line(x, y + h, x + len, y + h, tone, alpha, lw); Line(x, y + h, x, y + h - len, tone, alpha, lw);
+            Line(x + w, y + h, x + w - len, y + h, tone, alpha, lw); Line(x + w, y + h, x + w, y + h - len, tone, alpha, lw);
+        }
+
+        /// <summary>A drawn tick (the fonts lack one).</summary>
+        public void Check(float x, float y, float size, ScopeTone tone = Ink, float alpha = 1f, float w = 1f)
+        {
+            Line(x - size * 0.5f, y, x - size * 0.15f, y + size * 0.4f, tone, alpha, w);
+            Line(x - size * 0.15f, y + size * 0.4f, x + size * 0.55f, y - size * 0.45f, tone, alpha, w);
+        }
+
+        /// <summary>A drawn cross.</summary>
+        public void Cross(float x, float y, float size, ScopeTone tone = Ink, float alpha = 1f, float w = 1f)
+        {
+            Line(x - size / 2f, y - size / 2f, x + size / 2f, y + size / 2f, tone, alpha, w);
+            Line(x - size / 2f, y + size / 2f, x + size / 2f, y - size / 2f, tone, alpha, w);
+        }
+
+        /// <summary>Text on a small opaque square tag in <paramref name="tone"/>; (x, y) anchors the tag's vertical middle. Returns the tag's rectangle.</summary>
+        public ScopeRect PlateTag(ReadOnlySpan<char> s, float x, float y, ScopeTone tone = Ink, float size = 12f, ScopeAlign align = ScopeAlign.Left, float pad = 3f, float alpha = 1f)
+        {
+            float w = Mathf.Round(TextW(s, size) + pad * 2f), h = size + 5f;
+            float x0 = Mathf.Round(align == ScopeAlign.Right ? x - w : align == ScopeAlign.Center ? x - w / 2f : x), y0 = Mathf.Round(y - h / 2f);
+            Fill(x0, y0, w, h, tone, alpha);
+            Text(s, x0 + w / 2f, y0 + h / 2f + 0.5f, Bg, size, ScopeAlign.Center, true);
+            return new ScopeRect(x0, y0, w, h);
+        }
+
+        /// <summary>A boxed result stamp (HIT / MISS / DEFEATED), centred on (x, y); the box turns by <paramref name="angle"/>, the word stays level.</summary>
+        public void Stamp(ReadOnlySpan<char> s, float x, float y, ScopeTone tone = Ink, float size = 14f, float angle = 0f, float alpha = 1f)
+        {
+            float w = Mathf.Round(TextW(s, size) + 12f), h = size + 8f;
+            StampBox(w / 2f, h / 2f, x, y, angle, tone, alpha, 1f, true);
+            StampBox(w / 2f - 2f, h / 2f - 2f, x, y, angle, tone, alpha, 0.5f, false);
+            Text(s, x, y + 1f, tone, size, ScopeAlign.Center, true, alpha);
+        }
+
+        private void StampBox(float hw, float hh, float x, float y, float angle, ScopeTone tone, float alpha, float lineAlpha, bool fill)
+        {
+            float a = angle * Mathf.Deg2Rad, ca = Mathf.Cos(a), sa = Mathf.Sin(a);
+            for (int i = 0; i < 4; i++)
+            {
+                float vx = (i == 0 || i == 3 ? -hw : hw), vy = (i < 2 ? -hh : hh);
+                px[i] = x + vx * ca - vy * sa;
+                py[i] = y + vx * sa + vy * ca;
+            }
+            if (fill) FillPoly(4, Bg, 0.85f);
+            Path(4, tone, alpha * lineAlpha);
+        }
+
+        /// <summary>An outlined fill bar: <paramref name="frac"/> of its inside filled (or lit in <paramref name="segs"/> segments). Add marks with <see cref="BarTick"/>.</summary>
+        public void Bar(float x, float y, float w, float h, float frac, ScopeTone tone = Ink, int segs = 0)
+        {
+            frac = Clamp01(frac);
+            float iw = w - 4f, ih = h - 4f;
+            Box(x, y, w, h, Dim, 0.85f);
+            if (segs > 0)
+            {
+                float sw = (iw - (segs - 1)) / segs;
+                int lit = (int)Mathf.Round(frac * segs);
+                for (int i = 0; i < segs; i++)
+                    Fill(Mathf.Round(x + 2f + i * (sw + 1f)), y + 2f, Math.Max(1f, Mathf.Round(sw)), ih, i < lit ? tone : Faint, i < lit ? 1f : 0.7f);
+            }
+            else Fill(x + 2f, y + 2f, Mathf.Round(iw * frac), ih, tone);
+        }
+
+        /// <summary>A threshold tick across a <see cref="Bar"/> at 0..1 <paramref name="at"/>, optionally labelled above or below.</summary>
+        public void BarTick(float x, float y, float w, float h, float at, ScopeTone tone = Amber, ReadOnlySpan<char> label = default, bool up = false, ScopeAlign align = ScopeAlign.Center)
+        {
+            float tx = Mathf.Round(x + 2f + (w - 4f) * Clamp01(at));
+            Line(tx, y - 3f, tx, y + h + 3f, tone);
+            if (!label.IsEmpty) Text(label, tx, up ? y - 11f : y + h + 11f, tone, 12f, align);
+        }
+
+        /// <summary>
+        /// A dispenser display: <paramref name="filled"/> dots solid (row-major from the top-left), the next <paramref name="flash"/> flashing hi (just fired),
+        /// the rest hollow; <paramref name="cols"/> x <paramref name="rows"/> dots <paramref name="pitch"/> apart.
+        /// </summary>
+        public void DotGrid(float x, float y, int cols, int rows, int filled, ScopeTone tone = Ink, float pitch = 7f, float r = 2f, bool square = false, int flash = 0)
+        {
+            for (int i = 0; i < cols * rows; i++)
+            {
+                float cx = x + (i % cols) * pitch + pitch / 2f, cy = y + (i / cols) * pitch + pitch / 2f;
+                bool on = i < filled, hot = !on && i < filled + flash, lit = on || hot;
+                ScopeTone t = on ? tone : hot ? Hi : Faint;
+                float a = hot ? 0.9f : lit ? 1f : 0.8f;
+                if (square)
+                {
+                    if (lit) Fill(Mathf.Round(cx - r), Mathf.Round(cy - r), r * 2f, r * 2f, t, a);
+                    else Box(Mathf.Round(cx - r), Mathf.Round(cy - r), r * 2f, r * 2f, t, 0.8f);
+                }
+                else Ring(cx, cy, lit ? r : r - 0.5f, t, a, 1f, t, lit ? 1f : 0f);
+            }
+        }
+
+        /// <summary>The scope's faint dot grid with a cross at every fifth node.</summary>
+        public void Grid(float w, float h, float step = 20f, float gx = 0f, float gy = 0f, ScopeTone tone = Faint, float alpha = 0.9f)
+        {
+            int i = 0;
+            for (float x = gx % step; x < w; x += step, i++)
+            {
+                int j = 0;
+                for (float y = gy % step; y < h; y += step, j++)
+                {
+                    float rx = Mathf.Round(x), ry = Mathf.Round(y);
+                    Fill(rx, ry, 1f, 1f, tone, alpha);
+                    if (i % 5 == 0 && j % 5 == 0) { Fill(rx - 2f, ry, 5f, 1f, tone, alpha); Fill(rx, ry - 2f, 1f, 5f, tone, alpha); }
+                }
+            }
+        }
+    }
+}

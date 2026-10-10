@@ -66,6 +66,10 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("Aircraft", "GetFuelLevel"),
     ("Aircraft", "GetFuelTanks"),
     ("PartDamageTracker", "GetDetachedRatio"),
+    // TAC BOARD SYSTEMS page (HUD v8): lost parts by side, the jammer's charge.
+    ("UnitPart", "IsDetached"),
+    ("Aircraft", "GetPowerSupply"),
+    ("PowerSupply", "GetCharge"),
     ("FlareEjector", "GetMaxAmmo"),
     ("ChaffEjector", "GetMaxAmmo"),
     ("Missile", "Detonate"),
@@ -286,6 +290,8 @@ foreach ((string typeName, string fieldName) in fields)
     ("FuelTank", "isLeaking", "System.Boolean"),
     ("FuelTank", "ruptured", "System.Boolean"),
     ("FuelTank", "onFire", "System.Boolean"),
+    // TAC BOARD SYSTEMS page: the jammer's "jamming now" (CountermeasureWatch).
+    ("RadarJammer", "jammingIntensity", "System.Single"),
     ("Aircraft", "engineStates", "System.Collections.Generic.List`1<IEngine>"),
     ("Aircraft", "partDamageTracker", "PartDamageTracker"),
     ("AircraftParameters", "aircraftGLimit", "System.Single"),
@@ -923,6 +929,8 @@ foreach (var seam in intelMethods)
 };
 foreach (var seam in intelFields)
     RequireMetadataField(operationAssembly, seam.Type, seam.Field, seam.FieldType);
+// TAC BOARD SYSTEMS page: a helicopter is told by its rotor shaft (DamageWatch).
+if (gameAssembly.GetType("RotorShaft", false) == null) throw new TypeLoadException("RotorShaft");
 if (gameAssembly.GetType("Radar", true)!.BaseType?.FullName != "TargetDetector")
     throw new TypeLoadException("Radar no longer derives from TargetDetector; Intel reads Unit.radar as a Radar");
 foreach (string type in new[] {
@@ -947,7 +955,14 @@ foreach (string type in new[] {
     "BoscaliSummer.Core.Contracts.IHudLine",
     "BoscaliSummer.Core.Contracts.HudLayout",
     "BoscaliSummer.Modules.Hud.Presentation.HudBoard",
-    "BoscaliSummer.Modules.Hud.Presentation.StatusPanel" })
+    "BoscaliSummer.Modules.Hud.Presentation.StatusPanel",
+    // TAC BOARD (HUD v8): the offline check reaches these by name; the page groups' feeds register through them.
+    "BoscaliSummer.Core.Contracts.ScopeFeeds",
+    "BoscaliSummer.Core.Contracts.ScopeGauges",
+    "BoscaliSummer.Core.Contracts.GaugeSpec",
+    "BoscaliSummer.Modules.Hud.Domain.SystemsScope",
+    "BoscaliSummer.Modules.Hud.Presentation.ScopePages",
+    "BoscaliSummer.Modules.Hud.Presentation.SystemsPage" })
     if (pluginAssembly.GetType(type, false) == null) throw new TypeLoadException(type);
 foreach (string type in new[] {
     "BoscaliSummer.Modules.HighCommand.Runtime.HighCommandManager",

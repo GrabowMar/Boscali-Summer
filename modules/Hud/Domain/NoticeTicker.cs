@@ -42,8 +42,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const float FreshSeconds = 1.2f;
         /// <summary>A notice with a detail line shows its text, then its detail, each for this long, alternating.</summary>
         public const float PhaseSeconds = 3f;
-        /// <summary>The longest page of a long text or detail: the row holds about 42 characters of the mono face at full size (about 60 shrunk to 70 %), and a warning's prefix takes ten.</summary>
-        public const int PageChars = 40;
+        /// <summary>The longest page of a long text or detail: the board's ticker row holds about 43 characters of the mono face at 12 px beside its channel chip, and a warning's prefix takes ten.</summary>
+        public const int PageChars = 34;
         public const int MaxCount = 99;
 
         private struct Entry

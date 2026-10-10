@@ -161,7 +161,7 @@ namespace BoscaliSummer.Tests.Features.Hud
                 rejoined += (i > 0 ? " " : "") + page;
             }
             TestAssert.That(rejoined == longText, "...and the pages put back together are the whole notice: " + rejoined);
-            TestAssert.That(NoticeTicker.Page("ABCDEFGHIJ".PadRight(60, 'X'), 1).Length == 20 && NoticeTicker.PageCount("ABCDEFGHIJ".PadRight(60, 'X')) == 2, "A word longer than a page is cut where it falls");
+            TestAssert.That(NoticeTicker.Page("ABCDEFGHIJ".PadRight(60, 'X'), 1).Length == 60 - NoticeTicker.PageChars && NoticeTicker.PageCount("ABCDEFGHIJ".PadRight(60, 'X')) == 2, "A word longer than a page is cut where it falls");
 
             var line = new TickerLine { Tone = HudTone.Info, Text = longText, Detail = "AREA 4 EAST", Count = 1, Age = 0f };
             TestAssert.That(NoticeTicker.Words(line) == NoticeTicker.Page(longText, 0), "It opens on the first page");
