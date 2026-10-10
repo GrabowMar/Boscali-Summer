@@ -1,0 +1,35 @@
+{
+  "name": "pilot-damage",
+  "mods": ["boscalisummer"],
+  "timeout_s": 120,
+  "timescale": 1,
+  "_note": "Pilot reaction to damage: a warhead-sized blast pins stress at its ceiling and the heart becomes audible; a crippled airframe keeps the heartbeat going. InjectHit deals real blast damage through the game's own part damage, so the hit hook runs end to end (and the aircraft does not survive the scenario). Also checks the recorded voices loaded.",
+  "ops": [
+    {"op": "atmosphere", "time_of_day": 13, "conditions": 0.1, "cloud_height": 2500, "wind_speed": 3, "wind_heading": 90, "wind_turbulence": 0.1, "moon_phase": 14},
+    {"op": "seat", "id": "player", "aircraft": "FS-20 Vortex", "altitude": 4000, "speed": 200, "heading": 90, "view": "cockpit", "timeout": 30},
+    {"op": "fly", "id": "player", "program": [{"level": 320}]},
+    {"op": "wait", "seconds": 8},
+    {"op": "call", "method": "BoscaliSummer.Modules.Immersion.Runtime.ImmersionAutomation.Readout", "args": {}, "store": "calm"},
+    {"op": "call", "method": "BoscaliSummer.Modules.Immersion.Runtime.ImmersionAutomation.InjectHit", "args": {"blast": 300, "parts": 1}, "store": "hit"},
+    {"op": "wait", "seconds": 0.5},
+    {"op": "call", "method": "BoscaliSummer.Modules.Immersion.Runtime.ImmersionAutomation.Readout", "args": {}, "store": "struck"},
+    {"op": "wait", "seconds": 3},
+    {"op": "call", "method": "BoscaliSummer.Modules.Immersion.Runtime.ImmersionAutomation.Readout", "args": {}, "store": "held"},
+    {"op": "call", "method": "BoscaliSummer.Modules.Immersion.Runtime.ImmersionAutomation.InjectHit", "args": {"blast": 300, "parts": 12}, "store": "wreck"},
+    {"op": "wait", "seconds": 1},
+    {"op": "call", "method": "BoscaliSummer.Modules.Immersion.Runtime.ImmersionAutomation.Readout", "args": {}, "store": "crippled"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "result_above", "path": "calm.immersionRecordedVoices", "min": 9},
+    {"check": "result_below", "path": "calm.pilotPulse", "max": 0.01},
+    {"check": "result_below", "path": "calm.pilotStress", "max": 0.2},
+    {"check": "result_above", "path": "hit.partsStruck", "min": 1},
+    {"check": "result_above", "path": "struck.pilotStress", "min": 0.99},
+    {"check": "result_above", "path": "struck.pilotPulse", "min": 0.99},
+    {"check": "result_above", "path": "held.pilotStress", "min": 0.99},
+    {"check": "result_above", "path": "held.pilotHeartRate", "min": 155},
+    {"check": "result_above", "path": "crippled.pilotCritical", "min": 1}
+  ]
+}

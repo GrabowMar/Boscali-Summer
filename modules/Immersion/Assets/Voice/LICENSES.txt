@@ -1,0 +1,19 @@
+Recorded pilot voices: sources and licences
+===========================================
+
+Every clip in this folder is cut and filtered from a Creative Commons 0 (public domain) recording by
+tools/Build-PilotVoices.py. Licences were checked on the source pages on 2026-10-10. CC0 needs no credit;
+the authors are named here as thanks and so the clips can be rebuilt.
+
+keh0-keh4.wav   "strenuous_grunts" by takareads
+                https://freesound.org/people/takareads/sounds/841313/            CC0
+gasp0.wav       "AS060822_Short Exertion" by SuddenDice
+                https://freesound.org/people/SuddenDice/sounds/558618/           CC0
+gasp1.wav       "Masked_Breathing_Raspy_Loop" by Mediasaur
+recovery.wav    https://freesound.org/people/Mediasaur/sounds/788055/            CC0
+heart.wav       "Heartbeat sounds" (heartbeat_fast_0.wav) by bart
+                https://opengameart.org/content/heartbeat-sounds                 CC0
+
+Processing: mono, 22050 Hz, 16-bit. Voices get a mask filter (high-pass 180 Hz, +4 dB near 1.2 kHz,
+low-pass 6.5 kHz, a 4 ms resonance); the heartbeat is band-limited to 25-400 Hz. All are levelled to -3 dBFS.
+The source downloads are not kept in the repository.

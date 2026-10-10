@@ -5,13 +5,13 @@ namespace BoscaliSummer.Modules.Immersion.Domain
     internal enum BreathSound
     {
         Inhale0, Inhale1, Inhale2, Exhale0, Exhale1, Exhale2, PressureInhale, SuitInflate, SuitVent,
-        Keh0, Keh1, Keh2, Gasp0, Gasp1, Recovery, Heart
+        Keh0, Keh1, Keh2, Keh3, Keh4, Gasp0, Gasp1, Recovery, Heart
     }
 
     /// <summary>
     /// Deterministic one-time synthesis of oxygen-mask and body sounds (no Unity types; baked off the main thread).
     /// Mask sounds are genuinely shaped noise through a valve; voiced effort sounds are formant-filtered
-    /// pulse trains and stand in until recorded clips are bundled.
+    /// pulse trains and stand in wherever no recorded clip ships (see <see cref="PcmWav"/>, tools/Build-PilotVoices.py).
     /// </summary>
     internal static class BreathSynth
     {
@@ -38,7 +38,7 @@ namespace BoscaliSummer.Modules.Immersion.Domain
                 case BreathSound.PressureInhale: return Breath(rng, rate, .45f, 3500f, 1.4f, .05f, .1f, 0f, .55f);
                 case BreathSound.SuitInflate: return Hiss(rng, rate, .6f, true);
                 case BreathSound.SuitVent: return Hiss(rng, rate, .45f, false);
-                case BreathSound.Keh0: case BreathSound.Keh1: case BreathSound.Keh2:
+                case BreathSound.Keh0: case BreathSound.Keh1: case BreathSound.Keh2: case BreathSound.Keh3: case BreathSound.Keh4:
                 {
                     int v = sound - BreathSound.Keh0;
                     return Voiced(rng, rate, .3f + .05f * v, 120f + 10f * v, 550f + 60f * v, 1800f, .35f, .02f, false);

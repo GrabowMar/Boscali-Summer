@@ -1,5 +1,6 @@
 using System.Threading;
 using BoscaliSummer.Core.Fx;
+using BoscaliSummer.Core.Util;
 using BoscaliSummer.Modules.Immersion.Domain;
 using UnityEngine;
 using UnityEngine.Audio;
@@ -10,7 +11,8 @@ namespace BoscaliSummer.Modules.Immersion.Audio
     /// Oxygen-mask breathing, anti-G straining grunts, G-suit hiss and heartbeat, paced by
     /// <see cref="PilotPhysiology"/> cues. Three pooled 2D voices on the effects mixer, so vanilla's
     /// G-LOC master low-pass muffles them for free. Clips are baked once off the main thread;
-    /// the per-frame path only reads cue flags.
+    /// the per-frame path only reads cue flags. Grunts, gasps, the wake-up breath and the heartbeat are
+    /// embedded recordings (Assets/Voice); mask breathing and the G-suit are synthesized.
     /// </summary>
     internal sealed class PilotBreathingAudio : MonoBehaviour
     {
@@ -25,6 +27,8 @@ namespace BoscaliSummer.Modules.Immersion.Audio
         private bool ready, routed, silent = true;
 
         internal int Played { get; private set; }
+        /// <summary>How many sounds came from embedded recordings rather than the synth (set when the bake finishes).</summary>
+        internal int RecordedVoices { get; private set; }
         internal bool IsPlaying => (breath != null && breath.isPlaying) || (effort != null && effort.isPlaying) || (body != null && body.isPlaying);
 
         public void Initialize()
@@ -35,8 +39,15 @@ namespace BoscaliSummer.Modules.Immersion.Audio
                 try
                 {
                     var data = new float[SoundCount][];
-                    for (int i = 0; i < data.Length && !released; i++) data[i] = BreathSynth.Build((BreathSound)i, SampleRate);
+                    int recorded = 0;
+                    for (int i = 0; i < data.Length && !released; i++)
+                    {
+                        data[i] = Recorded((BreathSound)i);
+                        if (data[i] != null) recorded++;
+                        else data[i] = BreathSynth.Build((BreathSound)i, SampleRate);
+                    }
                     if (released) return;
+                    RecordedVoices = recorded;
                     baked = data;
                     bakeState = 1;
                 }
@@ -56,11 +67,11 @@ namespace BoscaliSummer.Modules.Immersion.Audio
                 Play(breath, p.Straining ? BreathSound.PressureInhale : Pick(BreathSound.Inhale0, 3), breathVolume, p.SegmentSeconds);
             if ((cues & PilotCue.Exhale) != 0) Play(breath, Pick(BreathSound.Exhale0, 3), breathVolume * .9f, p.SegmentSeconds);
             if ((cues & PilotCue.Grunt) != 0)
-                Play(effort, p.Ragged ? Pick(BreathSound.Gasp0, 2) : Pick(BreathSound.Keh0, 3), Mathf.Lerp(.35f, .6f, e), 0f, p.Ragged ? 1.08f : 1f);
+                Play(effort, p.Ragged ? Pick(BreathSound.Gasp0, 2) : Pick(BreathSound.Keh0, 5), Mathf.Lerp(.35f, .6f, e), 0f, p.Ragged ? 1.08f : 1f);
             if ((cues & PilotCue.RegainedConsciousness) != 0) Play(effort, BreathSound.Recovery, .55f, 0f);
             if ((cues & PilotCue.GSuitInflate) != 0) Play(body, BreathSound.SuitInflate, .18f, 0f);
             if ((cues & PilotCue.GSuitVent) != 0) Play(body, BreathSound.SuitVent, .15f, 0f);
-            if ((cues & PilotCue.Heartbeat) != 0) Play(body, BreathSound.Heart, .25f * p.Greyout01, 0f);
+            if ((cues & PilotCue.Heartbeat) != 0) Play(body, BreathSound.Heart, .45f * p.Pulse01, 0f);
         }
 
         public void TryRoute()
@@ -113,6 +124,11 @@ namespace BoscaliSummer.Modules.Immersion.Audio
         }
 
         private BreathSound Pick(BreathSound first, int count) => (BreathSound)((int)first + rng.Next(count));
+
+        // A recording named after its sound replaces the synthesized stand-in; a missing or odd file keeps the synth.
+        private static float[] Recorded(BreathSound sound) => PcmWav.Decode(EmbeddedResources.ReadAll(
+            typeof(PilotBreathingAudio).Assembly, "BoscaliSummer.Immersion.Voice." + sound.ToString().ToLowerInvariant() + ".wav", 512 * 1024),
+            SampleRate);
 
         private AudioSource Voice()
         {

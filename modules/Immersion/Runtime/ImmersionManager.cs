@@ -90,7 +90,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         internal PilotPhysiology Physiology => physiology;
         internal ImmersionSettings Settings => settings;
         internal PilotCue Cues { get; private set; }
-        internal void OnPlayerHit() => vitals.AddHit();
+        internal void OnPlayerHit(float blastDamage) => vitals.AddHit(blastDamage);
 
         /// <summary>Automation only: hold an extra cockpit look (degrees) for captures; the visor may ignore the hidden sim HUD.</summary>
         internal void DebugLook(float pitch, float yaw, float seconds)
@@ -419,6 +419,8 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             state["pilotBreathRate"] = physiology.BreathsPerMinute;
             state["pilotHeartRate"] = physiology.HeartRate;
             state["pilotGreyout"] = physiology.Greyout01;
+            state["pilotPulse"] = physiology.Pulse01;
+            state["pilotCritical"] = vitals.Critical;
             state["pilotVanillaGloc"] = vitals.HasVanilla;
             state["immersionBindingValid"] = presenting;
             state["immersionWeatherValid"] = environmentValid;
@@ -439,6 +441,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             state["immersionCreakPlaying"] = airframeAudio != null && airframeAudio.IsPlaying;
             state["immersionBreathPlaying"] = pilotBreathingAudio != null && pilotBreathingAudio.IsPlaying;
             state["immersionBreathPlayed"] = pilotBreathingAudio != null ? pilotBreathingAudio.Played : 0;
+            state["immersionRecordedVoices"] = pilotBreathingAudio != null ? pilotBreathingAudio.RecordedVoices : 0;
             state["visorVisible"] = visor.Visible;
             state["visorTint"] = visor.Tint;
             state["visorSunLit"] = visor.SunLit;

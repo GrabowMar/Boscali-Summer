@@ -88,6 +88,41 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             return Readout(manager);
         }
 
+        /// <summary>
+        /// Deal real blast damage to the followed aircraft (args: blast per part, parts counted from the end of its part
+        /// list) so the hit hook, the warhead test and the crippled check run end to end. Host only; it does break the aircraft.
+        /// </summary>
+        public static Dictionary<string, object> InjectHit(Dictionary<string, object> args)
+        {
+            ImmersionManager manager = ImmersionManager.Live;
+            var cameras = SceneSingleton<CameraStateManager>.i;
+            Aircraft aircraft = cameras != null ? cameras.followingUnit as Aircraft : null;
+            if (manager == null || aircraft == null || aircraft.partLookup == null)
+                return Failure("ImmersionAutomation", "InjectHit", "no followed aircraft in this scene");
+            float blast;
+            int count;
+            try
+            {
+                blast = System.Convert.ToSingle(Arg(args, "blast") ?? 50f, System.Globalization.CultureInfo.InvariantCulture);
+                count = System.Convert.ToInt32(Arg(args, "parts") ?? 1, System.Globalization.CultureInfo.InvariantCulture);
+            }
+            catch (System.Exception) { return Failure("ImmersionAutomation", "InjectHit", "blast and parts must be numbers"); }
+            if (float.IsNaN(blast) || blast < 0f || blast > 5000f || count < 1 || count > 64)
+                return Failure("ImmersionAutomation", "InjectHit", "blast must be 0..5000 and parts 1..64");
+            int struck = 0;
+            for (int i = aircraft.partLookup.Count - 1; i >= 0 && struck < count; i--)
+            {
+                UnitPart part = aircraft.partLookup[i];
+                if (part == null || part == aircraft.cockpit) continue;
+                part.TakeDamage(0f, blast, 1f, 0f, 0f, PersistentID.None);
+                struck++;
+            }
+            manager.LogAutomation("InjectHit: blast " + blast + " on " + struck + " parts");
+            Dictionary<string, object> state = Readout(manager);
+            state["partsStruck"] = struck;
+            return state;
+        }
+
         private static Dictionary<string, object> Readout(ImmersionManager manager)
         {
             var state = new Dictionary<string, object>();

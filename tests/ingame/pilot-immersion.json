@@ -72,6 +72,7 @@
     {"check": "result_below", "path": "cruise.pilotExertion", "max": 0.15},
     {"check": "result_above", "path": "cruise.visorVisible", "min": 1},
     {"check": "result_above", "path": "cruise_later.immersionBreathPlayed", "min": 4},
+    {"check": "result_above", "path": "cruise_later.immersionRecordedVoices", "min": 9},
     {"check": "result_above", "path": "strain.pilotStraining", "min": 1},
     {"check": "result_above", "path": "greyout.pilotGreyout", "min": 0.2},
     {"check": "result_above", "path": "greyout.visorBrow", "min": 0.2},
