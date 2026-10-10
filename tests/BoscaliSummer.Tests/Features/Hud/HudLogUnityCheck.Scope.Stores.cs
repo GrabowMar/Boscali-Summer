@@ -122,6 +122,19 @@ public static partial class HudLogUnityCheck
                     x.Kj = CapKjThreat(t); x.Rate = Rate(CapKjThreat);
                     break;
                 }
+            case "shot":          // the weapon cell follows the selected station, rounds step down at every launch and the fired station's pip drains (0.8 AAM-4 stn 1, 3.6 DART stn 7, 6.0 GBU-12 stn 5)
+                {
+                    float[][] launches = { new[] { 0.8f, 1f }, new[] { 3.6f, 7f }, new[] { 6.0f, 5f } };
+                    x.Rounds[7] = t >= 3.6f ? 0 : 1;
+                    foreach (float[] l in launches)
+                        if (t >= l[0])
+                        {
+                            if (l[1] != 7f) x.Rounds[(int)l[1]] = 0;
+                            if (t - l[0] < 1.5f) { x.FiredAt = (int)l[1]; x.FiredAge = t - l[0]; }
+                        }
+                    x.Sel = t < 1.8f ? 1 : t < 2.9f ? 2 : t < 4.6f ? 7 : t < 7.3f ? 5 : 2;
+                    break;
+                }
             case "approach":      // landing = master arm SAFE; the end of the sortie, so the dispensers show their low states
                 x.Safe = true; x.Ir = 9; x.Rdr = 0;
                 break;
