@@ -102,6 +102,31 @@ namespace BoscaliSummer.Modules.Squad.Runtime
             }
             return false;
         }
+        /// <summary>
+        /// The ace leading the hunt on the local pilot, for the TAC BOARD's ACE HUNT needle: the first aircraft of the wing still flying and its callsign. The hunts live on the host, so
+        /// this answers on the host and in solo only; a client has no position to point at.
+        /// </summary>
+        internal bool TryAce(out Aircraft ace, out string callsign)
+        {
+            ace = null;
+            callsign = null;
+            if (!GameAccess.IsServer() || !GameManager.GetLocalPlayer<Player>(out Player local) || local == null) return false;
+            for (int i = 0; i < hunts.Count; i++)
+            {
+                Hunt hunt = hunts[i];
+                if (hunt.Outcome != HuntOutcome.Hunting || hunt.Aircraft == null || hunt.Owner == null || hunt.Owner.Player != local) continue;
+                for (int j = 0; j < hunt.Aircraft.Length; j++)
+                {
+                    Aircraft a = hunt.Aircraft[j];
+                    if (a == null || a.disabled) continue;
+                    ace = a;
+                    callsign = hunt.Callsign;
+                    return true;
+                }
+            }
+            return false;
+        }
+
         public int GetBonusPoints(ulong id) => GameAccess.IsServer()
             ? careers.TryGetValue(id, out Career c) ? c.Rules.BonusPoints : 0 : id == localIdentity ? localBonus : 0;
         public int GetPilotGeneration(ulong id) => GameAccess.IsServer()

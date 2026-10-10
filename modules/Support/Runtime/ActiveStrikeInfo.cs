@@ -14,10 +14,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public readonly float Radius;
         public readonly float ImpactTime; // mission seconds
         public readonly float ExpiryTime; // mission seconds
+        /// <summary>Mission second the strike was first registered (kept when a cruise strike's route time is updated): the whole flight runs from here to <see cref="ImpactTime"/>.</summary>
+        public readonly float StartTime;
 
         public ActiveStrikeInfo(
             int requestId, SupportActionId actionId, GlobalPosition target,
-            float radius, float impactTime, float expiryTime)
+            float radius, float impactTime, float expiryTime, float startTime)
         {
             RequestId = requestId;
             ActionId = actionId;
@@ -25,6 +27,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             Radius = radius;
             ImpactTime = impactTime;
             ExpiryTime = expiryTime;
+            StartTime = startTime;
         }
 
         public bool IsActive(float now) => now < ExpiryTime;

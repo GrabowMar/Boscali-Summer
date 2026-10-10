@@ -43,7 +43,9 @@ namespace BoscaliSummer.Modules.Vanguard
             context.AddSceneService<Presentation.SkywellVisuals>(60);
             context.AddService<ISkywellControl>(context.AddSceneService<Presentation.SkywellHud>(60));
             context.AddSceneService<Presentation.SkywellScopeFeed>(60);
-            context.AddService<IDroneCommand>(context.AddSceneService<Networking.VanguardNet>(60));
+            Networking.VanguardNet drones = context.AddSceneService<Networking.VanguardNet>(60);
+            context.AddService<IDroneCommand>(drones);
+            new VanguardScopeGauges(drones).Register();      // the TAC BOARD's LANCE, SKYWELL, AEGIS and REMORA gauges
         }
     }
 }

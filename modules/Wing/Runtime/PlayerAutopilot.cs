@@ -37,7 +37,11 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         private float navFloor = float.NaN, navFloorAt = float.NegativeInfinity;
 
-        public PlayerAutopilot() => Instance = this;
+        public PlayerAutopilot()
+        {
+            Instance = this;
+            PlayerAutopilotGauge.Register();      // the TAC BOARD's AUTOPILOT gauge while a hold is engaged
+        }
 
         public void Activate() => Unbind();
 
