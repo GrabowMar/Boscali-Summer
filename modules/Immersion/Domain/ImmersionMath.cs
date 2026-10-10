@@ -31,13 +31,6 @@ namespace BoscaliSummer.Modules.Immersion.Domain
         private static float FiniteClamp(float value, float limit) =>
             float.IsNaN(value) || float.IsInfinity(value) ? 0f : Scalar.Clamp(value, -limit, limit);
 
-        public static float ExposureAudioCutoff(float positive, float negative)
-        {
-            if (float.IsNaN(positive) || float.IsNaN(negative)) return 22000f;
-            float exposure = Scalar.Clamp(Math.Max(positive, negative * 0.85f), 0f, 1f);
-            return 22000f * (float)Math.Pow(1200f / 22000f, exposure);
-        }
-
         /// <summary>
         /// Cockpit head target rotation in degrees (pitch, yaw, roll) from local specific force in G
         /// and body angular rates in deg/s.
@@ -113,34 +106,6 @@ namespace BoscaliSummer.Modules.Immersion.Domain
         }
 
         /// <summary>
-        /// Physiological G-vignette parameters (weight, vignette intensity, saturation drop, redout factor).
-        /// Positive G (&gt; 4G) produces greyout / tunnel vision.
-        /// Negative G (&lt; -1G) produces redout.
-        /// </summary>
-        public static (float weight, float intensity, float saturation, float redout) GVignette(float forceY, bool cockpit)
-        {
-            if (!cockpit) return (0f, 0f, 0f, 0f);
-
-            if (forceY > 4f)
-            {
-                float excess = Scalar.Clamp((forceY - 4f) / 5f, 0f, 1f); // 0 at 4G, 1 at 9G
-                float weight = excess;
-                float intensity = 0.25f + 0.45f * excess;
-                float saturation = -excess * 75f;
-                return (weight, intensity, saturation, 0f);
-            }
-            else if (forceY < -1f)
-            {
-                float excess = Scalar.Clamp((-forceY - 1f) / 3f, 0f, 1f); // 0 at -1G, 1 at -4G
-                float weight = excess;
-                float intensity = 0.2f + 0.35f * excess;
-                return (weight, intensity, 0f, excess);
-            }
-
-            return (0f, 0f, 0f, 0f);
-        }
-
-        /// <summary>
         /// How visible the sun flare is: 0 below the horizon, fading in over the first few degrees
         /// of elevation, then scaled by what stands between the eye and the sun (0 clear, 1 blocked).
         /// </summary>
@@ -149,16 +114,6 @@ namespace BoscaliSummer.Modules.Immersion.Domain
             if (terrainBlocked || sunElevationDeg <= -1f) return 0f;
             float horizon = Scalar.Clamp((sunElevationDeg + 1f) / 6f, 0f, 1f);
             return horizon * Scalar.Clamp(1f - cloudOcclusion, 0f, 1f);
-        }
-
-        /// <summary>
-        /// Pilot breathing: a slow asymmetric pitch sway in degrees. Exhale is longer than inhale.
-        /// </summary>
-        public static float BreathingOffset(float timeSec, float breathsPerMin, float amplitudeDeg)
-        {
-            if (amplitudeDeg <= 0f || breathsPerMin <= 0f) return 0f;
-            double phase = 2.0 * Math.PI * breathsPerMin / 60.0 * timeSec;
-            return amplitudeDeg * (float)(Math.Sin(phase) - 0.25 * Math.Sin(2.0 * phase + 0.6));
         }
 
         /// <summary>

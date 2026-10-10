@@ -185,7 +185,9 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     source.spatialBlend = 0f; source.playOnAwake = false;
                 }
                 source.Stop(); source.volume = Mathf.Clamp01(WingSettings.Instance.VoicePackVolume.Value);
-                source.clip = clip; source.Play(); return true;
+                source.clip = clip; source.Play();
+                WingRadioAudio.Tail(clip.length);
+                return true;
             }
             catch (Exception e)
             {

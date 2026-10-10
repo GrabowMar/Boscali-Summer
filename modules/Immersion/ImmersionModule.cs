@@ -15,7 +15,8 @@ namespace BoscaliSummer.Modules.Immersion
         {
             typeof(CockpitHeadRotationPatch),
             typeof(CockpitHeadResetPatch),
-            typeof(GunShotShakePatch)
+            typeof(GunShotShakePatch),
+            typeof(PlayerHitPatch)
         };
 
         public ModuleMetadata Metadata => Module;
@@ -30,6 +31,10 @@ namespace BoscaliSummer.Modules.Immersion
             CockpitPilot pilot = context.AddSceneService<CockpitPilot>(48);
             pilot.Configure(context.Settings.Immersion, context.Logger);
             context.AddClientEffect(pilot);
+            var gallery = new Visuals.KneeboardGallery(context.Settings.Immersion,
+                () => { pilot.DebugRefreshKneeboard(); ImmersionManager.Live?.PageFlip(); });
+            pilot.SetKneeboardGallery(gallery);
+            context.AddService<IKneeboardGallery>(gallery);
 
             context.AddClientSetting("IMMERSION", "IMMERSION MASTER",
                 "Master switch for all client-side cockpit immersion features.",
@@ -52,24 +57,21 @@ namespace BoscaliSummer.Modules.Immersion
             context.AddClientSetting("IMMERSION", "MFD NIGHT GLOW",
                 "Cockpit view: MFD glass night boost so instruments glow at dusk and night.",
                 context.Settings.Immersion.MfdGlowEnabled);
-            context.AddClientSetting("IMMERSION", "G-VIGNETTE",
-                "Cockpit view: physiological G-force visual effects (tunnel vision greyout under high G, redout under negative G).",
-                context.Settings.Immersion.GVignetteEnabled);
+            context.AddClientSetting("IMMERSION", "HELMET VISOR",
+                "Cockpit view: glass-only helmet visor - daytime sun tint, smudges lit by the sun, breath fog when breathing hard, brow shadow above 6 G.",
+                context.Settings.Immersion.HelmetVisorEnabled);
             context.AddClientSetting("IMMERSION", "SURFACE IMMERSION",
                 "Cockpit view: subtle damage shading on supported opaque cockpit materials. Weather owns glass moisture.",
                 context.Settings.Immersion.SurfaceImmersionEnabled);
             context.AddClientSetting("IMMERSION", "AIRFRAME CREAKS",
                 "Cockpit view: procedural airframe creaks and structural groans under violent G onsets.",
                 context.Settings.Immersion.AirframeAudioEnabled);
-            context.AddClientSetting("IMMERSION", "G-AUDIO FILTER",
-                "Cockpit view: dynamic auditory narrowing and helmet audio low-pass filtering under high G-forces.",
-                context.Settings.Immersion.GForceAudioEnabled);
             context.AddClientSetting("IMMERSION", "CANOPY WIND",
                 "Cockpit view: procedural canopy wind rush and aerodynamic slipstream audio.",
                 context.Settings.Immersion.WindAudioEnabled);
-            context.AddClientSetting("IMMERSION", "PILOT STRAIN",
-                "Cockpit view: pilot Anti-G Straining Maneuver (AGSM) pressurized breathing sounds under sustained high G.",
-                context.Settings.Immersion.PilotStrainAudioEnabled);
+            context.AddClientSetting("IMMERSION", "PILOT BREATHING",
+                "Cockpit view: oxygen-mask breathing, anti-G straining grunts, G-suit hiss and a faint heartbeat near blackout, paced by the game's G-LOC model.",
+                context.Settings.Immersion.PilotBreathingEnabled);
             context.AddClientSetting("IMMERSION", "PILOT BODY",
                 "First-person flight suit, arms and legs using the native pilot model.", context.Settings.Immersion.PilotBodyEnabled);
             context.AddClientSetting("IMMERSION", "PILOT CONTROL MOTION",

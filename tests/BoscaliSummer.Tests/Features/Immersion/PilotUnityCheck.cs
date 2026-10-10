@@ -171,7 +171,7 @@ public sealed class PilotUnityCheck : MonoBehaviour
             throttle.transform.position = source.bones[6].position + new Vector3(0, .01f, .03f);
             throttle.transform.rotation = Quaternion.Euler(-11, 0, 0);
             rig.CopySeatedPose();
-            rig.Pose(.8f, -.6f, .7f, .9f, new Vector3(.8f, 2.5f, 0), Quaternion.Euler(-30, 65, 0), 1f / 60f, true, false);
+            rig.Pose(.8f, -.6f, .7f, .9f, new Vector3(.8f, 2.5f, 0), .5f, Quaternion.Euler(-30, 65, 0), 1f / 60f, true, false);
             yield return null;
         }
         Check(Quaternion.Angle(handNeutral, rig.Bone("hand_R").rotation) > .5f, "Control inputs move owned hand pose");
@@ -195,7 +195,7 @@ public sealed class PilotUnityCheck : MonoBehaviour
         for (int frame = 0; frame < 30; frame++)
         {
             rig.CopySeatedPose();
-            rig.Pose(-.7f, .4f, -.7f, .15f, Vector3.up, Quaternion.Euler(20, -55, 0), 1f / 60f, true, false);
+            rig.Pose(-.7f, .4f, -.7f, .15f, Vector3.up, .5f, Quaternion.Euler(20, -55, 0), 1f / 60f, true, false);
             yield return null;
         }
         Check(Quaternion.Angle(capturedLook, rig.Head.rotation) > 5, "Head continues moving while direct body is off");
@@ -232,13 +232,13 @@ public sealed class PilotUnityCheck : MonoBehaviour
         broken[3] = missing; source.bones = broken;
         Check(rig.Bind(source, animator, shader, eye), "Valid source rebinds after release");
         rig.CopySeatedPose();
-        rig.Pose(0,0,0,0,Vector3.up,Quaternion.identity,1f/60,false,true);
+        rig.Pose(0,0,0,0,Vector3.up,.5f,Quaternion.identity,1f/60,false,true);
         Check(Vector3.Distance(rig.Bone("hand_R").position, source.bones[9].position) < .00001f,
             "Respawn clears the previous pilot's control target");
         stick.transform.SetPositionAndRotation(source.bones[9].position, Quaternion.identity);
         rig.SetControls(stick.transform, null);
         stick.transform.position += new Vector3(.015f,.01f,-.03f);
-        rig.CopySeatedPose(); rig.Pose(0,0,0,0,Vector3.up,Quaternion.identity,1f/60,false,true);
+        rig.CopySeatedPose(); rig.Pose(0,0,0,0,Vector3.up,.5f,Quaternion.identity,1f/60,false,true);
         Check(Vector3.Distance(rig.Bone("hand_R").position, stick.transform.position) < .0005f,
             "Respawned pilot attaches to its newly bound stick with motion disabled");
         Destroy(source); yield return null;
@@ -333,7 +333,7 @@ public sealed class PilotUnityCheck : MonoBehaviour
         Quaternion motionHead = rig.Head.rotation;
         for (int frame = 0; frame < 45; frame++)
         {
-            rig.CopySeatedPose(); rig.Pose(.7f, .5f, .7f, .8f, Vector3.up, Quaternion.Euler(-20, 60, 0), 1f / 60, true, false);
+            rig.CopySeatedPose(); rig.Pose(.7f, .5f, .7f, .8f, Vector3.up, .5f, Quaternion.Euler(-20, 60, 0), 1f / 60, true, false);
             yield return null;
         }
         // Batch mode may execute45 frames in25ms. Wait for the real10Hz clock so
@@ -408,7 +408,7 @@ public sealed class PilotUnityCheck : MonoBehaviour
             reflection.Release(); rig.SetBodyVisible(body);
             for (int frame = 0; frame < 20; frame++)
             {
-                if (body) { rig.CopySeatedPose(); rig.Pose(.3f,.2f,.2f,.5f,Vector3.up,Quaternion.identity,1f/120,true,false); }
+                if (body) { rig.CopySeatedPose(); rig.Pose(.3f,.2f,.2f,.5f,Vector3.up,.5f,Quaternion.identity,1f/120,true,false); }
                 if (reflected) reflection.Tick(rig, canopyRoot.transform, eye, eye, 1, true);
                 yield return null;
             }
@@ -420,7 +420,7 @@ public sealed class PilotUnityCheck : MonoBehaviour
                 int beforeCapture = reflection.CaptureCount;
                 long beforeAlloc = GC.GetAllocatedBytesForCurrentThread();
                 long start = System.Diagnostics.Stopwatch.GetTimestamp();
-                if (body) { rig.CopySeatedPose(); rig.Pose(.3f,.2f,.2f,.5f,Vector3.up,Quaternion.identity,1f/120,true,false); }
+                if (body) { rig.CopySeatedPose(); rig.Pose(.3f,.2f,.2f,.5f,Vector3.up,.5f,Quaternion.identity,1f/120,true,false); }
                 if (reflected) reflection.Tick(rig, canopyRoot.transform, eye, eye, 1, true);
                 double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - start) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
                 allocations += GC.GetAllocatedBytesForCurrentThread() - beforeAlloc;
@@ -552,12 +552,12 @@ public sealed class PilotUnityCheck : MonoBehaviour
         Quaternion bindRotation = rig.Bone("hand_R").rotation;
         stick.localRotation = Quaternion.Euler(12,0,0);
         stick.localPosition += new Vector3(.01f,.01f,-.025f);
-        rig.CopySeatedPose(); rig.Pose(0,0,0,0,Vector3.up,Quaternion.identity,1f/60,false,true);
+        rig.CopySeatedPose(); rig.Pose(0,0,0,0,Vector3.up,.5f,Quaternion.identity,1f/60,false,true);
         Quaternion attachedRotation = rig.Bone("hand_R").rotation;
         rig.CopySeatedPose();
         throttle.SetPositionAndRotation(source.bones[6].position, Quaternion.identity);
         rig.AttachControls(stick, Vector3.one, Quaternion.Euler(0,80,0), throttle, Vector3.zero, Quaternion.identity);
-        rig.Pose(0,0,0,0,Vector3.up,Quaternion.identity,1f/60,false,true);
+        rig.Pose(0,0,0,0,Vector3.up,.5f,Quaternion.identity,1f/60,false,true);
         Check(rig.StickBound && rig.ThrottleBound && Vector3.Distance(rig.Bone("hand_R").position, stick.TransformPoint(contact)) < .0005f &&
             Quaternion.Angle(rig.Bone("hand_R").rotation, attachedRotation) < .05f,
             "Delayed throttle attachment preserves an already tilted stick hand's anchor and orientation");
@@ -573,7 +573,7 @@ public sealed class PilotUnityCheck : MonoBehaviour
             stick.localPosition = rightRest - contact + new Vector3(Mathf.Sin(angle) * .025f, .01f, -.025f);
             stick.localRotation = Quaternion.Euler(Mathf.Cos(angle) * 18, Mathf.Sin(angle) * 24, -8);
             rig.CopySeatedPose();
-            rig.Pose(.8f,-.6f,.5f,.9f,new Vector3(.8f,2.5f,0),Quaternion.Euler(-15,40,0),
+            rig.Pose(.8f,-.6f,.5f,.9f,new Vector3(.8f,2.5f,0),.5f,Quaternion.Euler(-15,40,0),
                 sample % 3 == 0 ? 0 : 1f/60, sample % 2 == 0, sample % 4 == 0);
             float error = Vector3.Distance(rig.Bone("hand_R").position, stick.TransformPoint(contact));
             maximumError = Mathf.Max(maximumError, error);
@@ -585,12 +585,12 @@ public sealed class PilotUnityCheck : MonoBehaviour
         }
         log.AppendLine("Moving stick maximum wrist-contact error: " + (maximumError * 1000).ToString("F4") + " mm");
         rig.AttachControls(null, Vector3.zero, Quaternion.identity, throttle, Vector3.zero, Quaternion.identity);
-        rig.CopySeatedPose(); rig.Pose(0,0,0,0,Vector3.up,Quaternion.identity,1f/60,false,true);
+        rig.CopySeatedPose(); rig.Pose(0,0,0,0,Vector3.up,.5f,Quaternion.identity,1f/60,false,true);
         long beforeWeldAllocations = GC.GetAllocatedBytesForCurrentThread();
         for (int sample = 0; sample < 120; sample++)
         {
             rig.CopySeatedPose();
-            rig.Pose(.8f,-.6f,.5f,.9f,new Vector3(.8f,2.5f,0),Quaternion.Euler(-15,40,0),1f/60,true,false);
+            rig.Pose(.8f,-.6f,.5f,.9f,new Vector3(.8f,2.5f,0),.5f,Quaternion.Euler(-15,40,0),1f/60,true,false);
         }
         long weldAllocations = GC.GetAllocatedBytesForCurrentThread() - beforeWeldAllocations;
         Check(rig.StickBound && rig.ThrottleBound && weldAllocations == 0,
@@ -599,7 +599,7 @@ public sealed class PilotUnityCheck : MonoBehaviour
         float reach = Vector3.Distance(shoulder, source.bones[8].position) + Vector3.Distance(source.bones[8].position, source.bones[9].position);
         Vector3 fullThrow = shoulder + (source.bones[9].position - shoulder).normalized * (reach + .02f);
         stick.position = fullThrow - stick.TransformVector(contact);
-        rig.CopySeatedPose(); rig.Pose(0,0,0,0,Vector3.up,Quaternion.identity,1f/60,false,true);
+        rig.CopySeatedPose(); rig.Pose(0,0,0,0,Vector3.up,.5f,Quaternion.identity,1f/60,false,true);
         Check(Vector3.Distance(rig.Bone("hand_R").position, fullThrow) < .0005f,
             "Small full-throw reach extension keeps the wrist welded");
         for (int bone = 0; bone < source.bones.Length; bone++)
@@ -611,7 +611,7 @@ public sealed class PilotUnityCheck : MonoBehaviour
         stick.SetPositionAndRotation(rig.Bone("hand_R").position, Quaternion.identity);
         throttle.SetPositionAndRotation(rig.Bone("hand_L").position, Quaternion.identity);
         rig.SetControls(stick, throttle);
-        rig.Pose(0,0,0,0,Vector3.up,Quaternion.Euler(-15,40,0),0,true,false);
+        rig.Pose(0,0,0,0,Vector3.up,.5f,Quaternion.Euler(-15,40,0),0,true,false);
     }
 
     private void CheckAttackHeloGrip(Shader shader)
@@ -659,7 +659,7 @@ public sealed class PilotUnityCheck : MonoBehaviour
             for (int roll = -12; roll <= 12; roll += 12)
             {
                 stick.transform.rotation = Quaternion.Euler(pitch,0,-roll);
-                rig.CopySeatedPose(); rig.Pose(0,0,0,0,Vector3.up,Quaternion.identity,1f/60,false,true);
+                rig.CopySeatedPose(); rig.Pose(0,0,0,0,Vector3.up,.5f,Quaternion.identity,1f/60,false,true);
                 Vector3 target = stick.transform.TransformPoint(grip);
                 float error = Vector3.Distance(rig.Bone("hand_R").position, target);
                 maximumError = Mathf.Max(maximumError, error);
@@ -698,7 +698,7 @@ public sealed class PilotUnityCheck : MonoBehaviour
             for (int operation = 0; operation < 3; operation++)
             {
                 collective.transform.rotation = Quaternion.Euler(-6f * operation,0,0);
-                rig.CopySeatedPose(); rig.Pose(0,0,0,0,Vector3.up,Quaternion.identity,1f/60,false,true);
+                rig.CopySeatedPose(); rig.Pose(0,0,0,0,Vector3.up,.5f,Quaternion.identity,1f/60,false,true);
                 Transform leftHand = rig.Bone("hand_L");
                 Vector3 palm = collective.transform.TransformPoint(new Vector3(.516232967f,1.075476146f,.145437866f));
                 collectiveError = Mathf.Max(collectiveError, Vector3.Distance(leftHand.position, collective.transform.TransformPoint(leftGrip)),
@@ -724,7 +724,7 @@ public sealed class PilotUnityCheck : MonoBehaviour
                     for (int frame = 0; frame < 90; frame++)
                     {
                         collective.transform.rotation = Quaternion.Euler(-12f * (frame % 30) / 29f,0,0);
-                        rig.CopySeatedPose(); rig.Pose(1,1,1,1,forces[force],Quaternion.identity,1f/60,true,false);
+                        rig.CopySeatedPose(); rig.Pose(1,1,1,1,forces[force],.5f,Quaternion.identity,1f/60,true,false);
                         Transform upper = rig.Bone("upperarm_R"), lower = rig.Bone("forearm_R"), wrist = rig.Bone("hand_R");
                         Vector3 target = stick.transform.TransformPoint(grip);
                         bracedError = Mathf.Max(bracedError, Vector3.Distance(wrist.position, target));
@@ -801,7 +801,7 @@ public sealed class PilotUnityCheck : MonoBehaviour
         int statusLogs = 0;
         foreach (string message in fixtureLog.Messages) if (message.Contains("Cockpit pilot controls")) statusLogs++;
         Check(statusLogs == 2, "Runtime control status logs once per changed state and never on unchanged retries");
-        runtimeRig.CopySeatedPose(); runtimeRig.Pose(0,0,0,0,Vector3.up,Quaternion.identity,1f/60,false,true);
+        runtimeRig.CopySeatedPose(); runtimeRig.Pose(0,0,0,0,Vector3.up,.5f,Quaternion.identity,1f/60,false,true);
         Check(runtimeRig.StickGripError < .0005f, "Production runtime binding reaches its actual cached moving stick target");
         Destroy(cockpit); yield return null;
         var replacementStick = new GameObject("Replacement native runtime stick"); owned.Add(replacementStick);
@@ -812,7 +812,7 @@ public sealed class PilotUnityCheck : MonoBehaviour
         replacementOwner.SetFixtureControls(replacementStick.transform, null);
         runtimeRig.CopySeatedPose();
         type.GetMethod("BindControls", flags).Invoke(runtime, null);
-        runtimeRig.Pose(0,0,0,0,Vector3.up,Quaternion.identity,1f/60,false,true);
+        runtimeRig.Pose(0,0,0,0,Vector3.up,.5f,Quaternion.identity,1f/60,false,true);
         Check(type.GetField("controls", flags).GetValue(runtime) == replacementOwner && runtimeRig.StickBound && runtimeRig.StickGripError < .0005f,
             "Destroyed Cockpit owner resolves a replacement component and control anchor");
         Vector3 palm = replacementStick.transform.TransformPoint(new Vector3(0,.08f,0));
@@ -927,7 +927,7 @@ public sealed class PilotUnityCheck : MonoBehaviour
                     Transform chest = runtimeRig.Chest, head = runtimeRig.Head;
                     Transform rightUpper = runtimeRig.Bone("upperarm_R"), rightLower = runtimeRig.Bone("forearm_R"), rightHand = runtimeRig.Bone("hand_R");
                     Transform leftUpper = runtimeRig.Bone("upperarm_L"), leftLower = runtimeRig.Bone("forearm_L"), leftHand = runtimeRig.Bone("hand_L");
-                    runtimeRig.CopySeatedPose(); runtimeRig.Pose(0,0,0,0,Vector3.up,Quaternion.identity,1f/60,false,true);
+                    runtimeRig.CopySeatedPose(); runtimeRig.Pose(0,0,0,0,Vector3.up,.5f,Quaternion.identity,1f/60,false,true);
                     Check(Vector3.Distance(chest.position, source.bones[1].position) < .00001f &&
                         Quaternion.Angle(chest.rotation, source.bones[1].rotation) < .05f &&
                         Vector3.Distance(head.position, source.bones[3].position) < .00001f,
@@ -940,7 +940,7 @@ public sealed class PilotUnityCheck : MonoBehaviour
                                 for (int frame = 0; frame < 45; frame++)
                                 {
                                     throttle.transform.rotation = Quaternion.Euler(6f * (frame % 11) / 10f,0,0);
-                                    runtimeRig.CopySeatedPose(); runtimeRig.Pose(1,1,1,1,forces[force],Quaternion.identity,1f/60,true,false);
+                                    runtimeRig.CopySeatedPose(); runtimeRig.Pose(1,1,1,1,forces[force],.5f,Quaternion.identity,1f/60,true,false);
                                     float rightError = Vector3.Distance(rightHand.position + rightHand.rotation * palmOffset, stick.transform.TransformPoint(stickPalm));
                                     float leftError = Vector3.Distance(leftHand.position + leftHand.rotation * palmOffset, handle.transform.TransformPoint(throttlePalm));
                                     contactError = Mathf.Max(contactError, Mathf.Max(rightError, leftError));
@@ -972,13 +972,13 @@ public sealed class PilotUnityCheck : MonoBehaviour
         for (int frame = 0; frame < 120; frame++)
         {
             stick.transform.rotation = Quaternion.Euler(10,0,-10); throttle.transform.rotation = Quaternion.Euler(6,0,0);
-            runtimeRig.CopySeatedPose(); runtimeRig.Pose(1,1,1,1,forces[0],Quaternion.identity,1f/60,true,false);
+            runtimeRig.CopySeatedPose(); runtimeRig.Pose(1,1,1,1,forces[0],.5f,Quaternion.identity,1f/60,true,false);
         }
         long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         for (int frame = 0; frame < 120; frame++)
         {
             stick.transform.rotation = Quaternion.Euler(10,0,-10); throttle.transform.rotation = Quaternion.Euler(6,0,0);
-            runtimeRig.CopySeatedPose(); runtimeRig.Pose(1,1,1,1,forces[0],Quaternion.identity,1f/60,true,false);
+            runtimeRig.CopySeatedPose(); runtimeRig.Pose(1,1,1,1,forces[0],.5f,Quaternion.identity,1f/60,true,false);
         }
         long allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
         Check(allocated == 0, "Vortex active two-hand contact and owned shoulder reach allocate no managed memory after warm-up");
@@ -1046,7 +1046,7 @@ public sealed class PilotUnityCheck : MonoBehaviour
                 {
                     stick.transform.localRotation = Quaternion.Euler(pitch,0,roll);
                     throttle.transform.localRotation = Quaternion.Euler(level * 3f,0,0);
-                    runtimeRig.CopySeatedPose(); runtimeRig.Pose(1,1,1,1,Vector3.up,Quaternion.identity,1f/60,false,true);
+                    runtimeRig.CopySeatedPose(); runtimeRig.Pose(1,1,1,1,Vector3.up,.5f,Quaternion.identity,1f/60,false,true);
                     contactError = Mathf.Max(contactError,Mathf.Max(
                         Vector3.Distance(runtimeRig.StickHand.position + runtimeRig.StickHand.rotation * palmOffset,stick.transform.TransformPoint(localPalm)),
                         Vector3.Distance(runtimeRig.ThrottleHand.position + runtimeRig.ThrottleHand.rotation * palmOffset,throttle.transform.TransformPoint(localPalm))));
@@ -1056,10 +1056,10 @@ public sealed class PilotUnityCheck : MonoBehaviour
             "Mirrored left joystick palm and thumb orientation follow all moving throws while the right hand holds throttle");
         Vector3 force = new Vector3(100,100,100);
         for (int frame = 0; frame < 120; frame++)
-        { runtimeRig.CopySeatedPose(); runtimeRig.Pose(1,1,1,1,force,Quaternion.identity,1f/60,true,false); }
+        { runtimeRig.CopySeatedPose(); runtimeRig.Pose(1,1,1,1,force,.5f,Quaternion.identity,1f/60,true,false); }
         long before = GC.GetAllocatedBytesForCurrentThread();
         for (int frame = 0; frame < 120; frame++)
-        { runtimeRig.CopySeatedPose(); runtimeRig.Pose(1,1,1,1,force,Quaternion.identity,1f/60,true,false); }
+        { runtimeRig.CopySeatedPose(); runtimeRig.Pose(1,1,1,1,force,.5f,Quaternion.identity,1f/60,true,false); }
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         Check(allocated == 0 && runtimeRig.StickGripError < .0005f && runtimeRig.ThrottleGripError < .0005f,
             "Active left-stick/right-throttle contact allocates no managed memory after warm-up");
@@ -1167,7 +1167,7 @@ public sealed class PilotUnityCheck : MonoBehaviour
             {
                 stick.transform.localRotation = Quaternion.Euler(pitch * range,0,-roll * range);
                 throttle.transform.localRotation = Quaternion.Euler(6f * (frame % 11) / 10,0,0);
-                fitted.CopySeatedPose(); fitted.Pose(1,1,1,1,forces[force],Quaternion.identity,1f/60,true,false);
+                fitted.CopySeatedPose(); fitted.Pose(1,1,1,1,forces[force],.5f,Quaternion.identity,1f/60,true,false);
                 error = Mathf.Max(error,Vector3.Distance(hand.position + hand.rotation * new Vector3(0,.085f,.02f),stick.transform.TransformPoint(expectedPalm)));
                 shoulderShift = Mathf.Max(shoulderShift,Vector3.Distance(upper.position,upper.parent.TransformPoint(nativePositions[7])));
                 extension = Mathf.Max(extension,Vector3.Distance(upper.position,lower.position) + Vector3.Distance(lower.position,hand.position) - nativeReach - extra);
@@ -1178,7 +1178,7 @@ public sealed class PilotUnityCheck : MonoBehaviour
             family + " cached rest fit and native camera remain unchanged throughout moving controls and bracing");
         long before = GC.GetAllocatedBytesForCurrentThread();
         for (int frame = 0; frame < 120; frame++)
-        { fitted.CopySeatedPose(); fitted.Pose(1,1,1,1,forces[0],Quaternion.identity,1f/60,true,false); }
+        { fitted.CopySeatedPose(); fitted.Pose(1,1,1,1,forces[0],.5f,Quaternion.identity,1f/60,true,false); }
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         Check(allocated == 0, family + " cached rest-fit copying with both active hands allocates zero managed bytes after warm-up");
         for (int i = 0; i < source.bones.Length; i++)
@@ -1226,7 +1226,7 @@ public sealed class PilotUnityCheck : MonoBehaviour
         Vector3 nativeWristPosition = source.bones[9].localPosition;
         Quaternion nativeWristRotation = source.bones[9].localRotation;
         rig.AttachControls(lever.transform, grip, gripRotation, null, Vector3.zero, Quaternion.identity);
-        rig.CopySeatedPose(); rig.Pose(0,0,0,0,Vector3.up,Quaternion.identity,1f/60,false,true);
+        rig.CopySeatedPose(); rig.Pose(0,0,0,0,Vector3.up,.5f,Quaternion.identity,1f/60,false,true);
         Check(Vector3.Distance(hand.position + hand.up * .085f + hand.forward * .02f, upperHandle) < .0005f,
             "Bound hand palm touches the upper handle with body motion disabled");
         Check(lever.transform.position == nativeLeverPosition && lever.transform.rotation == nativeLeverRotation &&
@@ -1244,18 +1244,18 @@ public sealed class PilotUnityCheck : MonoBehaviour
         Quaternion head = rig.Head.rotation, chest = rig.Chest.rotation, leftFoot = rig.Bone("foot_L").rotation, rightFoot = rig.Bone("foot_R").rotation;
         Vector3 chestPosition = rig.Chest.position;
         rig.CopySeatedPose();
-        rig.Pose(-1,1,-1,0,new Vector3(100,100,100),Quaternion.Euler(90,180,0),0,true,false);
+        rig.Pose(-1,1,-1,0,new Vector3(100,100,100),.5f,Quaternion.Euler(90,180,0),0,true,false);
         Check(Quaternion.Angle(head, rig.Head.rotation) < .001f && Quaternion.Angle(chest, rig.Chest.rotation) < .001f &&
             Quaternion.Angle(leftFoot, rig.Bone("foot_L").rotation) < .001f && Quaternion.Angle(rightFoot, rig.Bone("foot_R").rotation) < .001f &&
             Vector3.Distance(chestPosition, rig.Chest.position) < .00001f, "Zero dt reapplies previous pose after native pose copy");
-        rig.CopySeatedPose(); rig.Pose(1,1,1,1,new Vector3(100,100,100),Quaternion.identity,1f/60,false,false);
+        rig.CopySeatedPose(); rig.Pose(1,1,1,1,new Vector3(100,100,100),.5f,Quaternion.identity,1f/60,false,false);
         Check(Quaternion.Angle(rig.Chest.rotation, source.bones[1].rotation) < .001f &&
             Quaternion.Angle(rig.Bone("foot_L").rotation, source.bones[15].rotation) < .001f &&
             Quaternion.Angle(rig.Bone("foot_R").rotation, source.bones[12].rotation) < .001f,
             "Motion disabled restores neutral chest and feet despite extreme controls");
         for (int frame = 0; frame < 90; frame++)
         {
-            rig.CopySeatedPose(); rig.Pose(1,1,1,1,new Vector3(100,100,100),Quaternion.Euler(70,-120,0),1f/60,true,true);
+            rig.CopySeatedPose(); rig.Pose(1,1,1,1,new Vector3(100,100,100),.5f,Quaternion.Euler(70,-120,0),1f/60,true,true);
         }
         Check(Vector3.Distance(rig.Chest.position, source.bones[1].position) < .00001f, "Comfort removes breathing translation");
         Vector3 lean = (Quaternion.Inverse(source.bones[1].rotation) * rig.Chest.rotation).eulerAngles;
@@ -1269,27 +1269,27 @@ public sealed class PilotUnityCheck : MonoBehaviour
             "Head clamps preserve signed35down45up75yaw limits");
         for (int frame = 0; frame < 90; frame++)
         {
-            rig.CopySeatedPose(); rig.Pose(0,0,0,0,Vector3.up,Quaternion.Euler(-80,120,0),1f/60,true,true);
+            rig.CopySeatedPose(); rig.Pose(0,0,0,0,Vector3.up,.5f,Quaternion.Euler(-80,120,0),1f/60,true,true);
         }
         headPitch = (float)typeof(CockpitPilotRig).GetField("headPitch", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(rig);
         headYaw = (float)typeof(CockpitPilotRig).GetField("headYaw", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(rig);
         Check(headPitch >= -45.001f && headPitch < -44 && headYaw <= 75.001f && headYaw > 74, "Opposite head limits retain45up and positive75yaw");
         for (int frame = 0; frame < 90; frame++)
         {
-            rig.CopySeatedPose(); rig.Pose(1,1,1,1,new Vector3(100,100,100),Quaternion.identity,1f/60,true,false);
+            rig.CopySeatedPose(); rig.Pose(1,1,1,1,new Vector3(100,100,100),.5f,Quaternion.identity,1f/60,true,false);
         }
         Check(Quaternion.Angle(source.bones[1].rotation, rig.Chest.rotation) <= 2.001f,
             "Combined full-motion torso rotation stays within two degrees");
         Check(Vector3.Distance(source.bones[1].position, rig.Chest.position) <= .00301f,
             "Full-motion breathing translation stays within three millimetres");
         rig.SetControls(null,null); rig.CopySeatedPose();
-        rig.Pose(1,1,1,1,Vector3.up,Quaternion.identity,1f/60,true,true);
+        rig.Pose(1,1,1,1,Vector3.up,.5f,Quaternion.identity,1f/60,true,true);
         Check(Quaternion.Angle(rig.Bone("upperarm_R").localRotation, source.bones[7].localRotation) < .001f &&
             Quaternion.Angle(rig.Bone("forearm_L").localRotation, source.bones[5].localRotation) < .001f,
             "Missing native grips preserve conservative seated arm pose");
         rig.SetControls(stick,throttle);
         stick.position = new Vector3(100,100,100); throttle.position = new Vector3(-100,100,100);
-        rig.CopySeatedPose(); rig.Pose(1,1,1,1,Vector3.up,Quaternion.identity,1f/60,true,true);
+        rig.CopySeatedPose(); rig.Pose(1,1,1,1,Vector3.up,.5f,Quaternion.identity,1f/60,true,true);
         Check(Quaternion.Angle(rig.Bone("forearm_R").localRotation, source.bones[8].localRotation) < .001f &&
             Quaternion.Angle(rig.Bone("forearm_L").localRotation, source.bones[5].localRotation) < .001f,
             "Unreachable native grips preserve seated arms");
@@ -1363,7 +1363,7 @@ public sealed class PilotUnityCheck : MonoBehaviour
         foreach (Vector2 look in new[] { new Vector2(35, 75), new Vector2(-45, -75), new Vector2(35, -75), new Vector2(-45, 75) })
         {
             for (int frame = 0; frame < 90; frame++)
-            { rig.CopySeatedPose(); rig.Pose(0, 0, 0, 0, Vector3.up, Quaternion.Euler(look.x, look.y, 0), 1f / 60f, true, true); }
+            { rig.CopySeatedPose(); rig.Pose(0, 0, 0, 0, Vector3.up, .5f, Quaternion.Euler(look.x, look.y, 0), 1f / 60f, true, true); }
             yield return new WaitForEndOfFrame(); yield return new WaitForEndOfFrame();
             Check(ColourPixels(eyeTarget, true) < 25, "Helmet coverage remains complete at look limit " + look);
             Check(ColourPixels(eyeTarget, false) > 800, "Collar remains visible at look limit " + look);

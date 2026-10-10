@@ -103,6 +103,7 @@
     <Compile Include="..\..\modules\Squad\Domain\AceCareer.cs" Link="Features\Squad\AceCareer.cs" />
     <Compile Include="..\..\modules\Squad\Domain\SnapshotRevision.cs" Link="Features\Squad\SnapshotRevision.cs" />
     <Compile Include="..\..\Core\Util\PngSprites.cs" Link="Core\PngSprites.cs" />
+    <Compile Include="..\..\Core\Util\PcmWav.cs" Link="Core\PcmWav.cs" />
     <Compile Include="..\..\Core\Contracts\IPlayerPerks.cs" Link="Framework\IPlayerPerks.cs" />
     <Compile Include="..\..\Core\Contracts\IProgressionView.cs" Link="Framework\IProgressionView.cs" />
     <Compile Include="..\..\modules\Progression\Runtime\PerkCatalog.cs" Link="Features\Progression\PerkCatalog.cs" />

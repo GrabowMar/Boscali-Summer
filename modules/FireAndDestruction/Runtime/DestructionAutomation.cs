@@ -187,6 +187,7 @@ namespace BoscaliSummer.Fire
             reply["wreckVisible"] = wreckVisible;
             reply["wreckColliders"] = wreckColliders;
             reply["pressureParticles"] = pressure;
+            reply["collapseRumbles"] = CollapseBurstPool.Rumbles;
             reply["impactMarks"] = BuildingHitLedger.Instance != null ? BuildingHitLedger.Instance.ImpactMarks : 0;
             reply["hitCostMs"] = hitCostMs;
             reply["originHeight"] = lastOriginHeight;

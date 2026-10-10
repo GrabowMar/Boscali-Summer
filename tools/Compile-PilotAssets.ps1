@@ -2,7 +2,9 @@ param(
     [string]$SourceDir = (Join-Path $PSScriptRoot '../modules/Immersion/Assets/Source'),
     [string]$OutputDir = (Join-Path $PSScriptRoot '../modules/Immersion/Assets'),
     [string]$Unity = 'C:/Program Files/Unity/Hub/Editor/2022.3.62f3/Editor/Unity.exe',
-    [string]$EvidenceDir = ''
+    [string]$EvidenceDir = '',
+    # Shadow-receiving body variants plus texture compression can exceed 10 min on a loaded machine.
+    [int]$TimeoutMinutes = 25
 )
 $ErrorActionPreference = 'Stop'
 if (-not (Test-Path -LiteralPath $Unity)) { throw "Unity Editor not found: $Unity" }
@@ -13,10 +15,17 @@ New-Item -ItemType Directory -Force -Path "$fixture/Assets/PilotShader", "$fixtu
 $editorVersion = if ($Unity -like '*62f3*') { '2022.3.62f3' } else { '2022.3.62f2' }
 Set-Content -LiteralPath "$fixture/ProjectSettings/ProjectVersion.txt" -Value "m_EditorVersion: $editorVersion"
 Set-Content -LiteralPath "$fixture/Packages/manifest.json" -Value '{"dependencies":{"com.unity.render-pipelines.universal":"14.0.12","com.unity.modules.assetbundle":"1.0.0"}}'
-foreach ($name in 'PilotBody.shader', 'PilotCanopyReflection.shader', 'pilot-first-person.json') {
+foreach ($name in 'PilotBody.shader', 'PilotCanopyReflection.shader', 'VisorOverlay.shader', 'pilot-first-person.json') {
     $source = Join-Path $SourceDir $name
     if (-not (Test-Path -LiteralPath $source)) { throw "Required pilot asset source missing: $source" }
     Copy-Item -LiteralPath $source -Destination "$fixture/Assets/PilotShader/$name" -Force
+}
+# Owned body textures ship with (and only match) the authored first-person mesh.
+New-Item -ItemType Directory -Force -Path "$fixture/Assets/PilotShader/body" | Out-Null
+foreach ($name in 'pilot_albedo.png', 'pilot_normal.png', 'pilot_mask.png') {
+    $source = Join-Path $SourceDir "Body/$name"
+    if (-not (Test-Path -LiteralPath $source)) { throw "Required pilot body texture missing: $source" }
+    Copy-Item -LiteralPath $source -Destination "$fixture/Assets/PilotShader/body/$name" -Force
 }
 Set-Content -LiteralPath "$fixture/Assets/Editor/BuildPilotBundle.cs" -Value @'
 using System;
@@ -89,6 +98,31 @@ public static class BuildPilotBundle
             data.triangles.Length / 3 + " triangles / 16 bones; readable=" + mesh.isReadable);
     }
 
+    private static readonly string[] BodyTextures = { "pilot_albedo", "pilot_normal", "pilot_mask" };
+
+    private static void ImportBodyTextures()
+    {
+        foreach (string name in BodyTextures)
+        {
+            string path = "Assets/PilotShader/body/" + name + ".png";
+            var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+            if (importer == null) throw new Exception("Body texture missing: " + path);
+            bool normal = name == "pilot_normal", mask = name == "pilot_mask";
+            importer.textureType = normal ? TextureImporterType.NormalMap : TextureImporterType.Default;
+            importer.sRGBTexture = !normal && !mask;
+            importer.mipmapEnabled = true;
+            importer.anisoLevel = mask ? 1 : 4;
+            importer.isReadable = false;
+            importer.maxTextureSize = mask ? 512 : 1024;
+            var standalone = importer.GetPlatformTextureSettings("Standalone");
+            standalone.overridden = true;
+            standalone.maxTextureSize = importer.maxTextureSize;
+            standalone.format = normal ? TextureImporterFormat.BC5 : TextureImporterFormat.DXT1;
+            importer.SetPlatformTextureSettings(standalone);
+            importer.SaveAndReimport();
+        }
+    }
+
     public static void Run()
     {
         try
@@ -112,7 +146,8 @@ public static class BuildPilotBundle
             GraphicsSettings.renderPipelineAsset = pipeline;
             QualitySettings.renderPipeline = pipeline;
             AssetDatabase.SaveAssets();
-            string[] shaderPaths = { "Assets/PilotShader/PilotBody.shader", "Assets/PilotShader/PilotCanopyReflection.shader" };
+            string[] shaderPaths = { "Assets/PilotShader/PilotBody.shader", "Assets/PilotShader/PilotCanopyReflection.shader",
+                "Assets/PilotShader/VisorOverlay.shader" };
             foreach (string path in shaderPaths)
             {
                 Shader shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
@@ -130,14 +165,16 @@ public static class BuildPilotBundle
                 throw new Exception("Pilot shader does not preserve BODY0 / CAPTURE1");
             string[] materialProperties = { "_BumpMap", "_BumpScale", "_MetallicGlossMap", "_Metallic", "_Smoothness",
                 "_SmoothnessTextureChannel", "_SpecularHighlights", "_OcclusionMap", "_OcclusionStrength",
-                "_HasNormalMap", "_HasMetallicMap", "_HasOcclusionMap", "_HeadMaskMode" };
+                "_HasNormalMap", "_HasMetallicMap", "_HasOcclusionMap", "_HeadMaskMode", "_OwnedMaps", "_MaskMap" };
             foreach (string property in materialProperties)
                 if (!bodyMaterial.HasProperty(property)) throw new Exception("Pilot material property missing: " + property);
             File.WriteAllText("shader-result.txt", "PASS supported BODY0 / CAPTURE1; native material contract: " +
                 string.Join(", ", materialProperties));
             UnityEngine.Object.DestroyImmediate(bodyMaterial);
             BuildFirstPersonMesh();
-            string[] paths = { shaderPaths[0], shaderPaths[1], "Assets/PilotShader/pilot-first-person.asset" };
+            ImportBodyTextures();
+            string[] paths = { shaderPaths[0], shaderPaths[1], shaderPaths[2], "Assets/PilotShader/pilot-first-person.asset",
+                "Assets/PilotShader/body/pilot_albedo.png", "Assets/PilotShader/body/pilot_normal.png", "Assets/PilotShader/body/pilot_mask.png" };
             var build = new AssetBundleBuild { assetBundleName = "pilot.bundle", assetNames = paths };
             var manifest = BuildPipeline.BuildAssetBundles("BundleOutput", new[] { build },
                 BuildAssetBundleOptions.ChunkBasedCompression, BuildTarget.StandaloneWindows64);
@@ -166,7 +203,7 @@ $resultPath = Join-Path $fixture 'build-result.txt'
 if (Test-Path -LiteralPath $resultPath) { Remove-Item -LiteralPath $resultPath }
 $arguments = @('-batchmode', '-projectPath', ('"' + $fixture + '"'), '-executeMethod', 'BuildPilotBundle.Run', '-logFile', ('"' + "$fixture/build.log" + '"'))
 $process = Start-Process -FilePath $Unity -ArgumentList $arguments -WorkingDirectory $fixture -WindowStyle Hidden -PassThru
-$deadline = [DateTime]::UtcNow.AddMinutes(10)
+$deadline = [DateTime]::UtcNow.AddMinutes($TimeoutMinutes)
 while (-not $process.WaitForExit(1000)) {
     if ([DateTime]::UtcNow -ge $deadline) { $process.Kill(); $process.WaitForExit(); throw "Pilot shader compiler timed out: $fixture/build.log" }
 }

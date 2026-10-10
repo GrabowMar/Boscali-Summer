@@ -29,6 +29,104 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             return Readout(manager);
         }
 
+        /// <summary>Hold an extra cockpit look for captures (args: pitch down-positive, yaw, seconds; degrees).</summary>
+        public static Dictionary<string, object> Look(Dictionary<string, object> args)
+        {
+            ImmersionManager manager = ImmersionManager.Live;
+            if (manager == null) return Failure("ImmersionAutomation", "Look", "no immersion manager in this scene");
+            float pitch, yaw, seconds;
+            try
+            {
+                pitch = System.Convert.ToSingle(Arg(args, "pitch") ?? 0f, System.Globalization.CultureInfo.InvariantCulture);
+                yaw = System.Convert.ToSingle(Arg(args, "yaw") ?? 0f, System.Globalization.CultureInfo.InvariantCulture);
+                seconds = System.Convert.ToSingle(Arg(args, "seconds") ?? 5f, System.Globalization.CultureInfo.InvariantCulture);
+            }
+            catch (System.Exception) { return Failure("ImmersionAutomation", "Look", "pitch, yaw and seconds must be numbers"); }
+            manager.DebugLook(Mathf.Clamp(pitch, -80f, 80f), Mathf.Clamp(yaw, -160f, 160f), Mathf.Clamp(seconds, 0f, 60f));
+            return Readout(manager);
+        }
+
+        /// <summary>Per-feature A/B switches (args: body, reflection, visor, breathing - each optional bool).</summary>
+        public static Dictionary<string, object> Configure(Dictionary<string, object> args)
+        {
+            ImmersionManager manager = ImmersionManager.Live;
+            if (manager == null || manager.Settings == null) return Failure("ImmersionAutomation", "Configure", "no immersion manager in this scene");
+            if (Arg(args, "body") is bool body) manager.Settings.PilotBodyEnabled.Value = body;
+            if (Arg(args, "reflection") is bool reflection) manager.Settings.PilotReflectionEnabled.Value = reflection;
+            if (Arg(args, "visor") is bool visor) manager.Settings.HelmetVisorEnabled.Value = visor;
+            if (Arg(args, "breathing") is bool breathing) manager.Settings.PilotBreathingEnabled.Value = breathing;
+            if (Arg(args, "visorIgnoreHud") is bool ignoreHud) manager.DebugVisorIgnoresHud(ignoreHud);
+            if (Arg(args, "kneeboardRefresh") is bool refresh && refresh) CockpitPilot.Live?.DebugRefreshKneeboard();
+            object card = Arg(args, "kneeboardCard");
+            if (card != null)
+            {
+                int index;
+                try { index = System.Math.Max(0, System.Convert.ToInt32(card, System.Globalization.CultureInfo.InvariantCulture)); }
+                catch (System.Exception) { return Failure("ImmersionAutomation", "Configure", "kneeboardCard must be a number"); }
+                // Through the gallery, as SQD STUDIO does, so the card refresh and the page flip both run.
+                if (BoscaliSummer.Core.Services.ModuleServices.TryGet(out BoscaliSummer.Core.Contracts.IKneeboardGallery gallery)) gallery.Selected = index;
+                else { manager.Settings.KneeboardCard.Value = index; CockpitPilot.Live?.DebugRefreshKneeboard(); }
+            }
+            manager.LogAutomation("Configure: body=" + manager.Settings.PilotBodyEnabled.Value + " reflection=" + manager.Settings.PilotReflectionEnabled.Value +
+                " visor=" + manager.Settings.HelmetVisorEnabled.Value + " breathing=" + manager.Settings.PilotBreathingEnabled.Value);
+            return Readout(manager);
+        }
+
+        /// <summary>Drive pilot cues from a fixed G (args: g -5..12, seconds 0..30) through the vanilla-equation fallback.</summary>
+        public static Dictionary<string, object> InjectG(Dictionary<string, object> args)
+        {
+            ImmersionManager manager = ImmersionManager.Live;
+            if (manager == null) return Failure("ImmersionAutomation", "InjectG", "no immersion manager in this scene");
+            float g, seconds;
+            try
+            {
+                g = System.Convert.ToSingle(Arg(args, "g") ?? 1f, System.Globalization.CultureInfo.InvariantCulture);
+                seconds = System.Convert.ToSingle(Arg(args, "seconds") ?? 5f, System.Globalization.CultureInfo.InvariantCulture);
+            }
+            catch (System.Exception) { return Failure("ImmersionAutomation", "InjectG", "g and seconds must be numbers"); }
+            if (float.IsNaN(g) || g < -5f || g > 12f || float.IsNaN(seconds) || seconds < 0f || seconds > 30f)
+                return Failure("ImmersionAutomation", "InjectG", "g must be -5..12 and seconds 0..30");
+            manager.InjectG(g, seconds);
+            manager.LogAutomation("InjectG: " + g + " G for " + seconds + " s");
+            return Readout(manager);
+        }
+
+        /// <summary>
+        /// Deal real damage to the followed aircraft (args: blast and pierce per part, parts counted from the end of its
+        /// part list) so the hit hook, the warhead test and the crippled check run end to end. Host only; it does break the aircraft.
+        /// </summary>
+        public static Dictionary<string, object> InjectHit(Dictionary<string, object> args)
+        {
+            ImmersionManager manager = ImmersionManager.Live;
+            var cameras = SceneSingleton<CameraStateManager>.i;
+            Aircraft aircraft = cameras != null ? cameras.followingUnit as Aircraft : null;
+            if (manager == null || aircraft == null || aircraft.partLookup == null)
+                return Failure("ImmersionAutomation", "InjectHit", "no followed aircraft in this scene");
+            float blast, pierce;
+            int count;
+            try
+            {
+                blast = System.Convert.ToSingle(Arg(args, "blast") ?? 50f, System.Globalization.CultureInfo.InvariantCulture);
+                pierce = System.Convert.ToSingle(Arg(args, "pierce") ?? 0f, System.Globalization.CultureInfo.InvariantCulture);
+                count = System.Convert.ToInt32(Arg(args, "parts") ?? 1, System.Globalization.CultureInfo.InvariantCulture);
+            }
+            catch (System.Exception) { return Failure("ImmersionAutomation", "InjectHit", "blast, pierce and parts must be numbers"); }
+            if (float.IsNaN(blast) || blast < 0f || blast > 5000f || float.IsNaN(pierce) || pierce < 0f || pierce > 5000f || count < 1 || count > 64)
+                return Failure("ImmersionAutomation", "InjectHit", "blast and pierce must be 0..5000 and parts 1..64");
+            int struck = 0;
+            for (int i = aircraft.partLookup.Count - 1; i >= 0 && struck < count; i--)
+            {
+                UnitPart part = aircraft.partLookup[i];
+                if (part == null || part == aircraft.cockpit) continue;
+                part.TakeDamage(pierce, blast, 1f, 0f, 0f, PersistentID.None);
+                struck++;
+            }
+            manager.LogAutomation("InjectHit: blast " + blast + " pierce " + pierce + " on " + struck + " parts");
+            Dictionary<string, object> state = Readout(manager);
+            state["partsStruck"] = struck;
+            return state;
+        }
+
         private static Dictionary<string, object> Readout(ImmersionManager manager)
         {
             var state = new Dictionary<string, object>();

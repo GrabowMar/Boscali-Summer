@@ -18,14 +18,14 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
         public ConfigEntry<bool> MfdGlowEnabled { get; }
         public ConfigEntry<bool> AirframeAudioEnabled { get; }
         public ConfigEntry<bool> SurfaceImmersionEnabled { get; }
-        public ConfigEntry<bool> GForceAudioEnabled { get; }
         public ConfigEntry<bool> WindAudioEnabled { get; }
-        public ConfigEntry<bool> GVignetteEnabled { get; }
         public ConfigEntry<bool> MachBuffetEnabled { get; }
-        public ConfigEntry<bool> PilotStrainAudioEnabled { get; }
+        public ConfigEntry<bool> PilotBreathingEnabled { get; }
+        public ConfigEntry<bool> HelmetVisorEnabled { get; }
         public ConfigEntry<bool> PilotBodyEnabled { get; }
         public ConfigEntry<bool> PilotControlMotionEnabled { get; }
         public ConfigEntry<bool> PilotReflectionEnabled { get; }
+        public ConfigEntry<int> KneeboardCard { get; }
 
         public ImmersionSettings(ConfigFile config)
         {
@@ -63,26 +63,24 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
             SurfaceImmersionEnabled = config.Bind(section, "SurfaceImmersionEnabled", true,
                 "Cockpit view: subtle damage darkening on verified opaque cockpit material slots. Weather owns glass rain and cold moisture.");
 
-            GForceAudioEnabled = config.Bind(section, "GForceAudioEnabled", true,
-                "Cockpit view: dynamic auditory narrowing and helmet audio low-pass filtering under high G-forces.");
-
             WindAudioEnabled = config.Bind(section, "WindAudioEnabled", true,
                 "Cockpit view: procedural canopy wind rush and aerodynamic slipstream audio.");
-
-            GVignetteEnabled = config.Bind(section, "GVignetteEnabled", true,
-                "Cockpit view: physiological G-force visual effects (tunnel vision greyout under high G, redout under negative G).");
 
             MachBuffetEnabled = config.Bind(section, "MachBuffetEnabled", true,
                 "Cockpit view: transonic Mach aerodynamic buffeting vibrations (Mach 0.86 - 1.12) and sound barrier crossing bump.");
 
-            PilotStrainAudioEnabled = config.Bind(section, "PilotStrainAudioEnabled", true,
-                "Cockpit view: pilot Anti-G Straining Maneuver (AGSM) pressurized breathing sounds under sustained high G.");
+            PilotBreathingEnabled = config.Bind(section, "PilotBreathingEnabled", true,
+                "Cockpit view: oxygen-mask breathing, anti-G straining grunts, G-suit hiss and a faint heartbeat near blackout, all paced by the game's own G-LOC model.");
+            HelmetVisorEnabled = config.Bind(section, "HelmetVisorEnabled", true,
+                "Cockpit view: glass-only helmet visor - daytime sun tint, smudges lit by the sun, breath fog when breathing hard, brow shadow above 6 G. No frame.");
             PilotBodyEnabled = config.Bind(section, "PilotBodyEnabled", true,
                 "Show the native pilot's flight suit, arms and legs in first person. Local presentation only.");
             PilotControlMotionEnabled = config.Bind(section, "PilotControlMotionEnabled", true,
                 "Enable rudder foot movement, restrained breathing and G-load bracing. Hand attachment stays active; Comfort Motion reduces body motion.");
             PilotReflectionEnabled = config.Bind(section, "PilotReflectionEnabled", true,
                 "Faint pilot and helmet reflection on verified windscreen glass. Pilot-only 128/256 pixel capture capped at 10 Hz; works independently of body visibility.");
+            KneeboardCard = config.Bind(section, "KneeboardCard", 0,
+                "Cockpit kneeboard card: 0 writes the mission card, 1 and up pick a picture card. Choose it in SQD > STUDIO.");
         }
     }
 }
