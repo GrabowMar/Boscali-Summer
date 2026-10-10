@@ -9,7 +9,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
     /// Page priority and selection for the TAC BOARD scope (HUD v8), pure. The board shows ONE page: the highest-priority page that
     /// has live content, SYSTEMS when none has (and SYSTEMS is the one page that folds to a compact strip). Every other live page
     /// gets a pip on the tab. The order is the spec's: THREAT 90, SHOT 80, MISSILE CAM 70, APPROACH 60, WING 50, STRIKE 40, DOCK 30,
-    /// OBJECTIVE 20, SYSTEMS 10; SYSTEMS rises to <see cref="CriticalSystemsRank"/> while it has a fire, an engine out, BINGO or lost
+    /// OBJECTIVE 20, SYSTEMS 10, with two exceptions. The MISSILE CAM ranks <see cref="RidingRank"/>: the missile being ridden is
+    /// itself a shot in the air, so SHOT is always live under it and at 70 the cam would never show; an inbound missile still
+    /// outranks the ride. SYSTEMS rises to <see cref="CriticalSystemsRank"/> while it has a fire, an engine out, BINGO or lost
     /// structure to report (above the pages that only inform, below the ones that fly the aircraft), because the damage and fuel
     /// cautions have no other place on the board. <see cref="ScopeSelector"/> adds the dwell that keeps the page from flapping.
     /// </summary>
@@ -20,14 +22,17 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>SYSTEMS while it reports something critical: between APPROACH (60) and WING (50).</summary>
         public const int CriticalSystemsRank = 55;
 
+        /// <summary>The MISSILE CAM (live only while the camera rides an own missile): between THREAT (90) and SHOT (80).</summary>
+        public const int RidingRank = 85;
+
         /// <summary>The page's bit in a live mask.</summary>
         public static ushort Bit(ScopePage page) => (ushort)(1 << (int)page);
 
         public static bool Has(ushort mask, ScopePage page) => (mask & Bit(page)) != 0;
 
-        /// <summary>0..90, higher wins (the prototype's page priorities); SYSTEMS is 55 while <paramref name="systemsCritical"/>.</summary>
+        /// <summary>0..90, higher wins (the prototype's page priorities); the cam is 85, SYSTEMS is 55 while <paramref name="systemsCritical"/>.</summary>
         public static int Rank(ScopePage page, bool systemsCritical = false) =>
-            page == ScopePage.Systems && systemsCritical ? CriticalSystemsRank : (PageCount - 1 - (int)page) * 10 + 10;
+            page == ScopePage.MissileCam ? RidingRank : page == ScopePage.Systems && systemsCritical ? CriticalSystemsRank : (PageCount - 1 - (int)page) * 10 + 10;
 
         /// <summary>The page to show for a live mask: the best-ranked live page, else SYSTEMS.</summary>
         public static ScopePage Best(ushort live, bool systemsCritical = false)

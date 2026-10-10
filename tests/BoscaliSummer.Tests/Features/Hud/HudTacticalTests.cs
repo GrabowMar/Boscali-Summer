@@ -41,39 +41,54 @@ namespace BoscaliSummer.Tests.Features.Hud
         {
             var ledger = new ShotLedger();
             Func<int, bool> allFlying = _ => true, noneFlying = _ => false;
-            ledger.Launch(1, false, 0f);
-            ledger.Launch(2, true, 0f);
-            ledger.Detonate(1, true, 5f);
-            TestAssert.That(ledger.State(0) == ShotState.Hit && ledger.State(1) == ShotState.InFlight, "Hit resolves only its own pip");
+            ledger.Launch(1, false, "SKYWY", 0f);
+            ledger.Launch(2, true, "GBU12", 0f);
+            ledger.Detonate(1, true, 5f, 100f, 6200f, -40f);
+            int one = ledger.IndexOf(1), two = ledger.IndexOf(2);
+            TestAssert.That(ledger.State(one) == ShotState.Hit && ledger.State(two) == ShotState.InFlight, "Hit resolves only its own entry");
+            TestAssert.That(ledger.TryPlace(one, out float px, out float py, out float pz) && px == 100f && py == 6200f && pz == -40f && !ledger.TryPlace(two, out _, out _, out _), "A resolved entry keeps where it ended; one in flight has no place");
+            TestAssert.That(ledger.Name(one) == "SKYWY" && ledger.IsBomb(two) && ledger.Id(one) == 1, "An entry keeps its weapon's name, kind and id");
             ledger.Detonate(99, false, 5f);
-            TestAssert.That(ledger.State(1) == ShotState.InFlight, "Unknown detonation changes nothing");
+            TestAssert.That(ledger.State(two) == ShotState.InFlight, "Unknown detonation changes nothing");
             ledger.Expire(8f, allFlying);
-            TestAssert.That(ledger.State(0) == ShotState.Empty, "Resolved pip clears after its hold");
+            TestAssert.That(ledger.State(one) == ShotState.Hit, "A result stays on the timeline for a minute (not the old 2.5 s)");
+            ledger.Expire(66f, allFlying);
+            TestAssert.That(ledger.State(one) == ShotState.Empty && ledger.IndexOf(1) < 0, "...and then clears");
 
-            // A cruise missile in the air for twenty minutes is still a pip; pausing the game cannot age it out.
+            // A cruise missile in the air for twenty minutes is still in flight; pausing the game cannot age it out.
             ledger.Expire(1200f, allFlying);
-            TestAssert.That(ledger.State(1) == ShotState.InFlight, "A weapon the game still has airborne never times out");
+            TestAssert.That(ledger.State(two) == ShotState.InFlight, "A weapon the game still has airborne never times out");
             ledger.Expire(1202f, noneFlying);
-            TestAssert.That(ledger.State(1) == ShotState.InFlight, "A brief gap before the detonation RPC lands keeps the pip");
+            TestAssert.That(ledger.State(two) == ShotState.InFlight, "A brief gap before the detonation RPC lands keeps the entry");
             ledger.Expire(1204f, noneFlying);
-            TestAssert.That(ledger.State(1) == ShotState.Miss, "Gone from the air for the grace period with no detonation: a miss");
+            TestAssert.That(ledger.State(two) == ShotState.Miss, "Gone from the air for the grace period with no detonation: a miss");
 
-            for (int i = 0; i < ShotLedger.Capacity + 3; i++) ledger.Launch(10 + i, false, 1210f);
+            // A weapon whose seeker lost a living target and then misses is DEFEATED; one that still hits is a hit.
+            var lost = new ShotLedger();
+            lost.Launch(5, false, "DART", 0f);
+            lost.Launch(6, false, "SKYWY", 0f);
+            lost.MarkLost(5);
+            lost.MarkLost(6);
+            lost.Detonate(5, false, 3f);
+            lost.Detonate(6, true, 3f);
+            TestAssert.That(lost.State(lost.IndexOf(5)) == ShotState.Defeated && lost.State(lost.IndexOf(6)) == ShotState.Hit, "A miss after the lock was lost is DEFEATED; a hit stays a hit");
+            lost.Launch(7, false, "DART", 4f);
+            lost.MarkLost(7);
+            lost.Expire(20f, noneFlying);
+            TestAssert.That(lost.State(lost.IndexOf(7)) == ShotState.Defeated, "...also when it just vanished");
+
+            var order = new ShotLedger();
+            for (int i = 0; i < ShotLedger.Capacity + 3; i++) order.Launch(10 + i, false, "W" + i, 1210f + i);
             int flying = 0;
-            for (int i = 0; i < ShotLedger.Capacity; i++) if (ledger.State(i) == ShotState.InFlight) flying++;
-            TestAssert.That(flying == ShotLedger.Capacity, "A full ring keeps every pip in flight");
-
-            var legend = new ShotLedger();
-            TestAssert.That(legend.Legend == "", "No pips, no legend");
-            legend.Launch(1, false, 0f);
-            TestAssert.That(legend.Legend == "SHOT", "A pip in flight reads SHOT");
-            legend.Detonate(1, true, 1f);
-            TestAssert.That(legend.Legend == "HIT", "The latest outcome reads HIT");
-            legend.Launch(2, false, 1.5f);
-            legend.Detonate(2, false, 2f);
-            TestAssert.That(legend.Legend == "MISS", "A later miss replaces it");
-            legend.Expire(10f, null);
-            TestAssert.That(legend.Legend == "", "Resolved pips clear and take the legend with them");
+            for (int i = 0; i < ShotLedger.Capacity; i++) if (order.State(i) == ShotState.InFlight) flying++;
+            TestAssert.That(flying == ShotLedger.Capacity, "A full ring keeps every entry in flight");
+            var slots = new int[ShotLedger.Capacity];
+            TestAssert.That(order.InOrder(slots) == ShotLedger.Capacity && order.Id(slots[0]) == 10 && order.Id(slots[ShotLedger.Capacity - 1]) == 10 + ShotLedger.Capacity - 1, "Entries come back in launch order");
+            order.Detonate(12, true, 1230f);
+            order.Launch(40, false, "NEW", 1231f);
+            TestAssert.That(order.IndexOf(12) < 0 && order.IndexOf(40) >= 0, "A new launch takes the place of the oldest resolved entry");
+            order.InOrder(slots);
+            TestAssert.That(order.Id(slots[ShotLedger.Capacity - 1]) == 40, "...and is the newest in the order");
 
             TestAssert.That(ShotRules.Hit(true, false), "A dumb bomb that struck armour is a hit even with no target");
             TestAssert.That(ShotRules.Hit(false, true), "A burst within 200 m of its target is a hit (even when it also flags the ground, as a ground target's impact does)");

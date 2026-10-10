@@ -16,9 +16,9 @@ namespace BoscaliSummer.Tests.Features.Hud
         {
             TestAssert.Eq((int)ScopePage.Systems, CuePriority.PageCount - 1, "SYSTEMS is the lowest page");
             TestAssert.Eq(CuePriority.Rank(ScopePage.Threat), 90, "THREAT ranks 90");
-            TestAssert.Eq(CuePriority.Rank(ScopePage.MissileCam), 70, "The missile cam ranks 70, as the prototype and the spec have it");
+            TestAssert.Eq(CuePriority.Rank(ScopePage.MissileCam), 85, "The missile cam ranks 85: riding a missile means a shot is in the air, so at the prototype's 70 SHOT would always hide it");
             TestAssert.Eq(CuePriority.Rank(ScopePage.Systems), 10, "SYSTEMS ranks 10");
-            TestAssert.That(CuePriority.Rank(ScopePage.Shot) > CuePriority.Rank(ScopePage.MissileCam) && CuePriority.Rank(ScopePage.MissileCam) > CuePriority.Rank(ScopePage.Approach), "The prototype order: shot, cam, approach");
+            TestAssert.That(CuePriority.Rank(ScopePage.Threat) > CuePriority.Rank(ScopePage.MissileCam) && CuePriority.Rank(ScopePage.MissileCam) > CuePriority.Rank(ScopePage.Shot) && CuePriority.Rank(ScopePage.Shot) > CuePriority.Rank(ScopePage.Approach), "The order: threat, cam, shot, approach");
             TestAssert.Eq(CuePriority.Rank(ScopePage.Systems, true), 55, "A critical SYSTEMS ranks 55...");
             TestAssert.That(CuePriority.Rank(ScopePage.Systems, true) > CuePriority.Rank(ScopePage.Wing) && CuePriority.Rank(ScopePage.Systems, true) < CuePriority.Rank(ScopePage.Approach), "...above WING, below APPROACH");
 
@@ -27,6 +27,7 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.Eq(CuePriority.Best(Live(ScopePage.Threat, ScopePage.Shot)), ScopePage.Threat, "THREAT beats SHOT");
             TestAssert.Eq(CuePriority.Best(Live(ScopePage.Threat, ScopePage.MissileCam)), ScopePage.Threat, "An inbound missile outranks the ride on our own");
             TestAssert.Eq(CuePriority.Best(Live(ScopePage.MissileCam, ScopePage.Approach, ScopePage.Wing)), ScopePage.MissileCam, "...but the cam outranks the flight pages");
+            TestAssert.Eq(CuePriority.Best(Live(ScopePage.Shot, ScopePage.MissileCam)), ScopePage.MissileCam, "...and the SHOT page its own missile keeps live");
             TestAssert.That(CuePriority.Outranks(ScopePage.Strike, ScopePage.Systems) && !CuePriority.Outranks(ScopePage.Systems, ScopePage.Strike), "Everything outranks SYSTEMS");
             TestAssert.Eq(CuePriority.Best(Live(ScopePage.Wing, ScopePage.Systems)), ScopePage.Wing, "An idle-ish SYSTEMS does not outrank WING...");
             TestAssert.Eq(CuePriority.Best(Live(ScopePage.Wing, ScopePage.Systems), true), ScopePage.Systems, "...a critical one does (a fire is not read off a pip)");
