@@ -135,6 +135,9 @@ public static partial class HudLogUnityCheck
                     x.Sel = t < 1.8f ? 1 : t < 2.9f ? 2 : t < 4.6f ? 7 : t < 7.3f ? 5 : 2;
                     break;
                 }
+            case "missilecam":    // the cam rides the AAM-4 off station 1: that rail is spent, the next one is selected
+                x.Sel = 2; x.Rounds[1] = 0;
+                break;
             case "approach":      // landing = master arm SAFE; the end of the sortie, so the dispensers show their low states
                 x.Safe = true; x.Ir = 9; x.Rdr = 0;
                 break;

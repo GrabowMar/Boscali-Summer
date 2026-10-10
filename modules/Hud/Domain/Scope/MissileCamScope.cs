@@ -113,6 +113,29 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>The chain cell that is lit (0 BOOST, 1 MID, 2 ACTIVE, 3 TERM); a bomb has no chain (-1).</summary>
         public static int ChainIndex(ShotPhase phase) => phase == ShotPhase.Fall ? -1 : (int)phase;
 
+        /// <summary>Half the side of the target box in design units: it grows as the range to go falls (36 units at a km), from 16 (far, or a range the game does not give) to 69.</summary>
+        public static float BoxHalf(float rangeM) => !(rangeM > 0f) ? 16f : Math.Max(16f, Math.Min(60f, 36000f / rangeM) + 9f);
+
+        /// <summary>Cut a segment to a rectangle (the view has no mask of its own: a tilted horizon must end at its frame); false = none of it is inside.</summary>
+        public static bool ClipLine(ref float x0, ref float y0, ref float x1, ref float y1, float xMin, float yMin, float xMax, float yMax)
+        {
+            float dx = x1 - x0, dy = y1 - y0, t0 = 0f, t1 = 1f;
+            if (!ClipEdge(-dx, x0 - xMin, ref t0, ref t1) || !ClipEdge(dx, xMax - x0, ref t0, ref t1) ||
+                !ClipEdge(-dy, y0 - yMin, ref t0, ref t1) || !ClipEdge(dy, yMax - y0, ref t0, ref t1)) return false;
+            x1 = x0 + dx * t1; y1 = y0 + dy * t1;
+            x0 += dx * t0; y0 += dy * t0;
+            return true;
+        }
+
+        private static bool ClipEdge(float p, float q, ref float t0, ref float t1)
+        {
+            if (p == 0f) return q >= 0f;
+            float r = q / p;
+            if (p < 0f) { if (r > t1) return false; if (r > t0) t0 = r; }
+            else { if (r < t0) return false; if (r < t1) t1 = r; }
+            return true;
+        }
+
         /// <summary>The highest altitude of the path so far and the sample it is at (-1: no path).</summary>
         public static int Apex(float[] altitude, int count, out float apexM)
         {

@@ -56,6 +56,7 @@ namespace BoscaliSummer.Tests.Features.Hud
             d.Weapon = null; d.Seeker = null; d.HasTarget = true; d.State = SeekerState.Unknown;
             TestAssert.That(MissileCamText.Header(d) == "MSL 1/2" && MissileCamText.Seeker(d) == "SEEKER · TRACK", "Missing names degrade to plain words");
             Words();
+            Geometry();
         }
 
         private static void Words()
@@ -74,6 +75,67 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.Near(MissileCamMath.TapeStep(40000f, 1000f), 5000f, "A 40 km tape ticks every 5 km");
             TestAssert.Near(MissileCamMath.TapeStep(300f, 1000f), 100f, "A short tape ticks every tenth of the unit");
             TestAssert.Near(MissileCamMath.TapeStep(20000f, 1852f), 1852f, "A 20 km tape in nautical miles ticks every nm");
+        }
+
+        /// <summary>The page's pure rules: the seeker's mode, its gauge, the tape, the chain, the profile's apex, the angles off the boresight, the target box and the cut at the view's frame.</summary>
+        private static void Geometry()
+        {
+            TestAssert.That(MissileCamMath.ModeOf(true, false, false, false) == CamMode.Blind && MissileCamMath.ModeOf(false, false, true, false) == CamMode.Blind, "Nothing to guide on is blind, whatever the seeker says");
+            TestAssert.That(MissileCamMath.ModeOf(true, false, true, true) == CamMode.Locked && MissileCamMath.ModeOf(false, false, true, true) == CamMode.Locked, "A seeker on its target is locked");
+            TestAssert.That(MissileCamMath.ModeOf(true, false, false, true) == CamMode.DataLink, "An active radar before its pitbull flies on the data-link");
+            TestAssert.That(MissileCamMath.ModeOf(true, true, false, true) == CamMode.Blind, "An active radar that lost its lock after the pitbull is blind");
+            TestAssert.That(MissileCamMath.ModeOf(false, false, false, true) == CamMode.Search, "A semi-active seeker without a lock searches");
+
+            TestAssert.Near(MissileCamMath.Strength(CamMode.Locked, 0f, 35f), 1f, "On the boresight the seeker gauge is full");
+            TestAssert.Near(MissileCamMath.Strength(CamMode.Locked, 35f, 35f), 0.15f, "At the cone's edge it is at its floor");
+            TestAssert.Near(MissileCamMath.Strength(CamMode.Locked, 20.125f, 35f), 0.5f, "Half way down in between");
+            TestAssert.Near(MissileCamMath.Strength(CamMode.Locked, 60f, 0f), 1f, "A seeker with no cone is full while locked");
+            TestAssert.That(MissileCamMath.Strength(CamMode.DataLink, 0f, 35f) == 0f && MissileCamMath.Strength(CamMode.Blind, 0f, 35f) == 0f, "No lock, no strength");
+
+            TestAssert.Near(MissileCamMath.TapeFrac(6200f, 12400f), 0.5f, "Half the tape's range is half way down the tape");
+            TestAssert.That(MissileCamMath.TapeFrac(20000f, 12400f) == 1f && MissileCamMath.TapeFrac(0f, 12400f) == 0f, "The tape ends at its top range and at the target");
+            TestAssert.That(MissileCamMath.TapeFrac(float.NaN, 12400f) == 0f && MissileCamMath.TapeFrac(500f, 0f) == 0f, "An unknown range or an empty tape puts the marker on the target");
+
+            TestAssert.That(MissileCamMath.ChainIndex(ShotPhase.Boost) == 0 && MissileCamMath.ChainIndex(ShotPhase.Mid) == 1 && MissileCamMath.ChainIndex(ShotPhase.Active) == 2 &&
+                MissileCamMath.ChainIndex(ShotPhase.Term) == 3, "The chain follows the phases");
+            TestAssert.That(MissileCamMath.ChainIndex(ShotPhase.Fall) == -1, "A bomb has no chain");
+
+            int at = MissileCamMath.Apex(new[] { 7000f, 10100f, 9000f, 99999f }, 3, out float apex);
+            TestAssert.That(at == 1 && apex == 10100f, "The apex is the highest of the samples in use (got " + at + ", " + apex + ")");
+            TestAssert.That(MissileCamMath.Apex(new[] { -40f, -90f }, 2, out apex) == 0 && apex == -40f, "Below sea level still has an apex");
+            TestAssert.That(MissileCamMath.Apex(null, 0, out apex) == -1 && apex == 0f, "No path, no apex");
+
+            TestAssert.Near(MissileCamMath.OffBoresight(3f, -4f), 5f, "The angle off the boresight is the length of the two error angles");
+            MissileCamMath.Error(0f, 0f, 1f, out float ex, out float ey);
+            TestAssert.That(ex == 0f && ey == 0f, "Dead ahead is on the boresight");
+            MissileCamMath.Error(1f, 0f, 1f, out ex, out ey);
+            TestAssert.Near(ex, 45f, "A target to the right is right");
+            TestAssert.Near(ey, 0f, "...and level");
+            MissileCamMath.Error(0f, 1f, 1f, out ex, out ey);
+            TestAssert.Near(ey, -45f, "A target above is up (y runs down)");
+            MissileCamMath.Error(1f, 0f, -1f, out ex, out ey);
+            TestAssert.Near(ex, 135f, "Behind the missile reads past 90");
+
+            TestAssert.Near(MissileCamMath.BoxHalf(12400f), 16f, "A far target wears the smallest box");
+            TestAssert.Near(MissileCamMath.BoxHalf(2000f), 27f, "At 2 km the box is 18 + 9 units a side from its middle");
+            TestAssert.Near(MissileCamMath.BoxHalf(100f), 69f, "It stops growing before it fills the view");
+            TestAssert.That(MissileCamMath.BoxHalf(float.NaN) == 16f && MissileCamMath.BoxHalf(0f) == 16f, "No range: the smallest box");
+
+            float x0 = -10f, y0 = 5f, x1 = 30f, y1 = 5f;
+            TestAssert.That(MissileCamMath.ClipLine(ref x0, ref y0, ref x1, ref y1, 0f, 0f, 20f, 10f), "A line across the frame is drawn");
+            TestAssert.That(x0 == 0f && x1 == 20f && y0 == 5f && y1 == 5f, "...cut at both edges (" + x0 + " to " + x1 + ")");
+            x0 = 5f; y0 = 2f; x1 = 15f; y1 = 8f;
+            TestAssert.That(MissileCamMath.ClipLine(ref x0, ref y0, ref x1, ref y1, 0f, 0f, 20f, 10f) && x0 == 5f && y0 == 2f && x1 == 15f && y1 == 8f, "A line inside the frame is left alone");
+            x0 = 0f; y0 = -5f; x1 = 20f; y1 = 15f;
+            TestAssert.That(MissileCamMath.ClipLine(ref x0, ref y0, ref x1, ref y1, 0f, 0f, 20f, 10f), "A slanted line (a rolled horizon) is drawn");
+            TestAssert.Near(x0, 5f, "...from where it enters at the top");
+            TestAssert.Near(y0, 0f, "...on the edge");
+            TestAssert.Near(x1, 15f, "...to where it leaves at the bottom");
+            TestAssert.Near(y1, 10f, "...on the edge");
+            x0 = -5f; y0 = 20f; x1 = 25f; y1 = 20f;
+            TestAssert.That(!MissileCamMath.ClipLine(ref x0, ref y0, ref x1, ref y1, 0f, 0f, 20f, 10f), "A line past the frame is not drawn");
+            x0 = 30f; y0 = 0f; x1 = 30f; y1 = 10f;
+            TestAssert.That(!MissileCamMath.ClipLine(ref x0, ref y0, ref x1, ref y1, 0f, 0f, 20f, 10f), "Nor is one parallel to an edge outside it");
         }
     }
 }
