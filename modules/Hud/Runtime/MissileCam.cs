@@ -22,7 +22,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             CameraStateManager cam = SceneSingleton<CameraStateManager>.i;
             CombatHUD hud = SceneSingleton<CombatHUD>.i;
             Aircraft candidate = hud != null ? hud.aircraft : null;
-            if (cam == null || candidate == null || candidate.disabled || candidate.Player == null || !candidate.Player.IsLocalPlayer) return false;
+            if (cam == null || candidate == null || candidate.disabled || candidate.HasEjected() || candidate.Player == null || !candidate.Player.IsLocalPlayer) return false;
             if (!(cam.followingUnit is Missile followed) || followed.disabled || followed.owner != candidate) return false;
             if (cam.currentState != cam.orbitState) return false;
             own = candidate;
@@ -62,7 +62,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             {
                 Vector3 targetVelocity = target.rb != null ? target.rb.velocity : Vector3.zero;
                 data.ClosureMps = -Vector3.Dot(targetVelocity - missile.rb.velocity, rel / range);
-                data.TtiS = ThreatRank.Tti(range, data.ClosureMps);
+                data.TtiS = MissileCamText.TimeToGo(range, data.ClosureMps);
             }
         }
     }

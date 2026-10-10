@@ -82,13 +82,19 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             if (own == null) return;
             own.onRegisterMissile += OnRegister;
             own.onDeregisterMissile += OnDeregister;
+            // Missiles already in the air (fired while the HUD was hidden, or before a re-enable) are live too; no Launched for them.
+            List<Unit> all = UnitRegistry.allUnits;
+            for (int i = 0; all != null && i < all.Count; i++)
+                if (all[i] is Missile m && m.owner == own && !m.disabled && live.Count < MaxLive) live.Add(m);
         }
 
         private void OnRegister(Missile missile)
         {
             if (missile == null) return;
             if (live.Count < MaxLive && !live.Contains(missile)) live.Add(missile);
-            Launched?.Invoke(missile);
+            // Raised inside the game's own multicast: a throwing subscriber must not abort Missile.StartMissile.
+            try { Launched?.Invoke(missile); }
+            catch (Exception e) { BoscaliSummer.Core.Diagnostics.PatchGuard.Report("Hud.MissileLaunched", e); }
         }
 
         private void OnDeregister(Missile missile) => live.Remove(missile);

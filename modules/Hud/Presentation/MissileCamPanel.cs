@@ -74,6 +74,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             range = Label("Range", TextAlignmentOptions.Center, 22f);
             closure = Label("Closure", TextAlignmentOptions.Center, 22f);
             tti = Label("Tti", TextAlignmentOptions.Center, 22f);
+            // A four-digit closure is wider than a column: the figures shrink to fit instead of running into their neighbours.
+            range.enableAutoSizing = closure.enableAutoSizing = tti.enableAutoSizing = true;
             target = Label("Target", TextAlignmentOptions.Center, 14f);
             root.gameObject.SetActive(false);
             shown = false;
@@ -110,14 +112,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 lastScale = scale;
                 header.fontSize = seeker.fontSize = target.fontSize = 14f * s;
-                range.fontSize = closure.fontSize = tti.fontSize = 22f * s;
+                range.fontSizeMax = closure.fontSizeMax = tti.fontSizeMax = 22f * s;
+                range.fontSizeMin = closure.fontSizeMin = tti.fontSizeMin = 13f * s;
             }
             Place(header.rectTransform, -w * 0.25f, h * 0.5f - 15f * s, w * 0.5f - 20f * s, 22f * s);
             Place(seeker.rectTransform, w * 0.25f, h * 0.5f - 15f * s, w * 0.5f - 20f * s, 22f * s);
             float column = (w - 24f * s) / 3f;
-            Place(range.rectTransform, -column, 2f * s, column, 34f * s);
-            Place(closure.rectTransform, 0f, 2f * s, column, 34f * s);
-            Place(tti.rectTransform, column, 2f * s, column, 34f * s);
+            // 8 px narrower than the column: a figure that shrinks to fit still leaves a gap to its neighbour.
+            Place(range.rectTransform, -column, 2f * s, column - 8f * s, 34f * s);
+            Place(closure.rectTransform, 0f, 2f * s, column - 8f * s, 34f * s);
+            Place(tti.rectTransform, column, 2f * s, column - 8f * s, 34f * s);
             Place(target.rectTransform, 0f, -h * 0.5f + 14f * s, w - 20f * s, 22f * s);
 
             Write(header, ref lastHeader, MissileCamText.Header(d));
@@ -129,7 +133,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Write(target, ref lastTarget, targetWords);
             header.color = seeker.color = range.color = closure.color = tti.color = target.color = ink;
 
-            int key = (int)screenW * 31 + (int)screenH + (int)MissileCamText.Tone(d) * 7 + (int)(scale * 100f) * 13;
+            int key = (int)screenW * 31 + (int)screenH + (int)MissileCamText.Tone(d) * 7 + (int)(scale * 100f) * 13 + ink.GetHashCode() * 17;
             if (key == lastKey) return;
             lastKey = key;
             AvQuadBuffer b = symbols.Buffer;

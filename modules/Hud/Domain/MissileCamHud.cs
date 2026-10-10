@@ -69,9 +69,21 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return new string(Scratch, 0, len).ToUpperInvariant();
         }
 
-        /// <summary>"3S" until impact; "--" when it is not closing.</summary>
-        public static string Tti(in MissileCamData d) =>
-            float.IsNaN(d.TtiS) ? "--" : Math.Max(1.0, Math.Round(d.TtiS, MidpointRounding.AwayFromZero)).ToString("0", System.Globalization.CultureInfo.InvariantCulture) + "S";
+        /// <summary>
+        /// Seconds until the missile arrives; NaN when it is not closing. Unlike a threat row there is no cap: a cruise missile
+        /// has minutes to go and that is what the pilot rides it for.
+        /// </summary>
+        public static float TimeToGo(float rangeM, float closureMps) =>
+            closureMps >= ThreatRank.MinClosureMps && rangeM >= 0f ? rangeM / closureMps : float.NaN;
+
+        /// <summary>"3S" until impact, "20:00" from 100 s up; "--" when it is not closing.</summary>
+        public static string Tti(in MissileCamData d)
+        {
+            if (float.IsNaN(d.TtiS) || float.IsInfinity(d.TtiS)) return "--";
+            int s = (int)Math.Min(359999.0, Math.Max(1.0, Math.Round(d.TtiS, MidpointRounding.AwayFromZero)));
+            var c = System.Globalization.CultureInfo.InvariantCulture;
+            return s < 100 ? s.ToString(c) + "S" : (s / 60).ToString(c) + ":" + (s % 60).ToString("00", c);
+        }
 
         /// <summary>Ink while the seeker has its target, caution while it is searching, blind or passive.</summary>
         public static HudTone Tone(in MissileCamData d) =>
