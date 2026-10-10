@@ -57,6 +57,13 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             if (Arg(args, "breathing") is bool breathing) manager.Settings.PilotBreathingEnabled.Value = breathing;
             if (Arg(args, "visorIgnoreHud") is bool ignoreHud) manager.DebugVisorIgnoresHud(ignoreHud);
             if (Arg(args, "kneeboardRefresh") is bool refresh && refresh) CockpitPilot.Live?.DebugRefreshKneeboard();
+            object card = Arg(args, "kneeboardCard");
+            if (card != null)
+            {
+                try { manager.Settings.KneeboardCard.Value = System.Math.Max(0, System.Convert.ToInt32(card, System.Globalization.CultureInfo.InvariantCulture)); }
+                catch (System.Exception) { return Failure("ImmersionAutomation", "Configure", "kneeboardCard must be a number"); }
+                CockpitPilot.Live?.DebugRefreshKneeboard();
+            }
             manager.LogAutomation("Configure: body=" + manager.Settings.PilotBodyEnabled.Value + " reflection=" + manager.Settings.PilotReflectionEnabled.Value +
                 " visor=" + manager.Settings.HelmetVisorEnabled.Value + " breathing=" + manager.Settings.PilotBreathingEnabled.Value);
             return Readout(manager);

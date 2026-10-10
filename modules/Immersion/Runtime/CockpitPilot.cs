@@ -36,6 +36,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         internal static CockpitPilot Live { get; private set; }
         /// <summary>Automation only: redraw the kneeboard card to measure a warm render.</summary>
         internal void DebugRefreshKneeboard() => kneeboard.MarkDirty();
+        internal void SetKneeboardGallery(IKneeboardGallery gallery) => kneeboard.Gallery = gallery;
         private ImmersionSettings settings;
         private ManualLogSource logger;
         private Aircraft aircraft;

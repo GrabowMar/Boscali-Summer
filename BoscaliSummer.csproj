@@ -196,6 +196,9 @@
     <EmbeddedResource Include="modules\Immersion\Assets\pilot.bundle" Condition="Exists('modules\Immersion\Assets\pilot.bundle')">
       <LogicalName>BoscaliSummer.Immersion.pilot.bundle</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="modules\Immersion\Assets\Kneeboard\*.png">
+      <LogicalName>BoscaliSummer.Immersion.Kneeboard.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup Label="Superevent posters">

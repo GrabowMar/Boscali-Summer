@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
 using BoscaliSummer.Modules.Immersion.Domain;
 
 namespace BoscaliSummer.Tests.Features.Immersion
@@ -38,6 +41,18 @@ namespace BoscaliSummer.Tests.Features.Immersion
                     TestAssert.That(line.Length <= KneeboardCard.Width, "Every line fits the card: " + line);
             TestAssert.That(Array.Exists(wide, l => l.EndsWith("...", StringComparison.Ordinal)) && Array.Exists(wide, l => l.Contains("23:59 L")),
                 "Overlong text is cut with an ellipsis; the clock never rolls to 24:00.");
+
+            TestAssert.That(KneeboardCard.Wrap(-1, 12) == 11 && KneeboardCard.Wrap(12, 12) == 0 && KneeboardCard.Wrap(5, 12) == 5 &&
+                KneeboardCard.Wrap(3, 0) == 0, "The card picker wraps both ways and survives an empty gallery.");
+
+            string root = AppContext.BaseDirectory;
+            while (root != null && !File.Exists(Path.Combine(root, "BoscaliSummer.sln"))) root = Path.GetDirectoryName(root);
+            string[] listed = Regex.Matches(File.ReadAllText(Path.Combine(root, "modules/Immersion/Visuals/KneeboardGallery.cs")),
+                "\\(\"[^\"]+\", \"([a-z0-9-]+)\"\\)").Cast<Match>().Select(m => m.Groups[1].Value).OrderBy(s => s, StringComparer.Ordinal).ToArray();
+            string[] shipped = Directory.GetFiles(Path.Combine(root, "modules/Immersion/Assets/Kneeboard"), "*.png")
+                .Select(Path.GetFileNameWithoutExtension).OrderBy(s => s, StringComparer.Ordinal).ToArray();
+            TestAssert.That(listed.Length > 0 && listed.SequenceEqual(shipped),
+                "Every picture card the gallery lists ships as a PNG and no PNG is orphaned: listed " + listed.Length + ", shipped " + shipped.Length);
 
             var schedule = new KneeboardSchedule();
             TestAssert.That(schedule.BeginBind() && !schedule.BeginBind(), "A bind is attempted once per cockpit entry, never every frame.");

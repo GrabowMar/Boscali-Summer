@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Immersion.Domain;
 using NOAvionics;
 using TMPro;
@@ -32,6 +33,8 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private Texture2D plain;
         private Aircraft aircraft;
         private bool cardValid, warned;
+        /// <summary>Picked in SQD STUDIO: picture cards replace the written mission card (and need no text render).</summary>
+        internal IKneeboardGallery Gallery;
 
         internal Kneeboard() { markDirty = () => schedule.MarkDirty(); }
 
@@ -93,7 +96,15 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                 material.SetFloat("_Smoothness", .05f);
             }
             renderer.sharedMaterial = material;
-            if (cardValid) material.SetTexture(BaseMapId, card);
+            if (!ApplyPicture() && cardValid) material.SetTexture(BaseMapId, card);
+        }
+
+        private bool ApplyPicture()
+        {
+            Texture2D picture = Gallery != null ? Gallery.Card(Gallery.Selected) : null;
+            if (picture == null) return false;
+            material.SetTexture(BaseMapId, picture);
+            return true;
         }
 
         /// <summary>Cheap per-frame check; the card is re-rendered only for a new aircraft, a rearm or a loadout change.</summary>
@@ -136,6 +147,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
 
         private void Render()
         {
+            if (ApplyPicture()) return;
             string[] lines = KneeboardCard.Lines(aircraft.unitName, aircraft.definition != null ? aircraft.definition.unitName : null,
                 Loadout(), HomeBase(), MissionManager.CurrentMission != null ? MissionManager.CurrentMission.Name : "Free flight", TimeOfDay());
             if (schedule.UseCamera)

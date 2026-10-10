@@ -126,6 +126,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         internal Renderer Renderer => null;
         internal bool TryBeginBind() => true;
         internal bool RightThigh => false;
+        internal BoscaliSummer.Core.Contracts.IKneeboardGallery Gallery;
         internal float LastLayoutMs => -1f;
         internal float LastDrawMs => -1f;
         internal int Renders => 0;

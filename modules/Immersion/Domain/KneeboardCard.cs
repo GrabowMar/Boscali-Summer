@@ -62,6 +62,9 @@ namespace BoscaliSummer.Modules.Immersion.Domain
             return (minutes / 60).ToString("00") + ":" + (minutes % 60).ToString("00") + " L";
         }
 
+        /// <summary>Gallery index that wraps both ways (stepping back from the first card reaches the last).</summary>
+        public static int Wrap(int index, int count) => count <= 0 ? 0 : ((index % count) + count) % count;
+
         private static string Fit(string line) => line.Length <= Width ? line : line.Substring(0, Width - 3) + "...";
     }
 

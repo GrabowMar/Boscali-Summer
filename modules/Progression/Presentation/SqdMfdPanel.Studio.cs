@@ -1,7 +1,9 @@
 using NOAvionics;
 using System;
 using BoscaliSummer.Modules.Progression.Runtime;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Services;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Progression.Presentation
@@ -30,6 +32,9 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private AvStepper studioShape, studioCharge, studioPalette, studioArt;
         private AvPortrait studioEmblem;
         private AvField studioSquadronField;
+        private AvStepper studioKneeboard;
+        private AvPortrait studioKneeboardArt;
+        private IKneeboardGallery kneeboardGallery;
 
         private void ResetStudioPage()
         {
@@ -44,6 +49,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             studioShape = studioCharge = studioPalette = studioArt = null;
             studioEmblem = null;
             studioSquadronField = null;
+            studioKneeboard = null; studioKneeboardArt = null; kneeboardGallery = null;
         }
 
         // ---- STUDIO page -------------------------------------------------------------------
@@ -89,6 +95,17 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             p.Row(studioShape, studioCharge);
             p.Row(studioPalette, studioArt);
 
+            if (ModuleServices.TryGet(out kneeboardGallery))
+            {
+                p.Section(AvIcon.Pencil, "KNEEBOARD", "COCKPIT THIGH CARD");
+                studioKneeboardArt = new AvPortrait(p.Content, "Kneeboard", "WRITTEN", StudioEmblemHeight);
+                studioKneeboard = new AvStepper(p.Content, "CARD", () => kneeboardGallery.Name(kneeboardGallery.Selected),
+                    () => kneeboardGallery.Selected--, () => kneeboardGallery.Selected++);
+                StepperHelp(studioKneeboard, "kneeboard card. MISSION CARD writes your sortie; the others are pictures strapped to your thigh");
+                studioKneeboardArt.Help = "The card on your cockpit kneeboard (look down at your free-hand thigh). Local cosmetic.";
+                p.Row(studioKneeboardArt, studioKneeboard);
+            }
+
             studioMessageText = p.Add(new AvNote(p.Content, AvTextRole.ProseSmall) { MinHeight = 14f, StretchText = true }, 1f);
             studioMessageText.Set(StudioQuietLine);
         }
@@ -120,6 +137,11 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                     : WingLink.SquadUnavailableReason);
             studioEmblem.Set(emblemSprite);
             studioShape.Refresh(); studioCharge.Refresh(); studioPalette.Refresh(); studioArt.Refresh();
+            if (studioKneeboard != null && kneeboardGallery != null)
+            {
+                studioKneeboard.Refresh();
+                studioKneeboardArt.Set(kneeboardGallery.Preview(kneeboardGallery.Selected));
+            }
 
             bool quiet = string.IsNullOrEmpty(studioMessage);
             studioMessageText.Set(quiet ? StudioQuietLine : studioMessage);
