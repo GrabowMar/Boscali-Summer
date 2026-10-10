@@ -33,6 +33,10 @@ namespace BoscaliSummer.Tests.Features.Hud
             float before = fuel.RatePerSecond;
             fuel.Update(level - 0.05f, float.NaN, 200f, 1f, afterburner: true);
             TestAssert.Near(fuel.RatePerSecond, before, "A burst of afterburner does not skew the learned rate");
+            // A 20 s burst at three times the burn, 100 km from a field: the rate is untouched and no flag trips.
+            for (int i = 0; i < 20; i++) { level -= 0.0015f; fuel.Update(level, 100000f, 200f, 1f, afterburner: true); }
+            TestAssert.Near(fuel.RatePerSecond, before, "A 20 s afterburner burst leaves the learned rate alone");
+            TestAssert.That(!fuel.Bingo && !fuel.Joker, "...and trips neither flag");
 
             fuel.Reset();
             TestAssert.That(float.IsNaN(fuel.Level) && float.IsNaN(fuel.RatePerSecond) && !fuel.Bingo, "A new aircraft forgets everything");
@@ -99,7 +103,8 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(FuelText.Endurance(2520f) == "42MIN" && FuelText.Endurance(30f) == "<1MIN", "Endurance reads in minutes");
             TestAssert.That(FuelText.Endurance(6300f) == "1H45" && FuelText.Endurance(7500f) == "2H05", "...and in hours past a hundred minutes");
             TestAssert.That(FuelText.Endurance(float.PositiveInfinity) == "--" && FuelText.Endurance(float.NaN) == "--", "Unknown endurance reads --");
-            TestAssert.That(FuelText.Level(0.38f, 2520f) == "38%  END 42MIN", "The level and what it buys: " + FuelText.Level(0.38f, 2520f));
+            TestAssert.That(FuelText.Endurance(359000f) == "99H43" && FuelText.Endurance(360000f) == "--" && FuelText.Endurance(1e12f) == "--", "...and so does anything past 100 h, never a wrapped minute count");
+            TestAssert.That(FuelText.Level(0.38f, 2520f) == "38% END 42MIN", "The level and what it buys: " + FuelText.Level(0.38f, 2520f));
             TestAssert.That(FuelText.Home("highwaystrip2", 23000f, AvUnits.Metric) == "RTB HIGHWAYSTRIP2 23KM", "Home reads the field and its range: " + FuelText.Home("highwaystrip2", 23000f, AvUnits.Metric));
             TestAssert.That(FuelText.Home(null, float.NaN, AvUnits.Metric) == "RTB --" && FuelText.Home("ALPHA", float.NaN, AvUnits.Metric) == "RTB --", "No field, no range");
             TestAssert.That(FuelText.State(true, true) == "BINGO" && FuelText.State(false, true) == "JOKER" && FuelText.State(false, false) == "", "BINGO outranks JOKER");

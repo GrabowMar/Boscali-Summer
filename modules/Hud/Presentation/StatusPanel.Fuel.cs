@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
-    // The fuel row (2026-10-10): drop-tank glyph, the level and what it buys ("38%  END 42MIN"), the way home ("RTB
+    // The fuel row (2026-10-10): drop-tank glyph, the level and what it buys ("38% END 42MIN"), the way home ("RTB
     // HIGHWAYSTRIP2 23KM") and, when it applies, a BINGO or JOKER tile at the right end. It replaces the old "fuel" feed cell
     // and its divert strip, so the cue strip is free for ILS, SKYWELL and combat words. Amber and red follow FuelEndurance's
     // tone (the same 25 % / 10 % thresholds as before); BINGO flashes. The rules are FuelEndurance's and FuelText's.
@@ -19,6 +19,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void BuildFuel()
         {
             fuelLevel = Text("FuelLevel", TextAlignmentOptions.MidlineLeft, legendSize, TextOverflowModes.Overflow);
+            Shrink(fuelLevel, legendSize);
             fuelHome = Text("FuelHome", TextAlignmentOptions.MidlineLeft, legendSize, TextOverflowModes.Ellipsis);
             Shrink(fuelHome, legendSize);
             fuelState = Text("FuelState", TextAlignmentOptions.Center, legendSize, TextOverflowModes.Overflow);
@@ -52,7 +53,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Color ink = s.Tone == HudTone.Info ? Ink : tone;
 
             // Words are rebuilt only when what they show changed: the percent and minutes, the field and its range in 100 m steps.
-            int levelKey = Mathf.RoundToInt(s.Level * 100f) * 10000 + (float.IsInfinity(s.EnduranceS) || float.IsNaN(s.EnduranceS) ? 9999 : Mathf.Min(9998, (int)(s.EnduranceS / 60f)));
+            int levelKey = Mathf.RoundToInt(s.Level * 100f) * 10000 + (float.IsNaN(s.EnduranceS) || s.EnduranceS >= 360000f ? 9999 : Mathf.Min(9998, (int)(s.EnduranceS / 60f)));
             if (fuelLevelKey != levelKey) { fuelLevelKey = levelKey; fuelLevelWords = FuelText.Level(s.Level, s.EnduranceS); }
             int homeKey = float.IsNaN(s.FieldM) ? -1 : (int)(s.FieldM / 100f) * 2 + (board.Units == AvUnits.Metric ? 0 : 1);
             if (fuelHomeKey != homeKey || !ReferenceEquals(fuelHomeField, s.Field))
@@ -77,7 +78,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 Place(fuelState.rectTransform, f.G.Width - pad - FuelStateWidth(u), f.G.Fuel.Y, FuelStateWidth(u), h);
             }
             beat |= s.Bingo;
-            signature = signature * 37 + levelKey + homeKey * 3 + (int)s.Tone * 11 + state.Length;
+            signature = signature * 37 + (int)s.Tone * 11 + state.Length;   // the mesh: tone, state and the beat; the words have their own caches
         }
 
         private void PaintFuel(AvQuadBuffer b)
@@ -102,7 +103,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (state.Length == 0) return;
             float w = FuelStateWidth(u), sx0 = x1 - w, sy0 = y0 + 2f * u, sy1 = y1 - 2f * u;
             bool flashOff = s.Bingo && !f.FlashOn;
-            AvStrokes.Fill(b, sx0, sy0, w - 2f * u, sy1 - sy0, tone.ToRgba().WithAlpha(flashOff ? 0.12f : 0.40f));
+            AvStrokes.Fill(b, sx0, sy0, w - 2f * u, sy1 - sy0, tone.ToRgba().WithAlpha(flashOff ? 0.12f : 0.30f));
             Rect4(b, sx0, sy0, x1 - 2f * u, sy1, 1.5f * u, tone.ToRgba());
         }
     }

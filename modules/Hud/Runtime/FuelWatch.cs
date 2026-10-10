@@ -18,12 +18,13 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         private readonly FuelEndurance endurance = new FuelEndurance();
         private Aircraft watched;
         private float lastTime = float.NaN, nextField;
-        private Airbase field;
+        private Airbase field, namedField;
+        private string fieldName;
 
         public void Read(Aircraft aircraft, BoardFrame frame)
         {
             frame.Fuel = default;
-            if (aircraft == null || aircraft.disabled)
+            if (aircraft == null || aircraft.disabled || aircraft.HasEjected())
             {
                 Forget();
                 return;
@@ -38,6 +39,11 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             {
                 nextField = now + FieldSeconds;
                 field = NearestField(aircraft);
+                if (field != namedField)
+                {
+                    namedField = field;
+                    fieldName = field != null ? field.name : null;
+                }
             }
             float distance = field != null && field.center != null
                 ? Vector3.Distance(aircraft.transform.position, field.center.position) : float.NaN;
@@ -46,8 +52,9 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             float dt = float.IsNaN(lastTime) ? 0f : Mathf.Min(game - lastTime, 1f);
             lastTime = game;
             float level = AircraftReadout.Fuel(aircraft);
-            // ponytail: afterburner is not read, so a long burn skews the learned rate until the 60 s low-pass forgets it.
-            endurance.Update(level, distance, CruiseSpeed(aircraft), dt);
+            // Wing's test (AirframeProfile.AfterburnerThrottle): a burst of afterburner must not inflate the learned burn rate.
+            bool afterburner = (aircraft.GetInputs()?.throttle ?? 0f) >= 0.9f;
+            endurance.Update(level, distance, CruiseSpeed(aircraft), dt, afterburner);
 
             frame.Fuel = new FuelState
             {
@@ -56,7 +63,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 EnduranceS = endurance.EnduranceSeconds,
                 Bingo = endurance.Bingo,
                 Joker = endurance.Joker,
-                Field = field != null ? field.name : null,
+                Field = fieldName,
                 FieldM = distance,
                 Tone = FuelEndurance.Tone(level, endurance.Bingo, endurance.Joker),
             };
@@ -67,7 +74,8 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         private void Forget()
         {
             watched = null;
-            field = null;
+            field = namedField = null;
+            fieldName = null;
             lastTime = float.NaN;
             nextField = 0f;
             endurance.Reset();

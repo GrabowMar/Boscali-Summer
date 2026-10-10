@@ -110,19 +110,19 @@ namespace BoscaliSummer.Modules.Hud.Domain
     {
         private static readonly char[] Scratch = new char[48];
 
-        /// <summary>"42MIN", "1H05", "&lt;1MIN"; "--" when the endurance is unknown.</summary>
+        /// <summary>"42MIN", "1H05", "&lt;1MIN"; "--" when the endurance is unknown or past 100 h (a parked aircraft decays its rate to nothing).</summary>
         public static string Endurance(float seconds)
         {
-            if (float.IsNaN(seconds) || float.IsInfinity(seconds) || seconds < 0f) return "--";
+            if (float.IsNaN(seconds) || float.IsInfinity(seconds) || seconds < 0f || seconds >= 360000f) return "--";
             int minutes = (int)(seconds / 60f);
             if (minutes < 1) return "<1MIN";
             if (minutes < 100) return minutes + "MIN";
             return (minutes / 60) + "H" + (minutes % 60).ToString("00", System.Globalization.CultureInfo.InvariantCulture);
         }
 
-        /// <summary>"38%  END 42MIN": the level and what it buys.</summary>
+        /// <summary>"38% END 42MIN": the level and what it buys.</summary>
         public static string Level(float level, float enduranceSeconds) =>
-            AvNum.PercentWhole(level) + "  END " + Endurance(enduranceSeconds);
+            AvNum.PercentWhole(level) + " END " + Endurance(enduranceSeconds);
 
         /// <summary>"RTB HIGHWAYSTRIP2 23KM"; "RTB --" when no field is known.</summary>
         public static string Home(string field, float distanceM, AvUnits units)
