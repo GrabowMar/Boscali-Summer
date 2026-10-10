@@ -292,7 +292,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             f.Strip = f.Caption != null || (f.Count > 0 && (!string.IsNullOrEmpty(f.Top.Detail) || f.Top.Bar > 0f));
             f.FlashOn = (int)(f.Now * 5f) % 2 == 0;
 
-            var rows = new BoardRows { Systems = f.LampCount > 0, Threat = f.Threats, Cells = f.Count > 0, Strip = f.Strip };
+            damageCount = HudDamage.Fill(board.Damage, damageLamps);
+            var rows = new BoardRows
+            {
+                Systems = f.LampCount > 0, Threat = f.Threats, DetailRows = board.ContactCount, Cm = board.CmCount > 0,
+                Damage = damageCount > 0, Fuel = board.Fuel.Valid, Cells = f.Count > 0, Strip = f.Strip, Ticker = board.HasTicker,
+            };
             ContentBounds(out float contentLeft, out float contentRight, out float contentBottom);
             f.G = HudBoardLayout.Compute(rows, contentRight - contentLeft, unit);
             if (f.G.Height <= 0f)
@@ -313,8 +318,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             PresentSystems();
             PresentThreat();
+            PresentDetail();
+            PresentCm();
+            PresentDamage();
+            PresentFuel();
             PresentCells(snapshot);
             PresentStrip();
+            PresentTicker();
 
             if (beat) signature = signature * 3 + (f.FlashOn ? 1 : 2);
             if (signature == lastSignature) return;

@@ -8,8 +8,5 @@ namespace BoscaliSummer.Core.Contracts
     {
         /// <summary>Lines shown at once. Notices and held lines share them, most severe first.</summary>
         public const int MaxRows = 4;
-
-        /// <summary>How long a transient notice stays up.</summary>
-        public const float NoticeSeconds = 8f;
     }
 }

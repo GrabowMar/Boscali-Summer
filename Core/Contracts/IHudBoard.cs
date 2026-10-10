@@ -33,8 +33,9 @@ namespace BoscaliSummer.Core.Contracts
         IHudLine Acquire(string owner, string channel, string key);
 
         /// <summary>
-        /// Show one transient line for <see cref="HudLayout.NoticeSeconds"/>. Re-pushing the same
-        /// channel and text refreshes the dwell instead of stacking a duplicate.
+        /// Show one transient notice on the board's one-line ticker. How long it stays depends on its tone (a Warning is
+        /// sticky), and re-pushing the same channel and text bumps a count ("x3") and refreshes the dwell instead of
+        /// stacking a duplicate.
         /// </summary>
         void Notice(string channel, HudTone tone, string text, string detail = null);
     }

@@ -49,10 +49,20 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             stripLabel = Text("Detail", TextAlignmentOptions.Center, detailSize, TextOverflowModes.Ellipsis);
             stripLabel.characterSpacing = 4f;
             Shrink(stripLabel, detailSize);
+            BuildDetail();
+            BuildCm();
+            BuildDamage();
+            BuildFuel();
+            BuildTicker();
         }
 
         private void DestroyRows()
         {
+            DestroyDetail();
+            DestroyCm();
+            DestroyDamage();
+            DestroyFuel();
+            DestroyTicker();
             barTrack = null;
             barTrackImage = barFill = null;
             stripLabel = dialLabel = shotLegend = null;
@@ -87,7 +97,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             int total = f.LampCount + HudThreats.Count;
             for (int i = 0; i < f.LampCount; i++)
                 LampTile(b, lamps[lampOrder[i]], LampOn(f, lamps[lampOrder[i]], i, total), f.Booting,
-                    HudBoardLayout.SystemSlotX(f.G.Width, u, i), f.G.Height - f.G.Systems.Y, slotW);
+                    HudBoardLayout.SystemSlotX(f.G.Width, u, i), f.G.Height - f.G.Systems.Y, slotW, HudBoardLayout.LampH * u);
         }
 
         // ------------------------------------------------------------------------------------------ threat row
@@ -141,7 +151,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             int total = f.LampCount + HudThreats.Count;
             for (int i = 0; i < HudThreats.Count; i++)
                 LampTile(b, threatLamps[i], LampOn(f, threatLamps[i], f.LampCount + i, total), f.Booting,
-                    HudBoardLayout.SystemSlotX(f.G.Width, u, i), rowTop, slotW);
+                    HudBoardLayout.SystemSlotX(f.G.Width, u, i), rowTop, slotW, HudBoardLayout.LampH * u);
 
             // Threat dial: own aircraft at the centre (a nose-up chevron, not a plus: a plus reads as an add button),
             // compass ticks on the rim, and a chevron riding the rim at the threat's bearing.
@@ -222,7 +232,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
                 bool flashing = f.Now < cells[i].FlashUntil;
                 beat |= flashing;
-                signature = signature * 17 + (m.Text?.GetHashCode() ?? 0) + (int)m.Tone * 3 + (m.Notice ? 1 : 0)
+                signature = signature * 17 + (m.Text?.GetHashCode() ?? 0) + (int)m.Tone * 3
                     + (m.Channel?.GetHashCode() ?? 0) + (flashing ? 5 : 0);
             }
         }
@@ -243,8 +253,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 if (m.Tone != HudTone.Info)
                     AvStrokes.Fill(b, x0, y0, cw, HudBoardLayout.CellH * u, toneColor.ToRgba().WithAlpha(flashing && f.FlashOn ? 0.28f : 0.12f));
                 float line = (m.Tone == HudTone.Warning ? CellLine + 1f : CellLine) * u;
-                if (m.Notice) DashedRect(b, x0, y0, x1, y1, line, ink, u);
-                else Rect4(b, x0, y0, x1, y1, line, ink);
+                Rect4(b, x0, y0, x1, y1, line, ink);
                 // MFD card rail: 2 px tone strip across the cell top, the green-glass idiom.
                 AvStrokes.Fill(b, x0, y1 - 2f * u, cw, 2f * u, ink);
 
@@ -289,16 +298,21 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             b.Clear();
             PaintSystems(b);
             if (f.Threats) PaintThreat(b);
+            PaintDetail(b);
+            PaintCm(b);
+            PaintDamage(b);
+            PaintFuel(b);
             PaintCells(b, snapshot);
+            PaintTicker(b);
             BufferGuard.Check(b, "status board");
             vector.Commit();
         }
 
-        private void LampTile(AvQuadBuffer b, Lamp lamp, bool lit, bool booting, float x0, float y1, float w)
+        private void LampTile(AvQuadBuffer b, Lamp lamp, bool lit, bool booting, float x0, float y1, float w, float h)
         {
-            float u = f.U, y0 = y1 - HudBoardLayout.LampH * u;
+            float u = f.U, y0 = y1 - h;
             Color tone = booting ? Ink : LampTone(lamp.State);
-            if (lit) AvStrokes.Fill(b, x0, y0, w, HudBoardLayout.LampH * u, tone.ToRgba().WithAlpha(0.30f));
+            if (lit) AvStrokes.Fill(b, x0, y0, w, h, tone.ToRgba().WithAlpha(0.30f));
             Rect4(b, x0, y0, x0 + w, y1, 1f * u, (lit ? tone : Ink).ToRgba().WithAlpha(lit ? 0.95f : 0.3f));
         }
 
@@ -313,15 +327,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             AvStrokes.Line(b, x1, y0, x1, y1, w, c);
             AvStrokes.Line(b, x1, y1, x0, y1, w, c);
             AvStrokes.Line(b, x0, y1, x0, y0, w, c);
-        }
-
-        private static void DashedRect(AvQuadBuffer b, float x0, float y0, float x1, float y1, float width, Rgba c, float u)
-        {
-            float dash = 6f * u, gap = 4f * u;
-            AvStrokes.DashedLine(b, x0, y0, x1, y0, dash, gap, width, c);
-            AvStrokes.DashedLine(b, x1, y0, x1, y1, dash, gap, width, c);
-            AvStrokes.DashedLine(b, x1, y1, x0, y1, dash, gap, width, c);
-            AvStrokes.DashedLine(b, x0, y1, x0, y0, dash, gap, width, c);
         }
     }
 }

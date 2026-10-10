@@ -54,6 +54,7 @@ public static class HudLogUnityCheck
             typeof(ThemeManager).GetProperty("Active", All).SetValue(null, theme);
             foreach (float width in new[] { 320f, 440f }) Status(width);
             foreach (float width in new[] { 320f, 440f }) StatusRich(width);
+            foreach (Vector2 size in new[] { new Vector2(1280,720), new Vector2(1920,1080) }) MissileCam(size);
             foreach (Vector2 size in new[] { new Vector2(1280,720), new Vector2(1920,1080), new Vector2(2560,1080) }) Cluster(size);
             Contracts();
             foreach (float height in new[] { 160f, 420f, 596f })
@@ -151,6 +152,34 @@ public static class HudLogUnityCheck
         object frame = Boxed("BoardFrame");
         Set(frame, "Systems", systems); Set(frame, "Threat", threat); Set(frame, "BootAge", -1f);
 
+        // Threat detail: an inbound radar missile (new, 7 s out) and a radar lock. Countermeasures: flares low, chaff matching, a jammer.
+        Array contacts = (Array)Field(frame, "Contacts");
+        object missileContact = Boxed("ThreatContact");
+        Set(missileContact, "Kind", EnumOf("ThreatKind", "Missile")); Set(missileContact, "Seeker", "SARH"); Set(missileContact, "Locked", true);
+        Set(missileContact, "RangeM", 2400f); Set(missileContact, "ClosureMps", 340f); Set(missileContact, "TtiS", 7.1f); Set(missileContact, "AgeS", 1.5f);
+        object lockContact = Boxed("ThreatContact");
+        Set(lockContact, "Kind", EnumOf("ThreatKind", "Lock")); Set(lockContact, "Name", "SA-19"); Set(lockContact, "RangeM", 9400f);
+        Set(lockContact, "TtiS", float.NaN); Set(lockContact, "AgeS", 10f);
+        contacts.SetValue(missileContact, 0); contacts.SetValue(lockContact, 1);
+        Set(frame, "ContactCount", 2); Set(frame, "InboundMask", (byte)2);
+        Array cm = (Array)Field(frame, "Cm");
+        object flares = Boxed("CmStation"); Set(flares, "Tag", "IR"); Set(flares, "Ammo", 6); Set(flares, "Max", 72); Set(flares, "Mask", (byte)1);
+        object chaff = Boxed("CmStation"); Set(chaff, "Tag", "RDR"); Set(chaff, "Ammo", 30); Set(chaff, "Max", 30); Set(chaff, "Mask", (byte)2);
+        object jammer = Boxed("CmStation"); Set(jammer, "Tag", "JAM"); Set(jammer, "Ammo", 1); Set(jammer, "Max", 1); Set(jammer, "Chargeable", true); Set(jammer, "Mask", (byte)2);
+        cm.SetValue(flares, 0); cm.SetValue(chaff, 1); cm.SetValue(jammer, 2);
+        Set(frame, "CmCount", 3);
+        object tick = Boxed("TickerLine");
+        Set(tick, "Tone", Enum.Parse(Type("BoscaliSummer.Core.Contracts.HudTone"), "Warning")); Set(tick, "Channel", "events");
+        Set(tick, "Text", "SUPEREVENT · NIGHTFALL 2 INBOUND"); Set(tick, "Detail", "ALL THEATER · SEEK COVER"); Set(tick, "Count", 3); Set(tick, "Age", 0.5f);
+        Set(frame, "Ticker", tick); Set(frame, "HasTicker", true);
+        object fuel = Boxed("FuelState");
+        Set(fuel, "Valid", true); Set(fuel, "Level", .38f); Set(fuel, "EnduranceS", 2520f); Set(fuel, "Joker", true);
+        Set(fuel, "Field", "HighwayStrip2"); Set(fuel, "FieldM", 23000f); Set(fuel, "Tone", Enum.Parse(Type("BoscaliSummer.Core.Contracts.HudTone"), "Caution"));
+        Set(frame, "Fuel", fuel);
+        object damage = Boxed("DamageState");
+        Set(damage, "Flags", Enum.Parse(Type(HudDomain + "DamageFlags"), "EngineDamaged, FuelLeak, Fire")); Set(damage, "Engines", 2); Set(damage, "EnginesOut", 1); Set(damage, "DetachedRatio", .14f);
+        Set(frame, "Damage", damage);
+
         object ledger = Boxed("ShotLedger");
         Call(ledger, "Launch", 1, false, 0f); Call(ledger, "Launch", 2, true, 0f); Call(ledger, "Launch", 3, false, 0f);
         Call(ledger, "Detonate", 1, true, 1f); Call(ledger, "Launch", 4, true, 1f); Call(ledger, "Detonate", 3, false, 1.2f);
@@ -171,6 +200,34 @@ public static class HudLogUnityCheck
         Check(((RectTransform)Field(status, "root")).Find("Value1").GetComponent<TMP_Text>().text == "70%", "The figure follows the bar when the text is constant.");
         Capture(canvas, "HUD-status-rich-" + width + ".png");
         Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
+    }
+    /// <summary>The readout while the orbit camera rides one of our missiles: locked on a target, then searching blind.</summary>
+    private static void MissileCam(Vector2 size)
+    {
+        Canvas canvas = MakeCanvas("MissileCam", size); CombatHUD hud = NativeDock(canvas);
+        object panel = Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Presentation.MissileCamPanel"), true);
+        Call(panel, "Build", hud, canvas);
+        SyntheticFont((RectTransform)Field(panel, "root"));
+        object data = Boxed("MissileCamData");
+        Set(data, "Valid", true); Set(data, "Index", 0); Set(data, "Count", 2); Set(data, "Weapon", "AIM-120"); Set(data, "Seeker", "SARH");
+        Set(data, "State", EnumOf("SeekerState", "Locked")); Set(data, "HasTarget", true); Set(data, "Target", "MiG-29");
+        Set(data, "RangeM", 2400f); Set(data, "ClosureMps", 233f); Set(data, "TtiS", 3.4f);
+        Call(panel, "Present", true, data, AvUnits.Metric, 1f);
+        Canvas.ForceUpdateCanvases();
+        RectTransform root = (RectTransform)Field(panel, "root");
+        Check(root.gameObject.activeSelf, "The readout shows while riding a missile.");
+        Check(root.Find("Header").GetComponent<TMP_Text>().text == "MSL 1/2 · AIM-120", "Header names the missile and its place in the list.");
+        Check(root.Find("Seeker").GetComponent<TMP_Text>().text == "SARH · LOCKED", "A locked seeker says LOCKED.");
+        Check(root.Find("Tti").GetComponent<TMP_Text>().text.Contains("3S"), "Time to impact is shown.");
+        Capture(canvas, "HUD-missilecam-locked-" + size.x + "x" + size.y + ".png");
+        Set(data, "State", EnumOf("SeekerState", "Search")); Set(data, "HasTarget", false); Set(data, "RangeM", float.NaN); Set(data, "ClosureMps", float.NaN); Set(data, "TtiS", float.NaN);
+        Call(panel, "Present", true, data, AvUnits.Metric, 1f);
+        Check(root.Find("Seeker").GetComponent<TMP_Text>().text == "SARH · NO TGT" && root.Find("Target").GetComponent<TMP_Text>().text == "NO TARGET", "A blind missile says NO TGT.");
+        Capture(canvas, "HUD-missilecam-blind-" + size.x + "x" + size.y + ".png");
+        foreach (Graphic g in root.GetComponentsInChildren<Graphic>()) Check(!g.raycastTarget, "The missile-cam readout must not intercept pointer input.");
+        Call(panel, "Present", false, data, AvUnits.Metric, 1f);
+        Check(!root.gameObject.activeSelf, "The readout hides when the camera leaves the missile.");
+        Call(panel, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
     }
     private static void Cluster(Vector2 size)
     {
