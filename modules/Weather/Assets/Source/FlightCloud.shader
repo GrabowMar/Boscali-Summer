@@ -841,6 +841,7 @@ Shader "Boscali/FlightCloud"
             float2 p = g.xz + warp;
             float2 w = float2(dot(p, _CloudWindDir), dot(p, float2(-_CloudWindDir.y, _CloudWindDir.x)));
             float streak = 0.52, cells = 0.52;
+            float2 bend = float2(0.0, 0.0);
             if (wts.z > 0.0)
             {
                 float2 sw = w;
@@ -861,12 +862,15 @@ Shader "Boscali/FlightCloud"
             }
             if (wts.x + wts.y > 0.0)
             {
-                // Rounded cells from the smooth base channel, also at two scales.
+                // Rounded cells from the smooth base channel, also at two scales. The cell tile repeats every cs metres and read as a lattice
+                // (sky 20), so a vector noise at 3.3 cs bends the coordinate by up to ~1/3 cs (Task 13); it filters to nothing with distance.
                 float cs = scale * 0.45;
+                bend = tex3Dlod(_CloudNoiseTex, float4(p / (cs * 3.3) + 0.57, 0.19 + g.y / (cs * 2.9), SlabLod(foot, cs * 3.3))).rg - 0.5;
+                float2 pc = p + bend * cs * 2.2;
                 float lodC = SlabLod(foot, cs);
-                float c1 = tex3Dlod(_CloudNoiseTex, float4(p / cs + 0.41, g.y / (cs * 0.8), lodC)).r;
+                float c1 = tex3Dlod(_CloudNoiseTex, float4(pc / cs + 0.41, g.y / (cs * 0.8), lodC)).r;
                 float fineC = saturate(4.0 - lodC);
-                float c2 = fineC > 0.0 ? lerp(0.52, tex3Dlod(_CloudNoiseTex, float4(float2(p.y, -p.x) / (cs * 2.37) + 0.13,
+                float c2 = fineC > 0.0 ? lerp(0.52, tex3Dlod(_CloudNoiseTex, float4(float2(pc.y, -pc.x) / (cs * 2.37) + 0.13,
                     g.y / (cs * 1.9) + 0.77, SlabLod(foot, cs * 2.37))).r, fineC) : 0.52;
                 cells = c1 * 0.62 + c2 * 0.38;
             }
@@ -877,9 +881,11 @@ Shader "Boscali/FlightCloud"
                 // is filtered past what the pixel resolves, so the horizon never moires.
                 float wavelength = max(1.0, row.rippleWave);
                 float rippleKeep = 1.0 - smoothstep(1.0, 3.0, LodFor(foot, wavelength));
-                float rows = 0.55 + 0.45 * sin(w.y / wavelength * 6.2831853 + warp.x / scale * 2.0);
+                // The rows meander and break up with the cell bend (Task 13): perfectly straight, equal stripes read as a zebra (sky 18).
+                float rows = 0.55 + 0.45 * sin(w.y / wavelength * 6.2831853 + warp.x / scale * 2.0 + bend.x * 6.0);
+                float rowKeep = saturate(0.8 + bend.y * 3.5);
                 // rows averages 0.55: dividing by it keeps the pattern's mean at the cells' (CloudBodies.SlabPattern is the twin).
-                ripples = cells * lerp(1.0, rows / 0.55, 0.8 * rippleKeep);
+                ripples = cells * lerp(1.0, rows / 0.55, 0.8 * rippleKeep * rowKeep);
             }
             return dot(wts, float3(cells, ripples, streak)) / (wts.x + wts.y + wts.z);
         }

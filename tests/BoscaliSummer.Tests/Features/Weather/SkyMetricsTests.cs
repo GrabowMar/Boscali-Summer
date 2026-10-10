@@ -139,6 +139,12 @@ namespace BoscaliSummer.Tests.Features.Weather
                 "a clear sky of cirrus streaks may show about its layer's cover (0.30), not more");
             SkyDef opacus = SkyLibrary.Get(32);
             TestAssert.That(SkyMetrics.For(opacus.Nominal, opacus.HasLow, opacus.Genus.Genus).Sheet, "sky 33's full altostratus deck is a sheet");
+            foreach (int index in new[] { 44, 46 })
+            {
+                SkyDef lid = SkyLibrary.Get(index);
+                SkyMetrics.Expectation l = SkyMetrics.For(lid.Nominal, lid.HasLow, lid.Genus.Genus);
+                TestAssert.That(l.Cumuliform && !l.Sheet, "sky " + (index + 1) + " (storm under a lid) is cumuliform and not a sheet: one lit/dark band applies");
+            }
         }
 
         private static void ExpectationsFollowTheLibrary()

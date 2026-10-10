@@ -51,7 +51,8 @@ namespace BoscaliSummer.Tests.Features.Weather
             float cover = SkyMath.SkyCover(SkyMath.LowCover(nominal), nominal.Mid.Cover, nominal.OpacityMid, nominal.High.Cover, nominal.OpacityHigh);
             bool cumuliform = hasLow && genus <= LowGenus.Cumulonimbus && SkyMath.LowCover(nominal) >= 0.12f;
             // A full thin deck (altostratus opacus, sky 33 and 38) is a sheet too: it covers the view completely, which is not a defect.
-            bool sheet = SkyMath.ClassOf(nominal) >= WeatherRegimeType.Overcast && Math.Max(nominal.SheetCover, nominal.Mid.Cover) >= 0.8f;
+            // A storm sky with a cumulonimbus (45, 47) is cumuliform, never a sheet: its lit/dark band is the cumulus one, and the two bands are disjoint.
+            bool sheet = !cumuliform && SkyMath.ClassOf(nominal) >= WeatherRegimeType.Overcast && Math.Max(nominal.SheetCover, nominal.Mid.Cover) >= 0.8f;
             bool feature = hasLow && (nominal.CumulusCover > 0f || nominal.Convective > 0.3f || genus == LowGenus.Cumulonimbus);
             return new Expectation { Cover = cover, Cumuliform = cumuliform, Sheet = sheet, Clear = cover < 0.05f, Faint = cover >= 0.05f && cover < 0.15f, Feature = feature,
                 ThinOnly = SkyMath.LowCover(nominal) < 0.05f, LayerCover = Math.Max(nominal.Mid.Cover, nominal.High.Cover) };

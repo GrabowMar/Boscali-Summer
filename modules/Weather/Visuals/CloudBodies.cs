@@ -453,7 +453,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             float warpX = (lowR - 0.5f) * scale * 1.6f, warpZ = (lowG - 0.5f) * scale * 1.6f;
             float px = x + warpX, pz = z + warpZ;
             float along = px * windX + pz * windZ, across = -px * windZ + pz * windX;
-            float streak = 0.52f, cells = 0.52f;
+            float streak = 0.52f, cells = 0.52f, bendX = 0f, bendY = 0f;
             if (ws > 0f)
             {
                 float a = along, b = across;
@@ -471,18 +471,24 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             }
             if (wc + wr > 0f)
             {
+                // The cell tile repeats every cs metres and read as a lattice (sky 20), so a vector noise at 3.3 cs bends the coordinate (Task 13).
                 float cs = scale * 0.45f;
-                float c1 = Sample(px / cs + 0.41f, pz / cs + 0.41f, y / (cs * 0.8f), 0);
-                float c2 = Sample(pz / (cs * 2.37f) + 0.13f, -px / (cs * 2.37f) + 0.13f, y / (cs * 1.9f) + 0.77f, 0);
+                float bu = px / (cs * 3.3f) + 0.57f, bv = pz / (cs * 3.3f) + 0.57f, bw = 0.19f + y / (cs * 2.9f);
+                bendX = Sample(bu, bv, bw, 0) - 0.5f; bendY = Sample(bu, bv, bw, 1) - 0.5f;
+                float qx = px + bendX * cs * 2.2f, qz = pz + bendY * cs * 2.2f;
+                float c1 = Sample(qx / cs + 0.41f, qz / cs + 0.41f, y / (cs * 0.8f), 0);
+                float c2 = Sample(qz / (cs * 2.37f) + 0.13f, -qx / (cs * 2.37f) + 0.13f, y / (cs * 1.9f) + 0.77f, 0);
                 cells = c1 * 0.62f + c2 * 0.38f;
             }
             float ripples = cells;
             if (wr > 0f)
             {
-                float rows = 0.55f + 0.45f * (float)Math.Sin(across / row.RippleWavelength * 2f * Math.PI + warpX / scale * 2f);
+                // The rows meander and break up with the cell bend (Task 13): perfectly straight, equal stripes read as a zebra (sky 18).
+                float rows = 0.55f + 0.45f * (float)Math.Sin(across / row.RippleWavelength * 2f * Math.PI + warpX / scale * 2f + bendX * 6f);
+                float rowKeep = Scalar.Clamp01(0.8f + bendY * 3.5f);
                 // rows averages 0.55, so dividing by it keeps the pattern's mean at the cells' (0.52): without it a ripple layer sat at 0.64 of a cell
                 // layer's mean and, through the cover mask, covered a fraction of its cover.
-                ripples = cells * WeatherMath.Lerp(1f, rows / 0.55f, 0.8f);
+                ripples = cells * WeatherMath.Lerp(1f, rows / 0.55f, 0.8f * rowKeep);
             }
             return (wc * cells + wr * ripples + ws * streak) / (wc + wr + ws);
         }

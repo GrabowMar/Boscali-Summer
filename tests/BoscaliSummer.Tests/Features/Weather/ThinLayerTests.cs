@@ -132,10 +132,13 @@ namespace BoscaliSummer.Tests.Features.Weather
             float cellsValue = bodies.Slab2D(cells, 1200f, 4400f, 700f);
             float streakValue = bodies.Slab2D(streaks, 1200f, 4400f, 700f);
             TestAssert.That(cellsValue > 0.1f && Math.Abs(cellsValue - streakValue) < 1e-5f, "on a constant field cells and streaks agree");
+            // The rows break up with the vector noise of the bend (Task 13): this volume's G = 90 reads as a strong negative bend that nearly
+            // switches the rows off, so the spread is measured on one whose G is neutral.
+            var neutral = MakeBodies(Uniform(200, 128, 255), 4);
             float lo = float.MaxValue, hi = float.MinValue;
             for (int i = 0; i < 40; i++)
             {
-                float v = bodies.Slab2D(ripples, i * 137f, 4400f, i * 53f);
+                float v = neutral.Slab2D(ripples, i * 137f, 4400f, i * 53f);
                 lo = Math.Min(lo, v); hi = Math.Max(hi, v);
             }
             TestAssert.That(hi - lo > 0.05f, "ripples add parallel rows across the layer: spread " + (hi - lo));
