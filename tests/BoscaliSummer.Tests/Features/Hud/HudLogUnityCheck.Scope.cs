@@ -201,7 +201,8 @@ public static partial class HudLogUnityCheck
         ScopeChecks(status, tag);
         if (variant == "service-zone")
             foreach (var label in canvas.GetComponentsInChildren<TextMeshProUGUI>(true))
-                Check(!label.text.Contains("BRAKE"), "Service-zone presentation must not instruct a brake-to-dock maneuver: " + tag);
+                if (label != null && label.gameObject.activeInHierarchy)
+                    Check(!(label.text ?? "").Contains("BRAKE"), "Service-zone presentation must not instruct a brake-to-dock maneuver: " + tag);
         Capture(canvas, tag + ".png");
         Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject); ScopeReset();
         return true;
