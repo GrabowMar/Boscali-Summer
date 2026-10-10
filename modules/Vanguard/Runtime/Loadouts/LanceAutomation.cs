@@ -206,9 +206,11 @@ namespace BoscaliSummer.Vanguard
             {
                 Vector3 desired = lead.transform.position + dir * (range + spacing * k);
                 desired.y = Datum.LocalSeaY + 1400f;
-                if (!GroundPlacement.TryPlace(def, desired, Quaternion.LookRotation(dir), out points[k]) ||
-                    (k > 0 && Mathf.Abs(points[k].y - points[0].y) > 0.4f)) return false;
+                if (!GroundPlacement.TryPlace(def, desired, Quaternion.LookRotation(dir), out points[k])) return false;
             }
+            // The slug flies first hull to last hull: an even slope serves as well as level ground, a hump or a dip does not.
+            for (int k = 1; k < count - 1; k++)
+                if (Mathf.Abs(points[k].y - Mathf.Lerp(points[0].y, points[count - 1].y, k / (count - 1f))) > 0.4f) return false;
             return true;
         }
 

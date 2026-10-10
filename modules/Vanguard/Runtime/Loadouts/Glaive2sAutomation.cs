@@ -37,6 +37,8 @@ namespace BoscaliSummer.Vanguard
         private static class Glaive2sSim
         {
             private static Unit handOffTarget;
+            private static GlobalPosition firstAt, secondAt;
+            private static bool firstSeen, secondSeen;
 
             public static GlaiveDrone Spectre() =>
                 Launched.TryGetValue(VanguardKeys.Glaive2S, out Missile m) && m != null && !m.disabled ? m.GetComponent<GlaiveDrone>() : null;
@@ -49,6 +51,9 @@ namespace BoscaliSummer.Vanguard
                     g[k] = VanguardStats.Get("glaive2s." + k);
                 GlaiveDrone drone = Spectre();
                 g["alive"] = drone != null ? 1 : 0;
+                // A destroyed target's wreck despawns within seconds: the last place each was seen stands in for it.
+                if (groundTarget != null) { firstAt = groundTarget.GlobalPosition(); firstSeen = true; }
+                if (handOffTarget != null) { secondAt = handOffTarget.GlobalPosition(); secondSeen = true; }
                 if (drone != null)
                 {
                     Missile m = drone.GetComponent<Missile>();
@@ -61,8 +66,8 @@ namespace BoscaliSummer.Vanguard
                     g["speed"] = m.speed;
                     g["radius"] = new Vector2(radial.x, radial.z).magnitude;
                     g["height"] = radial.y;
-                    if (groundTarget != null) g["centreToFirst"] = HFlat(drone.Centre, groundTarget.GlobalPosition());
-                    if (handOffTarget != null) g["centreToSecond"] = HFlat(drone.Centre, handOffTarget.GlobalPosition());
+                    if (firstSeen) g["centreToFirst"] = HFlat(drone.Centre, firstAt);
+                    if (secondSeen) g["centreToSecond"] = HFlat(drone.Centre, secondAt);
                 }
                 g["firstAlive"] = groundTarget != null && !groundTarget.disabled ? 1 : 0;
                 g["secondAlive"] = handOffTarget != null && !handOffTarget.disabled ? 1 : 0;

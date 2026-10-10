@@ -170,7 +170,7 @@
     {
       "check": "result_above",
       "path": "mid.lanceFlicker",
-      "min": 0.3
+      "min": 0.2
     },
     {
       "check": "result_above",

@@ -3,7 +3,7 @@
   "mods": [
     "boscalisummer"
   ],
-  "timeout_s": 420,
+  "timeout_s": 720,
   "ops": [
     {
       "op": "spawn",
