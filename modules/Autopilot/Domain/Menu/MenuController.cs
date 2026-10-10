@@ -43,8 +43,9 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         private bool cDown, prevC, moved, focusFromPointer;
         private float cTime, focusTime, lastMoveTime, edgeTime, flashUntil;
         private Owner owner;
-        private float ownX, ownY;
+        private float ownX, ownY, lastRealX, lastRealY;
         private int hover = -1;
+        private MenuDevice dockDevice;
 
         public MenuController(MenuModel model, MenuLayout layout)
         {
@@ -73,6 +74,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public MenuToast Toast;
         public float DenyUntil { get; private set; }
         public int Edge { get; private set; }
+        /// <summary>The configurable open key as the hint bar names it (RELEASE C); set by the host.</summary>
+        public string OpenKeyName { get; set; } = "C";
         /// <summary>The main dock's geometry for the current category / level; valid while <see cref="Cat"/> >= 0.</summary>
         public DockLayout Dock => dock;
         public MenuLayout Layout => layout;
@@ -112,7 +115,14 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
 
         public int Cap => layout.Cap(Items, Sub != null);
 
-        public void SetLayout(MenuLayout l) { layout = l; RefreshDock(); }
+        public void SetLayout(MenuLayout l) { layout = l; Resync(); }
+
+        /// <summary>Re-fills the dock after the model took a rebuild (a category turning available, a changed row count) or the layout changed, and keeps the focused row in view.</summary>
+        public void Resync()
+        {
+            if (!Open || Cat < 0) return;
+            if (DockFocus && Focus >= 0) EnsureVisible(); else RefreshDock();
+        }
 
         /// <summary>Close from outside: focus lost, aircraft gone, map opened.</summary>
         public void Cancel() { if (Open) CloseMenu(); }
@@ -121,6 +131,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public void Step(in MenuInput inp)
         {
             Now = inp.Time;
+            lastRealX = inp.PointerX; lastRealY = inp.PointerY;
             Commands.Clear();
             if (Open && inp.Esc) CloseMenu();
 
@@ -142,8 +153,9 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 if (inp.Rmb) { Device = MenuDevice.Mouse; Back(true); }
                 if (inp.DeltaX != 0f || inp.DeltaY != 0f || inp.PointerMoved) PointerMove(inp);
                 if (inp.Lmb) Click(inp);
-                if (Math.Abs(inp.StickX) > StickDeadzone || Math.Abs(inp.StickY) > StickDeadzone) Stick(inp);
+                if (inp.StickX * inp.StickX + inp.StickY * inp.StickY > StickDeadzone * StickDeadzone) Stick(inp);
                 CheckHoldSource(inp);
+                if (Open && Cat >= 0 && Device != dockDevice) RefreshDock(); // the footer shows for keys and pad, not for the mouse
             }
             Update(inp.Time);
         }
@@ -212,14 +224,22 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         private void Latch(in MenuInput inp)
         {
             Mode = MenuMode.Latched; Locked = false;
-            LatchCursor(inp);
+            LatchCursor(inp.PointerX, inp.PointerY);
             LatchedHover();
             RefreshDock();
         }
 
-        private void LatchCursor(in MenuInput inp)
+        /// <summary>Release C on a submenu or BACK row: HOLD turns LATCHED with the cursor where the real mouse is and no hover pass, so the focus Drill picked (the active child) stays.</summary>
+        private void LatchInPlace()
         {
-            if (inp.PointerX >= 0f && inp.PointerY >= 0f && inp.PointerX <= layout.W && inp.PointerY <= layout.H) { PtrX = inp.PointerX; PtrY = inp.PointerY; }
+            Mode = MenuMode.Latched; cDown = false; Locked = false;
+            LatchCursor(lastRealX, lastRealY);
+            RefreshDock();
+        }
+
+        private void LatchCursor(float x, float y)
+        {
+            if (x >= 0f && y >= 0f && x <= layout.W && y <= layout.H) { PtrX = x; PtrY = y; }
             else { PtrX = layout.Cx; PtrY = layout.Cy; }
         }
 
@@ -244,7 +264,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             bool empty = !c.Available;
             bool footer = (!empty && Device != MenuDevice.Mouse) || Sub == null;
             layout.FillDock(dock, Items, Sub != null, Offset, footer, MenuLayout.DockSide(c), empty);
-            Offset = dock.Offset;
+            Offset = dock.Offset; dockDevice = Device;
         }
 
         private void ClampOffset()
@@ -324,13 +344,13 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             if (row == MenuRow.BackRow)
             {
                 Back(src == ExecSource.Release || src == ExecSource.Lmb);
-                if (Mode == MenuMode.Hold && src == ExecSource.Release && Open) { Mode = MenuMode.Latched; cDown = false; Latch(default(MenuInput).WithPointer(PtrX, PtrY)); }
+                if (Mode == MenuMode.Hold && src == ExecSource.Release && Open) LatchInPlace();
                 return;
             }
             if (row.Kind == MenuKind.Submenu)
             {
                 Drill(row);
-                if (Mode == MenuMode.Hold && src == ExecSource.Release) { Mode = MenuMode.Latched; cDown = false; Latch(default(MenuInput).WithPointer(PtrX, PtrY)); }
+                if (Mode == MenuMode.Hold && src == ExecSource.Release) LatchInPlace();
                 return;
             }
             if (row.IsBlocked) { Deny(); return; }
@@ -495,7 +515,13 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                     if (y >= row.Rect.T && y < row.Rect.B) return new Hit { Type = HitType.Row, Index = row.Index };
                 return new Hit { Type = HitType.Dock };
             }
-            int cat = layout.CategoryAt(x, y);
+            int cat = layout.DiscAt(x, y, 5f);
+            // the plate as drawn (it hugs its own text), not the widest one: empty air beside a short plate is not that category
+            for (int i = 0; cat < 0 && i < layout.Count; i++)
+            {
+                MenuCategory c = model.Categories[i];
+                if (layout.PlateContains(i, i == Cat || c.BadgeShow ? c.Badge : null, x, y)) cat = i;
+            }
             return cat >= 0 ? new Hit { Type = HitType.Category, Index = cat } : default;
         }
 
@@ -613,10 +639,5 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             if (FlashId != null && t >= flashUntil) FlashId = null;
             if (Toast.Text != null && t >= Toast.Until) Toast = default;
         }
-    }
-
-    internal static class MenuInputExtensions
-    {
-        internal static MenuInput WithPointer(this MenuInput i, float x, float y) { i.PointerX = x; i.PointerY = y; return i; }
     }
 }

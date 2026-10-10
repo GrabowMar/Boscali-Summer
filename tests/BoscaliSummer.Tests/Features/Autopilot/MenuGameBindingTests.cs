@@ -11,7 +11,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
     /// </summary>
     internal static class MenuGameBindingTests
     {
-        private static readonly string[] Prefixes = { "weapons/select/st", "comms/c", "support/perks/", "targets/filters/" };
+        private static readonly string[] Prefixes = { "weapons/select/st", "comms/c", "support/perks/", "targets/filters/", "wing/shape/" };
 
         public static void Run()
         {

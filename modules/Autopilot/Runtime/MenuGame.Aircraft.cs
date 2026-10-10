@@ -1,6 +1,9 @@
 using System;
+using System.Collections;
+using System.Reflection;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Autopilot.Domain;
+using HarmonyLib;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Autopilot.Runtime
@@ -13,12 +16,14 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
     internal static partial class MenuGame
     {
         private const float AirborneRadarAlt = 0.2f;
-        private const int MaxStations = 8;
 
         private static Aircraft flareOwner;
-        private static FlareEjector flareEjector;
+        private static FlareEjector[] flareEjectors;
+        // the game keeps its countermeasure stations (one per display name, alphabetical) in a private list of a private class
+        private static readonly FieldInfo CmStations = AccessTools.Field(typeof(CountermeasureManager), "countermeasureStations");
+        private static FieldInfo cmStationName;
 
-        private static void ResetAircraftCache() { flareOwner = null; flareEjector = null; }
+        private static void ResetAircraftCache() { flareOwner = null; flareEjectors = null; }
 
         private static Action Bind(MenuRow row) => BindVanilla(row) ?? BindContracts(row);
 
@@ -78,7 +83,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         {
             if (!TryAircraft(out Aircraft a) || a.weaponManager == null || a.weaponStations == null) return;
             WeaponManager wm = a.weaponManager;
-            int count = Mathf.Min(a.weaponStations.Count, MaxStations);
+            int count = a.weaponStations.Count;
             for (int i = 0; i < count; i++)
             {
                 WeaponStation s = a.weaponStations[i];
@@ -89,7 +94,8 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                     ws.Name = MenuText.Upper(!string.IsNullOrEmpty(info.shortName) ? info.shortName : info.weaponName, 14);
                     ws.Ammo = s.Ammo;
                     ws.Class = info.gun ? (s.HasTurret() ? StationClass.Turret : StationClass.Gun)
-                        : info.bomb ? StationClass.Bomb : info.missile ? StationClass.Missile : StationClass.Other;
+                        : info.bomb ? StationClass.Bomb
+                        : info.missile ? (info.effectiveness.antiSurface > info.effectiveness.antiAir ? StationClass.Agm : StationClass.Missile) : StationClass.Other;
                 }
                 w.Stations.Add(ws);
                 if (s != null && wm.currentWeaponStation == s) w.ActiveStation = i;
@@ -104,27 +110,41 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         {
             if (!TryAircraft(out Aircraft a)) return;
             CountermeasureManager cm = a.countermeasureManager;
-            Countermeasure active = cm?.GetActiveCountermeasure();
+            IList stations = cm != null && CmStations != null ? CmStations.GetValue(cm) as IList : null;
+            // activeIndex is 255 after the game auto-chose "none" for a threat: GetActiveCountermeasure would throw
+            Countermeasure active = cm != null && (stations == null || cm.activeIndex < stations.Count) ? cm.GetActiveCountermeasure() : null;
             w.HasCountermeasures = cm != null && active != null;
             if (w.HasCountermeasures)
             {
                 w.Countermeasure = MenuText.Upper(active.displayName, 20);
-                FlareEjector ejector = FlareOf(a);
-                w.HasFlares = ejector != null;
-                if (ejector != null) { w.Flares = ejector.GetAmmo(); w.FlaresMax = ejector.GetMaxAmmo(); }
+                if (stations != null && stations.Count > 1)
+                {
+                    w.CountermeasureIndex = cm.activeIndex;
+                    w.NextCountermeasure = MenuText.Upper(StationName(stations[cm.activeIndex >= stations.Count - 1 ? 0 : cm.activeIndex + 1]), 20); // NextCountermeasure() wraps the same way
+                }
+                FlareEjector[] ejectors = FlaresOf(a);
+                w.HasFlares = ejectors.Length > 0;
+                foreach (FlareEjector e in ejectors) if (e != null) { w.Flares += e.GetAmmo(); w.FlaresMax += e.GetMaxAmmo(); }
             }
             w.HasRadar = a.radar != null;
             w.RadarOn = a.radar != null && a.radar.activated;
             IDroneCommand drones = Service<IDroneCommand>();
             w.HasDrones = drones != null;
-            if (drones != null) { w.DronesStriking = drones.Striking; w.DronesCanStrike = drones.CanStrike; }
+            if (drones != null) { w.DronesStriking = drones.Striking; w.DronesCanStrike = drones.CanStrike; w.Drones = drones.Ready; }
         }
 
-        /// <summary>The aircraft's flare ejector, found once per airframe.</summary>
-        private static FlareEjector FlareOf(Aircraft a)
+        private static string StationName(object station)
         {
-            if (flareOwner != a) { flareOwner = a; flareEjector = a.GetComponentInChildren<FlareEjector>(true); }
-            return flareEjector;
+            if (station == null) return "";
+            cmStationName ??= AccessTools.Field(station.GetType(), "displayName");
+            return cmStationName?.GetValue(station) as string ?? "";
+        }
+
+        /// <summary>The aircraft's flare ejectors, found once per airframe: the game adds the ammo of same-named countermeasures into one station, so the menu does too.</summary>
+        private static FlareEjector[] FlaresOf(Aircraft a)
+        {
+            if (flareOwner != a) { flareOwner = a; flareEjectors = a.GetComponentsInChildren<FlareEjector>(true); }
+            return flareEjectors;
         }
 
         private static void ReadView(MenuWorld w)

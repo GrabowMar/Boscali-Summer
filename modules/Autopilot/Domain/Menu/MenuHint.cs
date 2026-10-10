@@ -24,10 +24,11 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
     /// <summary>All the words the controller state turns into, as pure functions (the view only paints them).</summary>
     internal static class MenuHint
     {
-        public static string BackGlyph(MenuDevice d) => d == MenuDevice.Pad ? "B" : d == MenuDevice.Key ? "BKSP" : "RMB";
+        // The pad's own Back button and d-pad are not wired (the host reads the stick and the one A button), so a pad user is told the keys that do work.
+        public static string BackGlyph(MenuDevice d) => d == MenuDevice.Mouse ? "RMB" : "BKSP";
 
         /// <summary>The dock footer's back legend.</summary>
-        public static string BackFooter(MenuDevice d) => d == MenuDevice.Pad ? "B" : d == MenuDevice.Key ? "BKSP/0" : "RMB";
+        public static string BackFooter(MenuDevice d) => d == MenuDevice.Mouse ? "RMB" : "BKSP/0";
 
         public static string Press(MenuDevice d) => d == MenuDevice.Pad ? "A" : d == MenuDevice.Mouse ? "CLICK" : "ENTER";
 
@@ -37,7 +38,9 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         {
             bool hold = c.Mode == MenuMode.Hold;
             MenuRow row = c.FocusedRow;
-            string key = hold ? (c.FocusFromPointer ? (c.Device == MenuDevice.Pad ? "RELEASE Y" : "RELEASE C") : (c.Device == MenuDevice.Pad ? "A" : "ENTER")) : Press(c.Device);
+            // the open key is configurable: a long name (LEFTSHIFT) would push the row label out of the 396 px segment, so only short names are spelled out
+            string release = c.Device == MenuDevice.Pad || c.OpenKeyName.Length > 4 ? "RELEASE" : "RELEASE " + c.OpenKeyName;
+            string key = hold ? (c.FocusFromPointer ? release : (c.Device == MenuDevice.Pad ? "A" : "ENTER")) : Press(c.Device);
             string act;
             bool warn = false;
             if (c.Hold != null)
@@ -62,9 +65,9 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         }
 
         public static string FooterLeft(MenuController c) =>
-            c.Category != null && c.Category.Available && c.Device != MenuDevice.Mouse ? "↑↓ ROW · ←→ RING" : "";
+            c.Category != null && c.Category.Available && c.Device == MenuDevice.Key ? "↑↓ ROW · ←→ RING" : "";
 
-        public static string FooterRight(MenuController c) => c.Sub != null ? "" : BackFooter(c.Device) + " · BACK";
+        public static string FooterRight(MenuController c) => c.Sub != null ? "" : c.Device == MenuDevice.Mouse ? "RMB · BACK" : "BKSP/0 · BACK";
 
         /// <summary>Null when nothing is focused: the hub then shows the status summary.</summary>
         public static MenuReadout? Readout(MenuController c)
@@ -76,7 +79,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         }
 
         /// <summary>Dock header: category label, or "CATEGORY › LIST" at depth 3; context on the right.</summary>
-        public static string Crumb(MenuController c) => c.Sub != null ? c.Category.Label + " › " : "";
+        public static string Crumb(MenuController c) => c.Sub != null ? c.Category.Crumb : "";
 
         public static string Title(MenuController c) => c.Sub != null ? c.Sub.Label : c.Category.Label;
 
@@ -85,9 +88,9 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             MenuCategory cat = c.Category;
             if (cat == null || !cat.Available) return "";
             if (c.Sub == null) return cat.Context;
-            string ctx = c.Sub.Context ?? cat.Context;
-            int dot = ctx.LastIndexOf(" · ", StringComparison.Ordinal);
-            return dot >= 0 ? ctx.Substring(dot + 3) : ctx;
+            if (c.Sub.Context != null) return c.Sub.ContextTail;
+            int dot = cat.Context.LastIndexOf(" · ", StringComparison.Ordinal);
+            return dot >= 0 ? cat.Context.Substring(dot + 3) : cat.Context;
         }
     }
 }

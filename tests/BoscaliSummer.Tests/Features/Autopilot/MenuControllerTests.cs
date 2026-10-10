@@ -30,6 +30,11 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             EscClosesAndOpenIsGated();
             HintAndReadoutWords();
             HintSegmentsFitAtEveryScreenSize();
+            ReleaseOnASubmenuKeepsTheActiveChild();
+            DockFollowsTheDeviceTheModelAndTheLayout();
+            OpenKeyNameAndPadLegends();
+            StickUsesItsMagnitude();
+            LatchedPeekUsesThePlateAsDrawn();
         }
 
         private static MenuRig Rig() => new MenuRig(MenuWorlds.Default());
@@ -114,6 +119,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.That(r.Cat == "flight" && r.Ran("flight/assist") && r.C.Open, "with FLIGHT peeked, 2 is ROW 2 (assist), not the LIGHTS category");
             r.PressDigit(9);
             TestAssert.That(r.Cat == "flight" && r.C.Denying && r.Kinds.Contains(MenuCommandKind.Pulse), "digit 9 in a dock is refused with feedback");
+            TestAssert.That(r.C.DenyUntil - r.C.Now > 0f && r.C.DenyUntil - r.C.Now <= MenuController.DenySec, "the pulse the painter fades runs DenySec from the refusal");
             r.Adv(MenuController.DenySec + 0.02f);
             TestAssert.That(!r.C.Denying, "the pulse clears");
             r.PressDigit(0);
@@ -601,6 +607,116 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             ground.HoldOpen();
             TestAssert.That(MenuHint.Parts(ground.C).Mode == "HOLD MODE" && MenuHint.Parts(ground.C).Back.EndsWith("ESC CANCEL"), "HOLD hint says ESC CANCEL");
             TestAssert.Eq(MenuHint.Parts(ground.C).Live, "FLICK OR 1–0 · PICK A CATEGORY", "HOLD idle hint");
+        }
+
+        private static void ReleaseOnASubmenuKeepsTheActiveChild()
+        {
+            var r = Rig();
+            r.HoldOpen();
+            float[] p = r.Polar(18f, 0.87f * r.L.R);
+            r.Mouse(p[0], p[1]);
+            r.ToRow("weapons/select"); r.Adv(0.1f);
+            r.CUp();
+            TestAssert.That(r.C.Open && r.C.Mode == MenuMode.Latched && r.C.Sub != null && r.C.Sub.Id == "weapons/select", "releasing C on a submenu row drills in and latches");
+            TestAssert.That(r.C.Focus == 1 && !r.C.FocusFromPointer, "the focus stays on the active station (no hover pass re-aims it at the row under the cursor)");
+            TestAssert.Eq(r.C.PtrX, r.Mx, "and the cursor is where the real mouse is");
+            TestAssert.Eq(r.C.PtrY, r.My, "in both axes");
+        }
+
+        private static void DockFollowsTheDeviceTheModelAndTheLayout()
+        {
+            // the footer shows for keys and pad, not for the mouse: moving the mouse at depth 3 drops it without another event
+            var r = Rig();
+            r.LatchOpen(); r.PressDigit(1);
+            r.Down(); r.Down(); r.Down(); r.Enter();
+            TestAssert.That(r.C.Sub != null && r.C.Dock.HasFooter, "a depth-3 list opened by keys shows the footer");
+            MenuRect row = r.C.Dock.Rows[2].Rect;
+            r.Mouse(row.L + 30f, (row.T + row.B) / 2f);
+            TestAssert.That(r.C.Device == MenuDevice.Mouse && !r.C.Dock.HasFooter, "the mouse takes the footer away");
+
+            // a rebuild that takes a category's calls away dims it, and the open dock follows
+            r = Rig();
+            r.LatchOpen(); r.PressDigit(5);
+            TestAssert.That(!r.C.Dock.Empty, "COMMS lists its calls");
+            MenuWorld gone = MenuWorlds.Default();
+            gone.CallsAvailable = false;
+            r.Model.Reconcile(MenuCatalog.Build(gone));
+            r.C.Resync();
+            TestAssert.That(!r.Model.Category("comms").Available && r.C.Dock.Empty, "Resync re-fills the open dock when its category turned unavailable");
+
+            // a smaller screen keeps the focused row inside the visible window
+            r = Rig();
+            r.LatchOpen(); r.PressDigit(5);
+            for (int i = 0; i < 8; i++) r.Down();
+            r.C.SetLayout(MenuLayout.Compute(1280, 720, r.Model.Categories, new MenuTestMetrics()));
+            TestAssert.That(r.C.Focus >= r.C.Offset && r.C.Focus < r.C.Offset + r.C.Cap, "after a layout change the focused row is still one of the visible rows");
+        }
+
+        private static void OpenKeyNameAndPadLegends()
+        {
+            var r = Rig();
+            r.C.OpenKeyName = "V";
+            r.HoldOpen();
+            float[] p = r.Polar(90f, 0.87f * r.L.R);
+            r.Mouse(p[0], p[1]);
+            r.ToRow("flight/gear"); r.Adv(0.1f);
+            TestAssert.That(MenuHint.Parts(r.C).Live.StartsWith("RELEASE V · LOWER GEAR"), "the hint names the configured open key, not C");
+            r.C.OpenKeyName = "LEFTSHIFT";
+            TestAssert.Eq(MenuHint.Parts(r.C).Live, "RELEASE · LOWER GEAR", "a long key name is left out so the label keeps its room");
+
+            var metrics = new MenuTestMetrics();
+            foreach (int[] s in MenuLayoutTests.Screens)
+                foreach (string name in new[] { "C", "TAB", "LEFTSHIFT", "RIGHTCONTROL" })
+                    foreach (var scenario in new[] { new KeyValuePair<string, MenuWorld>("default", MenuWorlds.Default()), new KeyValuePair<string, MenuWorld>("jammer", MenuWorlds.Jammer()) })
+                    {
+                        var probe = new MenuRig(scenario.Value, s[0], s[1]);
+                        float t = probe.L.T, liveW = 396f * t, pad = 16f * t;
+                        foreach (MenuCategory cat in probe.Model.Categories)
+                        {
+                            if (!cat.Available) continue;
+                            foreach (MenuRow row in cat.Rows)
+                            {
+                                var q = new MenuRig(scenario.Value, s[0], s[1]);
+                                q.C.OpenKeyName = name;
+                                q.HoldOpen();
+                                float[] at = q.Polar(cat.Angle, 0.87f * q.L.R);
+                                q.Mouse(at[0], at[1]);
+                                q.ToRow(row.Id); q.Adv(0.1f);
+                                string live = MenuHint.Parts(q.C).Live;
+                                TestAssert.That(metrics.Width(live, MenuFont.Hint) * t <= liveW - pad, "hold hint fits with the key " + name + " @" + s[0] + "x" + s[1] + ": " + live);
+                            }
+                        }
+                    }
+
+            var pad2 = Rig();
+            pad2.PadY(true); pad2.Adv(0.2f);
+            pad2.Stick(0.6f, 0f);
+            TestAssert.That(pad2.C.Device == MenuDevice.Pad, "the stick drives the pad device");
+            TestAssert.That(MenuHint.Parts(pad2.C).Back.StartsWith("BKSP BACK") && !MenuHint.Parts(pad2.C).Live.Contains("RELEASE Y"),
+                "a pad user is told only the inputs that are wired (Backspace, not the pad's B or Y)");
+        }
+
+        private static void StickUsesItsMagnitude()
+        {
+            var r = Rig();
+            r.HoldOpen();
+            r.Stick(0.2f, 0.2f);
+            TestAssert.That(r.C.Device == MenuDevice.Pad, "a diagonal deflection of 0.28 is past the 0.25 dead zone");
+            r = Rig();
+            r.HoldOpen();
+            r.Stick(0.15f, 0.15f);
+            TestAssert.That(r.C.Device != MenuDevice.Pad, "a diagonal deflection of 0.21 is inside it");
+        }
+
+        private static void LatchedPeekUsesThePlateAsDrawn()
+        {
+            var r = Rig();
+            r.LatchOpen();
+            int wing = r.Model.IndexOf("wing");
+            r.Mouse(r.L.Widest[wing].R - 1f, r.L.DiscY[wing]);
+            TestAssert.That(r.C.Cat == -1, "empty air at the end of the widest plate is not WING: the plate hugs its text");
+            r.Mouse(r.L.Widest[wing].L + 3f, r.L.DiscY[wing]);
+            TestAssert.Eq(r.Cat, "wing", "the drawn plate still picks its category");
         }
 
         private static void HintSegmentsFitAtEveryScreenSize()

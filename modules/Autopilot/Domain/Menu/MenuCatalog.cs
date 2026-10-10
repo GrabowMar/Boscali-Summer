@@ -103,6 +103,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 case StationClass.Bomb: return "BOMB";
                 case StationClass.Turret: return "TUR";
                 case StationClass.Missile: return "MSL";
+                case StationClass.Agm: return "AGM";
                 default: return "STA";
             }
         }
@@ -113,6 +114,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             {
                 case StationClass.Gun: return "gun";
                 case StationClass.Missile: return "aam";
+                case StationClass.Agm: return "agm";
                 case StationClass.Bomb: return "bomb";
                 case StationClass.Turret: return "turret";
                 default: return "hardpoint";
@@ -252,12 +254,51 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             c.Rows.Add(b.Reg(MenuRow.Action("wing/six", "clear-six", "CLEAR MY SIX", "TO: WINGMAN", "WINGMAN CHASES BOGEYS OFF YOUR TAIL", "ORDER: CLEAR SIX")));
             c.Rows.Add(b.Reg(MenuRow.Action("wing/dope", "bogey-dope", "ASK FOR BOGEY DOPE", "ANSWERS: WINGMAN", "WINGMAN CALLS BRA OF NEAREST AIR THREAT", "ASKED: BOGEY DOPE")));
             c.Rows.Add(b.Reg(MenuRow.Action("wing/escort", "escort", "ESCORT ME", to, "WING GUARDS YOU WHILE YOU STRIKE", "ORDER: ESCORT")));
-            MenuRow shape = MenuRow.Action("wing/shape", "shape", "NEXT FORMATION", "FORMATION: " + (w.Shape.Length > 0 ? w.Shape : "NONE"), "STEP THROUGH THE FORMATIONS", "FORMATION CHANGED");
-            shape.StayOpen = true;
-            c.Rows.Add(b.Reg(shape));
+            if (w.Shapes.Count > 0) c.Rows.Add(b.Reg(ShapeMenu(w)));
             c.Rows.Add(b.Reg(MenuRow.Action("wing/rtb", "rtb", "ORDER WING RTB", to, "WING RETURNS TO BASE AND LANDS", "ORDER: RTB")));
-            Badge(c, "WING " + w.Wingmen);
+            Badge(c, w.Shape.Length > 0 ? ShortShape(w.Shape) : "WING " + w.Wingmen);
             return c;
+        }
+
+        /// <summary>FORMATION: the formations that suit the wing, scrolling, one dock group per family (families run together, game order inside).</summary>
+        private static MenuRow ShapeMenu(MenuWorld w)
+        {
+            var families = new List<string>(4);
+            foreach (WorldShape s in w.Shapes) if (!families.Contains(s.Family)) families.Add(s.Family);
+            var kids = new List<MenuRow>(w.Shapes.Count);
+            foreach (string family in families)
+                foreach (WorldShape s in w.Shapes)
+                {
+                    if (s.Family != family) continue;
+                    // the game's own name keeps its qualifier: FINGER FOUR (STRONG RIGHT) is a row FINGER FOUR with the state STRONG RIGHT
+                    int paren = s.Name.EndsWith(")", StringComparison.Ordinal) ? s.Name.IndexOf(" (", StringComparison.Ordinal) : -1;
+                    string label = paren > 0 ? s.Name.Substring(0, paren) : s.Name, note = paren > 0 ? s.Name.Substring(paren + 2, s.Name.Length - paren - 3) : family;
+                    MenuRow pick = MenuRow.Pick("wing/shape/" + MenuText.Slug(s.Name), "shape", Cut(label, MaxLabel), Cut(note, MaxState), "ACTIVE" + D + Cut(note, MaxState - 9),
+                        s.Active, "FLY THE WING IN THIS FORMATION", "FORMATION: " + s.Name);
+                    pick.Group = family;
+                    kids.Add(pick);
+                }
+            string current = "FORMATION: " + (w.Shape.Length > 0 ? w.Shape : "NONE");
+            if (current.Length > MaxState) current = "FORMATION: " + ShortShape(w.Shape);
+            return MenuRow.Submenu("wing/shape", "shape", "FORMATION", current, "CHOOSE THE WING FORMATION", "WING", "FORMATIONS", kids, iconless: true);
+        }
+
+        /// <summary>A formation as a ring badge, at most <see cref="MenuModel.BadgeChars"/>: no qualifier, FOUR as 4, then the longest words cut to fit.</summary>
+        internal static string ShortShape(string name)
+        {
+            string text = MenuText.Upper(name, 64);
+            int paren = text.IndexOf(" (", StringComparison.Ordinal);
+            if (paren > 0) text = text.Substring(0, paren);
+            string[] words = text.Replace(" FOUR", " 4").Split(' ');
+            while (string.Join(" ", words).Length > MenuModel.BadgeChars)
+            {
+                int longest = 0;
+                for (int i = 0; i < words.Length; i++) if (words[i].Length >= words[longest].Length) longest = i;
+                int over = string.Join(" ", words).Length - MenuModel.BadgeChars;
+                if (words[longest].Length <= 3) break;
+                words[longest] = words[longest].Substring(0, Math.Max(3, words[longest].Length - over));
+            }
+            return string.Join(" ", words);
         }
 
         // ------------------------------------------------------------------ COMMS
@@ -371,23 +412,25 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 if (!w.HasMark) clear.Blocked = "MARK: NONE";
                 c.Rows.Add(b.Reg(clear));
             }
-            int armed = 0;
+            int armed = 0, ready = 0;
             if (w.PerksAvailable && w.Perks.Count > 0)
             {
                 var kids = new List<MenuRow>(w.Perks.Count);
                 for (int i = 0; i < w.Perks.Count; i++)
                 {
                     WorldPerk p = w.Perks[i];
-                    if (p.Armed) armed++;
-                    string name = MenuText.Upper(p.Label, 14);
-                    MenuRow perk = MenuRow.Toggle("support/perks/" + MenuText.Slug(p.Label), "perk", p.Armed,
+                    if (p.Armed) armed++; else if (p.Cooldown <= 0) ready++;
+                    string name = MenuText.Upper(p.Label, 14), front = MenuText.Upper(p.Front, 5);
+                    MenuRow perk = MenuRow.Toggle("support/perks/" + MenuText.Slug(p.Label), front.Length > 0 ? "front-" + front.ToLowerInvariant() : "perk", p.Armed,
                         F("ARM " + name, p.Note, "ARM, THEN PRESS AGAIN TO FIRE", name + " ARMED"),
                         F("EXECUTE " + name, "ARMED: PRESS AGAIN", "PRESS AGAIN TO FIRE AT YOUR AIM", name + " FIRED", MenuTone.Active), checkbox: false);
                     perk.ArmedPip = true;
                     perk.Index = i;
+                    if (front.Length > 0) perk.Group = front;
+                    if (p.Cooldown > 0 && !p.Armed) perk.Blocked = "COOLDOWN: " + p.Cooldown + " S";
                     kids.Add(perk);
                 }
-                c.Rows.Add(b.Reg(MenuRow.Submenu("support/perks", "perk", "OPS PERKS", (w.Perks.Count - armed) + " READY" + D + armed + " ARMED",
+                c.Rows.Add(b.Reg(MenuRow.Submenu("support/perks", "perk", "OPS PERKS", ready + " READY" + D + armed + " ARMED",
                     "ARM A PERK, PRESS AGAIN TO FIRE", "OPS PERKS", "PERKS", kids)));
             }
             if (w.SkywellCarried)
@@ -408,9 +451,16 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             var c = Cat("view", "VIEW", 270f, "8", "CAMERA");
             if (w.MissileViewActive)
             {
-                string cam = "CAMERA: " + (w.MissileCurrent.Length > 0 ? w.MissileCurrent : "MISSILE");
-                c.Rows.Add(b.Reg(Stepper("view/mslnext", "missile-next", "FOLLOW NEXT MISSILE", cam, "SWITCH CAMERA TO THE NEXT MISSILE", "MISSILE CHANGED")));
-                c.Rows.Add(b.Reg(Stepper("view/mslprev", "missile-prev", "FOLLOW PREV MISSILE", cam, "SWITCH CAMERA TO THE PREVIOUS ONE", "MISSILE CHANGED")));
+                string cam = "CAMERA: " + (w.MissileCurrent.Length > 0 ? w.MissileCurrent : "MISSILE"), next = cam, prev = cam;
+                string[] now = w.MissileCurrent.Split(' ');
+                string[] slot = now.Length >= 2 && now[0] == "MSL" ? now[1].Split('/') : null;
+                if (slot != null && slot.Length == 2 && int.TryParse(slot[0], out int k) && int.TryParse(slot[1], out int n) && k >= 1 && n >= 1)
+                {
+                    next = "NEXT: MSL " + (k % n + 1) + "/" + n;
+                    prev = "PREV: MSL " + ((k + n - 2) % n + 1) + "/" + n;
+                }
+                c.Rows.Add(b.Reg(Stepper("view/mslnext", "missile-next", "FOLLOW NEXT MISSILE", next, "SWITCH CAMERA TO THE NEXT MISSILE", "MISSILE CHANGED")));
+                c.Rows.Add(b.Reg(Stepper("view/mslprev", "missile-prev", "FOLLOW PREV MISSILE", prev, "SWITCH CAMERA TO THE PREVIOUS ONE", "MISSILE CHANGED")));
                 c.Rows.Add(b.Reg(MenuRow.Action("view/mslexit", "missile-exit", "EXIT MISSILE VIEW", cam, "LEAVE MISSILE VIEW, RESUME CAMERA", "MISSILE VIEW OFF")));
                 if (w.MapAvailable) c.Rows.Add(b.Reg(MenuRow.Action("view/map", "map", "OPEN MAP", "MAP: CLOSED", "FULL-SCREEN TACTICAL MAP", "MAP OPEN")));
                 string[] words = w.MissileCurrent.Split(' ');
@@ -427,10 +477,15 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 c.Rows.Add(b.Reg(cam));
             }
             if (w.MapAvailable) c.Rows.Add(b.Reg(MenuRow.Action("view/map", "map", "OPEN MAP", "MAP: CLOSED", "FULL-SCREEN TACTICAL MAP", "MAP OPEN")));
-            if (w.MissileViewAvailable && w.CanEnterMissileView)
-                c.Rows.Add(b.Reg(MenuRow.Action("view/mslview", "missile-view", "ENTER MISSILE VIEW", Cut(w.MissileStatus, MaxState), "FOLLOW YOUR MISSILES IN FLIGHT", "MISSILE VIEW")));
-            if (w.Missiles > 0) Badge(c, w.Missiles + " MSL", show: true);
-            else if (w.Camera == ViewKind.Orbit) Badge(c, "EXTERNAL", show: true);
+            if (w.MissileViewAvailable)
+            {
+                // no missile in flight is transient: the row keeps its place and number, dimmed
+                MenuRow view = MenuRow.Action("view/mslview", "missile-view", "ENTER MISSILE VIEW", Cut(w.MissileStatus, MaxState), "FOLLOW YOUR MISSILES IN FLIGHT", "MISSILE VIEW");
+                if (!w.CanEnterMissileView) view.Blocked = "NO MISSILE IN FLIGHT";
+                c.Rows.Add(b.Reg(view));
+            }
+            if (w.Camera == ViewKind.Orbit) Badge(c, "EXTERNAL", show: true);
+            else if (w.Missiles > 0) Badge(c, w.Missiles + " MSL", show: true);
             else Badge(c, w.CameraFollowing ? "COCKPIT" : "");
             return c;
         }
@@ -447,13 +502,9 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 if (w.Flares <= 0) flares.Blocked = "FLARES: EMPTY";
                 c.Rows.Add(b.Reg(flares));
             }
-            if (w.HasCountermeasures && w.Countermeasure.Length > 0)
-            {
-                MenuRow cm = MenuRow.Action("defence/cm", "countermeasure-cycle", "NEXT COUNTERMEASURE", "ACTIVE: " + Cut(w.Countermeasure, 20),
-                    "SWITCH THE ACTIVE COUNTERMEASURE", "COUNTERMEASURE CHANGED");
-                cm.StayOpen = true;
-                c.Rows.Add(b.Reg(cm));
-            }
+            if (w.HasCountermeasures && w.Countermeasure.Length > 0 && w.NextCountermeasure.Length > 0)
+                // the label names where a press leads: SWITCH TO RADAR JAMMER, and the hub says IR FLARES → RADAR JAMMER
+                c.Rows.Add(b.Reg(MenuRow.Cycle("defence/cm", "countermeasure-cycle", "SWITCH TO", "ACTIVE: ", new[] { Cut(w.Countermeasure, 12), Cut(w.NextCountermeasure, 12) }, 0, "COUNTERMEASURE: ")));
             if (w.HasRadar)
                 c.Rows.Add(b.Reg(MenuRow.Toggle("defence/radar", "radar", w.RadarOn,
                     F("RADIATE", "RADAR: SILENT", "TURN THE RADAR ON, FIND TARGETS", "RADAR EMITTING"),
@@ -461,13 +512,14 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             if (w.HasDrones)
             {
                 MenuRow drones = MenuRow.Toggle("defence/drones", "drone-strike", w.DronesStriking,
-                    F("SEND DRONES TO STRIKE", "DRONES: READY", "SEND ESCORT DRONES AT THE TARGET", "DRONES STRIKING"),
+                    F("SEND DRONES TO STRIKE", w.Drones > 0 ? "DRONES: " + w.Drones + " READY" : "DRONES: NONE READY", "SEND ESCORT DRONES AT THE TARGET", "DRONES STRIKING"),
                     F("SCREEN WITH DRONES", "DRONES: STRIKING", "DRONES RETURN TO SCREEN YOU", "DRONES SCREENING", MenuTone.Caution), checkbox: false);
                 drones.IconOn = "drone-screen";
                 if (!w.DronesStriking && !w.DronesCanStrike) drones.Blocked = "NO TARGET SELECTED";
                 c.Rows.Add(b.Reg(drones));
             }
             if (w.HasFlares && w.Airborne && w.Flares <= 0) Badge(c, "FLR 0", show: true, alert: true);
+            else if (w.CountermeasureIndex > 0 && w.Countermeasure.Length > 0) Badge(c, w.Countermeasure.Substring(w.Countermeasure.LastIndexOf(' ') + 1), show: true); // JAMMER
             else if (w.HasRadar && !w.RadarOn) Badge(c, "SILENT", show: true);
             else if (w.HasFlares && w.FlaresMax > 0) Badge(c, "FLR " + w.Flares);
             else Badge(c, w.HasCountermeasures ? "READY" : "");
@@ -500,7 +552,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                     WorldFilter f = w.Filters[i];
                     string name = MenuText.Upper(f.Name, 14);
                     if (f.Active) active = name;
-                    MenuRow pick = MenuRow.Pick("targets/filters/" + MenuText.Slug(f.Name), "target-filter", name, "QUICK SLOT", "ACTIVE" + D + "QUICK SLOT", f.Active,
+                    string slot = "SLOT " + (f.Slot > 0 ? f.Slot : i + 1);
+                    MenuRow pick = MenuRow.Pick("targets/filters/" + MenuText.Slug(f.Name), "target-filter", name, slot, "ACTIVE" + D + slot, f.Active,
                         "APPLY THIS FILTER TO THE TARGET LIST", "FILTER: " + name);
                     pick.Index = i;
                     if (!f.Allowed) pick.Blocked = "NOT READY";

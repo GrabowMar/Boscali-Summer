@@ -59,9 +59,9 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
 
             for (int n = 0; n <= 9; n++)
             {
-                KeyCode key = KeyCode.Alpha0 + n;
-                if (Input.GetKeyDown(key)) i.Digit = n;
-                if (Input.GetKey(key)) i.DigitHeld = n;
+                KeyCode key = KeyCode.Alpha0 + n, numpad = KeyCode.Keypad0 + n; // the numpad counts too
+                if (Input.GetKeyDown(key) || Input.GetKeyDown(numpad)) i.Digit = n;
+                if (Input.GetKey(key) || Input.GetKey(numpad)) i.DigitHeld = n;
             }
             i.Left = left.Step(Input.GetKey(KeyCode.LeftArrow), now);
             i.Right = right.Step(Input.GetKey(KeyCode.RightArrow), now);
@@ -98,7 +98,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             if (Input.GetMouseButton(0) || Input.GetMouseButton(1)) return true;
             if (openKey != KeyCode.None && Input.GetKey(openKey)) return true;
             foreach (KeyCode k in HeldKeys) if (Input.GetKey(k)) return true;
-            for (int n = 0; n <= 9; n++) if (Input.GetKey(KeyCode.Alpha0 + n)) return true;
+            for (int n = 0; n <= 9; n++) if (Input.GetKey(KeyCode.Alpha0 + n) || Input.GetKey(KeyCode.Keypad0 + n)) return true;
             return false;
         }
 

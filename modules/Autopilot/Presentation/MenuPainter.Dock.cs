@@ -9,6 +9,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
     internal sealed partial class MenuPainter
     {
         private float dockA = 1f, listA = 1f, dockX, listX;
+        private string backFor, backTo;
 
         private static MenuRect Shift(MenuRect r, float dx) => new MenuRect(r.L + dx, r.T, r.R + dx, r.B);
 
@@ -69,8 +70,8 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             {
                 bool canUp = d.Offset > 0, canDn = d.Offset + d.Cap < d.Count;
                 MenuRect up = Shift(d.ChipUp, dockX), dn = Shift(d.ChipDown, dockX);
-                text.Draw("▲" + d.Offset, MenuFont.Badge, 13f * T, up, MenuTextPool.Align.Center, TC(canUp ? P.Ink : P.Hair, dockA));
-                text.Draw("▼" + Math.Max(0, d.Count - d.Offset - d.Cap), MenuFont.Badge, 13f * T, dn, MenuTextPool.Align.Center, TC(canDn ? P.Ink : P.Hair, dockA));
+                text.Draw(Chip(Ups, '▲', d.Offset), MenuFont.Badge, 13f * T, up, MenuTextPool.Align.Center, TC(canUp ? P.Ink : P.Hair, dockA));
+                text.Draw(Chip(Downs, '▼', d.Count - d.Offset - d.Cap), MenuFont.Badge, 13f * T, dn, MenuTextPool.Align.Center, TC(canDn ? P.Ink : P.Hair, dockA));
             }
             else if (showCtx)
                 text.Draw(ctx, MenuFont.Badge, 13f * T, new MenuRect(R.R - 1f - pad - ctxW - 2f, ty, R.R - 1f - pad, ty + th), MenuTextPool.Align.Right, TC(P.Ink2, dockA));
@@ -88,8 +89,8 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             float x = d.Rect.L + dockX + 1f + 14f * T, w = d.Rect.W - 2f - 28f * T;
             float y = d.Rect.T + 1f + MenuLayout.HeaderH * l.Lg + 6f * l.Lg + 18f * T;
             text.Draw(cat.EmptyTitle, MenuFont.Row, 17f * T, MenuRect.Of(x, y, w, 17f * T * MenuFonts.LinePitch), MenuTextPool.Align.Left, TC(P.InkDim, dockA));
-            var lines = MenuReadoutFit.Wrap(cat.EmptyBody, w, text, MenuFont.State, T);
-            text.Draw(string.Join("\n", lines), MenuFont.State, 13f * T, MenuRect.Of(x, y + 17f * T * MenuFonts.LinePitch + 6f * T, w, 13f * T * MenuFonts.LinePitch * Math.Max(1, lines.Count)),
+            emptyWrap.Set(cat.EmptyBody, w, text, MenuFont.State, T);
+            text.Draw(emptyWrap.Joined, MenuFont.State, 13f * T, MenuRect.Of(x, y + 17f * T * MenuFonts.LinePitch + 6f * T, w, 13f * T * MenuFonts.LinePitch * Math.Max(1, emptyWrap.Lines)),
                 MenuTextPool.Align.Left, TC(P.Ink2, dockA), top: true);
         }
 
@@ -144,9 +145,11 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
 
             // number gutter
             float kcX = r.L + 5f * t, kcH = 26f * t, kcY = r.T + (r.H - kcH) / 2f;
-            string number = back ? "0" : dr.Index >= 0 ? (dr.Index - c.Dock.Offset + 1).ToString() : "";
-            Fill(kcX + 22f * t - 1f, kcY, 1f, kcH, A(P.Hair, a));
-            text.Draw(number, MenuFont.Badge, 13f * t, MenuRect.Of(kcX, kcY, 22f * t - 1f, kcH), MenuTextPool.Align.Center, TC(num, a));
+            int digit = dr.Index - c.Dock.Offset + 1;
+            string number = back ? "0" : dr.Index >= 0 ? (digit < Digits.Length ? Digits[digit] : digit.ToString()) : "";
+            float deny = DenyK(); // a refused press: the row gutters are the live set while a dock is up
+            Fill(kcX + 22f * t - 1f, kcY, 1f, kcH, A(deny > 0f ? Mix(P.Hair, P.Amber, deny) : P.Hair, a));
+            text.Draw(number, MenuFont.Badge, 13f * t, MenuRect.Of(kcX, kcY, 22f * t - 1f, kcH), MenuTextPool.Align.Center, TC(deny > 0f ? Mix(num, P.Amber, deny) : num, a));
 
             // icon
             float x = kcX + 22f * t + 9f * t;
@@ -180,7 +183,8 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             }
             else
             {
-                string stateText = back ? "TO " + cat.Label : row.State;
+                if (back && !ReferenceEquals(backFor, cat.Label)) { backFor = cat.Label; backTo = "TO " + cat.Label; }
+                string stateText = back ? backTo : row.State;
                 text.Draw(stateText, MenuFont.State, 13f * t, MenuRect.Of(x, top + lh + t, textW, sh), MenuTextPool.Align.Left, TC(state, a));
             }
         }

@@ -16,14 +16,17 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             missile.onDisableUnit += OnDisabled;
         }
 
-        // Next REMORA slot on this launcher: drones already flying for it take the inner slots.
-        public static int NextDroneSlot(Unit launcher)
+        // REMORA drones flying for this launcher.
+        public static int DroneCount(Unit launcher)
         {
             int used = 0;
             foreach (VanguardFlight flight in Flights.Values)
                 if (flight.Role == VanguardRole.Drone && flight.Launcher == launcher) used++;
             return used;
         }
+
+        // Next REMORA slot on this launcher: drones already flying for it take the inner slots.
+        public static int NextDroneSlot(Unit launcher) => DroneCount(launcher);
 
         // ALE-X: one decoy on the fiber per aircraft. A new deployment cuts the old one.
         public static void CutTowed(Unit launcher)

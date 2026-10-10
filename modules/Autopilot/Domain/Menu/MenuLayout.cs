@@ -183,22 +183,14 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             return MenuRect.Of(l, DiscY[i] - ph / 2f, pw, ph);
         }
 
+        public bool PlateContains(int i, string badge, float x, float y) => Plate(i, badge).Contains(x, y);
+
         public MenuRect Disc(int i) => new MenuRect(DiscX[i] - Rd, DiscY[i] - Rd, DiscX[i] + Rd, DiscY[i] + Rd);
 
         public int DiscAt(float x, float y, float pad)
         {
             for (int i = 0; i < Count; i++)
                 if (Math.Sqrt((x - DiscX[i]) * (x - DiscX[i]) + (y - DiscY[i]) * (y - DiscY[i])) <= Rd + pad) return i;
-            return -1;
-        }
-
-        /// <summary>The category under the point: its disc (plus 5 px) or its widest plate; -1 for nothing.</summary>
-        public int CategoryAt(float x, float y) =>
-            DiscAt(x, y, 5f) >= 0 ? DiscAt(x, y, 5f) : PlateAt(x, y);
-
-        private int PlateAt(float x, float y)
-        {
-            for (int i = 0; i < Count; i++) if (Widest[i].Contains(x, y)) return i;
             return -1;
         }
 

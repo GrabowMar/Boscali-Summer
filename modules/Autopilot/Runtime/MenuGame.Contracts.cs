@@ -12,7 +12,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
     /// </summary>
     internal static partial class MenuGame
     {
-        private const int MaxCalls = 12;
+        private const int MaxCalls = 12, MaxFilters = 8;
         private const string FilterOn = " [ON]";
 
         private static void ReadSupport(MenuWorld w)
@@ -36,7 +36,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 {
                     string label = perks.PerkLabel(i);
                     if (string.IsNullOrEmpty(label)) continue;
-                    w.Perks.Add(new WorldPerk { Label = label, Note = MenuText.Upper(perks.PerkNote(i), 30), Armed = perks.PerkArmed(i) });
+                    w.Perks.Add(new WorldPerk { Label = label, Note = MenuText.Upper(perks.PerkNote(i), 30), Armed = perks.PerkArmed(i), Front = perks.PerkFront(i) ?? "", Cooldown = perks.PerkCooldown(i) });
                 }
             }
             ISkywellControl kit = Service<ISkywellControl>();
@@ -72,7 +72,9 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             IWingOrders wing = Service<IWingOrders>();
             if (wing == null) return;
             w.Wingmen = wing.Members;
-            w.Shape = MenuText.Upper(wing.Shape, 18);
+            w.Shape = MenuText.Upper(wing.Shape, 40);
+            for (int i = 0, n = wing.ShapeCount; i < n; i++)
+                w.Shapes.Add(new WorldShape { Name = wing.ShapeLabel(i), Family = wing.ShapeFamily(i), Active = wing.ShapeActive(i) });
         }
 
         /// <summary>The TGT quick slots (Command's page), listed under TARGETS as TARGET FILTERS.</summary>
@@ -80,14 +82,31 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         {
             IRadialMenuPage page = Service<IRadialMenuPage>();
             if (page == null) return;
-            int count = Math.Min(page.EntryCount, 8);
+            int count = Math.Min(page.EntryCount, MaxFilters);
             for (int i = 0; i < count; i++)
             {
                 string label = page.EntryLabel(i);
                 if (string.IsNullOrEmpty(label)) continue;
-                bool active = label.EndsWith(FilterOn, StringComparison.Ordinal);
-                w.Filters.Add(new WorldFilter { Name = active ? label.Substring(0, label.Length - FilterOn.Length) : label, Active = active, Allowed = page.EntryAllowed(i) });
+                w.Filters.Add(new WorldFilter { Name = FilterName(label), Active = label.EndsWith(FilterOn, StringComparison.Ordinal), Allowed = page.EntryAllowed(i), Slot = i + 1 });
             }
+        }
+
+        private static string FilterName(string label) => label.EndsWith(FilterOn, StringComparison.Ordinal) ? label.Substring(0, label.Length - FilterOn.Length) : label;
+
+        /// <summary>
+        /// Binds a row to an owner list entry by the id slug of its label, looked up when the row is PRESSED: the owner's list shifts as perks come off cooldown or
+        /// formations stop suiting the wing, and a closure bound to a build-time index would press a neighbour (the wrong, costly perk).
+        /// </summary>
+        private static Action BySlug<T>(string id, string prefix, Func<T, int> count, Func<T, int, string> label, Action<T, int> press) where T : class
+        {
+            string slug = id.Substring(prefix.Length);
+            return () =>
+            {
+                T owner = Service<T>();
+                if (owner == null) return;
+                for (int i = 0, n = count(owner); i < n; i++)
+                    if (MenuText.Slug(label(owner, i) ?? "") == slug) { press(owner, i); return; }
+            };
         }
 
         private static Action BindContracts(MenuRow row)
@@ -101,7 +120,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "wing/six": return () => Service<IWingOrders>()?.ClearMySix();
                 case "wing/dope": return () => Service<IWingOrders>()?.BogeyDope();
                 case "wing/escort": return () => Service<IWingOrders>()?.EscortMe();
-                case "wing/shape": return () => Service<IWingOrders>()?.NextShape();
                 case "wing/rtb": return () => Service<IWingOrders>()?.ReturnToBase();
                 case "radio/music": return () => Service<IRadioRemote>()?.DeckTogglePlayback();
                 case "radio/trknext": return () => Service<IRadioRemote>()?.DeckNext();
@@ -121,8 +139,11 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "defence/drones": return StrikeOrScreen;
             }
             if (row.Id.StartsWith("comms/c", StringComparison.Ordinal)) return () => Service<IQuickCalls>()?.Call(index);
-            if (row.Id.StartsWith("support/perks/", StringComparison.Ordinal)) return () => Service<IOpsPerks>()?.PerkPress(index);
-            if (row.Id.StartsWith("targets/filters/", StringComparison.Ordinal)) return () => Service<IRadialMenuPage>()?.InvokeEntry(index);
+            const string Perks = "support/perks/", Filters = "targets/filters/", Shapes = "wing/shape/";
+            if (row.Id.StartsWith(Perks, StringComparison.Ordinal)) return BySlug<IOpsPerks>(row.Id, Perks, p => p.PerkCount, (p, i) => p.PerkLabel(i), (p, i) => p.PerkPress(i));
+            if (row.Id.StartsWith(Filters, StringComparison.Ordinal))
+                return BySlug<IRadialMenuPage>(row.Id, Filters, p => Math.Min(p.EntryCount, MaxFilters), (p, i) => FilterName(p.EntryLabel(i) ?? ""), (p, i) => p.InvokeEntry(i));
+            if (row.Id.StartsWith(Shapes, StringComparison.Ordinal)) return BySlug<IWingOrders>(row.Id, Shapes, o => o.ShapeCount, (o, i) => o.ShapeLabel(i), (o, i) => o.SelectShape(i));
             return null;
         }
 

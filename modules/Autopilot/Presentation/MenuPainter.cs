@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using BoscaliSummer.Modules.Autopilot.Domain;
 using NOAvionics;
 using UnityEngine;
@@ -9,7 +10,9 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
     /// Paints the controller's state: every plate, outline, disc, glyph and line into ONE vector surface (a single
     /// <see cref="AvQuadBuffer"/>, so every colour renders the same brightness; lit elements and plates share it), and every word through
     /// the <see cref="MenuTextPool"/> above it. All numbers are the prototype's (style.css) times the layout scales. Origin top-left, y down;
-    /// the primitives flip to the canvas. Called every frame while the menu or its toast shows; allocation-free once warm.
+    /// the primitives flip to the canvas. Called every frame while the menu or its toast shows, so everything that builds a string, wraps text
+    /// or fits the readout is memoized on the values it depends on (the focused row and its live text, the layout, the controller's mode and
+    /// device); a steady frame allocates nothing, a change allocates once.
     /// </summary>
     internal sealed partial class MenuPainter
     {
@@ -24,7 +27,8 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         private float H, T;
 
         // dock animation: slide in when the dock first shows, slide the list when its content swaps
-        private string dockKey;
+        private int dockCat = -1;
+        private MenuRow dockSub;
         private bool dockWasShown;
         private float dockShownAt, swapAt = -10f;
 
@@ -109,6 +113,41 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
 
         private static Color Col(Rgba c) => MenuPalette.ToColor(c);
 
+        /// <summary>The refusal pulse: 1 right after a refused press, fading to 0 over <see cref="MenuController.DenySec"/> (the prototype's 180 ms denypulse).</summary>
+        private float DenyK() => c.Denying ? Mathf.Clamp01((c.DenyUntil - c.Now) / MenuController.DenySec) : 0f;
+
+        private static Rgba Mix(Rgba a, Rgba b, float k) => new Rgba(a.R + (b.R - a.R) * k, a.G + (b.G - a.G) * k, a.B + (b.B - a.B) * k, a.A + (b.A - a.A) * k);
+
+        /// <summary>A greedy word wrap joined with explicit line breaks, redone only when the text, width, face or scale change.</summary>
+        private sealed class Wrapped
+        {
+            private string text;
+            private float width, scale;
+            private MenuFont font;
+            private bool valid;
+            public string Joined = "";
+            public int Lines;
+
+            public void Set(string source, float w, IMenuMetrics metrics, MenuFont f, float t)
+            {
+                if (valid && width == w && scale == t && font == f && string.Equals(text, source)) return;
+                var lines = MenuReadoutFit.Wrap(source, w, metrics, f, t);
+                Joined = string.Join("\n", lines); Lines = lines.Count;
+                text = source; width = w; scale = t; font = f; valid = true;
+            }
+        }
+
+        private static readonly string[] Digits = { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9" };
+        private static readonly string[] Ups = new string[40], Downs = new string[40];
+
+        /// <summary>"up3" / "down5" chips without building the string every frame.</summary>
+        private static string Chip(string[] cache, char arrow, int n)
+        {
+            n = Math.Max(0, n);
+            if (n >= cache.Length) return arrow + n.ToString();
+            return cache[n] ??= arrow + n.ToString();
+        }
+
         // ---------------------------------------------------------------- vignette
 
         /// <summary>One soft field behind the ring: a polar mesh whose alpha falls from .66 at the middle to 0 at the rim (never a stack of bands).
@@ -137,6 +176,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         private void PaintRing()
         {
             bool dockUp = c.Cat >= 0;
+            float deny = DenyK();
             for (int i = 0; i < l.Count; i++)
             {
                 MenuCategory cat = c.Model.Categories[i];
@@ -171,9 +211,10 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
                 // number key-cap: the live set is the rows once a dock is up, so the ring digits fade
                 MenuRect kc = l.KeyCap[i];
                 float opacity = dockUp ? (sel ? 0.55f : 0.15f) : 1f;
-                Rgba kcInk = sel ? P.InkHi : p.Ink2;
+                Rgba kcInk = sel ? P.InkHi : p.Ink2, kcLine = sel ? P.InkHi : p.Line.WithAlpha(1f);
+                if (!dockUp && deny > 0f) { kcInk = Mix(kcInk, P.Amber, deny); kcLine = Mix(kcLine, P.Amber, deny); } // a refused press (the ring keys are the live set)
                 if (opacity >= 1f) Fill(kc, p.PlateHi); // a faded cap keeps only its outline and digit: a plate fill would be a dark square over the cockpit
-                Frame(kc, 1f, P.Fade(sel ? P.InkHi : p.Line.WithAlpha(1f), opacity));
+                Frame(kc, 1f, P.Fade(kcLine, opacity));
                 text.Draw(cat.Key, MenuFont.Badge, 13f * T, kc, MenuTextPool.Align.Center, Col(P.Fade(kcInk, opacity)));
             }
         }
@@ -209,33 +250,44 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             }
             else
             {
-                var lines = MenuReadoutFit.Wrap(roTitle, inner, text, MenuFont.Plate, T);
-                float th = roFit.TitleSize * MenuFonts.LinePitch * lines.Count;
-                text.Draw(string.Join("\n", lines), MenuFont.Plate, roFit.TitleSize, MenuRect.Of(act.L + pad, y, inner, th), MenuTextPool.Align.Center, Col(P.InkHi), top: true);
+                float th = roFit.TitleSize * MenuFonts.LinePitch * roTitleWrap.Lines;
+                text.Draw(roTitleWrap.Joined, MenuFont.Plate, roFit.TitleSize, MenuRect.Of(act.L + pad, y, inner, th), MenuTextPool.Align.Center, Col(P.InkHi), top: true);
                 y += th;
             }
             if (roFit.DescLines > 0)
-            {
-                var lines = MenuReadoutFit.Wrap(roDesc, inner, text, MenuFont.State, T);
-                text.Draw(string.Join("\n", lines), MenuFont.State, 13f * T, MenuRect.Of(act.L + pad, y + T, inner, 13f * T * MenuFonts.LinePitch * Math.Max(1, lines.Count)),
+                text.Draw(roDescWrap.Joined, MenuFont.State, 13f * T, MenuRect.Of(act.L + pad, y + T, inner, 13f * T * MenuFonts.LinePitch * Math.Max(1, roDescWrap.Lines)),
                     MenuTextPool.Align.Center, Col(P.Ink2), top: true);
-            }
         }
 
         // the hub action plate is sized before anything is drawn: the leader of a lower-ring category hangs from its bottom edge
         private string roTitle, roDesc;
-        private bool roFocus;
+        private bool roFocus, roValid;
         private ReadoutFit roFit;
+        private readonly Wrapped roTitleWrap = new Wrapped(), roDescWrap = new Wrapped(), emptyWrap = new Wrapped();
+        // what the readout words and fit were built from: refit only when one of these changes
+        private MenuRow roRow;
+        private MenuCategory roCat;
+        private MenuLayout roLayout;
+        private string roLabelSrc, roDescSrc, roVerbSrc;
 
         private void PrepareReadout()
         {
-            MenuReadout? ro = MenuHint.Readout(c);
-            roFocus = ro.HasValue;
-            roTitle = roFocus ? ro.Value.Title : null; roDesc = roFocus ? ro.Value.Desc : null;
+            MenuRow row = c.FocusedRow;
+            roFocus = row != null;
             float y0 = l.Readout.T + (l.ReadoutCompact ? 0f : l.ReadoutNameH + 3f * T);
             if (roFocus)
             {
-                roFit = MenuReadoutFit.Fit(l, text, roTitle, roDesc);
+                string label = row.Label, desc = row.IsBlocked ? row.BlockedText : row.Desc;
+                if (!roValid || row != roRow || c.Category != roCat || l != roLayout || !ReferenceEquals(label, roLabelSrc) || !ReferenceEquals(desc, roDescSrc) || !ReferenceEquals(row.Verb, roVerbSrc))
+                {
+                    MenuReadout ro = MenuHint.Readout(c).Value;
+                    roTitle = ro.Title; roDesc = ro.Desc;
+                    roFit = MenuReadoutFit.Fit(l, text, roTitle, roDesc);
+                    float inner = l.Readout.W - 2f * ((l.ReadoutCompact ? 4f : 6f) + 1f);
+                    if (roFit.TitleLines != 1) roTitleWrap.Set(roTitle, inner, text, MenuFont.Plate, T);
+                    if (roFit.DescLines > 0) roDescWrap.Set(roDesc, inner, text, MenuFont.State, T);
+                    roRow = row; roCat = c.Category; roLayout = l; roLabelSrc = label; roDescSrc = desc; roVerbSrc = row.Verb; roValid = true;
+                }
                 readoutBottom = y0 + Math.Min(roFit.Height, l.Readout.B - y0);
             }
             else readoutBottom = y0 + Math.Min(Math.Max(l.ReadoutActH, 13f * T * MenuFonts.LinePitch * 2f + 10f * T), l.Readout.B - y0);
@@ -243,12 +295,24 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
 
         private float readoutBottom;
 
-        /// <summary>Nothing focused: FUEL 72% / GEAR UP / 2 TGT / WING 3, flowed and wrapped by measured width.</summary>
+        private List<SummaryCell> sumCells;
+        private List<MenuSummary> sumSrc;
+        private float sumWidth, sumScale;
+        private int sumLines;
+
+        /// <summary>Nothing focused: FUEL 72% / GEAR UP / 2 TGT / WING 3, flowed and wrapped by measured width (redone when the model takes a rebuild or the layout changes).</summary>
         private void PaintSummary(float y0)
         {
             MenuRect room = l.Readout;
             float pad = (l.ReadoutCompact ? 4f : 6f) + 1f;
-            var cells = MenuReadoutFit.Flow(c.Model.Summary, room.W - 2f * pad, text, T, out int lines);
+            float flowW = room.W - 2f * pad;
+            if (sumCells == null || !ReferenceEquals(sumSrc, c.Model.Summary) || sumWidth != flowW || sumScale != T)
+            {
+                sumCells = MenuReadoutFit.Flow(c.Model.Summary, flowW, text, T, out sumLines);
+                sumSrc = c.Model.Summary; sumWidth = flowW; sumScale = T;
+            }
+            var cells = sumCells;
+            int lines = sumLines;
             float rowH = MenuReadoutFit.SummaryLine(T), gap = MenuReadoutFit.SummaryGap * T;
             float gridH = lines * rowH + Math.Max(0, lines - 1) * gap;
             float h = Math.Max(l.ReadoutActH, gridH + 12f * T);
@@ -274,7 +338,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
 
         private void PaintHint()
         {
-            MenuHintParts h = MenuHint.Parts(c);
+            MenuHintParts h = Hint();
             float shift = c.Cat >= 0 ? l.HintShift(c.Dock) : 0f;
             MenuRect r = MenuRect.Of(l.Hint.L + shift, l.Hint.T, l.Hint.W, l.Hint.H);
             Fill(r, P.Plate); Frame(r, 1f, P.InkHi);
@@ -284,6 +348,30 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             text.Draw(h.Mode, MenuFont.Hint, 15f * T, new MenuRect(r.L + pad, r.T, r.L + a - pad, r.B), MenuTextPool.Align.Center, Col(P.InkHi));
             text.Draw(h.Live, MenuFont.Hint, 15f * T, new MenuRect(r.L + a + pad, r.T, r.L + a + b - pad, r.B), MenuTextPool.Align.Center, Col(h.Warn ? P.Amber : P.Txt));
             text.Draw(h.Back, MenuFont.Hint, 15f * T, new MenuRect(r.L + a + b + pad, r.T, r.R - pad, r.B), MenuTextPool.Align.Center, Col(P.InkHi));
+        }
+
+        private MenuHintParts hint;
+        private MenuRow hintRow;
+        private string hintLabel, hintBlocked, hintVerb, hintKey;
+        private MenuMode hintMode;
+        private MenuDevice hintDevice;
+        private bool hintValid, hintFromPointer, hintHolding, hintLocked, hintRoot, hintNeedsHold;
+
+        /// <summary>The hint bar's words, rebuilt only when something they say changed (they concatenate and split strings).</summary>
+        private MenuHintParts Hint()
+        {
+            MenuRow row = c.FocusedRow;
+            string label = row?.Label, blocked = row != null && row != MenuRow.BackRow && row.IsBlocked ? row.BlockedText : null;
+            bool holding = c.Hold != null, root = c.Cat < 0, needsHold = row != null && row.NeedsHold;
+            if (!hintValid || row != hintRow || !ReferenceEquals(label, hintLabel) || !ReferenceEquals(blocked, hintBlocked) || !ReferenceEquals(row?.Verb, hintVerb) ||
+                !ReferenceEquals(c.OpenKeyName, hintKey) || c.Mode != hintMode || c.Device != hintDevice || c.FocusFromPointer != hintFromPointer || holding != hintHolding ||
+                c.Locked != hintLocked || root != hintRoot || needsHold != hintNeedsHold)
+            {
+                hint = MenuHint.Parts(c);
+                hintRow = row; hintLabel = label; hintBlocked = blocked; hintVerb = row?.Verb; hintKey = c.OpenKeyName; hintMode = c.Mode; hintDevice = c.Device;
+                hintFromPointer = c.FocusFromPointer; hintHolding = holding; hintLocked = c.Locked; hintRoot = root; hintNeedsHold = needsHold; hintValid = true;
+            }
+            return hint;
         }
 
         private void PaintToast()
@@ -341,10 +429,9 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         private void DockAnimation(float now)
         {
             bool shown = c.Cat >= 0;
-            string key = shown ? c.Cat + "|" + (c.Sub != null ? c.Sub.Id : "") : "";
             if (shown && !dockWasShown) dockShownAt = now;
-            else if (shown && key != dockKey) swapAt = now;
-            dockWasShown = shown; dockKey = key;
+            else if (shown && (c.Cat != dockCat || c.Sub != dockSub)) swapAt = now;
+            dockWasShown = shown; dockCat = shown ? c.Cat : -1; dockSub = shown ? c.Sub : null;
         }
     }
 }

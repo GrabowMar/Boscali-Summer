@@ -1,20 +1,16 @@
 using NOAvionics;
-using NuclearOption.UIStyleSystem;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Autopilot.Presentation
 {
     /// <summary>
-    /// Colour tokens of the v7 menu. Ink, caution and alert follow the player's HUD theme
-    /// (<c>ThemeManager.Active.ColorTheme</c> AllClear / Warning / Alert); without a theme (menus, the offline check, the editor stub
-    /// that throws) they are the base game's default green, amber and red. Everything else is derived from the ink so a re-themed HUD
-    /// re-themes the menu. Plates are opaque and dimming is by colour token, never by alpha over the native HUD.
+    /// Colour tokens of the v7 menu. Ink, caution and alert follow the player's HUD theme (<see cref="AvTheme"/>: AllClear / Warning / Alert,
+    /// with the kit's fixed fallbacks when no theme is up). Everything else is derived from the ink so a re-themed HUD re-themes the menu.
+    /// Plates are opaque, text colours are solid, and dimming is by colour token, never by alpha over the native HUD (alpha-blended text only
+    /// holds in Gamma space; the game runs Linear).
     /// </summary>
     internal sealed class MenuPalette
     {
-        private static readonly Color FallbackInk = new Color(0.263f, 0.804f, 0.325f);
-        private static readonly Color FallbackWarn = new Color(1f, 0.702f, 0f);
-        private static readonly Color FallbackAlert = new Color(1f, 0.302f, 0.239f);
         private static MenuPalette cached, cachedDim;
         private static Color cachedInk, cachedWarn, cachedAlert;
         private static int frame = -1;
@@ -29,9 +25,12 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             InkDim = Rgb(Color.Lerp(ink, new Color(0.3f, 0.4f, 0.34f), 0.45f), 1f);
             Hair = Rgb(ink, 1f).WithAlpha(0.30f);
             Txt = Rgb(txt, dim);
-            OnInk = new Rgba(0.008f, 0.102f, 0.047f); OnInk2 = OnInk.WithAlpha(0.76f);
+            // text on the focus fill: the dark ink, and a lighter solid secondary for state lines (the prototype blended 76% ink over the fill, i.e. 24% toward
+            // it; the 13 px regular face is thinner than the browser's, so 15% keeps it readable on the neon)
+            OnInk = new Rgba(0.008f, 0.102f, 0.047f);
+            OnInk2 = new Rgba(OnInk.R + (inkHi.r - OnInk.R) * 0.15f, OnInk.G + (inkHi.g - OnInk.G) * 0.15f, OnInk.B + (inkHi.b - OnInk.B) * 0.15f);
             Line = Rgb(ink, dim).WithAlpha(0.70f);
-            Plate = new Rgba(0.008f, 0.071f, 0.039f, 0.93f); PlateHi = new Rgba(0.004f, 0.094f, 0.051f, 0.96f);
+            Plate = new Rgba(0.008f, 0.071f, 0.039f, 1f); PlateHi = new Rgba(0.004f, 0.094f, 0.051f, 1f);
             Amber = Rgb(warn, 1f); Red = Rgb(alert, 1f);
             Casing = new Rgba(0.004f, 0.063f, 0.039f, 0.85f);
             Hub = new Rgba(0.008f, 0.059f, 0.031f, 1f);
@@ -45,13 +44,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             if (frame != Time.frameCount || cached == null)
             {
                 frame = Time.frameCount;
-                Color ink = FallbackInk, warn = FallbackWarn, alert = FallbackAlert;
-                try
-                {
-                    var theme = ThemeManager.Active.ColorTheme;
-                    ink = theme.AllClear; warn = theme.Warning; alert = theme.Alert;
-                }
-                catch (System.Exception) { /* no theme up: the fallback ink */ }
+                Color ink = AvTheme.Accent, warn = AvTheme.Warning, alert = AvTheme.Alert;
                 if (cached == null || ink != cachedInk || warn != cachedWarn || alert != cachedAlert)
                 {
                     cachedInk = ink; cachedWarn = warn; cachedAlert = alert;

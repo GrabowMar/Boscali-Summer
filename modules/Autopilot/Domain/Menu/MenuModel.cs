@@ -86,6 +86,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public bool Hatched;
         // submenu
         public string Context;
+        private string tailFor, tail;
         public string HintNoun;
         public bool Iconless;
         public List<MenuRow> Children;
@@ -128,21 +129,49 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public string Value => Values != null && Values.Length > 0 ? Values[ValueIndex % Values.Length] : "";
         public string NextValue => Values != null && Values.Length > 0 ? Values[(ValueIndex + 1) % Values.Length] : "";
 
-        public string Label => Kind == MenuKind.Cycle ? Lead + " " + NextValue : Current.Label;
+        // a cycle row's three strings are built once per value change, not on every read (the painter reads them every frame)
+        private string[] cycValues;
+        private int cycIndex;
+        private string cycLead, cycPrefix, cycLabel, cycState, cycDesc;
+
+        private void Cycled()
+        {
+            if (cycLabel != null && cycValues == Values && cycIndex == ValueIndex && (object)cycLead == Lead && (object)cycPrefix == StatePrefix) return;
+            cycValues = Values; cycIndex = ValueIndex; cycLead = Lead; cycPrefix = StatePrefix;
+            cycLabel = Lead + " " + NextValue; cycState = StatePrefix + Value; cycDesc = Value + " → " + NextValue;
+        }
+
+        public string Label
+        {
+            get
+            {
+                if (Kind != MenuKind.Cycle) return Current.Label;
+                Cycled();
+                return cycLabel;
+            }
+        }
 
         public string State
         {
             get
             {
                 if (IsBlocked) return BlockedText;
-                if (Kind == MenuKind.Cycle) return StatePrefix + Value;
+                if (Kind == MenuKind.Cycle) { Cycled(); return cycState; }
                 if (Kind == MenuKind.Picker && Selected && StateSelected != null) return StateSelected;
                 return Current.State;
             }
         }
 
         /// <summary>The hub's one-line description of what a press does.</summary>
-        public string Desc => Kind == MenuKind.Cycle ? Value + " → " + NextValue : Current.Desc;
+        public string Desc
+        {
+            get
+            {
+                if (Kind != MenuKind.Cycle) return Current.Desc;
+                Cycled();
+                return cycDesc;
+            }
+        }
 
         public string IconNow => Kind == MenuKind.Toggle && IsOn && IconOn != null ? IconOn : Icon;
 
@@ -154,6 +183,22 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
 
         /// <summary>The BACK row of a depth-3 list. Not part of any model; the controller focuses it as index -2.</summary>
         public static readonly MenuRow BackRow = Action("back", "back", "BACK", "", "RETURN TO THE PREVIOUS LEVEL");
+
+        /// <summary>The part of <see cref="Context"/> after the last middle dot: the dock header of a depth-3 list shows only that. Built once per context text.</summary>
+        public string ContextTail
+        {
+            get
+            {
+                if (Context == null) return null;
+                if (!ReferenceEquals(tailFor, Context))
+                {
+                    tailFor = Context;
+                    int dot = Context.LastIndexOf(" · ", StringComparison.Ordinal);
+                    tail = dot >= 0 ? Context.Substring(dot + 3) : Context;
+                }
+                return tail;
+            }
+        }
 
         public bool IsBlocked => Blocked != null || Gone;
         public string BlockedText => Blocked ?? GoneText;
@@ -199,6 +244,9 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
 
         public string Id { get; }
         public string Label { get; }
+        /// <summary>The dock header's lead at depth 3: "WING › ".</summary>
+        public string Crumb => crumb ??= Label + " › ";
+
         /// <summary>Clockwise from 12 o'clock.</summary>
         public float Angle { get; }
         /// <summary>Ring key-cap: 1..9 then 0.</summary>
@@ -206,6 +254,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public string Icon { get; }
 
         public string Context = "";
+        private string crumb;
         public bool Available = true;
         /// <summary>Unavailable only: replaces the badge (NO WING).</summary>
         public string Reason = "";

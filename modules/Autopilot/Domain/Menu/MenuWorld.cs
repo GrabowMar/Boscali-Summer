@@ -6,7 +6,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
 
     internal enum ViewKind : byte { Other, Cockpit, Orbit }
 
-    internal enum StationClass : byte { Other, Gun, Missile, Bomb, Turret }
+    internal enum StationClass : byte { Other, Gun, Missile, Agm, Bomb, Turret }
 
     internal sealed class WorldStation
     {
@@ -22,6 +22,20 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         /// <summary>Support's own note: "SPACE R2 · 6 ALLOC" while ready.</summary>
         public string Note = "";
         public bool Armed;
+        /// <summary>SPACE, CYBER or SOF: the group the perk sits under and the glyph it wears. Empty = ungrouped.</summary>
+        public string Front = "";
+        /// <summary>Seconds left on its cooldown; 0 = ready or armed.</summary>
+        public int Cooldown;
+    }
+
+    /// <summary>One formation the wing could fly.</summary>
+    internal sealed class WorldShape
+    {
+        /// <summary>Upper-case game name, e.g. FINGER FOUR (STRONG RIGHT).</summary>
+        public string Name = "";
+        /// <summary>CLASSIC, ESCORT, ROTARY, TACTICAL: the dock group.</summary>
+        public string Family = "";
+        public bool Active;
     }
 
     internal sealed class WorldFilter
@@ -29,6 +43,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public string Name = "";
         public bool Active;
         public bool Allowed = true;
+        /// <summary>1-based quick slot the page lists it under.</summary>
+        public int Slot;
     }
 
     /// <summary>
@@ -79,8 +95,14 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public int Flares, FlaresMax;
         /// <summary>Active countermeasure name, upper case.</summary>
         public string Countermeasure = "";
+        /// <summary>The countermeasure a press switches to, upper case; empty when the airframe has only one.</summary>
+        public string NextCountermeasure = "";
+        /// <summary>Index of the active countermeasure in the game's own (alphabetical) list.</summary>
+        public int CountermeasureIndex;
         public bool HasRadar, RadarOn;
         public bool HasDrones, DronesStriking, DronesCanStrike;
+        /// <summary>REMORA drones flying now.</summary>
+        public int Drones;
 
         // VIEW
         public bool CameraFollowing = true;
@@ -122,6 +144,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         // WING
         public int Wingmen;
         public string Shape = "";
+        /// <summary>The formations that suit the wing now, in the game's order.</summary>
+        public List<WorldShape> Shapes = new List<WorldShape>();
 
         // TARGET FILTERS (the contributed preset page)
         public List<WorldFilter> Filters = new List<WorldFilter>();

@@ -20,42 +20,68 @@ namespace BoscaliSummer.Tests.Features.Autopilot
                 Gear = GearPhase.Up, HasAssist = true, Assist = true, HasHover = true, Hover = false, Ignition = true, CanEject = true,
                 HasNav = true, NavOn = true, HasLandingLight = true, LandingLight = 2, HasNvg = true, NvgOn = false,
                 ActiveStation = 1, HasMultipleGuns = true, HasTurrets = true, TurretAuto = false,
-                HasCountermeasures = true, HasFlares = true, Flares = 48, FlaresMax = 48, Countermeasure = "IR FLARES", HasRadar = true, RadarOn = true,
-                HasDrones = true, DronesStriking = false, DronesCanStrike = true,
+                HasCountermeasures = true, HasFlares = true, Flares = 48, FlaresMax = 48, Countermeasure = "IR FLARES", NextCountermeasure = "RADAR JAMMER", HasRadar = true, RadarOn = true,
+                HasDrones = true, DronesStriking = false, DronesCanStrike = true, Drones = 2,
                 CameraFollowing = true, Camera = ViewKind.Cockpit, HasCockpitPoint = true, MapAvailable = true,
                 MissileViewAvailable = true, CanEnterMissileView = true, Missiles = 2, MissileStatus = "2 MSL · CLOSEST 1.1 KM",
                 MarkAvailable = true, HasMark = true, MarkAgeSeconds = 42f, CanCapture = true, CanCallAtMark = true, Armed = "SAT CAMERA",
                 PerksAvailable = true, SkywellCarried = true, SkywellStock = "FUEL 5.9T · AMMO 1.20T", CanExfil = false,
                 DeckAvailable = true, DeckPlaying = false, DeckTitle = "Salt Flats at Dawn", ReceiverAvailable = true, ReceiverOn = true,
                 Station = "Boscali Republic Radio", CanStopAll = true,
-                CallsAvailable = true, CanCall = true, Wingmen = 3, Shape = "FINGER FOUR",
+                CallsAvailable = true, CanCall = true, Wingmen = 3,
             };
             w.Stations.AddRange(new[]
             {
-                S("12.7MM GUN", 1000, StationClass.Gun), S("AAM-4 SKYWAY", 2, StationClass.Missile), S("AGM-48", 2, StationClass.Missile),
+                S("12.7MM GUN", 1000, StationClass.Gun), S("AAM-4 SKYWAY", 2, StationClass.Missile), S("AGM-48", 2, StationClass.Agm),
                 S("CBU-12", 0, StationClass.Bomb), S("AAM-4 SKYWAY", 2, StationClass.Missile), S("MALD-X", 0, StationClass.Missile),
                 S("23MM TURRET", 300, StationClass.Turret), S("SKYWELL KIT", 1, StationClass.Other),
             });
             string[] calls = { "ON MY WAY", "NEED SUPPORT", "ENGAGING", "SPIKE", "WINCHESTER", "BINGO FUEL", "RTB", "SPLASH ONE", "COPY", "NEGATIVE", "THANKS", "GG" };
             w.CallLabels.AddRange(calls);
+            // eight perks (IOpsPerks.MaxPerks) grouped by front, one armed, one cooling down
             w.Perks.AddRange(new[]
             {
-                new WorldPerk { Label = "RECON PASS", Note = "SPACE R1 · 4 ALLOC" },
-                new WorldPerk { Label = "SAT CAMERA", Note = "SPACE R2 · 6 ALLOC", Armed = true },
-                new WorldPerk { Label = "ELINT SWEEP", Note = "CYBER R1 · 4 ALLOC" },
-                new WorldPerk { Label = "SAM NET DOWN", Note = "CYBER R4 · 16 ALLOC" },
-                new WorldPerk { Label = "JTAC LASE", Note = "SOF R1 · 4 ALLOC" },
-                new WorldPerk { Label = "RECON TEAM", Note = "SOF R2 · 6 ALLOC" },
-                new WorldPerk { Label = "FORTIFY", Note = "SOF R3 · 10 ALLOC" },
+                new WorldPerk { Label = "RECON PASS", Note = "SPACE R1 · 4 ALLOC", Front = "SPACE" },
+                new WorldPerk { Label = "SAT CAMERA", Note = "SPACE R2 · 6 ALLOC", Front = "SPACE", Armed = true },
+                new WorldPerk { Label = "PRSM", Note = "SPACE R3 · 10 ALLOC", Front = "SPACE", Cooldown = 24 },
+                new WorldPerk { Label = "ELINT SWEEP", Note = "CYBER R1 · 4 ALLOC", Front = "CYBER" },
+                new WorldPerk { Label = "SAM NET DOWN", Note = "CYBER R4 · 16 ALLOC", Front = "CYBER" },
+                new WorldPerk { Label = "JTAC LASE", Note = "SOF R1 · 4 ALLOC", Front = "SOF" },
+                new WorldPerk { Label = "RECON TEAM", Note = "SOF R2 · 6 ALLOC", Front = "SOF" },
+                new WorldPerk { Label = "FORTIFY", Note = "SOF R3 · 10 ALLOC", Front = "SOF" },
             });
             w.Filters.AddRange(new[]
             {
-                new WorldFilter { Name = "Air threats", Active = true }, new WorldFilter { Name = "SAM sites" }, new WorldFilter { Name = "SEAD package" },
+                new WorldFilter { Name = "Air threats", Active = true, Slot = 1 }, new WorldFilter { Name = "SAM sites", Slot = 2 }, new WorldFilter { Name = "SEAD package", Slot = 3 },
             });
+            AddShapes(w);
             return w;
         }
 
-        public static MenuWorld NoWing() { MenuWorld w = Default(); w.Wingmen = 0; return w; }
+        /// <summary>formations.json: 22 shapes in 4 families (the families in the order the prototype lists them), finger four strong right flying.</summary>
+        private static void AddShapes(MenuWorld w)
+        {
+            string[][] shapes =
+            {
+                new[] { "CLASSIC", "ECHELON RIGHT" }, new[] { "CLASSIC", "ECHELON LEFT" }, new[] { "CLASSIC", "LINE ABREAST" }, new[] { "CLASSIC", "TRAIL" }, new[] { "CLASSIC", "VIC" },
+                new[] { "CLASSIC", "FINGER FOUR (STRONG RIGHT)" }, new[] { "CLASSIC", "FINGER FOUR (STRONG LEFT)" }, new[] { "CLASSIC", "DIAMOND" }, new[] { "CLASSIC", "BOX" }, new[] { "CLASSIC", "LADDER" },
+                new[] { "ESCORT", "HIGH COVER" }, new[] { "ESCORT", "LOW COVER" }, new[] { "ESCORT", "SWEEP AHEAD" }, new[] { "ESCORT", "CLOSE ESCORT" },
+                new[] { "ROTARY", "STAGGERED TRAIL" }, new[] { "ROTARY", "ECHELON (STAGGERED)" }, new[] { "ROTARY", "HEAVY STREAM" },
+                new[] { "TACTICAL", "COMBAT SPREAD" }, new[] { "TACTICAL", "FLUID FOUR" }, new[] { "TACTICAL", "WALL" }, new[] { "TACTICAL", "OFFSET BOX" }, new[] { "TACTICAL", "CARD" },
+            };
+            foreach (string[] s in shapes) w.Shapes.Add(new WorldShape { Family = s[0], Name = s[1], Active = s[1] == "FINGER FOUR (STRONG RIGHT)" });
+            w.Shape = "FINGER FOUR (STRONG RIGHT)";
+        }
+
+        public static MenuWorld NoWing() { MenuWorld w = Default(); w.Wingmen = 0; w.Shapes.Clear(); w.Shape = ""; return w; }
+
+        /// <summary>The second countermeasure (the jammer) is active.</summary>
+        public static MenuWorld Jammer()
+        {
+            MenuWorld w = Default();
+            w.Countermeasure = "RADAR JAMMER"; w.NextCountermeasure = "IR FLARES"; w.CountermeasureIndex = 1;
+            return w;
+        }
 
         /// <summary>On the apron: gear, autoland, eject and flares are absent, the engine is shut down.</summary>
         public static MenuWorld Ground()
@@ -90,6 +116,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             yield return new KeyValuePair<string, MenuWorld>("ground", Ground());
             yield return new KeyValuePair<string, MenuWorld>("missile", Missile());
             yield return new KeyValuePair<string, MenuWorld>("ibis", Ibis());
+            yield return new KeyValuePair<string, MenuWorld>("jammer", Jammer());
         }
     }
 }

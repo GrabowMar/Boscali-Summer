@@ -8,14 +8,14 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
     /// mouse-aim steering, chase-camera pan and mouse-button weapons fire; disabling the Rewired keyboard keeps the menu's own keys from
     /// reaching the game (the saved default map binds Enter to Select, Backspace to Cancel (deselects targets), Space to Fire, Tab, the up and
     /// down arrows and Esc; the digits and left / right arrows are unbound). The menu itself reads UnityEngine.Input, which Rewired's
-    /// enable switch does not touch. Everything is restored exactly as found by <see cref="Release"/>.
+    /// enable switch does not touch. <see cref="Release"/> switches back on only the devices this guard switched off (the repo's lease rule: another
+    /// window that already took one keeps it), so nothing is restored from a stale snapshot.
     /// </summary>
     internal static class AceRadialInputGuard
     {
         private static bool held;
         private static bool ownsCursorFlag;
-        private static bool mouseWasEnabled = true;
-        private static bool keyboardWasEnabled = true;
+        private static bool mouseTaken, keyboardTaken;
 
         public static bool Held => held;
 
@@ -26,28 +26,31 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             ownsCursorFlag = !CursorManager.GetFlag(CursorFlags.SelectionMenu);
             if (ownsCursorFlag) CursorManager.SetFlag(CursorFlags.SelectionMenu, true);
             Mouse mouse = TryMouse();
-            if (mouse != null) { mouseWasEnabled = mouse.enabled; mouse.enabled = false; }
+            if (mouse != null && mouse.enabled) { mouse.enabled = false; mouseTaken = true; }
             Keyboard keyboard = TryKeyboard();
-            if (keyboard != null) { keyboardWasEnabled = keyboard.enabled; keyboard.enabled = false; }
+            if (keyboard != null && keyboard.enabled) { keyboard.enabled = false; keyboardTaken = true; }
         }
 
         public static void Release()
         {
             if (!held) return;
             held = false;
-            Mouse mouse = TryMouse();
-            if (mouse != null) mouse.enabled = mouseWasEnabled;
-            Keyboard keyboard = TryKeyboard();
-            if (keyboard != null) keyboard.enabled = keyboardWasEnabled;
+            if (mouseTaken) { Mouse mouse = TryMouse(); if (mouse != null) mouse.enabled = true; mouseTaken = false; }
+            if (keyboardTaken) { Keyboard keyboard = TryKeyboard(); if (keyboard != null) keyboard.enabled = true; keyboardTaken = false; }
             if (ownsCursorFlag) CursorManager.SetFlag(CursorFlags.SelectionMenu, false);
             ownsCursorFlag = false;
             UnityEngine.Cursor.visible = CursorManager.Visible;
+            UnityEngine.Cursor.lockState = CursorManager.Visible ? UnityEngine.CursorLockMode.None : UnityEngine.CursorLockMode.Locked; // CursorManager's own rule
         }
 
-        /// <summary>HOLD mode flicks with a drawn reticle, so the OS cursor hides; LATCHED shows it again. Only while the guard is held.</summary>
+        /// <summary>HOLD mode flicks with a drawn reticle, so the OS cursor hides and stays inside the window (a flick or the release click must never land on another
+        /// application); LATCHED shows it again. Only while the guard is held.</summary>
         public static void SetCursorVisible(bool visible)
         {
-            if (held) UnityEngine.Cursor.visible = visible;
+            if (!held) return;
+            UnityEngine.Cursor.visible = visible;
+            UnityEngine.CursorLockMode mode = visible ? UnityEngine.CursorLockMode.None : UnityEngine.CursorLockMode.Confined;
+            if (UnityEngine.Cursor.lockState != mode) UnityEngine.Cursor.lockState = mode; // every frame: write only on a change
         }
 
         private static Mouse TryMouse()

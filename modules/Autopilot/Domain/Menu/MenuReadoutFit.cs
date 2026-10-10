@@ -53,7 +53,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         /// Status summary cells flowed left to right and wrapped by measured width (a fixed grid clips at 720p), each line centred in
         /// <paramref name="width"/>. <paramref name="lines"/> is the line count; the plate needs <c>lines * SummaryLine(t) + (lines - 1) * SummaryGap * t</c>.
         /// </summary>
-        public static List<SummaryCell> Flow(IReadOnlyList<MenuSummary> items, float width, IMenuMetrics m, float t, out int lines)
+        public static List<SummaryCell> Flow(List<MenuSummary> items, float width, IMenuMetrics m, float t, out int lines)
         {
             var cells = new List<SummaryCell>(items.Count);
             float space = m.Width(" ", MenuFont.Badge) * t, gap = 2f * space;

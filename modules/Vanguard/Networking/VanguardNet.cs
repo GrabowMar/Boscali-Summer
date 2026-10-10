@@ -38,6 +38,8 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
 
         public bool CanStrike => LocalTarget(out _, out _);
 
+        public int Ready => GameManager.GetLocalAircraft(out Aircraft aircraft) && aircraft != null ? VanguardRegistry.DroneCount(aircraft) : 0;
+
         private void Awake()
         {
             MirageSerializers.Strict.Install<VanguardDroneOrder>(

@@ -17,7 +17,12 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
     {
         private static readonly HashSet<string> Warned = new HashSet<string>();
 
-        public static MenuModel Build() => MenuCatalog.Build(ReadWorld(), Bind);
+        /// <summary>Throws without a live local aircraft: every reader would return early and the catalog would show its fabricated default world.</summary>
+        public static MenuModel Build()
+        {
+            if (!TryAircraft(out _)) throw new InvalidOperationException("no live local aircraft");
+            return MenuCatalog.Build(ReadWorld(), Bind);
+        }
 
         /// <summary>Drops cached references to the old scene's aircraft.</summary>
         public static void Reset() => ResetAircraftCache();

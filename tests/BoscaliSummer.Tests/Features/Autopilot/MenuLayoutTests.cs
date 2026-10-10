@@ -115,7 +115,8 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.Near(MenuLayout.AngleDiff(350f, 10f), -20f, "angle difference wraps");
             TestAssert.Eq(l.DiscAt(l.DiscX[0], l.DiscY[0], 0f), 0, "a point on a disc picks it");
             TestAssert.Eq(l.DiscAt(l.Cx, l.Cy, 0f), -1, "the hub is no category");
-            TestAssert.Eq(l.CategoryAt(l.Widest[3].L + 2f, l.DiscY[3]), 3, "a label plate picks its category too");
+            TestAssert.That(l.PlateContains(3, null, l.Widest[3].L + 2f, l.DiscY[3]), "a label plate picks its category too");
+            TestAssert.That(!l.PlateContains(3, null, l.Widest[3].R - 1f, l.DiscY[3]), "the plate as drawn hugs its text: the air at the end of the widest plate is not the category");
         }
 
         private static void RowGeometryIsOrdered()

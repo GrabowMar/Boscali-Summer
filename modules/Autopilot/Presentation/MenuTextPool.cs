@@ -154,7 +154,16 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
                 if (slots[i].Text.gameObject.activeSelf) slots[i].Text.gameObject.SetActive(false);
         }
 
-        public void HideAll() { used = 0; End(); }
+        /// <summary>Builds <paramref name="count"/> hidden labels up front, so opening the menu does not create them.</summary>
+        public void Prewarm(int count)
+        {
+            while (slots.Count < count)
+            {
+                TMP_Text label = NewLabel("Label" + slots.Count);
+                label.gameObject.SetActive(false);
+                slots.Add(new Slot { Text = label, Size = -1f });
+            }
+        }
 
         // ---- construction ---------------------------------------------------------------------------------------------------
         private TMP_Text NewLabel(string name)

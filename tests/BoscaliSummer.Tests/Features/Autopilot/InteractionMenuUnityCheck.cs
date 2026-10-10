@@ -17,7 +17,7 @@ using static UnityCheckHarness;
 /// Offline visual check of the v7 interaction menu: runs the production <see cref="MenuPainter"/> and <see cref="MenuTextPool"/> on the shared
 /// AvionicsUi kit over the REAL catalog (<see cref="MenuCatalog"/> over the prototype's scenario worlds), puts the pure controller into each gallery
 /// state of the prototype with the same input rig the unit tests use, and renders PNGs at 1920x1080 (every state) and 1280x720 / 2560x1080 (root-idle,
-/// flight-dock, comms-calls, left-dock) over a real cockpit backdrop. Assertions run with the real TMP font: the shared geometry matrix
+/// flight-dock, comms-calls, left-dock) over a real cockpit backdrop. The scratch project runs in Linear colour space like the game (see the runner). Assertions run with the real TMP font: the shared geometry matrix
 /// (<see cref="MenuGeometryChecks"/>), no label truncated, text at least 12 px, no vector quad dropped. A PASS is not visual acceptance:
 /// read the PNGs against the prototype shots (Compare-MenuShots.py puts them side by side). The game host (AceRadialMenuUi), input and game
 /// adapters are never run here.
@@ -27,6 +27,7 @@ public static class InteractionMenuUnityCheck
     private const int Capacity = 7000;
     /// <summary>Every failed assertion, reported together at the end so one run shows all the defects and still renders every state.</summary>
     private static readonly List<string> Failures = new List<string>();
+    private static readonly List<string> Allocation = new List<string>();
 
     private static void Check(bool ok, string message)
     {
@@ -72,6 +73,14 @@ public static class InteractionMenuUnityCheck
         F("support-perks", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(7); for (int i = 0; i < 4; i++) r.Down(); r.Enter(); r.Down(); }, One),
         F("view-missile", MenuWorlds.Missile, r => { r.HoldOpen(); FlickTo(r, 270f, 0.87f); r.ToRow("view/mslnext"); r.Adv(0.1f); }, One),
         F("ground-flight", MenuWorlds.Ground, r => { r.LatchOpen(); r.PressDigit(3); r.Down(); }, One),
+        // WING > FORMATION: 22 shapes in 4 families, scrolled so the CLASSIC and ESCORT groups meet, HIGH COVER focused
+        F("wing-formation", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(4); r.ToRow("wing/shape"); r.Click(); for (int i = 0; i < 5; i++) r.Wheel(1); r.ToRow("wing/shape/high-cover"); r.Adv(0.1f); }, One),
+        // OPS PERKS: grouped by front with the front glyph, PRSM cooling down in place
+        F("perk-cooldown", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(7); for (int i = 0; i < 4; i++) r.Down(); r.Enter(); r.ToRow("support/perks/prsm"); r.Adv(0.1f); }, One),
+        // the jammer is the active countermeasure: its name is the DEFENCE badge
+        F("jammer-idle", MenuWorlds.Jammer, r => r.HoldOpen(), One),
+        // a refused press (digit 9 in a 6-row dock): the row gutters flash amber for 180 ms (checked against the settled frame below)
+        F("deny-pulse", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(3); r.PressDigit(9); }, One),
     };
 
     public static void Run()
@@ -94,7 +103,7 @@ public static class InteractionMenuUnityCheck
             File.WriteAllText("result.txt",
                 "PASS: " + renders + " renders of the v7 ring + dock menu (production painter, text pool and catalog on the shared AvionicsUi kit); the shared geometry " +
                 "matrix, no truncated label, 12 px text floor and no dropped vector quad held with the real TMP font. Game host and adapters are not run here; " +
-                "compare the PNGs with the prototype shots and check in game.");
+                "compare the PNGs with the prototype shots and check in game. Steady-state paint allocation: " + string.Join("; ", Allocation) + ".");
             EditorApplication.Exit(0);
         }
         catch (Exception error)
@@ -130,6 +139,17 @@ public static class InteractionMenuUnityCheck
         painter.Paint(rig.C, rig.L, now + 1f);     // ... the second one is the settled frame
         surface.Commit();
         Check(!surface.Buffer.Overflowed, "vector buffer overflowed" + at + " (" + surface.Buffer.Capacity + " quads)");
+        long denyFrame = Fingerprint(surface.Buffer);
+        if (w == 1920 && (frame.Id == "root-idle" || frame.Id == "flight-dock" || frame.Id == "comms-calls" || frame.Id == "wing-formation"))
+        {
+            // a steady frame must not allocate: paint 300 settled frames and read the managed heap (a coarse meter: the old painter cost a few KB a frame)
+            long control = Grown(i => Sink = new byte[256]);
+            Check(control > 20 * 1024, "the allocation meter is blind: 300 x 256 B read as " + control + " B" + at);
+            long grown = Grown(i => painter.Paint(rig.C, rig.L, now + 2f + i * 0.016f));
+            Allocation.Add(frame.Id + " " + grown / 1024 + " KB/300 frames (meter control " + control / 1024 + " KB)");
+            Check(grown < 256 * 1024, "a steady painted frame allocates" + at + ": " + grown / 1024 + " KB over 300 frames");
+            painter.Paint(rig.C, rig.L, now + 1f);
+        }
 
         // Offline the vector layers' engine-driven OnEnable never runs: force it so the geometry flushes into a mesh.
         var graphicOnEnable = typeof(Graphic).GetMethod("OnEnable", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
@@ -157,7 +177,38 @@ public static class InteractionMenuUnityCheck
         focus.SetParent(host.Static, false);
         AvHudHost.Place(focus, 0f, 0f, w, h);
         RenderPng(host.Canvas, focus, frame.Id + "-" + w + "x" + h + ".png", w, h);
+        if (frame.Id == "deny-pulse")
+        {
+            // the same state after the pulse has faded must paint differently: the refusal is visible, and it ends
+            Check(rig.C.Denying, "the refusal pulse is running in the deny frame" + at);
+            rig.Adv(MenuController.DenySec + 0.05f);
+            painter.Paint(rig.C, rig.L, rig.Time + 1f);
+            Check(!rig.C.Denying && Fingerprint(surface.Buffer) != denyFrame, "the refusal pulse changes the painted frame while it runs" + at);
+        }
         Object.DestroyImmediate(host.Root);
+    }
+
+    private static byte[] Sink;
+
+    /// <summary>Managed heap growth over 300 calls of <paramref name="step"/>, without a collection in between.</summary>
+    private static long Grown(Action<int> step)
+    {
+        GC.Collect();
+        long before = GC.GetTotalMemory(false);
+        for (int i = 0; i < 300; i++) step(i);
+        return GC.GetTotalMemory(false) - before;
+    }
+
+    /// <summary>A hash of every vertex colour in the painted quads: two frames that differ in any colour differ here.</summary>
+    private static long Fingerprint(AvQuadBuffer buffer)
+    {
+        long h = 17;
+        for (int i = 0; i < buffer.Count * 4; i++)
+        {
+            Rgba c = buffer.C[i];
+            h = h * 31 + (long)(c.R * 1000f) + 7 * (long)(c.G * 1000f) + 13 * (long)(c.B * 1000f) + 29 * (long)(c.A * 1000f);
+        }
+        return h;
     }
 
     private static Texture2D backdropTexture;

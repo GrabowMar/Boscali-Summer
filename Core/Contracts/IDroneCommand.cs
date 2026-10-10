@@ -12,6 +12,9 @@ namespace BoscaliSummer.Core.Contracts
         /// <summary>The local aircraft has a target selected to send the drones at.</summary>
         bool CanStrike { get; }
 
+        /// <summary>REMORA drones the local aircraft has flying right now.</summary>
+        int Ready { get; }
+
         void Strike();
         void Screen();
     }

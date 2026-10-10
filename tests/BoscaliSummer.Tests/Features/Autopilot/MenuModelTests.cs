@@ -55,6 +55,8 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.Eq(light.ToastText(), "LANDING LIGHT: OFF", "toast shows the value the press produces");
             light.ValueIndex = 0;
             TestAssert.Eq(light.Label, "SET LANDING LIGHT ON", "OFF steps to ON");
+            TestAssert.That(ReferenceEquals(light.Label, light.Label) && ReferenceEquals(light.State, light.State) && ReferenceEquals(light.Desc, light.Desc),
+                "a cycle row builds its text once per value, not on every read (the painter reads it every frame)");
         }
 
         private static void PickerStateFollowsSelection()

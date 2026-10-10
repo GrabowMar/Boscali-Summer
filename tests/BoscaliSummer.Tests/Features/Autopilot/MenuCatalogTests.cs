@@ -18,6 +18,10 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             CommsIsOneGroupedList();
             BadgesAndSummary();
             BindAttachesRunToRunnableRows();
+            FormationIsASubmenuOfFamilies();
+            PerksGroupByFrontAndCool();
+            DefenceNamesTheOutcome();
+            ViewRowsKeepTheirPlace();
         }
 
         internal static IEnumerable<MenuRow> AllRows(MenuModel model)
@@ -170,7 +174,8 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.Eq(m.Row("weapons/prev").State, "PREV: STA 1 · 12.7MM GUN ×1K", "PREV STATION previews STA 1");
             w.ActiveStation = 2;
             m = MenuCatalog.Build(w);
-            TestAssert.Eq(m.Category("weapons").Badge, "MSL ×2", "badge follows the active station (AGM-48 does not fit beside its ammo, so the class tag is used)");
+            TestAssert.Eq(m.Category("weapons").Badge, "AGM ×2", "badge follows the active station (AGM-48 does not fit beside its ammo, so the class tag is used)");
+            TestAssert.Eq(m.Row("weapons/select/st3").Icon, "agm", "an air-to-surface missile wears the AGM glyph");
             TestAssert.Eq(m.Row("weapons/next").State, "NEXT: STA 4 · CBU-12 ×0", "NEXT follows the pick");
             TestAssert.That(m.Row("weapons/select/st3").Selected && !m.Row("weapons/select/st2").Selected, "the picker marks the active station");
             TestAssert.That(m.Row("weapons/select/st4").Hatched && m.Row("weapons/select/st4").ToneNow == MenuTone.Dim, "an empty station is hatched and dim, not amber");
@@ -245,6 +250,100 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             w.Fuel = 0.1f;
             TestAssert.That(MenuCatalog.Build(w).Summary[0].Caution, "low fuel is a caution");
             TestAssert.Eq(MenuCatalog.Build(MenuWorlds.Default()).AircraftName, "CI-22 CRICKET", "aircraft name");
+        }
+
+        private static void FormationIsASubmenuOfFamilies()
+        {
+            MenuModel m = MenuCatalog.Build(MenuWorlds.Default());
+            MenuRow shape = m.Row("wing/shape");
+            TestAssert.That(shape.Kind == MenuKind.Submenu && shape.Label == "FORMATION" && shape.Iconless, "WING FORMATION is an iconless submenu, not a stepper");
+            TestAssert.Eq(shape.Children.Count, 22, "all 22 formations are listed");
+            TestAssert.Eq(shape.State, "FORMATION: FINGER 4", "the row names the formation flying (the long name falls back to the short one)");
+            TestAssert.Eq(shape.HintNoun, "FORMATIONS", "the hint says FORMATIONS");
+            var groups = new List<string>();
+            foreach (MenuRow k in shape.Children) if (groups.Count == 0 || groups[groups.Count - 1] != k.Group) groups.Add(k.Group);
+            TestAssert.Eq(string.Join(",", groups), "CLASSIC,ESCORT,ROTARY,TACTICAL", "four dock groups, each family together");
+            MenuRow active = m.Row("wing/shape/finger-four-strong-right");
+            TestAssert.That(active.Kind == MenuKind.Picker && active.Selected && active.Label == "FINGER FOUR" && active.State == "ACTIVE · STRONG RIGHT", "the flying shape is the selected pick, its qualifier is the state");
+            TestAssert.That(!m.Row("wing/shape/vic").Selected && m.Row("wing/shape/vic").State == "CLASSIC", "an unqualified shape states its family");
+            TestAssert.Eq(m.Row("wing/shape/high-cover").ToastText(), "FORMATION: HIGH COVER", "the toast names the formation");
+            TestAssert.Eq(m.Category("wing").Badge, "FINGER 4", "the ring badge is the short formation name");
+
+            // families that arrive interleaved still run together
+            MenuWorld w = MenuWorlds.Default();
+            w.Shapes.Clear();
+            w.Shapes.Add(new WorldShape { Family = "CLASSIC", Name = "VIC" });
+            w.Shapes.Add(new WorldShape { Family = "ESCORT", Name = "HIGH COVER" });
+            w.Shapes.Add(new WorldShape { Family = "CLASSIC", Name = "BOX" });
+            var ids = MenuCatalog.Build(w).Row("wing/shape").Children.ConvertAll(r => r.Id);
+            TestAssert.Eq(string.Join(",", ids), "wing/shape/vic,wing/shape/box,wing/shape/high-cover", "game order inside a family, no repeated group heading");
+
+            TestAssert.Eq(MenuCatalog.ShortShape("COMBAT SPREAD"), "COMB SPR", "long names are cut word by word");
+            TestAssert.Eq(MenuCatalog.ShortShape("FLUID FOUR"), "FLUID 4", "FOUR is a digit");
+            foreach (WorldShape s in MenuWorlds.Default().Shapes) TestAssert.That(MenuCatalog.ShortShape(s.Name).Length <= MenuModel.BadgeChars, "short name fits a badge: " + s.Name);
+            w = MenuWorlds.Default();
+            w.Shapes.Clear(); w.Shape = "";
+            TestAssert.That(MenuCatalog.Build(w).Row("wing/shape") == null && MenuCatalog.Build(w).Category("wing").Badge == "WING 3", "no shape list: no row, the badge counts the wing");
+        }
+
+        private static void PerksGroupByFrontAndCool()
+        {
+            MenuModel m = MenuCatalog.Build(MenuWorlds.Default());
+            MenuRow perks = m.Row("support/perks");
+            TestAssert.Eq(perks.Children.Count, 8, "the dock holds eight perks (IOpsPerks.MaxPerks)");
+            var groups = new List<string>();
+            foreach (MenuRow k in perks.Children) if (groups.Count == 0 || groups[groups.Count - 1] != k.Group) groups.Add(k.Group);
+            TestAssert.Eq(string.Join(",", groups), "SPACE,CYBER,SOF", "perks group by front");
+            TestAssert.Eq(m.Row("support/perks/recon-pass").Icon, "front-space", "a SPACE perk wears the SPACE glyph");
+            TestAssert.Eq(m.Row("support/perks/elint-sweep").Icon, "front-cyber", "a CYBER perk wears the CYBER glyph");
+            TestAssert.Eq(m.Row("support/perks/jtac-lase").Icon, "front-sof", "a SOF perk wears the SOF glyph");
+            MenuRow cooling = m.Row("support/perks/prsm");
+            TestAssert.That(cooling.IsBlocked && cooling.State == "COOLDOWN: 24 S", "a cooling perk keeps its place, blocked, with the seconds left");
+            TestAssert.Eq(perks.State, "6 READY · 1 ARMED", "READY counts neither the armed nor the cooling perks");
+            MenuWorld w = MenuWorlds.Default();
+            w.Perks[1].Note = "ARMED · PRESS AGAIN";
+            TestAssert.Eq(MenuCatalog.Build(w).Row("support/perks/sat-camera").Group, "SPACE", "the group comes from the front, not from the note that flips when armed");
+            w.Perks.Clear();
+            TestAssert.That(MenuCatalog.Build(w).Row("support/perks") == null, "no perks, no submenu");
+        }
+
+        private static void DefenceNamesTheOutcome()
+        {
+            MenuModel m = MenuCatalog.Build(MenuWorlds.Default());
+            MenuRow cm = m.Row("defence/cm");
+            TestAssert.Eq(cm.Label, "SWITCH TO RADAR JAMMER", "the label names where a press leads");
+            TestAssert.Eq(cm.State, "ACTIVE: IR FLARES", "the state names what is active");
+            TestAssert.Eq(cm.Desc, "IR FLARES → RADAR JAMMER", "the hub shows the switch");
+            TestAssert.Eq(cm.ToastText(), "COUNTERMEASURE: RADAR JAMMER", "the toast names the new one");
+            TestAssert.Eq(m.Row("defence/drones").State, "DRONES: 2 READY", "the drone count");
+            TestAssert.Eq(m.Category("defence").Badge, "FLR 48", "flares in the first station: the flare count");
+            m = MenuCatalog.Build(MenuWorlds.Jammer());
+            TestAssert.That(m.Category("defence").Badge == "JAMMER" && m.Category("defence").BadgeShow, "another countermeasure active: the badge names it");
+            TestAssert.Eq(m.Row("defence/cm").Label, "SWITCH TO IR FLARES", "and the row leads back");
+            MenuWorld w = MenuWorlds.Default();
+            w.NextCountermeasure = "";
+            TestAssert.That(MenuCatalog.Build(w).Row("defence/cm") == null, "one countermeasure: nothing to switch to");
+            w.Drones = 0;
+            TestAssert.Eq(MenuCatalog.Build(w).Row("defence/drones").State, "DRONES: NONE READY", "no drone aloft");
+        }
+
+        private static void ViewRowsKeepTheirPlace()
+        {
+            MenuWorld w = MenuWorlds.Default();
+            w.CanEnterMissileView = false; w.Missiles = 0;
+            MenuRow view = MenuCatalog.Build(w).Row("view/mslview");
+            TestAssert.That(view != null && view.IsBlocked && view.Blocked == "NO MISSILE IN FLIGHT", "no missile in flight is transient: the row stays, dimmed");
+            w = MenuWorlds.Default();
+            w.Camera = ViewKind.Orbit;
+            TestAssert.Eq(MenuCatalog.Build(w).Category("view").Badge, "EXTERNAL", "the external camera outranks the missile count");
+            MenuModel m = MenuCatalog.Build(MenuWorlds.Missile());
+            TestAssert.Eq(m.Row("view/mslnext").State, "NEXT: MSL 2/2", "the next missile is named");
+            TestAssert.Eq(m.Row("view/mslprev").State, "PREV: MSL 2/2", "and the previous one");
+            MenuWorld two = MenuWorlds.Missile();
+            two.MissileCurrent = "MSL 2/3 AAM-4";
+            m = MenuCatalog.Build(two);
+            TestAssert.That(m.Row("view/mslnext").State == "NEXT: MSL 3/3" && m.Row("view/mslprev").State == "PREV: MSL 1/3", "the steps wrap around the list");
+            TestAssert.Eq(MenuCatalog.Build(MenuWorlds.Default()).Row("targets/filters/sam-sites").State, "SLOT 2", "a filter names its quick slot");
         }
 
         private static void BindAttachesRunToRunnableRows()

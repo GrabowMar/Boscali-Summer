@@ -36,7 +36,8 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         private MenuController controller;
         private int layoutW, layoutH;
         private float openedAt, lastRefresh;
-        private bool wasOpen, releasePending, overflowLogged;
+        private bool wasOpen, releasePending, overflowLogged, narrowLogged;
+        private KeyCode openKey = KeyCode.None;
 
         /// <summary>The Harmony patch on the native wheel's Update reads this: the wheel stays frozen while this menu is open.</summary>
         public static bool IsOpenNow { get; private set; }
@@ -47,23 +48,23 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
 
         public void ResetForScene()
         {
-            CloseMenu(force: true);
+            CloseMenu();
             CockpitStateProbe.Reset();
             MenuGame.Reset();
         }
 
         private void Awake() => BuildCanvas();
 
-        private void OnDisable() => CloseMenu(force: true);
+        private void OnDisable() => CloseMenu();
 
         private void OnApplicationFocus(bool focused)
         {
-            if (!focused) CloseMenu(force: true);
+            if (!focused) CloseMenu();
         }
 
         private void OnDestroy()
         {
-            CloseMenu(force: true);
+            CloseMenu();
             host?.Destroy();
         }
 
@@ -71,11 +72,12 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         {
             float now = Time.unscaledTime;
             KeyCode key = settings?.AceRadialKey?.Value ?? KeyCode.C;
+            if (key != openKey) { openKey = key; if (controller != null) controller.OpenKeyName = key.ToString().ToUpperInvariant(); }
             AceRadialPauseGate.Tick(now);
             if (releasePending && !AceRadialInputSource.AnyMenuInputHeld(key)) FinishClose();
             if (key == KeyCode.None)
             {
-                if (IsOpen) CloseMenu(force: true); // the key was unbound while the menu was open
+                if (IsOpen) CloseMenu(); // the key was unbound while the menu was open
                 return;
             }
 
@@ -109,13 +111,17 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         {
             if (GameplayUI.GameIsPaused || DynamicMap.mapMaximized) return false;
             if ((CursorManager.GetFlags() & ForeignCursorOwners) != 0) return false;
+            // another window (OPS, weather, cinematic, contracts) owns the cursor and has already taken the Rewired mouse: leave it alone
+            if (!AceRadialInputGuard.Held && CursorManager.GetFlag(CursorFlags.SelectionMenu)) return false;
             if (NativeWheelOpen() || Typing()) return false;
-            return GameManager.GetLocalAircraft(out Aircraft aircraft) && aircraft != null;
+            return LiveAircraft();
         }
 
         private static bool StillValid() =>
-            Application.isFocused && !GameplayUI.GameIsPaused && !DynamicMap.mapMaximized &&
-            GameManager.GetLocalAircraft(out Aircraft aircraft) && aircraft != null;
+            Application.isFocused && !GameplayUI.GameIsPaused && !DynamicMap.mapMaximized && LiveAircraft();
+
+        /// <summary>A wrecked jet stays the local aircraft for a while, disabled: the menu would show a fabricated default world for it.</summary>
+        private static bool LiveAircraft() => GameManager.GetLocalAircraft(out Aircraft aircraft) && aircraft != null && !aircraft.disabled;
 
         private static bool NativeWheelOpen()
         {
@@ -140,7 +146,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             }
             model = built;
             EnsureLayout();
-            controller = new MenuController(model, layout);
+            controller = new MenuController(model, layout) { OpenKeyName = key.ToString().ToUpperInvariant() };
             input.Prime();
             controller.Step(input.Sample(key, true, now));
             if (!controller.Open) return false;
@@ -152,7 +158,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             catch (Exception e)
             {
                 Plugin.Logger?.LogWarning("Autopilot: interaction menu could not take the input: " + e.Message);
-                CloseMenu(force: true);
+                CloseMenu();
                 return false;
             }
             wasOpen = true; IsOpenNow = true; releasePending = false;
@@ -175,18 +181,15 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             AceRadialInputGuard.Release();
         }
 
-        private void CloseMenu(bool force)
+        /// <summary>Hard close (scene change, focus loss, key unbound, disable): the input comes back at once.</summary>
+        private void CloseMenu()
         {
             controller?.Cancel();
             wasOpen = false; IsOpenNow = false;
-            if (force)
-            {
-                releasePending = false;
-                AceRadialInputGuard.Release();
-                AceRadialPauseGate.ForceRelease();
-                if (host != null) host.SetVisible(false);
-            }
-            else releasePending = true;
+            releasePending = false;
+            AceRadialInputGuard.Release();
+            AceRadialPauseGate.ForceRelease();
+            if (host != null) host.SetVisible(false);
         }
 
         private void RunCommands(float now)
@@ -206,7 +209,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         private void Refresh(float now)
         {
             lastRefresh = now;
-            try { model.Reconcile(MenuGame.Build()); }
+            try { model.Reconcile(MenuGame.Build()); controller.Resync(); }
             catch (Exception e) { Plugin.Logger?.LogWarning("Autopilot: interaction menu refresh failed: " + e.Message); }
         }
 
@@ -216,6 +219,11 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         {
             if (layout != null && layoutW == Screen.width && layoutH == Screen.height) return;
             layoutW = Screen.width; layoutH = Screen.height;
+            if (!narrowLogged && layoutW < layoutH * 1.5f)
+            {
+                narrowLogged = true;
+                Plugin.Logger?.LogWarning("Autopilot: interaction menu at " + layoutW + "x" + layoutH + " (narrower than 3:2): the dock may cover ring plates; 16:9 and wider are laid out.");
+            }
             layout = MenuLayout.Compute(layoutW, layoutH, model.Categories, text);
             controller?.SetLayout(layout);
             Vector2 pivot = new Vector2(layout.Cx / layoutW, 1f - layout.Cy / layoutH);
@@ -251,6 +259,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             host.SetVisible(false);
             surface = AvVector.Create(host.Static, "Menu", QuadCapacity);
             text = new MenuTextPool(host.Data);
+            text.Prewarm(80); // the ring and a full dock: no label is built on the first open
             painter = new MenuPainter(surface.Buffer, text);
         }
     }
