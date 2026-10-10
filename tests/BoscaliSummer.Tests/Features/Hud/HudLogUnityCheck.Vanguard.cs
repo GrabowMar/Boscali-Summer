@@ -29,6 +29,8 @@ public static partial class HudLogUnityCheck
             Check(!(bool)registry.GetMethod("TryRead", All).Invoke(null, read), "A released weapon status disappears");
             feeds.GetMethod("ResetForScene", All).Invoke(component, null);
             Check((int)registry.GetProperty("Count", All).GetValue(null) == 0, "Scene reset unregisters owned Vanguard gauges");
+            feeds.GetMethod("DeclareChannel", All).Invoke(null, new object[] { "lance", "LANCE" });
+            Check((int)registry.GetProperty("Count", All).GetValue(null) == 0, "Legacy LANCE lines must not replace its dedicated capacitor provider");
         }
         finally { UnityEngine.Object.DestroyImmediate(host); registry.GetMethod("Clear", All).Invoke(null, null); }
     }

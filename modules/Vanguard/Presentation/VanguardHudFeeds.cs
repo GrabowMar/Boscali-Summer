@@ -33,7 +33,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         }
 
         // These publishers already have dedicated typed providers; their held handles remain liveness signals.
-        private static bool Dedicated(string channel) => channel == "vg.lance" || channel == "vg.aegis" || channel == "vg.remora" || channel == "vg.skywell";
+        private static bool Dedicated(string channel) => channel == "lance" || channel == "vg.aegis" || channel == "vg.remora" || channel == "vg.skywell";
 
         public static IHudLine Acquire(IHudBoard board, string owner, string channel, string key)
         {
