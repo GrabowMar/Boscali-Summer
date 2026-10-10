@@ -962,7 +962,20 @@ foreach (string type in new[] {
     "BoscaliSummer.Core.Contracts.GaugeSpec",
     "BoscaliSummer.Modules.Hud.Domain.SystemsScope",
     "BoscaliSummer.Modules.Hud.Presentation.ScopePages",
-    "BoscaliSummer.Modules.Hud.Presentation.SystemsPage" })
+    "BoscaliSummer.Modules.Hud.Presentation.SystemsPage",
+    // STRIKE and OBJECTIVE (tb-ops): their feed structs and enums are filled by name in the offline fixtures.
+    "BoscaliSummer.Core.Contracts.StrikeScope",
+    "BoscaliSummer.Core.Contracts.StrikeTrack",
+    "BoscaliSummer.Core.Contracts.PerkTile",
+    "BoscaliSummer.Core.Contracts.StrikeKind",
+    "BoscaliSummer.Core.Contracts.PerkFront",
+    "BoscaliSummer.Core.Contracts.PerkPhase",
+    "BoscaliSummer.Core.Contracts.ChainNodeKind",
+    "BoscaliSummer.Core.Contracts.ObjectiveScope",
+    "BoscaliSummer.Modules.Hud.Presentation.StrikePage",
+    "BoscaliSummer.Modules.Hud.Presentation.ObjectivePage",
+    "BoscaliSummer.Modules.Support.Runtime.StrikeScopeFeed",
+    "BoscaliSummer.Modules.DynamicOperations.Runtime.ObjectiveScopeFeed" })
     if (pluginAssembly.GetType(type, false) == null) throw new TypeLoadException(type);
 foreach (string type in new[] {
     "BoscaliSummer.Modules.HighCommand.Runtime.HighCommandManager",

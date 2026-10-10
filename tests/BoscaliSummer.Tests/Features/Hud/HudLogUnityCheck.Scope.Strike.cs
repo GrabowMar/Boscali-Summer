@@ -10,9 +10,9 @@ using UnityEngine;
 // Variants (1080p, t = 6): "solo" = one rod and nothing else (the track takes the room); "sat" = a PRSM and a SAT CAMERA window, an armed perk, no intrusion.
 public static partial class HudLogUnityCheck
 {
-    private static object StrikeTrackOf(ScopeScene s, string kind, int id, float eta, float lead, float rangeM, float bearing, string target, int rounds = 1, float gap = 0f, int legs = 0, float radius = 420f) =>
+    private static object StrikeTrackOf(ScopeScene s, string kind, int id, float eta, float lead, float rangeM, float bearing, string target, int rounds = 1, float gap = 0f, int legs = 0) =>
         s.Fill(s.Contract("StrikeTrack"), "Id", id, "Kind", s.ContractEnum("StrikeKind", kind), "Eta", eta, "Lead", lead, "RangeM", rangeM, "BearingDeg", bearing, "Target", target,
-            "Rounds", rounds, "RoundGap", gap, "Legs", legs, "RadiusM", radius);
+            "Rounds", rounds, "RoundGap", gap, "Legs", legs);
 
     private static object PerkTileOf(ScopeScene s, string name, string front, string state, float cooldown, float total) =>
         s.Fill(s.Contract("PerkTile"), "Name", name, "Front", s.ContractEnum("PerkFront", front), "State", s.ContractEnum("PerkPhase", state), "Cooldown", cooldown, "Total", total);

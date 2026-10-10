@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Services;
 using BoscaliSummer.Garrisons;
 
 namespace BoscaliSummer.Modules.UrbanCombat.Runtime
@@ -22,6 +23,8 @@ namespace BoscaliSummer.Modules.UrbanCombat.Runtime
 
         private static readonly List<Unit> scratchUnits = new List<Unit>(64);
 
+        private string announcedBase;
+
         public string ActiveAlertTicker { get; private set; } = string.Empty;
         public bool IsBaseUnderAttack { get; private set; }
 
@@ -32,6 +35,7 @@ namespace BoscaliSummer.Modules.UrbanCombat.Runtime
             scratchUnits.Clear();
             ActiveAlertTicker = string.Empty;
             IsBaseUnderAttack = false;
+            announcedBase = null;
         }
 
         private void Update()
@@ -119,6 +123,12 @@ namespace BoscaliSummer.Modules.UrbanCombat.Runtime
                     ? threatenedBase.name.Replace("(Clone)", "").Trim().ToUpperInvariant()
                     : "AIRFIELD";
                 ActiveAlertTicker = $"[BASE ALERT // {baseName} UNDER INGRESS THREAT · SCRAMBLE SQUADRON]";
+                // The pilot hears it once per attack on the board's ticker (a sticky warning), not every poll.
+                if (!IsBaseUnderAttack || announcedBase != baseName)
+                {
+                    announcedBase = baseName;
+                    if (ModuleServices.TryGet(out IHudBoard board)) board.Notice("base", HudTone.Warning, "BASE UNDER ATTACK - " + baseName, "SCRAMBLE SQUADRON");
+                }
                 IsBaseUnderAttack = true;
                 return;
             }

@@ -33,8 +33,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private readonly int[] ids = new int[Candidates], source = new int[Candidates], picks = new int[StrikeScopeRules.MaxTracks];
         private readonly bool[] flying = new bool[Candidates];
         private readonly PerkPhase[] states = new PerkPhase[IOpsPerks.MaxPerks];
-        private readonly float[] cooldowns = new float[IOpsPerks.MaxPerks];
+        private readonly float[] cooldowns = new float[IOpsPerks.MaxPerks], totals = new float[IOpsPerks.MaxPerks];
+        private readonly string[] names = new string[IOpsPerks.MaxPerks], fronts = new string[IOpsPerks.MaxPerks];
         private readonly int[] perkPicks = new int[StrikeScopeRules.MaxPerks];
+        private int perkCount, perkTiles;
+        private float nextPerks;
         private readonly Dictionary<int, string> labels = new Dictionary<int, string>(Candidates);
         private readonly string[] callsigns = new string[SofRules.MaxTeams];
         private readonly float[] sofPeak = new float[SofRules.MaxTeams];
@@ -123,34 +126,45 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 {
                     Id = s.RequestId, Kind = kind, Eta = s.ImpactTime - now, Lead = Math.Max(0.1f, s.ImpactTime - s.StartTime),
                     Linger = StrikeScopeRules.Linger(kind, s.ImpactTime, s.ExpiryTime), RangeM = Mathf.Sqrt(dx * dx + dz * dz),
-                    BearingDeg = (Mathf.Atan2(dx, dz) * Mathf.Rad2Deg + 360f) % 360f, RadiusM = s.Radius, Rounds = 1, RoundGap = 0f,
+                    BearingDeg = (Mathf.Atan2(dx, dz) * Mathf.Rad2Deg + 360f) % 360f, Rounds = 1, RoundGap = 0f,
                     Legs = kind == StrikeKind.Cruise ? m.CruiseLegCount(s.RequestId) : 0, Target = label,
                 };
             }
             return n;
         }
 
-        /// <summary>The strip: what is armed, what is cooling, what is ready.</summary>
+        /// <summary>
+        /// The strip: what is armed, what is cooling, what is ready. The perk fan rebuilds its tiles (and their words) on every ask, so the feed asks four times a second at most and
+        /// answers from its own arrays in between; a perk armed, fired or ready shows within a quarter of a second.
+        /// </summary>
         private int Perks()
         {
+            RefreshPerks();
+            return perkTiles;
+        }
+
+        private void RefreshPerks()
+        {
+            float now = Time.unscaledTime;
+            if (now < nextPerks && now >= nextPerks - 1f) return;
+            nextPerks = now + 0.25f;
             int count = Math.Min(perks.PerkCount, IOpsPerks.MaxPerks);
             for (int i = 0; i < count; i++)
             {
                 int cooldown = perks.PerkCooldown(i);
                 cooldowns[i] = cooldown;
                 states[i] = perks.PerkArmed(i) ? PerkPhase.Armed : cooldown > 0 ? PerkPhase.Cooling : PerkPhase.Ready;
+                names[i] = StrikeScopeRules.PerkName(perks.PerkLabel(i));
+                fronts[i] = perks.PerkFront(i);
+                totals[i] = perks.PerkTotal(i);
             }
-            int n = StrikeScopeRules.PickPerks(count, states, cooldowns, perkPicks);
-            for (int k = 0; k < n; k++)
+            perkCount = count;
+            perkTiles = StrikeScopeRules.PickPerks(count, states, cooldowns, perkPicks);
+            for (int k = 0; k < perkTiles; k++)
             {
                 int i = perkPicks[k];
-                tiles[k] = new PerkTile
-                {
-                    Name = StrikeScopeRules.PerkName(perks.PerkLabel(i)), Front = StrikeScopeRules.Front(perks.PerkFront(i)), State = states[i],
-                    Cooldown = cooldowns[i], Total = perks.PerkTotal(i),
-                };
+                tiles[k] = new PerkTile { Name = names[i], Front = StrikeScopeRules.Front(fronts[i]), State = states[i], Cooldown = cooldowns[i], Total = totals[i] };
             }
-            return n;
         }
 
         /// <summary>The window the pilot's own RECON PASS or SAT CAMERA opened: seen as a new serial on the accepted reply, open for the host's 20 s observation.</summary>
@@ -262,21 +276,20 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public bool ReadPerk(out GaugeSpec gauge)
         {
             gauge = default;
-            int count = Math.Min(perks.PerkCount, IOpsPerks.MaxPerks), best = -1;
+            RefreshPerks();
+            int best = -1;
             float soonest = float.MaxValue;
-            for (int i = 0; i < count; i++)
+            for (int i = 0; i < perkCount; i++)
             {
-                if (perks.PerkArmed(i)) { best = i; break; }
-                int cd = perks.PerkCooldown(i);
-                if (cd > 0 && cd < soonest) { soonest = cd; best = i; }
+                if (states[i] == PerkPhase.Armed) { best = i; break; }
+                if (states[i] == PerkPhase.Cooling && cooldowns[i] < soonest) { soonest = cooldowns[i]; best = i; }
             }
             if (best < 0) return false;
-            bool armed = perks.PerkArmed(best);
-            float cooldown = perks.PerkCooldown(best), total = perks.PerkTotal(best);
+            bool armed = states[best] == PerkPhase.Armed;
             gauge = new GaugeSpec
             {
-                Id = "perk", Label = "PERK", Kind = GaugeKind.Ring, Value = armed ? 1f : Mathf.Clamp01(1f - cooldown / Mathf.Max(1f, total)), Inner = armed ? "GO" : Seconds(cooldown),
-                Text = StrikeScopeRules.PerkName(perks.PerkLabel(best)), Sub = perks.PerkFront(best), Tone = armed ? ScopeTone.Ink : ScopeTone.Dim, Ready = armed, Rank = 60,
+                Id = "perk", Label = "PERK", Kind = GaugeKind.Ring, Value = armed ? 1f : Mathf.Clamp01(1f - cooldowns[best] / Mathf.Max(1f, totals[best])), Inner = armed ? "GO" : Seconds(cooldowns[best]),
+                Text = names[best], Sub = fronts[best], Tone = armed ? ScopeTone.Ink : ScopeTone.Dim, Ready = armed, Rank = 60,
             };
             return true;
         }

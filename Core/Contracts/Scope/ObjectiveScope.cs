@@ -25,8 +25,6 @@ namespace BoscaliSummer.Core.Contracts
         /// <summary>The phases the host reports (the pips), how many, and which one is current (-1 = none).</summary>
         public ObjectivePhase[] Phases;
         public int PhaseCount, Current;
-        /// <summary>The contract is in its RETURN leg: land at the marked base.</summary>
-        public bool Returning;
         /// <summary>The host's instruction and its blocker for this tick.</summary>
         public string NextAction, Blocker;
         /// <summary>The current phase is one the on-station gates decide (JOIN, COVER, HOLD, SURVEY, OBSERVE), and the gates: inside the zone, 50 m above the ground,

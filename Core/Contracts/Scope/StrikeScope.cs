@@ -25,8 +25,6 @@ namespace BoscaliSummer.Core.Contracts
         public float Linger;
         /// <summary>From the player's aircraft to the aim point: metres and true compass degrees.</summary>
         public float RangeM, BearingDeg;
-        /// <summary>The effect radius around the aim point, metres.</summary>
-        public float RadiusM;
         /// <summary>CRUISE: waypoint legs confirmed on the way (the route's diamonds).</summary>
         public int Legs;
         /// <summary>Payloads in the flight (PRSM and the rod are one) and the seconds between their impacts.</summary>

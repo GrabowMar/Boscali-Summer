@@ -80,7 +80,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 Id = c.Id, Title = c.Title, Target = view.Target, Contact = contact,
                 X = c.X, Z = c.Z, Radius = c.Radius, OwnX = at.x, OwnZ = at.z, OwnHeading = ObjectiveScopeRules.Heading(forward.x, forward.z), OwnAgl = agl,
                 Left = c.Seconds, Total = Math.Max(c.Seconds, ObjectiveScopeRules.DeadlineSeconds(view.Title)), Money = view.Money, Xp = view.Xp, Multiplier = Multiplier(me),
-                Phases = phases, PhaseCount = phases != null ? phases.Length : 0, Current = current, Returning = c.Returning,
+                Phases = phases, PhaseCount = phases != null ? phases.Length : 0, Current = current,
                 NextAction = c.NextAction, Blocker = blocker,
                 HasGates = gated, GateRange = range, GateAlt = alt, GateLos = los, GateTrack = track,
                 RingCount = ringCount, Rings = rings,

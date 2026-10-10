@@ -27,8 +27,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const float ZoneShare = 0.4f;
         /// <summary>The pilot sits inside the plot at this share of its range at most.</summary>
         public const float OwnShare = 0.9f;
-        /// <summary>The 50 m the host asks a pilot to fly above a contact to be on station.</summary>
-        public const float StationHeightM = 50f;
         /// <summary>Radar SAM cones are drawn up to this height on the side view.</summary>
         public const float ConeCeilingM = 3000f;
 
