@@ -22,6 +22,17 @@ MODELS = tuple(REGISTRY)
 REQUIRED = {name: mod.JOINTS for name, mod in REGISTRY.items()}  # {joint: (parent or None, pivot or None)}
 
 
+def load_hidden(names):
+    """models/_<Name>.py (kit demos) are skipped by discover(); validate them when named with --only."""
+    import importlib
+    for name in names or ():
+        if name not in REGISTRY and name.startswith("_") and                 os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(models.__file__)), name + ".py")):
+            mod = importlib.import_module("models." + name)
+            models._check(mod, name)
+            REGISTRY[name] = mod
+            REQUIRED[name] = mod.JOINTS
+
+
 def triangles(obj):
     mesh = obj.data
     mesh.calc_loop_triangles()
@@ -104,6 +115,26 @@ def atlas_mask(parts, size=256):
     return mask
 
 
+def texel_density(parts, size):
+    """Mean skin texel density in px per metre: sqrt(UV area * size^2 / surface area)."""
+    uv_area = area = 0.0
+    for obj in parts:
+        uv = obj.data.uv_layers.active
+        if uv is None:
+            continue
+        coords, tri_areas = triangles(obj)
+        values = np.empty(len(uv.data) * 2, np.float32)
+        uv.data.foreach_get("uv", values)
+        values = values.reshape(-1, 2)
+        loops = np.empty(len(obj.data.loop_triangles) * 3, np.int32)
+        obj.data.loop_triangles.foreach_get("loops", loops)
+        q = values[loops].reshape(-1, 3, 2)
+        e1, e2 = q[:, 1] - q[:, 0], q[:, 2] - q[:, 0]
+        uv_area += float(np.abs(e1[:, 0] * e2[:, 1] - e1[:, 1] * e2[:, 0]).sum() / 2)
+        area += float(tri_areas.sum())
+    return round(float(np.sqrt(uv_area * size * size / max(area, 1e-9))))
+
+
 def texture_check(model, directory, skin_parts, errors):
     expected = REGISTRY[model].TEX
     images = {}
@@ -117,7 +148,8 @@ def texture_check(model, directory, skin_parts, errors):
                 images[os.path.basename(bpy.path.abspath(node.image.filepath))] = node.image
     mask = atlas_mask(skin_parts)
     ys, xs = np.nonzero(mask)
-    result = {"atlas_coverage": float(mask.mean()), "sampled_covered_texels": len(xs), "maps": {}}
+    result = {"atlas_coverage": float(mask.mean()), "sampled_covered_texels": len(xs), "maps": {},
+              "texel_px_per_m": texel_density(skin_parts, expected)}
     if not len(xs):
         errors.append(model + ": no rasterized skin UV coverage")
         return result
@@ -149,6 +181,7 @@ def texture_check(model, directory, skin_parts, errors):
             normal = sample[:, :3] * 2 - 1
             unit_error = np.abs(np.linalg.norm(normal, axis=-1) - 1)
             info["unit_error_p99"] = float(np.percentile(unit_error, 99))
+            info["xy_std_sampled"] = float(normal[:, :2].std())  # relief energy on the 256^2 sample grid
             info["minimum_tangent_z"] = float(normal[:, 2].min())
             if info["unit_error_p99"] > 0.025 or normal[:, 2].min() < 0.50:
                 errors.append(filename + ": invalid tangent normal payload")
@@ -264,6 +297,7 @@ def main():
     args = parser.parse_args(sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else [])
     directory = os.path.abspath(args.models_directory)
     names = args.only.split(",") if args.only else list(MODELS)
+    load_hidden(names)
     models.require(args.only and names)  # every model unless --only; a broken model nobody asked for is ignored
     unknown = [n for n in names if n not in REGISTRY]
     if unknown:

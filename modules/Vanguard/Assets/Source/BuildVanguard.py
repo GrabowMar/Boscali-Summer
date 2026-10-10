@@ -12,6 +12,9 @@
 # model. Detail lives in the bake, as on vanilla weapons: ambient occlusion, panel lines and
 # control-surface gaps (also cut into the normal map), NATO munition bands (yellow = live warhead,
 # brown = rocket motor, blue = inert/decoy), streaky airflow grime and smoothness variation.
+# Optional texture-detail kit (vgkit.py): spec keys relief / decals / weathering / heat / cull_hidden and the helpers
+# bevel_edges, conform_plate, cull_hidden; every build reports texel density, atlas use, hidden texels and normal
+# energy. See MODELING_GUIDE.md. Models named models/_<Name>.py (demos) build only when named explicitly.
 import sys
 sys.dont_write_bytecode = True  # Blender ignores PYTHONDONTWRITEBYTECODE; keep __pycache__ out of Source/
 import bpy
@@ -30,6 +33,8 @@ sys.path.insert(0, os.environ.get("NOMOD_BLENDER_PYLIBS", os.path.join(
     os.environ.get("LOCALAPPDATA", ""), "nomodkit", "blender-pylibs")))
 from PIL import Image, ImageDraw, ImageFont
 from VanguardSurface import surface_layers, detail_normal
+import importlib
+import vgkit  # optional texture-detail kit: relief / decals / weathering / heat spec keys (MODELING_GUIDE.md)
 import models
 
 MODELS = models.discover()  # {name: module}, dependencies first; per-model tables below derive from it
@@ -295,6 +300,110 @@ def box(name, size, loc, mat, rot=(0, 0, 0), chamfer=None, flat=False):
     return defix_caps(o)
 
 
+def bevel_edges(obj, width=0.004, angle=35.0, segments=1, profile=0.5):
+    """Crisp machined chamfer on every edge sharper than `angle` deg of any mesh (lofts with chines, surfaces,
+    hand-built meshes). One segment = a flat facet that finish() shades sharp (30 deg auto-smooth) and its Weighted
+    Normal pass keeps the big faces flat: the vanilla light-catching edge. Costs ~2 tris per bevelled edge."""
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    mod = obj.modifiers.new("KitChamfer", "BEVEL")
+    mod.width, mod.segments, mod.profile = width, segments, profile
+    mod.limit_method, mod.angle_limit = "ANGLE", math.radians(angle)
+    mod.use_clamp_overlap = True
+    mod.harden_normals = True
+    bpy.ops.object.modifier_apply(modifier=mod.name)
+    return defix_caps(obj)
+
+
+def cull_hidden(objs, eps=0.0015):
+    """Delete faces lying wholly inside another closed solid of `objs` (all vertices and the centre more than `eps`
+    inside). Overlapping primitives otherwise spend atlas texels on surfaces nobody sees. Only manifold meshes act as
+    occluders, and finish() only culls within one rigid group (the static body, or one joint), so nothing that can
+    move out of a housing loses faces. Returns the removed area in m2."""
+    from mathutils.bvhtree import BVHTree
+    occluders = []
+    for o in objs:
+        bm = bmesh.new()
+        bm.from_mesh(o.data)
+        bm.transform(o.matrix_world)
+        if bm.faces and not any(e.is_boundary or not e.is_manifold for e in bm.edges):
+            co = [v.co for v in bm.verts]
+            lo = Vector([min(c[i] for c in co) for i in range(3)])
+            hi = Vector([max(c[i] for c in co) for i in range(3)])
+            occluders.append((o, BVHTree.FromBMesh(bm), lo, hi))
+        bm.free()
+    removed = 0.0
+    for o in objs:
+        others = [oc for oc in occluders if oc[0] is not o]
+        if not others:
+            continue
+        cache = {}
+
+        def inside(p):
+            key = (round(p.x, 6), round(p.y, 6), round(p.z, 6))
+            if key not in cache:
+                cache[key] = False
+                for _, tree, lo, hi in others:
+                    if lo.x < p.x < hi.x and lo.y < p.y < hi.y and lo.z < p.z < hi.z:
+                        hit, normal, _, dist = tree.find_nearest(p)
+                        if hit is not None and dist > eps and (p - hit).dot(normal) < 0:
+                            cache[key] = True
+                            break
+            return cache[key]
+        bm = bmesh.new()
+        bm.from_mesh(o.data)
+        mw = o.matrix_world
+        dead = [f for f in bm.faces if inside(mw @ f.calc_center_median())
+                and all(inside(mw @ v.co) for v in f.verts)]
+        if dead and len(dead) < len(bm.faces):  # a wholly buried part stays whole (empty meshes break the LODs)
+            removed += sum(f.calc_area() for f in dead)
+            bmesh.ops.delete(bm, geom=dead, context="FACES")
+            bm.to_mesh(o.data)
+        bm.free()
+    return removed
+
+
+def conform_plate(name, target, at, direction, size, mat, lift=0.002, sink=0.008, res=(8, 6), up=None):
+    """Thin plate that hugs `target`'s surface: flush windows, sensor apertures, bezels, real doubler plates.
+    `at` is a point near the surface, `direction` the outward side ("+z", "-x" or a vector); `size` = (along u,
+    along v) metres in the same frame vgkit decals use (u = up x n: along the body on flanks and on top/bottom).
+    The top sits `lift` proud of the surface and the walls sink `sink` below it, so no gap shows on a curved
+    body. Closed solid; about 4*res[0]*res[1] tris."""
+    import vgkit as kit
+    n = Vector(kit.unit(direction))
+    upv = Vector(kit.unit(up)) if up is not None else Vector((0, 0, 1) if abs(n.z) <= 0.8 else (-1, 0, 0) if n.z > 0
+                                                             else (1, 0, 0))
+    u = upv.cross(n).normalized()
+    v = n.cross(u)
+    inv = target.matrix_world.inverted()
+    rot = inv.to_3x3()
+    nx, ny = res
+    top, bottom = [], []
+    for j in range(ny):
+        for i in range(nx):
+            p = Vector(at) + u * size[0] * (i / (nx - 1) - 0.5) + v * size[1] * (j / (ny - 1) - 0.5)
+            hit, loc, normal, _ = target.ray_cast(inv @ (p + n * 1.0), rot @ -n)
+            assert hit, f"{name}: no surface of {target.name} under {tuple(round(c, 3) for c in p)}"
+            loc = target.matrix_world @ loc
+            top.append(loc + n * lift)
+            bottom.append(loc - n * sink)
+    verts = [tuple(c) for c in top + bottom]
+    off = nx * ny
+    faces = []
+    for j in range(ny - 1):
+        for i in range(nx - 1):
+            a = j * nx + i
+            faces.append((a, a + 1, a + nx + 1, a + nx))
+            faces.append((off + a, off + a + nx, off + a + nx + 1, off + a + 1))
+    ring = [i for i in range(nx)] + [j * nx + nx - 1 for j in range(1, ny)]  # border loop for the walls
+    ring += [(ny - 1) * nx + i for i in range(nx - 2, -1, -1)] + [j * nx for j in range(ny - 2, 0, -1)]
+    for k in range(len(ring)):
+        a, b = ring[k], ring[(k + 1) % len(ring)]
+        faces.append((a, off + a, off + b, b))
+    return mesh_object(name, verts, faces, mat)
+
+
 def sphere(name, r, loc, mat, seg=16):
     bpy.ops.mesh.primitive_uv_sphere_add(segments=seg, ring_count=seg // 2, radius=r, location=loc)
     o = bpy.context.active_object
@@ -407,7 +516,7 @@ def unwrap_many(objs):
     bpy.ops.object.mode_set(mode="OBJECT")
 
 
-def bake_pass(o, kind, float_buf, samples=1, **kw):
+def bake_pass(o, kind, float_buf, samples=1, margin=6, **kw):
     objs = o if isinstance(o, list) else [o]
     o = objs[0]
     img = bpy.data.images.new("bake_" + kind, TEX, TEX, alpha=False, float_buffer=float_buf)
@@ -421,14 +530,15 @@ def bake_pass(o, kind, float_buf, samples=1, **kw):
     for each in objs:
         each.select_set(True)
     bpy.context.view_layer.objects.active = o
-    bpy.ops.object.bake(type=kind, margin=6, use_clear=True, **kw)
+    bpy.ops.object.bake(type=kind, margin=margin, use_clear=True, **kw)
     nt.nodes.remove(node)
     a = np.empty(TEX * TEX * 4, dtype=np.float32)
     img.pixels.foreach_get(a)
     return a.reshape(TEX, TEX, 4)
 
 
-def bake_maps(objs):
+def bake_maps(objs, masks=None):
+    """Position / object normal / AO arrays; `masks` = kwargs for bake_masks adds the kit weathering masks."""
     o = objs[0] if isinstance(objs, list) else objs
     sc = bpy.context.scene
     sc.render.engine = "CYCLES"
@@ -451,7 +561,61 @@ def bake_maps(objs):
     nt.nodes.remove(emit)
     nrm = bake_pass(objs, "NORMAL", True, normal_space="OBJECT")
     ao = bake_pass(objs, "AO", True, samples=48)
-    return pos[..., :3], nrm[..., :3] * 2 - 1, ao[..., 0]
+    if masks is None:
+        return pos[..., :3], nrm[..., :3] * 2 - 1, ao[..., 0]
+    return pos[..., :3], nrm[..., :3] * 2 - 1, ao[..., 0], bake_masks(objs, **masks)
+
+
+def bake_coverage(objs):
+    """Texels inside the UV triangles (no bake margin): EMIT white with margin 0, one sample."""
+    o = objs[0] if isinstance(objs, list) else objs
+    nt = o.data.materials[0].node_tree
+    out = nt.nodes["Material Output"]
+    emit = nt.nodes.new("ShaderNodeEmission")
+    emit.inputs["Color"].default_value = (1, 1, 1, 1)
+    old = [l.from_socket for l in out.inputs["Surface"].links]
+    nt.links.new(emit.outputs["Emission"], out.inputs["Surface"])
+    inside = bake_pass(objs, "EMIT", False, margin=0)[..., 0] > 0.5
+    nt.nodes.remove(emit)
+    for s in old:
+        nt.links.new(s, out.inputs["Surface"])
+    return inside
+
+
+def bake_masks(objs, edge_radius=0.008, cavity_radius=0.04, samples=4):
+    """Kit weathering masks in one EMIT pass, UV-seam independent: R = Bevel-node normal . true normal (dips on
+    every hard edge within edge_radius), G = short AO outside (concave crevices), B = short AO inside, own mesh only
+    (convex edges). Never touches the exported material: the temporary nodes are removed again."""
+    o = objs[0] if isinstance(objs, list) else objs
+    nt = o.data.materials[0].node_tree
+    out = nt.nodes["Material Output"]
+    bev = nt.nodes.new("ShaderNodeBevel")
+    bev.samples = 8
+    bev.inputs["Radius"].default_value = edge_radius
+    geo = nt.nodes.new("ShaderNodeNewGeometry")
+    dot = nt.nodes.new("ShaderNodeVectorMath")
+    dot.operation = "DOT_PRODUCT"
+    ao_out = nt.nodes.new("ShaderNodeAmbientOcclusion")
+    ao_out.samples, ao_out.inputs["Distance"].default_value = 16, cavity_radius
+    ao_in = nt.nodes.new("ShaderNodeAmbientOcclusion")
+    ao_in.samples, ao_in.inside, ao_in.only_local = 16, True, True
+    ao_in.inputs["Distance"].default_value = edge_radius * 1.5
+    comb = nt.nodes.new("ShaderNodeCombineColor")
+    emit = nt.nodes.new("ShaderNodeEmission")
+    nt.links.new(bev.outputs[0], dot.inputs[0])
+    nt.links.new(geo.outputs["Normal"], dot.inputs[1])
+    nt.links.new(dot.outputs["Value"], comb.inputs[0])
+    nt.links.new(ao_out.outputs["AO"], comb.inputs[1])
+    nt.links.new(ao_in.outputs["AO"], comb.inputs[2])
+    nt.links.new(comb.outputs[0], emit.inputs["Color"])
+    old = [l.from_socket for l in out.inputs["Surface"].links]
+    nt.links.new(emit.outputs["Emission"], out.inputs["Surface"])
+    masks = bake_pass(objs, "EMIT", True, samples=samples)[..., :3]
+    for n in (bev, geo, dot, ao_out, ao_in, comb, emit):
+        nt.nodes.remove(n)
+    for s in old:
+        nt.links.new(s, out.inputs["Surface"])
+    return masks
 
 
 def value_noise(p, scale, seed=0):
@@ -497,8 +661,9 @@ def grooves(pos, spec, lw):
     return groove
 
 
-def compose(model, spec, pos, nrm, ao, outdir):
-    """Albedo / normal / metal-smoothness from baked position, normal and AO, all in numpy."""
+def compose(model, spec, pos, nrm, ao, outdir, masks=None, inside=None):
+    """Albedo / normal / metal-smoothness from baked position, normal and AO, all in numpy. Returns the maps plus
+    a stats dict (normal-map energy, hidden texels, kit warnings)."""
     covered = np.abs(pos).sum(-1) > 0
     x, y, z = pos[..., 0], pos[..., 1], pos[..., 2]
     base = np.ones(pos.shape, np.float32) * np.array(spec["color"], np.float32)
@@ -543,16 +708,26 @@ def compose(model, spec, pos, nrm, ao, outdir):
     icon_lines = grooves(pos, spec, max(lw, extent / 330.0)) * covered
     save(model + "_IconLines", np.repeat(icon_lines[..., None], 3, -1), ICON_TMP, srgb=False)
 
-    # Edge wear: hard creases (normal jumps between neighbouring texels, island seams excluded).
-    dxp_ = np.roll(pos, -1, 1) - np.roll(pos, 1, 1)
-    dyp_ = np.roll(pos, -1, 0) - np.roll(pos, 1, 0)
-    step_ = np.median(np.linalg.norm(dxp_[covered], axis=-1)) + 1e-6
-    same = (np.linalg.norm(dxp_, axis=-1) < step_ * 4) & (np.linalg.norm(dyp_, axis=-1) < step_ * 4)
-    dn = np.linalg.norm(np.roll(nrm, -1, 1) - np.roll(nrm, 1, 1), axis=-1) +         np.linalg.norm(np.roll(nrm, -1, 0) - np.roll(nrm, 1, 0), axis=-1)
-    edge = np.clip((dn - 0.35) * 2.5, 0, 1) * same * covered
-    edge = np.maximum.reduce([edge, np.roll(edge, 1, 0), np.roll(edge, 1, 1)])
-    edge *= 0.5 + 0.5 * value_noise(pos, 60.0, 4)  # chipped, not a clean outline
-    base = base * (1 - edge[..., None] * 0.14) + np.array(spec.get("wear", (0.62, 0.64, 0.66)), np.float32) * edge[..., None] * 0.14
+    # Optional texture-detail kit (relief / decals / heat / weathering), see vgkit.py and MODELING_GUIDE.md.
+    kit_shade, kit_info = 1.0, {}
+    if vgkit.active(spec):
+        base, metal, surface_smooth, surface_height, kit_shade, kit_info = vgkit.apply(
+            spec, pos, nrm, covered, base, metal, surface_smooth, surface_height, value_noise, masks, inside)
+        for warning in kit_info["warnings"]:
+            print(f"[vanguard] {model}: KIT WARNING {warning}", flush=True)
+
+    if not spec.get("weathering"):  # the kit's curvature wear replaces this legacy crease wear
+        # Edge wear: hard creases (normal jumps between neighbouring texels, island seams excluded).
+        dxp_ = np.roll(pos, -1, 1) - np.roll(pos, 1, 1)
+        dyp_ = np.roll(pos, -1, 0) - np.roll(pos, 1, 0)
+        step_ = np.median(np.linalg.norm(dxp_[covered], axis=-1)) + 1e-6
+        same = (np.linalg.norm(dxp_, axis=-1) < step_ * 4) & (np.linalg.norm(dyp_, axis=-1) < step_ * 4)
+        dn = np.linalg.norm(np.roll(nrm, -1, 1) - np.roll(nrm, 1, 1), axis=-1) + \
+            np.linalg.norm(np.roll(nrm, -1, 0) - np.roll(nrm, 1, 0), axis=-1)
+        edge = np.clip((dn - 0.35) * 2.5, 0, 1) * same * covered
+        edge = np.maximum.reduce([edge, np.roll(edge, 1, 0), np.roll(edge, 1, 1)])
+        edge *= 0.5 + 0.5 * value_noise(pos, 60.0, 4)  # chipped, not a clean outline
+        base = base * (1 - edge[..., None] * 0.14) + np.array(spec.get("wear", (0.62, 0.64, 0.66)), np.float32) * edge[..., None] * 0.14
 
     # Streaky airflow grime: noise stretched along the body axis, heavier aft and underneath.
     stretched = pos * np.array([1.0, 0.12, 1.0], np.float32)
@@ -560,17 +735,23 @@ def compose(model, spec, pos, nrm, ao, outdir):
     grime = np.clip((grime - 0.45) * 1.6, 0, 1) * spec.get("grime", 0.12)
     fine = value_noise(pos, 140.0, 3) * 0.015
 
-    shade = (0.72 + 0.28 * np.clip(ao, 0, 1) ** 0.9)
+    shade = (0.72 + 0.28 * np.clip(ao, 0, 1) ** 0.9) * kit_shade
     albedo = base * (1 - grime[..., None]) * (1 - 0.22 * groove[..., None]) * (0.9925 + fine[..., None]) * shade[..., None]
     albedo = np.clip(albedo, 0, 1)
 
-    nmap = detail_normal(pos, nrm, surface_height - groove * spec.get("groove_depth", 0.0006), covered)
+    nmap = detail_normal(pos, nrm, surface_height - groove * spec.get("groove_depth", 0.0006), covered,
+                         max_slope=vgkit.max_slope(spec))
     smooth_v = surface_smooth * (1 - grime * 0.85) * (1 - 0.22 * groove)
 
     save(model + "_Albedo", albedo, outdir, srgb=True)
     save(model + "_Normal", nmap, outdir, srgb=False)
     save(model + "_MetalGloss", np.stack([metal, metal, metal], -1), outdir, srgb=False, alpha=np.clip(smooth_v, 0, 1))
-    return albedo, nmap, smooth_v
+    stats = {"normal_xy_std": round(float((nmap[covered][:, :2] * 2 - 1).std()), 4) if covered.any() else 0.0,
+             "hidden_texel_fraction": round(float((ao[covered] < 0.03).mean()), 4) if covered.any() else 0.0}
+    if kit_info:
+        stats["kit_warnings"] = kit_info["warnings"]
+        stats["decal_fit"] = kit_info["decal_fit"]
+    return albedo, nmap, smooth_v, stats
 
 
 def save(name, rgb, outdir, srgb, alpha=None):
@@ -648,9 +829,41 @@ def distance_meshes(parts):
     return counts
 
 
+def texel_stats(skins):
+    """Mean skin texel density (px/m = sqrt(UV area * TEX^2 / surface area)), per part, and atlas use."""
+    uv_total, area_total, parts = 0.0, 0.0, {}
+    for o in skins:
+        me = o.data
+        me.calc_loop_triangles()
+        n = len(me.loop_triangles)
+        if not n:
+            continue
+        co = np.empty(len(me.vertices) * 3, np.float32)
+        me.vertices.foreach_get("co", co)
+        co = co.reshape(-1, 3) @ np.asarray(o.matrix_world)[:3, :3].T
+        uv = np.empty(len(me.loops) * 2, np.float32)
+        me.uv_layers[0].data.foreach_get("uv", uv)
+        uv = uv.reshape(-1, 2)
+        vi = np.empty(n * 3, np.int32)
+        li = np.empty(n * 3, np.int32)
+        me.loop_triangles.foreach_get("vertices", vi)
+        me.loop_triangles.foreach_get("loops", li)
+        p, q = co[vi.reshape(-1, 3)], uv[li.reshape(-1, 3)]
+        area = float(np.linalg.norm(np.cross(p[:, 1] - p[:, 0], p[:, 2] - p[:, 0]), axis=-1).sum() / 2)
+        e1, e2 = q[:, 1] - q[:, 0], q[:, 2] - q[:, 0]
+        uva = float(np.abs(e1[:, 0] * e2[:, 1] - e1[:, 1] * e2[:, 0]).sum() / 2)
+        parts[o.name] = round(math.sqrt(uva * TEX * TEX / max(area, 1e-9)))
+        uv_total, area_total = uv_total + uva, area_total + area
+    return {"texel_px_per_m": round(math.sqrt(uv_total * TEX * TEX / max(area_total, 1e-9))),
+            "texel_px_per_m_parts": parts, "atlas_used": round(uv_total, 3), "skin_area_m2": round(area_total, 3)}
+
+
 def finish(model, spec, outdir, budget=16000):
     segmented = {id(o) for sg in SEGMENTS for o in sg["objs"]}
     objs = [o for o in bpy.context.scene.objects if o.type == "MESH" and id(o) not in segmented]
+    culled = 0.0
+    if spec.get("cull_hidden"):  # opt-in: only within one rigid group, see cull_hidden()
+        culled = cull_hidden(objs) + sum(cull_hidden(sg["objs"]) for sg in SEGMENTS)
     groups = {}
     for o in objs:
         groups.setdefault(o.data.materials[0].name, []).append(o)
@@ -713,9 +926,23 @@ def finish(model, spec, outdir, budget=16000):
         p.data.uv_layers[0].active_render = True
         assert all(math.isfinite(v) for vert in p.data.vertices for v in vert.co), f"{model}: invalid vertex"
 
+    density = texel_stats(skins)
     print(f"[vanguard] {model}: baking {TEX}px atlases", flush=True)
-    pos, nrm, ao = bake_maps(skins)
-    compose(model, spec, pos, nrm, ao, outdir)
+    if vgkit.wants_masks(spec):
+        weathering = spec["weathering"]
+        pos, nrm, ao, masks = bake_maps(skins, {"edge_radius": weathering.get("edge_radius", 0.008),
+                                                "cavity_radius": weathering.get("cavity_radius", 0.04)})
+    else:
+        (pos, nrm, ao), masks = bake_maps(skins), None
+    inside = bake_coverage(skins) if vgkit.active(spec) else None
+    stats = compose(model, spec, pos, nrm, ao, outdir, masks, inside)[3]
+    stats.update(density)
+    if culled:
+        stats["culled_hidden_m2"] = round(culled, 3)
+    print(f"[vanguard] {model}: {density['texel_px_per_m']} px/m (parts {min(density['texel_px_per_m_parts'].values())}"
+          f"-{max(density['texel_px_per_m_parts'].values())}), atlas {density['atlas_used']:.0%}, hidden texels "
+          f"{stats['hidden_texel_fraction']:.1%}, normal xy std {stats['normal_xy_std']}"
+          + (f", culled {culled:.2f} m2" if culled else ""), flush=True)
     textured_skin(skin, model, outdir)
 
     root = bpy.data.objects.new(model, None)
@@ -785,7 +1012,7 @@ def finish(model, spec, outdir, budget=16000):
     return {"triangles": tris, "parts": len(parts), "dimensions_xyz_m": dimensions,
             "lod_triangles": [tris] + lod_tris, "texture_size": TEX,
             "joints": [{"name": s["name"], "parent": s["parent"], "pivot": s["pivot"]} for s in SEGMENTS],
-            "materials": production_materials}
+            "materials": production_materials, "texture_stats": stats}
 
 
 def preview(path, view, res=(1920, 1080)):
@@ -995,8 +1222,20 @@ def with_dependencies(names, outdir):
     return wanted
 
 
+def load_hidden(names):
+    """models/_<Name>.py (demos, experiments) are skipped by models.discover(); build them when named explicitly."""
+    for name in names or ():
+        path = os.path.join(os.path.dirname(os.path.abspath(models.__file__)), name + ".py")
+        if name not in MODELS and name.startswith("_") and os.path.isfile(path):
+            mod = importlib.import_module("models." + name)
+            models._check(mod, name)
+            MODELS[name] = mod
+            MODEL_TEX[name] = mod.TEX
+
+
 def main(outdir, only=None):
     global TEX, UV_SHAPE
+    load_hidden(only)
     models.require(only)  # None = every model; a broken model nobody asked for is only a warning
     for name, why in models.BROKEN.items():
         print(f"[vanguard] WARNING models/{name}.py skipped: {why}", flush=True)
