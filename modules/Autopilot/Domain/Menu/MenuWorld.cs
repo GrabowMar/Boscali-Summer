@@ -1,0 +1,129 @@
+using System.Collections.Generic;
+
+namespace BoscaliSummer.Modules.Autopilot.Domain
+{
+    internal enum GearPhase : byte { None, Up, Down, Extending, Retracting }
+
+    internal enum ViewKind : byte { Other, Cockpit, Orbit }
+
+    internal enum StationClass : byte { Other, Gun, Missile, Bomb, Turret }
+
+    internal sealed class WorldStation
+    {
+        /// <summary>Upper-case short name, at most 14 characters.</summary>
+        public string Name = "";
+        public int Ammo;
+        public StationClass Class;
+    }
+
+    internal sealed class WorldPerk
+    {
+        public string Label = "";
+        /// <summary>Support's own note: "SPACE R2 · 6 ALLOC" while ready.</summary>
+        public string Note = "";
+        public bool Armed;
+    }
+
+    internal sealed class WorldFilter
+    {
+        public string Name = "";
+        public bool Active;
+        public bool Allowed = true;
+    }
+
+    /// <summary>
+    /// Plain data: everything the interaction menu reads from the game and from the other modules'
+    /// contracts, in one snapshot. <see cref="MenuCatalog"/> turns it into the menu model, so the whole catalog
+    /// (labels, state lines, hybrid availability, badges) is pure and testable; the Runtime adapter only fills this in.
+    /// </summary>
+    internal sealed class MenuWorld
+    {
+        public string Aircraft = "SELF";
+        /// <summary>Radar altitude at or above the gear/flare threshold: not on the apron.</summary>
+        public bool Airborne = true;
+        /// <summary>Live <c>Aircraft.GetFuelLevel()</c>, 0..1.</summary>
+        public float Fuel = 1f;
+        public int Targets;
+        /// <summary>Distance to the nearest selected target in kilometres, negative = none.</summary>
+        public float NearestKm = -1f;
+        public bool HudReady = true;
+
+        // FLIGHT
+        public GearPhase Gear = GearPhase.Up;
+        public bool HasAssist, Assist, HasHover, Hover;
+        public bool AutolandEngaged;
+        /// <summary>Non-null: why the autopilot cannot take the approach now.</summary>
+        public string AutolandBlock;
+        public bool Ignition = true;
+        public bool CanEject = true;
+
+        // LIGHTS
+        public bool HasNav, NavOn;
+        public bool HasLandingLight;
+        /// <summary>0 OFF, 1 ON, 2 AUTO.</summary>
+        public int LandingLight;
+        public bool HasNvg, NvgOn;
+
+        // WEAPONS
+        public List<WorldStation> Stations = new List<WorldStation>();
+        public int ActiveStation;
+        public bool HasMultipleGuns;
+        public bool GunsLinked;
+        public bool HasTurrets;
+        public bool TurretAuto;
+
+        // DEFENCE
+        public bool HasCountermeasures;
+        /// <summary>The airframe has a flare ejector (POP FLARES exists).</summary>
+        public bool HasFlares;
+        public int Flares, FlaresMax;
+        /// <summary>Active countermeasure name, upper case.</summary>
+        public string Countermeasure = "";
+        public bool HasRadar, RadarOn;
+        public bool HasDrones, DronesStriking, DronesCanStrike;
+
+        // VIEW
+        public bool CameraFollowing = true;
+        public ViewKind Camera = ViewKind.Cockpit;
+        public bool HasCockpitPoint = true;
+        public bool MapAvailable = true;
+        public bool MissileViewAvailable;
+        public bool MissileViewActive;
+        public bool CanEnterMissileView;
+        public int Missiles;
+        public string MissileStatus = "";
+        public string MissileCurrent = "";
+
+        // SUPPORT
+        public bool MarkAvailable;
+        public bool HasMark;
+        public float MarkAgeSeconds;
+        public bool CanCapture;
+        public bool CanCallAtMark;
+        /// <summary>Name of the armed support action, or empty.</summary>
+        public string Armed = "";
+        public bool PerksAvailable;
+        public List<WorldPerk> Perks = new List<WorldPerk>();
+        public bool SkywellCarried, SkywellDeployed;
+        public string SkywellStock = "";
+        public bool CanExfil;
+
+        // RADIO
+        public bool DeckAvailable, DeckPlaying;
+        public string DeckTitle = "";
+        public bool ReceiverAvailable, ReceiverOn;
+        public string Station = "";
+        public bool CanStopAll;
+
+        // COMMS
+        public bool CallsAvailable, CanCall;
+        public List<string> CallLabels = new List<string>();
+
+        // WING
+        public int Wingmen;
+        public string Shape = "";
+
+        // TARGET FILTERS (the contributed preset page)
+        public List<WorldFilter> Filters = new List<WorldFilter>();
+    }
+}
