@@ -36,6 +36,12 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>Seconds until the tanks are dry at the learned rate; +infinity before a rate is learned or when none is burning.</summary>
         public float EnduranceSeconds => float.IsNaN(rate) || rate <= 0f || float.IsNaN(lastFuel) ? float.PositiveInfinity : lastFuel / rate;
 
+        /// <summary>The BINGO level (fuel to reach the nearest field plus the reserve) from the last update that had a field and a burn rate; 0 before that.</summary>
+        public float Need => need;
+
+        /// <summary>Whether <see cref="Need"/> has been computed (a field is known and a burn rate learned).</summary>
+        public bool HasNeed { get; private set; }
+
         /// <summary>Seconds until BINGO at the learned rate (+infinity when unknown).</summary>
         public float SecondsToBingo => float.IsNaN(rate) || rate <= 0f ? float.PositiveInfinity : (lastFuel - need) / rate;
 
@@ -55,12 +61,13 @@ namespace BoscaliSummer.Modules.Hud.Domain
             lastFuel = fuel;
             if (float.IsNaN(distanceToField))
             {
-                Bingo = Joker = false;
+                Bingo = Joker = HasNeed = false;
                 return false;
             }
             if (float.IsNaN(rate) || rate <= 0f) return false;
             float needed = rate * distanceToField / Math.Max(cruiseSpeed, MinSpeed) + ReserveFraction;
             need = needed;
+            HasNeed = true;
             if (Joker && fuel > needed + JokerMargin + ClearMargin) Joker = false;
             if (!Joker && fuel < needed + JokerMargin)
             {
@@ -78,7 +85,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         {
             lastFuel = rate = float.NaN;
             need = 0f;
-            Bingo = Joker = JokerNow = false;
+            Bingo = Joker = JokerNow = HasNeed = false;
         }
 
         /// <summary>How loud the fuel state is: BINGO or a nearly empty tank warns; JOKER or a low tank cautions.</summary>
@@ -102,6 +109,11 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>The nearest friendly field and the metres to it; null / NaN when none is known.</summary>
         public string Field;
         public float FieldM;
+        /// <summary>Bearing of the nearest field off the nose, degrees clockwise (0 = dead ahead); meaningful with <see cref="Field"/>.</summary>
+        public float FieldRelDeg;
+        /// <summary>The BINGO level (fuel needed to reach the field plus the reserve, 0..1); <see cref="HasNeed"/> false: no field or no burn rate yet, so no BINGO / JOKER marks.</summary>
+        public bool HasNeed;
+        public float Need;
         public HudTone Tone;
     }
 

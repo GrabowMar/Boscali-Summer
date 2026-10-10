@@ -525,6 +525,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
             lastMissionTime = now;
             Available = true;
             RefreshBalance();
+            AnnounceBeats(now);
 
             if (GameAccess.IsServer())
             {
@@ -537,6 +538,34 @@ namespace BoscaliSummer.Modules.Events.Runtime
                 // A missed end broadcast still retires locally at the stamped time.
                 Retire();
             }
+        }
+
+        // ---- Superevent beats on the ticker ------------------------------------------------
+
+        private string beatsEvent;
+        private float beatsStart;
+        private int beatsAnnounced;
+
+        /// <summary>
+        /// Each timed beat of a superevent's script lands on the board's ticker as it comes due ("SUPEREVENT · TITLE" over the beat's label), on every peer from the event the
+        /// host broadcast: the pilot sees the second and third act, not only the opening alert. A beat already past when this peer first sees the event is not replayed.
+        /// Presentation only, client-local.
+        /// </summary>
+        private void AnnounceBeats(float now)
+        {
+            ActiveEventView view = current;
+            if (view == null || !view.IsSuper || view.Steps.Count == 0) { beatsEvent = null; return; }
+            if (beatsEvent != view.Id || beatsStart != view.StartedAtMissionTime)
+            {
+                beatsEvent = view.Id;
+                beatsStart = view.StartedAtMissionTime;
+                beatsAnnounced = 0;
+                while (beatsAnnounced < view.Steps.Count && now >= beatsStart + view.Steps[beatsAnnounced].AtSeconds) beatsAnnounced++;
+            }
+            if (beatsAnnounced >= view.Steps.Count || now < beatsStart + view.Steps[beatsAnnounced].AtSeconds) return;
+            ActiveEventStep step = view.Steps[beatsAnnounced++];
+            if (ModuleServices.TryGet(out IHudBoard board) && !string.IsNullOrEmpty(step.Label))
+                board.Notice("events", HudTone.Caution, "SUPEREVENT · " + view.Title.ToUpperInvariant(), step.Label.ToUpperInvariant());
         }
 
         // ---- Theater balance ---------------------------------------------------------------

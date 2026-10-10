@@ -12,6 +12,11 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public bool Chargeable;
         /// <summary>The threat types it counters (<see cref="HudCm.IrMask"/> | <see cref="HudCm.RadarMask"/>).</summary>
         public byte Mask;
+        /// <summary>A jammer only: its capacitor charge 0..1 and whether it is jamming now.</summary>
+        public float Charge;
+        public bool Active;
+        /// <summary>The dispenser the pilot has selected (the game's active countermeasure).</summary>
+        public bool Selected;
     }
 
     internal enum CmLevel : byte { Ok, Low, Empty }

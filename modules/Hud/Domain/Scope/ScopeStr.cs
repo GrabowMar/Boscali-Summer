@@ -1,0 +1,119 @@
+using System;
+
+namespace BoscaliSummer.Modules.Hud.Domain
+{
+    /// <summary>
+    /// Allocation-free words for the scope, pure. <see cref="Int"/> and <see cref="Pct"/> are cached strings; <see cref="Cat(string,int,string)"/>
+    /// and its siblings compose into ONE shared scratch buffer and return a span of it, which the painter copies at once: use the result
+    /// in the very call that receives it, never keep it, never nest two in one expression.
+    /// </summary>
+    internal static class ScopeStr
+    {
+        private static readonly string[] Ints = new string[1000];
+        private static readonly string[] Pcts = new string[101];
+        private static readonly char[] Scratch = new char[128];
+
+        private static readonly string[] SpeedUnits = { "KM/H", "KT" }, SpeedUnitsSp = { " KM/H", " KT" };
+
+        /// <summary>The speed unit in capitals ("KM/H", "KT") and with a leading space; cached, so a per-frame caller builds nothing.</summary>
+        public static string SpeedUnit(NOAvionics.AvUnits units) => SpeedUnits[units == NOAvionics.AvUnits.Imperial ? 1 : 0];
+
+        public static string SpeedUnitSp(NOAvionics.AvUnits units) => SpeedUnitsSp[units == NOAvionics.AvUnits.Imperial ? 1 : 0];
+
+        /// <summary>"7", cached for 0..999.</summary>
+        public static string Int(int n)
+        {
+            if ((uint)n >= Ints.Length) return n.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return Ints[n] ?? (Ints[n] = n.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        /// <summary>"42%", cached for 0..100 (clamped).</summary>
+        public static string Pct(int n)
+        {
+            n = n < 0 ? 0 : n > 100 ? 100 : n;
+            return Pcts[n] ?? (Pcts[n] = n + "%");
+        }
+
+        public static ReadOnlySpan<char> Cat(string a, string b) => Cat(a, b, null);
+
+        public static ReadOnlySpan<char> Cat(string a, string b, string c)
+        {
+            int n = Put(0, a);
+            n = Put(n, b);
+            n = Put(n, c);
+            return new ReadOnlySpan<char>(Scratch, 0, n);
+        }
+
+        /// <summary>"a" + "b" + value + "c" (a seeker word, a space and a figure, without joining strings first).</summary>
+        public static ReadOnlySpan<char> Cat(string a, string b, int value, string c)
+        {
+            int n = Put(0, a);
+            n = Put(n, b);
+            n = PutInt(n, value);
+            n = Put(n, c);
+            return new ReadOnlySpan<char>(Scratch, 0, n);
+        }
+
+        public static ReadOnlySpan<char> Cat(string a, int value) => Cat(a, value, null);
+
+        public static ReadOnlySpan<char> Cat(string a, int value, string b)
+        {
+            int n = Put(0, a);
+            n = PutInt(n, value);
+            n = Put(n, b);
+            return new ReadOnlySpan<char>(Scratch, 0, n);
+        }
+
+        /// <summary>"a" + value with <paramref name="decimals"/> places + "b"; a sign is written for a negative value, or always with <paramref name="plus"/>.</summary>
+        public static ReadOnlySpan<char> Cat(string a, double value, int decimals, string b, bool plus = false)
+        {
+            int n = Put(0, a);
+            n = NOAvionics.AvNumFormat.Write(Scratch, n, value, decimals, plus);
+            n = Put(n, b);
+            return new ReadOnlySpan<char>(Scratch, 0, n);
+        }
+
+        /// <summary>"a" + v1 + sep + v2 + "b" (two integers: a clock, a ratio).</summary>
+        public static ReadOnlySpan<char> Cat(string a, int v1, string sep, int v2, string b)
+        {
+            int n = Put(0, a);
+            n = PutInt(n, v1);
+            n = Put(n, sep);
+            n = PutInt(n, v2);
+            n = Put(n, b);
+            return new ReadOnlySpan<char>(Scratch, 0, n);
+        }
+
+        /// <summary>"K92 22KM": the name (upper case, cut with an ellipsis so the whole fits <paramref name="maxChars"/>, left out when three characters of it do not fit), a space and the distance in the player's units.</summary>
+        public static ReadOnlySpan<char> Distance(string name, float metres, NOAvionics.AvUnits units, int maxChars)
+        {
+            int dist = NOAvionics.AvUnitTable.DistanceReading(Scratch, 100, metres, units) - 100;   // measured in the tail of the scratch, then moved up
+            int room = maxChars - dist - 1, n = 0;
+            string upper = string.IsNullOrEmpty(name) || room < 3 ? "" : name.Trim().ToUpperInvariant();     // no room for a name: the distance alone
+            if (upper.Length > room) { n = Put(0, upper.Substring(0, room - 1)); Scratch[n++] = '…'; }
+            else n = Put(0, upper);
+            if (n > 0) Scratch[n++] = ' ';
+            Array.Copy(Scratch, 100, Scratch, n, dist);
+            for (int i = n; i < n + dist; i++) Scratch[i] = char.ToUpperInvariant(Scratch[i]);
+            return new ReadOnlySpan<char>(Scratch, 0, n + dist);
+        }
+
+        private static int Put(int at, string s)
+        {
+            if (string.IsNullOrEmpty(s)) return at;
+            int len = Math.Min(s.Length, Scratch.Length - at);
+            s.CopyTo(0, Scratch, at, len);
+            return at + len;
+        }
+
+        private static int PutInt(int at, int value)
+        {
+            if (at >= Scratch.Length - 11) return at;
+            if (value < 0) { Scratch[at++] = '-'; value = -value; }
+            int start = at;
+            do { Scratch[at++] = (char)('0' + value % 10); value /= 10; } while (value > 0);
+            Array.Reverse(Scratch, start, at - start);
+            return at;
+        }
+    }
+}

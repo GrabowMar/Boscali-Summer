@@ -119,6 +119,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             return label != null;
         }
+        /// <summary>The local pilot's own strikes in the air or just landed (what the map overlay reads), for the TAC BOARD's STRIKE page.</summary>
+        internal IReadOnlyList<ActiveStrikeInfo> ActiveStrikes => activeStrikes;
+
+        /// <summary>How many waypoint legs the pilot's own cruise strike <paramref name="requestId"/> has confirmed (0 when none are known).</summary>
+        internal int CruiseLegCount(int requestId) => cruiseLegs.TryGetValue(requestId, out CruiseLegMirror mirror) ? mirror.Legs.Count : 0;
+
         public SupportSettings Settings => settings;
 
         /// <summary>Latest accepted radar scan of the local player, for the imager.</summary>
@@ -129,6 +135,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>Latest accepted SAT CAMERA of the local player: where the optical bird last looked.</summary>
         public int CameraSerial { get; private set; }
         public GlobalPosition CameraTarget { get; private set; }
+        /// <summary>How many contacts that SAT CAMERA revealed.</summary>
+        public int CameraContacts { get; private set; }
 
         public float GetEffectRadius(SupportActionId action, FactionHQ owner)
         {
@@ -169,11 +177,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
             float impact = now + etaSeconds;
             float linger = duration;
             float expiry = impact + linger;
+            float start = now;
 
             for (int i = activeStrikes.Count - 1; i >= 0; i--)
             {
                 if (activeStrikes[i].RequestId == requestId)
                 {
+                    start = activeStrikes[i].StartTime;
                     activeStrikes.RemoveAt(i);
                 }
             }
@@ -183,7 +193,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 activeStrikes.RemoveAt(0);
             }
 
-            activeStrikes.Add(new ActiveStrikeInfo(requestId, action, target, radius, impact, expiry));
+            activeStrikes.Add(new ActiveStrikeInfo(requestId, action, target, radius, impact, expiry, start));
             RegisterInboundStrike(name, etaSeconds);
         }
 
@@ -801,6 +811,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (action != null && action.Id == SupportActionId.SatCamera && float.IsFinite(message.X) && float.IsFinite(message.Z))
                 {
                     CameraTarget = new GlobalPosition(message.X, message.Y, message.Z);
+                    CameraContacts = Mathf.Max(0, message.Contacts);
                     CameraSerial++;
                     Status = name + " accepted: imaging, " + Mathf.Max(0, message.Contacts) + " contact(s) revealed.";
                 }

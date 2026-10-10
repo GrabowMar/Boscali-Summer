@@ -243,6 +243,25 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (instance != null && instance.board != null) instance.board.Notice(Channel, tone, text, detail);
         }
 
+        /// <summary>
+        /// Where the capacitor of the LANCE pod on <paramref name="me"/> stands, for the TAC BOARD gauge (the same facts the cockpit line below says): the charge while the trigger
+        /// is held, the recharge share after a shot, nothing special at rest. False when this aircraft's pod has never been fired (the bank is full).
+        /// </summary>
+        internal static bool TryState(Aircraft me, out float value, out bool charging, out bool recharging)
+        {
+            value = 1f;
+            charging = recharging = false;
+            foreach (Charge c in Charges.Values)
+            {
+                if (c.Gun == null || c.Gun.attachedUnit != me) continue;
+                float now = Time.time;
+                if (c.LastHold > 0f && now - c.LastHold <= LanceCapacitor.ReleaseGap) { value = LanceCapacitor.Charge(now - c.Start); charging = true; }
+                else if (now < c.ReadyAt && c.RechargeTotal > 0f) { value = 1f - (c.ReadyAt - now) / c.RechargeTotal; recharging = true; }
+                return true;
+            }
+            return false;
+        }
+
         /// <summary>One trigger-held tick from the Fire patch. Never fires; Update fires on release.</summary>
         public static void Hold(Gun gun, WeaponStation station)
         {

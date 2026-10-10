@@ -13,7 +13,13 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public int Engines, EnginesOut;
         /// <summary>Share of the airframe's parts that have broken off (<c>PartDamageTracker.GetDetachedRatio</c>), 0..1.</summary>
         public float DetachedRatio;
+        /// <summary>Where on the airframe, as <see cref="ZoneSide"/> masks: the engines it has, the ones out, leaking tanks, burning tanks and wings that lost parts (the silhouette's hatched zones).</summary>
+        public byte EngineSlots, EngineOut, Leak, Fire, WingLoss;
     }
+
+    /// <summary>A side of the airframe seen from above (nose up): bit flags, so a zone can cover more than one.</summary>
+    [Flags]
+    internal enum ZoneSide : byte { None = 0, Left = 1, Centre = 2, Right = 4 }
 
     /// <summary>
     /// Persistent damage cautions (2026-10-10), pure. The vanilla damage silhouette fades ten seconds after a hit; these
@@ -23,7 +29,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
     /// </summary>
     internal static class HudDamage
     {
-        public const int MaxLamps = HudBoardLayout.Tiles;
+        public const int MaxLamps = 4;
         /// <summary>Structure lost at or beyond this share cautions; beyond <see cref="StructureWarning"/> it warns.</summary>
         public const float StructureCaution = 0.10f, StructureWarning = 0.25f;
 

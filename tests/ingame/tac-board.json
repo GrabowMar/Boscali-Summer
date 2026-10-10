@@ -1,0 +1,109 @@
+{
+  "name": "tac-board",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 240,
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "altitude": 3000,
+      "speed": 220,
+      "heading": 0,
+      "view": "cockpit"
+    },
+    {
+      "op": "spawn",
+      "id": "bandit",
+      "type": "FS-20 Vortex",
+      "faction": "Primeva",
+      "at": {
+        "map": [
+          0,
+          8000
+        ]
+      },
+      "altitude": 3000,
+      "speed": 200,
+      "heading": 180
+    },
+    {
+      "op": "record",
+      "ids": [
+        "player",
+        "bandit"
+      ],
+      "hz": 5
+    },
+    {
+      "op": "wait",
+      "seconds": 6
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Dock",
+      "args": {},
+      "store": "dock"
+    },
+    {
+      "op": "capture",
+      "name": "cruise"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Fire",
+      "args": {},
+      "store": "fire"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "capture",
+      "name": "shot"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Missiles",
+      "args": {},
+      "store": "msl"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "capture",
+      "name": "shot-later"
+    },
+    {
+      "op": "wait",
+      "seconds": 10
+    },
+    {
+      "op": "capture",
+      "name": "after"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "alive",
+      "ids": [
+        "player"
+      ]
+    },
+    {
+      "check": "result_above",
+      "path": "msl.count",
+      "min": 1
+    }
+  ]
+}

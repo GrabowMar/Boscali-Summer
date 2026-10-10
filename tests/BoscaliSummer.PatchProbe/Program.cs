@@ -66,6 +66,10 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("Aircraft", "GetFuelLevel"),
     ("Aircraft", "GetFuelTanks"),
     ("PartDamageTracker", "GetDetachedRatio"),
+    // TAC BOARD SYSTEMS page (HUD v8): lost parts by side, the jammer's charge.
+    ("UnitPart", "IsDetached"),
+    ("Aircraft", "GetPowerSupply"),
+    ("PowerSupply", "GetCharge"),
     ("FlareEjector", "GetMaxAmmo"),
     ("ChaffEjector", "GetMaxAmmo"),
     ("Missile", "Detonate"),
@@ -115,6 +119,7 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("RadialMenuMain", "SetupMain"),
     ("RadialMenuMain", "OpenMenu"),
     ("RadialMenuMain", "OnDestroy"),
+    ("RadialMenuMain", "Update"),
     ("RadialMenuAction", "AllowedOnAircraft"),
     ("RadialMenuAction", "TriggerAction"),
     ("PilotPlayerState", "FixedUpdateState"),
@@ -229,7 +234,12 @@ foreach ((string typeName, string methodName) in targets)
     ("WeaponInfo", "muzzleVelocity"),
     ("CombatHUD", "iconLayer"),
     ("CombatHUD", "topRightPanel"),
-    ("CombatHUD", "weaponStatus")
+    ("CombatHUD", "weaponStatus"),
+    // TAC BOARD seeker cones and the countermeasure bank (ShotBook, MenuGame.Aircraft): private members read by name through AccessTools.
+    ("ARHSeeker", "maxTrackingAngle"),
+    ("ARHSeeker", "terminalRange"),
+    ("SARHSeeker", "seekerAngle"),
+    ("CountermeasureManager", "countermeasureStations")
 };
 
 foreach ((string typeName, string fieldName) in fields)
@@ -270,10 +280,16 @@ foreach ((string typeName, string fieldName) in fields)
     ("UnitPart", "hitPoints", "System.Single"),
     ("Unit", "disabled", "System.Boolean"),
     ("WeaponStatus", "nameText", "TMPro.TextMeshProUGUI"),
-    // Tactical HUD (2026-10-07): StatusPanel reads the native cell and safety lamp, ThreatWatch and MissileTracker the warning systems.
+    // Tactical HUD (2026-10-07): StatusPanel reads the native label font and safety lamp, ThreatWatch and MissileTracker the warning systems.
     ("WeaponStatus", "safetyImage", "UnityEngine.UI.Image"),
-    ("WeaponStatus", "ammoText", "TMPro.TextMeshProUGUI"),
-    ("WeaponStatus", "panel", "UnityEngine.RectTransform"),
+    // Corner takeover (2026-10-10): NativeCorner hides the three boxes of the native TopRightPanel (weaponPanel, countermeasuresBackground, PowerPanel) behind owned CanvasGroups; the stores
+    // feed reads the guns' LINK (WeaponManager.gunsLinked, pinned below), the reload times of guns and missile launchers and the capacitor's full charge.
+    ("WeaponStatus", "weaponPanel", "UnityEngine.GameObject"),
+    ("CombatHUD", "weaponStatus", "WeaponStatus"),
+    ("CombatHUD", "countermeasureBackground", "UnityEngine.GameObject"),
+    ("Gun", "reloadTime", "System.Single"),
+    ("MissileLauncher", "reloadTime", "System.Single"),
+    ("PowerSupply", "maxCharge", "System.Single"),
     ("Missile", "target", "Unit"),
     ("Unit", "onRegisterMissile", "System.Action`1<Missile>"),
     ("MissileWarning", "onMissileWarning", "System.Action`1<MissileWarning+OnMissileWarning>"),
@@ -285,6 +301,8 @@ foreach ((string typeName, string fieldName) in fields)
     ("FuelTank", "isLeaking", "System.Boolean"),
     ("FuelTank", "ruptured", "System.Boolean"),
     ("FuelTank", "onFire", "System.Boolean"),
+    // TAC BOARD SYSTEMS page: the jammer's "jamming now" (CountermeasureWatch).
+    ("RadarJammer", "jammingIntensity", "System.Single"),
     ("Aircraft", "engineStates", "System.Collections.Generic.List`1<IEngine>"),
     ("Aircraft", "partDamageTracker", "PartDamageTracker"),
     ("AircraftParameters", "aircraftGLimit", "System.Single"),
@@ -926,6 +944,8 @@ foreach (var seam in intelMethods)
 };
 foreach (var seam in intelFields)
     RequireMetadataField(operationAssembly, seam.Type, seam.Field, seam.FieldType);
+// TAC BOARD SYSTEMS page: a helicopter is told by its rotor shaft (DamageWatch).
+if (gameAssembly.GetType("RotorShaft", false) == null) throw new TypeLoadException("RotorShaft");
 if (gameAssembly.GetType("Radar", true)!.BaseType?.FullName != "TargetDetector")
     throw new TypeLoadException("Radar no longer derives from TargetDetector; Intel reads Unit.radar as a Radar");
 foreach (string type in new[] {
@@ -950,7 +970,54 @@ foreach (string type in new[] {
     "BoscaliSummer.Core.Contracts.IHudLine",
     "BoscaliSummer.Core.Contracts.HudLayout",
     "BoscaliSummer.Modules.Hud.Presentation.HudBoard",
-    "BoscaliSummer.Modules.Hud.Presentation.StatusPanel" })
+    "BoscaliSummer.Modules.Hud.Presentation.StatusPanel",
+    // TAC BOARD (HUD v8): the offline check reaches these by name; the page groups' feeds register through them.
+    "BoscaliSummer.Core.Contracts.ScopeFeeds",
+    "BoscaliSummer.Core.Contracts.ScopeGauges",
+    "BoscaliSummer.Core.Contracts.GaugeSpec",
+    "BoscaliSummer.Modules.Hud.Domain.SystemsScope",
+    // Corner takeover: the stores header's feed structs are filled by name in the offline fixtures; NativeCorner is the one class that hides native objects.
+    "BoscaliSummer.Modules.Hud.Domain.StoresScope",
+    "BoscaliSummer.Modules.Hud.Domain.StoreStation",
+    "BoscaliSummer.Modules.Hud.Domain.StoreClass",
+    "BoscaliSummer.Modules.Hud.Domain.ThreatScope",
+    "BoscaliSummer.Modules.Hud.Domain.ThreatMissile",
+    "BoscaliSummer.Modules.Hud.Domain.ThreatEmitter",
+    "BoscaliSummer.Modules.Hud.Domain.ThreatSeeker",
+    "BoscaliSummer.Modules.Hud.Presentation.StoresHeader",
+    "BoscaliSummer.Modules.Hud.Presentation.ThreatPage",
+    "BoscaliSummer.Modules.Hud.Runtime.StoresFeed",
+    "BoscaliSummer.Modules.Hud.Runtime.NativeCorner",
+    "BoscaliSummer.Modules.Hud.Presentation.ScopePages",
+    "BoscaliSummer.Modules.Hud.Presentation.SystemsPage",
+    // APPROACH, WING and DOCK (tb-flight): their feed structs and enums are filled by name in the offline fixtures.
+    "BoscaliSummer.Core.Contracts.ApproachScope",
+    "BoscaliSummer.Core.Contracts.ApproachStage",
+    "BoscaliSummer.Core.Contracts.WingBoardScope",
+    "BoscaliSummer.Core.Contracts.WingBoardMember",
+    "BoscaliSummer.Core.Contracts.WingBoardAck",
+    "BoscaliSummer.Core.Contracts.WingState",
+    "BoscaliSummer.Core.Contracts.DockScope",
+    "BoscaliSummer.Core.Contracts.DockPhase",
+    "BoscaliSummer.Modules.Hud.Presentation.ApproachPage",
+    "BoscaliSummer.Modules.Hud.Presentation.WingPage",
+    "BoscaliSummer.Modules.Hud.Presentation.DockPage",
+    "BoscaliSummer.Modules.Autopilot.Runtime.ApproachScopeFeed",
+    "BoscaliSummer.Modules.Wing.Runtime.WingScopeFeed",
+    "BoscaliSummer.Modules.Vanguard.Presentation.SkywellScopeFeed",
+    // STRIKE and OBJECTIVE (tb-ops): their feed structs and enums are filled by name in the offline fixtures.
+    "BoscaliSummer.Core.Contracts.StrikeScope",
+    "BoscaliSummer.Core.Contracts.StrikeTrack",
+    "BoscaliSummer.Core.Contracts.PerkTile",
+    "BoscaliSummer.Core.Contracts.StrikeKind",
+    "BoscaliSummer.Core.Contracts.PerkFront",
+    "BoscaliSummer.Core.Contracts.PerkPhase",
+    "BoscaliSummer.Core.Contracts.ChainNodeKind",
+    "BoscaliSummer.Core.Contracts.ObjectiveScope",
+    "BoscaliSummer.Modules.Hud.Presentation.StrikePage",
+    "BoscaliSummer.Modules.Hud.Presentation.ObjectivePage",
+    "BoscaliSummer.Modules.Support.Runtime.StrikeScopeFeed",
+    "BoscaliSummer.Modules.DynamicOperations.Runtime.ObjectiveScopeFeed" })
     if (pluginAssembly.GetType(type, false) == null) throw new TypeLoadException(type);
 foreach (string type in new[] {
     "BoscaliSummer.Modules.HighCommand.Runtime.HighCommandManager",

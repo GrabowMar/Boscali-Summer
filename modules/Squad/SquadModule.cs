@@ -22,6 +22,7 @@ namespace BoscaliSummer.Modules.Squad
             manager.Configure(context.Settings.Squad, network, context.Services); network.Configure(manager);
             context.AddService<ISquadView>(manager);
             context.AddService<IAceWingRoster>(manager);
+            new AceScopeGauge(manager).Register();      // the TAC BOARD's ACE HUNT needle (host and solo)
             context.AddService<IAircraftTaskExclusion>(manager);
             context.Logger.LogInfo("[Squad] Wing Command API: " + (WingLink.SquadAvailable ? "ready" : WingLink.SquadUnavailableReason));
 

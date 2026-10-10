@@ -153,6 +153,12 @@ namespace BoscaliSummer.Tests.Features.Hud
             string longText = "SESSION HOST: THE MISSION WILL RESTART IN FIVE MINUTES FOR A SCHEDULED MAINTENANCE WINDOW";
             TestAssert.That(longText.Length > 80 && NoticeTicker.PageCount(longText) == 3 && NoticeTicker.PageCount("SHORT") == 1 && NoticeTicker.PageCount(null) == 1 && NoticeTicker.PageCount("") == 1,
                 "Only a long line takes more than one page: " + NoticeTicker.PageCount(longText));
+            // The ticker row holds 44 characters on an Info line and 34 behind a Warning's prefix; a page never ends on a bare separator.
+            string touchdown = "TOUCHDOWN - ROLLOUT 101 KM/H - BRAKES AUTO";
+            TestAssert.That(NoticeTicker.PageCount(touchdown) == 1 && NoticeTicker.Words(new TickerLine { Tone = HudTone.Info, Text = touchdown }) == touchdown, "A 42-character notice is one page on an Info line");
+            TestAssert.That(NoticeTicker.PageCount(touchdown, NoticeTicker.WarningPageChars) == 2 && NoticeTicker.Page(touchdown, 0, NoticeTicker.WarningPageChars) == "TOUCHDOWN - ROLLOUT 101 KM/H" &&
+                NoticeTicker.Page(touchdown, 1, NoticeTicker.WarningPageChars) == "BRAKES AUTO", "...two behind a Warning's prefix, and the first does not end on the dangling dash: " + NoticeTicker.Page(touchdown, 0, 34));
+            TestAssert.That(NoticeTicker.Words(new TickerLine { Tone = HudTone.Warning, Text = touchdown, Age = NoticeTicker.PhaseSeconds + 0.1f }) == "BRAKES AUTO", "...the line pages by its tone");
             string rejoined = "";
             for (int i = 0; i < NoticeTicker.PageCount(longText); i++)
             {
@@ -161,7 +167,7 @@ namespace BoscaliSummer.Tests.Features.Hud
                 rejoined += (i > 0 ? " " : "") + page;
             }
             TestAssert.That(rejoined == longText, "...and the pages put back together are the whole notice: " + rejoined);
-            TestAssert.That(NoticeTicker.Page("ABCDEFGHIJ".PadRight(60, 'X'), 1).Length == 20 && NoticeTicker.PageCount("ABCDEFGHIJ".PadRight(60, 'X')) == 2, "A word longer than a page is cut where it falls");
+            TestAssert.That(NoticeTicker.Page("ABCDEFGHIJ".PadRight(60, 'X'), 1).Length == 60 - NoticeTicker.PageChars && NoticeTicker.PageCount("ABCDEFGHIJ".PadRight(60, 'X')) == 2, "A word longer than a page is cut where it falls");
 
             var line = new TickerLine { Tone = HudTone.Info, Text = longText, Detail = "AREA 4 EAST", Count = 1, Age = 0f };
             TestAssert.That(NoticeTicker.Words(line) == NoticeTicker.Page(longText, 0), "It opens on the first page");

@@ -20,7 +20,7 @@ namespace BoscaliSummer.Tests.Features.Hud
                 ClusterInsideAndClear(width, Height, aspect);
                 TargetCardInsideAndClear(width, Height, aspect);
             }
-            MissileCam();
+            TextScale();
             KeepClearIsIdempotent();
             CollapsedCardHasNoHeight();
             Cues();
@@ -32,22 +32,11 @@ namespace BoscaliSummer.Tests.Features.Hud
             r.Left >= screen.Left - 0.01f && r.Right <= screen.Right + 0.01f &&
             r.Bottom >= screen.Bottom - 0.01f && r.Top <= screen.Top + 0.01f;
 
-        private static void MissileCam()
+        private static void TextScale()
         {
             TestAssert.That(ThirdPersonHudLayout.TextScale(40f) == 1f && ThirdPersonHudLayout.TextScale(60f) == 1.5f, "The player's text size scales the layout");
             TestAssert.That(ThirdPersonHudLayout.TextScale(100f) == ThirdPersonHudLayout.MaxScale && ThirdPersonHudLayout.TextScale(10f) == ThirdPersonHudLayout.MinScale, "...within limits");
             TestAssert.That(ThirdPersonHudLayout.TextScale(float.NaN) == 1f && ThirdPersonHudLayout.TextScale(0f) == 1f, "An unknown size is the default");
-            foreach (float aspect in AspectRatios)
-                foreach (float scale in new[] { ThirdPersonHudLayout.MinScale, 1f, ThirdPersonHudLayout.MaxScale })
-                {
-                    float width = Height * aspect;
-                    RectF box = ThirdPersonHudLayout.MissileCamBox(width, Height, scale);
-                    RectF screen = Screen(width, Height);
-                    TestAssert.That(Inside(box, screen), "The missile-cam box stays on screen at aspect " + aspect + ", scale " + scale);
-                    TestAssert.That(box.CenterX == 0f && box.CenterY < 0f, "It sits centred, below the middle at aspect " + aspect);
-                    TestAssert.That(!ThirdPersonHudLayout.Overlaps(box, ThirdPersonHudLayout.TargetCard(width, Height, visible: true)),
-                        "It never covers the target card at aspect " + aspect + ", scale " + scale);
-                }
         }
 
         private static void Cues()

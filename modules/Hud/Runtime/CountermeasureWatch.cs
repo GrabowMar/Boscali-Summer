@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Hud.Domain;
+using HarmonyLib;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Hud.Runtime
@@ -19,6 +20,10 @@ namespace BoscaliSummer.Modules.Hud.Runtime
 
         private static readonly Comparison<Countermeasure> ByName = (a, b) =>
             a == null || b == null ? (a == null ? (b == null ? 0 : 1) : -1) : string.CompareOrdinal(a.displayName, b.displayName);
+
+        private static readonly AccessTools.FieldRef<RadarJammer, float> JamIntensity = NativeRefs.Field<RadarJammer, float>("jammingIntensity");
+        /// <summary>A jammer is jamming while its intensity is above this.</summary>
+        private const float JamOn = 0.01f;
 
         private readonly CmStation[] stations = new CmStation[HudCm.MaxStations];
         private readonly string[] names = new string[HudCm.MaxStations];
@@ -43,9 +48,22 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             {
                 frame.Cm[i] = stations[i];
                 frame.Cm[i].Ammo = 0;
+                frame.Cm[i].Active = false;
             }
             for (int i = 0; i < parts.Length; i++)
-                if (partStation[i] >= 0 && parts[i] != null) frame.Cm[partStation[i]].Ammo += parts[i].ammo;
+            {
+                if (partStation[i] < 0 || parts[i] == null) continue;
+                frame.Cm[partStation[i]].Ammo += parts[i].ammo;
+                if (parts[i] is RadarJammer jammer && NativeRefs.Get(JamIntensity, jammer) > JamOn) frame.Cm[partStation[i]].Active = true;
+            }
+            // A jammer's rounds are one charge; its readiness is the aircraft's capacitor.
+            float charge = Mathf.Clamp01(aircraft.GetPowerSupply() != null ? aircraft.GetPowerSupply().GetCharge() : 0f);
+            for (int i = 0; i < stationCount; i++)
+                if (frame.Cm[i].Chargeable) frame.Cm[i].Charge = charge;
+            // The pilot's selected dispenser is the group of the game's active countermeasure (stations group by display name).
+            Countermeasure active = BoscaliSummer.Core.Game.AircraftReadout.ActiveCountermeasure(aircraft);
+            for (int i = 0; active != null && i < stationCount; i++)
+                frame.Cm[i].Selected = names[i] == active.displayName;
             frame.CmCount = stationCount;
         }
 

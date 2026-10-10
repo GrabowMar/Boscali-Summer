@@ -45,11 +45,7 @@
     <Compile Include="..\..\modules\Autopilot\Domain\CarrierPattern.cs" Link="Features\Autopilot\CarrierPattern.cs" />
     <Compile Include="..\..\modules\Autopilot\Domain\AirframeSeverity.cs" Link="Features\Autopilot\AirframeSeverity.cs" />
     <Compile Include="..\..\modules\Autopilot\Domain\IlsGuidance.cs" Link="Features\Autopilot\IlsGuidance.cs" />
-    <Compile Include="..\..\modules\Autopilot\Domain\IlsHudCopy.cs" Link="Features\Autopilot\IlsHudCopy.cs" />
-    <Compile Include="..\..\modules\Autopilot\Domain\AceRadialMath.cs" Link="Features\Autopilot\AceRadialMath.cs" />
-    <Compile Include="..\..\modules\Autopilot\Domain\AceRadialAction.cs" Link="Features\Autopilot\AceRadialAction.cs" />
-    <Compile Include="..\..\modules\Autopilot\Domain\AceRadialStyle.cs" Link="Features\Autopilot\AceRadialStyle.cs" />
-    <Compile Include="..\..\modules\Autopilot\Domain\AceRadialMenuTree.cs" Link="Features\Autopilot\AceRadialMenuTree.cs" />
+    <Compile Include="..\..\modules\Autopilot\Domain\Menu\*.cs" LinkBase="Features\Autopilot\Menu" />
     <Compile Include="..\..\modules\FireAndDestruction\Domain\CookoffPolicy.cs" Link="Features\FireAndDestruction\CookoffPolicy.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Domain\HitEscalation.cs" Link="Features\FireAndDestruction\HitEscalation.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Runtime\StrongpointHitPolicy.cs" Link="Features\UrbanCombat\StrongpointHitPolicy.cs" />
@@ -68,6 +64,7 @@
     <Compile Include="..\..\modules\DynamicOperations\Domain\ContractMarkerMath.cs" Link="Features\DynamicOperations\ContractMarkerMath.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\ContractMarkerLook.cs" Link="Features\DynamicOperations\ContractMarkerLook.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\ContractSelection.cs" Link="Features\DynamicOperations\ContractSelection.cs" />
+    <Compile Include="..\..\modules\DynamicOperations\Domain\ObjectiveScopeRules.cs" Link="Features\DynamicOperations\ObjectiveScopeRules.cs" />
     <Compile Include="..\..\Core\Contracts\IObservationSource.cs" Link="Framework\IObservationSource.cs" />
     <Compile Include="..\..\Core\Contracts\IHostSettingsView.cs" Link="Framework\IHostSettingsView.cs" />
     <Compile Include="..\..\Core\Contracts\ISecondaryObjectivesView.cs" Link="Framework\ISecondaryObjectivesView.cs" />
@@ -165,24 +162,9 @@
     <Compile Include="..\..\Core\Contracts\HudLayout.cs" Link="Framework\HudLayout.cs" />
     <Compile Include="..\..\Core\Contracts\HudPrimitives.cs" Link="Framework\HudPrimitives.cs" />
     <Compile Include="..\..\Core\Contracts\IHudBoard.cs" Link="Framework\IHudBoard.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\HudFeedStore.cs" Link="Features\Hud\HudFeedStore.cs" />
-    <Compile Include="..\..\modules\Autopilot\Domain\AutopilotHudCopy.cs" Link="Features\Autopilot\AutopilotHudCopy.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\WingviewMath.cs" Link="Features\Hud\WingviewMath.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\ThirdPersonHudLayout.cs" Link="Features\Hud\ThirdPersonHudLayout.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\HudSymbols.cs" Link="Features\Hud\HudSymbols.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\HudLamps.cs" Link="Features\Hud\HudLamps.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\HudTactical.cs" Link="Features\Hud\HudTactical.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\MissileTracks.cs" Link="Features\Hud\MissileTracks.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\DiscoveryGate.cs" Link="Features\Hud\DiscoveryGate.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\HudBoardLayout.cs" Link="Features\Hud\HudBoardLayout.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\BoardFrame.cs" Link="Features\Hud\BoardFrame.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\HudThreatDetail.cs" Link="Features\Hud\HudThreatDetail.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\HudCm.cs" Link="Features\Hud\HudCm.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\NoticeTicker.cs" Link="Features\Hud\NoticeTicker.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\CuePriority.cs" Link="Features\Hud\CuePriority.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\FuelEndurance.cs" Link="Features\Hud\FuelEndurance.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\HudDamage.cs" Link="Features\Hud\HudDamage.cs" />
-    <Compile Include="..\..\modules\Hud\Domain\MissileCamHud.cs" Link="Features\Hud\MissileCamHud.cs" />
+    <!-- Everything under modules/Hud/Domain and Core/Contracts/Scope is pure and compiles into the tests by wildcard: a page group adds files without touching this project. -->
+    <Compile Include="..\..\modules\Hud\Domain\**\*.cs" LinkBase="Features\Hud" />
+    <Compile Include="..\..\Core\Contracts\Scope\**\*.cs" LinkBase="Framework\Scope" />
     <Compile Include="..\..\modules\Wing\Domain\Ai\RecoveryRules.cs" Link="Features\Wing\RecoveryRules.cs" />
     <Compile Include="..\..\modules\Progression\Domain\AceHuntHudCopy.cs" Link="Features\Progression\AceHuntHudCopy.cs" />
     <Compile Include="..\..\modules\Radio\Domain\RadioHudCopy.cs" Link="Features\Radio\RadioHudCopy.cs" />

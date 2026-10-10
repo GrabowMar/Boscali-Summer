@@ -3,17 +3,19 @@ using Rewired;
 namespace BoscaliSummer.Modules.Autopilot.Runtime
 {
     /// <summary>
-    /// Takes the mouse away from flying while the interaction menu is open, the way ACE3's
-    /// cursor menu freezes the camera and blocks firing. The game's own cursor flag frees and
-    /// centres the cursor and stops cockpit look; disabling the Rewired mouse stops
-    /// mouse-aim steering, chase-camera pan and mouse-button weapons fire. Both are restored
-    /// exactly as found.
+    /// Takes the mouse and the keyboard away from flying while the interaction menu is open, the way ACE3's cursor menu freezes the
+    /// camera and blocks firing. The game's own cursor flag frees the cursor and stops cockpit look; disabling the Rewired mouse stops
+    /// mouse-aim steering, chase-camera pan and mouse-button weapons fire; disabling the Rewired keyboard keeps the menu's own keys from
+    /// reaching the game (the saved default map binds Enter to Select, Backspace to Cancel (deselects targets), Space to Fire, Tab, the up and
+    /// down arrows and Esc; the digits and left / right arrows are unbound). The menu itself reads UnityEngine.Input, which Rewired's
+    /// enable switch does not touch. <see cref="Release"/> switches back on only the devices this guard switched off (the repo's lease rule: another
+    /// window that already took one keeps it), so nothing is restored from a stale snapshot.
     /// </summary>
     internal static class AceRadialInputGuard
     {
         private static bool held;
         private static bool ownsCursorFlag;
-        private static bool mouseWasEnabled = true;
+        private static bool mouseTaken, keyboardTaken;
 
         public static bool Held => held;
 
@@ -24,25 +26,77 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             ownsCursorFlag = !CursorManager.GetFlag(CursorFlags.SelectionMenu);
             if (ownsCursorFlag) CursorManager.SetFlag(CursorFlags.SelectionMenu, true);
             Mouse mouse = TryMouse();
-            if (mouse == null) return;
-            mouseWasEnabled = mouse.enabled;
-            mouse.enabled = false;
+            if (mouse != null && mouse.enabled) { mouse.enabled = false; mouseTaken = true; }
+            Keyboard keyboard = TryKeyboard();
+            if (keyboard != null && keyboard.enabled) { keyboard.enabled = false; keyboardTaken = true; }
         }
 
         public static void Release()
         {
             if (!held) return;
             held = false;
-            Mouse mouse = TryMouse();
-            if (mouse != null) mouse.enabled = mouseWasEnabled;
+            if (mouseTaken) { Mouse mouse = TryMouse(); if (mouse != null) mouse.enabled = true; mouseTaken = false; }
+            if (keyboardTaken) { Keyboard keyboard = TryKeyboard(); if (keyboard != null) keyboard.enabled = true; keyboardTaken = false; }
             if (ownsCursorFlag) CursorManager.SetFlag(CursorFlags.SelectionMenu, false);
             ownsCursorFlag = false;
+            UnityEngine.Cursor.visible = CursorManager.Visible;
+            UnityEngine.Cursor.lockState = CursorManager.Visible ? UnityEngine.CursorLockMode.None : UnityEngine.CursorLockMode.Locked; // CursorManager's own rule
+        }
+
+        /// <summary>HOLD mode flicks with a drawn reticle, so the OS cursor hides and stays inside the window (a flick or the release click must never land on another
+        /// application); LATCHED shows it again. Only while the guard is held.</summary>
+        public static void SetCursorVisible(bool visible)
+        {
+            if (!held) return;
+            UnityEngine.Cursor.visible = visible;
+            UnityEngine.CursorLockMode mode = visible ? UnityEngine.CursorLockMode.None : UnityEngine.CursorLockMode.Confined;
+            if (UnityEngine.Cursor.lockState != mode) UnityEngine.Cursor.lockState = mode; // every frame: write only on a change
         }
 
         private static Mouse TryMouse()
         {
             if (!ReInput.isReady || ReInput.controllers == null) return null;
             return ReInput.controllers.Mouse;
+        }
+
+        private static Keyboard TryKeyboard()
+        {
+            if (!ReInput.isReady || ReInput.controllers == null) return null;
+            return ReInput.controllers.Keyboard;
+        }
+    }
+
+    /// <summary>
+    /// Esc closes the menu and must not also pause the game: <c>GameplayUI.Update</c> pauses on the Pause action or a raw Escape press unless
+    /// <c>GameplayUI.AllowPauseKeybind</c> is false. The flag is cleared while the menu is open and given back 0.25 s after it closes, so the
+    /// Escape that closed it has passed through <c>GameplayUI.Update</c> first (the chat box does the same with 100 ms).
+    /// </summary>
+    internal static class AceRadialPauseGate
+    {
+        private const float RestoreDelay = 0.25f;
+        private static bool holding;
+        private static float restoreAt;
+
+        public static void Hold()
+        {
+            holding = true; restoreAt = 0f;
+            GameplayUI.AllowPauseKeybind = false;
+        }
+
+        public static void Release(float now)
+        {
+            if (holding && restoreAt <= 0f) restoreAt = now + RestoreDelay;
+        }
+
+        public static void Tick(float now)
+        {
+            if (holding && restoreAt > 0f && now >= restoreAt) ForceRelease();
+        }
+
+        public static void ForceRelease()
+        {
+            if (holding) GameplayUI.AllowPauseKeybind = true;
+            holding = false; restoreAt = 0f;
         }
     }
 }

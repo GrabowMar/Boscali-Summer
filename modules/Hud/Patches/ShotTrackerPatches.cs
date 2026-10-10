@@ -21,9 +21,11 @@ namespace BoscaliSummer.Modules.Hud.Patches
     }
 
     /// <summary>
-    /// Resolves a pip when the weapon detonates on this client: the Mirage RPC body <c>UserCode_RpcDetonate_*</c>
+    /// Resolves a shot when the weapon detonates on this client: the Mirage RPC body <c>UserCode_RpcDetonate_*</c>
     /// (<c>relativeUnit, useUnit, pos, armed, hitArmor, hitTerrain, normal</c>). The flags are bound by NAME, not position:
     /// the old <c>__1</c> was <c>useUnit</c>, which is only true within 200 m of a target, so dumb bombs always read MISS.
+    /// The place is read off the missile: the RPC body has just moved it to where it went off (<c>pos</c> is relative to a
+    /// unit in one case and global in the other; the body resolves both), so the SHOT page stamps the result there.
     /// Found by name prefix so a regenerated hash suffix does not break it; tests/BoscaliSummer.PatchProbe pins the names.
     /// </summary>
     [HarmonyPatch]
@@ -40,8 +42,9 @@ namespace BoscaliSummer.Modules.Hud.Patches
         {
             try
             {
-                if (ShotFeed.IsOwn(__instance))
-                    ShotFeed.Ledger.Detonate(__instance.GetInstanceID(), ShotRules.Hit(hitArmor, useUnit), Time.unscaledTime);
+                if (!ShotFeed.IsOwn(__instance)) return;
+                GlobalPosition at = __instance.transform.position.ToGlobalPosition();
+                ShotFeed.Ledger.Detonate(__instance.GetInstanceID(), ShotRules.Hit(hitArmor, useUnit), Time.unscaledTime, at.x, at.y, at.z);
             }
             catch (Exception e)
             {
