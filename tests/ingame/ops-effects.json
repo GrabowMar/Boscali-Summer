@@ -1,0 +1,231 @@
+{
+  "name": "ops-effects",
+  "mods": [
+    "boscalisummer"
+  ],
+  "mission": "Free Flight",
+  "timeout_s": 420,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "map": [
+          0,
+          0
+        ]
+      },
+      "altitude": 1500,
+      "speed": 170,
+      "heading": 0
+    },
+    {
+      "op": "observe",
+      "follow": "lead"
+    },
+    {
+      "op": "atmosphere",
+      "time_of_day": 13,
+      "conditions": 0.1,
+      "cloud_height": 6000,
+      "wind_speed": 4,
+      "wind_heading": 70,
+      "wind_turbulence": 0,
+      "moon_phase": 14
+    },
+    {
+      "op": "wait",
+      "seconds": 8
+    },
+    {
+      "op": "camera",
+      "position": [
+        -10000,
+        2600,
+        -4500
+      ],
+      "heading": 0,
+      "pitch": 19,
+      "fov": 62
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+      "args": {
+        "fx": "descent",
+        "x": -10000,
+        "z": 0
+      },
+      "store": "fx_descent"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.2
+    },
+    {
+      "op": "capture",
+      "name": "fx-day-rod-descent",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.6
+    },
+    {
+      "op": "capture",
+      "name": "fx-day-rod-impact1",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "capture",
+      "name": "fx-day-rod-impact4",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 6
+    },
+    {
+      "op": "capture",
+      "name": "fx-day-rod-impact10",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "capture",
+      "name": "fx-day-rod-impact30",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 25
+    },
+    {
+      "op": "camera",
+      "position": [
+        -10000,
+        2600,
+        -4500
+      ],
+      "heading": 0,
+      "pitch": -22,
+      "fov": 80
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+      "args": {
+        "fx": "emp",
+        "x": -10000,
+        "z": 0,
+        "radius": 12000
+      },
+      "store": "fx_emp"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.35
+    },
+    {
+      "op": "capture",
+      "name": "fx-day-emp-flash",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 1.6
+    },
+    {
+      "op": "capture",
+      "name": "fx-day-emp-shell",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "capture",
+      "name": "fx-day-emp-late",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "camera",
+      "position": [
+        -10000,
+        2600,
+        -4500
+      ],
+      "heading": 0,
+      "pitch": 19,
+      "fov": 62
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+      "args": {
+        "fx": "flare",
+        "x": -10000,
+        "z": 0,
+        "radius": 3500
+      },
+      "store": "fx_flare"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "fx-day-flare-2",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "capture",
+      "name": "fx-day-flare-6",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 7
+    },
+    {
+      "op": "capture",
+      "name": "fx-day-flare-13",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 10
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    }
+  ]
+}

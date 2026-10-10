@@ -1,0 +1,291 @@
+{
+ "name": "ops-probe",
+ "mods": [
+  "boscalisummer"
+ ],
+ "mission": "Free Flight",
+ "timeout_s": 90,
+ "ops": [
+  {
+   "op": "spawn",
+   "id": "lead",
+   "type": "FS-20 Vortex",
+   "faction": "Boscali",
+   "at": {
+    "map": [
+     0,
+     0
+    ]
+   },
+   "altitude": 1500,
+   "speed": 170,
+   "heading": 0
+  },
+  {
+   "op": "observe",
+   "follow": "lead"
+  },
+  {
+   "op": "wait",
+   "seconds": 6
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": -20000,
+    "z": -20000
+   },
+   "store": "p_-20_-20"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": -20000,
+    "z": -10000
+   },
+   "store": "p_-20_-10"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": -20000,
+    "z": 0
+   },
+   "store": "p_-20_0"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": -20000,
+    "z": 10000
+   },
+   "store": "p_-20_10"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": -20000,
+    "z": 20000
+   },
+   "store": "p_-20_20"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": -10000,
+    "z": -20000
+   },
+   "store": "p_-10_-20"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": -10000,
+    "z": -10000
+   },
+   "store": "p_-10_-10"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": -10000,
+    "z": 0
+   },
+   "store": "p_-10_0"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": -10000,
+    "z": 10000
+   },
+   "store": "p_-10_10"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": -10000,
+    "z": 20000
+   },
+   "store": "p_-10_20"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": 0,
+    "z": -20000
+   },
+   "store": "p_0_-20"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": 0,
+    "z": -10000
+   },
+   "store": "p_0_-10"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": 0,
+    "z": 0
+   },
+   "store": "p_0_0"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": 0,
+    "z": 10000
+   },
+   "store": "p_0_10"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": 0,
+    "z": 20000
+   },
+   "store": "p_0_20"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": 10000,
+    "z": -20000
+   },
+   "store": "p_10_-20"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": 10000,
+    "z": -10000
+   },
+   "store": "p_10_-10"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": 10000,
+    "z": 0
+   },
+   "store": "p_10_0"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": 10000,
+    "z": 10000
+   },
+   "store": "p_10_10"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": 10000,
+    "z": 20000
+   },
+   "store": "p_10_20"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": 20000,
+    "z": -20000
+   },
+   "store": "p_20_-20"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": 20000,
+    "z": -10000
+   },
+   "store": "p_20_-10"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": 20000,
+    "z": 0
+   },
+   "store": "p_20_0"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": 20000,
+    "z": 10000
+   },
+   "store": "p_20_10"
+  },
+  {
+   "op": "call",
+   "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+   "args": {
+    "fx": "probe",
+    "x": 20000,
+    "z": 20000
+   },
+   "store": "p_20_20"
+  },
+  {
+   "op": "end"
+  }
+ ],
+ "checks": [
+  {
+   "check": "status_ok"
+  }
+ ]
+}

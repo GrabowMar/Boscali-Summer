@@ -1,0 +1,68 @@
+{
+  "name": "cinematic-simple",
+  "mods": ["boscalisummer"],
+  "timeout_s": 160,
+  "ops": [
+    { "op": "spawn", "id": "lead", "type": "FS-20 Vortex", "faction": "Boscali", "at": { "map": [0, 0] }, "altitude": 1500, "speed": 160, "heading": 0 },
+    { "op": "observe", "follow": "lead" },
+    { "op": "wait", "seconds": 3 },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step", "args": { "action": "detach" }, "store": "detach" },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicTestAutomation.Step", "args": { "action": "baseline" }, "store": "baseline" },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step", "args": { "action": "demo", "actor": "lead" }, "store": "demo" },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step", "args": { "action": "save_edit" }, "store": "saved" },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step", "args": { "action": "play_edit" }, "store": "playing" },
+    { "op": "wait", "seconds": 2 },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicTestAutomation.Step", "args": {}, "store": "follow" },
+    { "op": "capture", "name": "cinematic-follow", "hide_ui": false },
+    { "op": "wait", "seconds": 2.5 },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicTestAutomation.Step", "args": {}, "store": "orbit" },
+    { "op": "capture", "name": "cinematic-orbit-slowmo", "hide_ui": false },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step", "args": { "action": "pause" }, "store": "pause" },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step", "args": { "action": "seek", "seconds": 3 }, "store": "seek" },
+    { "op": "wait", "seconds": 0.2 },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicTestAutomation.Step", "args": {}, "store": "scrubbed" },
+    { "op": "capture", "name": "cinematic-scrubbed", "hide_ui": false },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step", "args": { "action": "bookmark", "label": "orbit-inspected" }, "store": "marked" },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step", "args": { "action": "resume" }, "store": "resume" },
+    { "op": "wait", "seconds": 2 },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicTestAutomation.Step", "args": {}, "store": "dolly" },
+    { "op": "capture", "name": "cinematic-dolly", "hide_ui": false },
+    { "op": "wait", "seconds": 8 },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicTestAutomation.Step", "args": {}, "store": "complete" },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step", "args": { "action": "console", "visible": true, "page": 1 }, "store": "console" },
+    { "op": "wait", "seconds": 0.5 },
+    { "op": "capture", "name": "cinematic-console", "hide_ui": false },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicTestAutomation.Step", "args": {}, "store": "editor_input" },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step", "args": { "action": "console", "visible": false }, "store": "closed_console" },
+    { "op": "wait", "seconds": 0.2 },
+    { "op": "call", "method": "BoscaliSummer.Cinematics.CinematicTestAutomation.Step", "args": {}, "store": "editor_restored" },
+    { "op": "end" }
+  ],
+  "checks": [
+    { "check": "status_ok" },
+    { "check": "result_above", "path": "demo.edit_clips", "min": 2.5 },
+    { "check": "result_above", "path": "follow.playing", "min": 0.5 },
+    { "check": "result_below", "path": "orbit.simulation_rate_actual", "max": 0.251 },
+    { "check": "result_above", "path": "orbit.simulation_rate_actual", "min": 0.249 },
+    { "check": "result_below", "path": "orbit.fixed_delta_ratio", "max": 0.251 },
+    { "check": "result_above", "path": "orbit.fixed_delta_ratio", "min": 0.249 },
+    { "check": "result_above", "path": "scrubbed.camera_paused", "min": 0.5 },
+    { "check": "result_below", "path": "scrubbed.seek_pending", "max": 0.5 },
+    { "check": "result_above", "path": "scrubbed.playhead", "min": 2.99 },
+    { "check": "result_below", "path": "scrubbed.playhead", "max": 3.01 },
+    { "check": "result_below", "path": "complete.playing", "max": 0.5 },
+    { "check": "result_below", "path": "complete.effect_roots", "max": 0.5 },
+    { "check": "result_above", "path": "complete.native_free", "min": 0.5 },
+    { "check": "result_above", "path": "complete.native_inputs", "min": 0.5 },
+    { "check": "result_above", "path": "complete.pause_key_allowed", "min": 0.5 },
+    { "check": "result_above", "path": "complete.simulation_rate_actual", "min": 0.999 },
+    { "check": "result_below", "path": "complete.simulation_rate_actual", "max": 1.001 },
+    { "check": "result_above", "path": "complete.clock_restored", "min": 0.5 },
+    { "check": "result_above", "path": "complete.inputs_restored", "min": 0.5 }
+    ,{ "check": "result_above", "path": "console.console_open", "min": 0.5 }
+    ,{ "check": "result_below", "path": "editor_input.mouse_enabled", "max": 0.5 }
+    ,{ "check": "result_below", "path": "editor_input.keyboard_enabled", "max": 0.5 }
+    ,{ "check": "result_above", "path": "editor_restored.mouse_enabled", "min": 0.5 }
+    ,{ "check": "result_above", "path": "editor_restored.keyboard_enabled", "min": 0.5 }
+  ]
+}

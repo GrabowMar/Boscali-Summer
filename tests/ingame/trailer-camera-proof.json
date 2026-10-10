@@ -1,0 +1,20 @@
+{
+  "name": "trailer-camera-proof",
+  "mods": ["boscalisummer"],
+  "mission": "Free Flight",
+  "timeout_s": 90,
+  "ops": [
+    {"op":"spawn","id":"lead","type":"FS-20 Vortex","faction":"Boscali","at":{"map":[0,0]},"altitude":1500,"speed":170,"heading":0},
+    {"op":"observe","follow":"lead"},
+    {"op":"atmosphere","time_of_day":7,"conditions":0.2,"cloud_height":3500,"wind_speed":2,"wind_heading":90,"wind_turbulence":0,"moon_phase":14},
+    {"op":"wait","seconds":8},
+    {"op":"call","method":"BoscaliSummer.Cinematics.CinematicAutomation.Step","args":{"action":"detach"},"store":"detached"},
+    {"op":"call","method":"TrailerCapture.Automation.Step","args":{"action":"shot","actor":"lead","id":"cw-proof-orbit","rig":"orbit","duration":9,"radius":60,"height":15,"from":-145,"to":-45,"fov":42},"store":"shot"},
+    {"op":"call","method":"TrailerCapture.Automation.Step","args":{"action":"start","id":"cw-proof-orbit","hide_ui":true},"store":"recording"},
+    {"op":"wait","seconds":8},
+    {"op":"call","method":"TrailerCapture.Automation.Step","args":{"action":"stop"},"store":"recorded"},
+    {"op":"call","method":"BoscaliSummer.Cinematics.CinematicAutomation.Step","args":{"action":"stop"},"store":"stopped"},
+    {"op":"end"}
+  ],
+  "checks":[{"check":"status_ok"},{"check":"result_above","path":"recorded.frames","min":30},{"check":"result_above","path":"recorded.duration","min":7}]
+}
