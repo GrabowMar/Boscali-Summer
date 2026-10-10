@@ -352,6 +352,110 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             return fog * 0.55f * Scalar.Clamp01(4f * h * (1f - h) * 1.3f) * 0.85f;
         }
 
+        /// <summary>The raw weighted sum of the three lobe taps at one lobe size, before the remap.</summary>
+        private float BodiesRaw(float x, float y, float z, float scale)
+        {
+            float period = scale * 4f;
+            float a = Sample(x / period, z / period, y / (period * 0.9f), 2);
+            float b = Sample(z / (period * 2.73f) + 0.37f, -x / (period * 2.73f) + 0.37f, y / (period * 2.1f), 0);
+            float c = Sample(x / (period * 0.29f) + 0.17f, z / (period * 0.29f) + 0.61f, y / (period * 0.24f), 2);
+            return a * 0.65f + b * 0.15f + c * 0.20f;
+        }
+
+        private static float RemapBodies(float raw) => Scalar.Clamp01((raw - 0.22f) * 2.5f);
+
+        /// <summary>The front body's scale for a lobe: the shield's lumps are larger than a deck's, and a sheet fades to a fixed 5.2 km.
+        /// INTERIM(slice 4): the front parameters of LadderScale and BodiesLadder go with the frontal shield. Its scale lerps with
+        /// sheetBlend, a scale that varies in space, and is the one place the ladder rule of spec 6 is broken knowingly.</summary>
+        private static float LadderScale(float rung, bool front, float sheetBlend)
+        {
+            float lobe = Ladder.LobeMetres(rung);
+            return front ? WeatherMath.Lerp(Math.Max(1800f, lobe * 1.35f), 5200f, sheetBlend) : lobe;
+        }
+
+        /// <summary>Bodies at a lobe rung index. A whole rung is one call; inside a ramp the two neighbouring rungs are mixed with
+        /// the contrast kept, and the second rung is evaluated only when it shows (spec 6). A sheet front is one fixed scale at every
+        /// rung, so it never takes a second tap (and Ladder.Mix would otherwise boost the deviation of two identical fields by up to 1.41).
+        /// Mirrors BodiesLadder in the shader. INTERIM(slice 4): the front and sheetBlend parameters go with the frontal shield.</summary>
+        public float BodiesLadder(float x, float y, float z, float rungIndex, bool front, float sheetBlend)
+        {
+            Ladder.Split(rungIndex, out float r0, out float w);
+            if (front && sheetBlend >= 0.999f) w = 0f;
+            float raw0 = 0f, raw1 = 0f;
+            if (w < 0.98f) raw0 = BodiesRaw(x, y, z, LadderScale(r0, front, sheetBlend));
+            if (w > 0.02f) raw1 = BodiesRaw(x, y, z, LadderScale(r0 + 1f, front, sheetBlend));
+            return RemapBodies(Ladder.Mix(raw0, raw1, w));
+        }
+
+        /// <summary>
+        /// A thin layer's 2D cloud field at a point (spec 4.3, 7.4): the pattern of the layer's weighted morphologies (cells,
+        /// ripples, streaks) at its period rung, the flattening from the veil weight, the edge from SlabCoverMask (which, with the
+        /// Detail-independent rank, makes the covered area follow Cover) and the interior density from Detail. No altitude
+        /// profile and no strength: the shader's Slab2D is the twin, at footprint zero.
+        /// </summary>
+        public float Slab2D(in SkyLayer row, float x, float y, float z)
+        {
+            float cover = row.Cover;
+            if (cover <= 0.005f) return 0f;
+            // The visible slab's mesoscale patch and warp share this RG sample.
+            float lowR = Sample(x / 27000f + 0.27f, z / 27000f + 0.27f, 0.71f, 0);
+            float lowG = Sample(x / 27000f + 0.27f, z / 27000f + 0.27f, 0.71f, 1);
+            SlabMath.Weights(row, out float wc, out float wr, out float ws, out float wv);
+            Ladder.Split(row.PeriodRung, out float r0, out float w);
+            float pat0 = 0f, pat1 = 0f;
+            if (w < 0.98f) pat0 = SlabPattern(row, x, y, z, Ladder.PeriodMetres(r0), lowR, lowG, wc, wr, ws);
+            if (w > 0.02f) pat1 = SlabPattern(row, x, y, z, Ladder.PeriodMetres(r0 + 1f), lowR, lowG, wc, wr, ws);
+            float pattern = Ladder.Mix(pat0, pat1, w, 0.52f);
+            // The cover law: the rank does not depend on Detail, so the layer covers about its Cover of the sky however crisp or flat it is;
+            // Detail only scales the density inside the cover.
+            float rank = Scalar.Clamp01(0.5f + (pattern - 0.52f) * SlabMath.RankGain);
+            float body = WeatherMath.Lerp(rank, 0.7f + 0.3f * rank, wv);
+            float c = Scalar.Clamp01(cover * (0.55f + 0.9f * Scalar.Clamp01(0.5f + (lowG - 0.52f) * 3.16f)));
+            return SlabMath.SlabCoverMask(body, c, row.Softness) * WeatherMath.Lerp(1f, body, row.Detail);
+        }
+
+        /// <summary>The weighted pattern value (about 0.52 on average) of a layer at one period; 0.52 when no pattern has weight.</summary>
+        private float SlabPattern(in SkyLayer row, float x, float y, float z, float scale, float lowR, float lowG,
+            float wc, float wr, float ws)
+        {
+            if (wc + wr + ws <= 0f) return 0.52f;
+            float warpX = (lowR - 0.5f) * scale * 1.6f, warpZ = (lowG - 0.5f) * scale * 1.6f;
+            float px = x + warpX, pz = z + warpZ;
+            float along = px * windX + pz * windZ, across = -px * windZ + pz * windX;
+            float streak = 0.52f, cells = 0.52f;
+            if (ws > 0f)
+            {
+                float a = along, b = across;
+                if (row.Curl > 0.01f)
+                {
+                    // Curl bends the streak coordinate with low-frequency vector noise: hooked cirrus. One fixed sign.
+                    a += (Sample(px / (scale * 3.1f) + 0.61f, pz / (scale * 3.1f) + 0.61f, 0.33f, 0) - 0.5f) * scale * 2f * row.Curl;
+                    b += (Sample(px / (scale * 3.1f) + 0.61f, pz / (scale * 3.1f) + 0.61f, 0.33f, 1) - 0.5f) * scale * 2f * row.Curl;
+                }
+                float span = scale * row.Aspect;
+                float s1 = Sample(a / span, b / scale, y / (scale * 0.6f) + 0.17f, 0);
+                float a2 = a * 0.982f - b * 0.191f, c2x = a * 0.191f + b * 0.982f;
+                float s2 = Sample(a2 / (span * 1.73f) + 0.53f, c2x / (scale * 1.73f) + 0.29f, y / (scale * 1.1f) + 0.61f, 0);
+                streak = s1 * 0.6f + s2 * 0.4f;
+            }
+            if (wc + wr > 0f)
+            {
+                float cs = scale * 0.45f;
+                float c1 = Sample(px / cs + 0.41f, pz / cs + 0.41f, y / (cs * 0.8f), 0);
+                float c2 = Sample(pz / (cs * 2.37f) + 0.13f, -px / (cs * 2.37f) + 0.13f, y / (cs * 1.9f) + 0.77f, 0);
+                cells = c1 * 0.62f + c2 * 0.38f;
+            }
+            float ripples = cells;
+            if (wr > 0f)
+            {
+                float rows = 0.55f + 0.45f * (float)Math.Sin(across / row.RippleWavelength * 2f * Math.PI + warpX / scale * 2f);
+                // rows averages 0.55, so dividing by it keeps the pattern's mean at the cells' (0.52): without it a ripple layer sat at 0.64 of a cell
+                // layer's mean and, through the cover mask, covered a fraction of its cover.
+                ripples = cells * WeatherMath.Lerp(1f, rows / 0.55f, 0.8f);
+            }
+            return (wc * cells + wr * ripples + ws * streak) / (wc + wr + ws);
+        }
+
         /// <summary>The shader's middle layer (altocumulus .. altostratus), times its strength.</summary>
         public float MidLayer(float x, float y, float z)
         {
@@ -400,20 +504,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         /// <summary>Rounded lobe field. Four cells per texture tile: scale is the lobe width,
         /// not the tile width. Broad variation breaks equal-sized cellular packing.</summary>
-        public float Bodies(float x, float y, float z, float scale)
-        {
-            float period = scale * 4f;
-            float a = Sample(x / period, z / period, y / (period * 0.9f), 2);
-            float b = Sample(z / (period * 2.73f) + 0.37f, -x / (period * 2.73f) + 0.37f, y / (period * 2.1f), 0);
-            float c = Sample(x / (period * 0.29f) + 0.17f, z / (period * 0.29f) + 0.61f, y / (period * 0.24f), 2);
-            return Scalar.Clamp01((a * 0.65f + b * 0.15f + c * 0.20f - 0.22f) * 2.5f);
-        }
+        public float Bodies(float x, float y, float z, float scale) => RemapBodies(BodiesRaw(x, y, z, scale));
 
-        public static float CoverMask(float body, float cover)
-        {
-            float open = Scalar.Clamp01((body - (1f - cover)) / Math.Max(0.18f, cover));
-            return WeatherMath.Lerp(open, Math.Max(open, 0.55f + body * 0.45f), WeatherMath.Smoothstep(0.82f, 1f, cover));
-        }
+        public static float CoverMask(float body, float cover) => SlabMath.CoverMask(body, cover);
 
         /// <summary>Bilinear clamped RGBA map read, with the same texel centres/units as SampleWeather.</summary>
         public static WeatherPoint SampleMap(byte[] structure, byte[] profiles, int mapSize, float u, float v)
