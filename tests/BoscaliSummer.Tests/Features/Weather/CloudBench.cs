@@ -234,6 +234,7 @@ public sealed class CloudBench : MonoBehaviour
             var watch = Stopwatch.StartNew();
             CloudMaps maps = CloudMaps.Build(key, time, HalfExtent, HalfExtent, 13f, 105000f, 315000f);
             long mapMs = watch.ElapsedMilliseconds;
+            long cookieMs = CookieMs(noiseBytes, n3, field);
             Texture2D near = Map(maps.Near, CloudMaps.NearSize), nearProfiles = Map(maps.NearProfiles, CloudMaps.NearSize);
             Texture2D far = Map(maps.Far, CloudMaps.FarSize), farProfiles = Map(maps.FarProfiles, CloudMaps.FarSize);
             Texture2D envelope = Map(maps.Envelope, CloudMaps.EnvelopeSize);
@@ -428,7 +429,7 @@ public sealed class CloudBench : MonoBehaviour
                 RenderTexture.active = null;
                 File.WriteAllBytes(s.Name + "-" + mode + ".png", readback.EncodeToPNG());
                 log.AppendLine(s.Name.PadRight(16) + mode.PadRight(5) + ms.ToString("0.00").PadLeft(8) + " ms/frame" +
-                    "  (maps " + mapMs + " ms, heroes " + field.SuperstructureCount + (moving ? "; route includes PNG capture overhead" : "") + ")");
+                    "  (maps " + mapMs + " ms, cookie " + cookieMs + " ms, heroes " + field.SuperstructureCount + (moving ? "; route includes PNG capture overhead" : "") + ")");
             }
             cmd.Clear();
             camera.transform.rotation = Quaternion.Euler(-s.Pitch, yaw, 0f);
@@ -441,6 +442,39 @@ public sealed class CloudBench : MonoBehaviour
             UnityEngine.Object.Destroy(near); UnityEngine.Object.Destroy(nearProfiles);
             UnityEngine.Object.Destroy(far); UnityEngine.Object.Destroy(farProfiles); UnityEngine.Object.Destroy(envelope);
         }
+    }
+
+    /// <summary>The shadow cookie build's CPU cost (WeatherCloudShadows.Queue; spec 10.3 gates "cookie worker time"): the same loop on every
+    /// fourth pixel of both axes, 14 density taps each, a fixed 45-degree sun, scaled by 16. A mirror of that loop; keep it in step.</summary>
+    private static long CookieMs(byte[] noise, int size, WeatherField field)
+    {
+        const int cookie = 256, stride = 4, samples = 14;
+        const float span = 48000f;
+        var body = new CloudBodies(noise, size, field.Params, field.PrevailingHeading, field.Split, 0f, field);
+        Vector3 direction = new Vector3(0.35f, -0.72f, 0.6f).normalized;
+        Vector3 right = Vector3.Cross(Vector3.up, direction).normalized, up = Vector3.Cross(direction, right);
+        float baseY = field.Params.CloudBase;
+        float lower = Mathf.Max(0f, baseY - 800f), upper = 12000f, dy = (upper - lower) / samples;
+        float rayStep = dy / Mathf.Max(0.06f, -direction.y), sink = 0f;
+        var timer = Stopwatch.StartNew();
+        for (int y = stride / 2; y < cookie; y += stride)
+            for (int x = stride / 2; x < cookie; x += stride)
+            {
+                float u = ((x + 0.5f) / cookie - 0.5f) * span, v = ((y + 0.5f) / cookie - 0.5f) * span;
+                float px = right.x * u + up.x * v, py = right.y * u + up.y * v, pz = right.z * u + up.z * v;
+                float deckT = (baseY + 700f - py) / direction.y;
+                WeatherPoint p = field.Sample(px + direction.x * deckT, pz + direction.z * deckT);
+                float depth = 0f;
+                for (int s = 0; s < samples && depth < 4f; s++)
+                {
+                    float altitude = lower + (s + 0.5f) * dy;
+                    float t = (altitude - py) / direction.y;
+                    depth += body.Density(p, px + direction.x * t, altitude, pz + direction.z * t, 0f) * rayStep * 0.0021f;
+                }
+                sink += depth;
+            }
+        if (sink < 0f) UnityEngine.Debug.Log("cookie sink " + sink); // keeps the loop live
+        return (long)(timer.Elapsed.TotalMilliseconds * ((cookie / stride) * (cookie / stride) / 4096.0) * 16.0);
     }
 
     private static void AddMapViews(List<Scene> scenes)
