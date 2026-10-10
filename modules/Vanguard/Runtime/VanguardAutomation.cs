@@ -48,6 +48,7 @@ namespace BoscaliSummer.Vanguard
                 case "snap": return Snap(lead, Text(args, "target") == "none" ? null : (Unit)bandit, Number(args, "press", 1f) > 0f);
                 case "launch":
                     string at = Text(args, "at");
+                    if (at == "point") return LaunchAtPoint(Text(args, "key"), lead, Number(args, "x", 0f), Number(args, "z", 0f));
                     return Launch(Text(args, "key"), lead, at == "threat" ? threat : at == "ground" ? groundTarget : at == "ship" ? testShip : (Unit)bandit);
                 case "lure":
                     Modules.Vanguard.Domain.SeductionRule.TowedRearChance = Number(args, "chance", 0.35f);
@@ -80,6 +81,7 @@ namespace BoscaliSummer.Vanguard
                 case "status": return Status(lead);
                 case "orca": return Orca(args, lead);
                 case "kestrel": return Kestrel(args, lead);
+                case "hamilcar": return Hamilcar(args, lead);
                 case "showcase": return Showcase(lead);
                 case "view": return View(Text(args, "angle") ?? "front");
                 default: return Failure("VanguardAutomation", "Step", "unknown action");

@@ -77,6 +77,7 @@ namespace BoscaliSummer.Modules.Vanguard
             Networking.VanguardNet drones = context.AddSceneService<Networking.VanguardNet>(60);
             context.AddService<IDroneCommand>(drones);
             new VanguardScopeGauges(drones).Register();      // the TAC BOARD's LANCE, AEGIS and REMORA gauges
+            context.AddSceneService<HamilcarService>(60);
         }
     }
 }

@@ -71,6 +71,10 @@ namespace Vanguard
                 Description = "Unarmed recon glider launched from a cargo hold on a sled. Flies at 80 m/s to your designated target (else a point ahead) and orbits 800 m around it, 1000 m above, for five minutes. Enemy ground units and ships within 5 km of the orbit stay on your side's map, and its laser holds your target so laser-guided weapons can home on it. Designate a new ground target to move the orbit.",
                 Mass = 80, Yield = 0, Cost = 0.8f, Value = 20, RadarSize = 0.05f, Thrust = 600, BurnTime = 900, GLimit = 4, TurnRate = 30,
                 Racks = new string[0] }, // hold-only sled mount "VG_Kestrel_Sled", see Kestrel() in VanguardBuilder.kestrel.cs
+            new Spec { Key = "VG_Hamilcar", Name = "CG-9 HAMILCAR Cargo Glider", Short = "HAMILCAR", Model = "Hamilcar",
+                Description = "Cargo glider with a small pusher propeller, carrying one Hexhound GMG robot. DESIGNATE a ground target and release from a hold: it flies fifteen metres for every metre of height, up to 45 km, lands on its belly about 250 m short of the target and the Hexhound rolls off. Straight-in at 120 m/s, it needs flat dry ground and anything that hits it on the way in loses both.",
+                Mass = 3650, Yield = 1, Pierce = 0, Cost = 1.6f, Value = 25, RadarSize = 0.5f, Thrust = 0, BurnTime = 1, GLimit = 4, TurnRate = 12,
+                Racks = new[] { "AGM_heavy_single" } }, // hold-floor station, see Hamilcar() in VanguardBuilder.hamilcar.cs
         };
 
         public static void Run()
@@ -89,6 +93,7 @@ namespace Vanguard
             AlexDress(materials);
             SkywellKit(materials);
             Kestrel(infos["VG_Kestrel"], materials); // VanguardBuilder.kestrel.cs
+            Hamilcar(infos[HamilcarKey]); // VanguardBuilder.hamilcar.cs: retunes both prefabs, seats the Hexhound, hold carriers, model gate
             Lance(materials);
             AssetDatabase.SaveAssets();
             ValidateOperationalPrefabs();
@@ -696,7 +701,9 @@ namespace Vanguard
             foreach (var station in g.GetComponentsInChildren<MountedMissile>(true))
             {
                 GameObject rackVisual = Visual(station.transform, spec.Model, materials);
-                if (!StowedInFbx(spec.Model)) StowWings(rackVisual, station.transform); // those FBX files already hold the stowed pose
+                // Those FBX files already hold the stowed pose; HAMILCAR holds the flight pose but its joints are not WingL/WingR:
+                // Hamilcar() stows the mount visual itself.
+                if (!StowedInFbx(spec.Model) && spec.Model != "Hamilcar") StowWings(rackVisual, station.transform);
                 Edit(station, s => P(s, "info").objectReferenceValue = info);
             }
             SaveMount(g, mount, json, info, donor);

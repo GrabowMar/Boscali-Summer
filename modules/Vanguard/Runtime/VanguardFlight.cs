@@ -62,6 +62,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (role == VanguardRole.Gunship) InitGunship(target, aimpoint);
             if (role == VanguardRole.Sentinel) InitSentinel(target);
             if (role == VanguardRole.Scout) InitScout(target);
+            if (role == VanguardRole.Lander) InitHamilcar();
         }
 
         public VanguardRole Role => role;
@@ -89,6 +90,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (role == VanguardRole.Scout)
             {
                 TickScout();
+                return;
+            }
+            if (role == VanguardRole.Lander)
+            {
+                TickHamilcar();
                 return;
             }
             if (role == VanguardRole.Towed) HoldTow();
@@ -123,9 +129,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (missile.disabled) return;
             missile.UpdateRadarAlt();
             float age = missile.timeSinceSpawn;
-            if (!missile.IsTangible() && age > (role == VanguardRole.Scout ? KestrelProfile.ClearSeconds : 1.5f)) missile.SetTangible(true); // the glider leaves through the hold
+            if (!missile.IsTangible() && age > (role == VanguardRole.Scout ? KestrelProfile.ClearSeconds : role == VanguardRole.Lander ? 2.5f : 1.5f)) missile.SetTangible(true); // the gliders leave through the hold
             if (role == VanguardRole.Scout) return; // KESTREL ends itself, quietly: station clock, hard cap, ground (KestrelDrone)
-            float minimumSpeed = role == VanguardRole.Sentinel ? 0f : VanguardKeys.IsGunDrone(role) ? 25f : 60f; // the sentry hovers
+            float minimumSpeed = role == VanguardRole.Sentinel ? 0f : role == VanguardRole.Lander ? HamilcarMinSpeed()
+                : VanguardKeys.IsGunDrone(role) ? 25f : 60f; // the sentry hovers, the cargo glider lands
             if (age > Lifetime() || (age > 10f && missile.speed < minimumSpeed && role != VanguardRole.Towed && !underwater)) Detonate();
         }
 
@@ -142,6 +149,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 case VanguardRole.Gunship: return 300f;
                 case VanguardRole.Towed: return 300f;
                 case VanguardRole.Glider: return 900f;
+                case VanguardRole.Lander: return HamilcarLifetime();
                 case VanguardRole.Jammer: return MaldjShadow.Lifetime;
                 default: return 600f;
             }
