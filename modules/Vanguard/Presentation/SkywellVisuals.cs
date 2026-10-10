@@ -186,7 +186,12 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 }
                 Drive(r, hold, now);
             }
-            for (int i = 0; i < released.Count; i++) holds.Remove(released[i]);
+            for (int i = 0; i < released.Count; i++)
+            {
+                SkywellDiag.Log("HOLD release r=" + (released[i] != null ? released[i].persistentID.Id.ToString() : "null-ref") + " disabled=" + (released[i] != null && released[i].disabled));
+                SkywellDiag.Track(released[i]);
+                holds.Remove(released[i]);
+            }
         }
 
         /// <summary>
@@ -234,7 +239,11 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             return best != null;
         }
 
-        private void Engage(Aircraft r, Aircraft tanker, float now) => holds[r] = MakeHold(r, tanker, now);
+        private void Engage(Aircraft r, Aircraft tanker, float now)
+        {
+            holds[r] = MakeHold(r, tanker, now);
+            SkywellDiag.Log("HOLD start r=" + r.persistentID.Id + " dur=" + holds[r].Duration.ToString("F1") + " bodies=" + holds[r].Bodies.Count + " startPos=" + holds[r].StartPos.ToString("F0"));
+        }
 
         private static Hold MakeHold(Aircraft r, Aircraft tanker, float now)
         {

@@ -12,7 +12,7 @@
       "faction": "Boscali",
       "at": {
         "map": [
-          0,
+          25000,
           0
         ]
       },
@@ -99,13 +99,13 @@
       "faction": "Primeva",
       "at": {
         "map": [
-          0,
+          25000,
           80000
         ]
       },
       "altitude": 3000,
-      "speed": 200,
-      "heading": 180
+      "speed": 130,
+      "heading": 0
     },
     {
       "op": "fly",

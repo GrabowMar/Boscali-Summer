@@ -200,6 +200,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (instance.lockout.TryGetValue(receiver, out float until) && Time.timeSinceLevelLoad < until) return false;
             float range = receiver.Player == null ? AiEngageRange : EngageRadius + 20f;
             if (Vector3.Distance(SkywellBoard.ProbePoint(receiver), SkywellBoard.ContactPoint(tanker)) > range) return false;
+            SkywellDiag.Log("DOCK accepted receiver=" + receiver.persistentID.Id);
             kit.Receiver = receiver;
             kit.HotUntil = 0f; // the red break flag belongs to the receiver the break hit, not to whoever docks next
             Enter(kit, SkywellPhase.Engage, Time.timeSinceLevelLoad + EngageTimeout);
@@ -229,6 +230,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private void FixedUpdate()
         {
             float now = Time.timeSinceLevelLoad;
+            if (GameAccess.IsServer()) foreach (Kit dk in kits.Values) { SkywellDiag.Tick(dk.Tanker); break; }
             if (now < nextTick || !GameAccess.IsServer()) return;
             nextTick = now + TickInterval;
             bool scan = now >= nextScan;
@@ -363,6 +365,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         private static void Enter(Kit kit, SkywellPhase phase, float end)
         {
+            SkywellDiag.Log("ENTER " + phase + " receiver=" + (kit.Receiver != null ? kit.Receiver.persistentID.Id.ToString() : "none"));
             kit.Phase = phase;
             kit.PhaseEnd = end;
             Publish(kit);
@@ -372,6 +375,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private void Drop(Kit kit, bool served, bool hot = false)
         {
             Aircraft r = kit.Receiver;
+            SkywellDiag.Log("DROP served=" + served + " hot=" + hot + " receiver=" + (r != null ? r.persistentID.Id.ToString() : "none") + " phase=" + kit.Phase + " disabled=" + (r != null && r.disabled));
             if (r != null)
             {
                 float now = Time.timeSinceLevelLoad;
