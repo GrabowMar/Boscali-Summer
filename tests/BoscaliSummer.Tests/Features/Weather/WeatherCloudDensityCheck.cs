@@ -74,7 +74,7 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
         byte[] solid = new byte[4 * 4 * 4 * 4]; Array.Fill(solid, (byte)255);
         for (int i = 1; i < solid.Length; i += 4) solid[i] = 128;
         var shallow = new byte[] { 0, 166, 204, 55 };
-        var shield = new byte[] { 104, 159, 22, 0 };
+        var shield = new byte[] { 104, 159, 86, 0 };   // base byte 86 is 1350 m on the 4096 m scale (22 was 1380 m on the old 16000 m one)
         Color[] lower = Group("shallow-under-shield", field, solid, 4, shallow, shield, shallow, shield, 1, null,
             new[] { new Vector3(0, 2100, 0), new Vector3(0, 5000, 0), new Vector3(0, 7500, 0),
                 new Vector3(0, 13000, 0), new Vector3(0, 500, 0) }, 0f, Vector3.zero, true);
@@ -83,7 +83,7 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
         Require(lower[0].g > .2f && lower[0].g < .5f && lower[2].g > .1f && lower[2].g < .5f,
             "Actual GPU heights are local to shallow body/front, not the aggregate ceiling");
         var deep = new byte[] { 0, 0, 220, 142 };
-        var wet = new byte[] { 0, 0, 22, 128 };
+        var wet = new byte[] { 0, 0, 86, 128 };
         Color[] upper = Group("deep-scud-shifted", field, solid, 4, deep, wet, deep, wet, 1, null,
             new[] { new Vector3(1000, 2700, -2000), new Vector3(1000, 6600, -2000),
                 new Vector3(1000, 1500, -2000), new Vector3(1000, 14000, -2000) }, 600f,
@@ -91,7 +91,7 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
         Require(upper[0].r > .1f && upper[1].r > .1f && upper[2].r > .1f && upper[3].r == 0f,
             "Actual GPU deep column/scud and floating-origin/terrain height shift remain coherent");
         var far = new byte[] { 0, 80, 220, 170 };
-        var farProfile = new byte[] { 140, 220, 32, 0 };
+        var farProfile = new byte[] { 140, 220, 125, 0 };
         Group("near-far-height-blend", field, solid, 4, shallow, shield, far, farProfile, 1, null,
             new[] { new Vector3(46000, 4500, 0), new Vector3(47000, 4500, 0),
                 new Vector3(48000, 4500, 0), new Vector3(-48000, 8500, 0) }, 0f, Vector3.zero, true);
@@ -177,13 +177,15 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
             material.SetVector("_CloudFlashA", Vector4.zero); material.SetVector("_CloudFlashB", Vector4.zero);
             Color weather = new Color(.55f, 0f, 0f, .5f);
             Texture2D structure = FloatMap(new[] { weather }, 1, owned);
-            Texture2D wet = FloatMap(new[] { new Color(0f, 0f, .125f, .8f) }, 1, owned);
-            Texture2D dry = FloatMap(new[] { new Color(0f, 0f, .125f, 0f) }, 1, owned);
+            // The cloud base sits at 2000 m: its byte spans 0-4096 m (CloudMaps.BaseRange).
+            const float Base2Km = 2000f / CloudMaps.BaseRange;
+            Texture2D wet = FloatMap(new[] { new Color(0f, 0f, Base2Km, .8f) }, 1, owned);
+            Texture2D dry = FloatMap(new[] { new Color(0f, 0f, Base2Km, 0f) }, 1, owned);
             var patchPixels = new Color[16 * 16];
             // Near span is -16..+16 km. The rightmost five texels begin at +6 km;
             // a 3 km opaque scene lies wholly before the wet patch, a 12 km ray reaches it.
             for (int z = 0; z < 16; z++)
-            for (int x = 0; x < 16; x++) patchPixels[z * 16 + x] = new Color(0f, 0f, .125f, x >= 11 ? .8f : 0f);
+            for (int x = 0; x < 16; x++) patchPixels[z * 16 + x] = new Color(0f, 0f, Base2Km, x >= 11 ? .8f : 0f);
             Texture2D patch = FloatMap(patchPixels, 16, owned);
             material.SetTexture("_WeatherMapTex", structure); material.SetTexture("_WeatherFarMapTex", structure);
             material.SetTexture("_WeatherFarProfileTex", dry);

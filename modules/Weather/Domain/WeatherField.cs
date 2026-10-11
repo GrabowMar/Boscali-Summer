@@ -38,6 +38,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public float FrontBase;
         public float FrontTop;
         public float CloudBase;
+        /// <summary>How far the base-height field may move the base at this point (the row's BaseVariation, 150-400 m): the map widens its altitude bounds by it.</summary>
+        public float BaseVariation;
         /// <summary>Ordinary deck/tower ceiling; excludes the independent frontal shield.</summary>
         public float LowTop;
         public float CloudTop;
@@ -98,6 +100,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
         private readonly FrontState[] fronts = new FrontState[WeatherFronts.MaxFronts];
         private readonly CellCache<CumulusGroup> cumulusCache = new CellCache<CumulusGroup>();
         private readonly CellCache<StormCell> stormCache = new CellCache<StormCell>();
+        /// <summary>The base-height field of the current layout seed (it remembers the last lattice cell it read).</summary>
+        private BaseHeightField baseField;
         private readonly StormLattice.Neighbourhood stormNear = new StormLattice.Neighbourhood();
         private readonly CumulusLattice.Neighbourhood cumulusNear = new CumulusLattice.Neighbourhood();
         private readonly Superstructure[] superstructures = new Superstructure[Superstructures.MaxCount];
@@ -196,6 +200,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             cumulusCache.Reset();
             cumulusNear.Reset();
             stormCache.Reset();
+            if (baseField == null || baseField.LayoutSeed != Key.LayoutSeed) baseField = new BaseHeightField(Key.LayoutSeed);
             stormNear.Reset();
         }
 
@@ -356,11 +361,14 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 point.FrontTop = frontTopSum / frontWeight;
             }
 
-            float cloudBase = p.CloudBase - 300f * WeatherMath.Smoothstep(0f, 15f, rain);
+            // The local row's base with the base-height field added (spec 6), and the rain-bearing lowering taken off.
+            float cloudBase = local.CloudBase + local.BaseVariation * baseField.At(qx, qz) -
+                300f * WeatherMath.Smoothstep(0f, 15f, rain);
             // A front may lower the rain-bearing ceiling, but a high leading shield must not
             // lift low cloud; the shield renders through FrontBase/FrontTop.
             cloudBase = WeatherMath.Lerp(cloudBase, Math.Min(cloudBase, point.FrontBase), point.FrontCover);
             point.CloudBase = Scalar.Clamp(cloudBase, 250f, 3600f);
+            point.BaseVariation = local.BaseVariation;
             float stratiformCover = Scalar.Clamp01(1f - (1f - coverBase) * clearClusters);
             CloudGenus genus = CloudShape.Resolve(local);
             float deck = WeatherMath.Lerp(genus.PuffDepth, Math.Max(genus.PuffDepth, local.DeckDepth), genus.SheetBlend);

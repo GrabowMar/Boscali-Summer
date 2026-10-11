@@ -39,7 +39,7 @@ namespace BoscaliSummer.Tests.Features.Weather
         private static void SeparateMapCeilings()
         {
             var structure = new byte[] { 0, 200, 220, 48 };
-            var profiles = new byte[] { 105, 160, 22, 0 };
+            var profiles = new byte[] { 105, 160, 86, 0 };
             WeatherPoint p = CloudBodies.SampleMap(structure, profiles, 1, 0.5f, 0.5f);
             TestAssert.That(Math.Abs(p.LowTop - 48f / 255f * 16000f) < 0.01f,
                 "Structure alpha transports only the low/tower ceiling");
@@ -174,11 +174,14 @@ namespace BoscaliSummer.Tests.Features.Weather
                     WeatherPoint actual = CloudBodies.SampleMap(maps.Near, maps.NearProfiles, CloudMaps.NearSize, u, v);
                     WeatherPoint truth = field.Sample((u * 2f - 1f) * 50000f, (v * 2f - 1f) * 50000f);
                     CloudGenus genus = CloudShape.Resolve(field.Params);
+                    // The packed top is widened by the base variation (spec 6: Fill widens bottom and visualTop by BaseVariation).
                     float lowTop = Math.Max(truth.LowTop, truth.CloudBase + Math.Max(genus.PuffDepth,
-                        field.Params.DeckDepth) + genus.BaseWobble * 0.5f);
+                        field.Params.DeckDepth) + genus.BaseWobble * 0.5f) + truth.BaseVariation;
                     TestAssert.That(Math.Abs(actual.LowTop - lowTop) <= 16000f / 255f * 0.51f &&
                         Math.Abs(actual.FrontTop - truth.FrontTop) <= 16000f / 255f * 0.51f,
                         "Packed ordinary/front ceilings mirror field truth within half a height texel");
+                    TestAssert.That(Math.Abs(actual.CloudBase - truth.CloudBase) <= CloudMaps.BaseRange / 255f * 0.51f,
+                        "The packed cloud base mirrors field truth within half a 16 m step");
                 }
             }
         }

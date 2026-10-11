@@ -81,6 +81,10 @@ Shader "Boscali/FlightCloud"
         static bool gLowReuse = false;
 
         // Near march limit: beyond it the far map's level of detail takes over.
+        // The weather map profiles: the cloud-base byte spans 0-4096 m (CloudMaps.BaseRange), the front base and top and the structure
+        // tops 0-16000 m (CloudMaps.VolumeTop).
+        #define CLOUD_BASE_RANGE 4096.0
+        #define CLOUD_MAP_RANGE 16000.0
         #define CLOUD_NEAR_LIMIT 45000.0
         #define CLOUD_FAR_LIMIT 220000.0
         // Thin layers and the horizon deck reach this far along sky pixels; haze hides the rest.
@@ -625,7 +629,7 @@ Shader "Boscali/FlightCloud"
             float puffLod = max(coarse, LodFor(gFoot, max(1200.0, LobeMetres(lobe.x) * 4.0)));
             // The far map cannot resolve erosion detail; keep its envelope smooth.
             coarse = max(coarse, farShare);
-            float baseY = profile.b * 16000.0 + _CloudHeightShift;
+            float baseY = profile.b * CLOUD_BASE_RANGE + _CloudHeightShift;
             float topY = max(baseY + 280.0, weather.a * 16000.0 + _CloudHeightShift);
             float frontBase = profile.r * 16000.0 + _CloudHeightShift;
             float frontCrown = max(frontBase + 300.0, profile.g * 16000.0 + _CloudHeightShift);
@@ -1137,7 +1141,7 @@ Shader "Boscali/FlightCloud"
                 float farShare;
                 if (!SampleWeather(p.xz, weather, profile, farShare) || profile.a <= 0.02) continue;
                 float frontShare = weather.g / max(0.001, weather.r + weather.g + weather.b);
-                float baseY = lerp(profile.b, profile.r, saturate(frontShare)) * 16000.0 + _CloudHeightShift;
+                float baseY = lerp(profile.b * CLOUD_BASE_RANGE, profile.r * CLOUD_MAP_RANGE, saturate(frontShare)) + _CloudHeightShift;
                 if (!ClipRainCurtainHeight(ro.y, ray.y, baseY + 40.0, s0, s1)) continue;
                 t = lerp(s0, s1, clamp(jitter, 0.1, 0.9));
                 p = ro + ray * t;

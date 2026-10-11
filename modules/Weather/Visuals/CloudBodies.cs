@@ -537,7 +537,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             float lowTop = MapChannel(structure, a, b, c, d, 3, tx, tz) * 16000f;
             float frontCover = MapChannel(structure, a, b, c, d, 1, tx, tz);
             float frontTop = MapChannel(profiles, a, b, c, d, 1, tx, tz) * 16000f;
-            float cloudBase = MapChannel(profiles, a, b, c, d, 2, tx, tz) * 16000f;
+            float cloudBase = MapChannel(profiles, a, b, c, d, 2, tx, tz) * CloudMaps.BaseRange;
             return new WeatherPoint
             {
                 BackgroundCover = MapChannel(structure, a, b, c, d, 0, tx, tz),
