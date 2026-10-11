@@ -1425,6 +1425,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         internal float NextChangeIn()
         {
             if (Field == null || !Field.Key.Dynamic || !TryMissionTime(out float now)) return -1f;
+            if (float.IsInfinity(Field.Timeline.NextChangeAt)) return -1f; // a pinned sky never steps
             return Mathf.Max(0f, Field.Timeline.NextChangeAt - now);
         }
 
