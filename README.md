@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="media/readme/briefing-header.svg" alt="Boscali Summer — animated relief map with layered terrain, tactical tracks and sensor pulses" width="100%">
+  <img src="media/readme/relief-header.svg" alt="Boscali Summer — animated relief map with layered terrain, tactical tracks and sensor pulses" width="100%">
 </p>
 
 <p align="center">
