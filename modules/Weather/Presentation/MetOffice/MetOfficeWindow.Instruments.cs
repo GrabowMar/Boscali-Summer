@@ -84,7 +84,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 // A placed formation says where it stands and how strong it is (or how far its 20 s fade has got, from slice 5). A forced fog bank is Present but has no site:
                 // it keeps the "where" line of a piece nothing placed (LOW LAYER · 300 M) instead of a distance of 0 km and a strength of 0%.
                 string strength = sp.FadeProgress > 0f && sp.FadeProgress < 1f ? "FADE " + MetOfficeText.Cover(sp.FadeProgress) : MetOfficeText.Cover(sp.Strength);
-                string sub = sp.Present && sp.Placed ? MetOfficeText.Where(Mathf.Sqrt(sp.X * sp.X + sp.Z * sp.Z), WeatherMath.VectorToHeading(sp.X, sp.Z)) + " · " + strength
+                string sub = sp.Present && sp.Placed ? MetOfficeText.SetPieceWhere(sp.X, sp.Z, model.CamX, model.CamZ) + " · " + strength
                     : MetCatalog.SetWhere[i];
                 Label(setButtons[i], MetCatalog.SetNames[i] + "  " + (sp.Forced ? "ON" : "OFF") + "\n" + (sp.Placed && !sp.Forced ? "AUTO · " : "") + sub);
                 setButtons[i].Latched = sp.Forced;

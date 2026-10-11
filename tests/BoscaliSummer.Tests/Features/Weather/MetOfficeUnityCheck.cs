@@ -447,6 +447,8 @@ public static class MetOfficeUnityCheck
             foreach (string label in new[] { "STORM EYE 100%", "LENTICULARS 100%", "SUPERCELL 100%" })
                 if (!chartText.Contains(label)) Fail(where + ": the cluttered chart lost its label '" + label + "'");
         }
+        if (Built >= 7 && state == "cluttered" && !System.Text.RegularExpressions.Regex.IsMatch(all, @"(?<!\d)0 KM"))
+            Fail(where + ": the storm eye cell on the camera does not read 0 KM (set-pieces measure from the camera, not the theatre centre)");
         if (Built >= 8 && state == "client")
         {
             if (System.Text.RegularExpressions.Regex.IsMatch(all, @"\bX5\b")) Fail(where + ": a client prints the pace of its own settings");

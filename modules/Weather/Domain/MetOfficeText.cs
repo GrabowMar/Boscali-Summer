@@ -37,6 +37,13 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>"62 KM W" for a front's distance and the compass word of its bearing.</summary>
         public static string Where(float km, float bearingDeg) => AvNum.Fixed(km, 0) + " KM " + WeatherWords.Cardinal(bearingDeg);
 
+        /// <summary>A placed set-piece's distance and bearing from the camera (CamX/CamZ are 0 with no camera), like every other "where" in the console.</summary>
+        public static string SetPieceWhere(float x, float z, float camX, float camZ)
+        {
+            float dx = x - camX, dz = z - camZ;
+            return Where((float)Math.Sqrt(dx * dx + dz * dz), WeatherMath.VectorToHeading(dx, dz));
+        }
+
         /// <summary>"ETA 30'" while a front moves, "STATIC" while it stands still (today every front does).</summary>
         public static string Eta(float minutes) =>
             float.IsNaN(minutes) || float.IsInfinity(minutes) || minutes < 0f ? "STATIC" : "ETA " + AvNum.Fixed(minutes, 0) + "'";

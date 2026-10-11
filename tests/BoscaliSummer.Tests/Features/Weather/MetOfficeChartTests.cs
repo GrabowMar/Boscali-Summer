@@ -35,6 +35,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             TestAssert.Eq(MetOfficeText.TapeLine(false, 2, 20f), "HELD // TAPE x2 · 20 M/S", "held tape line");
             TestAssert.Eq(MetOfficeText.HoldLabel(true) + "/" + MetOfficeText.HoldLabel(false), "HOLD TAPE/RESUME TAPE", "the hold button names its next action");
             TestAssert.Eq(MetOfficeText.Where(62.4f, 270f), "62 KM W", "front distance and bearing words");
+            TestAssert.Eq(MetOfficeText.SetPieceWhere(148f, 125f, 118f, 125f), "30 KM E", "a set-piece reads from the camera, not the theatre centre");
             TestAssert.Eq(MetOfficeText.Eta(30f) + "|" + MetOfficeText.Eta(float.NaN), "ETA 30'|STATIC", "a still front reads STATIC");
             TestAssert.Eq(MetOfficeText.FrontWord(MetFrontKind.Cold), "COLD FRONT", "front word");
             TestAssert.Eq(MetOfficeText.OutlookLabel(0) + MetOfficeText.OutlookLabel(15), "NOW+15", "outlook labels");
