@@ -18,6 +18,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public bool DarkLamps;
         /// <summary>Of the lamps only the threat ones: LOCK, SPKE and MSL.</summary>
         public bool ThreatLampsOnly;
+        /// <summary>The compact SYSTEMS strip may show: its own switch AND the SYSTEMS page's (the strip is that page in its cruise form).</summary>
         public bool ShowSystemsStrip;
         /// <summary>The compact SYSTEMS strip shows only while something is in a caution or warning state.</summary>
         public bool SystemsStripOnlyWhenNotNominal;
@@ -119,7 +120,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 ShowLamps = ShowLamps,
                 DarkLamps = full,
                 ThreatLampsOnly = minimal,
-                ShowSystemsStrip = ShowSystemsStrip,
+                ShowSystemsStrip = ShowSystemsStrip && CuePriority.Has(voiced, ScopePage.Systems),
                 SystemsStripOnlyWhenNotNominal = !full,
                 SystemsCriticalOnly = minimal,
                 ShowGauges = ShowGauges && full,

@@ -114,11 +114,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             for (int i = 0; i < pages.Length; i++)
                 if (PollPage(pages[i], CuePriority.Has(allow.Voiced, (ScopePage)i) ? voiced : silent)) live |= CuePriority.Bit((ScopePage)i);
             bool notNominal = CuePriority.Has(live, ScopePage.Systems);      // before the mask: the strip's rule is about the aircraft's state, not about a page switch
-            live &= allow.Pages;
-            // A page the pilot has just switched off does not hold the scope until its linger runs out.
-            if (selector.Page != ScopePage.Systems && !CuePriority.Has(allow.Pages, selector.Page)) selector.Reset();
-            selector.SetMinStay(Options.PageMinSeconds);
-            selector.Update(live, now, pages[(int)ScopePage.Systems].Critical && CuePriority.Has(allow.Pages, ScopePage.Systems));
+            selector.Select(live, allow, Options.PageMinSeconds, now, pages[(int)ScopePage.Systems].Critical);
             page = pages[(int)selector.Page];
             systemsStrip = allow.SystemsStripShows(notNominal, pages[(int)ScopePage.Systems].Critical);
             header.Poll(now, CuePriority.Has(allow.Voiced, ScopePage.Threat) ? ((ThreatPage)pages[(int)ScopePage.Threat]).CallMask : (byte)0);

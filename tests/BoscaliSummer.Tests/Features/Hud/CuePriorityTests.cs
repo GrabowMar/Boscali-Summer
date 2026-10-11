@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Hud.Domain;
 
 namespace BoscaliSummer.Tests.Features.Hud
@@ -81,6 +82,63 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(s.Page == ScopePage.Systems && s.Others == 0, "Reset returns to cruise");
 
             Timing();
+            UnderOptions();
+        }
+
+        /// <summary>The scope under the pilot's options (what the board's update runs): the page switches, the scope mode, the least stay and the critical SYSTEMS reach the selection.</summary>
+        private static void UnderOptions()
+        {
+            BoardOptions o = BoardOptions.Default;
+            BoardEffective allow = o.Effective();
+            var s = new ScopeSelector();
+            s.Select(Live(ScopePage.Wing), allow, 0f, 0f, false);
+            TestAssert.That(s.Page == ScopePage.Wing, "A page whose switch is on takes the scope");
+
+            // A page whose switch is off is never live: it neither takes the scope nor earns a pip.
+            o.PageThreat = false;
+            s.Reset();
+            s.Select(Live(ScopePage.Threat, ScopePage.Wing), o.Effective(), 0f, 0f, false);
+            TestAssert.That(s.Page == ScopePage.Wing && s.Others == 0, "THREAT switched off: WING takes the scope and THREAT earns no pip");
+            s.Reset();
+            s.Select(Live(ScopePage.Threat), o.Effective(), 0f, 0f, false);
+            TestAssert.That(s.Page == ScopePage.Systems && s.Compact, "...and alone it leaves the scope in cruise");
+
+            // Switched off while it holds the scope: it lets go at once, not after its linger.
+            s.Reset();
+            s.Select(Live(ScopePage.Threat), allow, 0f, 0f, false);
+            TestAssert.That(s.Page == ScopePage.Threat, "THREAT holds the scope");
+            s.Select(Live(ScopePage.Threat), o.Effective(), 0f, 0.1f, false);
+            TestAssert.That(s.Page == ScopePage.Systems, "...and lets go the moment its switch goes off");
+
+            // Scope mode Off allows no page at all.
+            o = BoardOptions.Default;
+            o.ScopeMode = BoardScopeMode.Off;
+            s.Reset();
+            s.Select(Live(ScopePage.Threat), allow, 0f, 0f, false);
+            s.Select(Live(ScopePage.Threat, ScopePage.Wing), o.Effective(), 0f, 0.1f, false);
+            TestAssert.That(s.Page == ScopePage.Systems && s.Others == 0, "Scope mode Off: the page on the scope goes and nothing takes its place");
+
+            // The least stay is the pilot's: 3 s keeps a page that went quiet, 0 leaves it to the linger.
+            s.Reset();
+            s.Select(Live(ScopePage.Wing), allow, 3f, 0f, false);
+            s.Select(0, allow, 3f, 2.75f, false);
+            TestAssert.That(s.Page == ScopePage.Wing && s.MinStay[(int)ScopePage.Wing] == 3f, "A 3 s minimum stay keeps WING though its linger is long gone");
+            s.Select(0, allow, 3f, 3f, false);
+            TestAssert.That(s.Page == ScopePage.Systems, "...and the scope folds at 3 s");
+            s.Reset();
+            s.Select(Live(ScopePage.Wing), allow, 0f, 0f, false);
+            s.Select(0, allow, 0f, 1.5f, false);
+            TestAssert.That(s.Page == ScopePage.Systems && s.MinStay[(int)ScopePage.Wing] == 0f, "No minimum stay: the linger alone, 1.5 s");
+
+            // A critical SYSTEMS takes the scope only while the SYSTEMS switch is on.
+            s.Reset();
+            s.Select(Live(ScopePage.Wing), allow, 0f, 0f, false);
+            o = BoardOptions.Default;
+            o.PageSystems = false;
+            s.Select(Live(ScopePage.Wing, ScopePage.Systems), o.Effective(), 0f, 0.1f, true);
+            TestAssert.That(s.Page == ScopePage.Wing && s.Others == 0, "A fire does not take the scope from WING when SYSTEMS is switched off");
+            s.Select(Live(ScopePage.Wing, ScopePage.Systems), allow, 0f, 0.2f, true);
+            TestAssert.That(s.Page == ScopePage.Systems, "...with the switch on it does");
         }
 
         /// <summary>The per-page linger and minimum stay: a page falls back only when both have passed; a page that outranks the current one still takes over at once.</summary>

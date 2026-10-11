@@ -205,6 +205,15 @@ namespace BoscaliSummer.Tests.Features.Hud
                 o.ShowSystemsStrip = false;
                 BoardEffective e = o.Effective();
                 TestAssert.That(!e.SystemsStripShows(false, false) && !e.SystemsStripShows(true, false) && !e.SystemsStripShows(true, true), level + ": the switch off, no strip even in a fire");
+
+                // The strip is the SYSTEMS page in its cruise form: with the page's switch off it is gone too, whatever the strip's own switch and the level say.
+                o = At(level);
+                o.PageSystems = false;
+                e = o.Effective();
+                TestAssert.That(!e.ShowSystemsStrip && !e.SystemsStripShows(false, false) && !e.SystemsStripShows(true, false) && !e.SystemsStripShows(true, true), level + ": SYSTEMS switched off, no strip even in a fire");
+                o.PageSystems = true;
+                o.PageThreat = o.PageWing = false;
+                TestAssert.That(o.Effective().ShowSystemsStrip, level + ": another page's switch leaves the strip alone");
             }
         }
 

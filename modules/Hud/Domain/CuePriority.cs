@@ -105,6 +105,17 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return Page;
         }
 
+        /// <summary>
+        /// <see cref="Update"/> under the pilot's options: only the pages <paramref name="allow"/> lets show can be live (so a SYSTEMS whose switch is off is never critical either), a page
+        /// the pilot has just switched off does not hold the scope until its linger runs out, and the least stay is <paramref name="minStay"/>.
+        /// </summary>
+        public ScopePage Select(ushort live, in BoardEffective allow, float minStay, float now, bool systemsCritical)
+        {
+            if (Page != ScopePage.Systems && !CuePriority.Has(allow.Pages, Page)) Reset();
+            SetMinStay(minStay);
+            return Update((ushort)(live & allow.Pages), now, systemsCritical && CuePriority.Has(allow.Pages, ScopePage.Systems));
+        }
+
         public void Reset()
         {
             Page = ScopePage.Systems;
