@@ -20,7 +20,7 @@ using static UnityCheckHarness;
 //   and reproduces the prototype page's scenario for that t (pages/<id>.js sim(t)). Fixtures are the ONLY place scripted data lives.
 //   A fixture that does not touch the scene is a stub: that page is skipped.
 // Output: <page>-t<sec>-<W>x<H>.png (t = 2, 6, 10, 14 at 1920x1080 and t = 6 at 1280x720), the same names as the spec shots.
-// Command line (after -executeMethod): -pages systems,threat   only those pages' fixtures (default: all, plus the rest of the check; 'shell' = the board shell alone)
+// Command line (after -executeMethod): -pages systems,threat   only those pages' fixtures (default: all, plus the rest of the check; 'shell' = the board shell alone, 'frame' = the board's frame alone)
 //                                      -spec <spec folder>     draws the shots over the spec's cockpit capture (takeover/assets/bg-cockpit-hud-takeover.jpg: the native top-right panel painted out)
 public static partial class HudLogUnityCheck
 {
@@ -138,7 +138,7 @@ public static partial class HudLogUnityCheck
         string[] names = pages.Length == 0 ? ScopePageNames : pages;
         foreach (string page in names)
         {
-            if (page == "shell") continue;      // the board shell itself (HudLogUnityCheck.Scope.Shell.cs), below
+            if (page == "shell" || page == "frame") continue;      // the board shell (HudLogUnityCheck.Scope.Shell.cs) and its frame (HudLogUnityCheck.Scope.Frame.cs), below
             Check(Array.IndexOf(ScopePageNames, page) >= 0, "Unknown scope page in -pages: " + page);
             int drawn = 0;
             if (page != "stores") foreach (var shot in ScopeShotTimes) if (RenderScope(page, shot.t, new Vector2(shot.w, shot.h))) drawn++;
@@ -147,6 +147,7 @@ public static partial class HudLogUnityCheck
             Debug.Log("[HudLogCheck] scope page " + page + ": " + (drawn > 0 ? drawn + " shots" : "stub fixture, skipped"));
         }
         if (pages.Length == 0 || Array.IndexOf(pages, "shell") >= 0) ScopeShell();
+        if (pages.Length == 0 || Array.IndexOf(pages, "frame") >= 0) ScopeFrame();
     }
 
     /// <summary>The spec's cockpit capture with the native top-right panel painted out (the backdrop of the takeover shots), else the older clean capture, else a hazy sky.</summary>
@@ -172,7 +173,7 @@ public static partial class HudLogUnityCheck
 
     /// <summary>
     /// One page at one scenario time: the board built the way production builds it (stand-in native weapon cell and label in the mono face),
-    /// docked where the prototype puts it (right edge x = 1904, top y = 152 at 1080p), handed one frame by the page's fixture.
+    /// docked at the screen's top-right corner (8 units in from the right edge, 6 down at 1080p), handed one frame by the page's fixture.
     /// </summary>
     private static bool RenderScope(string page, float t, Vector2 size, string variant = null)
     {
@@ -228,7 +229,7 @@ public static partial class HudLogUnityCheck
         Set(frame, "Now", t); Set(frame, "BootAge", -1f); Set(frame, "Units", AvUnits.Metric);
     }
 
-    /// <summary>What every scope render must keep true: the board shows, every word stays inside the plate, nothing takes a click, no mesh overflowed.</summary>
+    /// <summary>What every scope render must keep true: the board shows, every word stays inside the board's box, nothing takes a click, no mesh overflowed.</summary>
     private static void ScopeChecks(object status, string tag)
     {
         var root = (RectTransform)Field(status, "root");
@@ -241,8 +242,19 @@ public static partial class HudLogUnityCheck
         {
             if (string.IsNullOrEmpty(label.text)) continue;
             label.ForceMeshUpdate();
-            Bounds b = label.textBounds;
-            Vector3[] box = { new Vector3(b.min.x, b.min.y), new Vector3(b.max.x, b.max.y) };
+            // The ink: the drawn glyphs' corners (textBounds is the line box, 1.3 em high: a 12 unit line at the very top of the box would fail on its padding).
+            TMP_TextInfo info = label.textInfo;
+            var lo = new Vector3(float.MaxValue, float.MaxValue);
+            var hi = new Vector3(float.MinValue, float.MinValue);
+            for (int i = 0; i < info.characterCount; i++)
+            {
+                TMP_CharacterInfo c = info.characterInfo[i];
+                if (!c.isVisible) continue;
+                lo = new Vector3(Mathf.Min(lo.x, c.bottomLeft.x), Mathf.Min(lo.y, c.bottomLeft.y));
+                hi = new Vector3(Mathf.Max(hi.x, c.topRight.x), Mathf.Max(hi.y, c.topRight.y));
+            }
+            if (lo.x > hi.x) continue;
+            Vector3[] box = { lo, hi };
             foreach (Vector3 p in box)
             {
                 Vector3 local = root.InverseTransformPoint(label.transform.TransformPoint(p));

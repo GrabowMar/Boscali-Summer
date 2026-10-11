@@ -191,7 +191,7 @@ The TAC BOARD HUD has its own options. They are yours alone, apply at once and c
 - **SET → THIS PILOT → COCKPIT** — the options that change the board, in three groups. **Board**: on/off, declutter level and opacity. **Pages**: whether the scope shows pages at all, one switch per page (radar warning, shot, missile cam, approach, wing, strike, dock, objective, systems), how long a radar warning is held and the minimum time a page stays. **Blocks**: the lamp row, systems strip, gauge row and notice line. **Reset to defaults** puts every option back.
 - **C menu → VIEW** — **Show/Hide TAC BOARD** and **Set HUD declutter** (full, lean, min).
 - **F1** — the **TAC BOARD** switch; with **Advanced settings** on, the whole **TacBoard** section.
-- **Config file** — the same options under `[TacBoard]` in `com.marci.boscalisummer.cfg`. Layout, Scale, OffsetX, OffsetY, Shade, Sway and Corners are saved there, but the board does not draw them yet, so changing them does nothing for now.
+- **Config file** — the same options under `[TacBoard]` in `com.marci.boscalisummer.cfg`. Layout (`Wide` or `Stack`), Scale, OffsetX, OffsetY and Shade work from here and from F1's advanced view (the settings console has no rows for them yet); Sway and Corners are saved there, but the board does not draw them yet, so changing them does nothing for now.
 
 A page that is switched off also stops posting its notices on the notice line, so leave the radar-warning page on unless you really want it gone.
 

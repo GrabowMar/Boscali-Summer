@@ -154,7 +154,8 @@ namespace BoscaliSummer.Tests.Features.Hud
             var pal = new ScopePalette(new Rgba(0.22f, 0.87f, 0.32f), new Rgba(0.95f, 0.85f, 0.29f), new Rgba(1f, 0.31f, 0.27f));
             Rgba ink = pal.Of(ScopeTone.Ink), hi = pal.Of(ScopeTone.Hi), dim = pal.Of(ScopeTone.Dim), faint = pal.Of(ScopeTone.Faint);
             TestAssert.That(hi.R > ink.R && hi.B > ink.B, "Hi is the ink pushed toward white");
-            TestAssert.That(dim.G < ink.G && dim.G > faint.G, "Dim and faint step down from the ink");
+            TestAssert.That(dim.G == ink.G && Math.Abs(dim.A - 0.7f) < 1e-5f && faint.G < ink.G, "Dim is the ink at 0.70 (there is no plate to mix it with), faint steps down from it");
+            TestAssert.Near(pal.Of(ScopeTone.Dim, 0.5f).A, 0.35f, "A dim token's alpha is multiplied by the alpha asked for");
             TestAssert.That(pal.Of(ScopeTone.Amber).R > 0.9f && pal.Of(ScopeTone.Red).R > 0.9f && pal.Of(ScopeTone.Red).G < 0.4f, "Amber and red are the theme's caution and warning");
             TestAssert.Near(pal.Of(ScopeTone.Ink, 0.5f).A, 0.5f, "A token takes an alpha");
             TestAssert.That(pal.Of(ScopeTone.Bg).G < pal.Of(ScopeTone.Plate).G, "The glass is darker than the plate");

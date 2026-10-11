@@ -83,11 +83,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>Text on a small opaque square tag in <paramref name="tone"/>; (x, y) anchors the tag's vertical middle. Returns the tag's rectangle.</summary>
         public ScopeRect PlateTag(ReadOnlySpan<char> s, float x, float y, ScopeTone tone = Ink, float size = 12f, ScopeAlign align = ScopeAlign.Left, float pad = 3f, float alpha = 1f)
         {
+            ScopeRect box = TagBox(s, x, y, size, align, pad);
+            Fill(box.X, box.Y, box.W, box.H, tone, alpha);
+            Text(s, box.X + box.W / 2f, box.Y + box.H / 2f + 0.5f, Bg, size, ScopeAlign.Center, true);
+            return box;
+        }
+
+        /// <summary>The box of a tag around <paramref name="s"/>, whole units, anchored by <paramref name="align"/> at (x, y = its vertical middle).</summary>
+        private static ScopeRect TagBox(ReadOnlySpan<char> s, float x, float y, float size, ScopeAlign align, float pad)
+        {
             float w = Mathf.Round(TextW(s, size) + pad * 2f), h = size + 5f;
-            float x0 = Mathf.Round(align == ScopeAlign.Right ? x - w : align == ScopeAlign.Center ? x - w / 2f : x), y0 = Mathf.Round(y - h / 2f);
-            Fill(x0, y0, w, h, tone, alpha);
-            Text(s, x0 + w / 2f, y0 + h / 2f + 0.5f, Bg, size, ScopeAlign.Center, true);
-            return new ScopeRect(x0, y0, w, h);
+            return new ScopeRect(Mathf.Round(align == ScopeAlign.Right ? x - w : align == ScopeAlign.Center ? x - w / 2f : x), Mathf.Round(y - h / 2f), w, h);
         }
 
         /// <summary>A boxed result stamp (HIT / MISS / DEFEATED), centred on (x, y); the box turns by <paramref name="angle"/>, the word stays level.</summary>

@@ -37,6 +37,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The board unit: canvas pixels per design unit.</summary>
         public float Unit => u;
 
+        /// <summary>Decorative furniture (the caption shelf) is drawn: <see cref="BoardEffective.Furniture"/>, set by the board before it paints. Everything else furniture-like (brackets, ticks, markers) stays at every declutter level.</summary>
+        public bool Furniture { get; set; } = true;
+
         /// <summary>
         /// Start a frame: clear the buffer and the word pool. <paramref name="heightPx"/> is the surface's height in canvas units and <paramref name="devicePixel"/> the size of one
         /// DEVICE pixel in the same units (1 when the canvas is drawn 1:1; a CanvasScaler or a camera makes it something else). Hairlines, dashes and rectangle edges are laid on
@@ -362,6 +365,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>One word. (<paramref name="x"/>, <paramref name="y"/>) is the anchor by <paramref name="align"/>; y is the MIDDLE of the line. Returns the width.</summary>
         public float Text(ReadOnlySpan<char> s, float x, float y, ScopeTone tone = Ink, float size = 12f, ScopeAlign align = ScopeAlign.Left, bool bold = false, float alpha = 1f)
         {
+            if (tone == Dim && alpha < ScopePalette.DimTextFloor) alpha = ScopePalette.DimTextFloor;      // DIM text stays readable: 0.62 of the ink at the least
             Rgba c = C(tone, alpha);
             // TMP centres the line box, the canvas "middle" baseline the em box: the glyphs sit a little low unless nudged up.
             text?.Draw(s, X(x), Y2(y) - size * u * LineNudge, size * u, align, new Color(c.R, c.G, c.B, c.A), bold);

@@ -4,7 +4,10 @@ using static BoscaliSummer.Core.Contracts.ScopeTone;
 
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
-    /// <summary>Draws one <see cref="GaugeSpec"/> into its 109 x 64 cell of the gauge row (the prototype's <c>drawGauge</c>).</summary>
+    /// <summary>
+    /// Draws one <see cref="GaugeSpec"/> into its 109 x 64 cell of the old gauge row (the prototype's <c>drawGauge</c>). The visor board's gauge line is 12 high and does not use it (StatusPanel.Wing.cs draws the
+    /// words alone); the wing task takes its glyphs (arc, ring, needle, bars, bar, mode rail) down to the line's 6 unit radius.
+    /// </summary>
     internal static class GaugePainter
     {
         public static void Draw(ScopeCanvas g, in GaugeSpec s, float x, float y, float w, float h, bool flashOn, float now)

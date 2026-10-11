@@ -26,7 +26,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public bool SystemsCriticalOnly;
         public bool ShowGauges;
         public bool ShowTicker;
-        /// <summary>Decorative captions (the later drawing code reads this).</summary>
+        /// <summary>Decorative captions and shelves are drawn (the painters' <c>ScopeCanvas.Furniture</c> flag; brackets, ticks and markers stay at every level).</summary>
         public bool Furniture;
 
         /// <summary>

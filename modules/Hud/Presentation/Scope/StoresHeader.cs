@@ -15,6 +15,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// </summary>
     internal sealed partial class StoresHeader
     {
+        // The header as it was before the visor board (448 wide: cells 4 in, the capacitor row under them), drawn at the left of the box over the HERO and SAT columns until the stores task redraws it as the
+        // HERO, PWR BUS and EXPENDABLES blocks. These sizes are this painter's own, not the board's layout.
+        private const float Pad = 4f, Inner = 440f, StoreH = 108f, CapH = 24f, CapGap = 3f, WeaponW = 252f, CellGap = 4f;
+
         private StoresScope d;
         private bool live, primed;
         private float now;
@@ -33,8 +37,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public bool HasCap => live && d.HasCap;
 
-        /// <summary>The header's height in board units (0: nothing to show).</summary>
-        public float Height => live ? ScopeLayout.StoresHeight(HasWeapon || HasCm, HasCap) : 0f;
+        /// <summary>The header's height in board units (0: nothing to show): the cells (weapon, countermeasures), the capacitor row under them 3 apart.</summary>
+        public float Height => live ? (HasWeapon || HasCm ? StoreH : 0f) + (HasCap ? (HasWeapon || HasCm ? CapGap : 0f) + CapH : 0f) : 0f;
 
         /// <summary>The 10 Hz read: the feed, the THREAT page's countermeasure call (which dispenser pulses DISPENSE) and the rounds that just left a dispenser.</summary>
         public void Poll(float time, byte call)
@@ -64,17 +68,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             bool weapon = HasWeapon, cm = HasCm;
             if (weapon)
             {
-                beat |= PaintWeapon(g, ScopeLayout.Pad, y0, cm ? ScopeLayout.WeaponW : ScopeLayout.Inner, ScopeLayout.StoreH);
+                beat |= PaintWeapon(g, Pad, y0, cm ? WeaponW : Inner, StoreH);
                 WeaponDrawn = true;
             }
             if (cm)
             {
-                beat |= PaintCm(g, ScopeLayout.Pad + ScopeLayout.WeaponW + ScopeLayout.CellGap, y0, ScopeLayout.Inner - ScopeLayout.WeaponW - ScopeLayout.CellGap, ScopeLayout.StoreH, flashOn);
+                beat |= PaintCm(g, Pad + WeaponW + CellGap, y0, Inner - WeaponW - CellGap, StoreH, flashOn);
                 CmDrawn = true;
             }
             if (HasCap)
             {
-                beat |= PaintCap(g, ScopeLayout.Pad, y0 + (weapon || cm ? ScopeLayout.StoreH + ScopeLayout.CapGap : 0f), ScopeLayout.Inner, ScopeLayout.CapH, clock);
+                beat |= PaintCap(g, Pad, y0 + (weapon || cm ? StoreH + CapGap : 0f), Inner, CapH, clock);
                 CapDrawn = true;
             }
             Beat = beat;

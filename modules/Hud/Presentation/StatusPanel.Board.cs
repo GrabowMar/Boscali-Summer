@@ -4,50 +4,35 @@ using BoscaliSummer.Modules.Hud.Domain;
 using NOAvionics;
 using NuclearOption.UIStyleSystem;
 using UnityEngine;
-using static BoscaliSummer.Core.Contracts.ScopeTone;
 
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
-    // The board's update (data at 10 Hz, motion every frame) and painters: stores header, lamp strip, scope (page body, header and strip overlay, frame and
-    // wipe), gauge row and ticker. Geometry is ScopeLayout's; nothing here computes a row's y by hand.
+    // The board's orchestration: the update (data at 10 Hz, motion every frame), the layout (which blocks exist, where the box goes: ScopeLayout's numbers) and the hand-off to the painters of the stores side
+    // (StatusPanel.Stores.cs), the wing side (StatusPanel.Wing.cs: lamp line, gauge line, ticker; StatusPanel.Page.cs: the page, its header and frame) and the shade (StatusPanel.Shade.cs). Nothing here
+    // draws a block or works a block's place out by hand.
     internal sealed partial class StatusPanel
     {
         private const float FlashHz = 3f;
         private ScopePageBase[] pages;
         private readonly ScopeSelector selector = new ScopeSelector();
-        private readonly ScopeTransition transition = new ScopeTransition();
-        private readonly LampChange lampChange = new LampChange();
         private ScopePageBase page;
-        private readonly Lamp[] lamps = new Lamp[HudLamps.Count];
-        private readonly Lamp[] threatLamps = new Lamp[HudThreats.Count];
-        private readonly bool[] recent = new bool[HudLamps.Count];
-        private readonly int[] lampOrder = new int[HudLamps.Count];
-        private readonly GaugeSpec[] pageGauges = new GaugeSpec[GaugeRow.Slots], registered = new GaugeSpec[16], shown = new GaugeSpec[GaugeRow.Slots];
         private readonly System.Collections.Generic.HashSet<int> failed = new System.Collections.Generic.HashSet<int>();
         private BoardFrame board;
-        private readonly StoresHeader header = new StoresHeader();
-        /// <summary>The header's last paint threw: its native boxes are shown again until a paint succeeds.</summary>
-        private bool headerFault;
-        private readonly float[] Outline = new float[12];
-        private int lampCount, gaugeCount, lastPhase = -1;
+        private int lastPhase = -1;
         /// <summary>What the pilot's options and declutter level allow, as of the last <see cref="Present"/> (see <see cref="BoardOptions.Effective"/>).</summary>
         private BoardEffective allow;
-        /// <summary>The lamp row has a lamp to draw (<see cref="lampOrder"/> for the system lamps, a bit per threat lamp in <see cref="threatMask"/>), and the compact SYSTEMS strip may show.</summary>
-        private bool lampRow, systemsStrip;
-        private int threatMask;
-        private bool booting, shellBeat, scopeBeat, hasBoard;
+        /// <summary>The compact SYSTEMS strip may show.</summary>
+        private bool systemsStrip;
+        private bool hasBoard;
         /// <summary>When the last <see cref="Present"/> finished (<c>Time.unscaledTime</c>).</summary>
         private float presentedAt;
 
         /// <summary>Something on the board blinks, so its flash phase is part of what it draws.</summary>
         private bool beat => shellBeat || scopeBeat || header.Beat;
-        private float now, bootAge;
+        private float now;
         // One device pixel in the board's own units, and where the dock's origin falls inside a device pixel: what every edge is laid on (see ScopeCanvas.Begin).
         private float pixel = 1f, phaseX, phaseY;
         private AvUnits units;
-        private string tickerWords, tickerSourceText;
-        private int tickerSourceCount, tickerSourcePhase;
-        private HudTone tickerSourceTone;
 
         private void BuildBoard()
         {
@@ -93,7 +78,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 Hide();
                 return;
             }
-            // The pilot's opacity is the root group's alpha (nothing else in the board animates it).
+            // The pilot's opacity is the root group's alpha (nothing else in the board animates it); the shade is outside it (StatusPanel.Shade.cs).
             if (rootGroup.alpha != Options.Opacity) rootGroup.alpha = Options.Opacity;
             board = frame;
             now = frame.Now;
@@ -117,7 +102,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             selector.Select(live, allow, Options.PageMinSeconds, now, pages[(int)ScopePage.Systems].Critical);
             page = pages[(int)selector.Page];
             systemsStrip = allow.SystemsStripShows(notNominal, pages[(int)ScopePage.Systems].Critical);
-            header.Poll(now, CuePriority.Has(allow.Voiced, ScopePage.Threat) ? ((ThreatPage)pages[(int)ScopePage.Threat]).CallMask : (byte)0);
+            PollStores();
             MeasureScreen();      // after the header's read: where the board goes depends on what the header stands in for
 
             PresentLamps(frame);
@@ -170,74 +155,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (failed.Add((int)p.Id)) BoscaliSummer.Core.Diagnostics.PatchGuard.Report("Hud.Scope." + p.Title, e);
         }
 
-        /// <summary>The stores header's own faults are reported once (its id sits past the pages').</summary>
-        private void ReportHeaderOnce(Exception e)
-        {
-            if (failed.Add(CuePriority.PageCount)) BoscaliSummer.Core.Diagnostics.PatchGuard.Report("Hud.Scope.StoresHeader", e);
-        }
-
-        /// <summary>
-        /// Lamp states, the page overrides (an engine out lights ENG whatever page shows) and the "just changed" rule, then which lamps the strip draws: none with its switch off; at
-        /// Minimal only the threat lamps; unlit ones only at Full (or while the spawn lamp test lights them all); what is drawn is packed with no gap, the system lamps from the left and the threat lamps against the right end. A strip with nothing to draw takes no room.
-        /// </summary>
-        private void PresentLamps(BoardFrame frame)
-        {
-            int present = 0;
-            for (int i = 0; i < lamps.Length; i++)
-            {
-                if (!lamps[i].Present) { lampChange.Forget(i); recent[i] = false; continue; }
-                present++;
-                OverrideLamp(ref lamps[i], false);
-                recent[i] = lampChange.Recent(i, lamps[i].State, now);
-            }
-            // The threat lamps too (a strike landing close lights MSL as DNGR, a SAM envelope lights SPKE); a real threat keeps its own lamp.
-            for (int i = 0; i < threatLamps.Length; i++) OverrideLamp(ref threatLamps[i], true);
-            bootAge = frame.BootAge;
-            booting = present > 0 && LampTest.Running(bootAge);
-
-            bool showDark = allow.DarkLamps || booting;
-            lampCount = threatMask = 0;
-            if (allow.ShowLamps && present > 0)
-            {
-                if (!allow.ThreatLampsOnly)
-                    for (int i = 0; i < lamps.Length; i++)
-                        if (lamps[i].Present && HudLamps.Drawn(lamps[i].State, recent[i], showDark)) lampOrder[lampCount++] = i;
-                for (int i = 0; i < threatLamps.Length; i++)
-                    if (HudLamps.Drawn(threatLamps[i].State, false, showDark)) threatMask |= 1 << i;
-            }
-            lampRow = lampCount > 0 || threatMask != 0;
-        }
-
-        /// <summary>The first page that overrides this lamp (by its legend) sets its state, flash and, if it has one, its word.</summary>
-        private void OverrideLamp(ref Lamp lamp, bool onlyDark)
-        {
-            if (onlyDark && lamp.State != LampState.Dark) return;
-            for (int p = 0; p < pages.Length; p++)
-            {
-                LampState state;
-                bool flash;
-                string text;
-                try { if (!pages[p].Lamp(lamp.Legend, out state, out flash, out text)) continue; }
-                catch (Exception e) { ReportOnce(pages[p], e); continue; }
-                lamp.State = state;
-                lamp.Flash = flash;
-                if (text != null) lamp.Legend = text;
-                return;
-            }
-        }
-
-        private void PresentGauges()
-        {
-            // The gauge row's own switch (or the declutter level) is off: nothing is read for it and it takes no room.
-            if (!allow.ShowGauges) { gaugeCount = 0; return; }
-            int own = 0, reg = 0;
-            try { own = Math.Min(page.Gauges(pageGauges), GaugeRow.Slots); }
-            catch (Exception e) { ReportOnce(page, e); }
-            for (int i = 0; i < ScopeGauges.Count && reg < registered.Length; i++)
-                if (ScopeGauges.TryRead(i, out GaugeSpec spec)) registered[reg++] = spec;
-            gaugeCount = GaugeRow.Merge(pageGauges, own, registered, reg, shown);
-        }
-
         /// <summary>Every frame: carry the wipe and the flash beat, and repaint a page that moves.</summary>
         public void Animate(float clock)
         {
@@ -255,13 +172,19 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             bool compact = selector.Compact;
             bool strip = !compact && page.HasStrip;
-            // The scope mode Off shows no page at all, nor does a compact SYSTEMS strip the pilot's switch or the declutter level keeps away: the row has no height and the layout drops it;
-            // the lamps, gauges and ticker stay. A block that is switched off (or has nothing live) is no row either: it is not drawn and takes no room.
+            // The scope mode Off shows no page at all, nor does a compact SYSTEMS strip the pilot's switch or the declutter level keeps away: the block has no height and the layout drops it;
+            // the lamps, gauges and ticker stay. A block that is switched off (or has nothing live) is no block either: it is not drawn and takes no room.
             bool scopeOn = Options.ScopeMode != BoardScopeMode.Off && page.Ready && (!compact || systemsStrip);
             float target = scopeOn ? (compact ? ScopeLayout.Compact : ScopeLayout.Full) : 0f;
             transition.Update((int)selector.Page * 2 + (compact ? 1 : 0), target, now);
-            var rows = new BoardRows { StoresH = header.Height, Lamps = lampRow, ScopeH = transition.Height, Gauges = gaugeCount > 0, Ticker = allow.ShowTicker && board.HasTicker };
-            BoardGeometry geo = ScopeLayout.Compute(rows);
+            var blocks = new BoardBlocks
+            {
+                Layout = Options.Layout, Hero = header.HasWeapon, Pwr = header.HasCap, Exp = header.HasCm, Lamps = lampRow, PageH = transition.Height,
+                GaugeLines = gaugeLines, Ticker = allow.ShowTicker && board.HasTicker,
+            };
+            BoardGeometry geo = ScopeLayout.Compute(blocks);
+            // The stores header is drawn as one piece for now (StatusPanel.Stores.cs): the box reaches as low as it does.
+            if (geo.Height > 0f) geo.Height = Math.Max(geo.Height, ScopeLayout.BlockTop + header.Height);
             if (geo.Height <= 0f)
             {
                 header.Clear();
@@ -270,280 +193,24 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             Show(root, true);
 
-            // The board's top-right corner is the screen's (less the margin), on the device pixel grid (position and size in whole pixels), so every edge drawn inside it can too.
+            // The box's top-right corner on the device pixel grid (position and size in whole pixels), so every edge drawn inside it can be too.
+            PlaceBoard(geo, out float fromTop);
             Vector2 rootPosition = new Vector2(OnGrid(cornerX - dock.rect.xMin, phaseX), OnGrid(cornerY - dock.rect.yMin, phaseY));
             if (root.anchoredPosition != rootPosition) root.anchoredPosition = rootPosition;
             Vector2 rootSize = new Vector2(Whole(geo.Width * unit), Whole(geo.Height * unit));
             if (root.sizeDelta != rootSize) root.sizeDelta = rootSize;
-            float cut = 1f / unit;      // the plate sprite's cut corners are 8 px: ScopeLayout.Chamfer design units
-            if (plate.pixelsPerUnitMultiplier != cut) plate.pixelsPerUnitMultiplier = cut;
+            PaintShade(geo, fromTop);
 
             ScopePalette pal = Palette();
             lastPhase = (int)(now * FlashHz * 2f);
             bool flashOn = (int)(now * FlashHz) % 2 == 0;
-            if (geo.Scope.H > 0f) PaintScope(pal, geo, compact, strip, flashOn);
+            if (geo.Page.Present) PaintPage(pal, geo, compact, strip, flashOn);
             else { Show(scopeRect, false); scopeBeat = false; }
             if (shellToo)
             {
-                PaintShell(pal, geo, flashOn);
+                PaintWing(pal, geo, flashOn);
                 PaintStores(pal, geo, flashOn);
             }
-        }
-
-        private void PaintShell(in ScopePalette pal, in BoardGeometry geo, bool flashOn)
-        {
-            ScopeCanvas g = shellCanvas;
-            shellBeat = false;
-            g.Begin(pal, unit, Whole(geo.Height * unit), pixel);
-            // The plate's outline: the cut left corners, a faint ink line all the way round.
-            float c = ScopeLayout.Chamfer, w = geo.Width - 0.5f, h = geo.Height - 0.5f;
-            Outline[0] = c; Outline[1] = 0.5f; Outline[2] = w; Outline[3] = 0.5f; Outline[4] = w; Outline[5] = h;
-            Outline[6] = c; Outline[7] = h; Outline[8] = 0.5f; Outline[9] = h - c + 0.5f; Outline[10] = 0.5f; Outline[11] = c - 0.5f;
-            g.Path(g.Poly(Outline, 6), Ink, 0.3f);
-            if (geo.Lamps.H > 0f) PaintLamps(g, geo.Lamps.Y, flashOn);
-            // The live gauges from the left, a cell each; a slot with nothing live is not drawn, and with no gauge live the row has no height and nothing is drawn.
-            if (geo.Gauges.H > 0f)
-            {
-                for (int i = 0; i < gaugeCount; i++)
-                {
-                    if (shown[i].Flash || shown[i].Ready) shellBeat = true;
-                    GaugePainter.Draw(g, shown[i], ScopeLayout.GaugeX(i), geo.Gauges.Y, ScopeLayout.GaugeW, ScopeLayout.GaugeH, flashOn, now);
-                }
-            }
-            if (geo.Ticker.H > 0f) PaintTicker(g, geo.Ticker.Y, flashOn);
-            g.End();
-            shellVector.Commit();
-        }
-
-        // ------------------------------------------------------------------------------------------------ stores header
-
-        /// <summary>The stores header on its own surface (board coordinates, top of the plate). A header that throws is reported once and its native boxes come back.</summary>
-        private void PaintStores(in ScopePalette pal, in BoardGeometry geo, bool flashOn)
-        {
-            float h = geo.Stores.H;
-            if (h <= 0f) { Show(storesRect, false); header.Clear(); return; }
-            Show(storesRect, true);
-            float height = Whole((geo.Stores.Y + h) * unit);
-            PlaceOnGrid(storesRect, 0f, 0f, Whole(geo.Width * unit), height);
-            ScopeCanvas g = storesCanvas;
-            g.Begin(pal, unit, height, pixel);
-            try
-            {
-                header.Paint(g, geo.Stores.Y, now, flashOn);
-                headerFault = false;
-            }
-            catch (Exception e)
-            {
-                ReportHeaderOnce(e);
-                header.Clear();
-                headerFault = true;
-            }
-            g.End();
-            storesVector.Commit();
-        }
-
-        /// <summary>
-        /// Every frame, after <see cref="Ensure"/>: hide the native weapon, countermeasure and capacitor boxes whose replacement the header is drawing, show the rest (<see cref="NativeCorner"/>,
-        /// <see cref="NativeTakeover"/>). Fail open: no board, a hidden or inactive board, a header that threw, a hidden HUD or a batch run all give the native boxes back this frame; and a
-        /// board that has stopped being presented (its update threw: what it shows is frozen) is taken off the screen, so the native boxes show live data in its place.
-        /// </summary>
-        public void TickNatives()
-        {
-            bool stale = NativeTakeover.Stale(Time.unscaledTime, presentedAt);
-            if (stale && root != null && root.gameObject.activeSelf) root.gameObject.SetActive(false);      // Repaint shows it again when Present resumes
-            if (corner == null) return;
-            CombatHUD hud = SceneSingleton<CombatHUD>.i;
-            bool alive = root != null && hasBoard && !stale && !headerFault && root.gameObject.activeInHierarchy;
-            bool hudUp = hud != null && hud.iconLayer != null && hud.iconLayer.gameObject.activeInHierarchy, batch = Application.isBatchMode;
-            corner.Apply(NativeTakeover.Hide(alive, true, hudUp, batch, header.WeaponDrawn), NativeTakeover.Hide(alive, true, hudUp, batch, header.CmDrawn), NativeTakeover.Hide(alive, true, hudUp, batch, header.CapDrawn));
-        }
-
-        // ------------------------------------------------------------------------------------------------ lamp strip
-
-        private void PaintLamps(ScopeCanvas g, float y, bool flashOn)
-        {
-            int total = lampCount + HudThreats.Count;
-            for (int k = 0; k < lampCount; k++)
-            {
-                int i = lampOrder[k];
-                DrawLamp(g, ScopeLayout.SystemLampX(k), y, ScopeLayout.LampW, lamps[i], recent[i], k, total, flashOn);
-            }
-            // The threat lamps pack against the right end, in order: one that is not drawn leaves no gap (with all three drawn they sit where ScopeLayout.ThreatLampX puts them).
-            float tx = ScopeLayout.Pad + ScopeLayout.Inner;
-            for (int i = HudThreats.Count - 1; i >= 0; i--)
-            {
-                if ((threatMask & (1 << i)) == 0) continue;
-                tx -= ScopeLayout.ThreatLampWidth(i);
-                DrawLamp(g, tx, y, ScopeLayout.ThreatLampWidth(i), threatLamps[i], false, lampCount + i, total, flashOn);
-                tx -= ScopeLayout.LampGap;
-            }
-        }
-
-        /// <summary>
-        /// One lamp: a dim outline when dark, a lit box in its tone when on, caution or warning, or just changed. A warning or a lamp in
-        /// transition pulses its wash with the beat; the legend is bold when lit. The spawn lamp test lights them in a sweep.
-        /// </summary>
-        private void DrawLamp(ScopeCanvas g, float x, float y, float w, in Lamp lamp, bool changed, int index, int total, bool flashOn)
-        {
-            bool lit, blink;
-            ScopeTone tone = SystemsMath.ToneOf(lamp.State);
-            if (booting) { lit = LampTest.Lit(index, total, bootAge); blink = false; tone = Ink; }
-            else
-            {
-                lit = lamp.State != LampState.Dark || changed;
-                blink = lamp.State != LampState.Dark && (lamp.Flash || lamp.State == LampState.Warning);
-            }
-            if (blink) shellBeat = true;
-            bool wash = blink && flashOn;
-            g.Box(x, y + 1f, w, ScopeLayout.LampH - 2f, lit ? tone : Dim, lit ? 1f : 0.55f, 1f, tone, lit ? (wash ? 0.5f : 0.24f) : 0f);
-            g.Text(lamp.Legend, x + w / 2f, y + ScopeLayout.LampH / 2f + 1f, lit ? (tone == Ink ? Hi : tone) : Dim, 12f, ScopeAlign.Center, lit, lit ? 1f : 0.75f);
-        }
-
-        // ------------------------------------------------------------------------------------------------ ticker
-
-        /// <summary>The ticker's words, rebuilt only when the notice, its count, its phase or its tone changed.</summary>
-        private string TickerWords(in TickerLine line)
-        {
-            int phase = NoticeTicker.Phase(line);
-            if (tickerWords == null || !ReferenceEquals(tickerSourceText, line.Text) || tickerSourceCount != line.Count ||
-                tickerSourcePhase != phase || tickerSourceTone != line.Tone)
-            {
-                tickerSourceText = line.Text;
-                tickerSourceCount = line.Count;
-                tickerSourcePhase = phase;
-                tickerSourceTone = line.Tone;
-                // The words carry the repeat count ("x3", from NoticeTicker); a warning says so in words, not only in red.
-                tickerWords = (line.Tone == HudTone.Warning ? "WARNING · " : "") + NoticeTicker.Words(line).ToUpperInvariant();
-            }
-            return tickerWords;
-        }
-
-        private void PaintTicker(ScopeCanvas g, float y, bool flashOn)
-        {
-            TickerLine line = board.Ticker;
-            ScopeTone tone = SystemsMath.ToneOf(line.Tone);
-            bool hot = tone != Ink;
-            g.Box(ScopeLayout.Pad, y, ScopeLayout.Inner, ScopeLayout.TickerH, Faint, 0.9f);
-            string chip = NoticeTicker.Tag(line.Channel);
-            float cw = (float)Math.Ceiling(ScopeCanvas.TextW(chip, 12f)) + 10f, h = ScopeLayout.TickerH;
-            // The chip is the headline plate's look, a tone-coloured outline and word on a faint wash of the tone: the solid block it was painted dark text on swallowed its own word.
-            g.Box(ScopeLayout.Pad + 3f, y + 3f, cw, h - 6f, hot ? tone : Dim, 1f, 1f, tone, hot ? 0.2f : 0f);
-            g.Text(chip, ScopeLayout.Pad + 3f + cw / 2f, y + h / 2f + 1f, hot ? tone : Dim, 12f, ScopeAlign.Center, true);
-            bool sticky = line.Tone == HudTone.Warning;
-            if (sticky || NoticeTicker.IsFresh(line)) shellBeat = true;
-            float tx = ScopeLayout.Pad + 3f + cw + 8f;
-            g.FitText(TickerWords(line), tx, y + h / 2f + 1f, ScopeLayout.Pad + ScopeLayout.Inner - tx - 6f, tone, 12f, 12f, ScopeAlign.Left, hot, sticky && !flashOn ? 0.7f : 1f);
-        }
-
-        // ------------------------------------------------------------------------------------------------ scope
-
-        private void PaintScope(in ScopePalette pal, in BoardGeometry geo, bool compact, bool strip, bool flashOn)
-        {
-            float hS = geo.Scope.H, body = ScopeLayout.Body(compact, strip), w = ScopeLayout.Inner;
-            Show(scopeRect, true);
-            scopeBeat = false;
-            float wp = Whole(w * unit), hp = Whole(hS * unit), bp = Whole(body * unit);
-            PlaceOnGrid(scopeRect, ScopeLayout.Pad * unit, geo.Scope.Y * unit, wp, hp);
-            PlaceOnGrid(pageRect, 0f, 0f, wp, bp);
-            PlaceOnGrid(overlayRect, 0f, 0f, wp, hp);
-            PlaceOnGrid(frameRect, 0f, 0f, wp, hp);
-
-            // The page body: the glass, its grid, then the page.
-            ScopeCanvas g = pageCanvas;
-            g.Begin(pal, unit, bp, pixel);
-            g.Fill(0f, 0f, w, body, Bg);
-            g.Grid(w, body);
-            try { page.Paint(g, new PagePaint(w, body, compact, ScopeLayout.SafeTop(compact), now, units)); }
-            catch (Exception e)
-            {
-                ReportOnce(page, e);
-                g.Text("PAGE ERROR", 8f, 60f, Red);
-            }
-            g.End();
-            pageVector.Commit();
-
-            // The header band (tab, pips, headline) and the page strip, above the page.
-            g = overlayCanvas;
-            g.Begin(pal, unit, hp, pixel);
-            PaintHeader(g, w, compact, flashOn);
-            if (strip)
-            {
-                g.Origin(0f, body);
-                g.Fill(0f, 0f, w, ScopeLayout.Strip, Bg, 0.9f);
-                g.Line(0f, 0f, w, 0f, Faint);
-                try { page.PaintStrip(g, new PagePaint(w, ScopeLayout.Strip, false, 0f, now, units)); }
-                catch (Exception e) { ReportOnce(page, e); g.Text("STRIP ERROR", 8f, 13f, Red); }
-                g.Origin(0f, 0f);
-            }
-            g.End();
-            overlayVector.Commit();
-
-            // The wipe edge (the new page is revealed left to right behind it) and the frame.
-            g = frameCanvas;
-            g.Begin(pal, unit, hp, pixel);
-            if (transition.Wipe < 1f)
-            {
-                float wx = Mathf.Round(transition.Wipe * w);
-                g.Fill(wx, 0f, w - wx, hS, Bg);
-                g.Fill(wx - 3f, 0f, 3f, hS, Hi, 0.35f);
-                g.Fill(wx, 0f, 1f, hS, Hi);
-            }
-            g.Frame(0f, 0f, w, hS);
-            g.End();
-            frameVector.Commit();
-        }
-
-        /// <summary>The scope's header band: the page's tab, a pip for every other live page (in that page's tone), and the headline figure.</summary>
-        private void PaintHeader(ScopeCanvas g, float w, bool compact, bool flashOn)
-        {
-            float hh = compact ? ScopeLayout.HeadCompact : ScopeLayout.Head, th = hh - 6f;
-            g.Fill(0f, 0f, w, hh, Bg, 0.9f);
-            g.Line(0f, hh, w, hh, Faint);
-            string title = page.Title;
-            float tw = (float)Math.Ceiling(ScopeCanvas.TextW(title, 12f)) + 16f;
-            g.Box(4f, 3f, tw, th, Ink, 1f, 1f, Ink, 0.2f, chamTL: 5f);
-            g.Text(title, 4f + tw / 2f, 3f + th / 2f + 1f, Hi, 12f, ScopeAlign.Center, true);
-
-            float x = 4f + tw + 8f;
-            int pips = 0;
-            Span<char> code = stackalloc char[1];
-            for (int i = 0; i < pages.Length && pips < 5; i++)
-            {
-                if (!CuePriority.Has(selector.Others, (ScopePage)i)) continue;
-                ScopeHeadline other = HeadlineOf(pages[i]);
-                ScopeTone tone = other.Tone == Red ? Red : other.Tone == Amber ? Amber : Ink;
-                float py = Mathf.Round((hh - 16f) / 2f);
-                if (tone == Red && !string.IsNullOrEmpty(other.Text))
-                {
-                    // A warning on a page the pilot is not looking at says WHAT in words (FIRE, BINGO, ENG 1 OUT, 7 S), not only a letter in red.
-                    float pw = Math.Min((float)Math.Ceiling(ScopeCanvas.TextW(other.Text, 12f)) + 10f, 96f);
-                    bool lit = other.Flash && flashOn;
-                    if (other.Flash) scopeBeat = true;
-                    g.Box(x, py, pw, 16f, Red, 1f, 1f, Red, lit ? 0.5f : 0.18f);
-                    g.FitText(other.Text, x + pw / 2f, py + 9f, pw - 6f, lit ? Bg : Red, 12f, 12f, ScopeAlign.Center, true);
-                    x += pw + 3f;
-                }
-                else
-                {
-                    g.Box(x, py, 16f, 16f, tone, 1f, 1f, tone, 0.16f);
-                    code[0] = pages[i].Code;
-                    g.Text(code, x + 8f, py + 9f, tone, 12f, ScopeAlign.Center, true);
-                    x += 19f;
-                }
-                pips++;
-            }
-
-            ScopeHeadline hl = HeadlineOf(page);
-            if (string.IsNullOrEmpty(hl.Text)) return;
-            float size = compact ? 14f : 16f, hw = (float)Math.Ceiling(ScopeCanvas.TextW(hl.Text, size)) + 12f, hx = w - 4f - hw;
-            if (hl.Tone == Amber || hl.Tone == Red)
-            {
-                if (hl.Flash) scopeBeat = true;
-                bool pulse = hl.Flash && flashOn;
-                g.Box(hx, 3f, hw, th, hl.Tone, 1f, 1f, hl.Tone, pulse ? 0.55f : 0.2f);
-                g.Text(hl.Text, hx + hw / 2f, 3f + th / 2f + 1f, pulse ? Bg : hl.Tone, size, ScopeAlign.Center, true);
-            }
-            else g.Text(hl.Text, w - 8f, 3f + th / 2f + 1f, hl.Tone, size, ScopeAlign.Right, true, hl.Tone == Dim ? 0.8f : 1f);
         }
     }
 }
