@@ -197,7 +197,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             {
                 SkyDef d = SkyLibrary.Get(i);
                 if (!d.HasLow) continue;
-                float capacity = d.Genus.Convective ? d.Genus.Capacity : 0f;
+                float capacity = d.Genus.Convective ? (d.Nominal.Streets >= CumulusLattice.StreetThreshold ? SkyArchetypes.StreetCapacityHumilis : d.Genus.Capacity) : 0f;
                 TestAssert.That(Math.Abs(d.Nominal.CapacityCover - capacity) < 1e-6f && d.Genus.Convective == (d.Genus.Candidates > 0),
                     "sky " + (i + 1) + ": capacity is a cumulus-genus constant");
             }

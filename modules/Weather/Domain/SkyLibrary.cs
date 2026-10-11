@@ -111,6 +111,11 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 def.HasLow = true;
                 def.Genus = SkyArchetypes.Genus(genus.Value);
                 SkyArchetypes.ApplyGenus(ref sky, def.Genus, lowBase);
+                if (streets >= CumulusLattice.StreetThreshold)
+                {
+                    if (def.Genus.Genus != LowGenus.Humilis) throw new InvalidOperationException("street zones are baked for Humilis only: " + name);
+                    sky.CapacityCover = SkyArchetypes.StreetCapacityHumilis;
+                }
                 def.LowJitter = jitter ?? DefaultJitter(def.Genus.Genus);
             }
             else
