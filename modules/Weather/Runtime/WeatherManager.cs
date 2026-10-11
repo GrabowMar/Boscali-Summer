@@ -889,7 +889,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 { "metar", Field != null ? WeatherMetar.Line(localWeather) : "-" },
                 { "frontCount", Field?.FrontCount ?? 0 },
                 { "frontKind", Field != null && Field.FrontCount > 0 ? (int)Field.Front(0).Kind : -1 },
-                { "cellCount", Field?.CellCount ?? 0 },
+                { "activeCellCount", Field?.ActiveCellCount(0f, 0f, 40000f) ?? 0 },
                 { "activeGroupCount", Field?.ActiveGroupCount(0f, 0f, 40000f) ?? 0 },
                 { "cloudImmersion", cloudMoisture },
                 { "cloudBuffet", cloudBuffet },
@@ -1246,7 +1246,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 " base " + Mathf.RoundToInt(currentCloudHeight) +
                 " | local cover " + localWeather.Cover.ToString("0.00") + " front " + localWeather.FrontCover.ToString("0.00") +
                 " rain " + EffectiveRainIntensity().ToString("0.00") +
-                " | fronts " + (live?.FrontCount ?? 0) + " cells " + (live?.CellCount ?? 0) +
+                " | fronts " + (live?.FrontCount ?? 0) + " cells " + (live?.ActiveCellCount(0f, 0f, 40000f) ?? 0) +
                 " | maps " + (flightClouds?.MapUpdates ?? 0) +
                 " | precip " + viewPrecipitation.ToString("0.00") + " expo " + rainExposure.ToString("0.00") +
                 " cock " + (lastAudioCockpit ? 1 : 0) + " spd " + Mathf.RoundToInt(lastAudioSpeed) +

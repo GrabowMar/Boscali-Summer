@@ -95,9 +95,10 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// effects only; native wind keeps the mission's own speed.</summary>
         public const float BaseWindSpeed = 7f;
 
-        private readonly StormCell[] cells = new StormCell[StormCells.MaxCells];
         private readonly FrontState[] fronts = new FrontState[WeatherFronts.MaxFronts];
         private readonly CellCache<CumulusGroup> cumulusCache = new CellCache<CumulusGroup>();
+        private readonly CellCache<StormCell> stormCache = new CellCache<StormCell>();
+        private readonly StormLattice.Neighbourhood stormNear = new StormLattice.Neighbourhood();
         private readonly CumulusLattice.Neighbourhood cumulusNear = new CumulusLattice.Neighbourhood();
         private readonly Superstructure[] superstructures = new Superstructure[Superstructures.MaxCount];
         /// <summary>The row every sample reads when the tape is one keyframe (live play, and a one-keyframe fixture): not a texel copy per sample.</summary>
@@ -121,7 +122,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public TapeFrame Frame { get; private set; }
         /// <summary>Everything the lattices resolve from: the tape identity, the tape and its frame (spec 6). Rebuilt with every Build.</summary>
         public LatticeSource Lattice { get; private set; }
-        public int CellCount { get; private set; }
         public int FrontCount { get; private set; }
         /// <summary>Scenery storms outside the theater; see <see cref="Superstructures"/>.</summary>
         public int SuperstructureCount { get; private set; }
@@ -133,7 +133,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public float PrevailingHeading { get; private set; }
         public bool IsBuilt => Key != null;
 
-        public StormCell Cell(int index) => cells[index];
         public FrontState Front(int index) => fronts[index];
 
         public Superstructure SuperstructureAt(int index) => superstructures[index];
@@ -173,11 +172,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
             Frame = new TapeFrame(key.HeadingDeg, 0f);
             ResetLattice();
             PrevailingHeading = key.DownwindHeading; // the mission wind's heading, set once at capture
-            WeatherMath.HeadingToVector(PrevailingHeading, out float driftX, out float driftZ);
 
             Split = SkySplit.From(timeline.Layout, sky.Split, HalfX, HalfZ, PrevailingHeading, 0); // INTERIM(slice 4): no front turn
             FrontCount = WeatherFronts.Fill(fronts, timeline.Layout, sky, HalfX, HalfZ, PrevailingHeading, Split);
-            CellCount = StormCells.Fill(cells, timeline.Layout, convection, HalfX, HalfZ, driftX, driftZ, Split);
 
             SuperstructureCount = Superstructures.Fill(superstructures, timeline.Layout, convection,
                 HalfX, HalfZ, PrevailingHeading, key.Sets, key.HasAnchor, key.AnchorX, key.AnchorZ);
@@ -198,6 +195,29 @@ namespace BoscaliSummer.Modules.Weather.Domain
             Lattice = new LatticeSource(Key.TapeId, Key.LayoutSeed, Tape, Frame);
             cumulusCache.Reset();
             cumulusNear.Reset();
+            stormCache.Reset();
+            stormNear.Reset();
+        }
+
+        /// <summary>
+        /// The storm cell out (strength at least <paramref name="minStrength"/>) whose centre is nearest a world point, searching
+        /// <paramref name="rings"/> lattice cells each way: the bench places its cameras with it, in place of the old fixed cell 0.
+        /// </summary>
+        public bool FindNearestCell(float x, float z, out FieldFeature feature, float minStrength = StormLattice.ActiveStrength, int rings = 6)
+        {
+            Frame.ToTape(x, z, out float qx, out float qz);
+            feature = default;
+            if (!StormLattice.FindNearest(Lattice, stormCache, qx, qz, rings, minStrength, out StormCell c)) return false;
+            Frame.FromTape(c.X, c.Z, out float cx, out float cz);
+            feature = new FieldFeature { X = cx, Z = cz, Radius = c.Radius, Base = c.Base, Top = c.Top, Strength = c.Strength };
+            return true;
+        }
+
+        /// <summary>How many storm cells at or above <see cref="StormLattice.ActiveStrength"/> have their centre within a range of a world point (the activeCellCount readout).</summary>
+        public int ActiveCellCount(float x, float z, float range)
+        {
+            Frame.ToTape(x, z, out float qx, out float qz);
+            return StormLattice.CountActive(Lattice, stormCache, qx, qz, range);
         }
 
         /// <summary>
@@ -273,50 +293,49 @@ namespace BoscaliSummer.Modules.Weather.Domain
             float outX = 0f, outZ = 0f, vertical = 0f;
             float lightning = 0f;
             float core = 0f;
-            float top = 0f;
+            float towerDepth = 0f;
             bool hail = false;
-            for (int i = 0; i < CellCount; i++)
+            // Storm cells (spec 6): the cells that can touch this point's lattice cell hold every cell that can touch the point.
+            stormNear.Refresh(Lattice, stormCache, qx, qz);
+            // The flared anvil radius is the same for every cell of this point's row (0 when the row has none).
+            float anvilFlare = p.Anvil > 0.05f ? CloudShape.Footprint(0.82f, p.Anvil) : 0f;
+            for (int i = 0; i < stormNear.Count; i++)
             {
-                StormCell cell = cells[i];
-                float dx = x - cell.X, dz = z - cell.Z;
-                float reach = cell.Radius * 8f;
-                if (dx * dx + dz * dz > reach * reach) continue;
+                ref StormCell cell = ref stormNear.Items[i];
+                float dx = qx - cell.X, dz = qz - cell.Z;
+                if (dx * dx + dz * dz >= cell.Reach * cell.Reach) continue;
 
-                cellRain += cell.RainAt(x, z);
-                float cover = cell.CoverAt(x, z);
+                cellRain += cell.RainAt(qx, qz);
+                float cover = cell.CoverAt(qx, qz);
                 clearCells *= 1f - cover;
-                float shape = cell.ShapeAt(x, z);
+                float shape = cell.ShapeAt(qx, qz);
                 if (shape > point.CellShape) point.CellShape = shape;
-                cell.WindAt(x, z, out float ox, out float oz, out float w, out float t);
+                cell.WindAt(qx, qz, out float ox, out float oz, out float w, out float t);
                 outX += ox;
                 outZ += oz;
                 vertical += w;
                 turbulence += t;
+                lightning += cell.LightningRate * cell.LightningWeight(qx, qz);
 
-                float d2 = (dx * dx + dz * dz) / (9f * cell.Radius * cell.Radius);
-                lightning += cell.LightningRate * (float)Math.Exp(-d2);
-
-                float depth = cell.CoreAt(x, z);
+                float depth = cell.CoreAt(qx, qz);
                 if (depth > core) core = depth;
                 if (cell.Hail && depth > 0.5f) hail = true;
                 // The updraft is a dome. A real anvil holds that ceiling out to the flared
                 // radius; otherwise the column top falls inside the stem and the flare in
                 // CloudBodies never gets a column to fill.
-                float column = (float)Math.Pow(Math.Max(shape, 0f), 0.65f);
-                if (p.Anvil > 0.05f)
+                float column = shape > 0f ? (float)Math.Pow(shape, 0.65f) : 0f;
+                float anvilReach = cell.Radius * 1.35f * anvilFlare;
+                if (anvilFlare > 0f && dx * dx + dz * dz < (anvilReach + cell.Radius * 0.55f) * (anvilReach + cell.Radius * 0.55f))
                 {
-                    float dist = cell.EllipticDistance(dx, dz);
-                    float flare = CloudShape.Footprint(0.82f, p.Anvil);
-                    float anvilReach = cell.Radius * 1.35f * flare;
-                    float shelf = 1f - WeatherMath.Smoothstep(anvilReach, anvilReach + cell.Radius * 0.55f, dist);
+                    float shelf = 1f - WeatherMath.Smoothstep(anvilReach, anvilReach + cell.Radius * 0.55f, cell.Distance(qx, qz));
                     shelf *= WeatherMath.Smoothstep(0.25f, 0.45f, p.Anvil);
                     // The spreading crown is lower away from the updraft. A literal flat
                     // shelf=1 across this radius made every ordinary storm a giant saucer.
                     shelf *= 0.82f + 0.18f * Scalar.Clamp01(shape);
                     if (shelf > column) column = shelf;
                 }
-                float cellCrown = cell.Base + (cell.Top - cell.Base) * column;
-                if (cellCrown > top) top = cellCrown;
+                float cellDepth = (cell.Top - cell.Base) * column;
+                if (cellDepth > towerDepth) towerDepth = cellDepth;
             }
 
             // Cumulus groups: independent covers combine as 1 - (1 - c1)(1 - c2)...; the strongest one shapes the crown.
@@ -346,7 +365,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
             CloudGenus genus = CloudShape.Resolve(local);
             float deck = WeatherMath.Lerp(genus.PuffDepth, Math.Max(genus.PuffDepth, local.DeckDepth), genus.SheetBlend);
             deck = Math.Max(280f, deck);
-            float crown = Math.Max(top, groupCrown > 0f ? point.CloudBase + groupCrown : 0f);
+            float crownDepth = Math.Max(towerDepth, groupCrown);
+            float crown = crownDepth > 0f ? point.CloudBase + crownDepth : 0f;
             // Fair and stratocumulus stay at the genus depth. A cumulonimbus keeps the cell's full column.
             crown = WeatherMath.Lerp(Math.Min(crown, CloudShape.TowerCap(point.CloudBase, genus, local.DeckDepth)), crown, genus.TowerBlend);
             point.LowTop = Math.Max(point.CloudBase + deck * (0.5f + 0.5f * stratiformCover), crown);

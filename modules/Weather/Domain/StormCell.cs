@@ -3,155 +3,114 @@ using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Weather.Domain
 {
-    internal enum StormStage : byte
-    {
-        Towering = 0,
-        Mature = 1,
-        Dissipating = 2,
-    }
-
     /// <summary>
-    /// One convective cell at a fixed site of the static layout. <see cref="Age"/> is its
-    /// activation by the weather state (0 = gone, 0.5 = mature), so a fade grows the tower,
-    /// then the rain, then the lightning, in place. Velocity only orients the rain halo.
+    /// One convective cell of the storm lattice (spec 6): circular, with a constant <see cref="Strength"/> read at its centre. Rain,
+    /// cover, shape, wind and lightning each have a finite support, so a 5 x 5 block of 16 km cells sees every cell that can touch
+    /// a point. All coordinates are tape-frame metres; the field converts with <see cref="TapeFrame.ToTape"/>.
     /// </summary>
     internal struct StormCell
     {
-        public int Slot;
-        public int Cluster;
+        /// <summary>Supports as multiples of the radius R: shape and core 2.9 R (the cover disc is gone by 2.2 R, see CoverAt), rain halo 5.5 R, wind and turbulence 4 R, lightning 6 R.</summary>
+        public const float CoverSupport = 2.9f, HaloSupport = 5.5f, WindSupport = 4f, LightningSupport = 6f;
+
+        public int Gx, Gz, K;
+        /// <summary>hash(layout seed, gx, gz, k): the cell's lightning events derive from it.</summary>
         public uint Seed;
-
-        /// <summary>Centre now (metres, map frame: x east, z north).</summary>
-        public float X;
-        public float Z;
-        public float VelocityX;
-        public float VelocityZ;
-
-        /// <summary>0..1 through the lifecycle.</summary>
-        public float Age;
-
-        public float Radius;
+        public float X, Z;
+        public float Radius, Rank, Level, Strength;
+        /// <summary>Cloud base at the centre and the full depth of the tower above it.</summary>
+        public float Base, Depth;
+        /// <summary>Peak rain P = 30 + 90 * Severity mm/h at full strength.</summary>
         public float PeakRain;
-        public float Base;
-        public float TopMax;
         public float LightningPeak;
-        public bool Severe;
-        public bool Hail;
+        public bool Severe, Hail;
 
-        public StormStage Stage => Age < 0.3f ? StormStage.Towering : Age < 0.7f ? StormStage.Mature : StormStage.Dissipating;
+        /// <summary>The widest support of the cell: nothing of it lies further than this from the centre.</summary>
+        public float Reach => LightningSupport * Radius;
 
-        /// <summary>Cloud presence: builds first, lingers as an anvil after the rain.</summary>
-        public float CloudLevel => WeatherMath.Envelope(Age, 0f, 0.2f, 0.85f, 1f);
+        /// <summary>Tower top: the base plus the depth, rising with the strength (a weak cell is a young, low tower).</summary>
+        public float Top => Base + Depth * WeatherMath.Smoothstep(0.1f, 0.6f, Strength);
+        public float TopMax => Base + Depth;
 
-        /// <summary>Rain intensity: starts at 20 % of life, peaks through maturity.</summary>
-        public float RainLevel => WeatherMath.Envelope(Age, 0.2f, 0.4f, 0.65f, 0.95f);
+        /// <summary>Strikes per minute at the centre: only a developed cell is electric.</summary>
+        public float LightningRate => LightningPeak * WeatherMath.Smoothstep(0.55f, 0.85f, Strength);
 
-        public float LightningLevel => WeatherMath.Envelope(Age, 0.3f, 0.45f, 0.65f, 0.8f);
+        public float UpdraftLevel => WeatherMath.Smoothstep(0.05f, 0.3f, Strength) * (1f - WeatherMath.Smoothstep(0.5f, 0.9f, Strength));
+        public float DowndraftLevel => WeatherMath.Smoothstep(0.4f, 0.7f, Strength);
 
-        public float UpdraftLevel => WeatherMath.Envelope(Age, 0.05f, 0.2f, 0.3f, 0.45f);
+        public float Distance(float x, float z)
+        {
+            float dx = x - X, dz = z - Z;
+            return (float)Math.Sqrt(dx * dx + dz * dz);
+        }
 
-        public float DowndraftLevel => WeatherMath.Envelope(Age, 0.35f, 0.5f, 0.7f, 0.9f);
-
-        /// <summary>Tower top now: rises through the towering stage.</summary>
-        public float Top => Base + (TopMax - Base) * WeatherMath.Smoothstep(0f, 0.35f, Age);
-
-        /// <summary>Strikes per minute now.</summary>
-        public float LightningRate => LightningPeak * LightningLevel;
-
+        /// <summary>mm/h: the Gaussian core P * strength * exp(-(d/R)^2) plus a faint wider halo, each cut to zero at its support.</summary>
         public float RainAt(float x, float z)
         {
-            float level = RainLevel;
-            if (level <= 0f) return 0f;
-            float core = Elliptic(x - X, z - Z, Radius);
-            // A light-rain halo trailing downwind of the core.
-            float speed = (float)Math.Sqrt(VelocityX * VelocityX + VelocityZ * VelocityZ);
-            float hx = X, hz = Z;
-            if (speed > 0.1f)
-            {
-                hx -= VelocityX / speed * Radius * 1.5f;
-                hz -= VelocityZ / speed * Radius * 1.5f;
-            }
-            float halo = Gauss2(x - hx, z - hz, Radius * 2.5f);
-            return PeakRain * level * (core + 0.12f * halo);
+            float d = Distance(x, z);
+            if (d >= HaloSupport * Radius) return 0f;
+            float core = Gauss(d, Radius) * Taper(d, CoverSupport * Radius);
+            float halo = 0.12f * Gauss(d, 2.5f * Radius) * Taper(d, HaloSupport * Radius);
+            return PeakRain * Strength * (core + halo);
         }
 
+        /// <summary>Cloud cover: full inside R, gone by 2.2 R.</summary>
         public float CoverAt(float x, float z)
         {
-            float level = CloudLevel;
-            if (level <= 0f) return 0f;
-            float dx = x - X, dz = z - Z;
-            float d = EllipticDistance(dx, dz);
-            return level * (1f - WeatherMath.Smoothstep(Radius * 1.0f, Radius * 2.2f, d));
+            if (Strength <= 0f) return 0f;
+            return Strength * (1f - WeatherMath.Smoothstep(Radius, 2.2f * Radius, Distance(x, z)));
         }
 
-        /// <summary>Continuous horizontal buoyant core for the cloud crown; unlike
-        /// cover, it has no flat centre that would make a cylindrical tower.</summary>
+        /// <summary>The buoyant core that shapes the crown: continuous, with no flat centre that would make a cylindrical tower.</summary>
         public float ShapeAt(float x, float z)
         {
-            float dx = x - X, dz = z - Z;
-            return CloudLevel * Elliptic(dx, dz, Radius * 1.4f);
-        }
-
-        /// <summary>Metres from the buoyant core in its fixed wind-oriented footprint.
-        /// Rain, ordinary cloud and the crown use the same ellipse.</summary>
-        public float EllipticDistance(float dx, float dz)
-        {
-            float speed = (float)Math.Sqrt(VelocityX * VelocityX + VelocityZ * VelocityZ);
-            if (speed < 0.1f) return (float)Math.Sqrt(dx * dx + dz * dz);
-            float ax = VelocityX / speed, az = VelocityZ / speed;
-            float along = (dx * ax + dz * az) / 1.3f;
-            float across = -dx * az + dz * ax;
-            return (float)Math.Sqrt(along * along + across * across);
+            float d = Distance(x, z);
+            return d >= CoverSupport * Radius ? 0f : Strength * Gauss(d, 1.4f * Radius) * Taper(d, CoverSupport * Radius);
         }
 
         /// <summary>0..1 how deep a point is in the core (rain-weighted), for HUD and hazard.</summary>
-        public float CoreAt(float x, float z) => RainLevel * Elliptic(x - X, z - Z, Radius);
+        public float CoreAt(float x, float z)
+        {
+            float d = Distance(x, z);
+            return d >= CoverSupport * Radius ? 0f : Strength * Gauss(d, Radius) * Taper(d, CoverSupport * Radius);
+        }
 
-        /// <summary>Horizontal outflow (gust front) and vertical draft at a point.</summary>
+        /// <summary>exp(-d^2 / 9R^2) * (1 - smoothstep(3R, 6R, d)): how strongly a strike rate at the centre reads at a point.</summary>
+        public float LightningWeight(float x, float z)
+        {
+            float d = Distance(x, z);
+            if (d >= LightningSupport * Radius) return 0f;
+            return (float)Math.Exp(-(d * d) / (9f * Radius * Radius)) * (1f - WeatherMath.Smoothstep(3f * Radius, 6f * Radius, d));
+        }
+
+        /// <summary>Horizontal outflow (gust front) and vertical draft at a point; all zero beyond 4 R.</summary>
         public void WindAt(float x, float z, out float outX, out float outZ, out float vertical, out float turbulence)
         {
+            outX = outZ = vertical = turbulence = 0f;
             float dx = x - X, dz = z - Z;
             float d = (float)Math.Sqrt(dx * dx + dz * dz);
-            float down = DowndraftLevel;
-            float up = UpdraftLevel;
+            if (d >= WindSupport * Radius) return;
+            float taper = Taper(d, WindSupport * Radius);
+            float down = DowndraftLevel, up = UpdraftLevel;
 
-            vertical = 6f * up * Gauss(d, Radius) - 8f * down * Gauss(d, Radius * 0.8f);
+            vertical = (6f * up * Gauss(d, Radius) - 8f * down * Gauss(d, Radius * 0.8f)) * taper;
 
             // The gust front spreads out from the core as the downdraft matures.
-            float ring = Radius * (1.0f + 2.0f * Scalar.Clamp01((Age - 0.35f) / 0.4f));
-            float gust = 15f * down * Gauss(d - ring, Radius * 0.6f) + 6f * down * Gauss(d, Radius * 0.7f);
+            float ring = Radius * (1f + 0.75f * WeatherMath.Smoothstep(0.4f, 1f, Strength));
+            // The direction of the outflow is undefined at the centre: fade the gust to nothing there, or crossing the core flips it 12 m/s.
+            float gust = (15f * down * Gauss(d - ring, Radius * 0.6f) + 6f * down * Gauss(d, Radius * 0.7f)) * taper *
+                WeatherMath.Smoothstep(0f, 0.3f * Radius, d);
             if (d > 1f)
             {
                 outX = dx / d * gust;
                 outZ = dz / d * gust;
             }
-            else
-            {
-                outX = 0f;
-                outZ = 0f;
-            }
 
-            turbulence = (0.25f * up + 0.55f * down + 0.2f * CloudLevel) * Gauss(d, Radius * 2f);
+            turbulence = (0.25f * up + 0.55f * down + 0.2f * Strength) * Gauss(d, Radius * 2f) * taper;
         }
 
-        private float Elliptic(float dx, float dz, float radius)
-        {
-            // Stretched 1.3× along the direction of travel.
-            float speed = (float)Math.Sqrt(VelocityX * VelocityX + VelocityZ * VelocityZ);
-            if (speed < 0.1f) return Gauss2(dx, dz, radius);
-            float ax = VelocityX / speed, az = VelocityZ / speed;
-            float along = dx * ax + dz * az;
-            float across = -dx * az + dz * ax;
-            float u = along / (radius * 1.3f);
-            float v = across / radius;
-            return (float)Math.Exp(-(u * u + v * v));
-        }
-
-        private static float Gauss2(float dx, float dz, float width)
-        {
-            float d2 = (dx * dx + dz * dz) / (width * width);
-            return (float)Math.Exp(-d2);
-        }
+        /// <summary>1 inside 0.7 of the support, easing to exactly 0 at the support.</summary>
+        private static float Taper(float d, float support) => 1f - WeatherMath.Smoothstep(0.7f * support, support, d);
 
         private static float Gauss(float x, float width)
         {
@@ -161,84 +120,202 @@ namespace BoscaliSummer.Modules.Weather.Domain
     }
 
     /// <summary>
-    /// Four clusters of three cell sites per layout. Sites are fixed; each has a rank, and the
-    /// state's convective level decides how many are active and how deep they grow.
+    /// The storm lattice (spec 6, 6.1): cells on an infinite jittered grid of 16 km cells in the tape frame, 0 to 3 candidates per
+    /// cell, radius 3-5.3 km (the Cumulonimbus range), always circular. <see cref="Resolve"/> is the one pure resolver Sample, the
+    /// map rasteriser, the CloudBodies mirror and lightning all use. Activation is read at the centre: level = clamp01(Convective)
+    /// of the tape row there (CapacityCell 1); the slice-4 marker bias joins it at the marked line.
     /// </summary>
-    internal static class StormCells
+    internal static class StormLattice
     {
-        public const int MaxCells = 12;
-        public const int CellsPerCluster = 3;
+        public const float Cell = 16000f;
+        /// <summary>5 x 5 cells, 32 km each way: 6 R at R = 5.3 km is 31.8 km.</summary>
+        public const int Half = 2;
+        /// <summary>A cell has 0 to this many candidates.</summary>
+        public const int MaxCandidates = 3;
+        public const float RadiusMin = 3000f, RadiusMax = 5300f;
+        /// <summary>A cell at or above this strength is active: it shows, it can strike, it is enumerated.</summary>
+        public const float ActiveStrength = 0.5f;
+        /// <summary>Lightning looks at a 25 x 25 block (192 km guaranteed on every side), the nearest 24 within 180 km.</summary>
+        public const int EnumerateHalf = 12, EnumerateCap = 24;
+        public const float EnumerateRange = 180000f;
 
-        public static int Fill(StormCell[] cells, uint layout, SkyParams sky, float halfX, float halfZ,
-            float driftX, float driftZ, SkySplit spine = default)
+        private const uint SaltMix = 0xBB67AE85u;
+        private const int SlotCount = 0, SlotX = 1, SlotZ = 2, SlotRank = 3, SlotRadius = 4, SlotSevere = 5, SlotRain = 6,
+            SlotHail = 7, SlotDepth = 8, SlotLightning = 9, SlotStrike = 10;
+
+        [ThreadStatic] private static StormCell[] scratch;
+
+        /// <summary>Candidate k of cell (gx, gz), or false when the cell has no such candidate. Returned even at strength 0.</summary>
+        public static bool Resolve(in LatticeSource src, int gx, int gz, int k, out StormCell cell)
         {
-            int count = 0;
-            float convective = Scalar.Clamp01(sky.Convective);
-            if (convective <= 0f) return 0;
-            for (int slot = 0; slot < MaxCells && count < cells.Length; slot++)
-            {
-                int cluster = slot / CellsPerCluster;
-                uint clusterSeed = unchecked(layout ^ (uint)(cluster * 73856093) ^ 0x51ed27u);
-                uint cellSeed = unchecked(layout ^ (uint)(slot * 19349663) ^ 0x2c1b3au);
-                // Rank orders sites by how early they fire as convection deepens.
-                float rank = (slot + WeatherMath.Hash01(cellSeed, 1, 0)) / MaxCells;
-                float activation = WeatherMath.Smoothstep(rank * 0.7f, rank * 0.7f + 0.4f, convective);
-                if (activation <= 0f) continue;
+            cell = default;
+            uint salt = src.Salt ^ SaltMix;
+            float uCell = LatticeHash.Unit(salt, gx, gz, 0, SlotCount);
+            if (k >= (int)(uCell * (MaxCandidates + 1))) return false;
+            float x = (gx + LatticeHash.Unit(salt, gx, gz, k, SlotX)) * Cell;
+            float z = (gz + LatticeHash.Unit(salt, gx, gz, k, SlotZ)) * Cell;
+            SkyParams row = src.RowAt(x, z, out _);
 
-                // Severity blends each cluster toward its severe form rather than flipping it,
-                // so a fade into STORM swells cells instead of popping them.
-                float threshold = WeatherMath.Hash01(clusterSeed, 1, 0);
-                float severe = WeatherMath.Smoothstep(threshold, threshold + 0.15f, sky.Severity);
-                var cell = new StormCell
+            float conv = Scalar.Clamp01(row.Convective);
+            // INTERIM(slice 4): the marker bias of 5.3 adds to conv here, at the cell centre; CapacityCell is 1.
+            float level = Scalar.Clamp01(conv);
+            float rank = LatticeHash.Unit(salt, gx, gz, k, SlotRank);
+            float severeAt = LatticeHash.Unit(salt, gx, gz, k, SlotSevere);
+            float severeBlend = WeatherMath.Smoothstep(severeAt, severeAt + 0.15f, Scalar.Clamp01(row.Severity));
+
+            cell.Gx = gx; cell.Gz = gz; cell.K = k;
+            cell.Seed = LatticeHash.Hash(src.LayoutSeed, gx, gz, k, 0x5C);
+            cell.X = x; cell.Z = z;
+            cell.Radius = LatticeHash.Range(salt, gx, gz, k, SlotRadius, RadiusMin, RadiusMax);
+            cell.Rank = rank;
+            cell.Level = level;
+            cell.Strength = WeatherMath.Smoothstep(rank * 0.7f, rank * 0.7f + 0.35f, level);
+            cell.Base = Scalar.Clamp(row.CloudBase, 400f, 2500f);
+            cell.Depth = 1200f + 4600f * conv + LatticeHash.Range(salt, gx, gz, k, SlotDepth, 0f, 800f + 1800f * conv) + 3000f * severeBlend;
+            cell.PeakRain = 30f + 90f * Scalar.Clamp01(row.Severity);
+            cell.Severe = severeBlend > 0.5f;
+            cell.Hail = cell.Severe && cell.PeakRain >= 75f && LatticeHash.Unit(salt, gx, gz, k, SlotHail) < 0.6f;
+            float quiet = conv < 0.55f ? 0f : LatticeHash.Range(salt, gx, gz, k, SlotLightning, 0.3f, 4f) * (conv - 0.55f) / 0.45f;
+            cell.LightningPeak = WeatherMath.Lerp(quiet, LatticeHash.Range(salt, gx, gz, k, SlotStrike, 6f, 18f), severeBlend);
+            return true;
+        }
+
+        /// <summary>The cells of one lattice cell that are out (strength above 0), in candidate order. Returns the count.</summary>
+        public static int ResolveCell(in LatticeSource src, int gx, int gz, StormCell[] into)
+        {
+            if (src.ConstantConvective == 0f) return 0;
+            float uCell = LatticeHash.Unit(src.Salt ^ SaltMix, gx, gz, 0, SlotCount);
+            int candidates = (int)(uCell * (MaxCandidates + 1)), count = 0;
+            for (int k = 0; k < candidates; k++)
+                if (Resolve(src, gx, gz, k, out StormCell c) && c.Strength > 0f) into[count++] = c;
+            return count;
+        }
+
+        /// <summary>
+        /// The cells that can touch the lattice cell a point is in: a flat list refreshed only when the point crosses into another cell (see
+        /// <see cref="CumulusLattice.Neighbourhood"/>). One per field, reset with its cache. Not thread-safe.
+        /// </summary>
+        public sealed class Neighbourhood
+        {
+            public readonly StormCell[] Items = new StormCell[(2 * Half + 1) * (2 * Half + 1) * MaxCandidates];
+            public int Count;
+            private int cellX = int.MinValue, cellZ;
+
+            public void Reset() => cellX = int.MinValue;
+
+            public void Refresh(in LatticeSource src, CellCache<StormCell> cache, float qx, float qz)
+            {
+                int x = LatticeHash.CellOf(qx, Cell), z = LatticeHash.CellOf(qz, Cell);
+                if (x == cellX && z == cellZ) return;
+                cellX = x; cellZ = z; Count = 0;
+                if (src.ConstantConvective == 0f) return; // a sky without convection: no cell can be out, so skip the 25 cell lookups
+                float midX = (x + 0.5f) * Cell, midZ = (z + 0.5f) * Cell, slack = 0.7072f * Cell;
+                for (int gz = z - Half; gz <= z + Half; gz++)
+                for (int gx = x - Half; gx <= x + Half; gx++)
                 {
-                    Slot = slot,
-                    Cluster = cluster,
-                    Seed = cellSeed,
-                    Age = 0.5f * activation,
-                    Severe = severe > 0.5f,
-                    X = WeatherMath.HashRange(clusterSeed, 10, 0, 0, -0.38f, 0.38f) * halfX * 2f +
-                        WeatherMath.HashRange(cellSeed, 10, 1, 0, -5000f, 5000f),
-                    Z = WeatherMath.HashRange(clusterSeed, 11, 0, 0, -0.38f, 0.38f) * halfZ * 2f +
-                        WeatherMath.HashRange(cellSeed, 11, 1, 0, -5000f, 5000f),
-                    VelocityX = driftX,
-                    VelocityZ = driftZ,
-                };
-                if (cluster < 2 && spine.MeanderWavelength > 0f)
-                {
-                    // Two families bead the leading edge; two remain isolated. The curve,
-                    // sibling spacing and side of the line are layout properties, never
-                    // functions of convection, severity, radius or activation.
-                    float span = Math.Min(halfX, halfZ);
-                    float along = (cluster == 0 ? -0.42f : 0.42f) * span +
-                        WeatherMath.HashRange(clusterSeed, 12, 0, 0, -0.12f, 0.12f) * span +
-                        (slot % CellsPerCluster - 1) * 5000f +
-                        WeatherMath.HashRange(cellSeed, 12, 1, 0, -1200f, 1200f);
-                    float tx = -spine.NormalZ * along, tz = spine.NormalX * along;
-                    float offset = spine.SignedDistance(tx, tz) - 2000f +
-                        WeatherMath.HashRange(cellSeed, 13, 1, 0, -1600f, 1600f);
-                    cell.X = Scalar.Clamp(tx + spine.NormalX * offset, -halfX * 0.96f, halfX * 0.96f);
-                    cell.Z = Scalar.Clamp(tz + spine.NormalZ * offset, -halfZ * 0.96f, halfZ * 0.96f);
+                    int n = Fetch(src, cache, gx, gz, out StormCell[] items);
+                    for (int i = 0; i < n; i++)
+                    {
+                        float dx = items[i].X - midX, dz = items[i].Z - midZ, reach = items[i].Reach + slack;
+                        if (dx * dx + dz * dz <= reach * reach) Items[Count++] = items[i];
+                    }
                 }
-                cell.Radius = WeatherMath.Lerp(
-                    WeatherMath.HashRange(cellSeed, 2, 0, 0, 1500f, 4000f) * (0.7f + 0.3f * convective),
-                    WeatherMath.HashRange(cellSeed, 2, 0, 0, 2500f, 5000f), severe);
-                float peakRain = 2f + 78f * convective * convective * convective;
-                cell.PeakRain = WeatherMath.Lerp(
-                    WeatherMath.HashRange(cellSeed, 3, 0, 0, peakRain * 0.36f, peakRain),
-                    WeatherMath.HashRange(cellSeed, 3, 0, 0, 60f, 120f), severe);
-                cell.Hail = severe > 0.5f && cell.PeakRain > 70f && WeatherMath.Hash01(cellSeed, 4, 0) < 0.6f;
-                cell.Base = Scalar.Clamp(sky.CloudBase, 400f, 2500f);
-                // A fair-weather thermal condenses into shallow cumulus; deep moist
-                // convection has the buoyancy for a tall rain cell.
-                float depth = 1200f + 4600f * convective +
-                    WeatherMath.HashRange(cellSeed, 5, 0, 0, 0f, 800f + 1800f * convective);
-                cell.TopMax = cell.Base + depth + 3000f * severe;
-                float lightning = convective < 0.55f ? 0f :
-                    WeatherMath.HashRange(cellSeed, 6, 0, 0, 0.3f, 4f) * (convective - 0.55f) / 0.45f;
-                cell.LightningPeak = WeatherMath.Lerp(lightning, WeatherMath.HashRange(cellSeed, 6, 0, 0, 6f, 18f), severe);
-                cells[count++] = cell;
+            }
+        }
+
+        /// <summary>The cells (strength above 0) of lattice cell (gx, gz), through the cache when there is one.</summary>
+        public static int Fetch(in LatticeSource src, CellCache<StormCell> cache, int gx, int gz, out StormCell[] items)
+        {
+            if (cache != null && cache.TryGet(gx, gz, out items, out int cached)) return cached;
+            items = cache != null ? cache.Reserve(gx, gz, MaxCandidates) : scratch ?? (scratch = new StormCell[MaxCandidates]);
+            int count = ResolveCell(src, gx, gz, items);
+            if (cache != null) cache.Commit(gx, gz, count);
+            return count;
+        }
+
+        /// <summary>
+        /// The active cells within <paramref name="range"/> of a tape-frame point, nearest first (ties by cell id), at most
+        /// <paramref name="cap"/> of them, read from the 25 x 25 block around the point. Lightning's per-slot enumeration (6.1): a pure
+        /// function of the tape and the point. Returns the count written to <paramref name="into"/>.
+        /// </summary>
+        public static int Enumerate(in LatticeSource src, float qx, float qz, float range, StormCell[] into, int cap = EnumerateCap)
+        {
+            cap = Math.Min(cap, into.Length);
+            int count = 0;
+            float r2 = range * range;
+            int cx = LatticeHash.CellOf(qx, Cell), cz = LatticeHash.CellOf(qz, Cell);
+            StormCell[] cellCells = scratch ?? (scratch = new StormCell[MaxCandidates]);
+            for (int gz = cz - EnumerateHalf; gz <= cz + EnumerateHalf; gz++)
+            for (int gx = cx - EnumerateHalf; gx <= cx + EnumerateHalf; gx++)
+            {
+                int n = ResolveCell(src, gx, gz, cellCells);
+                for (int i = 0; i < n; i++)
+                {
+                    StormCell c = cellCells[i];
+                    if (c.Strength < ActiveStrength) continue;
+                    float d2 = Dist2(c, qx, qz);
+                    if (d2 > r2) continue;
+                    int at = count;
+                    while (at > 0 && Before(c, d2, into[at - 1], Dist2(into[at - 1], qx, qz))) at--;
+                    if (at >= cap) continue;
+                    int last = Math.Min(count, cap - 1);
+                    for (int j = last; j > at; j--) into[j] = into[j - 1];
+                    into[at] = c;
+                    if (count < cap) count++;
+                }
             }
             return count;
+        }
+
+        /// <summary>The active cell whose centre is nearest a tape-frame point, searching <paramref name="rings"/> cells each way.</summary>
+        public static bool FindNearest(in LatticeSource src, CellCache<StormCell> cache, float qx, float qz, int rings,
+            float minStrength, out StormCell best)
+        {
+            best = default;
+            float bestD2 = float.MaxValue;
+            int cx = LatticeHash.CellOf(qx, Cell), cz = LatticeHash.CellOf(qz, Cell);
+            for (int gz = cz - rings; gz <= cz + rings; gz++)
+            for (int gx = cx - rings; gx <= cx + rings; gx++)
+            {
+                int n = Fetch(src, cache, gx, gz, out StormCell[] items);
+                for (int i = 0; i < n; i++)
+                {
+                    if (items[i].Strength < minStrength) continue;
+                    float d2 = Dist2(items[i], qx, qz);
+                    if (d2 < bestD2) { bestD2 = d2; best = items[i]; }
+                }
+            }
+            return bestD2 < float.MaxValue;
+        }
+
+        /// <summary>How many active cells lie within <paramref name="range"/> of a tape-frame point (the activeCellCount readout).</summary>
+        public static int CountActive(in LatticeSource src, CellCache<StormCell> cache, float qx, float qz, float range)
+        {
+            int rings = (int)Math.Ceiling(range / Cell) + 1, total = 0;
+            int cx = LatticeHash.CellOf(qx, Cell), cz = LatticeHash.CellOf(qz, Cell);
+            float r2 = range * range;
+            for (int gz = cz - rings; gz <= cz + rings; gz++)
+            for (int gx = cx - rings; gx <= cx + rings; gx++)
+            {
+                int n = Fetch(src, cache, gx, gz, out StormCell[] items);
+                for (int i = 0; i < n; i++)
+                    if (items[i].Strength >= ActiveStrength && Dist2(items[i], qx, qz) <= r2) total++;
+            }
+            return total;
+        }
+
+        private static float Dist2(in StormCell c, float qx, float qz)
+        {
+            float dx = c.X - qx, dz = c.Z - qz;
+            return dx * dx + dz * dz;
+        }
+
+        private static bool Before(in StormCell a, float d2a, in StormCell b, float d2b)
+        {
+            if (d2a != d2b) return d2a < d2b;
+            if (a.Gx != b.Gx) return a.Gx < b.Gx;
+            if (a.Gz != b.Gz) return a.Gz < b.Gz;
+            return a.K < b.K;
         }
     }
 }

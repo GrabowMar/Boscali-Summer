@@ -71,24 +71,28 @@ namespace BoscaliSummer.Tests.Features.Weather
         {
             for (uint seed = 1; seed <= 12; seed++)
             {
-                var storm = new WeatherField(); var scattered = new WeatherField();
-                storm.Build(new WeatherKey(seed, 0f, false, (byte)WeatherRegimeType.Storm), 600f, 40000f, 40000f);
-                scattered.Build(new WeatherKey(seed, 0f, false, (byte)WeatherRegimeType.Scattered), 300f, 40000f, 40000f);
-                for (int i = 0; i < storm.CellCount; i++)
+                // The lattice belongs to the tape, not to the state: two moments of one key hold the same candidates in the same places.
+                var key = new WeatherKey(seed, 0f, true, (byte)WeatherRegimeType.Scattered);
+                var early = new WeatherField(); var late = new WeatherField();
+                early.Build(key, 100f, 40000f, 40000f);
+                late.Build(key, 4000f, 40000f, 40000f);
+                int compared = 0;
+                for (int gz = -3; gz <= 3; gz++)
+                for (int gx = -3; gx <= 3; gx++)
+                for (int k = 0; k < 3; k++)
                 {
-                    StormCell cell = storm.Cell(i);
-                    if (cell.Cluster < 2)
-                        TestAssert.That(Math.Abs(storm.Split.SignedDistance(cell.X, cell.Z)) < 6500f,
-                            "Front-attached cell families follow the seeded curved frontal spine");
-                    for (int j = 0; j < scattered.CellCount; j++)
-                    {
-                        StormCell early = scattered.Cell(j);
-                        if (early.Slot == cell.Slot)
-                            TestAssert.That(cell.X == early.X && cell.Z == early.Z,
-                                "A state/settle-time change never relocates an active cell site");
-                    }
+                    bool a = StormLattice.Resolve(early.Lattice, gx, gz, k, out StormCell first);
+                    bool b = StormLattice.Resolve(late.Lattice, gx, gz, k, out StormCell second);
+                    TestAssert.That(a == b, "A state/settle-time change never adds or removes a candidate");
+                    if (!a) continue;
+                    TestAssert.That(first.X == second.X && first.Z == second.Z && first.Radius == second.Radius,
+                        "A state/settle-time change never relocates a cell site");
+                    compared++;
                 }
-                WeatherMath.HeadingToVector(storm.PrevailingHeading, out float wx, out float wz);
+                TestAssert.That(compared > 20, "the comparison saw candidates: " + compared);
+                var scattered = new WeatherField();
+                scattered.Build(new WeatherKey(seed, 0f, false, (byte)WeatherRegimeType.Scattered), 300f, 40000f, 40000f);
+                WeatherMath.HeadingToVector(scattered.PrevailingHeading, out float wx, out float wz);
                 for (int cell = -2; cell <= 2; cell++)
                 {
                     int n = CumulusLattice.Fetch(scattered.Lattice, null, cell, cell / 2, out CumulusGroup[] groups);

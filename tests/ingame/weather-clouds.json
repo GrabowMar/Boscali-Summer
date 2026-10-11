@@ -272,7 +272,7 @@
     },
     {
       "check": "result_above",
-      "path": "weather.cellCount",
+      "path": "weather.activeCellCount",
       "min": 1
     },
     {

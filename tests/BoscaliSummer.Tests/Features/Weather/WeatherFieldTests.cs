@@ -97,10 +97,10 @@ namespace BoscaliSummer.Tests.Features.Weather
                     float settled = step * 300f + WeatherTimeline.SettleSeconds() + 1f, late = step * 300f + 299f;
                     field.Build(key, settled, HalfX, HalfZ);
                     WeatherPoint a = field.Sample(9000f, -14000f);
-                    int cells = field.CellCount;
+                    int cells = field.ActiveCellCount(0f, 0f, 60000f);
                     field.Build(key, late, HalfX, HalfZ);
                     WeatherPoint b = field.Sample(9000f, -14000f);
-                    TestAssert.That(a.Cover == b.Cover && a.RainRate == b.RainRate && cells == field.CellCount,
+                    TestAssert.That(a.Cover == b.Cover && a.RainRate == b.RainRate && cells == field.ActiveCellCount(0f, 0f, 60000f),
                         $"the sky moved during a hold (seed {seed}, step {step})");
                 }
             }
@@ -159,7 +159,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                     layout = s.Layout;
                     TestAssert.That(s.Level == 0f && s.GrowthLevel == 0f, "the layout swapped with cloud on the map");
                     field.Build(key, t, HalfX, HalfZ);
-                    TestAssert.That(field.CellCount == 0 && field.FrontCount == 0 && !field.FindNearestCloud(0f, 0f, out _, 0.0001f, 6),
+                    TestAssert.That(field.ActiveCellCount(0f, 0f, 80000f) == 0 && field.FrontCount == 0 && !field.FindNearestCloud(0f, 0f, out _, 0.0001f, 6),
                         "a clear sky has nothing left to swap");
                 }
             }
@@ -169,8 +169,9 @@ namespace BoscaliSummer.Tests.Features.Weather
         private static void StatesBuildRealisticSkies()
         {
             var field = new WeatherField();
+            var cells = new StormCell[StormLattice.EnumerateCap];
             field.Build(Held(WeatherRegimeType.Clear), 600f, HalfX, HalfZ);
-            TestAssert.That(field.CellCount == 0 && field.FrontCount == 0, "clear sky has no cells or fronts");
+            TestAssert.That(field.ActiveCellCount(0f, 0f, 80000f) == 0 && field.FrontCount == 0, "clear sky has no cells or fronts");
             for (int i = -3; i <= 3; i++)
             {
                 WeatherPoint p = field.Sample(i * 12000f, i * 7000f);
@@ -178,27 +179,30 @@ namespace BoscaliSummer.Tests.Features.Weather
             }
 
             field.Build(Held(WeatherRegimeType.Scattered), 600f, HalfX, HalfZ);
-            for (int i = 0; i < field.CellCount; i++)
-            {
-                StormCell cell = field.Cell(i);
-                TestAssert.That(cell.TopMax - cell.Base < 4000f && cell.LightningPeak == 0f,
+            int scattered = StormLattice.Enumerate(field.Lattice, 0f, 0f, 120000f, cells);
+            for (int i = 0; i < scattered; i++)
+                TestAssert.That(cells[i].TopMax - cells[i].Base < 4000f && cells[i].LightningPeak == 0f,
                     "scattered cumulus stays shallow and silent");
-            }
 
             field.Build(Held(WeatherRegimeType.Storm), 600f, HalfX, HalfZ);
-            TestAssert.That(field.CellCount >= 8 && field.FrontCount == WeatherFronts.MaxFronts,
-                "a storm fires most cell sites and both front bands");
+            TestAssert.That(field.ActiveCellCount(0f, 0f, 60000f) >= 8 && field.FrontCount == WeatherFronts.MaxFronts,
+                "a storm fires many cells and both front bands");
+            int count = StormLattice.Enumerate(field.Lattice, 0f, 0f, 120000f, cells);
             bool deep = false, lightning = false;
-            for (int i = 0; i < field.CellCount; i++)
+            int mature = 0;
+            for (int i = 0; i < count; i++)
             {
-                StormCell c = field.Cell(i);
+                StormCell c = cells[i];
                 deep |= c.TopMax - c.Base > 5000f;
                 lightning |= c.LightningRate > 0f;
-                WeatherPoint under = field.Sample(c.X, c.Z);
-                TestAssert.That(under.RainRate >= 0.5f * c.PeakRain * c.RainLevel, "it rains under a storm core");
+                if (c.Strength < 0.95f) continue;
+                mature++;
+                field.Frame.FromTape(c.X, c.Z, out float wx, out float wz);
+                WeatherPoint under = field.Sample(wx, wz);
+                TestAssert.That(under.RainRate >= 0.5f * c.PeakRain * c.Strength, "it rains under a storm core");
                 TestAssert.That(under.Cover > 0.9f, "a mature cell is overcast overhead");
             }
-            TestAssert.That(deep && lightning, "storm cells are deep and electric");
+            TestAssert.That(deep && lightning && mature > 3, "storm cells are deep and electric");
 
             field.Build(Held(WeatherRegimeType.Overcast), 600f, HalfX, HalfZ);
             FrontState band = field.Front(0);
@@ -350,7 +354,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             {
                 a.Build(Key(99u), t, HalfX, HalfZ, 14f);
                 b.Build(new WeatherKey(99u, 0f, true, WeatherKey.AutoState), t, HalfX, HalfZ, 14f);
-                TestAssert.That(a.CellCount == b.CellCount, "cell count differs between peers");
+                TestAssert.That(a.ActiveCellCount(0f, 0f, 60000f) == b.ActiveCellCount(0f, 0f, 60000f), "cell count differs between peers");
                 for (int i = -2; i <= 2; i++)
                 {
                     WeatherPoint pa = a.Sample(i * 15000f, -i * 9000f);
