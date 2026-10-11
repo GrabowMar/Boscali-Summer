@@ -28,7 +28,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
     // floating origin. Positioning clouds, shadows and rain before that drew them against
     // the old origin for one frame on every shift: a ~1 km flash while flying.
     [DefaultExecutionOrder(100)]
-    internal sealed class WeatherManager : MonoBehaviour, ISceneService, IFlightEnvironmentView, IWeatherView
+    internal sealed partial class WeatherManager : MonoBehaviour, ISceneService, IFlightEnvironmentView, IWeatherView
     {
         private WeatherSettings settings;
         private bool? captureRainVisuals;
