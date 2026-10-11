@@ -23,7 +23,8 @@ param(
     [int]$SettleFrames = 48,
     [int]$MeasuredFrames = 48,
     [string]$EvidenceDir = '',
-    [string]$PoseFile = ''
+    [string]$PoseFile = '',
+    [int]$TimeoutSeconds = 900
 )
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/../../../UnityCheck.Common.ps1"
@@ -34,7 +35,7 @@ New-UnityCheckProject $fixture '{"dependencies":{"com.unity.modules.imageconvers
 Copy-Item "$repo/modules/Weather/Domain/*.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/Core/Math/Deterministic.cs", "$repo/Core/Math/Scalar.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/Core/Contracts/FxBudget.cs", "$repo/Core/Contracts/IClientEffect.cs" "$fixture/Assets/Code/"
-Copy-Item "$repo/Core/Fx/*.cs" "$fixture/Assets/Code/"
+Copy-Item "$repo/Core/Fx/*.cs" "$fixture/Assets/Code/" -Exclude SfxClips.cs
 foreach ($f in 'CloudNoise3D.cs', 'CloudMaps.cs', 'CloudBodies.cs', 'CloudVolumeUniforms.cs', 'CloudLowRes.cs', 'TapeTexture.cs') { Copy-Item "$repo/modules/Weather/Visuals/$f" "$fixture/Assets/Code/" }
 Copy-Item "$PSScriptRoot/CloudBench.cs", "$PSScriptRoot/CloudBenchSkies.cs", "$PSScriptRoot/SkyMetrics.cs" "$fixture/Assets/Code/"
 function Copy-Shader([string]$from, [string]$to, [string]$rename = '') {
@@ -66,7 +67,7 @@ $env:CLOUD_BENCH_POSES = $PoseFile
 $env:CLOUD_BENCH_TAPE = $Tape
 $env:CLOUD_BENCH_SKIES = $Skies -join ','
 $env:CLOUD_BENCH_SKYCLASS = if ($ClassBaseline) { '1' } else { '' }
-$timeout = if ($Skies) { $SkyTimeoutSeconds } else { 900 }
+$timeout = if ($Skies) { $SkyTimeoutSeconds } else { $TimeoutSeconds }
 if ($Variant) { $env:CLOUD_BENCH_VARIANT = "1" } else { $env:CLOUD_BENCH_VARIANT = "" }
 $player = Invoke-UnityPlayer "$fixture/Player/CloudBench.exe" @('-batchmode', '-logFile', ('"' + "$fixture/player.log" + '"')) $fixture `
     -TimeoutSeconds $timeout -TimeoutMessage "Bench timeout: $fixture/player.log"
