@@ -1,126 +1,225 @@
 <p align="center">
-  <img src="modules/Events/Assets/Posters/dust_storm.png" alt="Boscali Summer" width="100%">
-</p>
-
-<h1 align="center">Boscali Summer</h1>
-
-<p align="center">
-  <b>A theater-scale overhaul for Nuclear Option</b><br>
-  Destruction and wildfire · occupied towns and trenches · AI wingmen · support fires ·
-  SPACE / CYBER / SOF fronts · world events · weather · cockpit radio
+  <img src="media/readme/relief-header.svg" alt="Boscali Summer — animated relief map with layered terrain, tactical tracks and sensor pulses" width="100%">
 </p>
 
 <p align="center">
-  <img alt="version" src="https://img.shields.io/badge/version-0.2.0--alpha-orange">
-  <img alt="game" src="https://img.shields.io/badge/Nuclear%20Option-0.34.2-2b5797">
-  <img alt="BepInEx" src="https://img.shields.io/badge/BepInEx-5.4.23-6a3">
-  <img alt="multiplayer" src="https://img.shields.io/badge/multiplayer-same%20version%20on%20every%20peer-informational">
-  <img alt="license" src="https://img.shields.io/badge/license-MIT-lightgrey">
+  <strong>An experimental theater overhaul for Nuclear Option.</strong>
 </p>
+
+# VERY EARLY DEVELOPMENT
+
+## I do not recommend playing this right now.
+
+> [!CAUTION]
+> **This is an unfinished development build.**
+>
+> Expect bugs, rough balance, performance problems, broken compatibility and settings resets between versions. The features below are still being developed; polish and reliable multiplayer are not established.
+>
+> **Install only if you actively want to help test the mod. For a stable evening of Nuclear Option, wait.**
+
+<p align="center">
+  <strong>0.2.0 ALPHA</strong> &nbsp; · &nbsp; Nuclear Option <strong>0.34.2</strong> &nbsp; · &nbsp; <strong>BepInEx 5</strong><br>
+  <a href="CHANGELOG.md">Changelog</a> &nbsp; · &nbsp;
+  <a href="https://github.com/GrabowMar/Boscali-Summer/releases">Development releases</a> &nbsp; · &nbsp;
+  <a href="LICENSE">MIT license</a>
+</p>
+
+<p align="center">
+  <a href="#features">Features</a> &nbsp; / &nbsp;
+  <a href="#screenshots">Screenshots</a> &nbsp; / &nbsp;
+  <a href="#ai-usage-disclosure">AI disclosure</a> &nbsp; / &nbsp;
+  <a href="#testing-the-alpha">Testing</a> &nbsp; / &nbsp;
+  <a href="#help-improve-the-next-build">Bug reports</a>
+</p>
+
+<p align="center"><img src="media/readme/section-divider.svg" alt="" width="100%"></p>
+
+## Overview
+
+Boscali Summer expands Nuclear Option with AI wingmen, support operations, a more active ground war and cockpit immersion. Command and support consoles show the wider theater. Weather, radio and squadron details add atmosphere in the cockpit.
+
+Which systems appear depends on the mission, enabled modules and optional dependencies.
+
+## Features
+
+### The battlefield
+
+- **Fire & destruction** — burning buildings and wrecks, spreading forest fires, ruins, scorch marks and blast craters.
+- **Fortified towns & trenches** — rooftop MG, anti-tank and anti-aircraft positions, sandbags, faction flags and experimental frontline fortifications.
+- **Airborne insertions** — Ibis fast-rope and rappel insertions, plus HALO drops from supported cargo aircraft. **HALO cargo mounts require Blueprinter.**
+- **Theater command & intelligence** — a relief map, territory and frontline views, command staff and intelligence tools.
+- **Events & contracts** — battlefield news and optional jobs that can affect rewards, funds, prices and morale.
+
+### Your wing and support
+
+- **Wingmen & rival aces** — recruit a squad, choose loadouts and formations, and issue orders through **WMC** or **C**. Includes grades, perks, squad progression and enemy ace wings.
+- **Support & readiness** — call artillery, cruise missiles, recon, EMP and experimental kinetic strikes within your allocation. The **Support Operations (OPS)** page tracks SPACE, CYBER and SOF directives, programmes and readiness.
+- **Experimental equipment** — VANGUARD weapons, decoys and escort or gun drones. **Requires Blueprinter.**
+- **Cargo support** — SKYWELL refuel/rearm, KESTREL reconnaissance and HAMILCAR cargo gliders. **Requires Blueprinter and a compatible cargo bay.**
+
+<details>
+<summary><strong>VANGUARD equipment reference</strong></summary>
+
+| Equipment | Role |
+| --- | --- |
+| **LANCE / AEGIS** | Railgun / defence pod |
+| **MALD / ALE-X** | Decoys / towed decoy |
+| **REMORA / GLAIVE** | Escort drones / gun drones |
+| **HAWC-X / ORCA** | Glide weapon / glide torpedo |
+| **SKYWELL** | Refuel and rearm tender |
+| **KESTREL** | Recon glider |
+| **HAMILCAR** | Cargo glider carrying a Hexhound |
+
+These systems are experimental. Availability also depends on the aircraft, loadout and enabled modules.
+
+</details>
+
+### Your cockpit
+
+- **TAC BOARD HUD** — stores, countermeasures and cautions, with contextual pages for threats, missiles, approach, wingmen, strikes, refuelling and objectives.
+- **Weather & pilot immersion** — sky profiles, volumetric clouds, in-cloud whiteout, canopy rain and thunder; a first-person pilot body, control-linked movement, breathing, cockpit audio and kneeboard cards.
+- **Cockpit radio** — FM, AIR and MW stations, plus your own music.
+- **Squadron identity** — a crest editor, markings on supported tail fins and cosmetic sharing between players.
+- **Comms & settings** — information and configuration consoles alongside the tactical map.
+
+<p align="center"><img src="media/readme/section-divider.svg" alt="" width="100%"></p>
+
+## Screenshots
+
+Unedited **1920 × 1080** captures from the running game, staged in a single-player development session. Click any image to open it at full size.
+
+<a href="media/readme/command.png"><img src="media/readme/command.png" alt="The STR console alongside the relief map, showing territory, frontline and command status" width="100%"></a>
+
+<p align="center"><sub><strong>Theater command</strong> · Relief map, territory and frontline</sub></p>
+
+<a href="media/readme/cockpit.png"><img src="media/readme/cockpit.png" alt="FS-20 Vortex cockpit with Boscali Summer HUD presentation and clouds beyond the canopy" width="100%"></a>
+
+<p align="center"><sub><strong>The cockpit</strong> · HUD presentation and weather</sub></p>
+
+<table>
+  <tr>
+    <td width="50%"><a href="media/readme/support.png"><img src="media/readme/support.png" alt="The OPS console showing SPACE, CYBER and SOF readiness beside the tactical map" width="100%"></a></td>
+    <td width="50%"><a href="media/readme/vortex-flight.png"><img src="media/readme/vortex-flight.png" alt="FS-20 Vortex above a coastal city and cloud banks during the development capture session" width="100%"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Support operations</strong><br><sub>SPACE, CYBER and SOF readiness</sub></td>
+    <td align="center"><strong>Over the coast</strong><br><sub>FS-20 Vortex in Free Flight</sub></td>
+  </tr>
+</table>
+
+<details>
+<summary><strong>Capture notes, limitations and source files</strong></summary>
+
+Captured with **nomodkit** in **Free Flight** on **11 October 2026**. The player was seated in an FS-20 Vortex; flight, camera and console views were scripted. Existing development settings and other installed plugins were retained.
+
+These images show appearance. The short capture run was not a performance benchmark, gameplay acceptance test or multiplayer test. The support allocation shown is not representative of balanced gameplay. Aircraft and terrain include native Nuclear Option assets.
+
+[Capture scenario](media/readme/scenario.json) · [Capture report](media/readme/report.json) · [Image hashes and build provenance](media/readme/provenance.json)
+
+The animated header is an artistic relief chart derived from the mod's terrain height data. Its tactical activity is illustrative; it is not a gameplay screenshot or live telemetry. Header animation respects reduced-motion preferences.
+
+</details>
+
+<p align="center"><img src="media/readme/section-divider.svg" alt="" width="100%"></p>
+
+## AI usage disclosure
+
+> [!NOTE]
+> **AI tools are used to develop this mod.**
+>
+> They assist with code, debugging, design exploration, documentation and some visual assets. Some artwork, including the layered pilot portraits, is AI-generated. This README's SVG artwork was also made with AI assistance.
+>
+> **The project author is responsible for what ships.** The screenshots above are real, unedited game captures.
+
+“AI wingmen” means computer-controlled pilots inside the game.
+
+<p align="center"><img src="media/readme/section-divider.svg" alt="" width="100%"></p>
+
+## Testing the alpha
+
+This section is for people who choose to help test the development build. Use a separate setup and back up saves and configuration you care about.
+
+### Requirements
+
+| Requirement | Notes |
+| --- | --- |
+| **Nuclear Option** | Project target: **0.34.2**. Other versions may break compatibility. |
+| **[BepInEx 5](https://github.com/BepInEx/BepInEx/releases)** | **5.4.23+**, within the 5.x line |
+| **[Blueprinter](https://github.com/nikkorap/NOBlueprinter-Releases)** *(optional)* | Required for VANGUARD equipment, cargo support systems and HALO drops. |
+| **[ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager)** *(optional)* | Opens the **F1** settings interface |
+
+### Installation
+
+1. Install **BepInEx 5** in the game folder. Launch and close the game once.
+2. With the game closed, download **`BoscaliSummer-0.2.0.zip`** from the [0.2.0 alpha release](https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.0-alpha). Extract the ZIP into the game folder.
+3. Check that the plugin is at:
+
+   ```text
+   Nuclear Option/
+   └── BepInEx/
+       └── plugins/
+           └── BoscaliSummer/
+               └── BoscaliSummer.dll
+   ```
+
+4. Remove the stand-alone **Wing Command** plugin if installed; its functionality is built in. Launch the game. **Fully restart after updating the mod.**
+
+**Using NOMM / NOMNOM?** Select **BoscaliSummer** and check that it installs the intended alpha version.
+
+### Finding your way around
+
+**Keyboard shortcuts**
+
+- **C** — flight, wing and context actions.
+- **F1** — ConfigurationManager, if installed. Enable **Advanced settings** to see additional options.
+
+**Pages on the tactical map**
+
+| Page | What you'll find |
+| --- | --- |
+| **WMC — Wing Command** | Wingmen, formations, loadouts and orders |
+| **STR — Theater Command** | Theater situation, territory and command |
+| **OPS — Support Operations** | Support calls, fronts and readiness |
+| **SET — Settings** | In-game module settings; host controls for shared rules |
+
+The settings file is `com.marci.boscalisummer.cfg` in `BepInEx/config/`. Systems can depend on one another; disabling a prerequisite can make related features unavailable.
 
 > [!WARNING]
-> **Alpha.** Expect bugs, balance changes and settings resets between versions. Bug reports
-> are very welcome — see [Reporting bugs](#reporting-bugs).
+> **Multiplayer is experimental.** Everyone, including the host, must run the **same mod version**. The host controls shared rules such as fires, destruction, progression, support prices and events. Matching versions is required; multiplayer may still be unreliable.
 
----
+<p align="center"><img src="media/readme/section-divider.svg" alt="" width="100%"></p>
 
-## What it adds
+## Help improve the next build
 
-### The war on the ground
-- **Fire & destruction**: guns, missiles and burning wrecks can set buildings and forests
-  alight. Forest fires spread downwind and leave ash scars, buildings burn down to ruins,
-  and big blasts leave craters and scorch marks.
-- **Occupied towns**: rooftops in contested zones fill with MG, AT and AA nests, sandbags and
-  faction flags.
-- **Trenches** *(experimental)*: fortified lines dig themselves in along the real front, with
-  manned nests, wire and support lines.
-- **Air assault**: HALO paratroopers, Ibis fast-rope and rappel insertions, and paradrop
-  loads for the Tarantula and MC-260 Chimera.
+[**Open a bug report →**](https://github.com/GrabowMar/Boscali-Summer/issues)
 
-### Command and support
-- **Perk board, squad & aces**: earn grades and perks, build a squad, and get hunted by
-  enemy ace wings when you hurt the enemy too much.
-- **Support CALLS**: artillery, cruise missiles, recon, EMP, kinetic rods and more, paid from
-  your allocation.
-- **OPS fronts**: autonomous SPACE, CYBER and SOF campaigns. Set their directive, queue
-  programmes (satellites, uplinks, data centers, SOF teams) and unlock perks as readiness
-  rises.
-- **Command map console**: an expanded tactical map with frontlines, intel and a chain of
-  command.
-- **Dynamic contracts & world events**: illustrated events that move prices, funds and
-  morale, plus side contracts with rewards.
+Include:
 
-### In the cockpit
-- **AI wingmen** (formerly *Wing Command*, now built in): formations, orders, loadouts and
-  routes from the WMC page and the **C** interaction menu.
-- **VANGUARD weapons** *(needs Blueprinter)*: LANCE railgun, AEGIS defence pod, MALD decoys,
-  REMORA escort drones, HAWC-X glide weapon, GLAIVE gun drones, ORCA glide torpedo, and ALE-X
-  towed decoy. Cargo holds also support the **SKYWELL** refuel/rearm tender, **KESTREL** recon
-  glider, and **HAMILCAR** cargo glider carrying a Hexhound.
-- **TAC BOARD HUD**: stores, countermeasures, warnings and gauges, with automatic pages for
-  threats, shots, missile camera, approach, wing, strikes, refuelling, objectives and systems.
-- **Squadron insignia**: edit your crest in SQD STUDIO and paint supported tail fins; crests
-  can be shared with other players.
-- **Weather**: 47 sky profiles, volumetric clouds, in-cloud whiteout, canopy rain and thunder.
-- **Cockpit immersion**: pilot body, native G-LOC-driven breathing, recorded pilot/effect
-  audio and kneeboard cards.
-- **Cockpit radio**: tune real stations across FM, AIR and MW bands, or play your own music.
+- What happened, what you expected and the steps to reproduce it.
+- Game and mod versions, the mission and other installed mods.
+- Whether you were in single-player, hosting or joining.
 
-<p align="center">
-  <img src="modules/Events/Assets/Posters/allied_intervention.png" width="32%">
-  <img src="modules/Events/Assets/Posters/fuel_depot_fire.png" width="32%">
-  <img src="modules/Events/Assets/Posters/monsoon_season.png" width="32%">
-</p>
+Attach a useful screenshot or clip and **`LogOutput.log` from the game's `BepInEx` folder**. Copy the log before restarting; the next launch overwrites it. Review it for personal information before posting.
 
-## Install
+For more detail, install ConfigurationManager, enable **Advanced settings**, then turn on **Debug → VerboseLogging**.
 
-**Requirements:** Nuclear Option 0.34.2 and [BepInEx 5](https://github.com/BepInEx/BepInEx/releases)
-(5.4.23 or newer).
-**Optional:** **Blueprinter** (`com.nikkorap.blueprinter`), needed for VANGUARD
-weapons and paratroopers. Everything else works without it.
+<details>
+<summary><strong>Building from source</strong></summary>
 
-**With a mod manager (NOMM / NOMNOM):** install *BoscaliSummer*.
+Use the **.NET 8 SDK or newer**, with Nuclear Option and BepInEx installed. Build against your installed game's assemblies; adjust `GameDir` to match your installation:
 
-**By hand:**
-1. Install BepInEx 5 into the game folder and start the game once.
-2. Download `BoscaliSummer-<version>.zip` from
-   [Releases](https://github.com/GrabowMar/Boscali-Summer/releases) and extract it into the
-   game folder, so you end up with `Nuclear Option\BepInEx\plugins\BoscaliSummer\BoscaliSummer.dll`.
-3. If you have the stand-alone **Wing Command** mod, remove it. It is built in now.
-
-### Multiplayer
-The host decides the rules (fires, destruction, progression, support prices, events). Every
-player, **host included**, must run the **same version**.
-
-## Settings
-
-- **F1** (needs [ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager)):
-  turn whole modules on or off. Tick *Advanced settings* for every tuning value.
-- **SET console** (in-game MFD): live switches the host can change mid-mission.
-- Everything is also stored in `BepInEx\config\com.marci.boscalisummer.cfg`.
-
-Every module can be switched off, so you can run only the parts you want.
-
-## Reporting bugs
-
-1. In F1, turn on **Debug › VerboseLogging**.
-2. Reproduce the problem.
-3. Open an [issue](https://github.com/GrabowMar/Boscali-Summer/issues) and attach
-   `Nuclear Option\BepInEx\LogOutput.log`. The game overwrites it on every launch, so copy it
-   before restarting.
-
-Say whether you were host, client or single-player, and which other mods you run.
-
-## Building from source
-
-```bash
-dotnet build BoscaliSummer.sln -c Release -p:GameDir="C:\Program Files (x86)\Steam\steamapps\common\Nuclear Option"
+```powershell
+dotnet build BoscaliSummer.sln -c Release -p:GameDir="C:\Program Files (x86)\Steam\steamapps\common\Nuclear Option" -p:PublicRelease=true
 ```
 
-Add `-p:PublicRelease=true` for a player build, which locks developer cheats and tools off.
-The plugin targets `netstandard2.1` and references the game's own assemblies from `GameDir`.
+`PublicRelease=true` creates a player build with developer cheats and tools locked off. The plugin targets `netstandard2.1`. Build success alone does not establish gameplay or multiplayer compatibility.
 
-## License
+</details>
 
-[MIT](LICENSE) © GrabowMar. Nuclear Option is © Shockfront Studios; this is an unofficial fan
-mod.
+<p align="center"><img src="media/readme/section-divider.svg" alt="" width="100%"></p>
+
+<p align="center">
+  <strong>BOSCALI SUMMER</strong><br>
+  <sub>By GrabowMar · Unofficial Nuclear Option fan mod · <a href="LICENSE">MIT license</a></sub><br>
+  <sub>Nuclear Option © Shockfront Studios. Not affiliated with or endorsed by Shockfront Studios.<br>Game assets shown belong to their respective creators.</sub>
+</p>

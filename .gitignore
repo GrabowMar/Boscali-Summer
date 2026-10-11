@@ -18,6 +18,9 @@ TestResults/
 # Local session trace exports
 /trajectory-*.json
 
+# Generated visual mockups and scratch exports
+/output/
+
 # Stray local tooling droppings
 .appdata/
 .codex-remote-attachments/

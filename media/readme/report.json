@@ -1,0 +1,41 @@
+{
+  "scenario": "readme-showcase",
+  "verdict": "pass",
+  "status": "ok",
+  "error": null,
+  "checks": [
+    {
+      "check": "status_ok",
+      "ok": true,
+      "detail": "status ok:"
+    }
+  ],
+  "units_recorded": 0,
+  "run_dir": ".",
+  "execution": {
+    "run_in_background": true,
+    "focused": false,
+    "time_scale": 1,
+    "target_frame_rate": 60,
+    "vsync": 1,
+    "fixed_delta_time": 0.01666666753590107,
+    "maximum_delta_time": 0.10000001639127731
+  },
+  "boot_seconds": 28.615816116333008,
+  "restart_seconds": 0,
+  "restart_verified": null,
+  "real_seconds": 24.718019485473633,
+  "game_time": 22.432924270629883,
+  "simulated_seconds_per_real_second": 0.907553493976593,
+  "wall_seconds": 62.08126030000858,
+  "timing": {
+    "wall_s": 62.081265899993014,
+    "boot_s": 28.615816116333008,
+    "quit_s": 1.8171103000058793
+  },
+  "process_started": true,
+  "requested_execution": {
+    "time_scale": 1.0,
+    "frame_limit": null
+  }
+}
