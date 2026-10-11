@@ -1,14 +1,13 @@
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Hud.Domain;
-using UnityEngine;
 using static BoscaliSummer.Core.Contracts.ScopeTone;
 
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
     /// <summary>
-    /// The class silhouettes of the STORES HEADER (the prototype's <c>takeover/stores.js</c> SHAPES): one line-art outline per <see cref="StoreClass"/> in a unit space
-    /// of u along the weapon (-1 tail, 1 nose) and v across it (+-1 = half height), drawn big in the weapon cell (filled to the share of rounds left) and small on the
-    /// station rail's pips. A part is closed (an outline that can take a fill) or open; a DETAIL line (barrel groove, seam) is left out at pip size, a RIB (the pod's tubes) is not.
+    /// The class silhouettes of the stores side (the prototype's <c>takeover/stores.js</c> SHAPES): one line-art outline per <see cref="StoreClass"/> in a unit space
+    /// of u along the weapon (-1 tail, 1 nose) and v across it (+-1 = half height), drawn small on the station rail and, for a store the game has no picture of, in HERO's art box.
+    /// A DETAIL line (barrel groove, seam) is left out at rail size, a RIB (the pod's tubes) is not.
     /// </summary>
     internal static class StoreShapes
     {
@@ -75,24 +74,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             },
         };
 
-        /// <summary>The weapon cell's silhouette size: length and half height, by class.</summary>
-        public static void CellSize(StoreClass c, out float length, out float half)
-        {
-            switch (c)
-            {
-                case StoreClass.Gun: length = 136f; half = 14f; break;
-                case StoreClass.Aam: length = 136f; half = 15f; break;
-                case StoreClass.Agm: length = 116f; half = 15f; break;
-                case StoreClass.Bomb: length = 104f; half = 15f; break;
-                case StoreClass.Pod: length = 94f; half = 14f; break;
-                case StoreClass.Rail: length = 136f; half = 14f; break;
-                default: length = 90f; half = 15f; break;
-            }
-        }
-
         /// <summary>
         /// The silhouette of <paramref name="cls"/> centred on (<paramref name="cx"/>, <paramref name="cy"/>), <paramref name="len"/> long and +-<paramref name="half"/> high: its outline
-        /// in <paramref name="tone"/> (dashed with <paramref name="dashed"/>: an empty store), <paramref name="mini"/> without the detail lines (a pip).
+        /// in <paramref name="tone"/> (dashed with <paramref name="dashed"/>: a spent store), <paramref name="mini"/> without the detail lines (the rail's).
         /// </summary>
         public static void Draw(ScopeCanvas g, StoreClass cls, float cx, float cy, float len, float half, ScopeTone tone, float alpha = 1f, bool mini = false, bool dashed = false)
         {
@@ -105,48 +89,5 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 g.Path(n, tone, alpha, 1f, parts[i].Closed, dashed ? 2f : 0f, dashed ? 2f : 0f);
             }
         }
-
-        /// <summary>The silhouette's solid parts filled in <paramref name="tone"/> at <paramref name="alpha"/>, only left of the board x of <paramref name="xCut"/> (a share of the weapon: the rounds left).</summary>
-        public static void Fill(ScopeCanvas g, StoreClass cls, float cx, float cy, float len, float half, ScopeTone tone, float alpha, float xCut, float[] scratch)
-        {
-            Part[] parts = Shapes[(int)cls];
-            float hx = len / 2f;
-            for (int i = 0; i < parts.Length; i++)
-            {
-                if (!parts[i].Closed) continue;
-                int n = parts[i].N;
-                for (int k = 0; k < n; k++)
-                {
-                    scratch[2 * k] = Mathf.Round(cx + parts[i].Pts[2 * k] * hx - 0.5f) + 0.5f;
-                    scratch[2 * k + 1] = Mathf.Round(cy + parts[i].Pts[2 * k + 1] * half - 0.5f) + 0.5f;
-                }
-                n = ClipLeft(scratch, n, xCut);
-                if (n < 3) continue;
-                g.FillPoly(g.Poly(scratch, n), tone, alpha);
-            }
-        }
-
-        /// <summary>Sutherland-Hodgman against the half plane x &lt;= <paramref name="xCut"/>; the polygon is x, y pairs in <paramref name="p"/> and the clipped one replaces it (twice the points at most).</summary>
-        private static int ClipLeft(float[] p, int n, float xCut)
-        {
-            float[] o = Clip;
-            int m = 0;
-            for (int i = 0; i < n && m < o.Length / 2 - 2; i++)
-            {
-                int j = (i + 1) % n;
-                float ax = p[2 * i], ay = p[2 * i + 1], bx = p[2 * j], by = p[2 * j + 1];
-                bool ain = ax <= xCut, bin = bx <= xCut;
-                if (ain) { o[2 * m] = ax; o[2 * m + 1] = ay; m++; }
-                if (ain != bin)
-                {
-                    float k = (xCut - ax) / (bx - ax);
-                    o[2 * m] = xCut; o[2 * m + 1] = ay + (by - ay) * k; m++;
-                }
-            }
-            for (int i = 0; i < 2 * m; i++) p[i] = o[i];
-            return m;
-        }
-
-        private static readonly float[] Clip = new float[64];
     }
 }

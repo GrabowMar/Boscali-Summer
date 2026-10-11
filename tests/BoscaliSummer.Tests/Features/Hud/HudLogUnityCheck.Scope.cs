@@ -148,6 +148,7 @@ public static partial class HudLogUnityCheck
         }
         if (pages.Length == 0 || Array.IndexOf(pages, "shell") >= 0) ScopeShell();
         if (pages.Length == 0 || Array.IndexOf(pages, "frame") >= 0) ScopeFrame();
+        if (pages.Length == 0 || Array.IndexOf(pages, "stores") >= 0) ScopeStoresBlocks();
     }
 
     /// <summary>The spec's cockpit capture with the native top-right panel painted out (the backdrop of the takeover shots), else the older clean capture, else a hazy sky.</summary>

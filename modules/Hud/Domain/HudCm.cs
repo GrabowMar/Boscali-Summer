@@ -17,6 +17,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public bool Active;
         /// <summary>The dispenser the pilot has selected (the game's active countermeasure).</summary>
         public bool Selected;
+        /// <summary>The countermeasure's own picture as a handle (0: none; see <see cref="StoreStation.Icon"/>).</summary>
+        public int Icon;
     }
 
     internal enum CmLevel : byte { Ok, Low, Empty }
@@ -57,6 +59,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
             if (s.Ammo <= 0) return CmLevel.Empty;
             return s.Max > 0 && s.Ammo <= (int)Math.Ceiling(s.Max * LowShare) ? CmLevel.Low : CmLevel.Ok;
         }
+
+        /// <summary>The short name on an EXPENDABLES row: FLR for flares, CHF for chaff, else the tag (JAM, or the first letters of the name).</summary>
+        public static string Word(in CmStation s) => s.Tag == "IR" ? "FLR" : s.Tag == "RDR" ? "CHF" : s.Tag ?? "CM";
 
         /// <summary>"IR 72", "RDR 30"; a jammer is just "JAM".</summary>
         public static string Tile(in CmStation s) => s.Chargeable ? s.Tag : s.Tag + " " + s.Ammo;

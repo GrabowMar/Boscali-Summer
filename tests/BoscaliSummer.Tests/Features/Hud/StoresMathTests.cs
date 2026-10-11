@@ -1,8 +1,10 @@
+using System;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Hud.Domain;
 
 namespace BoscaliSummer.Tests.Features.Hud
 {
-    /// <summary>The STORES HEADER's rules: store classes, pooled rounds, the state tab, a dispenser's band, the rail and the dot grid, the capacitor's rate, and the native takeover's fail-open decision.</summary>
+    /// <summary>The stores side's rules: store classes, pooled rounds, the state word, which blocks exist, the arm marker, a station's mark on the rail, the capacitor's cells and rate, a dispenser's word and dot matrix, and the native takeover's fail-open decision.</summary>
     internal static class StoresMathTests
     {
         public static void Run()
@@ -11,8 +13,11 @@ namespace BoscaliSummer.Tests.Features.Hud
             Pools();
             Tab();
             Dispensers();
+            Blocks();
+            Hero();
             Rail();
-            Grids();
+            Cells();
+            Matrices();
             Capacitor();
             Takeover();
         }
@@ -101,29 +106,106 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(!StoresMath.Called(jammer, HudCm.RadarMask), "A jammer is never called: it is a switch, not a round");
         }
 
-        private static void Rail()
+        private static void Blocks()
         {
-            TestAssert.Near(StoresMath.PipWidth(8, 1, 238f, 32f, 4f), 25f, "Eight stations with a gun: the prototype's 25 px pips");
-            TestAssert.Near(StoresMath.PipWidth(3, 1, 238f, 32f, 4f), 30f, "A few stations do not stretch into slabs");
-            TestAssert.Near(StoresMath.PipWidth(12, 4, 238f, 32f, 4f), 12f, "A crowded rail stays readable at 12 px");
-            TestAssert.Near(StoresMath.PipWidth(2, 2, 238f, 32f, 4f), 32f, "Guns only: no other pips to size");
-            TestAssert.Near(StoresMath.PipWidth(5, 0, 238f, 32f, 4f), 30f, "No gun, five stations");
+            StoresScope d = Scope(Station("GUN", 500, 500, StoreClass.Gun), Station("LANCE", 1, 1, StoreClass.Rail));
+            TestAssert.That(StoresMath.HasHero(d), "A selected station: HERO is there");
+            d.Selected = -1;
+            TestAssert.That(!StoresMath.HasHero(d), "None selected: no HERO");
+            d.Selected = 2;
+            TestAssert.That(!StoresMath.HasHero(d), "A selection past the stations: no HERO");
+            TestAssert.That(!StoresMath.HasHero(default), "No feed arrays: no HERO");
+            TestAssert.That(!StoresMath.HasPwr(d) && StoresMath.HasPwr(new StoresScope { HasCap = true }), "PWR BUS is there with a capacitor only");
+            TestAssert.That(!StoresMath.HasExp(d) && StoresMath.HasExp(new StoresScope { CmCount = 1 }), "EXPENDABLES is there with a dispenser or a jammer only");
+            d.HasCap = true;
+            TestAssert.Near(StoresMath.CostKj(d), 0f, "A rail fitted but no cost given: no cost row");
+            d.CapCostKj = 300f;
+            TestAssert.Near(StoresMath.CostKj(d), 300f, "A rail fitted and a cost: the cost row shows it");
+            d.HasCap = false;
+            TestAssert.Near(StoresMath.CostKj(d), 0f, "No capacitor: nothing to price");
+            d.HasCap = true;
+            d.Stations[1].Class = StoreClass.Aam;
+            TestAssert.Near(StoresMath.CostKj(d), 0f, "No energy weapon fitted: no cost row, whatever the feed says");
         }
 
-        private static void Grids()
+        private static void Hero()
         {
-            int[][] dims = { new[] { 48, 12, 4 }, new[] { 30, 10, 3 }, new[] { 72, 12, 6 }, new[] { 1, 10, 1 }, new[] { 0, 10, 1 } };
+            foreach (StoreState s in new[] { StoreState.Armed, StoreState.Firing, StoreState.Launch, StoreState.Release })
+                TestAssert.That(StoresMath.ArmTone(s) == ScopeTone.Hi && StoresMath.ArmFilled(s), s + ": a bright filled marker");
+            foreach (StoreState s in new[] { StoreState.Reload, StoreState.Empty })
+                TestAssert.That(StoresMath.ArmTone(s) == ScopeTone.Amber && StoresMath.ArmFilled(s), s + ": an amber filled marker");
+            TestAssert.That(StoresMath.ArmTone(StoreState.Safe) == ScopeTone.Amber && !StoresMath.ArmFilled(StoreState.Safe), "SAFE: an amber hollow marker");
+
+            TestAssert.That(StoresMath.RoundsTone(false, false, false) == ScopeTone.Hi, "Rounds in hand: BRIGHT");
+            TestAssert.That(StoresMath.RoundsTone(false, false, true) == ScopeTone.Amber && StoresMath.RoundsTone(false, true, false) == ScopeTone.Amber, "Low or none: amber");
+            TestAssert.That(StoresMath.RoundsTone(true, true, false) == ScopeTone.Ink, "A reload: INK, the countdown is the amber word");
+
+            TestAssert.That(StoresMath.ArtTone(StoreState.Safe, false) == ScopeTone.Ink, "The art is INK while SAFE");
+            TestAssert.That(StoresMath.ArtTone(StoreState.Armed, false) == ScopeTone.Hi && StoresMath.ArtTone(StoreState.Launch, false) == ScopeTone.Hi, "...BRIGHT armed or hot");
+            TestAssert.That(StoresMath.ArtTone(StoreState.Armed, true) == ScopeTone.Amber && StoresMath.ArtTone(StoreState.Reload, false) == ScopeTone.Amber && StoresMath.ArtTone(StoreState.Empty, false) == ScopeTone.Amber, "...amber low, reloading or empty");
+            TestAssert.That(StoresMath.ClassTone(StoreClass.Gun) == ScopeTone.Dim && StoresMath.ClassTone(StoreClass.Aam) == ScopeTone.Ink, "GUN is furniture, STA n AAM is data");
+
+            TestAssert.That(StoresMath.Magazine(StoreClass.Gun, 500) && StoresMath.Magazine(StoreClass.Pod, 38), "A gun's belt and a pod's rockets are magazines");
+            TestAssert.That(!StoresMath.Magazine(StoreClass.Gun, 1) && !StoresMath.Magazine(StoreClass.Aam, 2) && !StoresMath.Magazine(StoreClass.Bomb, 4), "A missile or a bomb pooled over pylons is not: one picture is one round");
+        }
+
+        private static void Rail()
+        {
+            StoreStation q = Station("AAM-4", 1, 1);
+            RailMark m = StoresMath.RailMarkOf(q, false);
+            TestAssert.That(m.Tone == ScopeTone.Ink && m.Alpha == 1f && !m.Dashed && !m.Bold && !m.Bracketed, "A loaded station: INK, plain");
+            m = StoresMath.RailMarkOf(q, true);
+            TestAssert.That(m.Tone == ScopeTone.Hi && m.Bold && m.Bracketed && !m.Dashed, "The selected one: BRIGHT, bold, bracketed");
+            q.Ammo = 0;
+            m = StoresMath.RailMarkOf(q, false);
+            TestAssert.That(m.Tone == ScopeTone.Ink && m.Dashed && m.Alpha < 1f && m.Alpha > 0.5f && !m.Bold, "A spent station: INK, dashed, a little dimmer but readable");
+            m = StoresMath.RailMarkOf(q, true);
+            TestAssert.That(m.Tone == ScopeTone.Hi && m.Dashed && m.Bracketed, "A spent station can still be the selected one");
+            q.Reloading = true;
+            m = StoresMath.RailMarkOf(q, false);
+            TestAssert.That(m.Tone == ScopeTone.Amber && m.Bold && !m.Dashed && m.Alpha == 1f, "A reloading station: amber and bold, not spent");
+            m = StoresMath.RailMarkOf(q, true);
+            TestAssert.That(m.Tone == ScopeTone.Amber && m.Bracketed, "...even when selected");
+        }
+
+        private static void Cells()
+        {
+            TestAssert.That(StoresMath.Cells(180f) == 20 && StoresMath.Cells(216f) == 24, "WIDE's 180 holds 20 cells, STACK's 216 holds 24");
+            TestAssert.That(StoresMath.Cells(1f) == 1, "A row always has a cell");
+            TestAssert.That(StoresMath.LitCells(1f, 20) == 20 && StoresMath.LitCells(0f, 20) == 0 && StoresMath.LitCells(0.5f, 20) == 10, "Lit cells are the share of the row");
+            TestAssert.That(StoresMath.LitCells(43f / 500f, 20) == 2 && StoresMath.LitCells(0.024f, 20) == 0 && StoresMath.LitCells(0.026f, 20) == 1, "...rounded to the nearest cell");
+            TestAssert.That(StoresMath.LitCells(-1f, 20) == 0 && StoresMath.LitCells(2f, 20) == 20, "...and held inside the row");
+            TestAssert.Near(StoresMath.CostTickX(20, 300f, 500f), 107f, "The cost tick of 300 of 500 on 20 cells: round(178 x 0.6)");
+            TestAssert.Near(StoresMath.CostTickX(20, 900f, 500f), 178f, "...never past the row");
+            TestAssert.Near(StoresMath.CostTickX(20, 300f, 0f), 0f, "...and nowhere without a full charge");
+            TestAssert.That(StoresMath.Shot(500f, 200f, 0.1f, 500f, out float drop) && Math.Abs(drop - 300f) < 0.01f, "A 300 kJ drop in a tick is a shot");
+            TestAssert.That(!StoresMath.Shot(500f, 498.6f, 0.1f, 500f, out _), "The jammer's trickle (1.4 kJ in a tick) is not");
+            TestAssert.That(!StoresMath.Shot(100f, 80.5f, 0.1f, 500f, out _) && StoresMath.Shot(100f, 79.5f, 0.1f, 500f, out _), "A shot is at least 4 % of the full charge");
+            TestAssert.That(!StoresMath.Shot(200f, 250f, 0.1f, 500f, out _), "A charge that rises is no shot");
+            TestAssert.That(!StoresMath.Shot(500f, 479f, 1.5f, 500f, out _) && StoresMath.Shot(500f, 479f, 0.1f, 500f, out _), "The same drop over a stalled 1.5 s frame is the jammer's drain, not a shot"); 
+            TestAssert.That(StoresMath.CostWord("RG-12 LANCE OVERCHARGE RAILGUN") == "LANCE", "The cost label names the weapon by its first word with no digit");
+            TestAssert.That(StoresMath.CostWord("RG-12") == "RG-12" && StoresMath.CostWord("  ") == "CHG" && StoresMath.CostWord(null) == "CHG", "...else its first word, else CHG");
+            TestAssert.That(StoresMath.CostWord("PLASMA-CANNON-MK2") == "PLASMA-CAN", "...at most 10 characters");
+        }
+
+        private static void Matrices()
+        {
+            int[][] dims = { new[] { 48, 3, 16 }, new[] { 30, 3, 10 }, new[] { 72, 3, 24 }, new[] { 12, 1, 12 }, new[] { 13, 2, 7 }, new[] { 1, 1, 1 }, new[] { 0, 1, 1 } };
             foreach (int[] g in dims)
             {
-                StoresMath.Grid(g[0], 80f, 36f, out int cols, out int rows, out float pitch, out int perDot);
-                TestAssert.That(cols == g[1] && rows == g[2] && pitch == 6f && perDot == 1, "A magazine of " + g[0] + " is " + cols + "x" + rows + " at pitch " + pitch);
+                StoresMath.Matrix(g[0], 112f, out int rows, out int cols, out int perDot);
+                TestAssert.That(rows == g[1] && cols == g[2] && perDot == 1, "A load of " + g[0] + " is " + rows + " rows x " + cols + " columns, a dot each");
             }
-            StoresMath.Grid(120, 80f, 30f, out int c2, out int r2, out float p2, out int pd2);
-            TestAssert.That(p2 < 6f && c2 * p2 <= 80f && r2 * p2 <= 30f && pd2 == 1 && c2 * r2 >= 120, "A big load narrows the pitch until it fits: " + c2 + "x" + r2 + " at " + p2);
-            StoresMath.Grid(2000, 80f, 30f, out int c3, out int r3, out float p3, out int pd3);
-            TestAssert.That(pd3 > 1 && c3 * r3 * pd3 >= 2000 && c3 * p3 <= 80f && r3 * p3 <= 30f, "An absurd load makes one dot stand for several rounds: " + pd3);
-            StoresMath.Grid(30, 52f, 30f, out int c4, out int r4, out float p4, out int pd4);
-            TestAssert.That(c4 * p4 <= 52f && r4 * p4 <= 30f && c4 * r4 >= 30 && pd4 == 1, "A narrow column still holds its rounds");
+            StoresMath.Matrix(300, 112f, out int r, out int c, out int per);
+            TestAssert.That(per == 4 && r == 3 && c <= 28 && r * c * per >= 300, "A load too big for the room: one dot stands for several rounds: " + r + "x" + c + " at " + per);
+            StoresMath.Matrix(300, 148f, out r, out c, out per);
+            TestAssert.That(per == 3 && c <= 37 && r * c * per >= 300, "STACK's wider room needs fewer rounds a dot: " + r + "x" + c + " at " + per);
+            StoresMath.Matrix(72, 20f, out r, out c, out per);
+            TestAssert.That(c <= 5 && r * c * per >= 72, "A tiny room still holds the load: " + r + "x" + c + " at " + per);
+
+            TestAssert.That(StoresMath.StateWord(CmCellState.Dispense) == "DISPENSE" && StoresMath.StateWord(CmCellState.Firing) == "FIRING" && StoresMath.StateWord(CmCellState.Low) == "LOW", "A dispenser's state words");
+            TestAssert.That(StoresMath.StateWord(CmCellState.Empty) == null && StoresMath.StateWord(CmCellState.Selected) == null && StoresMath.StateWord(CmCellState.Ready) == null, "EMPTY takes the matrix's place; a selection is the marker; READY says nothing");
+            TestAssert.That(StoresMath.CountTone(CmLevel.Ok) == ScopeTone.Hi && StoresMath.CountTone(CmLevel.Low) == ScopeTone.Amber && StoresMath.CountTone(CmLevel.Empty) == ScopeTone.Red, "The count: BRIGHT, amber low, red at none");
         }
 
         private static void Capacitor()

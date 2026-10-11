@@ -90,6 +90,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Build(panelRect,
                 weaponStatus != null ? NameTextField?.GetValue(weaponStatus) as TextMeshProUGUI : null,
                 weaponStatus != null ? SafetyField?.GetValue(weaponStatus) as Image : null);
+            TakeArtMaterial(weaponStatus);
             // The native boxes the stores header replaces (a stand-in build for the offline check has none): hidden only while the header draws them.
             corner?.Dispose();
             corner = new NativeCorner();

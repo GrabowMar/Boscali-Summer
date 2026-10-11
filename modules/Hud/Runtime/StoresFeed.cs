@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Hud.Domain;
+using BoscaliSummer.Modules.Hud.Presentation;
 using HarmonyLib;
 using UnityEngine;
 
@@ -20,6 +21,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
 
         private readonly StoreStation[] stations = new StoreStation[StoresScope.MaxStations];
         private readonly string[] names = new string[StoresScope.MaxStations];
+        private readonly int[] icons = new int[StoresScope.MaxStations];
         private readonly WeaponInfo[] namedFor = new WeaponInfo[StoresScope.MaxStations];
         private readonly bool[] namedCargo = new bool[StoresScope.MaxStations];
         private readonly CapacitorTrend trend = new CapacitorTrend();
@@ -69,7 +71,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 var q = new StoreStation
                 {
                     Class = cls, Name = NameOf(count, s, info), Ammo = s.Ammo, Max = Mathf.Max(s.FullAmmo, s.Ammo), Slot = cls == StoreClass.Gun ? 0 : ++slot,
-                    Reloading = s.Reloading, ReloadElapsed = float.NaN, ReloadLeftS = float.NaN, FiredAgeS = level - s.LastFiredTime,
+                    Reloading = s.Reloading, ReloadElapsed = float.NaN, ReloadLeftS = float.NaN, FiredAgeS = level - s.LastFiredTime, Icon = icons[count],
                 };
                 if (s.Reloading) Reload(s, ref q);
                 stations[count] = q;
@@ -85,13 +87,14 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             cache.StationCount = count;
         }
 
-        /// <summary>The weapon's own name in capitals, as the native panel words it (cargo stations say so), rebuilt only when the station's weapon changed.</summary>
+        /// <summary>The weapon's own name in capitals, as the native panel words it (cargo stations say so), and the handle of its picture (<see cref="StoreIcons"/>), both made only when the station's weapon changed.</summary>
         private string NameOf(int index, WeaponStation s, WeaponInfo info)
         {
             if (!ReferenceEquals(namedFor[index], info) || namedCargo[index] != s.Cargo || names[index] == null)
             {
                 namedFor[index] = info;
                 namedCargo[index] = s.Cargo;
+                icons[index] = StoreIcons.Id(info.weaponIcon);
                 names[index] = (s.Cargo ? "Cargo (" + info.weaponName + ")" : info.weaponName ?? "").ToUpperInvariant();
             }
             return names[index];
