@@ -54,6 +54,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>Where a page's events go (the board's ticker): set by the owner of the board.</summary>
         public Action<string, HudTone, string, string> Notice;
 
+        /// <summary>The pilot's options as of the last 10 Hz tick, set by the owner of the board before each <see cref="Present"/> (the defaults until then).</summary>
+        public BoardOptions Options = BoardOptions.Default;
+
         /// <summary>
         /// Find the native dock and, on first success or after it is lost, (re)build our own
         /// tree under it. Cheap when already built (two null checks).

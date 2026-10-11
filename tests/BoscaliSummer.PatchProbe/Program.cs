@@ -969,6 +969,8 @@ foreach (string type in new[] {
     "BoscaliSummer.Core.Contracts.IHudBoard",
     "BoscaliSummer.Core.Contracts.IHudLine",
     "BoscaliSummer.Core.Contracts.HudLayout",
+    "BoscaliSummer.Core.Contracts.ITacBoardSettings",
+    "BoscaliSummer.Modules.Hud.Configuration.HudSettings",
     "BoscaliSummer.Modules.Hud.Presentation.HudBoard",
     "BoscaliSummer.Modules.Hud.Presentation.StatusPanel",
     // TAC BOARD (HUD v8): the offline check reaches these by name; the page groups' feeds register through them.

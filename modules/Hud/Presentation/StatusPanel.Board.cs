@@ -82,6 +82,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public void Present(BoardFrame frame)
         {
             if (root == null) return;
+            // Switched off: hide the board and, through the same fail-open path as any other reason to stand down, give the native boxes back (TickNatives). Present again restores it.
+            if (!Options.Enabled)
+            {
+                Hide();
+                return;
+            }
+            // The pilot's opacity is the root group's alpha (nothing else in the board animates it).
+            if (rootGroup.alpha != Options.Opacity) rootGroup.alpha = Options.Opacity;
             board = frame;
             now = frame.Now;
             units = frame.Units;

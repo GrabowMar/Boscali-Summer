@@ -344,7 +344,7 @@ public static class SettingsUnityCheck
         clientCon.SetPage(CCockpit);
         Settle(clientCon);
         Check(!Array.Exists(cockpitContent.GetComponentsInChildren<TMP_Text>(true), t => t.text == "HUD ELEMENT" || t.text == "TARGET CAMERA"),
-            "The HUD ships unconfigurable: no HUD rows on the cockpit page");
+            "The retired HUD ELEMENT and TARGET CAMERA rows stay off the cockpit page (the TAC BOARD options are not on SET yet)");
         Click(FindRowByName(cockpitContent, "RADIAL PRESETS"));
         Check(!config.TargetPresetWheel.Value, "RADIAL PRESETS must write its saved entry");
 

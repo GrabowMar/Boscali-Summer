@@ -166,6 +166,7 @@
     <Compile Include="..\..\Core\Contracts\HudLayout.cs" Link="Framework\HudLayout.cs" />
     <Compile Include="..\..\Core\Contracts\HudPrimitives.cs" Link="Framework\HudPrimitives.cs" />
     <Compile Include="..\..\Core\Contracts\IHudBoard.cs" Link="Framework\IHudBoard.cs" />
+    <Compile Include="..\..\Core\Contracts\ITacBoardSettings.cs" Link="Framework\ITacBoardSettings.cs" />
     <!-- Everything under modules/Hud/Domain and Core/Contracts/Scope is pure and compiles into the tests by wildcard: a page group adds files without touching this project. -->
     <Compile Include="..\..\modules\Hud\Domain\**\*.cs" LinkBase="Features\Hud" />
     <Compile Include="..\..\Core\Contracts\Scope\**\*.cs" LinkBase="Framework\Scope" />
