@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="440" viewBox="0 0 1600 440" role="img" aria-labelledby="title desc">
+  <title id="title">Boscali Summer — Experimental theater overhaul for Nuclear Option</title>
+  <desc id="desc">Dark military briefing header with cyan map contours and amber markings. Version 0.2.0 alpha. Very early development.</desc>
+  <defs>
+    <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#101d24"/><stop offset="1" stop-color="#071014"/></linearGradient>
+    <pattern id="grid" width="64" height="64" patternUnits="userSpaceOnUse"><path d="M64 0H0V64" fill="none" stroke="#7ba2b2" stroke-opacity=".09"/></pattern>
+    <clipPath id="map"><rect x="940" y="30" width="630" height="330"/></clipPath>
+  </defs>
+  <rect width="1600" height="440" rx="8" fill="url(#bg)"/>
+  <rect width="1600" height="440" rx="8" fill="url(#grid)"/>
+  <g clip-path="url(#map)" fill="none" stroke="#64bfd0" stroke-width="1.5" opacity=".28">
+    <path d="M965-10C1080 30 1010 115 1140 110S1280 35 1400 75S1460 235 1610 205"/>
+    <path d="M965 25C1090 60 1025 135 1145 140S1280 65 1385 105S1475 255 1610 240"/>
+    <path d="M960 70C1080 90 1040 155 1155 170S1280 95 1370 135S1480 280 1610 280"/>
+    <path d="M945 110C1065 115 1055 175 1165 200S1280 125 1355 165S1485 315 1610 320"/>
+    <path d="M940 150C1050 140 1070 195 1175 230S1280 155 1340 195S1500 345 1610 360"/>
+    <path d="M940 190C1035 165 1085 215 1185 260S1280 185 1325 225S1515 375 1610 395"/>
+    <path d="M940 230C1020 195 1100 240 1195 295S1280 215 1310 260S1530 400 1610 430"/>
+  </g>
+  <g fill="none" stroke="#79cddd" stroke-width="2" opacity=".75">
+    <circle cx="1290" cy="174" r="93" stroke-dasharray="4 10"/>
+    <path d="M1290 66V98M1290 250V282M1182 174H1214M1366 174H1398"/>
+    <path d="M1140 295L1210 215L1290 174L1455 123" stroke="#e1b45d" stroke-dasharray="6 7"/>
+    <path d="M1290 161L1303 174L1290 187L1277 174Z"/>
+    <circle cx="1140" cy="295" r="5" fill="#e1b45d" stroke="#e1b45d"/>
+    <circle cx="1455" cy="123" r="5" fill="#79cddd"/>
+  </g>
+  <path d="M36 62V30H68M1532 30H1564V62M36 338V370H68M1532 370H1564V338" fill="none" stroke="#68828e" stroke-width="2"/>
+  <rect x="68" y="64" width="6" height="26" fill="#e1b45d"/>
+  <g font-family="Consolas, 'Liberation Mono', monospace" fill="#a9c4ce">
+    <text x="94" y="84" font-size="20" letter-spacing="3">NUCLEAR OPTION / THEATER MOD</text>
+    <text x="70" y="298" font-size="22" letter-spacing="2">FLY THE SORTIE. SEE THE BIGGER WAR.</text>
+    <text x="1130" y="331" font-size="14" letter-spacing="2">TACTICAL DISPLAY / CONCEPT GRAPHIC</text>
+  </g>
+  <text x="65" y="182" fill="#f0f4ec" font-family="'Arial Narrow', 'Liberation Sans', Arial, sans-serif" font-size="104" font-weight="800" letter-spacing="3">BOSCALI</text>
+  <text x="68" y="261" fill="#e1b45d" font-family="'Arial Narrow', 'Liberation Sans', Arial, sans-serif" font-size="72" font-weight="800" letter-spacing="10">SUMMER</text>
+  <path d="M68 338H850" stroke="#68828e" stroke-opacity=".6"/>
+  <rect y="390" width="1600" height="50" fill="#b84635"/>
+  <g font-family="Consolas, 'Liberation Mono', monospace" font-size="19" font-weight="700" fill="#fff4e9">
+    <text x="68" y="423" letter-spacing="2">VERY EARLY DEVELOPMENT</text>
+    <text x="1532" y="423" text-anchor="end" letter-spacing="1">0.2.0 ALPHA / EXPECT BREAKAGE</text>
+  </g>
+</svg>

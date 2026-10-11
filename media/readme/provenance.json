@@ -1,0 +1,40 @@
+{
+  "captured_date": "2026-10-11",
+  "timezone": "Europe/Warsaw",
+  "tool": "nomodkit sim run",
+  "mission": "Free Flight",
+  "mode": "scripted single-player development capture",
+  "game_version_target": "0.34.2",
+  "mod_version": "0.2.0",
+  "mod_dll_sha256": "8c17fbb2ba02e89cfa615d700641f29ab371bc6f7028f84c31e9f5705cf05380",
+  "capture_result": "status ok; four captures visually inspected",
+  "staging": "Player seated in FS-20 Vortex; scripted level flight; exterior and cockpit views; STR and OPS console opening. Existing development settings and other installed plugins retained.",
+  "image_processing": "None. Original PNG captures copied without editing.",
+  "limitations": "Single short capture run only. Not a performance benchmark, gameplay acceptance test or multiplayer test. Terrain and aircraft include native Nuclear Option assets. Development settings and Free Flight support allocation are not representative of balanced gameplay.",
+  "files": [
+    {
+      "file": "cockpit.png",
+      "sha256": "e3930b9ca534aa265bacea4bef635af3bc090337b2f83c8ae88e4ce60dcf104d",
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "file": "command.png",
+      "sha256": "7d909c1644a32df4b071fcb5f2f05856babda407f00a7fdfccf5f929c1114add",
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "file": "support.png",
+      "sha256": "7b431ba5da105678ef4d95502ed3ffe30d5801504508f8d75dff5437ab1abbe0",
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "file": "vortex-flight.png",
+      "sha256": "68df3b780bd9183a48bb285adbcda8eebdeafea81d79464290074be66ab3be20",
+      "width": 1920,
+      "height": 1080
+    }
+  ]
+}
