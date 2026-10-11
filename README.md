@@ -1,12 +1,10 @@
 <p align="center">
-  <img src="media/readme/briefing-header.svg" alt="Boscali Summer — experimental theater overhaul for Nuclear Option. Very early development, version 0.2.0 alpha." width="100%">
+  <img src="media/readme/briefing-header.svg" alt="Boscali Summer — animated relief map with layered terrain, tactical tracks and sensor pulses" width="100%">
 </p>
 
-<h1 align="center">Boscali Summer</h1>
-
 <p align="center">
-  <strong>A bigger war around your next sortie.</strong><br>
-  An experimental Nuclear Option mod for living battlefields, wingmen, support operations and cockpit immersion.
+  <strong>An experimental theater overhaul for Nuclear Option.</strong><br>
+  Living battlefields. Wingmen. Support operations. Cockpit immersion.
 </p>
 
 <p align="center">
@@ -35,7 +33,7 @@
   <a href="LICENSE">MIT license</a>
 </p>
 
----
+<p align="center"><img src="media/readme/divider-briefing.svg" alt="" width="100%"></p>
 
 ### Fly the sortie. See the bigger war.
 
@@ -45,11 +43,13 @@ Forests burn below you. Towns dig in. Your wing needs orders, the support desk h
 
 <p align="center"><sub>FS-20 Vortex over the coast · Actual in-game capture · Scripted single-player development session</sub></p>
 
+<p align="center"><img src="media/readme/divider-features.svg" alt="" width="100%"></p>
+
 ## Features
 
 **Every system below is experimental.** Availability depends on enabled modules, the mission and optional dependencies.
 
-### 01 / THE BATTLEFIELD
+### The battlefield
 
 **The ground war has a presence from the air.**
 
@@ -59,7 +59,7 @@ Forests burn below you. Towns dig in. Your wing needs orders, the support desk h
 - **Command & intelligence** — frontline views, command staff, intelligence tools and expanded tactical-map consoles.
 - **Events & contracts** — battlefield news and optional jobs that can affect rewards, funds, prices and morale.
 
-### 02 / YOUR BACKUP
+### Your backup
 
 **Take a wing. Call support. Manage the resources behind the sortie.**
 
@@ -85,7 +85,7 @@ Forests burn below you. Towns dig in. Your wing needs orders, the support desk h
 
 </details>
 
-### 03 / THE COCKPIT
+### The cockpit
 
 **More information, atmosphere and squadron identity.**
 
@@ -96,7 +96,7 @@ Forests burn below you. Towns dig in. Your wing needs orders, the support desk h
 - **Squadron insignia** — crest editing, markings on supported tail fins and cosmetic sharing between players.
 - **Comms & settings** — in-game information and configuration consoles alongside the tactical map.
 
----
+<p align="center"><img src="media/readme/divider-screenshots.svg" alt="" width="100%"></p>
 
 ## Screenshots
 
@@ -124,9 +124,11 @@ These are unedited PNG captures from a scripted **Free Flight** development sess
 
 [Capture scenario](media/readme/scenario.json) · [Capture report](media/readme/report.json) · [Image hashes and build provenance](media/readme/provenance.json)
 
-The header is an original vector briefing graphic, not an in-game screen.
+The header and section dividers are original SVG artwork. The header turns the mod's terrain height data into an artistic relief chart; its tactical tracks and sensor activity are illustrative. It is not a gameplay screenshot or live telemetry. Animation respects reduced-motion preferences.
 
 </details>
+
+<p align="center"><img src="media/readme/divider-disclosure.svg" alt="" width="100%"></p>
 
 ## AI usage disclosure
 
@@ -135,7 +137,7 @@ The header is an original vector briefing graphic, not an in-game screen.
 >
 > The project author remains responsible for what ships. AI assistance does not guarantee correctness or quality. The screenshots are real game captures. “AI wingmen” refers to computer-controlled in-game pilots.
 
----
+<p align="center"><img src="media/readme/divider-testing.svg" alt="" width="100%"></p>
 
 ## Testing the alpha
 
@@ -184,6 +186,8 @@ Settings live in `BepInEx/config/com.marci.boscalisummer.cfg`. Many systems have
 > [!WARNING]
 > **Multiplayer is experimental.** Everyone, including the host, must run the **same mod version**. The host controls shared rules such as fires, destruction, progression, support prices and events. Matching versions is a requirement, not a guarantee of reliable online play.
 
+<p align="center"><img src="media/readme/divider-debrief.svg" alt="" width="100%"></p>
+
 ## Help improve the next build
 
 [**Report a bug →**](https://github.com/GrabowMar/Boscali-Summer/issues) Include what happened, what you expected, reproduction steps, game/mod versions, mission, other mods, and whether you were in single-player, hosting or joining.
@@ -203,7 +207,7 @@ Add `-p:PublicRelease=true` for a player build that locks developer cheats and t
 
 </details>
 
----
+<p align="center"><img src="media/readme/divider-end.svg" alt="" width="100%"></p>
 
 <p align="center">
   <strong>BOSCALI SUMMER</strong><br>
