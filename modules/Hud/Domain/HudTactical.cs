@@ -40,6 +40,12 @@ namespace BoscaliSummer.Modules.Hud.Domain
             };
         }
 
+        /// <summary>
+        /// The radar-warning page keeps a contact until <paramref name="hold"/> seconds after its newest warning (a lock or a search ping), so a radar that pings every few seconds stays
+        /// between pings. The lamps keep their own shorter holds (<see cref="LockHold"/>, <see cref="SpikeHold"/>); the option's range (BoardOptions.HoldMin) never goes under them.
+        /// </summary>
+        public static bool Retained(float now, float lockAt, float spikeAt, float hold) => now - Math.Max(lockAt, spikeAt) < hold;
+
         /// <summary>HI / LO / "" for a threat elevation in degrees.</summary>
         public static string HighLow(float elevationDeg) => elevationDeg > Level ? "HI" : elevationDeg < -Level ? "LO" : "";
 

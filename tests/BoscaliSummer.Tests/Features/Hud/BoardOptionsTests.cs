@@ -30,6 +30,7 @@ namespace BoscaliSummer.Tests.Features.Hud
             PageMask();
             DeclutterLevels();
             SwitchesStayOff();
+            VoicedPages();
         }
 
         private static void Defaults()
@@ -165,6 +166,26 @@ namespace BoscaliSummer.Tests.Features.Hud
             off.ScopeMode = BoardScopeMode.Off;
             TestAssert.Eq(off.Effective().Pages, (ushort)0, "Scope mode Off: no pages");
             TestAssert.That(off.Effective().ShowLamps && off.Effective().ShowSystemsStrip, "...the blocks around the scope stay");
+        }
+
+        /// <summary>The pages that may post a notice or call a dispenser: the switches and the level, not the scope mode.</summary>
+        private static void VoicedPages()
+        {
+            BoardOptions o = BoardOptions.Default;
+            TestAssert.Eq(o.Effective().Voiced, (ushort)0x1FF, "The defaults let every page speak");
+
+            o.ScopeMode = BoardScopeMode.Off;
+            TestAssert.That(o.Effective().Pages == 0 && o.Effective().Voiced == 0x1FF, "Scope mode Off hides the scope, not the warnings: every page may still speak");
+
+            o.PageThreat = false;
+            TestAssert.Eq((ushort)(o.Effective().Voiced & CuePriority.Bit(ScopePage.Threat)), (ushort)0, "A page whose switch is off is silent, scope mode Off or not");
+            TestAssert.Eq(o.Effective().Voiced, (ushort)(0x1FF & ~CuePriority.Bit(ScopePage.Threat)), "...and only that page");
+            o.ScopeMode = BoardScopeMode.Auto;
+            TestAssert.Eq(o.Effective().Voiced, o.Effective().Pages, "In Auto the pages that may speak are the pages that may show");
+
+            BoardOptions min = At(BoardDeclutter.Minimal);
+            min.ScopeMode = BoardScopeMode.Off;
+            TestAssert.Eq(min.Effective().Voiced, Mask(ScopePage.Threat, ScopePage.MissileCam, ScopePage.Shot, ScopePage.Approach, ScopePage.Systems), "Minimal drops the quiet pages' voice too, scope mode Off or not");
         }
 
         private static void SwitchesStayOff()

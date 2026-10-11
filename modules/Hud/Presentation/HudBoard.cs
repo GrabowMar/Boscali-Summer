@@ -162,6 +162,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             nextRead = clock + .1f;
             settings?.Snapshot(ref options);
             panel.Options = options;
+            threats.Hold = options.ThreatHoldSeconds;
 
             CombatHUD combat = SceneSingleton<CombatHUD>.i;
             Aircraft hudAircraft = combat != null ? combat.aircraft : null;

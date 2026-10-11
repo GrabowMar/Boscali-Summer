@@ -137,7 +137,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             for (int i = 0; i < d.EmitterCount; i++)
             {
                 ThreatEmitter e = d.Emitters[i];
-                if (New(e.Lock ? lockSaid : spikeSaid, e.Id, now - e.AgeS))
+                if (!e.Held && New(e.Lock ? lockSaid : spikeSaid, e.Id, now - e.AgeS))
                     env.Notice?.Invoke("rwr", e.Lock ? HudTone.Warning : HudTone.Caution, (e.Lock ? "LOCK - " : "SPIKE - ") + Name(e), ScopeStr.Distance("", e.RangeM, env.Units, 10).ToString());
             }
         }

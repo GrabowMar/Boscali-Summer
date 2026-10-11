@@ -100,13 +100,21 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             HudThreats.Fill(frame.Threat, threatLamps);
 
             MeasurePixel();
-            var env = new ScopeEnv(now, frame.Units, Notice);
+            // The page switches. A page that is switched off (or that the declutter level drops) is still polled, other code reads its state, but it is never live, so it never takes the
+            // scope, and it is silent: no ticker notices (its environment has no Notice) and no dispenser call in the stores header. The scope mode Off hides the scope, not the warnings.
+            BoardEffective allow = Options.Effective();
+            var voiced = new ScopeEnv(now, frame.Units, Notice);
+            var silent = new ScopeEnv(now, frame.Units, null);
             ushort live = 0;
             for (int i = 0; i < pages.Length; i++)
-                if (PollPage(pages[i], env)) live |= CuePriority.Bit((ScopePage)i);
-            selector.Update(live, now, pages[(int)ScopePage.Systems].Critical);
+                if (PollPage(pages[i], CuePriority.Has(allow.Voiced, (ScopePage)i) ? voiced : silent)) live |= CuePriority.Bit((ScopePage)i);
+            live &= allow.Pages;
+            // A page the pilot has just switched off does not hold the scope until its linger runs out.
+            if (selector.Page != ScopePage.Systems && !CuePriority.Has(allow.Pages, selector.Page)) selector.Reset();
+            selector.SetMinStay(Options.PageMinSeconds);
+            selector.Update(live, now, pages[(int)ScopePage.Systems].Critical && CuePriority.Has(allow.Pages, ScopePage.Systems));
             page = pages[(int)selector.Page];
-            header.Poll(now, ((ThreatPage)pages[(int)ScopePage.Threat]).CallMask);
+            header.Poll(now, CuePriority.Has(allow.Voiced, ScopePage.Threat) ? ((ThreatPage)pages[(int)ScopePage.Threat]).CallMask : (byte)0);
             MeasureScreen();      // after the header's read: where the board goes depends on what the header stands in for
 
             PresentLamps(frame);
@@ -227,7 +235,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             bool compact = selector.Compact;
             bool strip = !compact && page.HasStrip;
-            float target = page.Ready ? (compact ? ScopeLayout.Compact : ScopeLayout.Full) : 0f;
+            // The scope mode Off shows no page at all: the row has no height and the layout drops it; the lamps, gauges and ticker stay.
+            float target = Options.ScopeMode != BoardScopeMode.Off && page.Ready ? (compact ? ScopeLayout.Compact : ScopeLayout.Full) : 0f;
             transition.Update((int)selector.Page * 2 + (compact ? 1 : 0), target, now);
             var rows = new BoardRows { StoresH = header.Height, Lamps = lampCount > 0, ScopeH = transition.Height, Gauges = gaugeCount > 0, Ticker = board.HasTicker };
             BoardGeometry geo = ScopeLayout.Compute(rows);

@@ -9,6 +9,7 @@ namespace BoscaliSummer.Tests.Features.Hud
         public static void Run()
         {
             Threats();
+            Retention();
             Shots();
             Test();
             Angles();
@@ -35,6 +36,31 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(Math.Abs(bearing - 45f) < 0.01f && Math.Abs(elevation) < 0.01f, "Right-front is +45 degrees");
             HudThreats.Clock(0f, 1f, -1f, out bearing, out elevation);
             TestAssert.That(Math.Abs(Math.Abs(bearing) - 180f) < 0.01f && HudThreats.HighLow(elevation) == "HI", "Behind and above: 180, HI");
+        }
+
+        /// <summary>How long the radar-warning page keeps a radar: until the hold after its newest warning, a lock or a search ping.</summary>
+        private static void Retention()
+        {
+            float never = float.NegativeInfinity;
+            TestAssert.That(!HudThreats.Retained(10f, never, never, 6f), "A radar that never warned is not kept");
+            TestAssert.That(HudThreats.Retained(15.5f, never, 10f, 6f) && !HudThreats.Retained(16f, never, 10f, 6f), "A search ping keeps the radar for the hold, not for the lamp's 1.5 s");
+            TestAssert.That(HudThreats.Retained(15.5f, 10f, never, 6f) && !HudThreats.Retained(16f, 10f, never, 6f), "...and so does a lock, not only its 2 s");
+            TestAssert.That(HudThreats.Retained(17.5f, 10f, 12f, 6f) && !HudThreats.Retained(18f, 10f, 12f, 6f), "The newest of the lock and the ping counts: a ping after the lock");
+            TestAssert.That(HudThreats.Retained(17.5f, 12f, 10f, 6f) && !HudThreats.Retained(18f, 12f, 10f, 6f), "...and a lock after the ping");
+            TestAssert.That(HudThreats.Retained(39.5f, never, 10f, 30f) && !HudThreats.Retained(40f, never, 10f, 30f), "The hold is the option's: 30 s keeps it 30 s");
+            TestAssert.That(HudThreats.Retained(11.5f, never, 10f, 2f) && !HudThreats.Retained(12f, never, 10f, 2f), "...and 2 s, the shortest, 2 s");
+            TestAssert.That(BoardOptions.HoldMin >= HudThreats.LockHold && BoardOptions.HoldMin >= HudThreats.SpikeHold, "The option never keeps a radar for less than the lamps do");
+
+            // A search radar that pings every 5 s: with the hold it stays on the page between pings (it used to pop off after the lamp's 1.5 s and on again at the next ping).
+            bool kept = true, droppedBefore = false;
+            for (int k = 0; k <= 600; k++)
+            {
+                float now = k * 0.1f, last = (k / 50) * 5f;
+                kept &= HudThreats.Retained(now, never, last, BoardOptions.Default.ThreatHoldSeconds);
+                droppedBefore |= now - last >= HudThreats.SpikeHold;
+            }
+            TestAssert.That(kept, "A radar pinging every 5 s is on the page for a whole minute");
+            TestAssert.That(droppedBefore, "...where the lamp's own hold alone would have let it go between pings");
         }
 
         private static void Shots()

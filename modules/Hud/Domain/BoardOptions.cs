@@ -11,6 +11,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
     {
         /// <summary>The pages that may appear, one <see cref="CuePriority.Bit"/> each: empty with the scope off.</summary>
         public ushort Pages;
+        /// <summary>The pages that may speak (post ticker notices, call for a dispenser): <see cref="Pages"/> without the scope mode, because Off hides the scope, not the warnings.</summary>
+        public ushort Voiced;
         public bool ShowLamps;
         /// <summary>Unlit lamps are drawn (as dim outlines). False: only a lamp that is lit shows.</summary>
         public bool DarkLamps;
@@ -96,16 +98,17 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>
         /// The switches with the declutter level applied. Full: everything the switches allow. Lean: no gauge row, no unlit lamps, no decorative captions, and the compact SYSTEMS
         /// strip only while something is not nominal. Minimal: as Lean, and of the lamps only LOCK / SPKE / MSL, of the pages only THREAT, MISSILE CAM, SHOT, APPROACH and the
-        /// critical form of SYSTEMS. The scope mode Off leaves no pages at all.
+        /// critical form of SYSTEMS. The scope mode Off leaves no pages at all (but <see cref="BoardEffective.Voiced"/> keeps the ones the switches allow).
         /// </summary>
         public readonly BoardEffective Effective()
         {
             bool full = Declutter == BoardDeclutter.Full, minimal = Declutter == BoardDeclutter.Minimal;
-            ushort pages = ScopeMode == BoardScopeMode.Off ? (ushort)0 : PageMask();
-            if (minimal) pages &= MinimalPages;
+            ushort voiced = PageMask();
+            if (minimal) voiced &= MinimalPages;
             return new BoardEffective
             {
-                Pages = pages,
+                Pages = ScopeMode == BoardScopeMode.Off ? (ushort)0 : voiced,
+                Voiced = voiced,
                 ShowLamps = ShowLamps,
                 DarkLamps = full,
                 ThreatLampsOnly = minimal,
