@@ -86,7 +86,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Patches
             if (!MissionPositionPriorityQuery.TryGetDirective(TheaterPriorityService.Active,
                 unit.NetworkHQ, out PriorityDirective directive)) return;
             destination = new GlobalPosition(directive.X, directive.Y, directive.Z);
-            GroundProbe.AdvanceReplaced++;
+            GroundProbe.AdvanceFallback++;
             __result = true;
         }
 

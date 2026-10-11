@@ -22,16 +22,28 @@
       "faction": "Boscali",
       "near": [
         -5000,
-        42000
+        30000
       ],
       "altitude": 9000,
       "speed": 200,
       "heading": 0
     },
     {
+      "op": "fly",
+      "id": "player",
+      "program": [
+        {
+          "orbit": {
+            "bank": 30,
+            "seconds": 540
+          }
+        }
+      ]
+    },
+    {
       "op": "record",
       "ids": [
-        "lead_*"
+        "veh_*"
       ],
       "hz": 1
     },
@@ -84,14 +96,6 @@
       "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
       "args": {},
       "store": "s05"
-    },
-    {
-      "op": "call",
-      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Verb",
-      "args": {
-        "verb": "pick"
-      },
-      "store": "pick"
     },
     {
       "op": "wait",
@@ -213,6 +217,11 @@
     },
     {
       "check": "result_above",
+      "path": "s14.counters.enrolledPerMember",
+      "min": 3
+    },
+    {
+      "check": "result_above",
       "path": "s14.counters.advanceReplaced",
       "min": 1
     },
@@ -230,6 +239,11 @@
       "check": "result_above",
       "path": "s14.ground.total.maxStaged",
       "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "s14.ground.total.maxLanded",
+      "min": 1
     },
     {
       "check": "result_above",

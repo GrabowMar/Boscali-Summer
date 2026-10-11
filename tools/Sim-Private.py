@@ -30,7 +30,7 @@ from nomodkit.sim import environment as env_mod
 from nomodkit.sim import install as install_mod
 from nomodkit.sim.checks import LOG_NAME, RunOutputs, load_outputs
 from nomodkit.sim.report import build_report
-from nomodkit.sim.runner import ENV_OUT, ENV_SCENARIO, QUIT_GRACE_S, launch_args
+from nomodkit.sim.runner import ENV_OUT, ENV_QUEUE, ENV_SCENARIO, QUIT_GRACE_S, launch_args
 from nomodkit.sim.scenario import ScenarioError, load_scenario, validate_scenario
 
 SLOT_POLL_S, SLOT_LIMIT_S, EXTRA_S = 20, 30 * 60, 180
@@ -151,7 +151,7 @@ def main():
     run_dir = opts.out / f"{scenario.name}-{datetime.now():%Y%m%d-%H%M%S}"
     run_dir.mkdir(parents=True)
     (run_dir / "scenario.json").write_text(json.dumps(raw, indent=2), encoding="utf-8")
-    env = {**os.environ, **scenario.environment.env, ENV_SCENARIO: str(run_dir / "scenario.json"), ENV_OUT: str(run_dir)}
+    env = {**os.environ, **scenario.environment.env, ENV_SCENARIO: str(run_dir / "scenario.json"), ENV_OUT: str(run_dir), ENV_QUEUE: ""}
     snapshot, launched_wall, status, failure = {}, time.time(), "ok", None
     try:
         snapshot = env_mod.apply(overrides)
