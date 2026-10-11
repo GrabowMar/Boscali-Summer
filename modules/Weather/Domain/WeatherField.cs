@@ -13,6 +13,13 @@ namespace BoscaliSummer.Modules.Weather.Domain
         Violent = 5,
     }
 
+    /// <summary>A lattice feature found near a point (a cumulus group or a storm cell): where it stands in world metres and how big it is.
+    /// The bench places its cameras with it; the readouts count them.</summary>
+    internal struct FieldFeature
+    {
+        public float X, Z, Radius, Base, Top, Strength;
+    }
+
     /// <summary>The weather at one point and instant. Units: mm/h, metres, km, m/s, hPa, °C.</summary>
     internal struct WeatherPoint
     {
@@ -90,8 +97,12 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         private readonly StormCell[] cells = new StormCell[StormCells.MaxCells];
         private readonly FrontState[] fronts = new FrontState[WeatherFronts.MaxFronts];
-        private readonly DryCloudCluster[] cloudClusters = new DryCloudCluster[DryCloudCluster.MaxCount];
+        private readonly CellCache<CumulusGroup> cumulusCache = new CellCache<CumulusGroup>();
+        private readonly CumulusLattice.Neighbourhood cumulusNear = new CumulusLattice.Neighbourhood();
         private readonly Superstructure[] superstructures = new Superstructure[Superstructures.MaxCount];
+        /// <summary>The row every sample reads when the tape is one keyframe (live play, and a one-keyframe fixture): not a texel copy per sample.</summary>
+        private SkyParams constantRow;
+        private bool tapeIsConstant;
 
         private readonly BakedTape constantTape = new BakedTape(1);
 
@@ -108,9 +119,10 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>Where every per-sample genus and thin-layer row is read from: one keyframe (<see cref="Params"/>) in slices 2-3, a fixture's baked tape in the density check and the bench.</summary>
         public TapeSampler Tape { get; private set; }
         public TapeFrame Frame { get; private set; }
+        /// <summary>Everything the lattices resolve from: the tape identity, the tape and its frame (spec 6). Rebuilt with every Build.</summary>
+        public LatticeSource Lattice { get; private set; }
         public int CellCount { get; private set; }
         public int FrontCount { get; private set; }
-        public int CloudClusterCount { get; private set; }
         /// <summary>Scenery storms outside the theater; see <see cref="Superstructures"/>.</summary>
         public int SuperstructureCount { get; private set; }
 
@@ -123,7 +135,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         public StormCell Cell(int index) => cells[index];
         public FrontState Front(int index) => fronts[index];
-        public DryCloudCluster CloudCluster(int index) => cloudClusters[index];
+
         public Superstructure SuperstructureAt(int index) => superstructures[index];
 
         public void Build(WeatherKey key, float time, float halfX, float halfZ, float hourOfDay = 12f, float hazeScale = 1f)
@@ -145,20 +157,28 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 ? SkyLibrary.Instance(key.SkyPin, SkyLibrary.PinSeed(key), key.OpeningBase)
                 : StateTable.At(timeline.Level);
             Params = sky;
-            constantTape.SetConstant(sky);
+            // INTERIM(slice 4): the legacy timeline grows cumulus and convection slower than the sheet fades (GrowthLevel), so the
+            // one-keyframe tape carries those activation columns from the growth sky. A pinned sky is its own growth sky.
+            SkyParams convection = pinned ? sky : StateTable.At(timeline.GrowthLevel);
+            SkyParams row = sky;
+            row.CumulusCover = convection.CumulusCover;
+            row.CapacityCover = convection.CapacityCover;
+            row.CumulusLevel = convection.CumulusLevel;
+            row.Convective = convection.Convective;
+            row.Severity = convection.Severity;
+            constantTape.SetConstant(row, pinned ? SkyLibrary.Get(key.SkyPin).Genus.Genus : StateTable.LatticeGenus);
             Tape = new TapeSampler(constantTape);
+            tapeIsConstant = true;
+            constantRow = row;
             Frame = new TapeFrame(key.HeadingDeg, 0f);
+            ResetLattice();
             PrevailingHeading = key.DownwindHeading; // the mission wind's heading, set once at capture
             WeatherMath.HeadingToVector(PrevailingHeading, out float driftX, out float driftZ);
 
             Split = SkySplit.From(timeline.Layout, sky.Split, HalfX, HalfZ, PrevailingHeading, 0); // INTERIM(slice 4): no front turn
             FrontCount = WeatherFronts.Fill(fronts, timeline.Layout, sky, HalfX, HalfZ, PrevailingHeading, Split);
-            SkyParams convection = pinned ? sky : StateTable.At(timeline.GrowthLevel);
             CellCount = StormCells.Fill(cells, timeline.Layout, convection, HalfX, HalfZ, driftX, driftZ, Split);
-            CloudClusterCount = 0;
-            for (int i = 0; i < cloudClusters.Length; i++)
-                if (DryCloudCluster.TryResolve(timeline.Layout, i, convection, HalfX, HalfZ, out DryCloudCluster cloud, driftX, driftZ))
-                    cloudClusters[CloudClusterCount++] = cloud;
+
             SuperstructureCount = Superstructures.Fill(superstructures, timeline.Layout, convection,
                 HalfX, HalfZ, PrevailingHeading, key.Sets, key.HasAnchor, key.AnchorX, key.AnchorZ);
         }
@@ -168,14 +188,48 @@ namespace BoscaliSummer.Modules.Weather.Domain
         {
             Tape = tape;
             Frame = frame;
+            tapeIsConstant = tape.IsConstant;
+            if (tapeIsConstant) constantRow = tape.At(0f);
+            ResetLattice();
+        }
+
+        private void ResetLattice()
+        {
+            Lattice = new LatticeSource(Key.TapeId, Key.LayoutSeed, Tape, Frame);
+            cumulusCache.Reset();
+            cumulusNear.Reset();
+        }
+
+        /// <summary>
+        /// The cumulus group out (strength at least <paramref name="minStrength"/>) whose centre is nearest a world point, searching
+        /// <paramref name="rings"/> lattice cells each way: the bench places its cameras with it, in place of the old fixed group 0.
+        /// </summary>
+        public bool FindNearestCloud(float x, float z, out FieldFeature feature, float minStrength = CumulusLattice.ActiveStrength, int rings = 4)
+        {
+            Frame.ToTape(x, z, out float qx, out float qz);
+            feature = default;
+            if (!CumulusLattice.FindNearest(Lattice, cumulusCache, qx, qz, rings, minStrength, out CumulusGroup g)) return false;
+            Frame.FromTape(g.X, g.Z, out float gx, out float gz);
+            float baseY = Sample(gx, gz).CloudBase;
+            feature = new FieldFeature { X = gx, Z = gz, Radius = g.Radius, Base = baseY, Top = baseY + g.TopDepth, Strength = g.Strength };
+            return true;
+        }
+
+        /// <summary>How many cumulus groups at or above <see cref="CumulusLattice.ActiveStrength"/> have their centre within a range of a world point (the activeGroupCount readout).</summary>
+        public int ActiveGroupCount(float x, float z, float range)
+        {
+            Frame.ToTape(x, z, out float qx, out float qz);
+            return CumulusLattice.CountActive(Lattice, cumulusCache, qx, qz, range);
         }
 
         public WeatherPoint Sample(float x, float z)
         {
             SkyParams p = Params;
-            // The per-sample row: the low genus and the thin layers are read from the tape at this point's position.
-            SkyParams local = Tape.IsConstant ? p : Tape.At(Frame.S(x, z));
+            // The per-sample row: the low genus, the base and the thin layers are read from the tape at this point's position.
+            SkyParams local = tapeIsConstant ? constantRow : Tape.At(Frame.S(x, z));
             var point = new WeatherPoint();
+            // The lattices live in the tape frame (spec 3.1): q = p + u * D, with D 0 until the tape moves (slice 5).
+            Frame.ToTape(x, z, out float qx, out float qz);
 
             // Area (stratiform) rain and the sheet, broken up by the static patch field so a
             // thinning deck opens in patches instead of fading uniformly.
@@ -216,7 +270,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
             float cellRain = 0f;
             float clearCells = 1f;
-            float clearClusters = 1f;
             float outX = 0f, outZ = 0f, vertical = 0f;
             float lightning = 0f;
             float core = 0f;
@@ -266,15 +319,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 if (cellCrown > top) top = cellCrown;
             }
 
-            for (int i = 0; i < CloudClusterCount; i++)
-            {
-                DryCloudCluster cloud = cloudClusters[i];
-                float cover = cloud.CoverAt(x, z);
-                clearClusters *= 1f - cover;
-                if (cover > point.CellShape) point.CellShape = cover;
-                float clusterCrown = cloud.Base + (cloud.Top - cloud.Base) * (float)Math.Pow(cover, 0.65f);
-                if (clusterCrown > top) top = clusterCrown;
-            }
+            // Cumulus groups: independent covers combine as 1 - (1 - c1)(1 - c2)...; the strongest one shapes the crown.
+            CumulusLattice.Sample(Lattice, cumulusCache, cumulusNear, qx, qz, out float clearClusters, out float groupShape, out float groupCrown);
+            if (groupShape > point.CellShape) point.CellShape = groupShape;
 
             float rain = Math.Min(areaRain + frontRain + cellRain, MaxRainRate);
             point.RainRate = rain;
@@ -299,7 +346,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             CloudGenus genus = CloudShape.Resolve(local);
             float deck = WeatherMath.Lerp(genus.PuffDepth, Math.Max(genus.PuffDepth, local.DeckDepth), genus.SheetBlend);
             deck = Math.Max(280f, deck);
-            float crown = top;
+            float crown = Math.Max(top, groupCrown > 0f ? point.CloudBase + groupCrown : 0f);
             // Fair and stratocumulus stay at the genus depth. A cumulonimbus keeps the cell's full column.
             crown = WeatherMath.Lerp(Math.Min(crown, CloudShape.TowerCap(point.CloudBase, genus, local.DeckDepth)), crown, genus.TowerBlend);
             point.LowTop = Math.Max(point.CloudBase + deck * (0.5f + 0.5f * stratiformCover), crown);
@@ -382,61 +429,4 @@ namespace BoscaliSummer.Modules.Weather.Domain
         }
     }
 
-    /// <summary>A rain-free cumulus group at a fixed site of the layout. The state's cumulus
-    /// level decides how many groups are out (by rank) and how strongly each one builds.</summary>
-    internal struct DryCloudCluster
-    {
-        public const int MaxCount = 8;
-        public int Slot;
-        public float X, Z, Radius, Base, Top, Strength, AxisX, AxisZ, Aspect;
-
-        public float CoverAt(float x, float z)
-        {
-            float dx = x - X, dz = z - Z;
-            if (dx * dx + dz * dz > Radius * Radius * 4f) return 0f;
-            float along = (dx * AxisX + dz * AxisZ) / Math.Max(1f, Aspect);
-            float across = (-dx * AxisZ + dz * AxisX) / 0.72f;
-            float r = Radius;
-            float shape = Math.Max(Blob(along, across, r * 0.50f),
-                Math.Max(Blob(along - r * 0.48f, across - r * 0.18f, r * 0.38f),
-                Math.Max(Blob(along + r * 0.49f, across + r * 0.08f, r * 0.38f),
-                Math.Max(Blob(along - r * 0.10f, across - r * 0.52f, r * 0.35f),
-                         Blob(along + r * 0.16f, across + r * 0.51f, r * 0.35f)))));
-            return shape * Math.Min(1f, Strength * 2.5f);
-        }
-
-        private static float Blob(float x, float z, float radius)
-        {
-            float q = 1f - (x * x + z * z) / (radius * radius);
-            return q > 0f ? q * q : 0f;
-        }
-
-        public static bool TryResolve(uint layout, int slot, SkyParams sky, float halfX, float halfZ,
-            out DryCloudCluster cloud, float windX = 0f, float windZ = 0f)
-        {
-            cloud = default;
-            uint seed = unchecked(layout ^ (uint)(slot * 73856093) ^ 0x7c15u);
-            float rank = (slot + WeatherMath.Hash01(seed, 70)) / MaxCount;
-            float strength = WeatherMath.Smoothstep(rank * 0.7f, rank * 0.7f + 0.35f, sky.Cumulus) *
-                Scalar.Clamp01(0.4f + 0.6f * sky.Cumulus);
-            // Keep the tail until zero: CoverAt magnifies strength.
-            if (strength <= 0f) return false;
-            cloud.Slot = slot;
-            cloud.X = WeatherMath.HashRange(seed, 73, 0, 0, -halfX * 0.85f, halfX * 0.85f);
-            cloud.Z = WeatherMath.HashRange(seed, 74, 0, 0, -halfZ * 0.85f, halfZ * 0.85f);
-            cloud.Radius = WeatherMath.HashRange(seed, 75, 0, 0, 5000f, 9500f);
-            cloud.Base = sky.CloudBase;
-            float puff = sky.PuffDepth >= 200f ? sky.PuffDepth : 900f;
-            cloud.Top = cloud.Base + WeatherMath.HashRange(seed, 76, 0, 0, 0.65f, 1.1f) * puff *
-                (0.75f + 0.25f * sky.Cumulus);
-            cloud.Strength = strength;
-            float angle = windX * windX + windZ * windZ > 0.001f
-                ? (float)Math.Atan2(windZ, windX) + WeatherMath.HashRange(seed, 77, 0, 0, -0.28f, 0.28f)
-                : WeatherMath.Hash01(seed, 77) * 2f * (float)Math.PI;
-            cloud.AxisX = (float)Math.Cos(angle);
-            cloud.AxisZ = (float)Math.Sin(angle);
-            cloud.Aspect = WeatherMath.HashRange(seed, 78, 0, 0, 1.05f, 1.45f);
-            return true;
-        }
-    }
 }

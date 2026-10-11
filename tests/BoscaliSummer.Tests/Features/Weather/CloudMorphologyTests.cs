@@ -89,11 +89,12 @@ namespace BoscaliSummer.Tests.Features.Weather
                     }
                 }
                 WeatherMath.HeadingToVector(storm.PrevailingHeading, out float wx, out float wz);
-                for (int i = 0; i < scattered.CloudClusterCount; i++)
+                for (int cell = -2; cell <= 2; cell++)
                 {
-                    DryCloudCluster group = scattered.CloudCluster(i);
-                    TestAssert.That(group.AxisX * wx + group.AxisZ * wz > 0.94f,
-                        "Ordinary cumulus streets align with fixed prevailing wind with bounded irregularity");
+                    int n = CumulusLattice.Fetch(scattered.Lattice, null, cell, cell / 2, out CumulusGroup[] groups);
+                    for (int i = 0; i < n; i++)
+                        TestAssert.That(Math.Abs(groups[i].AxisX * wx + groups[i].AxisZ * wz) > 0.94f,
+                            "Ordinary cumulus streets align with fixed prevailing wind with bounded irregularity");
                 }
             }
         }

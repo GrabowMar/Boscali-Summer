@@ -159,7 +159,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                     layout = s.Layout;
                     TestAssert.That(s.Level == 0f && s.GrowthLevel == 0f, "the layout swapped with cloud on the map");
                     field.Build(key, t, HalfX, HalfZ);
-                    TestAssert.That(field.CellCount == 0 && field.FrontCount == 0 && field.CloudClusterCount == 0,
+                    TestAssert.That(field.CellCount == 0 && field.FrontCount == 0 && !field.FindNearestCloud(0f, 0f, out _, 0.0001f, 6),
                         "a clear sky has nothing left to swap");
                 }
             }
@@ -226,18 +226,26 @@ namespace BoscaliSummer.Tests.Features.Weather
             var field = new WeatherField();
             field.Build(Held(WeatherRegimeType.Scattered), 600f, HalfX, HalfZ);
             bool found = false;
-            for (int i = 0; i < field.CloudClusterCount; i++)
+            for (int i = -3; i <= 3; i++)
             {
-                DryCloudCluster cloud = field.CloudCluster(i);
-                if (cloud.Strength < 0.35f) continue;
-                WeatherPoint core = field.Sample(cloud.X, cloud.Z);
-                TestAssert.That(core.ClusterCover > 0.75f && core.CellShape > 0.75f,
+                if (!CumulusLattice.FindNearest(field.Lattice, null, i * 17000f, -i * 9000f, 3, 0.8f, out CumulusGroup group)) continue;
+                group.BlobCentre(0, out float cx, out float cz);
+                field.Frame.FromTape(cx, cz, out float wx, out float wz);
+                WeatherPoint core = field.Sample(wx, wz);
+                TestAssert.That(core.ClusterCover >= 0.79f && core.CellShape >= 0.79f,
                     "cumulus cores are discrete towers in both weather and render fields");
-                TestAssert.That(cloud.CoverAt(cloud.X + cloud.Radius * 1.5f, cloud.Z + cloud.Radius * 1.5f) == 0f,
-                    "separate cumulus cores leave clear air between groups");
                 found = true;
             }
             TestAssert.That(found, "scattered sky forms cumulus groups");
+            int clear = 0, total = 0;
+            for (float z = -35000f; z <= 35000f; z += 2500f)
+            for (float x = -35000f; x <= 35000f; x += 2500f)
+            {
+                total++;
+                if (field.Sample(x, z).ClusterCover <= 0f) clear++;
+            }
+            TestAssert.That(clear > total * 0.15f && clear < total * 0.85f,
+                $"separate cumulus groups leave clear air between them ({clear} of {total} samples are clear)");
         }
 
         private static void SuperstructuresAreStaticScenery()

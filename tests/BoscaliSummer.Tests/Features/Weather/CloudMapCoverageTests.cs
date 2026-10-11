@@ -79,7 +79,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                     minimumCover, maximumCover, meanCover = sumCover / n,
                     cloudyShare = cloudy / (float)n, rainyShare = rainy / (float)n,
                     maximumRain, maximumTop, minimumMapWeight, cells = field.CellCount,
-                    clusters = field.CloudClusterCount, heroes = field.SuperstructureCount,
+                    groups = field.ActiveGroupCount(0f, 0f, 40000f), heroes = field.SuperstructureCount,
                     farthestHeroCenter, farthestCameraX, farthestCameraZ, farthestHeroX, farthestHeroZ,
                     farthestHeroKind, heroCenterViewsPast220km });
             }

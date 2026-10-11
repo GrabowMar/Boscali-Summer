@@ -890,7 +890,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 { "frontCount", Field?.FrontCount ?? 0 },
                 { "frontKind", Field != null && Field.FrontCount > 0 ? (int)Field.Front(0).Kind : -1 },
                 { "cellCount", Field?.CellCount ?? 0 },
-                { "clusterCount", Field?.CloudClusterCount ?? 0 },
+                { "activeGroupCount", Field?.ActiveGroupCount(0f, 0f, 40000f) ?? 0 },
                 { "cloudImmersion", cloudMoisture },
                 { "cloudBuffet", cloudBuffet },
                 { "viewCloudDensity", viewDensity },
