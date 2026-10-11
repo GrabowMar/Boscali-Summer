@@ -51,5 +51,7 @@ namespace BoscaliSummer.Core.Contracts
         bool Sway { get; set; }
         /// <summary>Restyle the kill feed and the map frame in the board's look.</summary>
         bool Corners { get; set; }
+        /// <summary>Put every option back to its default, the board's own values, so a settings surface keeps no copy of them.</summary>
+        void ResetToDefaults();
     }
 }

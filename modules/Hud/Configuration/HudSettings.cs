@@ -178,5 +178,22 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         bool ITacBoardSettings.ShowTicker { get => ShowTicker.Value; set => ShowTicker.Value = value; }
         bool ITacBoardSettings.Sway { get => Sway.Value; set => Sway.Value = value; }
         bool ITacBoardSettings.Corners { get => Corners.Value; set => Corners.Value = value; }
+
+        /// <summary>Every entry back to the default it was bound with (the <see cref="BoardOptions.Default"/> values). The file is saved once, not once per entry.</summary>
+        void ITacBoardSettings.ResetToDefaults()
+        {
+            ConfigEntryBase[] all =
+            {
+                Enabled, Layout, Scale, OffsetX, OffsetY, Opacity, Shade, Declutter, ScopeMode,
+                PageThreat, PageShot, PageMissileCam, PageApproach, PageWing, PageStrike, PageDock, PageObjective, PageSystems,
+                ThreatHoldSeconds, PageMinSeconds, ShowLamps, ShowSystemsStrip, ShowGauges, ShowTicker, Sway, Corners,
+            };
+            ConfigFile file = Enabled.ConfigFile;
+            bool save = file.SaveOnConfigSet;
+            file.SaveOnConfigSet = false;
+            try { foreach (ConfigEntryBase entry in all) entry.BoxedValue = entry.DefaultValue; }
+            finally { file.SaveOnConfigSet = save; }
+            if (save) file.Save();
+        }
     }
 }

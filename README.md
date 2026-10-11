@@ -184,6 +184,17 @@ This section is for people who choose to help test the development build. Use a 
 
 The settings file is `com.marci.boscalisummer.cfg` in `BepInEx/config/`. Systems can depend on one another; disabling a prerequisite can make related features unavailable.
 
+**TAC BOARD options**
+
+The TAC BOARD HUD has its own options. They are yours alone, apply at once and can be changed in flight, from whichever of these is handiest:
+
+- **SET → THIS PILOT → COCKPIT** — every option, in four groups. **Board**: on/off, layout (wide or stack), declutter level, size, position, opacity and shade. **Pages**: whether the scope shows pages at all, one switch per page (radar warning, shot, missile cam, approach, wing, strike, dock, objective, systems), how long a radar warning is held and the minimum time a page stays. **Blocks**: the lamp row, systems strip, gauge row and notice line. **Extras**: visor sway, restyling the kill feed and map, and **Reset to defaults**.
+- **C menu → VIEW** — **Show/Hide TAC BOARD**, **Set HUD declutter** (full, lean, min) and **Set board layout** (wide, stack).
+- **F1** — the **TAC BOARD** switch; with **Advanced settings** on, the whole **TacBoard** section.
+- **Config file** — the same options under `[TacBoard]` in `com.marci.boscalisummer.cfg`.
+
+A page that is switched off also stops posting its notices on the notice line, so leave the radar-warning page on unless you really want it gone.
+
 > [!WARNING]
 > **Multiplayer is experimental.** Everyone, including the host, must run the **same mod version**. The host controls shared rules such as fires, destruction, progression, support prices and events. Matching versions is required; multiplayer may still be unreliable.
 

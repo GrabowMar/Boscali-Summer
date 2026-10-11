@@ -1109,6 +1109,7 @@ ProbeTrenchSerialization(pluginAssembly, mirageAssembly);
 ProbeSessionSerialization(pluginAssembly, mirageAssembly);
 ProbeWeatherSerialization(pluginAssembly, mirageAssembly);
 ProbeWeatherConfig(pluginAssembly);
+ProbeTacBoardConfig(pluginAssembly);
 ProbeTheaterOpsSerialization(pluginAssembly, mirageAssembly);
 // Wing integration is optional and the supported contract is compiled in-tree. A hard
 // external dependency prevents BepInEx from loading the entire plugin when Wing is absent.
@@ -1932,6 +1933,43 @@ static void ProbeWeatherConfig(Assembly plugin)
         Console.WriteLine("  Weather config: old keys purged, TapeMoves on, Pace 3, SeedMode Random, FixedSeed 0");
     }
     finally { File.Delete(path); }
+}
+
+/// <summary>The settings pages keep no copy of the TAC BOARD defaults: ResetToDefaults on the real config entries must restore every option and save the file once.</summary>
+static void ProbeTacBoardConfig(Assembly plugin)
+{
+    Assembly bepInEx = Assembly.Load("BepInEx");
+    Type configFile = bepInEx.GetType("BepInEx.Configuration.ConfigFile", true)!;
+    Type settingsType = plugin.GetType("BoscaliSummer.Modules.Hud.Configuration.HudSettings", true)!;
+    Type contract = plugin.GetType("BoscaliSummer.Core.Contracts.ITacBoardSettings", true)!;
+    PropertyInfo[] options = contract.GetProperties();
+    string baseline = Path.Combine(Path.GetTempPath(), "boscali-tacboard-probe-default-" + Environment.ProcessId + ".cfg");
+    string path = Path.Combine(Path.GetTempPath(), "boscali-tacboard-probe-" + Environment.ProcessId + ".cfg");
+    object[] Values(object settings) => options.Select(option => option.GetValue(settings)!).ToArray();
+    try
+    {
+        object[] defaults = Values(Activator.CreateInstance(settingsType, Activator.CreateInstance(configFile, baseline, true))!);
+        object file = Activator.CreateInstance(configFile, path, true)!;
+        object settings = Activator.CreateInstance(settingsType, file)!;
+        foreach (PropertyInfo option in options)
+            option.SetValue(settings, option.PropertyType == typeof(bool) ? !(bool)option.GetValue(settings)!
+                : option.PropertyType == typeof(float) ? 0.5f
+                : Enum.ToObject(option.PropertyType, Enum.GetValues(option.PropertyType).Length - 1));
+        object[] changed = Values(settings);
+        for (int i = 0; i < options.Length; i++)
+            if (Equals(changed[i], defaults[i])) throw new InvalidOperationException("TAC BOARD probe could not move " + options[i].Name + " off its default");
+        contract.GetMethod("ResetToDefaults")!.Invoke(settings, null);
+        object[] reset = Values(settings);
+        object[] saved = Values(Activator.CreateInstance(settingsType, Activator.CreateInstance(configFile, path, true))!);
+        for (int i = 0; i < options.Length; i++)
+        {
+            if (!Equals(reset[i], defaults[i])) throw new InvalidOperationException("TAC BOARD ResetToDefaults left " + options[i].Name + " at " + reset[i] + ", not " + defaults[i]);
+            if (!Equals(saved[i], defaults[i])) throw new InvalidOperationException("TAC BOARD ResetToDefaults did not save " + options[i].Name);
+        }
+        if (!(bool)configFile.GetProperty("SaveOnConfigSet")!.GetValue(file)!) throw new InvalidOperationException("TAC BOARD ResetToDefaults left the config file's save-on-set off");
+        Console.WriteLine("  TAC BOARD config: " + options.Length + " options moved, reset to their bound defaults and saved");
+    }
+    finally { File.Delete(baseline); File.Delete(path); }
 }
 
 static void ProbeFactionMoraleSerialization(Assembly plugin, Assembly mirage)
