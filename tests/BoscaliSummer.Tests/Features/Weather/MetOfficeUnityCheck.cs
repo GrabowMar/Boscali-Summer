@@ -25,7 +25,7 @@ using static UnityCheckHarness;
 public static class MetOfficeUnityCheck
 {
     /// <summary>The plan task whose work the window must already show: 5 shell, 6 synoptic column, 7 instrument column, 8 time column, 9 command bar and press mapping, 10 seats and every theme. Each task raises it first, then makes it pass.</summary>
-    private const int Built = 8;
+    private const int Built = 9;
 
     /// <summary>Every state is required: cluttered (Review Focus 5), fog (a forced fog bank is not a formation), nan (Review Focus 4) and longest (the longest strings) each pin a failure the busy host cannot show.</summary>
     private static readonly string[] States = { "host", "pinned-held", "storm", "client", "waiting", "empty", "longest", "cluttered", "fog", "nan" };
