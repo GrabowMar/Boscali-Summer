@@ -147,6 +147,17 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.Eq(f3, 1, "NO MARGIN gives way to NO MGN before it goes: the warning stays beside a short name");
             TestAssert.That(SystemsMath.MarginWords(90, false).ToString() == "+90%" && SystemsMath.MarginWords(90, true).ToString() == "+90" &&
                 SystemsMath.MarginWords(0, false).ToString() == "NO MARGIN" && SystemsMath.MarginWords(-4, true).ToString() == "NO MGN", "The margin's words, long and short");
+
+            // The two-row base block (LAYOUT.md 3.5): the name has its own row, the distance and the margin share the one under it; the margin's fit does not count the name.
+            TestAssert.That(ScopeStr.Name("annex cliff", 17).ToString() == "ANNEX CLIFF" && ScopeStr.Name("  K92 ", 17).ToString() == "K92", "The base's name alone: upper case, trimmed");
+            string longName = ScopeStr.Name("AIRBASE CITY NORTH", 17).ToString();
+            TestAssert.That(longName == "AIRBASE CITY NOR…" && longName.Length == 17, "A name too long for its row is cut once with an ellipsis: " + longName);
+            TestAssert.That(ScopeStr.Name(null, 17).Length == 0 && ScopeStr.Name("K92", 0).Length == 0 && ScopeStr.Name("ABC", 1).ToString() == "…", "No name or no room: nothing; one character of room: just the cut");
+            int row = ScopeStr.FitMargin(null, 97f, AvUnits.Metric, 17, 4, 3, out _);
+            TestAssert.Eq(row, 0, "On its own row the distance (3) and the full margin (4) have room in 17");
+            TestAssert.Eq(ScopeStr.FitMargin(null, 97f, AvUnits.Metric, 7, 4, 3, out _), 1, "In 7 characters the short margin is what fits beside 97M");
+            TestAssert.Eq(ScopeStr.FitMargin(null, 97f, AvUnits.Metric, 4, 4, 3, out _), 2, "In 4 the margin is left out");
+            TestAssert.That(ScopeStr.Distance(null, 97f, AvUnits.Metric, 17).ToString() == "97M", "The distance row is the distance alone");
         }
 
         private static void Palette()
@@ -154,7 +165,7 @@ namespace BoscaliSummer.Tests.Features.Hud
             var pal = new ScopePalette(new Rgba(0.22f, 0.87f, 0.32f), new Rgba(0.95f, 0.85f, 0.29f), new Rgba(1f, 0.31f, 0.27f));
             Rgba ink = pal.Of(ScopeTone.Ink), hi = pal.Of(ScopeTone.Hi), dim = pal.Of(ScopeTone.Dim), faint = pal.Of(ScopeTone.Faint);
             TestAssert.That(hi.R > ink.R && hi.B > ink.B, "Hi is the ink pushed toward white");
-            TestAssert.That(dim.G == ink.G && Math.Abs(dim.A - 0.7f) < 1e-5f && faint.G < ink.G, "Dim is the ink at 0.70 (there is no plate to mix it with), faint steps down from it");
+            TestAssert.That(dim.G == ink.G && Math.Abs(dim.A - 0.7f) < 1e-5f && faint.G == dim.G && faint.A == dim.A, "Dim is the ink at 0.70 (there is no plate to mix it with), and faint is the same token: there is no fourth ink level");
             TestAssert.Near(pal.Of(ScopeTone.Dim, 0.5f).A, 0.35f, "A dim token's alpha is multiplied by the alpha asked for");
             TestAssert.That(pal.Of(ScopeTone.Amber).R > 0.9f && pal.Of(ScopeTone.Red).R > 0.9f && pal.Of(ScopeTone.Red).G < 0.4f, "Amber and red are the theme's caution and warning");
             TestAssert.Near(pal.Of(ScopeTone.Ink, 0.5f).A, 0.5f, "A token takes an alpha");

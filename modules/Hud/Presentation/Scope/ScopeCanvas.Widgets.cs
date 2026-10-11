@@ -47,13 +47,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Path(n, tone, alpha, w);
         }
 
-        /// <summary>Four corner brackets (target boxes).</summary>
+        /// <summary>Four corner brackets (target boxes). The far arms sit one line in (LAYOUT.md 0), so the rectangle keeps its outer size <paramref name="w"/> x <paramref name="h"/>.</summary>
         public void Brackets(float x, float y, float w, float h, float len = 8f, ScopeTone tone = Ink, float alpha = 1f, float lw = 1f)
         {
+            float r = x + w - lw, b = y + h - lw;
             Line(x, y, x + len, y, tone, alpha, lw); Line(x, y, x, y + len, tone, alpha, lw);
-            Line(x + w, y, x + w - len, y, tone, alpha, lw); Line(x + w, y, x + w, y + len, tone, alpha, lw);
-            Line(x, y + h, x + len, y + h, tone, alpha, lw); Line(x, y + h, x, y + h - len, tone, alpha, lw);
-            Line(x + w, y + h, x + w - len, y + h, tone, alpha, lw); Line(x + w, y + h, x + w, y + h - len, tone, alpha, lw);
+            Line(r, y, r - len, y, tone, alpha, lw); Line(r, y, r, y + len, tone, alpha, lw);
+            Line(x, b, x + len, b, tone, alpha, lw); Line(x, b, x, b - len, tone, alpha, lw);
+            Line(r, b, r - len, b, tone, alpha, lw); Line(r, b, r, b - len, tone, alpha, lw);
         }
 
         /// <summary>The scope's outline with an ink tick on each corner (the prototype's <c>HUD.frame</c>): the stores header's cells wear it too.</summary>
@@ -80,14 +81,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Line(x - size / 2f, y + size / 2f, x + size / 2f, y - size / 2f, tone, alpha, w);
         }
 
-        /// <summary>Text on a small opaque square tag in <paramref name="tone"/>; (x, y) anchors the tag's vertical middle. Returns the tag's rectangle.</summary>
-        public ScopeRect PlateTag(ReadOnlySpan<char> s, float x, float y, ScopeTone tone = Ink, float size = 12f, ScopeAlign align = ScopeAlign.Left, float pad = 3f, float alpha = 1f)
-        {
-            ScopeRect box = TagBox(s, x, y, size, align, pad);
-            Fill(box.X, box.Y, box.W, box.H, tone, alpha);
-            Text(s, box.X + box.W / 2f, box.Y + box.H / 2f + 0.5f, Bg, size, ScopeAlign.Center, true);
-            return box;
-        }
+        /// <summary>A tag in <paramref name="tone"/>: an open tag (LAYOUT.md 9 rule 4), the plate is gone; (x, y) anchors the tag's vertical middle. Returns the tag's rectangle.</summary>
+        public ScopeRect PlateTag(ReadOnlySpan<char> s, float x, float y, ScopeTone tone = Ink, float size = 12f, ScopeAlign align = ScopeAlign.Left, float pad = 3f, float alpha = 1f) =>
+            OpenTag(s, x, y, tone, size, align, pad, alpha);
 
         /// <summary>The box of a tag around <paramref name="s"/>, whole units, anchored by <paramref name="align"/> at (x, y = its vertical middle).</summary>
         private static ScopeRect TagBox(ReadOnlySpan<char> s, float x, float y, float size, ScopeAlign align, float pad)
@@ -96,26 +92,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             return new ScopeRect(Mathf.Round(align == ScopeAlign.Right ? x - w : align == ScopeAlign.Center ? x - w / 2f : x), Mathf.Round(y - h / 2f), w, h);
         }
 
-        /// <summary>A boxed result stamp (HIT / MISS / DEFEATED), centred on (x, y); the box turns by <paramref name="angle"/>, the word stays level.</summary>
+        /// <summary>A result stamp (HIT / MISS / DEFEATED), centred on (x, y): the bold word inside four corner brackets (LAYOUT.md 9 rule 4). Never turned: <paramref name="angle"/> is no longer used.</summary>
         public void Stamp(ReadOnlySpan<char> s, float x, float y, ScopeTone tone = Ink, float size = 14f, float angle = 0f, float alpha = 1f)
         {
-            float w = Mathf.Round(TextW(s, size) + 12f), h = size + 8f;
-            StampBox(w / 2f, h / 2f, x, y, angle, tone, alpha, 1f, true);
-            StampBox(w / 2f - 2f, h / 2f - 2f, x, y, angle, tone, alpha, 0.5f, false);
+            float w = Mathf.Round(TextW(s, size) + 14f), h = size + 8f;
+            Brackets(x - w / 2f, y - h / 2f, w, h, 5f, tone, alpha);
             Text(s, x, y + 1f, tone, size, ScopeAlign.Center, true, alpha);
-        }
-
-        private void StampBox(float hw, float hh, float x, float y, float angle, ScopeTone tone, float alpha, float lineAlpha, bool fill)
-        {
-            float a = angle * Mathf.Deg2Rad, ca = Mathf.Cos(a), sa = Mathf.Sin(a);
-            for (int i = 0; i < 4; i++)
-            {
-                float vx = (i == 0 || i == 3 ? -hw : hw), vy = (i < 2 ? -hh : hh);
-                px[i] = x + vx * ca - vy * sa;
-                py[i] = y + vx * sa + vy * ca;
-            }
-            if (fill) FillPoly(4, Bg, 0.85f);
-            Path(4, tone, alpha * lineAlpha);
         }
 
         /// <summary>An outlined fill bar: <paramref name="frac"/> of its inside filled (or lit in <paramref name="segs"/> segments). Add marks with <see cref="BarTick"/>.</summary>
@@ -160,22 +142,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     else Box(Mathf.Round(cx - r), Mathf.Round(cy - r), r * 2f, r * 2f, t, 0.8f);
                 }
                 else Ring(cx, cy, lit ? r : r - 0.5f, t, a, 1f, t, lit ? 1f : 0f);
-            }
-        }
-
-        /// <summary>The scope's faint dot grid with a cross at every fifth node.</summary>
-        public void Grid(float w, float h, float step = 20f, float gx = 0f, float gy = 0f, ScopeTone tone = Faint, float alpha = 0.9f)
-        {
-            int i = 0;
-            for (float x = gx % step; x < w; x += step, i++)
-            {
-                int j = 0;
-                for (float y = gy % step; y < h; y += step, j++)
-                {
-                    float rx = Mathf.Round(x), ry = Mathf.Round(y);
-                    Fill(rx, ry, 1f, 1f, tone, alpha);
-                    if (i % 5 == 0 && j % 5 == 0) { Fill(rx - 2f, ry, 5f, 1f, tone, alpha); Fill(rx, ry - 2f, 1f, 5f, tone, alpha); }
-                }
             }
         }
     }

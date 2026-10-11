@@ -35,7 +35,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private bool lastCautionSpeed, lastCautionIls, announced;
         private readonly ApproachCam cam = new ApproachCam();
         private readonly float[] world = new float[3 * 8], screen = new float[2 * 20], clipped = new float[2 * 24], tmp = new float[2 * 24];
-        private readonly float[] quad = new float[8], strip = new float[16];
+        private readonly float[] quad = new float[8];
 
         private string headlineText = "";
         private int headlineKey = -1;
@@ -549,14 +549,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             // Configuration checks: the gear, and the airbrake (the game has no flaps).
             Chip(g, x0, 238f + extra, "GEAR", d.GearDown, true, t);
-            Chip(g, x0 + 68f, 238f + extra, "BRK", !(d.Airbrake && d.Stage != ApproachStage.Rollout), false, t);
+            Chip(g, x0 + 70f, 238f + extra, "BRK", !(d.Airbrake && d.Stage != ApproachStage.Rollout), false, t);
         }
 
         private static void Chip(ScopeCanvas g, float x, float y, string label, bool ok, bool flash, float t)
         {
             ScopeTone tone = ok ? Ink : Amber;
             bool lit = !ok && flash && (int)(t * 3f) % 2 == 0;
-            g.Box(x, y, 64f, 24f, tone, ok ? 0.85f : 1f, 1f, tone, ok ? 0.1f : lit ? 0.4f : 0.16f);
+            g.Box(x, y, 60f, 24f, tone, ok ? 0.85f : 1f, 1f, tone, ok ? 0.1f : lit ? 0.4f : 0.16f);
             if (ok) g.Check(x + 13f, y + 12f, 10f, Hi, 1f, 2f); else g.Cross(x + 13f, y + 12f, 8f, Amber, 1f, 2f);
             g.Text(label, x + 25f, y + 13f, ok ? Hi : Amber, 12f, ScopeAlign.Left, !ok);
         }
@@ -567,26 +567,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             if (!live || !d.Autoland) return;
             string[] names = d.Pad ? ApproachWords.Pad : ApproachWords.Runway;
-            g.PlateTag("AUTO", 4f, 13f, Ink);
-            float x0 = 46f, cw = (p.W - x0 - 4f) / names.Length, prog = Progress();
+            g.Text("AUTO", 4f, 13f, Ink, 12f, ScopeAlign.Left, true);
+            // The autoland chain (LAYOUT.md 12.4) as plain words: a ">" before each phase, the active one bold BRIGHT, the flown ones INK, the rest DIM, and one BRIGHT tick under the active word that grows with its progress.
+            float x0 = 56f, cw = (p.W - x0 - 4f) / names.Length, prog = Progress();
             for (int i = 0; i < names.Length; i++)
             {
-                float x = x0 + i * cw, nl = i > 0 ? 6f : 0f;
+                float x = x0 + i * cw, wordW = ScopeCanvas.TextW(names[i]), cx = x + 51.5f;
                 bool act = i == (int)d.Stage, done = i < (int)d.Stage;
-                int n = 0;
-                strip[n++] = x; strip[n++] = 3f;
-                strip[n++] = x + cw - 6f; strip[n++] = 3f;
-                strip[n++] = x + cw; strip[n++] = 13f;
-                strip[n++] = x + cw - 6f; strip[n++] = 23f;
-                strip[n++] = x; strip[n++] = 23f;
-                if (nl > 0f) { strip[n++] = x + nl; strip[n++] = 13f; }
-                int path = g.Poly(strip, n / 2);
-                if (act) g.FillPoly(path, Ink, 0.3f); else if (done) g.FillPoly(path, Ink, 0.08f);
-                g.Path(path, act ? Hi : done ? Ink : Faint, act ? 1f : done ? 0.55f : 0.9f);
-                float tx = x + nl + (cw - nl - 6f) / 2f + (done ? 6f : 0f);
-                if (done) g.Check(x + nl + 9f, 13f, 8f, Ink, 0.8f, 1.5f);
-                g.Text(names[i], tx, 14f, act ? Hi : Dim, 12f, ScopeAlign.Center, act, act || done ? 1f : 0.7f);
-                if (act) g.Fill(Mathf.Round(x + nl + 2f), 21f, Mathf.Round((cw - nl - 10f) * prog), 2f, Hi);
+                g.Text(">", x + 2f, 13f, Dim);
+                g.Text(names[i], cx, 13f, act ? Hi : done ? Ink : Dim, 12f, ScopeAlign.Center, act);
+                if (act) g.Fill(Mathf.Round(cx - wordW / 2f), 21f, Mathf.Round(Math.Max(6f, wordW * prog)), 2f, Hi);
             }
         }
     }

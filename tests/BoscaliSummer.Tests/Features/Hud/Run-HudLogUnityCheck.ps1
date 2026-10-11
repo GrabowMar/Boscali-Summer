@@ -3,7 +3,7 @@ param(
     [string]$Unity = "C:/Program Files/Unity/Hub/Editor/2022.3.62f3/Editor/Unity.exe",
     [string]$PreviewDirectory = (Join-Path $env:TEMP ("BoscaliHudLogCheck-" + [guid]::NewGuid().ToString("N"))),
     # Comma list of TAC BOARD scope pages to render and nothing else of the check, e.g. 'systems' or 'threat,shot'
-    # (systems threat shot missilecam approach wing strike dock objective), or 'shell' (the board's shell) / 'frame' (its layout, anchor, shade and furniture). Empty: every page plus the rest of the check.
+    # (systems threat shot missilecam approach wing strike dock objective), or 'shell' (the board's shell) / 'frame' (its layout, anchor, shade and furniture) / 'lines' (the wing's lamp line, gauge line and ticker at the declutter levels). Empty: every page plus the rest of the check.
     [string]$Pages = '',
     # The TAC BOARD spec folder: its cockpit capture is the backdrop of the renders, so they line up with its shots/.
     [string]$SpecDirectory = ''

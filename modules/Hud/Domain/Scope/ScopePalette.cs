@@ -4,9 +4,10 @@ using NOAvionics;
 namespace BoscaliSummer.Modules.Hud.Domain
 {
     /// <summary>
-    /// The scope's eight colour tokens, pure. Ink, caution (amber) and warning (red) are the player's HUD theme; hi, dim and faint are
-    /// derived from the ink (hi = ink toward white, dim = the ink at <see cref="DimAlpha"/>, furniture only, faint = ink over the plate), so a
-    /// different HUD theme recolours the whole board. Plate and bg are the board's near-black glass.
+    /// The scope's colour tokens, pure. Ink, caution (amber) and warning (red) are the player's HUD theme; hi and dim are
+    /// derived from the ink (hi = ink toward white, dim = the ink at <see cref="DimAlpha"/>, furniture only), so a
+    /// different HUD theme recolours the whole board. Faint is dim (LAYOUT.md 1: there is no fourth ink level; the name stays for the painters that still say it).
+    /// Plate and bg are near-black: there is no plate to draw them on, so only text that sits on a chip and the shade use them.
     /// </summary>
     internal readonly struct ScopePalette
     {
@@ -15,7 +16,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>LAYOUT.md 1: DIM is the ink at 0.70 over whatever is behind (there is no plate); DIM text never drops under 0.89 of it (0.623 of the ink).</summary>
         public const float DimAlpha = 0.70f, DimTextFloor = 0.89f;
 
-        private readonly Rgba ink, hi, dim, faint, amber, red;
+        private readonly Rgba ink, hi, dim, amber, red;
 
         public ScopePalette(Rgba ink, Rgba amber, Rgba red)
         {
@@ -24,7 +25,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
             this.red = red.WithAlpha(1f);
             hi = Mix(this.ink, new Rgba(1f, 1f, 1f), 0.58f);
             dim = this.ink.WithAlpha(DimAlpha);
-            faint = Mix(PlateColor, this.ink, 0.20f);
         }
 
         /// <summary>The token's colour at <paramref name="alpha"/> (a token that has an alpha of its own, dim, is multiplied by it).</summary>
@@ -34,8 +34,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
             switch (tone)
             {
                 case ScopeTone.Hi: c = hi; break;
-                case ScopeTone.Dim: c = dim; break;
-                case ScopeTone.Faint: c = faint; break;
+                case ScopeTone.Dim:
+                case ScopeTone.Faint: c = dim; break;
                 case ScopeTone.Amber: c = amber; break;
                 case ScopeTone.Red: c = red; break;
                 case ScopeTone.Plate: c = PlateColor; break;

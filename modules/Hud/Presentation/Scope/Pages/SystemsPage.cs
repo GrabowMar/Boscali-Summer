@@ -168,24 +168,23 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             if (!ready) return;
             now = p.Now;
-            PaintAirframe(g, p.Now, 26f, 60f, 24f);
+            PaintAirframe(g, p.Now, 26f, 63f, 24f);
 
-            // Condition tags, most severe first; nominal words dim when nothing is wrong.
+            // The strip's three columns share one 16 unit row grid (LAYOUT.md 3.5, 12.1): R0..R4 = 31, 47, 63, 79, 95. Condition tags, most severe first (open tags 18 apart); the nominal words are data too (INK) and sit on
+            // R1..R3 when nothing is wrong. No column dividers: the gaps between the three columns (conditions, fuel and base, weather) are the separators.
             if (rowCount > 0)
                 for (int i = 0; i < rowCount; i++)
                     g.PlateTag(rows[i].Legend, 52f, 33f + i * 18f, SystemsMath.ToneOf(rows[i].State));
             else
             {
-                if (d.Damage.Engines > 0) g.Text(ScopeStr.Cat("ENG ", d.Damage.Engines - d.Damage.EnginesOut, "/", d.Damage.Engines, null), 54f, 42f, Dim, alpha: 0.85f);
-                g.Text("TANKS OK", 54f, 60f, Dim, alpha: 0.85f);
-                g.Text(ScopeStr.Cat("STR ", 100 - SystemsMath.Percent(d.Damage.DetachedRatio), "%"), 54f, 78f, Dim, alpha: 0.85f);
+                if (d.Damage.Engines > 0) g.Text(ScopeStr.Cat("ENG ", d.Damage.Engines - d.Damage.EnginesOut, "/", d.Damage.Engines, null), 54f, 47f, Ink);
+                g.Text("TANKS OK", 54f, 63f, Ink);
+                g.Text(ScopeStr.Cat("STR ", 100 - SystemsMath.Percent(d.Damage.DetachedRatio), "%"), 54f, 79f, Ink);
             }
 
-            g.Line(134f, 28f, 134f, 94f, Faint);
-            FuelBlock(g, 142f, 36f, 156f);
-            if (d.Fuel.Field != null && !float.IsNaN(d.Fuel.FieldM)) BaseBlock(g, 142f, 88f, 156f, p.Units);
-            g.Line(306f, 28f, 306f, 94f, Faint);
-            WeatherBlock(g, 314f, 38f);
+            FuelBlock(g, 142f, 31f, 156f);
+            if (d.Fuel.Field != null && !float.IsNaN(d.Fuel.FieldM)) BaseBlock(g, 142f, 79f, 156f, p.Units);
+            WeatherBlock(g, 310f, 35f);
         }
 
         private void PaintAirframe(ScopeCanvas g, float t, float cx, float cy, float s)
@@ -323,7 +322,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 ReadOnlySpan<char> words = min < 1 ? "END <1 MIN" : min < 100 ? ScopeStr.Cat("END ", min, " MIN") : ScopeStr.Cat("END ", min / 60, (min % 60) < 10 ? "H0" : "H", min % 60, null);
                 g.Text(words, x + w, y, et, align: ScopeAlign.Right, bold: et != Dim);
             }
-            float by = y + 12f, bh = 10f;
+            float by = y + 11f, bh = 10f;      // the bar is centred on R1 (y + 16)
             g.Bar(x, by, w, bh, f.Level, tone);
             if (f.HasNeed)
             {
@@ -334,7 +333,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if ((d.Damage.Flags & DamageFlags.FuelLeak) != 0 && burn > 0f)
                 g.Text(ScopeStr.Cat("LEAK -", burn, 1, "%/M"), x + w, by + bh + 11f, Amber, align: ScopeAlign.Right, bold: true);
             else if (f.HasNeed)
-                g.Text(ScopeStr.Cat("BINGO ", SystemsMath.Percent(f.Need), "%  JOKER ", SystemsMath.Percent(f.Need + FuelEndurance.JokerMargin), "%"), x, by + bh + 12f, Dim);
+                g.Text(ScopeStr.Cat("BINGO ", SystemsMath.Percent(f.Need), "%  JOKER ", SystemsMath.Percent(f.Need + FuelEndurance.JokerMargin), "%"), x, by + bh + 11f, Dim);
         }
 
         private void BaseBlock(ScopeCanvas g, float x, float y, float w, NOAvionics.AvUnits units)
@@ -345,34 +344,35 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Path(n, Hi);
             int margin = SystemsMath.MarginPoints(f);
             ScopeTone mt = SystemsMath.MarginTone(margin);
-            // The name has the line: the margin figure (at the right edge) is shortened, then dropped, before a character of the name is cut, and a blank always separates it from the distance.
-            int room = (int)((w - 18f) / (ScopeText.DesignAdvance * 12f)), form = 2;
-            if (f.HasNeed) form = ScopeStr.FitMargin(f.Field, f.FieldM, units, room, SystemsMath.MarginWords(margin, false).Length, SystemsMath.MarginWords(margin, true).Length, out room);
-            if (form < 2) g.Text(SystemsMath.MarginWords(margin, form == 1), x + w, y, mt, align: ScopeAlign.Right, bold: mt != Ink);
-            g.Text(ScopeStr.Distance(f.Field, f.FieldM, units, room), x + 18f, y, Ink);
+            // Two rows 16 apart (LAYOUT.md 3.5, 12.1): the name over the distance and the margin figure at the right edge, so a long name never meets the margin. The margin is shortened, then dropped, before
+            // a blank is lost between it and the distance; the name has the first row to itself (the bearing arrow reaches 13, the words start at 22).
+            int room = (int)((w - 22f) / (ScopeText.DesignAdvance * 12f)), form = 2;
+            if (f.HasNeed) form = ScopeStr.FitMargin(null, f.FieldM, units, room, SystemsMath.MarginWords(margin, false).Length, SystemsMath.MarginWords(margin, true).Length, out _);
+            g.Text(ScopeStr.Name(f.Field, room), x + 22f, y, Ink);
+            g.Text(ScopeStr.Distance(null, f.FieldM, units, room), x + 22f, y + 16f, Ink);
+            if (form < 2) g.Text(SystemsMath.MarginWords(margin, form == 1), x + w, y + 16f, mt, align: ScopeAlign.Right, bold: mt != Ink);
         }
 
         /// <summary>
-        /// The wind: a dial turning with the nose (the arrow is where the air is going, relative to it) and, beside it, the WIND label with the direction it blows from and, under it, the speed with a space before its unit ("WIND 270" over "33 KM/H"), and IN CLOUD under that while the aircraft is in a deck.
-        /// Weather is optional: without it nothing is drawn (no wind reading, no dial).
+        /// The wind (LAYOUT.md 3.5, 12.1): a dial turning with the nose (the arrow is where the air is going, relative to it) and, beside it, the DIM label WIND over the direction the air blows from and the speed with its unit
+        /// ("180/0 KM/H"), on the strip's 16 unit rows, and IN CLOUD under that while the aircraft is in a deck. Weather is optional: without it nothing is drawn (no wind reading, no dial).
         /// </summary>
         private void WeatherBlock(ScopeCanvas g, float x, float y)
         {
             if (!d.HasWind && !(d.HasCloud && d.InCloud)) return;
-            float row = y + 6f;
+            float row = y + 12f;
             if (d.HasWind)
             {
-                float cx = x + 18f, cy = y + 22f, a = d.WindFromDeg + 180f - d.HeadingDeg;
+                float cx = x + 18f, cy = y + 20f, a = d.WindFromDeg + 180f - d.HeadingDeg;
                 g.Ring(cx, cy, 17f, Faint);
                 g.Line(cx, cy - 19f, cx, cy - 15f, Dim);
                 ScopeCanvas.Polar(a, 13f, out float hx, out float hy);
                 ScopeCanvas.Polar(a + 180f, 13f, out float tx, out float ty);
                 g.Arrow(cx + tx, cy + ty, cx + hx, cy + hy, Ink, 1f, 1f, 5f);
                 int dir = SystemsMath.WindFromDegrees(d.WindFromDeg);
-                float label = g.Text("WIND ", x + 44f, row, Dim);
-                g.Text(ScopeStr.Cat(dir < 10 ? "00" : dir < 100 ? "0" : "", dir), x + 44f + label, row, Ink);
-                g.Text(ScopeStr.Cat("", (int)Math.Round(NOAvionics.AvUnitTable.Speed(d.WindMps, d.Units)), ScopeStr.SpeedUnitSp(d.Units)), x + 44f, row + 18f, Ink);
-                row += 36f;
+                g.Text("WIND", x + 44f, y - 4f, Dim);
+                g.Text(ScopeStr.Cat(dir < 10 ? "00" : dir < 100 ? "0" : "", dir, "/", (int)Math.Round(NOAvionics.AvUnitTable.Speed(d.WindMps, d.Units)), ScopeStr.SpeedUnitSp(d.Units)), x + 44f, row, Ink);
+                row += 16f;
             }
             if (d.HasCloud && d.InCloud) g.Text("IN CLOUD", x + 44f, row, Hi, bold: true);
         }

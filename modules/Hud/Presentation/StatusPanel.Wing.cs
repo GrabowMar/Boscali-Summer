@@ -5,9 +5,9 @@ using static BoscaliSummer.Core.Contracts.ScopeTone;
 
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
-    // The wing side of the board, minus the page (StatusPanel.Page.cs): the lamp line, the gauge line and the notice ticker, each in its ScopeLayout rectangle on the shell surface (box coordinates). Their data
-    // is read here too (PresentLamps, PresentGauges, TickerWords). Nothing here touches the stores side. The lamps and gauges are drawn as words alone for now, to fit the 12 unit lines (the wing task gives them
-    // their markers and glyphs).
+    // The wing side of the board, minus the page (StatusPanel.Page.cs): the lamp line, the gauge line and the notice ticker (LAYOUT.md 3.4, 3.6, 3.7), each in its ScopeLayout rectangle on the shell surface (box
+    // coordinates). Their data is read here too (PresentLamps, PresentGauges, TickerWords). Nothing here touches the stores side. Ordinary ink only: a marker square and a word per lamp, a glyph, a label and a value
+    // per gauge, a tone tick and bold words for the notice.
     internal sealed partial class StatusPanel
     {
         private readonly LampChange lampChange = new LampChange();
@@ -15,26 +15,28 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly Lamp[] threatLamps = new Lamp[HudThreats.Count];
         private readonly bool[] recent = new bool[HudLamps.Count];
         private readonly int[] lampOrder = new int[HudLamps.Count];
+        private readonly float[] lampWidth = new float[HudLamps.Count], lampLeft = new float[HudLamps.Count], threatWidth = new float[HudThreats.Count], threatLeft = new float[HudThreats.Count];
+        private readonly int[] threatOrder = new int[HudThreats.Count];
         private readonly GaugeSpec[] pageGauges = new GaugeSpec[GaugeRow.Slots], registered = new GaugeSpec[16], shown = new GaugeSpec[GaugeRow.Slots];
-        private readonly float[] gaugeWidth = new float[GaugeRow.Slots];
+        private readonly float[] gaugeLabel = new float[GaugeRow.Slots], gaugeValue = new float[GaugeRow.Slots], gaugeSub = new float[GaugeRow.Slots], gaugeWidth = new float[GaugeRow.Slots], gaugeX = new float[GaugeRow.Slots];
+        private readonly int[] gaugeRow = new int[GaugeRow.Slots];
         private int lampCount, gaugeCount, gaugeLines;
+        /// <summary>The gauges keep their sub-words (they do while two lines hold the gauges with them: <see cref="GaugeRow.Lay"/>).</summary>
+        private bool gaugeSubs;
         /// <summary>The lamp row has a lamp to draw (<see cref="lampOrder"/> for the system lamps, a bit per threat lamp in <see cref="threatMask"/>).</summary>
         private bool lampRow;
         private int threatMask;
         private bool booting, shellBeat;
         private float bootAge;
-        private string tickerWords, tickerSourceText;
+        private string tickerWords, tickerCount, tickerSourceText;
         private int tickerSourceCount, tickerSourcePhase;
         private HudTone tickerSourceTone;
-
-        /// <summary>The lamp slots (the old lamp cells' widths): the system lamps from the left, the threat lamps against the right end.</summary>
-        private const float LampW = 40f, ThreatLampW = 44f, MissileLampW = 46f, LampGap = 2f;
 
         // ------------------------------------------------------------------------------------------------ update
 
         /// <summary>
-        /// Lamp states, the page overrides (an engine out lights ENG whatever page shows) and the "just changed" rule, then which lamps the strip draws: none with its switch off; at
-        /// Minimal only the threat lamps; unlit ones only at Full (or while the spawn lamp test lights them all); what is drawn is packed with no gap, the system lamps from the left and the threat lamps against the right end. A strip with nothing to draw takes no room.
+        /// Lamp states, the page overrides (an engine out lights ENG whatever page shows) and the "just changed" rule, then which lamps the line draws: none with its switch off; at
+        /// Minimal only the threat lamps; unlit ones only at Full (or while the spawn lamp test lights them all). A line with nothing to draw takes no room.
         /// </summary>
         private void PresentLamps(BoardFrame frame)
         {
@@ -82,7 +84,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
         }
 
-        /// <summary>The live gauges (the page's own first, then the registered ones by rank) and how many lines of the wing they pack into (<see cref="ScopeLayout.GaugeLines"/>); none when the pilot's switch or the declutter level is off.</summary>
+        /// <summary>
+        /// The live gauges (the page's own first, then the registered ones by rank), the widths of their words and how they pack into the gauge line (<see cref="GaugeRow.Lay"/>: one line or two, the sub-words kept while
+        /// two lines hold them); none when the pilot's switch or the declutter level is off.
+        /// </summary>
         private void PresentGauges()
         {
             // The gauge row's own switch (or the declutter level) is off: nothing is read for it and it takes no room.
@@ -93,11 +98,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             for (int i = 0; i < ScopeGauges.Count && reg < registered.Length; i++)
                 if (ScopeGauges.TryRead(i, out GaugeSpec spec)) registered[reg++] = spec;
             gaugeCount = GaugeRow.Merge(pageGauges, own, registered, reg, shown);
-            for (int i = 0; i < gaugeCount; i++) gaugeWidth[i] = ScopeCanvas.TextW(shown[i].Label) + GaugeWordGap + ScopeCanvas.TextW(shown[i].Text);
-            gaugeLines = ScopeLayout.GaugeLines(new ReadOnlySpan<float>(gaugeWidth, 0, gaugeCount));
+            for (int i = 0; i < gaugeCount; i++)
+            {
+                gaugeLabel[i] = ScopeCanvas.TextW(shown[i].Label);
+                gaugeValue[i] = ScopeCanvas.TextW(shown[i].Text);
+                gaugeSub[i] = ScopeCanvas.TextW(shown[i].Sub);
+            }
+            gaugeLines = GaugeRow.Lay(gaugeLabel, gaugeValue, gaugeSub, gaugeCount, gaugeWidth, out gaugeSubs);
+            GaugeRow.Pack(new ReadOnlySpan<float>(gaugeWidth, 0, gaugeCount), gaugeX, gaugeRow);
         }
 
-        /// <summary>The ticker's words, rebuilt only when the notice, its count, its phase or its tone changed.</summary>
+        /// <summary>The ticker's words and its repeat count, rebuilt only when the notice, its count, its phase or its tone changed.</summary>
         private string TickerWords(in TickerLine line)
         {
             int phase = NoticeTicker.Phase(line);
@@ -108,8 +119,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 tickerSourceCount = line.Count;
                 tickerSourcePhase = phase;
                 tickerSourceTone = line.Tone;
-                // The words carry the repeat count ("x3", from NoticeTicker); a warning says so in words, not only in red.
+                // A warning says so in words, not only in red.
                 tickerWords = (line.Tone == HudTone.Warning ? "WARNING · " : "") + NoticeTicker.Words(line).ToUpperInvariant();
+                tickerCount = NoticeTicker.CountWord(line);
             }
             return tickerWords;
         }
@@ -132,28 +144,31 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         // ---- the lamp line
 
+        /// <summary>The system lamps from the left end, the threat lamps against the right end (<see cref="LampLine.Place"/>): one that is not drawn leaves no slot at Lean and Minimal, and a slot at Full.</summary>
         private void PaintLamps(ScopeCanvas g, in BoardRect r, bool flashOn)
         {
-            int total = lampCount + HudThreats.Count;
+            int total = lampCount + HudThreats.Count, threats = 0;
+            for (int k = 0; k < lampCount; k++) lampWidth[k] = LampLine.Width(lamps[lampOrder[k]].Legend.Length);
+            for (int i = 0; i < HudThreats.Count; i++)
+                if ((threatMask & (1 << i)) != 0) { threatOrder[threats] = i; threatWidth[threats++] = LampLine.Width(threatLamps[i].Legend.Length); }
+            LampLine.Place(new ReadOnlySpan<float>(lampWidth, 0, lampCount), new ReadOnlySpan<float>(threatWidth, 0, threats), allow.DarkLamps || booting, r.W, lampLeft, threatLeft);
             for (int k = 0; k < lampCount; k++)
             {
                 int i = lampOrder[k];
-                DrawLamp(g, r.X + k * (LampW + LampGap), r.Y, LampW, lamps[i], recent[i], k, total, flashOn);
+                DrawLamp(g, r.X + lampLeft[k], r.Y + ScopeLayout.LampH / 2f, lamps[i], recent[i], k, total, flashOn);
             }
-            // The threat lamps pack against the right end, in order: one that is not drawn leaves no gap.
-            float tx = r.Right;
-            for (int i = HudThreats.Count - 1; i >= 0; i--)
+            for (int k = 0; k < threats; k++)
             {
-                if ((threatMask & (1 << i)) == 0) continue;
-                float w = i == 2 ? MissileLampW : ThreatLampW;
-                tx -= w;
-                DrawLamp(g, tx, r.Y, w, threatLamps[i], false, lampCount + i, total, flashOn);
-                tx -= LampGap;
+                int i = threatOrder[k];
+                DrawLamp(g, r.X + threatLeft[k], r.Y + ScopeLayout.LampH / 2f, threatLamps[i], false, lampCount + i, total, flashOn);
             }
         }
 
-        /// <summary>One lamp: its legend in its slot, lit (bold, in its tone) or dark (DIM); a warning or a lamp in transition dims with the beat. The spawn lamp test lights them in a sweep.</summary>
-        private void DrawLamp(ScopeCanvas g, float x, float y, float w, in Lamp lamp, bool changed, int index, int total, bool flashOn)
+        /// <summary>
+        /// One lamp: a 4 unit square and its word. Lit, the square is filled and the word bold, in the lamp's tone (BRIGHT for a mode that is on, amber for a caution, red for a warning); dark, the square is a hollow DIM
+        /// and the word regular DIM. A warning or a lamp in transition dims with the beat. The spawn lamp test lights them in a sweep.
+        /// </summary>
+        private void DrawLamp(ScopeCanvas g, float x, float cy, in Lamp lamp, bool changed, int index, int total, bool flashOn)
         {
             bool lit, blink;
             ScopeTone tone = SystemsMath.ToneOf(lamp.State);
@@ -164,35 +179,46 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 blink = lamp.State != LampState.Dark && (lamp.Flash || lamp.State == LampState.Warning);
             }
             if (blink) shellBeat = true;
-            g.Text(lamp.Legend, x + w / 2f, y + ScopeLayout.LampH / 2f, lit ? (tone == Ink ? Hi : tone) : Dim, 12f, ScopeAlign.Center, lit, blink && !flashOn ? 0.5f : 1f);
+            bool dip = blink && !flashOn;
+            if (lit)
+            {
+                if (tone == Ink) tone = Hi;
+                g.Marker(x, cy, 4f, tone, true, dip ? 0.45f : 1f);
+                g.Text(lamp.Legend, x + LampLine.Marker, cy, tone, 12f, ScopeAlign.Left, true, dip ? 0.55f : 1f);
+            }
+            else
+            {
+                g.Marker(x, cy, 4f, Dim, false);
+                g.Text(lamp.Legend, x + LampLine.Marker, cy, Dim);
+            }
         }
 
         // ---- the gauge line
 
-        /// <summary>Between a gauge's label and its value.</summary>
-        private const float GaugeWordGap = 6f;
-
-        /// <summary>The live gauges, packed from the left like <see cref="ScopeLayout.GaugeLines"/> counts them: the label (DIM, or in the tone of a warning gauge) and the value in bold.</summary>
+        /// <summary>
+        /// The live gauges, packed from the left like <see cref="GaugeRow.Pack"/> counts them, each a glyph, its label (DIM, or in the tone of a warning gauge), its value in bold (BRIGHT, or the tone of a warning) and, while
+        /// the line has room, its sub-word in INK. The glyph is 6 in radius about 7 in from the gauge's left; a third line is never drawn.
+        /// </summary>
         private void PaintGauges(ScopeCanvas g, in BoardRect r, bool flashOn)
         {
-            float x = 0f, y = r.Y + ScopeLayout.GaugeLine1 / 2f;
             for (int i = 0; i < gaugeCount; i++)
             {
+                if (gaugeRow[i] > 1) break;
                 ref readonly GaugeSpec s = ref shown[i];
-                if (x > 0f && x + ScopeLayout.GaugeSpace + gaugeWidth[i] > r.W) { x = 0f; y += ScopeLayout.GaugePitch; }
-                if (x > 0f) x += ScopeLayout.GaugeSpace;
+                float x = r.X + gaugeX[i], cy = r.Y + ScopeLayout.GaugeLine1 / 2f + gaugeRow[i] * ScopeLayout.GaugePitch;
                 bool warn = s.Tone == Amber || s.Tone == Red;
                 if (s.Flash || s.Ready) shellBeat = true;
-                float alpha = s.Flash && !flashOn ? 0.5f : 1f, labelW = ScopeCanvas.TextW(s.Label);
-                g.Text(s.Label, r.X + x, y, warn ? s.Tone : Dim, 12f, ScopeAlign.Left, warn, alpha);
-                g.Text(s.Text, r.X + x + labelW + GaugeWordGap, y, warn ? s.Tone : Hi, 12f, ScopeAlign.Left, true, alpha);
-                x += gaugeWidth[i];
+                float alpha = s.Flash && !flashOn ? 0.5f : 1f, vx = x + GaugeRow.GlyphW + (float)Math.Ceiling(gaugeLabel[i]) + GaugeRow.WordGap;
+                GaugePainter.Glyph(g, s, x + 7f, cy, 6f, s.Ready && !flashOn ? 0.55f : 1f);
+                g.Text(s.Label, x + GaugeRow.GlyphW, cy, warn ? s.Tone : Dim, 12f, ScopeAlign.Left, warn);
+                g.Text(s.Text, vx, cy, warn ? s.Tone : Hi, 12f, ScopeAlign.Left, true, alpha);
+                if (gaugeSubs && gaugeSub[i] > 0f) g.Text(s.Sub, vx + (float)Math.Ceiling(gaugeValue[i]) + GaugeRow.SubGap, cy, Ink);
             }
         }
 
         // ---- the ticker
 
-        /// <summary>The notice: a tone tick, then its words in bold in the same tone (the count is in the words). A sticky warning pulses.</summary>
+        /// <summary>The notice: a tone tick, then its words in bold in the same tone, and the repeat count in bold at the right end. A sticky warning pulses.</summary>
         private void PaintTicker(ScopeCanvas g, in BoardRect r, bool flashOn)
         {
             TickerLine line = board.Ticker;
@@ -200,8 +226,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             bool sticky = line.Tone == HudTone.Warning;
             if (sticky || NoticeTicker.IsFresh(line)) shellBeat = true;
             bool dip = sticky && !flashOn;
+            float cy = r.Y + r.H / 2f;
+            string words = TickerWords(line);
+            float room = r.W - 10f;
             g.ToneTick(r.X, r.Y, tone, dip ? 0.55f : 1f);
-            g.FitText(TickerWords(line), r.X + 10f, r.Y + r.H / 2f, r.W - 10f, tone, 12f, 12f, ScopeAlign.Left, true, dip ? 0.8f : 1f);
+            if (tickerCount != null)
+            {
+                g.Text(tickerCount, r.Right, cy, tone, 12f, ScopeAlign.Right, true);
+                room -= ScopeCanvas.TextW(tickerCount) + 10f;
+            }
+            g.FitText(words, r.X + 10f, cy, room, tone, 12f, 12f, ScopeAlign.Left, true, dip ? 0.8f : 1f);
         }
     }
 }

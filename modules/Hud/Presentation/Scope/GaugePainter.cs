@@ -1,81 +1,52 @@
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Modules.Hud.Domain;
 using static BoscaliSummer.Core.Contracts.ScopeTone;
 
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
     /// <summary>
-    /// Draws one <see cref="GaugeSpec"/> into its 109 x 64 cell of the old gauge row (the prototype's <c>drawGauge</c>). The visor board's gauge line is 12 high and does not use it (StatusPanel.Wing.cs draws the
-    /// words alone); the wing task takes its glyphs (arc, ring, needle, bars, bar, mode rail) down to the line's 6 unit radius.
+    /// The glyph of a <see cref="GaugeSpec"/> on the gauge line (LAYOUT.md 3.6; the prototype's <c>gaugeGlyph</c>): a shape of radius <c>r</c> (6) about (cx, cy), strokes 2 units, the track DIM and the value in INK or
+    /// BRIGHT (the gauge's own tone when it is a caution or a warning). arc: 270 degrees; ring: a full turn; needle: a bearing; bars: signal in quarters; bar: a 3 unit bar; mode: a dashed line with a chevron riding it.
     /// </summary>
     internal static class GaugePainter
     {
-        public static void Draw(ScopeCanvas g, in GaugeSpec s, float x, float y, float w, float h, bool flashOn, float now)
+        public static void Glyph(ScopeCanvas g, in GaugeSpec s, float cx, float cy, float r, float alpha = 1f)
         {
-            ScopeTone tone = s.Tone;
-            bool warn = tone == Amber || tone == Red, flash = s.Flash && flashOn;
-            g.Box(x, y, w, h, warn ? tone : Dim, warn ? 1f : 0.8f, 1f, warn ? tone : Bg, warn ? (flash ? 0.4f : 0.14f) : 0.5f);
-            g.Text(s.Label, x + 6f, y + 10f, warn ? tone : Dim);
-            float v = ScopeCanvas.Clamp01(s.Value), cx = x + 24f, cy = y + 41f, r = 15f;
-            ScopeTone fig = warn ? tone : Hi;
+            ScopeTone tone = s.Tone == Dim ? Ink : s.Tone, fig = tone == Amber || tone == Red ? tone : Hi;
+            float v = ScopeCanvas.Clamp01(s.Value);
             switch (s.Kind)
             {
                 case GaugeKind.Arc:
-                    g.Arc(cx, cy, r, 225f, 135f, Faint, 1f, 4f);
-                    if (v > 0.005f) g.Arc(cx, cy, r, 225f, 225f + 270f * v, tone, 1f, 4f);
-                    ScopeCanvas.Polar(225f + 270f * v, r + 4f, out float ox, out float oy);
-                    ScopeCanvas.Polar(225f + 270f * v, r - 4f, out float ix, out float iy);
-                    g.Line(cx + ix, cy + iy, cx + ox, cy + oy, Hi);
-                    if (s.Ready && (int)(now * 2f) % 2 == 0) g.Ring(cx, cy, r + 5f, Hi, 0.6f);
-                    Figure(g, s, x + 46f, y + 33f, w - 49f, fig);
+                    g.Arc(cx, cy, r, 225f, 135f, Dim, alpha, 2f);
+                    if (v > 0.005f) g.Arc(cx, cy, r, 225f, 225f + 270f * v, fig, alpha, 2f);
                     break;
                 case GaugeKind.Ring:
-                    g.Ring(cx, cy, r, Faint, 1f, 4f);
-                    if (v > 0.005f) g.Arc(cx, cy, r, 0f, 360f * v - 0.01f, v >= 1f ? Hi : tone, 1f, 4f);
-                    g.Text(s.Inner, cx, cy + 1f, Hi, 12f, ScopeAlign.Center, true);
-                    Figure(g, s, x + 46f, y + 33f, w - 49f, fig);
-                    break;
-                case GaugeKind.Bars:
-                    int n = (int)(v * 4f + 0.5f);
-                    for (int i = 0; i < 4; i++)
-                    {
-                        float bh = 6f + i * 4f, bx = x + 8f + i * 8f;
-                        if (i < n) g.Fill(bx, y + 56f - bh, 5f, bh, tone);
-                        else g.Box(bx, y + 56f - bh, 5f, bh, Faint, 0.9f);
-                    }
-                    Figure(g, s, x + 46f, y + 33f, w - 49f, fig);
+                    g.Ring(cx, cy, r, Dim, alpha, 2f);
+                    if (v > 0.005f) g.Arc(cx, cy, r, 0f, 360f * v - 0.01f, v >= 1f ? Hi : tone, alpha, 2f);
                     break;
                 case GaugeKind.Needle:
-                    g.Ring(cx, cy, r, Faint);
-                    g.Line(cx, cy - r - 2f, cx, cy - r + 3f, Dim);
+                    g.Ring(cx, cy, r, Dim, alpha);
                     ScopeCanvas.Polar(s.Angle, r - 1f, out float tx, out float ty);
-                    ScopeCanvas.Polar(s.Angle + 180f, 5f, out float bx2, out float by2);
-                    g.Line(cx + bx2, cy + by2, cx + tx, cy + ty, tone, 1f, 2f);
-                    g.Chevron(cx + tx, cy + ty, s.Angle, 4f, tone, true);
-                    Figure(g, s, x + 46f, y + 33f, w - 49f, fig);
+                    ScopeCanvas.Polar(s.Angle + 180f, 2f, out float bx, out float by);
+                    g.Line(cx + bx, cy + by, cx + tx, cy + ty, tone, alpha, 2f);
+                    break;
+                case GaugeKind.Bars:
+                    int lit = (int)(v * 4f + 0.5f);
+                    for (int i = 0; i < 4; i++)
+                    {
+                        float h = 3f + i * 3f, x = cx - r + 1f + i * 4f;
+                        if (i < lit) g.Fill(x, cy + r - h, 3f, h, tone, alpha);
+                        else g.Fill(x, cy + r - 1f, 3f, 1f, Dim, alpha);
+                    }
                     break;
                 case GaugeKind.Bar:
-                    Figure(g, s, x + 6f, y + 29f, w - 12f, fig);
-                    g.Bar(x + 6f, y + 40f, w - 12f, 8f, v, tone);
-                    for (int i = 0; s.Ticks != null && i < s.TickCount && i < s.Ticks.Length; i++) g.BarTick(x + 6f, y + 40f, w - 12f, 8f, s.Ticks[i], s.TickTone);
-                    g.FitText(s.Sub, x + 6f, y + 56f, w - 12f, Dim);
+                    g.Fill(cx - r, cy - 1f, r * 2f, 3f, Dim, alpha);
+                    g.Fill(cx - r, cy - 1f, (float)System.Math.Round(r * 2f * v), 3f, tone, alpha);
                     break;
-                default:    // Mode: the state word and a progress rail with a chevron riding it toward the diamond
-                    g.FitText(s.Text, x + 6f, y + 30f, w - 12f, warn ? tone : Hi, 18f, 12f, ScopeAlign.Left, true);
-                    float ry = y + 44f;
-                    g.Dashed(x + 6f, ry, x + w - 22f, ry, Dim, 1f, 1f, -now * 10f);
-                    g.Chevron(GaugeRow.RailX(x, w, v), ry, 90f, 4f, tone, true);
-                    g.Diamond(x + w - 14f, ry, 4f, Hi);
-                    g.FitText(s.Sub, x + 6f, y + 57f, w - 12f, Dim);
+                default:
+                    g.Line(cx - r, cy, cx + r, cy, Dim, alpha, 1f, 3f, 2f);
+                    g.Chevron(cx - r + r * 2f * (v * 3f % 1f), cy, 90f, 3f, tone, true, alpha);
                     break;
             }
-        }
-
-        /// <summary>The figure (16 px bold) and the short word under it.</summary>
-        private static void Figure(ScopeCanvas g, in GaugeSpec s, float x, float y, float maxW, ScopeTone tone)
-        {
-            g.FitText(s.Text, x, y, maxW, tone, 16f, 12f, ScopeAlign.Left, true);
-            if (s.Kind != GaugeKind.Bar) g.FitText(s.Sub, x, y + 18f, maxW, Dim);
         }
     }
 }

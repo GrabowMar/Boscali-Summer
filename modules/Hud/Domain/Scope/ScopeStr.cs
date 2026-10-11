@@ -98,6 +98,19 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return new ReadOnlySpan<char>(Scratch, 0, n + dist);
         }
 
+        /// <summary>The base's name on a row of its own: upper case, trimmed, cut with an ellipsis so it fits <paramref name="maxChars"/>; empty with no name or no room.</summary>
+        public static ReadOnlySpan<char> Name(string name, int maxChars)
+        {
+            if (string.IsNullOrEmpty(name) || maxChars < 1) return default;
+            int a = 0, b = name.Length;
+            while (a < b && char.IsWhiteSpace(name[a])) a++;
+            while (b > a && char.IsWhiteSpace(name[b - 1])) b--;
+            int len = Math.Min(Math.Min(b - a, maxChars), Scratch.Length), keep = b - a > len ? len - 1 : len;
+            for (int i = 0; i < keep; i++) Scratch[i] = char.ToUpperInvariant(name[a + i]);
+            if (keep < len) Scratch[keep] = '…';
+            return new ReadOnlySpan<char>(Scratch, 0, len);
+        }
+
         /// <summary>Blank characters kept between the distance and the margin figure on the SYSTEMS strip's base line.</summary>
         public const int MarginGap = 1;
 

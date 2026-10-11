@@ -20,7 +20,7 @@ using static UnityCheckHarness;
 //   and reproduces the prototype page's scenario for that t (pages/<id>.js sim(t)). Fixtures are the ONLY place scripted data lives.
 //   A fixture that does not touch the scene is a stub: that page is skipped.
 // Output: <page>-t<sec>-<W>x<H>.png (t = 2, 6, 10, 14 at 1920x1080 and t = 6 at 1280x720), the same names as the spec shots.
-// Command line (after -executeMethod): -pages systems,threat   only those pages' fixtures (default: all, plus the rest of the check; 'shell' = the board shell alone, 'frame' = the board's frame alone)
+// Command line (after -executeMethod): -pages systems,threat   only those pages' fixtures (default: all, plus the rest of the check; 'shell' = the board shell alone, 'frame' = the board's frame alone, 'lines' = the wing's lamp, gauge and ticker lines)
 //                                      -spec <spec folder>     draws the shots over the spec's cockpit capture (takeover/assets/bg-cockpit-hud-takeover.jpg: the native top-right panel painted out)
 public static partial class HudLogUnityCheck
 {
@@ -138,7 +138,7 @@ public static partial class HudLogUnityCheck
         string[] names = pages.Length == 0 ? ScopePageNames : pages;
         foreach (string page in names)
         {
-            if (page == "shell" || page == "frame") continue;      // the board shell (HudLogUnityCheck.Scope.Shell.cs) and its frame (HudLogUnityCheck.Scope.Frame.cs), below
+            if (page == "shell" || page == "frame" || page == "lines") continue;      // the board shell (HudLogUnityCheck.Scope.Shell.cs), its frame (HudLogUnityCheck.Scope.Frame.cs) and the wing lines (HudLogUnityCheck.Scope.Lines.cs), below
             Check(Array.IndexOf(ScopePageNames, page) >= 0, "Unknown scope page in -pages: " + page);
             int drawn = 0;
             if (page != "stores") foreach (var shot in ScopeShotTimes) if (RenderScope(page, shot.t, new Vector2(shot.w, shot.h))) drawn++;
@@ -148,6 +148,7 @@ public static partial class HudLogUnityCheck
         }
         if (pages.Length == 0 || Array.IndexOf(pages, "shell") >= 0) ScopeShell();
         if (pages.Length == 0 || Array.IndexOf(pages, "frame") >= 0) ScopeFrame();
+        if (pages.Length == 0 || Array.IndexOf(pages, "lines") >= 0) ScopeLines();
     }
 
     /// <summary>The spec's cockpit capture with the native top-right panel painted out (the backdrop of the takeover shots), else the older clean capture, else a hazy sky.</summary>

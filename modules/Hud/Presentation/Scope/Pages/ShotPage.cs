@@ -204,7 +204,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 bool far = v >= 20f, current = Math.Abs(v - shown) < 0.5f;
                 g.Ring(OX, OY, r, far ? Dim : Faint, far ? 0.8f : 1f, 1f, Ink, 0f, far ? 0f : 4f, far ? 0f : 3f);
                 if (OY - r > 44f)
-                    g.Text(current ? ScopeStr.Cat("", (int)v, "KM") : v == Math.Floor(v) ? ScopeStr.Cat("", (int)v, null) : ScopeStr.Cat("", v, 1, null), OX - 4f, OY - r + 1f, current ? Ink : Dim, 12f, ScopeAlign.Right, current);
+                {
+                    ReadOnlySpan<char> label = current ? ScopeStr.Cat("", (int)v, "KM") : v == Math.Floor(v) ? ScopeStr.Cat("", (int)v, null) : ScopeStr.Cat("", v, 1, null);
+                    g.Text(label, OX - 4f, OY - r + 1f, current ? Ink : Dim, 12f, ScopeAlign.Right, current);
+                    float lw = Mathf.Round(ScopeCanvas.TextW(label));
+                    keep.Add(OX - 4f - lw - 2f, OY - r - 8f, lw + 4f, 16f);      // a ring's label is a keep-out: the target tags and the missile tags dodge it (LAYOUT.md 9: it was under them)
+                }
             }
             g.Line(OX, OY, OX, 30f, Faint);
             for (int b = -60; b <= 60; b += 30)
@@ -416,7 +421,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 ScopeTone tone = fly ? Hi : c.State == ShotState.Defeated ? Amber : c.State == ShotState.Hit ? Ink : Dim;
                 g.Box(x, y, w, h, fly || just ? tone : Faint, fly || just ? 1f : 0.9f, 1f, fresh ? Hi : fly ? Ink : tone, fresh ? 0.45f : fly ? 0.14f : just ? 0.12f : 0f);
                 Glyph(g, x + 7f, y + h / 2f, c.State, fly);
-                g.FitText(c.Name, x + 13f, y + h / 2f + 1f, w - 15f, fly ? Hi : c.State == ShotState.Defeated ? Amber : c.State == ShotState.Miss ? Dim : Ink, 12f, 12f, ScopeAlign.Left, fly);
+                g.FitText(c.Name, x + 12f, y + h / 2f + 1f, w - 13f, fly ? Hi : c.State == ShotState.Defeated ? Amber : c.State == ShotState.Miss ? Dim : Ink, 12f, 12f, ScopeAlign.Left, fly);
                 if (fly) g.Fill(x + 2f, y + h - 3f, Mathf.Round((w - 4f) * Mathf.Clamp01(c.Frac)), 2f, Hi);
             }
         }

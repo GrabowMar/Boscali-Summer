@@ -26,8 +26,46 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 Text(flag, end - Inset, cy, Dim, 12f, ScopeAlign.Right);
                 Line(end - Inset + Clear, cy, end, cy, Dim);
             }
-            Fill(end - 2f, cy - 2f, 4f, 4f, Dim);
-            Line(end + 2f, cy - 2f, end + 8f, cy - 8f, Dim);
+            Terminal(end, cy);
+        }
+
+        /// <summary>The end of a shelf: a 4 x 4 DIM node centred on (<paramref name="x"/>, <paramref name="cy"/>) and a 6 unit 45 degree stub up and to the right, whose tip lands 8 units on.</summary>
+        private void Terminal(float x, float cy)
+        {
+            Fill(x - 2f, cy - 2f, 4f, 4f, Dim);
+            Line(x + 2f, cy - 2f, x + 8f, cy - 8f, Dim);
+        }
+
+        /// <summary>
+        /// The page's header (LAYOUT.md 3.5): a caption shelf like <see cref="CaptionShelf"/>, 8 shorter than the page (node and stub, the tip on its edge). A 4 x 4 BRIGHT square on the start of the hairline, the
+        /// <paramref name="title"/> as its caption (12 bold BRIGHT at x + 12) and the <paramref name="headline"/> its right-hand caption (right-aligned to x + w - 20, in <paramref name="tone"/>, <paramref name="size"/> and
+        /// <paramref name="bold"/>). Without <see cref="Furniture"/> (Lean, Minimal) there is no shelf and no title: the headline alone, right-aligned to x + w - 4.
+        /// </summary>
+        public void PageShelf(float x, float y, float w, ReadOnlySpan<char> title, ReadOnlySpan<char> headline, ScopeTone tone, float size, bool bold, float alpha)
+        {
+            float cy = y + 6f;
+            if (!Furniture)
+            {
+                if (!headline.IsEmpty) Text(headline, x + w - 4f, cy, tone, size, ScopeAlign.Right, bold, alpha);
+                return;
+            }
+            float end = x + w - 8f, cur = x, titleW = (float)Math.Ceiling(TextW(title)), headW = (float)Math.Ceiling(TextW(headline, size));
+            if (!title.IsEmpty)
+            {
+                Line(cur, cy, x + 8f, cy, Dim);
+                Text(title, x + 12f, cy, Hi, 12f, ScopeAlign.Left, true);
+                cur = x + 12f + titleW + 4f;
+            }
+            if (!headline.IsEmpty)
+            {
+                float gap = end - 12f - headW - 4f;
+                if (gap > cur) Line(cur, cy, gap, cy, Dim);
+                Text(headline, end - 12f, cy, tone, size, ScopeAlign.Right, bold, alpha);
+                cur = end - 8f;
+            }
+            if (end > cur) Line(cur, cy, end, cy, Dim);
+            Marker(x, cy, 4f, Hi, true);
+            Terminal(end, cy);
         }
 
         /// <summary>
@@ -50,8 +88,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public ScopeRect OpenTag(ReadOnlySpan<char> s, float x, float y, ScopeTone tone = Ink, float size = 12f, ScopeAlign align = ScopeAlign.Left, float pad = 3f, float alpha = 1f)
         {
             ScopeRect box = TagBox(s, x, y, size, align, pad);
-            Fill(box.X, box.Y, 2f, box.H, tone, alpha);
-            Text(s, box.X + box.W / 2f, box.Y + box.H / 2f + 0.5f, tone, size, ScopeAlign.Center, true, alpha);
+            Fill(box.X, box.Y + 1f, 2f, box.H - 2f, tone, alpha);
+            Text(s, box.X + box.W / 2f + 1f, box.Y + box.H / 2f + 0.5f, tone, size, ScopeAlign.Center, true, alpha);
             Line(box.X, box.Y + box.H, box.X + box.W, box.Y + box.H, tone, alpha * 0.55f);
             return box;
         }

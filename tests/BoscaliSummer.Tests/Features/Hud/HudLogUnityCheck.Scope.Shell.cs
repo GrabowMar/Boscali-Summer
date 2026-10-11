@@ -68,8 +68,8 @@ public static partial class HudLogUnityCheck
         return words;
     }
 
-    /// <summary>The shell scene's WIDE board: lamp line at 0..12, the stub page at 18..318, a gauge line (the four gauges fit one line) 8 under it and the ticker 6 under that: 356.</summary>
-    private const float FullWide = 356f;
+    /// <summary>The shell scene's WIDE board: lamp line at 6..18, the stub page at 24..314, the gauge line (the four gauges take two lines, 30) 8 under it and the ticker 6 under that: 370.</summary>
+    private const float FullWide = 370f;
 
     private static void ScopeShell()
     {
@@ -84,7 +84,7 @@ public static partial class HudLogUnityCheck
             ShellForce(status, "Threat", 5f);
             Call(status, "Present", frame);
             Canvas.ForceUpdateCanvases();
-            Check(Mathf.Abs(BoardHeight(status) - FullWide * u) < 1f, "A full WIDE wing is 356 units tall (lamp line, page 18..318, one gauge line, ticker): " + BoardHeight(status) / u);
+            Check(Mathf.Abs(BoardHeight(status) - FullWide * u) < 1f, "A full WIDE wing is 370 units tall (lamp line 6..18, page 24..314, two gauge lines, ticker): " + BoardHeight(status) / u);
             object current = Field(status, "page");
             Check((string)current.GetType().GetProperty("Title").GetValue(current) == "THREAT", "The forced stub page is the current page");
             ScopeChecks(status, "shell-full" + res);
@@ -122,20 +122,20 @@ public static partial class HudLogUnityCheck
             ShellScene(frame, 30f, false);
             Call(status, "Present", frame);
             Canvas.ForceUpdateCanvases();
-            Check(Mathf.Abs(BoardHeight(status) - 12f * u) < 1f, "Only the lamp line: a 12 unit box: " + BoardHeight(status) / u);
+            Check(Mathf.Abs(BoardHeight(status) - 18f * u) < 1f, "Only the lamp line: its 12 under the 6 of the caption row, an 18 unit box: " + BoardHeight(status) / u);
             ScopeChecks(status, "shell-lamps" + res);
             Capture(canvas, "shell-lamps" + res + ".png");
 
-            // The pilot's options on the full scene (1080p): a block that is switched off is not drawn and takes no room (the gauge line and the ticker hang under the page and give back their 20 and 18 of the 356; the
+            // The pilot's options on the full scene (1080p): a block that is switched off is not drawn and takes no room (the gauge line and the ticker hang under the page and give back their 36 and 18 of the 370; the
             // lamp line is above the page, which keeps its place), the declutter levels take more away (no gauge line; unlit lamps gone, the rest packed; at Minimal only the threat lamps).
             if (size.x > 1500f)
                 foreach (var c in new (string name, object options, float height, string[] shown, string[] hidden)[]
                 {
-                    ("nogauges", PilotOptions("ShowGauges", false), 338f, new[] { "GEAR", "LOCK" }, new[] { "LANCE" }),
-                    ("noticker", PilotOptions("ShowTicker", false), 338f, new[] { "GEAR", "LANCE" }, new[] { "SAM LAUNCH" }),
+                    ("nogauges", PilotOptions("ShowGauges", false), 334f, new[] { "GEAR", "LOCK" }, new[] { "LANCE" }),
+                    ("noticker", PilotOptions("ShowTicker", false), 352f, new[] { "GEAR", "LANCE" }, new[] { "SAM LAUNCH" }),
                     ("nolamps", PilotOptions("ShowLamps", false), FullWide, new[] { "LANCE" }, new[] { "GEAR", "LOCK", "SPKE" }),
-                    ("lean", PilotOptions("Declutter", Declutter("Lean")), 338f, new[] { "GEAR", "FA", "RDR", "LOCK" }, new[] { "HOVR", "NVG", "SAFE", "ENG", "SPKE", "LANCE" }),
-                    ("minimal", PilotOptions("Declutter", Declutter("Minimal")), 338f, new[] { "LOCK" }, new[] { "GEAR", "FA", "RDR", "HOVR", "SPKE", "LANCE" }),
+                    ("lean", PilotOptions("Declutter", Declutter("Lean")), 334f, new[] { "GEAR", "FA", "RDR", "LOCK" }, new[] { "HOVR", "NVG", "SAFE", "ENG", "SPKE", "LANCE" }),
+                    ("minimal", PilotOptions("Declutter", Declutter("Minimal")), 334f, new[] { "LOCK" }, new[] { "GEAR", "FA", "RDR", "HOVR", "SPKE", "LANCE" }),
                 })
                 {
                     Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
@@ -225,7 +225,7 @@ public static partial class HudLogUnityCheck
 
         status = OptionBoard(size, "threat", 6f, PilotOptions("ScopeMode", Enum.Parse(Type("BoscaliSummer.Core.Contracts.BoardScopeMode"), "Off")), notices, out canvas, out frame);
         Check(!Shown(status, "scopeRect"), "options: ScopeMode Off, no scope");
-        Check(full - BoardHeight(status) >= 300f * u - 1f, "options: ...and the board gives its room back: " + full / u + " -> " + BoardHeight(status) / u);
+        Check(full - BoardHeight(status) >= 290f * u - 1f, "options: ...and the board gives its room back: " + full / u + " -> " + BoardHeight(status) / u);
         Check(notices[0] > 0, "options: ...but the warnings still post (" + notices[0] + " notices)");
         ScopeChecks(status, "options-scopeoff");
         Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);

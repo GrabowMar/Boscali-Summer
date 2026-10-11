@@ -24,7 +24,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public bool Lamps;
         /// <summary>The page's current height in board units, header included (animated between <see cref="ScopeLayout.Compact"/> and <see cref="ScopeLayout.Full"/>); 0: no page.</summary>
         public float PageH;
-        /// <summary>0: no gauge is live; else the lines the live gauges pack into, 1 or 2 (<see cref="ScopeLayout.GaugeLines"/>).</summary>
+        /// <summary>0: no gauge is live; else the lines the live gauges pack into, 1 or 2 (<see cref="GaugeRow.Lay"/>).</summary>
         public int GaugeLines;
         public bool Ticker;
     }
@@ -81,8 +81,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const float SatX = 284f, SatW = 180f, SatH = 72f;
         public const float WingX = 476f, WingW = 440f;
         public const float LampH = 12f;
-        /// <summary>The page starts under the lamp line (y 18) whether or not the lamp line is there.</summary>
-        public const float LampToPage = 6f, WingBodyY = LampH + LampToPage;
+        /// <summary>The lamp line sits at the top of the caption row of the blocks beside it (y 6); the page starts under it (y 24) whether or not the lamp line is there.</summary>
+        public const float LampToPage = 6f, WingBodyY = BlockTop + LampH + LampToPage;
         /// <summary>Between blocks that stand beside or above each other (HERO and SAT 12 in WIDE; PWR BUS and EXPENDABLES, HERO and SAT in STACK).</summary>
         public const float BlockGap = 10f;
         /// <summary>What hangs under the page: the gauge line 8 under it, the ticker 8 under it or 6 under the gauge line.</summary>
@@ -94,10 +94,11 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const float StackW = 448f, StackX = 4f, StackInnerW = 440f;
         public const float StackHeroH = 108f, StackHalfW = 216f, StackHalfX = 228f;
 
-        // ---- LAYOUT.md 3.5: the page. Full page and the compact SYSTEMS strip (header included), the header band of each and the strip under a full page's body.
-        public const float Full = 300f, Compact = 100f;
-        public const float Head = 28f, HeadCompact = 22f, Strip = 26f;
-        public const float WipeSeconds = 0.16f;
+        // ---- LAYOUT.md 3.5: the page. The rectangle of a full page and of the compact SYSTEMS strip (a full page's strip included): the header is a caption shelf in its first 18 units, not a row. The painters keep the
+        // safe area of the old header band (Head, HeadCompact: their first row is under it) and are drawn Lift units higher, so their first row is 20 units under the rectangle's top; Strip is the page strip under a full page's body.
+        public const float Full = 290f, Compact = 96f;
+        public const float Head = 28f, HeadCompact = 22f, Strip = 26f, ShelfRow = 18f;
+        public const float WipeSeconds = 0.18f;
 
         public static BoardGeometry Compute(in BoardBlocks b)
         {
@@ -121,7 +122,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 if (b.Hero) g.Hero = new BoardRect(HeroX, BlockTop, HeroW, HeroH);
                 if (b.Pwr) g.Pwr = new BoardRect(SatX, BlockTop, SatW, SatH);
                 if (b.Exp) g.Exp = new BoardRect(SatX, b.Pwr ? BlockTop + SatH + BlockGap : BlockTop, SatW, SatH);
-                if (b.Lamps) g.Lamps = new BoardRect(WingX, 0f, WingW, LampH);
+                if (b.Lamps) g.Lamps = new BoardRect(WingX, BlockTop, WingW, LampH);
                 y = WingBodyY;
             }
             // The page never depends on what hangs under it.
@@ -137,20 +138,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return g;
         }
 
-        /// <summary>The gauge line's width is shared by its gauges in order, <see cref="GaugeSpace"/> apart, none split: how many lines the <paramref name="widths"/> take, 0 for none. Never more than 2 (the gauges drop their sub-words instead).</summary>
-        public static int GaugeLines(ReadOnlySpan<float> widths)
-        {
-            if (widths.Length == 0) return 0;
-            int lines = 1;
-            float x = 0f;
-            for (int i = 0; i < widths.Length; i++)
-            {
-                if (x > 0f && x + GaugeSpace + widths[i] > WingW) { lines++; x = 0f; }
-                x += (x > 0f ? GaugeSpace : 0f) + widths[i];
-            }
-            return Math.Min(lines, 2);
-        }
-
         /// <summary>
         /// Where the box's top-right corner goes, measured in from the screen's top-right corner in the units of <paramref name="baseUnit"/> (the board unit without the player's Scale): the margins,
         /// moved left by <paramref name="offsetX"/> and down by <paramref name="offsetY"/> (also in base units), then held so the whole box (<paramref name="boxW"/> x <paramref name="boxH"/> board units
@@ -162,8 +149,11 @@ namespace BoscaliSummer.Modules.Hud.Domain
             fromTop = Math.Min((MarginTop + offsetY) * baseUnit, Math.Max(0f, screenH - boxH * unit));
         }
 
-        /// <summary>The page's body height: its height less the strip under a full page's body.</summary>
-        public static float Body(bool compact, bool strip) => (compact ? Compact : Full) - (strip && !compact ? Strip : 0f);
+        /// <summary>How far the painters' body is drawn above its own origin (the old header band less the shelf row): 4 compact, 10 full.</summary>
+        public static float Lift(bool compact) => (compact ? HeadCompact : Head) - ShelfRow;
+
+        /// <summary>The page body as the painters see it (their own height, before the <see cref="Lift"/>): the page's height with the lift put back, less the strip under a full page's body.</summary>
+        public static float Body(bool compact, bool strip) => (compact ? Compact : Full) + Lift(compact) - (strip && !compact ? Strip : 0f);
 
         public static float SafeTop(bool compact) => (compact ? HeadCompact : Head) + 2f;
     }

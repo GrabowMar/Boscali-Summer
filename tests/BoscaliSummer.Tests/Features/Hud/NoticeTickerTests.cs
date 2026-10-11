@@ -48,7 +48,12 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(t.Count == 1 && line.Count == 3 && line.Detail == "AREA 4", "The same notice three times is one line with a count of three");
             TestAssert.That(NoticeTicker.Words(line) == "AREA 4", "Four seconds in it has moved on to its detail");
             line.Age = 0f;
-            TestAssert.That(NoticeTicker.Words(line) == "SUPEREVENT x3", "...and on its text it reads x3: " + NoticeTicker.Words(line));
+            TestAssert.That(NoticeTicker.Words(line) == "SUPEREVENT" && NoticeTicker.CountWord(line) == "x3", "...and on its text it reads SUPEREVENT with the count apart, x3: " + NoticeTicker.Words(line) + " / " + NoticeTicker.CountWord(line));
+            line.Count = 1;
+            TestAssert.That(NoticeTicker.CountWord(line) == null && NoticeTicker.Words(line) == "SUPEREVENT", "A notice that came once has no count word");
+            line.Count = 12;
+            TestAssert.That(NoticeTicker.CountWord(line) == "x12", "Twelve repeats read x12");
+            line.Count = 3;
             TestAssert.That(t.Peek(11.9f, out _) && !t.Peek(12.1f, out _), "Every repeat refreshes the dwell");
             t.Push("events", HudTone.Info, "SUPEREVENT", null, 20f);
             t.Push("weather", HudTone.Info, "SUPEREVENT", null, 20f);
