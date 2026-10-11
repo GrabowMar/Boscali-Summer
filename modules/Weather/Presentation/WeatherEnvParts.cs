@@ -137,7 +137,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
     internal abstract class EnvPart : AvPart
     {
         protected const float Pad = 12f;
-        private readonly AvFrame frame;
+        private readonly AvFrame frame;   // null for a frameless part
         private readonly string variant;
         private readonly List<KeyValuePair<TMP_Text, string>> tints = new List<KeyValuePair<TMP_Text, string>>(16);
         protected EnvGraphic Art;
@@ -147,6 +147,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         {
             Rect = AvLay.Child(parent, name);
             variant = cardVariant;
+            if (cardVariant == null) return;   // frameless: the part sits inside a MetCard that owns the frame
             frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(8f));
             AvLay.Fill(frame.rectTransform);
             frame.Bracket = hasBrackets ? 8f : 0f;
@@ -192,10 +193,13 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
         public override void Restyle()
         {
-            AvStyle c = AvStyleHost.FuiStyle("card " + variant);
-            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
-            frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
-            frame.SetVerticesDirty();
+            if (frame != null)
+            {
+                AvStyle c = AvStyleHost.FuiStyle("card " + variant);
+                frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+                frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
+                frame.SetVerticesDirty();
+            }
             for (int i = 0; i < tints.Count; i++)
                 if (tints[i].Value.Length > 0) tints[i].Key.color = EnvInk.Role(tints[i].Value);
             OnRestyle();
