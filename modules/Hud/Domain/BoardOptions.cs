@@ -27,6 +27,13 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public bool ShowTicker;
         /// <summary>Decorative captions (the later drawing code reads this).</summary>
         public bool Furniture;
+
+        /// <summary>
+        /// Whether the compact SYSTEMS strip, the scope's cruise form, shows right now: its switch, and under Lean only while something is not nominal (a caution or a warning), under
+        /// Minimal only while that is critical (<see cref="SystemsCriticalOnly"/>). When it does not, the scope takes no room in cruise.
+        /// </summary>
+        public readonly bool SystemsStripShows(bool notNominal, bool critical) =>
+            ShowSystemsStrip && (SystemsCriticalOnly ? critical : !SystemsStripOnlyWhenNotNominal || notNominal);
     }
 
     /// <summary>

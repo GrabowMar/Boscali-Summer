@@ -113,6 +113,23 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.Eq(GaugeRow.Merge(page, 0, reg, 0, into), 0, "No gauges, no row");
             TestAssert.Eq(GaugeRow.Merge(page, 1, reg, 0, into), 1, "A lone page gauge fills one slot");
 
+            // Gauges exist only while live and sit from the left: whatever mix of page and registered gauges, the filled slots are the first n, none blank, none twice.
+            for (int pageCount = 0; pageCount <= 2; pageCount++)
+                for (int regCount = 0; regCount <= 5; regCount++)
+                {
+                    var own = new[] { new GaugeSpec { Id = "g" }, new GaugeSpec { Id = "lance" } };
+                    var live = new GaugeSpec[GaugeRow.Slots];
+                    int count = GaugeRow.Merge(own, pageCount, reg, regCount, live);
+                    string tag = pageCount + " page + " + regCount + " registered";
+                    TestAssert.Eq(count, System.Math.Min(GaugeRow.Slots, pageCount + regCount - (pageCount > 1 && regCount > 0 ? 1 : 0)), "Every live gauge has a slot, up to four: " + tag);
+                    for (int i = 0; i < count; i++)
+                    {
+                        TestAssert.That(!string.IsNullOrEmpty(live[i].Id), "No blank cell between live gauges: " + tag + " slot " + i);
+                        for (int k = 0; k < i; k++) TestAssert.That(live[k].Id != live[i].Id, "No gauge twice: " + tag);
+                    }
+                }
+            TestAssert.Near(ScopeLayout.GaugeX(0), ScopeLayout.Pad, "The first live gauge sits at the left edge");
+
             // A Mode gauge's progress rail is a plain 0..1 (a NAV leg 0.1, 0.3, 0.5...): the chevron only ever moves right as the progress grows.
             float prev = float.NegativeInfinity;
             for (float v = 0.1f; v < 0.95f; v += 0.2f)

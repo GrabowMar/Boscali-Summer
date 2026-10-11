@@ -30,6 +30,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private bool headerFault;
         private readonly float[] Outline = new float[12];
         private int lampCount, gaugeCount, lastPhase = -1;
+        /// <summary>What the pilot's options and declutter level allow, as of the last <see cref="Present"/> (see <see cref="BoardOptions.Effective"/>).</summary>
+        private BoardEffective allow;
+        /// <summary>The lamp row has a lamp to draw (<see cref="lampOrder"/> for the system lamps, a bit per threat lamp in <see cref="threatMask"/>), and the compact SYSTEMS strip may show.</summary>
+        private bool lampRow, systemsStrip;
+        private int threatMask;
         private bool booting, shellBeat, scopeBeat, hasBoard;
         /// <summary>When the last <see cref="Present"/> finished (<c>Time.unscaledTime</c>).</summary>
         private float presentedAt;
@@ -102,18 +107,20 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             MeasurePixel();
             // The page switches. A page that is switched off (or that the declutter level drops) is still polled, other code reads its state, but it is never live, so it never takes the
             // scope, and it is silent: no ticker notices (its environment has no Notice) and no dispenser call in the stores header. The scope mode Off hides the scope, not the warnings.
-            BoardEffective allow = Options.Effective();
+            allow = Options.Effective();
             var voiced = new ScopeEnv(now, frame.Units, Notice);
             var silent = new ScopeEnv(now, frame.Units, null);
             ushort live = 0;
             for (int i = 0; i < pages.Length; i++)
                 if (PollPage(pages[i], CuePriority.Has(allow.Voiced, (ScopePage)i) ? voiced : silent)) live |= CuePriority.Bit((ScopePage)i);
+            bool notNominal = CuePriority.Has(live, ScopePage.Systems);      // before the mask: the strip's rule is about the aircraft's state, not about a page switch
             live &= allow.Pages;
             // A page the pilot has just switched off does not hold the scope until its linger runs out.
             if (selector.Page != ScopePage.Systems && !CuePriority.Has(allow.Pages, selector.Page)) selector.Reset();
             selector.SetMinStay(Options.PageMinSeconds);
             selector.Update(live, now, pages[(int)ScopePage.Systems].Critical && CuePriority.Has(allow.Pages, ScopePage.Systems));
             page = pages[(int)selector.Page];
+            systemsStrip = allow.SystemsStripShows(notNominal, pages[(int)ScopePage.Systems].Critical);
             header.Poll(now, CuePriority.Has(allow.Voiced, ScopePage.Threat) ? ((ThreatPage)pages[(int)ScopePage.Threat]).CallMask : (byte)0);
             MeasureScreen();      // after the header's read: where the board goes depends on what the header stands in for
 
@@ -173,21 +180,36 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (failed.Add(CuePriority.PageCount)) BoscaliSummer.Core.Diagnostics.PatchGuard.Report("Hud.Scope.StoresHeader", e);
         }
 
-        /// <summary>Lamp states, the page overrides (an engine out lights ENG whatever page shows) and the "just changed" rule.</summary>
+        /// <summary>
+        /// Lamp states, the page overrides (an engine out lights ENG whatever page shows) and the "just changed" rule, then which lamps the strip draws: none with its switch off; at
+        /// Minimal only the threat lamps; unlit ones only at Full (or while the spawn lamp test lights them all); what is drawn is packed with no gap, the system lamps from the left and the threat lamps against the right end. A strip with nothing to draw takes no room.
+        /// </summary>
         private void PresentLamps(BoardFrame frame)
         {
-            lampCount = 0;
+            int present = 0;
             for (int i = 0; i < lamps.Length; i++)
             {
                 if (!lamps[i].Present) { lampChange.Forget(i); recent[i] = false; continue; }
+                present++;
                 OverrideLamp(ref lamps[i], false);
                 recent[i] = lampChange.Recent(i, lamps[i].State, now);
-                lampOrder[lampCount++] = i;
             }
             // The threat lamps too (a strike landing close lights MSL as DNGR, a SAM envelope lights SPKE); a real threat keeps its own lamp.
             for (int i = 0; i < threatLamps.Length; i++) OverrideLamp(ref threatLamps[i], true);
             bootAge = frame.BootAge;
-            booting = lampCount > 0 && LampTest.Running(bootAge);
+            booting = present > 0 && LampTest.Running(bootAge);
+
+            bool showDark = allow.DarkLamps || booting;
+            lampCount = threatMask = 0;
+            if (allow.ShowLamps && present > 0)
+            {
+                if (!allow.ThreatLampsOnly)
+                    for (int i = 0; i < lamps.Length; i++)
+                        if (lamps[i].Present && HudLamps.Drawn(lamps[i].State, recent[i], showDark)) lampOrder[lampCount++] = i;
+                for (int i = 0; i < threatLamps.Length; i++)
+                    if (HudLamps.Drawn(threatLamps[i].State, false, showDark)) threatMask |= 1 << i;
+            }
+            lampRow = lampCount > 0 || threatMask != 0;
         }
 
         /// <summary>The first page that overrides this lamp (by its legend) sets its state, flash and, if it has one, its word.</summary>
@@ -210,6 +232,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private void PresentGauges()
         {
+            // The gauge row's own switch (or the declutter level) is off: nothing is read for it and it takes no room.
+            if (!allow.ShowGauges) { gaugeCount = 0; return; }
             int own = 0, reg = 0;
             try { own = Math.Min(page.Gauges(pageGauges), GaugeRow.Slots); }
             catch (Exception e) { ReportOnce(page, e); }
@@ -235,10 +259,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             bool compact = selector.Compact;
             bool strip = !compact && page.HasStrip;
-            // The scope mode Off shows no page at all: the row has no height and the layout drops it; the lamps, gauges and ticker stay.
-            float target = Options.ScopeMode != BoardScopeMode.Off && page.Ready ? (compact ? ScopeLayout.Compact : ScopeLayout.Full) : 0f;
+            // The scope mode Off shows no page at all, nor does a compact SYSTEMS strip the pilot's switch or the declutter level keeps away: the row has no height and the layout drops it;
+            // the lamps, gauges and ticker stay. A block that is switched off (or has nothing live) is no row either: it is not drawn and takes no room.
+            bool scopeOn = Options.ScopeMode != BoardScopeMode.Off && page.Ready && (!compact || systemsStrip);
+            float target = scopeOn ? (compact ? ScopeLayout.Compact : ScopeLayout.Full) : 0f;
             transition.Update((int)selector.Page * 2 + (compact ? 1 : 0), target, now);
-            var rows = new BoardRows { StoresH = header.Height, Lamps = lampCount > 0, ScopeH = transition.Height, Gauges = gaugeCount > 0, Ticker = board.HasTicker };
+            var rows = new BoardRows { StoresH = header.Height, Lamps = lampRow, ScopeH = transition.Height, Gauges = gaugeCount > 0, Ticker = allow.ShowTicker && board.HasTicker };
             BoardGeometry geo = ScopeLayout.Compute(rows);
             if (geo.Height <= 0f)
             {
@@ -279,15 +305,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Outline[6] = c; Outline[7] = h; Outline[8] = 0.5f; Outline[9] = h - c + 0.5f; Outline[10] = 0.5f; Outline[11] = c - 0.5f;
             g.Path(g.Poly(Outline, 6), Ink, 0.3f);
             if (geo.Lamps.H > 0f) PaintLamps(g, geo.Lamps.Y, flashOn);
+            // The live gauges from the left, a cell each; a slot with nothing live is not drawn, and with no gauge live the row has no height and nothing is drawn.
             if (geo.Gauges.H > 0f)
+            {
                 for (int i = 0; i < gaugeCount; i++)
                 {
                     if (shown[i].Flash || shown[i].Ready) shellBeat = true;
                     GaugePainter.Draw(g, shown[i], ScopeLayout.GaugeX(i), geo.Gauges.Y, ScopeLayout.GaugeW, ScopeLayout.GaugeH, flashOn, now);
                 }
-                // The slots with nothing live stay as faint outlines: the row reads finished and the board's edge stays square (an outline is not data).
-                for (int i = gaugeCount; i < GaugeRow.Slots; i++)
-                    g.Box(ScopeLayout.GaugeX(i), geo.Gauges.Y, ScopeLayout.GaugeW, ScopeLayout.GaugeH, Faint, 0.7f);
+            }
             if (geo.Ticker.H > 0f) PaintTicker(g, geo.Ticker.Y, flashOn);
             g.End();
             shellVector.Commit();
@@ -346,8 +372,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 int i = lampOrder[k];
                 DrawLamp(g, ScopeLayout.SystemLampX(k), y, ScopeLayout.LampW, lamps[i], recent[i], k, total, flashOn);
             }
-            for (int i = 0; i < HudThreats.Count; i++)
-                DrawLamp(g, ScopeLayout.ThreatLampX(i), y, ScopeLayout.ThreatLampWidth(i), threatLamps[i], false, lampCount + i, total, flashOn);
+            // The threat lamps pack against the right end, in order: one that is not drawn leaves no gap (with all three drawn they sit where ScopeLayout.ThreatLampX puts them).
+            float tx = ScopeLayout.Pad + ScopeLayout.Inner;
+            for (int i = HudThreats.Count - 1; i >= 0; i--)
+            {
+                if ((threatMask & (1 << i)) == 0) continue;
+                tx -= ScopeLayout.ThreatLampWidth(i);
+                DrawLamp(g, tx, y, ScopeLayout.ThreatLampWidth(i), threatLamps[i], false, lampCount + i, total, flashOn);
+                tx -= ScopeLayout.LampGap;
+            }
         }
 
         /// <summary>
@@ -397,16 +430,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Box(ScopeLayout.Pad, y, ScopeLayout.Inner, ScopeLayout.TickerH, Faint, 0.9f);
             string chip = NoticeTicker.Tag(line.Channel);
             float cw = (float)Math.Ceiling(ScopeCanvas.TextW(chip, 12f)) + 10f, h = ScopeLayout.TickerH;
-            if (hot)
-            {
-                g.Fill(ScopeLayout.Pad + 3f, y + 3f, cw, h - 6f, tone);
-                g.Text(chip, ScopeLayout.Pad + 3f + cw / 2f, y + h / 2f + 1f, Bg, 12f, ScopeAlign.Center, true);
-            }
-            else
-            {
-                g.Box(ScopeLayout.Pad + 3f, y + 3f, cw, h - 6f, Dim);
-                g.Text(chip, ScopeLayout.Pad + 3f + cw / 2f, y + h / 2f + 1f, Dim, 12f, ScopeAlign.Center, true);
-            }
+            // The chip is the headline plate's look, a tone-coloured outline and word on a faint wash of the tone: the solid block it was painted dark text on swallowed its own word.
+            g.Box(ScopeLayout.Pad + 3f, y + 3f, cw, h - 6f, hot ? tone : Dim, 1f, 1f, tone, hot ? 0.2f : 0f);
+            g.Text(chip, ScopeLayout.Pad + 3f + cw / 2f, y + h / 2f + 1f, hot ? tone : Dim, 12f, ScopeAlign.Center, true);
             bool sticky = line.Tone == HudTone.Warning;
             if (sticky || NoticeTicker.IsFresh(line)) shellBeat = true;
             float tx = ScopeLayout.Pad + 3f + cw + 8f;

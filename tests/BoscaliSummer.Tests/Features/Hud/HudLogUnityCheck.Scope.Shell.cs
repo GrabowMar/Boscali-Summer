@@ -52,6 +52,21 @@ public static partial class HudLogUnityCheck
 
     private static float BoardHeight(object status) => ((RectTransform)Field(status, "root")).sizeDelta.y;
 
+    /// <summary>The pilot's options: the defaults with some switches changed (<c>name, value</c> pairs).</summary>
+    private static object PilotOptions(params object[] nameValue) =>
+        Fill(Type(HudDomain + "BoardOptions").GetProperty("Default", All).GetValue(null), nameValue);
+
+    private static object Declutter(string level) => Enum.Parse(Type("BoscaliSummer.Core.Contracts.BoardDeclutter"), level);
+
+    /// <summary>Every word the board draws right now.</summary>
+    private static System.Collections.Generic.List<string> BoardWords(object status)
+    {
+        var words = new System.Collections.Generic.List<string>();
+        foreach (TMPro.TextMeshProUGUI label in ((RectTransform)Field(status, "root")).GetComponentsInChildren<TMPro.TextMeshProUGUI>())
+            if (!string.IsNullOrEmpty(label.text)) words.Add(label.text);
+        return words;
+    }
+
     private static void ScopeShell()
     {
         foreach (Vector2 size in new[] { new Vector2(1920, 1080), new Vector2(1280, 720) })
@@ -106,6 +121,33 @@ public static partial class HudLogUnityCheck
             Check(Mathf.Abs(BoardHeight(status) - 34f * u) < 1f, "Only the lamp strip: one pad, the strip, one pad: " + BoardHeight(status) / u);
             ScopeChecks(status, "shell-lamps" + res);
             Capture(canvas, "shell-lamps" + res + ".png");
+
+            // The pilot's options on the full scene (1080p): a block that is switched off is not drawn and takes no room (lamp row 30, gauge row 68, ticker 28 of the 434), the
+            // declutter levels take more away (no gauge row; unlit lamps gone, the rest packed; at Minimal only the threat lamps).
+            if (size.x > 1500f)
+                foreach (var c in new (string name, object options, float height, string[] shown, string[] hidden)[]
+                {
+                    ("nogauges", PilotOptions("ShowGauges", false), 366f, new[] { "GEAR", "LOCK" }, new[] { "LANCE" }),
+                    ("noticker", PilotOptions("ShowTicker", false), 406f, new[] { "GEAR", "LANCE" }, new[] { "SAM LAUNCH" }),
+                    ("nolamps", PilotOptions("ShowLamps", false), 404f, new[] { "LANCE" }, new[] { "GEAR", "LOCK", "SPKE" }),
+                    ("lean", PilotOptions("Declutter", Declutter("Lean")), 366f, new[] { "GEAR", "FA", "RDR", "LOCK" }, new[] { "HOVR", "NVG", "SAFE", "ENG", "SPKE", "LANCE" }),
+                    ("minimal", PilotOptions("Declutter", Declutter("Minimal")), 366f, new[] { "LOCK" }, new[] { "GEAR", "FA", "RDR", "HOVR", "SPKE", "LANCE" }),
+                })
+                {
+                    Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
+                    MakeBoard(size, 40f, out canvas, out status, out frame);
+                    ShellScene(frame, 40f, true);
+                    Set(status, "Options", c.options);
+                    ShellForce(status, "Threat", 40f);
+                    Call(status, "Present", frame);
+                    Canvas.ForceUpdateCanvases();
+                    Check(Mathf.Abs(BoardHeight(status) - c.height * u) < 1f, c.name + ": the board is " + c.height + " units tall: " + BoardHeight(status) / u);
+                    var words = BoardWords(status);
+                    foreach (string w in c.shown) Check(words.Contains(w), c.name + ": " + w + " is drawn");
+                    foreach (string w in c.hidden) Check(!words.Exists(x => x == w || (w.Length > 6 && x.Contains(w))), c.name + ": " + w + " is not drawn");
+                    ScopeChecks(status, "shell-" + c.name + res);
+                    if (c.name == "lean" || c.name == "minimal") Capture(canvas, "shell-" + c.name + res + ".png");
+                }
             Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject); ScopeReset();
         }
     }

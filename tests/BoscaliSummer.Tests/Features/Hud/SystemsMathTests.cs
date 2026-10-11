@@ -14,6 +14,8 @@ namespace BoscaliSummer.Tests.Features.Hud
             Fuel();
             Zones();
             Words();
+            GaugeHold();
+            BaseLine();
             Palette();
         }
 
@@ -87,6 +89,64 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.Eq(SystemsMath.WindFromDegrees(0f), 360, "North reads 360");
             TestAssert.Eq(SystemsMath.WindFromDegrees(270f), 270, "270 reads 270");
             TestAssert.Eq(SystemsMath.WindFromDegrees(-90f), 270, "A negative bearing wraps");
+        }
+
+        /// <summary>The G gauge is live from 2.5 G and for 3 s after the load last was that high; level cruise has none.</summary>
+        private static void GaugeHold()
+        {
+            float at = float.NegativeInfinity;
+            TestAssert.That(!SystemsMath.GaugeLive(1f, 100f, ref at), "Level cruise: no G gauge");
+            TestAssert.That(!SystemsMath.GaugeLive(2.4f, 100.1f, ref at), "Under 2.5 G: none");
+            TestAssert.That(SystemsMath.GaugeLive(2.5f, 100.2f, ref at), "At 2.5 G it is live");
+            TestAssert.That(SystemsMath.GaugeLive(1f, 101f, ref at) && SystemsMath.GaugeLive(1f, 102.9f, ref at), "Back to 1 G it stays for the hold");
+            TestAssert.That(!SystemsMath.GaugeLive(1f, 103.3f, ref at), "...3 s after the load last was high, it goes");
+            TestAssert.That(!SystemsMath.GaugeLive(1f, 110f, ref at), "...and stays gone");
+            TestAssert.That(SystemsMath.GaugeLive(-3f, 111f, ref at), "A negative load counts by its size");
+            TestAssert.That(SystemsMath.GaugeLive(1f, 113.5f, ref at), "A new pull restarts the hold: 2.5 s after it, still live");
+            TestAssert.That(SystemsMath.GaugeLive(6f, 120f, ref at) && SystemsMath.GaugeLive(5f, 120.1f, ref at) && SystemsMath.GaugeLive(1f, 122.5f, ref at), "A hard pull keeps it up, and its hold runs from the last high tick");
+            TestAssert.That(!SystemsMath.GaugeLive(float.NaN, 130f, ref at), "A load that is not a number is not a pull");
+        }
+
+        /// <summary>The home base on the compact strip: the name has the line, the margin figure gives way, and the two never touch.</summary>
+        private static void BaseLine()
+        {
+            const int Line = 17;       // the strip's base line holds 17 characters of the board's face
+            string[] names = { "K92", "ANNEX CLIFF", "AIRBASE CITY NORTH", "AIRBASE CITY NORTH SECTOR 12" };
+            TestAssert.Eq(names[3].Length, 28, "The long test name is 28 characters");
+            foreach (AvUnits units in new[] { AvUnits.Metric, AvUnits.Imperial })
+                foreach (float metres in new[] { 97f, 800f, 4500f, 19000f, 123000f })
+                    foreach (int margin in new[] { 90, 100, 15, 0, -5 })
+                        foreach (string name in names)
+                        {
+                            int full = SystemsMath.MarginWords(margin, false).Length, shortChars = SystemsMath.MarginWords(margin, true).Length;
+                            int form = ScopeStr.FitMargin(name, metres, units, Line, full, shortChars, out int room);
+                            string line = ScopeStr.Distance(name, metres, units, room).ToString();
+                            string tag = name + " " + metres + " " + units + " margin " + margin + " form " + form + ": [" + line + "]";
+                            string distance = line.Substring(line.LastIndexOf(' ') + 1);
+                            int marginChars = form == 0 ? full : form == 1 ? shortChars : 0;
+                            TestAssert.That(line.Length + (form < 2 ? ScopeStr.MarginGap + marginChars : 0) <= Line, "The base line, a gap and the margin fit the line: " + tag);
+                            TestAssert.That(form == 2 || line.Length + ScopeStr.MarginGap + marginChars <= Line, "A margin shown always leaves its blank: " + tag);
+                            TestAssert.That(distance.Length > 0 && char.IsDigit(distance[0]), "The distance is never cut: " + tag);
+                            bool cut = line.Contains("…");
+                            // Name priority: a name is only cut when it cannot fit the line even with no margin at all.
+                            int whole = name.Length + 1 + distance.Length;
+                            TestAssert.That(cut == (whole > Line && line.Length > distance.Length), "A name is cut only when it cannot fit without the margin: " + tag);
+                            if (whole <= Line) TestAssert.That(line == name + " " + distance, "A name that fits is whole: " + tag);
+                            if (cut) TestAssert.That(form == 2, "A cut name has no margin beside it: " + tag);
+                        }
+
+            // The strip as the pilot sees it: 97 m from home, the margin 90 points.
+            int f0 = ScopeStr.FitMargin("ANNEX CLIFF", 97f, AvUnits.Metric, Line, 4, 3, out int r0);
+            TestAssert.That(f0 == 2 && ScopeStr.Distance("ANNEX CLIFF", 97f, AvUnits.Metric, r0).ToString() == "ANNEX CLIFF 97M", "ANNEX CLIFF keeps its name and gives up the margin");
+            int f1 = ScopeStr.FitMargin("K92", 19000f, AvUnits.Metric, Line, 4, 3, out int r1);
+            TestAssert.That(f1 == 0 && ScopeStr.Distance("K92", 19000f, AvUnits.Metric, r1).ToString() == "K92 19KM", "A short name has room for both");
+            int f2 = ScopeStr.FitMargin("AIRBASE CITY NORTH", 97f, AvUnits.Metric, Line, 4, 3, out int r2);
+            string north = ScopeStr.Distance("AIRBASE CITY NORTH", 97f, AvUnits.Metric, r2).ToString();
+            TestAssert.That(f2 == 2 && north.Length == Line && north.EndsWith(" 97M") && north.Contains("…"), "AIRBASE CITY NORTH takes the whole line, cut once: " + north);
+            int f3 = ScopeStr.FitMargin("K92", 800f, AvUnits.Metric, Line, SystemsMath.MarginWords(0, false).Length, SystemsMath.MarginWords(0, true).Length, out _);
+            TestAssert.Eq(f3, 1, "NO MARGIN gives way to NO MGN before it goes: the warning stays beside a short name");
+            TestAssert.That(SystemsMath.MarginWords(90, false).ToString() == "+90%" && SystemsMath.MarginWords(90, true).ToString() == "+90" &&
+                SystemsMath.MarginWords(0, false).ToString() == "NO MARGIN" && SystemsMath.MarginWords(-4, true).ToString() == "NO MGN", "The margin's words, long and short");
         }
 
         private static void Palette()

@@ -27,6 +27,12 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(lamps[0].State == LampState.Caution && lamps[0].Flash, "Gear in transit flashes amber");
             TestAssert.That(lamps[6].State == LampState.Warning, "Engine not running is a warning");
             TestAssert.That(lamps[0].Legend == "GEAR" && lamps[6].Legend == "ENG", "Legends stay fixed in order");
+
+            // Which lamps the strip draws: every lamp at the Full level and during the lamp test, else only a lit one or one that has just changed.
+            TestAssert.That(HudLamps.Drawn(LampState.Dark, false, true), "Showing dark lamps: a dark lamp is drawn");
+            TestAssert.That(!HudLamps.Drawn(LampState.Dark, false, false), "Hiding dark lamps: a dark lamp is not drawn");
+            TestAssert.That(HudLamps.Drawn(LampState.On, false, false) && HudLamps.Drawn(LampState.Caution, false, false) && HudLamps.Drawn(LampState.Warning, false, false), "...a lit one is, in any tone");
+            TestAssert.That(HudLamps.Drawn(LampState.Dark, true, false), "...and so is one that has just gone out, once");
         }
     }
 }

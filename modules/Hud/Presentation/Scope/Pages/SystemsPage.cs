@@ -52,6 +52,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private bool prevBingo, prevJoker;
         private int gaugeKey = -1;
         private string gaugeText, gaugeSub;
+        /// <summary>The G gauge's live window (see <see cref="SystemsMath.GaugeLive"/>): the clock the load last reached it, and whether it is live this tick.</summary>
+        private float gaugeAt = float.NegativeInfinity;
+        private bool gaugeLive;
 
         public override ScopePage Id => ScopePage.Systems;
 
@@ -71,7 +74,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             now = env.Now;
             ready = ScopeFeeds.TryRead(out d) && d.Fuel.Valid;
-            if (!ready) { primed = false; fast = abnormal = critical = false; return false; }
+            if (!ready) { primed = false; fast = abnormal = critical = gaugeLive = false; gaugeAt = float.NegativeInfinity; return false; }
+            gaugeLive = SystemsMath.GaugeLive(d.G, now, ref gaugeAt);
 
             if (!primed || !SystemsMath.SameDamage(rowsFor, d.Damage))
             {
@@ -145,7 +149,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public override int Gauges(GaugeSpec[] into)
         {
-            if (!ready || d.GLimit <= 1f) return 0;
+            if (!ready || !gaugeLive || d.GLimit <= 1f) return 0;      // the G gauge only while the airframe is pulling (a hard turn and a few seconds after), never in level cruise
             int key = (int)Math.Round(d.G * 10f) * 1000 + (int)d.GLimit;
             if (key != gaugeKey)
             {
@@ -341,19 +345,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Path(n, Hi);
             int margin = SystemsMath.MarginPoints(f);
             ScopeTone mt = SystemsMath.MarginTone(margin);
-            int marginChars = 0;
-            if (f.HasNeed)
-            {
-                ReadOnlySpan<char> m = margin > 0 ? ScopeStr.Cat("+", margin, "%") : "NO MARGIN";
-                marginChars = m.Length;
-                g.Text(m, x + w, y, mt, align: ScopeAlign.Right, bold: mt != Ink);
-            }
-            int room = (int)((w - 18f) / (ScopeText.DesignAdvance * 12f)) - marginChars;
+            // The name has the line: the margin figure (at the right edge) is shortened, then dropped, before a character of the name is cut, and a blank always separates it from the distance.
+            int room = (int)((w - 18f) / (ScopeText.DesignAdvance * 12f)), form = 2;
+            if (f.HasNeed) form = ScopeStr.FitMargin(f.Field, f.FieldM, units, room, SystemsMath.MarginWords(margin, false).Length, SystemsMath.MarginWords(margin, true).Length, out room);
+            if (form < 2) g.Text(SystemsMath.MarginWords(margin, form == 1), x + w, y, mt, align: ScopeAlign.Right, bold: mt != Ink);
             g.Text(ScopeStr.Distance(f.Field, f.FieldM, units, room), x + 18f, y, Ink);
         }
 
         /// <summary>
-        /// The wind: a dial turning with the nose (the arrow is where the air is going, relative to it) and the wind's direction and speed beside it, and IN CLOUD under it while the aircraft is in a deck.
+        /// The wind: a dial turning with the nose (the arrow is where the air is going, relative to it) and, beside it, the WIND label with the direction it blows from and, under it, the speed with a space before its unit ("WIND 270" over "33 KM/H"), and IN CLOUD under that while the aircraft is in a deck.
         /// Weather is optional: without it nothing is drawn (no wind reading, no dial).
         /// </summary>
         private void WeatherBlock(ScopeCanvas g, float x, float y)
@@ -369,8 +369,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 ScopeCanvas.Polar(a + 180f, 13f, out float tx, out float ty);
                 g.Arrow(cx + tx, cy + ty, cx + hx, cy + hy, Ink, 1f, 1f, 5f);
                 int dir = SystemsMath.WindFromDegrees(d.WindFromDeg);
-                g.Text(ScopeStr.Cat(dir < 10 ? "00" : dir < 100 ? "0" : "", dir, "/", (int)Math.Round(NOAvionics.AvUnitTable.Speed(d.WindMps, d.Units)), ScopeStr.SpeedUnit(d.Units)), x + 44f, row, Ink);
-                row += 18f;
+                float label = g.Text("WIND ", x + 44f, row, Dim);
+                g.Text(ScopeStr.Cat(dir < 10 ? "00" : dir < 100 ? "0" : "", dir), x + 44f + label, row, Ink);
+                g.Text(ScopeStr.Cat("", (int)Math.Round(NOAvionics.AvUnitTable.Speed(d.WindMps, d.Units)), ScopeStr.SpeedUnitSp(d.Units)), x + 44f, row + 18f, Ink);
+                row += 36f;
             }
             if (d.HasCloud && d.InCloud) g.Text("IN CLOUD", x + 44f, row, Hi, bold: true);
         }

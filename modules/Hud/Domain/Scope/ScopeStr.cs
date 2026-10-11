@@ -98,6 +98,24 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return new ReadOnlySpan<char>(Scratch, 0, n + dist);
         }
 
+        /// <summary>Blank characters kept between the distance and the margin figure on the SYSTEMS strip's base line.</summary>
+        public const int MarginGap = 1;
+
+        /// <summary>
+        /// How the base line (the name, a space and the distance at the left, a margin figure at the right edge) spends <paramref name="totalChars"/> so the NAME stays whole: the margin gives way first
+        /// and never takes room from the name. 0: the margin of <paramref name="fullChars"/> characters fits with <see cref="MarginGap"/> blank after the distance; 1: its short form of
+        /// <paramref name="shortChars"/> does (0: it has none); 2: the margin is left out. <paramref name="room"/> is what the name, space and distance may take (pass it to <see cref="Distance"/>, which cuts a name
+        /// that cannot fit even then).
+        /// </summary>
+        public static int FitMargin(string name, float metres, NOAvionics.AvUnits units, int totalChars, int fullChars, int shortChars, out int room)
+        {
+            int dist = NOAvionics.AvUnitTable.DistanceReading(Scratch, 100, metres, units) - 100;
+            int whole = (string.IsNullOrEmpty(name) ? 0 : name.Trim().Length + 1) + dist;
+            int form = whole + MarginGap + fullChars <= totalChars ? 0 : shortChars > 0 && whole + MarginGap + shortChars <= totalChars ? 1 : 2;
+            room = form == 2 ? totalChars : totalChars - MarginGap - (form == 0 ? fullChars : shortChars);
+            return form;
+        }
+
         private static int Put(int at, string s)
         {
             if (string.IsNullOrEmpty(s)) return at;

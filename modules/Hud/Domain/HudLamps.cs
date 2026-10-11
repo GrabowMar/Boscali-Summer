@@ -52,6 +52,12 @@ namespace BoscaliSummer.Modules.Hud.Domain
             };
         }
 
+        /// <summary>
+        /// Whether a lamp is drawn: any lamp while unlit ones are (<paramref name="showDark"/>: the Full level, or the spawn lamp test), else only one that is lit or has just changed
+        /// (<paramref name="changed"/>, the "just changed" window: a lamp that went out is seen once before it leaves the row).
+        /// </summary>
+        public static bool Drawn(LampState state, bool changed, bool showDark) => showDark || changed || state != LampState.Dark;
+
         private static Lamp Mode(string legend, bool? on, LampState lit) =>
             new Lamp { Legend = legend, Present = on.HasValue, State = on == true ? lit : LampState.Dark };
     }

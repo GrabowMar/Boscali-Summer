@@ -31,6 +31,7 @@ namespace BoscaliSummer.Tests.Features.Hud
             DeclutterLevels();
             SwitchesStayOff();
             VoicedPages();
+            SystemsStrip();
         }
 
         private static void Defaults()
@@ -186,6 +187,25 @@ namespace BoscaliSummer.Tests.Features.Hud
             BoardOptions min = At(BoardDeclutter.Minimal);
             min.ScopeMode = BoardScopeMode.Off;
             TestAssert.Eq(min.Effective().Voiced, Mask(ScopePage.Threat, ScopePage.MissileCam, ScopePage.Shot, ScopePage.Approach, ScopePage.Systems), "Minimal drops the quiet pages' voice too, scope mode Off or not");
+        }
+
+        /// <summary>The compact SYSTEMS strip in cruise: the switch, and what each level adds.</summary>
+        private static void SystemsStrip()
+        {
+            BoardEffective full = At(BoardDeclutter.Full).Effective(), lean = At(BoardDeclutter.Lean).Effective(), min = At(BoardDeclutter.Minimal).Effective();
+            TestAssert.That(full.SystemsStripShows(false, false) && full.SystemsStripShows(true, false) && full.SystemsStripShows(true, true), "Full: the strip shows nominal or not");
+            TestAssert.That(!lean.SystemsStripShows(false, false) && !lean.SystemsStripShows(false, true), "Lean: nothing wrong, no strip");
+            TestAssert.That(lean.SystemsStripShows(true, false) && lean.SystemsStripShows(true, true), "Lean: a caution or a warning brings it");
+            TestAssert.That(!min.SystemsStripShows(false, false) && !min.SystemsStripShows(true, false), "Minimal: a caution is not enough");
+            TestAssert.That(min.SystemsStripShows(true, true), "Minimal: only the critical form shows");
+
+            foreach (BoardDeclutter level in Levels)
+            {
+                BoardOptions o = At(level);
+                o.ShowSystemsStrip = false;
+                BoardEffective e = o.Effective();
+                TestAssert.That(!e.SystemsStripShows(false, false) && !e.SystemsStripShows(true, false) && !e.SystemsStripShows(true, true), level + ": the switch off, no strip even in a fire");
+            }
         }
 
         private static void SwitchesStayOff()
