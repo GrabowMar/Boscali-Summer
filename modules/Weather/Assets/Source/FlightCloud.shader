@@ -37,6 +37,9 @@ Shader "Boscali/FlightCloud"
         float4 _TapeChord;  // x,y = middle layer chord y0,y1 (m); z,w = high layer chord y0,y1
         float4 _TapeFlags;  // x = a middle layer exists on the tape, y = a high layer exists, z = the tape is one texel (read _TapeConstLow)
         float4 _TapeConstLow0, _TapeConstLow1, _TapeConstLow2; // rows 0-2 of a one-texel tape: live play reads these instead of the texture
+        // The noise decorrelation of this tape (NoiseXform.cs): per noise layer cos, sin, offset x, offset z. Every tap of the shared noise
+        // volume reads the position NoiseXZ gives it; none divides a raw world coordinate (a source scan and a grep prove it).
+        float4 _NoiseXf0, _NoiseXf1, _NoiseXf2, _NoiseXf3, _NoiseXf4, _NoiseXf5;
         float2 _CloudWindDir;
         // Radians one screen pixel spans: sets the noise level of detail by footprint.
         float _CloudPixelAngle;
@@ -122,20 +125,52 @@ Shader "Boscali/FlightCloud"
             return true;
         }
 
+        #define NOISE_LOW 0
+        #define NOISE_MID 1
+        #define NOISE_HIGH 2
+        #define NOISE_HORIZON 3
+        #define NOISE_MID_ALIGNED 4
+        #define NOISE_HIGH_ALIGNED 5
+
+        float4 NoiseXf(int layer)
+        {
+            if (layer == 0) return _NoiseXf0;
+            if (layer == 1) return _NoiseXf1;
+            if (layer == 2) return _NoiseXf2;
+            if (layer == 3) return _NoiseXf3;
+            if (layer == 4) return _NoiseXf4;
+            return _NoiseXf5;
+        }
+
+        // Where the noise volume is read for a position: TapeFrame.NoiseXZ in BakedTape.cs is the twin. The aligned layers (streak taps)
+        // carry no rotation, so a stretch along the wind stays along the wind.
+        float2 NoiseXZ(float2 xz, int layer)
+        {
+            float4 t = NoiseXf(layer);
+            return float2(t.x * xz.x - t.y * xz.y + t.z, t.y * xz.x + t.x * xz.y + t.w);
+        }
+
+        // A world position as the point the low volume's noise is read at: (NoiseXZ(x, z), y).
+        float3 NoiseG(float3 g, int layer)
+        {
+            float2 n = NoiseXZ(g.xz, layer);
+            return float3(n.x, g.y, n.y);
+        }
+
         float LodFor(float foot, float period);
 
         // Individual cloud bodies: cellular noise at non-integer scales (so the 64^3
         // tile never visibly repeats), in [0, 1]. Coverage thresholds it into separate
         // clouds with sky between them, the way broken and scattered decks really look.
         // The raw weighted sum of the three lobe taps at one lobe size (mean about 0.5), before the remap.
-        float BodiesRaw(float3 g, float scale, float lod)
+        float BodiesRaw(float3 ng, float scale, float lod)
         {
             float period = scale * 4.0;
-            float a = tex3Dlod(_CloudNoiseTex, float4(g.xz / period, g.y / (period * 0.9), lod)).b;
-            float b = tex3Dlod(_CloudNoiseTex, float4(float2(g.z, -g.x) / (period * 2.73) + 0.37,
-                g.y / (period * 2.1), lod)).r;
-            float c = tex3Dlod(_CloudNoiseTex, float4(g.xz / (period * 0.29) + float2(0.17, 0.61),
-                g.y / (period * 0.24), max(lod, LodFor(gFoot, period * 0.29)))).b;
+            float a = tex3Dlod(_CloudNoiseTex, float4(ng.xz / period, ng.y / (period * 0.9), lod)).b;
+            float b = tex3Dlod(_CloudNoiseTex, float4(float2(ng.z, -ng.x) / (period * 2.73) + 0.37,
+                ng.y / (period * 2.1), lod)).r;
+            float c = tex3Dlod(_CloudNoiseTex, float4(ng.xz / (period * 0.29) + float2(0.17, 0.61),
+                ng.y / (period * 0.24), max(lod, LodFor(gFoot, period * 0.29)))).b;
             return a * 0.65 + b * 0.15 + c * 0.20;
         }
 
@@ -144,9 +179,9 @@ Shader "Boscali/FlightCloud"
             return saturate((raw - 0.22) * 2.5);
         }
 
-        float Bodies(float3 g, float scale, float lod)
+        float Bodies(float3 ng, float scale, float lod)
         {
-            return BodiesRemap(BodiesRaw(g, scale, lod));
+            return BodiesRemap(BodiesRaw(ng, scale, lod));
         }
 
         // The feature-size ladders (Ladder.cs): sqrt(2) steps, 700 m lobes and 250 m periods.
@@ -180,14 +215,14 @@ Shader "Boscali/FlightCloud"
         }
 
         // Bodies at a lobe rung index: one call in steady state, two inside a ramp (CloudBodies.BodiesLadder is the twin).
-        float BodiesLadder(float3 g, float rungIndex, float lod, float front, float sheetBlend)
+        float BodiesLadder(float3 ng, float rungIndex, float lod, float front, float sheetBlend)
         {
             float2 sp = LadderSplit(rungIndex);
             // A sheet front is one fixed 5.2 km scale at every rung: no second tap, and no contrast boost of two identical fields.
             if (front > 0.5 && sheetBlend >= 0.999) sp.y = 0.0;
             float raw0 = 0.0, raw1 = 0.0;
-            if (sp.y < 0.98) raw0 = BodiesRaw(g, LadderScale(sp.x, front, sheetBlend), lod);
-            if (sp.y > 0.02) raw1 = BodiesRaw(g, LadderScale(sp.x + 1.0, front, sheetBlend), lod);
+            if (sp.y < 0.98) raw0 = BodiesRaw(ng, LadderScale(sp.x, front, sheetBlend), lod);
+            if (sp.y > 0.02) raw1 = BodiesRaw(ng, LadderScale(sp.x + 1.0, front, sheetBlend), lod);
             return BodiesRemap(LadderMix(raw0, raw1, sp.y, 0.5));
         }
 
@@ -310,8 +345,9 @@ Shader "Boscali/FlightCloud"
         // never shows the 64^3 tile as a regular grid of lumps (bubble wrap).
         float Billow(float3 g, float lod)
         {
-            float a = tex3Dlod(_CloudNoiseTex, float4(g.xz / 12000.0 + 0.43, g.y / 10000.0 + 0.11, lod)).b;
-            float b = tex3Dlod(_CloudNoiseTex, float4(float2(g.z, -g.x) / 4200.0 + 0.71, g.y / 3600.0 + 0.57, lod)).b;
+            float3 ng = NoiseG(g, NOISE_LOW);
+            float a = tex3Dlod(_CloudNoiseTex, float4(ng.xz / 12000.0 + 0.43, ng.y / 10000.0 + 0.11, lod)).b;
+            float b = tex3Dlod(_CloudNoiseTex, float4(float2(ng.z, -ng.x) / 4200.0 + 0.71, ng.y / 3600.0 + 0.57, lod)).b;
             return saturate((a * 0.65 + b * 0.35 - 0.22) * 2.5);
         }
 
@@ -323,7 +359,8 @@ Shader "Boscali/FlightCloud"
 
         float HeroNoise(float3 g, float scale, float lod)
         {
-            return tex3Dlod(_CloudNoiseTex, float4(g.xz / scale + 0.17, g.y / (scale * 0.8) + 0.23, lod)).r;
+            float3 ng = NoiseG(g, NOISE_LOW);
+            return tex3Dlod(_CloudNoiseTex, float4(ng.xz / scale + 0.17, ng.y / (scale * 0.8) + 0.23, lod)).r;
         }
 
         // Bounding circle of a set-piece on the ground (xy centre, z radius). Mirrored by
@@ -578,10 +615,10 @@ Shader "Boscali/FlightCloud"
         }
 
         // Boundary erosion at edge scale k (1 = the 1250 m erosion and 340 / 300 m micro periods). CloudBodies.EdgeDetail is the twin.
-        float EdgeDetail(float3 g, float coarse, float k, float edge, float sheetBlend)
+        float EdgeDetail(float3 ng, float coarse, float k, float edge, float sheetBlend)
         {
             float lod = max(coarse, LodFor(gFoot, 1250.0 * k));
-            float3 n2 = float3((g.xz - _CloudWindOffset * 1.7) / (1250.0 * k), g.y / (1250.0 * k));
+            float3 n2 = float3((ng.xz - _CloudWindOffset * 1.7) / (1250.0 * k), ng.y / (1250.0 * k));
             float d1 = tex3Dlod(_CloudNoiseTex, float4(n2, lod)).r;
             float nearDetail = saturate(1.0 - lod);
             // Cumulus edges take the rounded Worley lobes (B) for the near octave, so
@@ -593,7 +630,7 @@ Shader "Boscali/FlightCloud"
             float close = saturate(1.0 - gFoot / 3.0);
             if (close > 0.0 && edge > 0.35)
             {
-                float micro = tex3Dlod(_CloudNoiseTex, float4(g.xz / (340.0 * k) + 0.19, g.y / (300.0 * k) + 0.83, 0.0)).g;
+                float micro = tex3Dlod(_CloudNoiseTex, float4(ng.xz / (340.0 * k) + 0.19, ng.y / (300.0 * k) + 0.83, 0.0)).g;
                 detail = lerp(detail, detail * 0.65 + micro * 0.35, close);
             }
             return detail;
@@ -605,6 +642,8 @@ Shader "Boscali/FlightCloud"
             // A primary sample fetches its own genus row; the sun taps of one march sample reuse it.
             if (!gLowReuse) gLowValid = false;
             float3 g = world + _CloudWorldOffset;
+            // The low volume's noise is read where this tape's rotation and offset put it.
+            float3 ng = NoiseG(g, NOISE_LOW);
             // Filter the 1250 m detail to what one pixel and one step can resolve.
             float lod = max(coarse, LodFor(gFoot, 1250.0));
             float bodyLod = max(coarse, LodFor(gFoot, 24000.0));
@@ -612,7 +651,7 @@ Shader "Boscali/FlightCloud"
             float heroHeight = gLocalLightingHeight;
             if (gHeroOnly) return hero;
             if (g.y < _CloudAltitudeBounds.x || g.y > _CloudAltitudeBounds.y) return hero;
-            float3 n1 = float3((g.xz - _CloudWindOffset) / 24000.0, 0.37);
+            float3 n1 = float3((ng.xz - _CloudWindOffset) / 24000.0, 0.37);
             float2 broad = tex3Dlod(_CloudNoiseTex, float4(n1, bodyLod)).rg;
             // Warp the meteorological boundary at cloud scale; otherwise a smooth
             // front map reads as a vertical polygon even when its rain band is curved.
@@ -644,8 +683,9 @@ Shader "Boscali/FlightCloud"
             float sheetBlend = smoothstep(0.45, 0.85, smooth);
             bool sheet = sheetBlend >= 0.999;
             float3 gw = g + float3((broad.r - 0.5) * 1400.0, 0.0, (broad.g - 0.5) * 1400.0);
+            float3 ngw = NoiseG(gw, NOISE_LOW);
             float puffBody = 0.72;
-            if (!sheet) puffBody = lerp(BodiesLadder(gw, row.lobeRung, puffLod, 0.0, sheetBlend), 0.72, sheetBlend);
+            if (!sheet) puffBody = lerp(BodiesLadder(ngw, row.lobeRung, puffLod, 0.0, sheetBlend), 0.72, sheetBlend);
             float relief = lerp(0.55, 1.0, smoothstep(0.2, 0.85, puffBody));
             float localAnvil = LocalAnvil(columnTop - baseY, row.anvil);
             float localTowerBlend = smoothstep(0.18, 0.60, localAnvil);
@@ -681,7 +721,7 @@ Shader "Boscali/FlightCloud"
             float frontDepth = frontCrown - frontBase;
             if (front > 0.02)
             {
-                float frontBody = BodiesLadder(gw + 5311.0, row.lobeRung, sheet ? bodyLod : puffLod, 1.0, sheetBlend);
+                float frontBody = BodiesLadder(NoiseG(gw + 5311.0, NOISE_LOW), row.lobeRung, sheet ? bodyLod : puffLod, 1.0, sheetBlend);
                 float fm = CoverMask(frontBody, saturate(front * 1.05));
                 float frontFloor = frontBase + (frontBody - 0.5) * min(220.0, row.baseWobble + 40.0);
                 float frontTop = frontCrown + (broad.r - 0.5) * min(1200.0, frontDepth * 0.25) -
@@ -723,9 +763,9 @@ Shader "Boscali/FlightCloud"
             {
                 // The edge texture follows the lobe (spec 4.2): the erosion periods scale with the rung's lobe, and inside a
                 // ramp the two rungs' textures mix by the weight of their bodies.
-                if (lobe.y < 0.98) detail = EdgeDetail(g, coarse, EdgeScale(LobeMetres(lobe.x)), edge, sheetBlend);
+                if (lobe.y < 0.98) detail = EdgeDetail(ng, coarse, EdgeScale(LobeMetres(lobe.x)), edge, sheetBlend);
                 if (lobe.y > 0.02)
-                    detail = lerp(detail, EdgeDetail(g, coarse, EdgeScale(LobeMetres(lobe.x + 1.0)), edge, sheetBlend),
+                    detail = lerp(detail, EdgeDetail(ng, coarse, EdgeScale(LobeMetres(lobe.x + 1.0)), edge, sheetBlend),
                         lobe.y < 0.98 ? lobe.y : 1.0);
             }
             // Erosion only removes the boundary; signed noise used to create detached wisps.
@@ -752,7 +792,7 @@ Shader "Boscali/FlightCloud"
             // from a pixel footprint of 30 m and is skipped from 60 m. gFoot is 0 in the density check and the cookie, so the CPU twin is unchanged.
             if (rain > 0.02 && gFoot < 60.0 && g.y < floorY && g.y > floorY - 700.0)
             {
-                float frag = tex3Dlod(_CloudNoiseTex, float4(g.xz / 900.0 + 0.29, g.y / 420.0 + 0.61, lod)).r;
+                float frag = tex3Dlod(_CloudNoiseTex, float4(ng.xz / 900.0 + 0.29, ng.y / 420.0 + 0.61, lod)).r;
                 float band = smoothstep(floorY - 700.0, floorY - 450.0, g.y) * (1.0 - smoothstep(floorY - 180.0, floorY, g.y));
                 scud = smoothstep(0.62, 0.78, frag + rain * 0.35) * band * saturate(rain * 6.0) * (1.0 - smoothstep(30.0, 60.0, gFoot));
             }
@@ -771,7 +811,7 @@ Shader "Boscali/FlightCloud"
             float carveFade = saturate(1.0 - gFoot / 120.0);
             if (carveFade > 0.01 && field > 0.03 && field < 0.98)
             {
-                float cav = tex3Dlod(_CloudNoiseTex, float4(g.xz / 900.0 + 0.71, g.y / 760.0 + 0.29, LodFor(gFoot, 900.0))).g;
+                float cav = tex3Dlod(_CloudNoiseTex, float4(ng.xz / 900.0 + 0.71, ng.y / 760.0 + 0.29, LodFor(gFoot, 900.0))).g;
                 float carveKeep = 1.0 - 0.7 * smoothstep(0.25, 0.6, field);
                 field = saturate(field - (cav - 0.48) * 1.1 * carveFade * carveKeep);
             }
@@ -838,30 +878,33 @@ Shader "Boscali/FlightCloud"
 
         // The weighted pattern value (about 0.52 on average) of a layer at one period. Streak and cell taps fade to their mean
         // once filtered past what the pixel resolves; a morphology with no weight is not fetched.
-        float SlabPattern(float3 g, LayerRow row, float scale, float2 low, float foot, float3 wts)
+        float SlabPattern(float3 g, float layer, LayerRow row, float scale, float2 low, float foot, float3 wts)
         {
             if (wts.x + wts.y + wts.z <= 0.0) return 0.52;
             float2 warp = (low - 0.5) * scale * 1.6;
             float2 p = g.xz + warp;
             float2 w = float2(dot(p, _CloudWindDir), dot(p, float2(-_CloudWindDir.y, _CloudWindDir.x)));
+            // Rounded taps read the noise where the layer's rotation puts it; streak taps keep their stretch along the wind, so they take
+            // the layer's offset only (the aligned layers carry no rotation). The fog bank (layer 2) takes the high layer's.
+            float2 np = NoiseXZ(p, layer < 0.5 ? NOISE_MID : NOISE_HIGH);
+            float2 nsw = NoiseXZ(w, layer < 0.5 ? NOISE_MID_ALIGNED : NOISE_HIGH_ALIGNED);
             float streak = 0.52, cells = 0.52;
             float2 bend = float2(0.0, 0.0);
             if (wts.z > 0.0)
             {
-                float2 sw = w;
                 if (row.curl > 0.01)
                 {
                     // Curl bends the streak coordinate with low-frequency vector noise: hooked cirrus. One fixed sign.
-                    float2 bend = tex3Dlod(_CloudNoiseTex, float4(p / (scale * 3.1) + 0.61, 0.33, 1.5)).rg - 0.5;
-                    sw += bend * scale * 2.0 * row.curl;
+                    float2 curlBend = tex3Dlod(_CloudNoiseTex, float4(np / (scale * 3.1) + 0.61, 0.33, 1.5)).rg - 0.5;
+                    nsw += curlBend * scale * 2.0 * row.curl;
                 }
                 float along = scale * row.aspect;
                 float lod1 = SlabLod(foot, scale), lod2 = SlabLod(foot, scale * 1.73);
-                float s1 = tex3Dlod(_CloudNoiseTex, float4(sw.x / along, sw.y / scale, g.y / (scale * 0.6) + 0.17, lod1)).r;
-                float2 w2 = float2(sw.x * 0.982 - sw.y * 0.191, sw.x * 0.191 + sw.y * 0.982);
+                float s1 = tex3Dlod(_CloudNoiseTex, float4(nsw.x / along, nsw.y / scale, g.y / (scale * 0.6) + 0.17, lod1)).r;
+                float2 nw2 = float2(nsw.x * 0.982 - nsw.y * 0.191, nsw.x * 0.191 + nsw.y * 0.982);
                 float fine2 = saturate(4.0 - lod2);
-                float s2 = fine2 > 0.0 ? lerp(0.52, tex3Dlod(_CloudNoiseTex, float4(w2.x / (along * 1.73) + 0.53,
-                    w2.y / (scale * 1.73) + 0.29, g.y / (scale * 1.1) + 0.61, lod2)).r, fine2) : 0.52;
+                float s2 = fine2 > 0.0 ? lerp(0.52, tex3Dlod(_CloudNoiseTex, float4(nw2.x / (along * 1.73) + 0.53,
+                    nw2.y / (scale * 1.73) + 0.29, g.y / (scale * 1.1) + 0.61, lod2)).r, fine2) : 0.52;
                 streak = s1 * 0.6 + s2 * 0.4;
             }
             if (wts.x + wts.y > 0.0)
@@ -869,12 +912,12 @@ Shader "Boscali/FlightCloud"
                 // Rounded cells from the smooth base channel, also at two scales. The cell tile repeats every cs metres and read as a lattice
                 // (sky 20), so a vector noise at 3.3 cs bends the coordinate by up to ~1/3 cs (Task 13); it filters to nothing with distance.
                 float cs = scale * 0.45;
-                bend = tex3Dlod(_CloudNoiseTex, float4(p / (cs * 3.3) + 0.57, 0.19 + g.y / (cs * 2.9), SlabLod(foot, cs * 3.3))).rg - 0.5;
-                float2 pc = p + bend * cs * 2.2;
+                bend = tex3Dlod(_CloudNoiseTex, float4(np / (cs * 3.3) + 0.57, 0.19 + g.y / (cs * 2.9), SlabLod(foot, cs * 3.3))).rg - 0.5;
+                float2 npc = np + bend * cs * 2.2;
                 float lodC = SlabLod(foot, cs);
-                float c1 = tex3Dlod(_CloudNoiseTex, float4(pc / cs + 0.41, g.y / (cs * 0.8), lodC)).r;
+                float c1 = tex3Dlod(_CloudNoiseTex, float4(npc / cs + 0.41, g.y / (cs * 0.8), lodC)).r;
                 float fineC = saturate(4.0 - lodC);
-                float c2 = fineC > 0.0 ? lerp(0.52, tex3Dlod(_CloudNoiseTex, float4(float2(pc.y, -pc.x) / (cs * 2.37) + 0.13,
+                float c2 = fineC > 0.0 ? lerp(0.52, tex3Dlod(_CloudNoiseTex, float4(float2(npc.y, -npc.x) / (cs * 2.37) + 0.13,
                     g.y / (cs * 1.9) + 0.77, SlabLod(foot, cs * 2.37))).r, fineC) : 0.52;
                 cells = c1 * 0.62 + c2 * 0.38;
             }
@@ -897,19 +940,20 @@ Shader "Boscali/FlightCloud"
         // One thin layer's 2D field at a map point: pattern, flattening from the veil weight, the legacy front thinning, the
         // edge from SlabCoverMask (with the Detail-independent rank, the covered area follows Cover) and the interior density
         // from Detail. No altitude profile and no strength.
-        float Slab2D(float3 g, LayerRow row, float foot, float2 splitMul)
+        float Slab2D(float3 g, float layer, LayerRow row, float foot, float2 splitMul)
         {
             float cover = row.cover * EyeCloudKeep(g);
             if (cover <= 0.005) return 0.0;
             // Mesoscale patches (a layer is never uniform across the whole map) and a slow warp
             // that bends the streaks (hooked cirrus) and breaks the tile period: one fetch.
-            float2 low = tex3Dlod(_CloudNoiseTex, float4(g.xz / 27000.0 + 0.27, 0.71, 1.5)).rg;
+            float2 nlow = NoiseXZ(g.xz, layer < 0.5 ? NOISE_MID : NOISE_HIGH);
+            float2 low = tex3Dlod(_CloudNoiseTex, float4(nlow / 27000.0 + 0.27, 0.71, 1.5)).rg;
             float patch = low.g;
             float4 wts = SlabWeights(row);
             float2 sp = LadderSplit(row.periodRung);
             float pat0 = 0.0, pat1 = 0.0;
-            if (sp.y < 0.98) pat0 = SlabPattern(g, row, PeriodMetres(sp.x), low, foot, wts.xyz);
-            if (sp.y > 0.02) pat1 = SlabPattern(g, row, PeriodMetres(sp.x + 1.0), low, foot, wts.xyz);
+            if (sp.y < 0.98) pat0 = SlabPattern(g, layer, row, PeriodMetres(sp.x), low, foot, wts.xyz);
+            if (sp.y > 0.02) pat1 = SlabPattern(g, layer, row, PeriodMetres(sp.x + 1.0), low, foot, wts.xyz);
             float pattern = LadderMix(pat0, pat1, sp.y, 0.52);
             // The cover law (SlabMath.RankGain): the rank does not depend on Detail, so a layer covers about its Cover however crisp or
             // flat it is; Detail only scales the density inside the cover (the return below).
@@ -1044,7 +1088,7 @@ Shader "Boscali/FlightCloud"
                 float overlap = SlabOverlap(yA, yB, row.baseY, row.baseY + row.thick);
                 if (overlap <= 0.002) continue;
                 g.y = row.baseY + 0.5 * row.thick;
-                float d = Slab2D(g, row, max(t * _CloudPixelAngle, patternFoot), splitMul) * row.strength;
+                float d = Slab2D(g, layer, row, max(t * _CloudPixelAngle, patternFoot), splitMul) * row.strength;
                 if (d <= 0.002) continue;
                 // Thin cloud: its own depth toward the sun is all that shades it.
                 float toSun = row.thick * 0.5 / max(0.12, _CloudSunDirection.y);
@@ -1469,7 +1513,8 @@ Shader "Boscali/FlightCloud"
                         if (wispFade > 0.01)
                         {
                             float3 wg = world + _CloudWorldOffset;
-                            float3 wispN = tex3Dlod(_CloudNoiseTex, float4(wg.xz / 1200.0 + 0.47, wg.y / 1000.0 + 0.13, LodFor(gFoot, 1200.0))).rgb;
+                            float3 nwg = NoiseG(wg, NOISE_LOW);
+                            float3 wispN = tex3Dlod(_CloudNoiseTex, float4(nwg.xz / 1200.0 + 0.47, nwg.y / 1000.0 + 0.13, LodFor(gFoot, 1200.0))).rgb;
                             float wisp = wispN.x * 0.45 + wispN.y * 0.20 + wispN.z * 0.35;
                             // Smaller ragged filaments supply parallax as the aircraft crosses
                             // the volume. Filter them out before a march interval can alias them.
@@ -1477,8 +1522,8 @@ Shader "Boscali/FlightCloud"
                                 (1.0 - smoothstep(20.0, 70.0, gFoot));
                             if (filamentFade > 0.01)
                             {
-                                float filament = tex3Dlod(_CloudNoiseTex, float4(wg.xz / 360.0 + 0.19,
-                                    wg.y / 300.0 + 0.67, LodFor(gFoot, 360.0))).g;
+                                float filament = tex3Dlod(_CloudNoiseTex, float4(nwg.xz / 360.0 + 0.19,
+                                    nwg.y / 300.0 + 0.67, LodFor(gFoot, 360.0))).g;
                                 wisp += (filament - 0.5) * 0.55 * filamentFade;
                             }
                             light *= 1.0 + (wisp - 0.5) * 1.1 * (0.5 + saturate(d)) * wispFade;
@@ -1527,8 +1572,9 @@ Shader "Boscali/FlightCloud"
             if (_HorizonCover > 0.01 && horizonT > CLOUD_FAR_LIMIT * 0.75 && horizonT < deckLimit)
             {
                 float2 hp = ro.xz + ray.xz * horizonT;
-                float hn = tex3Dlod(_CloudNoiseTex, float4(hp / 52000.0 + 0.31, 0.47, 3.0)).r * 0.62 +
-                    tex3Dlod(_CloudNoiseTex, float4(float2(hp.y, -hp.x) / 141000.0 + 0.77, 0.19, 3.5)).r * 0.38;
+                float2 nhp = NoiseXZ(hp, NOISE_HORIZON);
+                float hn = tex3Dlod(_CloudNoiseTex, float4(nhp / 52000.0 + 0.31, 0.47, 3.0)).r * 0.62 +
+                    tex3Dlod(_CloudNoiseTex, float4(float2(nhp.y, -nhp.x) / 141000.0 + 0.77, 0.19, 3.5)).r * 0.38;
                 float hBody = saturate(0.5 + (hn - 0.52) * 3.16);
                 float hCover = CoverMask(hBody, _HorizonCover * (1.0 - _SplitB.x * (1.0 - SplitShare(hp))));
                 float hPath = min(_HorizonDepth / max(0.015, abs(ray.y)), 150000.0);

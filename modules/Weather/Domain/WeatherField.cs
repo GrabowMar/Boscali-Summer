@@ -108,6 +108,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>The row every sample reads when the tape is one keyframe (live play, and a one-keyframe fixture): not a texel copy per sample.</summary>
         private SkyParams constantRow;
         private bool tapeIsConstant;
+        /// <summary>The noise rotation and offsets of the current layout seed, built once per seed (spec 6).</summary>
+        private NoiseXform noiseXform;
 
         private readonly BakedTape constantTape = new BakedTape(1);
 
@@ -173,7 +175,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
             Tape = new TapeSampler(constantTape);
             tapeIsConstant = true;
             constantRow = row;
-            Frame = new TapeFrame(key.HeadingDeg, 0f);
+            if (noiseXform == null || noiseXform.LayoutSeed != key.LayoutSeed) noiseXform = new NoiseXform(key.LayoutSeed);
+            Frame = new TapeFrame(key.HeadingDeg, 0f, noise: noiseXform);
             ResetLattice();
             PrevailingHeading = key.DownwindHeading; // the mission wind's heading, set once at capture
 
