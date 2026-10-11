@@ -50,7 +50,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         private string localCommandStatus = "";
         private FactionHQ viewHq;
 
-        private sealed class FrontCandidate
+        internal sealed class FrontCandidate
         {
             internal string Key, Label;
             internal float X, Z, Pressure;
@@ -58,7 +58,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             internal bool Objective, Held;
         }
 
-        private sealed class Operation
+        internal sealed class Operation
         {
             internal int Id, Revision;
             internal string Key, Label, Kind, Phase;
@@ -69,7 +69,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             internal string Summary;
         }
 
-        private sealed class FactionWar
+        internal sealed class FactionWar
         {
             internal FactionHQ HQ;
             internal readonly List<FrontCandidate> Candidates = new List<FrontCandidate>(LivingWarRules.MaximumFronts);
@@ -696,6 +696,10 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 priority.TryGetDirective(war.HQ.faction.factionName, out PriorityDirective current) &&
                 current.Key == war.Active.Key) priority.ClearDirective(war.HQ);
         }
+
+        /// <summary>Read-only view of every faction's staff for the sim proof hook (GroundProof); the view properties below
+        /// advance clocks, this does not.</summary>
+        internal IReadOnlyDictionary<string, FactionWar> Wars => wars;
 
         internal bool IsDefending(FactionHQ hq, string key) => Authoritative && hq?.faction != null &&
             wars.TryGetValue(hq.faction.factionName, out FactionWar war) &&

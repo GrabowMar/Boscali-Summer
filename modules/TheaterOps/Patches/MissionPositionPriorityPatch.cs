@@ -67,13 +67,17 @@ namespace BoscaliSummer.Modules.TheaterOps.Patches
         {
             // Each enrolled group follows its own sector assignment. Unenrolled units and
             // every aircraft keep vanilla's own answer.
+            GroundProbe.AdvanceRan++;
             if (!(unit is GroundVehicle vehicle)) return;
+            GroundProbe.AdvanceGround++;
             if (GroundFrontService.Active?.HasRtsCommander() == true) return;
             GroundFrontService front = GroundFrontService.Active;
             if (front == null || !front.IsEnrolled(vehicle)) return;
+            GroundProbe.AdvanceEnrolled++;
             if (front.TryGetDestination(vehicle, out GlobalPosition frontDestination))
             {
                 destination = frontDestination;
+                GroundProbe.AdvanceReplaced++;
                 __result = true;
                 return;
             }
@@ -82,6 +86,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Patches
             if (!MissionPositionPriorityQuery.TryGetDirective(TheaterPriorityService.Active,
                 unit.NetworkHQ, out PriorityDirective directive)) return;
             destination = new GlobalPosition(directive.X, directive.Y, directive.Z);
+            GroundProbe.AdvanceReplaced++;
             __result = true;
         }
 
@@ -106,6 +111,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Patches
         private static void Postfix(
             FactionHQ factionHQ, Transform transform, ref float distance, ref bool __result)
         {
+            GroundProbe.DeliveryRan++;
             TheaterPriorityService service = TheaterPriorityService.Active;
             if (transform == null ||
                 !MissionPositionPriorityQuery.TryGetDirective(service, factionHQ, out PriorityDirective directive))
@@ -113,6 +119,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Patches
 
             distance = FastMath.Distance(
                 new GlobalPosition(directive.X, directive.Y, directive.Z), transform.GlobalPosition());
+            GroundProbe.DeliveryReplaced++;
             __result = true;
         }
 

@@ -39,9 +39,9 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         private static readonly FieldInfo CommandedDestination =
             AccessTools.Field(typeof(GroundVehicle), "commandedDestination");
 
-        private enum Stage { Rally, Line, Assault, Contact, Withdraw }
+        internal enum Stage { Rally, Line, Assault, Contact, Withdraw }
 
-        private sealed class Member
+        internal sealed class Member
         {
             internal GroundVehicle Vehicle;
             internal Group Group;
@@ -61,7 +61,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             internal float Next;
         }
 
-        private sealed class Group
+        internal sealed class Group
         {
             internal int Id;
             internal int Axis;
@@ -203,6 +203,11 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             destination = member.Destination;
             return true;
         }
+
+        // Read-only views for the sim proof hook (GroundProof): nothing here assigns, enrols or clears.
+        internal IReadOnlyList<Group> Groups => groups;
+        internal bool TacticsEnabled => settings != null && settings.FrontlineTacticsEnabled.Value;
+        internal bool Steering => AdapterEnabled;
 
         internal int CountGroups(string faction, string key)
         {
