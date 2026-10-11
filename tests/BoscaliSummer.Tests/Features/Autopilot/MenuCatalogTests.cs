@@ -354,7 +354,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
         {
             MenuModel m = MenuCatalog.Build(MenuWorlds.Default());
             string[] ids = m.Category("view").Rows.ConvertAll(r => r.Id).ToArray();
-            TestAssert.Eq(string.Join(" ", ids), "view/cam view/map view/mslview view/board view/declutter view/boardlayout", "the board rows follow the camera rows and keep their order");
+            TestAssert.Eq(string.Join(" ", ids), "view/cam view/map view/mslview view/board view/declutter", "the board rows follow the camera rows and keep their order");
 
             MenuRow board = m.Row("view/board");
             TestAssert.That(board.Kind == MenuKind.Toggle && board.IsOn && !board.Checkbox, "TAC BOARD is a toggle with distinct verbs, not a checkbox");
@@ -363,10 +363,8 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.Eq(m.Row("view/declutter").Label, "SET HUD DECLUTTER LEAN", "FULL steps to LEAN");
             TestAssert.Eq(m.Row("view/declutter").State, "HUD DECLUTTER: FULL", "the declutter state line names the level");
             TestAssert.Eq(m.Row("view/declutter").ToastText(), "HUD DECLUTTER: LEAN", "and the toast names where the press led");
-            TestAssert.Eq(m.Row("view/boardlayout").Label, "SET BOARD LAYOUT STACK", "WIDE steps to STACK");
-            TestAssert.Eq(m.Row("view/boardlayout").State, "BOARD LAYOUT: WIDE", "the layout state line names the layout");
 
-            // every declutter level and layout is reachable and the cycle wraps
+            // every declutter level is reachable and the cycle wraps
             string[] levels = { "FULL", "LEAN", "MIN" };
             for (int i = 0; i < levels.Length; i++)
             {
@@ -376,23 +374,17 @@ namespace BoscaliSummer.Tests.Features.Autopilot
                 TestAssert.Eq(row.State, "HUD DECLUTTER: " + levels[i], "declutter shows " + levels[i]);
                 TestAssert.Eq(row.NextValue, levels[(i + 1) % levels.Length], "declutter " + levels[i] + " steps to " + levels[(i + 1) % levels.Length]);
             }
-            MenuWorld stack = MenuWorlds.Default();
-            stack.BoardLayout = 1;
-            MenuRow layout = MenuCatalog.Build(stack).Row("view/boardlayout");
-            TestAssert.That(layout.State == "BOARD LAYOUT: STACK" && layout.NextValue == "WIDE", "STACK steps back to WIDE");
-            stack.BoardLayout = 9; stack.BoardDeclutter = -3;
-            MenuModel clamped = MenuCatalog.Build(stack);
-            TestAssert.That(clamped.Row("view/boardlayout").State == "BOARD LAYOUT: STACK" && clamped.Row("view/declutter").State == "HUD DECLUTTER: FULL",
-                "an index outside the lists is held inside them");
+            MenuWorld outside = MenuWorlds.Default();
+            outside.BoardDeclutter = -3;
+            TestAssert.Eq(MenuCatalog.Build(outside).Row("view/declutter").State, "HUD DECLUTTER: FULL", "an index below the list is held at its first step");
+            outside.BoardDeclutter = 9;
+            TestAssert.Eq(MenuCatalog.Build(outside).Row("view/declutter").State, "HUD DECLUTTER: MIN", "an index above the list is held at its last step");
 
             // the cycle order is the contract enums' order: the binding steps the enum by index
             TestAssert.Eq(MenuCatalog.BoardDeclutters.Length, Enum.GetValues(typeof(BoardDeclutter)).Length, "one declutter step per BoardDeclutter value");
-            TestAssert.Eq(MenuCatalog.BoardLayouts.Length, Enum.GetValues(typeof(BoardLayout)).Length, "one layout step per BoardLayout value");
-            string[] declutterNames = Enum.GetNames(typeof(BoardDeclutter)), layoutNames = Enum.GetNames(typeof(BoardLayout));
+            string[] declutterNames = Enum.GetNames(typeof(BoardDeclutter));
             for (int i = 0; i < declutterNames.Length; i++)
                 TestAssert.That(declutterNames[i].ToUpperInvariant().StartsWith(MenuCatalog.BoardDeclutters[i], StringComparison.Ordinal), "declutter step " + i + " is " + declutterNames[i]);
-            for (int i = 0; i < layoutNames.Length; i++)
-                TestAssert.Eq(layoutNames[i].ToUpperInvariant(), MenuCatalog.BoardLayouts[i], "layout step " + i);
         }
 
         private static void TacBoardOffKeepsItsRows()
@@ -400,29 +392,26 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             MenuModel m = MenuCatalog.Build(MenuWorlds.BoardOff());
             MenuRow board = m.Row("view/board");
             TestAssert.That(!board.IsOn && board.Label == "SHOW TAC BOARD" && board.State == "CURRENT: OFF", "a hidden board offers SHOW, state CURRENT: OFF");
-            foreach (string id in new[] { "view/declutter", "view/boardlayout" })
-            {
-                MenuRow row = m.Row(id);
-                TestAssert.That(row != null && row.IsBlocked && row.Blocked == "TAC BOARD: OFF" && row.State == "TAC BOARD: OFF", id + " stays, dimmed, with its reason");
-            }
-            TestAssert.That(m.Row("view/declutter").Value == "MIN" && m.Row("view/boardlayout").Value == "STACK", "a hidden board keeps the look the pilot left it on");
+            MenuRow look = m.Row("view/declutter");
+            TestAssert.That(look != null && look.IsBlocked && look.Blocked == "TAC BOARD: OFF" && look.State == "TAC BOARD: OFF", "the declutter row stays, dimmed, with its reason");
+            TestAssert.That(look.Value == "MIN", "a hidden board keeps the look the pilot left it on");
 
             // opened with the board off, turned on while the menu is open: the look rows come alive in place
             MenuModel live = MenuCatalog.Build(MenuWorlds.BoardOff());
             MenuWorld on = MenuWorlds.BoardOff();
             on.BoardOn = true;
             live.Reconcile(MenuCatalog.Build(on));
-            TestAssert.That(live.Row("view/board").IsOn && !live.Row("view/declutter").IsBlocked && !live.Row("view/boardlayout").IsBlocked, "switching the board on frees the look rows");
+            TestAssert.That(live.Row("view/board").IsOn && !live.Row("view/declutter").IsBlocked, "switching the board on frees the look row");
             // and the other way: turned off while open, the rows stay in their place, dimmed
             live = MenuCatalog.Build(MenuWorlds.Default());
             live.Reconcile(MenuCatalog.Build(MenuWorlds.BoardOff()));
-            TestAssert.That(!live.Row("view/board").IsOn && live.Row("view/declutter").Blocked == "TAC BOARD: OFF" && !live.Row("view/declutter").Gone, "switching the board off dims the look rows, never drops them");
+            TestAssert.That(!live.Row("view/board").IsOn && live.Row("view/declutter").Blocked == "TAC BOARD: OFF" && !live.Row("view/declutter").Gone, "switching the board off dims the look row, never drops it");
 
             // no options contract: no board rows; while a missile is followed VIEW lists only the missile steppers
             MenuWorld none = MenuWorlds.Default();
             none.BoardAvailable = false;
             MenuModel without = MenuCatalog.Build(none);
-            TestAssert.That(without.Row("view/board") == null && without.Row("view/declutter") == null && without.Row("view/boardlayout") == null, "no TAC BOARD options installed: no board rows");
+            TestAssert.That(without.Row("view/board") == null && without.Row("view/declutter") == null, "no TAC BOARD options installed: no board rows");
             TestAssert.That(without.Row("view/cam") != null && without.Row("view/map") != null, "the camera rows are unaffected");
             TestAssert.That(MenuCatalog.Build(MenuWorlds.Missile()).Row("view/board") == null, "the missile view lists no board rows");
         }

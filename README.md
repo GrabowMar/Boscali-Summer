@@ -188,10 +188,10 @@ The settings file is `com.marci.boscalisummer.cfg` in `BepInEx/config/`. Systems
 
 The TAC BOARD HUD has its own options. They are yours alone, apply at once and can be changed in flight, from whichever of these is handiest:
 
-- **SET → THIS PILOT → COCKPIT** — every option, in four groups. **Board**: on/off, layout (wide or stack), declutter level, size, position, opacity and shade. **Pages**: whether the scope shows pages at all, one switch per page (radar warning, shot, missile cam, approach, wing, strike, dock, objective, systems), how long a radar warning is held and the minimum time a page stays. **Blocks**: the lamp row, systems strip, gauge row and notice line. **Extras**: visor sway, restyling the kill feed and map, and **Reset to defaults**.
-- **C menu → VIEW** — **Show/Hide TAC BOARD**, **Set HUD declutter** (full, lean, min) and **Set board layout** (wide, stack).
+- **SET → THIS PILOT → COCKPIT** — the options that change the board, in three groups. **Board**: on/off, declutter level and opacity. **Pages**: whether the scope shows pages at all, one switch per page (radar warning, shot, missile cam, approach, wing, strike, dock, objective, systems), how long a radar warning is held and the minimum time a page stays. **Blocks**: the lamp row, systems strip, gauge row and notice line. **Reset to defaults** puts every option back.
+- **C menu → VIEW** — **Show/Hide TAC BOARD** and **Set HUD declutter** (full, lean, min).
 - **F1** — the **TAC BOARD** switch; with **Advanced settings** on, the whole **TacBoard** section.
-- **Config file** — the same options under `[TacBoard]` in `com.marci.boscalisummer.cfg`.
+- **Config file** — the same options under `[TacBoard]` in `com.marci.boscalisummer.cfg`. Layout, Scale, OffsetX, OffsetY, Shade, Sway and Corners are saved there, but the board does not draw them yet, so changing them does nothing for now.
 
 A page that is switched off also stops posting its notices on the notice line, so leave the radar-warning page on unless you really want it gone.
 

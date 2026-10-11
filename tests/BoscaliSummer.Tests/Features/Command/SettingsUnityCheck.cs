@@ -42,7 +42,7 @@ public static class SettingsUnityCheck
             File.WriteAllText("result.txt", "PASS: SET renders THIS PILOT (DISPLAY/MAP/COCKPIT/IMMERSION/PERFORMANCE) and SERVER (WORLD/FORCES/EFFECTS/TASKING) " +
                 "consoles as client and host at 896, 596 and 420 units (" + checkedTexts + " texts gated for overflow, overlap, gutter and 11 px floor); " +
                 "mode switch and remembered mode, toggles, background replacement and row reveal, disabled dependencies, +/- bounds, " +
-                "the COCKPIT tab's TAC BOARD section (four groups, every control with one line of help, a toggle, a strip and a dial writing through the options contract, " +
+                "the COCKPIT tab's TAC BOARD section (three groups and a reset, every control with one line of help, a toggle, a strip and a dial writing through the options contract, " +
                 "inert options with the board off, RESET TO DEFAULTS, the long page rendered stop by stop), " +
                 "host-only lock on SERVER rows and the flat page tree (no GameObject churn) are checked. Game adapters are stubbed; in-game acceptance remains required.");
             EditorApplication.Exit(0);
@@ -392,27 +392,27 @@ public static class SettingsUnityCheck
     }
 
     /// <summary>
-    /// The TAC BOARD section on the COCKPIT tab: four groups, every control present with one line of help, and a toggle, a strip and a dial each writing through the contract
+    /// The TAC BOARD section on the COCKPIT tab: three groups and a reset, every control present with one line of help, and a toggle, a strip and a dial each writing through the contract
     /// (<see cref="ITacBoardSettings"/>, here a plain object). Also the long page scrolled stop by stop so each part of it is rendered and gated, the page with the board
     /// switched off (its options inert, RESET still live), and RESET TO DEFAULTS. Leaves the fixture at its defaults.
     /// </summary>
     private static void CheckTacBoardSection(Camera camera, Canvas canvas, int height, AvConsole clientCon, RectTransform content, TacBoardFixture tac)
     {
-        foreach (string group in new[] { "TAC BOARD", "TAC BOARD PAGES", "TAC BOARD BLOCKS", "TAC BOARD EXTRAS" })
+        foreach (string group in new[] { "TAC BOARD", "TAC BOARD PAGES", "TAC BOARD BLOCKS", "TAC BOARD RESET" })
             Check(content.Find("Section " + group) != null, "COCKPIT carries the " + group + " section");
         foreach (string toggle in new[] { "TAC BOARD", "RADAR WARNING", "SHOT", "MISSILE CAM", "APPROACH", "WING", "STRIKE", "DOCK", "OBJECTIVE", "SYSTEMS",
-                                          "LAMPS", "SYSTEMS STRIP", "GAUGES", "NOTICES", "VISOR SWAY", "RESTYLE FEED AND MAP" })
+                                          "LAMPS", "SYSTEMS STRIP", "GAUGES", "NOTICES" })
             Check(content.Find("Cell " + toggle) != null, "TAC BOARD switch " + toggle + " exists");
-        foreach (string dial in new[] { "SIZE", "OPACITY", "MOVE LEFT", "MOVE DOWN", "SHADE", "RWR HOLD", "PAGE MIN STAY" }) FindRowByName(content, dial);
-        foreach (string segment in new[] { "WIDE", "STACK", "FULL", "LEAN", "MIN", "AUTO", "OFF", "RESET TO DEFAULTS" })
+        foreach (string dial in new[] { "OPACITY", "RWR HOLD", "PAGE MIN STAY" }) FindRowByName(content, dial);
+        foreach (string segment in new[] { "FULL", "LEAN", "MIN", "AUTO", "OFF", "RESET TO DEFAULTS" })
             Check(FindControl(content, segment) != null, "TAC BOARD control " + segment + " exists");
-        foreach (string label in new[] { "LAYOUT", "DECLUTTER", "PAGES" }) Check(HasText(content, label), "TAC BOARD choice " + label + " is labelled");
+        foreach (string label in new[] { "DECLUTTER", "PAGES" }) Check(HasText(content, label), "TAC BOARD choice " + label + " is labelled");
         foreach (AvHelpTip tip in content.GetComponentsInChildren<AvHelpTip>(true))
             Check(!string.IsNullOrEmpty(tip.Text) && tip.Text.Length <= 120 && tip.Text.IndexOf('\n') < 0, "A control's help is one short line: '" + tip.Text + "'");
         foreach (AvControl control in content.GetComponentsInChildren<AvControl>(true))
             Check(!string.IsNullOrEmpty(control.Help), "Control '" + control.Label + "' has help");
-        Check(HasText(content, "100%") && HasText(content, "45%") && HasText(content, "0 px") && HasText(content, "6 s") && HasText(content, "3 s"),
-            "The dials read the options as they stand: size, shade, offsets and the two times");
+        Check(HasText(content, "100%") && HasText(content, "6 s") && HasText(content, "3 s"),
+            "The dials read the options as they stand: opacity and the two times");
 
         // the long page, one stop at a time, each stop rendered and gated
         ScrollRect scroll = clientCon.Root.GetComponentInChildren<ScrollRect>(true);
@@ -428,43 +428,31 @@ public static class SettingsUnityCheck
         // a toggle, a strip and a dial each change only their own option
         Click(content.Find("Cell RADAR WARNING"));
         Check(!tac.PageThreat && tac.PageShot && tac.PageSystems, "A page switch writes its own option and no other");
-        Click(FindControl(content, "STACK"));
-        Check(tac.Layout == BoardLayout.Stack, "The LAYOUT strip writes Layout");
         Click(FindControl(content, "MIN"));
-        Check(tac.Declutter == BoardDeclutter.Minimal && tac.Layout == BoardLayout.Stack, "The DECLUTTER strip writes Declutter");
+        Check(tac.Declutter == BoardDeclutter.Minimal, "The DECLUTTER strip writes Declutter");
         Click(FindControl(content, "OFF"));
         Check(tac.ScopeMode == BoardScopeMode.Off, "The PAGES strip writes ScopeMode");
-        Click(Plus(content, "SIZE"));
-        Check(Mathf.Approximately(tac.Scale, 1.05f) && HasText(content, "105%"), "SIZE steps by 5% and reads as a percentage");
-        for (int i = 0; i < 20; i++) Click(Plus(content, "SIZE"));
-        Check(Mathf.Approximately(tac.Scale, 1.4f), "SIZE stops at 140%");
-        for (int i = 0; i < 30; i++) Click(Minus(content, "SIZE"));
-        Check(Mathf.Approximately(tac.Scale, .6f), "SIZE stops at 60%");
-        Click(Plus(content, "MOVE LEFT"));
-        Click(Plus(content, "MOVE DOWN"));
-        Click(Plus(content, "MOVE DOWN"));
-        Check(Mathf.Approximately(tac.OffsetX, 20f) && Mathf.Approximately(tac.OffsetY, 40f) && HasText(content, "40 px"), "MOVE LEFT and MOVE DOWN step by 20 px");
         Click(Minus(content, "OPACITY"));
-        Click(Minus(content, "SHADE"));
-        Check(Mathf.Approximately(tac.Opacity, .95f) && Mathf.Approximately(tac.Shade, .4f), "OPACITY and SHADE step by 5%");
+        Check(Mathf.Approximately(tac.Opacity, .95f) && HasText(content, "95%"), "OPACITY steps by 5% and reads as a percentage");
+        for (int i = 0; i < 30; i++) Click(Minus(content, "OPACITY"));
+        Check(Mathf.Approximately(tac.Opacity, .25f), "OPACITY stops at 25%");
         Click(Plus(content, "RWR HOLD"));
         Click(Minus(content, "PAGE MIN STAY"));
         Check(Mathf.Approximately(tac.ThreatHoldSeconds, 7f) && Mathf.Approximately(tac.PageMinSeconds, 2f) && HasText(content, "7 s"), "The two times step by whole seconds");
         for (int i = 0; i < 40; i++) { Click(Minus(content, "RWR HOLD")); Click(Plus(content, "PAGE MIN STAY")); }
         Check(Mathf.Approximately(tac.ThreatHoldSeconds, 2f) && Mathf.Approximately(tac.PageMinSeconds, 15f), "RWR HOLD stops at 2 s and PAGE MIN STAY at 15 s");
         Click(content.Find("Cell GAUGES"));
-        Click(content.Find("Cell RESTYLE FEED AND MAP"));
-        Check(!tac.ShowGauges && !tac.Corners && tac.ShowLamps && tac.Sway, "The block and extra switches write their own options");
+        Check(!tac.ShowGauges && tac.ShowLamps && tac.ShowTicker, "A block switch writes its own option and no other");
 
         // with the board off every option is inert, and only RESET still works
         Click(content.Find("Cell TAC BOARD"));
         Check(!tac.Enabled, "The TAC BOARD switch writes Enabled");
         Settle(clientCon);
-        float held = tac.Scale;
-        Click(Plus(content, "SIZE"));
+        float held = tac.Opacity;
+        Click(Plus(content, "OPACITY"));
         Click(content.Find("Cell SHOT"));
-        Click(FindControl(content, "WIDE"));
-        Check(tac.Scale == held && tac.PageShot && tac.Layout == BoardLayout.Stack, "With the board off its options ignore clicks");
+        Click(FindControl(content, "FULL"));
+        Check(tac.Opacity == held && tac.PageShot && tac.Declutter == BoardDeclutter.Minimal, "With the board off its options ignore clicks");
         Render(camera, canvas, height, "client-cockpit-boardoff");
         Click(FindControl(content, "RESET TO DEFAULTS"));
         Check(tac.ResetCount == 1 && tac.IsDefault(), "RESET TO DEFAULTS puts every option back through the contract, board off or not");

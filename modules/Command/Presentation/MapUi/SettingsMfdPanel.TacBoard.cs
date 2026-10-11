@@ -8,23 +8,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// The TAC BOARD's options on the COCKPIT tab, written only through <see cref="ITacBoardSettings"/> (the Hud module owns the board and its config; this console never
-    /// imports it). Four groups: the board itself, its pages, its blocks and the extras. Client-local: the board takes a change on its next 10 Hz tick, so a pilot sees it
-    /// in flight and there is no preview here. Every control but RESET waits on the board's own switch, as the immersion page waits on its master.
+    /// imports it). Three groups (the board itself, its pages, its blocks) and a reset. Client-local: the board takes a change on its next 10 Hz tick, so a pilot sees it
+    /// in flight and there is no preview here. Every control but RESET waits on the board's own switch, as the immersion page waits on its master. Only an option the board
+    /// draws has a row: Layout, Scale, OffsetX, OffsetY, Shade, Sway and Corners are in the contract and get one when the board honours them.
     /// </summary>
     internal sealed partial class SettingsMfdPanel
     {
-        // Index = the enum's value (BoardLayout, BoardScopeMode, BoardDeclutter), so a strip writes a segment's index straight to the contract.
-        private static readonly string[] BoardLayoutNames = { "WIDE", "STACK" };
-        private static readonly string[] BoardLayoutBriefs =
-        {
-            "WIDE: spreads the board along the top edge of the screen.",
-            "STACK: the classic narrow column.",
-        };
+        // Index = the enum's value (BoardScopeMode, BoardDeclutter), so a strip writes a segment's index straight to the contract.
         private static readonly string[] BoardDeclutterNames = { "FULL", "LEAN", "MIN" };
         private static readonly string[] BoardDeclutterBriefs =
         {
             "FULL: everything the switches below allow.",
-            "LEAN: no gauge row, no dark lamps, no captions.",
+            "LEAN: no gauge row, no dark lamps.",
             "MIN: only the lock, spike and missile lamps, and the pages that matter in a fight.",
         };
         private static readonly string[] BoardPagesNames = { "AUTO", "OFF" };
@@ -47,26 +42,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Func<bool> on = () => board.Enabled;
             Func<string> off = () => "Turn on TAC BOARD first.";
 
-            flow.Section(AvIcon.Target, "TAC BOARD", "BOARD · LAYOUT · LOOK");
+            flow.Section(AvIcon.Target, "TAC BOARD", "BOARD · DECLUTTER · LOOK");
             ToggleCell(flow, flow.Grid(1), page, "TAC BOARD",
                 "Off hides the board and gives back the game's own weapon, countermeasure and power panels.",
                 () => board.Enabled, v => board.Enabled = v);
-            BoardStrip(flow, page, "LAYOUT", BoardLayoutNames, BoardLayoutBriefs,
-                () => (int)board.Layout, i => board.Layout = (BoardLayout)i, on, off);
             BoardStrip(flow, page, "DECLUTTER", BoardDeclutterNames, BoardDeclutterBriefs,
                 () => (int)board.Declutter, i => board.Declutter = (BoardDeclutter)i, on, off);
 
             var look = flow.Add(new SetRingRow(flow.Content));
-            BoardRing(flow, look, page, "SIZE", () => board.Scale, v => board.Scale = v, 0.6f, 1.4f, .05f, v => AvNum.Percent(v),
-                "How big the whole board is.", on, off);
             BoardRing(flow, look, page, "OPACITY", () => board.Opacity, v => board.Opacity = v, 0.25f, 1f, .05f, v => AvNum.Percent(v),
                 "How solid the board's ink reads against the sky.", on, off);
-            BoardRing(flow, look, page, "MOVE LEFT", () => board.OffsetX, v => board.OffsetX = v, 0f, 1200f, 20f, Pixels,
-                "Slides the board left from the right screen edge, 20 px a step.", on, off);
-            BoardRing(flow, look, page, "MOVE DOWN", () => board.OffsetY, v => board.OffsetY = v, 0f, 600f, 20f, Pixels,
-                "Slides the board down from the top screen edge, 20 px a step.", on, off);
-            BoardRing(flow, look, page, "SHADE", () => board.Shade, v => board.Shade = v, 0f, 1f, .05f, v => AvNum.Percent(v),
-                "The dark band behind the symbols. 0% draws none.", on, off);
 
             flow.Section(AvIcon.Radar2, "TAC BOARD PAGES", "WHAT THE SCOPE SHOWS");
             BoardStrip(flow, page, "PAGES", BoardPagesNames, BoardPagesBriefs,
@@ -108,12 +93,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ToggleCell(flow, blocks, page, "NOTICES", "The notice line at the foot of the board.",
                 () => board.ShowTicker, v => board.ShowTicker = v, on, off);
 
-            flow.Section(AvIcon.Settings, "TAC BOARD EXTRAS", "SWAY · RESTYLE · RESET");
-            AvCellGrid extras = flow.Grid(2);
-            ToggleCell(flow, extras, page, "VISOR SWAY", "The symbols lag a little behind head movement, as if hung just off the glass.",
-                () => board.Sway, v => board.Sway = v, on, off);
-            ToggleCell(flow, extras, page, "RESTYLE FEED AND MAP", "Draw the kill feed and the map frame in the board's look.",
-                () => board.Corners, v => board.Corners = v, on, off);
+            flow.Section(AvIcon.Settings, "TAC BOARD RESET", "BACK TO DEFAULTS");
             AvControl reset = flow.Buttons(new AvControl.Spec("RESET TO DEFAULTS", () =>
             {
                 board.ResetToDefaults();
@@ -123,9 +103,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             reset.Help = "Put every TAC BOARD option back to its default. Nothing else changes.";
         }
 
-        private static string Pixels(float v) => AvNum.Fixed(v, 0) + " px";
-
-        /// <summary>A labelled choice strip (LAYOUT, DECLUTTER, PAGES): one segment per name, the latched one read from <paramref name="get"/>.</summary>
+        /// <summary>A labelled choice strip (DECLUTTER, PAGES): one segment per name, the latched one read from <paramref name="get"/>.</summary>
         private AvSegmented BoardStrip(AvFlow flow, int page, string label, string[] names, string[] briefs, Func<int> get, Action<int> set,
             Func<bool> enabled, Func<string> reason)
         {

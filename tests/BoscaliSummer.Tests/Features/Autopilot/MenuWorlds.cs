@@ -24,7 +24,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
                 HasDrones = true, DronesStriking = false, DronesCanStrike = true, Drones = 2,
                 CameraFollowing = true, Camera = ViewKind.Cockpit, HasCockpitPoint = true, MapAvailable = true,
                 MissileViewAvailable = true, CanEnterMissileView = true, Missiles = 2, MissileStatus = "2 MSL · CLOSEST 1.1 KM",
-                BoardAvailable = true, BoardOn = true, BoardDeclutter = 0, BoardLayout = 0,
+                BoardAvailable = true, BoardOn = true, BoardDeclutter = 0,
                 MarkAvailable = true, HasMark = true, MarkAgeSeconds = 42f, CanCapture = true, CanCallAtMark = true, Armed = "SAT CAMERA",
                 PerksAvailable = true, SkywellCarried = true, SkywellStock = "FUEL 5.9T · AMMO 1.20T", CanExfil = false,
                 DeckAvailable = true, DeckPlaying = false, DeckTitle = "Salt Flats at Dawn", ReceiverAvailable = true, ReceiverOn = true,
@@ -100,11 +100,11 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             return w;
         }
 
-        /// <summary>The pilot hid the TAC BOARD and left it on its non-default look: the two look rows are dimmed, the toggle offers it back.</summary>
+        /// <summary>The pilot hid the TAC BOARD and left it on its non-default look: the look row is dimmed, the toggle offers it back.</summary>
         public static MenuWorld BoardOff()
         {
             MenuWorld w = Default();
-            w.BoardOn = false; w.BoardDeclutter = 2; w.BoardLayout = 1;
+            w.BoardOn = false; w.BoardDeclutter = 2;
             return w;
         }
 

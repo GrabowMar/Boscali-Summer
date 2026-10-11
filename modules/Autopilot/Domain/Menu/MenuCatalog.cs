@@ -14,8 +14,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
     internal static class MenuCatalog
     {
         public const int MaxLabel = 22, MaxState = 30, MaxDesc = 48;
-        /// <summary>The steps of the two TAC BOARD cycle rows, in the order of the <c>BoardDeclutter</c> and <c>BoardLayout</c> contract enums (a press moves to the next, wrapping).</summary>
-        public static readonly string[] BoardDeclutters = { "FULL", "LEAN", "MIN" }, BoardLayouts = { "WIDE", "STACK" };
+        /// <summary>The steps of the TAC BOARD declutter cycle row, in the order of the <c>BoardDeclutter</c> contract enum (a press moves to the next, wrapping).</summary>
+        public static readonly string[] BoardDeclutters = { "FULL", "LEAN", "MIN" };
         private const string D = MenuText.Dot;
         private const string X = MenuText.Times;
 
@@ -510,14 +510,11 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 c.Rows.Add(b.Reg(MenuRow.Toggle("view/board", "hardpoint", w.BoardOn,
                     F("SHOW TAC BOARD", "CURRENT: OFF", "RESTORE THE TAC BOARD", "TAC BOARD ON"),
                     F("HIDE TAC BOARD", "CURRENT: ON", "GO BACK TO STOCK PANELS", "TAC BOARD OFF"), checkbox: false)));
-                // the two look rows keep their place while the board is off, dimmed with the reason: a row is never added mid-session
+                // the look row keeps its place while the board is off, dimmed with the reason: a row is never added mid-session
                 MenuRow declutter = MenuRow.Cycle("view/declutter", "target-filter", "SET HUD DECLUTTER", "HUD DECLUTTER: ",
                     BoardDeclutters, Math.Max(0, Math.Min(BoardDeclutters.Length - 1, w.BoardDeclutter)), "HUD DECLUTTER: ");
-                MenuRow layout = MenuRow.Cycle("view/boardlayout", "shape", "SET BOARD LAYOUT", "BOARD LAYOUT: ",
-                    BoardLayouts, Math.Max(0, Math.Min(BoardLayouts.Length - 1, w.BoardLayout)), "BOARD LAYOUT: ");
-                if (!w.BoardOn) declutter.Blocked = layout.Blocked = "TAC BOARD: OFF";
+                if (!w.BoardOn) declutter.Blocked = "TAC BOARD: OFF";
                 c.Rows.Add(b.Reg(declutter));
-                c.Rows.Add(b.Reg(layout));
             }
             if (w.Camera == ViewKind.Orbit) Badge(c, "EXTERNAL", show: true);
             else if (w.Missiles > 0) Badge(c, w.Missiles + " MSL", show: true);
