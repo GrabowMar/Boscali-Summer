@@ -133,7 +133,7 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
         // One low genus per sky: three pinned library skies (a humilis, a cumulonimbus, a stratus) read their lobe, depth,
         // dome and edge texture from the tape; then a tape whose genus changes across a 12 km ramp, bent by a 10 km meander,
         // so one march crosses lobe rungs 1 to 5 and the ladder blend.
-        foreach (int pin in new[] { 7, 43, 28 })
+        foreach (int pin in new[] { 7, 9, 43, 28 })
         {
             var pinned = new WeatherKey(73, 0f, false, skyPin: (byte)pin);
             field.Build(pinned, 600f, 40000f, 40000f);

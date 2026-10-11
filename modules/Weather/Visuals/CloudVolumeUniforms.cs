@@ -154,7 +154,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             material.SetTexture(TapeTexId, tapeTexture.Texture);
             material.SetVector(TapeInfoId, new Vector4(tape.Texels, 1f / tape.Texels, 1f / tape.TexelMetres, 0f));
             material.SetVector(TapeFrameId, new Vector4(f.UX, f.UZ, f.Amplitude, Mathf.Max(1f, f.Wavelength)));
-            material.SetVector(TapeFrame2Id, new Vector4(f.Phase, f.Offset, 0f, 0f));
+            material.SetVector(TapeFrame2Id, new Vector4(f.Phase, f.Offset, f.Noise.StreetSpacing, f.Noise.StreetPhase));
             NoiseXform noise = f.Noise;
             for (int layer = 0; layer < NoiseXform.Layers; layer++)
                 material.SetVector(NoiseXfIds[layer], new Vector4(noise.Cos(layer), noise.Sin(layer), noise.OffsetX(layer), noise.OffsetZ(layer)));

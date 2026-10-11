@@ -36,7 +36,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         public CloudBodies(byte[] noise, int size, in SkyParams sky, float prevailingHeading = 0f, SkySplit split = default,
             float fog = 0f, WeatherField field = null, float[] shownHeroes = null, bool nearDetail = false,
             Func<float, float, WeatherPoint> weatherSampler = null)
-            : this(noise, size, TapeSampler.Constant(sky), default, prevailingHeading, split, fog, field, shownHeroes,
+            : this(noise, size, TapeSampler.Constant(sky), new TapeFrame(0f, 0f), prevailingHeading, split, fog, field, shownHeroes,
                 nearDetail, weatherSampler)
         {
         }
@@ -113,9 +113,21 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
             // The shader warps bodies by its broad noise so no grid shows at range.
             float wx = x + (broadR - 0.5f) * 1400f, wz = z + (broadG - 0.5f) * 1400f;
-            frame.NoiseXZ(wx, wz, NoiseXform.Low, out float bnx, out float bnz);
-            float puffBody = genus.Sheet ? 0.72f
-                : WeatherMath.Lerp(BodiesLadder(bnx, y, bnz, genus.LobeRung, false, genus.SheetBlend), 0.72f, genus.SheetBlend);
+            // Cloud streets (spec 6, StreetMath): where the row asks, the body field is stretched along the wind and given rows across it.
+            float streets = Scalar.Clamp01(sky.Streets);
+            float sx = wx, sz = wz;
+            if (streets > 0f)
+            {
+                float along = wx * frame.UX + wz * frame.UZ, compress = StreetMath.Compress(streets);
+                sx -= frame.UX * along * compress;
+                sz -= frame.UZ * along * compress;
+            }
+            frame.NoiseXZ(sx, sz, NoiseXform.Low, out float bnx, out float bnz);
+            float bodies = genus.Sheet ? 0.72f : BodiesLadder(bnx, y, bnz, genus.LobeRung, false, genus.SheetBlend);
+            if (!genus.Sheet && streets > 0f)
+                bodies = StreetMath.Body(bodies, streets, StreetMath.Rows(-wx * frame.UZ + wz * frame.UX,
+                    frame.Noise.StreetSpacing, frame.Noise.StreetPhase, (broadG - 0.5f) * 4f));
+            float puffBody = genus.Sheet ? 0.72f : WeatherMath.Lerp(bodies, 0.72f, genus.SheetBlend);
             float relief = WeatherMath.Lerp(0.55f, 1f, WeatherMath.Smoothstep(0.2f, 0.85f, puffBody));
             float localAnvil = CloudShape.LocalAnvil(columnTop - baseY, genus.Anvil);
             float localTowerBlend = WeatherMath.Smoothstep(0.18f, 0.60f, localAnvil);

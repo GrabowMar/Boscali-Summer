@@ -33,7 +33,7 @@ Shader "Boscali/FlightCloud"
         sampler2D _TapeTex;
         float4 _TapeInfo;   // x = texel count, y = 1 / texel count, z = 1 / texel metres
         float4 _TapeFrame;  // xy = tape axis u (unit, toward upwind), z = meander amplitude (m), w = meander wavelength (m)
-        float4 _TapeFrame2; // x = meander phase, y = D, the tape offset at the map origin (m)
+        float4 _TapeFrame2; // x = meander phase, y = D, the tape offset at the map origin (m), z = spacing of the cloud-street rows (m), w = their phase
         float4 _TapeChord;  // x,y = middle layer chord y0,y1 (m); z,w = high layer chord y0,y1
         float4 _TapeFlags;  // x = a middle layer exists on the tape, y = a high layer exists, z = the tape is one texel (read _TapeConstLow)
         float4 _TapeConstLow0, _TapeConstLow1, _TapeConstLow2; // rows 0-2 of a one-texel tape: live play reads these instead of the texture
@@ -87,6 +87,10 @@ Shader "Boscali/FlightCloud"
         // The weather map profiles: the cloud-base byte spans 0-4096 m (CloudMaps.BaseRange), the front base and top and the structure
         // tops 0-16000 m (CloudMaps.VolumeTop).
         #define CLOUD_BASE_RANGE 4096.0
+        // Cloud streets (StreetMath.cs): the body field is stretched along the wind by 1 + STREET_STRETCH * Streets, and rows of
+        // amplitude STREET_ROW_AMP * Streets run across it.
+        #define STREET_STRETCH 3.0
+        #define STREET_ROW_AMP 0.45
         #define CLOUD_MAP_RANGE 16000.0
         #define CLOUD_NEAR_LIMIT 45000.0
         #define CLOUD_FAR_LIMIT 220000.0
@@ -155,6 +159,24 @@ Shader "Boscali/FlightCloud"
         {
             float2 n = NoiseXZ(g.xz, layer);
             return float3(n.x, g.y, n.y);
+        }
+
+        // Cloud streets (StreetMath.Compress, Rows and Body are the twins). The share of the along-wind coordinate removed before the
+        // noise is read, the 0..1 rows across the wind (the broad noise bends them) and the body value with the rows added.
+        float StreetCompress(float streets)
+        {
+            float k = STREET_STRETCH * streets;
+            return k / (1.0 + k);
+        }
+
+        float StreetRows(float across, float wobble)
+        {
+            return 0.5 + 0.5 * sin(6.2831853 * across / _TapeFrame2.z + _TapeFrame2.w + wobble);
+        }
+
+        float StreetBody(float body, float streets, float rows)
+        {
+            return saturate(body + streets * STREET_ROW_AMP * (rows - 0.5));
         }
 
         float LodFor(float foot, float period);
@@ -683,9 +705,19 @@ Shader "Boscali/FlightCloud"
             float sheetBlend = smoothstep(0.45, 0.85, smooth);
             bool sheet = sheetBlend >= 0.999;
             float3 gw = g + float3((broad.r - 0.5) * 1400.0, 0.0, (broad.g - 0.5) * 1400.0);
-            float3 ngw = NoiseG(gw, NOISE_LOW);
+            // Cloud streets: where the row asks, the body field is stretched along the wind and given rows across it.
+            float streets = saturate(row.streets);
+            float3 gs = gw;
+            if (streets > 0.0) gs.xz -= _TapeFrame.xy * (dot(gw.xz, _TapeFrame.xy) * StreetCompress(streets));
+            float3 ngw = NoiseG(gs, NOISE_LOW);
             float puffBody = 0.72;
-            if (!sheet) puffBody = lerp(BodiesLadder(ngw, row.lobeRung, puffLod, 0.0, sheetBlend), 0.72, sheetBlend);
+            if (!sheet)
+            {
+                float bodies = BodiesLadder(ngw, row.lobeRung, puffLod, 0.0, sheetBlend);
+                if (streets > 0.0)
+                    bodies = StreetBody(bodies, streets, StreetRows(dot(gw.xz, float2(-_TapeFrame.y, _TapeFrame.x)), (broad.g - 0.5) * 4.0));
+                puffBody = lerp(bodies, 0.72, sheetBlend);
+            }
             float relief = lerp(0.55, 1.0, smoothstep(0.2, 0.85, puffBody));
             float localAnvil = LocalAnvil(columnTop - baseY, row.anvil);
             float localTowerBlend = smoothstep(0.18, 0.60, localAnvil);
