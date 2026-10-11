@@ -30,7 +30,7 @@ namespace BoscaliSummer.Tests.Features.Hud
         {
             BoardGeometry empty = ScopeLayout.Compute(new BoardBlocks());
             TestAssert.Near(empty.Height, 0f, "A board with no block takes no room");
-            for (int i = 0; i < BoardGeometry.BlockCount; i++) TestAssert.That(!empty.Block(i).Present && !empty.Cloud(i).Present, "No block, no rectangle and no cloud: " + i);
+            for (int i = 0; i < BoardGeometry.BlockCount; i++) TestAssert.That(!empty.Block(i).Present, "No block, no rectangle: " + i);
 
             // WIDE (LAYOUT.md 3): box 916, cruise 160 (the SAT column's foot), live 374 (a full page with two gauge lines and the ticker under it).
             BoardGeometry cruise = ScopeLayout.Compute(All(BoardLayout.Wide, ScopeLayout.Compact));
@@ -65,11 +65,6 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.Near(sl.Height, 580f, "STACK with a live page is 580 tall");
             Same(sl.Gauges, 4f, 532f, 440f, 30f, "STACK live gauge line 532..562");
             Same(sl.Ticker, 4f, 568f, 440f, 12f, "STACK live ticker 568..580");
-
-            // The clouds (LAYOUT.md 2): the block grown by 28 on every side.
-            Same(cruise.Cloud(0), -28f, -22f, 328f, 208f, "HERO's cloud");
-            Same(cruise.Cloud(3), 448f, -28f, 496f, 68f, "The lamp line's cloud");
-            TestAssert.That(!ScopeLayout.Compute(new BoardBlocks { Layout = BoardLayout.Wide, Lamps = true }).Cloud(0).Present, "A block that is not there has no cloud");
 
             // The page never moves when the gauge line or the ticker come and go.
             foreach (BoardLayout layout in new[] { BoardLayout.Wide, BoardLayout.Stack })

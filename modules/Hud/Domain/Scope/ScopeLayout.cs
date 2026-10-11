@@ -13,8 +13,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public readonly float Right => X + W;
         public readonly float Bottom => Y + H;
         public readonly bool Present => W > 0f && H > 0f;
-
-        public readonly BoardRect Grow(float by) => new BoardRect(X - by, Y - by, W + by * 2f, H + by * 2f);
     }
 
     /// <summary>Which blocks of the board exist this tick, and the two sizes that move: the page's height and the number of gauge lines.</summary>
@@ -37,7 +35,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public float Width, Height;
         public BoardRect Hero, Pwr, Exp, Lamps, Page, Gauges, Ticker;
 
-        /// <summary>The blocks, in the order of <see cref="Block"/>: each has a shade cloud (<see cref="Cloud"/>).</summary>
+        /// <summary>The blocks, in the order of <see cref="Block"/>: the shade's cloud field (<see cref="ShadeField"/>) is the strongest of their fall-offs.</summary>
         public const int BlockCount = 7;
 
         public readonly BoardRect Box => new BoardRect(0f, 0f, Width, Height);
@@ -57,12 +55,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
             }
         }
 
-        /// <summary>The soft dark cloud behind block <paramref name="i"/>: its rectangle grown on every side (nothing for a block that is not there).</summary>
-        public readonly BoardRect Cloud(int i)
-        {
-            BoardRect b = Block(i);
-            return b.Present ? b.Grow(ScopeLayout.CloudGrow) : default;
-        }
     }
 
     /// <summary>
@@ -75,8 +67,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
         // ---- LAYOUT.md 0: the anchor (the box's top-right corner) and the smallest unit: below 1080p a 12 unit word is 10 px, never smaller.
         public const float Margin = 8f, MarginTop = 6f, MinScale = 0.85f;
 
-        // ---- LAYOUT.md 2: the shade. A cloud is its block grown by CloudGrow on every side and fades out over that much; the band hangs from the top of the screen.
-        public const float CloudGrow = 28f, CloudAlpha = 0.60f;
+        // ---- LAYOUT.md 2: the shade. ONE cloud field behind all the blocks (ShadeField): each block's fall-off is a smoothstep over CloudFeather units outside it, the fall-offs combine with MAX, the core is CloudAlpha at the top of
+        // the box and falls by CloudFall over CloudFallY units of box y; the fade distance varies by +-CloudWobble and the core is up to CloudMottle lighter in places; baked one texel per CloudCell units. The band hangs from the top of the screen.
+        public const float CloudAlpha = 0.60f, CloudFeather = 72f, CloudFall = 0.5f, CloudFallY = 380f, CloudWobble = 0.35f, CloudMottle = 0.12f, CloudCell = 4f;
         public const float BandAlpha = 0.55f, BandHeight = 190f, BandRamp = 160f, BandFadeTop = 60f;
 
         // ---- LAYOUT.md 3 (WIDE): box 916 wide. HERO 0..272, gap 12, SAT 284..464, gap 12, WING 476..916.

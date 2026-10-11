@@ -8,7 +8,7 @@ using UnityEngine.UI;
 using Object = UnityEngine.Object;
 using static UnityCheckHarness;
 
-// The TAC BOARD's frame: where its blocks sit (WIDE and the classic STACK), where the box goes under the pilot's Scale and offsets, the shade (the band and the clouds, no plate) and the furniture helpers of
+// The TAC BOARD's frame: where its blocks sit (WIDE and the classic STACK), where the box goes under the pilot's Scale and offsets, the shade (the band and the one cloud field, no plate) and the furniture helpers of
 // the page-drawing kit. The insides of the blocks are not what this file judges. Renders frame-<case>-<W>x<H>.png (not named like a page shot: the compare sheet leaves them out) and furniture-sheet.png.
 // Run alone with -pages frame.
 public static partial class HudLogUnityCheck
@@ -50,9 +50,15 @@ public static partial class HudLogUnityCheck
         var shade = (RectTransform)Field(status, "shadeRect");
         int children = root.childCount, shadeChildren = shade.childCount;
         Check(Mathf.Abs(root.sizeDelta.x - 916f) < 1.5f && shade.gameObject.activeSelf, "live: the board starts WIDE with its shade");
+        var field = (Texture2D)Field(status, "fieldTexture");
+        int wide = field.width;
+        field.SetPixel(0, 0, Color.red); field.Apply(false, false);      // a mark a bake would wipe (the rim of a bake is clear)
+        Call(status, "Present", frame);
+        Check(field.GetPixel(0, 0).a > 0.9f, "live: the same blocks do not bake the cloud field again");
         Set(status, "Options", PilotOptions("Layout", LayoutOf("Stack")));
         Call(status, "Present", frame);
         Check(Mathf.Abs(root.sizeDelta.x - 448f) < 1.5f, "live: Layout Stack shows at the next present: " + root.sizeDelta.x);
+        Check((Texture2D)Field(status, "fieldTexture") == field && field.width < wide - 50 && field.GetPixel(0, 0).a < 0.01f, "live: other blocks bake the same texture again, resized: " + wide + " -> " + field.width);
         Set(status, "Options", PilotOptions("Scale", 0.7f));
         Call(status, "Present", frame);
         Check(Mathf.Abs(root.sizeDelta.x - 916f * 0.7f) < 1.5f, "live: Scale 0.7 shows at the next present: " + root.sizeDelta.x);
@@ -114,7 +120,7 @@ public static partial class HudLogUnityCheck
         Check(bottomLeft.x >= screen.xMin - 0.5f && bottomLeft.y >= screen.yMin - 0.5f && topRight.x <= screen.xMax + 0.5f && topRight.y <= screen.yMax + 0.5f, tag + ": the box is fully on the screen");
         Check(Mathf.Abs(screen.xMax - topRight.x - (8f + ox) * baseUnit) < 1.5f, tag + ": the box is 8 + the offset in from the right edge: " + (screen.xMax - topRight.x) + " / " + (8f + ox) * baseUnit);
         Check(Mathf.Abs(screen.yMax - topRight.y - (6f + oy) * baseUnit) < 1.5f, tag + ": the box is 6 + the offset down from the top edge: " + (screen.yMax - topRight.y) + " / " + (6f + oy) * baseUnit);
-        // The shade: objects only while the pilot's Shade is above 0; a cloud for every block that is there; nothing takes a click; no plate.
+        // The shade: objects only while the pilot's Shade is above 0; ONE cloud field behind all the blocks (a texture, no cloud per block); nothing takes a click; no plate.
         var shadeRect = (RectTransform)Field(status, "shadeRect");
         Check(shadeRect.gameObject.activeSelf == shade > 0f, tag + ": the shade objects are on exactly when Shade is above 0");
         Check(root.Find("Plate") == null, tag + ": there is no plate");
@@ -122,30 +128,37 @@ public static partial class HudLogUnityCheck
         Check(group != null && group.ignoreParentGroups, tag + ": the shade ignores the board's opacity");
         if (shade > 0f)
         {
-            int clouds = shadeRect.GetComponentsInChildren<Image>().Count(i => i.gameObject.activeSelf && i.gameObject.name.EndsWith("Cloud"));
-            Check(clouds >= 4, tag + ": at least the lamp line, the page, HERO and a SAT block have a cloud: " + clouds);
-            foreach (Image i in shadeRect.GetComponentsInChildren<Image>(true)) Check(i.type == Image.Type.Sliced && !i.raycastTarget, tag + ": a shade image is 9-sliced and takes no click: " + i.name);
-            Check(Mathf.Abs(shadeRect.Find("PageCloud").GetComponent<Image>().color.a - 0.6f * shade) < 0.01f, tag + ": a cloud's core alpha is 0.60 x Shade");
+            RawImage[] fields = shadeRect.GetComponentsInChildren<RawImage>(true);
+            Check(fields.Length == 1 && fields[0].gameObject.name == "CloudField" && fields[0].gameObject.activeSelf && !fields[0].raycastTarget, tag + ": one cloud field behind all the blocks, and it takes no click");
+            foreach (Image i in shadeRect.GetComponentsInChildren<Image>(true)) Check(i.name == "SunBand" && i.type == Image.Type.Sliced && !i.raycastTarget, tag + ": the only sprite in the shade is the 9-sliced band: " + i.name);
+            Check(Mathf.Abs(fields[0].color.a - 0.6f * shade) < 0.01f, tag + ": the field's core alpha is 0.60 x Shade");
+            FieldChecks(status, fields[0], tag);
         }
     }
 
-    /// <summary>The generated shade sprites have no edge: nothing at the outer rim, full inside, a smooth ramp between, and a band that fades from the top down and ramps in at its left.</summary>
+    /// <summary>The baked cloud field is one small texture, nothing along its rim (a cut edge would be a straight line in the sky), dark somewhere, and stretched over the box and the room its clouds need.</summary>
+    private static void FieldChecks(object status, RawImage field, string tag)
+    {
+        var texture = (Texture2D)field.texture;
+        Check(texture != null && texture.filterMode == FilterMode.Bilinear && texture.width * texture.height < 60000, tag + ": the field is one small bilinear texture: " + (texture != null ? texture.width + " x " + texture.height : "none"));
+        Color32[] px = texture.GetPixels32();
+        int w = texture.width, h = texture.height, rim = 0, core = 0;
+        for (int i = 0; i < w; i++) rim = Math.Max(rim, Math.Max(px[i].a, px[(h - 1) * w + i].a));
+        for (int j = 0; j < h; j++) rim = Math.Max(rim, Math.Max(px[j * w].a, px[j * w + w - 1].a));
+        foreach (Color32 c in px) core = Math.Max(core, c.a);
+        Check(rim <= 1, tag + ": the field is nothing along its rim, so it has no cut edge: " + rim);
+        Check(core >= 200, tag + ": the field has a dark core: " + core);
+        float unit = (float)Field(status, "unit");
+        RectTransform r = field.rectTransform;
+        float x0 = r.anchoredPosition.x / unit, y0 = -r.anchoredPosition.y / unit, x1 = x0 + r.sizeDelta.x / unit, y1 = y0 + r.sizeDelta.y / unit;
+        Check(x0 <= 4f - 100f && y0 <= 0f - 100f && x1 >= 444f + 100f && y1 >= 100f + 100f, tag + ": the field is stretched over the box and its fade: " + x0 + ", " + y0 + " to " + x1 + ", " + y1);
+        Check(Mathf.Abs(r.sizeDelta.x / unit / (w * 4f) - 1f) < 0.01f && Mathf.Abs(r.sizeDelta.y / unit / (h * 4f) - 1f) < 0.01f, tag + ": a texel is 4 box units across");
+    }
+
+    /// <summary>The generated sun band has no edge: it fades from the top down and ramps in at its left (the cloud field is a texture of its own, FieldChecks).</summary>
     private static void ShadeSprites()
     {
         Type sprites = Type("BoscaliSummer.Core.Ui.HudSprites");
-        var cloud = (Sprite)sprites.GetProperty("ShadeCloud", All).GetValue(null);
-        Texture2D c = cloud.texture;
-        Check(cloud.border == new Vector4(28f, 28f, 28f, 28f), "The cloud is 9-sliced on its 28 texel fall-off");
-        Check(c.GetPixel(0, 0).a < 0.001f && c.GetPixel(0, 32).a < 0.01f && c.GetPixel(32, 0).a < 0.01f, "A cloud has nothing at its outer rim");
-        Check(Mathf.Abs(c.GetPixel(32, 32).a - 1f) < 0.001f && Mathf.Abs(c.GetPixel(28, 28).a - 1f) < 0.001f, "A cloud is full from 28 texels in");
-        float last = 0f;
-        for (int x = 0; x < 28; x++)
-        {
-            float a = c.GetPixel(x, 32).a;
-            Check(a >= last && a - last < 0.1f, "A cloud's edge ramps up smoothly: texel " + x + " " + a);
-            last = a;
-        }
-        Check(Mathf.Abs(c.GetPixel(14, 32).a - 0.5f) < 0.04f && Mathf.Abs(c.GetPixel(7, 32).a - 0.156f) < 0.04f, "A cloud's ramp is the smoothstep (half at 14 in)");
         var band = (Sprite)sprites.GetMethod("SunBand", All).Invoke(null, new object[] { 0f });
         var faded = (Sprite)sprites.GetMethod("SunBand", All).Invoke(null, new object[] { 60f / 190f });
         Texture2D b = band.texture, f = faded.texture;

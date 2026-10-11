@@ -11,20 +11,14 @@ namespace BoscaliSummer.Core.Ui
     /// </summary>
     internal static class HudSprites
     {
-        private static Sprite chamfer, cloud, bandPlain, bandFaded;
+        private static Sprite chamfer, bandPlain, bandFaded;
 
         /// <summary>The base game's HUD panel shape: a dark slab with its lower-left corner cut at 45°.
         /// 9-sliced so the cut stays 14 px at any size.</summary>
         public static Sprite Chamfer => chamfer != null ? chamfer : (chamfer = BakeChamfer("BoscaliHud_Chamfer", 40, 14f));
 
-        /// <summary>Texels of a <see cref="ShadeCloud"/>'s fall-off border, and of the left (and right) ramp of a <see cref="SunBand"/>: the sprites carry no size of their own, the image's <c>pixelsPerUnitMultiplier</c> is texels / (design units x board unit).</summary>
-        public const int CloudBorder = 28, BandRamp = 40;
-
-        /// <summary>
-        /// The TAC BOARD's shade cloud: a white alpha mask, 64 x 64, whose alpha is nothing at the outer edge and full <see cref="CloudBorder"/> texels in, a smoothstep per axis (a corner is the product),
-        /// 9-sliced on that border so the fall-off keeps its size at any block size. Tint it with <c>Image.color</c>; its alpha is the cloud's core alpha.
-        /// </summary>
-        public static Sprite ShadeCloud => cloud != null ? cloud : (cloud = BakeCloud());
+        /// <summary>Texels of the left (and right) ramp of a <see cref="SunBand"/>: the sprite carries no size of its own, the image's <c>pixelsPerUnitMultiplier</c> is texels / (design units x board unit).</summary>
+        public const int BandRamp = 40;
 
         /// <summary>
         /// The TAC BOARD's sun band: a white alpha mask whose alpha falls linearly from full at its top to nothing at its bottom, ramps from nothing to full over the <see cref="BandRamp"/> texel border at its left and
@@ -32,22 +26,6 @@ namespace BoscaliSummer.Core.Ui
         /// no edge there (the share is baked the first time that variant is asked for).
         /// </summary>
         public static Sprite SunBand(float fadeShare) => fadeShare > 0f ? (bandFaded != null ? bandFaded : (bandFaded = BakeBand("BoscaliHud_SunBandFaded", fadeShare))) : (bandPlain != null ? bandPlain : (bandPlain = BakeBand("BoscaliHud_SunBand", 0f)));
-
-        private static Sprite BakeCloud()
-        {
-            const int size = 64;
-            Texture2D texture = NewMask("BoscaliHud_ShadeCloud", size, size);
-            for (int y = 0; y < size; y++)
-                for (int x = 0; x < size; x++) texture.SetPixel(x, y, new Color(1f, 1f, 1f, Falloff(x, size) * Falloff(y, size)));
-            return Finish(texture, new Vector4(CloudBorder, CloudBorder, CloudBorder, CloudBorder));
-        }
-
-        /// <summary>0 at the outer edge of texel row/column <paramref name="i"/> of <paramref name="n"/>, 1 from <see cref="CloudBorder"/> texels in (smoothstep).</summary>
-        private static float Falloff(int i, int n)
-        {
-            float d = Mathf.Clamp01(Mathf.Min(i + 0.5f, n - i - 0.5f) / CloudBorder);
-            return d * d * (3f - 2f * d);
-        }
 
         private static Sprite BakeBand(string name, float fadeShare)
         {
