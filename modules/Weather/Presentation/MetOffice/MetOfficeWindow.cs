@@ -364,7 +364,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             bool ready = model.Host && model.Captured;
             window.Footer.Set(MetOfficeRules.Status(model), ready ? AvState.Info : AvState.Caution);
             if (refusedUntil > 0f && Time.unscaledTime > refusedUntil && hovered == null && tipHovered == null) { window.Footer.SetHint(null); refusedUntil = 0f; }
-            roleChip.Set("HOST // ALL PLAYERS", AvState.Ready);
+            roleChip.Set(model.Host ? "HOST // ALL PLAYERS" : "READ ONLY", model.Host ? AvState.Ready : AvState.Caution);
             Tip(roleChip.Rect.gameObject, model.Host ? MetCatalog.RoleHostHelp : MetCatalog.RoleClientHelp);
             AvText.Set(dtg, MetOfficeText.Dtg(DateTime.UtcNow) + " · " + MetOfficeText.MissionClock(model.MissionSeconds) + " · SN " + (model.SerialHex.Length > 0 ? model.SerialHex : "----"));
             RefreshChartColumn();

@@ -69,7 +69,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         partial void RefreshTimeColumn()
         {
             story.Set(model);
-            logNote.Set(model.LogText.Length > 0 ? model.LogText : "NO HOST ACTIONS YET");
+            logNote.Set(model.Host ? (model.LogText.Length > 0 ? model.LogText : "NO HOST ACTIONS YET") : "HOST ACTIONS ARE LOGGED ON THE HOST");
             logCard.SetCaption(model.Pending.Length > 0 ? model.Pending : "IDLE");
             storyCard.SetCaption(model.SkyRole.Length > 0 ? "NOW · " + model.SkyRole : "▲ CUT · WHOLE TAPE");
             storyRow.SetValue(model.HasStory ? model.StoryName.ToUpperInvariant() + " " + (model.StoryIndex + 1) + " / " + model.StoryCount : "AUTO · — / " + model.StoryCount);
