@@ -98,8 +98,19 @@ namespace NOAvionics
         {
             string state = !interactable ? "disabled" : pressed ? "pressed" : hover ? "hover" : armed ? "armed" : latched ? "latched" : null;
             AvStyle s = AvStyleHost.FuiStyle(classes, state);
-            frame.Paint(AvStyleHost.Resolve(s.Background, AvTheme.Surface), AvStyleHost.Resolve(s.Border, AvTheme.Frame));
+            Color back = AvStyleHost.Resolve(s.Background, AvTheme.Surface), edge = AvStyleHost.Resolve(s.Border, AvTheme.Frame);
             Color ink = AvStyleHost.Resolve(s.Color, AvTheme.TextPrimary);
+            // A read-only choice still has to say which option is set: the latched look, held back, instead of the plain disabled one
+            // (which made every host-only or built-in setting read as "nothing selected").
+            if (!interactable && latched)
+            {
+                s = AvStyleHost.FuiStyle(classes, "latched");
+                Color on = AvStyleHost.Resolve(s.Background, AvTheme.Surface);
+                back = on.WithAlpha(on.a * 0.7f);
+                edge = AvStyleHost.Resolve(s.Border, AvTheme.Frame).WithAlpha(0.75f);
+                ink = AvStyleHost.Resolve(s.Color, AvTheme.TextPrimary).WithAlpha(0.82f);
+            }
+            frame.Paint(back, edge);
             text.color = ink;
             frame.BracketColor = ink.WithAlpha(latched || armed || hover ? 0.72f : 0.18f);
             frame.SetVerticesDirty();

@@ -29,10 +29,11 @@ public static class WingRadioUnityCheck
     private static readonly List<string> captureManifest = new List<string> { "file\twidth\theight" };
     private static readonly List<string> musicBounds = new List<string> { "capture\trow\tminY\tmaxY\tviewportMinY\tviewportMaxY\tcontentHeight\tviewportHeight" };
     private static int captures, assertions;
-    private static bool radioOnlyMode;
+    private static bool radioOnlyMode, wingOnly, wingOnlyEmpty, wingHost;
 
     public static void Run() => RunPreview(false);
     public static void RunRadioOnly() => RunPreview(true);
+    public static void RunWingOnly() { wingOnly = true; RunPreview(false); }
 
     private static void RunPreview(bool radioOnly)
     {
@@ -63,9 +64,11 @@ public static class WingRadioUnityCheck
             foreach (float height in new[] { 896f, 596f, 420f })
             {
                 if (!radioOnly) RenderWing(height);
-                RenderRadio(height, config);
+                if (wingOnly && height == 896f) { wingOnlyEmpty = true; RenderWing(height); wingOnlyEmpty = false; }
+                if (wingOnly && height != 420f) { wingHost = true; RenderWing(height); wingHost = false; }
+                if (!wingOnly) RenderRadio(height, config);
             }
-            if (!radioOnly) RenderRecoveryOffer();
+            if (!radioOnly && !wingOnly) RenderRecoveryOffer();
             if (radioOnly)
                 for (int i = 1; i < captureManifest.Count; i++)
                     Check(captureManifest[i].StartsWith("RAD-", StringComparison.Ordinal), "Radio-only capture manifest must exclude Wing surfaces");
@@ -107,82 +110,91 @@ public static class WingRadioUnityCheck
         }
         console.Finish();
         object context = New(Wing + "Presentation.WmcContext");
-        Set(context, "Client", true);
-        Set(context, "Count", 3);
+        Set(context, "Client", !wingHost);
         Set(context, "MissionTime", 1840f);
+        // Host view: a real, memberless service, so every host-only control shows as the player flying alone sees it.
+        if (wingHost)
+            try { Set(context, "Wing", TypeOf(Wing + "Runtime.WingService").GetProperty("Instance", All).GetValue(null) ?? Activator.CreateInstance(TypeOf(Wing + "Runtime.WingService"), true)); }
+            catch (Exception error) { failures.Add("host service: " + (error.InnerException ?? error)); }
+        // Six aircraft in two elements with every duty, flag and station phase the snapshot can carry.
+        byte[] duty = { 0, 1, 3, 0, 2, 4 }, fuel = { 59, 219, 110, 240, 31, 255 }, ammo = { 255, 156, 0, 204, 92, 255 };
+        byte[] flags = { 4, 0, 8, 1, 2 | 16, 0 }, err = { 2, 14, 41, 0, 96, 0 }, phase = { 2, 1, 0, 2, 3, 2 };
+        sbyte[] closure = { 0, 12, -18, 1, 35, 0 };
         Array rows = (Array)Field(context, "Rows");
-        for (int i = 0; i < 3; i++)
+        int members = wingOnlyEmpty ? 0 : duty.Length;
+        for (int i = 0; i < members; i++)
         {
             object row = Activator.CreateInstance(rows.GetType().GetElementType());
-            Set(row, "Id", (uint)(100 + i)); Set(row, "Slot", (byte)i); Set(row, "Element", (byte)(i == 2 ? 1 : 0));
-            Set(row, "Fuel", (byte)(i == 0 ? 23 : 86)); Set(row, "Ammo", (byte)(i == 1 ? 61 : 100));
+            Set(row, "Id", (uint)(100 + i)); Set(row, "Slot", (byte)i); Set(row, "Element", (byte)(i >= 3 ? 1 : 0));
+            Set(row, "Duty", duty[i]); Set(row, "Fuel", fuel[i]); Set(row, "Ammo", ammo[i]); Set(row, "Flags", flags[i]);
+            Set(row, "Err10", err[i]); Set(row, "Closure", closure[i]); Set(row, "Phase", phase[i]);
             rows.SetValue(row, i);
         }
+        Set(context, "Count", members);
         Call(context, "Rescope");
-        string[][] subs = { new[] { "ORDERS", "FORMATION", "ROUTE" }, new[] { "TUNING", "PLAN", "RECORD" },
-            new[] { "DISPATCH" }, new[] { "PRESETS" }, new[] { "ROSTER", "STUDIO" } };
+        string[][] subs = { new[] { "ORDERS", "FORMATION", "ROUTE" }, new[] { "STANCES", "SORTIE" },
+            new[] { "DISPATCH" }, new[] { "PRESETS" }, new[] { "ROSTER", "AIRCRAFT", "STUDIO" } };
+        string tag = wingOnlyEmpty ? "-empty" : wingHost ? "-host" : "";
+        // Callsigns, types and element tasks as a live wing would name them (the table's own offline hooks).
+        string[] calls = { "NIGHTJAR", "COASTAL-WATCH", "GREY GOSHAWK", "HARBOR-FOUR", "VIKING", "SALT" };
+        string[] types = { "KR-67", "KR-67", "FS-12", "FS-20", "CI-22", "T/A-30" };
+        object wingTable = Field(pages[0], "table");
+        Set(wingTable, "PreviewIdentity", (Func<uint, string[]>)(id => new[] { calls[(id - 100) % calls.Length], types[(id - 100) % types.Length] }));
+        Set(wingTable, "PreviewTask", (Func<int, string>)(e => e == 0 ? "CAP · 12 KM · 4:20" : "ESCORT · STRIKE PACKAGE"));
         for (int i = 0; i < pages.Length; i++)
         {
             console.SetPage(i);
             foreach (string sub in subs[i])
             {
-                if (i == 0 || i == 1 || i == 4) Call(pages[i], "ShowSubNamed", sub);
-                Call(pages[i], "Refresh", context);
-                console.Footer.Set("OFFLINE / CLIENT MIRROR / " + sub, AvState.Info);
+                string prefix = "WMC-" + height + "-" + i + "-" + sub + tag;
+                try
+                {
+                    if (i == 0 || i == 1 || i == 4) Call(pages[i], "ShowSubNamed", sub);
+                    Call(pages[i], "Shown", context);
+                    Call(pages[i], "Refresh", context);
+                    Call(pages[i], "Refresh", context);
+                }
+                catch (Exception error) { failures.Add(prefix + ": page threw: " + (error.InnerException ?? error)); }
+                console.Footer.Set("STATUS  ·  " + (Get(pages[i], "Hint") as string ?? ""), AvState.Inert);
                 Settle(console);
-                string prefix = "WMC-" + height + "-" + i + "-" + sub;
-                Capture(canvas, height, prefix + ".png");
                 Gate(console, prefix);
-                Bottom(canvas, console, height, prefix);
-                SeedWingDisplay(pages[i], i, sub);
+                Scrolled(canvas, console, height, prefix);
+                if (!wingHost) continue;
+                try { SeedWingDisplay(pages[i], i, sub); }
+                catch (Exception error) { failures.Add(prefix + ": seed threw: " + (error.InnerException ?? error).Message); continue; }
+                if (i < 3 && !(i == 0 && sub == "ROUTE")) continue;
                 console.Page(i).RequestRelayout(); Settle(console);
-                Capture(canvas, height, prefix + "-populated.png"); Gate(console, prefix + "-populated");
-                Bottom(canvas, console, height, prefix + "-populated");
+                Gate(console, prefix + "-seeded");
+                Scrolled(canvas, console, height, prefix + "-seeded");
             }
         }
         Object.DestroyImmediate(canvas);
     }
 
+    // Every screenful of a scrolling page, top to bottom, so nothing below the fold goes unseen.
+    private static void Scrolled(GameObject canvas, AvConsole console, float height, string prefix)
+    {
+        ScrollRect scroll = console.Root.GetComponentInChildren<ScrollRect>();
+        float overflow = scroll != null && scroll.content != null && scroll.viewport != null ? scroll.content.rect.height - scroll.viewport.rect.height : 0f;
+        Capture(canvas, height, prefix + ".png");
+        if (overflow <= 1f) return;
+        float step = scroll.viewport.rect.height - 24f;
+        for (int n = 1; n * step < overflow + step - 1f && n < 8; n++)
+        {
+            scroll.verticalNormalizedPosition = 1f - Mathf.Clamp01(n * step / overflow);
+            Canvas.ForceUpdateCanvases();
+            Capture(canvas, height, prefix + "-s" + n + ".png");
+        }
+        scroll.verticalNormalizedPosition = 1f;
+        Canvas.ForceUpdateCanvases();
+    }
+
     private static void SeedWingDisplay(object page, int index, string sub)
     {
-        if (index == 0 && sub == "FORMATION")
-        {
-            object form = Field(page, "form");
-            Call(Field(form, "view"), "SetValues", "FINGER FOUR / FIXED WING", "STANDARD / 80 m", "LEVEL / GATE", "B COASTAL WATCH / 3 AC", "3/4 IN SLOT");
-            object family = Field(form, "familyGrid"), shape = Field(form, "shapeGrid");
-            Call(family, "SetShownCount", 3); Call(shape, "SetShownCount", 4);
-            SetGrid(family, new[] { "FIXED WING", "ROTARY", "ESCORT" });
-            SetGrid(shape, new[] { "FINGER FOUR", "LINE ABREAST", "TRAIL", "VIC" });
-            ((AvFlow)Field(form, "flow")).RequestRelayout();
-        }
-        if (index == 2)
-        {
-            Call(Field(page, "dispatch"), "Set", "BLOCKED", AvState.Caution, "KR-67 / 42,500", null,
-                "NIGHTJAR / FINGER FOUR / 75% FUEL / FORWARD OPERATING BASE EAST",
-                "Crew limit reached. Reserve or release a wingman before requisitioning this airframe.", "warn");
-        }
         if (index == 3)
         {
             Call(Field(page, "card"), "Set", "KR-67 / COASTAL PATROL", "6/8 STATIONS / 2,450 KG / 1 BLOCKED STORE", "EDITED", "warn", "warn", null, .75f);
             SeedHardpoints(page);
-        }
-        if (index == 4 && sub == "ROSTER")
-        {
-            object list = Field(page, "list"); Call(list, "Show", 4, false, null);
-            string[] status = { "FLYING #2", "NEXT", "LOCAL SAR", "CAPTURED" };
-            string[] callsigns = { "NIGHTJAR", "COASTAL-WATCH", "GREY GOSHAWK", "HARBOR-FOUR" };
-            for (int i = 0; i < 4; i++)
-            {
-                object row = list.GetType().GetProperty("Item", All).GetValue(list, new object[] { i });
-                Call(row, "SetIdentity", "V", Enum.Parse(TypeOf(Wing + "Domain.WingRank"), "Veteran"), callsigns[i], "Alexander Kowalski", "12 K");
-                Call(row, "SetState", status[i], i < 2 ? "ready" : "warn");
-            }
-            object dossier = Field(page, "dossier");
-            Call(dossier, "SetIdentity", "NIGHTJAR / ALEXANDER KOWALSKI");
-            Call(dossier, "SetRankLine", "VETERAN / 1,840 XP / ACE AT 2,500");
-            Call(dossier, "SetRecord", "12 KILLS / 8 SORTIES / 3 RESCUES");
-            Call(dossier, "SetRadio", "RADIO / PROFESSIONAL"); Call(dossier, "SetStamp", "FLYING #2", "ready"); Call(dossier, "SetXp", .73f, false);
-            ((AvFlow)Field(page, "rosterFlow")).RequestRelayout();
         }
         if (index == 4 && sub == "STUDIO")
         {
@@ -196,48 +208,25 @@ public static class WingRadioUnityCheck
         }
     }
 
+    // No native airframe asset loads offline: the production station board and store picker are bound directly.
     private static void SeedHardpoints(object page)
     {
-        const int count = 8;
-        string[] names = { "OUTER WING", "INNER WING", "CENTERLINE", "INTERNAL GUN", "SENSOR BAY", "AUXILIARY", "TAIL STATION", "SPARE STATION" };
-        var precludes = new int[count][]; precludes[1] = new[] { 0 };
-        object layout = New(Wing + "Domain.StationLayout", names, new string[count], new bool[count], new[] { 2, 2, 1, 1, 1, 1, 1, 1 }, precludes);
-        Set(page, "layout", layout);
-        Set(page, "current", New(Wing + "Domain.LoadoutTemplateRecord", "preview", "kr67", "COASTAL PATROL", new string[0]));
-        var options = Array.CreateInstance(TypeOf(Wing + "Domain.WingLoadoutCatalog+StoreOption"), count);
-        var facts = Array.CreateInstance(TypeOf(Wing + "Domain.StoreFacts"), count);
-        var keys = (IList)Field(page, "keys"); keys.Clear();
-        string[] labels = { "ARAD-121 / MARITIME STRIKE", "", "EXTERNAL FUEL / 1,500 L", "27 MM CANNON", "COASTAL SEARCH RADAR", "TACTICAL NUCLEAR STORE", "UNKNOWN SAVED STORE", "" };
-        for (int i = 0; i < count; i++)
-        {
-            string key = i == 1 || i == 7 ? null : "preview-store-" + i; keys.Add(key);
-            object option = New(Wing + "Domain.WingLoadoutCatalog+StoreOption", key, labels[i], i == 3 ? 240 : 1, 210f, 0f, 1f, false,
-                i != 6, false, i == 5, false, false, Enum.Parse(TypeOf(Wing + "Domain.StoreKind"), "Other"), null, false);
-            options.SetValue(option, i); facts.SetValue(option.GetType().GetProperty("Facts", All).GetValue(option), i);
-        }
-        Set(page, "setOptions", options); Set(page, "setFacts", facts); Set(page, "clearedSets", new bool[count]);
-        object mission = New(Wing + "Domain.MissionFacts"); Set(mission, "TacticalOpen", false); Set(page, "mission", mission);
-        Call(page, "RefreshHardpoints");
-        // No native airframe asset is loaded in this offline fixture. Drive the production
-        // list's binder with the synthetic station catalogue after exercising normal refresh.
+        string[] stores = { "ARAD-121 / MARITIME STRIKE", "BLOCKED BY INNER WING", "EXTERNAL FUEL / 1,500 L", "27 MM CANNON · 240 RDS", "COASTAL SEARCH RADAR", "NOT YET · TACTICAL RELEASE", "UNKNOWN STORE", "— EMPTY —" };
+        string[] mass = { "420 kg", "–", "1,280 kg", "210 kg", "95 kg", "–", "–", "–" };
+        string[] state = { "ready", "inert", "ready", "ready", "ready", "caution", "caution", "inert" };
+        object board = Field(page, "hpBoard"), picker = Field(page, "picker");
         Call(Field(page, "hpEmpty"), "Set", 0, "");
-        ((AvList)Field(page, "hpList")).SetCount(count);
-        IDictionary bound = (IDictionary)Field(page, "stationRows");
-        Check(bound.Count == count, "LOADOUT must bind every synthetic hardpoint row");
-        string rowsText = "";
-        foreach (AvRow row in bound.Keys)
-        {
-            Check(row.Shown, "LOADOUT populated hardpoint must be shown");
-            rowsText += ((TMP_Text)Field(row, "sub")).text + "\n";
-        }
-        foreach (string state in new[] { "MARITIME STRIKE", "BLOCKED BY", "NOT YET", "UNKNOWN STORE", "EMPTY" })
-            Check(rowsText.Contains(state), "LOADOUT populated hardpoints must exercise " + state);
-    }
-
-    private static void SetGrid(object grid, string[] values)
-    {
-        PropertyInfo item = grid.GetType().GetProperty("Item", All);
-        for (int i = 0; i < values.Length; i++) ((AvControl)item.GetValue(grid, new object[] { i })).Label = values[i];
+        Call(board, "SetStations", stores.Length, new List<int> { 2, 2, 1, 1, 1, 1, 1, 1 });
+        for (int i = 0; i < stores.Length; i++) Call(board, "Bind", i, stores[i], mass[i], state[i], i != 1 && i != 7, i != 1, "Pick the store.");
+        Call(board, "SetSelected", 0); Call(board, "Rebuild");
+        Call(picker, "SetHead", "STATION 1 · OUTER WING ×2", "HOLDS ARAD-121");
+        Call(picker, "SetBody", (object)null);
+        string[] names = { "ARAD-121", "AAM-29 SCYTHE", "AGM-48 HARPOON-L", "EXTERNAL FUEL 1,500 L", "PAB-250 GLIDE BOMB", "TACTICAL NUCLEAR STORE", "ECM POD", "— EMPTY —" };
+        string[] verdict = { "ANTI-RADIATION · 2 RDS", "AIR-TO-AIR · 4 RDS", "ANTI-SHIP · 2 RDS", "FUEL", "GLIDE BOMB · 4 RDS", "NOT YET · TACTICAL RELEASE", "RANK · ACE", "CLEAR THE STATION" };
+        int shown = Math.Min(names.Length, (int)picker.GetType().GetField("PerPage", All).GetValue(null));
+        Call(picker, "SetCount", shown);
+        for (int i = 0; i < shown; i++) Call(picker, "Bind", i, names[i], verdict[i], i == 7 ? "0 kg" : (180 + i * 115) + " kg", i < 5 ? "ok" : "warn", i == 0, i != 6, "Fit the store.");
+        Call(picker, "SetPaging", 0, names.Length);
     }
 
     private static void RenderRadio(float height, ConfigFile config)

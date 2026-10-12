@@ -106,7 +106,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvState state = a.Kind <= AlertKind.Damaged ? AvState.Danger : AvState.Caution;
             int more = alertCount - 1;
             alertStrip.Set(AvStates.Glyph(state) + AlertList.Word(a.Kind) + "  " + AlertWho(a, c),
-                AlertList.Detail(a) + (more > 0 ? " · +" + AvNum.Fixed(more, 0) + " MORE" : ""), "", state);
+                AlertList.Detail(a).ToUpperInvariant() + (more > 0 ? " · +" + AvNum.Fixed(more, 0) + " MORE" : ""), "", state);
             relayout = true;
         }
 

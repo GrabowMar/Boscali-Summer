@@ -951,6 +951,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             prev.Interactable = page > 0;
             next.Interactable = page < Pages - 1;
             AvText.Set(range, count == 0 ? "" : (first + 1) + "–" + Mathf.Min(count, first + RowsPerPage) + " OF " + count);
+            // No stations, no map: the outline used to stay drawn over whatever followed the (zero-height) board.
+            if (mapRoot.gameObject.activeSelf != (count > 0)) mapRoot.gameObject.SetActive(count > 0);
             LayoutMap();
             Changed();
         }
