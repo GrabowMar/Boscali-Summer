@@ -13,6 +13,7 @@ namespace BoscaliSummer.Tests.Features.Command
             RectanglesOverlapOnlyWhenTheyShareArea();
             CandidatesSitDiagonallyAtTheClearDistance();
             ALoneAnchorTakesTheFirstDiagonal();
+            APlateAvoidsAnotherAnchorsIcon();
             ACornerAnchorStaysInsideTheViewport();
             FortyAnchorsOnOneSpotNeverStackWhenARoomIsFree();
             RandomAnchorsNeverMeetAnyIconSquare();
@@ -48,6 +49,22 @@ namespace BoscaliSummer.Tests.Features.Command
             StrTagPlacer.Place(new RectF(0f, 0f, 800f, 600f), new[] { 400f }, new[] { 300f }, new[] { 90f }, new[] { 24f }, 1, placed);
             RectF want = StrTagPlacer.Candidate(0, 400f, 300f, 90f, 24f);
             TestAssert.That(placed[0].X == want.X && placed[0].Y == want.Y && placed[0].W == 90f && placed[0].H == 24f, "with nothing in the way the plate goes north-east");
+        }
+
+        private static void APlateAvoidsAnotherAnchorsIcon()
+        {
+            // Anchor 1 sits inside the first diagonal of anchor 0: that candidate would cover anchor 1's icon, so the plate must go elsewhere.
+            var vp = new RectF(0f, 0f, 800f, 600f);
+            var ax = new[] { 100f, 150f }; var ay = new[] { 100f, 130f };
+            var placed = new RectF[2];
+            StrTagPlacer.Place(vp, ax, ay, new[] { 100f, 100f }, new[] { 20f, 20f }, 2, placed);
+            RectF first = StrTagPlacer.Candidate(0, 100f, 100f, 100f, 20f);
+            TestAssert.That(first.Overlaps(new RectF(150f - NativeIconHalf, 130f - NativeIconHalf, 2f * NativeIconHalf, 2f * NativeIconHalf)), "the setup puts anchor 1 under anchor 0's first diagonal");
+            for (int i = 0; i < 2; i++)
+                for (int j = 0; j < 2; j++)
+                    TestAssert.That(!placed[i].Overlaps(new RectF(ax[j] - NativeIconHalf, ay[j] - NativeIconHalf, 2f * NativeIconHalf, 2f * NativeIconHalf)),
+                        "plate " + i + " keeps off the icon of anchor " + j);
+            TestAssert.That(placed[0].X != first.X || placed[0].Y != first.Y, "so plate 0 left its first diagonal");
         }
 
         private static void ACornerAnchorStaysInsideTheViewport()

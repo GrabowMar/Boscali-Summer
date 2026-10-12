@@ -503,6 +503,11 @@ namespace BoscaliSummer.Tests.Features.Command
             f.War.Census.Threat = 0; f.War.Census.ThreatWhy = TheaterThreatWhy.None; f.Census = f.War.Census;
             vm = Build(f);
             TestAssert.That(vm.AlertLevel == 0 && vm.AlertWord == "NOT MEASURED" && vm.AlertRule == "", "threat 0 is not measured and lights nothing");
+            foreach (byte bad in new byte[] { 6, 255 })
+            {
+                f.War.Census.Threat = bad; f.Census = f.War.Census;
+                TestAssert.That(Build(f).AlertLevel == 0 && Build(f).AlertWord == "NOT MEASURED", "a threat of " + bad + " is not a DEFCON level");
+            }
             foreach (var pair in new[] { (1, "MAXIMUM"), (2, "SEVERE"), (4, "ELEVATED"), (5, "NORMAL") })
             {
                 f.War.Census.Threat = (byte)pair.Item1; f.War.Census.ThreatWhy = TheaterThreatWhy.Nominal; f.Census = f.War.Census;
@@ -601,6 +606,8 @@ namespace BoscaliSummer.Tests.Features.Command
         {
             StrViewModel p = Fixture("proposals");
             TestAssert.That(p.Banner.CountSeconds == 34 && p.Banner.CountLabel == "AUTO-PICK O2 IN", "the staff pick counts down from the deal");
+            StrFeeds half = StrFixtures.Feeds("proposals"); half.War.StaffPickSeconds = 38.5f;
+            TestAssert.That(Build(half).Banner.CountSeconds == 35, "a countdown counts up: 34.5 s to go reads 35, never 00 while time remains");
             StrViewModel a = Fixture("assessing");
             TestAssert.That(a.Banner.CountSeconds == 8 && a.Banner.CountLabel == "FIRST REVIEW IN", "the first review counts down");
             StrFeeds f = StrFixtures.Live(StrFixtures.Reason(StrFixtures.Snapshot(), TheaterEmptyReason.CalledOff, 40f));
