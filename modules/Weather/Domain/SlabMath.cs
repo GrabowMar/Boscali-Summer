@@ -39,9 +39,19 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public const float PatchTile = 31000f;
         /// <summary>The domain warp of the pattern in scales (the 27 km fetch bends the pattern by up to WarpGain / 2 scales; kept at 1.6: 2.0 pushed the 8-bit parity of the cell probes past the density check tolerance) and the
         /// bend of the cell coordinate in cells (was 2.2).</summary>
-        public const float WarpGain = 1.6f, BendGain = 2.4f;
+        public const float WarpGain = 1.6f, BendGain = 1.5f;
         /// <summary>How far the curl bends a streak coordinate, in scales per unit of Curl (was 2): hooked cirrus read as molten swirls with closed loops.</summary>
-        public const float CurlGain = 1.0f;
+        public const float CurlGain = 0.6f;
+        /// <summary>Look pass round 2. The cell small-tap period in cells (was 0.41: it collapsed to 3-6 px dust and a fine cross-hatch at altitude); the phase
+        /// bend of the two ripple row sets in radians per unit of bend (was 10 and 9: their gradient could cancel the rows' own, which drew concentric
+        /// rings); and how far a streak's along-coordinate is shifted by a noise of the across position, in spans (so dashes of neighbouring fibres
+        /// no longer line up in rows).</summary>
+        public const float SmallCell = 0.62f, RowBend1 = 6f, RowBend2 = 5.4f, StreakStagger = 1.2f;
+        /// <summary>The low volume's lobe lookup: the lookup point is warped by a vector noise on a FIXED tile of LobeWarpWave metres (a tile that follows
+        /// the lobe rung would move the noise coordinate by position x d(1/period) wherever the rung ramps, and the CPU and GPU would disagree), by
+        /// up to LobeWarp x the lobe width, capped at LobeWarpMax metres; and where a size field is high the lobes are LobeSmall of their size (a second
+        /// tap turned 37 degrees).</summary>
+        public const float LobeWarp = 1.6f, LobeWarpMax = 2200f, LobeWarpWave = 7000f, LobeSmall = 0.6f;
         public const float PatchLo = 0.38f, PatchHi = 0.66f;
         /// <summary>1 / the mean of <see cref="PatchMask"/> over a layer: the cover inside the patches is lifted by this, so the layer's
         /// average cover stays its Cover while the lanes between patches are clear.</summary>

@@ -180,6 +180,7 @@ Shader "Boscali/FlightCloud"
         }
 
         float LodFor(float foot, float period);
+        float LadderMix(float raw0, float raw1, float w, float mean);
 
         // Individual cloud bodies: cellular noise at non-integer scales (so the 64^3
         // tile never visibly repeats), in [0, 1]. Coverage thresholds it into separate
@@ -191,6 +192,15 @@ Shader "Boscali/FlightCloud"
             float a = tex3Dlod(_CloudNoiseTex, float4(ng.xz / period, ng.y / (period * 0.9), lod)).b;
             float b = tex3Dlod(_CloudNoiseTex, float4(float2(ng.z, -ng.x) / (period * 2.73) + 0.37,
                 ng.y / (period * 2.1), lod)).r;
+            // Lobe size varies inside a group (SlabMath.LobeSmall): where the slow field b is high a second, smaller lobe tap (0.6, turned 37 degrees) takes over.
+            float fineMix = smoothstep(0.46, 0.60, b);
+            if (fineMix > 0.0)
+            {
+                float2 nrp = float2(ng.x * 0.8 + ng.z * 0.6, ng.z * 0.8 - ng.x * 0.6);
+                float pf = period * 0.6;
+                float a2 = tex3Dlod(_CloudNoiseTex, float4(nrp / pf + float2(0.29, 0.17), ng.y / (period * 0.9), max(lod, LodFor(gFoot, pf)))).b;
+                a = LadderMix(a, a2, fineMix, 0.5);
+            }
             float c = tex3Dlod(_CloudNoiseTex, float4(ng.xz / (period * 0.29) + float2(0.17, 0.61),
                 ng.y / (period * 0.24), max(lod, LodFor(gFoot, period * 0.29)))).b;
             return a * 0.65 + b * 0.15 + c * 0.20;
@@ -713,6 +723,9 @@ Shader "Boscali/FlightCloud"
             float puffBody = 0.72;
             if (!sheet)
             {
+                // Warp before the lobe lookup (SlabMath.LobeWarp; CloudBodies.WarpLobes is the twin): fades out with streets.
+                float2 lobeWarp = tex3Dlod(_CloudNoiseTex, float4(ngw.xz / 7000.0 + 0.23, ngw.y / 7000.0 + 0.41, puffLod)).rg - 0.5;
+                ngw.xz += lobeWarp * (min(LobeMetres(row.lobeRung) * 1.6, 2200.0) * (1.0 - streets));
                 float bodies = BodiesLadder(ngw, row.lobeRung, puffLod, 0.0, sheetBlend);
                 if (streets > 0.0)
                     bodies = StreetBody(bodies, streets, StreetRows(dot(gw.xz, float2(-_TapeFrame.y, _TapeFrame.x)), (broad.g - 0.5) * 4.0));
@@ -943,9 +956,11 @@ Shader "Boscali/FlightCloud"
                 {
                     // Curl bends the streak coordinate with low-frequency vector noise: hooked cirrus. One fixed sign.
                     float2 curlBend = tex3Dlod(_CloudNoiseTex, float4(np / (scale * 3.1) + 0.61, 0.33, 1.5)).rg - 0.5;
-                    nsw += curlBend * scale * 1.0 * row.curl;
+                    nsw += curlBend * scale * 0.6 * row.curl;
                 }
                 float along = scale * row.aspect;
+                // Stagger (SlabMath.StreakStagger): the along-coordinate is shifted by a noise of the position, so neighbouring fibres' dashes do not line up.
+                nsw.x += (tex3Dlod(_CloudNoiseTex, float4(np / (scale * 2.3) + 0.17, 0.52, 1.5)).r - 0.5) * along * 1.2;
                 float lod1 = SlabLod(foot, scale), lod2 = SlabLod(foot, scale * 1.73);
                 float s1 = tex3Dlod(_CloudNoiseTex, float4(nsw.x / along, nsw.y / scale, g.y / (scale * 0.6) + 0.17, lod1)).r;
                 float2 nw2 = float2(nsw.x * 0.982 - nsw.y * 0.191, nsw.x * 0.191 + nsw.y * 0.982);
@@ -966,7 +981,7 @@ Shader "Boscali/FlightCloud"
                 // (sky 20), so a vector noise at 3.3 cs bends the coordinate by up to ~1/3 cs (Task 13); it filters to nothing with distance.
                 float cs = scale * 0.45;
                 bend = tex3Dlod(_CloudNoiseTex, float4(np / (cs * 3.3) + 0.57, 0.19 + g.y / (cs * 2.9), SlabLod(foot, cs * 3.3))).rg - 0.5;
-                float2 npc = np + bend * cs * 2.4;
+                float2 npc = np + bend * cs * 1.5;
                 float lodC = SlabLod(foot, cs);
                 float c1 = tex3Dlod(_CloudNoiseTex, float4(npc / cs + 0.41, g.y / (cs * 0.8), lodC)).r;
                 float fineC = saturate(4.0 - lodC);
@@ -977,8 +992,8 @@ Shader "Boscali/FlightCloud"
                 // two or three sizes instead of one tile of equal blobs.
                 if (sizeMask > 0.0)
                 {
-                    float lodS = SlabLod(foot, cs * 0.41);
-                    float c3 = lerp(0.52, tex3Dlod(_CloudNoiseTex, float4(float2(npc.x * 0.8 + npc.y * 0.6, npc.y * 0.8 - npc.x * 0.6) / (cs * 0.41) + float2(0.31, 0.67),
+                    float lodS = SlabLod(foot, cs * 0.62);
+                    float c3 = lerp(0.52, tex3Dlod(_CloudNoiseTex, float4(float2(npc.x * 0.8 + npc.y * 0.6, npc.y * 0.8 - npc.x * 0.6) / (cs * 0.62) + float2(0.31, 0.67),
                         g.y / (cs * 0.7) + 0.45, lodS)).r, saturate(4.0 - lodS));
                     cells = lerp(cells, c3 * 0.5 + c1 * 0.5, sizeMask);
                 }
@@ -991,10 +1006,10 @@ Shader "Boscali/FlightCloud"
                 float wavelength = max(1.0, row.rippleWave);
                 float rippleKeep = 1.0 - smoothstep(1.0, 3.0, LodFor(foot, wavelength));
                 // The rows meander and break up with the cell bend (Task 13): perfectly straight, equal stripes read as a zebra (sky 18).
-                float rows1 = 0.55 + 0.45 * sin(w.y / wavelength * 6.2831853 + warp.x / scale * 3.0 + bend.x * 10.0);
+                float rows1 = 0.55 + 0.45 * sin(w.y / wavelength * 6.2831853 + warp.x / scale * 3.0 + bend.x * 6.0);
                 // A second set of rows at 1.43 wavelengths, turned 17 degrees, takes over where the size field is high (SlabMath's twin).
                 float across2 = w.y * 0.9563 + w.x * 0.2924;
-                float rows2 = 0.55 + 0.45 * sin(across2 / (wavelength * 1.43) * 6.2831853 + warp.y / scale * 3.0 + bend.y * 9.0 + 1.7);
+                float rows2 = 0.55 + 0.45 * sin(across2 / (wavelength * 1.43) * 6.2831853 + warp.y / scale * 3.0 + bend.y * 5.4 + 1.7);
                 float rows = lerp(rows1, rows2, sizeMask);
                 float rowKeep = saturate(0.7 + bend.y * 3.5);
                 // rows averages 0.55: dividing by it keeps the pattern's mean at the cells' (CloudBodies.SlabPattern is the twin).

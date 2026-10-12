@@ -18,6 +18,8 @@ namespace BoscaliSummer.Tests.Features.Weather
             PatchesLeaveClearLanes();
             SizeMaskSpansBothSizes();
             RippleRowsAreNotAComb();
+            LobesVaryInSizeAndSpacing();
+            FibreDashesDoNotLineUp();
         }
 
         private static CloudBodies Bodies() => new CloudBodies(BoscaliSummer.Modules.Weather.Visuals.CloudNoise3D.Generate(64, 47), 64, new SkyParams { LobeRung = 3f });
@@ -105,6 +107,63 @@ namespace BoscaliSummer.Tests.Features.Weather
             int large = 0, small = 0, total = 0;
             for (int i = 1; i < noise.Length; i += 4) { total++; float m = SlabMath.SizeMask(noise[i] / 255f); if (m < 0.2f) large++; if (m > 0.8f) small++; }
             TestAssert.That(large >= 0.1f * total && small >= 0.08f * total, "both cell sizes occur: " + large / (float)total + " large, " + small / (float)total + " small");
+        }
+
+        /// <summary>Round 2: the low volume's lobes (warped lookup, a smaller lobe tap where the size field is high). Along lines through the field the
+        /// spacing of the body's upcrossings must vary (a Worley tile of equal lobes gives a narrow spread) and the body stays in [0,1].</summary>
+        private static void LobesVaryInSizeAndSpacing()
+        {
+            CloudBodies bodies = Bodies();
+            var spacings = new List<double>();
+            for (int line = 0; line < 24; line++)
+            {
+                float z0 = 7000f + line * 2113f, x0 = 3000f + line * 1237f;
+                bool above = false; float last = float.NaN;
+                for (int i = 0; i < 1600; i++)
+                {
+                    float x = x0 + i * 25f, wz = z0;
+                    bodies.WarpLobes(ref x, 1500f, ref wz, 0f, 0f);
+                    float v = bodies.Bodies(x, 1500f, wz, 700f);
+                    TestAssert.That(v >= 0f && v <= 1f && !float.IsNaN(v), "the body is finite and in [0,1]");
+                    bool now = v > 0.5f;
+                    if (now && !above) { if (!float.IsNaN(last)) spacings.Add(x - last); last = x; }
+                    above = now;
+                }
+            }
+            double mean = 0; foreach (double s in spacings) mean += s / spacings.Count;
+            double var = 0; foreach (double s in spacings) var += (s - mean) * (s - mean) / spacings.Count;
+            double cv = Math.Sqrt(var) / mean;
+            Console.WriteLine("  lobe upcrossing spacing: " + spacings.Count + " gaps, mean " + mean.ToString("0") + " m, cv " + cv.ToString("0.000"));
+            TestAssert.That(spacings.Count > 200 && cv > LobeSpacingCv, "lobe spacing varies (cv " + cv.ToString("0.000") + ")");
+        }
+        private const double LobeSpacingCv = 0.55;
+        private const double DashAlignment = 0.3;
+
+        /// <summary>Round 2: the dashes of a streak layer. Two fibres a fibre-width apart must not break at the same places: the correlation of their
+        /// cloud/clear patterns along the wind stays low (the staggered along-coordinate), where aligned dashes read as dotted rows.</summary>
+        private static void FibreDashesDoNotLineUp()
+        {
+            CloudBodies bodies = Bodies();
+            var layer = new SkyLayer { Cover = 0.3f, PeriodRung = 6f, Softness = 0.5f, Detail = 0.7f, Streaks = 1f, Aspect = 5f, Curl = 0.1f };
+            double mean = 0; int count = 0;
+            for (int line = 0; line < 30; line++)
+            {
+                float x0 = 4000f + line * 2711f, z0 = 6000f + line * 1409f;
+                const int steps = 200;
+                var p = new float[steps]; var q = new float[steps];
+                for (int i = 0; i < steps; i++)
+                {
+                    bodies.Slab2D(layer, x0, 8000f, z0 + i * 150f, 0, out p[i], out _);
+                    bodies.Slab2D(layer, x0 + 900f, 8000f, z0 + i * 150f, 0, out q[i], out _);
+                }
+                double mp = 0, mq = 0; for (int i = 0; i < steps; i++) { mp += p[i] / steps; mq += q[i] / steps; }
+                double num = 0, dp = 0, dq = 0;
+                for (int i = 0; i < steps; i++) { num += (p[i] - mp) * (q[i] - mq); dp += (p[i] - mp) * (p[i] - mp); dq += (q[i] - mq) * (q[i] - mq); }
+                if (dp > 1e-9 && dq > 1e-9) { mean += num / Math.Sqrt(dp * dq); count++; }
+            }
+            mean /= Math.Max(1, count);
+            Console.WriteLine("  neighbouring fibre correlation: " + mean.ToString("0.000") + " over " + count + " pairs");
+            TestAssert.That(Math.Abs(mean) < DashAlignment, "neighbouring fibres break at different places: correlation " + mean.ToString("0.000"));
         }
 
         /// <summary>Along a line across the rows, the pattern of a ripple layer must not repeat at the nominal wavelength with the correlation of a comb.</summary>

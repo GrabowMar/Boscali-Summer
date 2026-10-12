@@ -235,9 +235,13 @@ namespace BoscaliSummer.Tests.Features.Weather
                 }
             }
             TestAssert.That(worst < 0.12f, "bodies move smoothly through a rung ramp (worst step " + worst + ")");
-            float front = bodies.BodiesLadder(4100f + 5311f, 900f + 5311f, 2300f + 5311f, 3f, true, 0f);
-            float plain = bodies.BodiesLadder(4100f + 5311f, 900f + 5311f, 2300f + 5311f, 3f, false, 0f);
-            TestAssert.That(front != plain, "the front body is a larger lump than the deck's");
+            int differ = 0;
+            for (int point = 0; point < 12; point++) // a single point can saturate both to 0 or 1, so ask of a dozen
+            {
+                float fx = 4100f + 5311f + point * 1713f, fz = 2300f + 5311f + point * 911f;
+                if (bodies.BodiesLadder(fx, 900f + 5311f, fz, 3f, true, 0f) != bodies.BodiesLadder(fx, 900f + 5311f, fz, 3f, false, 0f)) differ++;
+            }
+            TestAssert.That(differ >= 6, "the front body is a larger lump than the deck's (" + differ + " of 12 points differ)");
             TestAssert.That(bodies.BodiesLadder(4100f, 900f, 2300f, 3f, true, 1f) == bodies.Bodies(4100f, 900f, 2300f, 5200f), "a sheet front is the fixed 5.2 km body");
             TestAssert.That(bodies.BodiesLadder(4100f, 900f, 2300f, 3.5f, true, 1f) == bodies.BodiesLadder(4100f, 900f, 2300f, 3f, true, 1f),
                 "and at every rung: both rungs of a sheet front are the same 5.2 km scale, so there is no second tap and no contrast boost");

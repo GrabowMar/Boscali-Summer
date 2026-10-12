@@ -123,6 +123,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 sz -= frame.UZ * along * compress;
             }
             frame.NoiseXZ(sx, sz, NoiseXform.Low, out float bnx, out float bnz);
+            if (!genus.Sheet) WarpLobes(ref bnx, y, ref bnz, genus.LobeRung, streets);
             float bodies = genus.Sheet ? 0.72f : BodiesLadder(bnx, y, bnz, genus.LobeRung, false, genus.SheetBlend);
             if (!genus.Sheet && streets > 0f)
                 bodies = StreetMath.Body(bodies, streets, StreetMath.Rows(-wx * frame.UZ + wz * frame.UX,
@@ -405,8 +406,27 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             float period = scale * 4f;
             float a = Sample(nx / period, nz / period, y / (period * 0.9f), 2);
             float b = Sample(nz / (period * 2.73f) + 0.37f, -nx / (period * 2.73f) + 0.37f, y / (period * 2.1f), 0);
+            // Lobe size varies inside a group (look pass round 2): where the slow field b is high a second, smaller lobe tap (turned 37 degrees) takes over.
+            float fine = WeatherMath.Smoothstep(0.46f, 0.60f, b);
+            if (fine > 0f)
+            {
+                float rnx = nx * 0.8f + nz * 0.6f, rnz = nz * 0.8f - nx * 0.6f, pf = period * SlabMath.LobeSmall;
+                a = Ladder.Mix(a, Sample(rnx / pf + 0.29f, rnz / pf + 0.17f, y / (period * 0.9f), 2), fine); // the same vertical slice as the main tap: a slice of the lobe lattice has its own mean, and another slice moved the deck's cover
+            }
             float c = Sample(nx / (period * 0.29f) + 0.17f, nz / (period * 0.29f) + 0.61f, y / (period * 0.24f), 2);
             return a * 0.65f + b * 0.15f + c * 0.20f;
+        }
+
+        /// <summary>Warp before the lobe lookup (look pass round 2): a vector noise on a fixed 7 km tile bends the lookup point of the low deck's puffs by
+        /// up to ~0.5 lobe, so the lobes of a group are not one Worley tile of equal puffs on a regular pitch. Streets keep their stretched, regular rows:
+        /// the warp fades out with them. FlightCloud.shader's Density does the same before its BodiesLadder call.</summary>
+        internal void WarpLobes(ref float nx, float y, ref float nz, float rung, float streets)
+        {
+            float wave = SlabMath.LobeWarpWave;
+            float amp = Math.Min(Ladder.LobeMetres(rung) * SlabMath.LobeWarp, SlabMath.LobeWarpMax) * (1f - streets);
+            float wnx = nx + (Sample(nx / wave + 0.23f, nz / wave + 0.23f, y / wave + 0.41f, 0) - 0.5f) * amp;
+            float wnz = nz + (Sample(nx / wave + 0.23f, nz / wave + 0.23f, y / wave + 0.41f, 1) - 0.5f) * amp;
+            nx = wnx; nz = wnz;
         }
 
         private static float RemapBodies(float raw) => Scalar.Clamp01((raw - 0.22f) * 2.5f);
@@ -499,6 +519,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                     snz += (Sample(pnx / (scale * 3.1f) + 0.61f, pnz / (scale * 3.1f) + 0.61f, 0.33f, 1) - 0.5f) * scale * SlabMath.CurlGain * row.Curl;
                 }
                 float span = scale * row.Aspect;
+                // Stagger (round 2): the along-coordinate is shifted by a noise of the position, so the dashes of neighbouring fibres do not line up in rows.
+                snx += (Sample(pnx / (scale * 2.3f) + 0.17f, pnz / (scale * 2.3f) + 0.17f, 0.52f, 0) - 0.5f) * span * SlabMath.StreakStagger;
                 float s1 = Sample(snx / span, snz / scale, y / (scale * 0.6f) + 0.17f, 0);
                 float rnx = snx * 0.982f - snz * 0.191f, rnz = snx * 0.191f + snz * 0.982f;
                 float s2 = Sample(rnx / (span * 1.73f) + 0.53f, rnz / (scale * 1.73f) + 0.29f, y / (scale * 1.1f) + 0.61f, 0);
@@ -522,7 +544,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 if (sizeMask > 0f)
                 {
                     float tnx = qnx * 0.8f + qnz * 0.6f, tnz = qnz * 0.8f - qnx * 0.6f;
-                    float c3 = Sample(tnx / (cs * 0.41f) + 0.31f, tnz / (cs * 0.41f) + 0.67f, y / (cs * 0.7f) + 0.45f, 0);
+                    float c3 = Sample(tnx / (cs * SlabMath.SmallCell) + 0.31f, tnz / (cs * SlabMath.SmallCell) + 0.67f, y / (cs * 0.7f) + 0.45f, 0);
                     cells = WeatherMath.Lerp(cells, c3 * 0.5f + c1 * 0.5f, sizeMask);
                 }
             }
@@ -530,11 +552,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (wr > 0f)
             {
                 // The rows meander and break up with the cell bend (Task 13): perfectly straight, equal stripes read as a zebra (sky 18).
-                float rows1 = 0.55f + 0.45f * (float)Math.Sin(across / row.RippleWavelength * 2f * Math.PI + warpX / scale * 3f + bendX * 10f);
+                float rows1 = 0.55f + 0.45f * (float)Math.Sin(across / row.RippleWavelength * 2f * Math.PI + warpX / scale * 3f + bendX * SlabMath.RowBend1);
                 // A second set of rows at 1.43 wavelengths, turned 17 degrees, takes over where the size field is high: two spacings and two
                 // directions, so the rows meet in dislocations instead of one comb of equal stripes (sky 18, grazing).
                 float across2 = across * 0.9563f + along * 0.2924f;
-                float rows2 = 0.55f + 0.45f * (float)Math.Sin(across2 / (row.RippleWavelength * 1.43f) * 2f * Math.PI + warpZ / scale * 3f + bendY * 9f + 1.7f);
+                float rows2 = 0.55f + 0.45f * (float)Math.Sin(across2 / (row.RippleWavelength * 1.43f) * 2f * Math.PI + warpZ / scale * 3f + bendY * SlabMath.RowBend2 + 1.7f);
                 float rows = WeatherMath.Lerp(rows1, rows2, sizeMask);
                 float rowKeep = Scalar.Clamp01(0.7f + bendY * 3.5f);
                 // rows averages 0.55, so dividing by it keeps the pattern's mean at the cells' (0.52): without it a ripple layer sat at 0.64 of a cell
