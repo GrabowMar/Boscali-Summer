@@ -357,7 +357,8 @@ public sealed class CloudBench : MonoBehaviour
             }
             else if (s.Place == 8 && hasCell)
             {
-                s.Camera = new Vector3(cell.X + 25000f, maps.Top + 1200f, cell.Z);
+                CloudVolumeUniforms.FarBounds(field, new Vector3(cell.X + 25000f, 0f, cell.Z), out _, out float boundsTop);
+                s.Camera = new Vector3(cell.X + 25000f, boundsTop + 1200f, cell.Z);
                 s.Yaw = Mathf.Atan2(cell.X - s.Camera.x, cell.Z - s.Camera.z) * Mathf.Rad2Deg;
                 s.Pitch = -Mathf.Atan2(s.Camera.y - (cell.Top - 500f), 25000f) * Mathf.Rad2Deg;
             }
@@ -413,7 +414,6 @@ public sealed class CloudBench : MonoBehaviour
                     CameraForward = camera.transform.forward,
                     FieldOfView = camera.fieldOfView,
                     PixelHeight = mode == "half" || mode == "temporal" ? Height / 2 : Height,
-                    Bottom = maps.Bottom, Top = maps.Top,
                     SunDirection = sun,
                     SunColor = s.Name.Contains("night") ? new Color(.13f, .16f, .24f) : new Color(1.9f, 1.8f, 1.6f),
                     Ambient = s.Name.Contains("night") ? new Color(.022f, .029f, .045f) :
@@ -431,7 +431,8 @@ public sealed class CloudBench : MonoBehaviour
                 {
                     float top = 0f;
                     for (int i = 0; i < field.SuperstructureCount; i++) top = Mathf.Max(top, field.SuperstructureAt(i).Top + 1500f);
-                    m.SetVector("_CloudAltitudeBounds", new Vector2(Mathf.Min(maps.Bottom, 350f), Mathf.Max(maps.Top, top)));
+                    CloudVolumeUniforms.FarBounds(field, s.Camera, out float boundsBottom, out float boundsTop);
+                    m.SetVector("_CloudAltitudeBounds", new Vector2(Mathf.Min(boundsBottom, 350f), Mathf.Max(boundsTop, top)));
                 }
                 m.SetTexture("_WeatherMapTex", near);
                 m.SetTexture("_WeatherProfileTex", nearProfiles);

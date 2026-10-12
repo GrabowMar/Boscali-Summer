@@ -11,8 +11,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         public Vector3 CameraPosition, CameraForward;
         public float FieldOfView;
         public int PixelHeight;
-        /// <summary>Altitude range of the weather cloud (before set-pieces), </summary>
-        public float Bottom, Top;
         public Vector3 SunDirection;
         public Color SunColor, Ambient, Ground, Fog;
         public float Extinction;
@@ -176,6 +174,19 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             return true;
         }
 
+        /// <summary>
+        /// The march's altitude bounds from the baked tape (spec 7.3): the far bounds around the camera's s, a superset of the near ones. A held tape's bounds change
+        /// only with s; the rise-instantly / fall-at-200 m/s smoothing is slice 5's. Clamped to the volume and never thinner than 1 km (an empty sky still marches).
+        /// </summary>
+        internal static void FarBounds(WeatherField field, Vector3 cameraGlobal, out float bottom, out float top)
+        {
+            BakedTape tape = field.Tape.Tape;
+            if (tape == null) { bottom = 0f; top = CloudMaps.VolumeTop; return; }
+            TapeBounds.Compute(tape, field.Frame.S(cameraGlobal.x, cameraGlobal.z), TapeBounds.FarHalfWidth, out bottom, out top);
+            bottom = Mathf.Max(-30f, bottom);
+            top = Mathf.Min(CloudMaps.VolumeTop, Mathf.Max(top, bottom + 1000f));
+        }
+
         internal void Apply(Material material, WeatherField field, in CloudFrame frame, Texture noise)
         {
             SkyParams sky = field.Params;
@@ -211,7 +222,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             material.SetVectorArray(HeroBId, heroB);
             material.SetFloat(HeroCountId, heroes);
             material.SetVector(EyeId, eye);
-            material.SetVector(BoundsId, new Vector2(frame.Bottom, frame.Top));
+            FarBounds(field, frame.CameraPosition + frame.WorldOffset, out float boundsBottom, out float boundsTop);
+            material.SetVector(BoundsId, new Vector2(boundsBottom, boundsTop));
             material.SetVector(HeroBoundsId, heroes > 0 ? new Vector2(heroBottom, heroTop) : Vector2.zero);
             // Static weather: the detail texture does not crawl either.
             material.SetVector(WindOffsetId, Vector2.zero);

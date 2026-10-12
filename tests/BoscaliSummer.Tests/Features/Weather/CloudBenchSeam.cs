@@ -79,7 +79,7 @@ internal static class CloudBenchSeam
                 var frame = new CloudFrame
                 {
                     WorldOffset = Vector3.zero, CameraPosition = camera.transform.position, CameraForward = camera.transform.forward,
-                    FieldOfView = FovDegrees, PixelHeight = Height, Bottom = maps.Bottom, Top = maps.Top,
+                    FieldOfView = FovDegrees, PixelHeight = Height,
                     SunDirection = new Vector3(0.35f, 0.55f, -0.65f).normalized, SunColor = new Color(1.9f, 1.8f, 1.6f),
                     Ambient = new Color(0.55f, 0.65f, 0.85f) * 0.45f + new Color(0.72f, 0.8f, 0.9f) * 0.3f + new Color(1.9f, 1.8f, 1.6f) * 0.05f,
                     Ground = new Color(0.25f, 0.27f, 0.22f) * 0.25f + new Color(0.72f, 0.8f, 0.9f) * 0.1f,

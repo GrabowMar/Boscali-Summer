@@ -965,7 +965,7 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
             { filterMode = FilterMode.Trilinear, wrapMode = TextureWrapMode.Repeat };
             owned.Add(noise); noise.SetPixelData(noiseBytes, 0); noise.Apply(false, true);
             var uniforms = new CloudVolumeUniforms(); uniforms.Settle(field);
-            var frame = new CloudFrame { WorldOffset = offset, Bottom = 0f, Top = 16000f,
+            var frame = new CloudFrame { WorldOffset = offset,
                 FieldOfView = 60f, PixelHeight = 1080, SunDirection = Vector3.up };
             uniforms.Apply(material, field, frame, noise);
             CloudVolumeUniforms.ApplySpans(material, 50000f, 220000f);

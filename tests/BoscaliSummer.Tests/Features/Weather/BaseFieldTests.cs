@@ -130,7 +130,8 @@ namespace BoscaliSummer.Tests.Features.Weather
             // No ledges: neighbouring texels (one near texel is about 390 m here) differ by at most the field's slope times the spacing.
             float texel = 100000f / CloudMaps.NearSize;
             TestAssert.That(maxStep <= BaseHeightField.MaxSlope * 400f * texel + CloudMaps.BaseRange / 255f + 0.5f, "the underside has no step between texels: " + maxStep);
-            TestAssert.That(maps.Bottom <= Math.Max(-30f, minBase - 400f - 799f), "the altitude window is widened by the variation: " + maps.Bottom + " vs lowest cloudy base " + minBase);
+            TapeBounds.Compute(tape, 0f, TapeBounds.FarHalfWidth, out float boundsBottom, out float boundsTop);
+            TestAssert.That(boundsBottom <= minBase + 1e-3f, "the altitude bounds are widened by the variation: " + boundsBottom + " vs lowest cloudy base " + minBase);
             // The envelope never claims a floor above a texel's own base.
             for (int z = 0; z < CloudMaps.EnvelopeSize; z += 8)
             for (int x = 0; x < CloudMaps.EnvelopeSize; x += 8)
