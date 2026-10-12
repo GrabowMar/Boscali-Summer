@@ -78,6 +78,32 @@ namespace BoscaliSummer.Modules.Command.Domain
             return heightAboveSea < 0f ? 0f : heightAboveSea > cap ? cap : heightAboveSea;
         }
 
+        /// <summary>The widest and narrowest field of view the MINI's view wedge draws, in degrees (a lens outside this is a broken reading, not a view).</summary>
+        internal const float WedgeMinDegrees = 8f, WedgeMaxDegrees = 160f;
+
+        /// <summary>A camera's horizontal field of view in degrees from its vertical one and its aspect ratio (width over height); 0 for a reading that is not a lens.</summary>
+        internal static float HorizontalFov(float verticalDegrees, float aspect)
+        {
+            if (!(verticalDegrees > 0f && verticalDegrees < 180f && aspect > 0f)) return 0f;
+            return 2f * MathF.Atan(MathF.Tan(verticalDegrees * .5f * Deg) * aspect) / Deg;
+        }
+
+        /// <summary>
+        /// The camera's view wedge on the sea-level plane, as the arc that closes it: <paramref name="segments"/> + 1 east and north offsets (metres from the aircraft) on a circle of
+        /// <paramref name="length"/> metres, from the left edge of the view (the first point) to the right (the last), the middle one on the bearing the camera looks along (degrees from north, clockwise).
+        /// The two lines of the wedge run from the aircraft to the first and the last point. The field of view is held within <see cref="WedgeMinDegrees"/>..<see cref="WedgeMaxDegrees"/>.
+        /// </summary>
+        internal static void Wedge(float bearingDegrees, float fovDegrees, float length, int segments, float[] east, float[] north)
+        {
+            float half = Math.Min(WedgeMaxDegrees, Math.Max(WedgeMinDegrees, fovDegrees)) * .5f;
+            for (int i = 0; i <= segments; i++)
+            {
+                float a = (bearingDegrees - half + i * (2f * half / segments)) * Deg;
+                east[i] = MathF.Sin(a) * length;
+                north[i] = MathF.Cos(a) * length;
+            }
+        }
+
         /// <summary>Points of a circle of <paramref name="radius"/> metres round the aircraft, on the sea-level plane: east and north offsets, the first point due north, clockwise, the last equal to the first.</summary>
         internal static void Ring(float radius, int segments, float[] east, float[] north)
         {

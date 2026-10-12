@@ -11,13 +11,14 @@ namespace BoscaliSummer.Modules.Command.Runtime
 {
     /// <summary>
     /// The hologram's picture. The wire relief is one mesh (the <see cref="TerrainGhostGrid"/> topology with <see cref="HoloGrid"/>'s cell size), refilled only when the aircraft enters
-    /// another cell or the range or the HUD ink changes; turning the picture (heading up) is the view matrix, never a rebuild. At 20 Hz while the holo is up it is drawn into a render texture of the
-    /// mod's own by a command buffer executed on the spot (clear to opaque black, view and projection set by hand, additive lines with no depth test), so no game camera is touched; a RawImage
-    /// under the HUD canvas then shows the texture through the game's additive UI material, where black adds nothing.
+    /// another cell or the range or the HUD ink changes; turning the picture (heading up) is the view matrix, never a rebuild. At 10 Hz as the MINI and 20 Hz as the BIG one (every frame while it
+    /// changes size) it is drawn into a render texture of the mod's own by a command buffer executed on the spot (clear to opaque black, a viewport as many pixels as the picture shows times one and a half,
+    /// view and projection set by hand, additive lines with no depth test), so no game camera is touched and the small picture is not a shrunk big one; a RawImage under the HUD canvas then shows that part of the
+    /// texture through the game's additive UI material, where black adds nothing. Every picture is timed (last and worst milliseconds, the scan's share taken out) for the sim hook.
     /// </summary>
     internal sealed partial class HoloMap
     {
-        private const int TextureSize = 768;
+        private const int TextureSize = HoloPresentation.TextureSize;
         private const string LineShader = "Hidden/Internal-Colored";
         private const string AdditiveShader = "Unlit/AdditiveTextShader";
         private static readonly GhostTint FallbackInk = new GhostTint(127, 223, 154);
@@ -38,8 +39,10 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private bool placed;
         private int inkR = -1, inkG, inkB;
         private Color inkColour = new Color(.5f, .87f, .6f, 1f);
-        private float highest, lastRenderMs;
-        private int litVertices;
+        private float highest, lastRenderMs, worstRenderMs, lastScanMs, worstScanMs, scanMs;
+        private int litVertices, renders, scans;
+        // The part of the texture a picture is drawn into, in pixels (a square from its bottom-left corner), and the same as a share of the texture for the RawImage.
+        private int pixels = TextureSize;
 
         private bool PrepareRender()
         {
@@ -105,7 +108,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             return true;
         }
 
-        /// <summary>One picture: the mesh refilled if needed, the aircraft's place and heading read, the texture drawn, the marks laid over it.</summary>
+        /// <summary>One picture: the mesh refilled if needed, the aircraft's place and heading read, the texture drawn, the marks laid over it. Timed, without the scan that sometimes rides on it.</summary>
         private void Refresh()
         {
             long started = Stopwatch.GetTimestamp();
@@ -117,11 +120,16 @@ namespace BoscaliSummer.Modules.Command.Runtime
             int range = RangeKm;
             radius = HoloGrid.Radius(range);
             heading = NorthUp ? 0f : plane.transform.eulerAngles.y;
+            scanMs = 0f;
             Fill(range);
             Draw(range);
             DrawMarks(range);
-            lastRenderMs = (Stopwatch.GetTimestamp() - started) * 1000f / Stopwatch.Frequency;
+            lastRenderMs = Mathf.Max(0f, Milliseconds(started) - scanMs);
+            if (lastRenderMs > worstRenderMs) worstRenderMs = lastRenderMs;
+            renders++;
         }
+
+        private static float Milliseconds(long since) => (Stopwatch.GetTimestamp() - since) * 1000f / Stopwatch.Frequency;
 
         private void Fill(int range)
         {
@@ -161,6 +169,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
             commands.Clear();
             commands.SetRenderTarget(rt);
             commands.ClearRenderTarget(false, true, Color.black);
+            // After the clear, which takes the whole texture: the picture fills a square of it as big as the screen shows.
+            commands.SetViewport(new Rect(0f, 0f, pixels, pixels));
             commands.SetViewProjectionMatrices(viewMatrix, GL.GetGPUProjectionMatrix(projectionMatrix, true));
             commands.DrawMesh(mesh, model, lineMaterial, 0, 0);
             Graphics.ExecuteCommandBuffer(commands);

@@ -4,6 +4,9 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Configuration
 {
+    /// <summary>What the corner map is: a small hologram that the held map key grows (HOLO), or the game's own corner map (CLASSIC; the held map key still raises the hologram).</summary>
+    internal enum TacMapMode { Holo, Classic }
+
     internal sealed class CommandSettings
     {
         public ConfigEntry<bool> Enabled { get; }
@@ -62,6 +65,8 @@ namespace BoscaliSummer.Modules.Command.Configuration
         public ConfigEntry<bool> AvionicsReducedMotion { get; }
         public ConfigEntry<float> DisplayLife { get; }
         public ConfigEntry<float> TerrainGhost { get; }
+        public ConfigEntry<TacMapMode> TacMap { get; }
+        public ConfigEntry<int> TacMapRangeKm { get; }
         public ConfigEntry<bool> HoloMap { get; }
         public ConfigEntry<int> HoloRangeKm { get; }
         public ConfigEntry<bool> HoloNorthUp { get; }
@@ -75,6 +80,10 @@ namespace BoscaliSummer.Modules.Command.Configuration
                 new ConfigDescription("Live signal on the maximized MFD: the power-on raster, the slow refresh sweep and harder jam and hit break-up. 0 keeps the display still.", new AcceptableValueRange<float>(0f, 1f)));
             TerrainGhost = config.Bind("Command", "TerrainGhost", 0.35f,
                 new ConfigDescription("Visor terrain ghost: a very faint wire relief of the real ground around and below your aircraft, drawn over the cockpit view in the HUD's colours. Ground that can hit you glows amber. 0 turns it off, 1 is clearly visible. Needs a map with baked terrain. Applies now; no restart.", new AcceptableValueRange<float>(0f, 1f)));
+            TacMap = config.Bind("Command", "TacMapMode", TacMapMode.Holo,
+                new ConfigDescription("TAC MAP, the corner map at the bottom left of the HUD. Holo (default): a small hologram of the ground around your aircraft in the HUD's colours, with your view wedge, the units the map shows and the nearest airbase; hold the map key to grow it. Classic: the game's own corner map as before (holding the map key still raises the hologram). Needs a map with baked terrain, else the game's corner map stays. Applies now; no restart."));
+            TacMapRangeKm = config.Bind("Command", "TacMapRangeKm", 10,
+                new ConfigDescription("TAC MAP: how far the small hologram reaches from your aircraft, in kilometres: 5, 10 or 20. Applies now; no restart.", new AcceptableValueList<int>(5, 10, 20)));
             HoloMap = config.Bind("Command", "HoloMap", true,
                 new ConfigDescription("Holo map: hold the map key to project a 3D wire hologram of the real ground around your aircraft, drawn in the HUD's colours over the corner of the screen; it goes when you let go. A quick tap still opens the full map. Off makes the key open the full map the moment it is pressed. Needs a map with baked terrain. Applies now; no restart."));
             HoloRangeKm = config.Bind("Command", "HoloRangeKm", 20,

@@ -7,16 +7,16 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Command.Runtime
 {
     /// <summary>
-    /// The hologram's furniture on the HUD canvas, in the helmet visor's language: ink over the world, no plate, four corner brackets round the picture and a captioned shelf above it ("HOLO MAP"
-    /// at the left, the radius and which way is up at the right, a node and a 45 degree stub at the end). The picture is a square of 46 % of the canvas height, 24 units (a 1080p pixel) in from the
-    /// left and bottom edges, growing out of the corner in <see cref="GrowSeconds"/>. While it is up the game's corner map is hidden through a CanvasGroup of ours on its root (alpha only, never
-    /// SetActive on a native object), put back exactly the moment the holo goes. Everything is a child of one root under the HUD canvas, sent behind the HUD's own elements.
+    /// The hologram's furniture on the HUD canvas, in the helmet visor's language: ink over the world, no plate, four corner brackets round the picture and a captioned shelf. One picture in two sizes: the
+    /// MINI is a square of 300 units, 16 in from the left and bottom edges, with the shelf inside its lower-left ("TAC MAP" at the left, the radius at the right end, a node and a 45 degree stub) and the game's
+    /// grid reference dim at its lower right; the BIG one is 46 % of the canvas height, 24 units in, with the shelf above it ("HOLO MAP", the radius and which way is up) - the shelf glides between the two
+    /// as the frame grows in <see cref="HoloPresentation.GrowSeconds"/>. While either is up the game's corner map is hidden through a CanvasGroup of ours on its root (alpha only, never SetActive on a native
+    /// object), put back exactly the moment neither is. Everything is a child of one root under the HUD canvas, sent behind the HUD's own elements.
     /// </summary>
     internal sealed partial class HoloMap
     {
-        // Labels: 0 the shelf caption, 1 the shelf flag, 2 north, 3 the outer ring's range, 4..9 the airbases, 10 the selected target.
-        private const int LabelCaption = 0, LabelFlag = 1, LabelNorth = 2, LabelRing = 3, LabelBase = 4, LabelTarget = 10, LabelCount = 11;
-        private const float SideShare = .46f, Margin = 24f;
+        // Labels: 0 the shelf caption, 1 the shelf flag, 2 north, 3 the outer ring's range, 4..9 the airbases, 10 the selected target, 11 the game's grid reference (MINI only).
+        private const int LabelCaption = 0, LabelFlag = 1, LabelNorth = 2, LabelRing = 3, LabelBase = 4, LabelTarget = 10, LabelGrid = 11, LabelCount = 12;
 
         private GameObject root;
         private RectTransform rootRect, canvasRect;
@@ -25,7 +25,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private RawImage picture;
         private AvVector furniture, marks;
         private readonly TextMeshProUGUI[] labels = new TextMeshProUGUI[LabelCount];
-        private float unit = 1f, side = 1f, pixel = 1f, laidHeight = -1f;
+        private float unit = 1f, side = 1f, pixel = 1f, laidHeight = -1f, laidMargin = -1f;
         private bool furnitureDirty;
         private int inkAtFurniture = -1;
         private CanvasGroup mapGroup;
@@ -68,8 +68,9 @@ namespace BoscaliSummer.Modules.Command.Runtime
             MakeLabel(LabelCaption, AvTextRole.Label, TextAlignmentOptions.MidlineLeft, new Vector2(0f, .5f));
             MakeLabel(LabelFlag, AvTextRole.Label, TextAlignmentOptions.MidlineRight, new Vector2(1f, .5f));
             MakeLabel(LabelNorth, AvTextRole.Micro, TextAlignmentOptions.Midline, new Vector2(.5f, .5f));
-            for (int i = LabelRing; i < LabelCount; i++)
+            for (int i = LabelRing; i < LabelGrid; i++)
                 MakeLabel(i, AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, new Vector2(0f, .5f));
+            MakeLabel(LabelGrid, AvTextRole.Micro, TextAlignmentOptions.MidlineRight, new Vector2(1f, .5f));
             AvText.Set(labels[LabelCaption], HoloMarks.Caption);
             root.SetActive(false);
             laidHeight = -1f;
@@ -96,29 +97,49 @@ namespace BoscaliSummer.Modules.Command.Runtime
             Layout();
         }
 
-        /// <summary>Sizes everything from the canvas height: a unit is the canvas height over 1080 (a 1080p pixel), a hairline is one device pixel.</summary>
-        private void Layout()
+        /// <summary>
+        /// Sizes everything from the canvas height and how far the picture has grown: a unit is the canvas height over 1080 (a 1080p pixel), a hairline is one device pixel, the picture's side and its
+        /// distance from the corner follow <see cref="HoloPresentation.Side"/> and <see cref="HoloPresentation.Margin"/>, and the part of the texture it is drawn into follows the pixels it is shown with.
+        /// True when the picture's box changed (a picture is due: its marks are laid out for the new box).
+        /// </summary>
+        private bool Layout()
         {
+            if (canvasRect == null) return false;
             float height = canvasRect.rect.height;
-            if (height < 100f || Mathf.Approximately(height, laidHeight)) return;
+            if (height < 100f) return false;
+            float wantSide = HoloPresentation.Side(size, height), wantMargin = HoloPresentation.Margin(size, height);
+            bool resized = !Mathf.Approximately(height, laidHeight);
+            if (!resized && wantSide == side && wantMargin == laidMargin) return false;
             laidHeight = height;
+            laidMargin = wantMargin;
             unit = height / 1080f;
-            side = Mathf.Round(SideShare * height);
-            pixel = 1f / Mathf.Max(.01f, hudCanvas.rootCanvas.scaleFactor);
-            rootRect.anchoredPosition = new Vector2(Mathf.Round(Margin * unit), Mathf.Round(Margin * unit));
+            side = wantSide;
+            float scale = Mathf.Max(.01f, hudCanvas.rootCanvas.scaleFactor);
+            pixel = 1f / scale;
+            rootRect.anchoredPosition = new Vector2(wantMargin, wantMargin);
             rootRect.sizeDelta = new Vector2(side, side);
-            for (int i = 0; i < LabelCount; i++)
+            if (resized)
+                for (int i = 0; i < LabelCount; i++)
+                {
+                    labels[i].fontSize = Mathf.Max(9f, Mathf.Round((i < LabelNorth ? 12f : 11f) * unit));
+                    labels[i].rectTransform.sizeDelta = new Vector2(Mathf.Round(190f * unit), Mathf.Round(16f * unit));
+                }
+            int drawn = HoloPresentation.RenderPixels(side * scale);
+            if (drawn != pixels)
             {
-                labels[i].fontSize = Mathf.Max(9f, Mathf.Round((i < LabelNorth ? 12f : 11f) * unit));
-                labels[i].rectTransform.sizeDelta = new Vector2(Mathf.Round(190f * unit), Mathf.Round(16f * unit));
+                pixels = drawn;
+                float share = drawn / (float)TextureSize;
+                picture.uvRect = new Rect(0f, 0f, share, share);
             }
             furnitureDirty = true;
+            return true;
         }
 
-        /// <summary>The furniture, redrawn only when the layout, the ink or the flag's words change (the words set the shelf's gaps).</summary>
+        /// <summary>The furniture, redrawn only when the layout, the ink, the shape or the flag's words change (the words set the shelf's gaps).</summary>
         private void DrawFurniture(string flag)
         {
-            Layout();
+            bool mini = shape == HoloShape.Mini;
+            if (AvText.Set(labels[LabelCaption], mini ? HoloMarks.MiniCaption : HoloMarks.Caption)) furnitureDirty = true;
             if (AvText.Set(labels[LabelFlag], flag)) furnitureDirty = true;
             int ink = Mathf.RoundToInt(inkColour.r * 255f) * 65536 + Mathf.RoundToInt(inkColour.g * 255f) * 256 + Mathf.RoundToInt(inkColour.b * 255f);
             if (ink != inkAtFurniture) furnitureDirty = true;
@@ -131,11 +152,12 @@ namespace BoscaliSummer.Modules.Command.Runtime
             AvQuadBuffer f = furniture.Buffer;
             f.Clear();
             Rgba dim = new Rgba(inkColour.r, inkColour.g, inkColour.b, .7f);
-            float u = unit, w = pixel;
+            float u = unit, w = pixel, glide = HoloPresentation.Ease(size);
             AvStrokes.Bracket(f, -4f * u, -4f * u, side + 8f * u, side + 8f * u, 10f * u, w, dim);
 
-            // The shelf: a hairline interrupted by its two captions (4 unit gaps), ending in a node and a short 45 degree stub, as every block shelf of the visor.
-            float y = side + 18f * u, end = side - 8f * u, gap = 4f * u;
+            // The shelf: a hairline interrupted by its two captions (4 unit gaps), ending in a node and a short 45 degree stub, as every block shelf of the visor. Inside the lower-left of the
+            // MINI's frame (the game's own screen-edge markers can sit above it), above the BIG one's; it glides between the two as the frame grows.
+            float y = Mathf.Lerp(14f * u, side + 18f * u, glide), end = Mathf.Lerp(side * .62f, side - 8f * u, glide), gap = 4f * u;
             float captionEnd = 12f * u + AvText.Width(labels[LabelCaption]) + gap;
             float flagStart = end - 12f * u - AvText.Width(labels[LabelFlag]) - gap;
             AvStrokes.Line(f, 0f, y, 12f * u - gap, y, w, dim);
@@ -157,13 +179,12 @@ namespace BoscaliSummer.Modules.Command.Runtime
             if (rect.anchoredPosition != at) rect.anchoredPosition = at;
         }
 
-        /// <summary>The growth: the picture comes out of the corner at 60 % to full size while the corner map fades away behind it.</summary>
-        private void ApplyGrow()
+        /// <summary>The fade-in: the picture comes up while the corner map fades away behind it (only when a presentation first shows; between MINI and BIG the corner map stays hidden).</summary>
+        private void ApplyPresence()
         {
-            float eased = Mathf.SmoothStep(0f, 1f, grow);
-            rootRect.localScale = Vector3.one * Mathf.Lerp(StartScale, GrownScale, eased);
-            rootGroup.alpha = eased;
-            picture.color = new Color(1f, 1f, 1f, eased);
+            float eased = Mathf.SmoothStep(0f, 1f, appear);
+            if (rootGroup.alpha != eased) rootGroup.alpha = eased;
+            if (picture.color.a != eased) picture.color = new Color(1f, 1f, 1f, eased);
             HideMinimap(1f - eased);
         }
 
@@ -198,7 +219,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
             picture = null;
             furniture = marks = null;
             for (int i = 0; i < labels.Length; i++) labels[i] = null;
-            laidHeight = -1f;
+            laidHeight = laidMargin = -1f;
+            pixels = TextureSize;
             furnitureDirty = false;
             inkAtFurniture = -1;
         }
