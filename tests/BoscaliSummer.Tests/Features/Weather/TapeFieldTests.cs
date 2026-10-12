@@ -27,8 +27,11 @@ namespace BoscaliSummer.Tests.Features.Weather
                 TestAssert.That(row.LobeRung == lobes[i], "class " + i + " snaps its old puff scale to rung " + lobes[i] + ", got " + row.LobeRung);
                 TestAssert.That(Math.Abs(row.Mid.Strength - 0.42f) < 1e-6f && Math.Abs(row.High.Strength - 0.12f) < 1e-6f,
                     "class " + i + " keeps today's layer strengths 0.42 and 0.12");
-                TestAssert.That(row.HorizonDepth >= 300f && row.CapacityCover == 0f, "class rows have a horizon depth and no lattice capacity");
-                TestAssert.That(Math.Abs(row.HorizonCover - Math.Max(0.9f * row.SheetCover, 0.3f * row.Cumulus + 0.2f * row.Convective)) < 1e-6f,
+                TestAssert.That(row.HorizonDepth >= 300f && row.CapacityCover >= 0.36f && row.BaseVariation >= 150f,
+                    "class rows have a horizon depth, the capacity of their lattice genus and its base variation");
+                TestAssert.That(row.CumulusLevel == CumulusLevels.For(row.CumulusCover, row.CapacityCover) && (row.CumulusCover > 0f) == (row.CumulusLevel > 0f),
+                    "and the activation level that makes the lattice reach their cumulus cover");
+                TestAssert.That(Math.Abs(row.HorizonCover - Math.Max(0.9f * row.SheetCover, 0.6f * row.CumulusCover + 0.2f * row.Convective)) < 1e-6f,
                     "class " + i + " keeps today's horizon uniform (INTERIM), not the baked library formula");
             }
             SkyParams overcast = StateTable.Get(WeatherRegimeType.Overcast);
@@ -39,10 +42,12 @@ namespace BoscaliSummer.Tests.Features.Weather
             TestAssert.That(overcast.Mid.Veil > 0.8f && overcast.Mid.Streaks + overcast.Mid.Ripples + overcast.Mid.Veil > 0.99f,
                 "a near-sheet middle layer is mostly veil");
             SkyParams fair = StateTable.Get(WeatherRegimeType.Fair);
-            TestAssert.That(Math.Abs(fair.CumulusCover - 0.21f) < 1e-6f && Math.Abs(fair.Cumulus - 0.42f) < 1e-6f, "Fair keeps the legacy cumulus level and carries half of it as cover");
+            TestAssert.That(Math.Abs(fair.CumulusCover - 0.21f) < 1e-6f, "Fair carries half of its old cumulus level as cover");
+            TestAssert.That(StateTable.LatticeGenus == LowGenus.Mediocris, "every class sky builds its lattice from one genus, so a fade never swaps the groups");
             SkyParams halfway = StateTable.At(2.5f);
             TestAssert.That(Math.Abs(halfway.LobeRung - 3.5f) < 1e-5f && halfway.SheetCover > StateTable.Get(WeatherRegimeType.Scattered).SheetCover, "a fade between two class skies blends their columns, the lobe rung going fractional for the ladder");
-            TestAssert.That(Math.Abs(halfway.HorizonCover - Math.Max(0.9f * halfway.SheetCover, 0.3f * halfway.Cumulus + 0.2f * halfway.Convective)) < 1e-6f,
+            TestAssert.That(halfway.CumulusLevel == CumulusLevels.For(halfway.CumulusCover, halfway.CapacityCover), "but the cumulus level is recomputed from the blended cover, never blended");
+            TestAssert.That(Math.Abs(halfway.HorizonCover - Math.Max(0.9f * halfway.SheetCover, 0.6f * halfway.CumulusCover + 0.2f * halfway.Convective)) < 1e-6f,
                 "and the horizon cover of a fade is the uniform on the faded row, not the fade of two uniforms");
         }
 

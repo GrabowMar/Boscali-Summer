@@ -29,12 +29,17 @@ namespace BoscaliSummer.Tests.Features.Weather
                 "Surface histories wet over 35 seconds and retain residual water while drying");
             var field = new WeatherField();
             field.Build(new WeatherKey(73, 0f, false, (byte)WeatherRegimeType.Storm), 60f, 40000f, 40000f);
+            var cells = new StormCell[StormLattice.EnumerateCap];
+            int count = StormLattice.Enumerate(field.Lattice, 0f, 0f, StormLattice.EnumerateRange, cells);
+            TestAssert.That(count == StormLattice.EnumerateCap, "a storm sky fills the 24-cell enumeration");
             int events = 0;
             for (int slot = 0; slot < 300; slot++)
-            for (int source = 0; source < field.CellCount + field.SuperstructureCount; source++)
+            for (int source = 0; source < count + field.SuperstructureCount; source++)
             {
-                bool a = StormLightning.TryEvent(field, source, slot, out LightningEvent first);
-                bool b = StormLightning.TryEvent(field, source, slot, out LightningEvent second);
+                bool a = source < count ? StormLightning.TryCell(cells[source], field.Frame, slot, out LightningEvent first)
+                    : StormLightning.TryHero(field.SuperstructureAt(source - count), field.Key.LayoutSeed, slot, out first);
+                bool b = source < count ? StormLightning.TryCell(cells[source], field.Frame, slot, out LightningEvent second)
+                    : StormLightning.TryHero(field.SuperstructureAt(source - count), field.Key.LayoutSeed, slot, out second);
                 TestAssert.That(a == b && first.Time == second.Time && first.X == second.X,
                     "Storm events derive identically from field and mission-time slot");
                 if (!a) continue;

@@ -75,9 +75,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public float Convective, Severity, BaseVariation, StratRain, RainBase;
         public float WindFactor, Turbulence, Haze, Qnh, Temperature, OpacityMid, OpacityHigh;
 
-        // INTERIM(slice 3/4): the legacy cloud machinery (dry cumulus clusters, frontal shield, sky split) still runs
-        // on these until the lattice and the front markers replace it.
-        public float Cumulus, Frontal, Split;
+        // INTERIM(slice 4): the legacy frontal shield and sky split still run on these until the front markers replace them.
+        public float Frontal, Split;
 
         public SkyLayer Layer(int index) => index == 0 ? Mid : High;
 
@@ -135,7 +134,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
     /// <summary>The column table of <see cref="SkyParams"/>: array order, names and where each column sits in the shader texture.</summary>
     internal static class SkyColumns
     {
-        public const int Count = 60;
+        public const int Count = 59;
 
         public static readonly string[] Names =
         {
@@ -148,7 +147,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             "HighVeil", "HighCurl", "HighAspect", "HighRippleWavelength", "CloudBase", "SheetCover",
             "CumulusCover", "CapacityCover", "CumulusLevel", "Convective", "Severity", "BaseVariation",
             "StratRain", "RainBase", "WindFactor", "Turbulence", "Haze", "Qnh",
-            "Temperature", "OpacityMid", "OpacityHigh", "Cumulus", "Frontal", "Split",
+            "Temperature", "OpacityMid", "OpacityHigh", "Frontal", "Split",
         };
 
         /// <summary>Shader texture row of each column, or -1 for CPU-only columns (spec 7.2: rows 0-2 low genus, 3-6 mid, 7-10 high).</summary>
@@ -158,7 +157,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5,
             6, 6, 7, 7, 7, 7, 8, 8, 8, 8, 9, 9,
             9, 9, 10, 10, -1, -1, -1, -1, -1, -1, -1, -1,
-            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
         };
 
         public static readonly sbyte[] GpuChannel =
@@ -167,7 +166,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3,
             0, 1, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1,
             2, 3, 0, 1, -1, -1, -1, -1, -1, -1, -1, -1,
-            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
         };
 
         public static void Write(in SkyParams s, float[] to, int at)
@@ -229,9 +228,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
             to[at + 54] = s.Temperature;
             to[at + 55] = s.OpacityMid;
             to[at + 56] = s.OpacityHigh;
-            to[at + 57] = s.Cumulus;
-            to[at + 58] = s.Frontal;
-            to[at + 59] = s.Split;
+            to[at + 57] = s.Frontal;
+            to[at + 58] = s.Split;
         }
 
         public static SkyParams Read(float[] from, int at)
@@ -294,9 +292,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
             s.Temperature = from[at + 54];
             s.OpacityMid = from[at + 55];
             s.OpacityHigh = from[at + 56];
-            s.Cumulus = from[at + 57];
-            s.Frontal = from[at + 58];
-            s.Split = from[at + 59];
+            s.Frontal = from[at + 57];
+            s.Split = from[at + 58];
             return s;
         }
 

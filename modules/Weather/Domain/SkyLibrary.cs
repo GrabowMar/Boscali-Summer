@@ -111,6 +111,11 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 def.HasLow = true;
                 def.Genus = SkyArchetypes.Genus(genus.Value);
                 SkyArchetypes.ApplyGenus(ref sky, def.Genus, lowBase);
+                if (streets >= CumulusLattice.StreetThreshold)
+                {
+                    if (def.Genus.Genus != LowGenus.Humilis) throw new InvalidOperationException("street zones are baked for Humilis only: " + name);
+                    sky.CapacityCover = SkyArchetypes.StreetCapacityHumilis;
+                }
                 def.LowJitter = jitter ?? DefaultJitter(def.Genus.Genus);
             }
             else
@@ -135,8 +140,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
             }
             if (embedded) sky.Mid.Base = SkyArchetypes.DeckTop(sky) - 300f;
             sky.RainBase = rainBase >= 0f ? rainBase : (rain > 0.1f || convective > 0f) && def.HasLow ? sky.CloudBase : 0f;
-            // INTERIM(slice 3): the legacy dry-cumulus clusters read this until the lattice replaces them.
-            sky.Cumulus = Scalar.Clamp01(cumulus * 2f);
             SkyDerived.Apply(ref sky);
             def.Nominal = sky;
             return def;

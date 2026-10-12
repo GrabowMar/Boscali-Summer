@@ -87,6 +87,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         /// <summary>Hash of the tape identity: every array, texture and lattice salt is a pure function of it.</summary>
         public uint TapeId => tapeId;
+        /// <summary>Hash of the seed and the layout salt alone (spec 6.1). The cell seeds, the noise rotations and offsets and the
+        /// set-piece strikes derive from it, so a sky pin or a mission class never moves them.</summary>
+        public uint LayoutSeed => Deterministic.Hash((int)Seed, LayoutSalt, 0x4C41, 0x5EED);
 
         /// <summary>Heading the wind blows toward; what the field's prevailing wind and cloud orientation use.</summary>
         public float DownwindHeading => Wrap(HeadingDeg + 180f);

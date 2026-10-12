@@ -186,6 +186,14 @@ namespace BoscaliSummer.Modules.Weather.Domain
                  4600f, 2000f, 65f, 80f, 1.35f, 0.75f, 0.90f),
         };
 
+        /// <summary>
+        /// INTERIM(slice 4): the cumulus genus every class sky's lattice is built from (candidates per cell, radius, capacity, base
+        /// variation). One genus for all seven, because the legacy timeline fades the whole sky at once: a genus that changed half way
+        /// through a fade would swap every group in one frame. Mediocris groups (R 3-6 km) are the nearest to the old fixed groups
+        /// (R 5-9.5 km). The tape of slice 4 chooses the genus per keyframe, and a ramp swaps it at the ramp midpoint, in space.
+        /// </summary>
+        public const LowGenus LatticeGenus = LowGenus.Mediocris;
+
         public static SkyParams Get(WeatherRegimeType state) => Table[Index((int)state)];
 
         /// <summary>Parameters at a fractional ladder position (a fade between neighbours).</summary>
@@ -196,6 +204,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
             int i = (int)level;
             // INTERIM(slice 4): holdScales false keeps today's smooth fade of the high layer's streak length between two class skies.
             SkyParams sky = SkyParams.Lerp(Table[i], Table[i + 1], level - i, holdScales: false);
+            // The cumulus level is the inverse of a curve of the blended cover and capacity, never a blend of the two levels (spec 4.1).
+            sky.CumulusLevel = CumulusLevels.For(sky.CumulusCover, sky.CapacityCover);
             InterimHorizon(ref sky);
             return sky;
         }
@@ -238,15 +248,17 @@ namespace BoscaliSummer.Modules.Weather.Domain
             float puffScale, float puffDepth, float baseSharp, float baseWobble, float dome, float billow, float anvil)
         {
             float lobe = puffScale > 0f ? Math.Max(1000f, puffScale) : 1800f; // the old CloudShape.Resolve floor and default
+            GenusRow lattice = SkyArchetypes.Genus(LatticeGenus);
             var sky = new SkyParams
             {
+                CapacityCover = lattice.Capacity, BaseVariation = lattice.BaseVariation,
                 CloudBase = cloudBase, SheetCover = overcast, CumulusCover = cumulus * 0.5f, Convective = convective,
                 Severity = severity, StratRain = rain, WindFactor = wind, Turbulence = turbulence, Haze = haze, Qnh = qnh,
                 Temperature = temperature, OpacityMid = 0.7f, OpacityHigh = 0.15f,
                 LobeRung = Ladder.NearestLobeRung(lobe), PuffDepth = puffDepth, BaseSharp = baseSharp, BaseWobble = baseWobble,
                 Dome = dome, Billow = billow, Anvil = anvil, DeckDepth = layerDepth, DeckSmooth = layerSmooth,
                 Mid = SkyLayer.LegacyMid(midCover, midSheet), High = SkyLayer.LegacyHigh(highCover, highVeil),
-                Cumulus = cumulus, Frontal = frontal, Split = split,
+                Frontal = frontal, Split = split,
             };
             SkyDerived.Apply(ref sky);
             InterimHorizon(ref sky);
@@ -259,6 +271,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// play keeps its horizon until slice 4 rewrites the deck; library skies use the baked column.
         /// </summary>
         private static void InterimHorizon(ref SkyParams sky) =>
-            sky.HorizonCover = Math.Max(0.9f * sky.SheetCover, 0.3f * sky.Cumulus + 0.2f * sky.Convective);
+            sky.HorizonCover = Math.Max(0.9f * sky.SheetCover, 0.6f * sky.CumulusCover + 0.2f * sky.Convective);
     }
 }

@@ -14,16 +14,44 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>A meander wavelength below this many amplitudes could fold the boundaries; |M'| &lt;= 1 needs 8.1.</summary>
         public const float MinWavelengthPerAmplitude = 8.1f;
 
-        public TapeFrame(float headingDeg, float offsetMetres, float amplitude = 0f, float wavelength = 100000f, float phase = 0f)
+        public TapeFrame(float headingDeg, float offsetMetres, float amplitude = 0f, float wavelength = 100000f, float phase = 0f,
+            NoiseXform noise = null)
         {
             WeatherMath.HeadingToVector(headingDeg, out UX, out UZ);
             Offset = offsetMetres;
             Amplitude = amplitude;
             Wavelength = Math.Max(wavelength, MinWavelengthPerAmplitude * amplitude);
             Phase = phase;
+            this.noise = noise;
         }
 
         public readonly float UX, UZ, Offset, Amplitude, Wavelength, Phase;
+        private readonly NoiseXform noise;
+
+        /// <summary>The tape's noise rotation and offsets; <see cref="NoiseXform.Identity"/> for a frame built without a key.</summary>
+        public NoiseXform Noise => noise ?? NoiseXform.Identity;
+
+        /// <summary>Tape-frame coordinates of a world point, q = p + u*D (spec 3.1). The lattice, the base-height field and the
+        /// noise live in this frame; slice 3 holds D at 0, so q = p.</summary>
+        public void ToTape(float x, float z, out float qx, out float qz)
+        {
+            qx = x + UX * Offset;
+            qz = z + UZ * Offset;
+        }
+
+        /// <summary>The world point of a tape-frame point (the inverse of <see cref="ToTape"/>).</summary>
+        public void FromTape(float qx, float qz, out float x, out float z)
+        {
+            x = qx - UX * Offset;
+            z = qz - UZ * Offset;
+        }
+
+        /// <summary>Position along the tape of a tape-frame point. The offset D cancels, so this is S of the world point it came from.</summary>
+        public float STape(float qx, float qz) => qx * UX + qz * UZ + Meander(-qx * UZ + qz * UX);
+
+        /// <summary>The one helper every noise tap goes through (spec 6): the point where the shared noise volume is read for a
+        /// noise layer (<see cref="NoiseXform"/>.Low .. HighAligned). Taps divide the result by their scale; none divides a raw x, z.</summary>
+        public void NoiseXZ(float x, float z, int layer, out float nx, out float nz) => Noise.Apply(x, z, layer, out nx, out nz);
 
         public float Meander(float across)
         {
@@ -47,12 +75,14 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public const float SpanMetres = 3000000f;
 
         private readonly float[] scratch = new float[SkyColumns.Count];
+        private readonly byte[] genus;
 
         public BakedTape(int texels)
         {
             if (texels < 1 || texels > FullTexels) throw new ArgumentOutOfRangeException(nameof(texels));
             Texels = texels;
             Data = new float[texels * SkyColumns.Count];
+            genus = new byte[texels];
         }
 
         public int Texels { get; }
@@ -79,16 +109,27 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         public void SetTexel(int index, in SkyParams sky) => SkyColumns.Write(sky, Data, index * SkyColumns.Count);
 
+        public void SetTexel(int index, in SkyParams sky, LowGenus lowGenus)
+        {
+            SetTexel(index, sky);
+            genus[index] = (byte)lowGenus;
+        }
+
+        /// <summary>The low genus of a texel: the genus of the keyframe on the near side of any ramp midpoint (spec 6 "Genus inside a ramp"),
+        /// so the lattice reads its candidate count and radius range from it. Never blended. Humilis where the baker wrote none.</summary>
+        public LowGenus GenusAt(int index) => (LowGenus)genus[index];
+
         /// <summary>Makes a one-texel tape hold this row. Allocation-free, and a no-op (same revision) when nothing changed.</summary>
-        public void SetConstant(in SkyParams sky)
+        public void SetConstant(in SkyParams sky, LowGenus lowGenus = LowGenus.Humilis)
         {
             if (Texels != 1) throw new InvalidOperationException("SetConstant needs a one-texel tape");
             SkyColumns.Write(sky, scratch, 0);
-            bool same = true;
-            for (int i = 0; i < scratch.Length; i++)
-                if (scratch[i] != Data[i]) { same = false; break; }
+            bool same = genus[0] == (byte)lowGenus;
+            for (int i = 0; same && i < scratch.Length; i++)
+                if (scratch[i] != Data[i]) same = false;
             if (same) return;
             Array.Copy(scratch, Data, scratch.Length);
+            genus[0] = (byte)lowGenus;
             Finish();
         }
 
@@ -126,7 +167,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <paramref name="rampMetres"/>. Fixtures only: the density check and the bench use it to test spatial variation
         /// and CPU/GPU parity before real tapes exist.
         /// </summary>
-        public static BakedTape TwoKeyframes(in SkyParams a, in SkyParams b, float boundaryMetres, float rampMetres)
+        public static BakedTape TwoKeyframes(in SkyParams a, in SkyParams b, float boundaryMetres, float rampMetres,
+            LowGenus genusA = LowGenus.Humilis, LowGenus genusB = LowGenus.Humilis)
         {
             var tape = new BakedTape(FullTexels);
             for (int i = 0; i < FullTexels; i++)
@@ -135,7 +177,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 float w = WeatherMath.Smoothstep(boundaryMetres - 0.5f * rampMetres, boundaryMetres + 0.5f * rampMetres, s);
                 SkyParams row = SkyParams.Lerp(a, b, w);
                 row.CumulusLevel = CumulusLevels.For(row.CumulusCover, row.CapacityCover);
-                tape.SetTexel(i, row);
+                tape.SetTexel(i, row, s < boundaryMetres ? genusA : genusB);
             }
             tape.Finish();
             return tape;
@@ -152,11 +194,19 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         public TapeSampler(BakedTape tape) { this.tape = tape; }
 
-        public static TapeSampler Constant(in SkyParams sky)
+        public static TapeSampler Constant(in SkyParams sky, LowGenus lowGenus = LowGenus.Humilis)
         {
             var baked = new BakedTape(1);
-            baked.SetConstant(sky);
+            baked.SetConstant(sky, lowGenus);
             return new TapeSampler(baked);
+        }
+
+        /// <summary>The low genus at position s: that of the nearest texel, never blended (the lattice reads its constants from it).</summary>
+        public LowGenus GenusAt(float s)
+        {
+            if (float.IsNaN(s) || tape.Texels == 1) return tape.GenusAt(0);
+            int i = (int)Math.Max(0f, Math.Min(tape.Texels - 1, (float)Math.Floor(s / tape.TexelMetres)));
+            return tape.GenusAt(i);
         }
 
         public BakedTape Tape => tape;

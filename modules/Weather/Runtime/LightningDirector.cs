@@ -15,6 +15,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private readonly LineRenderer[] bolts = new LineRenderer[2];
         private readonly ThunderSoundscape thunder = new ThunderSoundscape();
         private readonly WeatherField slotField = new WeatherField();
+        private readonly StormCell[] slotCells = new StormCell[StormLattice.EnumerateCap];
+        private int slotCellCount;
         private int cachedSlot = -1;
         private WeatherKey key;
         private float previousTime = -1f;
@@ -59,12 +61,19 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                         // Peers with different render/update phases use precisely the same
                         // atmospheric strength and sites at the slot boundary.
                         slotField.Build(field.Key, slot * StormLightning.SlotSeconds, field.HalfX, field.HalfZ, field.HourOfDay);
+                        // The slot's sources are a pure function of the key and the slot: the active storm cells within 180 km of the
+                        // observer's tape position, nearest first, at most 24 (spec 6.1). A cell's event does not depend on the observer.
+                        slotField.Frame.ToTape(observerGlobal.x, observerGlobal.z, out float qx, out float qz);
+                        slotCellCount = StormLattice.Enumerate(slotField.Lattice, qx, qz, StormLattice.EnumerateRange, slotCells);
                         cachedSlot = slot;
                     }
-                    for (int source = 0; source < slotField.CellCount + slotField.SuperstructureCount; source++)
+                    for (int source = 0; source < slotCellCount + slotField.SuperstructureCount; source++)
                     {
-                        if (!StormLightning.TryEvent(slotField, source, slot, out LightningEvent strike) ||
-                            strike.Time <= previousTime || strike.Time > missionTime) continue;
+                        LightningEvent strike;
+                        bool has = source < slotCellCount
+                            ? StormLightning.TryCell(slotCells[source], slotField.Frame, slot, out strike)
+                            : StormLightning.TryHero(slotField.SuperstructureAt(source - slotCellCount), slotField.Key.LayoutSeed, slot, out strike);
+                        if (!has || strike.Time <= previousTime || strike.Time > missionTime) continue;
                         float distance = Vector3.Distance(observerGlobal, new Vector3(strike.X, strike.Y, strike.Z));
                         if (distance > 180000f) continue;
                         int free = !strikes[0].Valid || missionTime - strikes[0].Event.Time > 0.8f ? 0 :
@@ -124,6 +133,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             for (int i = 0; i < strikes.Length; i++) { strikes[i] = default; if (bolts[i] != null) bolts[i].enabled = false; }
             FlashA = FlashB = Vector4.zero; FlashNow = 0f; thunder.Clear();
             cachedSlot = -1;
+            slotCellCount = 0;
         }
         internal void Reset()
         {

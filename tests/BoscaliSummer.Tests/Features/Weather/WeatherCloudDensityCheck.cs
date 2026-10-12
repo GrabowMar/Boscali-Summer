@@ -74,7 +74,7 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
         byte[] solid = new byte[4 * 4 * 4 * 4]; Array.Fill(solid, (byte)255);
         for (int i = 1; i < solid.Length; i += 4) solid[i] = 128;
         var shallow = new byte[] { 0, 166, 204, 55 };
-        var shield = new byte[] { 104, 159, 22, 0 };
+        var shield = new byte[] { 104, 159, 86, 0 };   // base byte 86 is 1350 m on the 4096 m scale (22 was 1380 m on the old 16000 m one)
         Color[] lower = Group("shallow-under-shield", field, solid, 4, shallow, shield, shallow, shield, 1, null,
             new[] { new Vector3(0, 2100, 0), new Vector3(0, 5000, 0), new Vector3(0, 7500, 0),
                 new Vector3(0, 13000, 0), new Vector3(0, 500, 0) }, 0f, Vector3.zero, true);
@@ -83,7 +83,7 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
         Require(lower[0].g > .2f && lower[0].g < .5f && lower[2].g > .1f && lower[2].g < .5f,
             "Actual GPU heights are local to shallow body/front, not the aggregate ceiling");
         var deep = new byte[] { 0, 0, 220, 142 };
-        var wet = new byte[] { 0, 0, 22, 128 };
+        var wet = new byte[] { 0, 0, 86, 128 };
         Color[] upper = Group("deep-scud-shifted", field, solid, 4, deep, wet, deep, wet, 1, null,
             new[] { new Vector3(1000, 2700, -2000), new Vector3(1000, 6600, -2000),
                 new Vector3(1000, 1500, -2000), new Vector3(1000, 14000, -2000) }, 600f,
@@ -91,7 +91,7 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
         Require(upper[0].r > .1f && upper[1].r > .1f && upper[2].r > .1f && upper[3].r == 0f,
             "Actual GPU deep column/scud and floating-origin/terrain height shift remain coherent");
         var far = new byte[] { 0, 80, 220, 170 };
-        var farProfile = new byte[] { 140, 220, 32, 0 };
+        var farProfile = new byte[] { 140, 220, 125, 0 };
         Group("near-far-height-blend", field, solid, 4, shallow, shield, far, farProfile, 1, null,
             new[] { new Vector3(46000, 4500, 0), new Vector3(47000, 4500, 0),
                 new Vector3(48000, 4500, 0), new Vector3(-48000, 8500, 0) }, 0f, Vector3.zero, true);
@@ -133,7 +133,7 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
         // One low genus per sky: three pinned library skies (a humilis, a cumulonimbus, a stratus) read their lobe, depth,
         // dome and edge texture from the tape; then a tape whose genus changes across a 12 km ramp, bent by a 10 km meander,
         // so one march crosses lobe rungs 1 to 5 and the ladder blend.
-        foreach (int pin in new[] { 7, 43, 28 })
+        foreach (int pin in new[] { 7, 9, 43, 28 })
         {
             var pinned = new WeatherKey(73, 0f, false, skyPin: (byte)pin);
             field.Build(pinned, 600f, 40000f, 40000f);
@@ -151,7 +151,7 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
             tolerance: .04f, medianLimit: .002f); // a rung blend multiplies the noise taps' 8-bit filter error by up to 1.41, and the remaps by 2.5; the median guard catches what the slack hides
         RainOptics();
         var geometryFailures = new List<string>();
-        foreach (Action check in new Action[] { RayComposition, SlabFootprint, TapeRows, SlabMaskAndOverlap, AirOptics })
+        foreach (Action check in new Action[] { RayComposition, SlabFootprint, TapeRows, NoiseRows, SlabMaskAndOverlap, AirOptics })
             try { check(); }
             catch (Exception error) { geometryFailures.Add(error.Message); log.AppendLine("FAIL " + error.Message); }
         if (geometryFailures.Count > 0) throw new Exception(string.Join("; ", geometryFailures));
@@ -177,13 +177,15 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
             material.SetVector("_CloudFlashA", Vector4.zero); material.SetVector("_CloudFlashB", Vector4.zero);
             Color weather = new Color(.55f, 0f, 0f, .5f);
             Texture2D structure = FloatMap(new[] { weather }, 1, owned);
-            Texture2D wet = FloatMap(new[] { new Color(0f, 0f, .125f, .8f) }, 1, owned);
-            Texture2D dry = FloatMap(new[] { new Color(0f, 0f, .125f, 0f) }, 1, owned);
+            // The cloud base sits at 2000 m: its byte spans 0-4096 m (CloudMaps.BaseRange).
+            const float Base2Km = 2000f / CloudMaps.BaseRange;
+            Texture2D wet = FloatMap(new[] { new Color(0f, 0f, Base2Km, .8f) }, 1, owned);
+            Texture2D dry = FloatMap(new[] { new Color(0f, 0f, Base2Km, 0f) }, 1, owned);
             var patchPixels = new Color[16 * 16];
             // Near span is -16..+16 km. The rightmost five texels begin at +6 km;
             // a 3 km opaque scene lies wholly before the wet patch, a 12 km ray reaches it.
             for (int z = 0; z < 16; z++)
-            for (int x = 0; x < 16; x++) patchPixels[z * 16 + x] = new Color(0f, 0f, .125f, x >= 11 ? .8f : 0f);
+            for (int x = 0; x < 16; x++) patchPixels[z * 16 + x] = new Color(0f, 0f, Base2Km, x >= 11 ? .8f : 0f);
             Texture2D patch = FloatMap(patchPixels, 16, owned);
             material.SetTexture("_WeatherMapTex", structure); material.SetTexture("_WeatherFarMapTex", structure);
             material.SetTexture("_WeatherFarProfileTex", dry);
@@ -438,6 +440,63 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
         return new TapeSampler(copy);
     }
 
+    private void NoiseRows()
+    {
+        // The six noise layers' rotation and offset, GPU against CPU: NoiseXZ of a spread of map points through a keyed frame. The offsets
+        // are up to 100 km, so float32 holds them to about a centimetre; the tolerance is a few centimetres.
+        var owned = new List<UnityEngine.Object>();
+        RenderTexture rt = null;
+        RenderTexture previous = RenderTexture.active;
+        var tapeBinder = new CloudVolumeUniforms();
+        try
+        {
+            var material = new Material(Resources.Load<Shader>("CloudDensityProbe")); owned.Add(material);
+            material.SetFloat("_ProbeNoiseMode", 1f);
+            var frame = new TapeFrame(40f, 0f, noise: new NoiseXform(0xC0FFEE11u));
+            BindTape(tapeBinder, material, ConstantFixtureTape(), frame);
+            var inputs = new List<Color>();
+            for (int z = -3; z <= 3; z++)
+                for (int x = -3; x <= 3; x++) inputs.Add(new Color(x * 23000f, 0f, z * 17000f, 0f));
+            int count = inputs.Count;
+            var positions = new Texture2D(count, 1, TextureFormat.RGBAFloat, false, true)
+            { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp }; owned.Add(positions);
+            positions.SetPixels(inputs.ToArray()); positions.Apply();
+            material.SetTexture("_DensityProbePositions", positions);
+            rt = new RenderTexture(count, 1, 0, RenderTextureFormat.ARGBFloat, RenderTextureReadWrite.Linear);
+            Require(rt.Create(), "Bounded noise-row target created");
+            var readback = new Texture2D(count, 1, TextureFormat.RGBAFloat, false, true); owned.Add(readback);
+            int probes = 0;
+            for (int pair = 0; pair < NoiseXform.Layers / 2; pair++)
+            {
+                material.SetFloat("_ProbeLayer", pair * 2);
+                Graphics.Blit(null, rt, material, 0);
+                RenderTexture.active = rt; readback.ReadPixels(new Rect(0, 0, count, 1), 0, 0); readback.Apply();
+                Color[] gpu = readback.GetPixels();
+                for (int i = 0; i < count; i++)
+                {
+                    frame.NoiseXZ(inputs[i].r, inputs[i].b, pair * 2, out float ax, out float az);
+                    frame.NoiseXZ(inputs[i].r, inputs[i].b, pair * 2 + 1, out float bx, out float bz);
+                    float[] expected = { ax, az, bx, bz }, actual = { gpu[i].r, gpu[i].g, gpu[i].b, gpu[i].a };
+                    for (int c = 0; c < 4; c++)
+                    {
+                        probes++;
+                        if (!Finite(gpu[i]) || Mathf.Abs(expected[c] - actual[c]) > 0.05f + 2e-6f * Mathf.Abs(expected[c]))
+                            throw new Exception("Noise row mismatch (layers " + (pair * 2) + "," + (pair * 2 + 1) + ") at " + inputs[i].r + "," + inputs[i].b +
+                                " component " + c + ": CPU=" + F(expected[c]) + " GPU=" + F(actual[c]));
+                    }
+                }
+            }
+            log.AppendLine("PASS noise rows " + probes + " actual GPU NoiseXZ comparisons against the CPU frame (six layers)");
+        }
+        finally
+        {
+            tapeBinder.Reset();
+            RenderTexture.active = previous;
+            if (rt != null) { rt.Release(); Destroy(rt); }
+            foreach (UnityEngine.Object value in owned) Destroy(value);
+        }
+    }
+
     private void TapeRows()
     {
         // The tape texture and TapeS against the CPU sampler: a one-keyframe tape and a ramp with a meander, probed across the
@@ -564,10 +623,14 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
             // Two noise volumes. A constant one isolates the plumbing (weights, contrast, mask, ripple rows) and holds the old 0.001. A smooth
             // one makes every morphology, the curl and the rung blend vary in space; the GPU filters 3D textures with 8-bit weights, which
             // the layer's gains (contrast 3.2, mask slope up to 7) magnify to a few thousandths, so it holds 0.006.
-            (byte[] bytes, int size, float tolerance, string tag)[] volumes = { (ConstantNoise(), 4, .001f, "flat"), (SmoothNoise(16), 16, .006f, "smooth") };
+            // The third volume runs the smooth one through a keyed frame: the thin layers' rounded taps rotate and every tap shifts (NoiseXform).
+            (byte[] bytes, int size, float tolerance, string tag, bool keyed)[] volumes =
+            {
+                (ConstantNoise(), 4, .001f, "flat", false), (SmoothNoise(16), 16, .006f, "smooth", false), (SmoothNoise(16), 16, .006f, "smooth-keyed", true),
+            };
             int probes = 0, positive = 0;
             float worst = 0f;
-            foreach ((byte[] bytes, int size, float tolerance, string tag) in volumes)
+            foreach ((byte[] bytes, int size, float tolerance, string tag, bool keyed) in volumes)
             {
             var noise = new Texture3D(size, size, size, TextureFormat.RGBA32, false)
             { filterMode = FilterMode.Trilinear, wrapMode = TextureWrapMode.Repeat };
@@ -582,11 +645,12 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
                 SkyParams to = sky;
                 if (ramped) { to.Mid.Aspect = 1.4f; to.Mid.RippleWavelength = 600f; to.Mid.Curl = 0f; }
                 BakedTape tape = BakedTape.TwoKeyframes(sky, to, 1500000f, 12000f);
-                TapeFrame frame = ramped ? new TapeFrame(90f, 1500000f) : default;
+                NoiseXform xf = keyed ? new NoiseXform(0x5EED1234u) : null;
+                TapeFrame frame = ramped ? new TapeFrame(90f, 1500000f, noise: xf) : keyed ? new TapeFrame(0f, 0f, noise: xf) : default;
                 BindTape(tapeBinder, material, tape, frame);
                 var tapeCpu = new TapeSampler(tape);
                 material.SetFloat("_ProbeLayer", 0f);
-                var cpu = new CloudBodies(bytes, size, sky);
+                var cpu = keyed ? new CloudBodies(bytes, size, TapeSampler.Constant(sky), frame) : new CloudBodies(bytes, size, sky);
                 float height = layer.Base + layer.Thick * .5f;
                 var inputs = new Color[count]; int at = 0;
                 for (int z = -12000; z <= 12000; z += 6000)
@@ -600,14 +664,14 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
                     Color p = inputs[i];
                     float expected = cpu.Slab2D(tapeCpu.At(frame.S(p.r, p.b)).Mid, p.r, p.g, p.b);
                     float delta = Mathf.Abs(expected - output[i].r); probes++;
-                    if (tag == "smooth") worst = Mathf.Max(worst, delta);
+                    if (tag.StartsWith("smooth")) worst = Mathf.Max(worst, delta);
                     if (output[i].r > .01f) positive++;
                     csv.AppendLine(string.Join(",", tag + "-" + name, F(p.r), F(p.g), F(p.b), F(expected), F(output[i].r), F(delta)));
                     File.WriteAllText("slab-footprint-probes.csv", csv.ToString());
                     // The warp lookup (and the ripple rows and curl that ride on it) turn the 8-bit filter error of the GPU's 3D fetch (about 1 m of
                     // warp) into a pattern error of ~.003 that the Detail gain magnifies: the smooth volume holds .012 (the flat volume still holds .001,
                     // which is the check of the maths; the worst smooth delta is printed in the PASS line).
-                    if (!Finite(output[i]) || delta > (tag == "smooth" ? .012f : tolerance))
+                    if (!Finite(output[i]) || delta > (tag.StartsWith("smooth") ? .012f : tolerance))
                         throw new Exception("Thin-layer mismatch (" + tag + " noise, " + name + ") at " + i + ": CPU=" + F(expected) + " GPU=" + F(output[i].r));
                 }
             }
