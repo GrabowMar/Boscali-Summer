@@ -60,8 +60,7 @@
       "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.ForceWeather",
       "store": "fixture",
       "args": {
-        "regime": "Overcast",
-        "conditions": 0.95,
+        "regime": "RainSquall",
         "cloudHeight": 900,
         "seed": 91,
         "follow": "a0"
@@ -170,6 +169,56 @@
   "checks": [
     {
       "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "r3400cockpit.nativeDeck",
+      "min": 500
+    },
+    {
+      "check": "result_below",
+      "path": "r3400cockpit.nativeDeck",
+      "max": 1500
+    },
+    {
+      "check": "result_above",
+      "path": "r3400orbit.nativeDeck",
+      "min": 500
+    },
+    {
+      "check": "result_below",
+      "path": "r3400orbit.nativeDeck",
+      "max": 1500
+    },
+    {
+      "check": "result_above",
+      "path": "r3700cockpit.nativeDeck",
+      "min": 500
+    },
+    {
+      "check": "result_below",
+      "path": "r3700cockpit.nativeDeck",
+      "max": 1500
+    },
+    {
+      "check": "result_above",
+      "path": "r3700orbit.nativeDeck",
+      "min": 500
+    },
+    {
+      "check": "result_below",
+      "path": "r3700orbit.nativeDeck",
+      "max": 1500
+    },
+    {
+      "check": "result_above",
+      "path": "r3400cockpit.viewCloudDensity",
+      "min": 0.05
+    },
+    {
+      "check": "result_above",
+      "path": "r3700cockpit.viewCloudDensity",
+      "min": 0.05
     }
   ]
 }

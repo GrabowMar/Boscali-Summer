@@ -404,6 +404,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 { "open", IsOpen ? 1 : 0 }, { "host", model.Host ? 1 : 0 }, { "captured", model.Captured ? 1 : 0 }, { "running", model.Running ? 1 : 0 }, { "pace", model.Pace },
                 { "speed", model.SpeedMps }, { "pinnedSky", model.PinnedSky + 1 }, { "enabledControls", enabled }, { "controls", ControlCount },
                 { "fronts", model.FrontCount }, { "cells", model.CellCount }, { "sets", (int)ForcedMask() }, { "anchor", model.HasAnchor ? 1 : 0 },
+                { "story", model.StoryPick + 1 }, { "salt", model.LayoutSalt },
                 { "rain", model.ForcedRain.HasValue ? (int)Mathf.Round(model.ForcedRain.Value * 100f) : -1 },
                 { "inputHeld", input.MouseIsOurs ? 1 : 0 },
             });
