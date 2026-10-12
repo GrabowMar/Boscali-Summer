@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using NOAvionics;
 using static BoscaliSummer.Core.Contracts.ScopeTone;
 
 namespace BoscaliSummer.Modules.Hud.Presentation
@@ -93,6 +94,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             if (filled) Fill(x, cy - size / 2f, size, size, tone, alpha);
             else Box(x, cy - size / 2f, size, size, tone, alpha);
+        }
+
+        /// <summary>
+        /// A small filled square in a colour that is not one of the board's tones: the game's own colour of a name in DL EVT LOG (the one place the board shows a colour it did not choose). Its left edge is at <paramref name="x"/>,
+        /// its middle at <paramref name="cy"/>, on the device pixel grid like <see cref="Fill"/>.
+        /// </summary>
+        public void Swatch(float x, float cy, float size, Rgba color, float alpha = 1f)
+        {
+            if (alpha <= 0f) return;
+            float x0 = Edge(X(x)), y0 = Edge(Y(cy + size / 2f)), x1 = Math.Max(Edge(X(x + size)), x0 + pixel), y1 = Math.Max(Edge(Y(cy - size / 2f)), y0 + pixel);
+            AvStrokes.Fill(q, x0, y0, x1 - x0, y1 - y0, alpha >= 1f ? color : color.WithAlpha(color.A * alpha));
         }
 
         /// <summary>The ticker's tone tick (LAYOUT.md 3.7): a solid bar, 3 x 12 unless told otherwise, whose top left is (x, y).</summary>
