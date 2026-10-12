@@ -200,13 +200,19 @@ namespace BoscaliSummer.Tests.Features.HighCommand
             TestAssert.That(!CommandSnapshotRules.ValidHeader(0.5f, 999, 1), "impossible staff count rejected");
             TestAssert.That(!CommandSnapshotRules.ValidHeader(0.5f, -1, 1), "negative staff count rejected");
 
-            TestAssert.That(CommandSnapshotRules.ValidNode(3, 1, 2, 0x3F, 12f, 0.25f, 100f, -200f),
-                "every defined node flag is accepted");
-            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 9, 0, 12f, 0.25f, 0f, 0f), "bad tier rejected");
-            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 2, 0x80, 12f, 0.25f, 0f, 0f), "unknown flag rejected");
-            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 2, 0, 12f, 2f, 0f, 0f), "weight above one rejected");
-            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 2, 0, 12f, 0.25f, float.PositiveInfinity, 0f),
+            TestAssert.That(CommandSnapshotRules.ValidNode(3, 1, 2, 0x7F, 12f, 0.25f, 100f, -200f, 0),
+                "every defined node flag, the claimed bit included, is accepted");
+            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 9, 0, 12f, 0.25f, 0f, 0f, 0), "bad tier rejected");
+            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 2, 0x80, 12f, 0.25f, 0f, 0f, 0), "unknown flag rejected");
+            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 2, 0, 12f, 2f, 0f, 0f, 0), "weight above one rejected");
+            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 2, 0, 12f, 0.25f, float.PositiveInfinity, 0f, 0),
                 "infinite coordinate rejected");
+            TestAssert.That(CommandSnapshotRules.ValidNode(3, 1, 2, 0, 12f, 0.25f, 0f, 0f, CommandSnapshotRules.MaximumBounty),
+                "the largest bounty is accepted");
+            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 2, 0, 12f, 0.25f, 0f, 0f, -1) &&
+                !CommandSnapshotRules.ValidNode(3, 1, 2, 0, 12f, 0.25f, 0f, 0f, CommandSnapshotRules.MaximumBounty + 1),
+                "a negative or oversized bounty is rejected");
+            TestAssert.That(CommandSnapshotRules.MaximumLogText == 96, "staff log text is bounded at 96 characters");
 
             TestAssert.That(CommandSnapshotRules.ValidLogRow(-1, (byte)CommanderLogTone.Staff, "", 0f),
                 "a faction-wide log row is accepted");

@@ -53,6 +53,7 @@ namespace BoscaliSummer.Modules.HighCommand.Networking
         public const byte Transit = 8;
         public const byte Disrupted = 16;
         public const byte Alert = 32;
+        public const byte Claimed = 64;
 
         public int Id;
         public int ParentId;
@@ -68,11 +69,13 @@ namespace BoscaliSummer.Modules.HighCommand.Networking
         public string Rank;
         public string Role;
         public string Location;
+        public string Site;
+        public int Bounty;
     }
 
     internal sealed class HighCommandNet : MonoBehaviour
     {
-        internal const byte ProtocolVersion = 4;
+        internal const byte ProtocolVersion = 5;
         internal const int MaximumNodes = 32;
 
         private HighCommandManager manager;
@@ -254,6 +257,8 @@ namespace BoscaliSummer.Modules.HighCommand.Networking
             w.WriteSingle(node.X); w.WriteSingle(node.Z);
             w.WriteString(NetText.Clip(node.Name, 24)); w.WriteString(NetText.Clip(node.Rank, 8));
             w.WriteString(NetText.Clip(node.Role, 24)); w.WriteString(NetText.Clip(node.Location, 32));
+            w.WriteString(NetText.Clip(node.Site, 32));
+            w.WritePackedInt32(node.Bounty);
         }
 
         private static bool ReadNode(NetworkReader r, out CommanderWire node)
@@ -266,9 +271,10 @@ namespace BoscaliSummer.Modules.HighCommand.Networking
                 X = r.ReadSingle(), Z = r.ReadSingle(),
                 Name = NetText.Clip(r.ReadString(), 24), Rank = NetText.Clip(r.ReadString(), 8),
                 Role = NetText.Clip(r.ReadString(), 24), Location = NetText.Clip(r.ReadString(), 32),
+                Site = NetText.Clip(r.ReadString(), 32), Bounty = r.ReadPackedInt32(),
             };
             return CommandSnapshotRules.ValidNode(node.Id, node.ParentId, node.Tier, node.Flags,
-                    node.IntelAge, node.Weight, node.X, node.Z) &&
+                    node.IntelAge, node.Weight, node.X, node.Z, node.Bounty) &&
                 (node.TraitMask & ~CommandTraits.All) == 0;
         }
 
@@ -294,11 +300,12 @@ namespace BoscaliSummer.Modules.HighCommand.Networking
             rows = new CommanderLogWire[count];
             for (int i = 0; i < count; i++)
             {
+                // Raw text: the bound rejects a row, it never clips one into looking valid.
                 var row = new CommanderLogWire
                 {
                     TargetId = r.ReadPackedInt32(),
                     Tone = r.ReadByte(),
-                    Text = NetText.Clip(r.ReadString(), CommandSnapshotRules.MaximumLogText),
+                    Text = r.ReadString() ?? "",
                     Age = r.ReadSingle(),
                 };
                 if (!CommandSnapshotRules.ValidLogRow(row.TargetId, row.Tone, row.Text, row.Age)) return false;

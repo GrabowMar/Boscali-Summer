@@ -751,6 +751,8 @@ using (Stream pilotResource = pluginAssembly.GetManifestResourceStream("BoscaliS
     ,("BoscaliSummer.Modules.HighCommand.Networking.CommanderWire", "Rank", typeof(string))
     ,("BoscaliSummer.Modules.HighCommand.Networking.CommanderWire", "Role", typeof(string))
 ,("BoscaliSummer.Modules.HighCommand.Networking.CommanderWire", "Location", typeof(string))
+,("BoscaliSummer.Modules.HighCommand.Networking.CommanderWire", "Site", typeof(string))
+,("BoscaliSummer.Modules.HighCommand.Networking.CommanderWire", "Bounty", typeof(int))
 ,("BoscaliSummer.Modules.HighCommand.Networking.CommanderLogWire", "TargetId", typeof(int))
     ,("BoscaliSummer.Modules.HighCommand.Networking.CommanderLogWire", "Tone", typeof(byte))
     ,("BoscaliSummer.Modules.HighCommand.Networking.CommanderLogWire", "Text", typeof(string))
@@ -1059,7 +1061,7 @@ FieldInfo snapshotHostileLog = highCommandSnapshot.GetField("HostileLog", AllMem
 if (snapshotLog.FieldType != commanderLog.MakeArrayType() || snapshotHostileLog.FieldType != commanderLog.MakeArrayType())
     throw new InvalidOperationException("High command snapshot log array type changed");
 Type highCommandNet = pluginAssembly.GetType("BoscaliSummer.Modules.HighCommand.Networking.HighCommandNet", true)!;
-    if ((byte)highCommandNet.GetField("ProtocolVersion", AllMembers)!.GetRawConstantValue()! != 4)
+    if ((byte)highCommandNet.GetField("ProtocolVersion", AllMembers)!.GetRawConstantValue()! != 5)
     throw new InvalidOperationException("High command protocol changed without updating its probe");
 Type weatherNet = pluginAssembly.GetType("BoscaliSummer.Modules.Weather.Networking.WeatherNet", true)!;
 // Version 8 carries the whole weather-tape key (seed, story, pin, salt, class, opening base, heading, epoch,
@@ -1105,6 +1107,7 @@ foreach (var contract in new[] {
     if (!actual.SequenceEqual(contract.Item2)) throw new InvalidOperationException(contract.Item1 + " wire fields changed: " + string.Join("|", actual));
 }
 ProbeOperationSerialization(pluginAssembly, mirageAssembly);
+ProbeHighCommandSerialization(pluginAssembly, mirageAssembly);
 ProbeSquadSerialization(pluginAssembly, mirageAssembly);
 ProbeSupportSerialization(pluginAssembly, mirageAssembly);
 ProbeEventsSerialization(pluginAssembly, mirageAssembly);
@@ -1427,6 +1430,105 @@ static void ProbeOperationSerialization(Assembly plugin, Assembly mirage)
     writerType.GetMethod("WriteByte")!.Invoke(excessiveCount, new object[] { (byte)4 });
     Reject(excessiveCount);
     Console.WriteLine("  Dynamic operations serializers v5: query/card/typed-tasking/phase/link/subject roundtrip, 3-card/128-char/32-pilot/40-place bounds, non-finite/range/count/enum/duplicate-phase/link-coupling rejection");
+}
+
+static void ProbeHighCommandSerialization(Assembly plugin, Assembly mirage)
+{
+    const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
+    plugin.GetType("BoscaliSummer.Modules.HighCommand.Networking.HighCommandNet", true)!.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
+    Type writerType = mirage.GetType("Mirage.Serialization.NetworkWriter", true)!;
+    Type readerType = mirage.GetType("Mirage.Serialization.NetworkReader", true)!;
+    Type snapshotType = plugin.GetType("BoscaliSummer.Modules.HighCommand.Networking.HighCommandSnapshot", true)!;
+    Type nodeType = plugin.GetType("BoscaliSummer.Modules.HighCommand.Networking.CommanderWire", true)!;
+    Type logType = plugin.GetType("BoscaliSummer.Modules.HighCommand.Networking.CommanderLogWire", true)!;
+    MethodInfo[] extensions = mirage.GetTypes().Where(t => t.IsAbstract && t.IsSealed)
+        .SelectMany(t => t.GetMethods(flags)).Where(m => m.IsStatic && m.GetParameters().Length == 2 && m.GetParameters()[0].ParameterType == writerType).ToArray();
+
+    byte[] Encode(object value)
+    {
+        object writer = Activator.CreateInstance(writerType, 8192)!;
+        ((Delegate)mirage.GetType("Mirage.Serialization.Writer`1", true)!.MakeGenericType(snapshotType).GetProperty("Write", flags)!.GetValue(null)!).DynamicInvoke(writer, value);
+        return (byte[])writerType.GetMethod("ToArray")!.Invoke(writer, null)!;
+    }
+    object Decode(byte[] bytes)
+    {
+        object reader = Activator.CreateInstance(readerType)!;
+        try
+        {
+            readerType.GetMethod("Reset", new[] { typeof(byte[]) })!.Invoke(reader, new object[] { bytes });
+            return ((Delegate)mirage.GetType("Mirage.Serialization.Reader`1", true)!.MakeGenericType(snapshotType).GetProperty("Read", flags)!.GetValue(null)!).DynamicInvoke(reader)!;
+        }
+        finally { ((IDisposable)reader).Dispose(); }
+    }
+    void Set(object target, string field, object value) => target.GetType().GetField(field, flags)!.SetValue(target, value);
+    object Get(object target, string field) => target.GetType().GetField(field, flags)!.GetValue(target)!;
+    object Node(int id = 3, byte tier = 2, byte nodeFlags = 1 | 2 | 64, float age = 12f, float x = 100f, int bounty = 3000)
+    {
+        object node = Activator.CreateInstance(nodeType)!;
+        Set(node, "Id", id); Set(node, "ParentId", 1); Set(node, "Tier", tier); Set(node, "Flags", nodeFlags); Set(node, "TraitMask", (byte)0);
+        Set(node, "Seed", 77); Set(node, "IntelAge", age); Set(node, "Weight", 0f); Set(node, "X", x); Set(node, "Z", -200f);
+        Set(node, "Name", "COL TEST"); Set(node, "Rank", "COL"); Set(node, "Role", "GROUND"); Set(node, "Location", "PORT");
+        Set(node, "Site", new string('S', 40)); Set(node, "Bounty", bounty);
+        return node;
+    }
+    object Row(string text)
+    {
+        object row = Activator.CreateInstance(logType)!;
+        Set(row, "TargetId", 3); Set(row, "Tone", (byte)1); Set(row, "Text", text); Set(row, "Age", 5f);
+        return row;
+    }
+    object Snapshot(object node, object row)
+    {
+        object snapshot = Activator.CreateInstance(snapshotType)!;
+        Set(snapshot, "Protocol", (byte)5); Set(snapshot, "Scene", 345u); Set(snapshot, "Token", 678u);
+        Set(snapshot, "Status", new string('S', 200)); Set(snapshot, "Signal", ""); Set(snapshot, "Cohesion", .5f);
+        Set(snapshot, "Active", 5); Set(snapshot, "Kia", 0);
+        Array nodes = Array.CreateInstance(nodeType, node == null ? 0 : 1); if (node != null) nodes.SetValue(node, 0);
+        Array log = Array.CreateInstance(logType, row == null ? 0 : 1); if (row != null) log.SetValue(row, 0);
+        Set(snapshot, "Nodes", nodes); Set(snapshot, "Log", log); Set(snapshot, "HostileLog", Array.CreateInstance(logType, 0));
+        return snapshot;
+    }
+    void Rejected(byte[] bytes, string what)
+    {
+        if ((byte)Get(Decode(bytes), "Protocol") != 0) throw new InvalidOperationException("High command accepted " + what);
+    }
+    // Hand-written wire: the writer clips and caps, so these two cannot come from it.
+    byte[] Hand(int nodeCount, string logText)
+    {
+        object writer = Activator.CreateInstance(writerType, 1024)!;
+        void Put(string method, object value)
+        {
+            MethodInfo own = writerType.GetMethods(flags).FirstOrDefault(m => m.Name == method && m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == value.GetType());
+            if (own != null) { own.Invoke(writer, new[] { value }); return; }
+            extensions.First(m => m.Name == method && m.GetParameters()[1].ParameterType == value.GetType()).Invoke(null, new[] { writer, value });
+        }
+        Put("WriteByte", (byte)5); Put("WritePackedUInt32", 345u); Put("WritePackedUInt32", 678u);
+        Put("WriteString", "S"); Put("WriteString", ""); Put("WriteSingle", .5f); Put("WritePackedInt32", 5); Put("WritePackedInt32", 0);
+        Put("WriteByte", (byte)nodeCount);
+        if (nodeCount > 0) return (byte[])writerType.GetMethod("ToArray")!.Invoke(writer, null)!;
+        if (logText == null) Put("WriteByte", (byte)0);
+        else { Put("WriteByte", (byte)1); Put("WritePackedInt32", 3); Put("WriteByte", (byte)1); Put("WriteString", logText); Put("WriteSingle", 5f); }
+        Put("WriteByte", (byte)0);
+        return (byte[])writerType.GetMethod("ToArray")!.Invoke(writer, null)!;
+    }
+
+    object decoded = Decode(Encode(Snapshot(Node(), Row(new string('L', 96)))));
+    object back = ((Array)Get(decoded, "Nodes")).GetValue(0)!;
+    if ((byte)Get(decoded, "Protocol") != 5 || ((string)Get(decoded, "Status")).Length != 96 || ((Array)Get(decoded, "Nodes")).Length != 1 ||
+        ((string)Get(back, "Site")).Length != 32 || (int)Get(back, "Bounty") != 3000 || (byte)Get(back, "Flags") != 67 ||
+        ((string)Get(((Array)Get(decoded, "Log")).GetValue(0)!, "Text")).Length != 96)
+        throw new InvalidOperationException("High command v5 roundtrip changed (Claimed row, Site 40 to 32, status 200 to 96, 96-character log row)");
+    Rejected(Encode(Snapshot(Node(bounty: -1), null)), "bounty -1");
+    Rejected(Encode(Snapshot(Node(bounty: 100001), null)), "bounty 100001");
+    Rejected(Encode(Snapshot(Node(nodeFlags: 0x80), null)), "flag 0x80");
+    Rejected(Encode(Snapshot(Node(age: 601f), null)), "intel age 601");
+    Rejected(Encode(Snapshot(Node(x: float.NaN), null)), "a NaN coordinate");
+    Rejected(Encode(Snapshot(Node(id: 64), null)), "id 64");
+    Rejected(Encode(Snapshot(Node(tier: 3), null)), "tier 3");
+    Rejected(Hand(33, null), "33 nodes");
+    Rejected(Hand(0, new string('L', 97)), "a 97-character log row");
+    if ((byte)Get(Decode(Hand(0, new string('L', 96))), "Protocol") != 5) throw new InvalidOperationException("High command hand-written 96-character log row was refused");
+    Console.WriteLine("  High command serializers v5: Claimed row, Site 40 to 32, status 200 to 96, 96-character log row, nine rejections");
 }
 
 static void ProbeSquadSerialization(Assembly plugin, Assembly mirage)
