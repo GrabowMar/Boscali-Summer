@@ -417,15 +417,18 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             return a * 0.65f + b * 0.15f + c * 0.20f;
         }
 
-        /// <summary>Warp before the lobe lookup (look pass round 2): a vector noise on a fixed 7 km tile bends the lookup point of the low deck's puffs by
-        /// up to ~0.5 lobe, so the lobes of a group are not one Worley tile of equal puffs on a regular pitch. Streets keep their stretched, regular rows:
-        /// the warp fades out with them. FlightCloud.shader's Density does the same before its BodiesLadder call.</summary>
+        /// <summary>Warp before the lobe lookup (look pass rounds 2 and 3): two octaves of smooth vector noise (SmoothNoise; fixed lattices of 3.5 and 1.5 km,
+        /// only the amplitude follows the lobe rung) bend the lookup point of the low deck's puffs, so the lobes of a group are not one Worley tile of
+        /// equal puffs on a regular pitch. The round-2 warp read the noise volume, whose fine octaves folded the lookup over a third of the plane (mirrored
+        /// lobes and straight-edged facets); the smooth noise has a bounded slope (LobeWarp x 1.875 x spread / cell stays under 1). Streets keep their stretched,
+        /// regular rows: the warp fades out with them. FlightCloud.shader's Density does the same before its BodiesLadder call.</summary>
         internal void WarpLobes(ref float nx, float y, ref float nz, float rung, float streets)
         {
-            float wave = SlabMath.LobeWarpWave;
             float amp = Math.Min(Ladder.LobeMetres(rung) * SlabMath.LobeWarp, SlabMath.LobeWarpMax) * (1f - streets);
-            float wnx = nx + (Sample(nx / wave + 0.23f, nz / wave + 0.23f, y / wave + 0.41f, 0) - 0.5f) * amp;
-            float wnz = nz + (Sample(nx / wave + 0.23f, nz / wave + 0.23f, y / wave + 0.41f, 1) - 0.5f) * amp;
+            SmoothNoise.Vec2(nx / SlabMath.LobeWarpCell + 0.23f, nz / SlabMath.LobeWarpCell + 0.41f, SmoothNoise.SaltLobeA, out float a, out float b);
+            SmoothNoise.Vec2(nx / SlabMath.LobeWarpCell2 + 0.61f, nz / SlabMath.LobeWarpCell2 + 0.17f, SmoothNoise.SaltLobeB, out float c, out float d);
+            float wnx = nx + ((a - 0.5f) + (c - 0.5f) * SlabMath.LobeWarp2) * amp;
+            float wnz = nz + ((b - 0.5f) + (d - 0.5f) * SlabMath.LobeWarp2) * amp;
             nx = wnx; nz = wnz;
         }
 
@@ -485,23 +488,37 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             patternValue = pattern; patchField = mkR;
             // The cover law (SlabMath.Rank): the rank is the pattern's place in its own distribution, so the layer covers about its Cover of the
             // sky however crisp or flat it is; Detail only scales the density inside the cover.
-            float rank = SlabMath.Rank(pattern, SlabMath.PatternSigma(wc, wr, ws));
+            float rank = SlabMath.Rank(pattern, SlabMath.PatternSigma(wc, wr, ws) * SlabMath.RankSoft);
             float body = WeatherMath.Lerp(rank, 0.7f + 0.3f * rank, wv);
             // The mesoscale cover: the old slow modulation, times the patch mask that clusters the cover into patches and clears the lanes between.
             float c = Scalar.Clamp01(cover * SlabMath.Trim(cover, ws, wv) * (0.55f + 0.9f * Scalar.Clamp01(0.5f + (lowG - 0.52f) * 3.16f)) *
                 SlabMath.PatchFactor(SlabMath.PatchMask(mkR), SlabMath.Patchiness(cover, wv)));
             // How deep a point sits inside the cover (0 at the edge, 1 at the top rank): Detail turns it into density, so the interior has cores and thin fringes.
             float depth = Scalar.Clamp01((rank - (1f - c)) / Math.Max(c, 0.05f));
-            float interior = WeatherMath.Lerp(0.45f + 0.55f * depth, body, wv);
-            return SlabMath.SlabCoverMask(body, c, row.Softness) * WeatherMath.Lerp(1f, interior, row.Detail);
+            float interior = WeatherMath.Lerp(SlabMath.Interior(depth), body, wv);
+            return SlabMath.SlabCoverMask(body, c, row.Softness) * WeatherMath.Lerp(1f, interior, SlabMath.DetailDrive(row.Detail, wv));
         }
+
+        /// <summary>The vector noise that bends the cell coordinate (in half-units of cells, to be scaled by cs x BendGain): the two channels of one SmoothNoise
+        /// lattice of cs x tileMul metres. It replaced a read of the noise volume whose slope folded the bent coordinate over 38 % of the plane (the concentric
+        /// arcs and 8 px cross-hatch of sky 5); the smooth noise bends the cells by up to a cell without folding.</summary>
+        internal void CellBend(float pnx, float pnz, float y, float cs, float tileMul, out float bendX, out float bendY)
+        {
+            SmoothNoise.Vec2(pnx / (cs * tileMul) + 0.57f, pnz / (cs * tileMul) + 0.57f, SmoothNoise.SaltBend, out float a, out float b);
+            bendX = a - 0.5f; bendY = b - 0.5f;
+        }
+
+        /// <summary>A cell tap: R mixed with the shifted B lobes (SlabMath.LobeShare), one fetch's two channels on the GPU.</summary>
+        private float CellTap(float cnx, float cnz, float w)
+            => Sample(cnx, cnz, w, 0) * (1f - SlabMath.LobeShare) + (Sample(cnx, cnz, w, 2) + SlabMath.LobeShift) * SlabMath.LobeShare;
 
         /// <summary>The weighted pattern value (about 0.52 on average) of a layer at one period; 0.52 when no pattern has weight.</summary>
         private float SlabPattern(in SkyLayer row, int layer, float x, float y, float z, float scale, float lowR, float lowG, float sizeMask,
             float wc, float wr, float ws)
         {
             if (wc + wr + ws <= 0f) return 0.52f;
-            float warpX = (lowR - 0.5f) * scale * SlabMath.WarpGain, warpZ = (lowG - 0.5f) * scale * SlabMath.WarpGain;
+            float warpGain = SlabMath.WarpGain * (1f - SlabMath.StreakWarpCut * ws / (wc + wr + ws));
+            float warpX = (lowR - 0.5f) * scale * warpGain, warpZ = (lowG - 0.5f) * scale * warpGain;
             float px = x + warpX, pz = z + warpZ;
             float along = px * windX + pz * windZ, across = -px * windZ + pz * windX;
             // Rounded taps read the noise where the layer's rotation puts it; streak taps keep their stretch along the wind, so they
@@ -514,37 +531,41 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 float snx = anx, snz = anz;
                 if (row.Curl > 0.01f)
                 {
-                    // Curl bends the streak coordinate with low-frequency vector noise: hooked cirrus. One fixed sign.
-                    snx += (Sample(pnx / (scale * 3.1f) + 0.61f, pnz / (scale * 3.1f) + 0.61f, 0.33f, 0) - 0.5f) * scale * SlabMath.CurlGain * row.Curl;
-                    snz += (Sample(pnx / (scale * 3.1f) + 0.61f, pnz / (scale * 3.1f) + 0.61f, 0.33f, 1) - 0.5f) * scale * SlabMath.CurlGain * row.Curl;
+                    // Curl bends the streak coordinate with smooth vector noise: hooked cirrus, without the folds of the volume's fine octaves (those drew molten swirls).
+                    SmoothNoise.Vec2(pnx / (scale * 3.1f) + 0.61f, pnz / (scale * 3.1f) + 0.61f, SmoothNoise.SaltCurl, out float curlA, out float curlB);
+                    snx += (curlA - 0.5f) * scale * SlabMath.CurlGain * row.Curl;
+                    snz += (curlB - 0.5f) * scale * SlabMath.CurlGain * row.Curl;
                 }
                 float span = scale * row.Aspect;
-                // Stagger (round 2): the along-coordinate is shifted by a noise of the position, so the dashes of neighbouring fibres do not line up in rows.
-                snx += (Sample(pnx / (scale * 2.3f) + 0.17f, pnz / (scale * 2.3f) + 0.17f, 0.52f, 0) - 0.5f) * span * SlabMath.StreakStagger;
+                // Meander and stagger (round 3), one smooth lattice: the across-coordinate and the along-coordinate are shifted, so neighbouring fibres converge and part
+                // and their dashes do not line up in rows. The round-2 stagger read the noise volume and scrambled the along-coordinate over a hundred metres
+                // (a fold at almost every point), which cut every streak into dashes; this one keeps a streak whole over kilometres.
+                SmoothNoise.Vec2(pnx / (scale * SlabMath.MeanderTile) + 0.29f, pnz / (scale * SlabMath.MeanderTile) + 0.83f, SmoothNoise.SaltMeander, out float stagger, out float meander);
+                snz += (meander - 0.5f) * scale * SlabMath.Meander;
+                snx += (stagger - 0.5f) * span * SlabMath.StreakStagger;
                 float s1 = Sample(snx / span, snz / scale, y / (scale * 0.6f) + 0.17f, 0);
                 float rnx = snx * 0.982f - snz * 0.191f, rnz = snx * 0.191f + snz * 0.982f;
                 float s2 = Sample(rnx / (span * 1.73f) + 0.53f, rnz / (scale * 1.73f) + 0.29f, y / (scale * 1.1f) + 0.61f, 0);
                 // Fibres: a third tap, stretched twice as hard and a quarter as wide, turned a few degrees off the others.
                 float fnx = snx * 0.9962f + snz * 0.0872f, fnz = -snx * 0.0872f + snz * 0.9962f;
-                float fibre = Sample(fnx / (span * 0.7f) + 0.37f, fnz / (scale * 0.23f) + 0.81f, y / (scale * 0.4f) + 0.29f, 0);
-                streak = s1 * 0.45f + s2 * 0.3f + fibre * 0.25f;
+                float fibre = Sample(fnx / (span * SlabMath.FibreAlong) + 0.37f, fnz / (scale * SlabMath.FibreAcross) + 0.81f, y / (scale * 0.4f) + 0.29f, 0);
+                streak = s1 * 0.30f + s2 * 0.25f + fibre * SlabMath.FibreWeight;
             }
             if (wc + wr > 0f)
             {
                 // The cell tile repeats every cs metres and read as a lattice (sky 20), so a vector noise at 3.3 cs bends the coordinate (Task 13).
                 float cs = scale * 0.45f;
-                float bnx = pnx / (cs * 3.3f) + 0.57f, bnz = pnz / (cs * 3.3f) + 0.57f, bw = 0.19f + y / (cs * 2.9f);
-                bendX = Sample(bnx, bnz, bw, 0) - 0.5f; bendY = Sample(bnx, bnz, bw, 1) - 0.5f;
+                CellBend(pnx, pnz, y, cs, SlabMath.BendTile, out bendX, out bendY);
                 float qnx = pnx + bendX * cs * SlabMath.BendGain, qnz = pnz + bendY * cs * SlabMath.BendGain;
-                float c1 = Sample(qnx / cs + 0.41f, qnz / cs + 0.41f, y / (cs * 0.8f), 0);
-                float c2 = Sample(qnz / (cs * 2.37f) + 0.13f, -qnx / (cs * 2.37f) + 0.13f, y / (cs * 1.9f) + 0.77f, 0);
+                float c1 = CellTap(qnx / cs + 0.41f, qnz / cs + 0.41f, SlabMath.CellW1);
+                float c2 = CellTap(qnz / (cs * 2.37f) + 0.13f, -qnx / (cs * 2.37f) + 0.13f, SlabMath.CellW2);
                 cells = c1 * 0.62f + c2 * 0.38f;
                 // Cell sizes: where the size field is high the cells are small (a third tap at 0.41 cs, turned 37 degrees), so the layer mixes
                 // two or three sizes instead of one tile of equal blobs.
                 if (sizeMask > 0f)
                 {
                     float tnx = qnx * 0.8f + qnz * 0.6f, tnz = qnz * 0.8f - qnx * 0.6f;
-                    float c3 = Sample(tnx / (cs * SlabMath.SmallCell) + 0.31f, tnz / (cs * SlabMath.SmallCell) + 0.67f, y / (cs * 0.7f) + 0.45f, 0);
+                    float c3 = Sample(tnx / (cs * SlabMath.SmallCell) + 0.31f, tnz / (cs * SlabMath.SmallCell) + 0.67f, SlabMath.CellW3, 2) + SlabMath.LobeShift;
                     cells = WeatherMath.Lerp(cells, c3 * 0.5f + c1 * 0.5f, sizeMask);
                 }
             }

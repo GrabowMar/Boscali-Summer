@@ -161,6 +161,37 @@ Shader "Boscali/FlightCloud"
             return float3(n.x, g.y, n.y);
         }
 
+        // Smooth two-channel value noise from an integer hash (SmoothNoise.cs is the twin; change both together). The look pass's warps need a bounded
+        // slope, which the noise volume's fine octaves cannot give (they folded the warped coordinate over a third of the plane).
+        #define SALT_BEND 0x1B3Du
+        #define SALT_CURL 0x2C57u
+        #define SALT_MEANDER 0x3E91u
+        #define SALT_LOBE_A 0x4A05u
+        #define SALT_LOBE_B 0x5D73u
+
+        uint SmoothHash(int x, int z, uint salt)
+        {
+            uint h = (uint)x * 0x27D4EB2Fu + (uint)z * 0x165667B1u + salt * 0x9E3779B1u;
+            h ^= h >> 15; h *= 0x85EBCA6Bu;
+            h ^= h >> 13; h *= 0xC2B2AE35u;
+            h ^= h >> 16;
+            return h;
+        }
+
+        float2 SmoothNoise2(float2 uv, uint salt)
+        {
+            float2 f = floor(uv);
+            int2 i = (int2)f;
+            float2 t = uv - f;
+            t = t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+            uint h00 = SmoothHash(i.x, i.y, salt), h10 = SmoothHash(i.x + 1, i.y, salt);
+            uint h01 = SmoothHash(i.x, i.y + 1, salt), h11 = SmoothHash(i.x + 1, i.y + 1, salt);
+            const float k = 1.0 / 65535.0;
+            float2 v00 = float2(h00 & 0xFFFFu, h00 >> 16) * k, v10 = float2(h10 & 0xFFFFu, h10 >> 16) * k;
+            float2 v01 = float2(h01 & 0xFFFFu, h01 >> 16) * k, v11 = float2(h11 & 0xFFFFu, h11 >> 16) * k;
+            return lerp(lerp(v00, v10, t.x), lerp(v01, v11, t.x), t.y);
+        }
+
         // Cloud streets (StreetMath.Compress, Rows and Body are the twins). The share of the along-wind coordinate removed before the
         // noise is read, the 0..1 rows across the wind (the broad noise bends them) and the body value with the rows added.
         float StreetCompress(float streets)
@@ -723,8 +754,9 @@ Shader "Boscali/FlightCloud"
             float puffBody = 0.72;
             if (!sheet)
             {
-                // Warp before the lobe lookup (SlabMath.LobeWarp; CloudBodies.WarpLobes is the twin): fades out with streets.
-                float2 lobeWarp = tex3Dlod(_CloudNoiseTex, float4(ngw.xz / 7000.0 + 0.23, ngw.y / 7000.0 + 0.41, puffLod)).rg - 0.5;
+                // Warp before the lobe lookup (SlabMath.LobeWarp; CloudBodies.WarpLobes is the twin): two octaves of smooth noise, fades out with streets.
+                float2 lobeWarp = (SmoothNoise2(ngw.xz / 3500.0 + float2(0.23, 0.41), SALT_LOBE_A) - 0.5) +
+                    (SmoothNoise2(ngw.xz / 1500.0 + float2(0.61, 0.17), SALT_LOBE_B) - 0.5) * 0.3;
                 ngw.xz += lobeWarp * (min(LobeMetres(row.lobeRung) * 1.6, 2200.0) * (1.0 - streets));
                 float bodies = BodiesLadder(ngw, row.lobeRung, puffLod, 0.0, sheetBlend);
                 if (streets > 0.0)
@@ -932,7 +964,7 @@ Shader "Boscali/FlightCloud"
         float SlabSigma(float3 wts)
         {
             float s = wts.x + wts.y + wts.z;
-            return s <= 0.0 ? 0.095 : max(0.02, (wts.x * 0.095 + wts.y * 0.19 + wts.z * 0.082) / s);
+            return s <= 0.0 ? 0.071 : max(0.02, (wts.x * 0.071 + wts.y * 0.165 + wts.z * 0.082) / s);
         }
 
         // The weighted pattern value (about 0.52 on average) of a layer at one period. Streak and cell taps fade to their mean
@@ -941,7 +973,8 @@ Shader "Boscali/FlightCloud"
         float SlabPattern(float3 g, float layer, LayerRow row, float scale, float2 low, float sizeMask, float foot, float3 wts)
         {
             if (wts.x + wts.y + wts.z <= 0.0) return 0.52;
-            float2 warp = (low - 0.5) * scale * 1.6;
+            // Streak layers keep 30 % of the 27 km warp (SlabMath.StreakWarpCut): it bent fibres into marbled ribbons.
+            float2 warp = (low - 0.5) * scale * (1.6 * (1.0 - 0.7 * wts.z / (wts.x + wts.y + wts.z)));
             float2 p = g.xz + warp;
             float2 w = float2(dot(p, _CloudWindDir), dot(p, float2(-_CloudWindDir.y, _CloudWindDir.x)));
             // Rounded taps read the noise where the layer's rotation puts it; streak taps keep their stretch along the wind, so they take
@@ -954,13 +987,15 @@ Shader "Boscali/FlightCloud"
             {
                 if (row.curl > 0.01)
                 {
-                    // Curl bends the streak coordinate with low-frequency vector noise: hooked cirrus. One fixed sign.
-                    float2 curlBend = tex3Dlod(_CloudNoiseTex, float4(np / (scale * 3.1) + 0.61, 0.33, 1.5)).rg - 0.5;
-                    nsw += curlBend * scale * 0.6 * row.curl;
+                    // Curl bends the streak coordinate with smooth vector noise: hooked cirrus (SlabMath.CurlGain).
+                    nsw += (SmoothNoise2(np / (scale * 3.1) + 0.61, SALT_CURL) - 0.5) * scale * 0.8 * row.curl;
                 }
                 float along = scale * row.aspect;
-                // Stagger (SlabMath.StreakStagger): the along-coordinate is shifted by a noise of the position, so neighbouring fibres' dashes do not line up.
-                nsw.x += (tex3Dlod(_CloudNoiseTex, float4(np / (scale * 2.3) + 0.17, 0.52, 1.5)).r - 0.5) * along * 1.2;
+                // Meander and stagger (SlabMath.Meander, StreakStagger): one smooth lattice shifts the across- and the along-coordinate, so neighbouring
+                // fibres converge and part and their dashes do not line up in rows.
+                float2 ms = SmoothNoise2(np / (scale * 3.0) + float2(0.29, 0.83), SALT_MEANDER);
+                nsw.y += (ms.y - 0.5) * scale * 0.6;
+                nsw.x += (ms.x - 0.5) * along * 0.8;
                 float lod1 = SlabLod(foot, scale), lod2 = SlabLod(foot, scale * 1.73);
                 float s1 = tex3Dlod(_CloudNoiseTex, float4(nsw.x / along, nsw.y / scale, g.y / (scale * 0.6) + 0.17, lod1)).r;
                 float2 nw2 = float2(nsw.x * 0.982 - nsw.y * 0.191, nsw.x * 0.191 + nsw.y * 0.982);
@@ -968,25 +1003,31 @@ Shader "Boscali/FlightCloud"
                 float s2 = fine2 > 0.0 ? lerp(0.52, tex3Dlod(_CloudNoiseTex, float4(nw2.x / (along * 1.73) + 0.53,
                     nw2.y / (scale * 1.73) + 0.29, g.y / (scale * 1.1) + 0.61, lod2)).r, fine2) : 0.52;
                 // Fibres: a third tap, stretched twice as hard and a quarter as wide, turned a few degrees off the others.
-                float lodF = SlabLod(foot, scale * 0.23);
+                float lodF = SlabLod(foot, scale * 0.17);
                 float fineF = saturate(4.0 - lodF);
                 float2 nf = float2(nsw.x * 0.9962 + nsw.y * 0.0872, -nsw.x * 0.0872 + nsw.y * 0.9962);
-                float fibre = fineF > 0.0 ? lerp(0.52, tex3Dlod(_CloudNoiseTex, float4(nf.x / (along * 0.7) + 0.37, nf.y / (scale * 0.23) + 0.81,
+                float fibre = fineF > 0.0 ? lerp(0.52, tex3Dlod(_CloudNoiseTex, float4(nf.x / (along * 1.6) + 0.37, nf.y / (scale * 0.17) + 0.81,
                     g.y / (scale * 0.4) + 0.29, lodF)).r, fineF) : 0.52;
-                streak = s1 * 0.45 + s2 * 0.3 + fibre * 0.25;
+                streak = s1 * 0.30 + s2 * 0.25 + fibre * 0.45;
             }
             if (wts.x + wts.y > 0.0)
             {
                 // Rounded cells from the smooth base channel, also at two scales. The cell tile repeats every cs metres and read as a lattice
                 // (sky 20), so a vector noise at 3.3 cs bends the coordinate by up to ~1/3 cs (Task 13); it filters to nothing with distance.
                 float cs = scale * 0.45;
-                bend = tex3Dlod(_CloudNoiseTex, float4(np / (cs * 3.3) + 0.57, 0.19 + g.y / (cs * 2.9), SlabLod(foot, cs * 3.3))).rg - 0.5;
-                float2 npc = np + bend * cs * 1.5;
+                bend = SmoothNoise2(np / (cs * 4.0) + 0.57, SALT_BEND) - 0.5;
+                float2 npc = np + bend * cs * 2.2;
                 float lodC = SlabLod(foot, cs);
-                float c1 = tex3Dlod(_CloudNoiseTex, float4(npc / cs + 0.41, g.y / (cs * 0.8), lodC)).r;
+                // The cell taps mix R with the shifted B lobes (SlabMath.LobeShare / LobeShift): one fetch, two channels.
+                float4 t1 = tex3Dlod(_CloudNoiseTex, float4(npc / cs + 0.41, 0.82, lodC));
+                float c1 = lerp(t1.r, t1.b + 0.04, 0.5);
                 float fineC = saturate(4.0 - lodC);
-                float c2 = fineC > 0.0 ? lerp(0.52, tex3Dlod(_CloudNoiseTex, float4(float2(npc.y, -npc.x) / (cs * 2.37) + 0.13,
-                    g.y / (cs * 1.9) + 0.77, SlabLod(foot, cs * 2.37))).r, fineC) : 0.52;
+                float c2 = 0.52;
+                if (fineC > 0.0)
+                {
+                    float4 t2 = tex3Dlod(_CloudNoiseTex, float4(float2(npc.y, -npc.x) / (cs * 2.37) + 0.13, 0.633, SlabLod(foot, cs * 2.37)));
+                    c2 = lerp(0.52, lerp(t2.r, t2.b + 0.04, 0.5), fineC);
+                }
                 cells = c1 * 0.62 + c2 * 0.38;
                 // Cell sizes: where the size field is high the cells are small (a third tap at 0.41 cs, turned 37 degrees), so the layer mixes
                 // two or three sizes instead of one tile of equal blobs.
@@ -994,7 +1035,7 @@ Shader "Boscali/FlightCloud"
                 {
                     float lodS = SlabLod(foot, cs * 0.62);
                     float c3 = lerp(0.52, tex3Dlod(_CloudNoiseTex, float4(float2(npc.x * 0.8 + npc.y * 0.6, npc.y * 0.8 - npc.x * 0.6) / (cs * 0.62) + float2(0.31, 0.67),
-                        g.y / (cs * 0.7) + 0.45, lodS)).r, saturate(4.0 - lodS));
+                        0.352, lodS)).b + 0.04, saturate(4.0 - lodS));
                     cells = lerp(cells, c3 * 0.5 + c1 * 0.5, sizeMask);
                 }
             }
@@ -1006,10 +1047,10 @@ Shader "Boscali/FlightCloud"
                 float wavelength = max(1.0, row.rippleWave);
                 float rippleKeep = 1.0 - smoothstep(1.0, 3.0, LodFor(foot, wavelength));
                 // The rows meander and break up with the cell bend (Task 13): perfectly straight, equal stripes read as a zebra (sky 18).
-                float rows1 = 0.55 + 0.45 * sin(w.y / wavelength * 6.2831853 + warp.x / scale * 3.0 + bend.x * 6.0);
+                float rows1 = 0.55 + 0.45 * sin(w.y / wavelength * 6.2831853 + warp.x / scale * 3.0 + bend.x * 4.0);
                 // A second set of rows at 1.43 wavelengths, turned 17 degrees, takes over where the size field is high (SlabMath's twin).
                 float across2 = w.y * 0.9563 + w.x * 0.2924;
-                float rows2 = 0.55 + 0.45 * sin(across2 / (wavelength * 1.43) * 6.2831853 + warp.y / scale * 3.0 + bend.y * 5.4 + 1.7);
+                float rows2 = 0.55 + 0.45 * sin(across2 / (wavelength * 1.43) * 6.2831853 + warp.y / scale * 3.0 + bend.y * 3.6 + 1.7);
                 float rows = lerp(rows1, rows2, sizeMask);
                 float rowKeep = saturate(0.7 + bend.y * 3.5);
                 // rows averages 0.55: dividing by it keeps the pattern's mean at the cells' (CloudBodies.SlabPattern is the twin).
@@ -1041,19 +1082,19 @@ Shader "Boscali/FlightCloud"
             float pattern = LadderMix(pat0, pat1, sp.y, 0.52);
             // The cover law (SlabMath.Rank): the rank is the pattern's place in its own distribution, so a layer covers about its Cover
             // however crisp or flat it is; Detail only scales the density inside the cover (the return below).
-            float rank = SlabRank(pattern, SlabSigma(wts.xyz));
+            float rank = SlabRank(pattern, SlabSigma(wts.xyz) * 1.25);
             float body = lerp(rank, 0.7 + 0.3 * rank, wts.w);
             // Ahead of the front (share 0) and behind it (share 1) the layer differs. INTERIM(slice 4): the split goes with the front.
             cover *= lerp(splitMul.x, splitMul.y, SplitShare(g.xz));
             // The mesoscale cover: the old slow modulation, times the patch mask that clusters the cover into patches and clears the lanes between
             // (SlabMath.PatchMask / Patchiness / PatchFactor / CoverTrim).
-            float patchiness = (1.0 - smoothstep(0.2, 0.6, cover)) * (1.0 - wts.w);
-            float c = saturate(cover * lerp(1.05 + (0.9 * wts.z + 0.45 * (1.0 - wts.z - wts.w)) * (1.0 - smoothstep(0.02, 0.3, cover)), 1.0, wts.w) * (0.55 + 0.9 * saturate(0.5 + (patch - 0.52) * 3.16)) *
+            float patchiness = (1.0 - smoothstep(0.6, 1.0, cover)) * (1.0 - wts.w);
+            float c = saturate(cover * lerp(1.05 + (1.4 * wts.z + 1.2 * (1.0 - wts.z - wts.w)) * (1.0 - smoothstep(0.02, 0.3, cover)), 1.0, wts.w) * (0.55 + 0.9 * saturate(0.5 + (patch - 0.52) * 3.16)) *
                 lerp(1.0, smoothstep(0.38, 0.66, mk.x) * 2.17, patchiness));
             // How deep a point sits inside the cover (0 at the edge, 1 at the top rank): Detail turns it into density.
             float depth = saturate((rank - (1.0 - c)) / max(c, 0.05));
-            float interior = lerp(0.45 + 0.55 * depth, body, wts.w);
-            return SlabCoverMask(body, c, row.softness) * lerp(1.0, interior, row.detail);
+            float interior = lerp(0.2 + 0.8 * depth, body, wts.w);
+            return SlabCoverMask(body, c, row.softness) * lerp(1.0, interior, lerp(sqrt(row.detail), row.detail, wts.w));
         }
 
         // The layer's vertical profile saturate(5.2 h (1 - h)) and its integral (SlabMath.Profile / Integral).

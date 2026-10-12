@@ -32,26 +32,50 @@ namespace BoscaliSummer.Modules.Weather.Domain
             float sum = cells + ripples + streaks;
             return sum <= 0f ? SigmaCells : Math.Max(0.02f, (cells * SigmaCells + ripples * SigmaRipples + streaks * SigmaStreaks) / sum);
         }
-        public const float SigmaCells = 0.095f, SigmaRipples = 0.190f, SigmaStreaks = 0.082f;
+        public const float SigmaCells = 0.071f, SigmaRipples = 0.165f, SigmaStreaks = 0.082f;
+        /// <summary>The rank is taken over RankSoft x the measured spread: a rank at the exact spread is as steep as the data and the GPU's 8-bit filter error (a metre of
+        /// warp) crossed the density check's tolerance at the edge of a low, patchy cover (0.0137 against 0.012). A softer rank loses a little of the tails, which Trim makes up.</summary>
+        public const float RankSoft = 1.25f;
 
         /// <summary>Tile in metres of the mesoscale fetch that carries the patch field (R) and the cell-size field (G): another tile than the
         /// 27 km warp fetch, so the two never line up.</summary>
         public const float PatchTile = 31000f;
         /// <summary>The domain warp of the pattern in scales (the 27 km fetch bends the pattern by up to WarpGain / 2 scales; kept at 1.6: 2.0 pushed the 8-bit parity of the cell probes past the density check tolerance) and the
         /// bend of the cell coordinate in cells (was 2.2).</summary>
-        public const float WarpGain = 1.6f, BendGain = 1.5f;
+        public const float WarpGain = 1.6f;
+        /// <summary>Round 3: the cell bend is SmoothNoise (a lattice of BendTile cells, displacement up to BendGain x 0.5 cells), where the round-1 bend read the
+        /// noise volume on 3.3 cells with gain 1.5 and folded 38 % of the plane (the concentric arcs and 8 px cross-hatch of sky 5, the ring set of sky 18).
+        /// Smooth, it moves a cell by 0.4 cells on average and folds under 1 %.</summary>
+        public const float BendTile = 4f, BendGain = 2.2f;
+        /// <summary>The share of the 27 km domain warp that a streak layer keeps is 1 - StreakWarpCut x its streak weight: the warp bent fibres into marbled
+        /// oil-on-water ribbons (sky 2 and 3).</summary>
+        public const float StreakWarpCut = 0.7f;
+        /// <summary>Streak meander: the across-coordinate of a streak is shifted by SmoothNoise on a lattice of MeanderTile scales, by up to Meander x 0.5 scales,
+        /// so neighbouring fibres converge and part instead of running in parallel rows (the Morse rows of skies 8 and 9). Fibres: the third streak tap is
+        /// FibreAcross scales wide and FibreAlong spans long and carries FibreWeight of the pattern (the first two carry 0.30 and 0.25).</summary>
+        public const float MeanderTile = 3f, Meander = 0.6f, FibreAcross = 0.17f, FibreAlong = 1.6f, FibreWeight = 0.45f;
         /// <summary>How far the curl bends a streak coordinate, in scales per unit of Curl (was 2): hooked cirrus read as molten swirls with closed loops.</summary>
-        public const float CurlGain = 0.6f;
+        public const float CurlGain = 0.8f;
         /// <summary>Look pass round 2. The cell small-tap period in cells (was 0.41: it collapsed to 3-6 px dust and a fine cross-hatch at altitude); the phase
         /// bend of the two ripple row sets in radians per unit of bend (was 10 and 9: their gradient could cancel the rows' own, which drew concentric
         /// rings); and how far a streak's along-coordinate is shifted by a noise of the across position, in spans (so dashes of neighbouring fibres
         /// no longer line up in rows).</summary>
-        public const float SmallCell = 0.62f, RowBend1 = 6f, RowBend2 = 5.4f, StreakStagger = 1.2f;
-        /// <summary>The low volume's lobe lookup: the lookup point is warped by a vector noise on a FIXED tile of LobeWarpWave metres (a tile that follows
+        public const float SmallCell = 0.62f, RowBend1 = 4f, RowBend2 = 3.6f, StreakStagger = 0.8f;
+        /// <summary>The low volume's lobe lookup: the lookup point is warped by a vector noise on FIXED lattices of LobeWarpCell metres (a tile that follows
         /// the lobe rung would move the noise coordinate by position x d(1/period) wherever the rung ramps, and the CPU and GPU would disagree), by
         /// up to LobeWarp x the lobe width, capped at LobeWarpMax metres; and where a size field is high the lobes are LobeSmall of their size (a second
         /// tap turned 37 degrees).</summary>
-        public const float LobeWarp = 1.6f, LobeWarpMax = 2200f, LobeWarpWave = 7000f, LobeSmall = 0.6f;
+        public const float LobeWarp = 1.6f, LobeWarpMax = 2200f, LobeSmall = 0.6f;
+        /// <summary>Lattice cells in metres of the two octaves of the lobe warp (round 3, SmoothNoise) and the second octave's share of the first.</summary>
+        public const float LobeWarpCell = 3500f, LobeWarpCell2 = 1500f, LobeWarp2 = 0.3f;
+        /// <summary>Round 3: the cell taps mix the volume's R (a fractal of Worley and value octaves down to two texels) with its B (one octave of rounded lobes, no fine
+        /// detail): <see cref="LobeShare"/> of the tap is B, shifted by <see cref="LobeShift"/> so its mean (0.477) sits on R's (0.517). Where only the peaks of the
+        /// pattern show (cover 0.1-0.2) R's fine octaves drew 3-6 px dust on the edges of every cell; the lobes are clean rounded cells. The small tap is B alone.</summary>
+        public const float LobeShare = 0.5f, LobeShift = 0.04f;
+        /// <summary>The slices of the volume the three cell taps read (the third coordinate is fixed, not altitude): a slice of the volume has its own mean (B ranges 0.38-0.54
+        /// across slices, R 0.48-0.58), and a tap whose slice moved with altitude and period moved the pattern's mean and with it the cover of the layer (cirrocumulus
+        /// showed 1.9 times its cover). These three have means near the volume's (R 0.517 and B 0.472, R 0.511 and B 0.470, B 0.465). A cell pattern does not vary with altitude.</summary>
+        public const float CellW1 = 0.82f, CellW2 = 0.633f, CellW3 = 0.352f;
         public const float PatchLo = 0.38f, PatchHi = 0.66f;
         /// <summary>1 / the mean of <see cref="PatchMask"/> over a layer: the cover inside the patches is lifted by this, so the layer's
         /// average cover stays its Cover while the lanes between patches are clear.</summary>
@@ -63,14 +87,27 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>The trim of a layer: <see cref="CoverTrim"/>, plus up to 0.9 more for the streak share and 0.45 for the rest at low covers (a streak pattern has a shorter
         /// tail than a cell pattern, so at cover 0.03-0.08 cirrus showed 0.3-0.6 of its Cover), and none for a veil.</summary>
         public static float Trim(float cover, float streaks, float veil)
-            => WeatherMath.Lerp(CoverTrim + (0.9f * streaks + 0.45f * (1f - streaks - veil)) * (1f - WeatherMath.Smoothstep(0.02f, 0.3f, cover)), 1f, veil);
+            => WeatherMath.Lerp(CoverTrim + (StreakTrim * streaks + CellTrim * (1f - streaks - veil)) * (1f - WeatherMath.Smoothstep(0.02f, 0.3f, cover)), 1f, veil);
+        /// <summary>The low-cover lift of <see cref="Trim"/> per streak share and per cell share (round 3: 0.9 and 0.45 before; the sigma constants now match the
+        /// pattern, and on screen a thin layer showed about four times its cover, so the lift is cut).</summary>
+        public const float StreakTrim = 1.4f, CellTrim = 1.2f;
         public const float SizeLo = 0.15f, SizeHi = 0.85f;
 
         /// <summary>0 in a clear lane, 1 inside a patch, from the patch field (R of the mesoscale fetch).</summary>
         public static float PatchMask(float field) => WeatherMath.Smoothstep(PatchLo, PatchHi, field);
 
         /// <summary>How strongly a layer is patched: full for thin layers, none for decks (cover 0.6 and up) and none for a veil.</summary>
-        public static float Patchiness(float cover, float veil) => (1f - WeatherMath.Smoothstep(0.2f, 0.6f, cover)) * (1f - veil);
+        public static float Patchiness(float cover, float veil) => (1f - WeatherMath.Smoothstep(PatchCoverLo, PatchCoverHi, cover)) * (1f - veil);
+        /// <summary>Round 3: patches fade out over cover 0.6-1.0, not 0.2-0.6 (mackerel at cover 0.8 is cirrocumulus in patches, with lanes between, not a perforated deck).</summary>
+        public const float PatchCoverLo = 0.6f, PatchCoverHi = 1.0f;
+
+        /// <summary>The density inside the cover from the depth below its edge (0 at the edge, 1 at the top rank): feathered fringes, cores at the top. Round 3:
+        /// the old 0.45 + 0.55 depth left the whole covered area at 45-100 % density, and a ray at a low elevation (thin cloud, long chord) lit all of it. Linear
+        /// on purpose: a smoothstep here was 3.7 times as steep and the 8-bit filter error of the GPU's fetches crossed the density check's tolerance.</summary>
+        public static float Interior(float depth) => 0.2f + 0.8f * depth;
+
+        /// <summary>How strongly Detail drives the interior: the square root of Detail (cirrus Detail 0.3 now acts at 0.55), kept as is for a veil.</summary>
+        public static float DetailDrive(float detail, float veil) => WeatherMath.Lerp((float)Math.Sqrt(detail), detail, veil);
 
         /// <summary>The factor on a layer's cover from the patch mask: 1 without patchiness, mask x gain with it.</summary>
         public static float PatchFactor(float mask, float patchiness) => WeatherMath.Lerp(1f, mask * PatchGain, patchiness);

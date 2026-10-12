@@ -57,6 +57,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                         sum += pattern; sum2 += pattern * pattern;
                     }
                     double mean = sum / n, sd = Math.Sqrt(sum2 / n - mean * mean);
+                    Console.WriteLine("  sigma " + name + " rung " + rung + ": sd " + sd.ToString("0.000") + " against " + sigma + ", mean " + mean.ToString("0.000"));
                     TestAssert.That(Math.Abs(sd / sigma - 1.0) < 0.25 && Math.Abs(mean - 0.52) < 0.04, name + " at rung " + rung + ": sd " + sd.ToString("0.000") + " against " + sigma + ", mean " + mean.ToString("0.000"));
                 }
         }
@@ -65,16 +66,19 @@ namespace BoscaliSummer.Tests.Features.Weather
         private static void CoverFollowsNominal()
         {
             CloudBodies bodies = Bodies();
+            var bad = new List<string>();
             foreach (LayerKind kind in (LayerKind[])Enum.GetValues(typeof(LayerKind)))
             {
                 LayerArchetype a = SkyArchetypes.Layer(kind);
                 if (a.Veil >= 0.3f * (a.Cells + a.Ripples + a.Streaks + a.Veil)) continue;
-                foreach (float cover in new[] { 0.1f, 0.3f, 0.6f })
+                foreach (float cover in new[] { 0.05f, 0.1f, 0.3f, 0.6f })
                 {
                     float share = ThinLayerTests.AreaShare(bodies, a.ToLayer(cover));
-                    TestAssert.That(share >= 0.6f * cover && share <= 1.5f * cover, kind + " at cover " + cover + " shows " + share.ToString("0.000") + " of the sky");
+                    Console.WriteLine("  cover " + kind + " " + cover + ": share " + share.ToString("0.000") + " (x" + (share / cover).ToString("0.00") + ")");
+                    if (!(share >= 0.6f * cover && share <= 1.5f * cover)) bad.Add(kind + " at cover " + cover + " shows " + share.ToString("0.000") + " of the sky");
                 }
             }
+            TestAssert.That(bad.Count == 0, string.Join("; ", bad));
         }
 
         private static void PatchesLeaveClearLanes()
@@ -95,7 +99,8 @@ namespace BoscaliSummer.Tests.Features.Weather
             TestAssert.That(lane >= 0.15f * n, "clear lanes are at least 15 % of the sky: " + lane / (float)n);
             TestAssert.That(empty >= 0.97f * lane, "a lane holds no cloud: " + empty + " of " + lane + " lane points are empty");
             // A deck is not patched and a veil neither: the cover mask there is the old slow modulation alone.
-            TestAssert.That(SlabMath.Patchiness(0.7f, 0f) == 0f && SlabMath.Patchiness(0.1f, 1f) == 0f && SlabMath.Patchiness(0.1f, 0f) == 1f, "patchiness: full when thin, none for decks and veils");
+            TestAssert.That(SlabMath.Patchiness(1f, 0f) == 0f && SlabMath.Patchiness(0.1f, 1f) == 0f && SlabMath.Patchiness(0.1f, 0f) == 1f && SlabMath.Patchiness(0.6f, 0f) == 1f
+                && SlabMath.Patchiness(0.8f, 0f) > 0.3f && SlabMath.Patchiness(0.8f, 0f) < 0.7f, "patchiness: full when thin, half at mackerel's cover 0.8, none for a full deck and for veils");
             TestAssert.That(Math.Abs(SlabMath.PatchFactor(0.7f, 0f) - 1f) < 1e-6f && SlabMath.PatchFactor(0f, 1f) == 0f, "patch factor: 1 without patchiness, 0 in a lane with it");
         }
 
