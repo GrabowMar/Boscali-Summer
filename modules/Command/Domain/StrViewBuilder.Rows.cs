@@ -53,7 +53,7 @@ namespace BoscaliSummer.Modules.Command.Domain
             private void FillFront(StrFrontRow r, TheaterFrontView fv)
             {
                 int number = plat.Of(fv.Key ?? "");
-                bool seen = fv.Observed && fv.Status != TheaterFrontStatus.Unconfirmed;
+                bool seen = fv.Observed;
                 float pressure = FrontPressure(fv);
                 float trend = fv.Observed && !float.IsNaN(fv.Trend) && !float.IsInfinity(fv.Trend) ? Math.Max(-1f, Math.Min(1f, fv.Trend)) : float.NaN;
 
@@ -66,6 +66,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                 }
                 else if (fv.Status == TheaterFrontStatus.InContact) { status = "IN CONTACT"; ink = StrInkRole.Danger; }
                 else if (fv.Status == TheaterFrontStatus.UnderPressure) { status = "UNDER PRESSURE"; ink = StrInkRole.Caution; }
+                else if (fv.Status == TheaterFrontStatus.Unconfirmed) { status = "NO UNITS NEAR"; ink = StrInkRole.Muted; }
                 else { status = !float.IsNaN(pressure) && pressure < 0.25f ? "QUIET" : "HOLDING"; ink = StrInkRole.Own; }
 
                 StrItemId offer = StrItemId.None;

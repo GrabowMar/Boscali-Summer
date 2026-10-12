@@ -155,6 +155,13 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(flats != null && flats.PressureText == Dash && float.IsNaN(flats.Pressure) && float.IsNaN(flats.Trend) && flats.TrendText == "", "an unobserved front is a dash and no trend");
             TestAssert.That(flats.StatusText == "NOT OBSERVED" + StrWords.Dot + "6 MIN OLD" && flats.OfferText == "NO REPORT", "and says how old the last report is");
 
+            // The engine's Observed flag is the one source: a scouted front with no unit near either side comes over as Observed with the Unconfirmed status, and reads its real
+            // pressure and trend, never "NOT OBSERVED" beside a number.
+            TheaterWarSnapshot scouted = StrFixtures.Snapshot();
+            scouted.Fronts[3].Status = TheaterFrontStatus.Unconfirmed; scouted.Fronts[3].Pressure = 0.6f; scouted.Fronts[3].Trend = 0f; scouted.Fronts[3].ObservedAgeSeconds = 0f;
+            StrFrontRow ridge = FrontNamed(Build(StrFixtures.Live(scouted)), "NORTH RIDGE");
+            TestAssert.That(ridge.PressureText == "60%" && !ridge.StatusText.Contains("NOT OBSERVED") && ridge.OfferText != "NO REPORT", "an observed front with no unit near reads its pressure and is not called unobserved");
+
             // A real zero, observed, is a zero.
             TheaterWarSnapshot calm = StrFixtures.Snapshot();
             calm.Fronts[3].Pressure = 0f;
