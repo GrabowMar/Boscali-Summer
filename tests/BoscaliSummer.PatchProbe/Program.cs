@@ -1125,6 +1125,7 @@ ProbeTrenchSerialization(pluginAssembly, mirageAssembly);
 ProbeSessionSerialization(pluginAssembly, mirageAssembly);
 ProbeWeatherSerialization(pluginAssembly, mirageAssembly);
 ProbeWeatherConfig(pluginAssembly);
+ProbeTheaterOpsHostSettings(pluginAssembly);
 ProbeTheaterOpsSerialization(pluginAssembly, mirageAssembly);
 // Wing integration is optional and the supported contract is compiled in-tree. A hard
 // external dependency prevents BepInEx from loading the entire plugin when Wing is absent.
@@ -2083,6 +2084,49 @@ static void ProbeWeatherConfig(Assembly plugin)
             if (!text.Contains(kept))
                 throw new InvalidOperationException("Weather config is missing '" + kept + "':\n" + text);
         Console.WriteLine("  Weather config: old keys purged, TapeMoves on, Pace 3, SeedMode Random, FixedSeed 0");
+    }
+    finally { File.Delete(path); }
+}
+
+static void ProbeTheaterOpsHostSettings(Assembly plugin)
+{
+    // The one THEATER OPS table (S4): two rows with distinct ids, AI STAFF CONVOYS off by default (D3), and FRONTLINE TACTICS reads as
+    // unavailable, with its reason, exactly when Ground Control RTS owns the orders.
+    const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
+    Assembly bepInEx = Assembly.Load("BepInEx");
+    Type configFile = bepInEx.GetType("BepInEx.Configuration.ConfigFile", true)!;
+    string path = Path.Combine(Path.GetTempPath(), "boscali-theaterops-settings-probe-" + Environment.ProcessId + ".cfg");
+    try
+    {
+        object config = Activator.CreateInstance(configFile, path, true)!;
+        object settings = Activator.CreateInstance(plugin.GetType("BoscaliSummer.Modules.TheaterOps.Configuration.TheaterOpsSettings", true)!, config)!;
+        MethodInfo build = plugin.GetType("BoscaliSummer.Modules.TheaterOps.Configuration.TheaterOpsHostSettings", true)!.GetMethod("Build", flags)!;
+        bool rts = false;
+        object table = build.Invoke(null, new object[] { settings, new Func<bool>(() => rts) })!;
+        Type tableType = table.GetType();
+        Action refresh = () => tableType.GetMethod("Refresh")!.Invoke(table, null);
+        Func<List<object>> rows = () => ((System.Collections.IEnumerable)tableType.GetProperty("Rows")!.GetValue(table)!).Cast<object>().ToList();
+        refresh();
+        List<object> list = rows();
+        Func<object, string, object> get = (row, name) => row.GetType().GetProperty(name)!.GetValue(row);
+        if (list.Count != 2 || list.Select(row => (int)get(row, "Id")!).Distinct().Count() != 2)
+            throw new InvalidOperationException("THEATER OPS must declare two rows with distinct ids");
+        if ((string)tableType.GetProperty("Section")!.GetValue(table) != "THEATER OPS")
+            throw new InvalidOperationException("THEATER OPS table has the wrong section name");
+        object tactics = list.Single(row => (int)get(row, "Id")! == 1), convoys = list.Single(row => (int)get(row, "Id")! == 2);
+        if ((bool)get(convoys, "Value")! || (string)get(convoys, "ValueText") != "OFF")
+            throw new InvalidOperationException("AI STAFF CONVOYS must default to OFF (D3)");
+        if (!(bool)get(tactics, "Interactive")! || get(tactics, "Reason") != null)
+            throw new InvalidOperationException("FRONTLINE TACTICS must be available without an RTS commander");
+        rts = true;
+        refresh();
+        if ((bool)get(tactics, "Interactive")! || (string)get(tactics, "Reason") != "GROUND CONTROL RTS OWNS GROUND ORDERS")
+            throw new InvalidOperationException("FRONTLINE TACTICS must say why it is unavailable under an RTS commander");
+        tableType.GetMethod("Toggle", new[] { typeof(int) })!.Invoke(table, new object[] { 2 });
+        refresh();
+        if (!(bool)get(convoys, "Value")! || (string)get(convoys, "ValueText") != "ON")
+            throw new InvalidOperationException("AI STAFF CONVOYS must toggle on from the table");
+        Console.WriteLine("  THEATER OPS host table: two distinct rows, convoys off by default, tactics unavailable under RTS");
     }
     finally { File.Delete(path); }
 }

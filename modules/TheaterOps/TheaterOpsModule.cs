@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Modules.TheaterOps.Configuration;
 using BoscaliSummer.Modules.TheaterOps.Networking;
 using BoscaliSummer.Modules.TheaterOps.Patches;
 using BoscaliSummer.Modules.TheaterOps.Runtime;
@@ -10,7 +11,7 @@ namespace BoscaliSummer.Modules.TheaterOps
     internal sealed class TheaterOpsModule : IModule
     {
         private static readonly ModuleMetadata Module =
-            new ModuleMetadata("theater-ops", "Theater priority and AI effort direction");
+            new ModuleMetadata("theater-ops", "Living Front staff and ground steering");
 
         public ModuleMetadata Metadata => Module;
 
@@ -46,6 +47,8 @@ namespace BoscaliSummer.Modules.TheaterOps
             context.AddService<IEnemyIntentSource>(priority);
             context.AddService<ITheaterWarView>(living);
             context.AddService<ITheaterAirStationView>(living);
+
+            context.AddHostSettings(TheaterOpsHostSettings.Build(context.Settings.TheaterOps, groundFront.HasRtsCommander));
         }
     }
 }

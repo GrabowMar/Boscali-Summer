@@ -48,6 +48,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         {
             tasks.Clear();
             nextRoute.Clear();
+            NavalFrontChooseTargetPatch.Reset();
         }
 
         /// <summary>Refresh at each host review. The task expires if its operation stops reviewing.</summary>
@@ -134,14 +135,17 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
     {
         private static readonly MethodInfo SetDestination =
             AccessTools.Method(typeof(ShipAI), "SetDestination", new[] { typeof(GlobalPosition) });
-        private static bool failed;
+        // One exception disables routing; ResetForScene clears it so a failure in one mission does not outlive the scene (D8, N-25).
+        internal static bool Failed { get; private set; }
+
+        internal static void Reset() => Failed = false;
 
         [HarmonyPostfix]
         private static void Postfix(ShipAI __instance, Ship ___ship,
             bool ___commandedDestination, Unit ___currentTarget)
         {
             NavalFrontService service = NavalFrontService.Active;
-            if (failed || SetDestination == null || ___ship == null || service == null ||
+            if (Failed || SetDestination == null || ___ship == null || service == null ||
                 ___ship.weaponStations == null || ___ship.weaponStations.Count == 0 ||
                 __instance.state == ShipAI.ShipAIState.launching ||
                 __instance.state == ShipAI.ShipAIState.returning ||
@@ -161,7 +165,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             }
             catch (Exception exception)
             {
-                failed = true;
+                Failed = true;
                 Debug.LogWarning("Boscali naval routing disabled: " + exception.GetType().Name);
             }
         }
