@@ -17,6 +17,15 @@ namespace BoscaliSummer.Tests.Features.Weather
             ModelSanitizeKeepsTheChartFinite();
             ScenarioAndSetTablesMatchTheTape();
             HotKeysAreUnique();
+            ColumnsEndTogether();
+        }
+
+        /// <summary>The reviewed defect: the three columns ended at 525, 554 and 542 of 566 units and left a ragged dead band above the command bar. Every column now fills the body to within a unit.</summary>
+        private static void ColumnsEndTogether()
+        {
+            for (int column = 1; column <= 3; column++)
+                TestAssert.That(Math.Abs(MetOfficeLayout.ColumnHeight(column) - MetOfficeLayout.BodyHeight) <= 1f && MetOfficeLayout.ColumnHeight(column) <= MetOfficeLayout.BodyHeight + 0.01f,
+                    "column " + column + " is " + MetOfficeLayout.ColumnHeight(column) + " of " + MetOfficeLayout.BodyHeight + " units");
         }
 
         private static MetOfficeModel Ready() => new MetOfficeModel { Host = true, Captured = true, HasCamera = true, Pace = 3 };

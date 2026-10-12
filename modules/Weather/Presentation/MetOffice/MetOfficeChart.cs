@@ -6,45 +6,45 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Weather.Presentation
 {
     /// <summary>
-    /// The synoptic chart (R4, R7, C8's picture): north-up, ±150 km around the theater centre. Fronts with their symbols, storm cells, set-pieces with labels, the anchor,
-    /// the camera with its heading, the wind barb, the theater frame and a legend. One mesh (<see cref="EnvCanvas"/>) plus a pool of labels; it reads only the
-    /// <see cref="MetOfficeModel"/>, so the tape slices change the adapter and leave this untouched.
+    /// The synoptic chart (R4, R7, C8's picture): north-up, ±150 km around the theater centre. A wind strip on top, the plot (fronts with their symbols, storm cells, set-pieces with labels, the anchor,
+    /// the camera with its heading, the theater frame), an axis strip with the km ticks and north below it, then a legend. One mesh (<see cref="EnvCanvas"/>) plus a pool of labels; it reads only the
+    /// <see cref="MetOfficeModel"/>, so the tape slices change the adapter and leave this untouched. Nothing but data is drawn over the plot: the labels are placed clear of every front, the frame
+    /// and the markers by <see cref="MetChartLayout"/>, sit on a plate, and a leader line joins one that had to move away from its marker.
     /// </summary>
     internal sealed class MetSynopticChart : EnvPart
     {
-        private const float S = MetOfficeLayout.ChartSquare, Inset = 1f, Plot = S - 2f * Inset;
-        private readonly TMP_Text[] setLabel = new TMP_Text[MetOfficeModel.SetCount], axisLabel = new TMP_Text[4];
-        private readonly TMP_Text theaterLabel, camLabel, anchorLabel, windFrom, windSpeed, north, scale;
-        private readonly TMP_Text[] legendWord = new TMP_Text[8];
+        private const float S = MetOfficeLayout.ChartSquare, Inset = 1f, Plot = S - 2f * Inset, Top = MetOfficeLayout.WindStrip, AxisTop = Top + S, LegendTop = AxisTop + MetOfficeLayout.AxisStrip;
         private static readonly string[] LegendNames = { "WARM", "COLD", "OCCL.", "SQUALL", "CELL", "SET-PC", "CAM", "ANCHOR" };
-        private static readonly int[] AxisKm = { -50, 0, 50, 100 };
+        private static readonly int[] AxisKm = { -100, -50, 0, 50, 100 };
+        private readonly TMP_Text[] axisLabel = new TMP_Text[AxisKm.Length];
+        private readonly TMP_Text[] label = new TMP_Text[MetChartLayout.Labels];
+        private readonly TMP_Text windText, north, scale;
+        private readonly TMP_Text[] legendWord = new TMP_Text[8];
         private readonly float[] sx = new float[16], sz = new float[16], tx = new float[16], tz = new float[16];
-        // The wind box (text left, barb right) and the plot rectangle labels must stay inside; the bottom 31 px hold the scale, axis and north labels.
-        private const float WindW = 173f, WindH = 58f;
-        private static readonly MetBox WindBox = new MetBox(S - 3f - WindW, 3f, WindW, WindH);
-        private static readonly MetBox labelBounds = new MetBox(2f, 2f, S - 4f, S - 33f);
-        private readonly MetBox[] taken = new MetBox[12];
+        private readonly float[] widths = new float[MetChartLayout.Labels];
+        private readonly MetBox[] boxes = new MetBox[MetChartLayout.Labels], scratch = new MetBox[MetChartLayout.MaxObstacles + MetChartLayout.Labels];
         private MetOfficeModel model;
 
         public MetSynopticChart(RectTransform parent) : base(parent, "Synoptic chart", "inert", true)
         {
             MakeArt(Paint);
-            for (int i = 0; i < setLabel.Length; i++) setLabel[i] = Txt("Set" + i, AvTextRole.DataSmall, TextAlignmentOptions.MidlineLeft, "caution", false, true);
+            for (int i = 0; i < label.Length; i++)
+            {
+                bool set = i >= MetChartLayout.FirstSet;
+                string name = set ? "Set" + (i - MetChartLayout.FirstSet) : i == MetChartLayout.Theater ? "Theater" : i == MetChartLayout.Camera ? "Cam" : "Anchor";
+                label[i] = Txt(name, AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, set ? "caution" : i == MetChartLayout.Anchor ? "key" : "ink-dim", false, set);
+            }
+            label[MetChartLayout.Anchor].text = "ANCHOR";
             for (int i = 0; i < axisLabel.Length; i++)
             {
                 axisLabel[i] = Txt("Axis" + i, AvTextRole.Micro, TextAlignmentOptions.Center, "ink-muted");
                 axisLabel[i].text = (AxisKm[i] > 0 ? "+" : AxisKm[i] < 0 ? "−" : "") + System.Math.Abs(AxisKm[i]);
             }
-            theaterLabel = Txt("Theater", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, "ink-dim");
-            camLabel = Txt("Cam", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, "ink-dim");
-            anchorLabel = Txt("Anchor", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, "key");
-            anchorLabel.text = "ANCHOR";
-            windFrom = Txt("WindFrom", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, "ink-dim");
-            windSpeed = Txt("WindSpeed", AvTextRole.DataSmall, TextAlignmentOptions.MidlineLeft, "ink");
+            windText = Txt("Wind", AvTextRole.DataSmall, TextAlignmentOptions.MidlineLeft, "ink", false, true);
             north = Txt("North", AvTextRole.Micro, TextAlignmentOptions.Center, "ink-dim");
             north.text = "N";
             scale = Txt("Scale", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, "ink-dim");
-            scale.text = "50 KM";
+            scale.text = "KM";
             for (int i = 0; i < legendWord.Length; i++)
             {
                 legendWord[i] = Txt("Legend" + i, AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, "ink-dim");
@@ -58,80 +58,66 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         public void Set(MetOfficeModel m)
         {
             model = m;
-            AvText.Set(windFrom, "FROM " + m.WindFromDeg.ToString("000", System.Globalization.CultureInfo.InvariantCulture) + "°");
-            AvText.Set(windSpeed, AvNum.Fixed(m.WindMps, 0) + " M/S " + AvNum.Fixed(m.WindMps * 1.943844f, 0) + " KT");
-            AvText.Set(camLabel, m.HasCamera ? "CAM " + Mathf.RoundToInt(m.CamHeadingDeg).ToString("000") + "°" : "");
-            AvText.Set(theaterLabel, m.HalfXKm > 0f ? "THEATER " + AvNum.Fixed(m.HalfXKm * 2f, 2) + " x " + AvNum.Fixed(m.HalfZKm * 2f, 2) + " KM" : "");
+            AvText.Set(windText, MetOfficeText.WindStrip(m.WindFromDeg, m.WindMps));
+            AvText.Set(label[MetChartLayout.Camera], m.HasCamera ? "CAM " + Mathf.RoundToInt(m.CamHeadingDeg).ToString("000") + "°" : "");
+            AvText.Set(label[MetChartLayout.Theater], MetOfficeText.Theater(m.HalfXKm, m.HalfZKm));
             float offset = m.HasAnchor && m.HasCamera ? Mathf.Sqrt((m.AnchorX - m.CamX) * (m.AnchorX - m.CamX) + (m.AnchorZ - m.CamZ) * (m.AnchorZ - m.CamZ)) : 0f;
-            AvText.Set(anchorLabel, m.HasAnchor ? MetOfficeText.AnchorLabel(offset) : "");
-            for (int i = 0; i < setLabel.Length; i++)
-                AvText.Set(setLabel[i], m.Sets[i].Present && m.Sets[i].Placed ? MetCatalog.SetNames[i] + " " + MetOfficeText.Cover(m.Sets[i].Strength) : "");
+            AvText.Set(label[MetChartLayout.Anchor], m.HasAnchor ? MetOfficeText.AnchorLabel(offset) : "");
+            for (int i = 0; i < MetOfficeModel.SetCount; i++)
+                AvText.Set(label[MetChartLayout.FirstSet + i], m.Sets[i].Present && m.Sets[i].Placed ? MetCatalog.SetNames[i] + " " + MetOfficeText.Cover(m.Sets[i].Strength) : "");
             Arrange();
             Redraw();
         }
 
         protected override void Layout(float w, float h) => Arrange();
 
-        private float Px(float km) => Inset + MetChartMath.PxX(MetChartMath.Clamp(km), Plot);
-        private float Py(float km) => Inset + MetChartMath.PxY(MetChartMath.Clamp(km), Plot);
-
-        private static MetBox LabelBox(TMP_Text label, float x, float y) => new MetBox(x, y, Mathf.Ceil(AvText.Width(label)) + 2f, 16f);
-
-        /// <summary>Puts a label next to its marker on the first free spot (see <see cref="MetChartMath.Place"/>) and records it as taken.</summary>
-        private void PlaceLabel(TMP_Text label, float markerX, float markerY, bool below, ref int n)
-        {
-            bool on = label.text.Length > 0;
-            label.gameObject.SetActive(on);
-            if (!on) return;
-            MetBox size = LabelBox(label, 0f, 0f);
-            MetBox box = MetChartMath.Place(markerX, markerY, size.W, size.H, below, labelBounds, taken, n);
-            taken[n++] = box;
-            AvLay.Place(label, box.X, box.Y, box.W, box.H);
-        }
+        private float Px(float km) => MetChartLayout.Px(km, Inset, Plot);
+        private float Py(float km) => MetChartLayout.Py(km, Top + Inset, Plot);
 
         private void Arrange()
         {
             for (int i = 0; i < legendWord.Length; i++)
             {
-                float x = 4f + (i % 4) * 74f, y = S + 6f + (i / 4) * 16f;
+                float x = 4f + (i % 4) * 74f, y = LegendTop + 6f + (i / 4) * 16f;
                 AvLay.Place(legendWord[i], x + 27f, y, 46f, 15f);
             }
-            for (int i = 0; i < axisLabel.Length; i++) AvLay.Place(axisLabel[i], Px(AxisKm[i]) - 16f, S - 17f, 32f, 15f);
-            AvLay.Place(north, S - 18f, S - 17f, 16f, 15f);
-            AvLay.Place(scale, 8f, S - 29f, 50f, 15f);
-            AvLay.Place(windFrom, WindBox.X + 5f, 5f, 108f, 15f);
-            AvLay.Place(windSpeed, WindBox.X + 5f, 20f, 108f, 16f);
+            for (int i = 0; i < axisLabel.Length; i++) AvLay.Place(axisLabel[i], Px(AxisKm[i]) - 16f, AxisTop + 3f, 32f, 15f);
+            AvLay.Place(north, S - 34f, AxisTop + 3f, 16f, 15f);
+            AvLay.Place(scale, 5f, AxisTop + 3f, 24f, 15f);
+            AvLay.Place(windText, 6f, Inset, S - 44f, Top - 2f);
             if (model == null) return;
-            // The labels, one after the other against what is already taken: the wind box first, then the theater, the camera, the anchor (opposite the camera label) and the set-pieces.
-            int n = 0;
-            taken[n++] = WindBox;
-            float hx = model.HalfXKm, hz = model.HalfZKm;
-            PlaceLabel(theaterLabel, Px(-hx) - 6f, Py(hz) + 4f, false, ref n);        // first choice: above the frame's north-west corner
-            PlaceLabel(camLabel, Px(model.CamX), Py(model.CamZ), true, ref n);          // first choice: right of and below the camera
-            PlaceLabel(anchorLabel, Px(model.AnchorX), Py(model.AnchorZ), false, ref n); // first choice: right of and above the anchor, so it never lands on the camera label
-            for (int i = 0; i < setLabel.Length; i++)
-                PlaceLabel(setLabel[i], Px(model.Sets[i].X), Py(model.Sets[i].Z), false, ref n);
+            // One deterministic placer for every label (MetChartLayout): clear of the frame, the fronts, the markers and each other; a label with no free spot keeps the least bad one, and its plate.
+            for (int i = 0; i < label.Length; i++) widths[i] = label[i].text.Length > 0 ? Mathf.Ceil(AvText.Width(label[i])) + 2f : 0f;
+            MetChartLayout.Place(model, Inset, Top + Inset, Plot, widths, boxes, scratch);
+            for (int i = 0; i < label.Length; i++)
+            {
+                bool on = widths[i] > 0f && boxes[i].W > 0f;
+                label[i].gameObject.SetActive(on);
+                if (on) AvLay.Place(label[i], boxes[i].X, boxes[i].Y, boxes[i].W, boxes[i].H);
+            }
         }
 
         private void Paint(EnvCanvas c)
         {
             Color sunken = EnvInk.Role("surface-sunken"), grid = EnvInk.Alpha(EnvInk.Role("hairline"), 0.55f), muted = EnvInk.Role("ink-muted");
-            Color key = EnvInk.Role("key"), caution = EnvInk.Role("caution"), danger = EnvInk.Role("danger"), info = EnvInk.Role("info"), ink = EnvInk.Role("ink");
-            c.Quad(Inset, Inset, Plot, Plot, sunken);
+            Color key = EnvInk.Role("key"), caution = EnvInk.Role("caution"), danger = EnvInk.Role("danger"), ink = EnvInk.Role("ink");
+            float pt = Top + Inset;
+            c.Quad(Inset, Inset, Plot, Top - Inset - 1f, sunken);                               // the wind strip
+            c.Quad(Inset, pt, Plot, Plot, sunken);                                              // the plot
             for (int km = -100; km <= 100; km += 50)
             {
-                c.Line(Px(km), Inset, Px(km), S - Inset, 0.6f, grid);
+                c.Line(Px(km), pt, Px(km), pt + Plot, 0.6f, grid);
                 c.Line(Inset, Py(km), S - Inset, Py(km), 0.6f, grid);
             }
             float cx = Px(0f), cy = Py(0f);
             float r50 = Plot / 6f;
             c.Arc(cx, cy, r50, r50, 0f, 360f, 0.7f, EnvInk.Alpha(muted, 0.5f), 2);
             c.Arc(cx, cy, 2f * r50, 2f * r50, 0f, 360f, 0.7f, EnvInk.Alpha(muted, 0.5f), 2);
-            // Legend divider, the scale bar and the north arrow.
-            c.Quad(Inset, S, Plot, 1f, EnvInk.Role("hairline"));
-            c.Line(8f, S - 12f, 8f + r50, S - 12f, 1f, EnvInk.Role("ink-dim"));
-            c.Line(8f, S - 15f, 8f, S - 9f, 1f, EnvInk.Role("ink-dim")); c.Line(8f + r50, S - 15f, 8f + r50, S - 9f, 1f, EnvInk.Role("ink-dim"));
-            c.Line(S - 9f, S - 14f, S - 9f, S - 36f, 1f, EnvInk.Role("ink-dim")); c.Tri(S - 13f, S - 31f, S - 5f, S - 31f, S - 9f, S - 38f, EnvInk.Role("ink-dim"));
+            // The axis strip below the plot: a tick under every grid line, and the north arrow. Then the legend divider.
+            c.Quad(Inset, AxisTop, Plot, MetOfficeLayout.AxisStrip - 1f, sunken);
+            for (int i = 0; i < AxisKm.Length; i++) c.Quad(Px(AxisKm[i]) - 0.4f, AxisTop, 0.8f, 3f, muted);
+            c.Quad(S - 11f, AxisTop + 8f, 1f, 7f, EnvInk.Role("ink-dim")); c.Tri(S - 15f, AxisTop + 9f, S - 7f, AxisTop + 9f, S - 10.5f, AxisTop + 3f, EnvInk.Role("ink-dim"));
+            c.Quad(Inset, LegendTop, Plot, 1f, EnvInk.Role("hairline"));
             DrawLegend(c);
             if (model == null) return;
 
@@ -168,7 +154,8 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             for (int i = 0; i < model.CellCount; i++)
             {
                 MetCell cell = model.Cells[i];
-                float rr = Mathf.Max(2.5f, MetChartMath.Fin(cell.Radius) / (2f * MetChartMath.RangeKm) * Plot);
+                if (!MetChartMath.IsFinite(cell.X) || !MetChartMath.IsFinite(cell.Z) || !MetChartMath.IsFinite(cell.Radius)) continue;   // an unknown cell is not drawn at the chart centre
+                float rr = Mathf.Max(2.5f, cell.Radius / (2f * MetChartMath.RangeKm) * Plot);
                 c.Disc(Px(cell.X), Py(cell.Z), rr, EnvInk.Alpha(danger, 0.28f), 14);
                 c.Ring(Px(cell.X), Py(cell.Z), rr, 0.8f, danger);
             }
@@ -194,37 +181,49 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 c.Dashed(x, y, x + fx * 22f, y + fy * 22f, 0.8f, 3f, 3f, key);
                 c.Tri(x + fx * 9f, y + fy * 9f, x - fx * 6f - fy * 5.5f, y - fy * 6f + fx * 5.5f, x - fx * 6f + fy * 5.5f, y - fy * 6f - fx * 5.5f, key);
             }
+            // The labels last: a leader to each that stands off its marker, and a plate under each so a residual crossing still reads (the text is a later sibling, so it draws above).
+            Color leader = EnvInk.Alpha(EnvInk.Role("ink-dim"), 0.8f), plate = EnvInk.Alpha(EnvInk.Role("ground"), 0.7f);
+            for (int i = 0; i < label.Length; i++)
+            {
+                if (widths[i] <= 0f || boxes[i].W <= 0f) continue;
+                if (MetChartLayout.Marker(model, i, Inset, pt, Plot, out float mx, out float my, out _))
+                {
+                    if (i == MetChartLayout.Theater) { mx += 6f; my -= 4f; }          // the theater's marker is the frame's north-west corner, not the label's anchor point
+                    float gap = MetChartLayout.Gap(boxes[i], mx, my, out float nx, out float ny);
+                    if (gap > MetChartLayout.LeaderAfter) c.Dashed(mx + (nx - mx) / gap * (i == MetChartLayout.Theater ? 0f : 7f), my + (ny - my) / gap * (i == MetChartLayout.Theater ? 0f : 7f), nx, ny, 0.7f, 3f, 2f, leader);
+                }
+                c.Quad(boxes[i].X, boxes[i].Y + 1f, boxes[i].W, boxes[i].H - 2f, plate);
+            }
             DrawBarb(c, ink);
         }
 
         private void DrawBarb(EnvCanvas c, Color ink)
         {
-            // The wind box: the text sits on its left, the barb on a 58 px square at its right. The shaft leaves the station circle toward the heading the wind comes FROM
-            // (MetChartMath.BarbAxis), so a wind from 090 points east; the feathers sit on its clockwise side and walk from the tip toward the station.
-            c.Quad(WindBox.X, WindBox.Y, WindBox.W, WindBox.H, EnvInk.Alpha(EnvInk.Role("ground"), 0.9f));
-            float cx = WindBox.Right - 31f, cy = WindBox.Y + WindBox.H * 0.5f;
-            c.Ring(cx, cy, 2.4f, 1f, ink);
+            // The barb at the right end of the wind strip, a miniature of the weather-chart symbol (the readout beside it carries the numbers). The shaft leaves the station circle toward the heading the wind
+            // comes FROM (MetChartMath.BarbAxis), so a wind from 090 points east; the feathers sit on its clockwise side and walk from the tip toward the station. It stays inside the 18 px strip at any heading.
+            float cx = S - 20f, cy = Inset + (Top - Inset - 1f) * 0.5f;
+            c.Ring(cx, cy, 2.2f, 1f, ink);
             MetChartMath.Barb(model.WindMps * 1.943844f, out int pennants, out int full, out bool half);
             if (pennants + full == 0 && !half) return;                       // calm: the circle alone
             MetChartMath.BarbAxis(model.WindFromDeg, out float ux, out float uy);
             float vx = -uy, vy = ux;
-            const float shaft = 22f;
-            c.Line(cx + ux * 2.4f, cy + uy * 2.4f, cx + ux * shaft, cy + uy * shaft, 1f, ink);
+            const float shaft = 8f, feather = 5f, step = 2.6f;
+            c.Line(cx + ux * 2.2f, cy + uy * 2.2f, cx + ux * shaft, cy + uy * shaft, 1f, ink);
             float at = shaft;
-            for (int i = 0; i < pennants && at > 4f; i++)
+            for (int i = 0; i < pennants && at > 3f; i++)
             {
                 float px = cx + ux * at, py = cy + uy * at;
-                c.Tri(px, py, px - ux * 5f, py - uy * 5f, px + vx * 9f, py + vy * 9f, ink); at -= 7f;
+                c.Tri(px, py, px - ux * 3.2f, py - uy * 3.2f, px + vx * feather, py + vy * feather, ink); at -= step + 1.4f;
             }
-            for (int i = 0; i < full && at > 4f; i++)
+            for (int i = 0; i < full && at > 3f; i++)
             {
                 float px = cx + ux * at, py = cy + uy * at;
-                c.Line(px, py, px + ux * 3f + vx * 9f, py + uy * 3f + vy * 9f, 1f, ink); at -= 6f;
+                c.Line(px, py, px + ux * 1.5f + vx * feather, py + uy * 1.5f + vy * feather, 1f, ink); at -= step;
             }
-            if (half && at > 2f)
+            if (half && at > 2.4f)
             {
                 float px = cx + ux * at, py = cy + uy * at;
-                c.Line(px, py, px + ux * 1.6f + vx * 4.5f, py + uy * 1.6f + vy * 4.5f, 1f, ink);
+                c.Line(px, py, px + ux * 0.8f + vx * feather * 0.5f, py + uy * 0.8f + vy * feather * 0.5f, 1f, ink);
             }
         }
 
@@ -233,7 +232,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             MetFrontKind[] kinds = { MetFrontKind.Warm, MetFrontKind.Cold, MetFrontKind.Occluded, MetFrontKind.Squall };
             for (int i = 0; i < 8; i++)
             {
-                float x = 4f + (i % 4) * 74f, y = S + 5f + (i / 4) * 16f;
+                float x = 4f + (i % 4) * 74f, y = LegendTop + 5f + (i / 4) * 16f;
                 if (i < 4) { MetFrontGlyph.Draw(c, kinds[i], x - 3f, y - 1f); continue; }
                 switch (i)
                 {

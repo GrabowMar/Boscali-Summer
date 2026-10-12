@@ -160,6 +160,58 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         }
     }
 
+    /// <summary>The mockup's footer legend of the availability tags: LIVE works now, 4B arrives with the tape console, S5 with tape motion, in the three tint colours the cards' tags use. Sits on its own plate.</summary>
+    internal sealed class MetTagLegend : AvPart
+    {
+        public const float Width = 98f;
+        private static readonly string[] Words = { "LIVE", "4B", "S5" };
+        private static readonly MetAvail[] Avail = { MetAvail.Live, MetAvail.Tape4B, MetAvail.Motion5 };
+        private static readonly float[] Widths = { 38f, 26f, 26f };
+        private readonly Image plate;
+        private readonly AvFrame[] box = new AvFrame[3];
+        private readonly TMP_Text[] text = new TMP_Text[3];
+
+        public MetTagLegend(RectTransform parent)
+        {
+            Rect = AvLay.Child(parent, "TagLegend");
+            plate = AvLay.Solid(Rect, "Plate", Color.clear);
+            for (int i = 0; i < box.Length; i++)
+            {
+                box[i] = AvFrame.Add(Rect, "Tag" + i, default(AvChamfer));
+                box[i].Stroke = 1f; box[i].Fill = false;
+                text[i] = AvText.Make(Rect, "TagWord" + i, AvTextRole.DataSmall, Words[i], TextAlignmentOptions.Center);
+                AvText.Fit(text[i], false);
+            }
+            Restyle();
+        }
+
+        public override float Measure(float width) => 14f;
+
+        public override void Place(AvSlot s)
+        {
+            base.Place(s);
+            AvLay.Place(plate.rectTransform, -4f, -2f, s.W + 8f, s.H + 4f);
+            float x = 0f;
+            for (int i = 0; i < box.Length; i++)
+            {
+                AvLay.Place(box[i].rectTransform, x, 0f, Widths[i], s.H);
+                AvLay.Place(text[i].rectTransform, x, 0f, Widths[i], s.H);
+                x += Widths[i] + 4f;
+            }
+        }
+
+        public override void Restyle()
+        {
+            plate.color = EnvInk.Role("ground");
+            for (int i = 0; i < box.Length; i++)
+            {
+                Color tint = EnvInk.Role(Avail[i] == MetAvail.Live ? "key" : Avail[i] == MetAvail.Tape4B ? "info" : "caution");
+                box[i].Paint(Color.clear, tint);
+                text[i].color = tint;
+            }
+        }
+    }
+
     /// <summary>
     /// The mockup's card: a chamfered frame with the title in key colour, a muted caption and up to two availability tags on the right, an optional 3 px hero rail,
     /// and a stack of fixed-height parts below. The kit's AvCard has no caption or tags, and its nested flow pads 8 px on every side, which the 540 px columns cannot afford.
@@ -267,7 +319,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             }
             if (headerControl != null)
             {
-                AvLay.Place(headerControl.Rect, right - headerControlW, 2f, headerControlW, 20f);
+                AvLay.Place(headerControl.Rect, right - headerControlW, 4f, headerControlW, 18f);
                 right -= headerControlW + 6f;
             }
             float titleW = Mathf.Ceil(AvText.Width(title)) + 4f;

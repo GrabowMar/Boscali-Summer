@@ -11,6 +11,11 @@ namespace BoscaliSummer.Modules.Weather.Presentation
     /// </summary>
     internal sealed class MetSkyBody : EnvPart
     {
+        /// <summary>The mark of a caution sky (broken, overcast): not the kit's triangle, which this window keeps for "CUT".</summary>
+        public const string CautionMark = "● ";
+
+        private static string RegimeMark(AvState s) => s == AvState.Caution ? CautionMark : AvStates.Glyph(s);
+
         private const float HeadY = 44f, MetarY = 62f, TileY = 84f, TileH = 36f, TileGap = 4f;
         private readonly TMP_Text code, word, cover, coverCap, head, metarKey, metarText;
         private readonly TMP_Text[] layerKey = new TMP_Text[3], layerBase = new TMP_Text[3], layerDetail = new TMP_Text[3];
@@ -50,7 +55,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         {
             RegimeSnapshot regime = RegimeSnapshot.FromType(m.Class);
             state = WeatherEnvView.RegimeState(m.Class);
-            AvText.Set(code, AvStates.Glyph(state) + regime.Code);
+            AvText.Set(code, RegimeMark(state) + regime.Code);
             AvText.Set(word, regime.Name.ToUpperInvariant());
             AvText.Set(cover, MetOfficeText.Cover(m.Cover));
             AvText.Set(head, m.PinnedSky >= 0 ? MetOfficeText.SkyHead(m.SkyNumber, m.SkyName.ToUpperInvariant()) + " · PINNED" : "AUTO · CLASS SKY");

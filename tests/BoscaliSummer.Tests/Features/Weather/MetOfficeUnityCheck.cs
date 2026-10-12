@@ -452,7 +452,7 @@ public static class MetOfficeUnityCheck
         if (Built >= 8 && state == "client")
         {
             if (System.Text.RegularExpressions.Regex.IsMatch(all, @"\bX5\b")) Fail(where + ": a client prints the pace of its own settings");
-            if (!all.Contains("— · SEED")) Fail(where + ": a client prints a seed mode that is not the host's");
+            if (all.Contains("FIXED · SEED") || all.Contains("— · SEED") || !all.Contains("SEED 9A3F21C7")) Fail(where + ": a client prints a seed mode that is not the host's, or a lone dash for it");
         }
     }
 

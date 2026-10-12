@@ -46,6 +46,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
             outlookSection = f.Section(AvIcon.Clock, "OUTLOOK 60 MIN", "AT AIRCRAFT · TAPE");
             outlook = f.Add(new EnvOutlookStrip(f.Content, MetOfficeModel.OutlookCount));   // the offsets come from the model (MetOutlookCell.Minutes), never from WeatherForecast
+            outlook.CautionMark = MetSkyBody.CautionMark;   // the amber triangle means CUT in this window: a broken or overcast sky wears a dot
             outlook.SetHelp("OUTLOOK: the class now and at +5, +10, +15, +30 and +60 minutes at your position, with the rain bar. HELD while the tape is held.");
 
             f.Section(AvIcon.Bolt, "SET-PIECES", "TOGGLE · FADE 20 S");
@@ -95,10 +96,15 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         private void RefreshOutlook()
         {
             outlookSection.SetCaption(model.OutlookHeld ? "HELD · NO FORECAST" : "AT AIRCRAFT · TAPE");
-            if (!model.HasOutlook && !model.OutlookHeld) return;
             for (int i = 0; i < MetOfficeModel.OutlookCount; i++)
             {
                 MetOutlookCell cell = model.Outlook[i];
+                // Before the world is captured there is nothing to forecast: the time labels stay, the cells go dim and empty (never six clear skies).
+                if (!model.HasOutlook && !model.OutlookHeld)
+                {
+                    outlook.Set(i, MetOfficeText.OutlookLabel(cell.Minutes > 0 ? cell.Minutes : WeatherForecast.DefaultOffsetsMinutes[i]), i == 0, model.Class, "--", 0f, AvState.Inert, false);
+                    continue;
+                }
                 if (model.OutlookHeld) { outlook.Set(i, MetOfficeText.OutlookLabel(cell.Minutes), i == 0, model.Class, "HELD", 0f, AvState.Inert); continue; }
                 AvState st = cell.Class == WeatherRegimeType.Storm ? AvState.Danger : cell.Rain > 0.2f ? AvState.Caution : WeatherEnvView.RegimeState(cell.Class);
                 outlook.Set(i, MetOfficeText.OutlookLabel(cell.Minutes), i == 0, cell.Class, cell.Code, cell.Rain, st);

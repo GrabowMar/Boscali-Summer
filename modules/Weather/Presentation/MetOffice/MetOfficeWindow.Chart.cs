@@ -40,8 +40,8 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             chart.Set(model);
             fronts.Set(model);
             // A client's own SeedMode setting says nothing about the host's mission: only the seed travels in the key.
-            identityHead.Set(model.SeedHex.Length > 0 ? MetOfficeText.IdentityHead(model.Host ? model.SeedMode : "—", model.SeedHex) : "NO TAPE YET");
-            identitySub.Set(model.SeedHex.Length > 0 ? MetOfficeText.IdentitySub(model.LayoutSalt, model.TapeHex) : "");
+            identityHead.Set(model.SeedHex.Length > 0 ? MetOfficeText.IdentityHead(model.Host ? model.SeedMode : "", model.SeedHex) : "NO TAPE YET");
+            identitySub.Set(model.SeedHex.Length > 0 ? MetOfficeText.IdentitySub(model.LayoutSalt, model.TapeHex) : "SEED + LAYOUT SHOW ONCE CAPTURED");
             identityNext.Set(model.SeedHex.Length > 0 ? MetOfficeText.RerollLine(model.LayoutSalt) : "");
         }
     }

@@ -14,11 +14,12 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         // Fixed heights of the parts. Kit parts keep their kit height (AvSection 23, AvSegmented / AvStepper / AvControl row 28).
         public const float Section = 23f, Row = 28f, CardChrome = 30f;
-        public const float ChartSquare = 300f, ChartLegend = 38f, ChartPart = ChartSquare + Gap + ChartLegend;
-        public const float FrontsCard = 66f, IdentityCard = 78f;   // identity: chrome 30 + three 16 px lines
-        public const float SkyCard = 150f, PinCard = 90f, OutlookStrip = 76f, SetCellRow = 31f, CellGap = 4f;
+        public const float ChartSquare = 300f, ChartLegend = 38f, WindStrip = 18f, AxisStrip = 18f;   // the wind readout above the plot, the axis, scale and north below it: nothing is drawn over the plot but data
+        public const float ChartPart = WindStrip + ChartSquare + AxisStrip + Gap + ChartLegend;
+        public const float FrontsCard = 71f, IdentityCard = 78f;   // identity: chrome 30 + three 16 px lines
+        public const float SkyCard = 150f, PinCard = 90f, OutlookStrip = 76f, SetCellRow = 35f, CellGap = 4f;
         public const float PipsRow = 19f, StripArt = 66f, StripMeta = 15f;
-        public const float ScenarioRow = 30f, LogLines = 4f, LogLine = 16f;
+        public const float ScenarioRow = 34f, LogLines = 4f, LogLine = 19f;
 
         public static float SetGrid => 3f * SetCellRow + 2f * CellGap;
         public static float StoryCard => CardChrome + Row + 3f + PipsRow + 2f + StripArt + StripMeta;

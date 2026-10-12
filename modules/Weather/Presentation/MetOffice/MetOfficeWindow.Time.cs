@@ -43,7 +43,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             for (int i = 0; i < 4; i++) Reg(MetCatalog.From(MetControl.Front2, i), frontRow.Controls[i]);
             frontRow.SetTrail("S5", "caution");
             AvNote frontNote = time.Add(new AvNote(time.Content, AvTextRole.Micro), MetOfficeLayout.StripMeta, 3f);
-            frontNote.Set("▲ FRONT IN N ARRIVES WITH TAPE MOTION (S5)");
+            frontNote.Set("▲ FRONT IN 2 / 5 / 10 / 30 MIN ARRIVES WITH TAPE MOTION (S5)");
 
             MetCard scen = Card(f, "SCENARIOS");
             scen.SetCaption("▲ CUT · OVERWRITES STORY PIN SETS RAIN");
@@ -69,10 +69,10 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         partial void RefreshTimeColumn()
         {
             story.Set(model);
-            logNote.Set(model.Host ? (model.LogText.Length > 0 ? model.LogText : "NO HOST ACTIONS YET") : "HOST ACTIONS ARE LOGGED ON THE HOST");
+            logNote.Set(model.Host ? (model.LogText.Length > 0 ? model.LogText : "NO HOST ACTIONS YET\nEVERY CHANGE YOU MAKE IS LOGGED HERE") : "HOST ACTIONS ARE LOGGED ON THE HOST\nTHIS SEAT ONLY READS: THE HOST STEERS");
             logCard.SetCaption(model.Pending.Length > 0 ? model.Pending : "IDLE");
             storyCard.SetCaption(model.SkyRole.Length > 0 ? "NOW · " + model.SkyRole : "▲ CUT · WHOLE TAPE");
-            storyRow.SetValue(model.HasStory ? model.StoryName.ToUpperInvariant() + " " + (model.StoryIndex + 1) + " / " + model.StoryCount : "AUTO · — / " + model.StoryCount);
+            storyRow.SetValue(model.HasStory ? model.StoryName.ToUpperInvariant() + " " + (model.StoryIndex + 1) + " / " + model.StoryCount : "— / " + model.StoryCount);
             control[(int)MetControl.StoryAuto].Latched = !model.HasStory;
             control[(int)MetControl.Hold].Latched = !model.Running;
             Label(control[(int)MetControl.Hold], MetOfficeText.HoldLabel(model.Running));

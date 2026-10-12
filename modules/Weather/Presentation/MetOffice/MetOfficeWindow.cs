@@ -32,6 +32,8 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         private readonly AvControl[] control = new AvControl[ControlCount];
         private AvChip roleChip;
         private TMP_Text dtg;
+        private Image backing;
+        private MetTagLegend tagLegend;
         private readonly List<AvHit> hitList = new List<AvHit>(96);
         private readonly List<AvHelpTip> tipList = new List<AvHelpTip>(24);
         private AvHit hovered;
@@ -134,6 +136,8 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 SetTip(mouse);
                 if (under != null && Input.GetMouseButtonDown(0)) ((IPointerClickHandler)under).OnPointerClick(Pointer());
             }
+            // The tag legend shares the footer with the hover sentence: it steps aside while a sentence (or a refusal) is on.
+            tagLegend.Rect.gameObject.SetActive(hovered == null && tipHovered == null && refusedUntil <= 0f);
             if (Time.unscaledTime >= nextRefresh) { nextRefresh = Time.unscaledTime + 0.25f; Refresh(); }
         }
 
@@ -297,12 +301,19 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             window.CloseControl.Help = "Close the Met Office (Esc or Ctrl+O).";
             window.Ticker.Register(repaint);
             window.Root.Find("Body").gameObject.SetActive(false);   // the kit body (scroll view) stays empty: the columns are placed on the root
+            // The kit frame is 0.82 alpha when glassy and only the cards have their own fill, so the free-standing parts (section headers, the anchor and rain rows) would show the cockpit through them.
+            backing = AvLay.Solid(window.Root, "Backing", Color.clear);
+            AvLay.Place(backing.rectTransform, 4f, MetOfficeLayout.Title + 2f, MetOfficeLayout.Width - 8f, MetOfficeLayout.Height - MetOfficeLayout.Footer - MetOfficeLayout.Title - 4f);
+            backing.color = MetTitleTint.BackingColor();
             BuildTitleBar();
             BuildChartColumn();
             BuildInstrumentColumn();
             BuildTimeColumn();
             BuildCommandBar();
             window.Footer.Place(new AvSlot(0f, MetOfficeLayout.Height - MetOfficeLayout.Footer, MetOfficeLayout.Width, MetOfficeLayout.Footer));
+            tagLegend = new MetTagLegend(window.Root);
+            tagLegend.Place(new AvSlot(MetOfficeLayout.Width - MetTagLegend.Width - 10f, MetOfficeLayout.Height - MetOfficeLayout.Footer + 8f, MetTagLegend.Width, 14f));
+            window.Ticker.Register(tagLegend);
 
             hitList.AddRange(window.Root.GetComponentsInChildren<AvHit>(true));
             tipList.AddRange(window.Root.GetComponentsInChildren<AvHelpTip>(true));
@@ -340,7 +351,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             roleChip = new AvChip(r);
             roleChip.Place(new AvSlot(786f, 6f, 150f, 18f));
             window.Ticker.Register(roleChip);
-            window.Ticker.Register(new MetTitleTint(plate, plateText, dtg));
+            window.Ticker.Register(new MetTitleTint(plate, plateText, dtg, backing));
         }
 
         // ---- Live state ----------------------------------------------------------------------------
@@ -425,13 +436,16 @@ namespace BoscaliSummer.Modules.Weather.Presentation
     {
         private readonly AvFrame plate;
         private readonly TMP_Text plateText, dtg;
-        public MetTitleTint(AvFrame plate, TMP_Text plateText, TMP_Text dtg) { this.plate = plate; this.plateText = plateText; this.dtg = dtg; }
+        private readonly Image backing;
+        public MetTitleTint(AvFrame plate, TMP_Text plateText, TMP_Text dtg, Image backing) { this.plate = plate; this.plateText = plateText; this.dtg = dtg; this.backing = backing; }
+        public static Color BackingColor() => EnvInk.Alpha(EnvInk.Role("ground"), 0.92f);
         public override void Place(AvSlot slot) { }
         public override void Restyle()
         {
             plate.Paint(EnvInk.Role("key"), Color.clear);
             plateText.color = EnvInk.Role("ground");
             dtg.color = EnvInk.Role("ink-muted");
+            backing.color = BackingColor();
         }
     }
 }

@@ -9,8 +9,9 @@ namespace BoscaliSummer.Modules.Weather.Presentation
     internal sealed class MetFrontsBody : EnvPart
     {
         private const int Rows = 2;
-        private const float RowH = 19f;
+        private const float RowH = 20f;
         private readonly TMP_Text[] word = new TMP_Text[Rows], where = new TMP_Text[Rows], eta = new TMP_Text[Rows];
+        private readonly TMP_Text none;
         private readonly MetFrontKind[] kind = new MetFrontKind[Rows];
         private readonly bool[] used = new bool[Rows];
         private readonly int[] order = new int[MetOfficeModel.MaxFronts];
@@ -26,6 +27,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 where[r] = Txt("Where" + r, AvTextRole.DataSmall, TextAlignmentOptions.MidlineLeft, ink, false, true);
                 eta[r] = Txt("Eta" + r, AvTextRole.DataStrong, TextAlignmentOptions.MidlineRight, r == 0 ? "key" : "ink-dim", false, true);
             }
+            none = Txt("None", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, "ink-dim", false, true);
             Restyle();
         }
 
@@ -52,11 +54,13 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                     AvText.Set(where[r], ""); AvText.Set(eta[r], "");
                 }
             }
+            AvText.Set(none, n == 0 ? "NONE IN ±150 KM · FRONTS ARRIVE WITH TAPE (4B)" : "");
             Redraw();
         }
 
         protected override void Layout(float w, float h)
         {
+            AvLay.Place(none, 0f, RowH, w, RowH - 1f);
             for (int r = 0; r < Rows; r++)
             {
                 float y = r * RowH;
@@ -69,7 +73,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         private void Paint(EnvCanvas c)
         {
             for (int r = 0; r < Rows; r++)
-                if (used[r]) MetFrontGlyph.Draw(c, kind[r], 0f, r * RowH + 1f);
+                if (used[r]) MetFrontGlyph.Draw(c, kind[r], 0f, r * RowH - 1f);
         }
     }
 

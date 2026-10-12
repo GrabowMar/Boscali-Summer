@@ -30,6 +30,8 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             for (int i = 0; i < axisLabel.Length; i++)
             {
                 axisLabel[i] = Txt("Axis" + i, AvTextRole.Micro, TextAlignmentOptions.Center, AxisAt[i] == 0 ? "key" : "ink-muted");
+                // The end labels hang inward (left- and right-aligned): centred on the strip edges they would stand half out of the card.
+                if (i == 0) axisLabel[i].alignment = TextAlignmentOptions.MidlineLeft; else if (i == AxisAt.Length - 1) axisLabel[i].alignment = TextAlignmentOptions.MidlineRight;
                 axisLabel[i].text = AxisAt[i] == 0 ? "NOW" : (AxisAt[i] > 0 ? "+" : "−") + System.Math.Abs(AxisAt[i]) + "'";
             }
             for (int i = 0; i < Pips; i++) pipLabel[i] = Txt("Pip" + i, AvTextRole.Micro, TextAlignmentOptions.Center, "ink", false, true);
@@ -78,7 +80,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 if (on) AvLay.Place(markLabel[i], Mathf.Min(X(model.Marks[i].AtMin, w) + 6f, w - 60f), StripTop - 2f, 60f, 16f);
             }
             for (int i = 0; i < axisLabel.Length; i++)
-                AvLay.Place(axisLabel[i], X(AxisAt[i], w) - 20f, AxisY + 4f, 40f, 15f);
+                AvLay.Place(axisLabel[i], i == 0 ? 0f : i == AxisAt.Length - 1 ? w - 40f : X(AxisAt[i], w) - 20f, AxisY + 4f, 40f, 15f);
             float pw = (w - (Pips - 1) * 2f) / Pips;
             for (int i = 0; i < Pips; i++) AvLay.Place(pipLabel[i], i * (pw + 2f), 0f, pw, MetOfficeLayout.PipsRow);
             nowLabel.gameObject.SetActive(false);

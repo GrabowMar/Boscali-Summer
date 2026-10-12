@@ -23,6 +23,17 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public static string WindLine(int fromDeg, float mps, float kts) =>
             "FROM " + fromDeg.ToString("000", CultureInfo.InvariantCulture) + "° · " + AvNum.Fixed(mps, 0) + " M/S " + AvNum.Fixed(kts, 0) + " KT";
 
+        /// <summary>The chart's wind strip: "WIND 270° · 12 M/S 23 KT", or "WIND CALM" when there is none (a bearing of nothing means nothing). A non-finite wind reads calm.</summary>
+        public static string WindStrip(int fromDeg, float mps)
+        {
+            if (!(mps >= 0.3f) || float.IsInfinity(mps)) return "WIND CALM";
+            return "WIND " + fromDeg.ToString("000", CultureInfo.InvariantCulture) + "° · " + AvNum.Fixed(mps, 0) + " M/S " + AvNum.Fixed(mps * 1.943844f, 0) + " KT";
+        }
+
+        /// <summary>The theater frame's label on two lines, whole kilometres (one line with the mockup's decimals is a third of the chart wide and cannot stand between two fronts): "THEATER" over "164 X 82 KM"; empty without a frame.</summary>
+        public static string Theater(float halfXKm, float halfZKm) =>
+            halfXKm > 0f && halfZKm > 0f ? "THEATER\n" + AvNum.Fixed(halfXKm * 2f, 0) + " X " + AvNum.Fixed(halfZKm * 2f, 0) + " KM" : "";
+
         public static string FrontWord(MetFrontKind kind)
         {
             switch (kind)
@@ -74,8 +85,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>The identity card's third line: the mockup's "▲ 7→8" on the RE-ROLL button, as words and the glyph.</summary>
         public static string RerollLine(int salt) => "NEXT RE-ROLL ▲ CUT · LAYOUT " + RerollSub(salt);
 
-        /// <summary>The identity card: mode and seed on the first line, layout and tape on the second.</summary>
-        public static string IdentityHead(string mode, string seedHex) => mode.ToUpperInvariant() + " · SEED " + seedHex;
+        /// <summary>The identity card: mode and seed on the first line (a client has no mode of the host's to show: the seed alone), layout and tape on the second.</summary>
+        public static string IdentityHead(string mode, string seedHex) => string.IsNullOrEmpty(mode) ? "SEED " + seedHex : mode.ToUpperInvariant() + " · SEED " + seedHex;
         public static string IdentitySub(int salt, string tapeHex) => "LAYOUT " + salt + " / 255 · TAPE T-" + tapeHex;
 
         /// <summary>
