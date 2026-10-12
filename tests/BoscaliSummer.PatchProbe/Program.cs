@@ -1060,6 +1060,10 @@ Type weatherNet = pluginAssembly.GetType("BoscaliSummer.Modules.Weather.Networki
 // offset, speed, dynamic, sets, anchor, set origins) and drops the stepping timeline's fields.
 if ((byte)weatherNet.GetField("ProtocolVersion", AllMembers)!.GetRawConstantValue()! != 8)
     throw new InvalidOperationException("Weather protocol changed without updating its probe");
+Type tapeGolden = pluginAssembly.GetType("BoscaliSummer.Modules.Weather.Domain.TapeGolden", true)!;
+uint liveGolden = (uint)tapeGolden.GetMethod("Compute", AllMembers)!.Invoke(null, null)!;
+if ((uint)weatherNet.GetField("TapeGoldenVector", AllMembers)!.GetRawConstantValue()! != liveGolden)
+    throw new InvalidOperationException("The weather tape tables changed without updating WeatherNet.TapeGoldenVector (and the protocol at release)");
 foreach (var contract in new[] {
     ("BoscaliSummer.Modules.Support.Networking.SupportRequestMessage", new[] { "Protocol:System.Byte", "RequestId:System.Int32", "Action:System.Byte", "X:System.Single", "Y:System.Single", "Z:System.Single" }),
     ("BoscaliSummer.Modules.Support.Networking.SupportResultMessage", new[] { "Protocol:System.Byte", "RequestId:System.Int32", "Action:System.Byte", "Result:System.Byte", "CooldownSeconds:System.Single", "Radius:System.Single", "Duration:System.Single", "Contacts:System.Int32", "X:System.Single", "Y:System.Single", "Z:System.Single" }),

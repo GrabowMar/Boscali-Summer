@@ -22,6 +22,7 @@
   (up to 45 km), lands on its belly
   about 250 m short of the target and a Hexhound GMG rolls off as a live unit. It needs flat dry
   ground; anything that hits it on the way in loses both.
+- **Weather tape**: stories, front markers, contrast-scaled ramps, the multi-keyframe bake and TapeOpening.Solve; the legacy timeline, frontal shield, sky split and cloudShift are gone (held tape; motion is slice 5).
 - **Weather console (Ctrl+O) is the MET OFFICE**: a synoptic chart of fronts, cells and storms, sky and
   METAR readouts, pin any of the 47 skies, hold and pace the weather, set-pieces and an anchor, rain
   override, six one-click scenarios and a key-driven command line. Clients see it read-only.
