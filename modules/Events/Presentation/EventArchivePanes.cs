@@ -1,36 +1,21 @@
 using NOAvionics;
 using System;
-using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Events.Presentation
 {
-    /// <summary>One labelled reading in the archive detail grid.</summary>
-    internal readonly struct DetailFigure
-    {
-        public readonly string Key, Value, Note;
-        public readonly AvState State;
-
-        public DetailFigure(string key, string value, string note = null, AvState state = AvState.Inert)
-        {
-            Key = key;
-            Value = value;
-            Note = note;
-            State = state;
-        }
-    }
-
     /// <summary>
     /// A framed, independently scrolling pane hosting its own <see cref="AvFlow"/>. The archive window's body
-    /// is one flow; the two panes are how it shows an index and a detail side by side without either one
+    /// is one flow; the two panes are how it shows an index and a record side by side without either one
     /// making the whole window taller than the screen.
     /// </summary>
     internal sealed class ScrollPane
     {
         private readonly AvFrame frame;
         private readonly AvScrollView scrollView;
+        private float viewHeight;
 
         public RectTransform Root { get; }
         public RectTransform Content { get; }
@@ -52,10 +37,18 @@ namespace BoscaliSummer.Modules.Events.Presentation
         {
             AvLay.Place(Root, x, y, w, h);
             scrollView.Place(w, h);
-            Flow.ViewportHeight = h;   // a growing part (the dossier's poster) takes the pane's spare height
+            viewHeight = h;
+            Flow.ViewportHeight = h;   // a growing part (the card's plate) takes the pane's spare height
         }
 
         public void ScrollToTop() => scrollView.Scroll.verticalNormalizedPosition = 1f;
+
+        /// <summary>Brings content offset <paramref name="y"/> to the top of the pane, as far as the content allows.</summary>
+        public void ScrollTo(float y)
+        {
+            float travel = Flow.ContentHeight - viewHeight;
+            scrollView.Scroll.verticalNormalizedPosition = travel > 1f ? 1f - Mathf.Clamp01(y / travel) : 1f;
+        }
 
         public void Restyle()
         {
@@ -65,10 +58,10 @@ namespace BoscaliSummer.Modules.Events.Presentation
         }
     }
 
-    /// <summary>The index pane (about 40%) and the detail pane beside it, at a fixed height.</summary>
+    /// <summary>The index pane and the record pane beside it, at a fixed height.</summary>
     internal sealed class ArchivePanesPart : AvPart
     {
-        private const float PaneGap = 10f;
+        private const float PaneGap = 8f;
         private readonly float height, leftWidth, rightWidth;
 
         public ScrollPane Left { get; }
@@ -78,8 +71,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
         {
             Rect = AvLay.Child(parent, "Panes");
             height = paneHeight;
-            // The list's two pager buttons and full record range need at least 288 px inside its padding.
-            leftWidth = Mathf.Max(330f, Mathf.Floor(innerWidth * 0.38f));
+            // The index's pager line (two buttons and the record range) needs about 280 px inside its padding.
+            leftWidth = Mathf.Clamp(Mathf.Floor(innerWidth * 0.27f), 304f, 372f);
             rightWidth = innerWidth - leftWidth - PaneGap;
             Left = new ScrollPane(Rect, ticker, leftWidth);
             Right = new ScrollPane(Rect, ticker, rightWidth);
@@ -107,276 +100,491 @@ namespace BoscaliSummer.Modules.Events.Presentation
         }
     }
 
-    /// <summary>
-    /// The archive's detail pane: kicker, title, poster or model view, a grid of figures, the prose and (for a
-    /// superevent) its timed orders. One arrangement routine serves Measure and Place, and every setter calls
-    /// Changed(), so a long dossier grows the pane's scrollable height instead of running under anything.
-    /// </summary>
-    internal sealed class EventDetailPart : AvPart
+    /// <summary>Small builders the archive's parts share.</summary>
+    internal static class ArchiveUi
     {
-        private const int MaxFigures = 6;
-        private const float PosterHeight = 172f, ModelHeight = 250f, FigureGap = 6f;
-
-        private enum Media { None, Poster, Model }
-
-        private sealed class Cell
+        public static AvQuadGraphic Quads(RectTransform parent, string name)
         {
-            public readonly AvFrame Frame;
-            public readonly TMP_Text Key, Value, Note;
-            public AvState State;
-
-            public Cell(RectTransform parent)
-            {
-                Frame = AvFrame.Add(parent, "Cell", AvChamfer.Diagonal(4f));
-                Key = AvText.Make(parent, "CellKey", AvTextRole.Micro, "", TextAlignmentOptions.TopLeft);
-                Value = AvText.Make(parent, "CellValue", AvTextRole.DataStrong, "", TextAlignmentOptions.TopLeft, true);
-                Note = AvText.Make(parent, "CellNote", AvTextRole.Micro, "", TextAlignmentOptions.TopLeft);
-                AvText.Fit(Key, false);
-                AvText.Fit(Value, true);
-                AvText.Fit(Note, false);
-            }
-
-            public void SetActive(bool on)
-            {
-                Frame.gameObject.SetActive(on);
-                Key.gameObject.SetActive(on);
-                Value.gameObject.SetActive(on);
-                Note.gameObject.SetActive(on);
-            }
+            var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer));
+            go.transform.SetParent(parent, false);
+            var quads = go.AddComponent<AvQuadGraphic>();
+            quads.raycastTarget = false;
+            return quads;
         }
 
-        private readonly TMP_Text kicker, title, body, ordersKey, orders, previewNote;
-        private readonly Image mediaBack, rule;
-        private readonly EventsMfdPanel.EventPlateArt plate;
-        private readonly RawImage modelView;
-        private readonly AvControl rotateLeft, rotateRight;
-        private readonly Cell[] cells = new Cell[MaxFigures];
-        private Media media = Media.None;
-        private int figureCount;
-        private bool previewAvailable = true;
-
-        public Action<float> Rotate;
-
-        public EventDetailPart(RectTransform parent)
+        /// <summary>Four corner brackets just inside a w x h plate, the way a printed plate is registered.</summary>
+        public static void Brackets(AvQuadGraphic quads, float w, float h, Color c, float inset = 6f, float arm = 16f)
         {
-            Rect = AvLay.Child(parent, "Detail");
-            kicker = AvText.Make(Rect, "Kicker", AvTextRole.Micro, "", TextAlignmentOptions.TopLeft, true);
-            title = AvText.Make(Rect, "Title", AvTextRole.Title, "", TextAlignmentOptions.TopLeft, true);
-            rule = AvLay.Solid(Rect, "Rule", Color.clear);
-            mediaBack = AvLay.Solid(Rect, "MediaBack", Color.clear);
-            plate = new EventsMfdPanel.EventPlateArt(Rect, 34f);
-            var modelGo = new GameObject("Model", typeof(RectTransform), typeof(CanvasRenderer));
-            modelGo.transform.SetParent(Rect, false);
-            modelView = modelGo.AddComponent<RawImage>();
-            modelView.raycastTarget = false;
-            previewNote = AvText.Make(Rect, "PreviewNote", AvTextRole.Micro, "MODEL PREVIEW UNAVAILABLE", TextAlignmentOptions.Center);
-            rotateLeft = AvControl.Make(Rect, new AvControl.Spec("", () => Rotate?.Invoke(-30f), AvButtonStyle.Quiet, AvIcon.ChevronLeft));
-            rotateRight = AvControl.Make(Rect, new AvControl.Spec("", () => Rotate?.Invoke(30f), AvButtonStyle.Quiet, AvIcon.ChevronRight));
-            rotateLeft.Help = "Turn the model 30 degrees left.";
-            rotateRight.Help = "Turn the model 30 degrees right.";
-            for (int i = 0; i < cells.Length; i++) cells[i] = new Cell(Rect);
-            body = AvText.Make(Rect, "Body", AvTextRole.Prose, "", TextAlignmentOptions.TopLeft, true);
-            ordersKey = AvText.Make(Rect, "OrdersKey", AvTextRole.Micro, "TIMED ORDERS", TextAlignmentOptions.TopLeft);
-            orders = AvText.Make(Rect, "Orders", AvTextRole.DataSmall, "", TextAlignmentOptions.TopLeft, true);
-            ApplyVisibility();
+            const float t = 2f;
+            float x1 = w - inset, y1 = h - inset;
+            quads.Add(inset, inset, arm, t, c); quads.Add(inset, inset, t, arm, c);
+            quads.Add(x1 - arm, inset, arm, t, c); quads.Add(x1 - t, inset, t, arm, c);
+            quads.Add(inset, y1 - t, arm, t, c); quads.Add(inset, y1 - arm, t, arm, c);
+            quads.Add(x1 - arm, y1 - t, arm, t, c); quads.Add(x1 - t, y1 - arm, t, arm, c);
+        }
+
+        public static string Two(int n) => AvNum.Fixed(n, 0).PadLeft(2, '0');
+    }
+
+    /// <summary>
+    /// The library's header band: the issuing section's block, the title, who issued it and under which
+    /// reference, how many records the shelves hold, and a classification strip along the bottom edge. All of it
+    /// is fixed text in the section's voice except the holdings count, which is the real number of records.
+    /// </summary>
+    internal sealed class LibraryHeaderPart : AvPart
+    {
+        private const string Notice = "RESTRICTED  ·  AIRCREW REFERENCE  ·  THIS COPY IS HELD AT YOUR STATION; NOTHING ON ITS SHELVES IS TRANSMITTED";
+        private const string ShortNotice = "RESTRICTED  ·  AIRCREW REFERENCE  ·  LOCAL COPY, NOT TRANSMITTED";
+
+        private readonly AvFrame frame, crestBox;
+        private readonly Image strip;
+        private readonly TMP_Text crest, title, issuer, holdings, reference, notice;
+        private readonly bool compact;
+
+        public LibraryHeaderPart(RectTransform parent, bool compact)
+        {
+            this.compact = compact;
+            Rect = AvLay.Child(parent, "LibraryHeader");
+            frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(6f));
+            AvLay.Fill(frame.rectTransform);
+            crestBox = AvFrame.Add(Rect, "CrestBox", AvChamfer.Diagonal(4f));
+            crestBox.Bracket = 5f;
+            crest = AvText.Make(Rect, "Crest", AvTextRole.Head, "AIS", TextAlignmentOptions.Center);
+            title = AvText.Make(Rect, "Title", AvTextRole.Title, "RECOGNITION & REFERENCE LIBRARY");
+            issuer = AvText.Make(Rect, "Issuer", AvTextRole.Micro,
+                "ISSUED BY AIR INTELLIGENCE SECTION, EVENT DIRECTORATE  ·  FOR USE IN AIRCREW BRIEFING ROOMS");
+            holdings = AvText.Make(Rect, "Holdings", AvTextRole.Head, "", TextAlignmentOptions.MidlineRight);
+            reference = AvText.Make(Rect, "Reference", AvTextRole.Micro,
+                "EVD PUB 2-14  ·  EDITION 3  ·  AMENDMENT LIST 07", TextAlignmentOptions.MidlineRight);
+            strip = AvLay.Solid(Rect, "Classification", Color.clear);
+            notice = AvText.Make(strip.rectTransform, "Notice", AvTextRole.Micro, Notice, TextAlignmentOptions.Center);
+            AvLay.Fill(notice.rectTransform);
+            AvHelpTip.Attach(frame.gameObject,
+                "The field archive is a reference library. It is local to your station: opening or reading a record sends nothing to the host.");
+            frame.raycastTarget = true;
             Restyle();
         }
 
-        private void SetFigures(IList<DetailFigure> figures)
-        {
-            figureCount = Mathf.Min(figures != null ? figures.Count : 0, MaxFigures);
-            for (int i = 0; i < cells.Length; i++)
-            {
-                bool on = i < figureCount;
-                cells[i].SetActive(on);
-                if (!on) continue;
-                cells[i].Key.text = figures[i].Key ?? "";
-                cells[i].Value.text = figures[i].Value ?? "";
-                cells[i].Note.text = figures[i].Note ?? "";
-                cells[i].State = figures[i].State;
-            }
-        }
+        /// <summary>The real number of records on the shelves; a dash until any are held.</summary>
+        public void SetHoldings(int records, int shelves) =>
+            holdings.text = "HOLDINGS  " + (records > 0 ? AvNum.Thousands(records) : "—") + " RECORDS  ·  " +
+                AvNum.Fixed(shelves, 0) + " SHELVES";
 
-        private void ApplyVisibility()
-        {
-            plate.Root.gameObject.SetActive(media == Media.Poster);
-            mediaBack.gameObject.SetActive(media == Media.Model);
-            modelView.gameObject.SetActive(media == Media.Model);
-            rotateLeft.gameObject.SetActive(media == Media.Model && previewAvailable);
-            rotateRight.gameObject.SetActive(media == Media.Model && previewAvailable);
-            previewNote.gameObject.SetActive(media == Media.Model && !previewAvailable);
-            bool hasOrders = orders.text.Length > 0;
-            ordersKey.gameObject.SetActive(hasOrders);
-            orders.gameObject.SetActive(hasOrders);
-        }
-
-        private void Apply(string kick, string headline, string text, string timedOrders)
-        {
-            kicker.text = kick ?? "";
-            title.text = headline ?? "";
-            body.text = text ?? "";
-            orders.text = timedOrders ?? "";
-            ApplyVisibility();
-            Restyle();
-            Changed();
-        }
-
-        public void ShowEmpty(string headline, string note)
-        {
-            media = Media.None;
-            SetFigures(null);
-            Apply("", headline, note, null);
-        }
-
-        public void ShowDoc(string code, string headline, string text)
-        {
-            media = Media.None;
-            SetFigures(null);
-            Apply(code, headline, text, null);
-        }
-
-        public void ShowEvent(string kick, string headline, Sprite art, AvIcon glyph, IList<DetailFigure> figures,
-            string flavorText, string timedOrders)
-        {
-            media = Media.Poster;
-            plate.Bind(art, glyph, AvStyleHost.FuiColor("ink-dim", AvTheme.Dim));
-            SetFigures(figures);
-            Apply(kick, headline, flavorText, timedOrders);
-        }
-
-        public RawImage ShowAircraft(string kick, string headline, IList<DetailFigure> figures, string description, string note)
-        {
-            media = Media.Model;
-            previewAvailable = true;
-            SetFigures(figures);
-            Apply(kick, headline, string.IsNullOrEmpty(note) ? description : description + "\n\n" + note, null);
-            return modelView;
-        }
-
-        public void SetPreviewAvailable(bool available)
-        {
-            if (previewAvailable == available) return;
-            previewAvailable = available;
-            ApplyVisibility();
-        }
-
-        public override float Measure(float width) => Arrange(width, false);
+        public override float Measure(float width) => compact ? 47f : 66f;
 
         public override void Place(AvSlot s)
         {
             base.Place(s);
-            Arrange(s.W, true, Mathf.Max(0f, s.H - Arrange(s.W, false)));
-        }
-
-        private float Arrange(float w, bool place, float extra = 0f)
-        {
-            float y = 0f;
-            float kh = kicker.text.Length > 0 ? AvText.Height(kicker, w) : 0f;
-            if (place) AvLay.Place(kicker.rectTransform, 0f, y, w, kh);
-            if (kh > 0f) y += kh + 2f;
-            float th = AvText.Height(title, w);
-            if (place) AvLay.Place(title.rectTransform, 0f, y, w, th);
-            y += th + 8f;
-            if (place) AvLay.Place(rule.rectTransform, 0f, y, w, 1f);
-            y += 1f + 10f;
-
-            if (figureCount > 0)
+            const float stripH = 16f;
+            float top = s.H - stripH - 1f, x = 62f;
+            AvLay.Place(crestBox.rectTransform, 8f, 6f, 44f, top - 11f);
+            AvLay.Place(crest.rectTransform, 8f, 6f, 44f, top - 11f);
+            float rightW = Mathf.Max(AvText.Width(holdings), compact ? 0f : AvText.Width(reference)) + 2f;
+            float leftW = s.W - x - rightW - 26f;
+            issuer.gameObject.SetActive(!compact && AvText.Width(issuer) <= leftW);
+            reference.gameObject.SetActive(!compact);
+            if (compact)
             {
-                int cols = Mathf.Min(w < 500f ? 2 : 3, figureCount);
-                float cw = (w - (cols - 1) * FigureGap) / cols;
-                for (int first = 0; first < figureCount; first += cols)
-                {
-                    float rowH = 46f;
-                    for (int i = first; i < Mathf.Min(first + cols, figureCount); i++)
-                    {
-                        Cell cell = cells[i];
-                        float valueH = Mathf.Max(20f, AvText.Height(cell.Value, cw - 20f));
-                        rowH = Mathf.Max(rowH, 6f + 15f + valueH +
-                            (cell.Note.text.Length > 0 ? 2f + 15f : 0f) + 6f);
-                    }
-                    if (place)
-                        for (int i = first; i < Mathf.Min(first + cols, figureCount); i++)
-                        {
-                            float cx = (i - first) * (cw + FigureGap);
-                            Cell cell = cells[i];
-                            float valueH = Mathf.Max(20f, AvText.Height(cell.Value, cw - 20f));
-                            AvLay.Place(cell.Frame.rectTransform, cx, y, cw, rowH);
-                            AvLay.Place(cell.Key.rectTransform, cx + 10f, y + 6f, cw - 20f, 15f);
-                            AvLay.Place(cell.Value.rectTransform, cx + 10f, y + 21f, cw - 20f, valueH);
-                            AvLay.Place(cell.Note.rectTransform, cx + 10f, y + 23f + valueH, cw - 20f,
-                                cell.Note.text.Length > 0 ? 15f : 0f);
-                        }
-                    y += rowH + (first + cols < figureCount ? FigureGap : 12f);
-                }
+                AvLay.Place(title.rectTransform, x, 4f, leftW, top - 6f);
+                AvLay.Place(holdings.rectTransform, s.W - 10f - rightW, 4f, rightW, top - 6f);
             }
-
-            if (media != Media.None)
+            else
             {
-                float mh = media == Media.Model ? ModelHeight : PosterHeight;
-                // Spare pane height goes to the media, but never so much that the art is sliced (poster 1.4:1, model 1.6:1).
-                if (place && extra > 0f) mh += Mathf.Clamp((media == Media.Model ? w / 1.6f : w / 1.4f) - mh, 0f, extra);
-                if (place)
-                {
-                    if (media == Media.Poster)
-                    {
-                        AvLay.Place(plate.Root, 0f, y, w, mh);
-                        plate.Layout(w, mh);
-                    }
-                    else
-                    {
-                        AvLay.Place(mediaBack.rectTransform, 0f, y, w, mh);
-                        AvLay.Place(modelView.rectTransform, 0f, y, w, mh);
-                        modelView.uvRect = EventsMfdPanel.CropUv(new Rect(0f, 0f, 1f, 1f), w, mh);
-                        AvLay.Place(previewNote.rectTransform, 8f, y + mh * 0.5f - 8f, w - 16f, 16f);
-                        AvLay.Place(rotateLeft.Rect, w - 8f - 62f - 4f, y + mh - 8f - 26f, 30f, 26f);
-                        AvLay.Place(rotateRight.Rect, w - 8f - 30f, y + mh - 8f - 26f, 30f, 26f);
-                    }
-                }
-                y += mh + 12f;
+                AvLay.Place(title.rectTransform, x, 5f, leftW, 24f);
+                AvLay.Place(issuer.rectTransform, x, 29f, leftW, 15f);
+                AvLay.Place(holdings.rectTransform, s.W - 10f - rightW, 7f, rightW, 20f);
+                AvLay.Place(reference.rectTransform, s.W - 10f - rightW, 29f, rightW, 15f);
             }
-
-            if (body.text.Length > 0)
-            {
-                float bh = AvText.Height(body, w);
-                if (place) AvLay.Place(body.rectTransform, 0f, y, w, bh);
-                y += bh + 12f;
-            }
-
-            if (orders.text.Length > 0)
-            {
-                float kh2 = AvText.Height(ordersKey, w);
-                if (place) AvLay.Place(ordersKey.rectTransform, 0f, y, w, kh2);
-                y += kh2 + 2f;
-                float oh = AvText.Height(orders, w);
-                if (place) AvLay.Place(orders.rectTransform, 0f, y, w, oh);
-                y += oh + 12f;
-            }
-            return Mathf.Max(1f, y - 12f);
+            AvLay.Place(strip.rectTransform, 1f, top, s.W - 2f, stripH);
+            notice.text = notice.GetPreferredValues(Notice, 100000f, 0f).x <= s.W - 24f ? Notice : ShortNotice;
         }
 
         public override void Restyle()
         {
-            kicker.color = AvStyleHost.FuiColor("key", AvTheme.RailInfo);
-            title.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
-            rule.color = AvStyleHost.FuiColor("hairline", AvTheme.Hairline);
-            mediaBack.color = AvStyleHost.FuiColor("surface-inert", AvTheme.SurfaceInert);
-            modelView.color = Color.white;
-            previewNote.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
-            body.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
-            ordersKey.color = AvStyleHost.FuiColor("key", AvTheme.RailInfo);
-            orders.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
-            AvStyle card = AvStyleHost.FuiStyle("card inert");
-            foreach (Cell cell in cells)
+            AvStyle c = AvStyleHost.FuiStyle("card");
+            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+            crestBox.Paint(AvInk.Inert, AvInk.Frame);
+            crestBox.BracketColor = AvInk.Key;
+            crest.color = AvInk.Key;
+            title.color = AvInk.Ink;
+            issuer.color = AvInk.Key;
+            holdings.color = AvInk.Ink;
+            reference.color = AvInk.Dim;
+            strip.color = EventsMfdPanel.SlabBack(AvState.Caution);
+            notice.color = EventsMfdPanel.SlabInk();
+        }
+    }
+
+    /// <summary>
+    /// The shelves as index tabs: a drawer number, the shelf name and how many records it holds. The open shelf
+    /// stands proud of the rest. Counts are real; an empty shelf reads a dash.
+    /// </summary>
+    internal sealed class ShelfTabsPart : AvPart
+    {
+        private const float Gap = 4f;
+
+        private sealed class Tab
+        {
+            public RectTransform Root;
+            public AvFrame Frame;
+            public Image Rail;
+            public TMP_Text Drawer, Name, Count, Icon;
+            public AvHelpTip Tip;
+            public bool Hover;
+        }
+
+        private readonly Tab[] tabs = new Tab[ArchiveShelf.Count];
+        private readonly Image baseline;
+        private readonly bool compact;
+        private int selected = -1;
+
+        /// <summary>The shelf the pilot clicked.</summary>
+        public Action<int> Picked;
+
+        public ShelfTabsPart(RectTransform parent, bool compact)
+        {
+            this.compact = compact;
+            Rect = AvLay.Child(parent, "ShelfTabs");
+            baseline = AvLay.Solid(Rect, "Baseline", Color.clear);
+            for (int i = 0; i < tabs.Length; i++)
             {
-                cell.Frame.Paint(AvStyleHost.Resolve(card.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(card.Border, AvTheme.Hairline));
-                cell.Key.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
-                cell.Value.color = cell.State == AvState.Inert
-                    ? AvStyleHost.FuiColor("ink", AvTheme.TextPrimary) : EventsMfdPanel.TextColor(cell.State);
-                cell.Note.color = EventsMfdPanel.TextColor(cell.State);
+                int shelf = i;
+                var tab = new Tab { Root = AvLay.Child(Rect, "Shelf " + ArchiveShelf.Names[i]) };
+                tab.Frame = AvFrame.Add(tab.Root, "Frame", new AvChamfer { TL = 7f, TR = 7f });
+                AvLay.Fill(tab.Frame.rectTransform);
+                tab.Rail = AvLay.Solid(tab.Root, "Rail", Color.clear);
+                tab.Drawer = AvText.Make(tab.Root, "Drawer", AvTextRole.Micro, ArchiveUi.Two(i + 1));
+                tab.Name = AvText.Make(tab.Root, "Name", AvTextRole.Head, ArchiveShelf.Names[i]);
+                AvText.Fit(tab.Name, false);
+                tab.Icon = AvIcons.Make(tab.Root, ArchiveShelf.Icons[i], AvGridTokens.IconInline, Color.white);
+                tab.Count = AvText.Make(tab.Root, "Count", AvTextRole.DataSmall, "—", TextAlignmentOptions.MidlineRight);
+                AvHit hit = AvHit.On(tab.Frame);
+                hit.Hover = h => { tab.Hover = h; Restyle(); };
+                hit.Click = e => Picked?.Invoke(shelf);
+                tab.Tip = AvHelpTip.Attach(tab.Frame.gameObject, ArchiveShelf.Help[i]);
+                tabs[i] = tab;
             }
-            plate.Restyle();
-            rotateLeft.Restyle();
-            rotateRight.Restyle();
+            Restyle();
+        }
+
+        public void Select(int shelf)
+        {
+            if (selected == shelf) return;
+            selected = shelf;
+            Restyle();
+        }
+
+        public void SetCount(int shelf, int records)
+        {
+            tabs[shelf].Count.text = records > 0 ? AvNum.Fixed(records, 0) : "—";
+            tabs[shelf].Tip.Text = ArchiveShelf.Help[shelf] + (records > 0
+                ? " " + AvNum.Fixed(records, 0) + " records held."
+                : " No records are held: the game's encyclopedia has not issued any to this station.");
+        }
+
+        public override float Measure(float width) => compact ? 38f : 43f;
+
+        public override void Place(AvSlot s)
+        {
+            base.Place(s);
+            float w = (s.W - (tabs.Length - 1) * Gap) / tabs.Length, h = s.H - 1f;
+            for (int i = 0; i < tabs.Length; i++)
+            {
+                Tab tab = tabs[i];
+                AvLay.Place(tab.Root, i * (w + Gap), 0f, w, h);
+                AvLay.Place(tab.Rail.rectTransform, 7f, 0f, w - 14f, 2f);
+                tab.Drawer.gameObject.SetActive(!compact);
+                if (compact)
+                {
+                    AvLay.Place(tab.Name.rectTransform, 6f, 3f, w - 12f, 16f);
+                    AvLay.Place(tab.Icon.rectTransform, 6f, 20f, 14f, 14f);
+                    AvLay.Place(tab.Count.rectTransform, w - 6f - 44f, 19f, 44f, 16f);
+                }
+                else
+                {
+                    AvLay.Place(tab.Drawer.rectTransform, 8f, 5f, 18f, 15f);
+                    AvLay.Place(tab.Name.rectTransform, 28f, 3f, w - 34f, 19f);
+                    AvLay.Place(tab.Icon.rectTransform, 8f, 23f, 14f, 14f);
+                    AvLay.Place(tab.Count.rectTransform, w - 8f - 70f, 22f, 70f, 17f);
+                }
+            }
+            AvLay.Place(baseline.rectTransform, 0f, s.H - 1f, s.W, 1f);
+        }
+
+        public override void Restyle()
+        {
+            baseline.color = AvInk.Frame;
+            for (int i = 0; i < tabs.Length; i++)
+            {
+                Tab tab = tabs[i];
+                bool open = i == selected;
+                AvStyle style = AvStyleHost.FuiStyle("tab", open ? "latched" : tab.Hover ? "hover" : null);
+                tab.Frame.Paint(AvStyleHost.Resolve(style.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(style.Border, AvTheme.Hairline));
+                tab.Rail.color = style.Rail.HasValue ? AvStyleHost.Resolve(style.Rail, Color.clear) : Color.clear;
+                Color ink = AvStyleHost.Resolve(style.Color, AvTheme.Dim);
+                tab.Name.color = ink;
+                tab.Icon.color = ink;
+                tab.Count.color = open ? AvInk.Ink : AvInk.Dim;
+                tab.Drawer.color = AvInk.Key;
+            }
+        }
+    }
+
+    /// <summary>The index pane's heading: which drawer is open, how it is filed, and the three column captions.</summary>
+    internal sealed class IndexHeadPart : AvPart
+    {
+        private readonly TMP_Text drawer, count, colCode, colName, colTag;
+        private readonly Image rule;
+
+        public IndexHeadPart(RectTransform parent)
+        {
+            Rect = AvLay.Child(parent, "IndexHead");
+            drawer = AvText.Make(Rect, "Drawer", AvTextRole.Head, "");
+            AvText.Fit(drawer, false);
+            count = AvText.Make(Rect, "Count", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineRight);
+            colCode = AvText.Make(Rect, "ColCode", AvTextRole.Micro, "");
+            colName = AvText.Make(Rect, "ColName", AvTextRole.Micro, "");
+            colTag = AvText.Make(Rect, "ColTag", AvTextRole.Micro, "", TextAlignmentOptions.MidlineRight);
+            rule = AvLay.Solid(Rect, "Rule", Color.clear);
+            Restyle();
+        }
+
+        public void Set(string drawerText, string countText, string code, string name, string tag)
+        {
+            drawer.text = drawerText;
+            count.text = countText;
+            colCode.text = code;
+            colName.text = name;
+            colTag.text = tag;
+        }
+
+        public override float Measure(float width) => 40f;
+
+        public override void Place(AvSlot s)
+        {
+            base.Place(s);
+            float countW = AvText.Width(count) + 2f;
+            AvLay.Place(drawer.rectTransform, 2f, 0f, s.W - countW - 10f, 20f);
+            AvLay.Place(count.rectTransform, s.W - countW - 2f, 0f, countW, 20f);
+            AvLay.Place(colCode.rectTransform, ArchiveIndexRow.BoxX, 21f, ArchiveIndexRow.BoxW, 15f);
+            AvLay.Place(colName.rectTransform, ArchiveIndexRow.NameX, 21f, s.W - ArchiveIndexRow.NameX - ArchiveIndexRow.TagW - 12f, 15f);
+            AvLay.Place(colTag.rectTransform, s.W - 8f - ArchiveIndexRow.TagW, 21f, ArchiveIndexRow.TagW, 15f);
+            AvLay.Place(rule.rectTransform, 0f, s.H - 1f, s.W, 1f);
+        }
+
+        public override void Restyle()
+        {
+            drawer.color = AvInk.Key;
+            count.color = AvInk.Dim;
+            colCode.color = colName.color = colTag.color = AvInk.Dim;
+            rule.color = AvInk.Hairline;
+        }
+    }
+
+    /// <summary>
+    /// One line of the index: the boxed designation, the record's name and its class or tier tag, and (while
+    /// the drawer is short enough to afford it) a second line of filing detail. The open record is armed
+    /// (accent fill, edge and rail); the name wraps instead of being cut.
+    /// </summary>
+    internal sealed class ArchiveIndexRow : AvPart
+    {
+        internal const float BoxX = 8f, BoxW = 64f, NameX = BoxX + BoxW + 8f, TagW = 62f;
+
+        private readonly AvFrame frame, box;
+        private readonly Image rail;
+        private readonly TMP_Text code, name, sub, tag;
+        private readonly AvHelpTip tip;
+        private AvState state = AvState.Inert;
+        private bool hover, chosen;
+
+        /// <summary>The record this pooled row currently shows.</summary>
+        public int Item;
+
+        public ArchiveIndexRow(RectTransform parent, Action<int> onClick)
+        {
+            Rect = AvLay.Child(parent, "IndexRow");
+            frame = AvFrame.Add(Rect, "Frame", default(AvChamfer));
+            AvLay.Fill(frame.rectTransform);
+            rail = AvLay.Solid(Rect, "Rail", Color.clear);
+            box = AvFrame.Add(Rect, "CodeBox", AvChamfer.Diagonal(3f));
+            code = AvText.Make(Rect, "Code", AvTextRole.DataSmall, "", TextAlignmentOptions.Center);
+            AvText.Fit(code, false);
+            name = AvText.Make(Rect, "Name", AvTextRole.Label, "", TextAlignmentOptions.TopLeft, true);
+            sub = AvText.Make(Rect, "Sub", AvTextRole.Micro, "", TextAlignmentOptions.TopLeft, true);
+            tag = AvText.Make(Rect, "Tag", AvTextRole.Micro, "", TextAlignmentOptions.TopRight);
+            AvHit hit = AvHit.On(frame);
+            hit.Hover = h => { hover = h; Restyle(); };
+            hit.Click = e => onClick?.Invoke(Item);
+            tip = AvHelpTip.Attach(frame.gameObject, "");
+            Restyle();
+        }
+
+        public void Set(int item, string codeText, string nameText, string subText, string tagText, AvState tint, bool open)
+        {
+            Item = item;
+            code.text = codeText ?? "";
+            name.text = nameText ?? "";
+            sub.text = subText ?? "";
+            tag.text = tagText ?? "";
+            state = tint;
+            chosen = open;
+            tip.Text = "Open the " + (nameText ?? "").ToLowerInvariant() + " record. The up and down arrow keys step through the index.";
+            Restyle();
+        }
+
+        private float NameWidth(float width) => width - NameX - TagW - 14f;
+
+        private float SubHeight(float width) => sub.text.Length > 0 ? 1f + AvText.Height(sub, width - NameX - 10f) : 0f;
+
+        public override float Measure(float width) =>
+            Mathf.Max(30f, AvText.Height(name, NameWidth(width)) + SubHeight(width) + 13f);
+
+        public override void Place(AvSlot s)
+        {
+            base.Place(s);
+            float nameH = AvText.Height(name, NameWidth(s.W)), subH = SubHeight(s.W), boxY = subH > 0f ? (s.H - 20f) * 0.5f : 5f;
+            AvLay.Place(rail.rectTransform, 0f, 0f, 3f, s.H);
+            AvLay.Place(box.rectTransform, BoxX, boxY, BoxW, 20f);
+            AvLay.Place(code.rectTransform, BoxX + 3f, boxY, BoxW - 6f, 20f);
+            AvLay.Place(name.rectTransform, NameX, 7f, NameWidth(s.W), nameH);
+            AvLay.Place(sub.rectTransform, NameX, 8f + nameH, s.W - NameX - 10f, Mathf.Max(0f, subH - 1f));
+            AvLay.Place(tag.rectTransform, s.W - 8f - TagW, 8f, TagW, 15f);
+        }
+
+        public override void Restyle()
+        {
+            AvStyle style = AvStyleHost.FuiStyle("row " + AvStates.Class(state), chosen ? "armed" : hover ? "hover" : null);
+            frame.Paint(AvStyleHost.Resolve(style.Background, AvTheme.SurfaceInert),
+                style.Border.HasValue ? AvStyleHost.Resolve(style.Border, Color.clear) : Color.clear);
+            rail.color = AvStyleHost.Resolve(style.Rail, AvTheme.RailInfo);
+            box.Paint(AvInk.Ground, chosen ? AvInk.Select : AvInk.Frame);
+            code.color = AvInk.Ink;
+            name.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
+            sub.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
+            tag.color = state == AvState.Info ? AvInk.Dim : EventsMfdPanel.TextColor(state);
+        }
+    }
+
+    /// <summary>
+    /// What the index pane carries under its list: the drawer's standing figures (on a unit shelf, the card that
+    /// leads the shelf in each figure; in the event catalog, how the dossiers divide) and, seated on the pane's
+    /// bottom edge, a note of what the drawer holds. Every row is counted or read from the shelf itself.
+    /// </summary>
+    internal sealed class IndexFootPart : AvPart
+    {
+        internal const int MaxRows = 8;
+        private const float CaptionH = 21f, RowH = 22f;
+
+        private sealed class Row
+        {
+            public RectTransform Root;
+            public AvFrame Frame;
+            public TMP_Text Label, Code, Value;
+            public AvHelpTip Tip;
+            public bool Hover;
+            public int Item = -1;
+        }
+
+        private readonly TMP_Text caption, note;
+        private readonly Image rule, noteRule;
+        private readonly Row[] rows = new Row[MaxRows];
+        private int count;
+
+        /// <summary>The record a clicked leader row points at.</summary>
+        public Action<int> Picked;
+
+        public IndexFootPart(RectTransform parent)
+        {
+            Rect = AvLay.Child(parent, "IndexFoot");
+            rule = AvLay.Solid(Rect, "Rule", Color.clear);
+            caption = AvText.Make(Rect, "Caption", AvTextRole.Micro, "");
+            for (int i = 0; i < MaxRows; i++)
+            {
+                var row = new Row { Root = AvLay.Child(Rect, "Leader " + i) };
+                row.Frame = AvFrame.Add(row.Root, "Frame", default(AvChamfer));
+                AvLay.Fill(row.Frame.rectTransform);
+                row.Frame.Stroke = 0f;
+                row.Label = AvText.Make(row.Root, "Label", AvTextRole.Micro, "");
+                row.Code = AvText.Make(row.Root, "Code", AvTextRole.DataSmall, "");
+                AvText.Fit(row.Code, false);
+                row.Value = AvText.Make(row.Root, "Value", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineRight);
+                AvHit hit = AvHit.On(row.Frame);
+                hit.Hover = h => { row.Hover = h; Restyle(); };
+                hit.Click = e => { if (row.Item >= 0) Picked?.Invoke(row.Item); };
+                row.Tip = AvHelpTip.Attach(row.Frame.gameObject, "");
+                rows[i] = row;
+            }
+            noteRule = AvLay.Solid(Rect, "NoteRule", Color.clear);
+            note = AvText.Make(Rect, "Note", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
+            Restyle();
+        }
+
+        public void Begin(string captionText, string noteText)
+        {
+            count = 0;
+            caption.text = captionText;
+            note.text = noteText;
+        }
+
+        /// <param name="item">The record the row opens, or -1 for a row that only states a count.</param>
+        public void Add(string label, string code, string value, int item, string help)
+        {
+            if (count >= MaxRows) return;
+            Row row = rows[count++];
+            row.Label.text = label;
+            row.Code.text = code;
+            row.Value.text = value;
+            row.Item = item;
+            row.Tip.Text = help;
+        }
+
+        public void End()
+        {
+            for (int i = 0; i < MaxRows; i++) rows[i].Root.gameObject.SetActive(i < count);
+            caption.gameObject.SetActive(count > 0);
+            rule.gameObject.SetActive(count > 0);
+            Restyle();
+            Changed();
+        }
+
+        private float RowsHeight => count > 0 ? 8f + CaptionH + count * RowH : 0f;
+
+        public override float Measure(float width) => RowsHeight + 10f + AvText.Height(note, width - 4f) + 2f;
+
+        public override void Place(AvSlot s)
+        {
+            base.Place(s);
+            AvLay.Place(rule.rectTransform, 0f, 4f, s.W, 1f);
+            AvLay.Place(caption.rectTransform, 2f, 10f, s.W - 4f, 16f);
+            for (int i = 0; i < count; i++)
+            {
+                Row row = rows[i];
+                AvLay.Place(row.Root, 0f, 8f + CaptionH + i * RowH, s.W, RowH - 2f);
+                AvLay.Place(row.Label.rectTransform, 6f, 2f, 92f, 16f);
+                AvLay.Place(row.Code.rectTransform, 100f, 1f, 64f, 18f);
+                AvLay.Place(row.Value.rectTransform, 166f, 1f, s.W - 172f, 18f);
+            }
+            // The drawer note sits on the pane's bottom edge, the way a label plate sits on a drawer front.
+            float noteH = AvText.Height(note, s.W - 4f);
+            AvLay.Place(noteRule.rectTransform, 0f, s.H - noteH - 9f, s.W, 1f);
+            AvLay.Place(note.rectTransform, 2f, s.H - noteH - 2f, s.W - 4f, noteH);
+        }
+
+        public override void Restyle()
+        {
+            rule.color = AvInk.Hairline;
+            noteRule.color = AvInk.Hairline;
+            caption.color = AvInk.Key;
+            note.color = AvInk.Dim;
+            foreach (Row row in rows)
+            {
+                bool lit = row.Hover && row.Item >= 0;
+                AvStyle style = AvStyleHost.FuiStyle("row", lit ? "hover" : null);
+                row.Frame.Paint(lit ? AvStyleHost.Resolve(style.Background, AvTheme.SurfaceInert) : Color.clear, Color.clear);
+                row.Label.color = AvInk.Dim;
+                row.Code.color = AvInk.Key;
+                row.Value.color = AvInk.Ink;
+            }
         }
     }
 }
