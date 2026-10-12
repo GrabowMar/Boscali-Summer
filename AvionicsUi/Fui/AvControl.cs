@@ -77,8 +77,8 @@ namespace NOAvionics
 
         public bool Latched { get => latched; set { if (latched == value) return; latched = value; if (value) fx?.Play(AvFxKind.Shine, 0.2f); Restyle(); } }
         public bool Armed { get => armed; set { if (armed == value) return; armed = value; fx?.Set(value ? AvFxKind.Glow : AvFxKind.None, 0.5f, 10f); Restyle(); } }
-        public bool Interactable { get => interactable; set { interactable = value; frame.GetComponent<AvHit>().Interactable = value; Restyle(); } }
-        public string Label { get => text.text; set => text.text = value ?? ""; }
+        public bool Interactable { get => interactable; set { if (interactable == value) return; interactable = value; frame.GetComponent<AvHit>().Interactable = value; Restyle(); } }
+        public string Label { get => text.text; set => AvText.Set(text, value); }
 
         /// <summary>Swap the button's icon after build (play/pause); no-op when the button has none.</summary>
         public void SetIcon(AvIcon icon) { if (glyph != null && icon != AvIcon.None) { AvIcons.Set(glyph, icon, AvGridTokens.IconInline); glyph.color = text.color; } }
@@ -112,8 +112,8 @@ namespace NOAvionics
             }
             frame.Paint(back, edge);
             text.color = ink;
-            frame.BracketColor = ink.WithAlpha(latched || armed || hover ? 0.72f : 0.18f);
-            frame.SetVerticesDirty();
+            Color bracket = ink.WithAlpha(latched || armed || hover ? 0.72f : 0.18f);
+            if (bracket != frame.BracketColor) { frame.BracketColor = bracket; frame.SetVerticesDirty(); }
             if (glyph != null) glyph.color = ink;
             rail.color = s.Rail.HasValue ? AvStyleHost.Resolve(s.Rail, Color.clear) : Color.clear;
         }

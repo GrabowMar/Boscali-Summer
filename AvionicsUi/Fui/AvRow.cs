@@ -20,6 +20,7 @@ namespace NOAvionics
         private bool hover, armed, interactable = true;
         private AvSlot lastSlot;
         private bool placed;
+        private int styledLook = -1, styledGen = -1, styledTrailing = -1;
 
         public AvRow(RectTransform parent, Action onClick = null)
         {
@@ -116,6 +117,10 @@ namespace NOAvionics
 
         public override void Restyle()
         {
+            // A pooled list row is restyled on every rebind; skip when neither the sheet nor the row's look inputs moved.
+            int look = (interactable ? 0 : 1) | (armed ? 2 : 0) | (hover ? 4 : 0) | ((int)state << 3);
+            if (look == styledLook && styledGen == AvStyleHost.FuiGeneration && styledTrailing == trailing.Count) return;
+            styledLook = look; styledGen = AvStyleHost.FuiGeneration; styledTrailing = trailing.Count;
             string st = !interactable ? "disabled" : armed ? "armed" : hover ? "hover" : null;
             AvStyle r = AvStyleHost.FuiStyle("row " + AvStates.Class(state), st);
             frame.Paint(AvStyleHost.Resolve(r.Background, AvTheme.SurfaceInert),

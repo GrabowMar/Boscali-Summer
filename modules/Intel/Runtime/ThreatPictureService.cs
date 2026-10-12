@@ -26,6 +26,7 @@ namespace BoscaliSummer.Modules.Intel.Runtime
         private const float DemandWindowSeconds = 2f;
         private const float RebuildStaggerSeconds = 0.25f;
         private const int MaximumObservationUnits = 4096;
+        private const int ObservationUnitsPerFrame = 512;
         private const int ProfileSearchesPerFrame = 8;
 
         private readonly FactionPicture[] pictures = new FactionPicture[MaximumFactions];
@@ -38,6 +39,8 @@ namespace BoscaliSummer.Modules.Intel.Runtime
         private bool failed;
         private float nextAuthority;
         private float nextObservation;
+        private int observationCursor;
+        private float observationLevel;
         private float missionStart = float.NaN;
         private float lastDemand = float.NegativeInfinity;
         private int searchFrame = -1;
@@ -57,6 +60,7 @@ namespace BoscaliSummer.Modules.Intel.Runtime
             failed = false;
             nextAuthority = 0f;
             nextObservation = 0f;
+            observationCursor = 0;
             missionStart = float.NaN;
             lastDemand = float.NegativeInfinity;
             searchFrame = -1;
@@ -83,9 +87,9 @@ namespace BoscaliSummer.Modules.Intel.Runtime
                 if (!server && now - lastDemand > DemandWindowSeconds) return;
 
                 if (level >= missionStart + PreWarRules.SeedDelaySeconds && !AllPreWarSeeded()) SeedPreWar(level);
-                if (now >= nextObservation)
+                if (observationCursor > 0 || now >= nextObservation)
                 {
-                    nextObservation = now + ObservationSeconds;
+                    if (observationCursor == 0) nextObservation = now + ObservationSeconds;
                     ObservationPass(level);
                 }
                 RebuildOneDue(now, level);
@@ -275,11 +279,21 @@ namespace BoscaliSummer.Modules.Intel.Runtime
         /// </summary>
         private void ObservationPass(float level)
         {
-            for (int p = 0; p < pictureCount; p++) pictures[p].Grid.BeginPass();
+            // Spread over frames, ObservationUnitsPerFrame units at a time. The grids are stamped in place with a
+            // max-time rule, so a half-finished pass only leaves older stamps on units not reached yet.
+            if (observationCursor == 0)
+            {
+                for (int p = 0; p < pictureCount; p++) pictures[p].Grid.BeginPass();
+                observationLevel = level;
+            }
             List<Unit> all = UnitRegistry.allUnits;
-            if (all == null) return;
+            if (all == null) { observationCursor = 0; return; }
             int limit = all.Count < MaximumObservationUnits ? all.Count : MaximumObservationUnits;
-            for (int i = 0; i < limit; i++)
+            int end = Math.Min(limit, observationCursor + ObservationUnitsPerFrame);
+            int start = observationCursor;
+            observationCursor = end < limit ? end : 0;
+            level = observationLevel;
+            for (int i = start; i < end; i++)
             {
                 Unit unit = all[i];
                 if (unit == null || unit.disabled) continue;

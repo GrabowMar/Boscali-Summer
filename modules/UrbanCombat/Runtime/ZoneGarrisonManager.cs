@@ -980,7 +980,14 @@ namespace BoscaliSummer.Garrisons
             GameObject shell, Airbase airbase, Vector3 center, float radius,
             HashSet<int> seen, List<GameObject> result)
         {
-            if (shell == null || !shell.activeInHierarchy || GarrisonOccupancy.IsOccupied(shell) ||
+            if (shell == null) return;
+            // Cheap far-away rejection first: the exact test below uses the shell's bounds centre, which sits
+            // within a few tens of metres of its origin, so 500 m of margin never drops a shell that passes it.
+            Vector3 origin = shell.transform.position - center;
+            origin.y = 0f;
+            float reach = radius + 500f;
+            if (origin.sqrMagnitude > reach * reach) return;
+            if (!shell.activeInHierarchy || GarrisonOccupancy.IsOccupied(shell) ||
                 !shell.scene.IsValid() || shell.scene != airbase.gameObject.scene) return;
             Building networkBuilding = shell.GetComponentInParent<Building>();
             if (networkBuilding != null && (networkBuilding.disabled || networkBuilding.NetworkHQ != null)) return;

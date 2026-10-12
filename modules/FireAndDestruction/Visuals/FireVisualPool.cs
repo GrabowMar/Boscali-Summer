@@ -36,6 +36,8 @@ namespace BoscaliSummer.Fire
             private readonly List<Vector3> frontVertices = new List<Vector3>(FireFrontCell.MaximumVertices * 4);
             private readonly List<int> frontTriangles = new List<int>(FireFrontCell.MaximumVertices * 6);
             private float frontFraction = 1f;
+            private bool constantsApplied, appliedForest;
+            private float appliedSize, appliedLifetime;
 
             public void SetForestCell(FireFrontCell cell, Vector3 normal)
             {
@@ -147,6 +149,7 @@ namespace BoscaliSummer.Fire
             public void Configure(bool forest, GlobalPosition position)
             {
                 Forest = forest;
+                constantsApplied = false;
                 float a = Signature(position, 0.017f, 0.031f);
                 float b = Signature(position, 0.043f, -0.019f);
                 FootprintScale = forest ? Mathf.Lerp(1.06f, 1.34f, a) : Mathf.Lerp(0.32f, 0.53f, a);
@@ -196,36 +199,42 @@ namespace BoscaliSummer.Fire
                 float spread = Mathf.Lerp(FootprintScale * 0.24f, FootprintScale, growth) *
                     (Forest ? ClusterScale : 1f);
 
+                // The size/lifetime block only depends on these; Configure clears the flag on (re)activation.
+                bool refresh = !constantsApplied || appliedForest != Forest ||
+                    appliedSize != SizeScale || appliedLifetime != LifetimeScale;
                 for (int i = 0; i < Systems.Length && i < BaseRates.Length; i++)
                 {
                     ParticleSystem system = Systems[i];
                     if (system == null) continue;
-                    ParticleSystem.MainModule main = system.main;
                     bool ember = i == 3;
-                    if (Forest)
+                    if (refresh)
                     {
-                        // Scale from the authored ranges every tick, without accumulating
-                        // size changes when this pooled effect changes phase or owner.
-                        main.startLifetime = new ParticleSystem.MinMaxCurve(
-                            BaseLifetimes[i].constantMin * LifetimeScale,
-                            BaseLifetimes[i].constantMax * LifetimeScale);
-                        float width = SizeScale * (ember ? 0.32f : 0.72f);
-                        var size = new ParticleSystem.MinMaxCurve(
-                            BaseSizes[i].constantMin * width, BaseSizes[i].constantMax * width);
-                        if (ember) main.startSize = size;
+                        ParticleSystem.MainModule main = system.main;
+                        if (Forest)
+                        {
+                            // Scale from the authored ranges every tick, without accumulating
+                            // size changes when this pooled effect changes phase or owner.
+                            main.startLifetime = new ParticleSystem.MinMaxCurve(
+                                BaseLifetimes[i].constantMin * LifetimeScale,
+                                BaseLifetimes[i].constantMax * LifetimeScale);
+                            float width = SizeScale * (ember ? 0.32f : 0.72f);
+                            var size = new ParticleSystem.MinMaxCurve(
+                                BaseSizes[i].constantMin * width, BaseSizes[i].constantMax * width);
+                            if (ember) main.startSize = size;
+                            else
+                            {
+                                main.startSizeX = size;
+                                main.startSizeZ = size;
+                                float height = i == 2 ? 2.1f : i == 0 ? 1.55f : 1.25f;
+                                main.startSizeY = new ParticleSystem.MinMaxCurve(
+                                    size.constantMin * height, size.constantMax * height);
+                            }
+                        }
                         else
                         {
-                            main.startSizeX = size;
-                            main.startSizeZ = size;
-                            float height = i == 2 ? 2.1f : i == 0 ? 1.55f : 1.25f;
-                            main.startSizeY = new ParticleSystem.MinMaxCurve(
-                                size.constantMin * height, size.constantMax * height);
+                            main.startLifetimeMultiplier = LifetimeScale;
+                            main.startSizeMultiplier = SizeScale;
                         }
-                    }
-                    else
-                    {
-                        main.startLifetimeMultiplier = LifetimeScale;
-                        main.startSizeMultiplier = SizeScale;
                     }
                     ParticleSystem.EmissionModule emission = system.emission;
                     float layerPulse = Forest ? 0.65f + Mathf.PerlinNoise(
@@ -246,6 +255,8 @@ namespace BoscaliSummer.Fire
                     velocity.x = new ParticleSystem.MinMaxCurve(driftX, driftX);
                     velocity.z = new ParticleSystem.MinMaxCurve(driftZ, driftZ);
                 }
+                constantsApplied = true;
+                appliedForest = Forest; appliedSize = SizeScale; appliedLifetime = LifetimeScale;
             }
 
             private static float Smooth01(float value)

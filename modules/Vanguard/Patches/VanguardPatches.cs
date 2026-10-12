@@ -90,7 +90,7 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
     {
         public static bool Intercept(WeaponStation station, Unit owner)
         {
-            if (station?.WeaponInfo == null || !station.WeaponInfo.name.Contains(VanguardKeys.SkywellInfo)) return false;
+            if (!SkywellBoard.IsKit(station?.WeaponInfo)) return false;
             // AI tankers are deployed by SkywellService; their trigger is swallowed.
             if (owner is Aircraft aircraft && aircraft.LocalSim && aircraft.Player != null) Networking.SkywellNet.RequestToggle(aircraft);
             return true;

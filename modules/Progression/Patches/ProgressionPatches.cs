@@ -24,7 +24,7 @@ namespace BoscaliSummer.Modules.Progression.Patches
                 Player player = __instance == null ? null : __instance.Player;
                 if (manager == null || player == null) return;
                 fuelDrawn *= manager.Multiplier(PlayerIdentity.Of(player), PerkEffect.FuelUse);
-                fuelDrawn *= PlaneEngineMap.FuelFactor(manager.TuneFor(__instance));
+                if (manager.HasTunes) fuelDrawn *= PlaneEngineMap.FuelFactor(manager.TuneFor(__instance));
             }
             catch (Exception e)
             {
@@ -42,7 +42,7 @@ namespace BoscaliSummer.Modules.Progression.Patches
             try
             {
                 ProgressionManager manager = ProgressionRuntime.Active;
-                if (manager == null || __instance == null) return;
+                if (manager == null || !manager.HasTunes || __instance == null) return;
                 float limit = PlaneEngineMap.ThrottleCeiling(manager.TuneFor(__instance));
                 if (limit >= 1f) return;
                 ControlInputs inputs = __instance.GetInputs();

@@ -25,6 +25,9 @@ namespace NOAvionics
 
         public bool Overflowed { get; private set; }
 
+        /// <summary>Running hash of every value <see cref="Add"/> has stored since <see cref="Clear"/>.</summary>
+        public ulong ContentHash { get; private set; }
+
         public readonly float[] X;
         public readonly float[] Y;
         public readonly Rgba[] C;
@@ -34,7 +37,10 @@ namespace NOAvionics
         {
             Count = 0;
             Overflowed = false;
+            ContentHash = 0;
         }
+
+        private void Fold(float v) => ContentHash = (ContentHash ^ (ulong)BitConverter.DoubleToInt64Bits(v)) * 1099511628211UL;
 
         /// <summary>
         /// Appends one quad. At capacity it sets <see cref="Overflowed"/> and returns false
@@ -55,6 +61,11 @@ namespace NOAvionics
             X[i + 2] = x2; Y[i + 2] = y2; C[i + 2] = c2;
             X[i + 3] = x3; Y[i + 3] = y3; C[i + 3] = c3;
             Count++;
+            Fold(x0); Fold(y0); Fold(x1); Fold(y1); Fold(x2); Fold(y2); Fold(x3); Fold(y3);
+            Fold(c0.R); Fold(c0.G); Fold(c0.B); Fold(c0.A);
+            Fold(c1.R); Fold(c1.G); Fold(c1.B); Fold(c1.A);
+            Fold(c2.R); Fold(c2.G); Fold(c2.B); Fold(c2.A);
+            Fold(c3.R); Fold(c3.G); Fold(c3.B); Fold(c3.A);
             return true;
         }
     }

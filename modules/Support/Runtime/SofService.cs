@@ -108,7 +108,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             ResetEffects();
             factions.Clear();
             nextAttempt.Clear();
-            nextTick = 0f;
+            nextTick = 0.5f;   // phase: the four 1 Hz services tick on different frames
             loggedNoCampKeys = false;
             loggedNoSite.Clear();
             spawner.ResetForScene();

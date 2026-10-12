@@ -74,7 +74,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             foreach (var pair in factions) pair.Value.Desk.Reset();
             ResetEffects();
             factions.Clear();
-            nextTick = 0f;
+            nextTick = 0.75f;   // phase: the four 1 Hz services tick on different frames
         }
 
         private void OnDestroy()

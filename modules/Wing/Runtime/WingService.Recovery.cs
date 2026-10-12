@@ -327,7 +327,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         {
             Airbase best = null;
             float bestD = TouchdownFieldRadius;
-            foreach (Airbase b in UnityEngine.Object.FindObjectsOfType<Airbase>())
+            foreach (Airbase b in AllFields())
             {
                 if (b == null || b.disabled) continue;
                 float d = (b.transform.position - at).magnitude;

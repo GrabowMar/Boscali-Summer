@@ -272,6 +272,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
         }
 
+        // Scratch for Network (rebuilt every refresh; neither list is kept past the call).
+        private static readonly List<EwSource> networkTrucks = new List<EwSource>(4);
+        private static readonly List<CyberNode> networkHeld = new List<CyberNode>(8);
+
         public static void Network(NetworkRoomView n, CyberStateData s, bool known, in MapFrame frame, int selected, float now)
         {
             n.Nodes.Clear(); n.Anchors.Clear(); n.Terminal.Clear();

@@ -39,6 +39,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private CanvasGroup expandedGroup, compactGroup;
         private TMP_Text compactStatus;
         private int shownHuntId = -1;
+        private bool shown;
+        private EnemyWingView shownWing;
         private float introducedAt;
 
         public void Configure(ISquadView view) => squad = view;
@@ -56,16 +58,20 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 player.Aircraft == null || player.Aircraft.disabled || player.Aircraft.HasEjected())
             {
                 if (root != null) root.SetActive(false);
+                shown = false;
                 return;
             }
 
-            if (root == null) Build();
+            if (root == null) { Build(); shown = false; }
             if (shownHuntId != squad.ActiveHuntId)
             { shownHuntId = squad.ActiveHuntId; introducedAt = Time.unscaledTime; }
             root.SetActive(true);
             AnimateCollapse();
             ClearBoard();
             EnemyWingView wing = squad.GetEnemyWing(squad.ActiveEnemyWingIndex);
+            if (shown && SameWing(shownWing, wing)) return; // nothing displayed changed; the countdown-free text stays
+            shown = true;
+            shownWing = wing;
             string ace = wing.AceName ?? "UNKNOWN";
             int separator = ace.IndexOf(" / ", System.StringComparison.Ordinal);
             string name = separator < 0 ? ace : ace.Substring(0, separator);
@@ -103,6 +109,12 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 portraitFallback.gameObject.SetActive(portrait.sprite == null);
             }
         }
+
+        private static bool SameWing(EnemyWingView a, EnemyWingView b) =>
+            a.Tier == b.Tier && a.MembersAlive == b.MembersAlive && a.MemberCount == b.MemberCount &&
+            a.Returns == b.Returns && a.AbilityMask == b.AbilityMask &&
+            a.Symbol == b.Symbol && a.WingName == b.WingName && a.AceName == b.AceName &&
+            a.Skill == b.Skill && a.Status == b.Status;
 
         private void Build()
         {
@@ -327,6 +339,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             expandedGroup = compactGroup = null;
             compactStatus = null;
             shownHuntId = -1;
+            shown = false;
             introducedAt = 0;
         }
 

@@ -134,10 +134,15 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                         {
                             s.Wet = 0f;
                             float start = Mathf.Max(field.Key.Epoch, missionTime - 180f);
+                            // The history field is built non-moving, so its rain does not depend on the step time: build and sample once.
+                            float oldRain = 0f;
                             for (float time = start; time < missionTime; time += 15f)
                             {
-                                historyField.Build(field.Key, time, field.HalfX, field.HalfZ, field.HourOfDay);
-                                float oldRain = forcedRain ?? Mathf.Clamp01(historyField.Sample(gx, gz).RainRate / 20f);
+                                if (time == start)
+                                {
+                                    historyField.Build(field.Key, time, field.HalfX, field.HalfZ, field.HourOfDay);
+                                    oldRain = forcedRain ?? Mathf.Clamp01(historyField.Sample(gx, gz).RainRate / 20f);
+                                }
                                 s.Wet = AtmosphericSurfaceMath.AdvanceWetness(s.Wet, oldRain, Mathf.Min(15f, missionTime - time));
                             }
                             s.Initialized = true;

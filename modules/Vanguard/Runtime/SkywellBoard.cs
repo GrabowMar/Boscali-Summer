@@ -63,9 +63,19 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             for (int i = 0; i < a.weaponStations.Count; i++)
             {
                 WeaponStation s = a.weaponStations[i];
-                if (s?.WeaponInfo != null && s.WeaponInfo.name.Contains(VanguardKeys.SkywellInfo)) return s;
+                if (IsKit(s?.WeaponInfo)) return s;
             }
             return null;
+        }
+
+        private static readonly Dictionary<WeaponInfo, bool> KitInfos = new Dictionary<WeaponInfo, bool>();
+
+        /// <summary>The info is the SKYWELL kit. The name test runs once per WeaponInfo: Object.name allocates.</summary>
+        public static bool IsKit(WeaponInfo info)
+        {
+            if (info == null) return false;
+            if (!KitInfos.TryGetValue(info, out bool kit)) KitInfos[info] = kit = info.name.Contains(VanguardKeys.SkywellInfo);
+            return kit;
         }
 
         /// <summary>Kit visual root (the mount the deck and tender hang from), or the tanker itself.</summary>
