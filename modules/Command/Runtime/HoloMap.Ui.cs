@@ -29,6 +29,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private bool furnitureDirty;
         private int inkAtFurniture = -1;
         private CanvasGroup mapGroup;
+        private Text nativeGrid;
+        private float nativeGridAlpha = 1f;
 
         /// <summary>Builds the root, the picture, the two vector layers and the labels once, under the HUD canvas: the canvas of the corner map, else the canvas of the HUD's icon layer.</summary>
         private bool PrepareUi()
@@ -62,6 +64,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             picture.raycastTarget = false;
             picture.texture = rt;
             picture.material = additive;
+            picture.uvRect = Upright(1f);
 
             furniture = AvVector.Create(rootRect, "Furniture", 160);
             marks = AvVector.Create(rootRect, "Marks", 4096);
@@ -129,11 +132,17 @@ namespace BoscaliSummer.Modules.Command.Runtime
             {
                 pixels = drawn;
                 float share = drawn / (float)TextureSize;
-                picture.uvRect = new Rect(0f, 0f, share, share);
+                picture.uvRect = Upright(share);
             }
             furnitureDirty = true;
             return true;
         }
+
+        /// <summary>
+        /// The part of the texture the picture is drawn into, read from its top edge down: in the game the render texture comes out turned over against the marks (they are placed by <see cref="HoloView.Project"/>, the
+        /// same numbers as the mesh's view), so the sample runs from the top of the part to its bottom.
+        /// </summary>
+        private static Rect Upright(float share) => new Rect(0f, share, share, -share);
 
         /// <summary>The furniture, redrawn only when the layout, the ink, the shape or the flag's words change (the words set the shelf's gaps).</summary>
         private void DrawFurniture(string flag)
@@ -198,11 +207,31 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 if (mapGroup == null) return;
             }
             if (mapGroup.alpha != alpha) mapGroup.alpha = alpha;
+            FadeNativeGrid(alpha);
+        }
+
+        /// <summary>
+        /// The game's own grid reference (white, at the corner map's lower right) is parented under <c>DynamicMap.hudMapAnchor</c>, outside the root our group sits on, so it stayed up under the hologram's own dim copy of it.
+        /// Its renderer's alpha follows the corner map's: the game only switches the text on and off (<c>enabled</c>) and writes its words, never this alpha.
+        /// </summary>
+        private void FadeNativeGrid(float alpha)
+        {
+            if (nativeGrid == null)
+            {
+                DynamicMap map = SceneSingleton<DynamicMap>.i;
+                GridLabels labels = map != null ? map.gridLabels : null;
+                nativeGrid = labels != null && GridAircraft != null ? GridAircraft(labels) : null;
+                if (nativeGrid == null) return;
+                nativeGridAlpha = nativeGrid.canvasRenderer.GetAlpha();
+            }
+            if (nativeGrid.canvasRenderer.GetAlpha() != alpha * nativeGridAlpha) nativeGrid.canvasRenderer.SetAlpha(alpha * nativeGridAlpha);
         }
 
         /// <summary>Takes our group off the corner map's root: the game has it exactly as it was (its own alpha is never written).</summary>
         private void RestoreMinimap()
         {
+            if (nativeGrid != null) nativeGrid.canvasRenderer.SetAlpha(nativeGridAlpha);
+            nativeGrid = null;
             if (mapGroup == null) return;
             mapGroup.alpha = 1f;
             Destroy(mapGroup);
