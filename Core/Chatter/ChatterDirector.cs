@@ -218,7 +218,7 @@ namespace BoscaliSummer.Core.Chatter
             var aired = new ChatterAired
             {
                 Time = now, Net = e.Speaker.Net, Priority = e.Priority, Speaker = e.Speaker.Callsign, SpeakerId = e.Speaker.Id,
-                Event = e.Event, LineId = e.LineId, Text = e.Text, Seconds = seconds, Cut = cut,
+                Event = e.Event, LineId = e.LineId, Text = e.Text, Seconds = seconds, Cut = cut, Persona = e.Speaker.Persona, Character = e.Speaker.Character,
             };
             AiredCount++;
             Log.Push(aired);

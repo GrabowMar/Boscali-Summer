@@ -190,6 +190,25 @@ B[*]: Night second.
     Check(lib.Events["ok"].Lines.Count == 1 && lib.Events["ok"].Lines[0].Text == "Only." && lib.Events["x"].Lines.Count == 1, "good lines survive, !replace drops earlier ones");
 }
 
+// --- which lines a recorded clip serves
+{
+    var known = new HashSet<string> { "wing.fox3", "wing.splash", "awacs.checkin" };
+    List<string> exact = new(), fallback = new();
+    void Keys(string file, string net) { exact.Clear(); fallback.Clear(); ChatterVoiceKeys.Of(file, net, known.Contains, exact, fallback); }
+    Keys("003_fox3_fireFox3", "wing");
+    Check(exact.Count == 1 && exact[0] == "wing.fox3" && fallback.Count == 0, "number ignored, event and Yappinator alias agree");
+    Keys("fireMissile_01", "wing");
+    Check(exact.Count == 0 && fallback.Contains("wing.fox3") && fallback.Contains("wing.rifle"), "a Yappinator catch-all is a fallback");
+    Keys("9f3a00c1", "wing");
+    Check(exact.Count == 1 && exact[0] == ChatterVoiceKeys.Line("9f3a00c1"), "eight hex digits name one exact line");
+    Keys("checkin-take2", "awacs");
+    Check(exact.Count == 1 && exact[0] == "awacs.checkin", "an event name belongs to the pack's net; unknown words are ignored");
+    Keys("checkin", "wing");
+    Check(exact.Count == 0, "another net's event is not served");
+    Keys("KillGeneric SPLASH", "wing");
+    Check(exact.Count == 1 && exact[0] == "wing.splash", "one clip, one key, however it is named twice");
+}
+
 // --- persona names
 {
     Check(ChatterPersonas.Parse("Professional") == ChatterPersona.Veteran && ChatterPersonas.Parse("aggressive") == ChatterPersona.Hothead &&

@@ -29,6 +29,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         private readonly HashSet<string> warned = new HashSet<string>(StringComparer.Ordinal);
         private readonly CommandNet command = new CommandNet();
         private FlightNets flight;
+        private ChatterVoices voices;
         private readonly Func<ChatterSpeaker, bool> canTalk = s => s.CanTalk == null || s.CanTalk();
         private ChatterStrip strip;
         private WingConfig settings;
@@ -47,6 +48,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             settings = wing;
             log = logger;
             flight = new FlightNets(this);
+            voices = new ChatterVoices(logger);
             Instance = this;
             director.Aired += OnAired;
             LoadPacks();
@@ -76,6 +78,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             command.Reset();
             flight?.Reset();
             ChatterAudio.Reset();
+            if (voices != null && settings != null && !Application.isBatchMode) voices.Activate(settings.VoicePacks.Value, director.Library);
             strip?.Clear();
             nextWorld = 0f;
         }
@@ -85,6 +88,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             director.Aired -= OnAired;
             command.Reset();
             flight?.Reset();
+            voices?.Deactivate();
             if (ReferenceEquals(Instance, this)) Instance = null;
             strip?.Destroy();
             strip = null;
@@ -93,6 +97,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         private void Update()
         {
             if (settings == null) return;
+            voices.Tick();
             director.Level = (ChatterLevel)Mathf.Clamp((int)settings.Radio.Value, 0, 2);
             bool flying = GameManager.GetLocalAircraft(out Aircraft me) && me != null;
             if (flying)
@@ -130,9 +135,19 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
 
         private void OnAired(ChatterAired line)
         {
+            // A recorded voice holds the channel for as long as it really talks.
+            float spoken = voices.Play(line, transform, settings.VoicePackVolume.Value);
+            if (spoken > 0f)
+            {
+                director.Hold(Time.time, spoken);
+                line.Seconds = Mathf.Max(line.Seconds, spoken);
+            }
             ChatterAudio.Transmit(line.Seconds);
             if (strip == null && !Application.isBatchMode) strip = new ChatterStrip(transform);
             strip?.Show(line);
+            // The MFD's tactical log keeps the radio with the game's own messages.
+            BoscaliSummer.Modules.Command.Presentation.MapUi.MfdLogPanel.Radio(
+                ChatterStrip.Tag(line.Net) + " " + (line.Speaker ?? "").ToUpperInvariant() + ": " + line.Text);
         }
 
         private void LoadPacks()

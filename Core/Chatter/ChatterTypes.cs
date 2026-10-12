@@ -39,6 +39,8 @@ namespace BoscaliSummer.Core.Chatter
         public ChatterNet Net;
         public ChatterPriority Priority;
         public string Speaker, SpeakerId, Event, LineId, Text;
+        /// <summary>The speaker's persona and character when the line aired (either may be null): a recorded voice is chosen by them.</summary>
+        public string Persona, Character;
         /// <summary>How long the channel is held for it.</summary>
         public float Seconds;
         /// <summary>It took the channel from a line that was still on air.</summary>
