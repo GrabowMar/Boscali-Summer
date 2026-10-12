@@ -22,6 +22,9 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         private const int TabMap = 0;
         private const int TabComms = 1;
 
+        /// <summary>The console title; the harness builds its console with the same words.</summary>
+        internal const string Title = "MULTIPLAYER DATA LINK";
+
         private static readonly (AvIcon Icon, string Label)[] TabSpecs =
         {
             (AvIcon.Map2, "MAP"),
@@ -96,7 +99,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
         private RectTransform BuildScreen(RectTransform content, float height)
         {
-            console = AvConsole.Build(content, "COM", "MULTIPLAYER COMMS", TabSpecs.Length, Width, height);
+            console = AvConsole.Build(content, "COM", Title, TabSpecs.Length, Width, height);
             chips = console.Chips(3);
             BindAudienceChip();
             console.Tabs(TabSpecs);
@@ -118,13 +121,13 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             float now = Time.unscaledTime;
 
             bool online = comms.Online;
-            string connText = comms.HostSilent ? "HOST NOT ANSWERING"
-                : !online ? "NOT CONNECTED"
-                : comms.IsHost ? "HOSTING COMMS" : "ONLINE";
+            string connText = comms.HostSilent ? "HOST SILENT"
+                : !online ? "NO LINK"
+                : comms.IsHost ? "LINK UP · HOSTING" : "LINK UP";
             chips[0].Set(connText, !online || comms.HostSilent ? AvState.Caution : AvState.Info);
-            chips[1].Set(comms.Channel == CommsChannel.Team ? "TO TEAM / CHANGE" : "TO ALL / CHANGE",
+            chips[1].Set(comms.Channel == CommsChannel.Team ? "NET TEAM · CHANGE" : "NET ALL · CHANGE",
                 comms.Channel == CommsChannel.Team ? AvState.Ready : AvState.Caution);
-            chips[2].Set(ToolName(comms.Tool), comms.Tool == CommsTool.None ? AvState.Inert : AvState.Info);
+            chips[2].Set("PLOT · " + ToolName(comms.Tool), comms.Tool == CommsTool.None ? AvState.Inert : AvState.Info);
 
             switch (console.CurrentPage)
             {
@@ -155,11 +158,9 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
         private string Ambient(CommsClientState state)
         {
-            string line = AvNum.Fixed(state.Board.CountOf(CommsItemKind.Ping), 0) + " PINGS · " +
-                          AvNum.Fixed(state.Board.CountOf(CommsItemKind.Stroke), 0) + " DRAWINGS · " +
-                          AvNum.Fixed(state.Board.CountOf(CommsItemKind.Label), 0) + " LABELS";
-            KeyCode hold = settings.DrawHoldKey.Value;
-            return hold != KeyCode.None ? line + " · HOLD " + KeyName(hold) + " + DRAG TO DRAW" : line;
+            return "PLOT HOLDS " + AvNum.Fixed(state.Board.CountOf(CommsItemKind.Ping), 0) + " PINGS · " +
+                   AvNum.Fixed(state.Board.CountOf(CommsItemKind.Stroke), 0) + " DRAWN · " +
+                   AvNum.Fixed(state.Board.CountOf(CommsItemKind.Label), 0) + " LABELS";
         }
 
         private static string ToolName(CommsTool tool)
@@ -248,18 +249,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             return total / 3600 + "h";
         }
 
-        private string Who(ulong author, string name) => author == comms.LocalId ? "YOU" : name;
-
-        /// <summary>
-        /// How many rows of a paged/pooled list fit the page: everything else on it is
-        /// <paramref name="fixedHeight"/>, a row is 33 px with its gap. A short console gets fewer rows
-        /// instead of a scrollbar; a tall one gets more, so the list is what soaks up the height.
-        /// </summary>
-        private static int FitRows(AvFlow page, float fixedHeight, int max, int min)
-        {
-            float viewport = page.ViewportHeight;
-            if (viewport <= 0f) return max;
-            return Mathf.Clamp(Mathf.FloorToInt((viewport - fixedHeight) / 33f), min, max);
-        }
+        // Names are cleaned to CommsText.MaxName on arrival; the same limit here keeps a ledger column from ever overflowing.
+        private string Who(ulong author, string name) => author == comms.LocalId ? "YOU" : CommsText.Name(name);
     }
 }
