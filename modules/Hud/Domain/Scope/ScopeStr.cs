@@ -9,7 +9,10 @@ namespace BoscaliSummer.Modules.Hud.Domain
     /// </summary>
     internal static class ScopeStr
     {
-        private static readonly string[] Ints = new string[1000];
+        /// <summary>Whole numbers below this are cached (a thousand rounds, a 1200 kJ capacitor, an altitude in feet are all four digits).</summary>
+        public const int IntCache = 10000;
+
+        private static readonly string[] Ints = new string[IntCache];
         private static readonly string[] Pcts = new string[101];
         private static readonly char[] Scratch = new char[128];
 
@@ -20,7 +23,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         public static string SpeedUnitSp(NOAvionics.AvUnits units) => SpeedUnitsSp[units == NOAvionics.AvUnits.Imperial ? 1 : 0];
 
-        /// <summary>"7", cached for 0..999.</summary>
+        /// <summary>"7", cached (made on first use) for 0 to <see cref="IntCache"/> - 1: a value of a thousand or more does not allocate in a steady frame either.</summary>
         public static string Int(int n)
         {
             if ((uint)n >= Ints.Length) return n.ToString(System.Globalization.CultureInfo.InvariantCulture);

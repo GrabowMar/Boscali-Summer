@@ -78,6 +78,8 @@ namespace BoscaliSummer.Tests.Features.Hud
         private static void Words()
         {
             TestAssert.That(ScopeStr.Int(7) == "7" && ReferenceEquals(ScopeStr.Int(7), ScopeStr.Int(7)) && ScopeStr.Int(5000) == "5000", "Integers are cached");
+            TestAssert.That(ReferenceEquals(ScopeStr.Int(1000), ScopeStr.Int(1000)) && ReferenceEquals(ScopeStr.Int(9999), ScopeStr.Int(9999)) && ScopeStr.Int(1234) == "1234", "...four digits too: a thousand rounds, 1200 kJ, no string made per paint");
+            TestAssert.That(ScopeStr.Int(ScopeStr.IntCache) == "10000" && ScopeStr.Int(-3) == "-3", "...and what the cache does not hold is still right");
             TestAssert.That(ScopeStr.Pct(30) == "30%" && ReferenceEquals(ScopeStr.Pct(30), ScopeStr.Pct(30)) && ScopeStr.Pct(-4) == "0%" && ScopeStr.Pct(130) == "100%", "Percents are cached and clamped");
             TestAssert.That(ScopeStr.Cat("END ", 14, " MIN").ToString() == "END 14 MIN", "Cat composes text and an integer");
             TestAssert.That(ScopeStr.Cat("BINGO ", 14, "%  JOKER ", 29, "%").ToString() == "BINGO 14%  JOKER 29%", "Cat composes two integers");

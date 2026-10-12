@@ -66,12 +66,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             lampRow = lampCount > 0 || threatMask != 0;
         }
 
-        /// <summary>The first page that overrides this lamp (by its legend) sets its state, flash and, if it has one, its word.</summary>
+        /// <summary>The first page that overrides this lamp (by its legend) sets its state, flash and, if it has one, its word. A page the pilot has switched off, or the declutter level drops, does not: like its notices, its lamps are silent.</summary>
         private void OverrideLamp(ref Lamp lamp, bool onlyDark)
         {
             if (onlyDark && lamp.State != LampState.Dark) return;
             for (int p = 0; p < pages.Length; p++)
             {
+                if (!CuePriority.Has(allow.Voiced, (ScopePage)p)) continue;
                 LampState state;
                 bool flash;
                 string text;
@@ -147,7 +148,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The system lamps from the left end, the threat lamps against the right end (<see cref="LampLine.Place"/>): one that is not drawn leaves no slot at Lean and Minimal, and a slot at Full.</summary>
         private void PaintLamps(ScopeCanvas g, in BoardRect r, bool flashOn)
         {
-            int total = lampCount + HudThreats.Count, threats = 0;
+            int threats = 0;
             for (int k = 0; k < lampCount; k++) lampWidth[k] = LampLine.Width(lamps[lampOrder[k]].Legend.Length);
             for (int i = 0; i < HudThreats.Count; i++)
                 if ((threatMask & (1 << i)) != 0) { threatOrder[threats] = i; threatWidth[threats++] = LampLine.Width(threatLamps[i].Legend.Length); }
@@ -155,12 +156,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             for (int k = 0; k < lampCount; k++)
             {
                 int i = lampOrder[k];
-                DrawLamp(g, r.X + lampLeft[k], r.Y + ScopeLayout.LampH / 2f, lamps[i], recent[i], k, total, flashOn);
+                DrawLamp(g, r.X + lampLeft[k], r.Y + ScopeLayout.LampH / 2f, lamps[i], recent[i], k, flashOn);
             }
             for (int k = 0; k < threats; k++)
             {
                 int i = threatOrder[k];
-                DrawLamp(g, r.X + threatLeft[k], r.Y + ScopeLayout.LampH / 2f, threatLamps[i], false, lampCount + i, total, flashOn);
+                DrawLamp(g, r.X + threatLeft[k], r.Y + ScopeLayout.LampH / 2f, threatLamps[i], false, lampCount + i, flashOn);
             }
         }
 
@@ -168,11 +169,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// One lamp: a 4 unit square and its word. Lit, the square is filled and the word bold, in the lamp's tone (BRIGHT for a mode that is on, amber for a caution, red for a warning); dark, the square is a hollow DIM
         /// and the word regular DIM. A warning or a lamp in transition dims with the beat. The spawn lamp test lights them in a sweep.
         /// </summary>
-        private void DrawLamp(ScopeCanvas g, float x, float cy, in Lamp lamp, bool changed, int index, int total, bool flashOn)
+        private void DrawLamp(ScopeCanvas g, float x, float cy, in Lamp lamp, bool changed, int index, bool flashOn)
         {
             bool lit, blink;
             ScopeTone tone = SystemsMath.ToneOf(lamp.State);
-            if (booting) { lit = LampTest.Lit(index, total, bootAge); blink = false; tone = Ink; }
+            if (booting) { lit = LampTest.Lit(index, bootAge); blink = false; tone = Ink; }
             else
             {
                 lit = lamp.State != LampState.Dark || changed;

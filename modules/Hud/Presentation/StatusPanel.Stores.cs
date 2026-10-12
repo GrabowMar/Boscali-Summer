@@ -9,11 +9,11 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
     // The stores side of the board: the weapon (HERO), the capacitor (PWR BUS) and the countermeasures (EXPENDABLES), drawn by StoresHeader into their rectangles. What it has to say to the board: which of the three blocks
-    // exist (BoardBlocks.Hero / Pwr / Exp from the header's flags), the surface the header paints on, the images that carry the game's own line art (a sprite cannot go through the stroke canvas), and which native boxes
-    // it stands in for (TickNatives). Nothing here touches the wing side.
+    // exist (BoardBlocks.Hero / Pwr / Exp from the header's flags), the surface the header paints on, the images that carry the game's own line art (a sprite cannot go through the stroke canvas: it is baked into the
+    // mod's alpha mask, StoreIcons), and which native boxes it stands in for (TickNatives). Nothing here touches the wing side.
     internal sealed partial class StatusPanel
     {
-        /// <summary>The native weapon panel's picture: its material is the one the game draws the weapon pictures with (additive; the pictures are white on an opaque black ground).</summary>
+        /// <summary>The native weapon panel's picture: its material is the one the game draws the weapon pictures with (additive; the pictures are white on an opaque black ground), the fallback for a picture that cannot be baked.</summary>
         private static readonly AccessTools.FieldRef<WeaponStatus, Image> WeaponImage = NativeRefs.Field<WeaponStatus, Image>("weaponImage");
 
         private readonly StoresHeader header = new StoresHeader();
@@ -21,9 +21,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private bool headerFault;
         private RawImage[] artImages;
 
-        /// <summary>The 10 Hz read of the stores feed; the THREAT page's countermeasure call says which dispenser pulses DISPENSE.</summary>
-        private void PollStores() =>
+        /// <summary>The 10 Hz read of the stores feed; the THREAT page's countermeasure call says which dispenser pulses DISPENSE. Also where a picture the header asked for is baked: one per tick (<see cref="StoreIcons.Bake"/>).</summary>
+        private void PollStores()
+        {
+            StoreIcons.Bake();
             header.Poll(now, CuePriority.Has(allow.Voiced, ScopePage.Threat) ? ((ThreatPage)pages[(int)ScopePage.Threat]).CallMask : (byte)0);
+        }
 
         /// <summary>The header's own faults are reported once (its id sits past the pages').</summary>
         private void ReportHeaderOnce(Exception e)
@@ -32,8 +35,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         /// <summary>
-        /// Take the material the native weapon panel draws its picture with, so the board draws the same pictures the same way (<see cref="StoreIcons.Material"/>). Without it (the panel or its image is gone) the board
-        /// has no pictures and HERO draws its class glyph: never the sprite on the default material, which would paint its black ground.
+        /// Take the material the native weapon panel draws its picture with (<see cref="StoreIcons.Material"/>): the fallback for a picture the board cannot bake into its own mask. Without it (the panel or its image is
+        /// gone) such a picture is the class glyph: never the sprite on the default material, which would paint its black ground.
         /// </summary>
         private static void TakeArtMaterial(WeaponStatus weaponStatus)
         {
@@ -58,7 +61,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Begin(pal, unit, height, pixel);
             try
             {
-                header.Paint(g, geo, Options.Layout == BoardLayout.Stack, (int)Options.Declutter, StoreIcons.Material != null, now, flashOn);
+                header.Paint(g, geo, Options.Layout == BoardLayout.Stack, (int)Options.Declutter, now, flashOn);
                 headerFault = false;
             }
             catch (Exception e)
@@ -73,8 +76,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         /// <summary>
-        /// Put the pictures the header asked for where it said (<see cref="StoresHeader.Art"/>): each a RawImage over the part of its sprite the header named (the sprite's ink, so the art fills its box), tinted through its
-        /// colour, on the game's own material. Written only when they change; an unused slot is hidden.
+        /// Put the pictures the header asked for where it said (<see cref="StoresHeader.Art"/>): each a RawImage over the part of its picture the header named (the picture's ink, so the art fills its box), tinted through its
+        /// colour like the rest of the ink, on the ordinary UI material over the board's own mask; a picture that could not be baked is its sprite on the game's additive material instead. Written only when they change; an
+        /// unused slot is hidden.
         /// </summary>
         private void PlaceArt(in ScopePalette pal)
         {
@@ -82,18 +86,20 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             for (int i = 0; i < artImages.Length; i++)
             {
                 ArtSlot s = header.Art[i];
-                Sprite sprite = s.Icon > 0 && s.Place.W > 0f && StoreIcons.Material != null ? StoreIcons.Get(s.Icon) : null;
                 RawImage image = artImages[i];
-                Show(image, sprite != null);
-                if (sprite == null) continue;
-                Texture texture = sprite.texture;
-                Rect at = sprite.rect;      // the sprite as it was cut (the whole texture for the game's): the fractions are of that, whatever mesh Unity made for it
+                // The mask is exactly the sprite's part; the sprite itself is the whole texture the game cut it from (an atlas): the fractions are of the sprite's rect, whatever mesh Unity made for it.
+                Sprite sprite = s.Mask || s.Icon <= 0 || s.Place.W <= 0f || StoreIcons.Material == null ? null : StoreIcons.Get(s.Icon);
+                Texture texture = s.Mask && s.Place.W > 0f ? StoreIcons.MaskOf(s.Icon) : sprite != null ? sprite.texture : null;
+                Show(image, texture != null);
+                if (texture == null) continue;
+                Rect at = sprite != null ? sprite.rect : new Rect(0f, 0f, texture.width, texture.height);
                 float tw = texture.width, th = texture.height;
-                // The slot's part is in fractions of the sprite, y down; a texture's v runs up.
+                // The slot's part is in fractions of the picture, y down; a texture's v runs up.
                 var uv = new Rect((at.x + s.Place.U0 * at.width) / tw, (at.y + (1f - s.Place.V1) * at.height) / th, (s.Place.U1 - s.Place.U0) * at.width / tw, (s.Place.V1 - s.Place.V0) * at.height / th);
                 if (image.texture != texture) image.texture = texture;
                 if (image.uvRect != uv) image.uvRect = uv;
-                if (image.material != StoreIcons.Material) image.material = StoreIcons.Material;
+                if (s.Mask) image.material = null;
+                else if (image.material != StoreIcons.Material) image.material = StoreIcons.Material;
                 var c = pal.Of(s.Tone, s.Alpha);
                 var color = new Color(c.R, c.G, c.B, c.A);
                 if (image.color != color) image.color = color;

@@ -87,14 +87,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             string word = SystemsMath.JamWord(j);
             bool on = j.Active;
             ScopeTone tone = on ? Hi : Dim;
-            Sprite sprite = art ? StoreIcons.Get(j.Icon) : null;
-            ArtPlace place = default;
-            if (sprite != null)
-            {
-                Rect size = sprite.rect;
-                place = StoreArt.Fit(StoreIcons.Ink(j.Icon), size.width, size.height, x, cy - StoresLayout.JamIcon / 2f, StoresLayout.JamIcon, StoresLayout.JamIcon);
-            }
-            if (place.W > 0f) Art[JamArt] = new ArtSlot(j.Icon, place, tone, 1f);
+            ArtKind kind = StoreIcons.Pick(j.Icon, out ArtBounds ink, out float width, out float height);
+            ArtPlace place = kind != ArtKind.None ? StoreArt.Fit(ink, width, height, x, cy - StoresLayout.JamIcon / 2f, StoresLayout.JamIcon, StoresLayout.JamIcon) : default;
+            if (place.W > 0f) Art[JamArt] = new ArtSlot(j.Icon, place, tone, 1f, kind == ArtKind.Mask);
             else JamGlyph(g, x + StoresLayout.JamIcon / 2f, cy, tone);
             g.Text("JAM", x + StoresLayout.JamWordX, cy, tone, StoresLayout.WordSize, ScopeAlign.Left, on);
             float bx = x + StoresLayout.JamBarX, by = cy - StoresLayout.JamBarH / 2f, fill = Mathf.Round(StoresLayout.JamBarW * Mathf.Clamp01(j.Charge));

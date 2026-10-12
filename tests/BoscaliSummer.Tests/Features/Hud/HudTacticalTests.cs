@@ -128,8 +128,8 @@ namespace BoscaliSummer.Tests.Features.Hud
 
         private static void Test()
         {
-            TestAssert.That(LampTest.Lit(0, 10, 0.05f) && !LampTest.Lit(9, 10, 0.05f), "The sweep lights lamps in order");
-            TestAssert.That(LampTest.Lit(9, 10, 0.89f), "Every lamp is lit by the end of the sweep");
+            TestAssert.That(LampTest.Lit(0, 0.05f) && !LampTest.Lit(9, 0.05f) && !LampTest.Lit(1, 0.09f) && LampTest.Lit(1, 0.11f), "The sweep lights lamp i once t passes 0.1 i, in order (LAYOUT.md 3.4)");
+            TestAssert.That(LampTest.Lit(9, 0.91f) && LampTest.Lit(0, 1.19f) && !LampTest.Lit(0, 1.21f), "Every lamp is lit by 0.9 s and stays lit until the test ends at 1.2 s");
             TestAssert.That(!LampTest.Running(2f) && LampTest.Caption(2f) == "SYSTEMS ONLINE" && LampTest.Caption(3f) == null,
                 "Test ends, says ONLINE, then gets out of the way");
         }

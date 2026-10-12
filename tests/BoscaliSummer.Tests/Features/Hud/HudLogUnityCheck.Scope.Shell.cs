@@ -241,6 +241,36 @@ public static partial class HudLogUnityCheck
             ScopeChecks(status, "options-nosystems" + t);
             Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
         }
+
+        // MINIMAL keeps SYSTEMS only in its critical form: a FUEL LEAK and JOKER (cautions, 6 s) read after a quiet 2 s post nothing and bring no strip, the engine out and the fire (10 s) post and show. Under the defaults the cautions post.
+        foreach (bool minimal in new[] { false, true })
+        {
+            string level = minimal ? "MINIMAL" : "FULL";
+            status = OptionBoard(size, "systems", 2f, minimal ? PilotOptions("Declutter", Declutter("Minimal")) : PilotOptions(), notices, out canvas, out frame);
+            notices[0] = 0;
+            Fixture("systems", 6f, new ScopeScene(6f, size, frame));
+            Set(frame, "Now", 6f);
+            Call(status, "Present", frame);
+            Canvas.ForceUpdateCanvases();
+            Check(minimal ? notices[0] == 0 && !Shown(status, "scopeRect") : notices[0] > 0 && Shown(status, "scopeRect"), level + ": SYSTEMS' cautions " + (minimal ? "post nothing and bring no strip" : "post and the strip shows") + " (" + notices[0] + " notices)");
+            notices[0] = 0;
+            Fixture("systems", 10f, new ScopeScene(10f, size, frame));
+            Set(frame, "Now", 10f);
+            Call(status, "Present", frame);
+            Call(status, "Animate", 10.5f);      // the strip wipes in over 180 ms when it was not there
+            Canvas.ForceUpdateCanvases();
+            Check(notices[0] > 0 && Shown(status, "scopeRect") && PageTitle(status) == "SYSTEMS", level + ": the engine out and the fire post and show (" + notices[0] + " notices)");
+            Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
+        }
+
+        // A page the pilot has switched off does not override lamps (like its notices, its lamps are silent): an engine out (10 s) lights ENG through SYSTEMS only while that page is on.
+        foreach (bool on in new[] { true, false })
+        {
+            status = OptionBoard(size, "systems", 10f, PilotOptions("PageSystems", on), notices, out canvas, out frame);
+            object eng = ((Array)Field(status, "lamps")).GetValue(6);
+            Check((string)Field(eng, "Legend") == "ENG" && Field(eng, "State").ToString() == (on ? "Warning" : "Dark"), "options: the ENG lamp reads " + Field(eng, "State") + " with the SYSTEMS switch " + (on ? "on" : "off"));
+            Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
+        }
         ScopeReset();
     }
 }

@@ -120,6 +120,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>A coordinate of an axis-aligned line snapped to the device pixel grid (an odd number of pixels wide to a pixel centre).</summary>
         private float Snap(float v, float lw) => ((int)Math.Round(lw / pixel) & 1) == 1 ? Mathf.Floor(v / pixel) * pixel + pixel * 0.5f : Mathf.Round(v / pixel) * pixel;
 
+        /// <summary>
+        /// The y of a horizontal line on the device pixel grid: the row is counted from the TOP of the surface, where the design counts it (LAYOUT.md 0: a line at y 6 is the row from 6 to 7, its centre at floor(y) + 0.5). The canvas
+        /// counts from its bottom, where the same floor would land the line one row too high.
+        /// </summary>
+        private float SnapY(float v, float lw) => height - Snap(height - v, lw);
+
         /// <summary>An edge of a rectangle on the device pixel grid.</summary>
         private float Edge(float v) => Mathf.Round(v / pixel) * pixel;
 
@@ -131,7 +137,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             float lw = Lw(w), ax = X(x1), ay = Y(y1), bx = X(x2), by = Y(y2);
             if (ax == bx) ax = bx = Snap(ax, lw);
-            else if (ay == by) ay = by = Snap(ay, lw);
+            else if (ay == by) ay = by = SnapY(ay, lw);
             Rgba c = C(tone, alpha);
             if (dash <= 0f) { AvStrokes.Line(q, ax, ay, bx, by, lw, c); return; }
             DashedPx(ax, ay, bx, by, Math.Max(pixel, Edge(dash * u)), Math.Max(pixel, Edge(gap * u)), Edge(offset * u), lw, c);      // whole pixels: a 1 px dash never lands half on a pixel and drops out

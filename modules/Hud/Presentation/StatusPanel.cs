@@ -213,15 +213,19 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         /// <summary>
-        /// Where the board's top-right corner goes (<see cref="cornerX"/>, <see cref="cornerY"/>, dock-local): the margins from the screen's corner, the pilot's offsets, the whole box kept on the screen
-        /// (<see cref="ScopeLayout.Anchor"/>). <paramref name="fromTop"/> is how far down from the screen's top the box is, in dock units (the shade's band hangs from there).
+        /// Where the board's top-right corner goes (<see cref="cornerX"/>, <see cref="cornerY"/>, dock-local): the margins from the screen's corner, the pilot's offsets, a box <paramref name="holdHeight"/> tall kept on the
+        /// screen (<see cref="ScopeLayout.Anchor"/>). <paramref name="fromTop"/> is how far down from the screen's top the box ends up, in dock units (the shade's band hangs from there), also when the board hangs under the native panel.
         /// </summary>
-        private void PlaceBoard(in BoardGeometry geo, out float fromTop)
+        private void PlaceBoard(in BoardGeometry geo, float holdHeight, out float fromTop)
         {
-            ScopeLayout.Anchor(screenW, screenH, baseUnit, unit, Options.OffsetX, Options.OffsetY, geo.Width, geo.Height, out float fromRight, out fromTop);
+            ScopeLayout.Anchor(screenW, screenH, baseUnit, unit, Options.OffsetX, Options.OffsetY, geo.Width, holdHeight, out float fromRight, out fromTop);
             cornerX = screenRight - fromRight;
             cornerY = screenTop - fromTop;
-            if (underNative) cornerY = Mathf.Min(cornerY, dock.rect.yMin);
+            if (underNative)
+            {
+                cornerY = Mathf.Min(cornerY, dock.rect.yMin);
+                fromTop = screenTop - cornerY;
+            }
         }
 
         /// <summary>Take our board out of view without destroying it, and give the native boxes back. Idempotent.</summary>
@@ -253,6 +257,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             shellCanvas = pageCanvas = overlayCanvas = frameCanvas = storesCanvas = null;
             nativeSafety = null;
             board = null;
+            StoreIcons.Clear();      // the baked pictures are this scene's
             DestroyShade();
             DestroyBoard();
         }

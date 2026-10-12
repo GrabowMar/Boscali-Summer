@@ -29,6 +29,12 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>Decorative captions and shelves are drawn (the painters' <c>ScopeCanvas.Furniture</c> flag; brackets, ticks and markers stay at every level).</summary>
         public bool Furniture;
 
+        /// <summary>A page counts as live for the scope: it has live content, and it is not SYSTEMS at Minimal without something critical (that level keeps only the critical form of SYSTEMS: no pip, no selection for a caution).</summary>
+        public readonly bool Counts(ScopePage page, bool live, bool critical) => live && (page != ScopePage.Systems || !SystemsCriticalOnly || critical);
+
+        /// <summary>A page may post a notice of <paramref name="tone"/> to the ticker: SYSTEMS at Minimal only its warnings (a fire, an engine out, BINGO), its cautions stay quiet.</summary>
+        public readonly bool Posts(ScopePage page, HudTone tone) => page != ScopePage.Systems || !SystemsCriticalOnly || tone == HudTone.Warning;
+
         /// <summary>
         /// Whether the compact SYSTEMS strip, the scope's cruise form, shows right now: its switch, and under Lean only while something is not nominal (a caution or a warning), under
         /// Minimal only while that is critical (<see cref="SystemsCriticalOnly"/>). When it does not, the scope takes no room in cruise.

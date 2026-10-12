@@ -95,9 +95,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             allow = Options.Effective();
             var voiced = new ScopeEnv(now, frame.Units, Notice);
             var silent = new ScopeEnv(now, frame.Units, null);
+            if (systemsNotice == null) systemsNotice = NoticeFromSystems;
+            var systemsEnv = new ScopeEnv(now, frame.Units, systemsNotice);      // SYSTEMS at Minimal speaks only in its critical form
             ushort live = 0;
             for (int i = 0; i < pages.Length; i++)
-                if (PollPage(pages[i], CuePriority.Has(allow.Voiced, (ScopePage)i) ? voiced : silent)) live |= CuePriority.Bit((ScopePage)i);
+            {
+                var id = (ScopePage)i;
+                ScopeEnv env = !CuePriority.Has(allow.Voiced, id) ? silent : id == ScopePage.Systems ? systemsEnv : voiced;
+                if (allow.Counts(id, PollPage(pages[i], env), pages[i].Critical)) live |= CuePriority.Bit(id);
+            }
             bool notNominal = CuePriority.Has(live, ScopePage.Systems);      // before the mask: the strip's rule is about the aircraft's state, not about a page switch
             selector.Select(live, allow, Options.PageMinSeconds, now, pages[(int)ScopePage.Systems].Critical);
             page = pages[(int)selector.Page];
@@ -110,6 +116,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             hasBoard = true;
             Repaint(true);
             presentedAt = Time.unscaledTime;
+        }
+
+        private Action<string, HudTone, string, string> systemsNotice;
+
+        /// <summary>SYSTEMS' notices, through the declutter level's rule (<see cref="BoardEffective.Posts"/>).</summary>
+        private void NoticeFromSystems(string channel, HudTone tone, string text, string detail)
+        {
+            if (allow.Posts(ScopePage.Systems, tone)) Notice?.Invoke(channel, tone, text, detail);
         }
 
         private bool PollPage(ScopePageBase p, in ScopeEnv env)
@@ -191,17 +205,23 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             Show(root, true);
 
-            // The box's top-right corner on the device pixel grid (position and size in whole pixels), so every edge drawn inside it can be too.
-            PlaceBoard(geo, out float fromTop);
+            // The box's top-right corner on the device pixel grid (position and size in whole pixels), so every edge drawn inside it can be too. The screen holds the box by its CRUISE height (the compact page, nothing
+            // under it): a page, a gauge line or a notice coming and going never moves the page's rectangle.
+            BoardBlocks cruise = blocks;
+            cruise.PageH = ScopeLayout.Compact;
+            cruise.GaugeLines = 0;
+            cruise.Ticker = false;
+            PlaceBoard(geo, ScopeLayout.Compute(cruise).Height, out float fromTop);
             Vector2 rootPosition = new Vector2(OnGrid(cornerX - dock.rect.xMin, phaseX), OnGrid(cornerY - dock.rect.yMin, phaseY));
             if (root.anchoredPosition != rootPosition) root.anchoredPosition = rootPosition;
             Vector2 rootSize = new Vector2(Whole(geo.Width * unit), Whole(geo.Height * unit));
             if (root.sizeDelta != rootSize) root.sizeDelta = rootSize;
-            PaintShade(geo, fromTop);
+            blocks.PageH = target;      // the shade goes where the page is going: its field is baked once for a page change, not on every frame of the wipe
+            PaintShade(ScopeLayout.Compute(blocks), fromTop);
 
             ScopePalette pal = Palette();
             lastPhase = (int)(now * FlashHz * 2f);
-            bool flashOn = (int)(now * FlashHz) % 2 == 0;
+            bool flashOn = lastPhase % 2 == 0;      // FlashHz full cycles a second: on for half of each (LAYOUT.md 3.4, 10: 3 Hz)
             if (geo.Page.Present) PaintPage(pal, geo, compact, strip, flashOn);
             else { Show(scopeRect, false); scopeBeat = false; }
             if (shellToo)

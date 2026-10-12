@@ -31,6 +31,7 @@ namespace BoscaliSummer.Tests.Features.Hud
             DeclutterLevels();
             SwitchesStayOff();
             VoicedPages();
+            MinimalSystems();
             SystemsStrip();
         }
 
@@ -187,6 +188,23 @@ namespace BoscaliSummer.Tests.Features.Hud
             BoardOptions min = At(BoardDeclutter.Minimal);
             min.ScopeMode = BoardScopeMode.Off;
             TestAssert.Eq(min.Effective().Voiced, Mask(ScopePage.Threat, ScopePage.MissileCam, ScopePage.Shot, ScopePage.Approach, ScopePage.Systems), "Minimal drops the quiet pages' voice too, scope mode Off or not");
+        }
+
+        /// <summary>At Minimal SYSTEMS is a live page, and may post to the ticker, only in its critical form: a caution is neither a pip nor a notice. Every other page, and every other level, is unaffected.</summary>
+        private static void MinimalSystems()
+        {
+            BoardEffective min = At(BoardDeclutter.Minimal).Effective();
+            TestAssert.That(!min.Counts(ScopePage.Systems, true, false), "Minimal: a caution on SYSTEMS is not a live page");
+            TestAssert.That(min.Counts(ScopePage.Systems, true, true), "Minimal: its critical form is");
+            TestAssert.That(!min.Counts(ScopePage.Systems, false, true), "...and a page with nothing live never counts");
+            TestAssert.That(min.Counts(ScopePage.Threat, true, false) && min.Counts(ScopePage.Approach, true, false), "Minimal: the pages it keeps count as live as ever");
+            TestAssert.That(!min.Posts(ScopePage.Systems, HudTone.Caution) && !min.Posts(ScopePage.Systems, HudTone.Info), "Minimal: SYSTEMS posts no caution (JOKER, a fuel leak)");
+            TestAssert.That(min.Posts(ScopePage.Systems, HudTone.Warning) && min.Posts(ScopePage.Threat, HudTone.Caution), "Minimal: a fire, an engine out and BINGO are posted, and the other pages speak as ever");
+            foreach (BoardDeclutter level in new[] { BoardDeclutter.Full, BoardDeclutter.Lean })
+            {
+                BoardEffective e = At(level).Effective();
+                TestAssert.That(e.Counts(ScopePage.Systems, true, false) && e.Posts(ScopePage.Systems, HudTone.Caution), level + ": a caution on SYSTEMS is a live page and is posted");
+            }
         }
 
         /// <summary>The compact SYSTEMS strip in cruise: the switch, and what each level adds.</summary>

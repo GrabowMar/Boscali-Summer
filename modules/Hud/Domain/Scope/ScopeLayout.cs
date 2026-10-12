@@ -71,10 +71,11 @@ namespace BoscaliSummer.Modules.Hud.Domain
         // ---- LAYOUT.md 0: the anchor (the box's top-right corner) and the smallest unit: below 1080p a 12 unit word is 10 px, never smaller.
         public const float Margin = 8f, MarginTop = 6f, MinScale = 0.85f;
 
-        // ---- LAYOUT.md 2: the shade. ONE cloud field behind all the blocks (ShadeField): each block's fall-off is a smoothstep over CloudFeather units outside it, the fall-offs combine with MAX, the core is CloudAlpha at the top of
-        // the box and falls by CloudFall over CloudFallY units of box y; the fade distance varies by +-CloudWobble and the core is up to CloudMottle lighter in places; baked one texel per CloudCell units. The band hangs from the top of the screen.
-        public const float CloudAlpha = 0.60f, CloudFeather = 72f, CloudFall = 0.5f, CloudFallY = 380f, CloudWobble = 0.35f, CloudMottle = 0.12f, CloudCell = 4f;
-        public const float BandAlpha = 0.55f, BandHeight = 190f, BandRamp = 160f, BandFadeTop = 60f;
+        // ---- LAYOUT.md 2: the shade. ONE cloud field behind all the blocks (ShadeField): each block's fall-off is a softened smoothstep over CloudFeather units outside it (measured from a point warped by up to CloudWarp units,
+        // so no edge is ruled), the fall-offs combine with MAX, the core is CloudAlpha at the top of the box and falls by CloudFall over CloudFallY units of box y; the fade distance varies by +-CloudWobble and the core is up to
+        // CloudMottle lighter in places; baked one texel per CloudCell units. The band hangs from the top of the screen and ramps in over BandRamp units at its left.
+        public const float CloudAlpha = 0.60f, CloudFeather = 200f, CloudFall = 0.35f, CloudFallY = 380f, CloudWobble = 0.12f, CloudMottle = 0.12f, CloudWarp = 18f, CloudCell = 4f;
+        public const float BandAlpha = 0.55f, BandHeight = 190f, BandRamp = 280f, BandFadeTop = 60f;
 
         // ---- LAYOUT.md 3 (WIDE): box 916 wide. HERO 0..272, gap 12, SAT 284..464, gap 12, WING 476..916.
         public const float WideW = 916f;

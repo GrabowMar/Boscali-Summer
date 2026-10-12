@@ -17,8 +17,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private Image shadeBand;
         private RawImage shadeField;
         private Texture2D fieldTexture;
-        /// <summary>The blocks <see cref="fieldTexture"/> was last baked for: it is baked again only when they change (the page's height while it wipes, a block coming or going, the layout).</summary>
+        /// <summary>The blocks <see cref="fieldTexture"/> was last baked for: it is baked again only when they change (a block coming or going, the layout, the page's height once it has settled).</summary>
         private BoardGeometry fieldFor;
+        /// <summary>The field's alpha as <see cref="ShadeField.Bake"/> writes it; grown when the area is, never per bake.</summary>
+        private byte[] fieldBytes;
 
         private void BuildShade()
         {
@@ -86,25 +88,25 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>
         /// Bake the cloud field over <paramref name="area"/> into <see cref="fieldTexture"/>: white, the field as its alpha, a texel <see cref="ScopeLayout.CloudCell"/> box units across (bilinear when stretched). The
-        /// texture is made once, resized when the area is and written in place: nothing is allocated per bake.
+        /// texture is made once, resized when the area is and written in place: nothing is allocated per bake. Once per change of the blocks (<see cref="PaintShade"/> is given where the page is going, not each frame of
+        /// its wipe), a few milliseconds for a live WIDE board.
         /// </summary>
         private void BakeField(in BoardGeometry geo, in BoardRect area)
         {
-            // ponytail: about 3 ms (a live WIDE board, 285 x 150 texels, four sines each) once per frame of a page's 160 ms wipe, never in steady state; cache the wobble and mottle per column if a profile ever shows it.
-            const float cell = ScopeLayout.CloudCell;
-            int w = Mathf.RoundToInt(area.W / cell), h = Mathf.RoundToInt(area.H / cell);
+            ShadeField.Texels(area, out int w, out int h);
             if (fieldTexture == null)
             {
                 fieldTexture = new Texture2D(w, h, TextureFormat.RGBA32, false) { name = "BoscaliHud_CloudField", filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.HideAndDontSave };
                 shadeField.texture = fieldTexture;
             }
             else if (fieldTexture.width != w || fieldTexture.height != h) fieldTexture.Reinitialize(w, h);
+            if (fieldBytes == null || fieldBytes.Length < w * h) fieldBytes = new byte[w * h];
+            ShadeField.Bake(geo, area, fieldBytes);
             NativeArray<Color32> texels = fieldTexture.GetRawTextureData<Color32>();
-            for (int j = 0; j < h; j++)
+            for (int j = 0; j < h; j++)      // texel row 0 is the bottom, the bake's the top
             {
-                float y = area.Bottom - (j + 0.5f) * cell;      // texel row 0 is the bottom
-                for (int i = 0; i < w; i++)
-                    texels[j * w + i] = new Color32(255, 255, 255, (byte)(ShadeField.At(geo, area.X + (i + 0.5f) * cell, y) * 255f + 0.5f));
+                int from = (h - 1 - j) * w, to = j * w;
+                for (int i = 0; i < w; i++) texels[to + i] = new Color32(255, 255, 255, fieldBytes[from + i]);
             }
             fieldTexture.Apply(false, false);
         }
@@ -116,6 +118,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             if (fieldTexture != null) UnityEngine.Object.Destroy(fieldTexture);
             fieldTexture = null;
+            fieldBytes = null;
             fieldFor = default;
             shadeRect = null;
             shadeBand = null;

@@ -1,7 +1,6 @@
 using System;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Hud.Domain;
-using UnityEngine;
 using static BoscaliSummer.Core.Contracts.ScopeTone;
 
 namespace BoscaliSummer.Modules.Hud.Presentation
@@ -81,25 +80,25 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         /// <summary>
-        /// The weapon's picture in the art box: the game's own sprite, tinted to the state, cropped to the box its ink lives in so it fills the box (the board puts the image where <see cref="Art"/> says); a magazine's spent
-        /// share is the right part of it at a dim INK. Without the picture (a store the game gave none, no material to draw it with) the class glyph instead.
+        /// The weapon's picture in the art box: the game's own sprite as the board's alpha mask (<see cref="StoreIcons"/>), tinted to the state, cropped to the box its ink lives in so it fills the box (the board puts the image
+        /// where <see cref="Art"/> says); a magazine's spent share is the right part of it at a dim INK. Without the picture (a store the game gave none, one not baked yet, one that cannot be drawn) the class glyph instead.
         /// </summary>
         private void PaintArt(ScopeCanvas g, in StoreStation s, ScopeTone tone, float frac, bool magazine, in StoresLayout.HeroPlan p, float x, float y)
         {
             float bx = x + p.ArtX, by = y + p.ArtY;
-            Sprite sprite = art ? StoreIcons.Get(s.Icon) : null;
-            if (sprite != null)
+            ArtKind kind = StoreIcons.Pick(s.Icon, out ArtBounds ink, out float width, out float height);
+            if (kind != ArtKind.None)
             {
-                Rect size = sprite.rect;
-                ArtPlace place = StoreArt.Fit(StoreIcons.Ink(s.Icon), size.width, size.height, bx, by, p.ArtW, p.ArtH);
+                ArtPlace place = StoreArt.Fit(ink, width, height, bx, by, p.ArtW, p.ArtH);
                 if (place.W > 0f)
                 {
+                    bool mask = kind == ArtKind.Mask;
                     if (magazine && frac < 0.999f)
                     {
-                        Art[HeroLit] = new ArtSlot(s.Icon, place.Slice(0f, frac), tone, 1f);
-                        Art[HeroSpent] = new ArtSlot(s.Icon, place.Slice(frac, 1f), Ink, StoresMath.SpentArtAlpha);
+                        Art[HeroLit] = new ArtSlot(s.Icon, place.Slice(0f, frac), tone, 1f, mask);
+                        Art[HeroSpent] = new ArtSlot(s.Icon, place.Slice(frac, 1f), Ink, StoresMath.SpentArtAlpha, mask);
                     }
-                    else Art[HeroLit] = new ArtSlot(s.Icon, place, tone, 1f);
+                    else Art[HeroLit] = new ArtSlot(s.Icon, place, tone, 1f, mask);
                     return;
                 }
             }

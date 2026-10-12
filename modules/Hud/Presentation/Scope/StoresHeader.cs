@@ -9,8 +9,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// The stores side of the TAC BOARD (prototype: <c>takeover/stores.js</c>; LAYOUT.md 3.1 to 3.3), drawn as three separate blocks into the rectangles <see cref="ScopeLayout"/> gives them: HERO (the selected weapon: the rounds,
     /// the arm word, its name and class, its picture, the station rail), PWR BUS (the capacitor as a row of cells) and EXPENDABLES (every dispenser as a dot matrix, the jammer as a bar). Each has a caption shelf, drawn only while
     /// the board has its furniture (<see cref="ScopeCanvas.Furniture"/>). Fed by <see cref="StoresScope"/> (Hud's own provider over the aircraft); a block with no data is not there, and <see cref="WeaponDrawn"/> /
-    /// <see cref="CmDrawn"/> / <see cref="CapDrawn"/> say which native box it replaced (the board shows the native one again otherwise). The weapon's and the jammer's pictures are the game's own sprites: a sprite cannot be
-    /// drawn through the stroke canvas, so the header writes where each goes into <see cref="Art"/> and the board puts an image there (StatusPanel.Stores.cs); without a picture HERO draws the class glyph.
+    /// <see cref="CmDrawn"/> / <see cref="CapDrawn"/> say which native box it replaced (the board shows the native one again otherwise). The weapon's and the jammer's pictures are the game's own sprites (<see cref="StoreIcons"/>: baked into an
+    /// alpha mask): a sprite cannot be drawn through the stroke canvas, so the header writes where each goes into <see cref="Art"/> and the board puts an image there (StatusPanel.Stores.cs); without a picture HERO draws the class glyph.
     /// Painting allocates nothing in a steady frame; the class is partial: <c>StoresHeader.Hero.cs</c>, <c>StoresHeader.Pwr.cs</c> and <c>StoresHeader.Exp.cs</c> hold the blocks.
     /// </summary>
     internal sealed partial class StoresHeader
@@ -25,7 +25,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The cost word (the energy weapon's first word) of the station it was made for.</summary>
         private string costFor, costWord;
         // Set by Paint for the block painters.
-        private bool stack, art;
+        private bool stack;
         private int declutter;
 
         /// <summary>The pictures the last <see cref="Paint"/> wants drawn: the weapon's (lit share, then the spent share of a magazine) and the jammer's. An unused slot has icon 0.</summary>
@@ -80,9 +80,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>
         /// Paint the blocks that exist into their rectangles of <paramref name="geo"/> (board units; the surface's origin is the box's). <paramref name="stackLayout"/> is the classic column, <paramref name="declutterLevel"/> the
-        /// number the DCL flag shows (0 full, 1 lean, 2 minimal), <paramref name="pictures"/> that the game's additive material is at hand (else HERO draws its class glyph).
+        /// number the DCL flag shows (0 full, 1 lean, 2 minimal).
         /// </summary>
-        public void Paint(ScopeCanvas g, in BoardGeometry geo, bool stackLayout, int declutterLevel, bool pictures, float clock, bool flashOn)
+        public void Paint(ScopeCanvas g, in BoardGeometry geo, bool stackLayout, int declutterLevel, float clock, bool flashOn)
         {
             WeaponDrawn = CmDrawn = CapDrawn = false;
             for (int i = 0; i < Art.Length; i++) Art[i] = default;
@@ -91,7 +91,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             now = clock;
             stack = stackLayout;
             declutter = declutterLevel;
-            art = pictures;
             if (HasWeapon && geo.Hero.Present)
             {
                 PaintHero(g, geo.Hero);

@@ -16,6 +16,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>LAYOUT.md 1: DIM is the ink at 0.70 over whatever is behind (there is no plate); DIM text never drops under 0.89 of it (0.623 of the ink).</summary>
         public const float DimAlpha = 0.70f, DimTextFloor = 0.89f;
 
+        /// <summary>How far toward white BRIGHT is lifted from the ink (LAYOUT.md 1: INK 127, 223, 154 is BRIGHT 215, 255, 228, about 0.7 of the way): a lit word reads a clear step above data.</summary>
+        public const float HiLift = 0.70f;
+
         private readonly Rgba ink, hi, dim, amber, red;
 
         public ScopePalette(Rgba ink, Rgba amber, Rgba red)
@@ -23,7 +26,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             this.ink = ink.WithAlpha(1f);
             this.amber = amber.WithAlpha(1f);
             this.red = red.WithAlpha(1f);
-            hi = Mix(this.ink, new Rgba(1f, 1f, 1f), 0.58f);
+            hi = Mix(this.ink, new Rgba(1f, 1f, 1f), HiLift);
             dim = this.ink.WithAlpha(DimAlpha);
         }
 

@@ -10,9 +10,9 @@ using Object = UnityEngine.Object;
 // two AGM-48, a GBU-12, a MALD-X kit, an AAM-1 DART; 48 flares, 30 chaff, a jammer, a 500 kJ capacitor; and what each page's scenario does to it) and the block cases (ScopeStoresBlocks, below). The blocks are drawn on every
 // page's shot (RenderScope calls StoresFixture after the page's own fixture) and on their own over the cruise strip for the variants of the "stores" page. Fixtures are the ONLY place scripted data lives.
 //
-// The game's pictures: the sprites are white lines on an opaque black ground, drawn with the game's additive material, neither of which the offline project has. The fixtures stand in for both: a procedural sprite with a
-// TRANSPARENT ground (its outline is drawn inside the very box StoreArtBounds says the real one's ink lives in, so the crop is what is being judged), a stand-in material, both handed to the board the way the game's
-// are (StoreIcons).
+// The game's pictures: the sprites are light lines on an OPAQUE black ground, made for the game's additive material, neither of which the offline project has. The fixtures stand in for both: a procedural sprite of light lines
+// on opaque black (its outline is drawn inside the very box StoreArtBounds says the real one's ink lives in), a stand-in material, both handed to the board the way the game's are (StoreIcons). The board's own way is to bake
+// each sprite into an alpha mask (StoreIcons.Bake, one per tick): a fixture primes a picture the way a few ticks would (StandInId); StoreMaskCases is the case for the bake itself and the two fallbacks.
 public static partial class HudLogUnityCheck
 {
     private struct LoadStation
@@ -49,6 +49,8 @@ public static partial class HudLogUnityCheck
         public byte Call;
         /// <summary>The game's pictures are at hand (stand-in sprites on the stations of a class that has one, and the stand-in material); false: none of them, so the board draws its glyphs.</summary>
         public bool Pictures = true;
+        /// <summary>A picture handle for the selected station instead of its class's stand-in (0 or less: the class's).</summary>
+        public int HeroIcon;
     }
 
     // ------------------------------------------------------------------------------------------------ the stand-in pictures
@@ -67,13 +69,14 @@ public static partial class HudLogUnityCheck
         return new Vector4((float)Field(b, "X0"), (float)Field(b, "Y0"), (float)Field(b, "X1"), (float)Field(b, "Y1"));
     }
 
-    /// <summary>A procedural sprite named like a vanilla one: a transparent ground and a two pixel outline (a body, a nose, a tail fin and a centre line) inside the ink box the table says that sprite's ink lives in.</summary>
+    /// <summary>A procedural sprite named like a vanilla one: an OPAQUE black ground and a two pixel white outline (a body, a nose, a tail fin and a centre line) inside the ink box the table says that sprite's ink lives in.</summary>
     private static Sprite StandIn(string name, int w = 512, int h = 256)
     {
         if (standIns.TryGetValue(name, out Sprite known) && known != null) return known;
         Vector4 box = StoresInkBox(name);
         int x0 = Mathf.RoundToInt(box.x * w), y0 = Mathf.RoundToInt(box.y * h), x1 = Mathf.RoundToInt(box.z * w) - 1, y1 = Mathf.RoundToInt(box.w * h) - 1, mid = (y0 + y1) / 2, nose = Mathf.Max(6, (y1 - y0) / 2);
         var pixels = new Color32[w * h];
+        for (int i = 0; i < pixels.Length; i++) pixels[i] = new Color32(0, 0, 0, 255);
         var white = new Color32(255, 255, 255, 255);
         void Dot(int x, int y)
         {
@@ -99,8 +102,20 @@ public static partial class HudLogUnityCheck
         return sprite;
     }
 
-    private static int StandInId(string name, int w = 512, int h = 256) =>
-        (int)StoreIconsType().GetMethod("Id", All).Invoke(null, new object[] { StandIn(name, w, h) });
+    /// <summary>False: a fixture leaves its pictures unbaked, as the first tick does (StoreMaskCases drives the bake itself).</summary>
+    private static bool standInPrime = true;
+
+    /// <summary>The handle of a stand-in sprite; primed unless <see cref="standInPrime"/> says not: the picture is asked for and baked now, where the board bakes one per tick, so a still of the board has its pictures.</summary>
+    private static int StandInId(string name, int w = 512, int h = 256)
+    {
+        var id = (int)StoreIconsType().GetMethod("Id", All).Invoke(null, new object[] { StandIn(name, w, h) });
+        if (standInPrime)
+        {
+            StoreIconsType().GetMethod("Pick", All).Invoke(null, new object[] { id, null, 0f, 0f });
+            StoreIconsType().GetMethod("Bake", All).Invoke(null, null);
+        }
+        return id;
+    }
 
     /// <summary>The picture of a store class in the fixtures: one stand-in for a gun, an AAM, an AGM and a bomb under a vanilla sprite's name, one under a name the table does not know (a pod: a modded weapon's), none for a kit or a rail.</summary>
     private static int StoresIconOf(string cls)
@@ -135,7 +150,7 @@ public static partial class HudLogUnityCheck
             float left = x.ReloadAt == i ? x.ReloadLeft : x.Reload2Left, total = x.ReloadAt == i ? x.ReloadTotal : x.Reload2Total;
             stations.SetValue(s.Fill(s.Domain("StoreStation"), "Class", s.DomainEnum("StoreClass", st.Cls), "Name", st.Name, "Ammo", n, "Max", st.Max, "Slot", st.Cls == "Gun" ? 0 : ++slot,
                 "Reloading", rel, "ReloadElapsed", rel ? 1f - left / total : float.NaN, "ReloadLeftS", rel ? left : float.NaN, "FiredAgeS", x.FiredAt == i ? x.FiredAge : 99f,
-                "Icon", x.Pictures ? StoresIconOf(st.Cls) : 0), i);
+                "Icon", x.Pictures ? (i == x.Sel && x.HeroIcon > 0 ? x.HeroIcon : StoresIconOf(st.Cls)) : 0), i);
         }
         Array cm = BuildCm(s, x, out int c);
         return s.Fill(s.Domain("StoresScope"), "Stations", stations, "StationCount", x.Load.Length, "Selected", x.Sel, "Safe", x.Safe, "Link", x.Link, "TurretAuto", x.Trt,
@@ -376,7 +391,7 @@ public static partial class HudLogUnityCheck
         return v;
     }
 
-    /// <summary>What every stores case must keep true: each word sits inside its block, none is narrower than its content, no two words overlap, and every picture is on the game's material, never the default, inside its block.</summary>
+    /// <summary>What every stores case must keep true: each word sits inside its block, none is narrower than its content, no two words overlap, and every picture is inside its block and drawn one of the two ways: the board's mask on the default UI material, or (a picture that could not be baked) the sprite on the game's material, never the default.</summary>
     private static void StoresChecks(StoresView v, string tag)
     {
         var blocks = new List<Rect>();
@@ -402,13 +417,15 @@ public static partial class HudLogUnityCheck
         for (int i = 0; i < v.Art.Length; i++)
         {
             if (v.Art[i] == null) continue;
-            Check(material != null && v.Art[i].material == (Material)material && v.Art[i].material != Canvas.GetDefaultCanvasMaterial(), tag + ": picture " + i + " is drawn on the game's material, never the default");
+            bool mask = v.Art[i].texture != null && v.Art[i].texture.name.StartsWith("BoscaliHud_StoreMask_");
+            if (mask) Check(v.Art[i].material == Canvas.GetDefaultCanvasMaterial(), tag + ": picture " + i + " is the board's mask on the ordinary UI material");
+            else Check(material != null && v.Art[i].material == (Material)material && v.Art[i].material != Canvas.GetDefaultCanvasMaterial(), tag + ": picture " + i + " is drawn on the game's material, never the default");
             Check(StoresInside(v.ArtBox[i], i == 2 ? v.Exp : v.Hero, 1.5f), tag + ": picture " + i + " " + v.ArtBox[i] + " sits inside " + (i == 2 ? "EXPENDABLES " + v.Exp : "HERO " + v.Hero));
         }
     }
 
-    private static readonly Color StoresInk = new Color32(56, 222, 82, 255), StoresAmber = new Color32(243, 217, 74, 255);
-    private static Color StoresBright => Color.Lerp(StoresInk, Color.white, 0.58f);
+    private static readonly Color StoresInk = new Color32(127, 223, 154, 255), StoresAmber = new Color32(255, 216, 74, 255);
+    private static Color StoresBright => Color.Lerp(StoresInk, Color.white, 0.70f);
 
     private static bool StoresTint(Color a, Color b) => Mathf.Abs(a.r - b.r) < 0.01f && Mathf.Abs(a.g - b.g) < 0.01f && Mathf.Abs(a.b - b.b) < 0.01f;
 
@@ -423,7 +440,8 @@ public static partial class HudLogUnityCheck
         Check(Mathf.Abs(at.width / at.height - StoresInkAspect(sprite)) < 0.1f * StoresInkAspect(sprite), tag + ": picture " + slot + " keeps its aspect: " + at.width / at.height);
         Vector4 ink = StoresInkBox(sprite);
         Rect uv = image.uvRect;
-        Check(Mathf.Abs(uv.xMin - ink.x) < 0.002f && Mathf.Abs(uv.xMax - ink.z) < 0.002f && Mathf.Abs(uv.yMin - (1f - ink.w)) < 0.002f && Mathf.Abs(uv.yMax - (1f - ink.y)) < 0.002f,
+        const float slack = 0.006f;      // the mask's ink box is measured on the baked pixels (the stand-in's 2 px lines reach a pixel past the table's box): about 3 texels of 512
+        Check(Mathf.Abs(uv.xMin - ink.x) < slack && Mathf.Abs(uv.xMax - ink.z) < slack && Mathf.Abs(uv.yMin - (1f - ink.w)) < slack && Mathf.Abs(uv.yMax - (1f - ink.y)) < slack,
             tag + ": picture " + slot + " shows the ink's part of " + sprite + ": " + uv + " for " + ink);
     }
 
@@ -548,7 +566,8 @@ public static partial class HudLogUnityCheck
         StoresBlockShot("empty-dispenser", hd, null, x => { x.Rdr = 0; x.Ir = 9; }, (v, tag) =>
         {
             StoresSays(v, tag, "EMPTY", "0", "9", "LOW", "FLR", "CHF");
-            Check(v.Word("EMPTY").Label.color.r > 0.95f && v.Word("EMPTY").Label.color.g < 0.6f, tag + ": EMPTY is red");
+            Color red = v.Word("EMPTY").Label.color;
+            Check(red.r > 0.95f && red.g < 0.7f && red.b < 0.7f && red.r - red.g > 0.25f, tag + ": EMPTY is red (the theme's alert, #ffa094): " + red);
             Check(Mathf.Abs(v.Word("EMPTY").Ink.xMin - (v.Exp.x + 68f)) < 1.5f, tag + ": EMPTY stands where the matrix would");
         });
         // The THREAT page calls for chaff: DISPENSE, the call brackets, the capacitor draining, the jammer on.
@@ -601,6 +620,7 @@ public static partial class HudLogUnityCheck
             Check(v.Word("/1500").Ink.xMax <= v.Hero.x + 156f, tag + ": the load ends before the arm column: " + v.Word("/1500").Ink.xMax);
             Check(v.Word("1500").Ink.height < 35f, tag + ": the numeral shrank");
         });
+        StoreMaskCases();
         // LEAN: no captions, no shelves, DCL 1 where the arm word's row has room, and EXPENDABLES pulled up under the cells.
         StoresBlockShot("lean", hd, PilotOptions("Declutter", Declutter("Lean")), StoresCruise, (v, tag) =>
         {
@@ -611,6 +631,122 @@ public static partial class HudLogUnityCheck
             StoresWord dcl = v.Word("DCL 1");
             Check(Mathf.Abs(dcl.Ink.xMax - (v.Hero.x + 266f)) < 1.5f && Mathf.Abs(dcl.Ink.center.y - (v.Hero.y + 23f)) < 2.5f, tag + ": the flag takes the arm word's row, right edge at 266: " + dcl.Ink);
         });
+    }
+
+    /// <summary>The number of baked masks of the stand-in <paramref name="name"/> alive (the mask's texture carries the sprite's name), or of every one with an empty name.</summary>
+    private static int StoreMasksAlive(string name)
+    {
+        int n = 0;
+        foreach (Texture2D t in Resources.FindObjectsOfTypeAll<Texture2D>()) if (t.name.StartsWith("BoscaliHud_StoreMask_" + name)) n++;
+        return n;
+    }
+
+    /// <summary>
+    /// The line art as the board's alpha mask (LAYOUT.md 1): a stand-in sprite of light lines on OPAQUE black. Until it is baked the board draws the glyph; one bake per call of StoreIcons.Bake (the board's 10 Hz tick), in the
+    /// order the header asked; the mask is white with alpha near 0 on the ground and near 1 on the lines, the ink box measured from it; it is drawn on the default UI material tinted to the tone, with no private native material
+    /// needed; asked again it does not bake again; a picture that cannot be baked (a side over 1024) falls back to the sprite on the game's material, and without that material to the glyph; and tearing the board down
+    /// destroys every mask.
+    /// </summary>
+    private static void StoreMaskCases()
+    {
+        var hd = new Vector2(1920, 1080);
+        Type icons = StoreIconsType();
+        icons.GetMethod("Clear", All).Invoke(null, null);
+        Check(StoreMasksAlive("") == 0, "mask: Clear leaves no mask texture alive: " + StoreMasksAlive(""));
+        standInPrime = false;
+        StoresArt(false);      // no native material at all: the mask path does not need it
+        MakeBoard(hd, 2f, out Canvas canvas, out object status, out object frame);
+        Set(status, "Options", PilotOptions());
+        var spec = new StoresSpec { Sel = 1 };       // the first AAM-4, ARMED: BRIGHT art
+        var scene = new ScopeScene(2f, hd, frame);
+        FixtureSystems(2f, scene);
+        scene.Publish(BuildStores(scene, spec));
+        standInPrime = true;
+        Set(frame, "Now", 2f);
+
+        // Present is the board's 10 Hz tick: it bakes at most one picture, BEFORE it paints, and painting is what asks for pictures. So tick 1 asks (the glyphs), tick 2 bakes HERO's, tick 3 the jammer's.
+        Call(status, "Present", frame);
+        Canvas.ForceUpdateCanvases();
+        StoresView v = StoresViewOf(status);
+        Check(v.Art[0] == null && v.Art[2] == null, "mask: nothing is baked yet, so HERO and the jammer draw their glyphs, not a plate");
+        Check(StoreMasksAlive("") == 0, "mask: ...and nothing was baked by being looked at");
+        Call(status, "Present", frame);
+        Canvas.ForceUpdateCanvases();
+        v = StoresViewOf(status);
+        Check(StoreMasksAlive("") == 1 && v.Art[0] != null && v.Art[2] == null, "mask: tick 2 bakes ONE picture, HERO's (asked for first); the jammer's still waits: " + StoreMasksAlive(""));
+        Call(status, "Present", frame);
+        Canvas.ForceUpdateCanvases();
+        v = StoresViewOf(status);
+        Check(StoreMasksAlive("") == 2 && v.Art[0] != null && v.Art[2] != null, "mask: tick 3 bakes the jammer's: " + StoreMasksAlive(""));
+        StoresChecks(v, "mask");
+
+        // What the mask is: white, alpha near 0 on the black ground and near 1 on the lines, and the ink box measured from the pixels.
+        RawImage art = v.Art[0];
+        var texture = (Texture2D)art.texture;
+        Check(texture.name == "BoscaliHud_StoreMask_weaponIcon_AAM4" && texture.format == TextureFormat.RGBA32 && texture.mipmapCount == 1 && texture.filterMode == FilterMode.Bilinear && texture.wrapMode == TextureWrapMode.Clamp,
+            "mask: an RGBA32 texture, no mipmaps, bilinear, clamped: " + texture.name + " " + texture.format + " " + texture.mipmapCount);
+        Color32[] px = texture.GetPixels32();
+        int w = texture.width, h = texture.height;
+        Vector4 box = StoresInkBox("weaponIcon_AAM4");
+        int top = Mathf.RoundToInt(box.y * h), bottom = Mathf.RoundToInt(box.w * h) - 1, mid = (top + bottom) / 2, left = Mathf.RoundToInt(box.x * w);
+        Color32 Pixel(int x, int fromTop) => px[(h - 1 - fromTop) * w + x];
+        Check(Pixel(1, 1).a <= 4 && Pixel(w - 2, h - 2).a <= 4 && Pixel(left + 100, (top + mid) / 2).a <= 4, "mask: the black ground is clear (alpha near 0), also inside the outline");
+        Color32 line = Pixel(left + 100, top), centre = Pixel(left + 100, mid);
+        Check(line.a >= 250 && centre.a >= 250 && line.r == 255 && line.g == 255 && line.b == 255 && Pixel(1, 1).r == 255, "mask: a line is solid alpha (near 1) and every pixel white, the tint is the colour's: " + line + " " + centre);
+        int clear = 0, solid = 0;
+        foreach (Color32 c in px) { if (c.a <= 4) clear++; if (c.a >= 250) solid++; }
+        Check(clear > w * h * 9 / 10 && solid > 400 && clear + solid == w * h, "mask: every texel is either clear (the ground) or solid (a line): " + clear + " clear, " + solid + " solid of " + w * h);
+        int aamId = (int)icons.GetMethod("Id", All).Invoke(null, new object[] { StandIn("weaponIcon_AAM4") });
+        object[] pick = { aamId, null, 0f, 0f };
+        string kind = icons.GetMethod("Pick", All).Invoke(null, pick).ToString();
+        object ink = pick[1];
+        Check(kind == "Mask" && Mathf.Abs((float)Field(ink, "X0") - box.x) < 0.006f && Mathf.Abs((float)Field(ink, "X1") - box.z) < 0.006f && Mathf.Abs((float)Field(ink, "Y0") - box.y) < 0.006f && Mathf.Abs((float)Field(ink, "Y1") - box.w) < 0.006f,
+            "mask: the ink box is measured from the baked pixels: " + kind + " X " + Field(ink, "X0") + ".." + Field(ink, "X1") + " Y " + Field(ink, "Y0") + ".." + Field(ink, "Y1") + " for " + box);
+
+        // Drawn like the rest of the ink: the default UI material, the tone's colour (ARMED: BRIGHT), no private material needed (none is set).
+        Check(art.material == Canvas.GetDefaultCanvasMaterial() && Field(icons, "Material") == null, "mask: on the ordinary UI material with no native material at hand");
+        Check(StoresTint(art.color, StoresBright) && art.color.a > 0.99f, "mask: tinted to the tone (ARMED: BRIGHT): " + art.color);
+        Check(art.texture == texture && !art.raycastTarget, "mask: the image shows the mask and takes no click");
+
+        // Asked for again, it does not bake again: the same texture, no new one, however often it is painted and ticked.
+        for (int i = 0; i < 5; i++) Call(status, "Present", frame);
+        Canvas.ForceUpdateCanvases();
+        v = StoresViewOf(status);
+        Check(v.Art[0].texture == texture && StoreMasksAlive("") == 2, "mask: the second request does not bake again: " + StoreMasksAlive("") + " masks, the same texture " + (v.Art[0].texture == texture));
+
+        // A picture that cannot be baked (1100 wide: over the 1024 side the mask takes) is remembered as failed and falls back: first to the sprite on the game's material, then to the glyph.
+        Sprite bigSprite = StandIn("modded_big_icon", 1100, 40);
+        spec.HeroIcon = (int)icons.GetMethod("Id", All).Invoke(null, new object[] { bigSprite });
+        scene.Publish(BuildStores(scene, spec));
+        StoresArt(true);
+        Call(status, "Present", frame);
+        Canvas.ForceUpdateCanvases();
+        v = StoresViewOf(status);
+        Check(v.Art[0] == null, "mask: a picture not baked yet is the glyph even when the additive material is at hand");
+        Call(status, "Present", frame);
+        Canvas.ForceUpdateCanvases();
+        v = StoresViewOf(status);
+        Check(StoreMasksAlive("modded_big_icon") == 0, "mask: a picture over 1024 wide is not baked");
+        Check(v.Art[0] != null && v.Art[0].material == standInMaterial && v.Art[0].texture == bigSprite.texture, "mask: ...so it falls back to its sprite on the game's additive material");
+        Check(v.Art[2] != null && v.Art[2].texture.name.StartsWith("BoscaliHud_StoreMask_"), "mask: ...while the jammer's picture stays the mask");
+        StoresChecks(v, "mask-fallback");
+        Call(status, "Present", frame);
+        Canvas.ForceUpdateCanvases();
+        v = StoresViewOf(status);
+        Check(v.Art[0] != null && v.Art[0].material == standInMaterial && StoreMasksAlive("modded_big_icon") == 0, "mask: a failed picture is not tried again, it stays on the fallback");
+        StoresArt(false);
+        Call(status, "Present", frame);
+        Canvas.ForceUpdateCanvases();
+        v = StoresViewOf(status);
+        Check(v.Art[0] == null && v.Art[2] != null, "mask: with no additive material either, the failed picture is the glyph, and the jammer's mask still draws");
+        ScopeChecks(status, "mask");
+        Capture(canvas, "stores-mask-1920x1080.png");
+
+        // Tearing the board down destroys every baked texture and empties the cache.
+        Call(status, "Destroy");
+        Object.DestroyImmediate(canvas.gameObject);
+        Check(StoreMasksAlive("") == 0 && icons.GetMethod("MaskOf", All).Invoke(null, new object[] { aamId }) == null, "mask: the board's teardown destroys the baked masks and empties the cache: " + StoreMasksAlive(""));
+        ScopeReset();
     }
 }
 #endif

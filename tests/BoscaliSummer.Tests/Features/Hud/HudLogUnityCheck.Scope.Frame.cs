@@ -24,6 +24,8 @@ public static partial class HudLogUnityCheck
         FrameShot("wide-live", hd, "threat", 6f, PilotOptions());
         FrameShot("stack-cruise", hd, "systems", 2f, PilotOptions("Layout", LayoutOf("Stack")));
         FrameShot("stack-live", hd, "threat", 6f, PilotOptions("Layout", LayoutOf("Stack")));
+        FrameShot("lean-cruise", hd, "systems", 2f, PilotOptions("Declutter", Declutter("Lean")));
+        FrameShot("minimal-threat", hd, "threat", 6f, PilotOptions("Declutter", Declutter("Minimal")));
         FrameShot("shade0", hd, "systems", 2f, PilotOptions("Shade", 0f));
         FrameShot("shade1", hd, "systems", 2f, PilotOptions("Shade", 1f));
         FrameShot("scale07", hd, "systems", 2f, PilotOptions("Scale", 0.7f));
@@ -33,7 +35,9 @@ public static partial class HudLogUnityCheck
         FrameShot("wide-cruise", new Vector2(1280, 720), "systems", 2f, PilotOptions());
         FrameShot("wide-live", new Vector2(1280, 720), "threat", 6f, PilotOptions());
         FrameLive();
+        FrameHold();
         ShadeSprites();
+        ShadeBakeTime();
         FurnitureSheet();
     }
 
@@ -76,6 +80,29 @@ public static partial class HudLogUnityCheck
         Check(shade.gameObject.activeSelf && Mathf.Abs(root.sizeDelta.x - 916f) < 1.5f, "live: the defaults bring the board back");
         Check((RectTransform)Field(status, "root") == root && root.childCount == children && shade.childCount == shadeChildren, "live: the same tree throughout, nothing rebuilt");
         ScopeChecks(status, "frame-live");
+        Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject); ScopeReset();
+    }
+
+    /// <summary>The screen holds the box by its CRUISE height: a live page, a gauge line or a notice coming does not move the box, even one moved down and scaled up to where a taller box would not fit (the old rule pushed it up, and the page with it).</summary>
+    private static void FrameHold()
+    {
+        var size = new Vector2(1280, 720);
+        MakeBoard(size, 2f, out Canvas canvas, out object status, out object frame);
+        Set(status, "Options", PilotOptions("Scale", 1.4f, "OffsetY", 600f));
+        var cruise = new ScopeScene(2f, size, frame);
+        FixtureSystems(2f, cruise);
+        StoresFixture("systems", 2f, cruise);
+        Call(status, "Present", frame);
+        var root = (RectTransform)Field(status, "root");
+        float top = root.anchoredPosition.y, cruiseHeight = root.sizeDelta.y;
+        Set(frame, "Now", 6f);
+        var live = new ScopeScene(6f, size, frame);
+        Fixture("threat", 6f, live);
+        StoresFixture("threat", 6f, live);
+        Call(status, "Present", frame);
+        Call(status, "Animate", 7f);
+        Check(root.sizeDelta.y > cruiseHeight * 2f, "hold: a live THREAT page makes the box much taller: " + cruiseHeight + " -> " + root.sizeDelta.y);
+        Check(Mathf.Abs(root.anchoredPosition.y - top) < 0.5f, "hold: ...and the box does not move for it (cruise height holds it on the screen): " + top + " -> " + root.anchoredPosition.y);
         Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject); ScopeReset();
     }
 
@@ -133,6 +160,11 @@ public static partial class HudLogUnityCheck
             foreach (Image i in shadeRect.GetComponentsInChildren<Image>(true)) Check(i.name == "SunBand" && i.type == Image.Type.Sliced && !i.raycastTarget, tag + ": the only sprite in the shade is the 9-sliced band: " + i.name);
             Check(Mathf.Abs(fields[0].color.a - 0.6f * shade) < 0.01f, tag + ": the field's core alpha is 0.60 x Shade");
             FieldChecks(status, fields[0], tag);
+            // The band (LAYOUT.md 2.1): 190 units high, starting 280 left of the box with a 280 unit ramp up (the 40 texel border of its sprite spread over that).
+            var band = (Image)Field(status, "shadeBand");
+            RectTransform br = band.rectTransform;
+            Check(Mathf.Abs(br.anchoredPosition.x / unit + 280f) < 1f && Mathf.Abs(br.sizeDelta.y / unit - 190f) < 1f, tag + ": the band starts 280 units left of the box and is 190 high: " + br.anchoredPosition.x / unit + ", " + br.sizeDelta.y / unit);
+            Check(Mathf.Abs(40f / band.pixelsPerUnitMultiplier / unit - 280f) < 3f, tag + ": the band ramps in over 280 units: " + 40f / band.pixelsPerUnitMultiplier / unit);
         }
     }
 
@@ -140,7 +172,7 @@ public static partial class HudLogUnityCheck
     private static void FieldChecks(object status, RawImage field, string tag)
     {
         var texture = (Texture2D)field.texture;
-        Check(texture != null && texture.filterMode == FilterMode.Bilinear && texture.width * texture.height < 60000, tag + ": the field is one small bilinear texture: " + (texture != null ? texture.width + " x " + texture.height : "none"));
+        Check(texture != null && texture.filterMode == FilterMode.Bilinear && texture.width * texture.height < 90000, tag + ": the field is one small bilinear texture (about 360 x 220 texels for a live WIDE board): " + (texture != null ? texture.width + " x " + texture.height : "none"));
         Color32[] px = texture.GetPixels32();
         int w = texture.width, h = texture.height, rim = 0, core = 0;
         for (int i = 0; i < w; i++) rim = Math.Max(rim, Math.Max(px[i].a, px[(h - 1) * w + i].a));
@@ -153,6 +185,34 @@ public static partial class HudLogUnityCheck
         float x0 = r.anchoredPosition.x / unit, y0 = -r.anchoredPosition.y / unit, x1 = x0 + r.sizeDelta.x / unit, y1 = y0 + r.sizeDelta.y / unit;
         Check(x0 <= 4f - 100f && y0 <= 0f - 100f && x1 >= 444f + 100f && y1 >= 100f + 100f, tag + ": the field is stretched over the box and its fade: " + x0 + ", " + y0 + " to " + x1 + ", " + y1);
         Check(Mathf.Abs(r.sizeDelta.x / unit / (w * 4f) - 1f) < 0.01f && Mathf.Abs(r.sizeDelta.y / unit / (h * 4f) - 1f) < 0.01f, tag + ": a texel is 4 box units across");
+    }
+
+    /// <summary>A live WIDE board's cloud field bakes in a few milliseconds (the formula's sines worked out once per column and row), and what it makes is the field of the formula where the board looks.</summary>
+    private static void ShadeBakeTime()
+    {
+        object blocks = Boxed("BoardBlocks");
+        Set(blocks, "Layout", LayoutOf("Wide")); Set(blocks, "Hero", true); Set(blocks, "Pwr", true); Set(blocks, "PwrCost", true); Set(blocks, "Exp", true); Set(blocks, "Lamps", true);
+        Set(blocks, "PageH", 290f); Set(blocks, "GaugeLines", 2); Set(blocks, "Ticker", true);
+        object geo = Type(HudDomain + "ScopeLayout").GetMethod("Compute", All).Invoke(null, new[] { blocks });
+        Type field = Type(HudDomain + "ShadeField");
+        object area = field.GetMethod("Area", All).Invoke(null, new[] { geo });
+        object[] texels = { area, 0, 0 };
+        field.GetMethod("Texels", All).Invoke(null, texels);
+        var bytes = new byte[(int)texels[1] * (int)texels[2]];
+        object[] bake = { geo, area, bytes };
+        var timer = new System.Diagnostics.Stopwatch();
+        double best = double.MaxValue;
+        for (int i = 0; i < 4; i++)
+        {
+            timer.Restart();
+            field.GetMethod("Bake", All).Invoke(null, bake);
+            best = Math.Min(best, timer.Elapsed.TotalMilliseconds);
+        }
+        Debug.Log("ShadeField.Bake: " + texels[1] + " x " + texels[2] + " texels in " + best.ToString("0.0") + " ms (best of 4, the editor's Mono)");
+        Check(best < 25.0, "A live WIDE board's cloud field bakes in " + best.ToString("0.0") + " ms (under 25)");
+        int dark = 0;
+        foreach (byte b in bytes) if (b > 100) dark++;
+        Check(dark > 2000, "...and has a core in it: " + dark);
     }
 
     /// <summary>The generated sun band has no edge: it fades from the top down and ramps in at its left (the cloud field is a texture of its own, FieldChecks).</summary>
@@ -199,7 +259,24 @@ public static partial class HudLogUnityCheck
         Check(vector.Buffer.Count == 0, "Furniture off: the caption shelf draws no stroke");
         Check(!((RectTransform)Field(status, "pageRect")).GetComponentsInChildren<TextMeshProUGUI>().Any(l => l.gameObject.activeSelf && !string.IsNullOrEmpty(l.text)), "Furniture off: the caption shelf draws no word");
 
+        // 1 px lines land where LAYOUT.md 0 puts them: a horizontal line at y is the pixel row from y to y + 1 counted from the TOP (centre y + 0.5), a vertical one the column from x to x + 1, a bracket's far arms on
+        // floor(x + w - 1) and floor(y + h - 1). The canvas counts y from its bottom (1080 here): a line at y 40 is centred 1080 - 40.5 up.
         canvasType.GetProperty("Furniture").SetValue(g, true);
+        Begin();
+        object toneInk = ToneOfScope("Ink"), toneDim = ToneOfScope("Dim");
+        Draw("Line", 100f, 40f, 140f, 40f, toneInk, 1f, 1f, 0f, 0f, 0f);
+        Draw("Line", 150f, 40f, 150f, 80f, toneInk, 1f, 1f, 0f, 0f, 0f);
+        Draw("Brackets", 200f, 60f, 100f, 30f, 10f, toneDim, 1f, 1f);
+        Draw("End");
+        AvQuadBuffer snapped = vector.Buffer;
+        float Centre(int quad, float[] axis) => (axis[4 * quad] + axis[4 * quad + 1] + axis[4 * quad + 2] + axis[4 * quad + 3]) / 4f;
+        Check(snapped.Count == 10, "The snap sheet is a line, a line and eight bracket arms: " + snapped.Count);
+        Check(Mathf.Abs(Centre(0, snapped.Y) - (1080f - 40.5f)) < 0.01f, "A horizontal 1 px line at y 40 is the row 40 from the top, centre 40.5: " + (1080f - Centre(0, snapped.Y)));
+        Check(Mathf.Abs(Centre(1, snapped.X) - 150.5f) < 0.01f, "A vertical 1 px line at x 150 is the column 150, centre 150.5: " + Centre(1, snapped.X));
+        Check(Mathf.Abs(Centre(2, snapped.Y) - (1080f - 60.5f)) < 0.01f && Mathf.Abs(Centre(4, snapped.Y) - (1080f - 60.5f)) < 0.01f, "The top bracket arms are the row of the rectangle's top (60.5)");
+        Check(Mathf.Abs(Centre(6, snapped.Y) - (1080f - 89.5f)) < 0.01f && Mathf.Abs(Centre(8, snapped.Y) - (1080f - 89.5f)) < 0.01f, "The bottom arms are the row floor(y + h - 1) = 89 (89.5): " + (1080f - Centre(6, snapped.Y)));
+        Check(Mathf.Abs(Centre(3, snapped.X) - 200.5f) < 0.01f && Mathf.Abs(Centre(5, snapped.X) - 299.5f) < 0.01f, "The left arms are the column 200, the right arms the column floor(x + w - 1) = 299");
+
         Begin();
         float x = 996f;      // the box's left edge at 1080p: the sheet sits where the board does
         // The caption shelf, with the flag of a HERO block and without one.
