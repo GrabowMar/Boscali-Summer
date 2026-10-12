@@ -129,26 +129,16 @@ namespace BoscaliSummer.Tests.Features.Weather
             var veil = cells; veil.Cells = 0f; veil.Veil = 1f;
             var ripples = cells; ripples.Cells = 0f; ripples.Ripples = 1f;
             var streaks = cells; streaks.Cells = 0f; streaks.Streaks = 1f;
-            float cellsValue = bodies.Slab2D(cells, 1200f, 4400f, 700f);
-            float streakValue = bodies.Slab2D(streaks, 1200f, 4400f, 700f);
-            // On a constant field every pattern has the same value, so each morphology is the closed form of the cover law at its own sigma:
-            // rank, the cover from the old modulation and the patch factor (the constant R = 200 sits above the patch band: a full patch),
-            // the depth inside the cover and the interior density Detail scales.
-            float ExpectedConstant(float sigma, float cover, float pattern)
-            {
-                float rank = SlabMath.Rank(pattern, sigma * SlabMath.RankSoft);
-                float c = Math.Min(1f, cover * SlabMath.Trim(cover, 0f, 0f) * (0.55f + 0.9f * Math.Max(0f, Math.Min(1f, 0.5f + (90f / 255f - 0.52f) * 3.16f))) *
-                    SlabMath.PatchFactor(SlabMath.PatchMask(200f / 255f), SlabMath.Patchiness(cover, 0f)));
-                float depth = Math.Max(0f, Math.Min(1f, (rank - (1f - c)) / Math.Max(c, 0.05f)));
-                return SlabMath.SlabCoverMask(rank, c, 0.5f) * (1f - SlabMath.DetailDrive(0.7f, 0f) * (1f - SlabMath.Interior(depth)));
-            }
-            // The constant volume is R 200, G 90, B 255. A cell tap is R mixed with the shifted B lobes; where the size field (G = 90) is partly high the small tap
-            // (B alone, shifted) takes a share of the pattern. A streak tap is R alone.
-            float r = 200f / 255f, b = 1f + SlabMath.LobeShift, tap = r * (1f - SlabMath.LobeShare) + b * SlabMath.LobeShare;
-            float sizeMask = SlabMath.SizeMask(90f / 255f);
-            float cellsPattern = WeatherMath.Lerp(tap, b * 0.5f + tap * 0.5f, sizeMask);
-            TestAssert.That(cellsValue > 0.1f && Math.Abs(cellsValue - ExpectedConstant(SlabMath.SigmaCells, 0.6f, cellsPattern)) < 1e-4f, "on a constant field cells are the closed form of the cover law: " + cellsValue);
-            TestAssert.That(streakValue > 0.1f && Math.Abs(streakValue - ExpectedConstant(SlabMath.SigmaStreaks, 0.6f, r)) < 1e-4f, "on a constant field streaks are the closed form of the cover law: " + streakValue);
+            // Round 5: cells and streaks are smooth value noise (no texture), so they read the volume only through the mesoscale fields (warp and patch, R and G): a volume that
+            // differs in B alone gives the same value, and the pattern is finite and a density in [0,1].
+            var otherB = MakeBodies(Uniform(200, 90, 10), 4);
+            foreach (SkyLayer layer in new[] { cells, streaks })
+                for (int i = 0; i < 24; i++)
+                {
+                    float v = bodies.Slab2D(layer, 1200f + i * 733f, 4400f, 700f + i * 419f);
+                    TestAssert.That(v >= 0f && v <= 1f && !float.IsNaN(v), "the thin-layer density is finite and in [0,1]: " + v);
+                    TestAssert.That(Math.Abs(v - otherB.Slab2D(layer, 1200f + i * 733f, 4400f, 700f + i * 419f)) < 1e-6f, "cells and streaks read no texture channel of their own (B changed, value did not)");
+                }
             // The rows break up with the vector noise of the bend (Task 13): this volume's G = 90 reads as a strong negative bend that nearly
             // switches the rows off, so the spread is measured on one whose G is neutral.
             var neutral = MakeBodies(Uniform(200, 128, 255), 4);

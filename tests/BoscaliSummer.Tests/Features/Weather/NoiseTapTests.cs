@@ -51,7 +51,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                 TestAssert.That(Regex.IsMatch(argument, @"^-?[a-z]{0,2}n[xz]\b"), "a tap reads a noise-space coordinate, not a raw x or z: Sample(" + argument.Trim());
                 taps++;
             }
-            TestAssert.That(taps >= 19, "the scan saw the taps of CloudBodies: " + taps);
+            TestAssert.That(taps >= 15, "the scan saw the taps of CloudBodies: " + taps); // round 5: the thin-layer cell and streak taps are smooth value noise now (no texture)
             // The spec's grep: no raw x / scale tap anywhere in the CPU twin.
             TestAssert.That(!Regex.IsMatch(code, @"Sample\(\s*-?(x|z|px|pz|wx|wz|a|b)\s*/"), "no tap divides a raw coordinate by a scale");
         }
@@ -111,7 +111,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                 TestAssert.That(Regex.IsMatch(argument, @"^\s*(float2\(\s*-?)?n[a-z0-9]*\b"), "a shader tap reads a noise-space position: tex3Dlod(.. float4(" + argument.Trim());
                 taps++;
             }
-            TestAssert.That(taps >= 21, "the scan saw the taps of FlightCloud.shader: " + taps);
+            TestAssert.That(taps >= 16, "the scan saw the taps of FlightCloud.shader: " + taps); // round 5: see the CPU scan
             TestAssert.That(!Regex.IsMatch(code, @"tex3Dlod\(\s*_CloudNoiseTex\s*,\s*float4\(\s*(float2\()?-?(g|wg|hp|p|w|sw|w2|world)\b"), "no tap starts from a raw position");
             TestAssert.That(code.Contains("NOISE_MID_ALIGNED") && code.Contains("NOISE_HIGH_ALIGNED") && code.Contains("NOISE_HORIZON"),
                 "the streak taps and the horizon deck have their own noise layers");

@@ -20,6 +20,8 @@ namespace BoscaliSummer.Tests.Features.Weather
             RippleRowsAreNotAComb();
             LobesVaryInSizeAndSpacing();
             FibreDashesDoNotLineUp();
+            LobeKeepRemovesAThirdAndKeepsTheMean();
+            CellsAreIrregularAndFine();
         }
 
         private static CloudBodies Bodies() => new CloudBodies(BoscaliSummer.Modules.Weather.Visuals.CloudNoise3D.Generate(64, 47), 64, new SkyParams { LobeRung = 3f });
@@ -141,6 +143,65 @@ namespace BoscaliSummer.Tests.Features.Weather
             Console.WriteLine("  lobe upcrossing spacing: " + spacings.Count + " gaps, mean " + mean.ToString("0") + " m, cv " + cv.ToString("0.000"));
             TestAssert.That(spacings.Count > 200 && cv > LobeSpacingCv, "lobe spacing varies (cv " + cv.ToString("0.000") + ")");
         }
+        /// <summary>Round 5 (d): the lobe dropout and amplitude variance read the lobe and erosion channels of the broad tap. Over the shipped volume the factor averages about 1
+        /// (the cover of the low deck is kept), a quarter to two fifths of the texels sit in a hole (a lobe removed), and the amplitude spans 0.5-1.4.</summary>
+        private static void LobeKeepRemovesAThirdAndKeepsTheMean()
+        {
+            byte[] noise = BoscaliSummer.Modules.Weather.Visuals.CloudNoise3D.Generate(64, 47);
+            double sum = 0; int hole = 0, n = 0; float lo = float.MaxValue, hi = float.MinValue;
+            for (int i = 0; i + 3 < noise.Length; i += 4)
+            {
+                float k = SlabMath.LobeKeep(noise[i + 2] / 255f, noise[i + 1] / 255f);
+                sum += k; n++; if (noise[i + 2] / 255f < SlabMath.LobeKeepLo) hole++;
+                lo = Math.Min(lo, k); hi = Math.Max(hi, k);
+            }
+            double mean = sum / n, share = hole / (double)n;
+            Console.WriteLine("  lobe keep: mean " + mean.ToString("0.000") + ", hole share " + share.ToString("0.00") + ", range " + lo.ToString("0.00") + ".." + hi.ToString("0.00"));
+            TestAssert.That(Math.Abs(mean - 1.0) < 0.1, "the lobe keep factor restores the mean: " + mean.ToString("0.000"));
+            TestAssert.That(share > 0.2 && share < 0.45, "about a third of the lobes sit in a hole: " + share.ToString("0.00"));
+            TestAssert.That(Math.Abs(SlabMath.LobeKeep(1f, 0f) - SlabMath.LobeAmpLo * SlabMath.LobeKeepNorm) < 1e-5f && Math.Abs(SlabMath.LobeKeep(1f, 1f) - SlabMath.LobeAmpHi * SlabMath.LobeKeepNorm) < 1e-5f
+                && Math.Abs(SlabMath.LobeKeep(0f, 1f) - SlabMath.LobeKeepFloor * SlabMath.LobeAmpHi * SlabMath.LobeKeepNorm) < 1e-5f, "amplitude 0.5-1.4, and a hole keeps its floor");
+        }
+
+        /// <summary>Round 5 (a): the cell field is a sum of three octaves at incommensurate scales, not one tile. Its autocorrelation along a line has no second peak (a
+        /// lattice of equal cells shows one at one pitch) and its blobs vary in width (the spread of run lengths above the threshold).</summary>
+        private static void CellsAreIrregularAndFine()
+        {
+            const float scale = 1000f; // AcFloccus
+            var runs = new List<double>();
+            double peak = 0; int lines = 0;
+            for (int line = 0; line < 30; line++)
+            {
+                float x0 = 4000f + line * 1913f, z0 = 9000f + line * 1291f;
+                const int steps = 400; const float dx = 10f;
+                var v = new float[steps]; double mean = 0;
+                for (int i = 0; i < steps; i++) { v[i] = CloudBodies.CellField(x0 + i * dx, z0, scale, 0.5f); mean += v[i] / steps; }
+                double den = 0; for (int i = 0; i < steps; i++) den += (v[i] - mean) * (v[i] - mean);
+                // the autocorrelation after it first falls under 0.1 (the first lobe), out to 1.2 km: a lattice of equal cells repeats there
+                double best = -1; bool past = false;
+                for (int lag = 1; lag <= 120; lag++)
+                {
+                    double num = 0; for (int i = 0; i + lag < steps; i++) num += (v[i] - mean) * (v[i + lag] - mean);
+                    double r = num / den;
+                    if (!past && r < 0.1) past = true;
+                    else if (past) best = Math.Max(best, r);
+                }
+                peak += best; lines++;
+                int run = 0;
+                for (int i = 0; i < steps; i++)
+                {
+                    if (v[i] > 0.56f) run++;
+                    else if (run > 0) { runs.Add(run * dx); run = 0; }
+                }
+            }
+            double mr = 0; foreach (double r in runs) mr += r / runs.Count;
+            double vr = 0; foreach (double r in runs) vr += (r - mr) * (r - mr) / runs.Count;
+            double cv = Math.Sqrt(vr) / mr;
+            Console.WriteLine("  cells: " + runs.Count + " blobs, mean run " + mr.ToString("0") + " m, run cv " + cv.ToString("0.00") + ", mean autocorrelation repeat peak " + (peak / lines).ToString("0.00"));
+            TestAssert.That(runs.Count > 80 && cv > 0.5, "cell widths vary: cv " + cv.ToString("0.00"));
+            TestAssert.That(peak / lines < 0.35, "cells do not repeat at one pitch: " + (peak / lines).ToString("0.00"));
+        }
+
         private const double LobeSpacingCv = 0.55;
         private const double DashAlignment = 0.3;
 
