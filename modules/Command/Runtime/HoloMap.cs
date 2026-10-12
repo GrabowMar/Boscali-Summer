@@ -35,7 +35,9 @@ namespace BoscaliSummer.Modules.Command.Runtime
         internal static HoloMap Live { get; private set; }
 
         /// <summary>The hologram is up (the pilot is at HOLO): the HUD's own corner-map dressing is to be hidden meanwhile.</summary>
-        public static bool Active { get; private set; }
+        private static bool active;
+        /// <summary>The hologram is up. Also tells the HUD (Core HudMapState) so its own corner-map dressing steps aside.</summary>
+        public static bool Active { get => active; private set { active = value; BoscaliSummer.Core.Contracts.HudMapState.HoloActive = value; } }
 
         /// <summary>True while the game's own <c>ExtraUiInput.Update</c> runs: a Maximize call made then is the map key's.</summary>
         internal static bool InKeyUpdate { get; set; }
