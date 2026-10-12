@@ -32,6 +32,8 @@ namespace BoscaliSummer.Modules.Command
             typeof(MfdSinglePanelPatch),
             typeof(DynamicMapMaximizePatch),
             typeof(DynamicMapMinimizePatch),
+            typeof(HoloMapKeyScopePatch),
+            typeof(HoloMapKeyPatch),
             typeof(MapControlsPanelGuardPatch),
             typeof(MapBoxIconClickGuardPatch),
             typeof(MapCursorPanelGuardPatch),
@@ -68,6 +70,7 @@ namespace BoscaliSummer.Modules.Command
             context.AddSceneService<FactionResourceRecorder>(59);
             context.AddSceneService<StrMapOverlay>(60);
             context.AddSceneService<TerrainGhostOverlay>(61).Configure(context.Settings.Command);
+            context.AddSceneService<HoloMap>(62).Configure(context.Settings.Command);
 
             TerritoryControlView territory = context.AddSceneService<TerritoryControlView>(52);
             territory.Configure(compat, context.Settings.Command.GridCellSizeMetres.Value);
