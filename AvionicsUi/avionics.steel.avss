@@ -14,6 +14,7 @@
   select:          accent;
   ready:           accent;
   caution:         warning;
+  effort:          warning;
   danger:          alert;
   info:            #80C2D9;
   inert:           #3D5660 a6;

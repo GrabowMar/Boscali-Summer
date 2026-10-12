@@ -85,6 +85,7 @@ public static class MapOverlayUnityCheck
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
             if (!nonWingOnly) Call(T("Wing.Runtime.WingLog"), "Init", new ManualLogSource("MapPreview"));
             Directory.CreateDirectory("renders");
+            PointerGuard();
             foreach (Vector2 size in new[] { new Vector2(1280,720), new Vector2(1920,1080) })
                 foreach (float zoom in new[] { .7f, 1f, 1.8f }) {
                     foreach (string state in new[] { "empty", "calm", "contested" }) Case(size, zoom, "control", state);
@@ -104,6 +105,54 @@ public static class MapOverlayUnityCheck
         File.WriteAllText("result.txt", (failures.Count == 0 ? "PASS: " : "FAIL: ") + (captures.Count - 1) + " production map-overlay captures; " + checks +
             " real-widget mesh, state, text and pointer-transparency checks; " + failures.Count + " failures. " + (nonWingOnly ? "Scope: generic non-Wing overlays only; Wing/SQD/pilot/Ace excluded. " : "Scope: historical mixed overlay fixture. ") + "Synthetic native lifecycle/map adapter and display data; world observation, native input, oblique relief, replication and scene reload require in-game acceptance.");
         EditorApplication.Exit(failures.Count == 0 ? 0 : 1);
+    }
+
+    // The floating-chrome pointer guard and the consumed click (annex 05 P5), on the real MapUiPointer and MfdMapInteractions of the built DLL.
+    private static void PointerGuard()
+    {
+        capture = "pointer-guard";
+        Type pointer = T("Command.Presentation.MapUi.MapUiPointer"), interactions = T("Command.Presentation.MapUi.MfdMapInteractions");
+        var camera = new GameObject("Guard camera", typeof(Camera)).GetComponent<Camera>(); camera.enabled = false;
+        camera.orthographic = true; camera.orthographicSize = 360f; camera.transform.position = new Vector3(0f, 0f, -1000f); camera.farClipPlane = 2000f;
+        var target = new RenderTexture(1280, 720, 24); camera.targetTexture = target;
+        var canvas = new GameObject("Guard canvas", typeof(RectTransform), typeof(Canvas)).GetComponent<Canvas>();
+        canvas.renderMode = RenderMode.WorldSpace; canvas.worldCamera = camera; ((RectTransform)canvas.transform).sizeDelta = new Vector2(1280, 720);
+        RectTransform Card(string name, float x) {
+            var rect = new GameObject(name, typeof(RectTransform)).GetComponent<RectTransform>(); rect.SetParent(canvas.transform, false);
+            rect.sizeDelta = new Vector2(100f, 100f); rect.anchoredPosition = new Vector2(x, 0f); return rect;
+        }
+        Vector2 Screen(RectTransform rect) => RectTransformUtility.WorldToScreenPoint(camera, rect.position);
+        bool Over(RectTransform rect) => (bool)Call(pointer, "OverControls", Screen(rect));
+        Call(pointer, "ResetFloating");
+        RectTransform first = Card("Floating one", -300f), second = Card("Floating two", 300f);
+        Check(!Over(first), "an unregistered rect is not map chrome");
+        Call(pointer, "Register", first); Call(pointer, "Register", first);
+        Check(Over(first), "a registered rect claims the pointer");
+        Check(!Over(second), "a second rect nobody registered does not");
+        first.gameObject.SetActive(false);
+        Check(!Over(first), "a hidden registered rect does not claim the pointer");
+        first.gameObject.SetActive(true);
+        Check(Over(first), "the rect claims the pointer again once shown");
+        Call(pointer, "Unregister", first);
+        Check(!Over(first), "Unregister releases the rect");
+        Call(pointer, "Register", first); Call(pointer, "Register", second);
+        Check(Over(second), "a second registered rect claims the pointer");
+        Vector2 gone = Screen(first);
+        Object.DestroyImmediate(first.gameObject);
+        Check(!(bool)Call(pointer, "OverControls", gone) && Over(second), "a destroyed rect is dropped and the other stays");
+        Call(pointer, "ResetFloating");
+        Check(!Over(second), "ResetFloating forgets every rect");
+        for (int i = 0; i < 9; i++) Call(pointer, "Register", Card("Spare " + i, -540f + i * 120f));
+        Check(Over(canvas.transform.Find("Spare 7") as RectTransform) && !Over(canvas.transform.Find("Spare 8") as RectTransform), "at most eight rects register");
+        Call(pointer, "ResetFloating");
+        Call(interactions, "Restore");
+        PropertyInfo clicked = interactions.GetProperty("ClickedThisFrame", All);
+        Check(!(bool)clicked.GetValue(null), "no click is consumed at rest");
+        Call(interactions, "ConsumeClick");
+        Check((bool)clicked.GetValue(null), "ConsumeClick stamps the frame");
+        Call(interactions, "Restore");
+        Check(!(bool)clicked.GetValue(null), "Restore clears the stamp");
+        camera.targetTexture = null; target.Release(); Object.DestroyImmediate(target); Object.DestroyImmediate(canvas.gameObject); Object.DestroyImmediate(camera.gameObject);
     }
 
     private static void Case(Vector2 size, float zoom, string surface, string state)

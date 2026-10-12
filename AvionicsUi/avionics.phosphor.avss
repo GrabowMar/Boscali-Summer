@@ -14,6 +14,7 @@
   select:          #FF4FD8;
   ready:           #52E07A;
   caution:         #FFC252;
+  effort:          #FFC252;
   danger:          #FF6166;
   info:            #9FE8B4;
   inert:           #2E5A3E a6;

@@ -164,7 +164,11 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 tag.Apply(card, style, caution ? colours.Warning : style.LabelColour);
 
                 Color colour = caution ? colours.Warning : colours.AllClear;
-                float diameter = 2f * card.Radius * factor;
+                // The relief pins the native sheet at zoom 1, so a flat diameter would keep one pixel size at every relief zoom
+                // and orbit: ask the projection how far the radius spans on screen; a flat map answers false and keeps the flat maths.
+                float diameter = projected && projection.TryScale(card.X, card.Z, card.Radius, out float units)
+                    ? 2f * units
+                    : 2f * card.Radius * factor;
                 tag.SetRing(card.Radius > 0f && ringSprite != null && diameter * zoom >= MinimumRingPixels,
                     diameter, new Color(colour.r, colour.g, colour.b, RingAlpha));
             }

@@ -31,8 +31,8 @@ Copy-Item -LiteralPath "$repo/modules/Command/Presentation/MapUi/MfdTerrainRelie
 Copy-Item -LiteralPath "$repo/Core/Contracts/IMapProjection.cs", "$repo/Core/Math/MapScale.cs", "$repo/Core/Contracts/IMapBoxInput.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/Core/Math/Scalar.cs", "$repo/Core/Util/EmbeddedResources.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/modules/Command/Presentation/MapUi/AircraftTrailGraphic.cs" -Destination "$PreviewDirectory/Assets/"
-Copy-Item -LiteralPath "$repo/modules/Command/Presentation/MapUi/MapUiManager.cs" -Destination "$PreviewDirectory/Assets/"
-Copy-Item -LiteralPath "$repo/modules/Command/Domain/ReliefLight.cs", "$repo/modules/Command/Domain/ReliefClusterPlan.cs" -Destination "$PreviewDirectory/Assets/"
+Copy-Item -LiteralPath "$repo/modules/Command/Presentation/MapUi/MapUiManager.cs", "$repo/modules/Command/Presentation/MapUi/MapFocus.cs" -Destination "$PreviewDirectory/Assets/"
+Copy-Item -LiteralPath "$repo/modules/Command/Domain/ReliefLight.cs", "$repo/modules/Command/Domain/ReliefClusterPlan.cs", "$repo/modules/Command/Domain/MapClickRules.cs", "$repo/modules/Command/Domain/FlatFocus.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/AvionicsUi/Assets/avionics-ui.bundle" -Destination "$PreviewDirectory/avionics-ui.bundle"
 Copy-AvionicsStyles $PreviewDirectory $AtlasStyles
 $process = Invoke-UnityCheck $Unity $PreviewDirectory 'ReliefUnityCheck.Run' -Flags '-batchmode'
