@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Hud.Domain;
@@ -13,7 +14,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     // the feed's own text stays as the game draws it, and its dark plate is hidden (NativeScreenCorners, through a group of ours) while the board's shade stands in for it; the map is untouched. The mod's own objects
     // are two roots under the HUD canvas: the shade (the sun band and the cloud, first in the canvas so it lies behind every native mark; the feed's text is on the chat canvas, which draws above the HUD's) and the
     // furniture (brackets and caption shelves on one surface, last in the canvas so it lies over the map). They are placed from the native rectangles (world corners into canvas units) whenever those change, and at
-    // every 10 Hz present. Not scaled and not dimmed by the pilot's options (no scale, no opacity), but they sway with the board and follow the Shade and the declutter level (no furniture at Lean and Minimal).
+    // every 10 Hz present. Not scaled and not dimmed by the pilot's options (no scale, no opacity), but they sway with the board and follow the Shade and the declutter level (no furniture at Lean and Minimal). The minimised map's dressing is hidden whole while HudMapState.HoloActive is set (a map hologram has the corner), and its caption shelf stands inside the frame (HUD holo pass C); the NAV DATA block of the bottom-right corner has its own two roots and its own file (StatusPanel.Nav.cs), driven from CornersFrame.
     internal sealed partial class StatusPanel
     {
         private const int CornerQuads = 120;
@@ -34,6 +35,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The last paint drew the feed's shade and furniture (its plate is hidden while this holds).</summary>
         private bool feedLive;
         private bool seenFeedUp, seenMapUp;
+        /// <summary>Where the minimised map's north is on its frame as last laid out (the offline check reads it).</summary>
+        private CornerLayout.MapNorth mapNorth;
         private Vector2 seenFeedSize, seenMapSize;
         private Vector3 seenFeedAt, seenMapAt;
         /// <summary>The board's gate is shut (a pause, the maximised map, cinematic mode): set every frame by <see cref="TickNatives"/>.</summary>
@@ -49,11 +52,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             screenCorners.Find();
         }
 
-        /// <summary>The native pieces the corners are made from are parameters, so an offline render can stand in for them: the feed's plate (its parent is the feed's box) and the minimised map's plate.</summary>
-        private void AdoptCorners(Image feedPlate, RectTransform mapPlate)
+        /// <summary>The native pieces the corners are made from are parameters, so an offline render can stand in for them: the feed's plate (its parent is the feed's box), the minimised map's plate and the map picture the game turns by the heading.</summary>
+        private void AdoptCorners(Image feedPlate, RectTransform mapPlate, Transform mapImage)
         {
             findTries = int.MaxValue;
-            screenCorners.Adopt(feedPlate, mapPlate);
+            screenCorners.Adopt(feedPlate, mapPlate, mapImage);
         }
 
         /// <summary>
@@ -62,6 +65,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// </summary>
         private void CornersFrame(bool alive, bool tick)
         {
+            NavFrame(alive, tick);
             if (!(alive && Options.Corners && !cornersSuppressed && canvasRect != null)) { StandDownCorners(); return; }
             if (!screenCorners.Complete && findTries < 6 && Time.unscaledTime >= findAt)
             {
@@ -69,7 +73,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 findTries++;
                 screenCorners.Find();
             }
-            bool feedUp = screenCorners.FeedUp, mapUp = screenCorners.MapUp;
+            // The map's dressing gives the corner up to a map hologram (HudMapState.HoloActive, set by whoever draws it): hidden whole while it is up.
+            bool feedUp = screenCorners.FeedUp, mapUp = screenCorners.MapUp && !HudMapState.HoloActive;
             Vector2 feedSize = feedUp ? screenCorners.FeedBox.rect.size : default, mapSize = mapUp ? screenCorners.MapPlate.rect.size : default;
             Vector3 feedAt = feedUp ? screenCorners.FeedBox.position : default, mapAt = mapUp ? screenCorners.MapPlate.position : default;
             bool moved = feedUp != seenFeedUp || mapUp != seenMapUp || feedSize != seenFeedSize || mapSize != seenMapSize || feedAt != seenFeedAt || mapAt != seenMapAt;
@@ -127,6 +132,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The roots follow the board's sway (<see cref="swayShift"/>), and the band stays hung from the top of the screen.</summary>
         private void PlaceCornerRoots()
         {
+            if (navFurniture != null) navShade.offsetMin = navShade.offsetMax = navFurniture.offsetMin = navFurniture.offsetMax = swayShift;
             if (cornerFurniture == null) return;
             cornerShade.offsetMin = cornerShade.offsetMax = swayShift;
             cornerFurniture.offsetMin = cornerFurniture.offsetMax = swayShift;
@@ -165,6 +171,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             feedLive = feed;
             feedFurniture = feed ? CornerLayout.Feed(l, t, r, b, k) : default;
             mapFurniture = map ? CornerLayout.Map(ml, mt, mr, mb, canvasH, k) : default;
+            mapNorth = map ? CornerLayout.North(mapFurniture, screenCorners.MapTurnDeg) : default;
 
             float strength = Mathf.Clamp01(Options.Shade);
             bool shade = feed && strength > 0.001f;
@@ -179,7 +186,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (allow.Furniture)
             {
                 if (feed) DrawFeedFurniture(g, feedFurniture);
-                if (map) DrawMapFurniture(g, mapFurniture);
+                if (map) DrawMapFurniture(g, mapFurniture, mapNorth);
             }
             g.End();
             cornerVector.Commit();
@@ -227,15 +234,19 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.CaptionShelf(f.ShelfX, f.ShelfY, f.ShelfW, "DL EVT LOG");
         }
 
-        /// <summary>TAC MAP: four DIM brackets round the plate and the caption shelf above them.</summary>
-        private static void DrawMapFurniture(ScopeCanvas g, in CornerFurniture f)
+        /// <summary>TAC MAP: four DIM brackets round the plate, the caption shelf inside their lower left, and a small north tick with its "N" where the turning map's north meets the frame.</summary>
+        private static void DrawMapFurniture(ScopeCanvas g, in CornerFurniture f, in CornerLayout.MapNorth north)
         {
             if (f.Present) g.Brackets(f.X0, f.Y0, f.X1 - f.X0, f.Y1 - f.Y0, f.Arm, Dim);
             g.CaptionShelf(f.ShelfX, f.ShelfY, f.ShelfW, "TAC MAP");
+            if (!north.Present) return;
+            g.Line(north.X, north.Y, north.InX, north.InY, Dim);
+            g.Text("N", north.LabelX, north.LabelY, Ink, 12f, ScopeAlign.Center, true);
         }
 
         private void DestroyCorners()
         {
+            DestroyNav();
             screenCorners.Dispose();
             if (cornerShade != null) UnityEngine.Object.Destroy(cornerShade.gameObject);
             if (cornerFurniture != null) UnityEngine.Object.Destroy(cornerFurniture.gameObject);
@@ -251,6 +262,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             cornerCanvas = null;
             feedLive = seenFeedUp = seenMapUp = false;
             feedFurniture = mapFurniture = default;
+            mapNorth = default;
         }
     }
 }

@@ -41,6 +41,12 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>Lasting damage: engines, leaks, fire, structure.</summary>
         public DamageState Damage;
 
+        /// <summary>The camera is the cockpit's (not an external view of the aircraft, not a missile's): the only view the NAV DATA block is drawn in. Set by <c>NavReader</c>.</summary>
+        public bool CockpitView;
+
+        /// <summary>The NAV DATA block's data: nearest field, selected target, endurance and flags, mission clock (empty outside the cockpit view).</summary>
+        public NavInput Nav;
+
         /// <summary>The notice the ticker shows now (<see cref="HasTicker"/> false: no notice).</summary>
         public bool HasTicker;
         public TickerLine Ticker;

@@ -48,7 +48,7 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(d.PageThreat && d.PageShot && d.PageMissileCam && d.PageApproach && d.PageWing && d.PageStrike && d.PageDock && d.PageObjective && d.PageSystems, "Every page on");
             TestAssert.Near(d.ThreatHoldSeconds, 6f, "Threat hold 6 s");
             TestAssert.Near(d.PageMinSeconds, 3f, "Page minimum 3 s");
-            TestAssert.That(d.ShowLamps && d.ShowSystemsStrip && d.ShowGauges && d.ShowTicker, "Every block on");
+            TestAssert.That(d.ShowLamps && d.ShowSystemsStrip && d.ShowGauges && d.ShowTicker && d.ShowNavData, "Every block on, NAV DATA too");
             TestAssert.That(d.Sway && d.Corners, "Sway and Corners on");
 
             BoardOptions clean = d;
@@ -149,18 +149,21 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(full.ShowLamps && full.DarkLamps && !full.ThreatLampsOnly, "Full: every lamp, the dark ones too");
             TestAssert.That(full.ShowSystemsStrip && !full.SystemsStripOnlyWhenNotNominal && !full.SystemsCriticalOnly, "Full: the systems strip always");
             TestAssert.That(full.ShowGauges && full.ShowTicker && full.Furniture, "Full: gauges, ticker and captions");
+            TestAssert.That(full.ShowNavData, "Full: NAV DATA, with its shelf");
             TestAssert.Eq(full.Pages, (ushort)0x1FF, "Full: all nine pages");
 
             BoardEffective lean = At(BoardDeclutter.Lean).Effective();
             TestAssert.That(lean.ShowLamps && !lean.DarkLamps && !lean.ThreatLampsOnly, "Lean: lit lamps only, all of them");
             TestAssert.That(lean.ShowSystemsStrip && lean.SystemsStripOnlyWhenNotNominal && !lean.SystemsCriticalOnly, "Lean: the systems strip only while something is not nominal");
             TestAssert.That(!lean.ShowGauges && lean.ShowTicker && !lean.Furniture, "Lean: no gauge row, no captions, the ticker stays");
+            TestAssert.That(lean.ShowNavData, "Lean: NAV DATA stays, without its shelf (no captions)");
             TestAssert.Eq(lean.Pages, (ushort)0x1FF, "Lean: all nine pages");
 
             BoardEffective min = At(BoardDeclutter.Minimal).Effective();
             TestAssert.That(min.ShowLamps && !min.DarkLamps && min.ThreatLampsOnly, "Minimal: lit lamps, and only LOCK / SPKE / MSL");
             TestAssert.That(min.ShowSystemsStrip && min.SystemsStripOnlyWhenNotNominal && min.SystemsCriticalOnly, "Minimal: SYSTEMS only in its critical form");
             TestAssert.That(!min.ShowGauges && min.ShowTicker && !min.Furniture, "Minimal: no gauge row, no captions, the ticker stays");
+            TestAssert.That(!min.ShowNavData, "Minimal: NAV DATA is hidden");
             TestAssert.Eq(min.Pages, Mask(ScopePage.Threat, ScopePage.MissileCam, ScopePage.Shot, ScopePage.Approach, ScopePage.Systems), "Minimal: THREAT, MISSILE CAM, SHOT, APPROACH, SYSTEMS");
             TestAssert.That((min.Pages & Mask(ScopePage.Wing, ScopePage.Strike, ScopePage.Dock, ScopePage.Objective)) == 0, "Minimal: no WING, STRIKE, DOCK or OBJECTIVE");
 
@@ -240,10 +243,10 @@ namespace BoscaliSummer.Tests.Features.Hud
             foreach (BoardDeclutter level in Levels)
             {
                 BoardOptions o = At(level);
-                o.ShowLamps = o.ShowSystemsStrip = o.ShowGauges = o.ShowTicker = false;
+                o.ShowLamps = o.ShowSystemsStrip = o.ShowGauges = o.ShowTicker = o.ShowNavData = false;
                 o.PageThreat = o.PageMissileCam = o.PageApproach = o.PageWing = o.PageSystems = false;
                 BoardEffective e = o.Effective();
-                TestAssert.That(!e.ShowLamps && !e.ShowSystemsStrip && !e.ShowGauges && !e.ShowTicker, level + ": a block whose switch is off stays off");
+                TestAssert.That(!e.ShowLamps && !e.ShowSystemsStrip && !e.ShowGauges && !e.ShowTicker && !e.ShowNavData, level + ": a block whose switch is off stays off");
                 TestAssert.Eq((ushort)(e.Pages & Mask(ScopePage.Threat, ScopePage.MissileCam, ScopePage.Approach, ScopePage.Wing, ScopePage.Systems)), (ushort)0, level + ": a page whose switch is off stays off");
                 TestAssert.That((e.Pages & CuePriority.Bit(ScopePage.Shot)) != 0, level + ": SHOT, whose switch is on, is still allowed");
             }
@@ -254,10 +257,10 @@ namespace BoscaliSummer.Tests.Features.Hud
                 {
                     BoardOptions o = At(level);
                     o.ScopeMode = mode;
-                    o.ShowLamps = o.ShowSystemsStrip = o.ShowGauges = o.ShowTicker = false;
+                    o.ShowLamps = o.ShowSystemsStrip = o.ShowGauges = o.ShowTicker = o.ShowNavData = false;
                     o.PageThreat = o.PageShot = o.PageMissileCam = o.PageApproach = o.PageWing = o.PageStrike = o.PageDock = o.PageObjective = o.PageSystems = false;
                     BoardEffective e = o.Effective();
-                    TestAssert.That(e.Pages == 0 && !e.ShowLamps && !e.ShowSystemsStrip && !e.ShowGauges && !e.ShowTicker, level + "/" + mode + ": all switches off, nothing shows");
+                    TestAssert.That(e.Pages == 0 && !e.ShowLamps && !e.ShowSystemsStrip && !e.ShowGauges && !e.ShowTicker && !e.ShowNavData, level + "/" + mode + ": all switches off, nothing shows");
                 }
         }
     }

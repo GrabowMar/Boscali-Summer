@@ -107,6 +107,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 () => board.ShowGauges, v => board.ShowGauges = v, on, off);
             ToggleCell(flow, blocks, page, "NOTICES", "The notice line at the foot of the board.",
                 () => board.ShowTicker, v => board.ShowTicker = v, on, off);
+            ToggleCell(flow, blocks, page, "NAV DATA", "The cockpit view's bottom-right readout: home, target, fuel, clock. LEAN drops its caption, MIN hides it.",
+                () => board.ShowNavData, v => board.ShowNavData = v, on, off);
 
             flow.Section(AvIcon.Settings, "TAC BOARD EXTRAS", "SWAY · RESTYLE · RESET");
             AvCellGrid extras = flow.Grid(2);

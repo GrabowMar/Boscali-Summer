@@ -514,6 +514,8 @@ public static class PresentationUnityCheck
                 }
                 string prefix = "ace-hunt-" + state + (folded ? "-compact" : "-expanded");
                 Capture(root, 1920f, 1080f, prefix + "-1080p.png");
+                // The visor look has no plates: the same banner over a bright sky, where the ink and the shade alone carry it.
+                Capture(root, 1920f, 1080f, prefix + "-sky-1080p.png", new Color(.66f, .78f, .92f));
                 root.transform.localScale = Vector3.one * (720f / 1080f);
                 Capture(root, 1280f, 720f, prefix + "-720p.png");
             }
@@ -668,14 +670,14 @@ public static class PresentationUnityCheck
         }
     }
 
-    private static void Capture(GameObject canvas, float width, float height, string file)
+    private static void Capture(GameObject canvas, float width, float height, string file, Color? background = null)
     {
         foreach (Image fill in canvas.GetComponentsInChildren<Image>(true))
             if (fill.name == "ScanCover") fill.enabled = false;
         foreach (AvReveal reveal in canvas.GetComponentsInChildren<AvReveal>(true)) reveal.Finish();
         Canvas.ForceUpdateCanvases();
         foreach (TMP_Text text in canvas.GetComponentsInChildren<TMP_Text>(true)) text.ForceMeshUpdate();
-        Camera camera = OrthoCamera("Capture", height * .5f, AvTheme.SurfaceInert);
+        Camera camera = OrthoCamera("Capture", height * .5f, background ?? AvTheme.SurfaceInert);
         CapturePng(camera, (int)width * 2, (int)height * 2, Path.GetFullPath(file));
         Object.DestroyImmediate(camera.gameObject);
         captures++;

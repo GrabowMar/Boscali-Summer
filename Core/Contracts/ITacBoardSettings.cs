@@ -47,6 +47,8 @@ namespace BoscaliSummer.Core.Contracts
         bool ShowSystemsStrip { get; set; }
         bool ShowGauges { get; set; }
         bool ShowTicker { get; set; }
+        /// <summary>The NAV DATA block in the bottom-right corner of the cockpit view: home base, selected target, fuel and the mission clock.</summary>
+        bool ShowNavData { get; set; }
         /// <summary>The symbology lags slightly against head movement.</summary>
         bool Sway { get; set; }
         /// <summary>Restyle the kill feed and the map frame in the board's look.</summary>

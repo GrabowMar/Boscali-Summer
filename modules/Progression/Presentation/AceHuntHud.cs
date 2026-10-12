@@ -4,8 +4,10 @@ using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
 using NOAvionics;
 using NuclearOption.Networking;
+using NuclearOption.UIStyleSystem;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -16,13 +18,44 @@ namespace BoscaliSummer.Modules.Progression.Presentation
     /// Passive local threat display; all encounter state comes from the squad host. This is a
     /// screen-space overlay outside any MFD bezel, so it keeps its own absolute layout (kit v2's
     /// <c>AvFlow</c> is a page-body concept); only the chrome primitives moved to kit v2
-    /// (AvFrame/AvText/AvIcons instead of the retired v1 kit calls), geometry unchanged.
+    /// (AvText/AvIcons and the vector kit instead of the retired v1 kit calls), geometry unchanged.
+    /// Look (2026-10-12, the TAC BOARD's visor language): no plates and no slabs -- the words are in the game's own HUD theme
+    /// ink (<see cref="ThemeManager"/>: ink, BRIGHT for the callsign, the caution colour in bold for the alert) over a soft feathered shade,
+    /// with corner brackets round the panel and round its picture, ability and card cells, and the header's hairline shelf (interrupted by its
+    /// two captions, ending in a node and a 45 degree stub). Every colour is read from the theme at each refresh.
     /// </summary>
     internal sealed class AceHuntHud : MonoBehaviour, ISceneService
     {
-        private static readonly Color Caution = new Color32(246, 194, 66, 255);
-        private static readonly Color Ink = new Color32(12, 16, 19, 250);
-        private static readonly Color Secondary = new Color32(194, 201, 201, 255);
+        /// <summary>The tones of the visor look, resolved against the player's HUD theme (with the old fixed colours when there is none).</summary>
+        private enum Tone : byte { Ink, Bright, Caution, Dim }
+
+        private static ColorTheme Theme => ThemeManager.Active != null ? ThemeManager.Active.ColorTheme : null;
+        private static Color Caution => Theme != null ? Theme.Warning : new Color32(246, 194, 66, 255);
+        private static Color InkColor => Theme != null ? Theme.AllClear : new Color32(127, 223, 154, 255);
+
+        private static Color Of(Tone tone)
+        {
+            Color ink = InkColor;
+            switch (tone)
+            {
+                case Tone.Bright: return Color.Lerp(ink, Color.white, 0.7f);
+                case Tone.Caution: return Caution;
+                case Tone.Dim: return ink.WithAlpha(0.7f);
+                default: return ink;
+            }
+        }
+
+        /// <summary>A graphic and the tone (and alpha share) it is painted in: <see cref="Recolor"/> repaints every one from the theme.</summary>
+        private struct Tinted
+        {
+            public Graphic Graphic;
+            public Tone Tone;
+            public float Alpha;
+        }
+
+        private readonly System.Collections.Generic.List<Tinted> tinted = new System.Collections.Generic.List<Tinted>(64);
+        /// <summary>The shade stands this far outside the panel it backs (its feathered edge is <see cref="HudSprites.FeatherEdge"/> wide, so the panel's own edge is under the full part) at this alpha.</summary>
+        private const float ShadeMargin = 44f, ShadeAlpha = 0.45f;
         private ISquadView squad;
         private GameObject root;
         private Canvas bannerCanvas;
@@ -87,8 +120,13 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             for (int i = 0; i < abilitySlots.Length; i++)
                 abilitySlots[i].SetActive((wing.AbilityMask & (1 << i)) != 0);
             noAbilities.gameObject.SetActive(wing.AbilityMask == 0);
+            Recolor();
             for (int i = 0; i < tierPips.Length; i++)
-                tierPips[i].Paint(i < wing.Tier ? Caution : new Color32(50, 55, 60, 255), Color.clear);
+            {
+                bool lit = i < wing.Tier;      // a lit tier is a filled square, an unlit one a hollow one
+                tierPips[i].Fill = lit;
+                tierPips[i].Paint(lit ? Caution : Color.clear, lit ? Color.clear : Caution.WithAlpha(0.6f));
+            }
             string crestIdentity = (wing.Symbol ?? string.Empty) + "|" + (wing.WingName ?? string.Empty);
             if (crestKey != crestIdentity)
             {
@@ -128,61 +166,54 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1920f, 1080f);
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
+            tinted.Clear();
 
-            RectTransform panel = Panel((RectTransform)root.transform, new Rect(0, -48, 704, 184), Ink);
+            RectTransform panel = Holder((RectTransform)root.transform, new Rect(0, -48, 704, 184));
             panel.name = "Ace Threat Panel";
             panel.anchorMin = panel.anchorMax = new Vector2(0.5f, 1f);
             panel.pivot = new Vector2(0.5f, 1f);
             expandedPanel = panel;
             expandedGroup = panel.gameObject.AddComponent<CanvasGroup>();
             expandedGroup.blocksRaycasts = false;
-            Outline(panel, new Rect(0, 0, 704, 184), Caution.WithAlpha(0.55f));
-            Panel(panel, new Rect(0, 0, 704, 4), Caution);
-            Panel(panel, new Rect(2, -8, 700, 28), new Color32(20, 24, 28, 255));
-            Label(panel, new Rect(14, -10, 360, 24), "HOSTILE ACE DETECTED", AvTextRole.Title, Caution);
-            Label(panel, new Rect(420, -10, 266, 24), "AIR DEFENSE ALERT", AvTextRole.Label, Secondary,
-                TextAlignmentOptions.MidlineRight);
+            Shade(panel);
+            Brackets(panel, new Rect(0, 0, 704, 184), 12f, Tone.Caution, 0.85f);
+            TMP_Text headline = Label(panel, new Rect(14, -10, 360, 24), "HOSTILE ACE DETECTED", AvTextRole.Title, Tone.Caution, bold: true);
+            TMP_Text alertWord = Label(panel, new Rect(420, -10, 266, 24), "AIR DEFENSE ALERT", AvTextRole.Label, Tone.Ink, TextAlignmentOptions.MidlineRight);
+            Shelf(panel, 704f, 184f, -22f, 14f + AvText.Width(headline) + 4f, 686f - AvText.Width(alertWord) - 4f);
 
-            // Pilot portrait box
-            Panel(panel, new Rect(16, -44, 98, 114), AvTheme.SurfaceInert);
-            portraitFallback = Label(panel, new Rect(20, -70, 90, 50), "NO VISUAL", AvTextRole.Micro, Secondary,
-                TextAlignmentOptions.Center);
+            // Pilot portrait: brackets round the picture
+            Brackets(panel, new Rect(16, -44, 98, 114), 6f, Tone.Caution, 0.7f);
+            portraitFallback = Label(panel, new Rect(20, -70, 90, 50), "NO VISUAL", AvTextRole.Micro, Tone.Ink, TextAlignmentOptions.Center);
             portrait = ImageBox(panel, new Rect(18, -46, 94, 110));
             portrait.rectTransform.pivot = new Vector2(0.5f, 0.5f);
             portrait.rectTransform.anchoredPosition = new Vector2(65f, -101f);
-            Panel(panel, new Rect(16, -162, 98, 16), new Color32(24, 28, 32, 255));
-            TMP_Text leaderLabel = Label(panel, new Rect(16, -162, 98, 16), "ACE LEADER", AvTextRole.Micro, Caution,
-                TextAlignmentOptions.Center);
+            TMP_Text leaderLabel = Label(panel, new Rect(16, -162, 98, 16), "ACE LEADER", AvTextRole.Micro, Tone.Caution, TextAlignmentOptions.Center, bold: true);
 
             // Callsign, rank badge & wing identity
-            Panel(panel, new Rect(126, -43, 224, 16), new Color32(28, 32, 36, 255));
-            returning = Label(panel, new Rect(130, -43, 218, 16), "", AvTextRole.Micro, Caution);
-            callsign = Label(panel, new Rect(124, -58, 230, 32), "", AvTextRole.Display, Color.white);
-            identity = Label(panel, new Rect(126, -88, 228, 16), "", AvTextRole.ProseSmall, Secondary);
+            returning = Label(panel, new Rect(130, -43, 218, 16), "", AvTextRole.Micro, Tone.Caution, bold: true);
+            callsign = Label(panel, new Rect(124, -58, 230, 32), "", AvTextRole.Display, Tone.Bright);
+            identity = Label(panel, new Rect(126, -88, 228, 16), "", AvTextRole.ProseSmall, Tone.Ink);
 
             // Ability badges
-            noAbilities = Label(panel, new Rect(362, -54, 260, 20), "NO ACTIVE THREAT ABILITIES", AvTextRole.Micro, Secondary);
+            noAbilities = Label(panel, new Rect(362, -54, 260, 20), "NO ACTIVE THREAT ABILITIES", AvTextRole.Micro, Tone.Ink);
             string[] names = { "TOUGH", "CM", "NOTCH", "GHOST" };
             for (int i = 0; i < abilitySlots.Length; i++)
             {
-                RectTransform slot = Panel(panel, new Rect(362 + i * 66, -43, 62, 35), new Color32(22, 26, 30, 255));
+                RectTransform slot = Holder(panel, new Rect(362 + i * 66, -43, 62, 35));
                 abilitySlots[i] = slot.gameObject;
-                Outline(slot, new Rect(0, 0, 62, 35), Caution.WithAlpha(0.35f));
+                Brackets(slot, new Rect(0, 0, 62, 35), 5f, Tone.Caution, 0.55f);
                 Glyph(slot, new Rect(21, -2, 20, 20), (HuntMark)((int)HuntMark.Toughness + i));
                 // A Micro line is 14 px tall: every Micro row here is 16.
-                TMP_Text badgeCaption = Label(slot, new Rect(0, -20, 62, 16), names[i], AvTextRole.Micro, Caution,
-                    TextAlignmentOptions.Center);
+                TMP_Text badgeCaption = Label(slot, new Rect(0, -20, 62, 16), names[i], AvTextRole.Micro, Tone.Caution, TextAlignmentOptions.Center, bold: true);
             }
 
             // Generated squadron crest
             Rect crestFrame = new Rect(634, -43, 60, 60);
-            Panel(panel, crestFrame, AvTheme.SurfaceInert);
             crest = ImageBox(panel, new Rect(crestFrame.x + 2, crestFrame.y - 2, 56, 56));
             crest.enabled = false;
-            Outline(panel, crestFrame, Caution.WithAlpha(0.35f));
+            Brackets(panel, crestFrame, 6f, Tone.Caution, 0.55f);
             // Two Micro lines across the free column beside the cards: a long wing name wraps instead of leaving the panel.
-            crestCaption = Label(panel, new Rect(626, -105, 76, 30), "", AvTextRole.Micro, Secondary,
-                TextAlignmentOptions.Top);
+            crestCaption = Label(panel, new Rect(626, -105, 76, 30), "", AvTextRole.Micro, Tone.Ink, TextAlignmentOptions.Top);
             crestCaption.enableWordWrapping = true;
 
             // Three telemetry cards
@@ -191,27 +222,28 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             formation = SkillCard(panel, 454, 170, HuntMark.Formation, "WING LEADER");
 
             // Divider and footer status bar
-            Panel(panel, new Rect(126, -149, 562, 1), Caution.WithAlpha(0.3f));
+            Rule(panel, new Rect(126, -149, 562, 1), Tone.Caution, 0.3f);
             for (int i = 0; i < tierPips.Length; i++)
                 tierPips[i] = PanelFrame(panel, new Rect(126 + i * 14, -161, 10, 5), Caution);
-            status = Label(panel, new Rect(206, -156, 482, 16), "", AvTextRole.Micro, Caution);
+            status = Label(panel, new Rect(206, -156, 482, 16), "", AvTextRole.Micro, Tone.Caution, bold: true);
 
             // Minimized compact panel
-            compactPanel = Panel((RectTransform)root.transform, new Rect(0, -8, 420, 36), Ink);
+            compactPanel = Holder((RectTransform)root.transform, new Rect(0, -8, 420, 36));
             compactPanel.name = "Minimized Ace Hunt";
             compactPanel.anchorMin = compactPanel.anchorMax = new Vector2(0.5f, 1f);
             compactPanel.pivot = new Vector2(0.5f, 1f);
             compactGroup = compactPanel.gameObject.AddComponent<CanvasGroup>();
             compactGroup.blocksRaycasts = false;
-            Outline(compactPanel, new Rect(0, 0, 420, 36), Caution.WithAlpha(0.55f));
-            Panel(compactPanel, new Rect(0, 0, 420, 3), Caution);
+            Shade(compactPanel);
+            Brackets(compactPanel, new Rect(0, 0, 420, 36), 8f, Tone.Caution, 0.85f);
             Glyph(compactPanel, new Rect(12, -10, 16, 16), HuntMark.Target);
             compactCrest = ImageBox(compactPanel, new Rect(34, -9, 18, 18));
             compactCrest.enabled = false;
-            compactStatus = Label(compactPanel, new Rect(58, -6, 350, 24), "", AvTextRole.Label, Caution);
+            compactStatus = Label(compactPanel, new Rect(58, -6, 350, 24), "", AvTextRole.Label, Tone.Caution, bold: true);
 
             foreach (Graphic graphic in root.GetComponentsInChildren<Graphic>(true))
                 graphic.raycastTarget = false;
+            Recolor();
         }
 
         /// <summary>
@@ -244,13 +276,12 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             compactPanel.localScale = Vector3.one * Mathf.Lerp(0.9f, 1, t);
         }
 
-        private static TMP_Text SkillCard(RectTransform panel, float x, float width, HuntMark mark, string caption)
+        private TMP_Text SkillCard(RectTransform panel, float x, float width, HuntMark mark, string caption)
         {
-            RectTransform card = Panel(panel, new Rect(x, -109, width, 35), new Color32(22, 26, 30, 255));
-            Outline(card, new Rect(0, 0, width, 35), Caution.WithAlpha(0.25f));
+            Brackets(panel, new Rect(x, -109, width, 35), 5f, Tone.Caution, 0.4f);
             Glyph(panel, new Rect(x + 6, -115, 22, 22), mark);
-            Label(panel, new Rect(x + 32, -109, width - 36, 16), caption, AvTextRole.Micro, Secondary);
-            return Label(panel, new Rect(x + 32, -123, width - 36, 18), "", AvTextRole.DataStrong, Caution);
+            Label(panel, new Rect(x + 32, -109, width - 36, 16), caption, AvTextRole.Micro, Tone.Ink);
+            return Label(panel, new Rect(x + 32, -123, width - 36, 18), "", AvTextRole.DataStrong, Tone.Caution, bold: true);
         }
 
         // ---- Kit v2 chrome primitives (absolute layout; this HUD lives outside any AvFlow page) ----
@@ -267,8 +298,15 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             t.localScale = Vector3.one;
         }
 
-        private static RectTransform Panel(RectTransform parent, Rect area, Color fill) =>
-            PanelFrame(parent, area, fill).rectTransform;
+        /// <summary>A bare rectangle (no fill, nothing drawn): a container the cells and the panels are placed in.</summary>
+        private static RectTransform Holder(RectTransform parent, Rect area)
+        {
+            var go = new GameObject("Holder", typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+            var rect = (RectTransform)go.transform;
+            Place(rect, area);
+            return rect;
+        }
 
         private static AvFrame PanelFrame(RectTransform parent, Rect area, Color fill)
         {
@@ -279,13 +317,76 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             return frame;
         }
 
-        private static void Outline(RectTransform parent, Rect area, Color stroke)
+        private void Tint(Graphic graphic, Tone tone, float alpha = 1f) => tinted.Add(new Tinted { Graphic = graphic, Tone = tone, Alpha = alpha });
+
+        /// <summary>Repaint every tinted graphic in the player's HUD theme (a colour is written only when it changed).</summary>
+        private void Recolor()
         {
-            AvFrame frame = AvFrame.Add(parent, "Outline", default(AvChamfer));
-            frame.Fill = false;
-            frame.Paint(Color.clear, stroke);
-            frame.raycastTarget = false;
-            Place(frame.rectTransform, area);
+            for (int i = 0; i < tinted.Count; i++)
+            {
+                Tinted t = tinted[i];
+                if (t.Graphic == null) continue;
+                Color c = Of(t.Tone);
+                c.a *= t.Alpha;
+                if (t.Graphic.color != c) t.Graphic.color = c;
+            }
+        }
+
+        /// <summary>A soft feathered patch of shade a little larger than <paramref name="panel"/>, under everything of it: the ink is read through it, not on a plate.</summary>
+        private static void Shade(RectTransform panel)
+        {
+            Image shade = HudSprites.Child(panel, "Shade", HudSprites.Feather, sliced: true);
+            shade.rectTransform.offsetMin = new Vector2(-ShadeMargin, -ShadeMargin);
+            shade.rectTransform.offsetMax = new Vector2(ShadeMargin, ShadeMargin);
+            shade.color = HudSprites.ShadeTint.WithAlpha(ShadeAlpha);
+            shade.transform.SetAsFirstSibling();
+        }
+
+        /// <summary>
+        /// Four corner brackets (arm <paramref name="arm"/>) round <paramref name="area"/> (the widget's own top-left, y-down rectangles), one small vector mesh in a holder of its own: a cell that is switched off takes its
+        /// brackets with it when the holder is the cell itself. Drawn white and tinted by <paramref name="tone"/> at <paramref name="alpha"/>.
+        /// </summary>
+        private void Brackets(RectTransform parent, Rect area, float arm, Tone tone, float alpha)
+        {
+            RectTransform holder = Holder(parent, area);
+            holder.name = "Brackets";
+            AvVector vector = AvVector.Create(holder, "Strokes", 8);
+            AvStrokes.Bracket(vector.Buffer, 0f, 0f, area.width, area.height, arm, 1.25f, new Rgba(1f, 1f, 1f, 1f));
+            vector.Commit();
+            Tint(vector, tone, alpha);
+        }
+
+        /// <summary>
+        /// The header's hairline shelf at <paramref name="y"/> (the widget's y-down, negative): a short lead from the left edge, then the line between the two captions (<paramref name="from"/> to <paramref name="to"/>, 4 clear of each),
+        /// then a short run to a 4 unit node 8 in from the right edge and a 45 degree stub up and to the right whose tip lands on the edge.
+        /// </summary>
+        private void Shelf(RectTransform panel, float width, float height, float y, float from, float to)
+        {
+            RectTransform holder = Holder(panel, new Rect(0, 0, width, height));
+            holder.name = "Shelf";
+            AvVector vector = AvVector.Create(holder, "Strokes", 8);
+            AvQuadBuffer b = vector.Buffer;
+            var white = new Rgba(1f, 1f, 1f, 1f);
+            float cy = height + y, end = width - 8f;
+            AvStrokes.Line(b, 0f, cy, 10f, cy, 1f, white);
+            if (to > from) AvStrokes.Line(b, from, cy, to, cy, 1f, white);
+            AvStrokes.Line(b, 686f + 4f, cy, end, cy, 1f, white);
+            AvStrokes.Fill(b, end - 2f, cy - 2f, 4f, 4f, white);
+            AvStrokes.Line(b, end + 2f, cy + 2f, end + 8f, cy + 8f, 1f, white);
+            vector.Commit();
+            Tint(vector, Tone.Dim);
+        }
+
+        /// <summary>A hairline (a 1 unit high rule) in <paramref name="tone"/> at <paramref name="alpha"/>.</summary>
+        private void Rule(RectTransform parent, Rect area, Tone tone, float alpha)
+        {
+            var go = new GameObject("Rule", typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(parent, false);
+            Place((RectTransform)go.transform, area);
+            Image image = go.GetComponent<Image>();
+            image.sprite = AvSprites.White;
+            image.raycastTarget = false;
+            Tint(image, tone, alpha);
         }
 
         private static Image ImageBox(RectTransform parent, Rect area)
@@ -300,25 +401,26 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             return image;
         }
 
-        private static TMP_Text Label(RectTransform parent, Rect area, string text, AvTextRole role, Color color,
-            TextAlignmentOptions align = TextAlignmentOptions.MidlineLeft)
+        private TMP_Text Label(RectTransform parent, Rect area, string text, AvTextRole role, Tone tone,
+            TextAlignmentOptions align = TextAlignmentOptions.MidlineLeft, bool bold = false)
         {
             TMP_Text label = AvText.Make(parent, "Label", role, text ?? "", align);
             Place(label.rectTransform, area);
-            label.color = color;
+            if (bold) label.fontStyle |= FontStyles.Bold;      // caution and warning words are bold
             label.richText = false;
+            Tint(label, tone);
             return label;
         }
 
-        private static void Glyph(RectTransform parent, Rect area, HuntMark mark)
+        private void Glyph(RectTransform parent, Rect area, HuntMark mark)
         {
             var go = new GameObject(mark.ToString(), typeof(RectTransform), typeof(CanvasRenderer), typeof(HuntGlyph));
             go.transform.SetParent(parent, false);
             Place((RectTransform)go.transform, area);
             HuntGlyph glyph = go.GetComponent<HuntGlyph>();
             glyph.Mark = mark;
-            glyph.color = Caution;
             glyph.raycastTarget = false;
+            Tint(glyph, Tone.Caution);
         }
 
         public void ResetForScene()
@@ -333,6 +435,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             callsign = identity = status = proficiency = formation = returning = portraitFallback = null;
             System.Array.Clear(tierPips, 0, tierPips.Length);
             System.Array.Clear(abilitySlots, 0, abilitySlots.Length);
+            tinted.Clear();
             noAbilities = null;
             nextRefresh = 0f;
             expandedPanel = compactPanel = null;

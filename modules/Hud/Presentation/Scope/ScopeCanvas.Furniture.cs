@@ -29,6 +29,23 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Terminal(end, cy);
         }
 
+        /// <summary>
+        /// A caption shelf for a block at the RIGHT of the screen, <see cref="CaptionShelf"/> mirrored: the DIM hairline 6 under the block's top from <paramref name="x"/> to <paramref name="x"/> + <paramref name="w"/>, interrupted 4 units
+        /// clear on both sides by the <paramref name="caption"/> (12 regular, right-aligned 12 in from the right end); it starts in a 4 x 4 node centred on (x, y + 6) and a 45 degree stub up and to the LEFT, whose tip lands 8 units on.
+        /// Draws nothing when <see cref="Furniture"/> is off (the Lean and Minimal levels).
+        /// </summary>
+        public void CaptionShelfRight(float x, float y, float w, string caption)
+        {
+            if (!Furniture) return;
+            const float Inset = 12f, Clear = 4f;
+            float cy = y + 6f, end = x + w, captionLeft = end - Inset - TextW(caption);
+            Line(end - Inset + Clear, cy, end, cy, Dim);
+            Text(caption, end - Inset, cy, Dim, 12f, ScopeAlign.Right);
+            if (x + Clear < captionLeft - Clear) Line(x, cy, captionLeft - Clear, cy, Dim);
+            Fill(x - 2f, cy - 2f, 4f, 4f, Dim);
+            Line(x - 2f, cy - 2f, x - 8f, cy - 8f, Dim);
+        }
+
         /// <summary>The end of a shelf: a 4 x 4 DIM node centred on (<paramref name="x"/>, <paramref name="cy"/>) and a 6 unit 45 degree stub up and to the right, whose tip lands 8 units on.</summary>
         private void Terminal(float x, float cy)
         {

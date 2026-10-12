@@ -102,6 +102,8 @@ public static class WingHudUnityCheck
             if (state == "WING-SEVEN") sevenMemberHeight = root.rect.height;
             if (state == "SHRINK" || state == "CLEAR") Check(root.rect.height < sevenMemberHeight, capture + ": card must shrink after members/AP clear");
             Capture(canvasObject, capture + ".png", 600f, 300f);
+            // The same card over a bright sky: the visor look has no slab, so the ink must read through the shade alone.
+            Capture(canvasObject, capture + "-sky.png", 600f, 300f, new Color(.66f, .78f, .92f));
         }
         Object.DestroyImmediate(nativeHost); Object.DestroyImmediate(canvasObject);
     }
@@ -174,8 +176,15 @@ public static class WingHudUnityCheck
         for (int i = 0; i < count; i++) Check(!string.IsNullOrWhiteSpace(rows[i].text), where + ": active member row must display facts " + i);
         for (int i = count; i < rows.Length; i++) Check(rows[i].text == "", where + ": stale member row must clear " + i);
         foreach (Graphic graphic in root.GetComponentsInChildren<Graphic>()) Check(!graphic.raycastTarget, where + ": HUD widget must stay input-transparent");
-        var background = (Graphic)Field(widget, "background");
-        Check(Mathf.Abs(background.rectTransform.rect.height - root.rect.height) < .5f, where + ": backdrop must match card height");
+        // The visor look (2026-10-12): no slab. The backing is a soft feathered shade 44 outside the card on every side, never opaque; four corner brackets and the title's shelf are drawn with the vector kit.
+        var background = (Image)Field(widget, "background");
+        Check(Mathf.Abs(background.rectTransform.rect.height - (root.rect.height + 88f)) < .5f && Mathf.Abs(background.rectTransform.rect.width - (root.rect.width + 88f)) < .5f, where + ": the shade stands 44 outside the card on every side");
+        Check(background.sprite != null && background.sprite.name == "BoscaliHud_Feather" && background.color.a <= .6f, where + ": the backing is the soft feathered shade, not a slab: " + (background.sprite != null ? background.sprite.name : "none") + " alpha " + background.color.a);
+        var chrome = (AvVector)Field(widget, "chrome");
+        Check(chrome != null && chrome.Buffer.Count >= 8 && !chrome.Buffer.Overflowed, where + ": the card has its four corner brackets (" + (chrome != null ? chrome.Buffer.Count : -1) + " strokes)");
+        Check(chrome.Buffer.Count == 8 || chrome.Buffer.Count == 11, where + ": ...plus, when the title leaves room, its shelf (a hairline, a node and a stub): " + chrome.Buffer.Count);
+        if (count == 7 && where.Contains("WING-SEVEN"))
+            Check((rows[2].fontStyle & FontStyles.Bold) != 0 && (rows[0].fontStyle & FontStyles.Bold) == 0, where + ": a warning row (DEFEND) is bold, a nominal one is not");
         Check(root.rect.height <= 252f, where + ": card must fit the preview HUD safe area");
         float previousBottom = float.PositiveInfinity;
         foreach (TMP_Text text in root.GetComponentsInChildren<TMP_Text>())
@@ -200,9 +209,9 @@ public static class WingHudUnityCheck
         }
     }
 
-    private static void Capture(GameObject canvas, string path, float width, float height)
+    private static void Capture(GameObject canvas, string path, float width, float height, Color? background = null)
     {
-        Camera camera = OrthoCamera("Preview camera", height / 2f, new Color(.04f, .065f, .08f));
+        Camera camera = OrthoCamera("Preview camera", height / 2f, background ?? new Color(.04f, .065f, .08f));
         int pixelWidth = (int)width * 2, pixelHeight = (int)height * 2;
         CapturePng(camera, pixelWidth, pixelHeight, path);
         captures.Add(path + "\t" + pixelWidth + "\t" + pixelHeight);

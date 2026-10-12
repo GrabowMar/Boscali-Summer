@@ -18,8 +18,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// the limit that binds it;</item>
     /// <item>up to two ack chips (WILCO green, UNABLE red) for three seconds under the rows.</item>
     /// </list>
-    /// Look (2026-10-07, base-game aligned): the native HUD's chamfered black slab and the game's own HUD theme ink
-    /// (<see cref="ThemeManager"/>), square status lamps like the native status rows; the edge rail lights in the worst
+    /// Look (2026-10-12, the TAC BOARD's visor language): no slab -- ink in the game's own HUD theme (<see cref="ThemeManager"/>) over a soft feathered shade,
+    /// four corner brackets round the strip and the title's hairline shelf (ending in a node and a 45 degree stub), square status lamps like the native status rows;
+    /// caution and warning rows are bold. The edge rail lights in the worst
     /// member's tone -- amber for BEHIND/RTB/REFIT/MNVR or bingo inside two minutes, red for GCAS/COLL/DEFEND.
     /// Not configurable: it shows whenever there is a wing, an engaged autopilot or a held wing key.
     /// While the wing key is held the same box shows the Call Ladder instead (<see cref="WingCallLadder"/>). Refreshes at 5 Hz
@@ -32,6 +33,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private const float BarFullM = 400f, InSlotM = 60f;
         private const float BingoWarnSeconds = 120f;
         private static readonly Vector2 Anchor = new Vector2(24f, 180f);
+        /// <summary>The shade stands this far outside the strip (its feathered edge is <see cref="HudSprites.FeatherEdge"/> wide, so the strip's own edge is under the full part) at this alpha; the brackets' arm and stroke.</summary>
+        private const float ShadeMargin = 44f, ShadeAlpha = 0.45f, BracketArm = 8f, ChromeStroke = 1.5f;
 
         public string Name => "HUD";
 
@@ -40,6 +43,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private CombatHUD canvasOwner;
         private Canvas hudCanvas;
         private Image background;
+        private AvVector chrome;
+        private int chromeKey;
         private Image rail;
         private TMP_Text title, autopilot;
         private readonly TMP_Text[] rows = new TMP_Text[FormationCatalog.MaxSlots];
@@ -108,8 +113,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             root.anchorMin = root.anchorMax = Vector2.zero;
             root.pivot = Vector2.zero;
             root.anchoredPosition = Anchor;
-            background = HudSprites.Child(root, "Plate", HudSprites.Chamfer, sliced: true);
-            background.color = new Color(0.01f, 0.02f, 0.03f, 0.78f);
+            // No slab: a feathered patch of shade a little larger than the strip (the ink is read through it, not on a plate), then the corner brackets and the title's shelf (PaintChrome).
+            background = HudSprites.Child(root, "Shade", HudSprites.Feather, sliced: true);
+            background.rectTransform.offsetMin = new Vector2(-ShadeMargin, -ShadeMargin);
+            background.rectTransform.offsetMax = new Vector2(ShadeMargin, ShadeMargin);
+            background.color = new Color(HudSprites.ShadeTint.r, HudSprites.ShadeTint.g, HudSprites.ShadeTint.b, ShadeAlpha);
+            chrome = AvVector.Create(root, "Chrome", 24);
+            chromeKey = 0;
             // A kit accent rail down the left edge says it is the wing's.
             rail = WingUi.Rule(root, new Rect(0f, -4f, 2f, LineHeight * 2f), AvTheme.Accent);
             rail.raycastTarget = false;
@@ -141,6 +151,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 chipFrames[i] = WingUi.Panel(root, new Rect(Pad, 0f, 120f, ChipHeight), Color.clear);
                 chipFrames[i].raycastTarget = false;
+                chipFrames[i].Fill = false;      // a chip is two corner brackets round a bold word, not a tinted box
+                chipFrames[i].Stroke = 1f;
+                chipFrames[i].Bracket = 4f;
+                chipFrames[i].BracketColor = Color.clear;
                 chipText[i] = WingUi.Label(root, "", new Rect(Pad + 5f, 0f, inner - 10f, ChipHeight), WingUi.TextPrimary,
                     AvTokens.FontSmall, FontStyles.Bold, TextAlignmentOptions.Left);
                 chipFrames[i].gameObject.SetActive(false);
@@ -217,6 +231,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 worst = Mathf.Max(worst, severity);
                 if (phase == "SLOT" && error < InSlotM) inSlot++;
                 rows[i].color = severity == 2 ? Danger : severity == 1 ? Caution : Ink;
+                FontStyles style = severity > 0 ? FontStyles.Bold : FontStyles.Normal;      // caution and warning are bold
+                if (rows[i].fontStyle != style) rows[i].fontStyle = style;
                 lamps[i].color = LampColor(phase, severity);
                 Color barColor = error < InSlotM ? Ink : error < BarFullM * 0.5f ? InkDim : Caution;
                 bars[i].fillAmount = Mathf.Max(Mathf.Clamp01(error / BarFullM), 0.04f);
@@ -234,7 +250,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Color lit = worst == 2 ? Danger : worst == 1 ? Caution : Ink;
             rail.color = lit;
             title.color = Ink;
-            autopilot.color = InkDim;
+            autopilot.color = Ink;      // data over the sky, never DIM
 
             float height = LineHeight * (2 + n) + 8f;
             int shown = WingAcks.Feed.Chips(Time.unscaledTime, chips);
@@ -248,7 +264,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 Color state = chips[i].Accepted ? Ink : Danger;
                 chipText[i].text = chips[i].Chip();
                 chipText[i].color = state;
-                chipFrames[i].Paint(state.WithAlpha(0.16f), state.WithAlpha(0.6f));
+                if (chipFrames[i].BracketColor != state) { chipFrames[i].BracketColor = state; chipFrames[i].SetVerticesDirty(); }
                 float w = Mathf.Min(Width - Pad - 6f, chipText[i].preferredWidth + 12f);
                 WmcDraw.Place(chipFrames[i].rectTransform, new Rect(Pad, -height - 2f, w, ChipHeight));
                 WmcDraw.Place(chipText[i].rectTransform, new Rect(Pad + 6f, -height - 2f, w - 8f, ChipHeight));
@@ -284,7 +300,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 ladder[i].text = ladderLines[i];
                 // The last line is the readback when an ack chip is live: green WILCO, red UNABLE.
                 bool readback = i == n - 1 && i > 0 && shown > 0 && ladderLines[i] == chips[0].Chip();
-                ladder[i].color = i == 0 ? Ink : readback ? (chips[0].Accepted ? Ink : Danger) : InkDim;
+                ladder[i].color = i == 0 || !readback ? Ink : chips[0].Accepted ? Ink : Danger;
             }
             rail.color = Ink;
             stripSized = false;
@@ -332,6 +348,35 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             for (int i = 0; i < ladder.Length; i++) Inner(ladder[i], inner);
             rail.rectTransform.sizeDelta = new Vector2(2f, height - 8f);
             root.sizeDelta = new Vector2(w, height);
+            PaintChrome(w, height);
+        }
+
+        /// <summary>
+        /// The strip's chrome in the board's language, drawn with the vector kit: four corner brackets (arm 8) round the box and, on the title's line, a hairline shelf from the end of the title to the right edge ending in a 4 unit node and
+        /// a 45 degree stub up and to the right. Rebuilt only when the box, the shelf or the ink changes.
+        /// </summary>
+        private void PaintChrome(float w, float height)
+        {
+            TMP_Text caption = ladderShown ? ladder[0] : title;
+            bool shelf = caption != null && caption.gameObject.activeSelf && !string.IsNullOrEmpty(caption.text);
+            float cy = height - 3f - LineHeight * 0.5f, from = shelf ? Pad + Mathf.Ceil(caption.preferredWidth) + 6f : 0f, to = w - 12f;
+            shelf = shelf && to - from >= 8f;
+            Color ink = Ink;
+            int key = (int)(w * 2f) * 7919 + (int)(height * 2f) * 31 + (shelf ? (int)from * 104729 : 0) + ((Color32)ink).GetHashCode();
+            if (key == chromeKey) return;
+            chromeKey = key;
+            var white = new Rgba(1f, 1f, 1f, 1f);
+            AvQuadBuffer b = chrome.Buffer;
+            b.Clear();
+            AvStrokes.Bracket(b, 0f, 0f, w, height, BracketArm, ChromeStroke, white);
+            if (shelf)
+            {
+                AvStrokes.Line(b, from, cy, to, cy, 1f, white);
+                AvStrokes.Fill(b, to - 2f, cy - 2f, 4f, 4f, white);
+                AvStrokes.Line(b, to + 2f, cy + 2f, to + 8f, cy + 8f, 1f, white);
+            }
+            chrome.color = ink.WithAlpha(0.8f);
+            chrome.Commit();
         }
 
         private static void Fit(TMP_Text t, ref float need)
@@ -350,6 +395,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             if (root != null) Object.Destroy(root.gameObject);
             root = null;
+            chrome = null;
+            chromeKey = 0;
             canvas = null;
             nextRefresh = 0f;
             stripSized = false;
