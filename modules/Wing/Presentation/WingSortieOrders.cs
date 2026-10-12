@@ -24,6 +24,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         /// <summary>Largest horizontal distance of a sendable wingman from the tasked point since Send, metres.</summary>
         internal float OrbitMax { get; private set; }
 
+        /// <summary>The sortie the last tasking was for (the sim reads its status).</summary>
+        internal int LastSortieId => tally.SortieId;
+
         public string Name => "Sorties";
         public void Activate() { Current = this; tally.Clear(); target = null; AutoFormUps = 0; OrbitMax = 0f; accumulated = 0f; }
         public void Deactivate() { tally.Clear(); target = null; if (Current == this) Current = null; }

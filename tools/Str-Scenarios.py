@@ -14,6 +14,12 @@ Blocks, in the spec's naming (docs/superpowers/specs/2026-10-12-str-repair-desig
   str-8-merged-smoke                   the merged build (engine S4, census S5, ground S6 and the Station Board panel and map overlay) in one Escalation run: the panel opened through
                                        StrAutomation at about 150 s, place names, known census tiles, a live operation with ground groups, a pick through the panel verb with its lock and picker,
                                        the deferred features printing their honest empty states, screenshots of the panel beside the map
+  str-5-wing                           P5 SEND WING (slice 10): with no wing the ticket's press prints its reason; with a recruited wing a press on an accepted tied strike ticket tasks it, the status
+                                       reads Tasked, a radial order mid-task reads Recalled, a second press tasks it again, the target going down completes the sortie, credits the operation, and the
+                                       wing gets exactly one automatic FormUp
+  str-5-posts                          P5 command posts as strike targets (slice 11): the staff board refreshes with no panel open, a confirmed post is a feed row with a display name and a global
+                                       position, a STRIKE COMMAND POST card's SubjectId is a feed row, killing the post completes the card and pays the bounty once, the respawned post of the same
+                                       office pays 0, a post whose commander is away pays 0 and spends no entry
   census (slice 5)                     the str-2-war-tc census block (threat level on the ticker with STR never opened, parked jets are not sorties, the
                                        contested-base cross-check) and the Free Flight grid check (no contested sectors on a quiet map)
 
@@ -33,6 +39,10 @@ WAR = "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof."
 CENSUS = "BoscaliSummer.Modules.Command.Runtime.CensusProof.Read"
 SORTIE = "BoscaliSummer.Modules.DynamicOperations.Runtime.SortieAutomation."
 WAVE_PROOF = "BoscaliSummer.Modules.TheaterOps.Runtime.WaveProof."
+WING_PROOF = "BoscaliSummer.Modules.Wing.Runtime.SortieProof."
+WING_AUTO = "BoscaliSummer.Modules.Wing.Runtime.Automation."
+HC_PROOF = "BoscaliSummer.Modules.HighCommand.Runtime.HighCommandAutomation."
+STR = "BoscaliSummer.Modules.Command.Runtime.StrAutomation."
 SAMPLES, EVERY = 14, 30                      # 14 x 30 s = 7 minutes
 UNITY_LOG = {"config": {"bepinex": {"Logging.Disk": {"WriteUnityLog": True}}}}
 
@@ -450,6 +460,147 @@ def sorties():
     }
 
 
+def wing():
+    """P5 (spec 8.2 S10, annex 04 5.3): Escalation, the seat is Boscali and orbits high. The press is the console's own ticket control (StrAutomation.Ticket) so the gate, the verbs and the wing desk are the
+    production path. Order: staff pick, a tied STRIKE ticket accepted, a press with NO wing (the reason is printed, nothing is tasked), a wing recruited through the Wing hook, a press (Tasked), a radial FORM UP
+    (Recalled, no automatic FormUp), a second press, then the target is allowed 240 s to fall to the wing; if it still stands the hook takes it down (killedBefore says which) and the card must complete, credit the
+    operation, read Done and cost the wing exactly one automatic FormUp. wingState codes: None 0, Tasked 1, OnStation 2, Done 3, Failed 4, Recalled 5."""
+    S = lambda store: call(SORTIE + "Read", store)
+    T = lambda store, **a: call(STR + "Ticket", store, **a)
+    wr = lambda store: call(SORTIE + "WingRead", store)
+    pr = lambda store: call(WING_PROOF + "Read", store)
+    sx = lambda name, store, **a: call(STR + name, store, **a)
+    shot = lambda name: {"op": "capture", "name": name, "hide_ui": False}
+    ops = [
+        # The one seat that survived is the str-4 one: seated over the first operation's tied cards (13 km east, 2 to 12 km south of the origin) or 11 km west of them the seat was shot down within
+        # five minutes (runs 2 and 3, 9000 and 12000 m), and with it the wing. From here the first strike card is 37 km away: beyond the attack reach, so a card the faction does not track is
+        # scouted, which the answer says (NOT TRACKED YET), and a tracked one is refused with the distance. The press is read either way.
+        {"op": "seat", "id": "player", "faction": "Boscali", "near": [-5000, 30000], "altitude": 9000, "speed": 200, "heading": 0},
+        {"op": "fly", "id": "player", "program": [{"orbit": {"bank": 30, "seconds": 1500}}]},
+        wait(20), call(WAR + "Command", "pk", faction="Boscali", verb="pick", card=0),
+        wait(40), S("s1"), 
+        sx("Open", "o", page="board"), wait(3),
+        T("acc", act="accept"), wait(4),                          # the ticket is held; the 1 Hz wing refresh then knows its order
+        sx("Read", "a0"),
+        T("nowing", act="wing"), wait(1),                         # NO wing yet: the press is refused with the reason in words
+        pr("w0"),
+        call(WING_AUTO + "Launch", "launch", lead="player", count=2, field="nearest"),
+        wait(100), pr("w1"), wait(100), pr("w2"), wait(100), pr("w3"), wait(100), pr("w4"), wait(100), pr("w5"),            # the wing rolls, lifts off and rejoins: measured at well over 180 s
+        call(WING_PROOF + "Leash", "leash", metres=60000),          # the first strike card is 31 km away (run 4 printed it): reach is 0.9 x the leash
+        T("send1", act="wing"), wait(4), pr("t1"), sx("Read", "a1"), shot("live-wing-tasked"),
+        call(WING_PROOF + "Funnel", "fn"), wait(3), pr("t2"), sx("Read", "a2"),
+        T("send2", act="wing"), wait(4), pr("t3"), wr("k0"),
+    ]
+    for n in range(1, 5): ops += [wait(40), pr("g%d" % n), wr("v%d" % n)]
+    ops += [call(SORTIE + "KillTarget", "kill"), wait(8), pr("d1"), wr("e1"), call(WAVE_PROOF + "Read", "wv"), wait(10), pr("d2"), sx("Read", "a3")]
+    # The explicit RECALL button, on a cover ticket (a hold kind needs no weapons and no reach): tasked, shown as a tasking, recalled by the press that the label now offers.
+    ops += [T("acc2", act="accept", chip="CONTROL"), wait(4), T("cov1", act="wing", chip="CONTROL"), wait(4), pr("c1"), sx("Read", "ac1"), wait(20), pr("c2"),
+            T("rec", act="wing", chip="CONTROL"), wait(3), pr("c3"), sx("Read", "ac2")]
+    # The command post block of str-5-posts, in the same run (the sim launches are few): confirmed rows, the generator's card, the kill and the ledger.
+    H = lambda store: call(HC_PROOF + "Read", store)
+    ops += [call(HC_PROOF + "Confirm", "cf"), wait(6), H("h1"),
+            call(SORTIE + "OfferPost", "offer"), wait(4), call(SORTIE + "Read", "s2"), sx("Read", "ap1"),
+            call(HC_PROOF + "Kill", "k1", office=-1, away=False), wait(5), H("h2"), call(SORTIE + "WingRead", "wr1"),
+            wait(15), call(HC_PROOF + "Confirm", "cf2"), wait(6), H("h3"),
+            call(HC_PROOF + "Kill", "k2", office=-1, away=False), wait(3), H("h4"),
+            call(HC_PROOF + "Kill", "k3", office=-3, away=True), wait(3), H("h5"),
+            {"op": "end"}]
+    checks = [{"check": "status_ok"}, above("s1.sorties.tiedOffered", 1)]
+    # No wing: nothing tasked, the reason is in words, and the console says it.
+    checks += [equals("acc.pressed", 1), equals("nowing.pressed", 0), above("nowing.reasonLen", 20), equals("w0.wing.members", 0), equals("w0.tasking.state", 0), equals("w0.tasking.id", 0)]
+    # A wing in the air before the press.
+    checks += [above("launch.launched", 1), above("w5.wing.sendable", 1)]
+    # The press: the gate allowed it, the order went out, the wing is tasked, the console shows the tasking.
+    checks += [equals("send1.pressed", 1), above("t1.tasking.state", 1), below("t1.tasking.state", 2), above("t1.tasking.wingmen", 1), above("t1.tasking.wordsLen", 8),
+               above("a1.ticketCheck.wingTasked", 1)]
+    # A radial order mid-task: the tasking reads Recalled and the radial path is not an automatic order.
+    checks += [equals("t2.tasking.state", 5), equals("t2.tasking.autoFormUps", 0), equals("a2.ticketCheck.wingTasked", 0)]
+    # Pressed again: tasked again.
+    checks += [equals("send2.pressed", 1), above("t3.tasking.state", 1), below("t3.tasking.state", 2)]
+    # The wing's own work: the guard radius is legal, the reach rule holds, and the wing reached the target by itself (killedBefore 1), else the hook finished it.
+    checks += [above("g4.rules.coverRadiusOk", 1), above("g4.rules.reachOk", 1), above("kill.killedBefore", 1)]
+    # The sortie ended: the card completed, its target is down, the wing read Done and was formed up exactly once, the finished sortie said the wing was on it and credited the operation.
+    checks += [equals("e1.state", 1), equals("e1.targetUp", 0), equals("d1.tasking.state", 3), equals("d1.tasking.autoFormUps", 1), equals("d2.tasking.autoFormUps", 1),
+               above("e1.finished", 1), equals("e1.finishedByWing", 1), above("wv.wave.credits", 1)]
+    checks += [equals("acc2.pressed", 1), equals("cov1.pressed", 1), above("c1.tasking.state", 1), below("c1.tasking.state", 2), above("ac1.ticketCheck.wingTasked", 1),
+               above("c2.tasking.state", 1), below("c2.tasking.state", 2), equals("rec.pressed", 1), equals("c3.tasking.state", 5), equals("ac2.ticketCheck.wingTasked", 0)]
+    checks += [above("h1.view.available", 1), above("cf.confirmed", 2), above("h1.view.enemy", 2), equals("h1.view.siteIsObjectName", 0), above("h1.view.positionMatchesBuilding", 2),
+               equals("h1.view.positionMismatch", 0), above("h1.view.bountyRows", 2), equals("h1.view.claimedRows", 0),
+               equals("offer.made", 1), equals("offer.subjectInFeed", 1), equals("offer.targetUp", 1), equals("offer.markerKnown", 1), equals("offer.acceptedNow", 1),
+               above("ap1.view.posts", 2), above("ap1.overlay.tags.post", 2),
+               equals("k1.ok", True), equals("k1.disabled", 1), above("k1.paid", 1000), equals("k1.claimed", 1), equals("h2.lastPick.inFeed", 0), equals("wr1.state", 1),
+               equals("h3.lastPick.inFeed", 1), equals("h3.lastPick.claimed", 1), equals("h3.lastPick.bounty", 0), equals("k2.ok", True), equals("k2.paid", 0), equals("k2.claimed", 1),
+               equals("k3.ok", True), equals("k3.paid", 0), equals("k3.claimed", 0)]
+    checks += [{"check": "log_match", "pattern": "Exception", "max": 0}]
+    return {
+        "name": "str-5-wing",
+        "description": "STR SEND WING proof, mission Escalation: with no wing the console refuses with the reason; with a recruited wing the press tasks it (Tasked, RECALL shown), a radial order reads Recalled, "
+                       "a second press tasks it again, the target falling completes the tied sortie, credits the operation and costs the wing exactly one automatic FormUp; the explicit RECALL button; "
+                       "then the command post block of str-5-posts. See tools/Str-Scenarios.py.",
+        "mission": "Escalation",
+        "mods": ["boscalisummer"],
+        "timeout_s": 2200,
+        "environment": {"config": {"bepinex": {"Logging.Disk": {"WriteUnityLog": True}}, "boscalisummer": {"HighCommand": {"TransfersEnabled": False, "PostRespawnSeconds": 10}}}},
+        "ops": ops,
+        "checks": checks,
+    }
+
+
+def posts():
+    """P5 (spec 8.2 S11, annex 04 5.4): Escalation, the seat is Boscali, transfers off so no commander is away by chance and the post respawn short. The staff board must be live with no panel open;
+    Confirm records the sighting a patrol would (the fog rule itself is the pure PostIntel test), after which every confirmed enemy post is a feed row with a display name and a global position. The
+    STRIKE COMMAND POST card is offered through the production generator, its SubjectId is a feed row, the panel and the map show post rows, hexes and tags. Killing the post (the hook disables the real
+    building with the seat's aircraft as dealer) completes the card and pays the bounty once; the respawned post of the same office pays 0 and the feed row reads claimed; a post whose commander is
+    away pays 0 and spends no entry (its office is still claimable)."""
+    H = lambda store: call(HC_PROOF + "Read", store)
+    sx = lambda name, store, **a: call(STR + name, store, **a)
+    shot = lambda name: {"op": "capture", "name": name, "hide_ui": False}
+    ops = [
+        {"op": "seat", "id": "player", "faction": "Boscali", "near": [-5000, 30000], "altitude": 9000, "speed": 200, "heading": 0},
+        {"op": "fly", "id": "player", "program": [{"orbit": {"bank": 30, "seconds": 520}}]},
+        wait(30), H("h0"),                                        # no panel has been opened: the board must already be live
+        call(HC_PROOF + "Confirm", "cf"), wait(6), H("h1"),
+        call(WAR + "Command", "pk", faction="Boscali", verb="pick", card=0), wait(35),
+        sx("Open", "o", page="board"), wait(3),
+        call(SORTIE + "OfferPost", "offer"), wait(4), call(SORTIE + "Read", "s1"), sx("Read", "a1"), shot("live-post-board"),
+        call(HC_PROOF + "Kill", "k1", office=-1, away=False), wait(5), H("h2"), call(SORTIE + "WingRead", "wr1"), sx("Read", "a2"),
+        wait(15), call(HC_PROOF + "Confirm", "cf2"), wait(6), H("h3"),
+        call(HC_PROOF + "Kill", "k2", office=-1, away=False), wait(3), H("h4"),
+        call(HC_PROOF + "Kill", "k3", office=-3, away=True), wait(3), H("h5"),
+        {"op": "end"},
+    ]
+    checks = [{"check": "status_ok"}]
+    # The board is live with no panel open, with the staff's own posts, and says why there is no enemy post yet.
+    checks += [equals("h0.view.available", 1), above("h0.view.own", 6), equals("h0.view.enemy", 0), above("h0.view.statusLen", 20), equals("h0.host.paidTotal", 0)]
+    # Confirmed posts are feed rows: a display name (never the scene object name), the building's global position, a bounty, no claim yet.
+    checks += [above("cf.confirmed", 2), above("h1.view.enemy", 2), equals("h1.view.siteIsObjectName", 0), above("h1.view.positionMatchesBuilding", 2), equals("h1.view.positionMismatch", 0),
+               above("h1.view.bountyRows", 2), equals("h1.view.claimedRows", 0), equals("h1.view.statusLen", 0)]
+    # The card: made by the generator, its SubjectId is a row of the feed, the marker is known, a name is printed.
+    checks += [equals("offer.made", 1), equals("offer.subjectInFeed", 1), above("offer.subject", 0), equals("offer.targetUp", 1), equals("offer.markerKnown", 1), above("offer.nameLen", 8),
+               equals("offer.acceptedNow", 1), above("s1.sorties.cardCount", 1)]
+    # The panel: post rows and the map's tags come from the feed.
+    checks += [above("a1.view.posts", 2), above("a1.overlay.tags.post", 2)]
+    # The kill: one payment, the card completes, the row leaves the feed.
+    checks += [equals("k1.ok", True), equals("k1.disabled", 1), above("k1.paid", 1000), equals("k1.claimed", 1), equals("h2.lastPick.inFeed", 0), equals("wr1.state", 1), above("h2.host.paidTotal", 1000)]
+    # The respawned post of the same office: the feed row is back and claimed with no bounty; killing it pays 0.
+    checks += [equals("h3.lastPick.inFeed", 1), equals("h3.lastPick.claimed", 1), equals("h3.lastPick.bounty", 0), equals("k2.ok", True), equals("k2.paid", 0), equals("k2.claimed", 1)]
+    # A post whose commander is away: no bounty and the ledger entry is not spent.
+    checks += [equals("k3.ok", True), equals("k3.paid", 0), equals("k3.claimed", 0)]
+    checks += [{"check": "log_match", "pattern": "Exception", "max": 0}]
+    return {
+        "name": "str-5-posts",
+        "description": "STR command posts as strike targets, mission Escalation: the staff board is live with no panel open, confirmed enemy posts are feed rows with display names and global positions, "
+                       "the STRIKE COMMAND POST card's SubjectId is a feed row, killing the post completes the card and pays the bounty once, the respawned post pays 0, a post whose commander is "
+                       "away pays 0 and spends no entry. See tools/Str-Scenarios.py.",
+        "mission": "Escalation",
+        "mods": ["boscalisummer"],
+        "timeout_s": 700,
+        "environment": {"config": {"bepinex": {"Logging.Disk": {"WriteUnityLog": True}}, "boscalisummer": {"HighCommand": {"TransfersEnabled": False, "PostRespawnSeconds": 10}}}},
+        "ops": ops,
+        "checks": checks,
+    }
+
+
 def write(doc):
     with open(os.path.join(REPO, "tests", "ingame", doc["name"] + ".json"), "w", encoding="utf-8", newline="\r\n") as f:
         f.write(json.dumps(doc, indent=2) + "\n")
@@ -468,3 +619,5 @@ if __name__ == "__main__":
     write(reduced_dom())
     write(merged_smoke())
     write(sorties())
+    write(wing())
+    write(posts())

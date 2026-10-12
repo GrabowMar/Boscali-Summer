@@ -123,6 +123,9 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
         /// <summary>Funds paid as command-post bounties this mission (the sim reads it: it stays 0 unless a real death was paid).</summary>
         internal int BountyPaidTotal { get; private set; }
 
+        /// <summary>The office the last STRIKE COMMAND POST pick named (the sim kills it); -1 before any pick.</summary>
+        internal int LastPickId { get; private set; } = -1;
+
         // ---- IHighCommandView -------------------------------------------------------------
 
         public float AgeSeconds => float.IsNegativeInfinity(appliedAt) ? float.PositiveInfinity : Time.unscaledTime - appliedAt;
@@ -567,6 +570,7 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
             CommandSlot chosen = picked.Tree.Find(LocalId(id));
             Unit post = FindAsset(picked, chosen, AssetKind.Post).Unit;
             intel.TryGet(observer, id, now, out PostSighting at);
+            LastPickId = id;
             target = new CommandPostTarget(id, post, at.X, at.Y, at.Z, chosen.Person?.Rank ?? "", chosen.Person?.Name ?? "", chosen.Role,
                 Label(picked, chosen.SiteName), BountyFor(chosen));
             return true;
