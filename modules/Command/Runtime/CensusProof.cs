@@ -68,8 +68,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     "check", new Dictionary<string, object>
                     {
                         // The census counts friendly bases with hostile presence from the same field the game-side loop reads; a stale or miswired figure shows here.
-                        { "contestedBasesDelta", measured && gridBases >= 0 ? Math.Abs(fresh.BasesContested - gridBases) : -1 },
-                        { "sectorsDelta", measured && grid != null ? Math.Abs(fresh.SectorsContested - grid.ContestedSectorCount) : -1 },
+                        { "contestedBasesDelta", measured && gridBases >= 0 && fresh.BasesContested >= 0 ? Math.Abs(fresh.BasesContested - gridBases) : -1 },
+                        { "sectorsDelta", measured && grid != null && fresh.SectorsContested >= 0 ? Math.Abs(fresh.SectorsContested - grid.ContestedSectorCount) : -1 },
                         // The rule the grid adopted: a cell is contested only where both sides have ground weight (or two airbases of opposite owners share it). Strategic influence alone,
                         // or a one-sided push, left cells contested under the old rule; on any map, this is 0 now.
                         { "contestedWithoutContact", contestedWithoutContact },

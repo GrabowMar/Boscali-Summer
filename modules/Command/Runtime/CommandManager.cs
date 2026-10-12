@@ -261,8 +261,9 @@ namespace BoscaliSummer.Modules.Command.Runtime
             if (owned == 0) return false;
 
             // Which of our bases are being argued over is a property of the field, not of the airbase list: a friendly base with hostile presence in its cell.
+            // A field with every cell neutral has been fed nothing yet (no base reconciled, no unit seen), which is "no data" and not a calm front: the figures stay -1.
             TacticalSectorGrid grid = territory != null ? territory.Read(hq) : null;
-            if (grid != null)
+            if (grid != null && grid.NeutralSectorCount < grid.TotalSectors)
             {
                 IReadOnlyList<TacticalSectorGrid.TacticalNode> nodes = grid.GetNodes();
                 int contested = 0;
