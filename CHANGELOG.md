@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.1 — update
 
 - **MFD index rail rebuilt**: the button column on the right of the map is a new panel in the
   same style as the MFD consoles. Its keys now follow the colour scheme chosen on SET > DISPLAY the

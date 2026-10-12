@@ -3,7 +3,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>BoscaliSummer</AssemblyName>
     <RootNamespace>BoscaliSummer</RootNamespace>
-    <Version>0.2.0</Version>
+    <Version>0.2.1</Version>
     <DebugType>portable</DebugType>
     <!-- CS0436: the vendored avionics sources compile into this assembly and the test assembly. -->
     <NoWarn>$(NoWarn);CS0436;MSB3277</NoWarn>
@@ -175,7 +175,7 @@
       <LogicalName>BoscaliSummer.Command.terrain_naval_intel.png</LogicalName>
     </EmbeddedResource>
     <!-- Plan-view ground vehicle map icons, baked by tools/Build-VehicleMapIcons.py. -->
-    <EmbeddedResource Include="modules\Command\Assetsehicle-map-icons.png">
+    <EmbeddedResource Include="modules\Command\Assets\vehicle-map-icons.png">
       <LogicalName>BoscaliSummer.Command.vehicle-map-icons.png</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
