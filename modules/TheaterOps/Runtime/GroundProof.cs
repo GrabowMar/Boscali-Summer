@@ -23,7 +23,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         /// <summary>Delivery postfix: every call, the calls that replaced the sort key, depot and airbase rewrites (airbase is never rewritten), airbase queries left alone.</summary>
         internal static int DeliveryRan, DeliveryReplaced, DepotRewrites, AirbaseRewrites, AirbaseSkips;
         /// <summary>Members that found no usable slot candidate and hold where they stood; group passes that held in place for want of a known friendly side, and passes with no line to stage behind.</summary>
-        internal static int SlotFallbacks, FrameHold, FrameNoFront;
+        internal static int SlotFallbacks, SlotMarches, FrameHold, FrameNoFront;
     }
 
 #if !PUBLIC_RELEASE
@@ -279,7 +279,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 { "callsAll", GroundProbe.AdvanceGround }, { "calls", GroundProbe.AdvanceEnrolled }, { "overrides", GroundProbe.AdvanceReplaced },
                 { "unassigned", GroundProbe.AdvanceUnassigned }, { "noFront", GroundProbe.AdvanceNoFront }, { "stale", GroundProbe.AdvanceStale },
                 { "ran", GroundProbe.AdvanceRan }, { "members", membersAll },
-                { "slotFallbacks", GroundProbe.SlotFallbacks }, { "holdFrames", GroundProbe.FrameHold }, { "noFrontFrames", GroundProbe.FrameNoFront },
+                { "slotFallbacks", GroundProbe.SlotFallbacks }, { "slotMarches", GroundProbe.SlotMarches }, { "holdFrames", GroundProbe.FrameHold }, { "noFrontFrames", GroundProbe.FrameNoFront },
                 // The postfix polled every enrolled member about three times or more (vanilla asks each vehicle about every 4 s); -1 below four members.
                 { "h1", membersAll < 4 ? -1 : GroundProbe.AdvanceEnrolled >= 3 * membersAll ? 1 : 0 },
                 { "overridesSincePick", pickFirstAt >= 0f ? GroundProbe.AdvanceReplaced - pickOverridesBaseline : -1 },
