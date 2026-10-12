@@ -1762,7 +1762,7 @@ Shader "Boscali/FlightCloud"
                         tex3Dlod(_CloudNoiseTex, float4(float2(nhp.y, -nhp.x) / 141000.0 + 0.77, 0.19, 3.5)).r * 0.38;
                     float hBody = saturate(0.5 + (hn - 0.52) * 3.16);
                     float hCover = CoverMask(hBody, saturate(hRow.z));
-                    float hPath = min(hd / max(0.015, abs(ray.y)), 150000.0);
+                    float hPath = min(hd / max(0.0002, abs(ray.y)), 150000.0); // the slab's real chord; a 0.015 floor capped a grazing ray's optical depth at 0.45 (300 m)
                     // A distance fade collapses to less than a pixel when the camera flies near
                     // the deck's altitude (hundreds of km per milliradian), drawing a hard step.
                     // Dissolve by view angle instead: always about four texels into the haze.
