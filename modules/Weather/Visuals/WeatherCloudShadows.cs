@@ -118,12 +118,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             {
                 nextUpload = now + UploadSeconds;
                 float strength = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.06f, 0.20f, elevation));
-                WeatherPoint local = field.Sample((float)eye.x, (float)eye.z);
-                float bottom = local.CloudBase;
-                float top = Math.Max(bottom + 500f, local.CloudTop);
-                // A cookie cannot tell receiver altitude: fade it as the observer climbs
-                // through the deck so aircraft above the clouds lose the ground shadows.
-                strength *= 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(bottom, top, (float)eye.y));
+                // The shadows used to fade out as the observer climbed through the deck (a cookie cannot tell receiver altitude, so an aircraft above the
+                // clouds is shaded too). That removed every ground shadow for anyone flying at cloud level or higher, which is most of a sortie: the ground
+                // matters more than the airframe, so the shadows stay.
                 float blend = Mathf.Clamp01((now - blendStart) / BlendSeconds);
                 // The cookie is static while the tape holds: rebuild its 64k pixels only
                 // while a new map fades in or the strength has moved.
