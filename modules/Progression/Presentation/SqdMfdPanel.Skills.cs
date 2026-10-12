@@ -15,8 +15,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         // grade. All four lanes fit side by side, so picking compares classes instead of
         // scrolling a list. Geometry lives in SkillBoardLayout (which a test pins); SkillBoard
         // draws it and SkillNode is one grade.
-        private const string SkillIdleTitle = "SELECT A GRADE";
-        private const string SkillHint = "Tap an open grade. One pick, no undo.";
+        private const string SkillIdleTitle = "NO GRADE SELECTED";
+        private const string SkillHint = "Tap an open grade to read what it buys. One pick, no undo.";
 
         private SkillBoard skillBoard;
         private AvNote skillStripTitle;
@@ -78,7 +78,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             skillStripEffect = detail.Flow.Add(new AvNote(detail.Flow.Content, AvTextRole.DataStrong) { MinHeight = 14f, StretchText = true });
             skillStripDetail = detail.Flow.Add(new AvNote(detail.Flow.Content, AvTextRole.Prose) { MinHeight = 14f, StretchText = true });
             AvButtons buttons = detail.Flow.Buttons(
-                new AvControl.Spec("UNLOCK SELECTED", CommitSelected, AvButtonStyle.Primary, AvIcon.CircleCheck));
+                new AvControl.Spec("COMMIT GRADE", CommitSelected, AvButtonStyle.Primary, AvIcon.CircleCheck));
             skillConfirmButton = buttons.Controls[0];
             skillConfirmButton.Interactable = false;
             skillConfirmButton.Help = "Commit the selected grade. One pick, no undo.";
@@ -196,7 +196,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 skillStripTitle.Set("WAITING FOR THE HOST");
                 skillStripTitle.Color = AvTheme.RailCaution;
                 skillStripEffect.SetShown(false);
-                skillStripDetail.Set("Pick sent.");
+                skillStripDetail.Set("Pick sent. The board updates when the host confirms it.");
             }
             else if (hasSelection)
             {
@@ -213,10 +213,13 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             }
             else
             {
+                int free = view.AvailablePoints;
                 skillStripTitle.Set(skillIdleTitle);
                 skillStripTitle.Color = AvTheme.TextPrimary;
                 skillStripEffect.SetShown(false);
-                skillStripDetail.Set(skillIdleDetail);
+                skillStripDetail.Set((progression.BypassRequirements ? "Debug bypass: every grade is open. "
+                    : free > 0 ? AvNum.Thousands(free) + (free == 1 ? " pick in hand. " : " picks in hand. ")
+                    : "No pick in hand. ") + skillIdleDetail);
             }
         }
 

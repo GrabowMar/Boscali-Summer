@@ -18,6 +18,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private SqdStatGrid sortieGrid;
         private int sortieAirframe, sortieCondition, sortieLife, sortieMission;
         private const int AceBonusCeiling = 20; // matches the host's ace bonus point ceiling
+        private const string NoBackground = "No service background on file. One can be written in the Wing Command pilot studio.";
         private AvGauge ringScore, ringBonus, ringPicks, ringFree;
         private SkillLaneStrip committedLanes;
         private string[] committedLaneNames;
@@ -38,14 +39,15 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         {
             pilotIdentity = p.Add(new PilotIdCard(p.Content));
 
+            pilotBackground = p.Add(new SqdQuote(p.Content, "SERVICE BACKGROUND"));
+            pilotBackground.Set(NoBackground);
+
+            p.Section(AvIcon.ListDetails, "FLIGHT LOG", "FORM 12-B · THIS SORTIE");
             tileSortie = new AvStatTile(p.Content, "SORTIE");
             tileTime = new AvStatTile(p.Content, "MISSION");
             tileFuel = new AvStatTile(p.Content, "FUEL");
             tileDeaths = new AvStatTile(p.Content, "DEATHS");
             p.Row(tileSortie, tileTime, tileFuel, tileDeaths);
-
-            pilotBackground = p.Add(new SqdQuote(p.Content));
-            pilotBackground.Set("No service background on file.");
 
             sortieGrid = p.Add(new SqdStatGrid(p.Content));
             sortieAirframe = sortieGrid.Add("AIRFRAME");
@@ -62,6 +64,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             ringBonus.Help = "ACE: bonus score from ace kills and streaks, added to your career score (ceiling " + AceBonusCeiling + ").";
             ringPicks.Help = "EARNED: skill picks earned so far out of the maximum.";
             ringFree.Help = "FREE: earned picks not yet spent. Spend them on the SKILLS tab; a pick cannot be undone.";
+            p.Section(AvIcon.Star, "PICK LEDGER", "MISSION SCORE TO PICKS");
             p.Row(ringScore, ringBonus, ringPicks, ringFree);
 
             // The lanes come from the catalogue, in table order: one row per qualification, one pip per grade.
@@ -70,6 +73,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 if (!names.Contains(PerkCatalog.All[i].Lane)) names.Add(PerkCatalog.All[i].Lane);
             committedLaneNames = names.ToArray();
             for (int i = 0; i < committedHeld.Length; i++) committedHeld[i] = new bool[PerkCatalog.MaximumDepth];
+            p.Section(AvIcon.Stack2, "QUALIFICATIONS", "FORM 3-C · GRADES HELD");
             committedLanes = p.Add(new SkillLaneStrip(p.Content, committedLaneNames, PerkCatalog.MaximumDepth) { Grow = 1f });
             committedLanes.Help = "HELD: every qualification lane and its six grades. A lit pip is a grade you hold; a dim lane is closed because the career already carries two support tools.";
         }
@@ -92,11 +96,11 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             if (GameManager.GetLocalPlayer<Player>(out localPlayer) && localPlayer != null)
                 playerAircraft = localPlayer.Aircraft;
 
-            pilotBackground.Set(string.IsNullOrEmpty(background) ? "No service background on file." : background);
+            pilotBackground.Set(string.IsNullOrEmpty(background) ? NoBackground : background);
             string pilotTitle = PilotTitleCatalog.TitleFor(pilotScore, Progress.ScorePerPoint, Progress.MaximumPoints);
             bool kia = pilot.Status != null && pilot.Status.IndexOf("KIA", StringComparison.OrdinalIgnoreCase) >= 0;
             pilotIdentity.Set(
-                profile ? "LOCAL PROFILE" : "PILOT DOSSIER",
+                profile ? "PERSONNEL JACKET · LOCAL PROFILE" : "PERSONNEL JACKET · FORM 1-A",
                 string.IsNullOrEmpty(callsign) ? "RECORD PENDING" : callsign,
                 string.IsNullOrEmpty(name) ? "—" : name,
                 AvNum.Thousands(Progress.Rank), pilotTitle,
@@ -189,8 +193,10 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         {
             private static Sprite equipmentArt;
             private const float CardH = 156f, StripH = 26f, PortraitW = 92f, EmblemW = 64f, Pad = 10f;
-            private readonly AvFrame frame, rankFrame;
+            private readonly AvFrame frame, rankFrame, stampFrame;
             private readonly Image strip;
+            private readonly RectTransform stamp;
+            private readonly TMP_Text stampText;
             private readonly AvPortrait portrait, emblem;
             private readonly TMP_Text profileTag, callsignText, nameLine, rankCaption, rankNumber, rankTitle,
                 generationText, statusText, squadronText;
@@ -235,6 +241,18 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 emblem = new AvPortrait(Rect, "Emblem", "NO ART");
                 squadronText = AvText.Make(Rect, "Squadron", AvTextRole.Micro, "", TextAlignmentOptions.Top, true);
                 AvText.Fit(squadronText, true);
+
+                // The rubber stamp over the photo plate is fixed paperwork, never a reading: a tilted outline, no state colour.
+                stamp = AvLay.Child(Rect, "Stamp");
+                stampFrame = AvFrame.Add(stamp, "Frame", default(AvChamfer));
+                AvLay.Fill(stampFrame.rectTransform);
+                stampFrame.Stroke = 1.2f;
+                stampFrame.raycastTarget = false;   // paperwork never takes the pointer from the portrait's hover help
+                stampText = AvText.Make(stamp, "StampText", AvTextRole.Micro, "FILE COPY", TextAlignmentOptions.Center);
+                AvText.Fit(stampText, false);
+                stampText.raycastTarget = false;
+                AvLay.Fill(stampText.rectTransform);
+                stamp.localEulerAngles = new Vector3(0f, 0f, 8f);
 
                 Restyle();
             }
@@ -281,6 +299,11 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
                 float top = StripH + 8f;
                 portrait.Place(new AvSlot(Pad, top, PortraitW, s.H - top - Pad));
+                float stampW = AvText.Width(stampText) + 14f, stampH = 20f;
+                stamp.anchorMin = stamp.anchorMax = new Vector2(0f, 1f);
+                stamp.pivot = new Vector2(0.5f, 0.5f);
+                stamp.sizeDelta = new Vector2(stampW, stampH);
+                stamp.anchoredPosition = new Vector2(Pad + PortraitW * 0.5f, -(s.H - Pad - 20f));
 
                 float emblemX = s.W - Pad - EmblemW;
                 emblem.Place(new AvSlot(emblemX, top, EmblemW, EmblemW));
@@ -322,6 +345,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 statusText.color = SqdTone.Text(status);
                 if (statusIcon != null) statusIcon.color = SqdTone.Rail(status);
                 squadronText.color = AvInk.Muted;
+                stampFrame.Paint(AvTheme.SurfaceInert.WithAlpha(.82f), AvInk.Dim);
+                stampText.color = AvInk.Dim;
                 portrait.Restyle();
                 emblem.Restyle();
                 stateChip.Restyle();

@@ -153,8 +153,39 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             BuildWingsPage(console.Page(TabWings));
             studioPageFlow = console.Page(TabStudio);
             BuildPlanePage(console.Page(TabPlane));
+            SetStandingOrders();
             console.Finish();
             return null;
+        }
+
+        /// <summary>What each page's bay cover prints when its content ends above the footer: usage doctrine, most important first.</summary>
+        private void SetStandingOrders()
+        {
+            console.Orders(TabPilot,
+                "Read the flight log before you taxi: fuel state, aircraft condition and life mode.",
+                "Free picks are spent on the SKILLS tab. A committed pick cannot be withdrawn.",
+                "A dim qualification lane is closed: a career holds two support tools at most.",
+                "Callsign, portrait and service background come from your Wing Command profile.");
+            console.Orders(TabSkills,
+                "Tap an open grade to read what it buys, then commit it. One pick, no undo.",
+                "A grade needs the grade before it. Grade 1 of every lane is a support tool.",
+                "A career holds two support tools at most; the lanes left over close.",
+                "Picks come from mission score: fly, capture or rescue to earn the next one.");
+            console.Orders(TabWings,
+                "Tier sets an ace wing's threat; its skill badges say what it can do to you.",
+                "An ace wing that hunts you is flagged on every tab; the footer carries the alert.",
+                "An ace kill earns one skill point; a returning ace has met you before.",
+                "Wing management stays in Wing Command; this board only reports.");
+            console.Orders(TabStudio,
+                "Roll fresh proofs, then tap one to adopt it; the insignia you had takes its place.",
+                "A PNG in the emblem folder overrides the generated insignia; NO ART clears it.",
+                "Tail-fin paint shows on your own aircraft only: OFF, COLOUR or LOW-VIS.",
+                "Custom pilots are written in the Wing Command studio, not on this console.");
+            console.Orders(TabPlane,
+                "Read the status card on the ramp: damage, fuel state and discrepancies come first.",
+                "Choose an engine map, then land to apply it; it cannot change in the air.",
+                "STOCK gives full throttle; RANGE saves 10% fuel and caps throttle at 85%.",
+                "The crew chief's call is in the footer: low fuel, damage and missile warnings.");
         }
 
         /// <summary>Every tab carries the hover sentence the pre-kit-v2 console gave it.</summary>
@@ -249,7 +280,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         {
             if (console == null) return;
             string baseLine = console.CurrentPage == TabWings
-                ? (squad != null ? squad.Status : "Enemy wing reports are unavailable.")
+                ? (squad != null ? squad.Status : "No ace reports reach this console.")
                 : console.CurrentPage == TabStudio ? StudioStatusLine()
                 : console.CurrentPage == TabPlane ? planeStatus
                 : progression.BypassRequirements ? "DEBUG BYPASS — EVERY GRADE OPEN"

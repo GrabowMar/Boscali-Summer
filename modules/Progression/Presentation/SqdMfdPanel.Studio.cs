@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private const float StudioEmblemHeight = 136f;
         private const float StudioKneeboardHeight = 96f;
         private const int ProofCount = 4;
-        private const string StudioQuietLine = "The insignia and squadron name are local cosmetics; nothing is uploaded.";
+        private const string StudioQuietLine = "Insignia, squadron name and fin paint are local cosmetics; nothing is uploaded.";
 
         private static readonly string[] LayerLabels = { "SHAPE", "SPLIT", "MARK", "TRIM", "FIELD", "SECOND", "INK", "NUMBER" };
         private static readonly string[] LayerHelp =
@@ -39,7 +39,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private float studioMessageUntil;
 
         private SqdEmptyCard studioLauncher;
-        private AvNote studioMessageText, studioBlazon, studioContrast;
+        private SqdQuote studioMessageText;
+        private AvNote studioBlazon, studioContrast;
         private AvStepper[] studioLayers;
         private AvStepper studioArt, studioPaint;
         private AvPortrait studioEmblem;
@@ -60,7 +61,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             studioMessageTone = StudioTone.Info;
             studioMessageUntil = 0f;
             studioLauncher = null;
-            studioMessageText = studioBlazon = studioContrast = null;
+            studioMessageText = null;
+            studioBlazon = studioContrast = null;
             studioLayers = null;
             studioArt = studioPaint = null;
             studioEmblem = null;
@@ -75,7 +77,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         {
             float half = AvFlowMath.ColumnWidth(p.Inner, 2, AvGridTokens.Gap);
 
-            p.Section(AvIcon.Shield, "SQUADRON INSIGNIA", "LOCAL COSMETIC");
+            p.Section(AvIcon.Shield, "SQUADRON INSIGNIA", "PAINT SHOP · LOCAL ONLY");
             studioEmblem = new AvPortrait(p.Content, "Emblem", "NO ART", StudioEmblemHeight);
             studioEmblem.Help = "Your squadron insignia, shown on the pilot card. Local cosmetic only; nothing is uploaded.";
             AvCard squadronCard = new AvCard(p.Content, console.Ticker, half);
@@ -141,7 +143,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 "The WMC WING tab has the pilot studio: write, clone, recruit and delete pilots.",
                 "OPEN WMC STUDIO", OpenWmcStudio, AvIcon.Pencil));
 
-            studioMessageText = p.Add(new AvNote(p.Content, AvTextRole.ProseSmall) { MinHeight = 14f, StretchText = true }, 1f);
+            // No grow: the note is the last line of the job sheet, and what the page leaves below it is the bay cover's.
+            studioMessageText = p.Add(new SqdQuote(p.Content, "SHOP NOTE"));
             studioMessageText.Set(StudioQuietLine);
         }
 
@@ -185,11 +188,11 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
             bool quiet = string.IsNullOrEmpty(studioMessage);
             studioMessageText.Set(quiet ? StudioQuietLine : studioMessage);
-            studioMessageText.Color = quiet ? AvTheme.Dim
+            studioMessageText.Tone = quiet ? (Color?)null
                 : studioMessageTone == StudioTone.Ok ? AvTheme.RailReady
-                : studioMessageTone == StudioTone.Warn ? AvTheme.Warning
-                : studioMessageTone == StudioTone.Bad ? AvTheme.Alert
-                : AvTheme.Dim;
+                : studioMessageTone == StudioTone.Warn ? AvTheme.RailCaution
+                : studioMessageTone == StudioTone.Bad ? AvTheme.RailDanger
+                : (Color?)null;
         }
 
         // ---- STUDIO actions --------------------------------------------------------------
@@ -283,7 +286,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             if (settings != null && settings.EmblemPaint.Value != EmblemPaint.Off && Visuals.TailPaint.Status.Length > 0)
                 return Visuals.TailPaint.Status + ". Only you see it.";
             return WingLink.SquadAvailable
-                ? "Pilot editing lives in Wing Command; the insignia is designed here."
+                ? "PAINT SHOP · pilots are written in Wing Command."
                 : WingLink.SquadUnavailableReason;
         }
 
