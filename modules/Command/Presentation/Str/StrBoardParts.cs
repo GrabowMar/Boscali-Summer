@@ -51,8 +51,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
         }
 
         /// <summary>LOCATE: allowed while the item has a known place on the map.</summary>
-        protected StrAct LocateGate(StrItemId id) =>
-            StrAnchors.TryGet(Vm, id, out _, out _) ? Allowed : new StrAct(StrWhy.Gone, "NO KNOWN PLACE ON THE MAP FOR THIS ITEM");
+        protected StrAct LocateGate(StrItemId id) => StrAnchors.LocateGate(Vm, id);
 
         protected StrAct Locate(StrItemId id)
         {

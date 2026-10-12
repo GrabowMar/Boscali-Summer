@@ -345,13 +345,10 @@ namespace BoscaliSummer.Modules.Command.Presentation
             data = Text(Rect, "Data", AvTextRole.DataSmall, TextAlignmentOptions.MidlineLeft);
             note = Text(Rect, "Note", AvTextRole.ProseSmall, TextAlignmentOptions.TopLeft, true);
             accept = new StrButton(Rect, "ACCEPT", AvButtonStyle.Primary, () => Hub.Run(StrActionKind.Accept, row.Id));
-            wing = new StrButton(Rect, "SEND WING", AvButtonStyle.Default, () => Hub.Run(Tasked(row) ? StrActionKind.Recall : StrActionKind.SendWing, row.Id));
+            wing = new StrButton(Rect, "SEND WING", AvButtonStyle.Default, () => Hub.Run(StrPanelText.WingTasked(row) ? StrActionKind.Recall : StrActionKind.SendWing, row.Id));
             locate = new StrButton(Rect, "LOCATE ON MAP", AvButtonStyle.Quiet, () => Locate(row.Id));
             Restyle();
         }
-
-        private static bool Tasked(StrSortieRow r) =>
-            r != null && r.HasWing && (r.WingState == WingSortieState.Tasked || r.WingState == WingSortieState.OnStation);
 
         private static StrInkRole FamilyInk(string chipText)
         {

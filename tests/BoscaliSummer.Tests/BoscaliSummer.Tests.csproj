@@ -159,6 +159,7 @@
     <Compile Include="..\..\modules\Command\Domain\MapClickRules.cs" Link="Features\Command\MapClickRules.cs" />
     <Compile Include="..\..\modules\Command\Domain\FlatFocus.cs" Link="Features\Command\FlatFocus.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrOverlayPlan.cs" Link="Features\Command\StrOverlayPlan.cs" />
+    <Compile Include="..\..\modules\Command\Domain\StrCardPlan.cs" Link="Features\Command\StrCardPlan.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrViewBuilder.cs" Link="Features\Command\StrViewBuilder.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrViewBuilder.Rows.cs" Link="Features\Command\StrViewBuilder.Rows.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrViewBuilder.Sitrep.cs" Link="Features\Command\StrViewBuilder.Sitrep.cs" />

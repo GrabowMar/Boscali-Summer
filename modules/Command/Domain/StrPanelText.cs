@@ -118,6 +118,25 @@ namespace BoscaliSummer.Modules.Command.Domain
             return "";
         }
 
+        /// <summary>The wing is out on this sortie: the one definition the ticket's and the card's wing button share (RECALL while true, the send verb otherwise).</summary>
+        public static bool WingTasked(StrSortieRow row) =>
+            row != null && row.HasWing && (row.WingState == WingSortieState.Tasked || row.WingState == WingSortieState.OnStation);
+
+        /// <summary>
+        /// The second line of the map's layer plate: how old the board is and whose it is ("BOARD 4S OLD · BDF"). A board that never arrived claims
+        /// no age and names why instead; an age that cannot be read is said, never printed as a zero.
+        /// </summary>
+        public static string LayerLine(StrViewModel vm)
+        {
+            if (vm == null) return "NO BOARD";
+            string faction = string.IsNullOrEmpty(vm.FactionCode) ? "" : StrWords.Dot + vm.FactionCode;
+            bool report = vm.Mode == StrBoardMode.Operation || vm.Mode == StrBoardMode.Proposals || vm.Mode == StrBoardMode.Assessing ||
+                          vm.Mode == StrBoardMode.NoOpening || vm.Mode == StrBoardMode.Reduced;
+            if (!report) return (vm.Banner.Chip.Length > 0 ? vm.Banner.Chip : "NO BOARD") + faction;
+            string age = float.IsNaN(vm.AgeSeconds) ? "AGE UNKNOWN" : vm.AgeText.ToUpperInvariant() + " OLD";
+            return "BOARD " + (vm.Stale ? "STALE " : "") + age + faction;
+        }
+
         public static string PlateState(StrProposalRow row) => row != null && row.Recommended ? "DEFAULT" : "OPEN";
 
         /// <summary>"WAVE 1,850 OK" as the word and the price the plate stacks.</summary>

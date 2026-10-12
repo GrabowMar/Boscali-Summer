@@ -3,6 +3,10 @@ namespace BoscaliSummer.Modules.Command.Domain
     /// <summary>Pure: where on the ground an item of the board is, so a select can fly the map to it.</summary>
     internal static class StrAnchors
     {
+        /// <summary>LOCATE and FOCUS: allowed while the item has a known place on the map (the panel's buttons and the map card share this).</summary>
+        public static StrAct LocateGate(StrViewModel vm, StrItemId id) =>
+            TryGet(vm, id, out _, out _) ? new StrAct(StrWhy.None, "") : new StrAct(StrWhy.Gone, "NO KNOWN PLACE ON THE MAP FOR THIS ITEM");
+
         /// <summary>
         /// The global metres of the item named by id, read from the row it points at. False when the row is gone or its place is not known
         /// (a sortie with no site, a position that is not finite): the caller then flies nowhere rather than to the origin.
