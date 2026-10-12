@@ -141,6 +141,8 @@
     <Compile Include="..\..\modules\Command\Runtime\SectorContour.cs" Link="Features\Command\SectorContour.cs" />
     <Compile Include="..\..\modules\Command\Domain\SortieClassifier.cs" Link="Features\Command\SortieClassifier.cs" />
     <Compile Include="..\..\modules\Command\Domain\TheaterReadout.cs" Link="Features\Command\TheaterReadout.cs" />
+    <Compile Include="..\..\modules\Command\Domain\StrContracts.cs" Link="Features\Command\StrContracts.cs" />
+    <Compile Include="..\..\modules\Command\Domain\StrViewModel.cs" Link="Features\Command\StrViewModel.cs" />
     <Compile Include="..\..\modules\Command\Domain\ControlFieldCore.cs" Link="Features\Command\ControlFieldCore.cs" />
     <Compile Include="..\..\modules\HighCommand\Domain\CommandEconomy.cs" Link="Features\HighCommand\CommandEconomy.cs" />
     <Compile Include="..\..\modules\HighCommand\Domain\CommandLog.cs" Link="Features\HighCommand\CommandLog.cs" />
