@@ -10,8 +10,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
     /// </summary>
     internal static class SkyDerived
     {
-        /// <summary>Grazing views stack cumulus groups, so the horizon reads about this many times the ground fraction (spec 4.1; tuned on the seam metric in slice 4).</summary>
-        public const float HorizonStack = 1.5f;
+        /// <summary>Grazing views stack cumulus groups, so the horizon reads this many times the ground fraction (spec 4.1). 5.3 is the seam metric result on sky 8 (mean A 0.483, B 0.492) once the deck path is the slab's real chord; the spec's 1.5 start value left B at 0.07.</summary>
+        public const float HorizonStack = 5.3f;
 
         public static void Apply(ref SkyParams sky)
         {

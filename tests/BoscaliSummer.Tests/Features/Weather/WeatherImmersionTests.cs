@@ -29,12 +29,17 @@ namespace BoscaliSummer.Tests.Features.Weather
                 "Surface histories wet over 35 seconds and retain residual water while drying");
             var field = new WeatherField();
             field.Build(new WeatherKey(73, 0f, false, (byte)WeatherRegimeType.Storm), 60f, 40000f, 40000f);
+            var cells = new StormCell[StormLattice.EnumerateCap];
+            int count = StormLattice.Enumerate(field.Lattice, 0f, 0f, StormLattice.EnumerateRange, cells);
+            TestAssert.That(count == StormLattice.EnumerateCap, "a storm sky fills the 24-cell enumeration");
             int events = 0;
             for (int slot = 0; slot < 300; slot++)
-            for (int source = 0; source < field.CellCount + field.SuperstructureCount; source++)
+            for (int source = 0; source < count + field.SuperstructureCount; source++)
             {
-                bool a = StormLightning.TryEvent(field, source, slot, out LightningEvent first);
-                bool b = StormLightning.TryEvent(field, source, slot, out LightningEvent second);
+                bool a = source < count ? StormLightning.TryCell(cells[source], field.Frame, slot, out LightningEvent first)
+                    : StormLightning.TryHero(field.SuperstructureAt(source - count), field.Key.LayoutSeed, slot, out first);
+                bool b = source < count ? StormLightning.TryCell(cells[source], field.Frame, slot, out LightningEvent second)
+                    : StormLightning.TryHero(field.SuperstructureAt(source - count), field.Key.LayoutSeed, slot, out second);
                 TestAssert.That(a == b && first.Time == second.Time && first.X == second.X,
                     "Storm events derive identically from field and mission-time slot");
                 if (!a) continue;
@@ -51,11 +56,9 @@ namespace BoscaliSummer.Tests.Features.Weather
             { noise[i] = 255; noise[i + 1] = 128; noise[i + 2] = 255; noise[i + 3] = 255; }
             var scud = new CloudBodies(noise, 2, new SkyParams { LobeRung = 3f, DeckDepth = 1200f }, nearDetail: true);
             var rainyColumn = new WeatherPoint { BackgroundCover = 1f, CloudBase = 1000f, CloudTop = 2500f, RainRate = 20f };
-            TestAssert.That(scud.Density(rainyColumn, 0f, 500f, 0f, 0f) > 0.2f &&
-                scud.Density(rainyColumn, 0f, 200f, 0f, 0f) == 0f,
+            TestAssert.That(scud.Density(rainyColumn, 0f, 500f, 0f) > 0.2f &&
+                scud.Density(rainyColumn, 0f, 200f, 0f) == 0f,
                 "View occupation includes scud 500 m beneath a rainy base, with a bounded lower edge");
-            TestAssert.That(scud.Density(rainyColumn, 0f, 1700f, 0f, 1200f) > 0.2f,
-                "Cloud altitude shift moves scud and its occupation together");
 
             field.Build(new WeatherKey(73, 0f, false, (byte)WeatherRegimeType.Clear,
                 Superstructures.SupercellSet), 60f, 40000f, 40000f);
@@ -95,7 +98,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             float sampledX = float.NaN, sampledZ = float.NaN;
             var heldWarp = new CloudBodies(noise, 2, new SkyParams { LobeRung = 3f, DeckDepth = 1200f }, nearDetail: true,
                 weatherSampler: (x, z) => { sampledX = x; sampledZ = z; return rainyColumn; });
-            TestAssert.That(heldWarp.Density(default, 100f, 500f, 200f, 0f) > 0.2f &&
+            TestAssert.That(heldWarp.Density(default, 100f, 500f, 200f) > 0.2f &&
                 Math.Abs(sampledX - 1500f) < 0.1f && sampledZ > 200f && sampledZ < 210f,
                 "Boundary warp resamples the displayed map, preserving held precipitation and cloud occupation");
         }

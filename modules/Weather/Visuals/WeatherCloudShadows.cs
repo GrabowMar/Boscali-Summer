@@ -10,14 +10,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
     /// <summary>Cloud shadows through the native directional-light cookie: a camera-centred,
     /// 48 km, 256-square transmission map computed from the same cloud bodies the volume
     /// shader draws, so each cloud casts its own shadow on terrain, sea and aircraft.
-    /// Rebuilt on a worker when the camera moves far, the sun turns, or the weather steps;
-    /// the weather is static in between, so nothing needs rebuilding while it holds.</summary>
+    /// Rebuilt on a worker when the camera moves far, the sun turns, or the tape or D changes;
+    /// the weather is held in between, so nothing needs rebuilding while it holds.</summary>
     internal sealed class WeatherCloudShadows
     {
         private const int Size = 256;
         private const float Span = 48000f;
         private const float RecentreDistance = 9000f;
-        private const float SettlingRefreshSeconds = 20f;
         private const float BlendSeconds = 4f;
         private const float UploadSeconds = 0.25f;
         private readonly Color32[] blended = new Color32[Size * Size];
@@ -27,10 +26,10 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private LevelInfo owner;
         private LightState sun, moon;
         private WeatherKey key;
-        private int step = -1;
+        private float builtOffset;
         private Vector3 projectedDirection;
         private double centreX, centreZ;
-        private float nextBuild, nextUpload, blendStart, heightShift;
+        private float nextBuild, nextUpload, blendStart;
         private int revision, generating;
         private ShadowResult ready;
         private string failureReason;
@@ -41,7 +40,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         internal int UpdateCount { get; private set; }
         internal string FailureReason => Volatile.Read(ref failureReason);
 
-        internal void Update(LevelInfo level, WeatherField field, float currentCloudHeight, Camera camera)
+        internal void Update(LevelInfo level, WeatherField field, Camera camera)
         {
             if (Application.isBatchMode || level == null || field == null || !field.IsBuilt || camera == null ||
                 level.sun == null || level.moon == null || level.SunURPLightData == null ||
@@ -64,22 +63,20 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (light == null) return;
 
             float now = Time.unscaledTime;
-            float shift = currentCloudHeight - field.Regional().CloudBase;
             GlobalPosition eye = camera.transform.GlobalPosition();
-            bool keyChanged = key == null || !key.Equals(field.Key);
+            // SameTape ignores D: a held offset edit (a rebased key, SetFixtureTape) would otherwise leave the cookie built for the old D.
+            bool keyChanged = key == null || !field.Key.SameTape(key) || field.Frame.Offset != builtOffset;
             bool turned = Vector3.Dot(projectedDirection, light.transform.forward) < 0.9986f;
-            if (keyChanged || turned || Math.Abs(shift - heightShift) > 250f)
+            if (keyChanged || turned)
             {
                 Interlocked.Increment(ref revision);
                 Interlocked.Exchange(ref ready, null);
                 key = field.Key;
+                builtOffset = field.Frame.Offset;
                 projectedDirection = light.transform.forward;
-                heightShift = shift;
-                step = -1;
                 nextBuild = 0f;
             }
-            // A new weather step, a drift away from the centre, or a still-settling sky rebuilds.
-            if (field.Timeline.Step != step) nextBuild = 0f;
+            // A drift away from the centre rebuilds.
             double dx = eye.x - centreX, dz = eye.z - centreZ;
             if (target == null || dx * dx + dz * dz > RecentreDistance * RecentreDistance) nextBuild = 0f;
 
@@ -103,11 +100,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             float elevation = -light.transform.forward.y;
             if (now >= nextBuild && elevation > 0.06f && Volatile.Read(ref generating) == 0)
             {
-                Queue(field, light, shift, eye.x, eye.z);
-                step = field.Timeline.Step;
-                bool settling = field.Key.Dynamic &&
-                    field.Time < WeatherTimeline.SettledAt(field.Key, field.Timeline);
-                nextBuild = settling ? now + SettlingRefreshSeconds : float.PositiveInfinity;
+                Queue(field, light, eye.x, eye.z);
+                nextBuild = float.PositiveInfinity;
             }
 
             if (texture == null)
@@ -125,13 +119,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 nextUpload = now + UploadSeconds;
                 float strength = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.06f, 0.20f, elevation));
                 WeatherPoint local = field.Sample((float)eye.x, (float)eye.z);
-                float bottom = local.CloudBase + shift;
-                float top = Math.Max(bottom + 500f, local.CloudTop + shift);
+                float bottom = local.CloudBase;
+                float top = Math.Max(bottom + 500f, local.CloudTop);
                 // A cookie cannot tell receiver altitude: fade it as the observer climbs
                 // through the deck so aircraft above the clouds lose the ground shadows.
                 strength *= 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(bottom, top, (float)eye.y));
                 float blend = Mathf.Clamp01((now - blendStart) / BlendSeconds);
-                // The cookie is static between weather steps: rebuild its 64k pixels only
+                // The cookie is static while the tape holds: rebuild its 64k pixels only
                 // while a new map fades in or the strength has moved.
                 // 2 % strength steps are invisible on ground shadows; finer steps rebuilt all
                 // 64k pixels at every 4 Hz tick while climbing through a deck.
@@ -178,7 +172,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             moon = default;
             owner = null;
             key = null;
-            step = -1;
             attached = false;
             target = null;
             nextBuild = 0f;
@@ -198,7 +191,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             nextUpload = 0f;
         }
 
-        private void Queue(WeatherField field, Light light, float shift, double centreGlobalX, double centreGlobalZ)
+        private void Queue(WeatherField field, Light light, double centreGlobalX, double centreGlobalZ)
         {
             byte[] noise = WeatherVolumeDressing.NoiseData;
             if (noise == null || noise.Length != WeatherVolumeDressing.NoiseTexels * 4) return;
@@ -221,11 +214,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 {
                     var snapshot = new WeatherField();
                     snapshot.Build(requestKey, time, halfX, halfZ, hour, haze);
-                    var body = new CloudBodies(noise, WeatherVolumeDressing.NoiseSize, snapshot.Tape, snapshot.Frame, snapshot.PrevailingHeading, snapshot.Split, 0f, snapshot);
+                    var body = new CloudBodies(noise, WeatherVolumeDressing.NoiseSize, snapshot.Tape, snapshot.Frame, snapshot.PrevailingHeading, 0f, snapshot);
                     var pixels = new byte[Size * Size];
                     const int samples = 14;
-                    float baseY = snapshot.Params.CloudBase + shift;
-                    float lower = Math.Max(0f, baseY - 800f), upper = 12000f + Math.Max(0f, shift);
+                    float baseY = snapshot.RowAt(0f, 0f).CloudBase;
+                    float lower = Math.Max(0f, baseY - 800f), upper = 12000f;
                     float dy = (upper - lower) / samples;
                     float rayStep = dy / Math.Max(0.06f, -direction.y);
                     for (int y = 0; y < Size; y++)
@@ -247,7 +240,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                                 float altitude = lower + (s + 0.5f) * dy;
                                 float t = (altitude - py) / direction.y;
                                 float wx = px + direction.x * t, wz = pz + direction.z * t;
-                                depth += body.Density(p, wx, altitude, wz, shift) * rayStep * 0.0021f;
+                                depth += body.Density(p, wx, altitude, wz) * rayStep * 0.0021f;
                             }
                             // A soft border fades the shadows out toward the cookie's edge.
                             float edge = Math.Min(Math.Min(x, Size - 1 - x), Math.Min(y, Size - 1 - y)) / 24f;

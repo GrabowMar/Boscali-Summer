@@ -17,19 +17,11 @@ namespace BoscaliSummer.Tests.Features.Weather
         public static void Run()
         {
             DomainStaysFreeOfUnity();
-            TimelineStepsOnTheInterval();
-            StatesMoveOnlyToNeighbours();
-            HeldSkyNeverChanges();
-            SkyIsStaticBetweenFades();
-            FadesNeverPop();
-            LayoutOnlyChangesUnderAnEmptySky();
             StatesBuildRealisticSkies();
             CoverGrowsUpTheLadder();
             FairCloudGroupsHaveSeparateCores();
             SuperstructuresAreStaticScenery();
-            FrontSplitsTheSky();
             ConsoleFormationsFollowTheKey();
-            FrontCloudProfilesHaveVerticalStructure();
             FieldIsDeterministic();
             VisibilityFollowsRain();
             ClassificationAndConditions();
@@ -41,136 +33,19 @@ namespace BoscaliSummer.Tests.Features.Weather
         private static WeatherKey Key(uint seed = 20260918u, bool dynamic = true, WeatherRegimeType? start = null)
             => new WeatherKey(seed, 0f, dynamic, start.HasValue ? (byte)start.Value : WeatherKey.AutoState);
 
-        private static WeatherKey Held(WeatherRegimeType state, uint seed = 24u) => Key(seed, false, state);
-
-        private static void TimelineStepsOnTheInterval()
+        private static WeatherKey Held(WeatherRegimeType state, uint seed = 24u)
         {
-            WeatherKey key = Key(7u);
-            TimelineState a = WeatherTimeline.Evaluate(key, 299f);
-            TimelineState b = WeatherTimeline.Evaluate(key, 301f);
-            TestAssert.That(a.Step == 0 && b.Step == 1, "a new state every five minutes");
-            TestAssert.That(Math.Abs(b.NextChangeAt - 600f) < 0.01f, "the next change is one interval on");
-            TestAssert.That(WeatherTimeline.Evaluate(key, 361f).Blend == 1f, "the fade lasts sixty seconds");
-            TestAssert.That(WeatherTimeline.Evaluate(key, 330f).Blend > 0f && WeatherTimeline.Evaluate(key, 330f).Blend < 1f,
-                "the change fades in");
-            TestAssert.That(WeatherTimeline.Evaluate(key, 700f).Step == 2, "the interim step interval is five minutes");
-        }
-
-        private static void StatesMoveOnlyToNeighbours()
-        {
-            bool[] seen = new bool[StateTable.Count];
-            for (uint seed = 1; seed <= 20; seed++)
-            {
-                WeatherKey key = Key(seed);
-                for (int step = 1; step < 400; step++)
-                {
-                    TimelineState s = WeatherTimeline.Evaluate(key, step * 300f + 1f);
-                    TestAssert.That(Math.Abs((int)s.To - (int)s.From) <= 1,
-                        $"jumped {s.From} -> {s.To} at step {step} seed {seed}");
-                    seen[(int)s.To] = true;
-                }
-            }
-            for (int i = 0; i < seen.Length; i++)
-                TestAssert.That(seen[i], "the walk should reach " + (WeatherRegimeType)i);
-        }
-
-        private static void HeldSkyNeverChanges()
-        {
-            WeatherKey key = Held(WeatherRegimeType.Overcast);
-            for (float t = 0f; t < 4f * 3600f; t += 97f)
-            {
-                TimelineState s = WeatherTimeline.Evaluate(key, t);
-                TestAssert.That(s.To == WeatherRegimeType.Overcast && s.Level == (int)WeatherRegimeType.Overcast,
-                    "held sky changed");
-                TestAssert.That(float.IsPositiveInfinity(s.NextChangeAt), "held sky predicted a change");
-            }
-        }
-
-        private static void SkyIsStaticBetweenFades()
-        {
-            var field = new WeatherField();
-            for (uint seed = 1; seed <= 8; seed++)
-            {
-                WeatherKey key = Key(seed);
-                for (int step = 0; step < 24; step++)
-                {
-                    float settled = step * 300f + WeatherTimeline.SettleSeconds() + 1f, late = step * 300f + 299f;
-                    field.Build(key, settled, HalfX, HalfZ);
-                    WeatherPoint a = field.Sample(9000f, -14000f);
-                    int cells = field.CellCount;
-                    field.Build(key, late, HalfX, HalfZ);
-                    WeatherPoint b = field.Sample(9000f, -14000f);
-                    TestAssert.That(a.Cover == b.Cover && a.RainRate == b.RainRate && cells == field.CellCount,
-                        $"the sky moved during a hold (seed {seed}, step {step})");
-                }
-            }
-        }
-
-        private static void FadesNeverPop()
-        {
-            var field = new WeatherField();
-            float[] xs = { 0f, 12000f, -20000f, 26000f };
-            float[] zs = { 0f, -8000f, 15000f, 21000f };
-            float worstCover = 0f;
-            for (uint seed = 3; seed < 9; seed++)
-            {
-                WeatherKey key = Key(seed);
-                var cover = new float[xs.Length];
-                var rain = new float[xs.Length];
-                var wind = new float[xs.Length];
-                for (int t = 0; t < 2 * 3600; t++)
-                {
-                    field.Build(key, t, HalfX, HalfZ);
-                    for (int k = 0; k < xs.Length; k++)
-                    {
-                        WeatherPoint p = field.Sample(xs[k], zs[k]);
-                        if (t > 0)
-                        {
-                            worstCover = Math.Max(worstCover, Math.Abs(p.Cover - cover[k]));
-                            TestAssert.That(Math.Abs(p.RainRate - rain[k]) < 3f,
-                                $"rain popped by {p.RainRate - rain[k]:F2} mm/h at t={t} seed {seed}");
-                            TestAssert.That(Math.Abs(p.WindSpeed - wind[k]) < 1.5f,
-                                $"wind popped by {p.WindSpeed - wind[k]:F2} at t={t} seed {seed}");
-                        }
-                        cover[k] = p.Cover;
-                        rain[k] = p.RainRate;
-                        wind[k] = p.WindSpeed;
-                        TestAssert.That(p.RainRate >= 0f && p.RainRate <= WeatherField.MaxRainRate, "rain in range");
-                        TestAssert.That(p.VisibilityKm >= 0.3f && p.VisibilityKm <= 50f, "visibility in range");
-                    }
-                }
-            }
-            TestAssert.That(worstCover < 0.05f, $"cover popped by {worstCover:F3} in one second");
-        }
-
-        private static void LayoutOnlyChangesUnderAnEmptySky()
-        {
-            var field = new WeatherField();
-            int swaps = 0;
-            for (uint seed = 1; seed <= 12; seed++)
-            {
-                WeatherKey key = Key(seed, start: WeatherRegimeType.Clear);
-                uint layout = WeatherTimeline.Evaluate(key, 0f).Layout;
-                for (float t = 0f; t < 10f * 3600f; t += 5f)
-                {
-                    TimelineState s = WeatherTimeline.Evaluate(key, t);
-                    if (s.Layout == layout) continue;
-                    swaps++;
-                    layout = s.Layout;
-                    TestAssert.That(s.Level == 0f && s.GrowthLevel == 0f, "the layout swapped with cloud on the map");
-                    field.Build(key, t, HalfX, HalfZ);
-                    TestAssert.That(field.CellCount == 0 && field.FrontCount == 0 && field.CloudClusterCount == 0,
-                        "a clear sky has nothing left to swap");
-                }
-            }
-            TestAssert.That(swaps > 3, "layouts are re-rolled through clear skies, saw " + swaps);
+            int pin = 0;
+            for (int i = 0; i < SkyLibrary.Count; i++) if (SkyLibrary.ClassOf(i) == state) { pin = i; break; }
+            return new WeatherKey(seed, 0f, false, (byte)state, skyPin: (byte)pin);
         }
 
         private static void StatesBuildRealisticSkies()
         {
             var field = new WeatherField();
+            var cells = new StormCell[StormLattice.EnumerateCap];
             field.Build(Held(WeatherRegimeType.Clear), 600f, HalfX, HalfZ);
-            TestAssert.That(field.CellCount == 0 && field.FrontCount == 0, "clear sky has no cells or fronts");
+            TestAssert.That(field.ActiveCellCount(0f, 0f, 80000f) == 0 && field.FrontCount == 0, "clear sky has no cells or fronts");
             for (int i = -3; i <= 3; i++)
             {
                 WeatherPoint p = field.Sample(i * 12000f, i * 7000f);
@@ -178,34 +53,30 @@ namespace BoscaliSummer.Tests.Features.Weather
             }
 
             field.Build(Held(WeatherRegimeType.Scattered), 600f, HalfX, HalfZ);
-            for (int i = 0; i < field.CellCount; i++)
-            {
-                StormCell cell = field.Cell(i);
-                TestAssert.That(cell.TopMax - cell.Base < 4000f && cell.LightningPeak == 0f,
+            int scattered = StormLattice.Enumerate(field.Lattice, 0f, 0f, 120000f, cells);
+            for (int i = 0; i < scattered; i++)
+                TestAssert.That(cells[i].TopMax - cells[i].Base < 4000f && cells[i].LightningPeak == 0f,
                     "scattered cumulus stays shallow and silent");
-            }
 
             field.Build(Held(WeatherRegimeType.Storm), 600f, HalfX, HalfZ);
-            TestAssert.That(field.CellCount >= 8 && field.FrontCount == WeatherFronts.MaxFronts,
-                "a storm fires most cell sites and both front bands");
+            TestAssert.That(field.ActiveCellCount(0f, 0f, 60000f) >= 8, "a storm fires many cells");
+            int count = StormLattice.Enumerate(field.Lattice, 0f, 0f, 120000f, cells);
             bool deep = false, lightning = false;
-            for (int i = 0; i < field.CellCount; i++)
+            int mature = 0;
+            for (int i = 0; i < count; i++)
             {
-                StormCell c = field.Cell(i);
+                StormCell c = cells[i];
                 deep |= c.TopMax - c.Base > 5000f;
                 lightning |= c.LightningRate > 0f;
-                WeatherPoint under = field.Sample(c.X, c.Z);
-                TestAssert.That(under.RainRate >= 0.5f * c.PeakRain * c.RainLevel, "it rains under a storm core");
+                if (c.Strength < 0.95f) continue;
+                mature++;
+                field.Frame.FromTape(c.X, c.Z, out float wx, out float wz);
+                WeatherPoint under = field.Sample(wx, wz);
+                TestAssert.That(under.RainRate >= 0.5f * c.PeakRain * c.Strength, "it rains under a storm core");
                 TestAssert.That(under.Cover > 0.9f, "a mature cell is overcast overhead");
             }
-            TestAssert.That(deep && lightning, "storm cells are deep and electric");
+            TestAssert.That(deep && lightning && mature > 3, "storm cells are deep and electric");
 
-            field.Build(Held(WeatherRegimeType.Overcast), 600f, HalfX, HalfZ);
-            FrontState band = field.Front(0);
-            float across = band.OffsetAtAlong(0f) - 2000f;
-            WeatherPoint underBand = field.Sample(band.NormalX * across, band.NormalZ * across);
-            TestAssert.That(field.FrontCount == 1 && underBand.FrontCover > 0.5f,
-                "overcast carries one connected frontal band");
         }
 
         private static void CoverGrowsUpTheLadder()
@@ -226,18 +97,26 @@ namespace BoscaliSummer.Tests.Features.Weather
             var field = new WeatherField();
             field.Build(Held(WeatherRegimeType.Scattered), 600f, HalfX, HalfZ);
             bool found = false;
-            for (int i = 0; i < field.CloudClusterCount; i++)
+            for (int i = -3; i <= 3; i++)
             {
-                DryCloudCluster cloud = field.CloudCluster(i);
-                if (cloud.Strength < 0.35f) continue;
-                WeatherPoint core = field.Sample(cloud.X, cloud.Z);
-                TestAssert.That(core.ClusterCover > 0.75f && core.CellShape > 0.75f,
+                if (!CumulusLattice.FindNearest(field.Lattice, null, i * 17000f, -i * 9000f, 3, 0.8f, out CumulusGroup group)) continue;
+                group.BlobCentre(0, out float cx, out float cz);
+                field.Frame.FromTape(cx, cz, out float wx, out float wz);
+                WeatherPoint core = field.Sample(wx, wz);
+                TestAssert.That(core.ClusterCover >= 0.79f && core.CellShape >= 0.79f,
                     "cumulus cores are discrete towers in both weather and render fields");
-                TestAssert.That(cloud.CoverAt(cloud.X + cloud.Radius * 1.5f, cloud.Z + cloud.Radius * 1.5f) == 0f,
-                    "separate cumulus cores leave clear air between groups");
                 found = true;
             }
             TestAssert.That(found, "scattered sky forms cumulus groups");
+            int clear = 0, total = 0;
+            for (float z = -35000f; z <= 35000f; z += 2500f)
+            for (float x = -35000f; x <= 35000f; x += 2500f)
+            {
+                total++;
+                if (field.Sample(x, z).ClusterCover <= 0f) clear++;
+            }
+            TestAssert.That(clear > total * 0.15f && clear < total * 0.85f,
+                $"separate cumulus groups leave clear air between them ({clear} of {total} samples are clear)");
         }
 
         private static void SuperstructuresAreStaticScenery()
@@ -245,12 +124,15 @@ namespace BoscaliSummer.Tests.Features.Weather
             var field = new WeatherField();
             field.Build(Held(WeatherRegimeType.Clear), 600f, HalfX, HalfZ);
             TestAssert.That(field.SuperstructureCount == 0, "a clear sky has no storm set-pieces");
-            field.Build(Held(WeatherRegimeType.Scattered), 600f, HalfX, HalfZ);
+            // Sky 17, the isolated cumulonimbus (Convective 0.25): the class's first sky, 15, is dry cumulus and shows no distant cell.
+            field.Build(new WeatherKey(24u, 0f, false, (byte)WeatherRegimeType.Scattered, skyPin: 16), 600f, HalfX, HalfZ);
             TestAssert.That(field.SuperstructureCount == 1 &&
                 field.SuperstructureAt(0).Kind == SuperstructureKind.Supercell,
                 "a convective sky shows one distant cumulonimbus");
 
-            field.Build(Held(WeatherRegimeType.Storm), 600f, HalfX, HalfZ);
+            // Sky 45, the cold-front storm line (Convective 0.9): the class's first sky, 42, is a multicell cluster at 0.7, too weak for a full-strength squall line.
+            WeatherKey storm = new WeatherKey(24u, 0f, false, (byte)WeatherRegimeType.Storm, skyPin: 44);
+            field.Build(storm, 600f, HalfX, HalfZ);
             TestAssert.That(field.SuperstructureCount == 3, "a storm shows a squall line and two cells");
             TestAssert.That(field.SuperstructureAt(0).Kind == SuperstructureKind.ShelfLine, "the squall line comes first");
             var first = new Superstructure[Superstructures.MaxCount];
@@ -261,9 +143,9 @@ namespace BoscaliSummer.Tests.Features.Weather
                 float distance = (float)Math.Sqrt(s.X * s.X + s.Z * s.Z);
                 TestAssert.That(distance > Math.Max(HalfX, HalfZ) + 25000f && distance < 220000f,
                     $"set-piece {i} sits outside the theater and inside the march ({distance / 1000f:F0} km)");
-                TestAssert.That(s.Top > 8000f && s.Top < 16000f && s.Strength > 0.99f, "a storm set-piece is built and tall");
+                TestAssert.That(s.Top > 8000f && s.Top < 16000f && s.Strength > 0.85f, "a storm set-piece is built and tall (the supercell scales with Convective 0.9)");
             }
-            field.Build(Held(WeatherRegimeType.Storm), 3000f, HalfX, HalfZ);
+            field.Build(storm, 3000f, HalfX, HalfZ);
             for (int i = 0; i < field.SuperstructureCount; i++)
                 TestAssert.That(field.SuperstructureAt(i).X == first[i].X && field.SuperstructureAt(i).Z == first[i].Z,
                     "set-pieces never move");
@@ -280,32 +162,6 @@ namespace BoscaliSummer.Tests.Features.Weather
                 "a re-roll leaves the weather state alone");
             TestAssert.That(!forced.Equals(forced.WithLayoutSalt(1)) && !forced.Equals(Held(WeatherRegimeType.Clear)),
                 "set-pieces and layout are part of the synced key");
-        }
-
-        private static void FrontSplitsTheSky()
-        {
-            var field = new WeatherField();
-            field.Build(Held(WeatherRegimeType.Scattered, 11u), 600f, HalfX, HalfZ);
-            TestAssert.That(field.Split.Amount == 0f, "fair-weather skies have no frontal boundary");
-
-            field.Build(Held(WeatherRegimeType.Overcast, 11u), 600f, HalfX, HalfZ);
-            SkySplit split = field.Split;
-            TestAssert.That(split.Amount > 0.5f, "an overcast sky is a front passing over the map");
-            // Walk across the boundary along its normal: open ahead, full deck behind.
-            float ahead = 0f, behind = 0f;
-            for (int i = -2; i <= 2; i++)
-            {
-                float along = i * 12000f;
-                float bx = -split.NormalZ * along, bz = split.NormalX * along;
-                float line = split.Offset;
-                ahead += field.Sample(bx + split.NormalX * (line + 60000f), bz + split.NormalZ * (line + 60000f)).BackgroundCover;
-                behind += field.Sample(bx + split.NormalX * (line - 60000f), bz + split.NormalZ * (line - 60000f)).BackgroundCover;
-            }
-            TestAssert.That(behind > ahead * 2f && behind / 5f > 0.5f,
-                $"the deck lies behind the front ({behind / 5f:F2}) and opens ahead of it ({ahead / 5f:F2})");
-            FrontState band = field.Front(0);
-            TestAssert.That(Math.Abs(band.NormalX - split.NormalX) < 1e-5f && Math.Abs(band.Offset - split.Offset) < 1e-3f,
-                "the main front band lies on the boundary");
         }
 
         private static void ConsoleFormationsFollowTheKey()
@@ -342,7 +198,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             {
                 a.Build(Key(99u), t, HalfX, HalfZ, 14f);
                 b.Build(new WeatherKey(99u, 0f, true, WeatherKey.AutoState), t, HalfX, HalfZ, 14f);
-                TestAssert.That(a.CellCount == b.CellCount, "cell count differs between peers");
+                TestAssert.That(a.ActiveCellCount(0f, 0f, 60000f) == b.ActiveCellCount(0f, 0f, 60000f), "cell count differs between peers");
                 for (int i = -2; i <= 2; i++)
                 {
                     WeatherPoint pa = a.Sample(i * 15000f, -i * 9000f);
@@ -429,38 +285,6 @@ namespace BoscaliSummer.Tests.Features.Weather
                 "cloud entry carries rain and condensation together");
             TestAssert.That(FlightWeatherAirMass.Evaluate(point, 5000f, false, 0.8f).Rain == 0.8f,
                 "manual rain override remains useful for flight checks");
-        }
-
-        private static void FrontCloudProfilesHaveVerticalStructure()
-        {
-            FrontEffect warmFar = WeatherFronts.Profile(FrontKind.Warm, -65000f);
-            FrontEffect warmRain = WeatherFronts.Profile(FrontKind.Warm, -10000f);
-            TestAssert.That(warmFar.BaseOffset > warmRain.BaseOffset + 4500f &&
-                warmFar.Depth < warmRain.Depth * 0.4f,
-                "warm front leads with a high thin shield and lowers into deep rain cloud");
-            FrontEffect coldLine = WeatherFronts.Profile(FrontKind.Cold, 2000f);
-            FrontEffect coldRear = WeatherFronts.Profile(FrontKind.Cold, 22000f);
-            FrontEffect squallLine = WeatherFronts.Profile(FrontKind.Squall, 1200f);
-            FrontEffect squallRear = WeatherFronts.Profile(FrontKind.Squall, 22000f);
-            TestAssert.That(coldLine.Depth > coldRear.Depth + 2500f &&
-                squallLine.Depth > squallRear.Depth + 4000f &&
-                squallLine.Depth > coldLine.Depth + 1500f,
-                "cold and squall fronts concentrate ascent near the line and trail a shallower shield");
-            foreach (FrontKind kind in new[] { FrontKind.Warm, FrontKind.Cold, FrontKind.Squall })
-            {
-                FrontEffect previous = WeatherFronts.Profile(kind, -90000f);
-                for (float distance = -89900f; distance <= 50000f; distance += 100f)
-                {
-                    FrontEffect current = WeatherFronts.Profile(kind, distance);
-                    TestAssert.That(current.Depth >= 900f && current.Depth <= 8500f &&
-                        current.BaseOffset >= -350f && current.BaseOffset <= 5200f,
-                        "frontal altitude profiles are bounded");
-                    TestAssert.That(Math.Abs(current.BaseOffset - previous.BaseOffset) < 30f &&
-                        Math.Abs(current.Depth - previous.Depth) < 130f,
-                        "flying across the front must not meet altitude steps");
-                    previous = current;
-                }
-            }
         }
 
         private static string FindRepoRoot()

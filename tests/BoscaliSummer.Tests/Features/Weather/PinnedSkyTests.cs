@@ -32,7 +32,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             WeatherKey reset = WeatherScenarios.Apply(WeatherScenario.ResetAll, pinned, false, 0f, 0f, 0f, 1f);
             TestAssert.That(reset.SkyPin == WeatherKey.None, "the ResetAll scenario unpins");
             WeatherKey hurricane = WeatherScenarios.Apply(WeatherScenario.HurricaneEye, pinned, false, 0f, 0f, 0f, 1f);
-            TestAssert.That(hurricane.SkyPin == WeatherKey.None, "so does any other scenario");
+            TestAssert.That(hurricane.SkyPin == 43, "a pin scenario pins its sky (the storm eye is sky 44)");
         }
 
         private static void EveryLibrarySkyBuildsAndSamples()
@@ -64,7 +64,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                 SkyParams s = field.Params;
                 if (s.StratRain > 1f && s.Mid.Cover + s.SheetCover > 0.9f) TestAssert.That(rainy > 20, "sky " + (i + 1) + " rains over much of the field, got " + rainy);
                 if (SkyLibrary.ClassOf(i) <= WeatherRegimeType.Overcast && s.Convective == 0f) TestAssert.That(rainy == 0, "sky " + (i + 1) + " is dry");
-                if (s.Convective > 0.1f) TestAssert.That(field.CellCount > 0, "sky " + (i + 1) + " has storm cells");
+                if (s.Convective > 0.1f) TestAssert.That(StormLattice.FindNearest(field.Lattice, null, 0f, 0f, 10, 0.0001f, out _), "sky " + (i + 1) + " has storm cells");
             }
             string spread = "MeanCover of the pinned skies by class (printed, not asserted against the class until slice 4b):";
             for (int c = 0; c < 7; c++) spread += "\n  " + (WeatherRegimeType)c + " " + meanLow[c].ToString("0.000") + "-" + meanHigh[c].ToString("0.000");
@@ -98,14 +98,8 @@ namespace BoscaliSummer.Tests.Features.Weather
                 var field = new WeatherField();
                 var key = new WeatherKey(73u, 0f, true, (byte)WeatherRegimeType.Fair, skyPin: bad);
                 field.Build(key, 1300f, 40000f, 40000f);
-                var legacy = new WeatherField();
-                legacy.Build(new WeatherKey(73u, 0f, true, (byte)WeatherRegimeType.Fair), 1300f, 40000f, 40000f);
-                TestAssert.That(field.Timeline.Step == legacy.Timeline.Step && field.Params.SheetCover == legacy.Params.SheetCover,
-                    "a pin outside the library (" + bad + ") plays the legacy timeline");
+                TestAssert.That(field.TapeSource.Keyframes.Length > 1, "a pin outside the library (" + bad + ") builds the auto tape");
             }
-            var moving = new WeatherField();
-            moving.Build(new WeatherKey(73u, 0f, true, (byte)WeatherRegimeType.Fair), 3600f, 40000f, 40000f);
-            TestAssert.That(moving.Timeline.Step > 3 && float.IsFinite(moving.Timeline.NextChangeAt), "an unpinned moving key still steps");
         }
 
         private static void SkiesWithNoLowLayerStayHigh()

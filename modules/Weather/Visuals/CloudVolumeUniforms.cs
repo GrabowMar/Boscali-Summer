@@ -11,10 +11,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         public Vector3 CameraPosition, CameraForward;
         public float FieldOfView;
         public int PixelHeight;
-        public float CloudShift;
-        /// <summary>Altitude range of the weather cloud (before set-pieces), shift not applied.</summary>
+        /// <summary>Altitude range of the weather cloud (before set-pieces), </summary>
         public float Bottom, Top;
-        public float HorizonCover;
         public Vector3 SunDirection;
         public Color SunColor, Ambient, Ground, Fog;
         public float Extinction;
@@ -35,7 +33,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static readonly int MapSpanId = Shader.PropertyToID("_WeatherMapSpan");
         private static readonly int FarSpanId = Shader.PropertyToID("_WeatherFarSpan");
         private static readonly int BaseId = Shader.PropertyToID("_CloudBase");
-        private static readonly int ShiftId = Shader.PropertyToID("_CloudHeightShift");
         private static readonly int OffsetId = Shader.PropertyToID("_CloudWorldOffset");
         private static readonly int ForwardId = Shader.PropertyToID("_CloudCameraForward");
         private static readonly int CameraPosId = Shader.PropertyToID("_CloudCameraPos");
@@ -57,7 +54,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static readonly int FlashAId = Shader.PropertyToID("_CloudFlashA");
         private static readonly int FlashBId = Shader.PropertyToID("_CloudFlashB");
         private static readonly int FlashChangeId = Shader.PropertyToID("_CloudFlashChange");
-        private static readonly int StormId = Shader.PropertyToID("_CloudStorm");
         private static readonly int RainVisualsId = Shader.PropertyToID("_CloudRainVisuals");
         // The weather tape (TapeTexture, BakedTape): the shader reads every per-sample genus and thin-layer column from it.
         private static readonly int TapeTexId = Shader.PropertyToID("_TapeTex");
@@ -71,12 +67,14 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         {
             Shader.PropertyToID("_TapeConstLow0"), Shader.PropertyToID("_TapeConstLow1"), Shader.PropertyToID("_TapeConstLow2"),
         };
+        // The noise decorrelation of the tape (NoiseXform): one (cos, sin, offset x, offset z) per noise layer.
+        private static readonly int[] NoiseXfIds =
+        {
+            Shader.PropertyToID("_NoiseXf0"), Shader.PropertyToID("_NoiseXf1"), Shader.PropertyToID("_NoiseXf2"),
+            Shader.PropertyToID("_NoiseXf3"), Shader.PropertyToID("_NoiseXf4"), Shader.PropertyToID("_NoiseXf5"),
+        };
         private static readonly int WindDirId = Shader.PropertyToID("_CloudWindDir");
-        private static readonly int HorizonCoverId = Shader.PropertyToID("_HorizonCover");
         private static readonly int HorizonDeckId = Shader.PropertyToID("_HorizonDeck");
-        private static readonly int HorizonDepthId = Shader.PropertyToID("_HorizonDepth");
-        private static readonly int SplitAId = Shader.PropertyToID("_SplitA");
-        private static readonly int SplitBId = Shader.PropertyToID("_SplitB");
         private static readonly int PixelAngleId = Shader.PropertyToID("_CloudPixelAngle");
         private static readonly int StepsId = Shader.PropertyToID("_CloudSteps");
         private static readonly int FarStepsId = Shader.PropertyToID("_CloudFarSteps");
@@ -148,7 +146,10 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             material.SetTexture(TapeTexId, tapeTexture.Texture);
             material.SetVector(TapeInfoId, new Vector4(tape.Texels, 1f / tape.Texels, 1f / tape.TexelMetres, 0f));
             material.SetVector(TapeFrameId, new Vector4(f.UX, f.UZ, f.Amplitude, Mathf.Max(1f, f.Wavelength)));
-            material.SetVector(TapeFrame2Id, new Vector4(f.Phase, f.Offset, 0f, 0f));
+            material.SetVector(TapeFrame2Id, new Vector4(f.Phase, f.Offset, f.Noise.StreetSpacing, f.Noise.StreetPhase));
+            NoiseXform noise = f.Noise;
+            for (int layer = 0; layer < NoiseXform.Layers; layer++)
+                material.SetVector(NoiseXfIds[layer], new Vector4(noise.Cos(layer), noise.Sin(layer), noise.OffsetX(layer), noise.OffsetZ(layer)));
             material.SetVector(TapeChordId, new Vector4(tape.MidChord0, tape.MidChord1, tape.HighChord0, tape.HighChord1));
             bool constant = tape.IsConstant;
             if (constant)
@@ -179,8 +180,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         {
             SkyParams sky = field.Params;
             material.SetTexture(NoiseId, noise);
-            material.SetFloat(BaseId, sky.CloudBase + frame.CloudShift);
-            material.SetFloat(ShiftId, frame.CloudShift);
+            material.SetFloat(BaseId, sky.CloudBase);
             material.SetVector(OffsetId, frame.WorldOffset);
             material.SetVector(ForwardId, frame.CameraForward);
 
@@ -200,7 +200,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 heroB[i] = new Vector4(s.Size, s.Top, heroShown[i], s.Extent);
                 if (s.Kind == SuperstructureKind.StormEye) eye = new Vector4(s.X, s.Z, s.Size, heroShown[i]);
                 // Set-pieces use absolute seeded heights in both CPU and shader bodies.
-                // Native cloud-height changes shift the ordinary weather volume only.
                 heroBottom = Mathf.Min(heroBottom, 300f);
                 heroTop = Mathf.Max(heroTop, s.Top + 1500f);
             }
@@ -212,7 +211,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             material.SetVectorArray(HeroBId, heroB);
             material.SetFloat(HeroCountId, heroes);
             material.SetVector(EyeId, eye);
-            material.SetVector(BoundsId, new Vector2(frame.Bottom + frame.CloudShift, frame.Top + frame.CloudShift));
+            material.SetVector(BoundsId, new Vector2(frame.Bottom, frame.Top));
             material.SetVector(HeroBoundsId, heroes > 0 ? new Vector2(heroBottom, heroTop) : Vector2.zero);
             // Static weather: the detail texture does not crawl either.
             material.SetVector(WindOffsetId, Vector2.zero);
@@ -228,7 +227,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             material.SetVector(FlashBId, frame.FlashB);
             Shader.SetGlobalFloat(FlashChangeId, Mathf.Abs(frame.Flash - previousFlash));
             previousFlash = frame.Flash;
-            material.SetFloat(StormId, sky.Severity);
             material.SetFloat(RainVisualsId, frame.RainVisualsEnabled ? 1f : 0f);
             // The low genus of every sample is a row of the field's tape (it fades with the state).
             BindTape(material, field);
@@ -236,20 +234,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
             WeatherMath.HeadingToVector(field.PrevailingHeading, out float windX, out float windZ);
             material.SetVector(WindDirId, new Vector2(windX, windZ));
-            // Horizon deck: the far ring's cover, plus a distant band of cumulus in fair skies.
-            // An overcast deck continues past the march: rays that reach its base beyond 220 km
-            // (just above the horizon under or inside it) otherwise showed a bright sky sliver.
-            // The shader still opens it ahead of a frontal boundary (SplitShare).
-            // INTERIM(slice 4): the deck continues the far ring's cover with the sky's baked HorizonCover and HorizonDepth columns;
-            // reading the tape alone, with the march hand-off, comes with the horizon-deck work of slice 4.
-            material.SetFloat(HorizonCoverId, Mathf.Clamp01(Mathf.Max(frame.HorizonCover, sky.HorizonCover)));
-            material.SetFloat(HorizonDeckId, sky.CloudBase + frame.CloudShift + sky.HorizonDepth * 0.4f);
-            material.SetFloat(HorizonDepthId, sky.HorizonDepth);
-            // The frontal boundary: one side of the map under the deck, the other opening up.
-            SkySplit split = field.Split;
-            material.SetVector(SplitAId, new Vector4(split.NormalX, split.NormalZ, split.Offset, SkySplit.Width));
-            material.SetVector(SplitBId, new Vector4(split.Amount, split.MeanderAmplitude,
-                Mathf.Max(1000f, split.MeanderWavelength), split.MeanderPhase));
+            // Horizon deck (spec 7.3): one plane at the tape's deck altitude, fixed per tape; cover and depth per hit come from the tape rows in the shader.
+            material.SetFloat(HorizonDeckId, field.Tape.Tape.DeckAltitude);
+
             material.SetFloat(PixelAngleId,
                 2f * Mathf.Tan(frame.FieldOfView * 0.5f * Mathf.Deg2Rad) / Mathf.Max(1, frame.PixelHeight));
             // 64 near steps: temporal accumulation averages the per-frame dither, which

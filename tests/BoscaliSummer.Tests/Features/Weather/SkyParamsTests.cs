@@ -186,13 +186,13 @@ namespace BoscaliSummer.Tests.Features.Weather
             SkyDerived.Apply(ref sky);
             TestAssert.That(Math.Abs(sky.Mid.Strength - 0.42f) < 1e-6f && Math.Abs(sky.High.Strength - 0.12f) < 1e-6f,
                 "Strength is 0.6 x OpacityMid and 0.8 x OpacityHigh: today's 0.42 and 0.12 at the old opacities");
-            TestAssert.That(Math.Abs(sky.HorizonCover - 0.225f) < 1e-6f, "horizon cover of sky 8 is 1.5 x 0.15");
+            TestAssert.That(Math.Abs(sky.HorizonCover - 0.795f) < 1e-6f, "horizon cover of sky 8 is HorizonStack 5.3 x 0.15");
             TestAssert.That(sky.HorizonDepth == 300f, "Humilis horizon depth is the 300 m floor");
             TestAssert.That(Math.Abs(sky.CumulusLevel - 0.430f) < 0.001f, "sky 8's cumulus level is 0.430, got " + sky.CumulusLevel);
 
             sky = new SkyParams { SheetCover = 0.60f, CumulusCover = 0.30f, Convective = 0.7f, PuffDepth = 2000f, DeckDepth = 0f, CapacityCover = 0.65f };
             SkyDerived.Apply(ref sky);
-            TestAssert.That(Math.Abs(sky.HorizonCover - 0.59f) < 1e-6f, "sky 42: max(0.54, 0.45 + 0.14) = 0.59");
+            TestAssert.That(Math.Abs(sky.HorizonCover - 1f) < 1e-6f, "sky 42: min(1, 5.3 x 0.30 + 0.14) = 1");
             TestAssert.That(sky.HorizonDepth == 1000f, "a Cb deck is half its puff depth deep");
             sky = new SkyParams { SheetCover = 1f, DeckDepth = 500f, PuffDepth = 500f };
             SkyDerived.Apply(ref sky);

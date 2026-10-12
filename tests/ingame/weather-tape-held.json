@@ -1,0 +1,490 @@
+{
+  "name": "weather-tape-held",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 420,
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "at": {
+        "map": [
+          0,
+          0
+        ]
+      },
+      "altitude": 1500,
+      "speed": 110,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "level": 120
+        }
+      ]
+    },
+    {
+      "op": "observe",
+      "follow": "lead"
+    },
+    {
+      "op": "wait",
+      "seconds": 10
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.ForceWeather",
+      "store": "forced",
+      "args": {
+        "conditions": 0.5,
+        "cloudHeight": 2500,
+        "seed": 3
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.SetFixtureTape",
+      "store": "s0o0",
+      "args": {
+        "seed": 2026091,
+        "story": 0,
+        "pin": 255,
+        "offsetKm": 0,
+        "dynamic": false
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Readout",
+      "store": "s0o0r",
+      "args": {
+        "requireClouds": true
+      }
+    },
+    {
+      "op": "camera",
+      "position": [
+        0,
+        1500,
+        0
+      ],
+      "heading": 30,
+      "pitch": 6,
+      "fov": 70
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "tape-held-s0o0",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.SetFixtureTape",
+      "store": "s0o150",
+      "args": {
+        "seed": 2026091,
+        "story": 0,
+        "pin": 255,
+        "offsetKm": 150,
+        "dynamic": false
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Readout",
+      "store": "s0o150r",
+      "args": {
+        "requireClouds": true
+      }
+    },
+    {
+      "op": "camera",
+      "position": [
+        0,
+        1500,
+        0
+      ],
+      "heading": 30,
+      "pitch": 6,
+      "fov": 70
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "tape-held-s0o150",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.SetFixtureTape",
+      "store": "s0o215",
+      "args": {
+        "seed": 2026091,
+        "story": 0,
+        "pin": 255,
+        "offsetKm": 215,
+        "dynamic": false
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Readout",
+      "store": "s0o215r",
+      "args": {
+        "requireClouds": true
+      }
+    },
+    {
+      "op": "camera",
+      "position": [
+        0,
+        1500,
+        0
+      ],
+      "heading": 30,
+      "pitch": 6,
+      "fov": 70
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "tape-held-s0o215",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.SetFixtureTape",
+      "store": "s0o250",
+      "args": {
+        "seed": 2026091,
+        "story": 0,
+        "pin": 255,
+        "offsetKm": 250,
+        "dynamic": false
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Readout",
+      "store": "s0o250r",
+      "args": {
+        "requireClouds": true
+      }
+    },
+    {
+      "op": "camera",
+      "position": [
+        0,
+        1500,
+        0
+      ],
+      "heading": 30,
+      "pitch": 6,
+      "fov": 70
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "tape-held-s0o250",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.SetFixtureTape",
+      "store": "s0o300",
+      "args": {
+        "seed": 2026091,
+        "story": 0,
+        "pin": 255,
+        "offsetKm": 300,
+        "dynamic": false
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Readout",
+      "store": "s0o300r",
+      "args": {
+        "requireClouds": true
+      }
+    },
+    {
+      "op": "camera",
+      "position": [
+        0,
+        1500,
+        0
+      ],
+      "heading": 30,
+      "pitch": 6,
+      "fov": 70
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "tape-held-s0o300",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.SetFixtureTape",
+      "store": "s1o200",
+      "args": {
+        "seed": 2026091,
+        "story": 1,
+        "pin": 255,
+        "offsetKm": 200,
+        "dynamic": false
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Readout",
+      "store": "s1o200r",
+      "args": {
+        "requireClouds": true
+      }
+    },
+    {
+      "op": "camera",
+      "position": [
+        0,
+        1500,
+        0
+      ],
+      "heading": 30,
+      "pitch": 6,
+      "fov": 70
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "tape-held-s1o200",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.SetFixtureTape",
+      "store": "s1o245",
+      "args": {
+        "seed": 2026091,
+        "story": 1,
+        "pin": 255,
+        "offsetKm": 245,
+        "dynamic": false
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Readout",
+      "store": "s1o245r",
+      "args": {
+        "requireClouds": true
+      }
+    },
+    {
+      "op": "camera",
+      "position": [
+        0,
+        1500,
+        0
+      ],
+      "heading": 30,
+      "pitch": 6,
+      "fov": 70
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "tape-held-s1o245",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.SetFixtureTape",
+      "store": "sky37",
+      "args": {
+        "seed": 2026091,
+        "story": 255,
+        "pin": 36,
+        "offsetKm": 0,
+        "dynamic": false
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Readout",
+      "store": "sky37r",
+      "args": {
+        "requireClouds": true
+      }
+    },
+    {
+      "op": "camera",
+      "position": [
+        0,
+        1500,
+        0
+      ],
+      "heading": 30,
+      "pitch": 6,
+      "fov": 70
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "tape-held-sky37",
+      "hide_ui": true
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "s0o0r.markerCount",
+      "min": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "s0o0r.keyDynamic",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "s0o150r.markerCount",
+      "min": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "s0o150r.keyDynamic",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "s0o215r.markerCount",
+      "min": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "s0o215r.keyDynamic",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "s0o250r.markerCount",
+      "min": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "s0o250r.keyDynamic",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "s0o300r.markerCount",
+      "min": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "s0o300r.keyDynamic",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "s1o200r.markerCount",
+      "min": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "s1o200r.keyDynamic",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "s1o245r.markerCount",
+      "min": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "s1o245r.keyDynamic",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "sky37r.flightClouds",
+      "min": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "sky37r.keyDynamic",
+      "max": 0.5
+    }
+  ]
+}

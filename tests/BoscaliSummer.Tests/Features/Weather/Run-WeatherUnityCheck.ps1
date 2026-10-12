@@ -11,7 +11,7 @@ Get-ChildItem "$repo/modules/Weather/Visuals/*.cs" |
     Copy-Item -Destination "$fixture/Assets/Code/"
 Copy-Item "$repo/modules/Weather/Audio/*.cs" "$fixture/Assets/Code/"
 Copy-Item "$PSScriptRoot/CloudDressingStubs.cs" "$fixture/Assets/Code/"
-Copy-Item "$repo/modules/Weather/Domain/*.cs" "$fixture/Assets/Code/"
+Copy-Item (Get-ChildItem "$repo/modules/Weather/Domain/*.cs" | Where-Object { $_.Name -notlike 'MetOffice*' }).FullName "$fixture/Assets/Code/"
 Copy-Item "$repo/Core/Math/Deterministic.cs", "$repo/Core/Math/Scalar.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/Core/Contracts/FxBudget.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/Core/Contracts/IClientEffect.cs" "$fixture/Assets/Code/"

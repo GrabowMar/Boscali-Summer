@@ -41,8 +41,12 @@ public sealed class CloudBench : MonoBehaviour
         public Vector3 Camera;
         public float Yaw, Pitch;
         public int LookAtHero = -1;
-        /// <summary>0 fixed camera, 1 in first cell, 2 beside its anvil, 3 cumulus group, 4 set-piece portrait, 5 outside first cell.</summary>
+        /// <summary>0 fixed camera, 1 in the nearest storm cell, 2 beside its anvil, 3 at the nearest cumulus group, 4 set-piece portrait,
+        /// 5 outside the nearest cell, 6 flythrough at a group, 7 flythrough of a cell, 8 and 9 the front beside a cell, 10 the sky-sheet
+        /// framing, 11 looking along the tape axis (across it when the name says so).</summary>
         public int Place;
+        /// <summary>Above 0: a one-keyframe tape of the scene's sky with this BaseVariation (the Humilis ledge check).</summary>
+        public float BaseVariation;
         public Vector3 Travel;
     }
 
@@ -163,6 +167,14 @@ public sealed class CloudBench : MonoBehaviour
         camera.AddCommandBuffer(CameraEvent.BeforeForwardAlpha, cmd);
         var readback = new Texture2D(Width, Height, TextureFormat.RGB24, false);
 
+        // The deck seam metric (spec 7.3, CloudBenchSeam): its own render loop, run alone with -Only seam (skies 8, 15 and 29, or CLOUD_BENCH_SKIES).
+        if (Array.Exists(filters, filter => filter == "seam"))
+        {
+            ground.SetActive(false);
+            CloudBenchSeam.Run(log, skies != null ? skies.Skies : new[] { 7, 14, 28 }, camera, target, cmd, cube, march, noise, HalfExtent);
+            return;
+        }
+
         var scenes = new List<Scene>
         {
             new Scene { Name = "broken-high", State = WeatherRegimeType.Broken, Camera = new Vector3(0, 7000, 0), Yaw = 30, Pitch = -6 },
@@ -195,6 +207,12 @@ public sealed class CloudBench : MonoBehaviour
             new Scene { Name = "frontal-edge-exterior", State = WeatherRegimeType.Storm, Place = 9 },
             new Scene { Name = "flythrough-cumulus", State = WeatherRegimeType.Scattered, Place = 6 },
             new Scene { Name = "flythrough-storm", State = WeatherRegimeType.Storm, Place = 7 },
+            // Slice 3: a flat-base Humilis sky (sky 8) at the smallest and the largest base variation: the underside must show no ledges.
+            new Scene { Name = "humilis-ledge-150", State = WeatherRegimeType.Fair, Sky = 7, BaseVariation = 150f, Place = 3 },
+            new Scene { Name = "humilis-ledge-400", State = WeatherRegimeType.Fair, Sky = 7, BaseVariation = 400f, Place = 3 },
+            // Cloud streets (sky 10) seen along the rows and across them.
+            new Scene { Name = "streets-along", State = WeatherRegimeType.Fair, Sky = 9, Camera = new Vector3(0, 500, 0), Pitch = 8, Place = 11 },
+            new Scene { Name = "streets-across", State = WeatherRegimeType.Fair, Sky = 9, Camera = new Vector3(0, 500, 0), Pitch = 8, Place = 11 },
         };
 
         // Exercise the console's actual scenario definitions, plus all state and set buttons.
@@ -250,14 +268,14 @@ public sealed class CloudBench : MonoBehaviour
         foreach (Scene s in scenes)
         {
             if (filters.Length > 0 && !Array.Exists(filters, filter => s.Name.Contains(filter))) continue;
-            // INTERIM(slice 4): the key has no front turn; the three front-turn views render the unturned sky.
+            // The key has no front turn: the three front-turn scenes render the unturned sky (slice 4b retires them).
             var key = new WeatherKey(s.Seed, 0f, false, (byte)s.State, s.Sets, s.Salt, s.Anchor, 0f, 25000f,
                 skyPin: s.Sky >= 0 && !skyClass ? (byte)s.Sky : WeatherKey.None);
             if (s.Preset.HasValue) key = WeatherScenarios.Apply(s.Preset.Value, key, true, 0f, 0f, 0f, 1f);
             const float time = 900f;
             var field = new WeatherField();
             field.Build(key, time, HalfExtent, HalfExtent, 13f);
-            TapeFixture fixture = TapeVariant(tapeMode, field);
+            TapeFixture fixture = TapeVariant(tapeMode, field, s.BaseVariation);
             if (fixture != null) field.UseFixtureTape(fixture.Sampler, fixture.Frame);
             var watch = Stopwatch.StartNew();
             CloudMaps maps = CloudMaps.Build(key, time, HalfExtent, HalfExtent, 13f, 105000f, 315000f, fixture);
@@ -268,43 +286,47 @@ public sealed class CloudBench : MonoBehaviour
             Texture2D envelope = Map(maps.Envelope, CloudMaps.EnvelopeSize);
             envelope.filterMode = FilterMode.Point;
 
-            if (s.Place == 1 && field.CellCount > 0)
+            // The lattice has no fixed first cell or group: the features near the origin are found, nearest first.
+            FieldFeature cell = default, cloud = default;
+            bool hasCell = s.Place != 0 && field.FindNearestCell(0f, 0f, out cell);
+            bool hasCloud = s.Place != 0 && field.FindNearestCloud(0f, 0f, out cloud);
+            if (s.Place == 1 && hasCell)
             {
-                StormCell cell = field.Cell(0);
                 s.Camera = new Vector3(cell.X, (cell.Base + cell.Top) * 0.45f, cell.Z);
             }
-            else if (s.Place == 2 && field.CellCount > 0)
+            else if (s.Place == 2 && hasCell)
             {
-                StormCell cell = field.Cell(0);
                 s.Camera = new Vector3(cell.X - cell.Radius * 2.2f, cell.Base + (cell.Top - cell.Base) * 0.82f, cell.Z);
                 s.Yaw = Mathf.Atan2(cell.X - s.Camera.x, cell.Z - s.Camera.z) * Mathf.Rad2Deg;
             }
-            else if (s.Place == 3 && field.CloudClusterCount > 0)
+            else if (s.Place == 3 && hasCloud)
             {
-                DryCloudCluster cloud = field.CloudCluster(0);
                 float y = s.Name.Contains("high") ? cloud.Top + 1800f : Math.Max(400f, cloud.Base - 500f);
                 s.Camera = new Vector3(cloud.X - cloud.Radius * 0.9f, y, cloud.Z - cloud.Radius * 0.4f);
                 s.Yaw = Mathf.Atan2(cloud.X - s.Camera.x, cloud.Z - s.Camera.z) * Mathf.Rad2Deg;
                 s.Pitch = s.Name.Contains("high") ? -12f : 6f;
             }
-            else if (s.Place == 10 && (field.CloudClusterCount > 0 || field.CellCount > 0))
+            else if (s.Place == 10 && (hasCloud || hasCell))
             {
                 // The sky sheets: a cumulus group seen from below at its edge, or - for a storm sky, or when there is no group - the
-                // first storm cell. The legacy layout places a handful of features; the lattice of slice 3 makes cover uniform.
-                if (field.CellCount > 0 && (field.CloudClusterCount == 0 || s.State >= WeatherRegimeType.RainSquall))
+                // nearest storm cell.
+                if (hasCell && (!hasCloud || s.State >= WeatherRegimeType.RainSquall))
                 {
-                    StormCell cell = field.Cell(0);
                     s.Camera = new Vector3(cell.X - cell.Radius * 5f, 600f, cell.Z);
                     s.Yaw = 90f;
                     s.Pitch = 8f;
                 }
                 else
                 {
-                    DryCloudCluster cloud = field.CloudCluster(0);
                     s.Camera = new Vector3(cloud.X - cloud.Radius * 0.9f, Math.Max(400f, cloud.Base - 500f), cloud.Z - cloud.Radius * 0.4f);
                     s.Yaw = Mathf.Atan2(cloud.X - s.Camera.x, cloud.Z - s.Camera.z) * Mathf.Rad2Deg;
                     s.Pitch = 6f;
                 }
+            }
+            else if (s.Place == 11)
+            {
+                // Along the tape axis (up the wind, the direction cloud streets run), or across it when the name says so.
+                s.Yaw = Mathf.Atan2(field.Frame.UX, field.Frame.UZ) * Mathf.Rad2Deg + (s.Name.Contains("across") ? 90f : 0f);
             }
             else if (s.Place == 4 && s.LookAtHero >= 0 && s.LookAtHero < field.SuperstructureCount)
             {
@@ -314,43 +336,34 @@ public sealed class CloudBench : MonoBehaviour
                 s.Camera = new Vector3(h.X, h.Kind == SuperstructureKind.Lenticulars ? h.Top - 800f : 3500f, h.Z) + side * distance;
                 s.Pitch = h.Kind == SuperstructureKind.Lenticulars ? 5f : 8f;
             }
-            else if (s.Place == 5 && field.CellCount > 0)
+            else if (s.Place == 5 && hasCell)
             {
-                StormCell cell = field.Cell(0);
                 s.Camera = new Vector3(cell.X - cell.Radius * 5f, 4500f, cell.Z);
                 s.Yaw = 90f;
                 s.Pitch = 7f;
             }
-            else if (s.Place == 6 && field.CloudClusterCount > 0)
+            else if (s.Place == 6 && hasCloud)
             {
-                DryCloudCluster cloud = field.CloudCluster(0);
                 s.Camera = new Vector3(cloud.X - 10000f, cloud.Base + 650f, cloud.Z);
                 s.Travel = new Vector3(20000f, 0f, 0f);
                 s.Yaw = 90f;
             }
-            else if (s.Place == 7 && field.CellCount > 0)
+            else if (s.Place == 7 && hasCell)
             {
-                StormCell cell = field.Cell(0);
                 s.Camera = new Vector3(cell.X, cell.Base + 650f, cell.Z);
                 s.Travel = new Vector3(5000f, cell.Top + 2000f - s.Camera.y, 0f);
                 s.Yaw = 90f;
                 s.Pitch = 12f;
             }
-            else if (s.Place == 8 && field.CellCount > 0)
+            else if (s.Place == 8 && hasCell)
             {
-                StormCell cell = field.Cell(0);
-                FrontState front = field.Front(0);
-                s.Camera = new Vector3(cell.X + front.NormalX * 25000f, maps.Top + 1200f,
-                    cell.Z + front.NormalZ * 25000f);
+                s.Camera = new Vector3(cell.X + 25000f, maps.Top + 1200f, cell.Z);
                 s.Yaw = Mathf.Atan2(cell.X - s.Camera.x, cell.Z - s.Camera.z) * Mathf.Rad2Deg;
                 s.Pitch = -Mathf.Atan2(s.Camera.y - (cell.Top - 500f), 25000f) * Mathf.Rad2Deg;
             }
-            else if (s.Place == 9 && field.CellCount > 0)
+            else if (s.Place == 9 && hasCell)
             {
-                StormCell cell = field.Cell(0);
-                FrontState front = field.Front(0);
-                s.Camera = new Vector3(cell.X + front.NormalX * 25000f, 900f,
-                    cell.Z + front.NormalZ * 25000f);
+                s.Camera = new Vector3(cell.X + 25000f, 900f, cell.Z);
                 s.Yaw = Mathf.Atan2(cell.X - s.Camera.x, cell.Z - s.Camera.z) * Mathf.Rad2Deg;
                 s.Pitch = 8f;
             }
@@ -377,10 +390,10 @@ public sealed class CloudBench : MonoBehaviour
                 if (nearWeight >= 1f) return nearPoint;
                 WeatherPoint outer = CloudBodies.SampleMap(maps.Far, maps.FarProfiles, CloudMaps.FarSize,
                     x / 630000f + .5f, z / 630000f + .5f);
-                outer.BackgroundCover *= farFade; outer.FrontCover *= farFade; outer.CellShape *= farFade;
+                outer.BackgroundCover *= farFade; outer.CellShape *= farFade;
                 return nearWeight <= 0f ? outer : CloudBodies.BlendMaps(outer, nearPoint, nearWeight);
             }
-            var bodies = new CloudBodies(noiseBytes, n3, field.Tape, field.Frame, field.PrevailingHeading, field.Split, 0f,
+            var bodies = new CloudBodies(noiseBytes, n3, field.Tape, field.Frame, field.PrevailingHeading, 0f,
                 field, null, true, SampleDisplayed);
             camera.transform.position = s.Camera;
             camera.transform.rotation = Quaternion.Euler(-s.Pitch, yaw, 0f);
@@ -401,7 +414,6 @@ public sealed class CloudBench : MonoBehaviour
                     FieldOfView = camera.fieldOfView,
                     PixelHeight = mode == "half" || mode == "temporal" ? Height / 2 : Height,
                     Bottom = maps.Bottom, Top = maps.Top,
-                    HorizonCover = maps.HorizonCover,
                     SunDirection = sun,
                     SunColor = s.Name.Contains("night") ? new Color(.13f, .16f, .24f) : new Color(1.9f, 1.8f, 1.6f),
                     Ambient = s.Name.Contains("night") ? new Color(.022f, .029f, .045f) :
@@ -438,7 +450,7 @@ public sealed class CloudBench : MonoBehaviour
                     camera.transform.position = s.Camera + s.Travel * Mathf.Clamp01(index / (float)(frames - 1));
                     camera.transform.rotation = moving || staticView ? start : Quaternion.AngleAxis(index * 0.5f, Vector3.up) * start;
                     Vector3 position = camera.transform.position;
-                    float density = bodies.Density(SampleDisplayed(position.x, position.z), position.x, position.y, position.z, 0f);
+                    float density = bodies.Density(SampleDisplayed(position.x, position.z), position.x, position.y, position.z);
                     inCloud = Mathf.MoveTowards(inCloud, Mathf.Clamp01((density - 0.02f) * 5f), 1.5f / 30f);
                     uniforms.ApplyView(camera, camera.transform.position);
                     Matrix4x4 box = Matrix4x4.TRS(camera.transform.position, Quaternion.identity, Vector3.one * 1000f);
@@ -507,7 +519,7 @@ public sealed class CloudBench : MonoBehaviour
     {
         const int cookie = 256, stride = 4, samples = 14;
         const float span = 48000f;
-        var body = new CloudBodies(noise, size, field.Tape, field.Frame, field.PrevailingHeading, field.Split, 0f, field);
+        var body = new CloudBodies(noise, size, field.Tape, field.Frame, field.PrevailingHeading, 0f, field);
         Vector3 direction = new Vector3(0.35f, -0.72f, 0.6f).normalized;
         Vector3 right = Vector3.Cross(Vector3.up, direction).normalized, up = Vector3.Cross(direction, right);
         float baseY = field.Params.CloudBase;
@@ -526,7 +538,7 @@ public sealed class CloudBench : MonoBehaviour
                 {
                     float altitude = lower + (s + 0.5f) * dy;
                     float t = (altitude - py) / direction.y;
-                    depth += body.Density(p, px + direction.x * t, altitude, pz + direction.z * t, 0f) * rayStep * 0.0021f;
+                    depth += body.Density(p, px + direction.x * t, altitude, pz + direction.z * t) * rayStep * 0.0021f;
                 }
                 sink += depth;
             }
@@ -539,15 +551,25 @@ public sealed class CloudBench : MonoBehaviour
     /// every rung half-way to the next, so the shader blends two rungs at every sample (the worst case of the feature ladder).
     /// "ramp" is the scene's own sky joined to the same sky a rung or more away by a 12 km ramp through the origin, bent by a 10 km meander.
     /// "mix" is the worst-case morphology mix: both thin layers carry all four morphologies at weight 0.25.</summary>
-    private static TapeFixture TapeVariant(string mode, WeatherField field)
+    private static TapeFixture TapeVariant(string mode, WeatherField field, float baseVariation = 0f)
     {
+        // The lattice reads its genus from the tape, so every fixture keeps the field's own.
+        LowGenus genus = field.Tape.GenusAt(0f);
+        if (baseVariation > 0f && mode == "")
+        {
+            SkyParams sky = field.Params;
+            sky.BaseVariation = baseVariation;
+            var tape = new BakedTape(1);
+            tape.SetConstant(sky, genus);
+            return new TapeFixture(tape, field.Frame);
+        }
         if (mode == "texture")
         {
             // B': the sky B renders, as a 4096-texel tape of that one sky. IsConstant is false, so BindTape sends no uniforms and the shader
             // fetches and lerps three low-genus rows per sample and evaluates TapeS with its sines. The origin sits inside the tape (s about
             // 1500 km of 3000), so both texels of a lerp are fetched, as on a real tape.
             SkyParams sky = field.Params;
-            return new TapeFixture(BakedTape.TwoKeyframes(sky, sky, 1500000f, 12000f), new TapeFrame(90f, 1500000f, 10000f, 80000f, 0.7f));
+            return new TapeFixture(BakedTape.TwoKeyframes(sky, sky, 1500000f, 12000f, genus, genus), new TapeFrame(90f, 1500000f, 10000f, 80000f, 0.7f));
         }
         if (mode == "ladder")
         {
@@ -556,7 +578,7 @@ public sealed class CloudBench : MonoBehaviour
             sky.Mid.PeriodRung += 0.5f;
             sky.High.PeriodRung += 0.5f;
             var tape = new BakedTape(1);
-            tape.SetConstant(sky);
+            tape.SetConstant(sky, genus);
             return new TapeFixture(tape, field.Frame);
         }
         if (mode == "ramp")
@@ -571,7 +593,7 @@ public sealed class CloudBench : MonoBehaviour
             // The thin layers' aspect and ripple wavelength change across the ramp too (the bake holds them at the nearer side, spec 6).
             right.Mid.Aspect = left.Mid.Aspect * 0.6f; right.High.Aspect = left.High.Aspect * 0.6f;
             right.Mid.RippleWavelength = left.Mid.RippleWavelength * 0.7f; right.High.RippleWavelength = left.High.RippleWavelength * 0.7f;
-            return new TapeFixture(BakedTape.TwoKeyframes(left, right, 1500000f, 12000f), new TapeFrame(90f, 1500000f, 10000f, 80000f, 0.7f));
+            return new TapeFixture(BakedTape.TwoKeyframes(left, right, 1500000f, 12000f, genus, genus), new TapeFrame(90f, 1500000f, 10000f, 80000f, 0.7f));
         }
         if (mode == "mix")
         {
@@ -588,7 +610,7 @@ public sealed class CloudBench : MonoBehaviour
             }
             SkyDerived.Apply(ref sky);
             var tape = new BakedTape(1);
-            tape.SetConstant(sky);
+            tape.SetConstant(sky, genus);
             return new TapeFixture(tape, field.Frame);
         }
         return null;

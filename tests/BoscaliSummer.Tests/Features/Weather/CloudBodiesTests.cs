@@ -42,8 +42,8 @@ namespace BoscaliSummer.Tests.Features.Weather
             var field = new WeatherField();
             field.Build(key, 900f, 60000f, 60000f, 13f);
             TestAssert.That(field.SuperstructureCount >= 2, "a storm holds set-pieces, got " + field.SuperstructureCount);
-            var withHeroes = new CloudBodies(noise, 64, field.Params, field.PrevailingHeading, field.Split, 0f, field);
-            var withoutHeroes = new CloudBodies(noise, 64, field.Params, field.PrevailingHeading, field.Split);
+            var withHeroes = new CloudBodies(noise, 64, field.Params, field.PrevailingHeading, 0f, field);
+            var withoutHeroes = new CloudBodies(noise, 64, field.Params, field.PrevailingHeading);
             var empty = new WeatherPoint();
             for (int i = 0; i < field.SuperstructureCount; i++)
             {
@@ -52,32 +52,32 @@ namespace BoscaliSummer.Tests.Features.Weather
                 if (s.Kind == SuperstructureKind.ShelfLine)
                 {
                     float v = -s.Extent * 0.5f;
-                    float d = withHeroes.Density(empty, s.X + dirZ * v, 3000f, s.Z - dirX * v, 0f);
+                    float d = withHeroes.Density(empty, s.X + dirZ * v, 3000f, s.Z - dirX * v);
                     TestAssert.That(d > 0.5f * s.Strength, $"shelf storm mass reads as cloud, got {d:F2}");
                 }
                 else if (s.Kind == SuperstructureKind.Supercell)
                 {
-                    float d = withHeroes.Density(empty, s.X, 3000f, s.Z, 0f);
+                    float d = withHeroes.Density(empty, s.X, 3000f, s.Z);
                     TestAssert.That(d > 0.5f * s.Strength, $"supercell tower reads as cloud, got {d:F2}");
                 }
                 else if (s.Kind == SuperstructureKind.StormEye)
                 {
                     float inner = s.Size * 1.04f;
                     float wallR = (inner + 2750f + s.Size + s.Extent * 0.8f) * 0.5f;
-                    float wall = withHeroes.Density(empty, s.X + wallR, 3000f, s.Z, 0f);
+                    float wall = withHeroes.Density(empty, s.X + wallR, 3000f, s.Z);
                     TestAssert.That(wall > 0.5f * s.Strength, $"eyewall reads as cloud, got {wall:F2}");
-                    float floorD = withHeroes.Density(empty, s.X, 1000f, s.Z, 0f);
+                    float floorD = withHeroes.Density(empty, s.X, 1000f, s.Z);
                     TestAssert.That(floorD > 0.3f * s.Strength, $"eye floor reads as cloud, got {floorD:F2}");
-                    float band = withHeroes.Density(empty, s.X + s.Size + s.Extent * 2f, 2000f, s.Z, 0f);
+                    float band = withHeroes.Density(empty, s.X + s.Size + s.Extent * 2f, 2000f, s.Z);
                     TestAssert.That(band > 0.2f * s.Strength, $"rain band reads as cloud, got {band:F2}");
                 }
                 else
                 {
-                    float d = withHeroes.Density(empty, s.X + dirX * s.Extent, s.Top + 700f, s.Z + dirZ * s.Extent, 0f);
+                    float d = withHeroes.Density(empty, s.X + dirX * s.Extent, s.Top + 700f, s.Z + dirZ * s.Extent);
                     TestAssert.That(d > 0.4f * s.Strength, $"lenticular reads as cloud, got {d:F2}");
                 }
-                float far = withHeroes.Density(empty, s.X + 200000f, 3000f, s.Z, 0f);
-                float farPlain = withoutHeroes.Density(empty, s.X + 200000f, 3000f, s.Z, 0f);
+                float far = withHeroes.Density(empty, s.X + 200000f, 3000f, s.Z);
+                float farPlain = withoutHeroes.Density(empty, s.X + 200000f, 3000f, s.Z);
                 TestAssert.That(far == farPlain, "set-pieces stay inside their bounds");
             }
         }
@@ -90,7 +90,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             for (int i = 0; i < 60; i++)
             for (int j = 0; j < 60; j++)
             {
-                if (bodies.Density(point, i * 1000f + 13f, 1800f, j * 1000f + 7f, 0f) > 0.02f) cloudy++;
+                if (bodies.Density(point, i * 1000f + 13f, 1800f, j * 1000f + 7f) > 0.02f) cloudy++;
                 n++;
             }
             return (float)cloudy / n;

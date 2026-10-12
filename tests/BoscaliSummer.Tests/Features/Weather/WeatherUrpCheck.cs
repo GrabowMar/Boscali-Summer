@@ -5,7 +5,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using BoscaliSummer.Core.Fx;
-using BoscaliSummer.Modules.Immersion.Audio;
 using BoscaliSummer.Modules.Immersion.Visuals;
 using BoscaliSummer.Modules.Immersion.Runtime;
 using BoscaliSummer.Modules.Weather.Domain;
@@ -162,7 +161,7 @@ public sealed class WeatherUrpCheck : MonoBehaviour
         {
             CameraPosition = main.transform.position, CameraForward = main.transform.forward,
             FieldOfView = main.fieldOfView, PixelHeight = 540, Bottom = maps.Bottom, Top = maps.Top,
-            HorizonCover = maps.HorizonCover, SunDirection = new Vector3(.35f, .55f, -.65f),
+            SunDirection = new Vector3(.35f, .55f, -.65f),
             SunColor = new Color(1.9f, 1.8f, 1.6f), Ambient = new Color(.5f, .58f, .7f),
             Ground = new Color(.12f, .15f, .13f), Fog = new Color(.72f, .8f, .9f), Extinction = .00004f
         };
@@ -355,7 +354,7 @@ public sealed class WeatherUrpCheck : MonoBehaviour
         {
             CameraPosition = deckPosition, CameraForward = deckRotation * Vector3.forward,
             FieldOfView = 60f, PixelHeight = 360, Bottom = maps.Bottom, Top = maps.Top,
-            HorizonCover = maps.HorizonCover, SunDirection = new Vector3(.35f, .55f, -.65f),
+            SunDirection = new Vector3(.35f, .55f, -.65f),
             SunColor = new Color(1.9f, 1.8f, 1.6f), Ambient = new Color(.5f, .58f, .7f),
             Ground = new Color(.12f, .15f, .13f), Fog = new Color(.72f, .8f, .9f), Extinction = .00004f
         };

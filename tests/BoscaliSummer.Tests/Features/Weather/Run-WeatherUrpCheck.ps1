@@ -6,16 +6,17 @@ $fixture = Resolve-UnityCheckDir $EvidenceDir 'BoscaliWeatherUrp-'
 if (Test-Path -LiteralPath $fixture) { throw "Evidence directory already exists: $fixture" }
 if (-not (Test-Path -LiteralPath $Unity)) { throw "Unity Editor not found: $Unity" }
 New-UnityCheckProject $fixture '{"dependencies":{"com.unity.render-pipelines.universal":"14.0.12","com.unity.modules.audio":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.physics":"1.0.0"}}' -Folders 'Assets/Resources', 'Assets/Code'
-Copy-Item "$repo/modules/Weather/Domain/*.cs" "$fixture/Assets/Code/"
+Copy-Item (Get-ChildItem "$repo/modules/Weather/Domain/*.cs" | Where-Object { $_.Name -notlike 'MetOffice*' }).FullName "$fixture/Assets/Code/"
 Copy-Item "$repo/Core/Math/Deterministic.cs", "$repo/Core/Math/Scalar.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/Core/Contracts/FxBudget.cs", "$repo/Core/Contracts/IClientEffect.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/Core/Fx/*.cs" "$fixture/Assets/Code/"
+Copy-Item "$repo/Core/Util/*.cs" "$fixture/Assets/Code/"
 foreach ($f in 'CloudNoise3D.cs', 'CloudMaps.cs', 'CloudBodies.cs', 'CloudVolumeUniforms.cs', 'CloudLowRes.cs', 'WeatherCloudPass.cs', 'TapeTexture.cs') {
     Copy-Item "$repo/modules/Weather/Visuals/$f" "$fixture/Assets/Code/"
 }
 Copy-Item "$PSScriptRoot/WeatherUrpCheck.cs" "$fixture/Assets/Code/"
 Copy-Item "$PSScriptRoot/CloudEdgeFixture.shader" "$fixture/Assets/Resources/"
-Copy-Item "$repo/modules/Immersion/Visuals/MaterialSlotClone.cs", "$repo/modules/Immersion/Audio/CockpitAudioFilter.cs" "$fixture/Assets/Code/"
+Copy-Item "$repo/modules/Immersion/Visuals/MaterialSlotClone.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/modules/Immersion/Runtime/CockpitCameraOffset.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/modules/Immersion/Domain/ImmersionMath.cs" "$fixture/Assets/Code/"
 # Keep production pipeline tags and shaders unchanged for the URP integration check.

@@ -137,7 +137,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
     internal abstract class EnvPart : AvPart
     {
         protected const float Pad = 12f;
-        private readonly AvFrame frame;
+        private readonly AvFrame frame;   // null for a frameless part
         private readonly string variant;
         private readonly List<KeyValuePair<TMP_Text, string>> tints = new List<KeyValuePair<TMP_Text, string>>(16);
         protected EnvGraphic Art;
@@ -147,6 +147,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         {
             Rect = AvLay.Child(parent, name);
             variant = cardVariant;
+            if (cardVariant == null) return;   // frameless: the part sits inside a MetCard that owns the frame
             frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(8f));
             AvLay.Fill(frame.rectTransform);
             frame.Bracket = hasBrackets ? 8f : 0f;
@@ -192,10 +193,13 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
         public override void Restyle()
         {
-            AvStyle c = AvStyleHost.FuiStyle("card " + variant);
-            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
-            frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
-            frame.SetVerticesDirty();
+            if (frame != null)
+            {
+                AvStyle c = AvStyleHost.FuiStyle("card " + variant);
+                frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+                frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
+                frame.SetVerticesDirty();
+            }
             for (int i = 0; i < tints.Count; i++)
                 if (tints[i].Value.Length > 0) tints[i].Key.color = EnvInk.Role(tints[i].Value);
             OnRestyle();
@@ -848,6 +852,8 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         private readonly float[] rain;
         private readonly AvState[] state;
         private int nowIndex;
+        /// <summary>The mark in front of a caution cell's code; null keeps the kit glyph. The Met Office reads the kit's caution triangle as "CUT", so it passes another one.</summary>
+        public string CautionMark;
 
         public EnvOutlookStrip(RectTransform parent, int cells) : base(parent, "Outlook strip")
         {
@@ -865,12 +871,13 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             Restyle();
         }
 
-        public void Set(int i, string timeText, bool isNow, WeatherRegimeType regime, string codeText, float rainProbability, AvState s)
+        public void Set(int i, string timeText, bool isNow, WeatherRegimeType regime, string codeText, float rainProbability, AvState s, bool showGlyph = true)
         {
             if (i < 0 || i >= count) return;
             AvText.Set(time[i], timeText);
             bool alarm = s == AvState.Caution || s == AvState.Danger;
-            AvText.Set(code[i], (alarm ? AvStates.Glyph(s) : "") + (codeText ?? ""));
+            AvText.Set(code[i], (alarm ? (s == AvState.Caution && CautionMark != null ? CautionMark : AvStates.Glyph(s)) : "") + (codeText ?? ""));
+            glyph[i].gameObject.SetActive(showGlyph);
             glyph[i].SetKind(regime);
             rain[i] = Mathf.Clamp01(rainProbability);
             state[i] = s;
@@ -882,7 +889,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         private void Tint(int i)
         {
             bool alarm = state[i] == AvState.Caution || state[i] == AvState.Danger;
-            Color c = alarm ? EnvInk.State(state[i]) : EnvInk.Role("ink");
+            Color c = alarm ? EnvInk.State(state[i]) : EnvInk.Role(state[i] == AvState.Inert ? "ink-dim" : "ink");
             glyph[i].color = c; code[i].color = c;
             glyph[i].SetVerticesDirty();
         }

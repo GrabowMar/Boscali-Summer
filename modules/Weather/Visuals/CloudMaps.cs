@@ -3,11 +3,11 @@ using BoscaliSummer.Modules.Weather.Domain;
 
 namespace BoscaliSummer.Modules.Weather.Visuals
 {
-    /// <summary>The cloud renderer's weather maps for one settled state: a near map over the
+    /// <summary>The cloud renderer's weather maps for one tape and frame: a near map over the
     /// flight domain and a coarse far map (the level of detail out to the horizon), RGBA32
     /// bytes ready to upload. Pure: built on a worker, or once on the main thread to preload.
-    /// Structure: sheet cover, front cover, cell shape, low/tower top. Profiles: front base, front
-    /// top, cloud base, rain.</summary>
+    /// Structure: sheet cover, (unused), cell shape, low/tower top. Profiles: (unused), (unused),
+    /// cloud base, rain.</summary>
     internal sealed class CloudMaps
     {
         internal const int NearSize = 256;
@@ -15,8 +15,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// <summary>The empty-space map: half the near map's resolution over the same span.</summary>
         internal const int EnvelopeSize = 128;
         internal const float VolumeTop = 16000f;
+        /// <summary>The cloud-base byte spans 0-4096 m (16 m steps, spec 6): the base is clamped to 250-3600 m. The structure tops keep <see cref="VolumeTop"/>.</summary>
+        internal const float BaseRange = 4096f;
 
-        internal readonly float SettledAt;
         internal readonly byte[] Near = new byte[NearSize * NearSize * 4];
         internal readonly byte[] NearProfiles = new byte[NearSize * NearSize * 4];
         internal readonly byte[] Far = new byte[FarSize * FarSize * 4];
@@ -26,24 +27,21 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// 1.4 km boundary warp and the bilinear footprint). Where r is zero, or a point lies
         /// outside [b, g] with margins, no cloud can be drawn and the march skips its density.</summary>
         internal readonly byte[] Envelope = new byte[EnvelopeSize * EnvelopeSize * 4];
-        internal float Bottom, Top, HorizonCover;
+        internal float Bottom, Top;
         /// <summary>Maximum encoded precipitation alpha across both displayed map levels, 0..1.</summary>
         internal float RainMaximum;
         internal int Revision;
 
-        private CloudMaps(float settledAt) { SettledAt = settledAt; }
-
-        internal static CloudMaps Build(WeatherKey key, float settledAt, float halfX, float halfZ, float hour,
+        internal static CloudMaps Build(WeatherKey key, float time, float halfX, float halfZ, float hour,
             float nearHalf, float farHalf, TapeFixture fixture = null)
         {
             var snapshot = new WeatherField();
-            snapshot.Build(key, settledAt, halfX, halfZ, hour);
+            snapshot.Build(key, time, halfX, halfZ, hour);
             if (fixture != null) snapshot.UseFixtureTape(fixture.Sampler, fixture.Frame);
-            var result = new CloudMaps(settledAt);
+            var result = new CloudMaps();
             float bottom = VolumeTop, top = 0f;
             Fill(snapshot, nearHalf, NearSize, result.Near, result.NearProfiles, ref bottom, ref top, ref result.RainMaximum);
-            Fill(snapshot, farHalf, FarSize, result.Far, result.FarProfiles, ref bottom, ref top, ref result.RainMaximum);
-            result.HorizonCover = RingCover(result.Far, FarSize);
+            Fill(snapshot, farHalf, FarSize, result.Far, result.FarProfiles, ref bottom, ref top, ref result.RainMaximum, areaMean: true);
             BuildEnvelope(result.Near, result.NearProfiles, result.Envelope);
             result.Bottom = Math.Max(-30f, bottom - 800f);
             result.Top = Math.Min(VolumeTop, Math.Max(bottom + 2000f, top + 1600f));
@@ -51,33 +49,60 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         }
 
         private static void Fill(WeatherField snapshot, float half, int size, byte[] pixels, byte[] profiles,
-            ref float bottom, ref float top, ref float rainMaximum)
+            ref float bottom, ref float top, ref float rainMaximum, bool areaMean = false)
         {
+            float third = 2f * half / size / 3f;
             for (int z = 0; z < size; z++)
             for (int x = 0; x < size; x++)
             {
                 float worldX = ((x + 0.5f) / size * 2f - 1f) * half;
                 float worldZ = ((z + 0.5f) / size * 2f - 1f) * half;
                 WeatherPoint p = snapshot.Sample(worldX, worldZ);
+                if (areaMean) p = AreaMean(snapshot, worldX, worldZ, third, p);
                 // The deck's geometry has its own thickness, independent of cell coverage; the local tape row gives it
                 // (DeckTop). Include it even at a thinly covered edge, or empty-space skipping cuts tops off.
-                float visualTop = Math.Max(p.LowTop, p.DeckTop);
+                float visualTop = Math.Max(p.LowTop, p.DeckTop) + p.BaseVariation;
                 int i = (z * size + x) * 4;
                 pixels[i] = Byte(p.BackgroundCover);
-                pixels[i + 1] = Byte(p.FrontCover);
+                pixels[i + 1] = 0;                              // the frontal shield's channel is free (spec 5.3)
                 pixels[i + 2] = Byte(p.CellShape);
                 pixels[i + 3] = Byte(visualTop / VolumeTop);
-                profiles[i] = Byte(p.FrontBase / VolumeTop);
-                profiles[i + 1] = Byte(p.FrontTop / VolumeTop);
-                profiles[i + 2] = Byte(p.CloudBase / VolumeTop);
+                profiles[i] = 0;
+                profiles[i + 1] = 0;
+                profiles[i + 2] = Byte(p.CloudBase / BaseRange);
                 profiles[i + 3] = Byte(p.RainRate / 100f);
                 rainMaximum = Math.Max(rainMaximum, profiles[i + 3] / 255f);
                 if (p.Cover > 0.02f)
                 {
-                    bottom = Math.Min(bottom, p.FrontCover > 0.02f ? Math.Min(p.CloudBase, p.FrontBase) : p.CloudBase);
-                    top = Math.Max(top, Math.Max(visualTop, p.FrontTop));
+                    bottom = Math.Min(bottom, p.CloudBase - p.BaseVariation);
+                    top = Math.Max(top, visualTop);
                 }
             }
+        }
+
+        /// <summary>
+        /// The far window's texel as the mean of 3 x 3 samples over its area (spec 6), centred on <paramref name="centre"/>'s sample:
+        /// a far texel is ~5 km wide and the smallest group 2 km, so one sample aliases the groups. The covers are means; the heights, the
+        /// rain and the cover that sets the window bounds are the largest of the nine (a mean height would cut a neighbour's cloud top off);
+        /// the base stays the centre's.
+        /// </summary>
+        private static WeatherPoint AreaMean(WeatherField snapshot, float x, float z, float third, WeatherPoint centre)
+        {
+            WeatherPoint mean = centre;
+            float background = centre.BackgroundCover, shape = centre.CellShape;
+            for (int k = 0; k < 9; k++)
+            {
+                if (k == 4) continue;
+                WeatherPoint s = snapshot.Sample(x + (k % 3 - 1) * third, z + (k / 3 - 1) * third);
+                background += s.BackgroundCover; shape += s.CellShape;
+                mean.LowTop = Math.Max(mean.LowTop, s.LowTop);
+                mean.DeckTop = Math.Max(mean.DeckTop, s.DeckTop);
+                mean.RainRate = Math.Max(mean.RainRate, s.RainRate);
+                mean.Cover = Math.Max(mean.Cover, s.Cover);
+            }
+            mean.BackgroundCover = background / 9f;
+            mean.CellShape = shape / 9f;
+            return mean;
         }
 
         private static void BuildEnvelope(byte[] near, byte[] profiles, byte[] envelope)
@@ -96,13 +121,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                     // Heights of every texel in reach, cloudy or not: bilinear filtering
                     // blends an empty texel's heights into its cloudy neighbour's.
                     int i = (zz * NearSize + xx) * 4;
-                    byte c = Math.Max(near[i], Math.Max(near[i + 1], near[i + 2]));
+                    byte c = Math.Max(near[i], near[i + 2]);
                     if (c > cover) cover = c;
                     // Stored tops already include the genus. A few hundred metres of slack covers
                     // a puff dome above that top; the old base+1600 floor made every deck a slab.
-                    int crown = Math.Max(near[i + 3], profiles[i + 1]) + 6;
+                    int crown = near[i + 3] + 6;
                     top = (byte)Math.Max(top, Math.Min(255, crown));
-                    bottom = Math.Min(bottom, Math.Min(profiles[i], profiles[i + 2]));
+                    bottom = Math.Min(bottom, BaseToMapUnits(profiles[i + 2]));
                 }
                 int o = (z * EnvelopeSize + x) * 4;
                 envelope[o] = cover;
@@ -112,36 +137,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             }
         }
 
-        /// <summary>Per-texel union of two envelopes: what a crossfade between them can show.</summary>
-        internal static void Union(byte[] a, byte[] b, byte[] into)
-        {
-            for (int i = 0; i < into.Length; i += 4)
-            {
-                into[i] = Math.Max(a[i], b[i]);
-                into[i + 1] = Math.Max(a[i + 1], b[i + 1]);
-                into[i + 2] = Math.Min(a[i + 2], b[i + 2]);
-                into[i + 3] = 255;
-            }
-        }
-
-        /// <summary>Mean sheet and front cover on the far map's outer ring: what the horizon deck
-        /// continues with, so the two agree where they meet.</summary>
-        internal static float RingCover(byte[] pixels, int size)
-        {
-            float sum = 0f;
-            int n = 0;
-            int ring = size / 10;
-            for (int z = 0; z < size; z++)
-            for (int x = 0; x < size; x++)
-            {
-                if (x >= ring && x < size - ring && z >= ring && z < size - ring) continue;
-                int i = (z * size + x) * 4;
-                float sheet = pixels[i] / 255f, front = pixels[i + 1] / 255f;
-                sum += 1f - (1f - sheet) * (1f - front);
-                n++;
-            }
-            return n > 0 ? sum / n : 0f;
-        }
+        /// <summary>A cloud-base byte (metres / <see cref="BaseRange"/>) in the units of the 16 km structure tops, rounded down so the envelope stays conservative.</summary>
+        private static byte BaseToMapUnits(byte b) => (byte)(b * BaseRange / VolumeTop);
 
         private static byte Byte(float v) => (byte)(Math.Max(0f, Math.Min(1f, v)) * 255f + 0.5f);
     }

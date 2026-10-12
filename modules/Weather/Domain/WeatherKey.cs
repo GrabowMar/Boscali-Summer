@@ -24,7 +24,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public const float DefaultSystemSpeed = 27f;
 
         /// <summary>Table sizes the wire validates against. Slices 2 and 4 assert the real tables match.</summary>
-        public const int ClassCount = 7, StoryCount = 6, SkyCount = 47;
+        public const int ClassCount = 7, StoryCount = WeatherStories.Count, SkyCount = 47;
 
         public const float EditorCloudAltitude = 1800f, OpeningBaseStep = 10f;
 
@@ -87,6 +87,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         /// <summary>Hash of the tape identity: every array, texture and lattice salt is a pure function of it.</summary>
         public uint TapeId => tapeId;
+        /// <summary>Hash of the seed and the layout salt alone (spec 6.1). The cell seeds, the noise rotations and offsets and the
+        /// set-piece strikes derive from it, so a sky pin or a mission class never moves them.</summary>
+        public uint LayoutSeed => Deterministic.Hash((int)Seed, LayoutSalt, 0x4C41, 0x5EED);
 
         /// <summary>Heading the wind blows toward; what the field's prevailing wind and cloud orientation use.</summary>
         public float DownwindHeading => Wrap(HeadingDeg + 180f);
@@ -109,6 +112,11 @@ namespace BoscaliSummer.Modules.Weather.Domain
             other != null && TapeId == other.TapeId && HeadingDeg == other.HeadingDeg;
 
         public WeatherKey WithSets(byte sets) => Copy(sets: sets);
+        /// <summary>The opening placement (TapeOpening.Solve) at capture: the same tape, the offset the opening gave. Not a cut: nothing was on screen yet.</summary>
+        public WeatherKey WithOffset(float offset) => Copy(offset: offset);
+        /// <summary>Repeats one story for the whole tape (0-4), or hands the choice back to the mission class with <see cref="None"/>. A new tape identity, so a cut.</summary>
+        public WeatherKey WithStory(byte story) => new WeatherKey(Seed, Epoch, Dynamic, MissionClass, Sets, LayoutSalt, HasAnchor, AnchorX, AnchorZ, story, SkyPin, OpeningBase,
+            HeadingDeg, Offset, SystemSpeed, SetOriginSquall, SetOriginSupercell, SetOriginCell);
         public WeatherKey WithLayoutSalt(byte salt) => Copy(salt: salt);
         public WeatherKey WithAnchor(float x, float z) => Copy(anchor: true, x: x, z: z);
         public WeatherKey WithoutAnchor() => Copy(anchor: false);

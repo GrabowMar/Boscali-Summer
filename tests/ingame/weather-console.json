@@ -1,0 +1,360 @@
+{
+  "name": "weather-console",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 300,
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "altitude": 1500,
+      "speed": 180,
+      "heading": 0,
+      "view": "cockpit"
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Console",
+      "store": "settled",
+      "args": {
+        "action": "settle"
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Console",
+      "store": "before",
+      "args": {
+        "action": "read"
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Console",
+      "store": "opened",
+      "args": {
+        "action": "open"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "capture",
+      "name": "met-office-auto"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Console",
+      "store": "held",
+      "args": {
+        "action": "press",
+        "control": "Hold"
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Console",
+      "store": "paced",
+      "args": {
+        "action": "press",
+        "control": "PaceUp"
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Console",
+      "store": "unpaced",
+      "args": {
+        "action": "press",
+        "control": "PaceDown"
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Console",
+      "store": "pinned",
+      "args": {
+        "action": "press",
+        "control": "PinSelected"
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Console",
+      "store": "supercell",
+      "args": {
+        "action": "press",
+        "control": "SetSupercell"
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Console",
+      "store": "anchored",
+      "args": {
+        "action": "press",
+        "control": "AnchorAhead"
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Console",
+      "store": "rained",
+      "args": {
+        "action": "press",
+        "control": "RainLight"
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Console",
+      "store": "refused",
+      "args": {
+        "action": "press",
+        "control": "Front5"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "capture",
+      "name": "met-office-held-pinned"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Console",
+      "store": "resumed",
+      "args": {
+        "action": "press",
+        "control": "Hold"
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Console",
+      "store": "reset",
+      "args": {
+        "action": "press",
+        "control": "ScenReset"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "capture",
+      "name": "met-office-reset"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Console",
+      "store": "closed",
+      "args": {
+        "action": "close"
+      }
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "settled.settled",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "before.mouseEnabled",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "before.keyboardEnabled",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "before.pauseAllowed",
+      "min": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "before.cursorFlag",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "opened.open",
+      "min": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "opened.mouseEnabled",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "opened.keyboardEnabled",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "opened.pauseAllowed",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "opened.cursorFlag",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "opened.running",
+      "min": 0.5
+    },
+    {
+      "check": "result_equals",
+      "path": "opened.pace",
+      "value": 3
+    },
+    {
+      "check": "result_above",
+      "path": "opened.host",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "opened.captured",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "opened.enabledControls",
+      "min": 20
+    },
+    {
+      "check": "result_below",
+      "path": "held.running",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "held.pressed",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "paced.pressed",
+      "min": 0.5
+    },
+    {
+      "check": "result_equals",
+      "path": "paced.pace",
+      "value": 4
+    },
+    {
+      "check": "result_above",
+      "path": "unpaced.pressed",
+      "min": 0.5
+    },
+    {
+      "check": "result_equals",
+      "path": "unpaced.pace",
+      "value": 3
+    },
+    {
+      "check": "result_above",
+      "path": "pinned.pinnedSky",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "supercell.sets",
+      "min": 1.5
+    },
+    {
+      "check": "result_above",
+      "path": "anchored.anchor",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "rained.rain",
+      "min": 39
+    },
+    {
+      "check": "result_below",
+      "path": "refused.pressed",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "resumed.running",
+      "min": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "reset.pinnedSky",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "reset.sets",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "reset.anchor",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "closed.open",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "closed.inputHeld",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "closed.mouseEnabled",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "closed.keyboardEnabled",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "closed.pauseAllowed",
+      "min": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "closed.cursorFlag",
+      "max": 0.5
+    },
+    {
+      "check": "log_match",
+      "pattern": "Exception",
+      "max": 0
+    }
+  ]
+}

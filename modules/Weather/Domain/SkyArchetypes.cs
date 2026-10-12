@@ -102,6 +102,13 @@ namespace BoscaliSummer.Modules.Weather.Domain
             new LayerArchetype(LayerKind.CirrostratusFibratus,   true,  8700f,  800f, 10f, 0.60f, 0.25f, 0.0f, 0.0f, 0.5f, 0.5f, 0.30f, 3.0f),
         };
 
+        /// <summary>
+        /// CapacityCover of a Humilis lattice whose groups are street zones (aspect 3-6, spec 6): longer groups cover far more at full
+        /// strength than round ones (0.36). Baked from the same Monte Carlo as 4.2 (32 runs of 250 blocks gave 0.777); the lattice test
+        /// reruns it. A sky with Streets at or above <see cref="CumulusLattice.StreetThreshold"/> carries it in place of the genus constant.
+        /// </summary>
+        public const float StreetCapacityHumilis = 0.78f;
+
         public static GenusRow Genus(LowGenus genus) => Genera[(int)genus];
         public static LayerArchetype Layer(LayerKind kind) => Layers[(int)kind];
         public static int GenusCount => Genera.Length;

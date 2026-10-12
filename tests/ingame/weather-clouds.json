@@ -267,12 +267,12 @@
     },
     {
       "check": "result_above",
-      "path": "weather.frontCount",
+      "path": "weather.markerCount",
       "min": 1
     },
     {
       "check": "result_above",
-      "path": "weather.cellCount",
+      "path": "weather.activeCellCount",
       "min": 1
     },
     {
