@@ -244,5 +244,6 @@ namespace BoscaliSummer.Modules.Command.Domain
         internal long BuiltSecond;
         internal bool BuiltNotice, BuiltArmed;
         internal StrUiState BuiltUi;
+        internal int BuiltSince, BuiltAge, BuiltWait, BuiltPostsAge;   // whole seconds of the decaying feed numbers
     }
 }
