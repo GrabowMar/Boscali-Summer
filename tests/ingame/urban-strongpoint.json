@@ -35,6 +35,35 @@
       "store": "bullet"
     },
     {
+      "op": "call",
+      "method": "BoscaliSummer.Garrisons.StrongpointAutomation.Step",
+      "args": {
+        "action": "nest"
+      },
+      "store": "nest"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Garrisons.StrongpointAutomation.Step",
+      "args": {
+        "action": "unit",
+        "building": true
+      },
+      "store": "building"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Garrisons.StrongpointAutomation.Step",
+      "args": {
+        "action": "unit"
+      },
+      "store": "other"
+    },
+    {
       "op": "wait",
       "seconds": 0.5
     },
@@ -170,6 +199,36 @@
     {
       "check": "result_below",
       "path": "bullet.hp_drop",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "nest.hp_drop",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "nest.part_drop",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "building.part_drop",
+      "min": 0.01
+    },
+    {
+      "check": "result_below",
+      "path": "building.hp_drop",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "other.part_drop",
+      "min": 0.01
+    },
+    {
+      "check": "result_below",
+      "path": "other.hp_drop",
       "max": 0
     },
     {
