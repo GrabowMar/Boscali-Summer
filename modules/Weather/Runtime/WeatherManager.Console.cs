@@ -32,7 +32,6 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             settings.TapeMoves.Value = plan.TapeMoves;
             consoleAuto = plan.ConsoleAuto;
             isManualOverride = plan.ManualOverride;
-            explicitTargets = false;
             fieldKey = TapeSwitch.Held(fieldKey, plan.Key);
             RekeyAndSync(now);
             NotifyPlayer(moves ? "TAPE RUNNING" : "TAPE HELD", forcedRainIntensity);

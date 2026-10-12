@@ -42,7 +42,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private UnityEngine.Object capturedMap;
         private float captureWaitSince = -1f;
         private bool captureWaitLogged;
-        private WeatherSyncMessage? pendingSync;
+        private readonly PendingSync<WeatherSyncMessage> pendingSync = new PendingSync<WeatherSyncMessage>();
         private float lastTapeTime = -1f;
         internal bool IsCaptured => baselineCaptured && fieldKey != null;
 
@@ -64,11 +64,12 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private float currentTurbulence;
         private float targetTurbulence;
 
-        // Transition timing
-        /// <summary>The native targets ease over a fixed minute (spec 8.1; slice 4b rewrites the easing).</summary>
-        private const float NativeTransitionSeconds = 60f;
-        private float transitionDuration;
-        private float transitionProgress = 1f;
+        // Native outputs (spec 8.1): the current values ease toward the targets at the fixed rates of NativeWeather; the targets come from the role's reference.
+        // A client's first targets are the host's message (a late joiner's preload); once its own field is built it derives them itself (ownNatives).
+        private bool ownNatives;
+        // Handshake and sun-gate counters for the sims (spec 9.4, 10.5). sunActiveSeen is -1 until the native sun has been looked at once.
+        private int syncSeen, syncAdopted, syncIgnored, syncBuffered;
+        private int sunActiveSeen = -1, sunFlips;
         // Preload: targets are known (host field built, or first client sync) and applied.
         private bool targetsReady;
         private bool settled;
@@ -143,7 +144,6 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         // conditions; a console hold still derives fog, light and wind from the cloud field.
         private bool isManualOverride;
         private bool consoleAuto;
-        private bool explicitTargets;
         private MetOfficeWindow console;
         private float? forcedRainIntensity;
 
@@ -155,8 +155,9 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         public float CurrentCloudHeight => currentCloudHeight;
         public Vector3 CurrentWindVelocity => currentWind;
         public float CurrentTurbulence => currentTurbulence;
-        public RegimeSnapshot CurrentRegime => RegimeSnapshot.FromConditions(currentConditions);
-        public float TransitionProgress => transitionProgress;
+        public RegimeSnapshot CurrentRegime => Field != null
+            ? RegimeSnapshot.FromType(SkyMath.ClassOf(Field.RowAt(fieldPosition.x, fieldPosition.y)))
+            : RegimeSnapshot.FromConditions(currentConditions);
         public bool IsManualOverride => isManualOverride;
         public float? ForcedRainIntensity => forcedRainIntensity;
         internal WeatherField Field => fieldReady && field.IsBuilt ? field : null;
@@ -222,7 +223,6 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             baselineCaptured = false;
             isManualOverride = false;
             consoleAuto = false;
-            explicitTargets = false;
             forcedRainIntensity = null;
             CanopyGlassResolver.ResetForScene();
             canopySurfaces = null;
@@ -237,7 +237,6 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             rainExposure = 1f;
             heightAboveGround = 0f;
             sheltered = false;
-            transitionProgress = 1f;
             lastForecastSampleTime = -999f;
             fieldKey = null;
             fieldReady = false;
@@ -251,7 +250,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             capturedMap = null;
             captureWaitSince = -1f;
             captureWaitLogged = false;
-            pendingSync = null;
+            pendingSync.Clear();
             lastTapeTime = -1f;
             warned.Clear();
             // Capture happens in Update, after the mission environment is applied.
@@ -356,6 +355,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             captureWaitLogged = false;
             settled = false;
             targetsReady = false;
+            ownNatives = false;
 
             currentConditions = baselineConditions;
             targetConditions = baselineConditions;
@@ -389,11 +389,9 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                     " m, T1 n/a, Tm n/a (slice 5), dynamic " + fieldKey.Dynamic + ", speed " +
                     fieldKey.SystemSpeed.ToString("0.0") + " m/s, map " + map);
             }
-            else if (!server && pendingSync.HasValue)
+            else if (!server && pendingSync.TryTake(out WeatherSyncMessage held))
             {
                 // A sync that arrived before this client captured is replayed now.
-                WeatherSyncMessage held = pendingSync.Value;
-                pendingSync = null;
                 ApplyNetworkSync(held);
             }
         }
@@ -491,17 +489,13 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             if (settings != null && !InputFieldChecker.InsideInputField && ConsoleKeyPressed())
                 ToggleConsole();
 
-            bool drive = fieldKey != null && (fieldKey.Dynamic || isManualOverride);
-            if (drive)
+            // Spec 8.1: native weather follows the field whenever it is built, held or moving, so Hold freezes D and never the camera-following natives.
+            UpdateNativeTargets();
+            if (targetsReady)
             {
-                if (GameAccess.IsServer())
-                {
-                    UpdateHostProgression();
-                }
-
                 // Preload: the first known targets apply at once, so a mission (or a late
                 // joiner) opens on the model's weather instead of drifting into it.
-                if (!settled && targetsReady) SnapToTargets(level);
+                if (!settled) SnapToTargets(level);
                 ApplySmoothModulation(level);
             }
             else
@@ -881,6 +875,20 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 { "baselineWindSpeed", baselineWindSpeed },
                 { "protocol", (int)WeatherNet.ProtocolVersion },
                 { "fieldCover", localWeather.LowCover },
+                { "skyCover", localWeather.SkyCover },
+                { "classSampled", localWeather.ClassSampled },
+                { "nativeDeck", localWeather.NativeDeck },
+                { "nativeRole", GameAccess.IsServer() ? "server" : "client" },
+                { "ownNatives", ownNatives ? 1 : 0 },
+                { "nativeConditions", LevelInfo.i != null ? LevelInfo.i.conditions : -1f },
+                { "targetConditions", targetConditions },
+                { "sunFlips", sunFlips },
+                { "syncSeen", syncSeen },
+                { "syncAdopted", syncAdopted },
+                { "syncIgnored", syncIgnored },
+                { "syncBuffered", syncBuffered },
+                { "syncPending", pendingSync.Has ? 1 : 0 },
+                { "tapeMoving", Field != null && Field.Moving ? 1 : 0 },
                 { "tapeId", fieldKey != null ? (double)fieldKey.TapeId : -1.0 },
                 { "story", fieldKey != null && fieldKey.Story < WeatherStories.Count ? WeatherStories.Name(fieldKey.Story) : "auto" },
                 { "skyPin", fieldKey != null && fieldKey.SkyPin < SkyLibrary.Count ? fieldKey.SkyPin + 1 : 0 },
@@ -946,7 +954,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         {
             if (!GameAccess.IsServer() || !isManualOverride || !IsCaptured || !RequireClock("fixture tape", out float missionTime)) return false;
             missionSeed = unchecked((int)seed);
-            fieldKey = NewFieldKey(missionTime, dynamic, (byte)StateTable.FromConditions(targetConditions), seed).WithStory(story).WithSkyPin(pin).WithOffset(offsetKm * 1000f);
+            fieldKey = NewFieldKey(missionTime, dynamic, fieldKey.MissionClass, seed).WithStory(story).WithSkyPin(pin).WithOffset(offsetKm * 1000f);
             nextFieldUpdate = 0f;
             lastForecastSampleTime = -999f;
             BroadcastSync(missionTime);
@@ -958,8 +966,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             if (!GameAccess.IsServer() || !isManualOverride || !IsCaptured ||
                 !RequireClock("fixture field", out float missionTime)) return false;
             missionSeed = unchecked((int)seed);
-            fieldKey = NewFieldKey(missionTime - modelAge, false,
-                (byte)(fixtureState ?? StateTable.FromConditions(targetConditions)), seed);
+            // Spec 10.4: the class pins its first sky, the seed is the Seed, and modelAge is a position on the held tape (Offset = v x age).
+            fieldKey = ForceWeatherMap.Key(fieldKey, missionTime, fixtureState, null, null, seed, modelAge);
             nextFieldUpdate = 0f;
             lastForecastSampleTime = -999f;
             BroadcastSync(missionTime);
@@ -969,6 +977,13 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private void UpdateLighting(Camera camera)
         {
             LevelInfo level = LevelInfo.i;
+            // Invariant 6: the native sun must not flip while a front crosses (conditions never pass 0.6). The sims read the count.
+            if (level != null && level.sun != null)
+            {
+                int active = level.sun.gameObject.activeSelf ? 1 : 0;
+                if (sunActiveSeen >= 0 && active != sunActiveSeen) sunFlips++;
+                sunActiveSeen = active;
+            }
             lightLevel = level != null ? Mathf.Sqrt(Mathf.Clamp01(level.GetAmbientLight())) : 1f;
             WeatherLight light = WeatherLighting.Resolve(level);
             sunDirection = light.Direction;
@@ -1059,7 +1074,6 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             LevelInfo level = LevelInfo.i;
             field.Build(fieldKey, missionTime, fieldSpan.x * 0.5f, fieldSpan.y * 0.5f,
                 level != null ? level.timeOfDay : 12f);
-            transitionProgress = 1f;
             CameraStateManager camera = SceneSingleton<CameraStateManager>.i;
             if (camera != null)
             {
@@ -1085,27 +1099,11 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             BroadcastSync(missionTime);
         }
 
-        private void UpdateHostProgression()
-        {
-            if (explicitTargets || !field.IsBuilt || !fieldUpdated) return;
-
-            transitionDuration = NativeTransitionSeconds;
-            transitionProgress = 1f;
-            targetConditions = Mathf.Clamp(field.MeanCover(3),
-                settings.MinConditions.Value, settings.MaxConditions.Value);
-            targetCloudHeight = field.Regional().CloudBase;
-            // Each state freshens or calms the mission wind (never reverses it) and adds
-            // its own turbulence on top of the authored loads.
-            SkyParams sky = field.RowAt(0f, 0f);
-            targetTurbulence = Mathf.Max(baselineWindTurbulence, sky.Turbulence) * settings.TurbulenceMultiplier.Value;
-            float windFactor = Mathf.Lerp(1f, sky.WindFactor, settings.WindVariability.Value);
-            targetWind = new Vector3(baselineWindVelocity.x * windFactor, baselineWindVelocity.y,
-                baselineWindVelocity.z * windFactor);
-            targetsReady = true;
-        }
-
         private void BroadcastSync(float missionTime)
         {
+            // The targets in the message are the server's natives, from which a client derives the mission wind (NativeWeather.MissionFromTargets): until they exist (the frames after the capture) nothing is
+            // sent, and the heartbeat, still due because lastBroadcastTime is untouched, tries again every frame until the first send.
+            if (GameAccess.IsServer() && !ownNatives) return;
             lastBroadcastTime = Time.unscaledTime;
             if (network == null || fieldKey == null) return;
             var message = new WeatherSyncMessage
@@ -1127,21 +1125,31 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         public void ApplyNetworkSync(WeatherSyncMessage message)
         {
             if (GameAccess.IsServer()) return;
-            if (!baselineCaptured) { pendingSync = message; return; }
-
+            syncSeen++;
             WeatherKey key = WeatherKeyWire.ToKey(WeatherSyncKey.Read(message), WarnOnce);
             bool haveClock = TryMissionTime(out float localTime);
-            if (!WeatherKeyWire.CanAdopt(key.Dynamic, haveClock, localTime, message.MissionTimeSeconds))
+            switch (SyncGate.Decide(false, baselineCaptured, key.Dynamic, haveClock, localTime, message.MissionTimeSeconds))
             {
-                WarnOnce("a moving weather key from a host whose mission clock is more than 10 s away was ignored");
-                return;
+                case SyncDecision.Buffer:
+                    pendingSync.Hold(message);
+                    syncBuffered++;
+                    return;
+                case SyncDecision.Ignore:
+                    syncIgnored++;
+                    WarnOnce("a moving weather key from a host whose mission clock is more than 10 s away was ignored");
+                    return;
             }
+            syncAdopted++;
 
-            targetConditions = message.TargetConditions;
-            targetCloudHeight = message.TargetCloudHeight;
-            targetWind = new Vector3(message.TargetWindX, baselineWindVelocity.y, message.TargetWindZ);
-            targetTurbulence = message.TargetTurbulence;
-            transitionDuration = NativeTransitionSeconds;
+            // The targets of the message are the late joiner's preload (spec 8.1); once this client derives its own from the field they are ignored.
+            if (!ownNatives)
+            {
+                targetConditions = message.TargetConditions;
+                targetCloudHeight = message.TargetCloudHeight;
+                targetWind = new Vector3(message.TargetWindX, baselineWindVelocity.y, message.TargetWindZ);
+                targetTurbulence = message.TargetTurbulence;
+                targetsReady = true;
+            }
             missionSeed = unchecked((int)message.FieldSeed);
             // Keep the same instance while nothing changed, so consumers see one stable key (spec 10.1).
             fieldKey = WeatherKeyWire.Reuse(fieldKey, key);
@@ -1149,7 +1157,6 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             nextFieldUpdate = 0f;
             lastForecastSampleTime = -999f;
             isManualOverride = message.FieldManual;
-            targetsReady = true;
             forcedRainIntensity = message.ForcedRain >= 0f ? message.ForcedRain : (float?)null;
         }
 
@@ -1161,23 +1168,56 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             if (warned.Add(text)) logger?.LogWarning("[Weather] " + text);
         }
 
-        private float NativeSkyConditions(float conditions)
+        // Spec 8.1: the targets come from the role's reference (NativeWeather.Server on the server, NativeWeather.Client once a client's own field is built). The server's depend on
+        // the key and the clock alone; a client's follow its camera and its aircraft. Run once per field update, so a held tape still follows the camera.
+        private void UpdateNativeTargets()
         {
-            // Native conditions fog the entire theater. Convective cover is local in the
-            // model, so cell rain supplies its own haze while gaps keep the distant terrain.
-            float convective = field.IsBuilt ? field.RowAt(0f, 0f).Convective :
-                StateTable.Get(StateTable.FromConditions(conditions)).Convective;
-            return Mathf.Clamp01(conditions * (1f - 0.55f * convective));
+            if (!fieldUpdated || !field.IsBuilt) return;
+            var baseline = new NativeBaseline(baselineWindVelocity.x, baselineWindVelocity.y, baselineWindVelocity.z, baselineWindTurbulence,
+                settings.MinConditions.Value, settings.MaxConditions.Value, settings.WindVariability.Value, settings.TurbulenceMultiplier.Value);
+            NativeValues values;
+            if (GameAccess.IsServer()) values = NativeWeather.Server(field, baseline);
+            else
+            {
+                if (!ownNatives && targetsReady)
+                {
+                    // Spec 9.4: a client builds nothing from its own LevelInfo. Its wind baseline comes from the first message it adopted (targetWind / targetTurbulence still hold the host's
+                    // natives here): the mission wind is the target over the factor of this client's own Regional(), whatever its LevelInfo held at capture (the host's SyncVars may have landed first).
+                    baseline = NativeWeather.MissionFromTargets(field.Regional(), baseline, targetWind.x, targetWind.z, targetTurbulence);
+                    baselineWindVelocity = new Vector3(baseline.WindX, baseline.WindY, baseline.WindZ);
+                    baselineWindTurbulence = baseline.Turbulence;
+                }
+                Vector2 aircraft = AircraftPosition();
+                values = NativeWeather.Client(field, fieldPosition.x, fieldPosition.y, aircraft.x, aircraft.y, baseline);
+            }
+            targetConditions = values.Conditions;
+            targetCloudHeight = values.CloudHeight;
+            targetWind = new Vector3(values.WindX, values.WindY, values.WindZ);
+            targetTurbulence = values.Turbulence;
+            ownNatives = true;
+            targetsReady = true;
+        }
+
+        /// <summary>Where the followed aircraft is in the world plane (the local one when nothing is followed), else the camera.</summary>
+        private Vector2 AircraftPosition()
+        {
+            CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
+            Aircraft aircraft = cameras != null ? cameras.followingUnit as Aircraft : null;
+            if (aircraft == null && !(GameManager.GetLocalAircraft(out aircraft) && aircraft != null)) return fieldPosition;
+            GlobalPosition at = aircraft.transform.GlobalPosition();
+            return new Vector2((float)at.x, (float)at.z);
         }
 
         private void ApplySmoothModulation(LevelInfo level)
         {
-            float dt = Time.deltaTime;
-            float rateScale = WeatherForecast.TransitionRateMultiplier(transitionDuration);
-            currentConditions = Mathf.MoveTowards(currentConditions, targetConditions, dt * 0.02f * rateScale);
-            currentCloudHeight = Mathf.MoveTowards(currentCloudHeight, targetCloudHeight, dt * 25f * rateScale);
-            currentWind = Vector3.MoveTowards(currentWind, targetWind, dt * 2.0f * rateScale);
-            currentTurbulence = Mathf.MoveTowards(currentTurbulence, targetTurbulence, dt * 0.05f * rateScale);
+            NativeValues next = NativeWeather.Ease(
+                new NativeValues { Conditions = currentConditions, CloudHeight = currentCloudHeight, WindX = currentWind.x, WindY = currentWind.y, WindZ = currentWind.z, Turbulence = currentTurbulence },
+                new NativeValues { Conditions = targetConditions, CloudHeight = targetCloudHeight, WindX = targetWind.x, WindY = targetWind.y, WindZ = targetWind.z, Turbulence = targetTurbulence },
+                Time.deltaTime);
+            currentConditions = next.Conditions;
+            currentCloudHeight = next.CloudHeight;
+            currentWind = new Vector3(next.WindX, next.WindY, next.WindZ);
+            currentTurbulence = next.Turbulence;
 
             // Update vanilla skybox periodically on major shifts
             bool skybox = Time.unscaledTime - lastSkyboxUpdateTime > 3.0f;
@@ -1201,7 +1241,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private void ApplyNative(LevelInfo level, bool force, bool skybox = true)
         {
             if (!baselineCaptured) return;
-            level.conditions = NativeSkyConditions(currentConditions);
+            level.conditions = Mathf.Min(NativeWeather.ConditionsCap, currentConditions);   // the eased value is capped already; the min keeps a stray write from opening vanilla's grey-and-no-sun gate
             level.cloudHeight = currentCloudHeight;
             level.windVelocity = currentWind;
             level.windSpeed = new Vector3(currentWind.x, 0f, currentWind.z).magnitude;
@@ -1356,39 +1396,29 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         {
             if (!IsCaptured || !RequireClock("manual override", out float missionTime)) return false;
             isManualOverride = true;
-            explicitTargets = true;
-            targetConditions = Mathf.Clamp01(conditions);
-            targetCloudHeight = Mathf.Max(500f, cloudHeight);
-            if (wind.HasValue) targetWind = wind.Value;
             forcedRainIntensity = forcedRain;
-
-            // Rain presets preserve mission flight physics; visual storms must not amplify wind loads.
-            float turbMult = settings != null ? settings.TurbulenceMultiplier.Value : 1f;
-            targetTurbulence = baselineWindTurbulence * turbMult;
-
-            LevelInfo level = LevelInfo.i;
-            if (snapImmediate && level != null)
-            {
-                currentConditions = targetConditions;
-                currentCloudHeight = targetCloudHeight;
-                if (wind.HasValue) currentWind = targetWind;
-                currentTurbulence = targetTurbulence;
-                transitionProgress = 1f;
-
-                ApplyNative(level, true);
-                settled = true;
-            }
-
-            fieldKey = NewFieldKey(missionTime, false, (byte)StateTable.FromConditions(targetConditions),
-                unchecked((uint)missionSeed));
+            // Spec 10.4: a held key pinned to the class that conditions names, with the altitude as OpeningBase. The wind argument is retired with the explicit targets:
+            // the natives follow the pinned sky by role (the mission wind stays the mission's).
+            fieldKey = PlaceOpening(ForceWeatherMap.Key(fieldKey, missionTime, null, conditions, cloudHeight, null, null));
             fieldReady = true;
             nextFieldUpdate = 0f;
             lastForecastSampleTime = -999f;
+            if (snapImmediate) SnapNatives(missionTime);
             BroadcastSync(missionTime);
 
-            RegimeSnapshot reg = RegimeSnapshot.FromConditions(currentConditions);
+            RegimeSnapshot reg = RegimeSnapshot.FromConditions(Mathf.Clamp01(conditions));
             NotifyPlayer(reg.Name, forcedRain);
             return true;
+        }
+
+        /// <summary>Builds the field now, derives the natives and applies them without easing (a forced call asked for the snap).</summary>
+        private void SnapNatives(float missionTime)
+        {
+            LevelInfo level = LevelInfo.i;
+            if (level == null) return;
+            UpdateField(missionTime);
+            UpdateNativeTargets();
+            if (targetsReady) SnapToTargets(level);
         }
 
         public void SetForcedRain(float? rainIntensity)
@@ -1409,9 +1439,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         {
             if (fieldKey == null || !RequireClock("resume", out float missionTime)) return;
             isManualOverride = false;
-            explicitTargets = false;
             forcedRainIntensity = null;
-            transitionProgress = 0f;
 
             // AUTO is the only way to unpin: a pinned sky goes back to the class tape and is placed again like a capture.
             bool wasPinned = fieldKey.SkyPin < SkyLibrary.Count;
@@ -1465,7 +1493,6 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             if (sky != WeatherKey.None && sky >= SkyLibrary.Count) return false;
             if (sky == WeatherKey.None) { ResumeChanging(); return true; }
             isManualOverride = true;
-            explicitTargets = false;
             fieldKey = PlaceOpening(fieldKey.Rebased(now, false).WithSkyPin(sky));
             RekeyAndSync(now);
             NotifyPlayer("SKY " + (sky + 1) + " " + SkyLibrary.Get(sky).Name.ToUpperInvariant(), forcedRainIntensity);
@@ -1518,7 +1545,6 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return false;
             consoleAuto = scenario == WeatherScenario.ResetAll;
             isManualOverride = !consoleAuto;
-            explicitTargets = false;
             forcedRainIntensity = null;
             Camera camera = SceneSingleton<CameraStateManager>.i?.mainCamera;
             float x = 0f, z = 0f;

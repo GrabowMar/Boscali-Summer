@@ -91,8 +91,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>Conditions index where precipitation begins (heavy overcast).</summary>
         public const float RainThreshold = 0.60f;
 
-        /// <summary>Transition length the base modulation rates are tuned for.</summary>
-        public const float ReferenceTransitionSeconds = 120f;
 
         /// <summary>
         /// Effective rain intensity: an explicit forced value wins, otherwise conditions
@@ -108,17 +106,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         {
             if (conditions < RainThreshold) return 0f;
             return (float)Math.Max(0.0, Math.Min(1.0, (conditions - RainThreshold) / 0.35));
-        }
-
-        /// <summary>
-        /// Scales the base modulation rates so shorter/longer transitions actually blend
-        /// faster/slower. 1.0 at the reference length; identical behaviour to the legacy
-        /// fixed rates at the default 2-minute transition.
-        /// </summary>
-        public static float TransitionRateMultiplier(float transitionDurationSeconds)
-        {
-            if (transitionDurationSeconds <= 1f) return 1f;
-            return ReferenceTransitionSeconds / transitionDurationSeconds;
         }
 
         /// <summary>
