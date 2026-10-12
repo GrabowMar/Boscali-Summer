@@ -44,7 +44,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             int skyHere = tape != null ? tape.SkyIndexAt(sCam) : -1;
             bool moving = key.Dynamic && field.Moving;
             m.Class = SkyMath.ClassOf(field.RowAt(camX, camZ));
-            m.Cover = p.LowCover;
+            m.Cover = p.SkyCover;
             m.PinnedSky = key.SkyPin < SkyLibrary.Count ? key.SkyPin : -1;
             m.SkyNumber = skyHere + 1;
             m.SkyName = skyHere >= 0 ? SkyLibrary.Get(skyHere).Name : RegimeSnapshot.FromType(m.Class).Name;

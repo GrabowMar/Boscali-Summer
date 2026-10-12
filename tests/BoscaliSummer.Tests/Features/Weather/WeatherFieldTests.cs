@@ -272,7 +272,7 @@ namespace BoscaliSummer.Tests.Features.Weather
 
         private static void FlightLevelPrecipitation()
         {
-            var point = new WeatherPoint { RainRate = 20f, CloudBase = 1000f, CloudTop = 3000f };
+            var point = new WeatherPoint { RainRate = 20f, CloudBase = 1000f, CloudTop = 3000f, RainBase = 1000f, RainTop = 3000f };
             TestAssert.That(FlightWeatherAirMass.Evaluate(point, 500f, false, null).Rain == 1f,
                 "rain reaches aircraft below the cloud base");
             TestAssert.That(FlightWeatherAirMass.Evaluate(point, 3000f, false, null).Rain == 0f,

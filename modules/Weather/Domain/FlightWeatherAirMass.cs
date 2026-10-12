@@ -37,10 +37,11 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         internal static float VerticalRain(WeatherPoint point, float altitude)
         {
-            if (altitude <= point.CloudBase) return 1f;
-            if (altitude >= point.CloudTop) return 0f;
-            float t = (altitude - point.CloudBase) /
-                Math.Max(1f, point.CloudTop - point.CloudBase);
+            // Rain falls from the lowest rain-bearing layer (spec 8.2): its base and top, not the low deck's.
+            if (altitude <= point.RainBase) return 1f;
+            if (altitude >= point.RainTop) return 0f;
+            float t = (altitude - point.RainBase) /
+                Math.Max(1f, point.RainTop - point.RainBase);
             return 1f - t * t * (3f - 2f * t);
         }
 

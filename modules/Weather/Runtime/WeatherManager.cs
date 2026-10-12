@@ -178,8 +178,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             if (!IsEnabled || built == null || level == null ||
                 float.IsNaN(globalX) || float.IsInfinity(globalX) || float.IsNaN(globalZ) || float.IsInfinity(globalZ)) return false;
             WeatherPoint point = built.Sample(globalX, globalZ);
-            sample = new WeatherViewSample(Mathf.Clamp01(point.LowCover), point.CloudBase, point.CloudTop,
-                Mathf.Clamp01(point.RainRate / 20f), WeatherViewSample.IsNightHour(level.timeOfDay));
+            sample = SkySummary.View(point, WeatherViewSample.IsNightHour(level.timeOfDay));
             return true;
         }
 
@@ -629,6 +628,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 airPoint.RainRate = WeatherForecast.RainIntensityFromConditions(currentConditions) * 20f;
                 airPoint.CloudBase = currentCloudHeight;
                 airPoint.CloudTop = currentCloudHeight + 1500f;
+                airPoint.RainBase = airPoint.CloudBase;
+                airPoint.RainTop = airPoint.CloudTop;
                 airPoint.Temperature = 15f;
                 airPoint.Dewpoint = 6f;
             }

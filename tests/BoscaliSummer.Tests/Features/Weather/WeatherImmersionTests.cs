@@ -8,7 +8,7 @@ namespace BoscaliSummer.Tests.Features.Weather
     {
         public static void Run()
         {
-            var point = new WeatherPoint { CloudBase = 1000f, CloudTop = 3000f };
+            var point = new WeatherPoint { CloudBase = 1000f, CloudTop = 3000f, RainBase = 1000f, RainTop = 3000f };
             var cloud = FlightWeatherAirMass.Evaluate(point, 1500f, 0.6f, null);
             TestAssert.That(cloud.CloudMoisture > 0.8f && cloud.VisualRain == 0f && cloud.Atmosphere == 0f,
                 "A dry dense cloud condenses on glass without rain or duplicate atmospheric extinction");

@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Weather.Domain
@@ -53,6 +54,17 @@ namespace BoscaliSummer.Modules.Weather.Domain
         {
             deckBase = Scalar.Clamp(layerBase, MinDeck, MaxDeck);
             deckTop = Math.Max(deckBase, layerTop);
+        }
+
+        /// <summary>
+        /// The sample a sky-dependent sensor gets (<c>IWeatherView</c>): the opacity-weighted <see cref="WeatherPoint.SkyCover"/>, the bounds of the native deck, and the rain on the
+        /// 20 mm/h scale. Every number is clamped, so no sensor sees a cover above 1 or a deck whose top is under its base.
+        /// </summary>
+        public static WeatherViewSample View(in WeatherPoint p, bool night)
+        {
+            float deckBase = Scalar.IsFinite(p.NativeDeck) ? p.NativeDeck : MinDeck;
+            float deckTop = Scalar.IsFinite(p.NativeDeckTop) ? Math.Max(deckBase, p.NativeDeckTop) : deckBase;
+            return new WeatherViewSample(Scalar.Clamp01(p.SkyCover), deckBase, deckTop, Scalar.Clamp01(p.RainRate / 20f), night);
         }
     }
 }
