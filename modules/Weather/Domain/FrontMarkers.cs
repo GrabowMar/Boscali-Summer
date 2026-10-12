@@ -29,7 +29,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
     /// <summary>
     /// <c>Line(kind, d)</c> of spec 5.3, the marker table and the beading shape. <c>d</c> is the signed distance in metres from the
-    /// boundary's ramp midpoint, measured across the line: negative before the line arrives, positive after (the FrontState sign).
+    /// boundary's ramp midpoint, measured across the line: negative before the line arrives, positive after.
     /// The old one-sided exponential rain tails are gone: they were true steps.
     /// </summary>
     internal static class FrontLine

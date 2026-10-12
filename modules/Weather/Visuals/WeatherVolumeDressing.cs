@@ -61,7 +61,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         // The signature the maps were built for: tape identity plus frame heading (SameTape) and D (spec 9.2).
         private WeatherKey mapKey;
         private float mapOffset;
-        private float volumeBottom, volumeTop = CloudMaps.VolumeTop;
         private float rainMaximum;
         private bool halfResolution;
         private Vector3 lightDirection = Vector3.up;
@@ -91,8 +90,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         internal int ShadowUpdates => shadows.UpdateCount;
         internal string ShadowFailure => shadows.FailureReason ?? string.Empty;
         internal bool Active => renderer != null && renderer.enabled && near.Current != null && noise != null;
-        internal bool DeckActive => Active && activeField.Params.SheetCover > 0.75f &&
-            activeField.Params.Convective < 0.25f;
+        internal bool DeckActive => Active && activeField.RowAt(0f, 0f).SheetCover > 0.75f &&
+            activeField.RowAt(0f, 0f).Convective < 0.25f;
         /// <summary>True while the reduced-resolution pass draws the sky.</summary>
         internal bool HalfResolution => Active && halfResolution;
         internal bool RainCurtainsEnabled { get; private set; }
@@ -224,8 +223,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 CameraForward = camera.transform.forward,
                 FieldOfView = camera.fieldOfView,
                 PixelHeight = halfResolution && pass.Height > 0 ? pass.Height : camera.pixelHeight,
-                Bottom = volumeBottom,
-                Top = volumeTop,
                 SunDirection = sunDirection,
                 SunColor = sunColor,
                 Ambient = RenderSettings.ambientSkyColor * RenderSettings.ambientIntensity * 0.45f +
@@ -401,8 +398,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             material.SetTexture(EnvelopeTexId, envelope);
             material.SetFloat(EnvelopeOnId, 1f);
             rainMaximum = result.RainMaximum;
-            volumeBottom = result.Bottom;
-            volumeTop = result.Top;
             mapUpdates++;
         }
 

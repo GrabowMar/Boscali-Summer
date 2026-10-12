@@ -209,7 +209,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 case MetControl.AnchorHere: return commands.PlaceAhead(0f);
                 case MetControl.AnchorAhead: return commands.PlaceAhead(30000f);
                 case MetControl.AnchorDefault: return commands.ClearPlacement();
-                // Seam stubs: MetOfficeRules keeps these disabled until 4B / S5 flip their MetAvail, and the adapter refuses them until it implements them.
+                // Seam stubs: MetOfficeRules keeps the front-in controls disabled until S5 flips their MetAvail, and the adapter refuses them until it implements them.
                 case MetControl.StoryAuto: return commands.SetStory(-1);
                 case MetControl.StoryPrev: return commands.SetStory(StoryStep(-1));
                 case MetControl.StoryNext: return commands.SetStory(StoryStep(1));
@@ -226,11 +226,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         }
 
         /// <summary>The story the stepper moves to, wrapping inside StoryCount (0 while no story is authored).</summary>
-        private int StoryStep(int direction)
-        {
-            int n = Mathf.Max(1, model.StoryCount);
-            return ((Mathf.Max(0, model.StoryIndex) + direction) % n + n) % n;
-        }
+        private int StoryStep(int direction) => MetOfficeRules.StoryStep(model.StoryPick, model.StoryCount, direction);
 
         private byte ForcedMask()
         {
@@ -408,6 +404,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 { "open", IsOpen ? 1 : 0 }, { "host", model.Host ? 1 : 0 }, { "captured", model.Captured ? 1 : 0 }, { "running", model.Running ? 1 : 0 }, { "pace", model.Pace },
                 { "speed", model.SpeedMps }, { "pinnedSky", model.PinnedSky + 1 }, { "enabledControls", enabled }, { "controls", ControlCount },
                 { "fronts", model.FrontCount }, { "cells", model.CellCount }, { "sets", (int)ForcedMask() }, { "anchor", model.HasAnchor ? 1 : 0 },
+                { "story", model.StoryPick + 1 }, { "salt", model.LayoutSalt },
                 { "rain", model.ForcedRain.HasValue ? (int)Mathf.Round(model.ForcedRain.Value * 100f) : -1 },
                 { "inputHeld", input.MouseIsOurs ? 1 : 0 },
             });

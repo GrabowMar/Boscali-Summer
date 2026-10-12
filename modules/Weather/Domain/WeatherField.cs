@@ -24,7 +24,17 @@ namespace BoscaliSummer.Modules.Weather.Domain
     internal struct WeatherPoint
     {
         public float RainRate;
-        public float Cover;
+        public float LowCover;
+        /// <summary>The opacity-weighted cover of all three levels, 1 - (1 - low)(1 - mid x opacity)(1 - high x opacity): what vanilla's conditions and IWeatherView.Cover follow (spec 8.2).</summary>
+        public float SkyCover;
+        /// <summary>The class measure of this point (the same formula as the nominal one, with the sampled cover and rain). Random for lattice skies: readouts only, never a test or a pool.</summary>
+        public float ClassSampled;
+        /// <summary>The local row's Convective (0-1); the native conditions take their convective term from it.</summary>
+        public float Convective;
+        /// <summary>Base and top of the deck the native cloud height follows (<see cref="SkySummary.NativeDeck"/>); its clamp is 250-9500 m.</summary>
+        public float NativeDeck, NativeDeckTop;
+        /// <summary>Base and top of the lowest rain-bearing layer (cells, nimbostratus, or the altostratus of embedded showers): what the vertical rain profile reads.</summary>
+        public float RainBase, RainTop;
         /// <summary>max(low cover, mid cover x opacity) of the local row: what Gate() reads to let stratiform rain fall (spec 5.3).</summary>
         public float RainCover;
         /// <summary>Top of the low deck from the local row (base + max(puff depth, deck depth) + half the wobble): the envelope's conservative ceiling.</summary>
@@ -119,15 +129,11 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public WeatherTape TapeSource { get; private set; }
         /// <summary>True when D follows the mission clock (<c>Build(..., moving: true)</c>); the live manager holds D at the key's Offset until slice 5.</summary>
         public bool Moving { get; private set; }
-        // SHIM(task 15): the legacy surface, inert, until the last consumers move. Deleted with WeatherTimeline, SkySplit and WeatherFronts.
-        public TimelineState Timeline => HeldTimeline();
-        public SkyParams Params => RowAt(0f, 0f);
-        /// <summary>Where every per-sample genus and thin-layer row is read from: one keyframe (<see cref="Params"/>) in slices 2-3, a fixture's baked tape in the density check and the bench.</summary>
+        /// <summary>Where every per-sample genus and thin-layer row is read from: one keyframe (<see cref="RowAt"/>) in slices 2-3, a fixture's baked tape in the density check and the bench.</summary>
         public TapeSampler Tape { get; private set; }
         public TapeFrame Frame { get; private set; }
         /// <summary>Everything the lattices resolve from: the tape identity, the tape and its frame (spec 6). Rebuilt with every Build.</summary>
         public LatticeSource Lattice { get; private set; }
-        public int FrontCount => 0;
         /// <summary>Scenery storms outside the theater; see <see cref="Superstructures"/>.</summary>
         public int SuperstructureCount { get; private set; }
 
@@ -137,14 +143,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>Downwind heading of the layout's prevailing wind; fixed for the key.</summary>
         public float PrevailingHeading { get; private set; }
         public bool IsBuilt => Key != null;
-
-        public FrontState Front(int index) => default;
-
-        private TimelineState HeldTimeline()
-        {
-            WeatherRegimeType cls = Key.SkyPin < SkyLibrary.Count ? SkyLibrary.ClassOf(Key.SkyPin) : SkyMath.ClassOf(RowAt(0f, 0f));
-            return new TimelineState { From = cls, To = cls, Blend = 1f, Level = (int)cls, GrowthLevel = (int)cls, StepStart = Key.Epoch, NextChangeAt = float.PositiveInfinity, Next = cls, Layout = Key.LayoutSeed };
-        }
 
         /// <summary>The tape row at a world point: the local sky, with the low genus, the base, the thin layers and every CPU column.</summary>
         public SkyParams RowAt(float x, float z) => tapeIsConstant ? constantRow : Tape.At(Frame.S(x, z));
@@ -344,7 +342,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             point.RainRate = rain;
             point.RainCover = rainCover;
             point.ConvectiveShare = rain > 0.01f ? Math.Min(1f, cellRain / (stratiform + cellRain)) : 0f;
-            point.Cover = Scalar.Clamp01(1f - (1f - coverBase) * clearCells * clearClusters);
+            point.LowCover = Scalar.Clamp01(1f - (1f - coverBase) * clearCells * clearClusters);
             point.ClusterCover = Scalar.Clamp01(1f - clearClusters);
             point.CellCover = Scalar.Clamp01(1f - clearCells);
 
@@ -367,6 +365,14 @@ namespace BoscaliSummer.Modules.Weather.Domain
             point.DeckTop = point.CloudBase + Math.Max(genus.PuffDepth, local.DeckDepth) + genus.BaseWobble * 0.5f;
             point.MidCover = local.Mid.Cover; point.MidBase = local.Mid.Base; point.MidTop = local.Mid.Top;
             point.HighCover = local.High.Cover; point.HighBase = local.High.Base; point.HighTop = local.High.Top;
+            // The sky summary (spec 8.2): opacity-weighted cover, the sampled class, the deck the natives follow and the layer the rain falls from.
+            point.SkyCover = SkyMath.SkyCover(point.LowCover, point.MidCover, local.OpacityMid, point.HighCover, local.OpacityHigh);
+            point.Convective = local.Convective;
+            point.ClassSampled = SkyMath.ClassConditions(point.SkyCover, stratiform, local.Convective, local.Severity);
+            SkySummary.NativeDeck(point.LowCover, point.CloudBase, point.LowTop, point.MidCover, local.OpacityMid, point.MidBase, point.MidTop,
+                point.HighCover, local.OpacityHigh, point.HighBase, point.HighTop, out point.NativeDeck, out point.NativeDeckTop);
+            SkySummary.RainLayer(cellRain, stratiform, point.LowCover, point.MidCover * local.OpacityMid, point.CloudBase, point.LowTop, point.MidBase, point.MidTop,
+                out point.RainBase, out point.RainTop);
 
             float haze = Math.Max(p.Haze * HazeScale, 0.5f);
             float extinction = 3.912f / haze + 0.25f * (float)Math.Pow(rain, 0.66);
@@ -386,7 +392,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
             float diurnal = 5f * (float)Math.Sin((HourOfDay - 9f) / 24f * 2f * Math.PI);
             point.Temperature = p.Temperature + diurnal - 4f * WeatherMath.Smoothstep(0f, 15f, rain);
-            float humid = Scalar.Clamp01(point.Cover * 0.6f + WeatherMath.Smoothstep(0f, 5f, rain) * 0.6f);
+            float humid = Scalar.Clamp01(point.LowCover * 0.6f + WeatherMath.Smoothstep(0f, 5f, rain) * 0.6f);
             point.Dewpoint = point.Temperature - WeatherMath.Lerp(9f, 0.5f, humid);
             return point;
         }
@@ -394,7 +400,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>The regional sky at the map centre.</summary>
         public WeatherPoint Regional() => Sample(0f, 0f);
 
-        /// <summary>Mean of cover over a coarse grid; what vanilla's global <c>conditions</c> should say.</summary>
+        /// <summary>Mean of the opacity-weighted <see cref="WeatherPoint.SkyCover"/> over a coarse grid: the theater mean the server's native conditions follow (spec 8.1).</summary>
         public float MeanCover(int steps = 5)
         {
             float sum = 0f;
@@ -405,7 +411,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 {
                     float x = ((i + 0.5f) / steps * 2f - 1f) * HalfX;
                     float z = ((j + 0.5f) / steps * 2f - 1f) * HalfZ;
-                    sum += Sample(x, z).Cover;
+                    sum += Sample(x, z).SkyCover;
                     n++;
                 }
             }

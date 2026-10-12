@@ -20,6 +20,21 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         internal Vector2 TheaterHalfSpan => fieldSpan * 0.5f;
 
         internal bool TryMissionSeconds(out float seconds) => TryMissionTime(out seconds);
+        /// <summary>
+        /// STORY: repeats one story for the whole tape, or hands the choice back to the mission class with <see cref="WeatherKey.None"/> (AUTO). A new tape identity, so a cut: the key is
+        /// rebased and the new tape is placed like a capture (<see cref="TapeCuts.Story"/>). The hold state and the pin are left as they are; a pinned sky still wins over the story.
+        /// </summary>
+        internal bool SetStory(byte story)
+        {
+            if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return false;
+            if (story != WeatherKey.None && story >= WeatherStories.Count) return false;
+            fieldKey = TapeCuts.Story(fieldKey, now, story);
+            RekeyAndSync(now);
+            // While a sky is pinned the pin wins: the press is still a cut (the tape is placed again and the lattice reshuffles) but the sky does not change, so the note says so.
+            string pinned = fieldKey.SkyPin < SkyLibrary.Count ? " · SKY PIN STILL WINS" : "";
+            NotifyPlayer((story == WeatherKey.None ? "STORY AUTO" : "STORY " + WeatherStories.Name(story).ToUpperInvariant()) + pinned, forcedRainIntensity);
+            return true;
+        }
 
         /// <summary>
         /// HOLD / RESUME: the same switch as SET SERVER > EFFECTS > CHANGING WEATHER (<c>TapeMoves</c>), written from the console. One key edit, a SMOOTH rebase
@@ -32,7 +47,6 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             settings.TapeMoves.Value = plan.TapeMoves;
             consoleAuto = plan.ConsoleAuto;
             isManualOverride = plan.ManualOverride;
-            explicitTargets = false;
             fieldKey = TapeSwitch.Held(fieldKey, plan.Key);
             RekeyAndSync(now);
             NotifyPlayer(moves ? "TAPE RUNNING" : "TAPE HELD", forcedRainIntensity);

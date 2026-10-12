@@ -37,8 +37,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         public static float AmbientMultiplier(float rain) => 1f - (1f - MinAmbientMultiplier) * Scalar.Clamp01(rain);
 
-        /// <summary>Ambient kept under a cloud deck: a full overcast overhead takes 28 %.</summary>
-        public static float ShadeAmbient(float shade) => 1f - 0.28f * Scalar.Clamp01(shade);
+        /// <summary>Ambient kept under a cloud deck: a full overcast overhead takes 40 % (start value for the capped native conditions, tuned on the bench; spec 8.1).</summary>
+        public static float ShadeAmbient(float shade) => 1f - 0.40f * Scalar.Clamp01(shade);
 
         /// <summary>Extra low haze under a cloud deck: up to 35 % thicker.</summary>
         public static float ShadeFog(float shade) => 1f + 0.35f * Scalar.Clamp01(shade);

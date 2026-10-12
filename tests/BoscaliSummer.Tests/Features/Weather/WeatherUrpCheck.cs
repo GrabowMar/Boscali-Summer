@@ -160,7 +160,7 @@ public sealed class WeatherUrpCheck : MonoBehaviour
         var frame = new CloudFrame
         {
             CameraPosition = main.transform.position, CameraForward = main.transform.forward,
-            FieldOfView = main.fieldOfView, PixelHeight = 540, Bottom = maps.Bottom, Top = maps.Top,
+            FieldOfView = main.fieldOfView, PixelHeight = 540,
             SunDirection = new Vector3(.35f, .55f, -.65f),
             SunColor = new Color(1.9f, 1.8f, 1.6f), Ambient = new Color(.5f, .58f, .7f),
             Ground = new Color(.12f, .15f, .13f), Fog = new Color(.72f, .8f, .9f), Extinction = .00004f
@@ -348,12 +348,13 @@ public sealed class WeatherUrpCheck : MonoBehaviour
         field.Build(key, 900f, 60000f, 60000f, 13f);
         CloudMaps maps = CloudMaps.Build(key, 900f, 60000f, 60000f, 13f, 105000f, 315000f);
         var uniforms = new CloudVolumeUniforms(); uniforms.Settle(field);
-        Vector3 deckPosition = new Vector3(0f, maps.Bottom + 150f, 0f);
+        CloudVolumeUniforms.FarBounds(field, Vector3.zero, out float boundsBottom, out _);
+        Vector3 deckPosition = new Vector3(0f, boundsBottom + 150f, 0f);
         Quaternion deckRotation = Quaternion.Euler(-2f, 30f, 0f);
         var frame = new CloudFrame
         {
             CameraPosition = deckPosition, CameraForward = deckRotation * Vector3.forward,
-            FieldOfView = 60f, PixelHeight = 360, Bottom = maps.Bottom, Top = maps.Top,
+            FieldOfView = 60f, PixelHeight = 360,
             SunDirection = new Vector3(.35f, .55f, -.65f),
             SunColor = new Color(1.9f, 1.8f, 1.6f), Ambient = new Color(.5f, .58f, .7f),
             Ground = new Color(.12f, .15f, .13f), Fog = new Color(.72f, .8f, .9f), Extinction = .00004f

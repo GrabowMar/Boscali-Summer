@@ -167,6 +167,13 @@ public static class WeatherEnvUnityCheck
         }
         Set(d, "Forecast", rows);
         if (scenario == "no-forecast") Set(d, "Forecast", null);
+        if (d.GetType().GetField("Story", All) != null)
+        {
+            // Spec 8.4: the story, the role of the segment and the next front ahead; a missing forecast on a held tape says OUTLOOK HELD.
+            Set(d, "Story", "Frontal system"); Set(d, "Role", "PRE-WARM");
+            Set(d, "NextMarker", scenario == "no-camera" ? "NO FRONT AHEAD" : "COLD FRONT 62 KM W");
+            Set(d, "ForecastHeld", scenario == "no-forecast"); Set(d, "AtPosition", scenario != "storm-in-cloud");
+        }
         if (scenario == "unknown-visibility") Set(d, "VisibilityKm", -1f);
         if (d.GetType().GetField("HasViewAir", All) != null && scenario != "no-camera")
         {
@@ -395,6 +402,12 @@ public static class WeatherEnvUnityCheck
                 foreach (string field in new[] { "outlook", "coverEq" })
                     if (((AvPart)view.GetType().GetField(field, All).GetValue(view)).Shown)
                         Failures.Add("late-fill: stale " + field + " remains visible after forecast data disappears");
+                con.SetPage(0);
+                for (int i = 0; i < 2; i++) con.Ticker.TickNow();
+                bool heldShown = false;
+                foreach (TMP_Text text in con.Root.GetComponentsInChildren<TMP_Text>(false))
+                    if (text.text.Contains("OUTLOOK HELD")) heldShown = true;
+                if (!heldShown) Failures.Add("late-fill: a held forecast must say OUTLOOK HELD");
             }
             if (s == "unknown-visibility")
             {

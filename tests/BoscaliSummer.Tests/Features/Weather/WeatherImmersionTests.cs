@@ -8,7 +8,7 @@ namespace BoscaliSummer.Tests.Features.Weather
     {
         public static void Run()
         {
-            var point = new WeatherPoint { CloudBase = 1000f, CloudTop = 3000f };
+            var point = new WeatherPoint { CloudBase = 1000f, CloudTop = 3000f, RainBase = 1000f, RainTop = 3000f };
             var cloud = FlightWeatherAirMass.Evaluate(point, 1500f, 0.6f, null);
             TestAssert.That(cloud.CloudMoisture > 0.8f && cloud.VisualRain == 0f && cloud.Atmosphere == 0f,
                 "A dry dense cloud condenses on glass without rain or duplicate atmospheric extinction");
@@ -63,8 +63,8 @@ namespace BoscaliSummer.Tests.Features.Weather
             field.Build(new WeatherKey(73, 0f, false, (byte)WeatherRegimeType.Clear,
                 Superstructures.SupercellSet), 60f, 40000f, 40000f);
             Superstructure hero = field.SuperstructureAt(0);
-            var settledHero = new CloudBodies(noise, 2, field.Params, field: field);
-            var hiddenHero = new CloudBodies(noise, 2, field.Params, field: field,
+            var settledHero = new CloudBodies(noise, 2, field.RowAt(0f, 0f), field: field);
+            var hiddenHero = new CloudBodies(noise, 2, field.RowAt(0f, 0f), field: field,
                 shownHeroes: new float[Superstructures.MaxCount], nearDetail: true);
             TestAssert.That(settledHero.Heroes(hero.X, 3000f, hero.Z) > 0.5f &&
                 hiddenHero.Heroes(hero.X, 3000f, hero.Z) == 0f,

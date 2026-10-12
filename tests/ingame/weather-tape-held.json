@@ -485,6 +485,46 @@
       "check": "result_below",
       "path": "sky37r.keyDynamic",
       "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "s0o0r.tapeId",
+      "min": -0.5
+    },
+    {
+      "check": "result_above",
+      "path": "s0o150r.tapeId",
+      "min": -0.5
+    },
+    {
+      "check": "result_above",
+      "path": "s0o215r.tapeId",
+      "min": -0.5
+    },
+    {
+      "check": "result_above",
+      "path": "s0o250r.tapeId",
+      "min": -0.5
+    },
+    {
+      "check": "result_above",
+      "path": "s0o300r.tapeId",
+      "min": -0.5
+    },
+    {
+      "check": "result_above",
+      "path": "s1o200r.tapeId",
+      "min": -0.5
+    },
+    {
+      "check": "result_above",
+      "path": "s1o245r.tapeId",
+      "min": -0.5
+    },
+    {
+      "check": "result_above",
+      "path": "sky37r.tapeId",
+      "min": -0.5
     }
   ]
 }

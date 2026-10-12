@@ -17,10 +17,17 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public const string NoCamera = "NO CAMERA";
         public const string NoAnchor = "NO ANCHOR PLACED";
 
+        /// <summary>The story the STORY stepper moves to: from AUTO the first (next) or the last (previous), otherwise one step with wrap-around.</summary>
+        public static int StoryStep(int pick, int count, int direction)
+        {
+            int n = count < 1 ? 1 : count;
+            if (pick < 0) return direction > 0 ? 0 : n - 1;
+            return ((pick + direction) % n + n) % n;
+        }
+
         public static MetState State(MetControl id, MetOfficeModel m)
         {
             MetControlInfo info = MetCatalog.Info(id);
-            if (info.Avail == MetAvail.Tape4B) return new MetState(false, "ARRIVES WITH THE TAPE CONSOLE (4B)");
             if (info.Avail == MetAvail.Motion5) return new MetState(false, "ARRIVES WITH TAPE MOTION (S5)");
             if (!m.Host) return new MetState(false, Client);
             if (!m.Captured) return new MetState(false, Waiting);
@@ -50,7 +57,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         {
             if (!m.Host) return "READ ONLY: " + Client;
             if (!m.Captured) return Waiting;
-            return "HOST // ALL PLAYERS · UNTIL THE TAPE LANDS EDITS FOLLOW THE LEGACY SKY STEP";
+            return "HOST // ALL PLAYERS · THE TAPE IS HELD UNTIL TAPE MOTION (S5)";
         }
     }
 }

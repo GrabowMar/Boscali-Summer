@@ -32,7 +32,7 @@ def write(name,ops,timeout=400):
 # Native cockpit for ownship features; no cinematic spectator bypass.
 weather=[dict(op='seat',id='player',altitude=700,speed=140,heading=0,view='cockpit'),atmosphere(8),
          dict(op='fly',id='player',program=[{'level':25},{'orbit':{'bank':25,'seconds':90}}]),
-         call(WEATHER+'ForceWeather','rain_state',conditions=.74,cloudHeight=2200,rain=.65,follow='player'),wait(15)]
+         call(WEATHER+'ForceWeather','rain_state',regime='RainSquall',cloudHeight=1500,rain=.65,follow='player'),wait(15)]
 weather+=record('cw-canopy',12)
 weather+=[call(WEATHER+'Readout','canopy'),call('BoscaliSummer.Modules.Immersion.Runtime.ImmersionAutomation.Readout','body'),
           dict(op='seat',id='player',view='orbit'),wait(2)]

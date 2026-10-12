@@ -22,9 +22,9 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             chart.SetHelp("SYNOPTIC CHART: north up, ±150 km around the theater centre. Fronts, storm cells, set-pieces, the anchor, you and the wind.");
 
             MetCard next = Card(f, "NEXT FRONTS");
-            next.SetTag(0, "4B", MetAvail.Tape4B); next.SetTag(1, "R4", MetAvail.Live);
+            next.SetTag(0, "ETA S5", MetAvail.Motion5); next.SetTag(1, "R4", MetAvail.Live);
             fronts = next.Add(new MetFrontsBody(next.Content), MetOfficeLayout.FrontsCard - MetOfficeLayout.CardChrome);
-            fronts.SetHelp("NEXT FRONTS: the two nearest fronts with distance and bearing. ETA reads STATIC until the tape moves them (4B / S5).");
+            fronts.SetHelp("NEXT FRONTS: the two nearest fronts with distance and bearing. ETA reads STATIC while the tape is held; it counts down once the tape moves them (S5).");
 
             MetCard id = Card(f, "IDENTITY");
             id.SetTag(0, "R8", MetAvail.Live);

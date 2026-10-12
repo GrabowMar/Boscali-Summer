@@ -3,8 +3,8 @@ using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Weather.Domain
 {
-    /// <summary>When a control's feature reaches the player (the mockup's availability tags): LIVE now, 4B with the tape console, S5 with tape motion.</summary>
-    internal enum MetAvail : byte { Live, Tape4B, Motion5 }
+    /// <summary>When a control's feature reaches the player (the mockup's availability tags): LIVE now, S5 with tape motion. The tag of the tape console is gone: slice 4b shipped it.</summary>
+    internal enum MetAvail : byte { Live, Motion5 }
 
     /// <summary>How an action lands (spec 9.3): a SMOOTH rebase, a FADE of one set-piece (20 s), a CUT (one atomic hard swap), or no sky change at all.</summary>
     internal enum MetEffect : byte { None, Smooth, Fade, Cut }
@@ -42,7 +42,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
     /// </summary>
     internal struct MetSetPiece { public bool Forced, Present, Placed; public float X, Z, Strength, FadeProgress; }
 
-    /// <summary>One of the nine segments of the story (the pips above the strip). Empty until the tape console (4B) fills them.</summary>
+    /// <summary>One of the nine segments of the story (the pips above the strip), filled from the tape.</summary>
     internal struct MetSegment { public bool Present; public string Label; public WeatherRegimeType Class; }
 
     /// <summary>What holds a stopped tape: the console's HOLD, or the SET SERVER switch. Main cannot tell the two apart (one config entry), so the adapter leaves None until 4b.</summary>
@@ -87,10 +87,11 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public float SpeedMps, WindMps;
         public int WindFromDeg;
 
-        // Story and strip. Today the strip is the legacy step; HasStory arrives with the tape (4B).
+        // Story and strip: the tape's segments and markers around the camera. StoryPick is the story the host chose (0-based), -1 while the mission class picks (AUTO).
         public bool HasStory;
-        /// <summary>The story's name and the role of the segment under the cursor (for example "PRE-WARM"); empty until 4B.</summary>
+        /// <summary>The story's name and the role of the segment under the cursor (for example "PRE-WARM"); empty without a tape.</summary>
         public string StoryName = "", SkyRole = "";
+        public int StoryPick = -1;
         public int StoryIndex = -1, StoryCount = WeatherKey.StoryCount;
         public int BlockCount, MarkCount;
         public readonly MetBlock[] Blocks = new MetBlock[MaxBlocks];
@@ -135,7 +136,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             Class = WeatherRegimeType.Clear; Cover = 0f; SkyNumber = 0; SkyName = Metar = ""; PinnedSky = -1;
             Array.Clear(Layers, 0, Layers.Length);
             Running = false; HeldBy = MetHeldBy.None; Pace = TapePace.DefaultPace; SpeedMps = WindMps = 0f; WindFromDeg = 0;
-            HasStory = false; StoryName = SkyRole = ""; StoryIndex = -1; StoryCount = WeatherKey.StoryCount;
+            HasStory = false; StoryName = SkyRole = ""; StoryIndex = -1; StoryPick = -1; StoryCount = WeatherKey.StoryCount;
             BlockCount = MarkCount = 0; StripNote = Pending = "";
             Array.Clear(Segments, 0, Segments.Length);
             FrontCount = CellCount = 0;
@@ -193,7 +194,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         bool ClearPlacement();
         bool SetRain(float? intensity);
         bool Scenario(WeatherScenario scenario);
-        /// <summary>Seam stub (4B): repeats story <paramref name="story"/> (0-based) for the whole tape; -1 hands the choice back to the mission class. The adapter refuses it until the tape console lands.</summary>
+        /// <summary>Repeats story <paramref name="story"/> (0-based) for the whole tape; -1 hands the choice back to the mission class. A cut: the tape is placed again like a capture.</summary>
         bool SetStory(int story);
         /// <summary>Seam stub (S5): brings the next front to the camera in <paramref name="minutes"/>. The adapter refuses it until tape motion lands.</summary>
         bool FrontIn(int minutes);

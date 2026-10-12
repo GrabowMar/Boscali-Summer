@@ -24,12 +24,12 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
             storyCard = Card(f, "STORY");
             MetCard st = storyCard;
-            st.SetCaption("▲ CUT · WHOLE TAPE"); st.SetTag(0, "4B", MetAvail.Tape4B); st.SetTag(1, "R3", MetAvail.Live);
+            st.SetCaption("▲ CUT · WHOLE TAPE"); st.SetTag(0, "LIVE", MetAvail.Live); st.SetTag(1, "R3", MetAvail.Live);
             storyRow = st.Add(new MetStepRow(st.Content, Spec(MetControl.StoryPrev, "", AvIcon.ChevronLeft, AvButtonStyle.Quiet), Spec(MetControl.StoryNext, "", AvIcon.ChevronRight, AvButtonStyle.Quiet))
                 .WithLeft(Spec(MetControl.StoryAuto, "AUTO"), 52f), MetOfficeLayout.Row);
             Reg(MetControl.StoryPrev, storyRow.Minus); Reg(MetControl.StoryNext, storyRow.Plus); Reg(MetControl.StoryAuto, storyRow.Left);
             story = st.Add(new MetStoryBody(st.Content), MetOfficeLayout.PipsRow + 2f + MetOfficeLayout.StripArt + MetOfficeLayout.StripMeta, 3f);
-            story.SetHelp("STORY STRIP: where the sky changes, ±93 minutes around now. Legacy step today; the tape (4B) draws segments and front markers here.");
+            story.SetHelp("STORY STRIP: the tape's segments, ±93 minutes around you, with the front markers. HELD while the tape does not move; minutes count at the tape's own speed.");
 
             MetCard time = Card(f, "TIME");
             time.SetCaption("SMOOTH · HOLD / PACE"); time.SetTag(0, "LIVE", MetAvail.Live);
@@ -72,8 +72,8 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             logNote.Set(model.Host ? (model.LogText.Length > 0 ? model.LogText : "NO HOST ACTIONS YET\nEVERY CHANGE YOU MAKE IS LOGGED HERE") : "HOST ACTIONS ARE LOGGED ON THE HOST\nTHIS SEAT ONLY READS: THE HOST STEERS");
             logCard.SetCaption(model.Pending.Length > 0 ? model.Pending : "IDLE");
             storyCard.SetCaption(model.SkyRole.Length > 0 ? "NOW · " + model.SkyRole : "▲ CUT · WHOLE TAPE");
-            storyRow.SetValue(model.HasStory ? model.StoryName.ToUpperInvariant() + " " + (model.StoryIndex + 1) + " / " + model.StoryCount : "— / " + model.StoryCount);
-            control[(int)MetControl.StoryAuto].Latched = !model.HasStory;
+            storyRow.SetValue(MetOfficeText.StoryValue(model.StoryPick, model.StoryCount, model.StoryName, model.HasStory));
+            control[(int)MetControl.StoryAuto].Latched = model.StoryPick < 0;
             control[(int)MetControl.Hold].Latched = !model.Running;
             Label(control[(int)MetControl.Hold], MetOfficeText.HoldLabel(model.Running));
             // A client's Pace setting is its own: only the host's speed travels, so a client reads the speed alone (pace 0).

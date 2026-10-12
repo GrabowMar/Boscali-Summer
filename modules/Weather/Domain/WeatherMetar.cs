@@ -45,7 +45,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 if (text.Length > 0) text.Append(' ');
                 text.Append(oktas).Append(Height(baseMetres));
             }
-            Group(p.Cover, p.CloudBase);
+            Group(p.LowCover, p.CloudBase);
             Group(p.MidCover, p.MidBase);
             Group(p.HighCover, p.HighBase);
             if (text.Length == 0) text.Append("SKC");

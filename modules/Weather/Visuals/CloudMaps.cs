@@ -27,7 +27,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// 1.4 km boundary warp and the bilinear footprint). Where r is zero, or a point lies
         /// outside [b, g] with margins, no cloud can be drawn and the march skips its density.</summary>
         internal readonly byte[] Envelope = new byte[EnvelopeSize * EnvelopeSize * 4];
-        internal float Bottom, Top;
         /// <summary>Maximum encoded precipitation alpha across both displayed map levels, 0..1.</summary>
         internal float RainMaximum;
         internal int Revision;
@@ -39,17 +38,14 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             snapshot.Build(key, time, halfX, halfZ, hour);
             if (fixture != null) snapshot.UseFixtureTape(fixture.Sampler, fixture.Frame);
             var result = new CloudMaps();
-            float bottom = VolumeTop, top = 0f;
-            Fill(snapshot, nearHalf, NearSize, result.Near, result.NearProfiles, ref bottom, ref top, ref result.RainMaximum);
-            Fill(snapshot, farHalf, FarSize, result.Far, result.FarProfiles, ref bottom, ref top, ref result.RainMaximum, areaMean: true);
+            Fill(snapshot, nearHalf, NearSize, result.Near, result.NearProfiles, ref result.RainMaximum);
+            Fill(snapshot, farHalf, FarSize, result.Far, result.FarProfiles, ref result.RainMaximum, areaMean: true);
             BuildEnvelope(result.Near, result.NearProfiles, result.Envelope);
-            result.Bottom = Math.Max(-30f, bottom - 800f);
-            result.Top = Math.Min(VolumeTop, Math.Max(bottom + 2000f, top + 1600f));
             return result;
         }
 
         private static void Fill(WeatherField snapshot, float half, int size, byte[] pixels, byte[] profiles,
-            ref float bottom, ref float top, ref float rainMaximum, bool areaMean = false)
+            ref float rainMaximum, bool areaMean = false)
         {
             float third = 2f * half / size / 3f;
             for (int z = 0; z < size; z++)
@@ -72,11 +68,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 profiles[i + 2] = Byte(p.CloudBase / BaseRange);
                 profiles[i + 3] = Byte(p.RainRate / 100f);
                 rainMaximum = Math.Max(rainMaximum, profiles[i + 3] / 255f);
-                if (p.Cover > 0.02f)
-                {
-                    bottom = Math.Min(bottom, p.CloudBase - p.BaseVariation);
-                    top = Math.Max(top, visualTop);
-                }
             }
         }
 
@@ -98,7 +89,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 mean.LowTop = Math.Max(mean.LowTop, s.LowTop);
                 mean.DeckTop = Math.Max(mean.DeckTop, s.DeckTop);
                 mean.RainRate = Math.Max(mean.RainRate, s.RainRate);
-                mean.Cover = Math.Max(mean.Cover, s.Cover);
+                mean.LowCover = Math.Max(mean.LowCover, s.LowCover);
             }
             mean.BackgroundCover = background / 9f;
             mean.CellShape = shape / 9f;

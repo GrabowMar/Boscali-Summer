@@ -44,14 +44,15 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             int skyHere = tape != null ? tape.SkyIndexAt(sCam) : -1;
             bool moving = key.Dynamic && field.Moving;
             m.Class = SkyMath.ClassOf(field.RowAt(camX, camZ));
-            m.Cover = p.Cover;
+            m.Cover = p.SkyCover;
             m.PinnedSky = key.SkyPin < SkyLibrary.Count ? key.SkyPin : -1;
+            m.StoryPick = key.Story < WeatherStories.Count ? key.Story : -1;
             m.SkyNumber = skyHere + 1;
             m.SkyName = skyHere >= 0 ? SkyLibrary.Get(skyHere).Name : RegimeSnapshot.FromType(m.Class).Name;
             m.Metar = WeatherMetar.Line(p);
             SetLayer(m, 0, "HIGH", p.HighCover, p.HighBase);
             SetLayer(m, 1, "MID", p.MidCover, p.MidBase);
-            SetLayer(m, 2, "LOW", p.Cover, p.CloudBase);
+            SetLayer(m, 2, "LOW", p.LowCover, p.CloudBase);
 
             // Time.
             m.Running = key.Dynamic;
@@ -94,8 +95,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
 
             m.ForcedRain = w.ForcedRainIntensity;
 
-            // Outlook: the legacy forecast at the aircraft; HELD while the tape is held.
-            m.OutlookHeld = !key.Dynamic;
+            // Outlook (spec 8.4): the tape's forecast at the aircraft's position at t + offset; HELD while the tape does not move.
+            m.OutlookHeld = !(key.Dynamic && field.Moving);
             ForecastStep[] steps = w.GetForecastTimeline();
             if (steps != null && steps.Length >= MetOfficeModel.OutlookCount)
             {
@@ -206,8 +207,15 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             return ok;
         }
 
-        // Seam stubs: the window routes the 4B and S5 controls here; they stay refused (and disabled by MetOfficeRules) until the tape console and tape motion land.
-        public bool SetStory(int story) => false;
+        // Seam stub: the window routes the S5 control here; it stays refused (and disabled by MetOfficeRules) until tape motion lands.
+        public bool SetStory(int story)
+        {
+            if (!Ready) return false;
+            byte pick = story < 0 || story >= WeatherStories.Count ? WeatherKey.None : (byte)story;
+            bool ok = w.SetStory(pick);
+            if (ok) Note(MetOfficeText.StoryNote(pick == WeatherKey.None ? -1 : pick));
+            return ok;
+        }
         public bool FrontIn(int minutes) => false;
     }
 }

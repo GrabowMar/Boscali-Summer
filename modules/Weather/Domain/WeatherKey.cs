@@ -117,36 +117,27 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>Repeats one story for the whole tape (0-4), or hands the choice back to the mission class with <see cref="None"/>. A new tape identity, so a cut.</summary>
         public WeatherKey WithStory(byte story) => new WeatherKey(Seed, Epoch, Dynamic, MissionClass, Sets, LayoutSalt, HasAnchor, AnchorX, AnchorZ, story, SkyPin, OpeningBase,
             HeadingDeg, Offset, SystemSpeed, SetOriginSquall, SetOriginSupercell, SetOriginCell);
+
+        /// <summary>
+        /// One key edit for a preset (spec 9.3): the tape fields first (story and pin change the tape identity, so this is a cut), then the set-pieces. Scenarios build with it:
+        /// <c>basis.Rebased(...).With(story, pin, sets)</c>. Slice 5 latches each newly set bit's SetOrigin against the new Offset here (7.6).
+        /// </summary>
+        public WeatherKey With(byte story, byte skyPin, byte sets) =>
+            new WeatherKey(Seed, Epoch, Dynamic, MissionClass, sets, LayoutSalt, HasAnchor, AnchorX, AnchorZ, story, skyPin, OpeningBase,
+                HeadingDeg, Offset, SystemSpeed, SetOriginSquall, SetOriginSupercell, SetOriginCell);
         public WeatherKey WithLayoutSalt(byte salt) => Copy(salt: salt);
         public WeatherKey WithAnchor(float x, float z) => Copy(anchor: true, x: x, z: z);
         public WeatherKey WithoutAnchor() => Copy(anchor: false);
 
-        /// <summary>INTERIM(slice 4): the legacy timeline needs an opener; the tape never re-keys its class.</summary>
-        public WeatherKey WithMissionClass(byte missionClass) => Copy(missionClass: missionClass, skyPin: None);
-
-        /// <summary>Pins the whole sky to one library sky (index 0-46), or unpins it with <see cref="None"/>. A pin changes the tape identity, so it is a cut.
-        /// INTERIM(slice 4): a held or scenario state unpins (<see cref="WithMissionClass"/>), the tape console's Pin sky arrives in slice 4.</summary>
+        /// <summary>Pins the whole sky to one library sky (index 0-46), or unpins it with <see cref="None"/>. A pin changes the tape identity, so it is a cut.</summary>
         public WeatherKey WithSkyPin(byte skyPin) => Copy(skyPin: skyPin);
 
-        private WeatherKey Copy(byte? missionClass = null, byte? sets = null, byte? salt = null, bool? anchor = null,
+        private WeatherKey Copy(byte? sets = null, byte? salt = null, bool? anchor = null,
             float? x = null, float? z = null, float? epoch = null, float? offset = null, bool? dynamic = null,
             float? systemSpeed = null, byte? skyPin = null) =>
-            new WeatherKey(Seed, epoch ?? Epoch, dynamic ?? Dynamic, missionClass ?? MissionClass, sets ?? Sets,
+            new WeatherKey(Seed, epoch ?? Epoch, dynamic ?? Dynamic, MissionClass, sets ?? Sets,
                 salt ?? LayoutSalt, anchor ?? HasAnchor, x ?? AnchorX, z ?? AnchorZ, Story, skyPin ?? SkyPin, OpeningBase,
                 HeadingDeg, offset ?? Offset, systemSpeed ?? SystemSpeed, SetOriginSquall, SetOriginSupercell, SetOriginCell);
-
-        /// <summary>The state the legacy timeline opens with. INTERIM(slice 4).</summary>
-        public WeatherRegimeType OpeningState()
-        {
-            if (MissionClass < ClassCount) return (WeatherRegimeType)MissionClass;
-            // No authored class (or one outside the table): missions open flyable, mostly fair skies.
-            float roll = WeatherMath.Hash01(Seed, 7, 1);
-            if (roll < 0.20f) return WeatherRegimeType.Clear;
-            if (roll < 0.55f) return WeatherRegimeType.Fair;
-            if (roll < 0.80f) return WeatherRegimeType.Scattered;
-            if (roll < 0.92f) return WeatherRegimeType.Broken;
-            return WeatherRegimeType.Overcast;
-        }
 
         // ---- capture helpers -----------------------------------------------------------------
 

@@ -32,6 +32,9 @@ public sealed class CloudBench : MonoBehaviour
         public WeatherRegimeType State;
         /// <summary>Library sky to pin (0-46), or -1 for the class state.</summary>
         public int Sky = -1;
+        /// <summary>A story to pin (0-4) and the held tape offset D in km: the story cross-sections of the contact sheets (-Only story-). 255 = none.</summary>
+        public byte Story = WeatherKey.None;
+        public float OffsetKm;
         /// <summary>A grazing view (pitch 1 degree) of a sky: rendered and saved, never measured.</summary>
         public bool Grazing;
         public byte Sets;
@@ -248,6 +251,12 @@ public sealed class CloudBench : MonoBehaviour
         // that the native aircraft can sustain flight at this altitude.
         if (Array.Exists(filters, filter => filter == "map" || filter.Contains("map-")))
             AddMapViews(scenes);
+        // Explicit opt-in (-Only story-): the first stories' cross-sections at held offsets (slice 4a contact sheets), looking up the tape axis and back down it.
+        if (Array.Exists(filters, filter => filter.StartsWith("story-")))
+            foreach (var cut in new[] { (0, 0f), (0, 150f), (0, 215f), (0, 250f), (0, 300f), (1, 200f), (1, 245f) })
+                foreach (string way in new[] { "fwd", "back" })
+                    scenes.Add(new Scene { Name = "story-" + cut.Item1 + "-o" + cut.Item2 + "-" + way, State = WeatherRegimeType.Overcast, Story = (byte)cut.Item1,
+                        OffsetKm = cut.Item2, Camera = new Vector3(0, 1500, 0), Pitch = 6, Place = 11 });
         if (skies != null)
         {
             // The sky sheets run alone: one pose under each selected sky, from 300 m, the horizon at 65 % of the frame height; a sky whose
@@ -270,7 +279,7 @@ public sealed class CloudBench : MonoBehaviour
             if (filters.Length > 0 && !Array.Exists(filters, filter => s.Name.Contains(filter))) continue;
             // The key has no front turn: the three front-turn scenes render the unturned sky (slice 4b retires them).
             var key = new WeatherKey(s.Seed, 0f, false, (byte)s.State, s.Sets, s.Salt, s.Anchor, 0f, 25000f,
-                skyPin: s.Sky >= 0 && !skyClass ? (byte)s.Sky : WeatherKey.None);
+                story: s.Story, skyPin: s.Sky >= 0 && !skyClass ? (byte)s.Sky : WeatherKey.None, offset: s.OffsetKm * 1000f);
             if (s.Preset.HasValue) key = WeatherScenarios.Apply(s.Preset.Value, key, true, 0f, 0f, 0f, 1f);
             const float time = 900f;
             var field = new WeatherField();
@@ -326,7 +335,7 @@ public sealed class CloudBench : MonoBehaviour
             else if (s.Place == 11)
             {
                 // Along the tape axis (up the wind, the direction cloud streets run), or across it when the name says so.
-                s.Yaw = Mathf.Atan2(field.Frame.UX, field.Frame.UZ) * Mathf.Rad2Deg + (s.Name.Contains("across") ? 90f : 0f);
+                s.Yaw = Mathf.Atan2(field.Frame.UX, field.Frame.UZ) * Mathf.Rad2Deg + (s.Name.Contains("across") ? 90f : s.Name.EndsWith("-back") ? 180f : 0f);
             }
             else if (s.Place == 4 && s.LookAtHero >= 0 && s.LookAtHero < field.SuperstructureCount)
             {
@@ -357,7 +366,8 @@ public sealed class CloudBench : MonoBehaviour
             }
             else if (s.Place == 8 && hasCell)
             {
-                s.Camera = new Vector3(cell.X + 25000f, maps.Top + 1200f, cell.Z);
+                CloudVolumeUniforms.FarBounds(field, new Vector3(cell.X + 25000f, 0f, cell.Z), out _, out float boundsTop);
+                s.Camera = new Vector3(cell.X + 25000f, boundsTop + 1200f, cell.Z);
                 s.Yaw = Mathf.Atan2(cell.X - s.Camera.x, cell.Z - s.Camera.z) * Mathf.Rad2Deg;
                 s.Pitch = -Mathf.Atan2(s.Camera.y - (cell.Top - 500f), 25000f) * Mathf.Rad2Deg;
             }
@@ -413,7 +423,6 @@ public sealed class CloudBench : MonoBehaviour
                     CameraForward = camera.transform.forward,
                     FieldOfView = camera.fieldOfView,
                     PixelHeight = mode == "half" || mode == "temporal" ? Height / 2 : Height,
-                    Bottom = maps.Bottom, Top = maps.Top,
                     SunDirection = sun,
                     SunColor = s.Name.Contains("night") ? new Color(.13f, .16f, .24f) : new Color(1.9f, 1.8f, 1.6f),
                     Ambient = s.Name.Contains("night") ? new Color(.022f, .029f, .045f) :
@@ -431,7 +440,8 @@ public sealed class CloudBench : MonoBehaviour
                 {
                     float top = 0f;
                     for (int i = 0; i < field.SuperstructureCount; i++) top = Mathf.Max(top, field.SuperstructureAt(i).Top + 1500f);
-                    m.SetVector("_CloudAltitudeBounds", new Vector2(Mathf.Min(maps.Bottom, 350f), Mathf.Max(maps.Top, top)));
+                    CloudVolumeUniforms.FarBounds(field, s.Camera, out float boundsBottom, out float boundsTop);
+                    m.SetVector("_CloudAltitudeBounds", new Vector2(Mathf.Min(boundsBottom, 350f), Mathf.Max(boundsTop, top)));
                 }
                 m.SetTexture("_WeatherMapTex", near);
                 m.SetTexture("_WeatherProfileTex", nearProfiles);
@@ -522,7 +532,7 @@ public sealed class CloudBench : MonoBehaviour
         var body = new CloudBodies(noise, size, field.Tape, field.Frame, field.PrevailingHeading, 0f, field);
         Vector3 direction = new Vector3(0.35f, -0.72f, 0.6f).normalized;
         Vector3 right = Vector3.Cross(Vector3.up, direction).normalized, up = Vector3.Cross(direction, right);
-        float baseY = field.Params.CloudBase;
+        float baseY = field.RowAt(0f, 0f).CloudBase;
         float lower = Mathf.Max(0f, baseY - 800f), upper = 12000f, dy = (upper - lower) / samples;
         float rayStep = dy / Mathf.Max(0.06f, -direction.y), sink = 0f;
         var timer = Stopwatch.StartNew();
@@ -557,7 +567,7 @@ public sealed class CloudBench : MonoBehaviour
         LowGenus genus = field.Tape.GenusAt(0f);
         if (baseVariation > 0f && mode == "")
         {
-            SkyParams sky = field.Params;
+            SkyParams sky = field.RowAt(0f, 0f);
             sky.BaseVariation = baseVariation;
             var tape = new BakedTape(1);
             tape.SetConstant(sky, genus);
@@ -568,12 +578,12 @@ public sealed class CloudBench : MonoBehaviour
             // B': the sky B renders, as a 4096-texel tape of that one sky. IsConstant is false, so BindTape sends no uniforms and the shader
             // fetches and lerps three low-genus rows per sample and evaluates TapeS with its sines. The origin sits inside the tape (s about
             // 1500 km of 3000), so both texels of a lerp are fetched, as on a real tape.
-            SkyParams sky = field.Params;
+            SkyParams sky = field.RowAt(0f, 0f);
             return new TapeFixture(BakedTape.TwoKeyframes(sky, sky, 1500000f, 12000f, genus, genus), new TapeFrame(90f, 1500000f, 10000f, 80000f, 0.7f));
         }
         if (mode == "ladder")
         {
-            SkyParams sky = field.Params;
+            SkyParams sky = field.RowAt(0f, 0f);
             sky.LobeRung += 0.5f;
             sky.Mid.PeriodRung += 0.5f;
             sky.High.PeriodRung += 0.5f;
@@ -585,7 +595,7 @@ public sealed class CloudBench : MonoBehaviour
         {
             // The scene's own sky on one side and the same sky a rung or more away on the other (two lobe rungs, three period rungs,
             // a 15 % higher base), joined by a 12 km ramp through the origin and bent by a 10 km meander.
-            SkyParams left = field.Params, right = left;
+            SkyParams left = field.RowAt(0f, 0f), right = left;
             right.LobeRung += 2f;
             right.Mid.PeriodRung += 3f;
             right.High.PeriodRung += 3f;
@@ -598,7 +608,7 @@ public sealed class CloudBench : MonoBehaviour
         if (mode == "mix")
         {
             // The worst-case morphology mix: both thin layers carry all four morphologies at weight 0.25 and a curl.
-            SkyParams sky = field.Params;
+            SkyParams sky = field.RowAt(0f, 0f);
             sky.Mid = SkyArchetypes.Layer(LayerKind.AcFloccus).ToLayer(0.6f);
             sky.High = SkyArchetypes.Layer(LayerKind.CirrusSpissatus).ToLayer(0.5f);
             for (int i = 0; i < 2; i++)

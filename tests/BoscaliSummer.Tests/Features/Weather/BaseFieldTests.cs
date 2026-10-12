@@ -45,7 +45,7 @@ namespace BoscaliSummer.Tests.Features.Weather
         {
             var field = new WeatherField();
             field.Build(new WeatherKey(17u, 0f, false, skyPin: 7), 600f, 40960f, 40960f);
-            float variation = field.Params.BaseVariation;
+            float variation = field.RowAt(0f, 0f).BaseVariation;
             TestAssert.That(variation == 150f, "sky 8 is a Humilis: 150 m of variation");
             float low = float.MaxValue, high = float.MinValue;
             for (float z = -40000f; z <= 40000f; z += 2000f)
@@ -53,7 +53,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             {
                 WeatherPoint p = field.Sample(x, z);
                 field.Frame.ToTape(x, z, out float qx, out float qz);
-                float expected = field.Params.CloudBase + variation * new BaseHeightField(field.Key.LayoutSeed).At(qx, qz);
+                float expected = field.RowAt(0f, 0f).CloudBase + variation * new BaseHeightField(field.Key.LayoutSeed).At(qx, qz);
                 TestAssert.That(Math.Abs(p.CloudBase - expected) < 0.01f && p.BaseVariation == variation, "the base is the row's base plus the field");
                 low = Math.Min(low, p.CloudBase); high = Math.Max(high, p.CloudBase);
             }
@@ -106,7 +106,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             var field = new WeatherField();
             var key = new WeatherKey(17u, 0f, false, skyPin: 7);
             field.Build(key, 600f, 40960f, 40960f);
-            SkyParams sky = field.Params;
+            SkyParams sky = field.RowAt(0f, 0f);
             sky.BaseVariation = 400f;
             var tape = new BakedTape(1);
             tape.SetConstant(sky, LowGenus.Humilis);
@@ -123,14 +123,15 @@ namespace BoscaliSummer.Tests.Features.Weather
                     row[x] = CloudBodies.SampleMap(maps.Near, maps.NearProfiles, CloudMaps.NearSize, u, v);
                     WeatherPoint truth = field.Sample((u * 2f - 1f) * 50000f, (v * 2f - 1f) * 50000f);
                     TestAssert.That(Math.Abs(row[x].CloudBase - truth.CloudBase) <= CloudMaps.BaseRange / 255f * 0.51f, "the map stores the varied base to a 16 m step");
-                    if (truth.Cover > 0.02f) minBase = Math.Min(minBase, truth.CloudBase);
+                    if (truth.LowCover > 0.02f) minBase = Math.Min(minBase, truth.CloudBase);
                     if (x > 0) maxStep = Math.Max(maxStep, Math.Abs(row[x].CloudBase - row[x - 1].CloudBase));
                 }
             }
             // No ledges: neighbouring texels (one near texel is about 390 m here) differ by at most the field's slope times the spacing.
             float texel = 100000f / CloudMaps.NearSize;
             TestAssert.That(maxStep <= BaseHeightField.MaxSlope * 400f * texel + CloudMaps.BaseRange / 255f + 0.5f, "the underside has no step between texels: " + maxStep);
-            TestAssert.That(maps.Bottom <= Math.Max(-30f, minBase - 400f - 799f), "the altitude window is widened by the variation: " + maps.Bottom + " vs lowest cloudy base " + minBase);
+            TapeBounds.Compute(tape, 0f, TapeBounds.FarHalfWidth, out float boundsBottom, out float boundsTop);
+            TestAssert.That(boundsBottom <= minBase + 1e-3f, "the altitude bounds are widened by the variation: " + boundsBottom + " vs lowest cloudy base " + minBase);
             // The envelope never claims a floor above a texel's own base.
             for (int z = 0; z < CloudMaps.EnvelopeSize; z += 8)
             for (int x = 0; x < CloudMaps.EnvelopeSize; x += 8)

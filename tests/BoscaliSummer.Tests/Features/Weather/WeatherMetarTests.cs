@@ -34,9 +34,9 @@ namespace BoscaliSummer.Tests.Features.Weather
         private static void LineIsDerivedFromTheLayers()
         {
             TestAssert.That(WeatherMetar.Line(default) == "SKC", "no layer is a clear sky");
-            var p = new WeatherPoint { Cover = 0.30f, CloudBase = 1500f, MidCover = 0.5f, MidBase = 4200f, HighCover = 0.9f, HighBase = 8800f };
+            var p = new WeatherPoint { LowCover = 0.30f, CloudBase = 1500f, MidCover = 0.5f, MidBase = 4200f, HighCover = 0.9f, HighBase = 8800f };
             TestAssert.That(WeatherMetar.Line(p) == "SCT049 BKN138 OVC289", "three layers, lowest first: " + WeatherMetar.Line(p));
-            p.MidCover = 0.02f; p.Cover = 0.04f;
+            p.MidCover = 0.02f; p.LowCover = 0.04f;
             TestAssert.That(WeatherMetar.Line(p) == "OVC289", "a layer under 0.05 is not reported");
             p.RainRate = 12f; p.LightningRate = 0.5f;
             TestAssert.That(WeatherMetar.Line(p) == "OVC289 +RA TS", "weather follows the cloud groups: " + WeatherMetar.Line(p));
@@ -53,7 +53,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                 string line = WeatherMetar.Line(field.Sample(0f, 0f));
                 string[] parts = line.Split(' ');
                 TestAssert.That(line.Length > 0 && parts.Length <= 5, "sky " + (i + 1) + " reads '" + line + "'");
-                if (field.Params.Mid.Cover > 0.9f) TestAssert.That(line.Contains("OVC"), "sky " + (i + 1) + ": an opaque deck reads OVC, got " + line);
+                if (field.RowAt(0f, 0f).Mid.Cover > 0.9f) TestAssert.That(line.Contains("OVC"), "sky " + (i + 1) + ": an opaque deck reads OVC, got " + line);
             }
         }
     }

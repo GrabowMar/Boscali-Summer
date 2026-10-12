@@ -34,6 +34,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private bool applied;
         private Slot fog, ambient;
         private ColorSlot fogColor, skyColor, equatorColor, groundColor;
+        private Slot sunSlot;
+        private Light sunOwner;
 
         public string EffectId => "rain-haze";
 
@@ -52,10 +54,12 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         internal bool Applied => applied;
         internal float LastFogMultiplier { get; private set; } = 1f;
+        /// <summary>The factor this effect currently puts on <c>sun.intensity</c> (1 when it writes nothing): the cloud lighting divides it out, so the cloud tops keep the sun's own colour.</summary>
+        internal static float CurrentSunScale { get; private set; } = 1f;
 
         /// <param name="shade">0..1 how much cloud deck hangs overhead; dims and greys the air
         /// under overcast even when it is dry.</param>
-        internal void Apply(float rain, bool underwater, float shade = 0f)
+        internal void Apply(float rain, bool underwater, float shade = 0f, Light sun = null)
         {
             rain = Mathf.Clamp01(rain);
             shade = Mathf.Clamp01(shade);
@@ -67,6 +71,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             skyColor.Track(RenderSettings.ambientSkyColor, applied);
             equatorColor.Track(RenderSettings.ambientEquatorColor, applied);
             groundColor.Track(RenderSettings.ambientGroundColor, applied);
+            if (sun != null) { sunOwner = sun; sunSlot.Track(sun.intensity, applied); }
 
             // Vanilla storm fog peaks near 0.0014; the underwater preset is 0.05. Never amplify the latter.
             if (fog.Base > 0.02f) { Restore(); return; }
@@ -80,7 +85,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             // Cloud extinction belongs to the ray-marched volume. Applying it to global
             // fog as well erased gaps and local geometry as soon as the camera crossed an edge.
             ambient.Written = ambient.Base * dim;
-            fogColor.Written = Tint(fogColor.Base, Mathf.Max(rain, 0.4f * shade));
+            fogColor.Written = ShadeTint(Tint(fogColor.Base, rain), shade);
             skyColor.Written = Dim(skyColor.Base, dim);
             equatorColor.Written = Dim(equatorColor.Base, dim);
             groundColor.Written = Dim(groundColor.Base, dim);
@@ -91,6 +96,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             RenderSettings.ambientSkyColor = skyColor.Written;
             RenderSettings.ambientEquatorColor = equatorColor.Written;
             RenderSettings.ambientGroundColor = groundColor.Written;
+            CurrentSunScale = OvercastLook.SunScale(shade);
+            if (sunOwner != null) { sunSlot.Written = sunSlot.Base * CurrentSunScale; sunOwner.intensity = sunSlot.Written; }
             applied = true;
         }
 
@@ -100,6 +107,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (!applied) return;
             applied = false;
             LastFogMultiplier = 1f;
+            CurrentSunScale = 1f;
+            if (sunOwner != null && RainSkyMath.IsOwnWrite(sunSlot.Written, sunOwner.intensity)) sunOwner.intensity = sunSlot.Base;
+            sunOwner = null;
             if (RainSkyMath.IsOwnWrite(fog.Written, RenderSettings.fogDensity)) RenderSettings.fogDensity = fog.Base;
             if (RainSkyMath.IsOwnWrite(ambient.Written, RenderSettings.ambientIntensity)) RenderSettings.ambientIntensity = ambient.Base;
             if (SameColor(fogColor.Written, RenderSettings.fogColor)) RenderSettings.fogColor = fogColor.Base;
@@ -112,6 +122,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         {
             float r = c.r, g = c.g, b = c.b;
             RainSkyMath.FogTint(rain, ref r, ref g, ref b);
+            return new Color(r, g, b, c.a);
+        }
+
+        private static Color ShadeTint(Color c, float shade)
+        {
+            float r = c.r, g = c.g, b = c.b;
+            OvercastLook.Tint(shade, ref r, ref g, ref b);
             return new Color(r, g, b, c.a);
         }
 
