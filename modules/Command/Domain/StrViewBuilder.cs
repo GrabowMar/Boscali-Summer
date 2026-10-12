@@ -406,7 +406,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                     StrSortieRow r = m.Sorties[i];
                     PutAct(ref r.Accept, StrGate.Check(m, StrActionKind.Accept, r.Id));
                     bool tasked = r.HasWing && (r.WingState == WingSortieState.Tasked || r.WingState == WingSortieState.OnStation);
-                    PutAct(ref r.Wing, tasked ? StrGate.WingGate(m.IsHost, m.SortiesLive, r, true) : StrGate.WingGate(m.IsHost, m.SortiesLive, r, false));
+                    PutAct(ref r.Wing, StrGate.WingGate(m.IsHost, m.SortiesLive, r, tasked));
                 }
             }
 

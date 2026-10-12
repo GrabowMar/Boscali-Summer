@@ -26,13 +26,15 @@ namespace BoscaliSummer.Modules.Command.Domain
             private void Tiles()
             {
                 TheaterCensus c = f.Census;
-                bool sectors = SectorShares(c, out float own, out _, out float hostile, out _, out _);
-                float lead = own - hostile;
+                bool sectors = SectorShares(c, out float own, out _, out _, out _, out int total);
+                // "More than two points" is judged on the counts: the float shares of an exact two-point lead round either way.
+                long gap = sectors ? (long)(c.SectorsFriendly - c.SectorsHostile) * 50L : 0L;
+                bool ahead = sectors && gap > total, behind = sectors && -gap > total;
                 PutTile(0, "SECTORS",
                     sectors ? TheaterReadout.Percent(own) : StrWords.Dash,
-                    !sectors ? CensusCaption(c) : lead > 0.02f ? "LEAD" : lead < -0.02f ? "LAG" : "EVEN",
+                    !sectors ? CensusCaption(c) : ahead ? "LEAD" : behind ? "LAG" : "EVEN",
                     sectors ? own : float.NaN,
-                    !sectors ? AvState.Inert : lead > 0.02f ? AvState.Ready : lead < -0.02f ? AvState.Caution : AvState.Info,
+                    !sectors ? AvState.Inert : ahead ? AvState.Ready : behind ? AvState.Caution : AvState.Info,
                     "Share of the map's sectors your side holds, out of every sector the staff classifies: held, contested, hostile and unclaimed.");
 
                 bool air = c.Known && c.AirFriendly >= 0 && c.AirHostileTracked >= 0;

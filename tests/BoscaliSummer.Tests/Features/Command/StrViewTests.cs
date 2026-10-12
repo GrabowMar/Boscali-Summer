@@ -476,6 +476,15 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(lag.Tiles[0].Caption == "LAG" && lag.Tiles[0].State == NOAvionics.AvState.Caution, "behind by more than two points is a lag");
             f.War.Census.SectorsFriendly = 8; f.War.Census.SectorsHostile = 8; f.War.Census.SectorsContested = 0; f.War.Census.SectorsNeutral = 0; f.Census = f.War.Census;
             TestAssert.That(Build(f).Tiles[0].Caption == "EVEN", "level is even");
+            // Exactly two points apart is not "more than two": judged on the counts, because the float shares of 37 : 35 in 100 round both ways.
+            foreach (var edge in new[] { (37, 35, "EVEN", NOAvionics.AvState.Info), (35, 37, "EVEN", NOAvionics.AvState.Info), (38, 35, "LEAD", NOAvionics.AvState.Ready), (35, 38, "LAG", NOAvionics.AvState.Caution) })
+            {
+                f.War.Census.SectorsFriendly = (short)edge.Item1; f.War.Census.SectorsHostile = (short)edge.Item2;
+                f.War.Census.SectorsContested = 20; f.War.Census.SectorsNeutral = (short)(80 - edge.Item1 - edge.Item2); f.Census = f.War.Census;
+                StrTile sectorTile = Build(f).Tiles[0];
+                TestAssert.That(sectorTile.Caption == edge.Item3 && sectorTile.State == edge.Item4, edge.Item1 + " against " + edge.Item2 + " of 100 reads " + edge.Item3);
+            }
+            f.War.Census.SectorsContested = 0; f.War.Census.SectorsNeutral = 0; f.Census = f.War.Census;
             f.War.Census.AirFriendly = 0; f.War.Census.AirHostileTracked = 0; f.Census = f.War.Census;
             StrViewModel none = Build(f);
             TestAssert.That(none.Tiles[1].Value == "0 : 0" && float.IsNaN(none.Tiles[1].Bar) && float.IsNaN(none.Air.Own), "a measured nothing has no share");
