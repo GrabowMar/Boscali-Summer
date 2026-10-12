@@ -268,7 +268,7 @@ Shader "Boscali/FlightCloudComposite"
                     occludedHistory = true;
                 }
                 if (historyWeight <= 1e-5) return Resolved(fallback, sceneDepth, cloudDepth);
-                float4 carried = clamp(history, low, high);
+                float4 boxed = clamp(history, low, high);
                 // A single representative depth cannot reproject all the material in a
                 // nearby volume. Reduce history when translation is large relative to it.
                 // Distant skies keep the same temporal savings and accumulation.
@@ -280,6 +280,10 @@ Shader "Boscali/FlightCloudComposite"
                 // Fresh neighbours expose a local flash promptly without clearing sky history.
                 motion = max(motion, saturate(_CloudFlashChange * 12.0));
                 if (occludedHistory) motion = max(motion, 0.5);
+                // The clamp box comes from the nine quarter-size texels marched this frame, one of every four half-size texels. A cloud thinner than that (a far layer seen edge-on) is
+                // inside the box only on the frames whose marched row happens to cross it: clamped hard, it blinked on and off along the horizon. A sky that barely moves on screen
+                // keeps most of its history (a 15 % pull toward the box per frame still clears a cloud that has really gone); a moving one is clamped as before.
+                float4 carried = lerp(history, boxed, saturate(0.15 + motion * 3.0));
                 if (!fresh) return Resolved(lerp(carried, upsampled, motion), sceneDepth, cloudDepth);
                 // The clamp already pulled the carried value into the fresh range, so new and
                 // vanished cloud still converge within a few frames. A fresh texel enters half
