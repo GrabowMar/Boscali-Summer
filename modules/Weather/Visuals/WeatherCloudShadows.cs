@@ -15,8 +15,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
     internal sealed class WeatherCloudShadows
     {
         private const int Size = 256;
-        private const float Span = 48000f;
-        private const float RecentreDistance = 9000f;
+        private const float Span = 96000f;
+        private const float RecentreDistance = 18000f;
         private const float BlendSeconds = 4f;
         private const float UploadSeconds = 0.25f;
         private readonly Color32[] blended = new Color32[Size * Size];
@@ -237,7 +237,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                                 float altitude = lower + (s + 0.5f) * dy;
                                 float t = (altitude - py) / direction.y;
                                 float wx = px + direction.x * t, wz = pz + direction.z * t;
-                                depth += body.Density(p, wx, altitude, wz) * rayStep * 0.0034f;
+                                depth += body.Density(p, wx, altitude, wz) * rayStep * 0.0085f;
                             }
                             // A soft border fades the shadows out toward the cookie's edge.
                             float edge = Math.Min(Math.Min(x, Size - 1 - x), Math.Min(y, Size - 1 - y)) / 24f;
