@@ -156,6 +156,7 @@
     <Compile Include="..\..\modules\HighCommand\Domain\BountyLedger.cs" Link="Features\HighCommand\BountyLedger.cs" />
     <Compile Include="..\..\modules\HighCommand\Domain\PostIntel.cs" Link="Features\HighCommand\PostIntel.cs" />
     <Compile Include="..\..\modules\HighCommand\Domain\StrikePostRules.cs" Link="Features\HighCommand\StrikePostRules.cs" />
+    <Compile Include="..\..\modules\HighCommand\Domain\StaffWords.cs" Link="Features\HighCommand\StaffWords.cs" />
     <Compile Include="..\..\modules\HighCommand\Domain\CommandTree.cs" Link="Features\HighCommand\CommandTree.cs" />
     <Compile Include="..\..\modules\HighCommand\Domain\SeedStream.cs" Link="Features\HighCommand\SeedStream.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\PriorityDirective.cs" Link="Features\TheaterOps\PriorityDirective.cs" />
