@@ -24,7 +24,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public const float DefaultSystemSpeed = 27f;
 
         /// <summary>Table sizes the wire validates against. Slices 2 and 4 assert the real tables match.</summary>
-        public const int ClassCount = 7, StoryCount = 6, SkyCount = 47;
+        public const int ClassCount = 7, StoryCount = WeatherStories.Count, SkyCount = 47;
 
         public const float EditorCloudAltitude = 1800f, OpeningBaseStep = 10f;
 
