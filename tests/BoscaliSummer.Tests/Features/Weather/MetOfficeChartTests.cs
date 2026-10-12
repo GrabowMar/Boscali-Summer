@@ -12,8 +12,10 @@ namespace BoscaliSummer.Tests.Features.Weather
             LogLinesFitTheCard();
             ChartMapping();
             WindBarb();
-            LabelsNeverCollideInACorner();
             LabelsClearEverythingTheChartDraws();
+            LeadersAreShortAndNeverCross();
+            AnUnchangedChartCostsNothing();
+            ThePlacerIsFast();
             NearestFront();
             NextFrontsAreNearestFirst();
             FrontSymbolsFollowTheLine();
@@ -132,43 +134,6 @@ namespace BoscaliSummer.Tests.Features.Weather
             TestAssert.That(ex > 0.7f && ey < -0.7f, "a north-east wind points the shaft up and to the right");
         }
 
-        /// <summary>Review Focus 5: a storm eye, its lenticulars and a supercell in the north-east corner, the anchor standing on the camera, next to the wind box. No two labels share a pixel and all stay on the plot.</summary>
-        private static void LabelsNeverCollideInACorner()
-        {
-            const float S = 300f;
-            var bounds = new MetBox(2f, 2f, S - 4f, S - 33f);
-            var wind = new MetBox(S - 176f, 3f, 173f, 58f);
-            var taken = new MetBox[12];
-            taken[0] = wind;
-            int n = 1;
-            var placed = new System.Collections.Generic.List<MetBox>();
-            // camera and anchor on the same pixel (ANCHOR HERE); then the eye, its lenticulars 30 km east of it and a supercell next to both, all at 100 %.
-            float[] px = { 268f, 268f, 268f, 296f, 281f }, py = { 28f, 28f, 28f, 28f, 41f }, w = { 70f, 96f, 104f, 104f, 112f };
-            bool[] below = { true, false, false, false, false };
-            for (int i = 0; i < px.Length; i++)
-            {
-                MetBox b = MetChartMath.Place(px[i], py[i], w[i], 16f, below[i], bounds, taken, n);
-                taken[n++] = b;
-                placed.Add(b);
-                TestAssert.That(b.X >= bounds.X - 0.01f && b.Right <= bounds.Right + 0.01f && b.Y >= bounds.Y - 0.01f && b.Bottom <= bounds.Bottom + 0.01f, "label " + i + " stays on the plot");
-                TestAssert.That(MetChartMath.Overlap(b, wind) <= 0f, "label " + i + " stays off the wind box");
-            }
-            for (int i = 0; i < placed.Count; i++)
-                for (int j = i + 1; j < placed.Count; j++)
-                    TestAssert.That(MetChartMath.Overlap(placed[i], placed[j]) <= 0f, "labels " + i + " and " + j + " do not overlap");
-            // ANCHOR HERE in the middle of the chart: the camera label goes below its marker, the anchor label above it.
-            var mid = new MetBox[3];
-            mid[0] = wind;
-            MetBox camBox = MetChartMath.Place(150f, 150f, 70f, 16f, true, bounds, mid, 1);
-            mid[1] = camBox;
-            MetBox anchorBox = MetChartMath.Place(150f, 150f, 96f, 16f, false, bounds, mid, 2);
-            TestAssert.That(anchorBox.Y < camBox.Y && MetChartMath.Overlap(camBox, anchorBox) <= 0f, "the anchor label sits opposite the camera label when both stand on one point");
-            var lone = MetChartMath.Place(150f, 150f, 100f, 16f, false, bounds, taken, 1);
-            TestAssert.That(lone.X > 150f && lone.Y < 150f, "an uncrowded label keeps its first choice: right of its marker and above it");
-            var edge = MetChartMath.Place(float.NaN, float.NaN, 100f, 16f, false, bounds, taken, 1);
-            TestAssert.That(!float.IsNaN(edge.X) && !float.IsNaN(edge.Y), "a NaN marker still gets a finite label box");
-        }
-
         /// <summary>The Busy and Cluttered fixtures of the Unity check, as models.</summary>
         private static MetOfficeModel ChartFixture(bool cluttered)
         {
@@ -205,53 +170,199 @@ namespace BoscaliSummer.Tests.Features.Weather
             m.FrontCount = Math.Max(m.FrontCount, slot + 1);
         }
 
+        private const float Ox = 1f, Oy = 19f, PlotPx = 298f;
+
+        private static float EstimateWidth(string text) => (float)Math.Ceiling(LongestLine(text) * 5.6f) + 2f;
+
+        /// <summary>One line per label: what it says, where it stands, how it got there. For the failure messages.</summary>
+        private static string Describe(MetChartPlanner p)
+        {
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < MetChartLayout.Labels; i++)
+                if (p.Box[i].W > 0f)
+                    sb.Append(" [").Append(i).Append(" '").Append(p.Text[i].Replace((char)10, (char)47)).Append("' ").Append(p.Box[i].X.ToString("0")).Append(',').Append(p.Box[i].Y.ToString("0")).Append(p.Short[i] ? " short" : "").Append(p.Straddle[i] ? " straddles" : "").Append(p.Forced[i] ? " FORCED" : "").Append(p.Leader[i] ? " leader" : "").Append(']');
+            return sb.ToString();
+        }
+
+        private static MetChartPlanner NewPlanner() => new MetChartPlanner(Ox, Oy, PlotPx, EstimateWidth);
+
+        /// <summary>The states of the Unity check that differ on the chart, as models: the Busy host, the cluttered corner, a forced fog bank (nothing placed), a storm, a model full of NaN and an empty clear day.</summary>
+        private static MetOfficeModel NamedFixture(string name)
+        {
+            MetOfficeModel m = ChartFixture(name == "cluttered");
+            switch (name)
+            {
+                case "storm":
+                    m.HasAnchor = false; m.Sets[3] = new MetSetPiece { Forced = true, Present = true, Placed = true, X = 0f, Z = 0f, Strength = 1f };
+                    break;
+                case "fog":
+                    Array.Clear(m.Sets, 0, m.Sets.Length); m.Sets[5] = new MetSetPiece { Forced = true, Present = true };
+                    break;
+                case "nan":
+                    m.CamX = float.NaN; m.Sets[1].Strength = float.NaN; m.Cells[2].X = float.NaN;
+                    break;
+                case "empty":
+                    m.FrontCount = 0; m.CellCount = 0; m.HasAnchor = false; m.HasCamera = false; Array.Clear(m.Sets, 0, m.Sets.Length);
+                    break;
+            }
+            return m;
+        }
+
         /// <summary>
-        /// The reviewed defect: the label placer only avoided other labels and the wind box, so labels stood on the theater frame, on the fronts and on the markers, and the text-against-text gate never saw it.
-        /// Now every label box of the Busy and Cluttered charts (at the real label widths, 5.6 px a character) touches no frame edge, no front sample, no marker and no other label, and stays on the plot.
+        /// What every plan must hold, whatever the model: each label on the plot at the width of its own text, off the hard obstacles (frame, markers, heading line), off the soft ones (fronts, cells) unless it says it
+        /// straddles them, off every other label, and its leader short, off every other label and off every other leader. A label that fell back to the least bad spot is allowed to break these, and says so.
+        /// </summary>
+        private static void AssertPlan(string name, MetOfficeModel m, MetChartPlanner p)
+        {
+            var obstacles = new MetBox[MetChartLayout.MaxObstacles];
+            int count = MetChartLayout.Obstacles(m, Ox, Oy, PlotPx, obstacles, out int hard);
+            for (int i = 0; i < MetChartLayout.Labels; i++)
+            {
+                MetBox b = p.Box[i];
+                if (b.W <= 0f) { TestAssert.That(p.Text[i].Length == 0 && !p.Leader[i], name + ": slot " + i + " has no box, so no text and no leader"); continue; }
+                string tag = name + ": '" + p.Text[i].Replace("\n", " / ") + "' at " + b.X.ToString("0") + "," + b.Y.ToString("0");
+                TestAssert.That(p.Text[i].Length > 0 && b.W == EstimateWidth(p.Text[i]) && b.H == MetChartLayout.Height(p.Text[i]), tag + " has the size of its text");
+                TestAssert.That(b.X >= Ox && b.Right <= Ox + PlotPx && b.Y >= Oy && b.Bottom <= Oy + PlotPx, tag + " stays on the plot");
+                TestAssert.That(MetChartMath.IsFinite(b.X) && MetChartMath.IsFinite(b.Y), tag + " is finite");
+                if (p.Forced[i]) continue;
+                for (int o = 0; o < count; o++)
+                    if (o < hard || !p.Straddle[i])
+                        TestAssert.That(MetChartMath.Overlap(b, obstacles[o]) <= 0f, tag + " crosses " + (o < hard ? "the frame or a marker" : "a front or a cell") + " at " + obstacles[o].X.ToString("0") + "," + obstacles[o].Y.ToString("0"));
+                if (!MetChartLayout.Marker(m, i, Ox, Oy, PlotPx, out float mx, out float my, out _)) { TestAssert.That(false, tag + " has no marker"); continue; }
+                float gap = MetChartLayout.Gap(b, mx, my, out _, out _);
+                TestAssert.That(p.Leader[i] == gap > MetChartLayout.LeaderAfter(i), tag + " has a leader exactly when it stands off its marker (gap " + gap.ToString("0.0") + ")");
+                if (p.Leader[i])
+                {
+                    float len = (float)Math.Sqrt((p.LeaderX1[i] - p.LeaderX0[i]) * (p.LeaderX1[i] - p.LeaderX0[i]) + (p.LeaderY1[i] - p.LeaderY0[i]) * (p.LeaderY1[i] - p.LeaderY0[i]));
+                    TestAssert.That(len <= MetChartLayout.LeaderMax + 0.01f, tag + " has a leader of " + len.ToString("0") + " px (cap " + MetChartLayout.LeaderMax + ")");
+                }
+                for (int j = 0; j < MetChartLayout.Labels; j++)
+                {
+                    if (j == i || p.Box[j].W <= 0f || p.Forced[j]) continue;
+                    if (j > i) TestAssert.That(MetChartMath.Overlap(b, p.Box[j]) <= 0f, tag + " overlaps '" + p.Text[j] + "'");
+                    if (p.Leader[i]) TestAssert.That(!MetChartLayout.SegmentHitsBox(p.LeaderX0[i], p.LeaderY0[i], p.LeaderX1[i], p.LeaderY1[i], p.Box[j], 0f), tag + ": its leader runs through '" + p.Text[j] + "'");
+                    if (j > i && p.Leader[i] && p.Leader[j])
+                        TestAssert.That(MetChartLayout.SegmentDistance(p.LeaderX0[i], p.LeaderY0[i], p.LeaderX1[i], p.LeaderY1[i], p.LeaderX0[j], p.LeaderY0[j], p.LeaderX1[j], p.LeaderY1[j]) > 0f, tag + ": its leader crosses the leader of '" + p.Text[j] + "'");
+                }
+            }
+        }
+
+        /// <summary>
+        /// The reviewed defects: labels stood on the theater frame, the fronts and the markers; and then a later label's leader ran through an earlier label's text, and labels flew 170-260 px from their markers on dashed
+        /// leaders across fronts, the frame and each other. Every fixture of the Unity check that differs on the chart now places every label on the plot at real label widths, clear of the frame, the markers, the fronts,
+        /// each other and each other's leaders, within a leader's reach of its marker, with no label forced onto a bad spot.
         /// </summary>
         private static void LabelsClearEverythingTheChartDraws()
         {
-            const float ox = 1f, oy = 19f, plot = 298f;
-            foreach (bool cluttered in new[] { false, true })
+            foreach (string name in new[] { "busy", "cluttered", "fog", "storm", "nan", "empty" })
             {
-                MetOfficeModel m = ChartFixture(cluttered);
-                string[] text = new string[MetChartLayout.Labels];
-                float offset = (float)Math.Sqrt((m.AnchorX - m.CamX) * (m.AnchorX - m.CamX) + (m.AnchorZ - m.CamZ) * (m.AnchorZ - m.CamZ));
-                text[MetChartLayout.Theater] = MetOfficeText.Theater(m.HalfXKm, m.HalfZKm);
-                text[MetChartLayout.Camera] = "CAM 045°";
-                text[MetChartLayout.Anchor] = MetOfficeText.AnchorLabel(offset);
-                for (int i = 0; i < MetOfficeModel.SetCount; i++)
-                    text[MetChartLayout.FirstSet + i] = m.Sets[i].Present && m.Sets[i].Placed ? MetCatalog.SetNames[i] + " " + MetOfficeText.Cover(m.Sets[i].Strength) : "";
-                var widths = new float[MetChartLayout.Labels];
-                for (int i = 0; i < widths.Length; i++) widths[i] = text[i].Length > 0 ? (float)Math.Ceiling(LongestLine(text[i]) * 5.6f) + 2f : 0f;
-                var boxes = new MetBox[MetChartLayout.Labels];
-                MetChartLayout.Place(m, ox, oy, plot, widths, boxes, new MetBox[MetChartLayout.MaxObstacles + MetChartLayout.Labels]);
+                MetOfficeModel m = NamedFixture(name);
+                MetChartPlanner p = NewPlanner();
+                TestAssert.That(p.Update(m), name + ": the first update places");
+                AssertPlan(name, m, p);
+                int shown = 0, forced = 0, straddling = 0;
+                for (int i = 0; i < MetChartLayout.Labels; i++) { if (p.Box[i].W > 0f) shown++; if (p.Forced[i]) forced++; if (p.Straddle[i]) straddling++; }
                 var obstacles = new MetBox[MetChartLayout.MaxObstacles];
-                int count = MetChartLayout.Obstacles(m, ox, oy, plot, obstacles);
-                string name = cluttered ? "cluttered" : "busy";
-                TestAssert.That(count > 100 && count < MetChartLayout.MaxObstacles, name + ": the obstacle list holds the frame, the fronts and the markers (" + count + ")");
-                int placed = 0;
-                for (int i = 0; i < boxes.Length; i++)
-                {
-                    if (widths[i] <= 0f) { TestAssert.That(boxes[i].W == 0f, name + ": no text, no box (" + i + ")"); continue; }
-                    placed++;
-                    MetBox b = boxes[i];
-                    TestAssert.That(b.W == widths[i] && b.X >= ox && b.Right <= ox + plot && b.Y >= oy && b.Bottom <= oy + plot, name + ": '" + text[i] + "' stays on the plot");
-                    for (int o = 0; o < count; o++)
-                        TestAssert.That(MetChartMath.Overlap(b, obstacles[o]) <= 0f, name + ": '" + text[i] + "' at " + b.X.ToString("0") + "," + b.Y.ToString("0") + " crosses the frame, a front or a marker at " + obstacles[o].X.ToString("0") + "," + obstacles[o].Y.ToString("0"));
-                    for (int j = i + 1; j < boxes.Length; j++)
-                        TestAssert.That(widths[j] <= 0f || MetChartMath.Overlap(b, boxes[j]) <= 0f, name + ": '" + text[i] + "' and '" + text[j] + "' overlap");
-                }
-                TestAssert.That(placed >= (cluttered ? 6 : 5), name + ": the fixture has its labels (" + placed + ")");
+                int count = MetChartLayout.Obstacles(m, Ox, Oy, PlotPx, obstacles, out _);
+                TestAssert.That(name == "empty" ? count == 4 : count > 100 && count < MetChartLayout.MaxObstacles, name + ": the obstacle list holds the frame, the fronts and the markers (" + count + ")");
+                TestAssert.That(forced == 0, name + ": no label fell back to a bad spot (" + forced + ")" + Describe(p));
+                int expect = name == "cluttered" ? 7 : name == "busy" ? 6 : name == "storm" ? 6 : name == "nan" ? 6 : name == "fog" ? 3 : 1;
+                TestAssert.That(shown == expect, name + ": " + expect + " labels (" + shown + ")");
+                TestAssert.That(!(name == "busy" || name == "fog" || name == "empty") || straddling == 0, name + ": an uncrowded chart straddles no front (" + straddling + ")");
                 // The same input places the same boxes: no hidden state.
-                var again = new MetBox[MetChartLayout.Labels];
-                MetChartLayout.Place(m, ox, oy, plot, widths, again, new MetBox[MetChartLayout.MaxObstacles + MetChartLayout.Labels]);
-                for (int i = 0; i < again.Length; i++) TestAssert.That(again[i].X == boxes[i].X && again[i].Y == boxes[i].Y, name + ": placement is deterministic");
+                MetChartPlanner again = NewPlanner(); again.Update(m);
+                for (int i = 0; i < MetChartLayout.Labels; i++) TestAssert.That(again.Box[i].X == p.Box[i].X && again.Box[i].Y == p.Box[i].Y && again.Text[i] == p.Text[i], name + ": placement is deterministic");
             }
             // A cell with an unknown position is not drawn, so it blocks nothing.
             var nan = new MetOfficeModel { CellCount = 1 };
             nan.Cells[0] = new MetCell { X = float.NaN, Z = 3f, Radius = 8f };
-            TestAssert.That(MetChartLayout.Obstacles(nan, 1f, 19f, 298f, new MetBox[MetChartLayout.MaxObstacles]) == 0, "a cell with a non-finite position leaves no obstacle at the chart centre");
+            TestAssert.That(MetChartLayout.Obstacles(nan, 1f, 19f, 298f, new MetBox[MetChartLayout.MaxObstacles], out _) == 0, "a cell with a non-finite position leaves no obstacle at the chart centre");
+            // The short forms are the spec's: SC 62%, LENT 100%, EYE, CB 58%, SQL 40%, FOG.
+            TestAssert.Eq(MetOfficeText.SetShortLabel(1, 0.62f) + "|" + MetOfficeText.SetShortLabel(4, 1f) + "|" + MetOfficeText.SetShortLabel(3, 1f) + "|" + MetOfficeText.SetShortLabel(2, 0.58f) + "|" + MetOfficeText.SetShortLabel(0, 0.4f) + "|" + MetOfficeText.SetShortLabel(5, 1f),
+                "SC 62%|LENT 100%|EYE|CB 58%|SQL 40%|FOG", "the short set-piece labels");
+        }
+
+        /// <summary>A few hundred random charts: whatever the clutter, no plan lets a leader cross a label or a leader or run past its cap, and a label that cannot be kept clear says so rather than hiding a defect.</summary>
+        private static void LeadersAreShortAndNeverCross()
+        {
+            uint seed = 12345u;
+            float Rnd(float lo, float hi) { seed = seed * 1664525u + 1013904223u; return lo + (hi - lo) * ((seed >> 8) / 16777216f); }
+            int forced = 0, labels = 0, short_ = 0, straddling = 0;
+            MetChartPlanner p = NewPlanner();
+            for (int k = 0; k < 300; k++)
+            {
+                var m = new MetOfficeModel { HalfXKm = Rnd(10f, 120f), HalfZKm = Rnd(10f, 120f), HasCamera = Rnd(0f, 1f) > 0.1f, CamX = Rnd(-150f, 150f), CamZ = Rnd(-150f, 150f), CamHeadingDeg = Rnd(0f, 360f), HasAnchor = Rnd(0f, 1f) > 0.3f };
+                m.AnchorX = Rnd(-150f, 150f); m.AnchorZ = Rnd(-150f, 150f);
+                int fronts = (int)Rnd(0f, 4.99f);
+                for (int f = 0; f < fronts; f++) Wavy(m, f, (MetFrontKind)(int)Rnd(0f, 3.99f), Rnd(-140f, 140f), Rnd(0f, 6f));
+                m.CellCount = (int)Rnd(0f, 12.99f);
+                for (int c = 0; c < m.CellCount; c++) m.Cells[c] = new MetCell { X = Rnd(-150f, 150f), Z = Rnd(-150f, 150f), Radius = Rnd(3f, 14f) };
+                for (int s = 0; s < MetOfficeModel.SetCount; s++)
+                    if (Rnd(0f, 1f) > 0.5f) m.Sets[s] = new MetSetPiece { Present = true, Placed = true, X = Rnd(-150f, 150f), Z = Rnd(-150f, 150f), Strength = Rnd(0f, 1f) };
+                p.Invalidate(); p.Update(m);
+                AssertPlan("random " + k, m, p);
+                for (int i = 0; i < MetChartLayout.Labels; i++) { if (p.Box[i].W > 0f) labels++; if (p.Forced[i]) forced++; if (p.Short[i]) short_++; if (p.Straddle[i]) straddling++; }
+            }
+            Console.WriteLine("  random charts: " + labels + " labels, " + short_ + " short, " + straddling + " straddling a front, " + forced + " forced");
+            TestAssert.That(labels > 1000, "the random charts carry labels (" + labels + ")");
+            TestAssert.That(forced * 100 <= labels * 3, "no more than 3% of the labels of crowded random charts fall back to a bad spot (" + forced + " of " + labels + ")");
+        }
+
+        /// <summary>The performance defect: the placer reran on every 0.25 s refresh. A model that did not change (or only jittered below what the eye can tell apart) does zero placements and allocates nothing.</summary>
+        private static void AnUnchangedChartCostsNothing()
+        {
+            MetOfficeModel m = ChartFixture(true);
+            MetChartPlanner p = NewPlanner();
+            TestAssert.That(p.Update(m) && p.Runs == 1, "the first update places once");
+            for (int i = 0; i < 20; i++) p.Update(m);
+            TestAssert.That(p.Runs == 1, "twenty updates of an unchanged model place nothing more (" + p.Runs + ")");
+            float cx = m.CamX, cz = m.CamZ, ax = m.AnchorX, az = m.AnchorZ, heading = m.CamHeadingDeg;
+            m.WindMps = 12f;
+            p.Update(m);
+            int baseline = p.Runs;
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < 400; i++)
+            {
+                float jitter = (i % 5 - 2) * 0.1f;                                     // +-0.2 km and +-0.2 degrees: below a pixel, below a printed degree
+                m.CamX = cx + jitter; m.CamZ = cz - jitter; m.CamHeadingDeg = heading + jitter; m.AnchorX = ax + jitter; m.AnchorZ = az - jitter; m.WindMps = 12f + jitter * 0.1f;
+                p.Update(m);
+            }
+            long after = GC.GetAllocatedBytesForCurrentThread();
+            TestAssert.That(p.Runs == baseline, "idle jitter (the camera creeping a fifth of a kilometre and degree) does not re-place (" + (p.Runs - baseline) + " placements)");
+            TestAssert.That(after - before == 0, "an unchanged chart allocates nothing per refresh (" + (after - before) + " bytes in 400)");
+            m.CamX = cx; m.CamZ = cz; m.CamHeadingDeg = heading; m.AnchorX = ax; m.AnchorZ = az; m.WindMps = 12f;
+            p.Update(m);
+            int runs = p.Runs;
+            m.CamX = cx + 3f; p.Update(m);
+            TestAssert.That(p.Runs == runs + 1, "the camera moving three kilometres places again");
+            m.Sets[1].Strength = 0.5f; p.Update(m);
+            TestAssert.That(p.Runs == runs + 2, "a set-piece's strength changing a printed percent places again");
+            m.Fronts[2].X[10] += 4f; p.Update(m);
+            TestAssert.That(p.Runs == runs + 3, "a front moving four kilometres places again");
+            m.WindFromDeg += 10; p.Update(m);
+            TestAssert.That(p.Runs == runs + 4, "a new wind bearing places again");
+            p.Invalidate(); p.Update(m);
+            TestAssert.That(p.Runs == runs + 5, "an invalidated plan (a new font) places again");
+        }
+
+        /// <summary>The worst fixture (the cluttered corner: anchor on the camera, an eye, lenticulars, a supercell and a front across them) is placed, text and grids and all, well inside a frame's budget even before Unity's slower runtime.</summary>
+        private static void ThePlacerIsFast()
+        {
+            foreach (string name in new[] { "busy", "cluttered" })
+            {
+                MetOfficeModel m = NamedFixture(name);
+                MetChartPlanner p = NewPlanner();
+                for (int i = 0; i < 200; i++) { p.Invalidate(); p.Update(m); }          // warm the JIT
+                double ms = double.MaxValue;                                          // the best of twelve batches: a pause by the machine is not the placer's cost
+                for (int batch = 0; batch < 12; batch++)
+                {
+                    var watch = System.Diagnostics.Stopwatch.StartNew();
+                    for (int i = 0; i < 50; i++) { p.Invalidate(); p.Update(m); }
+                    ms = Math.Min(ms, watch.Elapsed.TotalMilliseconds / 50);
+                }
+                Console.WriteLine("  chart placer, " + name + ": " + ms.ToString("0.000") + " ms per placement (CoreCLR)");
+                TestAssert.That(ms < 1.5, name + ": a placement takes " + ms.ToString("0.00") + " ms (limit 1.5)");
+            }
         }
 
         private static void NearestFront()

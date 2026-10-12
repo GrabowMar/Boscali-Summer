@@ -21,20 +21,19 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         private readonly TMP_Text windText, north, scale;
         private readonly TMP_Text[] legendWord = new TMP_Text[8];
         private readonly float[] sx = new float[16], sz = new float[16], tx = new float[16], tz = new float[16];
-        private readonly float[] widths = new float[MetChartLayout.Labels];
-        private readonly MetBox[] boxes = new MetBox[MetChartLayout.Labels], scratch = new MetBox[MetChartLayout.MaxObstacles + MetChartLayout.Labels];
+        private readonly MetChartPlanner planner;
         private MetOfficeModel model;
 
         public MetSynopticChart(RectTransform parent) : base(parent, "Synoptic chart", "inert", true)
         {
             MakeArt(Paint);
+            planner = new MetChartPlanner(Inset, Top + Inset, Plot, Measure);
             for (int i = 0; i < label.Length; i++)
             {
                 bool set = i >= MetChartLayout.FirstSet;
                 string name = set ? "Set" + (i - MetChartLayout.FirstSet) : i == MetChartLayout.Theater ? "Theater" : i == MetChartLayout.Camera ? "Cam" : "Anchor";
                 label[i] = Txt(name, AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, set ? "caution" : i == MetChartLayout.Anchor ? "key" : "ink-dim", false, set);
             }
-            label[MetChartLayout.Anchor].text = "ANCHOR";
             for (int i = 0; i < axisLabel.Length; i++)
             {
                 axisLabel[i] = Txt("Axis" + i, AvTextRole.Micro, TextAlignmentOptions.Center, "ink-muted");
@@ -55,21 +54,26 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
         public override float Measure(float width) => MetOfficeLayout.ChartPart;
 
+        /// <summary>The width a label's text takes, plate padding included, measured on a set-piece label (all the labels share one type role).</summary>
+        private float Measure(string text) => Mathf.Ceil(label[MetChartLayout.FirstSet].GetPreferredValues(text, 100000f, 0f).x) + 2f;
+
+        /// <summary>
+        /// Called on every 0.25 s refresh. Unless the chart's inputs changed (<see cref="MetChartLayout.Signature"/>: the camera to a kilometre and a degree, the fronts to 200 m, the printed numbers) this
+        /// hashes the model and returns: no placement, no text, no mesh, no allocation. The labels are re-placed and the mesh rebuilt only when something a viewer could see moved.
+        /// </summary>
         public void Set(MetOfficeModel m)
         {
             model = m;
+            if (!planner.Update(m)) return;
             AvText.Set(windText, MetOfficeText.WindStrip(m.WindFromDeg, m.WindMps));
-            AvText.Set(label[MetChartLayout.Camera], m.HasCamera ? "CAM " + Mathf.RoundToInt(m.CamHeadingDeg).ToString("000") + "°" : "");
-            AvText.Set(label[MetChartLayout.Theater], MetOfficeText.Theater(m.HalfXKm, m.HalfZKm));
-            float offset = m.HasAnchor && m.HasCamera ? Mathf.Sqrt((m.AnchorX - m.CamX) * (m.AnchorX - m.CamX) + (m.AnchorZ - m.CamZ) * (m.AnchorZ - m.CamZ)) : 0f;
-            AvText.Set(label[MetChartLayout.Anchor], m.HasAnchor ? MetOfficeText.AnchorLabel(offset) : "");
-            for (int i = 0; i < MetOfficeModel.SetCount; i++)
-                AvText.Set(label[MetChartLayout.FirstSet + i], m.Sets[i].Present && m.Sets[i].Placed ? MetCatalog.SetNames[i] + " " + MetOfficeText.Cover(m.Sets[i].Strength) : "");
-            Arrange();
+            for (int i = 0; i < label.Length; i++) AvText.Set(label[i], planner.Text[i]);
+            ApplyLabels();
             Redraw();
         }
 
         protected override void Layout(float w, float h) => Arrange();
+
+        protected override void OnRestyle() => planner.Invalidate();   // a new theme can mean a new font, so new text widths: the next refresh places again
 
         private float Px(float km) => MetChartLayout.Px(km, Inset, Plot);
         private float Py(float km) => MetChartLayout.Py(km, Top + Inset, Plot);
@@ -85,15 +89,18 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             AvLay.Place(north, S - 34f, AxisTop + 3f, 16f, 15f);
             AvLay.Place(scale, 5f, AxisTop + 3f, 24f, 15f);
             AvLay.Place(windText, 6f, Inset, S - 44f, Top - 2f);
-            if (model == null) return;
-            // One deterministic placer for every label (MetChartLayout): clear of the frame, the fronts, the markers and each other; a label with no free spot keeps the least bad one, and its plate.
-            for (int i = 0; i < label.Length; i++) widths[i] = label[i].text.Length > 0 ? Mathf.Ceil(AvText.Width(label[i])) + 2f : 0f;
-            MetChartLayout.Place(model, Inset, Top + Inset, Plot, widths, boxes, scratch);
+            ApplyLabels();
+        }
+
+        /// <summary>Puts each label where <see cref="MetChartPlanner"/> decided (or hides it). Placement-free, so Layout may call it.</summary>
+        private void ApplyLabels()
+        {
             for (int i = 0; i < label.Length; i++)
             {
-                bool on = widths[i] > 0f && boxes[i].W > 0f;
-                label[i].gameObject.SetActive(on);
-                if (on) AvLay.Place(label[i], boxes[i].X, boxes[i].Y, boxes[i].W, boxes[i].H);
+                MetBox b = planner.Box[i];
+                bool on = b.W > 0f && planner.Text[i].Length > 0;
+                if (label[i].gameObject.activeSelf != on) label[i].gameObject.SetActive(on);
+                if (on) AvLay.Place(label[i], b.X, b.Y, b.W, b.H);
             }
         }
 
@@ -181,19 +188,13 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 c.Dashed(x, y, x + fx * 22f, y + fy * 22f, 0.8f, 3f, 3f, key);
                 c.Tri(x + fx * 9f, y + fy * 9f, x - fx * 6f - fy * 5.5f, y - fy * 6f + fx * 5.5f, x - fx * 6f + fy * 5.5f, y - fy * 6f - fx * 5.5f, key);
             }
-            // The labels last: a leader to each that stands off its marker, and a plate under each so a residual crossing still reads (the text is a later sibling, so it draws above).
-            Color leader = EnvInk.Alpha(EnvInk.Role("ink-dim"), 0.8f), plate = EnvInk.Alpha(EnvInk.Role("ground"), 0.7f);
+            // The labels last: the leaders first (the planner kept each off every other label and leader), then a nearly opaque plate under each label so a grid line, a range ring or a front it had to
+            // straddle never runs through the letters (the text is a later sibling, so it draws above).
+            Color leader = EnvInk.Alpha(EnvInk.Role("ink-dim"), 0.8f), plate = EnvInk.Alpha(EnvInk.Role("ground"), MetChartPlanner.PlateAlpha);
             for (int i = 0; i < label.Length; i++)
-            {
-                if (widths[i] <= 0f || boxes[i].W <= 0f) continue;
-                if (MetChartLayout.Marker(model, i, Inset, pt, Plot, out float mx, out float my, out _))
-                {
-                    if (i == MetChartLayout.Theater) { mx += 6f; my -= 4f; }          // the theater's marker is the frame's north-west corner, not the label's anchor point
-                    float gap = MetChartLayout.Gap(boxes[i], mx, my, out float nx, out float ny);
-                    if (gap > MetChartLayout.LeaderAfter) c.Dashed(mx + (nx - mx) / gap * (i == MetChartLayout.Theater ? 0f : 7f), my + (ny - my) / gap * (i == MetChartLayout.Theater ? 0f : 7f), nx, ny, 0.7f, 3f, 2f, leader);
-                }
-                c.Quad(boxes[i].X, boxes[i].Y + 1f, boxes[i].W, boxes[i].H - 2f, plate);
-            }
+                if (planner.Box[i].W > 0f && planner.Leader[i]) c.Dashed(planner.LeaderX0[i], planner.LeaderY0[i], planner.LeaderX1[i], planner.LeaderY1[i], 1f, 3f, 2f, leader);
+            for (int i = 0; i < label.Length; i++)
+                if (planner.Box[i].W > 0f) c.Quad(planner.Box[i].X, planner.Box[i].Y + 1f, planner.Box[i].W, planner.Box[i].H - 2f, plate);
             DrawBarb(c, ink);
         }
 

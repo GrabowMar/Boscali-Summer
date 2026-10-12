@@ -98,6 +98,12 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>The chart's anchor label: "ANCHOR", plus "+30 KM" when it stands off the camera (the mockup).</summary>
         public static string AnchorLabel(float offsetKm) => offsetKm >= 1f ? "ANCHOR +" + AvNum.Fixed(offsetKm, 0) + " KM" : "ANCHOR";
 
+        /// <summary>The chart's camera label: "CAM 045°". The heading rounds to a whole degree, as the label prints it.</summary>
+        public static string CameraLabel(float headingDeg) => "CAM " + ((int)Math.Round(float.IsNaN(headingDeg) || float.IsInfinity(headingDeg) ? 0f : headingDeg)).ToString("000", CultureInfo.InvariantCulture) + "°";
+
+        /// <summary>The short chart label of set-piece <paramref name="i"/>: "SC 62%", "LENT 100%", "EYE".</summary>
+        public static string SetShortLabel(int i, float strength) => i == 3 || i == 5 ? MetCatalog.SetShort[i] : MetCatalog.SetShort[i] + " " + Cover(strength);
+
         /// <summary>Mission seconds as the title bar's "T+00:41:07".</summary>
         public static string MissionClock(float seconds)
         {

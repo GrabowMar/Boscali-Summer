@@ -308,6 +308,14 @@ public static class MetOfficeUnityCheck
                 var ink = Rect.MinMaxRect(Mathf.Min(lo.x, hi.x), Mathf.Min(lo.y, hi.y), Mathf.Max(lo.x, hi.x), Mathf.Max(lo.y, hi.y));
                 if (ink.xMin < root.rect.xMin - 1f || ink.xMax > root.rect.xMax + 1f || ink.yMin < root.rect.yMin - 1f || ink.yMax > root.rect.yMax + 1f) Fail(tag + " outside the window");
                 placed.Add(new KeyValuePair<TMP_Text, Rect>(t, ink));
+                if (owner != null)
+                {
+                    // Text needs air: what is drawn (the ink) must stand at least 4 px inside the control it belongs to, on both sides, or it reads as printed on the edge.
+                    var corners = new Vector3[4];
+                    ((RectTransform)owner.transform).GetWorldCorners(corners);
+                    Vector3 clo = root.InverseTransformPoint(corners[0]), chi = root.InverseTransformPoint(corners[2]);
+                    if (ink.xMin < clo.x + 4f - 0.01f || ink.xMax > chi.x - 4f + 0.01f) Fail(tag + " is within 4 px of the edge of its control (" + (ink.xMin - clo.x).ToString("0.0") + " left, " + (chi.x - ink.xMax).ToString("0.0") + " right)");
+                }
             }
         }
         for (int i = 0; i < placed.Count; i++)
@@ -444,8 +452,9 @@ public static class MetOfficeUnityCheck
         if (Built >= 6 && state == "cluttered")
         {
             string chartText = AllText((RectTransform)chartColumn);
-            foreach (string label in new[] { "STORM EYE 100%", "LENTICULARS 100%", "SUPERCELL 100%" })
-                if (!chartText.Contains(label)) Fail(where + ": the cluttered chart lost its label '" + label + "'");
+            // each set-piece is labelled in full or, when its marker has no room, in the short form (EYE, LENT 100%, SC 100%)
+            foreach (string[] label in new[] { new[] { "STORM EYE 100%", "EYE" }, new[] { "LENTICULARS 100%", "LENT 100%" }, new[] { "SUPERCELL 100%", "SC 100%" } })
+                if (!chartText.Contains(label[0]) && !chartText.Contains(label[1])) Fail(where + ": the cluttered chart lost its label '" + label[0] + "'");
         }
         if (Built >= 7 && state == "cluttered" && !System.Text.RegularExpressions.Regex.IsMatch(all, @"(?<!\d)0 KM"))
             Fail(where + ": the storm eye cell on the camera does not read 0 KM (set-pieces measure from the camera, not the theatre centre)");

@@ -86,9 +86,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
             return n;
         }
 
-        /// <summary>A label box in chart pixels (y down).</summary>
-        public static MetBox Box(float x, float y, float w, float h) => new MetBox(x, y, w, h);
-
         /// <summary>Overlap area of two boxes in square pixels; boxes that only touch overlap by 0.</summary>
         public static float Overlap(MetBox a, MetBox b)
         {
@@ -96,74 +93,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             return w > 0f && h > 0f ? w * h : 0f;
         }
 
-        private static readonly float[] RowsAbove = { -20f, 6f, -36f, 22f, -52f, 38f, 54f, -68f, 70f, -84f, 86f, -100f, 102f, -116f, 118f, 134f, 150f, 166f, 182f, 198f, 214f };
-        private static readonly float[] RowsBelow = { 6f, -20f, 22f, -36f, 38f, -52f, 54f, -68f, 70f, -84f, 86f, -100f, 102f, -116f, 118f, 134f, 150f, 166f, 182f, 198f, 214f };
-        private static readonly float[] Shifts = { 0f, 22f, 44f, 70f, 100f, 140f };
-        private const int NearRows = 9;
-
         public static bool IsFinite(float v) => !float.IsNaN(v) && !float.IsInfinity(v);
-
-        private static float Fit(float v, float lo, float hi) => hi < lo ? lo : v < lo ? lo : v > hi ? hi : v;
-
-        /// <summary>One candidate: true when it touches nothing (and is then the answer), otherwise remembered when it is the least bad so far (the earlier candidate wins a tie).</summary>
-        private static bool Consider(float px, float py, float w, float h, float shift, float dy, int side, MetBox bounds, MetBox[] taken, int takenCount, ref MetBox best, ref float bestCost)
-        {
-            float x = side == 0 ? px + 10f + shift : px - 10f - shift - w;
-            var c = new MetBox(Fit(x, bounds.X, bounds.Right - w), Fit(py + dy, bounds.Y, bounds.Bottom - h), w, h);
-            float cost = 0f;
-            for (int i = 0; i < takenCount && cost < bestCost; i++) cost += Overlap(c, taken[i]);
-            if (cost >= bestCost) return false;
-            bestCost = cost; best = c;
-            return cost <= 0f;
-        }
-
-        /// <summary>
-        /// Places a label of <paramref name="w"/> x <paramref name="h"/> pixels next to the marker at (<paramref name="px"/>, <paramref name="py"/>), inside <paramref name="bounds"/> and clear of the
-        /// first <paramref name="takenCount"/> boxes of <paramref name="taken"/> (the other labels and everything the chart draws as mesh). Candidates, nearest first: the rows above (or below, when
-        /// <paramref name="below"/>) the marker, right side then left side, at growing horizontal gaps from the marker, then rows further up and down the plot. The first box that touches nothing wins;
-        /// if none is free it returns the one with the least overlap. The caller appends the result to <paramref name="taken"/>, so the labels of one chart never share a pixel while there is room.
-        /// </summary>
-        public static MetBox Place(float px, float py, float w, float h, bool below, MetBox bounds, MetBox[] taken, int takenCount)
-        {
-            px = Fin(px); py = Fin(py);
-            float[] rows = below ? RowsBelow : RowsAbove;
-            MetBox best = default;
-            float bestCost = float.MaxValue;
-            for (int s = 0; s < Shifts.Length; s++)
-                for (int r = 0; r < NearRows; r++)
-                    for (int side = 0; side < 2; side++)
-                        if (Consider(px, py, w, h, Shifts[s], rows[r], side, bounds, taken, takenCount, ref best, ref bestCost)) return best;
-            // No coarse candidate is free (a corridor between two fronts is narrower than the gaps tried): on every row of the plot slide the label to sit flush against an obstacle's edge,
-            // and take the free spot nearest to the marker (the shortest leader).
-            MetBox pick = default;
-            float pickDist = float.MaxValue;
-            for (float dy = -140f; dy <= 220f; dy += 8f)
-            {
-                float y = Fit(py + dy, bounds.Y, bounds.Bottom - h);
-                for (int k = 0; k < takenCount; k++)
-                {
-                    MetBox o = taken[k];
-                    if (o.Bottom <= y || o.Y >= y + h) continue;
-                    for (int side = 0; side < 2; side++)
-                    {
-                        float x = Fit(side == 0 ? o.Right + 0.5f : o.X - w - 0.5f, bounds.X, bounds.Right - w);
-                        float gx = Math.Max(Math.Max(x - px, px - (x + w)), 0f), gy = Math.Max(Math.Max(y - py, py - (y + h)), 0f);
-                        float d = gx * gx + gy * gy;
-                        if (d >= pickDist) continue;
-                        var c = new MetBox(x, y, w, h);
-                        float cost = 0f;
-                        for (int i = 0; i < takenCount && cost <= 0f; i++) cost += Overlap(c, taken[i]);
-                        if (cost <= 0f) { pick = c; pickDist = d; }
-                    }
-                }
-            }
-            if (pickDist < float.MaxValue) return pick;
-            for (int s = 0; s < 3; s++)
-                for (int r = NearRows; r < rows.Length; r++)
-                    for (int side = 0; side < 2; side++)
-                        if (Consider(px, py, w, h, Shifts[s], rows[r], side, bounds, taken, takenCount, ref best, ref bestCost)) return best;
-            return best;
-        }
 
         /// <summary>A front's symbols along its polyline: the points (km) at every <paramref name="spacingKm"/> of arc length, with the unit tangent there. Returns the count written.</summary>
         public static int Symbols(MetFront f, float spacingKm, float[] x, float[] z, float[] tx, float[] tz)

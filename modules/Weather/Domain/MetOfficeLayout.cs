@@ -19,7 +19,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public const float FrontsCard = 71f, IdentityCard = 78f;   // identity: chrome 30 + three 16 px lines
         public const float SkyCard = 150f, PinCard = 90f, OutlookStrip = 76f, SetCellRow = 35f, CellGap = 4f;
         public const float PipsRow = 19f, StripArt = 66f, StripMeta = 15f;
-        public const float ScenarioRow = 34f, LogLines = 4f, LogLine = 19f;
+        public const float ScenarioRow = 38f, LogLines = 4f, LogLine = 16f;   // the log is DataSmall text: 16 px a line, so the card reserves exactly that
 
         public static float SetGrid => 3f * SetCellRow + 2f * CellGap;
         public static float StoryCard => CardChrome + Row + 3f + PipsRow + 2f + StripArt + StripMeta;
