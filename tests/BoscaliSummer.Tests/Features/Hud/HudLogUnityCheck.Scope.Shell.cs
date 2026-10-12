@@ -1,6 +1,7 @@
 #if UNITY_EDITOR
 using System;
 using UnityEngine;
+using Ex = System.Linq.Expressions.Expression;
 using Object = UnityEngine.Object;
 using static UnityCheckHarness;
 
@@ -52,6 +53,24 @@ public static partial class HudLogUnityCheck
 
     private static float BoardHeight(object status) => ((RectTransform)Field(status, "root")).sizeDelta.y;
 
+    /// <summary>The pilot's options: the defaults with some switches changed (<c>name, value</c> pairs).</summary>
+    private static object PilotOptions(params object[] nameValue) =>
+        Fill(Type(HudDomain + "BoardOptions").GetProperty("Default", All).GetValue(null), nameValue);
+
+    private static object Declutter(string level) => Enum.Parse(Type("BoscaliSummer.Core.Contracts.BoardDeclutter"), level);
+
+    /// <summary>Every word the board draws right now.</summary>
+    private static System.Collections.Generic.List<string> BoardWords(object status)
+    {
+        var words = new System.Collections.Generic.List<string>();
+        foreach (TMPro.TextMeshProUGUI label in ((RectTransform)Field(status, "root")).GetComponentsInChildren<TMPro.TextMeshProUGUI>())
+            if (!string.IsNullOrEmpty(label.text)) words.Add(label.text);
+        return words;
+    }
+
+    /// <summary>The shell scene's WIDE board: lamp line at 6..18, the stub page at 24..314, the gauge line (the four gauges take two lines, 30) 8 under it and the ticker 6 under that: 370.</summary>
+    private const float FullWide = 370f;
+
     private static void ScopeShell()
     {
         foreach (Vector2 size in new[] { new Vector2(1920, 1080), new Vector2(1280, 720) })
@@ -65,7 +84,7 @@ public static partial class HudLogUnityCheck
             ShellForce(status, "Threat", 5f);
             Call(status, "Present", frame);
             Canvas.ForceUpdateCanvases();
-            Check(Mathf.Abs(BoardHeight(status) - 434f * u) < 1f, "A full board is the prototype's 434 units tall: " + BoardHeight(status) / u);
+            Check(Mathf.Abs(BoardHeight(status) - FullWide * u) < 1f, "A full WIDE wing is 370 units tall (lamp line 6..18, page 24..314, two gauge lines, ticker): " + BoardHeight(status) / u);
             object current = Field(status, "page");
             Check((string)current.GetType().GetProperty("Title").GetValue(current) == "THREAT", "The forced stub page is the current page");
             ScopeChecks(status, "shell-full" + res);
@@ -85,7 +104,7 @@ public static partial class HudLogUnityCheck
             ScopeChecks(status, "shell-wipe" + res);
             Capture(canvas, "shell-wipe" + res + ".png");
             Call(status, "Animate", 10.3f);
-            Check(Mathf.Abs(BoardHeight(status) - 434f * u) < 1f, "After the wipe the board is full height: " + BoardHeight(status) / u);
+            Check(Mathf.Abs(BoardHeight(status) - FullWide * u) < 1f, "After the wipe the board is full height: " + BoardHeight(status) / u);
 
             // Lamp test sweep (spawn): lamps light one by one.
             Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
@@ -103,11 +122,156 @@ public static partial class HudLogUnityCheck
             ShellScene(frame, 30f, false);
             Call(status, "Present", frame);
             Canvas.ForceUpdateCanvases();
-            Check(Mathf.Abs(BoardHeight(status) - 34f * u) < 1f, "Only the lamp strip: one pad, the strip, one pad: " + BoardHeight(status) / u);
+            Check(Mathf.Abs(BoardHeight(status) - 18f * u) < 1f, "Only the lamp line: its 12 under the 6 of the caption row, an 18 unit box: " + BoardHeight(status) / u);
             ScopeChecks(status, "shell-lamps" + res);
             Capture(canvas, "shell-lamps" + res + ".png");
+
+            // The pilot's options on the full scene (1080p): a block that is switched off is not drawn and takes no room (the gauge line and the ticker hang under the page and give back their 36 and 18 of the 370; the
+            // lamp line is above the page, which keeps its place), the declutter levels take more away (no gauge line; unlit lamps gone, the rest packed; at Minimal only the threat lamps).
+            if (size.x > 1500f)
+                foreach (var c in new (string name, object options, float height, string[] shown, string[] hidden)[]
+                {
+                    ("nogauges", PilotOptions("ShowGauges", false), 334f, new[] { "GEAR", "LOCK" }, new[] { "LANCE" }),
+                    ("noticker", PilotOptions("ShowTicker", false), 352f, new[] { "GEAR", "LANCE" }, new[] { "SAM LAUNCH" }),
+                    ("nolamps", PilotOptions("ShowLamps", false), FullWide, new[] { "LANCE" }, new[] { "GEAR", "LOCK", "SPKE" }),
+                    ("lean", PilotOptions("Declutter", Declutter("Lean")), 334f, new[] { "GEAR", "FA", "RDR", "LOCK" }, new[] { "HOVR", "NVG", "SAFE", "ENG", "SPKE", "LANCE" }),
+                    ("minimal", PilotOptions("Declutter", Declutter("Minimal")), 334f, new[] { "LOCK" }, new[] { "GEAR", "FA", "RDR", "HOVR", "SPKE", "LANCE" }),
+                })
+                {
+                    Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
+                    MakeBoard(size, 40f, out canvas, out status, out frame);
+                    ShellScene(frame, 40f, true);
+                    Set(status, "Options", c.options);
+                    ShellForce(status, "Threat", 40f);
+                    Call(status, "Present", frame);
+                    Canvas.ForceUpdateCanvases();
+                    Check(Mathf.Abs(BoardHeight(status) - c.height * u) < 1f, c.name + ": the board is " + c.height + " units tall: " + BoardHeight(status) / u);
+                    var words = BoardWords(status);
+                    foreach (string w in c.shown) Check(words.Contains(w), c.name + ": " + w + " is drawn");
+                    foreach (string w in c.hidden) Check(!words.Exists(x => x == w || (w.Length > 6 && x.Contains(w))), c.name + ": " + w + " is not drawn");
+                    ScopeChecks(status, "shell-" + c.name + res);
+                    if (c.name == "lean" || c.name == "minimal") Capture(canvas, "shell-" + c.name + res + ".png");
+                }
             Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject); ScopeReset();
+            if (size.x > 1500f) ScopeOptionCases(size);
         }
+    }
+
+    /// <summary>A board under the pilot's options handed one page fixture's scene and presented;<paramref name="notices"/> counts what the pages post to the ticker.</summary>
+    private static object OptionBoard(Vector2 size, string page, float t, object options, int[] notices, out Canvas canvas, out object frame)
+    {
+        MakeBoard(size, t, out canvas, out object status, out frame);
+        Set(status, "Options", options);
+        notices[0] = 0;
+        Set(status, "Notice", CountingNotice(status, notices));
+        var scene = new ScopeScene(t, size, frame);
+        Fixture(page, t, scene);
+        Check(scene.Touched, "The " + page + " fixture drives the option cases");
+        Call(status, "Present", frame);
+        Call(status, "Present", frame);      // a page only posts the events that come after its first read
+        Canvas.ForceUpdateCanvases();
+        return status;
+    }
+
+    /// <summary>A <c>StatusPanel.Notice</c> that counts the notices posted to it (its parameter types are the mod's own, so it is built from the delegate's shape).</summary>
+    private static Delegate CountingNotice(object status, int[] count)
+    {
+        Type type = status.GetType().GetField("Notice").FieldType;
+        var args = Array.ConvertAll(type.GetMethod("Invoke").GetParameters(), p => Ex.Parameter(p.ParameterType));
+        return Ex.Lambda(type, Ex.PreIncrementAssign(Ex.ArrayAccess(Ex.Constant(count), Ex.Constant(0))), args).Compile();
+    }
+
+    private static string PageTitle(object status)
+    {
+        object p = Field(status, "page");
+        return (string)p.GetType().GetProperty("Title").GetValue(p);
+    }
+
+    private static bool Shown(object status, string rect) => ((RectTransform)Field(status, rect)).gameObject.activeSelf;
+
+    /// <summary>
+    /// The pilot's options through the board's own update with real page fixtures (1080p): the master switch and the opacity, a page switch (the page does not take the scope and does not
+    /// speak), the scope mode Off (no scope, the warnings still post) and the SYSTEMS switch (no cruise strip, nor one in a fire).
+    /// </summary>
+    private static void ScopeOptionCases(Vector2 size)
+    {
+        float u = Mathf.Max(size.y / 1080f, 0.85f);
+        var notices = new int[1];
+
+        object status = OptionBoard(size, "threat", 6f, PilotOptions(), notices, out Canvas canvas, out object frame);
+        Check(PageTitle(status) == "THREAT", "options: THREAT, live, takes the scope under the defaults");
+        Check(notices[0] > 0, "options: ...and speaks to the ticker");
+        Check(Mathf.Abs(((CanvasGroup)Field(status, "rootGroup")).alpha - 1f) < 0.001f, "options: the board is fully opaque by default");
+        float full = BoardHeight(status);
+        Set(status, "Options", PilotOptions("Opacity", 0.5f));
+        Call(status, "Present", frame);
+        Check(Mathf.Abs(((CanvasGroup)Field(status, "rootGroup")).alpha - 0.5f) < 0.001f, "options: Opacity 0.5 is the board's alpha");
+        ScopeChecks(status, "options-opacity");
+        Set(status, "Options", PilotOptions("Enabled", false));
+        Call(status, "Present", frame);
+        Check(!((RectTransform)Field(status, "root")).gameObject.activeSelf, "options: Enabled off hides the board");
+        Set(status, "Options", PilotOptions());
+        Call(status, "Present", frame);
+        Canvas.ForceUpdateCanvases();
+        ScopeChecks(status, "options-enabled");
+        Check(Mathf.Abs(((CanvasGroup)Field(status, "rootGroup")).alpha - 1f) < 0.001f, "options: ...and on again it is back at full opacity");
+        Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
+
+        status = OptionBoard(size, "threat", 6f, PilotOptions("PageThreat", false), notices, out canvas, out frame);
+        Check(PageTitle(status) == "SYSTEMS", "options: PageThreat off, THREAT does not take the scope: " + PageTitle(status));
+        Check(notices[0] == 0, "options: ...and does not speak (" + notices[0] + " notices)");
+        ScopeChecks(status, "options-nothreat");
+        Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
+
+        status = OptionBoard(size, "threat", 6f, PilotOptions("ScopeMode", Enum.Parse(Type("BoscaliSummer.Core.Contracts.BoardScopeMode"), "Off")), notices, out canvas, out frame);
+        Check(!Shown(status, "scopeRect"), "options: ScopeMode Off, no scope");
+        Check(full - BoardHeight(status) >= 290f * u - 1f, "options: ...and the board gives its room back: " + full / u + " -> " + BoardHeight(status) / u);
+        Check(notices[0] > 0, "options: ...but the warnings still post (" + notices[0] + " notices)");
+        ScopeChecks(status, "options-scopeoff");
+        Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
+
+        // SYSTEMS: nominal cruise (2 s) is the compact strip, the fire (10 s) its critical form; with the page's switch off neither is drawn.
+        foreach (float t in new[] { 2f, 10f })
+        {
+            status = OptionBoard(size, "systems", t, PilotOptions(), notices, out canvas, out frame);
+            Check(Shown(status, "scopeRect") && PageTitle(status) == "SYSTEMS", "options: SYSTEMS at " + t + " s is drawn under the defaults");
+            Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
+            status = OptionBoard(size, "systems", t, PilotOptions("PageSystems", false), notices, out canvas, out frame);
+            Check(!Shown(status, "scopeRect") && !BoardWords(status).Contains("SYSTEMS"), "options: PageSystems off, no SYSTEMS strip at " + t + " s");
+            ScopeChecks(status, "options-nosystems" + t);
+            Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
+        }
+
+        // MINIMAL keeps SYSTEMS only in its critical form: a FUEL LEAK and JOKER (cautions, 6 s) read after a quiet 2 s post nothing and bring no strip, the engine out and the fire (10 s) post and show. Under the defaults the cautions post.
+        foreach (bool minimal in new[] { false, true })
+        {
+            string level = minimal ? "MINIMAL" : "FULL";
+            status = OptionBoard(size, "systems", 2f, minimal ? PilotOptions("Declutter", Declutter("Minimal")) : PilotOptions(), notices, out canvas, out frame);
+            notices[0] = 0;
+            Fixture("systems", 6f, new ScopeScene(6f, size, frame));
+            Set(frame, "Now", 6f);
+            Call(status, "Present", frame);
+            Canvas.ForceUpdateCanvases();
+            Check(minimal ? notices[0] == 0 && !Shown(status, "scopeRect") : notices[0] > 0 && Shown(status, "scopeRect"), level + ": SYSTEMS' cautions " + (minimal ? "post nothing and bring no strip" : "post and the strip shows") + " (" + notices[0] + " notices)");
+            notices[0] = 0;
+            Fixture("systems", 10f, new ScopeScene(10f, size, frame));
+            Set(frame, "Now", 10f);
+            Call(status, "Present", frame);
+            Call(status, "Animate", 10.5f);      // the strip wipes in over 180 ms when it was not there
+            Canvas.ForceUpdateCanvases();
+            Check(notices[0] > 0 && Shown(status, "scopeRect") && PageTitle(status) == "SYSTEMS", level + ": the engine out and the fire post and show (" + notices[0] + " notices)");
+            Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
+        }
+
+        // A page the pilot has switched off does not override lamps (like its notices, its lamps are silent): an engine out (10 s) lights ENG through SYSTEMS only while that page is on.
+        foreach (bool on in new[] { true, false })
+        {
+            status = OptionBoard(size, "systems", 10f, PilotOptions("PageSystems", on), notices, out canvas, out frame);
+            object eng = ((Array)Field(status, "lamps")).GetValue(6);
+            Check((string)Field(eng, "Legend") == "ENG" && Field(eng, "State").ToString() == (on ? "Warning" : "Dark"), "options: the ENG lamp reads " + Field(eng, "State") + " with the SYSTEMS switch " + (on ? "on" : "off"));
+            Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
+        }
+        ScopeReset();
     }
 }
 #endif

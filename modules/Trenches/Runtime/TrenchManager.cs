@@ -77,6 +77,10 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         private const double PlanBudgetMs = 2.0;
         private TrenchPlanner.PlanJob planJob;
         private int planMaximum;
+        // One belt growth in flight, stepped the same way; never beside planJob (shared planner buffers).
+        private TrenchPlanner.PlanJob growJob;
+        private TrenchStage growBefore;
+        private TrenchLine reinforceLine;
         private float nextSimulationTick;
         private float nextSeedDelay;
         private float nextGrowthWarning;
@@ -210,6 +214,8 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         public void ResetForScene()
         {
             planJob = null;
+            growJob = null;
+            reinforceLine = null;
             foreach (var work in works.Values) work.Remove();
             works.Clear();
             foreach (var garrison in garrisons.Values) garrison.Remove();
@@ -270,10 +276,16 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             if (Datum.origin == null) return;
             if (Time.unscaledTime < nextSeedDelay) return;
 
+            barrage.Pump(Time.time);
+            if (reinforceLine != null) FinishReinforce();
             if (planJob != null)
             {
                 // The trace cursor stays frozen until the attempt in flight lands.
                 if (TrenchPlanner.StepPlan(planJob, PlanBudgetMs)) FinishBuild();
+            }
+            else if (growJob != null)
+            {
+                if (TrenchPlanner.StepPlan(growJob, PlanBudgetMs)) FinishGrowth();
             }
             else
             {
@@ -673,29 +685,13 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                 }
 
                 if (suppressed) line.NextGrowthAt = Math.Max(line.NextGrowthAt, garrison.SuppressedUntil);
-                if (!advancedOne && planJob == null && TrenchTraceMath.CanAdvance(line.Overrun, now, garrison.SuppressedUntil, line.NextGrowthAt))
+                if (!advancedOne && planJob == null && growJob == null && reinforceLine == null &&
+                    TrenchTraceMath.CanAdvance(line.Overrun, now, garrison.SuppressedUntil, line.NextGrowthAt))
                 {
                     advancedOne = true;
                     line.NextGrowthAt = now + TrenchTraceMath.GrowthInterval(settings.GrowthIntervalSeconds.Value, line.Pressure);
-                    TrenchStage before = line.Stage;
-                    if (TrenchPlanner.TryGrowBelt(line, territory, airfieldX, airfieldZ, airfieldCount))
-                    {
-                        changed = true;
-                        string missing = MissingBeltTrace(line, before);
-                        if (missing != null)
-                            Plugin.Logger?.LogInfo($"[TRENCHES] '{line.Name}' advanced to {line.Stage} without its {missing}: the ground refused it {TrenchTraceMath.BeltRefusalLimit} times.");
-                        if (visualChunks.TryGetValue(line.Id, out TrenchVisualChunk chunk) && chunk != null) chunk.Rebuild();
-                        garrison.ResetAttempts();
-                        garrison.Reinforce();
-                        garrison.Poll(now);
-                        TrenchNet.BroadcastGeometry(line);
-                        line.DefenderCount = garrison.Alive;
-                    }
-                    else if (line.Stage != TrenchStage.Saps && Time.unscaledTime >= nextGrowthWarning)
-                    {
-                        nextGrowthWarning = Time.unscaledTime + 60f;
-                        Plugin.Logger?.LogWarning($"[TRENCHES] '{line.Name}' growth held at {line.Stage}: the ground refused the next belt trace.");
-                    }
+                    growBefore = line.Stage;
+                    growJob = TrenchPlanner.BeginGrowBelt(line, territory, airfieldX, airfieldZ, airfieldCount);
                 }
 
                 if (changed)
@@ -709,6 +705,47 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             TickBarrage(now);
 
             if (anyChanged) OnLinesChanged?.Invoke();
+        }
+
+        /// <summary>
+        /// The rest of one growth step, once its belt has finished stepping: the mesh
+        /// rebuild now, the nests a frame later, so no frame pays for all three.
+        /// </summary>
+        private void FinishGrowth()
+        {
+            TrenchLine line = growJob.Line;
+            bool grown = growJob.Planned;
+            growJob = null;
+            if (!lines.Contains(line)) return; // retired while its belt was being planned
+            if (!grown)
+            {
+                if (line.Stage != TrenchStage.Saps && Time.unscaledTime >= nextGrowthWarning)
+                {
+                    nextGrowthWarning = Time.unscaledTime + 60f;
+                    Plugin.Logger?.LogWarning($"[TRENCHES] '{line.Name}' growth held at {line.Stage}: the ground refused the next belt trace.");
+                }
+                return;
+            }
+            string missing = MissingBeltTrace(line, growBefore);
+            if (missing != null)
+                Plugin.Logger?.LogInfo($"[TRENCHES] '{line.Name}' advanced to {line.Stage} without its {missing}: the ground refused it {TrenchTraceMath.BeltRefusalLimit} times.");
+            if (visualChunks.TryGetValue(line.Id, out TrenchVisualChunk chunk) && chunk != null) chunk.Rebuild();
+            TrenchNet.BroadcastGeometry(line);
+            reinforceLine = line;
+        }
+
+        private void FinishReinforce()
+        {
+            TrenchLine line = reinforceLine;
+            reinforceLine = null;
+            if (!lines.Contains(line) || !garrisons.TryGetValue(line.Id, out TrenchGarrison garrison)) return;
+            garrison.ResetAttempts();
+            garrison.Reinforce();
+            garrison.Poll(Time.time);
+            line.DefenderCount = garrison.Alive;
+            Plugin.Logger?.LogInfo($"[TRENCHES] '{line.Name}': {line.Stage}, {line.DefenderCount} defenders, {line.Curve.Length} curve stations/{line.Anchors.Length} anchors, suppressed={line.Suppressed}, overrun={line.Overrun}.");
+            TrenchNet.BroadcastState(line);
+            OnLinesChanged?.Invoke();
         }
 
         /// <summary>Name of the belt trace the stage just entered was meant to add but could not.</summary>

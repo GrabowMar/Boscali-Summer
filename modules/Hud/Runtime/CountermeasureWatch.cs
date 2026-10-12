@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Hud.Domain;
+using BoscaliSummer.Modules.Hud.Presentation;
 using HarmonyLib;
 using UnityEngine;
 
@@ -43,7 +44,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 return;
             }
             float now = Time.unscaledTime;
-            if (aircraft != watched || now >= nextScan) Scan(aircraft, now);
+            if (aircraft != watched || NeedsScan(now)) Scan(aircraft, now);
             for (int i = 0; i < stationCount; i++)
             {
                 frame.Cm[i] = stations[i];
@@ -67,6 +68,15 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             frame.CmCount = stationCount;
         }
 
+        /// <summary>Scan once per aircraft; rescan when a stored part was destroyed, or slowly while none were found.</summary>
+        private bool NeedsScan(float now)
+        {
+            if (parts.Length == 0) return now >= nextScan;
+            for (int i = 0; i < parts.Length; i++)
+                if (parts[i] == null) return true;
+            return false;
+        }
+
         private void Scan(Aircraft aircraft, float now)
         {
             watched = aircraft;
@@ -88,6 +98,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                     names[s] = part.displayName;
                     stations[s] = default;
                 }
+                if (stations[s].Icon == 0) stations[s].Icon = StoreIcons.Id(part.displayImage);
                 stations[s].Max += MaxOf(part);
                 stations[s].Chargeable |= part.chargeable;
                 stations[s].Mask |= MaskOf(part.GetThreatTypes());

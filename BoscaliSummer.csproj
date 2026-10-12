@@ -3,7 +3,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>BoscaliSummer</AssemblyName>
     <RootNamespace>BoscaliSummer</RootNamespace>
-    <Version>0.2.0</Version>
+    <Version>0.2.1</Version>
     <DebugType>portable</DebugType>
     <!-- CS0436: the vendored avionics sources compile into this assembly and the test assembly. -->
     <NoWarn>$(NoWarn);CS0436;MSB3277</NoWarn>
@@ -29,6 +29,14 @@
     <!-- The nomod panel-atlas harness (scratch Unity project) builds CallsPanel and paints CallTile directly. -->
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
       <_Parameter1>BoscaliSupportPreview</_Parameter1>
+    </AssemblyAttribute>
+    <!-- The offline map-overlay harness (MapOverlayUnityCheck) builds the STR overlay from a fixture model and reads its tags. -->
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>BoscaliMapOverlayPreview</_Parameter1>
+    </AssemblyAttribute>
+    <!-- The Met Office check (BoscaliWeatherEnv asmdef) builds the weather console window and drives it with fake world and command seams. -->
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>BoscaliWeatherEnv</_Parameter1>
     </AssemblyAttribute>
   </ItemGroup>
 
@@ -120,21 +128,11 @@
     <EmbeddedResource Include="AvionicsUi\avionics.nightops.avss"><LogicalName>NOAvionics.avionics.nightops.avss</LogicalName></EmbeddedResource>
   </ItemGroup>
 
-  <ItemGroup Label="Vanguard Blueprinter bundle">
-    <!-- Built by modules/Vanguard/Assets/Editor/VanguardBuilder.cs; Blueprinter loads any *.nobp resource. -->
-    <EmbeddedResource Include="modules\Vanguard\Assets\Vanguard.nobp" Condition="Exists('modules\Vanguard\Assets\Vanguard.nobp')">
-      <LogicalName>BoscaliSummer.Vanguard.nobp</LogicalName>
-    </EmbeddedResource>
-  </ItemGroup>
-  <ItemGroup Label="Airborne Blueprinter bundle">
-    <!-- HALO paratrooper mount + models, built by modules/UrbanCombat/Assets/Editor/AirborneBuilder.cs. -->
-    <EmbeddedResource Include="modules\UrbanCombat\Assets\Airborne.nobp" Condition="Exists('modules\UrbanCombat\Assets\Airborne.nobp')">
-      <LogicalName>BoscaliSummer.Airborne.nobp</LogicalName>
-    </EmbeddedResource>
-  </ItemGroup>
-  <ItemGroup Label="Container feeder Blueprinter bundle">
-    <EmbeddedResource Include="assets\FutureOps\CargoShip.nobp" Condition="Exists('assets\FutureOps\CargoShip.nobp')">
-      <LogicalName>BoscaliSummer.CargoShip.nobp</LogicalName>
+  <ItemGroup Label="Blueprinter bundle">
+    <!-- All Blueprinter content (Vanguard weapons, HALO mount, container feeder) in one pack, built by
+         tools/Compile-BlueprinterAssets.ps1; Blueprinter loads any *.nobp resource. -->
+    <EmbeddedResource Include="assets\BoscaliSummer.nobp" Condition="Exists('assets\BoscaliSummer.nobp')">
+      <LogicalName>BoscaliSummer.Assets.nobp</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup Label="Avionics UI bundle">
@@ -143,6 +141,14 @@
          and no effects. Wing Command embeds its own copy under the same name. -->
     <EmbeddedResource Include="AvionicsUi\Assets\avionics-ui.bundle" Condition="Exists('AvionicsUi\Assets\avionics-ui.bundle')">
       <LogicalName>NOAvionics.avionics-ui.bundle</LogicalName>
+    </EmbeddedResource>
+    <!-- Second-generation UI shaders (Glass2), built by tools/Compile-AvionicsFxAssets.ps1. Optional as well. -->
+    <EmbeddedResource Include="AvionicsUi\Assets\avionics-fx.bundle" Condition="Exists('AvionicsUi\Assets\avionics-fx.bundle')">
+      <LogicalName>NOAvionics.avionics-fx.bundle</LogicalName>
+    </EmbeddedResource>
+    <!-- NOA Angular icon font, built by tools/Build-AvIcons.py + tools/Compile-AvionicsIconAssets.ps1. Optional as well. -->
+    <EmbeddedResource Include="AvionicsUi\Assets\avionics-icons.bundle" Condition="Exists('AvionicsUi\Assets\avionics-icons.bundle')">
+      <LogicalName>NOAvionics.avionics-icons.bundle</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
 
@@ -167,6 +173,10 @@
     </EmbeddedResource>
     <EmbeddedResource Include="modules\Command\Assets\terrain_naval_intel.png">
       <LogicalName>BoscaliSummer.Command.terrain_naval_intel.png</LogicalName>
+    </EmbeddedResource>
+    <!-- Plan-view ground vehicle map icons, baked by tools/Build-VehicleMapIcons.py. -->
+    <EmbeddedResource Include="modules\Command\Assets\vehicle-map-icons.png">
+      <LogicalName>BoscaliSummer.Command.vehicle-map-icons.png</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
 
@@ -225,6 +235,7 @@
     <EmbeddedResource Include="modules\Wing\Assets\Data\formations.json" LogicalName="WingCommand.formations.json" />
     <EmbeddedResource Include="modules\Wing\Assets\Data\airframes.json" LogicalName="WingCommand.airframes.json" />
     <EmbeddedResource Include="modules\Wing\Assets\Pilots\layers.png" LogicalName="WingCommand.PilotLayers.png" />
+    <EmbeddedResource Include="modules/Progression/Assets/emblem-art.bin" LogicalName="BoscaliSummer.Progression.emblem-art.bin" />
   </ItemGroup>
 
 </Project>

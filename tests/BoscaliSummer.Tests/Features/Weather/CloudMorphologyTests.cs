@@ -8,16 +8,15 @@ namespace BoscaliSummer.Tests.Features.Weather
     {
         public static void Run()
         {
-            ShallowClusterBelowShield();
+            ShallowClusterKeepsOwnCeiling();
             SeparateMapCeilings();
-            StaticFrontGeometry();
-            FrontFamiliesAndFixedSites();
+            FixedSites();
             LocalProfileContinuity();
             DominantBodyHeight();
             EncodedMapParity();
         }
 
-        private static void ShallowClusterBelowShield()
+        private static void ShallowClusterKeepsOwnCeiling()
         {
             var noise = new byte[4 * 4 * 4 * 4];
             Array.Fill(noise, (byte)255);
@@ -25,75 +24,60 @@ namespace BoscaliSummer.Tests.Features.Weather
                 DeckDepth = 1200f, BaseSharp = 65f, BaseWobble = 80f, Dome = 1.35f,
                 Billow = 0.75f, Anvil = 0.9f, DeckSmooth = 0.15f };
             var bodies = new CloudBodies(noise, 4, sky);
-            var p = new WeatherPoint { CloudBase = 1400f, LowTop = 3500f, CloudTop = 10000f,
-                CellShape = 0.8f, FrontCover = 0.65f, FrontBase = 6500f, FrontTop = 10000f };
-            float between = bodies.Density(p, 0f, 5000f, 0f, 0f);
+            var p = new WeatherPoint { CloudBase = 1400f, LowTop = 3500f, CloudTop = 10000f, CellShape = 0.8f };
+            float between = bodies.Density(p, 0f, 5000f, 0f);
             TestAssert.That(between < 0.001f,
-                $"A shallow ordinary cluster must not borrow the high front shield's ceiling: {between}");
-            TestAssert.That(bodies.Density(p, 0f, 2100f, 0f, 0f) > 0.2f,
+                $"A shallow ordinary cluster must not borrow the aggregate ceiling: {between}");
+            TestAssert.That(bodies.Density(p, 0f, 2100f, 0f) > 0.2f,
                 "Ceiling separation retains the shallow cluster's dense body");
-            TestAssert.That(bodies.Density(p, 0f, 7500f, 0f, 0f) > 0.2f,
-                "The independent high frontal shield remains visible");
         }
 
         private static void SeparateMapCeilings()
         {
-            var structure = new byte[] { 0, 200, 220, 48 };
-            var profiles = new byte[] { 105, 160, 22, 0 };
+            var structure = new byte[] { 0, 0, 220, 48 };
+            var profiles = new byte[] { 0, 0, 86, 0 };
             WeatherPoint p = CloudBodies.SampleMap(structure, profiles, 1, 0.5f, 0.5f);
             TestAssert.That(Math.Abs(p.LowTop - 48f / 255f * 16000f) < 0.01f,
                 "Structure alpha transports only the low/tower ceiling");
-            TestAssert.That(p.CloudTop > p.LowTop && p.FrontTop > p.LowTop,
-                "CPU map decode retains independent front and aggregate ceilings");
+            TestAssert.That(p.CloudTop >= p.LowTop && Math.Abs(p.CloudBase - 86f / 255f * CloudMaps.BaseRange) < 0.01f,
+                "CPU map decode retains the aggregate ceiling and the 4096 m cloud base");
             WeatherPoint blend = CloudBodies.BlendMaps(new WeatherPoint { LowTop = 1400f, CloudTop = 1400f }, p, 0.5f);
             TestAssert.That(Math.Abs(blend.LowTop - (1400f + p.LowTop) * 0.5f) < 0.01f,
-                "Displayed-map fade carries ordinary ceiling without borrowing front height");
+                "Displayed-map fade carries the ordinary ceiling");
         }
 
-        private static void StaticFrontGeometry()
-        {
-            const uint layout = 99;
-            SkySplit bare = SkySplit.From(layout, 0f, 40000f, 40000f, 130f);
-            SkySplit visible = SkySplit.From(layout, 0.6f, 40000f, 40000f, 130f);
-            var sky = new SkyParams { Frontal = 1f };
-            var a = new FrontState[2]; var b = new FrontState[2];
-            int na = WeatherFronts.Fill(a, layout, sky, 40000f, 40000f, 130f, bare);
-            int nb = WeatherFronts.Fill(b, layout, sky, 40000f, 40000f, 130f, visible);
-            TestAssert.That(na == nb && na > 0, "Comparison retains the same front identities");
-            for (int i = 0; i < na; i++)
-                TestAssert.That(a[i].NormalX == b[i].NormalX && a[i].NormalZ == b[i].NormalZ &&
-                    a[i].Offset == b[i].Offset && a[i].MeanderAmplitude == b[i].MeanderAmplitude &&
-                    a[i].MeanderWavelength == b[i].MeanderWavelength && a[i].MeanderPhase == b[i].MeanderPhase,
-                    "Strength/sky-split amount cannot relocate a seeded front");
-        }
-
-        private static void FrontFamiliesAndFixedSites()
+        private static void FixedSites()
         {
             for (uint seed = 1; seed <= 12; seed++)
             {
-                var storm = new WeatherField(); var scattered = new WeatherField();
-                storm.Build(new WeatherKey(seed, 0f, false, (byte)WeatherRegimeType.Storm), 600f, 40000f, 40000f);
-                scattered.Build(new WeatherKey(seed, 0f, false, (byte)WeatherRegimeType.Scattered), 300f, 40000f, 40000f);
-                for (int i = 0; i < storm.CellCount; i++)
+                // The lattice belongs to the tape, not to the state: two moments of one key hold the same candidates in the same places.
+                var key = new WeatherKey(seed, 0f, true, (byte)WeatherRegimeType.Scattered);
+                var early = new WeatherField(); var late = new WeatherField();
+                early.Build(key, 100f, 40000f, 40000f);
+                late.Build(key, 4000f, 40000f, 40000f);
+                int compared = 0;
+                for (int gz = -3; gz <= 3; gz++)
+                for (int gx = -3; gx <= 3; gx++)
+                for (int k = 0; k < 3; k++)
                 {
-                    StormCell cell = storm.Cell(i);
-                    if (cell.Cluster < 2)
-                        TestAssert.That(Math.Abs(storm.Split.SignedDistance(cell.X, cell.Z)) < 6500f,
-                            "Front-attached cell families follow the seeded curved frontal spine");
-                    for (int j = 0; j < scattered.CellCount; j++)
-                    {
-                        StormCell early = scattered.Cell(j);
-                        if (early.Slot == cell.Slot)
-                            TestAssert.That(cell.X == early.X && cell.Z == early.Z,
-                                "A state/settle-time change never relocates an active cell site");
-                    }
+                    bool a = StormLattice.Resolve(early.Lattice, gx, gz, k, out StormCell first);
+                    bool b = StormLattice.Resolve(late.Lattice, gx, gz, k, out StormCell second);
+                    TestAssert.That(a == b, "A state/settle-time change never adds or removes a candidate");
+                    if (!a) continue;
+                    TestAssert.That(first.X == second.X && first.Z == second.Z && first.Radius == second.Radius,
+                        "A state/settle-time change never relocates a cell site");
+                    compared++;
                 }
-                WeatherMath.HeadingToVector(storm.PrevailingHeading, out float wx, out float wz);
-                for (int i = 0; i < scattered.CloudClusterCount; i++)
+                TestAssert.That(compared > 20, "the comparison saw candidates: " + compared);
+                var scattered = new WeatherField();
+                scattered.Build(new WeatherKey(seed, 0f, false, (byte)WeatherRegimeType.Scattered), 300f, 40000f, 40000f);
+                WeatherMath.HeadingToVector(scattered.PrevailingHeading, out float wx, out float wz);
+                for (int cell = -2; cell <= 2; cell++)
                 {
-                    DryCloudCluster group = scattered.CloudCluster(i);
-                    TestAssert.That(group.AxisX * wx + group.AxisZ * wz > 0.94f,
-                        "Ordinary cumulus streets align with fixed prevailing wind with bounded irregularity");
+                    int n = CumulusLattice.Fetch(scattered.Lattice, null, cell, cell / 2, out CumulusGroup[] groups);
+                    for (int i = 0; i < n; i++)
+                        TestAssert.That(Math.Abs(groups[i].AxisX * wx + groups[i].AxisZ * wz) > 0.94f,
+                            "Ordinary cumulus streets align with fixed prevailing wind with bounded irregularity");
                 }
             }
         }
@@ -134,17 +118,14 @@ namespace BoscaliSummer.Tests.Features.Weather
             var sky = new SkyParams { LobeRung = 5f, PuffDepth = 2000f, DeckDepth = 1200f,
                 Dome = 1.35f, Anvil = 0.9f, BaseSharp = 65f, BaseWobble = 80f };
             var bodies = new CloudBodies(noise, 4, sky);
-            var p = new WeatherPoint { CloudBase = 1400f, LowTop = 3500f, CloudTop = 10000f,
-                CellShape = 0.8f, FrontCover = 0.65f, FrontBase = 6500f, FrontTop = 10000f };
-            TestAssert.That(bodies.Density(p, 0f, 2100f, 0f, 0f, out float lower) > 0.2f && lower > 0.2f && lower < 0.5f,
-                "A shallow cluster lights in its own height interval, independently of the high shield");
-            TestAssert.That(bodies.Density(p, 0f, 7500f, 0f, 0f, out float upper) > 0.2f && upper > 0.1f && upper < 0.5f,
-                "The dominant high front lights from its own local underside and crown");
-            TestAssert.That(bodies.Density(default, 0f, 5000f, 0f, 0f, out float empty) == 0f && empty == 0f,
+            var p = new WeatherPoint { CloudBase = 1400f, LowTop = 3500f, CloudTop = 10000f, CellShape = 0.8f };
+            TestAssert.That(bodies.Density(p, 0f, 2100f, 0f, out float lower) > 0.2f && lower > 0.2f && lower < 0.5f,
+                "A shallow cluster lights in its own height interval");
+            TestAssert.That(bodies.Density(default, 0f, 5000f, 0f, out float empty) == 0f && empty == 0f,
                 "An empty density sample clears the lighting height");
             var rainy = new WeatherPoint { CloudBase = 2200f, LowTop = 4200f, CloudTop = 4200f,
                 BackgroundCover = 0.7f, RainRate = 40f };
-            TestAssert.That(bodies.Density(rainy, 0f, 1700f, 0f, 0f, out float scud) > 0.2f &&
+            TestAssert.That(bodies.Density(rainy, 0f, 1700f, 0f, out float scud) > 0.2f &&
                 Math.Abs(scud - 2f / 7f) < 0.001f, "Under-base scud uses its own 700 m height band");
         }
 
@@ -168,12 +149,14 @@ namespace BoscaliSummer.Tests.Features.Weather
                     float u = (x + 0.5f) / CloudMaps.NearSize, v = (z + 0.5f) / CloudMaps.NearSize;
                     WeatherPoint actual = CloudBodies.SampleMap(maps.Near, maps.NearProfiles, CloudMaps.NearSize, u, v);
                     WeatherPoint truth = field.Sample((u * 2f - 1f) * 50000f, (v * 2f - 1f) * 50000f);
-                    CloudGenus genus = CloudShape.Resolve(field.Params);
+                    CloudGenus genus = CloudShape.Resolve(field.RowAt(0f, 0f));
+                    // The packed top is widened by the base variation (spec 6: Fill widens bottom and visualTop by BaseVariation).
                     float lowTop = Math.Max(truth.LowTop, truth.CloudBase + Math.Max(genus.PuffDepth,
-                        field.Params.DeckDepth) + genus.BaseWobble * 0.5f);
-                    TestAssert.That(Math.Abs(actual.LowTop - lowTop) <= 16000f / 255f * 0.51f &&
-                        Math.Abs(actual.FrontTop - truth.FrontTop) <= 16000f / 255f * 0.51f,
-                        "Packed ordinary/front ceilings mirror field truth within half a height texel");
+                        field.RowAt(0f, 0f).DeckDepth) + genus.BaseWobble * 0.5f) + truth.BaseVariation;
+                    TestAssert.That(Math.Abs(actual.LowTop - lowTop) <= 16000f / 255f * 0.51f,
+                        "The packed ordinary ceiling mirrors field truth within half a height texel");
+                    TestAssert.That(Math.Abs(actual.CloudBase - truth.CloudBase) <= CloudMaps.BaseRange / 255f * 0.51f,
+                        "The packed cloud base mirrors field truth within half a 16 m step");
                 }
             }
         }

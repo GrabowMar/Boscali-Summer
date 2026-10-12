@@ -8,7 +8,7 @@ namespace BoscaliSummer.Modules.Vanguard
 {
     /// <summary>
     /// VANGUARD near-future aircraft weapons. Content ships as an embedded Blueprinter bundle
-    /// (Assets/Vanguard.nobp); without Blueprinter the weapons do not exist, so the module stays out.
+    /// (assets/BoscaliSummer.nobp); without Blueprinter the weapons do not exist, so the module stays out.
     /// </summary>
     internal sealed class VanguardModule : IModule
     {

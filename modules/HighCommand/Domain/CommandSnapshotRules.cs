@@ -12,7 +12,8 @@ namespace BoscaliSummer.Modules.HighCommand.Domain
         public const int MaximumIdentifier = 64;
         public const int MaximumTier = 2;
         public const int MaximumLogRows = 6;
-        public const int MaximumLogText = 64;
+        public const int MaximumLogText = 96;
+        public const int MaximumBounty = 100000;
         public const byte FlagsMask = 0x7F;
         public const float MaximumIntelAge = 600f;
         public const float MaximumLogAge = 900f;
@@ -24,7 +25,7 @@ namespace BoscaliSummer.Modules.HighCommand.Domain
             kia >= 0 && kia <= CommandTier.MaximumSlots * 8;
 
         public static bool ValidNode(int id, int parentId, byte tier, byte flags,
-            float intelAge, float weight, float x, float z) =>
+            float intelAge, float weight, float x, float z, int bounty) =>
             id >= 0 && id < MaximumIdentifier &&
             parentId >= -1 && parentId < MaximumIdentifier &&
             tier <= MaximumTier &&
@@ -33,7 +34,8 @@ namespace BoscaliSummer.Modules.HighCommand.Domain
             float.IsFinite(weight) && weight >= 0f && weight <= 1f &&
             float.IsFinite(x) && float.IsFinite(z) &&
             x >= -MaximumCoordinate && x <= MaximumCoordinate &&
-            z >= -MaximumCoordinate && z <= MaximumCoordinate;
+            z >= -MaximumCoordinate && z <= MaximumCoordinate &&
+            bounty >= 0 && bounty <= MaximumBounty;
 
         public static bool ValidLogRow(int targetId, byte tone, string text, float age) =>
             targetId >= -1 && targetId < MaximumIdentifier &&

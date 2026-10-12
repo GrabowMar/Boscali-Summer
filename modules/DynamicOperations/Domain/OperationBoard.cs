@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Core.Contracts;
 
 namespace BoscaliSummer.Modules.DynamicOperations.Domain
 {
@@ -7,7 +8,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
     {
         Capture, Defend, Interdict, Intercept, Patrol, Jam, Rappel, Rooftop,
         Rescue, Recon, DamageAssessment, SupplyEscort, SupplyInterdict, RepairCover,
-        ElectronicWarfare, SortieReport, BattlefieldSurvey
+        ElectronicWarfare, SortieReport, BattlefieldSurvey, StrikePost
     }
     internal enum OperationReward : byte { None, Convoy, Fortification }
     internal enum OperationState : byte { Active, Completed, Expired, Cancelled, Offered }
@@ -51,20 +52,24 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         public OperationState State { get; private set; } = OperationState.Offered;
         public bool IsLive => State == OperationState.Offered || State == OperationState.Active;
         public bool IsStrike => Kind == OperationKind.Interdict || Kind == OperationKind.Intercept ||
-            Kind == OperationKind.SupplyInterdict || Kind == OperationKind.ElectronicWarfare;
+            Kind == OperationKind.SupplyInterdict || Kind == OperationKind.ElectronicWarfare || Kind == OperationKind.StrikePost;
         public bool AwardTaken { get; private set; }
         // Who took the contract: the name on the card, and the identity the host pays and guards by.
         public string AcceptedBy { get; private set; } = string.Empty;
         public ulong AcceptorId { get; private set; }
         public int ChainDepth { get; }
+        // The operation this card was tied to at issue time (0 = a general sortie) and its stable anchor; never re-read.
+        public int FocusId { get; }
+        public string FocusAnchor { get; }
         public const float RequiredHold = 180f;
 
         public Operation(int id, int targetId, OperationKind kind, OperationReward reward,
-            float now, int money, int xp, int chainDepth = 0)
+            float now, int money, int xp, int chainDepth = 0, int focusId = 0, string focusAnchor = "")
         {
             if (!float.IsFinite(now)) throw new ArgumentOutOfRangeException(nameof(now));
             Id = id; TargetId = targetId; Kind = kind; Reward = reward;
             ChainDepth = Math.Clamp(chainDepth, 0, OperationChains.MaximumDepth);
+            FocusId = focusId; FocusAnchor = focusAnchor ?? string.Empty;
             Deadline = now + 300f; Money = Math.Clamp(money, 0, 100000); Xp = Math.Clamp(xp, 0, 10000);
         }
 
@@ -141,12 +146,14 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
     internal sealed class OperationBoard
     {
         public const int MaximumCards = 3;
+        // The memory of what was already offered, newest 128: a long session keeps offering instead of stopping for good.
         public const int MaximumIssued = 128;
         public const int MaximumActive = 2;
         private readonly HashSet<long> issued = new HashSet<long>();
+        private readonly List<long> issuedOrder = new List<long>(MaximumIssued + 1);
         private readonly List<Operation> operations = new List<Operation>(MaximumCards);
         public IReadOnlyList<Operation> Operations => operations;
-        public bool HasCapacity => operations.Count < MaximumCards && issued.Count < MaximumIssued;
+        public bool HasCapacity => operations.Count < MaximumCards;
 
         public bool WasIssued(OperationKind kind, int targetId) => issued.Contains(Key(kind, targetId));
 
@@ -164,9 +171,51 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
 
         public bool TryAdd(Operation operation)
         {
-            if (operation == null || !HasCapacity || !issued.Add(Key(operation.Kind, operation.TargetId))) return false;
+            long key = operation == null ? 0 : Key(operation.Kind, operation.TargetId);
+            if (operation == null || !HasCapacity || !issued.Add(key)) return false;
+            issuedOrder.Add(key);
+            if (issuedOrder.Count > MaximumIssued)
+            {
+                issued.Remove(issuedOrder[0]);
+                issuedOrder.RemoveAt(0);
+            }
             operations.Add(operation);
             return true;
+        }
+
+        /// <summary>Takes an Offered card off the board and frees its key so the opportunity can be offered again. False for any other state or an unknown id.</summary>
+        public bool Withdraw(int id)
+        {
+            for (int i = 0; i < operations.Count; i++)
+            {
+                Operation operation = operations[i];
+                if (operation.Id != id) continue;
+                if (operation.State != OperationState.Offered) return false;
+                operations.RemoveAt(i);
+                long key = Key(operation.Kind, operation.TargetId);
+                issued.Remove(key);
+                issuedOrder.Remove(key);
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// The Offered card a new tied sortie of <paramref name="kind"/> may replace: the lowest-id card of the same kind that is not
+        /// tied to the live focus, else (only when the board is full) the lowest-id such card, else null. Never an Active or
+        /// terminal card, never a card the live focus covers, nothing at all while no focus is live.
+        /// </summary>
+        public Operation PickDisplaced(OperationKind kind, in OperationFocus focus)
+        {
+            if (!focus.IsLive) return null;
+            Operation sameKind = null, lowest = null;
+            foreach (Operation card in operations)
+            {
+                if (card.State != OperationState.Offered || focus.Covers(card.FocusId, card.FocusAnchor)) continue;
+                if (card.Kind == kind && (sameKind == null || card.Id < sameKind.Id)) sameKind = card;
+                if (lowest == null || card.Id < lowest.Id) lowest = card;
+            }
+            return sameKind ?? (HasCapacity ? null : lowest);
         }
 
         public void Prune(float now)

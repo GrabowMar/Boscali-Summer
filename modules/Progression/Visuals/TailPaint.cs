@@ -79,8 +79,9 @@ namespace BoscaliSummer.Modules.Progression.Visuals
             { "fighter1_vstab1", new Spot(-0.097f, 0.037f, -0.115f, -0.998f, 0.066f, 0.016f, 0.066f, 0.998f, -0.001f, 0.45f, false) },
             { "smallFighter1_vstab_L", new Spot(0.349f, -0.451f, 0.415f, -0.773f, -0.632f, -0.048f, -0.631f, 0.774f, -0.039f, 0.48f, true) },
             { "smallFighter1_vstab_R", new Spot(-0.350f, -0.451f, 0.403f, 0.773f, -0.632f, -0.048f, 0.631f, 0.774f, -0.039f, 0.48f, true) },
-            { "multirole1_tail_L", new Spot(-0.120f, -0.154f, -0.468f, -0.688f, -0.723f, -0.061f, -0.720f, 0.691f, -0.064f, 0.40f, true) },
-            { "multirole1_tail_R", new Spot(0.134f, -0.154f, -0.321f, 0.688f, -0.723f, -0.061f, 0.720f, 0.691f, -0.064f, 0.40f, true) },
+            // The multirole's fins are its canted ruddervators; the tail_L/R meshes are the booms under them.
+            { "multirole1_elevator_L", new Spot(-0.684f, 0.667f, -0.769f, -0.679f, -0.735f, 0.001f, -0.735f, 0.679f, 0.001f, 0.80f, true) },
+            { "multirole1_elevator_R", new Spot(0.684f, 0.667f, -0.769f, 0.679f, -0.735f, 0.001f, 0.735f, 0.679f, 0.001f, 0.80f, true) },
             { "attackhelo1_tailfin", new Spot(0.001f, -0.132f, -0.242f, -1.000f, 0.013f, 0.001f, 0.013f, 1.000f, -0.000f, 0.42f, true) },
             { "utilityHelo1_vstab_L", new Spot(-0.042f, -0.038f, -0.164f, -1.000f, 0.000f, 0.003f, 0.000f, 1.000f, -0.000f, 0.66f, false) },
             { "utilityHelo1_vstab_R", new Spot(0.042f, -0.018f, -0.170f, 1.000f, 0.000f, 0.003f, -0.000f, 1.000f, -0.000f, 0.66f, false) },
@@ -88,12 +89,12 @@ namespace BoscaliSummer.Modules.Progression.Visuals
             { "quadVTOL1_vstab1_R", new Spot(-0.142f, -0.499f, 0.152f, 0.960f, -0.280f, 0.001f, 0.280f, 0.960f, 0.000f, 0.80f, true) },
             { "sfb_vstab1_L", new Spot(0.390f, 0.602f, -0.507f, -0.537f, 0.843f, -0.043f, 0.840f, 0.539f, 0.067f, 0.80f, true) },
             { "sfb_vstab1_R", new Spot(-0.397f, 0.613f, -0.390f, 0.537f, 0.843f, -0.043f, -0.840f, 0.539f, 0.067f, 0.80f, true) },
-            { "fastBomber1_rudder_L", new Spot(0.029f, 0.016f, -0.070f, -0.931f, -0.361f, 0.047f, -0.361f, 0.932f, 0.018f, 0.54f, true) },
-            { "fastBomber1_rudder_R", new Spot(-0.046f, -0.021f, -0.024f, 0.931f, -0.361f, 0.047f, 0.361f, 0.932f, 0.018f, 0.54f, true) },
-            { "CAS1_vstab_L", new Spot(0.073f, 0.175f, -0.012f, -0.918f, 0.397f, -0.005f, 0.397f, 0.918f, 0.002f, 0.60f, true) },
-            { "CAS1_vstab_R", new Spot(-0.073f, 0.175f, -0.026f, 0.918f, 0.397f, -0.005f, -0.397f, 0.918f, 0.002f, 0.60f, true) },
-            { "trainer_vstab2_L", new Spot(0.120f, -0.379f, 0.116f, -0.950f, -0.312f, -0.028f, -0.312f, 0.950f, -0.009f, 0.47f, true) },
-            { "trainer_vstab2_R", new Spot(-0.126f, -0.398f, 0.123f, 0.950f, -0.312f, -0.028f, 0.312f, 0.950f, -0.009f, 0.47f, true) },
+            { "fastBomber1_rudder_L", new Spot(0.066f, -0.005f, -0.039f, -0.926f, -0.377f, 0.030f, -0.376f, 0.926f, 0.012f, 0.56f, true) },
+            { "fastBomber1_rudder_R", new Spot(-0.067f, -0.005f, -0.036f, 0.926f, -0.377f, 0.030f, 0.376f, 0.926f, 0.012f, 0.56f, true) },
+            { "CAS1_vstab_L", new Spot(0.276f, 0.472f, 0.394f, -0.930f, 0.368f, 0.012f, 0.368f, 0.930f, -0.005f, 0.36f, true) },
+            { "CAS1_vstab_R", new Spot(-0.276f, 0.472f, 0.401f, 0.930f, 0.368f, 0.012f, -0.368f, 0.930f, -0.005f, 0.36f, true) },
+            { "trainer_vstab2_L", new Spot(0.198f, -0.462f, 0.090f, -0.946f, -0.323f, -0.021f, -0.323f, 0.946f, -0.007f, 0.44f, true) },
+            { "trainer_vstab2_R", new Spot(-0.198f, -0.462f, 0.086f, 0.946f, -0.323f, -0.020f, 0.323f, 0.946f, -0.007f, 0.44f, true) },
             { "VTOLTrainer1_vstab2", new Spot(0.000f, 0.044f, -0.130f, -1.000f, 0.000f, 0.000f, 0.000f, 1.000f, 0.000f, 0.36f, true) },
             { "COIN_vstab1_L_LOD0", new Spot(-0.103f, -0.145f, -0.000f, -0.943f, 0.333f, -0.001f, 0.333f, 0.943f, 0.000f, 0.40f, false) },
             { "COIN_vstab1_R_LOD0", new Spot(0.117f, -0.186f, 0.016f, 0.943f, 0.333f, -0.001f, -0.333f, 0.943f, -0.007f, 0.40f, false) },
@@ -152,6 +153,8 @@ namespace BoscaliSummer.Modules.Progression.Visuals
         private ManualLogSource log;
         private CrestBoard crests;
         private ProgressionNet net;
+        private string gatherText;
+        private EmblemDesign gatherDesign = EmblemDesign.Default;
         private string ownText;
         private EmblemDesign ownDesign = EmblemDesign.Default;
         private Material bake;
@@ -282,7 +285,13 @@ namespace BoscaliSummer.Modules.Progression.Visuals
         private void Gather(EmblemFinish finish)
         {
             wanted.Clear();
-            var own = new Marking(EmblemDesign.Parse(forcedEmblem ?? settings.Emblem.Value, EmblemDesign.Default), finish,
+            string emblemText = forcedEmblem ?? settings.Emblem.Value;
+            if (!string.Equals(emblemText, gatherText, StringComparison.Ordinal))
+            {
+                gatherText = emblemText;
+                gatherDesign = EmblemDesign.Parse(emblemText, EmblemDesign.Default);
+            }
+            var own = new Marking(gatherDesign, finish,
                 forcedEmblem != null ? string.Empty : settings.EmblemFile.Value);
 
             // The resolver clears its list, so the wing goes in first and the player's own aircraft after.

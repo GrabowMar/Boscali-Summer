@@ -92,7 +92,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 }
 namespace NuclearOption.UIStyleSystem
 {
-    public static class ThemeManager { public static Theme Active => throw new System.InvalidOperationException(); }
+    // Override: a harness may stand in for the game palette (the kit falls back to its own when Active throws, which is what every other harness wants).
+    public static class ThemeManager { public static Theme Override; public static Theme Active => Override ?? throw new System.InvalidOperationException(); }
     public class Theme { public Palette ColorTheme; public TacticalScreenTheme TacScreenTheme; }
     public class TacticalScreenTheme { public List<TacticalTextStyle> TextStyles; }
     public class TacticalTextStyle { public TacticalStyle Style; }

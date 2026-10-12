@@ -16,6 +16,8 @@ namespace BoscaliSummer.Modules.Weather.Networking
     internal sealed class WeatherNet : MonoBehaviour
     {
         public const byte ProtocolVersion = 8;
+        /// <summary>The golden vector of the tape tables (TapeGolden.Compute): a sky or story edit changes it, TapeGoldenTests and PatchProbe fail until it is updated here, and the protocol is bumped at release.</summary>
+        public const uint TapeGoldenVector = 0x977DBDF7u;
 
         private WeatherManager manager;
         private HandlerSlot clientSlot;

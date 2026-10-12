@@ -254,8 +254,9 @@ namespace BoscaliSummer.Modules.Radio.Presentation
     /// </summary>
     internal sealed class RadioLevelsPart : AvPart
     {
-        private const float Ring = 30f, GaugeW = 62f, KeyW = 30f, BlockW = 104f, SwitchX = 212f;
+        private const float BlockH = 60f, GaugeW = 62f, KeyW = 30f, KeyH = 28f, BlockW = 104f, SwitchX = 214f, SwitchH = 18f;
         public readonly AvGauge Volume, Squelch;
+        private readonly Image rule;
         public readonly AvControl VolumeDown, VolumeUp, SquelchDown, SquelchUp, Mode, Bandwidth, Step;
 
         public RadioLevelsPart(RectTransform parent, Action volumeDown, Action volumeUp, Action squelchDown,
@@ -271,6 +272,8 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             Mode = AvControl.Make(Rect, new AvControl.Spec("MODE", mode, AvButtonStyle.Toggle));
             Bandwidth = AvControl.Make(Rect, new AvControl.Spec("BANDWIDTH", bandwidth, AvButtonStyle.Toggle));
             Step = AvControl.Make(Rect, new AvControl.Spec("STEP", step, AvButtonStyle.Toggle));
+            rule = AvLay.Solid(Rect, "Rule", Color.clear);
+            Restyle();
         }
 
         public override float Measure(float width) => 68f;
@@ -278,18 +281,20 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         public override void Place(AvSlot s)
         {
             base.Place(s);
-            float gy = (s.H - (Ring + 18f)) * 0.5f, ky = (s.H - 60f) * 0.5f;
-            Volume.Place(new AvSlot(0f, gy, GaugeW, Ring + 18f));
-            AvLay.Place(VolumeUp.Rect, GaugeW + 2f, ky, KeyW, 28f);
-            AvLay.Place(VolumeDown.Rect, GaugeW + 2f, ky + 32f, KeyW, 28f);
-            Squelch.Place(new AvSlot(BlockW, gy, GaugeW, Ring + 18f));
-            AvLay.Place(SquelchUp.Rect, BlockW + GaugeW + 2f, ky, KeyW, 28f);
-            AvLay.Place(SquelchDown.Rect, BlockW + GaugeW + 2f, ky + 32f, KeyW, 28f);
+            // One 60 px block: both rings, both key stacks and the three switches share its top and bottom edge.
+            float top = (s.H - BlockH) * 0.5f;
+            Volume.Place(new AvSlot(0f, top, GaugeW, BlockH));
+            AvLay.Place(VolumeUp.Rect, GaugeW + 2f, top, KeyW, KeyH);
+            AvLay.Place(VolumeDown.Rect, GaugeW + 2f, top + BlockH - KeyH, KeyW, KeyH);
+            Squelch.Place(new AvSlot(BlockW, top, GaugeW, BlockH));
+            AvLay.Place(SquelchUp.Rect, BlockW + GaugeW + 2f, top, KeyW, KeyH);
+            AvLay.Place(SquelchDown.Rect, BlockW + GaugeW + 2f, top + BlockH - KeyH, KeyW, KeyH);
 
-            float w = Mathf.Max(60f, s.W - SwitchX), y = (s.H - 64f) * 0.5f;
-            AvLay.Place(Mode.Rect, SwitchX, y, w, 20f);
-            AvLay.Place(Bandwidth.Rect, SwitchX, y + 22f, w, 20f);
-            AvLay.Place(Step.Rect, SwitchX, y + 44f, w, 20f);
+            float w = Mathf.Max(60f, s.W - SwitchX), gap = (BlockH - 3f * SwitchH) * 0.5f;
+            AvLay.Place(rule.rectTransform, SwitchX - 8f, top, 1f, BlockH);
+            AvLay.Place(Mode.Rect, SwitchX, top, w, SwitchH);
+            AvLay.Place(Bandwidth.Rect, SwitchX, top + SwitchH + gap, w, SwitchH);
+            AvLay.Place(Step.Rect, SwitchX, top + BlockH - SwitchH, w, SwitchH);
         }
 
         public override void Restyle()
@@ -298,6 +303,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             Squelch.Restyle();
             VolumeUp.Restyle(); VolumeDown.Restyle(); SquelchUp.Restyle(); SquelchDown.Restyle();
             Mode.Restyle(); Bandwidth.Restyle(); Step.Restyle();
+            if (rule != null) rule.color = AvStyleHost.FuiBorder("section", AvTheme.Hairline);
         }
     }
 }

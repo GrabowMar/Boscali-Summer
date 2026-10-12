@@ -55,15 +55,24 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
     /// <summary>
     /// The scope's page selection over time: a higher-priority live page takes the scope at once, but the scope only falls back to a
-    /// lower one (or to SYSTEMS) after the current page has been out of the live set for <see cref="MinDwell"/>, so a contact that blinks
-    /// in and out (however long it has held the scope before) does not wipe the scope back and forth. Pure; the caller feeds the live
-    /// mask, the clock and whether SYSTEMS has something critical.
+    /// lower one (or to SYSTEMS) after the current page has been out of the live set for its <see cref="Linger"/> AND has been on the
+    /// scope for its <see cref="MinStay"/>, so a contact that blinks in and out (however long it has held the scope before) does not
+    /// wipe the scope back and forth. Pure; the caller feeds the live mask, the clock and whether SYSTEMS has something critical.
     /// </summary>
     internal sealed class ScopeSelector
     {
-        public const float MinDwell = 1.5f;
+        /// <summary>How long a page keeps the scope after it last had live content, unless the caller says otherwise.</summary>
+        public const float DefaultLinger = 1.5f;
 
-        private float lastLive = float.NegativeInfinity;
+        /// <summary>Per page (index = <see cref="ScopePage"/>): seconds the page keeps the scope after its last live tick, and the least seconds it stays once it has taken the scope.</summary>
+        public readonly float[] Linger = new float[CuePriority.PageCount], MinStay = new float[CuePriority.PageCount];
+
+        private float lastLive = float.NegativeInfinity, shownAt = float.NegativeInfinity;
+
+        public ScopeSelector()
+        {
+            for (int i = 0; i < Linger.Length; i++) Linger[i] = DefaultLinger;
+        }
 
         public ScopePage Page { get; private set; } = ScopePage.Systems;
 
@@ -73,27 +82,44 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>The live pages other than the current one, for the tab's pips.</summary>
         public ushort Others { get; private set; }
 
+        /// <summary>The least stay of every page but SYSTEMS (the page the scope falls back to never has to stay).</summary>
+        public void SetMinStay(float seconds)
+        {
+            for (int i = 0; i < MinStay.Length; i++) MinStay[i] = i == (int)ScopePage.Systems ? 0f : seconds;
+        }
+
         public ScopePage Update(ushort live, float now, bool systemsCritical = false)
         {
             if (CuePriority.Has(live, Page)) lastLive = now;
             ScopePage best = CuePriority.Best(live, systemsCritical);
             if (best != Page)
             {
-                // A different best is either a page that outranks the current one (take over now) or the current page has gone quiet (fall back after the dwell).
-                if (CuePriority.Outranks(best, Page, systemsCritical) || now - lastLive >= MinDwell)
+                // A different best is either a page that outranks the current one (take over now) or the current page has gone quiet (fall back once its linger and its minimum stay have passed).
+                if (CuePriority.Outranks(best, Page, systemsCritical) || (now - lastLive >= Linger[(int)Page] && now - shownAt >= MinStay[(int)Page]))
                 {
                     Page = best;
-                    lastLive = now;
+                    lastLive = shownAt = now;
                 }
             }
             Others = (ushort)(live & ~CuePriority.Bit(Page));
             return Page;
         }
 
+        /// <summary>
+        /// <see cref="Update"/> under the pilot's options: only the pages <paramref name="allow"/> lets show can be live (so a SYSTEMS whose switch is off is never critical either), a page
+        /// the pilot has just switched off does not hold the scope until its linger runs out, and the least stay is <paramref name="minStay"/>.
+        /// </summary>
+        public ScopePage Select(ushort live, in BoardEffective allow, float minStay, float now, bool systemsCritical)
+        {
+            if (Page != ScopePage.Systems && !CuePriority.Has(allow.Pages, Page)) Reset();
+            SetMinStay(minStay);
+            return Update((ushort)(live & allow.Pages), now, systemsCritical && CuePriority.Has(allow.Pages, ScopePage.Systems));
+        }
+
         public void Reset()
         {
             Page = ScopePage.Systems;
-            lastLive = float.NegativeInfinity;
+            lastLive = shownAt = float.NegativeInfinity;
             Others = 0;
         }
     }

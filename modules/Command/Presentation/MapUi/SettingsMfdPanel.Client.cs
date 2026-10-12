@@ -18,6 +18,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private void BuildDisplayPage(AvFlow flow, int page)
         {
+            BuildSchemeSection(flow, page);
             flow.Section(AvIcon.Typography, "DISPLAY & AUDIO", "GLASS · SURFACE · TINT · SOUND");
 
             AvCellGrid switches = flow.Grid(3);
@@ -38,6 +39,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 "Fine static screen texture over the display. 0% is off.", EffectsEnabled, EffectsDisabled);
             PercentRing(flow, finish, page, "EDGE SHADING", settings.DisplayVignette, 0f, 1f, .1f,
                 "Shades the display perimeter without a circular mask. 0% is off.", EffectsEnabled, EffectsDisabled);
+            PercentRing(flow, finish, page, "LIVE SIGNAL", settings.DisplayLife, 0f, 1f, .1f,
+                "The display powers on from a line, a slow refresh band rolls down it, and jamming breaks the picture up harder. 0% is a still display.",
+                EffectsEnabled, EffectsDisabled);
 
             string[] tints = { "NEUTRAL", "GREEN", "AMBER", "ICE", "ROSE" };
             string[] tintBriefs =
@@ -80,6 +84,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 settings.DisplayAutoLight.Value = true;
                 settings.DisplayScanlines.Value = 0f;
                 settings.DisplayVignette.Value = 0f;
+                settings.DisplayLife.Value = .6f;
                 settings.DisplayTint.Value = 0;
                 settings.DisplayTintStrength.Value = .25f;
                 Echo("Display filter reset.");
@@ -227,6 +232,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private void BuildCockpitPage(AvFlow flow, int page)
         {
+            BuildTacBoardRows(flow, page);
+            BuildVisorRows(flow, page);
             flow.Section(AvIcon.Camera, "COCKPIT", "TARGETING");
             AvCellGrid switches = flow.Grid(2);
             ToggleCell(flow, switches, page, "RADIAL PRESETS",

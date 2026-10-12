@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -13,19 +14,49 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private const string SelectionObjectName = "WingCommand_SelectionBadge";
         private const string StatusObjectName = "WingCommand_StatusLabel";
 
+        /// <summary>The badge children of one host, found once (only this class creates them).</summary>
+        private sealed class Slots
+        {
+            public WingMapRingGraphic Ring;
+            public Image Selection;
+            public TMP_Text Status;
+        }
+
+        private static readonly Dictionary<Image, Slots> slots = new Dictionary<Image, Slots>();
+        private static readonly List<Image> deadHosts = new List<Image>();
+
+        private static Slots SlotsOf(Image host)
+        {
+            if (slots.TryGetValue(host, out Slots known)) return known;
+            if (slots.Count > 512)
+            {
+                deadHosts.Clear();
+                foreach (Image h in slots.Keys)
+                    if (h == null) deadHosts.Add(h);
+                foreach (Image h in deadHosts) slots.Remove(h);
+            }
+            Transform ring = host.transform.Find(RingObjectName);
+            Transform selection = host.transform.Find(SelectionObjectName);
+            Transform status = host.transform.Find(StatusObjectName);
+            return slots[host] = new Slots
+            {
+                Ring = ring != null ? ring.GetComponent<WingMapRingGraphic>() : null,
+                Selection = selection != null ? selection.GetComponent<Image>() : null,
+                Status = status != null ? status.GetComponent<TMP_Text>() : null,
+            };
+        }
+
         public static void Apply(Image host, WingMapPresentation presentation, Color color, string status = null)
         {
             if (host == null) return;
-            Transform child = host.transform.Find(RingObjectName);
-            WingMapRingGraphic ring = child != null ? child.GetComponent<WingMapRingGraphic>() : null;
+            Slots known = SlotsOf(host);
+            WingMapRingGraphic ring = known.Ring;
             bool outlined = presentation.Outline != WingMapPresentation.OutlineKind.None;
             if (!outlined && !presentation.CommandBrackets)
             {
                 if (ring != null) ring.gameObject.SetActive(false);
-                Transform selection = host.transform.Find(SelectionObjectName);
-                if (selection != null) selection.gameObject.SetActive(false);
-                Transform oldStatus = host.transform.Find(StatusObjectName);
-                if (oldStatus != null) oldStatus.gameObject.SetActive(false);
+                if (known.Selection != null) known.Selection.gameObject.SetActive(false);
+                if (known.Status != null) known.Status.gameObject.SetActive(false);
                 return;
             }
 
@@ -48,6 +79,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     var go = new GameObject(RingObjectName, typeof(RectTransform), typeof(WingMapRingGraphic));
                     ring = go.GetComponent<WingMapRingGraphic>();
                     ring.rectTransform.SetParent(host.rectTransform, worldPositionStays: false);
+                    known.Ring = ring;
                 }
                 ring.gameObject.SetActive(true);
                 ring.raycastTarget = false;
@@ -67,8 +99,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private static void ApplyStatus(Image host, string text, Color color, WingMapBadgeGeometry geometry,
             Canvas canvas, Camera camera)
         {
-            Transform child = host.transform.Find(StatusObjectName);
-            TMP_Text label = child != null ? child.GetComponent<TMP_Text>() : null;
+            Slots known = SlotsOf(host);
+            TMP_Text label = known.Status;
             if (string.IsNullOrEmpty(text))
             {
                 if (label != null) label.gameObject.SetActive(false);
@@ -84,12 +116,16 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 label.fontStyle = FontStyles.Bold;
                 label.alignment = TextAlignmentOptions.Center;
                 label.raycastTarget = false;
+                known.Status = label;
             }
 
             label.gameObject.SetActive(true);
             AlignToScreen(label.rectTransform, canvas, camera);
-            label.rectTransform.anchoredPosition = new Vector2(0f, geometry.OuterRadiusPixels + 5f);
-            label.rectTransform.sizeDelta = new Vector2(120f, 18f);
+            // Offset in world space: anchoredPosition is in the icon's own space, which carries map zoom and heading.
+            // After AlignToScreen one local unit is one pixel, so lossyScale is world units per pixel.
+            RectTransform rt = label.rectTransform;
+            rt.position = host.rectTransform.position + rt.up * ((geometry.OuterRadiusPixels + 9f) * rt.lossyScale.y);
+            rt.sizeDelta = new Vector2(120f, 18f);
             if (label.color != color) label.color = color;
             if (!ReferenceEquals(label.text, text)) label.text = text;
         }
@@ -116,8 +152,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private static void ApplyCommandSelection(Image host, bool selected, Color color,
             WingMapBadgeGeometry geometry, Canvas canvas, Camera camera)
         {
-            Transform child = host.transform.Find(SelectionObjectName);
-            Image badge = child != null ? child.GetComponent<Image>() : null;
+            Slots known = SlotsOf(host);
+            Image badge = known.Selection;
             if (!selected)
             {
                 if (badge != null) badge.gameObject.SetActive(false);
@@ -131,6 +167,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 badge.rectTransform.SetParent(host.rectTransform, worldPositionStays: false);
                 badge.sprite = IconFactory.Get("selection");
                 badge.preserveAspect = true;
+                known.Selection = badge;
             }
 
             AlignToScreen(badge.rectTransform, canvas, camera);

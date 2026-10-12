@@ -271,7 +271,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             PlaceTape();
         }
 
-        private float TextX => Pad + 44f;
+        // The text starts at the pad when there is no airframe icon to stand beside.
+        private float TextX => icon.enabled ? Pad + 44f : Pad + 4f;
 
         private float ChainW(float width) => Mathf.Max(1f, width - TextX - Pad);
 

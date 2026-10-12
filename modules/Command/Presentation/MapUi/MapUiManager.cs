@@ -61,8 +61,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             MapMfdLookup.Reset();
             MfdRailPatch.Reset();
             MfdTerrainRelief.Reset();
-            MfdMapInteractions.Restore();
+            MfdMapInteractions.Reset();
             MfdNewsTicker.Reset();
+            MapUiPointer.ResetFloating();
             nextRefresh = 0f;
             screenCount = -1;
             mapWasMaximized = false;

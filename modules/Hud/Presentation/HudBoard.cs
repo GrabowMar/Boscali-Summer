@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Diagnostics;
+using BoscaliSummer.Modules.Hud.Configuration;
 using BoscaliSummer.Modules.Hud.Domain;
 using BoscaliSummer.Modules.Hud.Patches;
 using BoscaliSummer.Modules.Hud.Runtime;
@@ -13,8 +14,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     // Service and lifecycle only. Feed handles contain data; the panel owns a fixed widget pool
     // parented directly under the native weapons panel (see StatusPanel).
     // Native CameraStateManager runs at order 2 and owns camera-state entry/visibility.
-    // Since 2026-10-07 nothing is configurable: every feed shows, notices are on, the vanilla HUD
-    // is forced open in orbit/chase, Wingview and its look-ahead are on, the target card shows.
+    // The TAC BOARD's options (HudSettings, section "TacBoard", 2026-10-11) are read once per 10 Hz tick into `options`. The rest is not configurable (since 2026-10-07): the
+    // vanilla HUD is forced open in orbit/chase, Wingview and its look-ahead are on, the target card shows.
     // The C-menu can ride an own missile with the orbit camera (IMissileView). The board is the TAC BOARD (HUD v8, see StatusPanel):
     // this service reads the watchers at 10 Hz into the BoardFrame, serves Hud's own scope feeds (SYSTEMS, THREAT, SHOT, MISSILE CAM) and carries the board's motion.
     [DefaultExecutionOrder(1000)]
@@ -31,6 +32,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly WingviewCameraState wingview = new WingviewCameraState();
         private readonly ThirdPersonHudCenter hudCenterProjection = new ThirdPersonHudCenter();
         private readonly NativeFlightNumberHider flightNumberHider = new NativeFlightNumberHider();
+        private readonly VisorSwayDriver visorSway = new VisorSwayDriver();
         private readonly ThreatWatch threats = new ThreatWatch();
         private readonly CountermeasureWatch countermeasures = new CountermeasureWatch();
         private readonly FuelWatch fuelWatch = new FuelWatch();
@@ -56,10 +58,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private ThirdPersonHudCluster cluster;
         private float nextRead;
         private System.Func<int, bool> missileFlying;
+        private HudSettings settings;
+        /// <summary>The pilot's options as of the last 10 Hz tick (the defaults until the module configures the board); what later features of the board read.</summary>
+        private BoardOptions options = BoardOptions.Default;
 
-        // Target closure: range delta between 10 Hz reads of the same target.
-        private Unit closureTarget;
-        private float closureRange, closureTime;
+        // The selected target's range and closure (10 Hz reads of the same target): the third-person card's and the cockpit's NAV DATA block's.
+        private readonly TargetReadout targetReadout = new TargetReadout();
 
         private void Awake()
         {
@@ -68,6 +72,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             shotFeed = new ShotScopeFeed(shotBook, ShotFeed.Ledger);
             camFeed = new MissileCamScopeFeed(missileTracker, shotBook, ShotFeed.Ledger);
         }
+
+        /// <summary>Hand the board the pilot's options; the next 10 Hz tick takes the first snapshot.</summary>
+        public void Configure(HudSettings hudSettings) => settings = hudSettings;
 
         /// <summary>The live own-missile set (the sim probe in <c>HudAutomation</c> reads it).</summary>
         internal MissileTracker Tracker => missileTracker;
@@ -102,11 +109,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public void Notice(string channel, HudTone tone, string text, string detail = null) =>
             store.Notice(channel, tone, text, detail);
 
+        public bool TryGetScreenBox(out float left, out float top, out float right, out float bottom)
+        {
+            left = top = right = bottom = 0f;
+            return panel != null && panel.TryGetScreenBox(out left, out top, out right, out bottom);
+        }
+
         /// <summary>The board's 10 Hz readers, in order (the stores and threat feeds read the frame the watchers before them filled): the sites a reader that throws is reported under.</summary>
         private static readonly string[] ReadSites =
         {
             "Hud.Read.Missiles", "Hud.Read.Shots", "Hud.Read.Systems", "Hud.Read.Threats", "Hud.Read.Countermeasures", "Hud.Read.Fuel", "Hud.Read.Damage",
-            "Hud.Read.SystemsFeed", "Hud.Read.Stores", "Hud.Read.CombatFeeds",
+            "Hud.Read.SystemsFeed", "Hud.Read.Stores", "Hud.Read.Nav", "Hud.Read.CombatFeeds",
         };
 
         private void LateUpdate()
@@ -116,6 +129,20 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             catch (Exception e) { PatchGuard.Report("Hud.Tick", e); }
             // Every frame, whatever happened above (fail open): a board that is not up and fresh gives the native boxes it replaces back.
             panel?.TickNatives();
+            if (panel != null)
+            {
+                // The visor's lag (the option Sway): zero in a pause, the map and a cinematic, and while the board is off (its corners then stay still too). The driver itself answers only in the cockpit view.
+                visorSway.Tick(Time.unscaledDeltaTime, options.Sway && options.Enabled && BoscaliSummer.Core.Game.CockpitOverlayGate.NotSuppressed());
+                panel.ApplySway(visorSway.X, visorSway.Y);
+            }
+        }
+
+        /// <summary>The pilot's options as of this tick, handed to everything that reads them: the board, and the radar-warning watch (how long it keeps a contact after its last warning).</summary>
+        private void TakeOptions()
+        {
+            settings?.Snapshot(ref options);
+            if (panel != null) panel.Options = options;
+            threats.Hold = options.ThreatHoldSeconds;
         }
 
         private void Tick()
@@ -153,6 +180,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 return;
             }
             nextRead = clock + .1f;
+            TakeOptions();
 
             CombatHUD combat = SceneSingleton<CombatHUD>.i;
             Aircraft hudAircraft = combat != null ? combat.aircraft : null;
@@ -190,6 +218,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                         case 6: damageWatch.Read(hudAircraft, frame); break;
                         case 7: systemsFeed.Update(hudAircraft, frame, damageWatch.Rotary); break;
                         case 8: storesFeed.Update(hudAircraft, frame, combat); break;
+                        case 9: NavReader.Read(hudAircraft, frame, !viewingOwnExternally && !viewingMissile, targetReadout); break;      // after the fuel watch: HOME and FUEL come from it
                         default:
                             threatFeed.Update(hudAircraft, frame);
                             shotFeed.Update(hudAircraft);
@@ -201,6 +230,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // A board that cannot be presented must not take the third-person cluster below down with it (and TickNatives takes a board that stopped presenting off the screen).
             try { panel.Present(frame); }
             catch (Exception e) { PatchGuard.Report("Hud.Present", e); }
+            cluster.Board = panel.KeepClearBox;      // the third-person cluster keeps clear of the board's box
 
             // The cockpit already has its own native tac screen for this feed; the card only
             // earns its space in the external views this module can force the HUD into.
@@ -274,21 +304,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         /// <summary>Range to the first selected target and its closure rate (positive = closing).</summary>
-        private void ReadTarget(Aircraft aircraft, out float range, out float closure)
-        {
-            range = closure = float.NaN;
-            if (aircraft.weaponManager == null) return;
-            var targets = aircraft.weaponManager.GetTargetList();
-            if (targets == null || targets.Count == 0 || targets[0] == null) { closureTarget = null; return; }
-            Unit target = targets[0];
-            range = Vector3.Distance(aircraft.transform.position, target.transform.position);
-            float now = Time.unscaledTime;
-            if (ReferenceEquals(target, closureTarget) && now > closureTime + 0.05f)
-                closure = (closureRange - range) / (now - closureTime);
-            closureTarget = target;
-            closureRange = range;
-            closureTime = now;
-        }
+        private void ReadTarget(Aircraft aircraft, out float range, out float closure) => targetReadout.Read(aircraft, out _, out range, out closure);
 
         private static NOAvionics.AvUnits AvUnitsOf(int unitSystem) =>
             unitSystem == (int)NOAvionics.AvUnits.Imperial ? NOAvionics.AvUnits.Imperial : NOAvionics.AvUnits.Metric;
@@ -350,12 +366,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             missileTracker.Release();
             missileTracks.Clear();
             store.Reset();
+            visorSway.Reset();
             panel?.Destroy();
             panel = null;
             cluster?.Destroy();
             cluster = null;
             nextRead = 0;
-            closureTarget = null;
+            targetReadout.Release();
             bootAircraft = null;
             threats.Release();
             fuelWatch.Release();

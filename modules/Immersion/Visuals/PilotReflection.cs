@@ -21,7 +21,9 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private static readonly int EyeId = Shader.PropertyToID("_EyeWorld");
         private RenderTexture target;
         private CommandBuffer capture;
+        private static readonly int StrengthId = Shader.PropertyToID("_ReflectionStrength");
         private Material glass;
+        private float glassStrength = -1f;
         private CockpitPilotRig boundRig;
         private Vector3 localCenter;
         private Vector4 captureRect;
@@ -52,7 +54,8 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             int size = FxBus.EffectiveQuality == FxQuality.Low ? 128 : 256;
             if (target != null && target.width != size) DropTarget();
             if (!EnsureTarget(size)) return;
-            glass.SetFloat("_ReflectionStrength", .085f + (1f - Mathf.Clamp01(ambient)) * .025f);
+            float strength = .085f + (1f - Mathf.Clamp01(ambient)) * .025f;
+            if (strength != glassStrength) { glass.SetFloat(StrengthId, strength); glassStrength = strength; }
             Vector3 center = rig.Frame.TransformPoint(localCenter);
             Matrix4x4 planeToWorld = Matrix4x4.TRS(center, rig.Frame.rotation, Vector3.one);
             double now = Time.unscaledTimeAsDouble;
@@ -143,7 +146,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         {
             DropTarget();
             if (glass != null) Object.Destroy(glass);
-            glass = null;
+            glass = null; glassStrength = -1f;
             if (capture != null) capture.Release();
             capture = null; boundRig = null; draws = captures = 0; retryAt = 0f; properties.Clear();
             for (int i = 0; i < surfaces.Length; i++) surfaces[i] = default;

@@ -81,10 +81,7 @@ namespace BoscaliSummer.Tests.Features.Weather
 
             warnings.Clear();
             WeatherKey junk = WeatherKeyWire.ToKey(Fields(254, 200, 7), warnings.Add);
-            TestAssert.That(junk.Story == 255 && junk.SkyPin == 255 && junk.MissionClass == 255 && junk.OpeningState() ==
-                new WeatherKey(4242u, 0f, true).OpeningState(), "254, 200 and 7 are not table values and open like auto");
-            TestAssert.That(WeatherKeyWire.ToKey(Fields(255, 255, 255)).OpeningState() != WeatherRegimeType.Storm ||
-                new WeatherKey(4242u, 0f, true).OpeningState() == WeatherRegimeType.Storm, "an auto class is not turned into Storm");
+            TestAssert.That(junk.Story == 255 && junk.SkyPin == 255 && junk.MissionClass == 255, "254, 200 and 7 are not table values and fall back to auto");
         }
 
         private static void MasksAndRanges()
@@ -133,7 +130,7 @@ namespace BoscaliSummer.Tests.Features.Weather
         private static void TwoPeersAgree()
         {
             // The host key and the key a client builds from the message fields alone, with no local LevelInfo.
-            // Until the tape exists (slice 4) the shared pure function of the key is the timeline and the field.
+            // The shared pure function of the key is the tape and the field.
             var hostField = new WeatherField();
             var clientField = new WeatherField();
             for (uint seed = 1; seed <= 500; seed++)
@@ -144,18 +141,14 @@ namespace BoscaliSummer.Tests.Features.Weather
                             headingDeg: WeatherKey.SeededHeading(seed), systemSpeed: 31f, offset: 1234f);
                         WeatherKey client = WeatherKeyWire.ToKey(WeatherKeyWire.FromKey(host));
                         TestAssert.That(client.Equals(host) && client.TapeId == host.TapeId, "peers hold the same key and tape");
-                        foreach (float t in new[] { 100f, 401f, 3700f })
-                        {
-                            TimelineState a = WeatherTimeline.Evaluate(host, t), b = WeatherTimeline.Evaluate(client, t);
-                            TestAssert.That(a.From == b.From && a.To == b.To && a.Level == b.Level && a.Layout == b.Layout,
-                                "both peers derive the same timeline");
-                        }
+                        TestAssert.That(host.TapeId == client.TapeId && TapeGolden.Hash(WeatherTape.For(host)) == TapeGolden.Hash(WeatherTape.For(client)),
+                            "both peers derive the same tape");
                         if (seed % 25 == 0)
                         {
                             hostField.Build(host, 900f, 40960f, 40960f);
                             clientField.Build(client, 900f, 40960f, 40960f);
                             WeatherPoint p = hostField.Sample(1500f, -800f), q = clientField.Sample(1500f, -800f);
-                            TestAssert.That(p.Cover == q.Cover && p.RainRate == q.RainRate && p.WindX == q.WindX &&
+                            TestAssert.That(p.LowCover == q.LowCover && p.RainRate == q.RainRate && p.WindX == q.WindX &&
                                 hostField.PrevailingHeading == clientField.PrevailingHeading, "both peers derive the same sky and wind direction");
                         }
                     }

@@ -21,6 +21,8 @@ namespace NOAvionics
         public static Color Surface => AvStyleHost.FuiColor("surface", AvTheme.Surface);
         public static Color Ground => AvStyleHost.FuiColor("ground", AvTheme.Ground);
         public static Color Key => AvStyleHost.FuiColor("key", AvTheme.RailInfo);
+        /// <summary>The main effort: the operation's amber on the STR panel and map. A sheet without the role falls back to the caution hue.</summary>
+        public static Color Effort => AvStyleHost.FuiColor("effort", AvTheme.RailCaution);
 
         /// <summary>The hue of a state (rails, bars, glyphs); Inert is the opaque inert grey.</summary>
         public static Color State(AvState s)

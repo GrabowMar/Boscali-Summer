@@ -20,9 +20,57 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (MissionContractWindow.BlocksMap) return true;
             if (MfdPanelDock.ContainsScreenPoint(screenPoint)) return true;
             if (MfdLogPanel.ContainsScreenPoint(screenPoint)) return true;
+            if (OverFloating(screenPoint)) return true;
             if (MfdMapOrbitControls.Contains(screenPoint)) return true;
             if (MfdMapInteractions.ContainsMenu(screenPoint)) return true;
             return MfdRail.TryGetRail(out RectTransform rail) && Contains(rail, screenPoint);
+        }
+
+        // Floating map chrome (the STR card, the layer plate, the legend strip) registers its rect once, so wheel, drag and
+        // clicks over it stay off the map behind it. At most Capacity rects; a destroyed one is dropped on the way.
+        private const int Capacity = 8;
+        private static readonly RectTransform[] floating = new RectTransform[Capacity];
+        private static int floatingCount;
+
+        internal static void Register(RectTransform rect)
+        {
+            if (rect == null) return;
+            for (int i = 0; i < floatingCount; i++) if (ReferenceEquals(floating[i], rect)) return;
+            if (floatingCount < Capacity) floating[floatingCount++] = rect;
+        }
+
+        internal static void Unregister(RectTransform rect)
+        {
+            for (int i = 0; i < floatingCount; i++)
+            {
+                if (!ReferenceEquals(floating[i], rect)) continue;
+                RemoveAt(i);
+                return;
+            }
+        }
+
+        /// <summary>Scene reset: forget every registered rect.</summary>
+        internal static void ResetFloating()
+        {
+            for (int i = 0; i < floatingCount; i++) floating[i] = null;
+            floatingCount = 0;
+        }
+
+        private static bool OverFloating(Vector2 screenPoint)
+        {
+            for (int i = floatingCount - 1; i >= 0; i--)
+            {
+                RectTransform rect = floating[i];
+                if (rect == null) { RemoveAt(i); continue; }           // destroyed: Unity's null check
+                if (rect.gameObject.activeInHierarchy && Contains(rect, screenPoint)) return true;
+            }
+            return false;
+        }
+
+        private static void RemoveAt(int index)
+        {
+            floating[index] = floating[--floatingCount];
+            floating[floatingCount] = null;
         }
 
         public static bool Contains(RectTransform rect, Vector2 screenPoint)

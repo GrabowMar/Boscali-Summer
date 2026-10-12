@@ -23,6 +23,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public const string ReadyHex = "8ED9BE";
         public const string CautionHex = "F5BA56";
         public const string DangerHex = "F39A96";
+        /// <summary>The mission-clock stamp in front of each line: quieter than the report it dates.</summary>
+        public const string StampHex = "90A5AE";
 
         private static readonly string[] DangerWords =
         {

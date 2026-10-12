@@ -35,7 +35,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             w.Aircraft = a.definition != null ? MenuText.Upper(a.definition.unitName) : "SELF";
             if (w.Aircraft.Length == 0) w.Aircraft = "SELF";
             w.Airborne = a.radarAlt >= AirborneRadarAlt;
-            w.Fuel = BoscaliSummer.Core.Game.AircraftReadout.Fuel(a);
             w.Gear = GearOf(a);
         }
 

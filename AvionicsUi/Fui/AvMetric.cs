@@ -10,7 +10,8 @@ namespace NOAvionics
         private readonly TMP_Text key, value, unit, symbol;
         private readonly AvGaugeGraphic gauge;
         private AvState state = AvState.Ready;
-        private string shownValue, shownUnit;
+        private string shownValue, shownUnit, unitIn;
+        private AvState unitState;
 
         public AvMetric(RectTransform parent, string keyText, AvGaugeShape shape = AvGaugeShape.Bar)
         {
@@ -89,8 +90,12 @@ namespace NOAvionics
         {
             bool text = false;
             if (v != shownValue) { shownValue = v; value.text = v ?? ""; text = true; }
-            string uu = AvStates.Glyph(st) + (u ?? "");
-            if (uu != shownUnit) { shownUnit = uu; unit.text = uu; text = true; }
+            if (u != unitIn || st != unitState || shownUnit == null)
+            {
+                unitIn = u; unitState = st;
+                string uu = AvStates.Glyph(st) + (u ?? "");
+                if (uu != shownUnit) { shownUnit = uu; unit.text = uu; text = true; }
+            }
             if (text && placed) Place(lastSlot);   // the key/unit/value split depends on the text widths
             gauge.Value = fill01;
             if (st != state) { state = st; Restyle(); }

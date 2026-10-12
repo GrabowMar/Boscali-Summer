@@ -328,10 +328,17 @@ namespace BoscaliSummer.Core.Game
             return true;
         }
 
+        private static int serverFrame = -1;
+        private static bool serverActive;
+
         public static bool IsServer()
         {
-            try { return NetworkManagerOrNull?.Server?.Active == true; }
-            catch { return false; }
+            int frame = Time.frameCount;
+            if (serverFrame == frame) return serverActive;
+            serverFrame = frame;
+            try { serverActive = NetworkManagerOrNull?.Server?.Active == true; }
+            catch { serverActive = false; }
+            return serverActive;
         }
 
         // The native singleton getter logs an error until MainMenu finishes its async preload.

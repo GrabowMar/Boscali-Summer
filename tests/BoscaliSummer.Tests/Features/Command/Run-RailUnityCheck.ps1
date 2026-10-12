@@ -16,7 +16,9 @@ Get-ChildItem -LiteralPath "$repo/AvionicsUi" -Filter '*.cs' -Recurse | Where-Ob
 Copy-Item -LiteralPath "$repo/modules/Command/Presentation/MapUi/MfdLayout.cs", "$repo/modules/Command/Presentation/MapUi/MfdRail.cs", "$repo/modules/Command/Presentation/MapUi/MfdRailCatalog.cs", "$repo/modules/Command/Presentation/MapUi/MfdChromeLay.cs", "$repo/modules/Command/Presentation/MapUi/MfdGlyph.cs", "$repo/modules/Command/Presentation/MapUi/MfdScreenFinish.cs", "$PSScriptRoot/SettingsUnityStubs.cs", "$PSScriptRoot/RailUnityCheck.cs", $UnityCheckHarness -Destination "$PreviewDirectory/Assets/"
 Copy-GameDlls "$PreviewDirectory/Assets/" -BepInExMatch '^(BepInEx|Mono|0Harmony)'
 Copy-Item -LiteralPath "$repo/AvionicsUi/Assets/avionics-ui.bundle" -Destination "$PreviewDirectory/avionics-ui.bundle"
-Copy-AvionicsStyles $PreviewDirectory $AtlasStyles -NoDefaults
+# The icon face ships in its own bundle; without it the render shows the older glyphs and none of the newer ones.
+Copy-Item -LiteralPath "$repo/AvionicsUi/Assets/avionics-icons.bundle" -Destination "$PreviewDirectory/avionics-icons.bundle"
+Copy-AvionicsStyles $PreviewDirectory $AtlasStyles
 $process = Invoke-UnityCheck $Unity $PreviewDirectory 'RailUnityCheck.Run' -Flags '-batchmode'
 Write-Output "Results and renders: $PreviewDirectory"
 Show-UnityCheckResult $PreviewDirectory

@@ -27,6 +27,7 @@ namespace BoscaliSummer.Fire
             internal GlobalPosition Position;
             internal Vector2 Footprint;
             internal readonly Transform[] Sections = new Transform[6];
+            internal readonly MeshRenderer[] SectionRenderers = new MeshRenderer[6];
             internal readonly Vector3[] Start = new Vector3[6], Rest = new Vector3[6], SpinAxis = new Vector3[6];
             internal readonly Quaternion[] Rotation = new Quaternion[6];
             internal readonly float[] Flight = new float[6], Spin = new float[6];
@@ -60,7 +61,8 @@ namespace BoscaliSummer.Fire
                     var section = new GameObject("FracturedSection");
                     section.transform.SetParent(pile.Root.transform, false);
                     section.AddComponent<MeshFilter>().sharedMesh = meshes[i];
-                    section.AddComponent<MeshRenderer>().sharedMaterial = material;
+                    pile.SectionRenderers[i] = section.AddComponent<MeshRenderer>();
+                    pile.SectionRenderers[i].sharedMaterial = material;
                     pile.Sections[i] = section.transform;
                 }
                 piles.Add(pile);
@@ -222,11 +224,12 @@ namespace BoscaliSummer.Fire
             {
                 float distance = Vector3.Distance(cameraPosition, pile.Root.transform.position);
                 bool show = distance < 1600f;
-                pile.Root.SetActive(show);
+                if (pile.Root.activeSelf != show) pile.Root.SetActive(show);
                 if (pile.Trim != null)
-                    foreach (Renderer renderer in pile.Trim) if (renderer != null) renderer.enabled = pile == nearest;
-                foreach (Transform section in pile.Sections)
-                    section.GetComponent<MeshRenderer>().shadowCastingMode = distance < 900f ? ShadowCastingMode.On : ShadowCastingMode.Off;
+                    foreach (Renderer renderer in pile.Trim) if (renderer != null && renderer.enabled != (pile == nearest)) renderer.enabled = pile == nearest;
+                ShadowCastingMode shadows = distance < 900f ? ShadowCastingMode.On : ShadowCastingMode.Off;
+                foreach (MeshRenderer renderer in pile.SectionRenderers)
+                    if (renderer.shadowCastingMode != shadows) renderer.shadowCastingMode = shadows;
             }
         }
 

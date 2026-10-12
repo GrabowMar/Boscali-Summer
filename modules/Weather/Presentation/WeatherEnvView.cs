@@ -33,6 +33,10 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
         public WeatherRegimeType Regime;
         public string Code = "", Name = "", Briefing = "";
+        /// <summary>The tape's story and the role of the segment over the aircraft, and the next front ahead as "COLD FRONT 62 KM W" (spec 8.4); empty without a tape.</summary>
+        public string Story = "", Role = "", NextMarker = "";
+        /// <summary>The tape does not move: the outlook says HELD instead of drawing a forecast. AtPosition: the aircraft is slow enough for a forecast at its position to mean something.</summary>
+        public bool ForecastHeld, AtPosition;
         /// <summary>The METAR-style line derived from the layers at the camera (WeatherMetar); empty when unknown.</summary>
         public string Metar = "";
         public float Cover, Deck, Top, VisibilityKm = -1f, Rain, Turbulence;
@@ -70,6 +74,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
         // WEATHER
         private EnvStateRow stateRow;
+        private AvRow briefRow;
         private EnvConditionCard card;
         private AvGauge visGauge, rainGauge, turbGauge, nextGauge;
         private AvHazardBar stormBar;
@@ -102,6 +107,14 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             Console.Tabs((AvIcon.Cloud, "WEATHER"), (AvIcon.Wind, "SKY & AIR"));
             BuildWeatherPage(Console.Page(PageWeather));
             BuildSkyPage(Console.Page(PageSky));
+            Console.Orders(PageWeather,
+                "Read the flight category first: IFR and LIFR are instrument weather.",
+                "The layer chart sets cloud base and top against your own height.",
+                "The forecast strip and the cover trend read left to right, now to one hour out.");
+            Console.Orders(PageSky,
+                "Check sun and moon before a night sortie; moonlight decides what you can see.",
+                "The wind dial gives where it blows from and to; crab into it on final.",
+                "Air thins with height: expect less lift and less thrust the higher you fly.");
         }
 
         public void Finish() => Console.Finish();
@@ -122,6 +135,8 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         {
             const int pg = PageWeather;
             stateRow = Track(pg, p.Add(new EnvStateRow(p.Content)));
+            briefRow = Track(pg, p.Add(new AvRow(p.Content)));
+            briefRow.Help = "STORY: the weather system the tape is playing and the part of it over you. The line under it is the next front ahead: its distance across the line and the side it comes from.";
             card = Track(pg, p.Add(new EnvConditionCard(p.Content)));
             card.SetHelp("SKY: the sky code and word for the current weather state, how much of the sky the cloud covers, and the flight category from visibility and ceiling (VFR good, MVFR marginal, IFR poor, LIFR very poor).");
             visGauge = new AvGauge(p.Content, "VIS KM");
@@ -131,7 +146,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             rainGauge.Help = "RAIN: current rain intensity, as a percentage of the heaviest rain.";
             turbGauge.Help = "TURB: air turbulence, 0 to 0.8. Higher means a rougher ride.";
             nextGauge = new AvGauge(p.Content, "NEXT");
-            nextGauge.Help = "NEXT: time to the next weather step. The ladder fills as the current state runs out; the sky then holds or moves one state along. HELD means the host or the mission froze it.";
+            nextGauge.Help = "NEXT: distance to the next front ahead, with the ladder full at 150 km. HELD means the tape is not moving, so nothing is coming.";
             p.Row(Track(pg, visGauge), Track(pg, rainGauge), Track(pg, turbGauge), Track(pg, nextGauge));
             viewAirRow = Track(pg, p.Add(new AvRow(p.Content)));
             viewAirRow.Help = "VIEW AIR: conditions at the current camera. Cloud density follows visible cloud bodies, including clear gaps. Rain is falling precipitation; cloud moisture can wet the glass without rain. Temperature is the local weather estimate at altitude.";
@@ -248,6 +263,10 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             if (d.VisibilityKm >= 0f && d.VisibilityKm < 5f) lit |= EnvStateRow.Mist;
             stateRow.Set(lit, RegimeState(d.Regime));
             stateRow.SetHelp(d.Briefing);
+            briefRow.SetShown(d.Story.Length > 0);
+            if (d.Story.Length > 0)
+                briefRow.Set("STORY / " + d.Story.ToUpperInvariant() + (d.Role.Length > 0 ? " · " + d.Role.ToUpperInvariant() : ""),
+                    d.NextMarker, d.ForecastHeld ? "HELD" : "MOVING", d.ForecastHeld ? AvState.Inert : AvState.Info);
 
             card.Set(new EnvSky
             {
@@ -298,6 +317,11 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 Base = d.Deck, Top = d.Top, CameraAlt = d.CameraAlt, HasCamera = d.HasCamera, State = statusState, Status = status,
             });
 
+            forecastMissing.Set(d.ForecastHeld ? "OUTLOOK HELD" : "OUTLOOK UNAVAILABLE",
+                d.ForecastHeld ? "The tape is held: no forecast until it moves." : "Waiting for mission weather data.", "", AvState.Inert);
+            outlook.SetHelp(d.AtPosition
+                ? "NEXT 60 MIN, AT POSITION: the sky over where you are now, at +5, +10, +15, +30 and +60 minutes. The bar under each icon is the chance of rain; amber or red marks rain or a storm."
+                : "NEXT 60 MIN: the sky over where you are now, at +5 to +60 minutes. You are moving fast, so you will not be here then. The bar is the chance of rain.");
             bool hasForecast = rows != null && rows.Length > 0;
             outlook.SetShown(hasForecast);
             coverEq.SetShown(hasForecast);

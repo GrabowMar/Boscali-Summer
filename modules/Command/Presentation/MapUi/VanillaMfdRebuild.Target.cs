@@ -19,9 +19,19 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private readonly List<Unit> selectedUnits = new List<Unit>();
             private readonly List<TargetPresetSnapshot> catalog = new List<TargetPresetSnapshot>();
 
-            private AvEqualizer rangeProfile;
-            private readonly float[] rangeBins = new float[20];
+            // Range gates: contacts per band, the same steps the range filter cycles through.
+            private static readonly float[] BandFloorKm = { 0f, 10f, 25f, 50f, 100f };
+            private static readonly string[] BandNames = { "0-10 KM", "10-25 KM", "25-50 KM", "50-100 KM", "OVER 100 KM" };
+            private AvHazardBar[] rangeBands;
+            private AvSection rangeSection;
+            private AvNote rangeNote;
+            private AvRow focusRow;
+            private GateBoard filterGate, presetGate;
+            private AvSection gateSection;
+            private int gateStamp = int.MinValue;
+            private string presetGateKey = "";
             private AvEqualizer trackedProfile;
+            private AvNote trackedNote;
             private readonly float[] trackedBars = new float[16];
             private AvEqualizer cameraLife;
             private readonly float[] cameraLifeBars = new float[12];
@@ -39,8 +49,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private AvControl airPreference;
             private AvControl rangePreference;
             private AvControl designateCandidate;
-            private AvSlab focusSlab;
-            private AvHazardBar focusRange;
             private AvControl nextCandidate;
             private AvControl incomingCandidate;
             private AvSection contactsSection;
@@ -75,14 +83,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private EditMode editorMode = EditMode.None;
 
             private const int PresetVisible = 12;
-            private const int SelectedVisible = 8;
+            private const int SelectedVisible = 10;
 
             // Camera surface mark: state lives in Support through a narrow contract.
             private ICameraTargetService cameraService;
             private AvSlab cameraSlab;
+            private AvFlow cameraPage;
             private AvGauge[] cameraRings;
             private AvHazardBar cameraAge;
-            private readonly AvRow[] cameraRows = new AvRow[2];
+            // Mark chain, in flow order: [2] camera view, [0] grid, [1] armed call-in, [3] delivery.
+            private readonly AvRow[] cameraRows = new AvRow[4];
             private AvControl cameraCapture;
             private AvControl cameraCall;
             private AvControl cameraClear;
@@ -108,8 +118,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
             }
 
-            protected override string Title => "TARGETING";
+            protected override string Title => PageTitles[0];
             protected override (AvIcon Icon, string Label)[] TabItems => Pages;
+
+            private static readonly string[] PageTitles =
+            {
+                "TARGETING / ENGAGEMENT FILTERS", "TARGETING / TRACK ACQUISITION", "TARGETING / FILTER PROFILES",
+                "TARGETING / TRACK FILE", "TARGETING / SENSOR MARK",
+            };
 
             protected override string[] TabTips { get; } = new[]
             {
@@ -129,10 +145,38 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 BuildPresetsPage(CreatePage());
                 BuildSelectedPage(CreatePage());
                 BuildCameraPage(CreatePage());
+
+                // A page that ends above the footer prints these on its bay cover, most important first.
+                Console.Orders(0,
+                    "Left-click a tile to open or close it; right-click keeps only that one.",
+                    "A contact reaches the list only when its side, class and platform are all open.",
+                    "HUD LINK lets the HUD mode set the filters; unlinking resets them to ALL.",
+                    "RESET returns every gate to the ALL profile.");
+                Console.Orders(1,
+                    "Preview a contact to light it on the map; DESIGNATE adds it to the target list.",
+                    "Contacts are listed nearest first, from positions your side actually knows.",
+                    "FIT ON keeps only contacts the selected weapon can engage right now.",
+                    "The range button cycles the reach through ALL, 10, 25, 50 and 100 km.");
+                Console.Orders(2,
+                    "Left-click a profile to apply it; right-click assigns it to a quick slot.",
+                    "Quick slots answer to their keys and to the radial wheel.",
+                    "UPDATE overwrites the selected saved profile with the gates as they stand.",
+                    "Built-in profiles are fixed. Save your own with SAVE AS.");
+                Console.Orders(3,
+                    "Left-click a group to recall it; right-click stores the tracked contacts in it.",
+                    "Right-click a tracked contact to drop it from the file.",
+                    "A group keeps up to 32 contacts and forgets any that are destroyed.",
+                    "CLEAR on the FILTERS page drops every tracked contact at once.");
+                Console.Orders(4,
+                    "MARK records the surface point under the targeting camera cross-hair.",
+                    "A mark lapses 120 seconds after it is taken. MARK again to refresh it.",
+                    "Arm an operation on OPS / SUPPORT, then CALL AT MARK to deliver it.",
+                    "CALL AT MARK stays dark until a mark is held and an operation is armed.");
             }
 
             protected override void OnPageChanged(int index)
             {
+                Console.SetTitle(PageTitles[Mathf.Clamp(index, 0, PageTitles.Length - 1)]);
                 CancelDeleteConfirm();
                 CloseEditor();
                 RequestRefresh();
@@ -146,6 +190,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 {
                     SetFilterInput(false);
                     foreach (AvGauge ring in filterMetrics) ring.Set(0f, "—", AvState.Inert);
+                    filterGate.Wait();
+                    presetGate.Wait();
+                    gateStamp = int.MinValue;
+                    presetGateKey = "";
+                    gateSection.SetCaption("FILTERS OFFLINE");
                     return;
                 }
 
@@ -186,9 +235,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 RefreshAcquire();
                 RefreshQuickSlots();
                 RefreshLibrary();
+                RefreshGate(tracked);
+                RefreshPresetGate();
 
-                presetReadout.Set(selector.toggleFollowHUD.status ? "HUD LINK" : activePreset,
-                    "ACTIVE PROFILE", DescribeSelected());
+                bool onProfile = !selector.toggleFollowHUD.status && selectedPreset == activePreset;
+                presetReadout.Set(selector.toggleFollowHUD.status ? "HUD LINK" : selectedPreset,
+                    selector.toggleFollowHUD.status ? "FILTERS FOLLOW THE HUD"
+                    : onProfile ? "ACTIVE PROFILE" : "SELECTED · NOT ACTIVE", DescribeSelected());
             }
 
             protected override string AmbientStatus()
@@ -198,6 +251,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (page == 1) return "PICK · DESIGNATE";
                 if (page == 2) return "L APPLY · R QUICK SLOT";
                 if (page == 3) return "L RECALL · R STORE / DROP";
+                if (page == 4) return "MARK · CALL AT MARK";
                 return "L TOGGLE · R SOLO";
             }
 
@@ -263,25 +317,161 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 followHud.Help = "HUD link: the target list tracks whatever the HUD is following, so the two never disagree.";
                 laser.Help = "Laser only: the target list keeps only targets that are being lased.";
 
-                page.Section(AvIcon.Shield, "FACTION", "R-CLICK: ONLY THIS");
+                page.Section(AvIcon.Shield, "FACTION GATE", "R-CLICK: ONLY THIS");
                 factionGrid = AddGrid(page, new MfdPagingGrid(page.Content, 2, 1, pager: false, rowHeight: 56f, tile: true));
                 factionGrid.SetGlyphs(i => FilterGlyph(selector == null ? null : selector.toggleFactionItems, i,
                     i == 0 ? "FRIENDLY" : i == 1 ? "ENEMY" : ""));
                 AddRightClickActions(factionGrid, 2, OnlyFaction);
 
-                page.Section(AvIcon.LayersSubtract, "CLASS", "R-CLICK: ONLY THIS");
+                page.Section(AvIcon.LayersSubtract, "CLASS GATE", "R-CLICK: ONLY THIS");
                 unitGrid = AddGrid(page, new MfdPagingGrid(page.Content, 3, 2, pager: false, rowHeight: 56f, tile: true));
                 unitGrid.SetGlyphs(i => FilterGlyph(selector == null ? null : selector.toggleUnitTypesItems, i,
                     i >= 0 && i < UnitFallback.Length ? UnitFallback[i] : ""));
                 AddRightClickActions(unitGrid, 6, OnlyUnitType);
 
-                page.Section(AvIcon.Stack2, "PLATFORM", "R-CLICK: ONLY THIS");
+                page.Section(AvIcon.Stack2, "PLATFORM GATE", "R-CLICK: ONLY THIS");
                 vehicleGrid = AddGrid(page, new MfdPagingGrid(page.Content, 5, 2, pager: false, rowHeight: 56f, tile: true));
                 vehicleGrid.SetGlyphs(i => VehicleGlyph(
                     selector != null && selector.toggleVehicleTypesItems != null && i >= 0 && i < selector.toggleVehicleTypesItems.Count
                         ? NativeTargetLabel(selector.toggleVehicleTypesItems[i]) : "", i));
                 AddRightClickActions(vehicleGrid, 10, OnlyVehicleType);
 
+                gateSection = page.Section(AvIcon.Eye, "TRACK FILE GATE", "LIST EMPTY");
+                filterGate = new GateBoard(page);
+            }
+
+            // ----------------------------------------------------- gate summary
+
+            /// <summary>Four list rows that put a set of target gates into words: sides, classes, platforms and
+            /// the two overrides. The FILTERS page reads the live toggles into one, the PRESETS page a saved profile.</summary>
+            private sealed class GateBoard
+            {
+                private static readonly string[] Names = { "SIDES", "CLASSES", "PLATFORMS", "LINKS" };
+                private readonly AvRow[] rows = new AvRow[4];
+
+                public GateBoard(AvFlow page)
+                {
+                    for (int i = 0; i < rows.Length; i++) rows[i] = page.Add(new AvRow(page.Content));
+                    Wait();
+                }
+
+                public void Wait()
+                {
+                    for (int i = 0; i < rows.Length; i++) rows[i].Set(Names[i], "Waiting for the target filters.", "—", AvState.Inert);
+                }
+
+                public void Set(string sides, int sideOpen, int sideTotal, string classes, int classOpen, int classTotal,
+                    string platforms, int platformOpen, int platformTotal, string linkName, string links, string linkValue,
+                    AvState linkState)
+                {
+                    rows[0].Set(Names[0], sides, Fraction(sideOpen, sideTotal), State(sideOpen, sideTotal));
+                    rows[1].Set(Names[1], classes, Fraction(classOpen, classTotal), State(classOpen, classTotal));
+                    rows[2].Set(Names[2], platforms, Fraction(platformOpen, platformTotal), State(platformOpen, platformTotal));
+                    rows[3].Set(linkName, links, linkValue, linkState);
+                }
+
+                private static string Fraction(int open, int total) => AvNum.Fixed(open, 0) + "/" + AvNum.Fixed(total, 0);
+
+                private static AvState State(int open, int total) =>
+                    total == 0 ? AvState.Inert : open == total ? AvState.Ready : open == 0 ? AvState.Caution : AvState.Info;
+            }
+
+            /// <summary>
+            /// A gate list in words, shortest form first: the open names when few are open, "ALL BUT" the closed ones
+            /// when most are. <paramref name="allOpen"/> replaces the list when nothing is closed.
+            /// </summary>
+            private static string GateWords(List<TargetListSelector_ToggleButton> entries, bool[] on, out int open, string allOpen = null)
+            {
+                int total = entries == null ? 0 : entries.Count;
+                open = 0;
+                for (int i = 0; i < total; i++) if (on[i]) open++;
+                if (total == 0) return "—";
+                if (open == total && allOpen != null) return allOpen;
+                if (open == 0) return "NONE OPEN";
+                bool listOpen = open * 2 <= total;
+                var text = new System.Text.StringBuilder(listOpen ? "" : "ALL BUT ");
+                bool first = true;
+                for (int i = 0; i < total; i++)
+                {
+                    if (on[i] != listOpen) continue;
+                    if (!first) text.Append(" · ");
+                    text.Append(NativeTargetLabel(entries[i]));
+                    first = false;
+                }
+                return text.ToString();
+            }
+
+            private static string LaserWords(bool laser) =>
+                laser ? "LASER ONLY ON — UNLASED CONTACTS STAY OFF THE LIST" : "LASER ONLY OFF — LASED OR NOT";
+
+            private void RefreshGate(int tracked)
+            {
+                gateSection.SetCaption(tracked > 0 ? tracked + " ON LIST" : "LIST EMPTY");
+                if (gateStamp == activeStamp) return;   // the stamp covers every toggle, the laser and the HUD link
+                gateStamp = activeStamp;
+                FillLive(filterGate);
+            }
+
+            /// <summary>The filters as they stand right now.</summary>
+            private void FillLive(GateBoard board)
+            {
+                bool[] sides = Opened(selector.toggleFactionItems), classes = Opened(selector.toggleUnitTypesItems),
+                    platforms = Opened(selector.toggleVehicleTypesItems);
+                int sideOpen, classOpen, platformOpen;
+                string sideWords = GateWords(selector.toggleFactionItems, sides, out sideOpen);
+                string classWords = GateWords(selector.toggleUnitTypesItems, classes, out classOpen, "EVERY CLASS");
+                string platformWords = GateWords(selector.toggleVehicleTypesItems, platforms, out platformOpen, "EVERY VEHICLE TYPE");
+                bool hud = selector.toggleFollowHUD.status, laserOnly = selector.toggleLaser.status;
+                board.Set(WithConsequence(sideWords, sideOpen, "LIST STAYS EMPTY"), sideOpen, sides.Length,
+                    WithConsequence(classWords, classOpen, "LIST STAYS EMPTY"), classOpen, classes.Length,
+                    WithConsequence(platformWords, platformOpen, "NO VEHICLES LISTED"), platformOpen, platforms.Length,
+                    "LINKS", (hud ? "HUD LINK ON — THE HUD MODE SETS THE GATES" : "HUD LINK OFF") + "  ·  " + LaserWords(laserOnly),
+                    hud ? "LINKED" : laserOnly ? "LASED" : "FREE", hud || laserOnly ? AvState.Caution : AvState.Inert);
+            }
+
+            private static string WithConsequence(string words, int open, string consequence) =>
+                open == 0 && words != "—" ? words + " — " + consequence : words;
+
+            private static bool[] Opened(List<TargetListSelector_ToggleButton> entries)
+            {
+                var on = new bool[entries == null ? 0 : entries.Count];
+                for (int i = 0; i < on.Length; i++) on[i] = entries[i] != null && entries[i].status;
+                return on;
+            }
+
+            /// <summary>The same four lines for the profile selected in the library, read from its stored gates.</summary>
+            private void FillPreset(GateBoard board, TargetPresetSnapshot preset)
+            {
+                TargetPresetState state = TargetPresetRuntime.CaptureState(selector);
+                var sides = new bool[selector.toggleFactionItems.Count];
+                for (int i = 0; i < sides.Length; i++)
+                    sides[i] = selector.toggleFactionItems[i] != null &&
+                               TargetPresetRules.FactionExpected(preset, selector.toggleFactionItems[i].sameFaction);
+                var classes = new bool[state.ClassTokens.Length];
+                for (int i = 0; i < classes.Length; i++) classes[i] = TargetPresetRules.Includes(state.ClassTokens[i], preset.Classes);
+                var platforms = new bool[state.VehicleTokens.Length];
+                for (int i = 0; i < platforms.Length; i++) platforms[i] = TargetPresetRules.Includes(state.VehicleTokens[i], preset.Vehicles);
+                int sideOpen, classOpen, platformOpen;
+                string sideWords = GateWords(selector.toggleFactionItems, sides, out sideOpen);
+                string classWords = GateWords(selector.toggleUnitTypesItems, classes, out classOpen, "EVERY CLASS");
+                string platformWords = GateWords(selector.toggleVehicleTypesItems, platforms, out platformOpen, "EVERY VEHICLE TYPE");
+                board.Set(WithConsequence(sideWords, sideOpen, "LIST STAYS EMPTY"), sideOpen, sides.Length,
+                    WithConsequence(classWords, classOpen, "LIST STAYS EMPTY"), classOpen, classes.Length,
+                    WithConsequence(platformWords, platformOpen, "NO VEHICLES LISTED"), platformOpen, platforms.Length,
+                    "LASER", LaserWords(preset.Laser), preset.Laser ? "LASED" : "ANY", preset.Laser ? AvState.Caution : AvState.Inert);
+            }
+
+            private void RefreshPresetGate()
+            {
+                if (Console.CurrentPage != 2) return;
+                int index = TargetPresetRuntime.IndexOfCatalogName(selectedPreset);
+                TargetPresetSnapshot preset = index >= 0 && index < catalog.Count ? catalog[index] : null;
+                // A hand-set profile has no stored form: it is read from the live gates, so it follows their stamp.
+                string key = selectedPreset + "|" + catalogVersion + "|" + catalogStamp + "|" + (preset == null ? activeStamp : 0);
+                if (key == presetGateKey) return;
+                presetGateKey = key;
+                if (preset == null) FillLive(presetGate);
+                else FillPreset(presetGate, preset);
             }
 
             private static readonly string[] UnitFallback =
@@ -308,6 +498,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 public Unit Unit;
                 public float DistanceKm;
+                public int BearingDeg;
+                public string Side;
             }
 
             private void BuildAcquirePage(AvFlow page)
@@ -326,13 +518,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 airPreference.Help = "Air only: list aircraft only. Press again to show every class the filters allow.";
                 rangePreference.Help = "Range: cycle the maximum distance through all, 10, 25, 50 and 100 km.";
 
-                contactsSection = page.Section(AvIcon.Eye, "NEAREST", "0 KNOWN");
-                focusSlab = new AvSlab(page.Content, "NO CONTACT", AvState.Inert);
-                focusRange = new AvHazardBar(page.Content, "RANGE");
-                focusRange.Set(0f, "—", AvState.Inert);
-                focusRange.Help = "Range to the previewed contact, full at your aircraft and empty at the range limit. Known position only.";
-                page.Row(focusSlab, focusRange);
-                candidateGrid = AddGrid(page, new MfdPagingGrid(page.Content, 1, 7, rowHeight: 40f));
+                contactsSection = page.Section(AvIcon.Eye, "KNOWN CONTACTS", "0 MATCH");
+                focusRow = page.Add(new AvRow(page.Content));
+                focusRow.Set("NO TRACK IN FOCUS", "Pick a contact below to preview it on the map.", "—", AvState.Inert);
+                focusRow.Help = "Focus track: the contact previewed on the map, with its side, class, bearing and range from your aircraft. Known position only.";
+                candidateGrid = AddGrid(page, new MfdPagingGrid(page.Content, 1, 8, rowHeight: 40f));
                 candidateGrid.SetEmptyMessage("NO CONTACTS");
                 AvButtons candidateRow = page.Buttons(
                     new AvControl.Spec("NEXT", NextCandidate, AvButtonStyle.Default, AvIcon.ChevronRight, true),
@@ -345,29 +535,38 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 incomingCandidate.Help = "Incoming: highlight the nearest tracked missile aimed at your aircraft. It does not select it.";
                 designateCandidate.Help = "Designate: add the previewed contact to the native target list.";
 
-                rangeProfile = new AvEqualizer(page.Content, "RANGE PROFILE", 36f);
-                rangeProfile.Set(rangeBins, "—", AvState.Inert);
-                rangeProfile.Help = "Range profile: known contacts per distance band from your aircraft out to the range limit, nearest on the left. " +
-                                    "Tall bars are where the contacts are.";
-                page.Add(rangeProfile, 1f);
+                rangeSection = page.Section(AvIcon.Ruler2, "RANGE GATES", "NONE HELD");
+                rangeNote = page.Add(new AvNote(page.Content, "NO CONTACTS HELD. The gates draw once a contact is known."));
+                rangeBands = new AvHazardBar[BandNames.Length];
+                for (int i = 0; i < rangeBands.Length; i++)
+                {
+                    rangeBands[i] = new AvHazardBar(page.Content, BandNames[i]);
+                    rangeBands[i].Set(0f, "—", AvState.Inert);
+                    rangeBands[i].Help = "Range gate " + BandNames[i].ToLowerInvariant() +
+                                         ": contacts on the list above that lie in this distance band from your aircraft, scaled to the busiest band.";
+                    page.Add(rangeBands[i]).SetShown(false);
+                }
             }
 
-            /// <summary>Histogram of the listed contacts by distance (nearest left), out to the range limit.</summary>
-            private void RefreshRangeProfile(int limitKm)
+            /// <summary>Contacts per range gate. With none held the five bars collapse to a one-line note.</summary>
+            private void SetRangeBands(int[] counts, int limitKm, bool flying)
             {
-                for (int i = 0; i < rangeBins.Length; i++) rangeBins[i] = 0f;
-                float span = limitKm > 0 ? limitKm : 100f;
-                float peak = 0f;
-                for (int i = 0; i < candidates.Count; i++)
+                int total = 0, peak = 0;
+                for (int i = 0; i < counts.Length; i++) { total += counts[i]; peak = Mathf.Max(peak, counts[i]); }
+                rangeSection.SetCaption(total > 0 ? total + " BY BAND" : "NONE HELD");
+                rangeNote.Set(flying ? "NO CONTACTS HELD. The gates draw once a contact is known."
+                                     : "NO AIRCRAFT. The gates measure from your own position.");
+                rangeNote.SetShown(total == 0);
+                for (int i = 0; i < rangeBands.Length; i++)
                 {
-                    int bin = Mathf.Clamp((int)(candidates[i].DistanceKm / span * rangeBins.Length), 0, rangeBins.Length - 1);
-                    rangeBins[bin] += 1f;
-                    peak = Mathf.Max(peak, rangeBins[bin]);
+                    rangeBands[i].SetShown(total > 0);
+                    bool beyond = limitKm > 0 && BandFloorKm[i] >= limitKm;   // the range filter already excludes this band
+                    rangeBands[i].Set(peak > 0 ? counts[i] / (float)peak : 0f, beyond ? "BEYOND LIMIT" : AvNum.Fixed(counts[i], 0),
+                        beyond || counts[i] == 0 ? AvState.Inert : AvState.Info);
                 }
-                if (peak > 0f) for (int i = 0; i < rangeBins.Length; i++) rangeBins[i] /= peak;
-                rangeProfile.Set(rangeBins, candidates.Count == 0 ? "—" : candidates.Count + " · 0-" + AvNum.Fixed(span, 0) + " KM",
-                    candidates.Count > 0 ? AvState.Info : AvState.Inert);
             }
+
+            private readonly int[] bandCounts = new int[BandNames.Length];
             private void ToggleAcquirePreference(int which)
             {
                 var settings = TargetPresetRuntime.Settings;
@@ -416,36 +615,60 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     i => candidates[i].Unit == candidateFocus,
                     PreviewCandidate,
                     icons: i => candidates[i].Unit.definition == null ? null : candidates[i].Unit.definition.mapIcon,
-                    subs: i => AvNum.Fixed(candidates[i].DistanceKm, 1) + " KM");
-                RefreshFocus(settings.TargetRangeKm.Value);
-                RefreshRangeProfile(settings.TargetRangeKm.Value);
-                if (contactsSection != null) contactsSection.SetCaption(flying ? candidates.Count + " MATCH" : "NO AIRCRAFT");
+                    subs: i => AvNum.Fixed(candidates[i].DistanceKm, 1) + " KM · BRG " +
+                               candidates[i].BearingDeg.ToString("000") + " · " + candidates[i].Side);
+                RefreshFocus(flying);
+                for (int i = 0; i < bandCounts.Length; i++) bandCounts[i] = 0;
+                for (int i = 0; i < candidates.Count; i++)
+                {
+                    int band = 0;
+                    while (band + 1 < BandFloorKm.Length && candidates[i].DistanceKm >= BandFloorKm[band + 1]) band++;
+                    bandCounts[band]++;
+                }
+                SetRangeBands(bandCounts, settings.TargetRangeKm.Value, flying);
+                if (contactsSection != null) contactsSection.SetCaption(flying ? candidates.Count + " MATCH · NEAREST FIRST" : "NO AIRCRAFT");
                 nextCandidate.Interactable = candidates.Count > 0;
                 designateCandidate.Interactable = candidateFocus != null && candidates.Exists(c => c.Unit == candidateFocus);
             }
 
-            /// <summary>IFF slab and range bar for the previewed contact (known position only).</summary>
-            private void RefreshFocus(int rangeLimitKm)
+            /// <summary>The previewed contact as one track line: callsign, side, class, bearing and range (known position only).</summary>
+            private void RefreshFocus(bool flying)
             {
                 int index = candidates.FindIndex(c => c.Unit == candidateFocus);
                 if (index < 0)
                 {
-                    focusSlab.Set("NO CONTACT", AvState.Inert);
-                    focusRange.Set(0f, "—", AvState.Inert);
+                    focusRow.Set("NO TRACK IN FOCUS", flying ? "Pick a contact below to preview it on the map."
+                        : "No aircraft: there is nothing to measure from.", "—", AvState.Inert);
                     return;
                 }
-                string word;
+                TargetCandidate c = candidates[index];
                 AvState state;
-                switch (DynamicMap.GetFactionMode(candidates[index].Unit.NetworkHQ, true))
+                SideWord(c.Unit, out state);
+                focusRow.Set(TargetUnitLabel(c.Unit), c.Side + " · " + ClassWord(c.Unit) + " · BRG " + c.BearingDeg.ToString("000"),
+                    AvNum.Fixed(c.DistanceKm, 1) + " KM", state);
+            }
+
+            private static string SideWord(Unit unit, out AvState state)
+            {
+                switch (DynamicMap.GetFactionMode(unit.NetworkHQ, true))
                 {
-                    case FactionMode.Friendly: word = "FRIENDLY"; state = AvState.Info; break;
-                    case FactionMode.Enemy: word = "HOSTILE"; state = AvState.Danger; break;
-                    default: word = "UNKNOWN"; state = AvState.Caution; break;
+                    case FactionMode.Friendly: state = AvState.Info; return "FRIENDLY";
+                    case FactionMode.Enemy: state = AvState.Danger; return "HOSTILE";
+                    default: state = AvState.Caution; return "UNKNOWN";
                 }
-                focusSlab.Set(word, state);
-                float km = candidates[index].DistanceKm;
-                float span = rangeLimitKm > 0 ? rangeLimitKm : 100f;
-                focusRange.Set(Mathf.Clamp01(1f - km / span), AvNum.Fixed(km, 1) + " KM", AvState.Info);
+            }
+
+            private static string ClassWord(Unit unit)
+            {
+                switch (unit.definition == null ? "" : unit.definition.GetType().Name)
+                {
+                    case "AircraftDefinition": return "AIRCRAFT";
+                    case "MissileDefinition": return "MISSILE";
+                    case "VehicleDefinition": return "VEHICLE";
+                    case "BuildingDefinition": return "STRUCTURE";
+                    case "ShipDefinition": return "SHIP";
+                    default: return "UNIT";
+                }
             }
 
             private void ScanCandidates()
@@ -467,7 +690,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     if (settings.TargetAirOnly.Value && !(unit is Aircraft)) continue;
                     GlobalPosition known;
                     if (!map.HQ.TryGetKnownPosition(unit, out known)) continue;
-                    float distance = FastMath.Distance(hud.aircraft.GlobalPosition(), known) / 1000f;
+                    GlobalPosition own = hud.aircraft.GlobalPosition();
+                    float distance = FastMath.Distance(own, known) / 1000f;
                     if (float.IsNaN(distance) || float.IsInfinity(distance) ||
                         (settings.TargetRangeKm.Value > 0 && distance > settings.TargetRangeKm.Value)) continue;
                     if (settings.TargetWeaponOnly.Value &&
@@ -476,7 +700,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     int insert = candidates.FindIndex(c => c.DistanceKm > distance);
                     if (insert < 0) insert = candidates.Count;
                     if (insert >= 128) continue;
-                    candidates.Insert(insert, new TargetCandidate { Unit = unit, DistanceKm = distance });
+                    Vector3 offset = known - own;
+                    AvState side;
+                    candidates.Insert(insert, new TargetCandidate
+                    {
+                        Unit = unit,
+                        DistanceKm = distance,
+                        BearingDeg = ((Mathf.RoundToInt(Mathf.Atan2(offset.x, offset.z) * Mathf.Rad2Deg) % 360) + 360) % 360,
+                        Side = SideWord(unit, out side),
+                    });
                     if (candidates.Count > 128) candidates.RemoveAt(128);
                 }
                 if (candidateFocus != null && !candidates.Exists(c => c.Unit == candidateFocus)) candidateFocus = null;
@@ -557,8 +789,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 presetGrid = AddGrid(page, new MfdPagingGrid(page.Content, 2, 6, rowHeight: 40f));
                 AddPresetActions();
 
-                presetReadout = page.Add(new AvReadout(page.Content));
-
                 AvButtons presetActions = page.Buttons(
                     new AvControl.Spec("SAVE AS", BeginSaveAs, AvButtonStyle.Primary, AvIcon.Plus),
                     new AvControl.Spec("UPDATE", UpdateSelected, AvButtonStyle.Toggle, AvIcon.Refresh),
@@ -571,6 +801,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 saveAs.Help = "Save as: store the current filters as a new named preset. Names are A-Z, 0-9, up to 14 characters.";
 
                 editorPart = page.Add(new PresetEditor(page, CommitEdit, CancelEdit));
+
+                // The selected profile, in words: what UPDATE, RENAME and DELETE would act on.
+                page.Section(AvIcon.Bookmark, "PROFILE CARD", "SELECTED PROFILE");
+                presetReadout = page.Add(new AvReadout(page.Content));
+                presetGate = new GateBoard(page);
             }
             private string SavedNote() =>
                 TargetPresetRuntime.Library.Count + " / " + TargetPresetLibrary.MaxCustomPresets + " SAVED";
@@ -1006,7 +1241,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private string DescribeSelected()
             {
                 int index = TargetPresetRuntime.IndexOfCatalogName(selectedPreset);
-                if (index < 0) return "—";
+                if (index < 0) return selectedPreset == TargetPresetLibrary.CustomProfile
+                    ? "Hand-set filters. SAVE AS keeps them as a profile." : "—";
                 if (index < TargetPresetRuntime.BuiltInCount)
                     return "Built-in. " + MfdTargetPresets.Descriptions[index];
                 TargetPresetSnapshot preset = TargetPresetRuntime.Library.At(
@@ -1018,21 +1254,23 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             private void BuildSelectedPage(AvFlow page)
             {
-                selectedSection = page.Section(AvIcon.Target, "SELECTED TARGETS", "0 TRACKED");
+                selectedSection = page.Section(AvIcon.Target, "TRACK FILE", "NONE HELD");
 
                 groupGrid = AddGrid(page, new MfdPagingGrid(page.Content, 3, 1, pager: false, rowHeight: 56f, tile: true));
                 groupGrid.SetGlyphs(i => AvIcon.UsersGroup);
                 AddGroupActions();
 
                 selectedGrid = AddGrid(page, new MfdPagingGrid(page.Content, 1, SelectedVisible, readOnly: true, rowHeight: 44f));
-                selectedGrid.SetEmptyMessage("NO TARGETS");
+                selectedGrid.SetEmptyMessage("NO TARGETS HELD");
                 AddRightClickActions(selectedGrid, SelectedVisible, DeselectSelected);
 
+                // An empty chart is one line of text until a tracked target has a position to plot.
+                trackedNote = page.Add(new AvNote(page.Content, "NO RANGE PROFILE. It draws once a tracked target has a known position."));
                 trackedProfile = new AvEqualizer(page.Content, "RANGE PROFILE", 36f);
                 trackedProfile.Set(trackedBars, "—", AvState.Inert);
                 trackedProfile.Help = "Range profile: one bar per tracked target in list order, tall for far and short for near, scaled to the farthest. " +
                                       "Right-click a target in the list to drop it.";
-                page.Add(trackedProfile, 1f);
+                page.Add(trackedProfile).SetShown(false);
             }
 
             /// <summary>Distance of each tracked target from the player, as bars scaled to the farthest.</summary>
@@ -1041,29 +1279,52 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 for (int i = 0; i < trackedBars.Length; i++) trackedBars[i] = 0f;
                 DynamicMap map = SceneSingleton<DynamicMap>.i;
                 CombatHUD hud = SceneSingleton<CombatHUD>.i;
-                if (map == null || map.HQ == null || hud == null || hud.aircraft == null || selectedUnits.Count == 0)
+                float far = 0f, near = float.MaxValue;
+                int known = 0;
+                if (map != null && map.HQ != null && hud != null && hud.aircraft != null)
                 {
+                    for (int i = 0; i < selectedUnits.Count && i < trackedBars.Length; i++)
+                    {
+                        GlobalPosition at;
+                        if (selectedUnits[i] == null || !map.HQ.TryGetKnownPosition(selectedUnits[i], out at)) continue;
+                        float km = FastMath.Distance(hud.aircraft.GlobalPosition(), at) / 1000f;
+                        if (float.IsNaN(km) || float.IsInfinity(km)) continue;
+                        trackedBars[i] = km;
+                        far = Mathf.Max(far, km);
+                        near = Mathf.Min(near, km);
+                        known++;
+                    }
+                }
+                trackedProfile.SetShown(known > 0);
+                trackedNote.SetShown(known == 0);
+                if (known == 0)
+                {
+                    trackedNote.Set(selectedUnits.Count == 0
+                        ? "NO TARGETS TRACKED. The range profile draws once one is."
+                        : "NO KNOWN POSITION. The range profile needs a position your side holds.");
                     trackedProfile.Set(trackedBars, "—", AvState.Inert);
                     return;
                 }
-                float far = 0f, near = float.MaxValue;
-                int known = 0;
-                for (int i = 0; i < selectedUnits.Count && i < trackedBars.Length; i++)
-                {
-                    GlobalPosition at;
-                    if (selectedUnits[i] == null || !map.HQ.TryGetKnownPosition(selectedUnits[i], out at)) continue;
-                    float km = FastMath.Distance(hud.aircraft.GlobalPosition(), at) / 1000f;
-                    if (float.IsNaN(km) || float.IsInfinity(km)) continue;
-                    trackedBars[i] = km;
-                    far = Mathf.Max(far, km);
-                    near = Mathf.Min(near, km);
-                    known++;
-                }
-                if (known == 0) { trackedProfile.Set(trackedBars, "—", AvState.Inert); return; }
                 for (int i = 0; i < trackedBars.Length; i++)
                     if (trackedBars[i] > 0f) trackedBars[i] = Mathf.Max(0.08f, trackedBars[i] / Mathf.Max(0.01f, far));
                 trackedProfile.Set(trackedBars, "NEAREST " + AvNum.Fixed(near, 1) + " KM", AvState.Info);
             }
+
+            /// <summary>One line under a tracked target: class, side and range from the player (known position only).</summary>
+            private static string TrackSub(Unit unit)
+            {
+                if (unit == null) return "";
+                AvState state;
+                string head = ClassWord(unit) + " · " + SideWord(unit, out state);
+                DynamicMap map = SceneSingleton<DynamicMap>.i;
+                CombatHUD hud = SceneSingleton<CombatHUD>.i;
+                GlobalPosition at;
+                if (map == null || map.HQ == null || hud == null || hud.aircraft == null ||
+                    !map.HQ.TryGetKnownPosition(unit, out at)) return head + " · POSITION UNKNOWN";
+                float km = FastMath.Distance(hud.aircraft.GlobalPosition(), at) / 1000f;
+                return float.IsNaN(km) || float.IsInfinity(km) ? head + " · POSITION UNKNOWN" : head + " · " + AvNum.Fixed(km, 1) + " KM";
+            }
+
             private void DeselectSelected(int index)
             {
                 if (index < 0 || index >= selectedUnits.Count) return;
@@ -1115,6 +1376,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             private void BuildCameraPage(AvFlow page)
             {
+                cameraPage = page;
                 cameraSlab = new AvSlab(page.Content, "NO MARK", AvState.Inert);
                 cameraAge = new AvHazardBar(page.Content, "MARK AGE");
                 cameraAge.Help = "Mark age: the mark expires 120 seconds after it was taken. The bar empties as it ages.";
@@ -1131,24 +1393,46 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 {
                     new AvGauge(page.Content, "RANGE KM"),
                     new AvGauge(page.Content, "ELEV M"),
+                    new AvGauge(page.Content, "BRG DEG"),
                 };
                 cameraRings[0].Help = "Range: distance from your aircraft to the mark, full ring at 20 km.";
                 cameraRings[1].Help = "Elevation: height of the marked surface point above sea level, full ring at 3000 m.";
+                cameraRings[2].Help = "Bearing: true bearing from your aircraft to the mark, one full turn around the ring.";
                 page.Row(cameraRings);
-                for (int i = 0; i < cameraRows.Length; i++) cameraRows[i] = page.Add(new AvRow(page.Content));
+
+                // The chain from camera to delivery, one link per row, in the order the pilot works through it.
+                page.Section(AvIcon.Camera, "MARK CHAIN", "CAMERA TO DELIVERY");
+                string[] links = { "GRID (X / Z)", "ARMED CALL-IN", "CAMERA VIEW", "DELIVERY" };
+                int[] order = { 2, 0, 1, 3 };
+                foreach (int slot in order)
+                {
+                    cameraRows[slot] = page.Add(new AvRow(page.Content));
+                    cameraRows[slot].Set(links[slot], "Waiting for the camera service.", "—", AvState.Inert);
+                }
 
                 cameraLife = new AvEqualizer(page.Content, "MARK LIFE", 36f);
                 cameraLife.Set(cameraLifeBars, "—", AvState.Inert);
                 cameraLife.Help = "Mark life: twelve steps of ten seconds. Each lit step is time the mark has left before it expires.";
-                page.Add(cameraLife, 1f);
+                page.Add(cameraLife).SetShown(false);   // nothing to count down until a mark is held
             }
+
+            /// <summary>A slab is placed to its text width; a new word needs a new placement, which the flow only gives on a height change.</summary>
+            private void SetCameraSlab(string word, AvState state)
+            {
+                cameraSlab.Set(word, state);
+                if (word != cameraSlabWord) cameraPage.RequestRelayout();
+                cameraSlabWord = word;
+            }
+
+            private string cameraSlabWord;
+
             private void RefreshCamera()
             {
                 if (cameraSlab == null) return;
                 ICameraTargetService service = Camera;
                 if (service == null || !service.Available)
                 {
-                    cameraSlab.Set("OFFLINE", AvState.Inert);
+                    SetCameraSlab("OFFLINE", AvState.Inert);
                     if (cameraCapture != null) cameraCapture.Interactable = false;
                     if (cameraCall != null) cameraCall.Interactable = false;
                     if (cameraClear != null) cameraClear.Interactable = false;
@@ -1157,26 +1441,49 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     if (cameraCapture != null) cameraCapture.Help = cameraOffline;
                     if (cameraCall != null) cameraCall.Help = cameraOffline;
                     if (cameraClear != null) cameraClear.Help = cameraOffline;
-                    SetCameraTelemetry("—", "—", false, 0f, 0f, 0f);
+                    SetCameraTelemetry("—", "", false, 0f, 0f, 0f, -1);
+                    cameraRows[2].Set("CAMERA VIEW", "Marking is offline: the support module or its observation source is not installed.",
+                        "OFFLINE", AvState.Inert);
+                    cameraRows[3].Set("DELIVERY", "Needs the camera marking service.", "OFFLINE", AvState.Inert);
                     return;
                 }
 
                 bool marked = service.HasMark;
-                bool armed = !string.IsNullOrEmpty(service.ArmedActionName);
+                string armedName = service.ArmedActionName;
+                bool armed = !string.IsNullOrEmpty(armedName);
                 if (marked)
                 {
                     ObservationPoint point = service.Mark;
-                    cameraSlab.Set((point.Source ?? "SENSOR").ToUpperInvariant() + " MARK", AvState.Ready);
+                    SetCameraSlab((point.Source ?? "SENSOR").ToUpperInvariant() + " MARK", AvState.Ready);
+                    int bearing = -1;
+                    CombatHUD hud = SceneSingleton<CombatHUD>.i;
+                    if (hud != null && hud.aircraft != null && !hud.aircraft.disabled)
+                    {
+                        GlobalPosition own = hud.aircraft.GlobalPosition();
+                        float turn = Mathf.Atan2(point.X - own.x, point.Z - own.z) * Mathf.Rad2Deg;
+                        if (!float.IsNaN(turn) && !float.IsInfinity(turn)) bearing = ((Mathf.RoundToInt(turn) % 360) + 360) % 360;
+                    }
                     SetCameraTelemetry(
                         "X " + AvNum.Fixed(point.X, 0) + " · Z " + AvNum.Fixed(point.Z, 0),
-                        armed ? service.ArmedActionName : "NONE",
-                        true, Mathf.Max(0f, point.Range / 1000f), point.Y, Mathf.Max(0f, service.AgeSeconds));
+                        armedName, true, Mathf.Max(0f, point.Range / 1000f), point.Y, Mathf.Max(0f, service.AgeSeconds), bearing);
                 }
                 else
                 {
-                    cameraSlab.Set("NO MARK", AvState.Inert);
-                    SetCameraTelemetry("—", armed ? service.ArmedActionName : "NONE", false, 0f, 0f, 0f);
+                    SetCameraSlab("NO MARK", AvState.Inert);
+                    SetCameraTelemetry("", armedName, false, 0f, 0f, 0f, -1);
                 }
+
+                bool view = service.CanCapture;
+                cameraRows[2].Set("CAMERA VIEW",
+                    view ? "Targeting camera is live. MARK records the point under its cross-hair."
+                         : "No live camera view on your aircraft. MARK needs one.",
+                    view ? "LIVE" : "NO VIEW", view ? AvState.Ready : AvState.Inert);
+                bool deliver = service.CanCallAtMark;
+                cameraRows[3].Set("DELIVERY",
+                    deliver ? "CALL AT MARK sends the armed operation onto the mark."
+                        : !marked ? "Needs a mark first." : !armed ? "Needs an armed call-in. Arm one on OPS / SUPPORT."
+                        : "Not available right now.",
+                    deliver ? "READY" : "WAIT", deliver ? AvState.Ready : AvState.Inert);
 
                 if (cameraCapture != null) cameraCapture.Interactable = service.CanCapture;
                 if (cameraCall != null)
@@ -1196,15 +1503,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (cameraClear != null) cameraClear.Help = marked ? "Clear the active mark." : "No mark to clear.";
             }
 
-            /// <summary>Range and elevation ride rings, the 120 s expiry a hazard bar; grid and armed call-in stay
-            /// as rows so a long action name can wrap.</summary>
+            /// <summary>Range, elevation and bearing ride rings, the 120 s expiry a hazard bar; grid and armed call-in
+            /// stay as rows so a long action name can wrap. <paramref name="armed"/> is empty when nothing is armed,
+            /// <paramref name="bearing"/> negative when it could not be established.</summary>
             private void SetCameraTelemetry(string position, string armed, bool marked, float rangeKm,
-                float elevationM, float ageSeconds)
+                float elevationM, float ageSeconds, int bearing)
             {
                 cameraRings[0].Set(marked ? Mathf.Clamp01(rangeKm / 20f) : 0f,
                     marked ? AvNum.Fixed(rangeKm, 1) : "\u2014", marked ? AvState.Info : AvState.Inert);
                 cameraRings[1].Set(marked ? Mathf.Clamp01(elevationM / 3000f) : 0f,
                     marked ? AvNum.Fixed(elevationM, 0) : "\u2014", marked ? AvState.Info : AvState.Inert);
+                cameraRings[2].Set(marked && bearing >= 0 ? bearing / 360f : 0f,
+                    marked && bearing >= 0 ? bearing.ToString("000") : "\u2014", marked && bearing >= 0 ? AvState.Info : AvState.Inert);
                 cameraAge.Set(marked ? Mathf.Clamp01(1f - ageSeconds / 120f) : 0f,
                     marked ? AvNum.Fixed(ageSeconds, 0) + " S" : "—",
                     !marked ? AvState.Inert : ageSeconds > 90f ? AvState.Caution : AvState.Info);
@@ -1212,8 +1522,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     cameraLifeBars[i] = marked ? ((120f - ageSeconds) > i * 10f ? 1f : 0.12f) : 0.12f;
                 cameraLife.Set(cameraLifeBars, marked ? AvNum.Fixed(Mathf.Max(0f, 120f - ageSeconds), 0) + " S LEFT" : "—",
                     !marked ? AvState.Inert : ageSeconds > 90f ? AvState.Caution : AvState.Info);
-                cameraRows[0]?.Set("GRID", position, "", marked ? AvState.Info : AvState.Inert);
-                cameraRows[1]?.Set("ARMED", armed, "", armed.StartsWith("NONE") ? AvState.Inert : AvState.Caution);
+                cameraLife.SetShown(marked);
+                cameraRows[0]?.Set("GRID (X / Z)", marked ? position : "No point recorded.", marked ? "HELD" : "NONE",
+                    marked ? AvState.Info : AvState.Inert);
+                bool isArmed = !string.IsNullOrEmpty(armed);
+                cameraRows[1]?.Set("ARMED CALL-IN", isArmed ? armed : "None armed. Arm one on OPS / SUPPORT.",
+                    isArmed ? "ARMED" : "NONE", isArmed ? AvState.Caution : AvState.Inert);
             }
 
             // ------------------------------------------------------------ plumbing
@@ -1316,10 +1630,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     }
                 }
 
+                bool onPage = Console.CurrentPage == 3;   // the sub-lines only matter while this page shows
                 selectedGrid.SetData(selectedUnits.Count,
                     i => TargetUnitLabel(selectedUnits[i]), i => false, null,
-                    icons: i => selectedUnits[i].definition == null ? null : selectedUnits[i].definition.mapIcon);
-                if (selectedSection != null) selectedSection.SetCaption(selectedUnits.Count + " TRACKED");
+                    icons: i => selectedUnits[i].definition == null ? null : selectedUnits[i].definition.mapIcon,
+                    subs: onPage ? (Func<int, string>)(i => TrackSub(selectedUnits[i])) : null);
+                if (selectedSection != null)
+                    selectedSection.SetCaption(selectedUnits.Count > 0 ? selectedUnits.Count + " HELD" : "NONE HELD");
                 RefreshTrackedProfile();
                 for (int i = 0; i < targetGroups.Length; i++)
                     targetGroups[i].RemoveAll(unit => unit == null || unit.disabled);

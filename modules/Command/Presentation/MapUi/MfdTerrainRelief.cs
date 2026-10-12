@@ -41,14 +41,22 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private const float VerticalScale = 3.6f;
         private const float MaximumAirLift = 120f;
         private const float RenderInterval = 0.2f;
-        private const float MovingRenderInterval = 1f / 30f;
+        // A moving view redraws with the display (capped at 60 Hz): at 30 Hz a pan stepped under the cursor.
+        // A frame already slower than SlowFrame keeps the old 30 Hz, so the map never digs the hole deeper.
+        private const float MovingRenderInterval = 1f / 60f;
+        private const float SlowMovingRenderInterval = 1f / 30f;
+        private const float SlowFrame = .022f;
         private const int MaximumStems = 64;
         private const int MaximumClusters = 64;
-        private const int MaximumClusteredIcons = 2048;
+        private const int MaximumClusteredIcons = ReliefClusters.Capacity;
         private const int MinimumStack = 3;
+        /// <summary>Stack cell edge on screen, before it snaps to a power of two in metres.</summary>
+        private const float StackPixels = 40f;
         private const float CameraRadius = 1122f;
         private const float SeaSurfaceLift = .012f;
         private const float SeaSurfaceAlpha = .30f;
+        private const float LandFieldGain = 2f;
+        private const float LandFieldAlpha = .55f;
 
         private static DynamicMap owner;
         private static MapSettings source;
@@ -147,12 +155,20 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             internal bool Hovered;
         }
         private sealed class CountMark { internal RectTransform Root; internal TMP_Text Text; }
-        private static readonly Dictionary<(int, int, int), int> clusterIndex =
-            new Dictionary<(int, int, int), int>();
+        private static readonly ReliefClusters stackPlan = new ReliefClusters();
+        private static readonly List<Image> stackImages = new List<Image>(256);
+        private static readonly Dictionary<int, int> stackIndex = new Dictionary<int, int>();
         private static readonly List<ClusterMark> clusters = new List<ClusterMark>(MaximumClusters);
         private static readonly List<CountMark> counts = new List<CountMark>(MaximumClusters);
-        private static readonly HashSet<Image> hiddenIcons = new HashSet<Image>();
+        // Swapped on every regroup, so only the icons whose state really changed are toggled.
+        private static HashSet<Image> hiddenIcons = new HashSet<Image>();
+        private static HashSet<Image> nextHidden = new HashSet<Image>();
+        /// <summary>This frame's selection as a set: the native list is scanned once, not once per projected icon.</summary>
         private static readonly HashSet<MapIcon> selectedForClusters = new HashSet<MapIcon>();
+        private static int selectedSeen = -1;
+        // The displayed pose as matrices, for the bulk reprojection: an orthographic view is one affine map.
+        private static Matrix4x4 modelToUi, modelToImage, modelToParent;
+        private static Transform fastParent;
         private sealed class MarkerLabels
         {
             internal TMP_Text[] Text;
@@ -212,6 +228,33 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         internal static int ViewRevision => viewRevision;
         internal static int HoveredStackCount => hoveredStackCount;
         internal static bool ClusterHidden(Image image) => image != null && hiddenIcons.Contains(image);
+
+        private static TerrainHeightField heightField;
+
+        /// <summary>
+        /// The baked elevation as a plain sampler for the visor terrain ghost. It loads the heightfield on first use, once,
+        /// whether or not the map was ever opened, and shares it with the relief; false while the map is not up yet, and for good
+        /// when this map has no matching baked terrain.
+        /// </summary>
+        internal static bool TryGetHeightField(out TerrainHeightField field)
+        {
+            field = null;
+            if (!ready && !unavailable)
+            {
+                DynamicMap map = SceneSingleton<DynamicMap>.i;
+                Image image = map != null && map.mapImage != null ? MapImageComponent(map.mapImage) : null;
+                if (image == null || image.sprite == null) return false;
+                if (owner != null && (owner != map || sprite != image.sprite)) Reset();
+                owner = map;
+                sprite = image.sprite;
+                if (!LoadHeightfield()) return false;
+            }
+            if (!ready) return false;
+            if (heightField == null)
+                heightField = new TerrainHeightField(heights, dryLand, Samples, source.MapSize.x / (Samples - 1), 0f);
+            field = heightField;
+            return true;
+        }
 
         /// <summary>Instant turn and tilt about the view centre; buttons ease through the navigator.</summary>
         internal static void Rotate(float yawDelta, float pitchDelta)
@@ -352,6 +395,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Mathf.Clamp01(Plugin.Settings.Command.MapTerrainOpacity.Value));
             if (view.transform.GetSiblingIndex() != 0) view.transform.SetAsFirstSibling();
 
+            selectedForClusters.Clear();
+            for (int i = 0; i < map.selectedIcons.Count && i < MaximumClusteredIcons; i++)
+                if (map.selectedIcons[i] != null) selectedForClusters.Add(map.selectedIcons[i]);
+            bool selectionChanged = map.selectedIcons.Count != selectedSeen;
+            selectedSeen = map.selectedIcons.Count;
+
             bool cameraMoved = UpdateViewportCamera(map);
             HideNativeGrid();
             CaptureFieldLayers();
@@ -367,7 +416,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     Unavailable("Render pipeline cannot render the terrain; using the native map.");
                     return;
                 }
-                nextRender = Time.unscaledTime + (cameraMoved ? MovingRenderInterval : RenderInterval);
+                nextRender = Time.unscaledTime + (!cameraMoved ? RenderInterval
+                    : Time.unscaledDeltaTime > SlowFrame ? SlowMovingRenderInterval : MovingRenderInterval);
                 if (cameraMoved) viewRevision++;
                 lastCameraPosition = camera.transform.localPosition;
                 lastCameraRotation = camera.transform.localRotation;
@@ -389,7 +439,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // every existing faction-known glyph once when switching to the relief view.
             if (opening && map.mapIcons != null)
                 foreach (MapIcon icon in map.mapIcons) ProjectIcon(icon, map.mapDisplayFactor);
-            if (renderNow || hierarchyMoved || Time.unscaledTime >= nextIconRefresh)
+            if (renderNow || hierarchyMoved || selectionChanged || Time.unscaledTime >= nextIconRefresh)
             {
                 ReprojectCachedIcons();
                 ReprojectCachedMarkers();
@@ -602,9 +652,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 groundMaterial.SetFloat("_Cull", 0f);
                 groundMaterial.renderQueue = 2000;
             }
-            controlMaterial = new Material(shader) { color = Color.white.WithAlpha(.65f) };
+            // The land field rides the terrain tiles, whose vertex colour is the baked hillshade: at plain
+            // white the tint was multiplied by that shade and all but vanished on the dark relief, so only
+            // the sea showed whose ground it was. Twice the colour undoes the average shade; the alpha
+            // keeps it a wash over the terrain, lighter than the sea plane. The relief harness gates both.
+            controlMaterial = new Material(shader) { color = new Color(LandFieldGain, LandFieldGain, LandFieldGain, LandFieldAlpha) };
             controlMaterial.renderQueue = 3100;
-            seaControlMaterial = FieldMaterial(shader, .32f, 3101);
+            // Friendly blue over the navy sea was a few percent of blue on blue, so "mine" read as the absence of red. Alpha 1 draws the
+            // raster at its own strength, as the flat map does (the plane was .32); the hue is untouched (red/blue colour-blind safety).
+            // The relief harness measured the sweep .32 / .60 / .80 / 1 and gates the contrast.
+            seaControlMaterial = FieldMaterial(shader, 1f, 3101);
             threatMaterial = new Material(shader) { color = Color.white.WithAlpha(.35f) };
             threatMaterial.renderQueue = 3110;
             gridMaterial = new Material(shader) { mainTexture = Texture2D.whiteTexture,
@@ -955,6 +1012,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             RectTransform imageRect = MapImageRect(owner.mapImage);
             if (imageRect == null) return;
             Rect rect = imageRect.rect;
+            bool fast = BuildProjection();
             staleIconFixes.Clear();
             foreach (KeyValuePair<MapIcon, IconFix> entry in iconFixes)
             {
@@ -963,7 +1021,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     if (staleIconFixes.Count < 64) staleIconFixes.Add(entry.Key);
                     continue;
                 }
-                PlaceProjectedIcon(entry.Key, entry.Value, rect);
+                PlaceProjectedIcon(entry.Key, entry.Value, rect, fast);
             }
             foreach (MapIcon icon in staleIconFixes)
             {
@@ -981,6 +1039,35 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     airbaseMarks.Remove(airbase);
                 }
             }
+        }
+
+        /// <summary>
+        /// The displayed camera pose as one matrix from relief model space to UI world space. The view
+        /// is orthographic, so world to viewport is affine and the whole chain folds into a multiply:
+        /// the roster reprojects on every terrain render, and the per-icon transform calls were the cost.
+        /// </summary>
+        private static bool BuildProjection()
+        {
+            if (!IsDrawing || source == null || owner?.mapBackground == null || owner.mapImage == null ||
+                !camera.orthographic) return false;
+            RectTransform viewport = owner.mapBackground.rectTransform;
+            Rect bounds = viewport.rect;
+            // Clip space runs -1..1 across the viewport; depth is dropped, as the per-point path drops it.
+            Matrix4x4 toViewport = Matrix4x4.TRS(new Vector3(bounds.center.x, bounds.center.y, 0f),
+                Quaternion.identity, new Vector3(bounds.width * .5f, bounds.height * .5f, 0f));
+            modelToUi = viewport.localToWorldMatrix * toViewport * camera.projectionMatrix *
+                camera.worldToCameraMatrix * Matrix4x4.Translate(sceneRoot.transform.position);
+            modelToImage = owner.mapImage.transform.worldToLocalMatrix * modelToUi;
+            fastParent = null;
+            return true;
+        }
+
+        private static Matrix4x4 ToParent(Transform parent)
+        {
+            if (ReferenceEquals(parent, fastParent)) return modelToParent;
+            fastParent = parent;
+            modelToParent = parent.worldToLocalMatrix * modelToUi;
+            return modelToParent;
         }
 
         private static void UpdateAircraftTrails()
@@ -1012,54 +1099,77 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             else aircraftTrails.Refresh(camera, sceneRoot.transform.position, viewRevision, time);
         }
 
-        private static void PlaceProjectedIcon(MapIcon icon, IconFix fix, Rect rect)
+        /// <summary>
+        /// Puts one glyph on the terrain. <paramref name="fast"/> uses the matrices of
+        /// <see cref="BuildProjection"/> (the bulk pass); otherwise each point goes through the camera
+        /// and the UI transforms, which is exact at any moment (the native per-icon refresh).
+        /// </summary>
+        private static void PlaceProjectedIcon(MapIcon icon, IconFix fix, Rect rect, bool fast = false)
         {
             float groundHeight = GroundHeight(fix.X, fix.Z);
-            if (!TryProjectAtHeight(fix.X, fix.Z, groundHeight + 1f,
-                    rect, out Vector2 point)) return;
             Transform symbol = icon.iconImage.transform;
-            Vector3 screenPoint = owner.mapImage.transform.TransformPoint(new Vector3(point.x, point.y, 0f));
-            Vector3 groundPoint = symbol.parent.InverseTransformPoint(screenPoint);
             float lift = fix.Airborne ? Mathf.Clamp(
                 (fix.Altitude - seaLevel) * VerticalScale * ModelWidth / 81920f -
                 groundHeight, 0f, MaximumAirLift) : 0f;
-            Vector3 parentPoint = groundPoint;
-            Vector2 iconPoint = point;
-            if (lift > .5f && TryProjectAtHeight(fix.X, fix.Z,
-                    groundHeight + 1f + lift, rect, out iconPoint))
+            Vector2 point = default;
+            Vector3 groundPoint, parentPoint;
+            if (fast)
             {
-                Vector3 raised = owner.mapImage.transform.TransformPoint(
-                    new Vector3(iconPoint.x, iconPoint.y, 0f));
-                parentPoint = symbol.parent.InverseTransformPoint(raised);
+                Matrix4x4 toParent = ToParent(symbol.parent);
+                var model = new Vector3(fix.X / source.MapSize.x * ModelSpanX, groundHeight + 1f,
+                    fix.Z / source.MapSize.y * ModelSpanZ);
+                groundPoint = parentPoint = toParent.MultiplyPoint3x4(model);
+                if (lift > .5f) parentPoint = toParent.MultiplyPoint3x4(model + Vector3.up * lift);
+            }
+            else
+            {
+                if (!TryProjectAtHeight(fix.X, fix.Z, groundHeight + 1f, rect, out point)) return;
+                Vector3 screenPoint = owner.mapImage.transform.TransformPoint(new Vector3(point.x, point.y, 0f));
+                groundPoint = parentPoint = symbol.parent.InverseTransformPoint(screenPoint);
+                if (lift > .5f && TryProjectAtHeight(fix.X, fix.Z,
+                        groundHeight + 1f + lift, rect, out Vector2 iconPoint))
+                {
+                    Vector3 raised = owner.mapImage.transform.TransformPoint(
+                        new Vector3(iconPoint.x, iconPoint.y, 0f));
+                    parentPoint = symbol.parent.InverseTransformPoint(raised);
+                }
             }
             symbol.localPosition = new Vector3(parentPoint.x, parentPoint.y, fix.Depth);
+            // A contact folded into a stack is not drawn. It keeps its place, for box selection and for
+            // the moment its stack opens; size and heading wait until it shows again.
+            if (fast && hiddenIcons.Contains(icon.iconImage))
+            {
+                PlaceStem(icon, symbol, groundPoint, parentPoint, false);
+                if (icon is UnitMapIcon folded) MapSymbology.Sync(folded);
+                return;
+            }
+            bool selected = selectedForClusters.Contains(icon);
             symbol.localScale = fix.NativeScale;
             // Framed contacts size themselves on the shared symbol grid; anything else keeps the old cap.
-            if (!(icon is UnitMapIcon framed &&
-                    MapSymbology.Fit(framed, owner.selectedIcons.Contains(icon))))
+            if (!(icon is UnitMapIcon framed && MapSymbology.Fit(framed, selected)))
             {
                 RectTransform symbolRect = symbol as RectTransform;
                 float pixels = symbolRect != null
                     ? Mathf.Max(symbolRect.rect.width, symbolRect.rect.height) : 15f;
                 float size = pixels * Mathf.Max(Mathf.Abs(symbol.lossyScale.x),
                     Mathf.Abs(symbol.lossyScale.y));
-                float cap = icon is AirbaseMapIcon ? 13f :
-                    owner.selectedIcons.Contains(icon) ? 17f : 11f;
+                float cap = icon is AirbaseMapIcon ? 13f : selected ? 17f : 11f;
                 if (size > cap && size > .01f) symbol.localScale *= cap / size;
             }
             if (icon is UnitMapIcon unitIcon && headings.TryGetValue(unitIcon, out HeadingMark mark))
             {
                 float heading = mark.Native * Mathf.Deg2Rad;
-                if (TryProject(fix.X - Mathf.Sin(heading) * 1000f,
+                Vector2 direction = default;
+                if (fast)
+                    direction = modelToImage.MultiplyVector(new Vector3(-Mathf.Sin(heading), 0f, Mathf.Cos(heading)) * 10f);
+                else if (TryProject(fix.X - Mathf.Sin(heading) * 1000f,
                         fix.Z + Mathf.Cos(heading) * 1000f, rect, out Vector2 ahead))
+                    direction = ahead - point;
+                if (direction.sqrMagnitude > .01f)
                 {
-                    Vector2 direction = ahead - point;
-                    if (direction.sqrMagnitude > .01f)
-                    {
-                        float projected = Mathf.Atan2(-direction.x, direction.y) * Mathf.Rad2Deg;
-                        symbol.eulerAngles = new Vector3(0f, 0f, projected);
-                        mark.Projected = projected;
-                    }
+                    float projected = Mathf.Atan2(-direction.x, direction.y) * Mathf.Rad2Deg;
+                    symbol.eulerAngles = new Vector3(0f, 0f, projected);
+                    mark.Projected = projected;
                 }
             }
             PlaceStem(icon, symbol, groundPoint, parentPoint, lift > .5f);
@@ -1218,7 +1328,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static void PlaceStem(MapIcon icon, Transform symbol, Vector3 ground,
             Vector3 projected, bool airborne)
         {
-            bool show = airborne || icon is AirbaseMapIcon || owner.selectedIcons.Contains(icon);
+            bool show = airborne || icon is AirbaseMapIcon || selectedForClusters.Contains(icon);
             if (!stems.TryGetValue(icon, out StemMark mark))
             {
                 if (!show || stems.Count >= MaximumStems) return;
@@ -1308,8 +1418,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             position = default;
             elevation = 0f;
-            if (owner == null || MapUiPointer.OverControls() || !TryCursor(owner, out position))
-                return false;
+            return owner != null && !MapUiPointer.OverControls() && TryCursor(owner, out position) &&
+                TryElevation(position, out elevation);
+        }
+
+        /// <summary>Approximate terrain elevation at a world point, read off the relief's own height sample.</summary>
+        internal static bool TryElevation(GlobalPosition position, out float elevation)
+        {
+            elevation = 0f;
+            if (!IsDrawing || source == null) return false;
             elevation = seaLevel + GroundHeight(position.x, position.z) *
                 81920f / (VerticalScale * ModelWidth);
             return true;
@@ -1365,9 +1482,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             foreach (Image image in hiddenIcons) if (image != null) image.enabled = true;
             hiddenIcons.Clear();
-            selectedForClusters.Clear();
             foreach (CountMark mark in counts) if (mark.Root != null) mark.Root.gameObject.SetActive(false);
-            clusterIndex.Clear();
+            stackIndex.Clear();
             clusteredCount = 0;
             hoveredStackCount = 0;
             clusterIcons = clusterSelected = clusterView = -1;
@@ -1375,76 +1491,116 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             lastRecluster = 0f;
         }
 
+        /// <summary>
+        /// The faction a contact stacks with. Not its tint: the game dims and highlights icons, and a
+        /// colour key dropped a contact out of its stack every time it did.
+        /// </summary>
+        private static int SideKey(UnitMapIcon icon, Image image)
+        {
+            Unit unit = icon.unit;
+            if (unit != null && unit.NetworkHQ != null) return unit.NetworkHQ.GetHashCode();
+            Color32 tone = image.color;
+            return ((tone.r >> 4) << 8) | ((tone.g >> 4) << 4) | (tone.b >> 4);
+        }
+
+        /// <summary>
+        /// Regroups ground contacts into stacks on <see cref="ReliefClusters"/>' world grid, from their
+        /// faction-known fixes rather than their screen places, so a pan or an orbit cannot reshuffle
+        /// them. Aircraft, airbases and the selection are never folded in. Only icons whose state
+        /// changed are toggled: re-enabling the whole roster four times a second cost a canvas rebuild.
+        /// </summary>
         private static void ReclusterIcons(int icons)
         {
-            foreach (Image image in hiddenIcons) if (image != null) image.enabled = true;
-            hiddenIcons.Clear();
-            selectedForClusters.Clear();
-            for (int i = 0; i < owner.selectedIcons.Count && i < MaximumClusteredIcons; i++)
-                if (owner.selectedIcons[i] != null) selectedForClusters.Add(owner.selectedIcons[i]);
-            foreach (CountMark mark in counts) if (mark.Root != null) mark.Root.gameObject.SetActive(false);
-            clusterIndex.Clear();
             hoveredStackCount = 0;
             RectTransform viewport = owner.mapBackground.rectTransform;
             Canvas canvas = ViewportCanvas(viewport);
             Camera uiCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
                 ? canvas.worldCamera : null;
-            int activeClusters = 0;
+            float pixels = viewport.rect.height * Mathf.Max(.01f, Mathf.Abs(viewport.lossyScale.y));
+            float metresPerPixel = 2f * camera.orthographicSize / Mathf.Max(1f, pixels) *
+                source.MapSize.x / ModelSpanX;
+            stackPlan.Begin(ReliefClusters.CellMetres(metresPerPixel, StackPixels));
+            stackImages.Clear();
             int limit = Mathf.Min(icons, MaximumClusteredIcons);
             for (int i = 0; i < limit; i++)
             {
-                MapIcon icon = owner.mapIcons[i];
-                if (icon == null || !icon.gameObject.activeInHierarchy ||
-                    selectedForClusters.Contains(icon)) continue;
+                MapIcon entry = owner.mapIcons[i];
+                if (entry == null || !(entry is UnitMapIcon icon) || !icon.gameObject.activeInHierarchy ||
+                    selectedForClusters.Contains(icon) ||
+                    !iconFixes.TryGetValue(icon, out IconFix fix) || fix.Airborne) continue;
                 Image image = icon.iconImage;
-                if (image == null || !image.enabled || !image.raycastTarget) continue;
-                Vector2 screen = RectTransformUtility.WorldToScreenPoint(uiCamera, image.transform.position);
-                if (!MapUiPointer.Contains(viewport, screen)) continue;
-                Color32 tone = image.color;
-                int colorKey = ((tone.r >> 4) << 8) | ((tone.g >> 4) << 4) | (tone.b >> 4);
-                var key = (Mathf.FloorToInt(screen.x / 36f), Mathf.FloorToInt(screen.y / 36f), colorKey);
-                if (clusterIndex.TryGetValue(key, out int at))
-                {
-                    clusters[at].Members.Add(image);
-                }
-                else if (activeClusters < MaximumClusteredIcons)
-                {
-                    if (activeClusters == clusters.Count) clusters.Add(new ClusterMark());
-                    ClusterMark cluster = clusters[activeClusters];
-                    cluster.Members.Clear();
-                    cluster.Members.Add(image);
-                    cluster.Screen = screen;
-                    cluster.Badge = -1;
-                    cluster.Hovered = false;
-                    clusterIndex.Add(key, activeClusters++);
-                }
+                if (image == null || !image.raycastTarget ||
+                    (!image.enabled && !hiddenIcons.Contains(image))) continue;
+                if (stackPlan.Add(fix.X, fix.Z, SideKey(icon, image)) >= 0) stackImages.Add(image);
             }
-            clusteredCount = activeClusters;
+            stackPlan.Solve();
+
+            stackIndex.Clear();
+            int active = 0;
+            for (int handle = 0; handle < stackImages.Count; handle++)
+            {
+                int stack = stackPlan.StackOf(handle);
+                if (stackPlan.Size(stack) < MinimumStack) continue;
+                if (!stackIndex.TryGetValue(stack, out int at))
+                {
+                    if (active == clusters.Count) clusters.Add(new ClusterMark());
+                    at = active++;
+                    clusters[at].Members.Clear();
+                    clusters[at].Badge = -1;
+                    clusters[at].Hovered = false;
+                    stackIndex.Add(stack, at);
+                }
+                clusters[at].Members.Add(stackImages[handle]);
+            }
+            clusteredCount = active;
+
+            // Stacks in view take the counts first; one that gets no count keeps its members shown.
+            nextHidden.Clear();
+            Vector2 mouse = Input.mousePosition;
             int badges = 0;
-            for (int i = 0; i < activeClusters; i++)
+            for (int pass = 0; pass < 2; pass++)
+            for (int i = 0; i < active && badges < MaximumClusters; i++)
             {
                 ClusterMark cluster = clusters[i];
+                if (cluster.Badge >= 0) continue;
+                Vector2 screen = RectTransformUtility.WorldToScreenPoint(uiCamera,
+                    cluster.Members[0].transform.position);
+                bool inView = MapUiPointer.Contains(viewport, screen);
+                if (inView != (pass == 0)) continue;
                 int total = cluster.Members.Count;
-                if (total < MinimumStack || badges == MaximumClusters) continue;
-                bool hovered = (cluster.Screen - (Vector2)Input.mousePosition).sqrMagnitude < 35f * 35f;
-                if (hovered) hoveredStackCount = total;
-                else for (int member = 1; member < total; member++)
-                {
-                    Image image = cluster.Members[member];
-                    image.enabled = false;
-                    hiddenIcons.Add(image);
-                }
-                if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(viewport,
-                        cluster.Screen, uiCamera, out Vector2 local)) continue;
+                cluster.Screen = screen;
                 cluster.Badge = badges;
-                cluster.Hovered = hovered;
+                cluster.Hovered = inView && (screen - mouse).sqrMagnitude < 35f * 35f;
+                if (cluster.Hovered) hoveredStackCount = total;
+                else for (int member = 1; member < total; member++) nextHidden.Add(cluster.Members[member]);
                 CountMark mark = Badge(viewport, badges++);
-                mark.Root.anchoredPosition = local + new Vector2(14f, 10f);
                 mark.Text.text = total > 99 ? "99+" : AvNum.Fixed(total, 0);
-                mark.Text.color = hovered ? AvStyleHost.FuiColor("select", AvTheme.Accent)
+                mark.Text.color = cluster.Hovered ? AvStyleHost.FuiColor("select", AvTheme.Accent)
                     : AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
-                mark.Root.gameObject.SetActive(true);
+                PlaceBadge(mark, viewport, uiCamera, screen, inView);
             }
+            for (int i = badges; i < counts.Count; i++)
+                if (counts[i].Root != null && counts[i].Root.gameObject.activeSelf)
+                    counts[i].Root.gameObject.SetActive(false);
+
+            bool changed = false;
+            foreach (Image image in hiddenIcons)
+            {
+                if (image == null || nextHidden.Contains(image)) continue;
+                image.enabled = true;
+                changed = true;
+            }
+            foreach (Image image in nextHidden)
+            {
+                if (!image.enabled) continue;
+                image.enabled = false;
+                changed = true;
+            }
+            HashSet<Image> spare = hiddenIcons;
+            hiddenIcons = nextHidden;
+            nextHidden = spare;
+            // A contact that just unfolded needs its size and heading.
+            if (changed) nextIconRefresh = 0f;
             clusterIcons = icons;
             clusterSelected = owner.selectedIcons.Count;
             clusterView = viewRevision;
@@ -1474,31 +1630,39 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     if (mark.Root.gameObject.activeSelf) mark.Root.gameObject.SetActive(false);
                     continue;
                 }
-                if (!mark.Root.gameObject.activeSelf) mark.Root.gameObject.SetActive(true);
                 Vector2 screen = RectTransformUtility.WorldToScreenPoint(uiCamera, head.transform.position);
-                bool hovered = (screen - mouse).sqrMagnitude < 35f * 35f;
+                // A stack panned out of the map keeps its grouping but not its count: the count is a
+                // child of the viewport and would otherwise ride out over the panels.
+                bool inView = MapUiPointer.Contains(viewport, screen);
+                bool hovered = inView && (screen - mouse).sqrMagnitude < 35f * 35f;
                 if (hovered) hoveredStackCount = cluster.Members.Count;
-                for (int member = 1; member < cluster.Members.Count; member++)
-                {
-                    Image image = cluster.Members[member];
-                    if (image == null) continue;
-                    if (hovered && !image.enabled) image.enabled = true;
-                    else if (!hovered && image.enabled)
-                    {
-                        image.enabled = false;
-                        hiddenIcons.Add(image);
-                    }
-                }
                 if (cluster.Hovered != hovered)
                 {
                     cluster.Hovered = hovered;
                     mark.Text.color = hovered ? AvStyleHost.FuiColor("select", AvTheme.Accent)
                         : AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
+                    for (int member = 1; member < cluster.Members.Count; member++)
+                    {
+                        Image image = cluster.Members[member];
+                        if (image == null) continue;
+                        image.enabled = hovered;
+                        if (hovered) hiddenIcons.Remove(image);
+                        else hiddenIcons.Add(image);
+                    }
+                    nextIconRefresh = 0f;
                 }
-                if (RectTransformUtility.ScreenPointToLocalPointInRectangle(viewport,
-                        screen, uiCamera, out Vector2 local))
-                    mark.Root.anchoredPosition = local + new Vector2(14f, 10f);
+                PlaceBadge(mark, viewport, uiCamera, screen, inView);
             }
+        }
+
+        private static void PlaceBadge(CountMark mark, RectTransform viewport, Camera uiCamera,
+            Vector2 screen, bool inView)
+        {
+            Vector2 local = default;
+            bool show = inView && RectTransformUtility.ScreenPointToLocalPointInRectangle(viewport,
+                screen, uiCamera, out local);
+            if (mark.Root.gameObject.activeSelf != show) mark.Root.gameObject.SetActive(show);
+            if (show) mark.Root.anchoredPosition = local + new Vector2(14f, 10f);
         }
 
         private static CountMark Badge(RectTransform viewport, int index)
@@ -1609,7 +1773,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             selectedForClusters.Clear();
             foreach (CountMark mark in counts) if (mark.Root != null) Object.Destroy(mark.Root.gameObject);
             counts.Clear();
-            clusterIndex.Clear();
+            stackIndex.Clear();
+            stackImages.Clear();
+            nextHidden.Clear();
+            selectedSeen = -1;
+            fastParent = null;
             clusters.Clear();
             clusteredCount = 0;
             clusterIcons = clusterSelected = clusterView = -1;
@@ -1698,6 +1866,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             land = null;
             seaLevel = SeaLevel;
             dryLand = null;
+            heightField = null;
             highestModelPoint = 0f;
             peakMeters = 0f;
             shore = null;
@@ -1727,6 +1896,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             mapX = at.x;
             mapY = at.y;
             return true;
+        }
+
+        public bool TryScale(float worldX, float worldZ, float metres, out float mapUnits)
+        {
+            mapUnits = 0f;
+            if (!(metres > 0f) || !TryProject(worldX, worldZ, out float x0, out float y0) ||
+                !TryProject(worldX + metres, worldZ, out float x1, out float y1) ||
+                !TryProject(worldX, worldZ + metres, out float x2, out float y2)) return false;
+            return BoscaliSummer.Core.Math.MapScale.Mean(Mathf.Sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0)),
+                Mathf.Sqrt((x2 - x0) * (x2 - x0) + (y2 - y0) * (y2 - y0)), out mapUnits);
         }
     }
 

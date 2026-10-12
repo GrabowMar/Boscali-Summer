@@ -136,6 +136,12 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         public void Reset() => n = 0;
 
+        /// <summary>Take a spot as placed without moving it: something already drawn there (the digit by a slot diamond) that the labels placed after it keep clear of (LAYOUT.md 12.5).</summary>
+        public void Reserve(float x0, float x1, float y)
+        {
+            if (n < left.Length) { left[n] = x0; right[n] = x1; top[n] = y; n++; }
+        }
+
         /// <summary>Place a label spanning x0..x1 at y; returns the y it takes.</summary>
         public float Place(float x0, float x1, float y)
         {

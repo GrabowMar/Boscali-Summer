@@ -118,12 +118,19 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     if (hot) Disc(g, sx, sy, reach, Amber, 0.07f);
                     Circle(g, sx, sy, reach, tone, hot ? 1f : 0.9f);
                     if (Inside(sx, sy, 6f)) g.Tri(sx, sy, 0f, 5f, hot ? Amber : Ink, false);
-                    if (Inside(sx - 6f, sy + 16f, 0f) && sx + 40f < WinR) Label(ScopeStr.Distance("SAM", e.DistanceM, units, 12), sx - 6f, sy + 16f, hot ? Amber : Dim, hot, ScopeAlign.Left);
+                    // LAYOUT.md 12.8: two short rows inside the ring, the site and the reach at the pilot's height (one wide row ran over the ring)
+                    if (Inside(sx - 12f, sy + 15f, 0f) && Inside(sx - 12f, sy + 29f, 0f) && sx + 40f < WinR)
+                    {
+                        Label(ObjectiveMath.Kind(ring.Kind), sx - 12f, sy + 15f, hot ? Amber : Dim, hot, ScopeAlign.Left);
+                        Label(ScopeStr.Distance("", e.ReachM, units, 8), sx - 12f, sy + 29f, hot ? Amber : Dim, hot, ScopeAlign.Left, true);
+                    }
                 }
                 else if (Inside(sx, sy, 4f))
                 {
                     g.Box(sx - 3f, sy - 3f, 6f, 6f, hot ? Amber : Ink);
-                    if (sx + 60f < WinR) Label(ObjectiveMath.Kind(ring.Kind), sx + 8f, sy, hot ? Amber : Dim, hot, ScopeAlign.Left);
+                    float lx = sx + maxR + 4f;      // its id keeps its place right of its ring, inside the plot's edge
+                    if (lx + 40f > WinR) lx = sx + 8f;
+                    if (lx + 40f < WinR) Label(ObjectiveMath.Kind(ring.Kind), lx, sy, hot ? Amber : Dim, hot, ScopeAlign.Left);
                 }
             }
 
@@ -202,27 +209,29 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly int[] labelLen = new int[LabelCap];
         private readonly float[] labelX = new float[LabelCap], labelY = new float[LabelCap];
         private readonly ScopeTone[] labelTone = new ScopeTone[LabelCap];
-        private readonly bool[] labelBold = new bool[LabelCap];
+        private readonly bool[] labelBold = new bool[LabelCap], labelUnder = new bool[LabelCap];
         private readonly ScopeAlign[] labelAlign = new ScopeAlign[LabelCap];
         private readonly LabelPlacer placer = new LabelPlacer();
         private int labelCount;
 
-        /// <summary>Queue a plot word (copied out of the shared scratch): it is placed clear of the words before it and drawn on a plate after everything else of the plot.</summary>
-        private void Label(ReadOnlySpan<char> text, float x, float y, ScopeTone tone, bool bold, ScopeAlign align)
+        /// <summary>Queue a plot word (copied out of the shared scratch): it is placed clear of the words before it and drawn after everything else of the plot. <c>under</c>: the second row of the word before it, 14 under wherever that one went.</summary>
+        private void Label(ReadOnlySpan<char> text, float x, float y, ScopeTone tone, bool bold, ScopeAlign align, bool under = false)
         {
             if (labelCount >= LabelCap) return;
             int l = labelCount++, len = Math.Min(text.Length, LabelChars);
             text.Slice(0, len).CopyTo(new Span<char>(labelChars, l * LabelChars, len));
-            labelLen[l] = len; labelX[l] = x; labelY[l] = y; labelTone[l] = tone; labelBold[l] = bold; labelAlign[l] = align;
+            labelLen[l] = len; labelX[l] = x; labelY[l] = y; labelTone[l] = tone; labelBold[l] = bold; labelAlign[l] = align; labelUnder[l] = under;
         }
 
         private void FlushLabels(ScopeCanvas g)
         {
+            float above = 0f;
             for (int i = 0; i < labelCount; i++)
             {
                 var text = new ReadOnlySpan<char>(labelChars, i * LabelChars, labelLen[i]);
                 float w = ScopeCanvas.TextW(text, 12f), x0 = labelAlign[i] == ScopeAlign.Right ? labelX[i] - w : labelAlign[i] == ScopeAlign.Center ? labelX[i] - w / 2f : labelX[i];
-                float y = Mathf.Clamp(placer.Place(x0, x0 + w, labelY[i]), WinT + 9f, WinB - 9f);
+                float y = Mathf.Clamp(labelUnder[i] ? above + 14f : placer.Place(x0, x0 + w, labelY[i]), WinT + 9f, WinB - 9f);
+                above = y;
                 g.Fill(Mathf.Round(x0) - 2f, Mathf.Round(y) - 8f, (float)Math.Ceiling(w) + 4f, 16f, Bg, 0.85f);
                 g.Text(text, labelX[i], y, labelTone[i], 12f, labelAlign[i], labelBold[i]);
             }

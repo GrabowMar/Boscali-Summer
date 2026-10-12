@@ -1,7 +1,6 @@
 using System;
 using System.Reflection;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Hud.Domain;
 using BoscaliSummer.Modules.Hud.Runtime;
 using HarmonyLib;
@@ -14,12 +13,13 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
     /// <summary>
-    /// The TAC BOARD (HUD v8, 2026-10-10): an opaque chamfered plate that owns the whole top-right corner of the screen (8 px from the edges at 1080p), a child of the native
-    /// <c>HUDCanvas/HMDCenter/TopRightPanel</c> so it follows the native HUD's visibility. Top to bottom: the stores header (weapon cell with its station rail, countermeasure cell, capacitor row:
-    /// <see cref="StoresHeader"/>), the lamp strip (the aircraft's switches, threat lamps at the right end), the scope (ONE page chosen by context, see <see cref="ScopePageBase"/>; the compact
-    /// SYSTEMS strip in cruise), the gauge row (up to four <see cref="GaugeSpec"/>s) and the notice ticker. A row with nothing to say takes no room. One design unit is a 1080p pixel scaled by
-    /// the screen's height (never under 0.85). The board hides the native weapon, countermeasure and capacitor boxes it replaces through <see cref="NativeCorner"/> and nothing else native; every
-    /// other Unity object it touches is its own. The class is partial: <c>StatusPanel.Board.cs</c> holds the update and the painters.
+    /// The TAC BOARD (HUD v8, 2026-10-10; the visor layout, 2026-10-11): symbology with no plate, kept legible by a soft shade (<c>StatusPanel.Shade.cs</c>), anchored by its top-right corner near the top-right
+    /// corner of the screen, a child of the native <c>HUDCanvas/HMDCenter/TopRightPanel</c> so it follows the native HUD's visibility. Two arrangements of the same blocks (<see cref="ScopeLayout"/>): WIDE, three
+    /// columns (the stores side at the left: HERO weapon, PWR BUS, EXPENDABLES; the wing at the right: lamp line, the scope's page, gauge line, notice ticker), and the classic STACK column. A block with nothing to say
+    /// takes no room. One design unit is a 1080p pixel scaled by the screen's height (never under 0.85) and the pilot's Scale. The board hides the native weapon, countermeasure and capacitor boxes it replaces through
+    /// <see cref="NativeCorner"/> and nothing else native; every other Unity object it touches is its own. The class is partial: <c>StatusPanel.Board.cs</c> orchestrates (update, layout, placement),
+    /// <c>StatusPanel.Stores.cs</c> is the stores side, <c>StatusPanel.Wing.cs</c> and <c>StatusPanel.Page.cs</c> the wing side, <c>StatusPanel.Shade.cs</c> the shade, <c>StatusPanel.Corners.cs</c> the kill feed's and the map's corners
+    /// (the sway of the whole symbology is <see cref="ApplySway"/>, in <c>StatusPanel.Board.cs</c>).
     /// </summary>
     internal sealed partial class StatusPanel
     {
@@ -35,7 +35,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private RectTransform canvasRect;
         private RectTransform root;
         private CanvasGroup rootGroup;
-        private Image plate;
         private RectTransform scopeRect, pageRect, overlayRect, frameRect, storesRect;
         private AvVector shellVector, pageVector, overlayVector, frameVector, storesVector;
         private ScopeText shellText, pageText, overlayText, storesText;
@@ -44,8 +43,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private Material fontMaterial;
         private Image nativeSafety;
         private NativeCorner corner;
-        /// <summary>Canvas units per design unit, and where the screen's top-right corner (less the margin) is in dock-local units: both measured every update.</summary>
-        private float unit = 1f, cornerX, cornerY;
+        /// <summary>Canvas units per design unit: <see cref="baseUnit"/> is the screen's (what the margins and the offsets are in), <see cref="unit"/> that times the pilot's Scale (what the board itself is in).</summary>
+        private float unit = 1f, baseUnit = 1f;
+        /// <summary>The screen as the dock sees it, in dock-local units: its top-right corner and its size. Measured every update.</summary>
+        private float screenRight, screenTop, screenW, screenH;
+        /// <summary>Where the board's top-right corner is in dock-local units: worked out every repaint (it depends on the box's size).</summary>
+        private float cornerX, cornerY;
+        /// <summary>A native weapon box or capacitor bar is up that the header does not draw: the board hangs under the native panel (see <see cref="MeasureScreen"/>).</summary>
+        private bool underNative;
 
         private readonly Vector3[] corners = new Vector3[4];
 
@@ -53,6 +58,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>Where a page's events go (the board's ticker): set by the owner of the board.</summary>
         public Action<string, HudTone, string, string> Notice;
+
+        /// <summary>The pilot's options as of the last 10 Hz tick, set by the owner of the board before each <see cref="Present"/> (the defaults until then).</summary>
+        public BoardOptions Options = BoardOptions.Default;
 
         /// <summary>
         /// Find the native dock and, on first success or after it is lost, (re)build our own
@@ -83,10 +91,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Build(panelRect,
                 weaponStatus != null ? NameTextField?.GetValue(weaponStatus) as TextMeshProUGUI : null,
                 weaponStatus != null ? SafetyField?.GetValue(weaponStatus) as Image : null);
+            TakeArtMaterial(weaponStatus);
             // The native boxes the stores header replaces (a stand-in build for the offline check has none): hidden only while the header draws them.
             corner?.Dispose();
             corner = new NativeCorner();
             corner.Find(hud, panelRect, root);
+            FindCorners();
         }
 
         /// <summary>The native pieces the board is fonted from are parameters, so an offline render can stand in for them.</summary>
@@ -105,20 +115,19 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             var rootObject = new GameObject("BoscaliStatusPanel", typeof(RectTransform));
             root = (RectTransform)rootObject.transform;
             root.SetParent(dock, false);
-            // Anchored to the dock's bottom-left; Repaint() puts its top-right corner at the screen's.
+            // Anchored to the dock's bottom-left; Repaint() puts its top-right corner where the margins, the pilot's offsets and the screen put it.
             root.anchorMin = root.anchorMax = Vector2.zero;
             root.pivot = new Vector2(1f, 1f);
             // The panel's own group (see NativeCorner) must never dim the board: it ignores every group above it.
             rootGroup = rootObject.AddComponent<CanvasGroup>();
             rootGroup.ignoreParentGroups = true;
 
-            plate = HudSprites.Child(root, "Plate", HudSprites.Slab, sliced: true);
-            plate.color = new Color(ScopePalette.PlateColor.R, ScopePalette.PlateColor.G, ScopePalette.PlateColor.B, 1f);
+            BuildShade();      // first: behind everything
             shellVector = AvVector.Create(root, "Shell", ShellQuads);
             shellText = new ScopeText(Holder(root, "ShellWords"), font, fontMaterial);
             shellCanvas = new ScopeCanvas(shellVector.Buffer, shellText, "scope.shell");
 
-            // The stores header: one surface over the top of the plate (board coordinates), above the shell, away from the scope.
+            // The stores header: one surface over the top of the board (board coordinates), above the shell, away from the scope.
             storesRect = Pinned(root, "Stores", false);
             storesVector = AvVector.Create(storesRect, "Strokes", StoresQuads);
             storesText = new ScopeText(Holder(storesRect, "Words"), font, fontMaterial);
@@ -178,35 +187,64 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         /// <summary>
-        /// The screen as the dock sees it: the board unit (one design unit is the screen's height over 1080 of a device pixel, never under <see cref="ScopeLayout.MinScale"/>) and the
-        /// dock-local place of the screen's top-right corner, <see cref="ScopeLayout.Margin"/> in. Needs <see cref="pixel"/> measured first. The board owns the corner only while it stands
-        /// in for what the native panel shows: with a native weapon box or capacitor bar up that the header does not draw (a header that threw, a station the feed could not read), it hangs
-        /// under the native panel as it did before the takeover, so the box the pilot is given back is not under the board's plate.
+        /// The screen as the dock sees it: its top-right corner and size in dock-local units, and the board units (<see cref="baseUnit"/>: one design unit is the screen's height over 1080 of a device pixel, never
+        /// under <see cref="ScopeLayout.MinScale"/>; <see cref="unit"/>: that times the pilot's Scale). Needs <see cref="pixel"/> measured first. Where the board's corner goes is <see cref="PlaceBoard"/>'s: it needs the
+        /// box's size. The board owns the corner only while it stands in for what the native panel shows: with a native weapon box or capacitor bar up that the header does not draw (a header that threw, a station the
+        /// feed could not read), it hangs under the native panel as it did before the takeover, so the box the pilot is given back is not under the board (<see cref="underNative"/>).
         /// </summary>
         private void MeasureScreen()
         {
             float scale = 1f;
-            cornerX = dock.rect.xMax;
-            cornerY = dock.rect.yMax;
+            screenRight = dock.rect.xMax;
+            screenTop = dock.rect.yMax;
+            screenW = dock.rect.width;
+            screenH = dock.rect.height;
             if (canvasRect != null)
             {
                 canvasRect.GetWorldCorners(corners);
-                Vector3 topRight = dock.InverseTransformPoint(corners[2]), bottomRight = dock.InverseTransformPoint(corners[3]);
-                cornerX = topRight.x;
-                cornerY = topRight.y;
-                scale = Mathf.Abs(topRight.y - bottomRight.y) / pixel / 1080f;
+                Vector3 bottomLeft = dock.InverseTransformPoint(corners[0]), topRight = dock.InverseTransformPoint(corners[2]), bottomRight = dock.InverseTransformPoint(corners[3]);
+                screenRight = topRight.x;
+                screenTop = topRight.y;
+                screenW = Mathf.Abs(topRight.x - bottomLeft.x);
+                screenH = Mathf.Abs(topRight.y - bottomRight.y);
+                scale = screenH / pixel / 1080f;
             }
-            unit = Mathf.Max(scale, ScopeLayout.MinScale) * pixel;
-            cornerX -= ScopeLayout.Margin * unit;
-            cornerY -= ScopeLayout.Margin * unit;
-            if (headerFault || (corner != null && corner.Uncovered(header.HasWeapon, header.HasCap))) cornerY = Mathf.Min(cornerY, dock.rect.yMin);
+            baseUnit = Mathf.Max(scale, ScopeLayout.MinScale) * pixel;
+            unit = baseUnit * Mathf.Clamp(Options.Scale, BoardOptions.ScaleMin, BoardOptions.ScaleMax);
+            underNative = headerFault || (corner != null && corner.Uncovered(header.HasWeapon, header.HasCap));
         }
 
-        /// <summary>Take our board out of view without destroying it, and give the native boxes back. Idempotent.</summary>
+        /// <summary>
+        /// Where the board's top-right corner goes (<see cref="cornerX"/>, <see cref="cornerY"/>, dock-local): the margins from the screen's corner, the pilot's offsets, a box <paramref name="holdHeight"/> tall kept on the
+        /// screen (<see cref="ScopeLayout.Anchor"/>). <paramref name="fromTop"/> is how far down from the screen's top the box ends up, in dock units (the shade's band hangs from there), also when the board hangs under the native panel.
+        /// </summary>
+        private void PlaceBoard(in BoardGeometry geo, float holdHeight, out float fromTop)
+        {
+            ScopeLayout.Anchor(screenW, screenH, baseUnit, unit, Options.OffsetX, Options.OffsetY, geo.Width, holdHeight, out float fromRight, out fromTop);
+            boxFromRight = fromRight;
+            cornerX = screenRight - fromRight;
+            cornerY = screenTop - fromTop;
+            if (underNative)
+            {
+                cornerY = Mathf.Min(cornerY, dock.rect.yMin);
+                fromTop = screenTop - cornerY;
+            }
+        }
+
+        /// <summary>Take our board out of view without destroying it, and give the native boxes back; the kill feed and the map stand down with it (the module is going away). Idempotent.</summary>
         public void Hide()
         {
+            HideBoard();
+            StandDownCorners();
+            StandDownNav();
+        }
+
+        /// <summary>The board alone off the screen and the native boxes back, the other corners as they are: what the master switch does (the corners have a switch of their own, LAYOUT.md 8).</summary>
+        private void HideBoard()
+        {
             corner?.Release();
-            header.Clear();
+            BoardBox = default;
+            ClearHeader();
             if (root != null && root.gameObject.activeSelf) root.gameObject.SetActive(false);
         }
 
@@ -218,6 +256,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             corner?.Dispose();
             corner = null;
+            DestroyCorners();
+            BoardBox = default;
+            swayShift = rootBase = default;
             header.Clear();
             if (root != null) UnityEngine.Object.Destroy(root.gameObject);
             root = null;
@@ -225,13 +266,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             dock = null;
             rootCanvas = null;
             canvasRect = null;
-            plate = null;
             scopeRect = pageRect = overlayRect = frameRect = storesRect = null;
             shellVector = pageVector = overlayVector = frameVector = storesVector = null;
             shellText = pageText = overlayText = storesText = null;
             shellCanvas = pageCanvas = overlayCanvas = frameCanvas = storesCanvas = null;
             nativeSafety = null;
             board = null;
+            StoreIcons.Clear();      // the baked pictures are this scene's
+            DestroyShade();
             DestroyBoard();
         }
     }

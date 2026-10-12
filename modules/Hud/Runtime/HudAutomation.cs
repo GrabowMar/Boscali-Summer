@@ -1,9 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Reflection;
+using BepInEx.Configuration;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Diagnostics;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Services;
+using BoscaliSummer.Modules.Hud.Configuration;
 using BoscaliSummer.Modules.Hud.Domain;
 using BoscaliSummer.Modules.Hud.Presentation;
 using NOAvionics;
@@ -27,6 +31,71 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 GameManager.gameState != GameState.SinglePlayer || !GameAccess.IsServer())
                 failure = Failure("HudAutomation", "guard", "requires a hosted single-player nomodkit scenario");
             return failure == null;
+        }
+
+        private static object[] pilotOptions;
+
+        /// <summary>
+        /// Set any of the TAC BOARD's options through the settings contract (<see cref="ITacBoardSettings"/>, the same door the SET console and the C menu use) so ONE sim run can try several looks, and return every option as it
+        /// now stands. The names are the contract's, in any case (enabled, layout, scale, offsetX, offsetY, opacity, shade, declutter, scopeMode, sway, corners, showLamps, showSystemsStrip, showGauges, showTicker, pageThreat,
+        /// pageShot, pageMissileCam, pageApproach, pageWing, pageStrike, pageDock, pageObjective, pageSystems, threatHoldSeconds, pageMinSeconds); an enum is given by name (wide, stack, full, lean, minimal, auto, off). A name that is
+        /// none of them fails the call, so a typo cannot waste a run. IN MEMORY ONLY: the contract's setters save the config file on every set, so the file's save-on-set is held off around them and put back; the file on
+        /// disk is never written by this hook and the pilot's saved options come back with the next start. <c>restore</c> true first puts every option back to what it was at the first call of the run (the pilot's own values).
+        /// The board takes a change on its next 10 Hz tick: wait before a capture.
+        /// </summary>
+        public static Dictionary<string, object> Configure(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            if (!ModuleServices.TryGet(out ITacBoardSettings options) || options == null)
+                return Failure("HudAutomation", "Configure", "no TAC BOARD settings service");
+            PropertyInfo[] properties = typeof(ITacBoardSettings).GetProperties();
+            if (args != null)
+                foreach (string key in args.Keys)
+                    if (key != "restore" && Array.FindIndex(properties, p => string.Equals(p.Name, key, StringComparison.OrdinalIgnoreCase)) < 0)
+                        return Failure("HudAutomation", "Configure", "no TAC BOARD option called '" + key + "'");
+            if (pilotOptions == null)
+            {
+                pilotOptions = new object[properties.Length];
+                for (int i = 0; i < properties.Length; i++) pilotOptions[i] = properties[i].GetValue(options);
+            }
+            ConfigFile file = (options as HudSettings)?.Enabled.ConfigFile;
+            bool save = file != null && file.SaveOnConfigSet;
+            if (file != null) file.SaveOnConfigSet = false;
+            var result = new Dictionary<string, object> { { "ok", true }, { "saved", false } };
+            try
+            {
+                for (int i = 0; i < properties.Length; i++)
+                {
+                    PropertyInfo option = properties[i];
+                    if (Bool(args, "restore")) option.SetValue(options, pilotOptions[i]);
+                    object given = args != null ? FindIgnoringCase(args, option.Name) : null;
+                    if (given != null) option.SetValue(options, OptionValue(option.PropertyType, given));
+                }
+            }
+            catch (Exception e) { return Failure("HudAutomation", "Configure", "could not set an option: " + e.Message); }
+            finally { if (file != null) file.SaveOnConfigSet = save; }
+            foreach (PropertyInfo option in properties)
+            {
+                object value = option.GetValue(options);
+                result[char.ToLowerInvariant(option.Name[0]) + option.Name.Substring(1)] = value is Enum ? value.ToString() : value;
+            }
+            Debug.Log("[HudAutomation] Configure: " + Describe(result));
+            return result;
+        }
+
+        private static object FindIgnoringCase(Dictionary<string, object> args, string name)
+        {
+            foreach (KeyValuePair<string, object> pair in args)
+                if (string.Equals(pair.Key, name, StringComparison.OrdinalIgnoreCase)) return pair.Value;
+            return null;
+        }
+
+        /// <summary>A scenario's JSON value as the option's own type: a bool, a number, or an enum by name (any case).</summary>
+        private static object OptionValue(Type type, object given)
+        {
+            if (type.IsEnum) return given is string name ? Enum.Parse(type, name, true) : Enum.ToObject(type, Convert.ToInt32(given, CultureInfo.InvariantCulture));
+            if (type == typeof(bool)) return Convert.ToBoolean(given, CultureInfo.InvariantCulture);
+            return Convert.ToSingle(given, CultureInfo.InvariantCulture);
         }
 
         /// <summary>Fire one own missile station at the nearest enemy aircraft (blind if none).</summary>
@@ -60,6 +129,54 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 { "missiles_after", OwnMissiles(a) },
             };
             Debug.Log("[HudAutomation] Fire: " + Describe(result));
+            return result;
+        }
+
+        /// <summary>
+        /// Select the first loaded fixed gun, designate the nearest enemy aircraft and report the native
+        /// lead pipper (tests/ingame/gun-pipper.json). Call it three times about a second apart: the first
+        /// sights the target, the second designates it, the third reads the pipper.
+        /// </summary>
+        public static Dictionary<string, object> Gun(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            if (!GameManager.GetLocalAircraft(out Aircraft a) || a == null || a.disabled)
+                return Failure("HudAutomation", "Gun", "no live local aircraft");
+            WeaponStation gun = null;
+            if (a.weaponStations != null)
+                foreach (WeaponStation s in a.weaponStations)
+                {
+                    if (s == null || s.WeaponInfo == null || s.WeaponInfo.muzzleVelocity <= 0f || s.HasTurret() || s.Ammo <= 0)
+                        continue;
+                    gun = s;
+                    break;
+                }
+            if (gun == null)
+                return Failure("HudAutomation", "Gun", "no loaded fixed gun");
+            Unit target = NearestEnemy(a, Number(args, "range", 3000f));
+            if (target == null)
+                return Failure("HudAutomation", "Gun", "no enemy aircraft in range");
+            CombatHUD hud = SceneSingleton<CombatHUD>.i;
+            if (hud == null || hud.aircraft != a)
+                return Failure("HudAutomation", "Gun", "the combat HUD is not attached to the local aircraft");
+            // A sighting keeps the track "accurate" for 4 s and spawns the map icon and HUD marker SelectUnit needs.
+            a.NetworkHQ.RpcUpdateTrackingInfo(target.persistentID);
+            if (a.weaponManager.currentWeaponStation != gun) a.SetActiveStation(gun.Number);
+            if (!hud.GetTargetList().Contains(target)) hud.SelectUnit(target);
+            HUDBoresightState sight = UnityEngine.Object.FindObjectOfType<HUDBoresightState>();
+            var pipper = sight == null ? null
+                : HarmonyLib.AccessTools.Field(typeof(HUDBoresightState), "projectedPosition")?.GetValue(sight) as UnityEngine.UI.Image;
+            var result = new Dictionary<string, object>
+            {
+                { "ok", true },
+                { "gun", gun.WeaponInfo.shortName ?? gun.WeaponInfo.weaponName ?? "GUN" },
+                { "range_m", Vector3.Distance(target.transform.position, a.transform.position) },
+                { "designated", hud.GetTargetList().Contains(target) ? 1 : 0 },
+                { "state", sight == null ? "none"
+                    : HarmonyLib.AccessTools.Field(typeof(HUDBoresightState), "displayState")?.GetValue(sight)?.ToString() ?? "?" },
+                { "pipper", pipper != null && pipper.enabled ? 1 : 0 },
+            };
+            Debug.Log("[HudAutomation] Gun: " + Describe(result));
             return result;
         }
 

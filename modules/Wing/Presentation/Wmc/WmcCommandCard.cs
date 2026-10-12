@@ -11,12 +11,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// <summary>ORDERS' command card (spec 2026-10-04 §4.2; mockup board/orders.html): the 24 orders of <see cref="OrderGrid"/> as a 4 × 6
     /// grid of keys. Each key is a kit button with the wing-key letter (<see cref="ChordResolver.OrderKeys"/>) in its top-left corner, a
     /// group colour rail across its top, the kind of input it needs ("PT" a map point, "TGT" an enemy, "AREA" an area) bottom right, an
-    /// LED top right while an element is flying it (the element letters), and a short reason when it cannot be pressed. Kit gap: a key
+    /// LED bottom left while an element is flying it (the element letters; clear of the label, which a top-right plate covered), and a
+    /// short reason beside it when it cannot be pressed. Kit gap: a key
     /// with corner marks is not a kit control, so the marks are text and plates drawn over a kit <see cref="AvControl"/>.</summary>
     internal sealed class WmcCommandCard : AvPart
     {
         public const int Count = OrderGrid.Rows * OrderGrid.Columns;
-        private const float KeyH = 36f, Gap = 3f;
+        private const float KeyH = 36f, Gap = 3f, LedW = 24f;
 
         public readonly AvControl[] Cells = new AvControl[Count];
         private readonly Image[] rails = new Image[Count], leds = new Image[Count];
@@ -63,12 +64,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 int r = k / OrderGrid.Columns, c = k % OrderGrid.Columns;
                 float x = c * (w + Gap), y = r * (KeyH + Gap);
                 AvLay.Place(Cells[k].Rect, x, y, w, KeyH);
-                AvLay.Place(rails[k].rectTransform, 0f, 0f, w, 2f);
+                AvLay.Place(rails[k].rectTransform, 0f, 0f, w, 3f);
                 AvLay.Place(keys[k].rectTransform, 5f, 1f, 18f, 18f);
                 AvLay.Place(marks[k].rectTransform, w - 44f, KeyH - 19f, 40f, 18f);
-                AvLay.Place(leds[k].rectTransform, w - 32f, 3f, 28f, 15f);
-                AvLay.Place(ledText[k].rectTransform, w - 32f, 2f, 28f, 18f);
-                AvLay.Place(whys[k].rectTransform, 5f, KeyH - 19f, w - 50f, 18f);
+                bool led = leds[k].gameObject.activeSelf;
+                AvLay.Place(leds[k].rectTransform, 4f, KeyH - 15f, LedW, 12f);
+                AvLay.Place(ledText[k].rectTransform, 4f, KeyH - 18f, LedW, 18f);
+                AvLay.Place(whys[k].rectTransform, led ? LedW + 8f : 5f, KeyH - 19f, w - 50f - (led ? LedW + 3f : 0f), 18f);
             }
         }
 
@@ -89,6 +91,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 leds[k].gameObject.SetActive(on);
                 ledText[k].gameObject.SetActive(on);
+                float w = Cells[k].Rect.rect.width;
+                AvLay.Place(whys[k].rectTransform, on ? LedW + 8f : 5f, KeyH - 19f, w - 50f - (on ? LedW + 3f : 0f), 18f);
             }
             if (on) AvText.Set(ledText[k], letters);
         }

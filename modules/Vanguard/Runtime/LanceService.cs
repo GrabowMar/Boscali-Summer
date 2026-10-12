@@ -174,11 +174,22 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         private void Awake() => instance = this;
 
-        public static bool IsLance(Gun gun) =>
-            gun != null && (Pods.ContainsKey(gun) || (gun.info != null && gun.info.name.Contains(VanguardKeys.LanceInfo)));
+        private static readonly Dictionary<WeaponInfo, bool> LanceInfos = new Dictionary<WeaponInfo, bool>();
+
+        // Hot path (every Gun.Fire): the name test runs once per WeaponInfo, Object.name allocates.
+        public static bool IsLance(Gun gun)
+        {
+            if (gun == null) return false;
+            if (Pods.ContainsKey(gun)) return true;
+            WeaponInfo info = gun.info;
+            if (info == null) return false;
+            if (!LanceInfos.TryGetValue(info, out bool lance)) LanceInfos[info] = lance = info.name.Contains(VanguardKeys.LanceInfo);
+            return lance;
+        }
 
         public void ResetForScene()
         {
+            LanceInfos.Clear();
             Pods.Clear();
             gone.Clear();
             ReleaseLines();

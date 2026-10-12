@@ -187,6 +187,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         /// </summary>
         public void SetApprovedContacts(IReadOnlyList<FeedContact> hostMirroredContacts)
         {
+            int had = rowCount;   // last call's slots: a slot whose contact, position and words are unchanged keeps its ground point and label
             rowCount = 0;
             if (hostMirroredContacts != null)
             {
@@ -197,12 +198,17 @@ namespace BoscaliSummer.Modules.Support.Visuals
                     FeedContact row = hostMirroredContacts[i];
                     if (float.IsNaN(row.X) || float.IsInfinity(row.X) || float.IsNaN(row.Z) || float.IsInfinity(row.Z)) continue;
                     if (filter && row.Expires <= now) continue;
-                    var point = new GlobalPosition(row.X, 0f, row.Z);
-                    Vector3 local = point.ToLocalPosition();
-                    if (Runtime.SupportTargeting.TryMapPoint(point, out Vector3 ground)) local = ground;
+                    FeedContact old = rows[rowCount];
+                    bool same = rowCount < had && old.Id == row.Id && old.X == row.X && old.Z == row.Z && old.Class == row.Class && old.Percent == row.Percent;
+                    if (!same)
+                    {
+                        var point = new GlobalPosition(row.X, 0f, row.Z);
+                        Vector3 local = point.ToLocalPosition();
+                        if (Runtime.SupportTargeting.TryMapPoint(point, out Vector3 ground)) local = ground;
+                        rowPoints[rowCount] = local.ToGlobalPosition(); // stored global: a floating-origin shift must not strand it
+                        rowLabels[rowCount] = SpaceFeedRules.ContactLabel(row.Class, row.Percent);
+                    }
                     rows[rowCount] = row;
-                    rowPoints[rowCount] = local.ToGlobalPosition(); // stored global: a floating-origin shift must not strand it
-                    rowLabels[rowCount] = SpaceFeedRules.ContactLabel(row.Class, row.Percent);
                     rowCount++;
                 }
             }

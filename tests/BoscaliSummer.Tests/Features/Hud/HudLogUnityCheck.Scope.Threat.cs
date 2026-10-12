@@ -1,5 +1,7 @@
 #if UNITY_EDITOR
 using System;
+using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 
 // THREAT fixture: pages/threat.js sim(t) of the takeover prototype, the 16 s loop.
@@ -38,10 +40,13 @@ public static partial class HudLogUnityCheck
         return true;
     }
 
+    private static readonly string[] LongNames = { "HYPERION CLASS CARRIER", "SHARD CLASS CORVETTE", "HLT RADAR TRUCK", "MSV RADAR", "T9K41 BOLTSTRIKE", "T9K41 BOLTSTRIKE", "T9K41 BOLTSTRIKE" };
+    private static readonly float[] LongBearing = { 186f, 185f, 187f, 211f, 212.5f, 214f, 229f }, LongKm = { 12f, 13.4f, 16f, 18.4f, 18f, 18f, 20f };
+
     static partial void FixtureThreat(float t, ScopeScene s)
     {
         var list = new System.Collections.Generic.List<SimMissile>();
-        for (int i = 0; i < 2; i++) if (ThreatMissileAt(i, t, out SimMissile m)) list.Add(m);
+        for (int i = 0; i < 2; i++) if (ThreatMissileAt(i, t, out SimMissile m) && s.Variant != "longnames") list.Add(m);
         Array missiles = s.DomainArray("ThreatMissile", 8);
         int liveCount = 0;
         for (int i = 0; i < list.Count; i++)
@@ -62,13 +67,23 @@ public static partial class HudLogUnityCheck
         bool lockOn = t >= 0.8f && t < 8.4f;
         float lockAge = t >= 8.4f ? t - 8.4f : t >= 0.8f ? t - 0.8f : t;
         int emitterCount = 0;
-        emitters.SetValue(s.Fill(s.Domain("ThreatEmitter"), "Id", 1, "Name", "SA-19", "Lock", lockOn, "BearingDeg", ((brg - 7f) % 360f + 360f) % 360f, "RangeM", (11.6f - 0.35f * t) * 1000f, "AgeS", lockAge), emitterCount++);
-        if (t >= 12.6f) emitters.SetValue(s.Fill(s.Domain("ThreatEmitter"), "Id", 2, "Name", "ZSU", "Lock", false, "BearingDeg", 288f, "RangeM", (4.1f - 0.1f * (t - 12.6f)) * 1000f, "AgeS", t - 12.6f), emitterCount++);
+        if (s.Variant == "longnames")
+        {
+            // What the game's runs showed: a carrier group (the carrier, a corvette, a truck) round 186 degrees and a SAM site (a radar and three T9K41) round 212 and 229, the names that printed over each other and the spokes that ran
+            // through the tags; the nearest, spiking us, has the longest name.
+            for (int i = 0; i < LongNames.Length; i++)
+                emitters.SetValue(s.Fill(s.Domain("ThreatEmitter"), "Id", i + 1, "Name", LongNames[i], "Lock", false, "BearingDeg", LongBearing[i], "RangeM", LongKm[i] * 1000f, "AgeS", 3f), emitterCount++);
+        }
+        else
+        {
+            emitters.SetValue(s.Fill(s.Domain("ThreatEmitter"), "Id", 1, "Name", "SA-19", "Lock", lockOn, "BearingDeg", ((brg - 7f) % 360f + 360f) % 360f, "RangeM", (11.6f - 0.35f * t) * 1000f, "AgeS", lockAge), emitterCount++);
+            if (t >= 12.6f) emitters.SetValue(s.Fill(s.Domain("ThreatEmitter"), "Id", 2, "Name", "ZSU", "Lock", false, "BearingDeg", 288f, "RangeM", (4.1f - 0.1f * (t - 12.6f)) * 1000f, "AgeS", t - 12.6f), emitterCount++);
+        }
 
         StoresSpec stores = StoresSpecFor("threat", t, null);
         Array cm = BuildCm(s, stores, out int cmCount);
         s.Publish(s.Fill(s.Domain("ThreatScope"), "MissileCount", list.Count, "Missiles", missiles, "EmitterCount", emitterCount, "Emitters", emitters, "Cm", cm, "CmCount", cmCount,
-            "HasSam", true, "SamRings", t < 12.6f ? 2 : 1));
+            "HasSam", true, "SamRings", s.Variant == "longnames" ? (t < 1f ? 0 : 2) : (t < 12.6f ? 2 : 1)));
 
         // Lamps: LOCK flashing for its first 1.5 s, SPKE while only a search radar paints us, MSL n while anything is inbound.
         object picture = s.Domain("ThreatPicture");
@@ -85,6 +100,71 @@ public static partial class HudLogUnityCheck
             "Sub", Mathf.RoundToInt(38f - 0.4f * t) + "KM", "Tone", s.ContractEnum("ScopeTone", "Ink")));
         s.Gauge("radio", s.Fill(s.Contract("GaugeSpec"), "Id", "radio", "Label", "RADIO", "Kind", s.ContractEnum("GaugeKind", "Bars"), "Value", 0.75f, "Text", "VIPER 2",
             "Sub", liveCount > 0 ? "BREAK!" : lockOn ? "COVER" : "ON STA", "Tone", s.ContractEnum("ScopeTone", "Ink")));
+    }
+
+    /// <summary>
+    /// The THREAT page with the names the game gave its radars (the first run printed them over each other): no two words of the page overlap, the call box's second line keeps its range whole, a radar's tag is the whole
+    /// words that fit twelve characters and nothing says "SAM ENV x0" (that word shows only inside an envelope; t 1.5 is inside two).
+    /// </summary>
+    private static void ThreatLongNamesChecks(object status, string tag, float t)
+    {
+        var page = (RectTransform)Field(status, "pageRect");
+        var words = new List<(string text, Rect ink)>();
+        foreach (TextMeshProUGUI label in page.GetComponentsInChildren<TextMeshProUGUI>())
+        {
+            if (!label.gameObject.activeInHierarchy || string.IsNullOrEmpty(label.text)) continue;
+            label.ForceMeshUpdate();
+            Vector2 lo = new Vector2(float.MaxValue, float.MaxValue), hi = new Vector2(float.MinValue, float.MinValue);
+            for (int i = 0; i < label.textInfo.characterCount; i++)
+            {
+                TMP_CharacterInfo c = label.textInfo.characterInfo[i];
+                if (!c.isVisible) continue;
+                foreach (Vector3 p in new[] { c.bottomLeft, c.topRight })
+                {
+                    Vector3 local = page.InverseTransformPoint(label.transform.TransformPoint(p));
+                    lo = Vector2.Min(lo, local); hi = Vector2.Max(hi, local);
+                }
+            }
+            if (lo.x <= hi.x) words.Add((label.text, Rect.MinMaxRect(lo.x, lo.y, hi.x, hi.y)));
+        }
+        for (int i = 0; i < words.Count; i++)
+            for (int j = i + 1; j < words.Count; j++)
+            {
+                Rect a = words[i].ink, b = words[j].ink;
+                float iw = Mathf.Min(a.xMax, b.xMax) - Mathf.Max(a.xMin, b.xMin), ih = Mathf.Min(a.yMax, b.yMax) - Mathf.Max(a.yMin, b.yMin);
+                bool overlap = iw > 1f && ih > 2f && iw * ih > 0.12f * Mathf.Min(a.width * a.height, b.width * b.height);
+                Check(!overlap, "THREAT with the game's radar names: [" + words[i].text + "] and [" + words[j].text + "] overlap (" + tag + ")");
+            }
+        string sub = null;
+        foreach (var w in words)
+        {
+            Check(!w.text.StartsWith("HYPERION CLASS") && !w.text.StartsWith("SHARD CLASS C"), "THREAT: a radar's tag is the words that fit twelve characters, not the game's whole name: [" + w.text + "] (" + tag + ")");
+            if (w.text.EndsWith("KM") && w.text.Contains(" ")) sub = w.text;
+            Check(!w.text.StartsWith("SAM ENV") || t >= 1f, "THREAT: no SAM ENV word with no envelope round us: [" + w.text + "] (" + tag + ")");
+        }
+        bool tagged = false;
+        foreach (var w in words) tagged |= w.text == "HYPERION";
+        Check(tagged, "THREAT: the carrier's tag reads HYPERION (" + tag + ")");
+        // The call box's second line is a name and a range ("HYPE… 12KM"): found by its range, so a line the box cut off ("HYPERI… 1…", seen in game) is not found at all.
+        Check(sub != null, "THREAT: the call box's second line keeps its range whole, the name gives way (" + tag + ")");
+        // In whole words, with no ellipsis ("HYPE... 37KM" and "MSV ... 19KM" in game: the font draws the ellipsis wide and a cut after a space left a blank before it).
+        Check(sub != null && sub.Length <= 10 && sub.IndexOf('…') < 0 && sub.IndexOf("...", StringComparison.Ordinal) < 0 && !sub.StartsWith("HYPERION"), "...and it fits the 84 units the box has, in whole words with no ellipsis: [" + sub + "] (" + tag + ")");
+        // The radars' spokes run from the rim (centre 220, 164, radius 130 in the page's own units) in to 0.56 of it: none goes through a tag's words (the dashed spoke ran through the first letter of HYPERION and through "HLT RADAR" in game).
+        // The page's body is drawn 10 units higher than those numbers say (ScopeLayout.Lift of a full page), and the page rectangle's top-left is its origin.
+        foreach (var w in words)
+            for (int i = 0; i < LongBearing.Length; i++)
+                for (int k = 0; k <= 40; k++)
+                {
+                    float a = LongBearing[i] * Mathf.Deg2Rad, r = 130f * Mathf.Lerp(1f, 0.56f, k / 40f), px = 220f + Mathf.Sin(a) * r, py = 10f - (164f - Mathf.Cos(a) * r);
+                    Check(!(px > w.ink.xMin + 1f && px < w.ink.xMax - 1f && py > w.ink.yMin + 1f && py < w.ink.yMax - 1f),
+                        "THREAT with the game's radar names: the spoke at " + LongBearing[i] + " degrees runs through [" + w.text + "] (" + tag + ")");
+                }
+        if (t >= 1f)
+        {
+            bool env = false;
+            foreach (var w in words) env |= w.text == "SAM ENV x2";
+            Check(env, "THREAT: inside two envelopes the page says SAM ENV x2 (" + tag + ")");
+        }
     }
 }
 #endif

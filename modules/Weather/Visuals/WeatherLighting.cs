@@ -31,7 +31,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static WeatherLight Resolve(LevelInfo level, Light source)
         {
             if (source == null) return new WeatherLight(Vector3.up, Color.black, false);
-            Color colour = source.color * source.intensity;
+            // The atmosphere may have dimmed the sun for the overcast look; the cloud tops are lit by the sun's own light.
+            float dimmed = source == level.sun ? Mathf.Max(0.05f, RainAtmosphere.CurrentSunScale) : 1f;
+            Color colour = source.color * (source.intensity / dimmed);
             float peak = Mathf.Max(colour.r, Mathf.Max(colour.g, colour.b));
             if (peak > 2f) colour *= 2f / peak;
             return new WeatherLight(-source.transform.forward, colour, source == level.moon);

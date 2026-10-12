@@ -1,0 +1,169 @@
+{
+  "_note": "The visor TERRAIN GHOST in the cockpit, ONE run for three strengths. The player is seated in the cockpit view at 1500 m over the west of the island (map x -6 km, z +10 km), heading west (270) at 180 m/s toward the massif whose peaks stand 1.3 to 1.6 km (map x -18..-12 km, z +6..+14 km): in 16 s it flies about 3 km, never closer than 4 km to the peaks, and every 320 m cell of the 10 km grid around it has real ground heights (sea at the coast, thinned to every fourth line; ground higher than 150 m under the aircraft, here the massif, in the caution colour at double strength). After 8 s the ghost has faded in; TerrainGhostAutomation.Configure sets the strength IN MEMORY ONLY (the saved TerrainGhost setting is never written; restore gives it back, cfg ghost_restored.saved false): ghost-default is the saved default (0.35, 'barely there'), ghost-full is strength 1, ghost-off is strength 0 (nothing may be drawn: compare it with the other two). Each Configure result is stored: supportedMap (a baked heightfield was found), materialFound (the line shader exists), vertexCount, lastRebuildMs, fade, cautionVertices. The checks assert those and that the Unity log has no Exception; nothing asserts the pixels, that is read off the three captures. The cockpit interior is drawn by a second (overlay) camera over the main one, so in the cockpit view the ghost is drawn on THAT camera (squeezed into its 5 m of depth at the same screen position) and shows over the cockpit's own opaque parts too: ghost_default.camera must read cockpit, and the captures should show the lines over the dashboard.",
+  "name": "terrain-ghost",
+  "description": "Visor terrain ghost in one cockpit run: the default strength, strength 1 and strength 0 over real ground.",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 240,
+  "environment": {
+    "config": {
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "near": [
+        -6000,
+        10000
+      ],
+      "altitude": 1500,
+      "speed": 180,
+      "heading": 270,
+      "view": "cockpit"
+    },
+    {
+      "op": "record",
+      "ids": [
+        "*"
+      ],
+      "hz": 2
+    },
+    {
+      "op": "wait",
+      "seconds": 8
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.TerrainGhostAutomation.Configure",
+      "args": {
+        "restore": true
+      },
+      "store": "ghost_default"
+    },
+    {
+      "op": "capture",
+      "name": "ghost-default"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.TerrainGhostAutomation.Configure",
+      "args": {
+        "strength": 1.0
+      },
+      "store": "ghost_full"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "ghost-full"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.TerrainGhostAutomation.Configure",
+      "args": {
+        "strength": 0.0
+      },
+      "store": "ghost_off"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "ghost-off"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.TerrainGhostAutomation.Configure",
+      "args": {},
+      "store": "ghost_off_later"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.TerrainGhostAutomation.Configure",
+      "args": {
+        "restore": true
+      },
+      "store": "ghost_restored"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_equals",
+      "path": "ghost_default.supportedMap",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "ghost_default.materialFound",
+      "value": true
+    },
+    {
+      "check": "result_above",
+      "path": "ghost_default.vertexCount",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "ghost_default.fade",
+      "min": 0.9
+    },
+    {
+      "check": "result_equals",
+      "path": "ghost_default.camera",
+      "value": "cockpit"
+    },
+    {
+      "check": "result_equals",
+      "path": "ghost_default.cockpitCamera",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "ghost_full.strength",
+      "value": 1
+    },
+    {
+      "check": "result_above",
+      "path": "ghost_full.vertexCount",
+      "min": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "ghost_off.strength",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "ghost_off_later.fade",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "ghost_restored.saved",
+      "value": false
+    },
+    {
+      "check": "log_match",
+      "pattern": "Exception",
+      "max": 0
+    }
+  ]
+}

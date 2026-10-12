@@ -62,14 +62,25 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private sealed class HudPresenter : Presenter
         {
 
+            // The HUD picks its mode from the active weapon station (HUDOptions.AutomaticToggle), on every weapon or safety change.
+            private static readonly string[] ModeRules =
+            {
+                "Chosen while weapon safety is on, or when no store is active.",
+                "Chosen when the active store is a gun.",
+                "Chosen when the active store rates higher against air than against surface.",
+                "Chosen when the active store rates higher against surface than against air.",
+                "Chosen for an anti-radar store.",
+                "Chosen for a store with no combat rating: cargo, troops or supply.",
+            };
+
             private static readonly string[] ModeNotes =
             {
-                "NAV: routes and waypoints on the HUD. Tap to make it the active mode.",
-                "GUN: gun pipper and lead cue. Tap to make it the active mode.",
-                "A2A: air intercept cues and tracks. Tap to make it the active mode.",
-                "A2G: ground attack cues and targets. Tap to make it the active mode.",
-                "EW: emitters and jamming. Tap to make it the active mode.",
-                "LOG: transport and logistics routing. Tap to make it the active mode."
+                "NAV: the priority set used with weapon safety on. Tap to switch the HUD to it.",
+                "GUN: the priority set used when the active store is a gun. Tap to switch the HUD to it.",
+                "A2A: the priority set used for stores rated best against air. Tap to switch the HUD to it.",
+                "A2G: the priority set used for stores rated best against surface. Tap to switch the HUD to it.",
+                "EW: the priority set used for anti-radar stores. Tap to switch the HUD to it.",
+                "LOG: the priority set used for stores with no combat rating. Tap to switch the HUD to it.",
             };
 
             private static readonly AvIcon[] ModeGlyphs =
@@ -79,12 +90,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             private static readonly string[] CategoryNotes =
             {
-                "Gate: friendly contacts. Tap to draw or hide them on the HUD.",
-                "Gate: hostile contacts. Tap to draw or hide them on the HUD.",
-                "Gate: airborne tracks. Tap to draw or hide them on the HUD.",
-                "Gate: incoming missiles. Tap to draw or hide them on the HUD.",
-                "Gate: ground vehicles. Tap to draw or hide them on the HUD.",
-                "Gate: bases and structures. Tap to draw or hide them on the HUD."
+                "Gate: friendly contacts. Open gives full-size HUD markers, closed shrinks them to a mark.",
+                "Gate: hostile contacts. Open gives full-size HUD markers, closed shrinks them to a mark.",
+                "Gate: airborne tracks. Open gives full-size HUD markers, closed shrinks them to a mark.",
+                "Gate: incoming missiles. Open gives full-size HUD markers, closed shrinks them to a mark.",
+                "Gate: ground vehicles. Open gives full-size HUD markers, closed shrinks them to a mark.",
+                "Gate: bases and structures. Open gives full-size HUD markers, closed shrinks them to a mark."
             };
 
             private static readonly string[] VehicleNotes =
@@ -103,7 +114,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             private static readonly string[] BuildingNotes =
             {
-                "Civilian sites. Turning them on lets the HUD mark civilians as targets.",
+                "Civilian sites. Listed gives them full-size HUD markers; unlisted keeps them minimised.",
                 "Industrial plants. Tap to toggle them in the HUD priority list.",
                 "Early warning radar. Tap to toggle it in the HUD priority list.",
                 "Fuel and supply depots. Tap to toggle them in the HUD priority list.",
@@ -123,6 +134,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private AvGauge gatesRing;
             private AvGauge typesRing;
 
+            private readonly AvRow[] modeBrief = new AvRow[4];
+            private AvRow[] vehicleBrief, buildingBrief;
+
             private MfdPagingGrid vehicles;
             private AvControl vehAll, vehClear;
             private AvGauge airDefRing, armorRing, shownVehRing;
@@ -137,7 +151,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 this.options = options;
             }
 
-            protected override string Title => "HUD PRIORITY MATRIX";
+            protected override string Title => PageTitles[0];
+
+            private static readonly string[] PageTitles =
+                { "HUD SYMBOLOGY / MODE & GATES", "HUD SYMBOLOGY / GROUND PRIORITY", "HUD SYMBOLOGY / STRUCTURE PRIORITY" };
 
             protected override (AvIcon Icon, string Label)[] TabItems => new[]
             {
@@ -158,10 +175,25 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 BuildModePage(CreatePage());
                 BuildVehiclesPage(CreatePage());
                 BuildBuildingsPage(CreatePage());
+
+                // A page that ends above the footer prints these on its bay cover, most important first.
+                Console.Orders(0,
+                    "The HUD picks its mode itself whenever you change weapon or flip the safety.",
+                    "Pick a mode by hand to edit its priority set. The next weapon change re-selects.",
+                    "Each mode keeps its own gates and platform lists.");
+                Console.Orders(1,
+                    "Tap a tile to list or unlist that vehicle type.",
+                    "AIR DEF and ARMOR keep one family and switch every other type off.",
+                    "ALL lists every type; CLEAR minimises every vehicle on the HUD.");
+                Console.Orders(2,
+                    "Tap a tile to list or unlist that structure type.",
+                    "STRIKE keeps radar, depots, hangars and munitions; MILITARY switches civilian sites off.",
+                    "ALL lists every type, civilian sites included; CLEAR minimises every structure.");
             }
 
             protected override void OnPageChanged(int index)
             {
+                Console.SetTitle(PageTitles[Mathf.Clamp(index, 0, PageTitles.Length - 1)]);
                 selectedPage = index;
                 RequestRefresh();
             }
@@ -187,6 +219,46 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     ? NativeCategoryLabel(options.listCategories[i], i) : ""));
                 AddGrid(page, categories);
 
+                // Why the HUD is in this mode and what the gates do to its markers.
+                page.Section(AvIcon.InfoCircle, "MODE BRIEF", "WHAT THE HUD DRAWS");
+                string[] names = { "ACTIVE STORE", "AUTO-SELECT", "PRIORITY SET", "MARKERS" };
+                for (int i = 0; i < modeBrief.Length; i++)
+                {
+                    modeBrief[i] = page.Add(new AvRow(page.Content));
+                    modeBrief[i].Set(names[i], "Waiting for the HUD.", "—", AvState.Inert);
+                }
+            }
+
+            /// <summary>The MODE page brief for one mode. Takes plain values, so a layout preview can fill it without a HUD.</summary>
+            private void SetModeBrief(int mode, string store, string safety, AvState safetyState, int gatesOpen, int gates)
+            {
+                string code = ((HUDOptions.HUDMode)mode).ToString(), rule = ModeRules[Mathf.Clamp(mode, 0, ModeRules.Length - 1)];
+                modeBrief[0].Set("ACTIVE STORE", store, safety, safetyState);
+                modeBrief[1].Set("AUTO-SELECT", rule, code, AvState.Info);
+                modeBrief[2].Set("PRIORITY SET", code + " keeps its own gates and platform lists. Edits on these pages are saved to " +
+                    code + " only.", "SAVED", AvState.Inert);
+                modeBrief[3].Set("MARKERS", "Open gate and listed type: full-size marker within reach. Otherwise a minimised mark.",
+                    gatesOpen + "/" + gates + " OPEN", gatesOpen == 0 ? AvState.Caution : AvState.Info);
+            }
+
+            /// <summary>The store the HUD follows: its name and whether its safety is on (a dash when it cannot be read).</summary>
+            private static void ReadStore(out string store, out string safety, out AvState state)
+            {
+                CombatHUD hud = SceneSingleton<CombatHUD>.i;
+                WeaponStation station = hud == null ? null : hud.GetWeaponStation();
+                if (hud == null || hud.aircraft == null || hud.aircraft.disabled)
+                {
+                    store = "No aircraft."; safety = "—"; state = AvState.Inert; return;
+                }
+                if (station == null || station.WeaponInfo == null)
+                {
+                    store = "No store selected."; safety = "—"; state = AvState.Inert; return;
+                }
+                string name = string.IsNullOrEmpty(station.WeaponInfo.weaponName) ? station.WeaponInfo.shortName : station.WeaponInfo.weaponName;
+                store = string.IsNullOrEmpty(name) ? "UNNAMED STORE" : name.ToUpperInvariant();
+                bool safe = station.SafetyIsOn(hud.aircraft);
+                safety = safe ? "SAFE" : "ARMED";
+                state = safe ? AvState.Inert : AvState.Caution;
             }
 
             private static AvIcon GateGlyph(string label)
@@ -208,7 +280,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             private void BuildVehiclesPage(AvFlow page)
             {
-                vehicles = new MfdPagingGrid(page.Content, 3, 4, pager: true, rowHeight: 56f, tile: true);
+                page.Section(AvIcon.Filter, "GROUND TYPES", "LISTED = FULL MARKER");
+                vehicles =new MfdPagingGrid(page.Content, 3, 4, pager: true, rowHeight: 56f, tile: true);
                 vehicles.SetGlyphs(i => VehicleGlyph(
                     options != null && options.listVehicleTypes != null && i >= 0 && i < options.listVehicleTypes.Count
                         ? LabelFor(options.listVehicleTypes[i], "") : "", i));
@@ -234,13 +307,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 shownVehRing.Help = "Vehicle types on the HUD priority list out of all ten.";
                 page.Row(airDefRing, armorRing, shownVehRing);
 
+                vehicleBrief = BuildBrief(page, "GROUND");
             }
 
             // ------------------------------------------------------------ buildings page
 
             private void BuildBuildingsPage(AvFlow page)
             {
-                buildings = new MfdPagingGrid(page.Content, 3, 3, pager: true, rowHeight: 56f, tile: true);
+                page.Section(AvIcon.BuildingBank, "STRUCTURE TYPES", "LISTED = FULL MARKER");
+                buildings =new MfdPagingGrid(page.Content, 3, 3, pager: true, rowHeight: 56f, tile: true);
                 buildings.SetGlyphs(i => BuildingGlyph(
                     options != null && options.listBuildingTypes != null && i >= 0 && i < options.listBuildingTypes.Count
                         ? LabelFor(options.listBuildingTypes[i], "") : "", i));
@@ -263,9 +338,57 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 civilianRing = new AvGauge(page.Content, "CIVILIANS");
                 strikeRing.Help = "Strike coverage: how many of RDR, DEP, HGR and AMMO are on (4 = full set).";
                 militaryRing.Help = "Military coverage: how many of the six military building types are on.";
-                civilianRing.Help = "Civilian sites: OFF keeps civilians protected from HUD target marks; ON lets the HUD mark them.";
+                civilianRing.Help = "Civilian sites: OFF keeps civilian buildings minimised on the HUD; ON gives them full-size markers.";
                 page.Row(strikeRing, militaryRing, civilianRing);
 
+                buildingBrief = BuildBrief(page, "STRUCTURE");
+            }
+
+            // ------------------------------------------------------------ priority brief
+
+            private static AvRow[] BuildBrief(AvFlow page, string kind)
+            {
+                page.Section(AvIcon.InfoCircle, kind + " PRIORITY BRIEF", "FULL MARKER · MINIMISED");
+                var rows = new AvRow[3];
+                string[] names = { "FULL MARKER", "MINIMISED", "RULE" };
+                for (int i = 0; i < rows.Length; i++)
+                {
+                    rows[i] = page.Add(new AvRow(page.Content));
+                    rows[i].Set(names[i], "Waiting for the HUD.", "—", AvState.Inert);
+                }
+                return rows;
+            }
+
+            /// <summary>The listed types in words (the shorter of the listed and the unlisted names) and the standing rule.</summary>
+            private void SetBrief(AvRow[] rows, List<HUDOptions_ToggleButton> types, string what)
+            {
+                int total = types.Count, listed = CountEnabled(types);
+                FillBrief(rows, listed == 0 || listed == total ? "" : TypeWords(types, true),
+                    listed == 0 || listed == total ? "" : TypeWords(types, false), listed, total, what, options.currentMode.ToString());
+            }
+
+            private void FillBrief(AvRow[] rows, string listedWords, string unlistedWords, int listed, int total, string what, string code)
+            {
+                rows[0].Set("FULL MARKER", listed == 0 ? "NONE LISTED. Every " + what + " is minimised."
+                    : listed == total ? "EVERY " + what.ToUpperInvariant() + " TYPE" : listedWords, listed + "/" + total,
+                    listed == 0 ? AvState.Caution : AvState.Ready);
+                rows[1].Set("MINIMISED", listed == total ? "NONE. Every " + what + " type is listed."
+                    : listed == 0 ? "EVERY " + what.ToUpperInvariant() + " TYPE" : unlistedWords,
+                    AvNum.Fixed(total - listed, 0), listed == total ? AvState.Inert : AvState.Info);
+                rows[2].Set("RULE", "Listed types get a full-size HUD marker within reach; unlisted types shrink to a minimised mark. Saved with the " +
+                    code + " set.", code, AvState.Inert);
+            }
+
+            private string TypeWords(List<HUDOptions_ToggleButton> types, bool listed)
+            {
+                var text = new System.Text.StringBuilder();
+                for (int i = 0; i < types.Count; i++)
+                {
+                    if (types[i] == null || types[i].status != listed) continue;
+                    if (text.Length > 0) text.Append(" · ");
+                    text.Append(LabelFor(types[i], "TYPE"));
+                }
+                return text.ToString();
             }
 
             // ------------------------------------------------------------- refresh
@@ -318,6 +441,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                         i => options.listCategories[i] != null && options.listCategories[i].maximized,
                         ToggleCategory,
                         details: i => i < CategoryNotes.Length ? CategoryNotes[i] : null);
+
+                    string store, safety;
+                    AvState safetyState;
+                    ReadStore(out store, out safety, out safetyState);
+                    SetModeBrief((int)options.currentMode, store, safety, safetyState, activeGates, options.listCategories.Count);
                 }
 
                 if (selectedPage == 1)
@@ -339,6 +467,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     int vehTotal = Mathf.Max(1, options.listVehicleTypes.Count);
                     shownVehRing.Set(activeVeh / (float)vehTotal, activeVeh + "/" + options.listVehicleTypes.Count,
                         activeVeh > 0 ? AvState.Ready : AvState.Inert);
+                    SetBrief(vehicleBrief, options.listVehicleTypes, "vehicle");
                 }
 
                 if (selectedPage == 2)
@@ -359,6 +488,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     strikeRing.Set(strikeCount / 4f, strikeCount + "/4", strikeCount > 0 ? AvState.Ready : AvState.Inert);
                     militaryRing.Set(militaryCount / 6f, militaryCount + "/6", militaryCount > 0 ? AvState.Ready : AvState.Inert);
                     civilianRing.Set(civActive ? 1f : 0f, civActive ? "ON" : "OFF", civActive ? AvState.Caution : AvState.Inert);
+                    SetBrief(buildingBrief, options.listBuildingTypes, "structure");
                 }
             }
 
@@ -374,8 +504,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 options == null
                     ? "HUD MATRIX UNAVAILABLE"
                     : selectedPage == 0
-                        ? "HUD " + options.currentMode
-                        : selectedPage == 1 ? "VEHICLES • TAP TO TOGGLE" : "BUILDINGS • TAP TO TOGGLE";
+                        ? "HUD MODE " + options.currentMode
+                        : selectedPage == 1 ? "GROUND TYPES · TAP TO TOGGLE" : "STRUCTURES · TAP TO TOGGLE";
 
             private void SelectMode(int index)
             {

@@ -234,9 +234,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     while (at > 0 && siteRank[at - 1] > rank) at--;
                     if (at >= MaximumSites) continue;
                     // The optical verdict is per site (its own sky), sampled with the map every ten seconds.
-                    sites.Insert(at, new WatchSite(airbase.GetInstanceID(), p.x, p.z, OpticalDay(p.x, p.z))); siteRank.Insert(at, rank);
+                    sites.Insert(at, new WatchSite(airbase.GetInstanceID(), p.x, p.z)); siteRank.Insert(at, rank);
                     if (sites.Count > MaximumSites) { sites.RemoveAt(sites.Count - 1); siteRank.RemoveAt(siteRank.Count - 1); }
                 }
+                for (int i = 0; i < sites.Count; i++)   // the sky sample only for the sites that made the cut
+                    sites[i] = new WatchSite(sites[i].Key, sites[i].X, sites[i].Z, OpticalDay(sites[i].X, sites[i].Z));
             }
 
             private static bool OpticalDay(float x, float z)

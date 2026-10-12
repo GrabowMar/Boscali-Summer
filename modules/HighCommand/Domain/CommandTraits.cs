@@ -24,6 +24,8 @@ namespace BoscaliSummer.Modules.HighCommand.Domain
     {
         public const int All = (1 << 5) - 1;
         public const int MinimumBonusBudget = 96;
+        /// <summary>The longest strike line the sortie card carries.</summary>
+        public const int MaximumStrikeLine = 64;
 
         public static bool Has(CommandTrait mask, CommandTrait trait) => (mask & trait) == trait;
 
@@ -87,6 +89,40 @@ namespace BoscaliSummer.Modules.HighCommand.Domain
                 if (!Has(mask, trait)) continue;
                 if (builder.Length > 0) builder.Append(" · ");
                 builder.Append(Label(trait)).Append(' ').Append(Effect(trait));
+            }
+            return builder.Length == 0 ? "NO STAFF BONUS" : builder.ToString();
+        }
+
+        /// <summary>What killing a commander with this trait means to the attacker (the friendly side reads Effect).</summary>
+        public static string StrikeEffect(CommandTrait trait)
+        {
+            switch (trait)
+            {
+                case CommandTrait.Logistician: return "THEIR STIPEND +15%";
+                case CommandTrait.Beloved: return "LOSS HURTS THEM 30 S LONGER";
+                case CommandTrait.Zealot: return "+15% OF THEIR STAFF";
+                case CommandTrait.Veteran: return "BOUNTY +20% TO YOU";
+                case CommandTrait.Recluse: return "HARD TO SPOT (1.8 KM)";   // IntelPostRadius 2600 m x 0.7
+                default: return "";
+            }
+        }
+
+        /// <summary>
+        /// The enemy post's dossier line: what its commander is worth to the faction that must kill them. Up to two traits
+        /// (the most a generated commander has) joined by " · "; a trait that would not fit MaximumStrikeLine is left out.
+        /// </summary>
+        public static string StrikeLine(CommandTrait mask)
+        {
+            var builder = new StringBuilder(MaximumStrikeLine);
+            for (int bit = 0; bit < 5; bit++)
+            {
+                var trait = (CommandTrait)(1 << bit);
+                if (!Has(mask, trait)) continue;
+                string effect = StrikeEffect(trait);
+                int separator = builder.Length > 0 ? 3 : 0;
+                if (builder.Length + separator + effect.Length > MaximumStrikeLine) break;
+                if (separator > 0) builder.Append(" · ");
+                builder.Append(effect);
             }
             return builder.Length == 0 ? "NO STAFF BONUS" : builder.ToString();
         }

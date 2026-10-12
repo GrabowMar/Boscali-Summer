@@ -1,6 +1,6 @@
 {
   "name": "wing-taxi",
-  "notes": "Mechanics test (taxi/lineup/roll/liftoff), not combat survival: checks count wheels-off events, which fire before air defences can engage. Requires Trenches/TheaterOps/Events/Garrisons Enabled=false so barrages do not shell the stands; the lead anchors from far away so it survives.",
+  "_notes": "Mechanics test (taxi/lineup/roll/liftoff), not combat survival: checks count wheels-off events, which fire before air defences can engage. Requires Trenches/TheaterOps/Events/Garrisons Enabled=false so barrages do not shell the stands; the lead anchors from far away so it survives.",
   "mods": [
     "boscalisummer"
   ],

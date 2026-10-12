@@ -19,7 +19,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     {
         public const int MaxMembers = WcSnapshot.MaxMembers, MaxElements = ElementRoster.MaxElements;
         private const float RowH = 19f, HeadH = 18f, SumH = 22f, Pad = 6f, Gap = 4f, RowGap = 1f;
-        private const float NumW = 28f, NameW = 82f, TypeW = 44f, FuelW = 52f, AmmoW = 34f, DmgW = 36f;
+        private const float NumW = 24f, NameW = 98f, TypeW = 44f, FuelW = 52f, AmmoW = 34f, DmgW = 36f;
         private const int KindHead = 0, KindRow = 1;
 
         private sealed class Cell
@@ -103,6 +103,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvControl toSupply = seats.AddTrailing(new AvControl.Spec("SUPPLY", () => SupplyPicked?.Invoke()));
             toSupply.Help = "Requisition a wingman: pilot, airframe, fit and base.";
             SupplyButton = toSupply;
+            // The summary line starts hidden: until the first mode change it sat unplaced over the table (a dark square and stray words).
+            Apply();
             Restyle();
         }
 

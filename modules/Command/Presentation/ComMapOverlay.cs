@@ -12,10 +12,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
 {
     internal sealed class ComMapOverlay : MonoBehaviour, ISceneService
     {
-        private const int BaseTextureWidth = 1024;
+        private const int BaseTextureWidth = TacticalSectorGrid.MaximumTextureSize;
 
         private CommandSettings settings;
-        private CommandManager command;
 
         private DynamicMap dynamicMap;
         private GameObject overlayObj;
@@ -31,6 +30,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private bool isMapMaximized;
         private bool initialized;
 
+        private const float BakeMinInterval = 3f;
+        private float lastBakeTime = -999f;
         private ulong lastBakeDisplayHash;
         private bool lastBakeShowSectors;
         private float lastBakeOverlayAlpha = -1f;
@@ -83,10 +84,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
             MfdMapDeck.ApplyAppearance(settings);
         }
 
-        public void Configure(CommandSettings config, CommandManager manager, MissionMapCompatibilityEngine compat, TerritoryControlView control)
+        public void Configure(CommandSettings config, MissionMapCompatibilityEngine compat, TerritoryControlView control)
         {
             settings = config;
-            command = manager;
             compatibilityEngine = compat;
             territory = control;
 
@@ -151,6 +151,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
         {
             isMapMaximized = true;
             nextGridUpdate = 0f;
+            lastBakeTime = -999f;
             SetOverlayVisible(true);
         }
 
@@ -179,7 +180,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             isMapMaximized = DynamicMap.mapMaximized;
 
             // Build the raster and vector map surfaces only when the large map opens.
-            // STR still reads sector telemetry while flying with the map closed.
+            // The sector counts the board and the ticker read come from CommandManager's census, so nothing here needs to run while the map is closed.
             if (isMapMaximized && !initialized) TryInitialize();
 
             // Strict visibility control: Overlay is strictly for the Maximized Theater Map!
@@ -324,7 +325,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 if (localHq == null)
                 {
                     if (frontlineGraphic != null) frontlineGraphic.SetSource(null);
-                    command?.SyncSectorTelemetry(sectorGrid);
                     return;
                 }
 
@@ -335,7 +335,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
                     return;
                 }
                 sectorGrid = current;
-                command?.SyncSectorTelemetry(sectorGrid);
                 if (!paintMap) return;
                 GetTextureSize(out int texW, out int texH);
                 EnsureTexture(texW, texH);
@@ -349,8 +348,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 }
 
                 // 4. Fast Procedural Texture Bake (dirty-checked)
+                // A moving front changes the hash every refresh; hash-only re-bakes wait out BakeMinInterval (the change stays pending).
                 bool bakeDirty = !hasBakedTexture
-                    || lastBakeDisplayHash != sectorGrid.DisplayHash
+                    || (lastBakeDisplayHash != sectorGrid.DisplayHash && Time.unscaledTime - lastBakeTime >= BakeMinInterval)
                     || lastBakeShowSectors != showSectors
                     || !Mathf.Approximately(lastBakeOverlayAlpha, overlayAlpha)
                     || lastBakeTexW != texW
@@ -373,6 +373,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
                     lastBakeTexW = texW;
                     lastBakeTexH = texH;
                     hasBakedTexture = true;
+                    lastBakeTime = Time.unscaledTime;
                 }
 
                 if (frontlineGraphic != null)

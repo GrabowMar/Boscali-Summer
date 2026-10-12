@@ -25,11 +25,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// <summary>The surface a page paints on and the clock it paints at.</summary>
     internal readonly struct PagePaint
     {
-        /// <summary>The page body's size in design units (the scope less its page strip); the prototype's <c>env.w</c> / <c>env.h</c>.</summary>
+        /// <summary>The page body's size in design units (the scope less its page strip); the prototype's <c>env.w</c> / <c>env.h</c>. The board draws the body <see cref="ScopeLayout.Lift"/> units higher than the origin says.</summary>
         public readonly float W, H;
         /// <summary>The compact SYSTEMS strip rather than a full page.</summary>
         public readonly bool Compact;
-        /// <summary>Keep content below this y: the header band overlays the top of the body.</summary>
+        /// <summary>Keep content below this y: the page's header shelf is above it (the body is drawn 4 or 10 units higher, so its first row is 20 under the page's top).</summary>
         public readonly float SafeTop;
         /// <summary>The board's clock: use it for every animation (never a random number or the wall clock).</summary>
         public readonly float Now;
@@ -41,12 +41,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
     }
 
-    /// <summary>The one figure at the right of the page's tab: readable in under a second (<c>7 S</c>, <c>2 OUT</c>, <c>GS +0.3</c>).</summary>
+    /// <summary>The one figure at the right end of the page's header shelf: readable in under a second (<c>7 S</c>, <c>2 OUT</c>, <c>GS +0.3</c>). INK 12 unless it is a caution or a warning (bold 14 in that tone).</summary>
     internal struct ScopeHeadline
     {
         public string Text;
         public ScopeTone Tone;
-        /// <summary>Pulses the headline's plate (a warning that has just changed).</summary>
+        /// <summary>Pulses the headline (a warning that has just changed).</summary>
         public bool Flash;
     }
 
@@ -70,7 +70,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The tab's name (<c>SYSTEMS</c>).</summary>
         public abstract string Title { get; }
 
-        /// <summary>The pip letter other pages show for this one.</summary>
+        /// <summary>A one-letter code for the page (the header shows no pips for other live pages any more).</summary>
         public abstract char Code { get; }
 
         /// <summary>The page has data to draw at all. Only SYSTEMS is ever shown without being live (cruise), and it is not Ready without an aircraft: the shell then leaves the scope out.</summary>

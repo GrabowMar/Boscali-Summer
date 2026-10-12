@@ -323,7 +323,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 bool inSlot = m.SlotErrM < InSlotFilledM;
                 WingBoardMath.At(m.SlotX, m.SlotY, out float x, out float y);
                 g.Diamond(x, y, 5f, inSlot ? Ink : Dim, inSlot, inSlot ? 0.5f : 0.95f);
-                if (!inSlot) g.Text(ScopeStr.Int(m.Number), x, y + 13f, Dim, 12f, ScopeAlign.Center, false, 0.9f);
+                if (!inSlot)
+                {
+                    string digit = ScopeStr.Int(m.Number);
+                    float half = ScopeCanvas.TextW(digit, 12f) / 2f;
+                    placer.Reserve(x - half, x + half, y + 13f);      // the V labels keep 15 clear of it (LAYOUT.md 12.5)
+                    g.Text(digit, x, y + 13f, Dim, 12f, ScopeAlign.Center, false, 0.9f);
+                }
             }
 
             // Tethers: a thin line wingman -> slot (amber when it is an involuntary miss).

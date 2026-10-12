@@ -371,8 +371,9 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             if (!baseline && Time.timeSinceLevelLoad < nextSeveritySample) return;
             nextSeveritySample = Time.timeSinceLevelLoad + 1f;
             if (aircraft == null) { severity = 0f; return; }
-            UnitPart[] parts = aircraft.GetComponentsInChildren<UnitPart>(true);
-            int count = parts == null ? 0 : parts.Length;
+            IList<UnitPart> parts = aircraft.partLookup; // the game's own part list: no component scan
+            if (parts == null || parts.Count == 0) parts = aircraft.GetComponentsInChildren<UnitPart>(true);
+            int count = parts == null ? 0 : parts.Count;
             float hp = 0f;
             for (int i = 0; i < count; i++)
             {

@@ -6,3 +6,6 @@
 *.png binary
 *.ogg binary
 *.bundle binary
+
+# The Blueprinter pack is over GitHub's 100 MB file limit, so it goes through Git LFS.
+/assets/BoscaliSummer.nobp filter=lfs diff=lfs merge=lfs -text

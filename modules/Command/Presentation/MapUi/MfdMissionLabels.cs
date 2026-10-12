@@ -48,6 +48,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             { "HUNT THE JAMMER", new ContractVisual("radar", "ELECTRONIC WAR") },
             { "BRING BACK THE INTELLIGENCE", new ContractVisual("eye", "RECONNAISSANCE") },
             { "SURVEY THE AFTERMATH", new ContractVisual("eye", "RECONNAISSANCE") },
+            { "STRIKE COMMAND POST", new ContractVisual("target", "COMMAND POST") },
         };
 
         public static string ContractGlyph(string title) =>

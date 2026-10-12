@@ -1,6 +1,6 @@
-// Builds Vanguard.nobp from vanilla donors + the Blender models (BuildVanguard.py output).
-//   Unity -batchmode -quit -projectPath <bp> -executeMethod Vanguard.VanguardBuilder.Run
-// Env: VG_MODELS (folder with the *.fbx), VG_OUT (where Vanguard.nobp is copied).
+// Builds the Vanguard assets from vanilla donors + the Blender models (BuildVanguard.py output) into the
+// shared mod folder; tools/BlueprinterAssets/Editor/ModAssetsBuilder.cs calls Run and packs the one bundle.
+// Env: VG_MODELS (folder with the *.fbx), VG_OUT (import report), VG_PREVIEWS (optional).
 // Recipe follows Circuit-Breaker: copy donor ScriptableObjects, clone donor prefabs, hide donor
 // renderers, attach our FBX, re-point references, then one OpAddWeaponToHardpoint per rack that
 // reuses every hardpoint the donor rack is allowed on. Prefabs carry vanilla components only;
@@ -17,9 +17,8 @@ namespace Vanguard
 {
     public static partial class VanguardBuilder
     {
-        const string R = "Assets/Blueprinter/Mods/Vanguard/";
+        const string R = "Assets/Blueprinter/Mods/BoscaliSummer/Vanguard/";
         const string D = "Assets/Blueprinter/_donotship/";
-        const string Version = "0.1.0";
 
         // Keep in sync with modules/Vanguard/Domain/VanguardKeys.cs.
         sealed class Spec
@@ -101,8 +100,6 @@ namespace Vanguard
             ValidateRemoraRig();
             ValidateMaldJ();
             ValidateHawcX();
-            OpReferenceIndex.Refresh();
-            Build();
             ValidateAndPreview(materials);
         }
 
@@ -882,20 +879,6 @@ namespace Vanguard
                 UnityEngine.Object.DestroyImmediate(op);
             }
             else AssetDatabase.CreateAsset(op, opPath);
-        }
-
-        static void Build()
-        {
-            string outDir = Environment.GetEnvironmentVariable("VG_OUT") ?? throw new Exception("VG_OUT not set");
-            string delivery = Path.GetFullPath("Delivery~");
-            Directory.CreateDirectory(delivery);
-            var started = DateTime.UtcNow;
-            ModBuilder.Build("Vanguard", "Vanguard", Version, delivery);
-            string built = Path.Combine(delivery, "Vanguard_" + Version + ".nobp");
-            if (!File.Exists(built) || File.GetLastWriteTimeUtc(built) < started.AddSeconds(-1))
-                throw new Exception("fresh bundle was not produced");
-            File.Copy(built, Path.Combine(outDir, "Vanguard.nobp"), true);
-            Debug.Log("[Vanguard] BUNDLE_OK " + new FileInfo(built).Length + " bytes");
         }
     }
 }

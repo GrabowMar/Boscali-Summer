@@ -58,6 +58,8 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private readonly Transform[] glints = new Transform[SpaceRules.BirdCount];
         private readonly MeshRenderer[] glintRenderers = new MeshRenderer[SpaceRules.BirdCount];
         private MaterialPropertyBlock glintBlock;
+        private Color lastHull;
+        private bool hullPainted;
 
         public void Configure(SupportManager manager) => support = manager;
 
@@ -132,11 +134,13 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 Vector3 offset = Track(i, now) * DisplayRange;
                 birds[i].position = new GlobalPosition(offset.x, offset.y, offset.z).ToLocalPosition();
                 birds[i].localScale = new Vector3(size, size, size);
-                birds[i].gameObject.SetActive(has[i]);
+                if (birds[i].gameObject.activeSelf != has[i]) birds[i].gameObject.SetActive(has[i]);
                 Transform glint = glints[i];
-                if (glint == null || !has[i] || cam == null) { if (glint != null) glint.gameObject.SetActive(false); continue; }
+                if (glint == null || !has[i] || cam == null) { if (glint != null && glint.gameObject.activeSelf) glint.gameObject.SetActive(false); continue; }
                 float flare = 0.3f + 0.7f * Mathf.Pow(Mathf.Max(0f, Mathf.Sin(now * 0.7f + i * 2.4f)), 10f);
-                glint.gameObject.SetActive(dusk > 0.02f);
+                bool glinting = dusk > 0.02f;
+                if (glint.gameObject.activeSelf != glinting) glint.gameObject.SetActive(glinting);
+                if (!glinting) continue; // hidden: no transform or colour writes (they are all rewritten the frame it shows)
                 glint.position = birds[i].position;
                 glint.rotation = cam.transform.rotation;
                 float span = size * MeshSpan * (3f + 4f * flare);
@@ -145,8 +149,13 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 glintRenderers[i].SetPropertyBlock(glintBlock);
             }
             Color hull = Color.Lerp(HullDay, HullNight, night);
-            hullMaterial.SetColor(BaseColor, hull);
-            hullMaterial.SetColor(ColorId, hull);
+            if (!hullPainted || hull != lastHull)
+            {
+                hullMaterial.SetColor(BaseColor, hull);
+                hullMaterial.SetColor(ColorId, hull);
+                lastHull = hull;
+                hullPainted = true;
+            }
         }
 
         private void Build()
@@ -162,6 +171,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 ?? Shader.Find("Sprites/Default")
                 ?? Shader.Find("Unlit/Color");
             hullMaterial = new Material(shader) { name = "BoscaliSatHull" };
+            hullPainted = false;
             panelMaterial = new Material(shader) { name = "BoscaliSatPanel" };
             panelMaterial.SetColor(BaseColor, Panel);
             panelMaterial.SetColor(ColorId, Panel);

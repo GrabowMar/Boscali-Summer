@@ -37,21 +37,21 @@ namespace BoscaliSummer.Tests.Features.Weather
                     CloudBodies.MapWeights(x, z, nearHalf, farHalf, out float nearWeight, out float farFade);
                     TestAssert.That(nearWeight == 1f && farFade == 1f,
                         "All theater positions retain full near-map weight, including corners");
-                    TestAssert.That(float.IsFinite(p.Cover) && p.Cover >= 0f && p.Cover <= 1f &&
+                    TestAssert.That(float.IsFinite(p.LowCover) && p.LowCover >= 0f && p.LowCover <= 1f &&
                         float.IsFinite(p.RainRate) && p.RainRate >= 0f && p.RainRate <= WeatherField.MaxRainRate &&
                         float.IsFinite(p.CloudTop) && p.CloudTop >= p.CloudBase && p.LowTop >= p.CloudBase &&
                         p.CloudTop >= p.LowTop,
                         "Every sampled map column has finite physical coverage, precipitation and ordered ceilings");
-                    TestAssert.That(p.Cover == q.Cover && p.CellShape == q.CellShape && p.LowTop == q.LowTop &&
-                        p.FrontBase == q.FrontBase && p.FrontTop == q.FrontTop && p.RainRate == q.RainRate,
+                    TestAssert.That(p.LowCover == q.LowCover && p.CellShape == q.CellShape && p.LowTop == q.LowTop &&
+                        p.RainRate == q.RainRate,
                         "A settled held state retains the same cloud geometry and rain across mission time");
-                    minimumCover = Math.Min(minimumCover, p.Cover);
-                    maximumCover = Math.Max(maximumCover, p.Cover);
-                    sumCover += p.Cover;
+                    minimumCover = Math.Min(minimumCover, p.LowCover);
+                    maximumCover = Math.Max(maximumCover, p.LowCover);
+                    sumCover += p.LowCover;
                     maximumRain = Math.Max(maximumRain, p.RainRate);
                     maximumTop = Math.Max(maximumTop, p.CloudTop);
                     minimumMapWeight = Math.Min(minimumMapWeight, nearWeight);
-                    if (p.Cover > 0.5f) cloudy++;
+                    if (p.LowCover > 0.5f) cloudy++;
                     if (p.RainRate > 1f) rainy++;
                     n++;
                 }
@@ -78,8 +78,8 @@ namespace BoscaliSummer.Tests.Features.Weather
                     halfX = extent.Item1, halfZ = extent.Item2, samples = n,
                     minimumCover, maximumCover, meanCover = sumCover / n,
                     cloudyShare = cloudy / (float)n, rainyShare = rainy / (float)n,
-                    maximumRain, maximumTop, minimumMapWeight, cells = field.CellCount,
-                    clusters = field.CloudClusterCount, heroes = field.SuperstructureCount,
+                    maximumRain, maximumTop, minimumMapWeight, cells = field.ActiveCellCount(0f, 0f, 40000f),
+                    groups = field.ActiveGroupCount(0f, 0f, 40000f), heroes = field.SuperstructureCount,
                     farthestHeroCenter, farthestCameraX, farthestCameraZ, farthestHeroX, farthestHeroZ,
                     farthestHeroKind, heroCenterViewsPast220km });
             }
@@ -102,14 +102,13 @@ namespace BoscaliSummer.Tests.Features.Weather
                 {
                     WeatherPoint a = Displayed(maps, boundary * sign - 1f, along, nearHalf, farHalf);
                     WeatherPoint b = Displayed(maps, boundary * sign + 1f, along, nearHalf, farHalf);
-                    TestAssert.That(Math.Abs(a.BackgroundCover - b.BackgroundCover) < 0.001f &&
-                        Math.Abs(a.FrontCover - b.FrontCover) < 0.001f && Math.Abs(a.CellShape - b.CellShape) < 0.001f,
+                    TestAssert.That(Math.Abs(a.BackgroundCover - b.BackgroundCover) < 0.001f && Math.Abs(a.CellShape - b.CellShape) < 0.001f,
                         "Near/far onset and map boundaries have no cover step over a two-metre camera movement");
                     TestAssert.That(Math.Abs(a.CloudBase - b.CloudBase) < 10f && Math.Abs(a.LowTop - b.LowTop) < 10f,
                         "The map transition fades coverage without shifting the cloud ceiling abruptly");
                 }
                 WeatherPoint outside = Displayed(maps, farHalf + 1f, 0f, nearHalf, farHalf);
-                TestAssert.That(outside.BackgroundCover == 0f && outside.FrontCover == 0f && outside.CellShape == 0f,
+                TestAssert.That(outside.BackgroundCover == 0f && outside.CellShape == 0f,
                     "The outer ordinary map is cleanly absent while independent heroes may still render");
             }
         }
@@ -119,7 +118,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             CloudBodies.MapWeights(x, z, nearHalf, farHalf, out float nearWeight, out float farFade);
             WeatherPoint far = CloudBodies.SampleMap(maps.Far, maps.FarProfiles, CloudMaps.FarSize,
                 x / (farHalf * 2f) + 0.5f, z / (farHalf * 2f) + 0.5f);
-            far.BackgroundCover *= farFade; far.FrontCover *= farFade; far.CellShape *= farFade;
+            far.BackgroundCover *= farFade; far.CellShape *= farFade;
             if (nearWeight <= 0f) return far;
             WeatherPoint near = CloudBodies.SampleMap(maps.Near, maps.NearProfiles, CloudMaps.NearSize,
                 x / (nearHalf * 2f) + 0.5f, z / (nearHalf * 2f) + 0.5f);

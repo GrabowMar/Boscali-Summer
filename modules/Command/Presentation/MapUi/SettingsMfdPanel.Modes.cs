@@ -57,7 +57,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                         (AvIcon.Gauge, "PERF")),
                     "Glass, surface texture, tint, motion and interface audio, with a live preview of the finish.",
                     "Map layout, terrain, backdrop imagery and the news ticker, with a layout schematic.",
-                    "Target camera, radial presets and the common HUD element, with a sample of it.",
+                    "TAC BOARD HUD: layout, size, position, pages and blocks. Also the visor terrain ghost and the radial target presets.",
                     "Cockpit head inertia, camera vibrations, Mach buffeting, sun glare, G-vignette, and aerodynamic audio.",
                     "Client-local work budgets and panel effects, with a live frame-time trace. Each switch applies " +
                     "during this mission. Installing a disabled Weather module requires a game restart.");
@@ -68,6 +68,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 BuildPerformancePage(c.Page(CPerf), CPerf);
             }
 
+            ApplyOrders(c, server);
             c.Ticker.Add(-1, AvTickRate.Slow, () => RefreshChrome(c, mode, server));
             c.Finish();
             return c;

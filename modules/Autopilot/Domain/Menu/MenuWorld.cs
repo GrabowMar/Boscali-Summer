@@ -64,8 +64,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public string Aircraft = "SELF";
         /// <summary>Radar altitude at or above the gear/flare threshold: not on the apron.</summary>
         public bool Airborne = true;
-        /// <summary>Live <c>Aircraft.GetFuelLevel()</c>, 0..1.</summary>
-        public float Fuel = 1f;
         public int Targets;
         /// <summary>Distance to the nearest selected target in kilometres, negative = none.</summary>
         public float NearestKm = -1f;
@@ -122,6 +120,13 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public int Missiles;
         public string MissileStatus = "";
         public string MissileCurrent = "";
+        /// <summary>The TAC BOARD options (<c>ITacBoardSettings</c>) are installed: VIEW lists the three board rows.</summary>
+        public bool BoardAvailable;
+        public bool BoardOn;
+        /// <summary>Index into <see cref="MenuCatalog.BoardDeclutters"/>: FULL, LEAN, MIN.</summary>
+        public int BoardDeclutter;
+        /// <summary>Index into <see cref="MenuCatalog.BoardLayouts"/>: WIDE, STACK.</summary>
+        public int BoardLayout;
 
         // SUPPORT
         public bool MarkAvailable;

@@ -10,9 +10,10 @@ namespace BoscaliSummer.Modules.Command.Patches
     {
         public static event Action OnMaximized;
 
+        // The holo map can take the map key's press in the prefix: the original is skipped, the postfix still runs, and nothing was maximised.
         private static void Postfix()
         {
-            OnMaximized?.Invoke();
+            if (DynamicMap.mapMaximized) OnMaximized?.Invoke();
         }
     }
 

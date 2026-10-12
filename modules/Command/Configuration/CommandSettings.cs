@@ -10,6 +10,9 @@ namespace BoscaliSummer.Modules.Command.Configuration
         public ConfigEntry<bool> ExpandedMapUi { get; }
         public ConfigEntry<bool> FrontlinesOverlay { get; }
         public ConfigEntry<bool> FrontlineTrace { get; }
+        public ConfigEntry<bool> StrOverlayFronts { get; }
+        public ConfigEntry<bool> StrOverlayOperation { get; }
+        public ConfigEntry<bool> StrOverlaySorties { get; }
         public ConfigEntry<bool> ThreatHeat { get; }
         public ConfigEntry<float> OverlayOpacity { get; }
         public ConfigEntry<int> GridCellSizeMetres { get; }
@@ -57,9 +60,33 @@ namespace BoscaliSummer.Modules.Command.Configuration
         public ConfigEntry<AvFxTier> AvionicsFxTier { get; }
         public ConfigEntry<bool> AvionicsBlurBehind { get; }
         public ConfigEntry<bool> AvionicsReducedMotion { get; }
+        public ConfigEntry<float> DisplayLife { get; }
+        public ConfigEntry<float> TerrainGhost { get; }
+        public ConfigEntry<bool> HoloMap { get; }
+        public ConfigEntry<int> HoloRangeKm { get; }
+        public ConfigEntry<bool> HoloNorthUp { get; }
+        public ConfigEntry<float> AvionicsCustomKeyHue { get; }
+        public ConfigEntry<float> AvionicsCustomGlassHue { get; }
+        public ConfigEntry<float> AvionicsCustomGlassTint { get; }
 
         public CommandSettings(ConfigFile config)
         {
+            DisplayLife = config.Bind("Command", "DisplayLife", 0.6f,
+                new ConfigDescription("Live signal on the maximized MFD: the power-on raster, the slow refresh sweep and harder jam and hit break-up. 0 keeps the display still.", new AcceptableValueRange<float>(0f, 1f)));
+            TerrainGhost = config.Bind("Command", "TerrainGhost", 0.35f,
+                new ConfigDescription("Visor terrain ghost: a very faint wire relief of the real ground around and below your aircraft, drawn over the cockpit view in the HUD's colours. Ground that can hit you glows amber. 0 turns it off, 1 is clearly visible. Needs a map with baked terrain. Applies now; no restart.", new AcceptableValueRange<float>(0f, 1f)));
+            HoloMap = config.Bind("Command", "HoloMap", true,
+                new ConfigDescription("Holo map: the map key stops at a 3D wire hologram of the real ground around your aircraft, drawn in the HUD's colours over the corner of the screen, before the full map (corner map, then holo, then full map, then the corner map again). Off sends the key straight to the full map. Needs a map with baked terrain. Applies now; no restart."));
+            HoloRangeKm = config.Bind("Command", "HoloRangeKm", 20,
+                new ConfigDescription("Holo map: how far the hologram reaches from your aircraft, in kilometres: 10, 20 or 40. Applies now; no restart.", new AcceptableValueList<int>(10, 20, 40)));
+            HoloNorthUp = config.Bind("Command", "HoloNorthUp", false,
+                new ConfigDescription("Holo map: keep north at the top of the hologram. Off turns it so your heading is up. Applies now; no restart."));
+            AvionicsCustomKeyHue = config.Bind("Avionics", "CustomKeyHue", 190f,
+                new ConfigDescription("Custom scheme: hue of keys and selection, in degrees.", new AcceptableValueRange<float>(0f, 360f)));
+            AvionicsCustomGlassHue = config.Bind("Avionics", "CustomGlassHue", 200f,
+                new ConfigDescription("Custom scheme: hue of the panel glass, in degrees.", new AcceptableValueRange<float>(0f, 360f)));
+            AvionicsCustomGlassTint = config.Bind("Avionics", "CustomGlassTint", 0.6f,
+                new ConfigDescription("Custom scheme: how much of its hue the panel glass carries (0 = neutral grey).", new AcceptableValueRange<float>(0f, 1f)));
             DisplayEffects = config.Bind("Command", "DisplayEffects", true,
                 "Enable client-local MFD glass and display overlays. OFF gives a clean display.");
             DisplayAutoLight = config.Bind("Command", "DisplayAutoLight", true,
@@ -75,7 +102,7 @@ namespace BoscaliSummer.Modules.Command.Configuration
             DisplayTintStrength = config.Bind("Command", "DisplayTintStrength", 0.25f,
                 new ConfigDescription("Color wash strength; limited to preserve symbols and warning colors.", new AcceptableValueRange<float>(0f, 1f)));
             AvionicsTheme = config.Bind("Avionics", "Theme", AvThemeId.Portal,
-                "Panel color theme: Portal, Steel, Ace, Phosphor, FieldOps (FIELD OPS), Amber (AMBER CRT), Glass (GLASS MFD), NightOps (NIGHT OPS). Unknown saved names fall back to Portal.");
+                "Panel color theme: Portal, Steel, Ace, Phosphor, FieldOps (FIELD OPS), Amber (AMBER CRT), Glass (GLASS MFD), NightOps (NIGHT OPS), Custom (built from the three Custom* keys). Unknown saved names fall back to Portal.");
             AvionicsFxTier = config.Bind("Avionics", "FxTier", AvFxTier.Full,
                 "Panel effects: Off (none), Lite (glass and static glow), Full (shine, scan-in, alerts, EMP glitch).");
             AvionicsBlurBehind = config.Bind("Avionics", "BlurBehind", false,
@@ -93,6 +120,15 @@ namespace BoscaliSummer.Modules.Command.Configuration
 
             FrontlineTrace = config.Bind("Command", "FrontlineTrace", true,
                 "Draw the front line trace above the control tint. Only drawn while the control field is on; the MAP bezel's FRONT LINE layer switches it in game.");
+
+            StrOverlayFronts = config.Bind("Command", "StrOverlayFronts", true,
+                "STR layer on the expanded map: platform badges with lane bars and the proposal tags. The layer plate's FRONTS switch changes it in game.");
+
+            StrOverlayOperation = config.Bind("Command", "StrOverlayOperation", true,
+                "STR layer on the expanded map: the main effort's ring, axis and ground groups, and the reinforcement route once a wave desk reports a depot (none does in this build). The layer plate's OPERATION switch changes it in game.");
+
+            StrOverlaySorties = config.Bind("Command", "StrOverlaySorties", true,
+                "STR layer on the expanded map: the sorties tied to the operation, and enemy command posts (this build ties no sortie and reports no post yet). The layer plate's SORTIES switch changes it in game.");
 
             ThreatHeat = config.Bind("Command", "ThreatHeat", true,
                 "Tracked hostile sensor coverage as range contours. The local faction's tracked picture and your aircraft's detection envelope drive it. The MAP bezel's SENSOR CONTOURS layer switches it in game.");
@@ -151,7 +187,7 @@ namespace BoscaliSummer.Modules.Command.Configuration
                 "Show a tilted tactical model from baked game terrain when the expanded map is open. The native map remains available when terrain data is missing or this is off.");
 
             MapSymbology = config.Bind("Command", "MapSymbology", true,
-                "Draw expanded-map contacts as framed symbols: a frame shape for allegiance (square friendly, diamond hostile, circle unknown), a glyph per platform class and a dark plate that lifts them off the terrain. Off keeps the game's bare icons.");
+                "Draw expanded-map contacts as frameless solid symbols, one silhouette per platform class, tinted by side. Off keeps the game's bare icons.");
 
             MapTerrainOpacity = config.Bind("Command", "MapTerrainOpacity", 1.0f,
                 new ConfigDescription(

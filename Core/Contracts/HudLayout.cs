@@ -2,7 +2,7 @@ namespace BoscaliSummer.Core.Contracts
 {
     /// <summary>
     /// The common HUD element's fixed presentation bounds, shared by the seam and its
-    /// implementation. Nothing here is pilot-configurable since 2026-10-07.
+    /// implementation. These bounds are fixed; the pilot's options are <c>ITacBoardSettings</c>.
     /// </summary>
     internal static class HudLayout
     {

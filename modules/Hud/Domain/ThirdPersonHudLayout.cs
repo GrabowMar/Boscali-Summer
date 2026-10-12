@@ -37,7 +37,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
     /// The aircraft-frame guard is authoritative: <see cref="KeepClear"/> nudges an element clear
     /// of the frame rather than trusting the nominal offsets alone, so "never gets our elements"
     /// holds even where the spec's screen-fraction figures for the frame and an element (the HDG
-    /// box in particular) would otherwise land inside the same band.
+    /// box in particular) would otherwise land inside the same band. The TAC BOARD's box is the
+    /// second thing the cluster keeps clear of (<see cref="KeepClearOf"/>): an element it would
+    /// overlap moves the shortest way out.
     /// </summary>
     internal static class ThirdPersonHudLayout
     {
@@ -76,14 +78,18 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return new RectF(0f, centerY, FrameWidthFraction * width, h);
         }
 
-        public static RectF SpeedBox(float width, float height) =>
-            KeepClear(new RectF(-BoxOffsetXFraction * width, 0f, BoxWidth, BoxHeight), AircraftFrame(width, height));
+        /// <summary>The SPD and ALT boxes carry a slim bar on their outer side; the board is kept this far from the box so the bar is clear of it too.</summary>
+        private const float BarClear = BarGap + BarWidth;
 
-        public static RectF AltitudeBox(float width, float height) =>
-            KeepClear(new RectF(BoxOffsetXFraction * width, 0f, BoxWidth, BoxHeight), AircraftFrame(width, height));
+        /// <summary>The boxes, clear of the aircraft frame and of <paramref name="board"/> (the TAC BOARD's box in the same space; the default, no size, is no board).</summary>
+        public static RectF SpeedBox(float width, float height, RectF board = default) =>
+            KeepClear(KeepClearOf(new RectF(-BoxOffsetXFraction * width, 0f, BoxWidth, BoxHeight), board, GuardMargin + BarClear), AircraftFrame(width, height));
 
-        public static RectF HeadingBox(float width, float height) =>
-            KeepClear(new RectF(0f, HdgOffsetYFraction * height, HdgWidth, HdgHeight), AircraftFrame(width, height));
+        public static RectF AltitudeBox(float width, float height, RectF board = default) =>
+            KeepClear(KeepClearOf(new RectF(BoxOffsetXFraction * width, 0f, BoxWidth, BoxHeight), board, GuardMargin + BarClear), AircraftFrame(width, height));
+
+        public static RectF HeadingBox(float width, float height, RectF board = default) =>
+            KeepClear(KeepClearOf(new RectF(0f, HdgOffsetYFraction * height, HdgWidth, HdgHeight), board, GuardMargin), AircraftFrame(width, height));
 
         /// <summary>Slim vertical bar beside a box, on its outward side (away from screen centre).</summary>
         public static RectF SideBar(RectF box, bool outwardIsLeft)
@@ -118,6 +124,23 @@ namespace BoscaliSummer.Modules.Hud.Domain
             if (!Overlaps(r, frame)) return r;
             float clearY = frame.Top + GuardMargin + r.Height * 0.5f;
             return r.WithCenter(r.CenterX, clearY);
+        }
+
+        /// <summary>
+        /// Moves <paramref name="r"/> clear of <paramref name="board"/> grown by <paramref name="margin"/>, by the shortest of the four moves that do it (left, right, up or down): the board hangs from the top of the
+        /// screen, so an element in its way usually goes down or sideways. A rect already clear, or no board (no size), is returned unchanged.
+        /// </summary>
+        public static RectF KeepClearOf(RectF r, RectF board, float margin)
+        {
+            if (board.Width <= 0f || board.Height <= 0f) return r;
+            float left = board.Left - margin, right = board.Right + margin, top = board.Top + margin, bottom = board.Bottom - margin;
+            if (!(r.Left < right && r.Right > left && r.Bottom < top && r.Top > bottom)) return r;
+            float toLeft = r.Right - left, toRight = right - r.Left, down = r.Top - bottom, up = top - r.Bottom;
+            float best = Math.Min(Math.Min(toLeft, toRight), Math.Min(down, up));
+            if (best == down) return r.WithCenter(r.CenterX, r.CenterY - down);
+            if (best == toLeft) return r.WithCenter(r.CenterX - toLeft, r.CenterY);
+            if (best == toRight) return r.WithCenter(r.CenterX + toRight, r.CenterY);
+            return r.WithCenter(r.CenterX, r.CenterY + up);
         }
     }
 

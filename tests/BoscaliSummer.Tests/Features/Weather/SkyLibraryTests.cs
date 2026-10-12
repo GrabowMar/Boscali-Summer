@@ -197,7 +197,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             {
                 SkyDef d = SkyLibrary.Get(i);
                 if (!d.HasLow) continue;
-                float capacity = d.Genus.Convective ? d.Genus.Capacity : 0f;
+                float capacity = d.Genus.Convective ? (d.Nominal.Streets >= CumulusLattice.StreetThreshold ? SkyArchetypes.StreetCapacityHumilis : d.Genus.Capacity) : 0f;
                 TestAssert.That(Math.Abs(d.Nominal.CapacityCover - capacity) < 1e-6f && d.Genus.Convective == (d.Genus.Candidates > 0),
                     "sky " + (i + 1) + ": capacity is a cumulus-genus constant");
             }
@@ -242,7 +242,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                 SkyParams s = d.Nominal;
                 string who = "sky " + (i + 1);
                 TestAssert.That(Math.Abs(s.Mid.Strength - 0.6f * s.OpacityMid) < 1e-6f && Math.Abs(s.High.Strength - 0.8f * s.OpacityHigh) < 1e-6f, who + ": strength");
-                float cumulus = Math.Min(1f, 1.5f * s.CumulusCover + 0.2f * s.Convective);
+                float cumulus = Math.Min(1f, SkyDerived.HorizonStack * s.CumulusCover + 0.2f * s.Convective);
                 TestAssert.That(Math.Abs(s.HorizonCover - Math.Max(0.9f * s.SheetCover, cumulus)) < 1e-6f, who + ": horizon cover");
                 TestAssert.That(Math.Abs(s.HorizonDepth - Math.Max(300f, Math.Max(s.DeckDepth, 0.5f * s.PuffDepth))) < 1e-4f, who + ": horizon depth");
                 if (d.HasLow) TestAssert.That(s.BaseVariation == d.Genus.BaseVariation && s.BaseVariation >= 150f && s.BaseVariation <= 400f, who + ": base variation is the genus constant");
@@ -251,7 +251,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                 var tape = TapeSampler.Constant(s);
                 TestAssert.That(tape.At(0f).CumulusLevel == s.CumulusLevel && tape.At(0f).HorizonCover == s.HorizonCover, who + ": the baked row carries the derived columns");
             }
-            float[] horizon = { 0.225f, 0.525f, 0.855f, 0.90f, 0.59f };
+            float[] horizon = { 0.795f, 1f, 0.855f, 0.90f, 1f };
             int[] at = { 7, 14, 28, 31, 41 };
             for (int k = 0; k < at.Length; k++)
                 TestAssert.That(Math.Abs(SkyLibrary.Nominal(at[k]).HorizonCover - horizon[k]) < 0.001f, "sky " + (at[k] + 1) + " horizon cover " + horizon[k]);

@@ -30,6 +30,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public readonly int RunwayIndex;
         public readonly bool Reverse;
         public readonly List<Vec3> Obstacles = new List<Vec3>();
+        /// <summary>Ground vehicles on the field (refreshed by the engine): a taxiing member stops short of one in its way.
+        /// Live 2026-10-12 (highway strip): #2 drove into a parked fuel truck at its hold point and stood against it at 85 %.</summary>
+        public readonly List<Vec3> Vehicles = new List<Vec3>();
         private readonly Dictionary<int, Vec3> positions = new Dictionary<int, Vec3>();
         private readonly Dictionary<int, int> waitsFor = new Dictionary<int, int>();
         private readonly Dictionary<int, int> stands = new Dictionary<int, int>();   // owner → stand node

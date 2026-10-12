@@ -223,30 +223,55 @@ public sealed class WeatherUnityCheck : MonoBehaviour
         Check(wetCount < simBg.Length / 2, "Developed rain must not veil the pane: " + wetCount);
         Check(ThirdSpread(simWet, texture.width) < 5.0, "Split panes agree when parked");
 
+        // A dim horizon around the fixture's grey: what a bead inverts inside cloud.
+        var gradient = new Texture2D(64, 64, TextureFormat.RGB24, false);
+        for (int y = 0; y < 64; y++)
+            for (int gx = 0; gx < 64; gx++)
+                gradient.SetPixel(gx, y, new Color(0.18f + 0.24f * y / 63f, 0.18f + 0.24f * y / 63f, 0.18f + 0.24f * y / 63f));
+        gradient.Apply();
+        // Picture evidence only: the parked wet pane at bead scale, plain and refracting.
+        void CloseUp(string name, bool refracting)
+        {
+            var big = new RenderTexture(1024, 1024, 24);
+            camera.targetTexture = big;
+            camera.transform.position = new Vector3(-0.50f, 0f, -3f);
+            camera.orthographicSize = 0.16f;
+            dressing.SetScene(refracting ? gradient : null);
+            dressing.SetLighting(Vector3.up, Color.black, new Color(0.55f, 0.6f, 0.68f, 1f), refracting);
+            Check(dressing.Draw(simSurfaces, camera, 1f, 1f), "Close-up draws: " + name);
+            Capture(camera, big, name);
+            dressing.SetScene(null);
+            dressing.SetLighting(Vector3.up, Color.black, new Color(0.55f, 0.6f, 0.68f, 1f), false);
+            camera.transform.position = new Vector3(0f, 0f, -3f);
+            camera.orthographicSize = 1.05f;
+            camera.targetTexture = texture;
+            big.Release();
+        }
+        CloseUp("sim-wet-close.png", false);
+        CloseUp("sim-wet-close-refract.png", true);
+
         PrimeSim(dressing, updateShader, simSurfaces, 60, 1f, 1f, new Vector3(2f, 0.5f, 0f));
         Check(dressing.Draw(simSurfaces, camera, 1f, 1f), "Slipstream sim draws");
         Color32[] simSlip = Capture(camera, texture, "sim-slip.png");
         Check(DiffCount(simWet, simSlip, 8) > 100, "Slipstream advects the pattern");
         Check(ThirdSpread(simSlip, texture.width) < 5.0, "Split panes agree at speed");
 
-        var gradient = new Texture2D(64, 64, TextureFormat.RGB24, false);
-        for (int y = 0; y < 64; y++)
-            for (int gx = 0; gx < 64; gx++)
-                gradient.SetPixel(gx, y, new Color(y / 63f, y / 63f, y / 63f));
-        gradient.Apply();
-        Shader.SetGlobalTexture("_CameraOpaqueTexture", gradient);
+        // The glass refracts the scene copy it is handed, never a pipeline global.
+        dressing.SetScene(gradient);
         dressing.SetLighting(Vector3.up, Color.black, new Color(0.55f, 0.6f, 0.68f, 1f), true);
         Check(dressing.Draw(simSurfaces, camera, 1f, 1f), "Refracting sim draws");
         Color32[] simRefract = Capture(camera, texture, "sim-refract.png");
         Check(DiffCount(simBg, simRefract, 6) < simBg.Length / 2, "Refraction must not veil the pane");
-        Shader.SetGlobalTexture("_CameraOpaqueTexture", Texture2D.blackTexture);
-        UnityEngine.Object.Destroy(gradient);
 
         texture.Release();
         texture = new RenderTexture(1024, 1024, 24);
         camera.targetTexture = texture;
         camera.transform.position = new Vector3(-0.50f, 0f, -3f);
         camera.orthographicSize = 0.16f;
+        Check(dressing.Draw(simSurfaces, camera, 1f, 1f), "Close-up refracting sim draws");
+        Capture(camera, texture, "sim-close-refract.png");
+        dressing.SetScene(null);
+        UnityEngine.Object.Destroy(gradient);
         dressing.SetLighting(Vector3.up, Color.black, new Color(0.55f, 0.6f, 0.68f, 1f), false);
         Check(dressing.Draw(simSurfaces, camera, 1f, 1f), "Close-up sim draws");
         Color32[] simClose = Capture(camera, texture, "sim-close.png");
@@ -570,9 +595,9 @@ public sealed class WeatherUnityCheck : MonoBehaviour
             "Larger clouds use fewer particles");
         dressing.Apply(weather);
         Check(Mathf.Approximately(layer.SizeMin, 540f), "Repeated apply does not compound size");
-        dressing.Apply(weather, 1f, 1f);
+        dressing.Apply(weather, 1f);
         Check(layer.SizeMin > 540f && layer.SizeMax > 900f && layer.Thickness > 202.5f,
-            "Fronts and cell cores deepen native cloud shapes");
+            "Cell cores deepen native cloud shapes");
         dressing.Restore();
         Check(!dressing.Applied && layer.SizeMin == 300f && layer.SizeMax == 500f &&
             layer.MapScale == 250f && layer.Thickness == 150f &&

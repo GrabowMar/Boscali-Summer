@@ -45,6 +45,20 @@ namespace NOAvionics
         {
             base.Place(s);
             int perRow = (tabs.Length + Rows - 1) / Rows;
+            if (Rows == 1)
+            {
+                // One row: a tab's share follows its label, so a long word (BEHAVIOUR) is not squeezed onto its icon by short ones.
+                const float Base = 6f;
+                float total = 0f, x = 0f, avail = s.W - (tabs.Length - 1) * 2f;
+                foreach (AvControl t in tabs) total += Base + (t.Label?.Length ?? 0);
+                foreach (AvControl t in tabs)
+                {
+                    float w = Mathf.Floor(avail * (Base + (t.Label?.Length ?? 0)) / total);
+                    AvLay.Place(t.Rect, x, 0f, w, AvGridTokens.Tab);
+                    x += w + 2f;
+                }
+                return;
+            }
             for (int i = 0; i < tabs.Length; i++)
             {
                 int row = i / perRow, inRow = row == Rows - 1 ? tabs.Length - row * perRow : perRow;

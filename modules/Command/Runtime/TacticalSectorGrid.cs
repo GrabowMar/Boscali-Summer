@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Math;
+using BoscaliSummer.Modules.Command.Domain;
 #if !NET8_0_OR_GREATER
 using UnityEngine;
 #endif
@@ -49,7 +50,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private const int MaximumInfluenceCells = 8;
         private const int MaximumContourSegments = 4096;
         private const float MinimumCellSize = 100f;
-        private const float PresenceThreshold = 0.05f;
+        private const float PresenceThreshold = ControlFieldCore.PresenceThreshold;
         /// <summary>Ground-control weight of one vehicle or ordinary building.</summary>
         public const float VehicleWeight = 2.5f;
         /// <summary>
@@ -58,8 +59,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
         /// one six-vehicle group in its cell and yields to three.
         /// </summary>
         public const float DefensiveBuildingWeight = 5f;
-        private const float CaptureSeconds = 15f;
-        private const float RecoverySeconds = 90f;
         private bool hasEvaluated;
 
         /// <summary>Control-field inks. Shared so the map legend cannot drift from the bake.</summary>
@@ -135,7 +134,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
         // Cached strategic influence: node influence only changes when the node set does,
         // so the per-cell sqrt sweep is skipped on the 2 Hz observation refresh.
         private readonly float[] strategicField;
-        private bool hasStrategicInfluence;
         private ulong nodeSignature;
         private ulong strategicSignature;
         private bool strategicDirty = true;
@@ -330,6 +328,55 @@ namespace BoscaliSummer.Modules.Command.Runtime
             displayDirty = true;
             FrontlineHash = 0UL;
             GridVersion++;
+        }
+
+        /// <summary>Finishes the lazy display clusters and front traces, so the first reader pays nothing.</summary>
+        internal void Prewarm()
+        {
+            EnsureDisplay();
+            if (!tracesReady) StitchTraces();
+        }
+
+        /// <summary>
+        /// Takes over everything another grid of the same layout evaluated: the territory
+        /// view evaluates a spare grid off the main thread and publishes it here in one
+        /// step, so readers of this grid never see a half-advanced field. Scratch buffers
+        /// and the baked pixel buffer stay this grid's own.
+        /// </summary>
+        internal void CopyResultFrom(TacticalSectorGrid other)
+        {
+            if (other.ResolutionX != ResolutionX || other.ResolutionY != ResolutionY || other.CellSize != CellSize ||
+                other.OriginX != OriginX || other.OriginZ != OriginZ)
+                throw new InvalidOperationException("Territory grids differ in layout.");
+            int cells = TotalSectors;
+            Array.Copy(other.holdStrength, holdStrength, cells);
+            Array.Copy(other.friendlyForce, friendlyForce, cells);
+            Array.Copy(other.hostileForce, hostileForce, cells);
+            Array.Copy(other.sectorStates, sectorStates, cells);
+            Array.Copy(other.frontBand, frontBand, cells);
+            Array.Copy(other.nodeAnchors, nodeAnchors, cells);
+            Array.Copy(other.frontSegments, frontSegments, other.FrontlineSegmentCount);
+            Array.Copy(other.displayClusters, displayClusters, other.displayQuadCount);
+            Array.Copy(other.tracePoints, tracePoints, other.tracePointCount);
+            Array.Copy(other.traceLengths, traceLengths, other.traceCount);
+            Array.Copy(other.tracePressure, tracePressure, other.traceCount);
+            nodes.Clear();
+            nodes.AddRange(other.nodes);
+            hasEvaluated = other.hasEvaluated;
+            GridVersion = other.GridVersion;
+            displayHash = other.displayHash;
+            displayQuadCount = other.displayQuadCount;
+            displayDirty = other.displayDirty;
+            FrontlineHash = other.FrontlineHash;
+            FrontlineSegmentCount = other.FrontlineSegmentCount;
+            FrontlineLengthMetres = other.FrontlineLengthMetres;
+            traceCount = other.traceCount;
+            tracePointCount = other.tracePointCount;
+            tracesReady = other.tracesReady;
+            FriendlySectorCount = other.FriendlySectorCount;
+            HostileSectorCount = other.HostileSectorCount;
+            ContestedSectorCount = other.ContestedSectorCount;
+            NeutralSectorCount = other.NeutralSectorCount;
         }
 
         public bool WorldToCell(float worldX, float worldZ, out int col, out int row)
@@ -576,7 +623,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     if (claim != 0 && nodeAnchors[index] == 0 &&
                         (claim == 1 ? hostile <= PresenceThreshold : friendly <= PresenceThreshold))
                         target = claim == 1 ? 1f : -1f;
-                    float response = 1f - (float)Math.Exp(-elapsed / (total > PresenceThreshold ? CaptureSeconds : RecoverySeconds));
+                    float response = ControlFieldCore.Response(elapsed, total);
                     float previousHold = holdStrength[index];
                     holdStrength[index] = hasEvaluated ? previousHold + (target - previousHold) * response : target;
 
@@ -585,14 +632,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     if (nodeAnchors[index] != 0)
                         holdStrength[index] = nodeAnchors[index] == 1 ? 1f : nodeAnchors[index] == 2 ? -1f : 0f;
                     float hold = holdStrength[index];
-                    bool balancedClash = friendly > PresenceThreshold && hostile > PresenceThreshold &&
-                        friendly / total > 0.34f && friendly / total < 0.66f;
-                    bool advancing = Math.Abs(pressure) > PresenceThreshold && pressure * hold < 0f;
                     SectorControl previousState = sectorStates[index];
-                    sectorStates[index] = nodeAnchors[index] == 3 || balancedClash || advancing
-                        ? SectorControl.Contested
-                        : hold > 0.01f ? SectorControl.Friendly : hold < -0.01f ? SectorControl.Hostile
-                        : hasStrategicInfluence || total > PresenceThreshold ? SectorControl.Contested : SectorControl.Neutral;
+                    sectorStates[index] = (SectorControl)ControlFieldCore.Classify(hold, friendly, hostile, nodeAnchors[index] == 3);
 
                     // Only a real change bumps the grid version: a repainted but identical
                     // front must not trigger a texture upload. The hold epsilon catches
@@ -660,14 +701,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
             if (!strategicDirty && strategicSignature == nodeSignature) return;
             strategicSignature = nodeSignature;
             strategicDirty = false;
-
-            hasStrategicInfluence = false;
-            for (int i = 0; i < nodes.Count; i++)
-            {
-                if (nodes[i].Faction == SectorControl.Neutral) continue;
-                hasStrategicInfluence = true;
-                break;
-            }
 
             // ponytail: at most 16384 cells x 128 strategic nodes, avoiding pathfinding
             // and terrain claims. Add terrain-aware supply only after profiling/playtests.
@@ -866,6 +899,11 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     hash = HashStep(hash, (uint)(share * 256f));
                 }
             }
+            // The two colours meet on the hold contour, so a front that slides inside
+            // unchanged cells still has to re-bake - one coarse step at a time.
+            int cells = ResolutionX * ResolutionY;
+            for (int i = 0; i < cells; i++)
+                if (frontBand[i] != 0) hash = HashStep(hash, (uint)(i * 64 + TintStep(i) + 32));
             return hash;
         }
 
@@ -1039,10 +1077,16 @@ namespace BoscaliSummer.Modules.Command.Runtime
             return low;
         }
 
+        /// <summary>Longest side of the baked tint the map overlay may ask for.</summary>
+        public const int MaximumTextureSize = 2048;
+
         /// <summary>
-        /// Fast procedural CPU rasterizer that bakes the sector tint one cluster at a time.
-        /// Reuses a bounded pixel buffer after the initial allocation. The front line itself
-        /// is vector geometry (`Presentation/MapUi/FrontlineGraphic`), never baked here.
+        /// CPU rasterizer for the sector tint. Territory is a smooth field sampled between cell
+        /// centres, so borders run diagonal and round instead of stepping on the grid: a soft
+        /// fill that deepens toward the fighting, a fine rim where held ground meets open
+        /// ground, and the two colours meeting on the hold field's zero contour - the same one
+        /// the vector front line (`Presentation/MapUi/FrontlineGraphic`) traces. Quads whose
+        /// four cells agree are plain fills, so only border ground pays per-pixel work.
         /// </summary>
         public Color32[] BakeTexture(
             int texWidth,
@@ -1050,8 +1094,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
             bool showSectors,
             float globalOpacity)
         {
-            if (texWidth < 1 || texHeight < 1 || texWidth > 1024 || texHeight > 1024)
-                throw new ArgumentOutOfRangeException(nameof(texWidth), "Tactical overlay dimensions must be 1..1024.");
+            if (texWidth < 1 || texHeight < 1 || texWidth > MaximumTextureSize || texHeight > MaximumTextureSize)
+                throw new ArgumentOutOfRangeException(nameof(texWidth), "Tactical overlay dimensions must be 1.." + MaximumTextureSize + ".");
             globalOpacity = float.IsFinite(globalOpacity) ? Math.Clamp(globalOpacity, 0f, 1f) : 0f;
             int totalPixels = texWidth * texHeight;
             if (pixelBuffer == null || pixelBuffer.Length != totalPixels || cachedTexWidth != texWidth || cachedTexHeight != texHeight)
@@ -1061,69 +1105,154 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 cachedTexHeight = texHeight;
             }
 
-            Color32 clearColor = new Color32(0, 0, 0, 0);
-            Array.Fill(pixelBuffer, clearColor);
+            Array.Fill(pixelBuffer, new Color32(0, 0, 0, 0));
 
             if (!showSectors || globalOpacity <= 0f) return pixelBuffer;
             EnsureDisplay();
 
-            byte fillAlpha = (byte)Math.Clamp((int)(globalOpacity * 255f * 0.45f), 18, 56);
-            Color32 friendlyBase = new Color32(FriendlyTint.r, FriendlyTint.g, FriendlyTint.b, fillAlpha);
-            Color32 hostileBase = new Color32(HostileTint.r, HostileTint.g, HostileTint.b, fillAlpha);
-
+            float fillAlpha = Math.Clamp(globalOpacity * 255f * 0.45f, 18f, 56f);
             float pxPerCellX = CellSize / WorldSizeX * texWidth;
             float pxPerCellY = CellSize / WorldSizeY * texHeight;
             float originPxX = (OriginX + WorldSizeX * 0.5f) / WorldSizeX * texWidth;
             float originPxY = (OriginZ + WorldSizeY * 0.5f) / WorldSizeY * texHeight;
+            // Smoothstep weights steepen the field to 1.5 per cell at a border: this turns a
+            // field value into "pixels inside the border".
+            float edgeScale = Math.Min(pxPerCellX, pxPerCellY) / 1.5f;
+            int period = Math.Clamp((int)(Math.Min(pxPerCellX, pxPerCellY) / 2f), 4, 12);
 
-            for (int q = 0; q < displayQuadCount; q++)
+            for (int qr = -1; qr < ResolutionY; qr++)
             {
-                SectorClusterTree.Cluster quad = displayClusters[q];
-                SectorControl state = (SectorControl)((quad.Key >> 2) & 3);
-                if (state == SectorControl.Neutral) continue;
+                int r0 = Math.Max(qr, 0), r1 = Math.Min(qr + 1, ResolutionY - 1);
+                int yMin = Math.Max(0, QuadStart(originPxY, pxPerCellY, qr, ResolutionY));
+                int yMax = Math.Min(texHeight, QuadStart(originPxY, pxPerCellY, qr + 1, ResolutionY)) - 1;
+                if (yMax < yMin) continue;
 
-                int band = quad.Key & 3;
-                int pxMin = Math.Max(0, (int)Math.Floor(originPxX + quad.X * pxPerCellX));
-                int pyMin = Math.Max(0, (int)Math.Floor(originPxY + quad.Y * pxPerCellY));
-                int pxMax = Math.Min(texWidth - 1, (int)Math.Floor(originPxX + (quad.X + quad.Width) * pxPerCellX) - 1);
-                int pyMax = Math.Min(texHeight - 1, (int)Math.Floor(originPxY + (quad.Y + quad.Height) * pxPerCellY) - 1);
-                if (pxMax < pxMin || pyMax < pyMin) continue;
-
-                float weight = band == 2 ? 1f : band == 1 ? 0.55f : 0.22f;
-                Color32 friendly = WeightedAlpha(friendlyBase, weight);
-                Color32 hostile = WeightedAlpha(hostileBase, weight);
-                bool striped = state == SectorControl.Contested;
-                // A contested square is hatched red/blue, never a third colour: the stripe
-                // runs follow the cell's control value, so the wider run is the side that
-                // holds more of the square. Every square keeps at least one pixel of each
-                // side, so "contested" never reads as solid.
-                int period = striped ? Math.Clamp((pxMax - pxMin + 1) / 3, 4, 12) : 0;
-                int friendlyRun = striped ? StripeRun(quad.Y * ResolutionX + quad.X, period) : 0;
-
-                for (int y = pyMin; y <= pyMax; y++)
+                for (int qc = -1; qc < ResolutionX; qc++)
                 {
-                    int rowOffset = y * texWidth;
-                    for (int x = pxMin; x <= pxMax; x++)
+                    int c0 = Math.Max(qc, 0), c1 = Math.Min(qc + 1, ResolutionX - 1);
+                    int i00 = r0 * ResolutionX + c0, i10 = r0 * ResolutionX + c1;
+                    int i01 = r1 * ResolutionX + c0, i11 = r1 * ResolutionX + c1;
+                    SectorControl s00 = sectorStates[i00], s10 = sectorStates[i10];
+                    SectorControl s01 = sectorStates[i01], s11 = sectorStates[i11];
+                    if (s00 == SectorControl.Neutral && s10 == SectorControl.Neutral &&
+                        s01 == SectorControl.Neutral && s11 == SectorControl.Neutral) continue;
+
+                    int xMin = Math.Max(0, QuadStart(originPxX, pxPerCellX, qc, ResolutionX));
+                    int xMax = Math.Min(texWidth, QuadStart(originPxX, pxPerCellX, qc + 1, ResolutionX)) - 1;
+                    if (xMax < xMin) continue;
+
+                    float w00 = BandWeight(i00), w10 = BandWeight(i10), w01 = BandWeight(i01), w11 = BandWeight(i11);
+                    if (s00 != SectorControl.Contested && s00 == s10 && s00 == s01 && s00 == s11 &&
+                        w00 == w10 && w00 == w01 && w00 == w11)
                     {
-                        if (striped)
+                        Color32 flat = s00 == SectorControl.Friendly ? FriendlyTint : HostileTint;
+                        flat.a = (byte)Math.Max(1f, fillAlpha * w00);
+                        for (int y = yMin; y <= yMax; y++)
+                            Array.Fill(pixelBuffer, flat, y * texWidth + xMin, xMax - xMin + 1);
+                        continue;
+                    }
+
+                    float o00 = w00 > 0f ? 1f : 0f, o10 = w10 > 0f ? 1f : 0f, o01 = w01 > 0f ? 1f : 0f, o11 = w11 > 0f ? 1f : 0f;
+                    float k00 = s00 == SectorControl.Contested ? 1f : 0f, k10 = s10 == SectorControl.Contested ? 1f : 0f;
+                    float k01 = s01 == SectorControl.Contested ? 1f : 0f, k11 = s11 == SectorControl.Contested ? 1f : 0f;
+                    bool hatched = k00 + k10 + k01 + k11 > 0f;
+                    float h00 = TintHold(i00), h10 = TintHold(i10), h01 = TintHold(i01), h11 = TintHold(i11);
+
+                    for (int y = yMin; y <= yMax; y++)
+                    {
+                        float cellY = (y + 0.5f - originPxY) / pxPerCellY;
+                        float ty = Math.Clamp(cellY - 0.5f - qr, 0f, 1f);
+                        float sy = ty * ty * (3f - 2f * ty);
+                        int row = Math.Clamp((int)cellY, 0, ResolutionY - 1);
+                        int rowOffset = y * texWidth;
+                        for (int x = xMin; x <= xMax; x++)
                         {
-                            int stripe = (x - pxMin + y - pyMin) % period;
-                            pixelBuffer[rowOffset + x] = stripe < friendlyRun ? friendly : hostile;
-                            continue;
+                            float cellX = (x + 0.5f - originPxX) / pxPerCellX;
+                            float tx = Math.Clamp(cellX - 0.5f - qc, 0f, 1f);
+                            float sx = tx * tx * (3f - 2f * tx);
+
+                            float owned = Bilerp(o00, o10, o01, o11, sx, sy);
+                            float inside = (owned - 0.5f) * edgeScale;
+                            if (inside <= -0.5f) continue;
+                            float cover = Math.Min(1f, inside + 0.5f);
+                            float weight = Bilerp(w00, w10, w01, w11, sx, sy) / owned;
+                            float rim = Math.Max(0f, 1f - Math.Abs(inside - RimInset) / RimInset);
+                            float alpha = fillAlpha * (weight + rim * RimStrength);
+
+                            // Which side: the hold field itself, one pixel of blend across its zero.
+                            float hold = Bilerp(h00, h10, h01, h11, tx, ty);
+                            float gx = ((h10 - h00) + ((h11 - h01) - (h10 - h00)) * ty) / pxPerCellX;
+                            float gy = ((h01 - h00) + ((h11 - h10) - (h01 - h00)) * tx) / pxPerCellY;
+                            float slope = (float)Math.Sqrt(gx * gx + gy * gy);
+                            float friendly = slope > 1e-6f ? Math.Clamp(hold / slope + 0.5f, 0f, 1f) : hold >= 0f ? 1f : 0f;
+
+                            if (hatched)
+                            {
+                                // A contested square is hatched red/blue, never a third colour: the
+                                // stripe runs follow the cell's control value, so the wider run is
+                                // the side that holds more of the square.
+                                float hatch = Math.Clamp((Bilerp(k00, k10, k01, k11, sx, sy) - 0.5f) * edgeScale + 0.5f, 0f, 1f);
+                                if (hatch > 0f)
+                                {
+                                    int col = Math.Clamp((int)cellX, 0, ResolutionX - 1);
+                                    bool blue = (x + y) % period < StripeRun(row * ResolutionX + col, period);
+                                    friendly += ((blue ? 1f : 0f) - friendly) * hatch;
+                                    alpha += fillAlpha * HatchStrength * hatch;
+                                }
+                            }
+
+                            pixelBuffer[rowOffset + x] = new Color32(
+                                (byte)(HostileTint.r + (FriendlyTint.r - HostileTint.r) * friendly),
+                                (byte)(HostileTint.g + (FriendlyTint.g - HostileTint.g) * friendly),
+                                (byte)(HostileTint.b + (FriendlyTint.b - HostileTint.b) * friendly),
+                                (byte)Math.Clamp(alpha * cover, 1f, 255f));
                         }
-                        pixelBuffer[rowOffset + x] = state == SectorControl.Friendly ? friendly : hostile;
                     }
                 }
             }
 
-            // 2. The front line itself is no longer rasterised here: the map draws it as one
-            // plain vector line (`Presentation/MapUi/FrontlineGraphic`) so it stays sharp at
-            // every zoom instead of magnifying the overlay texture's resolution.
             return pixelBuffer;
         }
 
-        private static Color32 WeightedAlpha(Color32 color, float weight)
-            => new Color32(color.r, color.g, color.b, (byte)Math.Max(1f, color.a * weight));
+        /// <summary>Pixels inside the border where the rim line peaks; it is twice this wide.</summary>
+        private const float RimInset = 1.25f;
+        private const float RimStrength = 1.6f;
+        private const float HatchStrength = 0.6f;
+        /// <summary>Steps of hold the tint can tell apart; the display hash re-bakes on one step.</summary>
+        private const float TintHoldSteps = 8f;
+
+        /// <summary>First pixel whose centre lies in the quad starting at cell centre <paramref name="quad"/>;
+        /// the outermost quads run to the grid edge.</summary>
+        private static int QuadStart(float originPx, float pxPerCell, int quad, int resolution)
+        {
+            float cell = quad < 0 ? 0f : quad >= resolution ? resolution : quad + 0.5f;
+            return (int)Math.Ceiling(originPx + cell * pxPerCell - 0.5f);
+        }
+
+        private static float Bilerp(float v00, float v10, float v01, float v11, float x, float y)
+        {
+            float low = v00 + (v10 - v00) * x;
+            return low + (v01 + (v11 - v01) * x - low) * y;
+        }
+
+        /// <summary>Full at the front, quiet in the rear, nothing on unheld ground.</summary>
+        private float BandWeight(int index)
+        {
+            if (sectorStates[index] == SectorControl.Neutral) return 0f;
+            byte band = frontBand[index];
+            return band == 2 ? 1f : band == 1 ? 0.55f : 0.22f;
+        }
+
+        /// <summary>The cell's hold in coarse signed steps, never zero for held ground.</summary>
+        private float TintHold(int index) => TintStep(index) / TintHoldSteps;
+
+        private int TintStep(int index)
+        {
+            float hold = holdStrength[index];
+            if (sectorStates[index] == SectorControl.Neutral || !float.IsFinite(hold) || hold == 0f) return 0;
+            int step = (int)Math.Round(hold * TintHoldSteps);
+            return step != 0 ? step : hold > 0f ? 1 : -1;
+        }
 
         /// <summary>
         /// Pixels of one stripe period that belong to the friendly side: the cell's control

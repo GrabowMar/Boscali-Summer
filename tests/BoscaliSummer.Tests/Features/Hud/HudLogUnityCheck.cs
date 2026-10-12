@@ -50,9 +50,9 @@ public static partial class HudLogUnityCheck
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
             new GameObject("Events", typeof(EventSystem));
             var colors = ScriptableObject.CreateInstance<ColorTheme>();
-            // The prototype's ink, amber and red (spec style.css), so a render lines up with shots/ colour for colour.
-            Set(colors, "allClear", (Color)new Color32(56, 222, 82, 255)); Set(colors, "warning", (Color)new Color32(243, 217, 74, 255));
-            Set(colors, "alert", (Color)new Color32(255, 80, 70, 255));
+            // The visor mock's ink, amber and red (LAYOUT.md 1: #7fdf9a, #ffd84a, #ffa094), so a render lines up with the shots colour for colour. The board takes them from the theme; they are not in the code.
+            Set(colors, "allClear", (Color)new Color32(127, 223, 154, 255)); Set(colors, "warning", (Color)new Color32(255, 216, 74, 255));
+            Set(colors, "alert", (Color)new Color32(255, 160, 148, 255));
             var theme = ScriptableObject.CreateInstance<ThemeGroup>(); theme.SetColorTheme(colors);
             typeof(ThemeManager).GetProperty("Active", All).SetValue(null, theme);
             string[] pages = ScopePagesArg();
@@ -156,7 +156,7 @@ public static partial class HudLogUnityCheck
                 ("G", c.G), ("GLimit", 9f), ("Fuel", c.Fuel), ("Throttle", .8f), ("BankDeg", c.Bank), ("SlipDeg", c.Slip), ("AoaDeg", c.Aoa) })
                 Set(flight, kv.Item1, kv.Item2);
             Set(flight, "FuelBingo", c.Bingo); Set(flight, "FuelJoker", c.Joker);
-            Call(cluster, "Present", true, AvUnits.Imperial, flight, Texture2D.whiteTexture, "SAM SITE", 9400f, 120f, c.Scale);
+            Call(cluster, "Present", true, AvUnits.Imperial, flight, TargetFeed(), "SAM SITE", 9400f, 120f, c.Scale);
             Canvas.ForceUpdateCanvases();
             string tag = c.Name + "-" + size.x + "x" + size.y;
             Capture(canvas, "HUD-cluster-" + tag + ".png");
@@ -186,6 +186,16 @@ public static partial class HudLogUnityCheck
                 Check(!g.raycastTarget, "Flight cluster must not intercept pointer input.");
             Call(cluster, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
         }
+    }
+    private static Texture2D targetFeed;
+    /// <summary>A stand-in for the target camera's picture (pale sky over dark ground, not the flat white of a missing one): what the third-person target card is judged against.</summary>
+    private static Texture2D TargetFeed()
+    {
+        if (targetFeed != null) return targetFeed;
+        targetFeed = new Texture2D(1, 32, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+        for (int y = 0; y < 32; y++) targetFeed.SetPixel(0, y, y < 14 ? Color.Lerp(new Color(.18f, .24f, .17f), new Color(.30f, .38f, .26f), y / 13f) : Color.Lerp(new Color(.55f, .68f, .82f), new Color(.78f, .86f, .93f), (y - 14) / 17f));
+        targetFeed.Apply();
+        return targetFeed;
     }
     private static void Log(float height, bool merged)
     {

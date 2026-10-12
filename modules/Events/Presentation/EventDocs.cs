@@ -34,15 +34,11 @@ namespace BoscaliSummer.Modules.Events.Presentation
         internal static readonly EventDocEntry[] Guide =
         {
             new EventDocEntry("FIELD MANUAL / 01", "READING A DISPATCH",
-                "Only one world event is live at a time. Its target, price factor and support reset factor are separate readouts. The event clock counts mission time; a super-event may carry additional timed orders. The response desk offers routes only when the current event changes your side's support price."),
-            new EventDocEntry("FIELD MANUAL / 02", "CHOOSING A RESPONSE",
-                "Each pilot can initiate one response per event. Allocation containment or leverage is personal. A treasury directive spends faction funds and reaches the whole side. Contract intelligence is a faction-wide credit earned by completing a secondary contract and can be spent once per mission. A qualifying Recon perk opens a personal pilot channel. The host checks every cost and prerequisite."),
-            new EventDocEntry("FIELD MANUAL / 03", "SHARED ORDERS",
-                "A teammate can issue a faction directive after another pilot has made a personal choice. Both effects can benefit that pilot, subject to the support-price floor. A faction order is mirrored to late joiners; personal replies go to the pilot who sent them. The archive itself never sends an order."),
-            new EventDocEntry("FIELD MANUAL / 04", "THE EVENT LOG",
+                "Only one world event is live at a time. Its target, price factor and support reset factor are separate readouts. The event clock counts mission time; a super-event may carry additional timed orders. An event runs its course; there is nothing to answer, only a price to plan around."),
+            new EventDocEntry("FIELD MANUAL / 02", "THE EVENT LOG",
                 "The log is a bounded local record of completed events in this mission. It is newest first and is not backfilled for a pilot who joins late. A fresh scene clears it. The dossier library is different: it describes authored theater scenarios and can be read even while the director is quiet."),
-            new EventDocEntry("FIELD MANUAL / 05", "AIRFRAME REGISTRY",
-                "The aircraft shelf reads the game's loaded encyclopedia. Names, descriptions and performance figures come from native definitions; the rotating object is a local render-mesh copy of the selected prefab. It has no flight logic, network identity or collision. The viewer renders only when you change the selection or viewing angle."),
+            new EventDocEntry("FIELD MANUAL / 03", "RECOGNITION CARDS",
+                "The five card shelves read the game's loaded encyclopedia when the reading room opens. Names, notes and figures come from native definitions. A bar sets each figure against the largest on the same shelf, and a dash means the definition does not establish it. The plate is a local render-mesh copy of the selected prefab, drawn to scale; it has no flight logic, network identity or collision, and it is redrawn only when you change the selection or the view."),
         };
     }
 }

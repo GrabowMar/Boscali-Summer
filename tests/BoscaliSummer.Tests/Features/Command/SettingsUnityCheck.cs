@@ -42,6 +42,9 @@ public static class SettingsUnityCheck
             File.WriteAllText("result.txt", "PASS: SET renders THIS PILOT (DISPLAY/MAP/COCKPIT/IMMERSION/PERFORMANCE) and SERVER (WORLD/FORCES/EFFECTS/TASKING) " +
                 "consoles as client and host at 896, 596 and 420 units (" + checkedTexts + " texts gated for overflow, overlap, gutter and 11 px floor); " +
                 "mode switch and remembered mode, toggles, background replacement and row reveal, disabled dependencies, +/- bounds, " +
+                "the COCKPIT tab's TAC BOARD section (four groups, every control with one line of help, a toggle, a strip and a dial writing through the options contract, " +
+                "inert options with the board off, RESET TO DEFAULTS, the long page rendered stop by stop), " +
+                "the COCKPIT tab's VISOR TERRAIN section (the TERRAIN GHOST dial in 5% steps from 0% to 100%, its help, its saved level; the HOLO MAP switch, the HOLO RANGE strip of 10, 20 and 40 KM and the NORTH UP switch, each with one line of help, writing their saved entries, the strip and NORTH UP waiting on the switch), " +
                 "host-only lock on SERVER rows and the flat page tree (no GameObject churn) are checked. Game adapters are stubbed; in-game acceptance remains required.");
             EditorApplication.Exit(0);
         }
@@ -126,6 +129,8 @@ public static class SettingsUnityCheck
         ModuleServices.Services.Remove(typeof(ISecondaryObjectivesView));
         var hud = new HudFixture();
         ModuleServices.Services[typeof(IHudBoard)] = hud;
+        var tac = new TacBoardFixture();
+        ModuleServices.Services[typeof(ITacBoardSettings)] = tac;
         var config = new CommandSettings(new ConfigFile(Path.GetFullPath("settings-" + height + "-" + Guid.NewGuid().ToString("N") + ".cfg"), false));
         // Exercise compatibility with an existing layered configuration.
         config.DeckGrid.Value = true;
@@ -344,7 +349,9 @@ public static class SettingsUnityCheck
         clientCon.SetPage(CCockpit);
         Settle(clientCon);
         Check(!Array.Exists(cockpitContent.GetComponentsInChildren<TMP_Text>(true), t => t.text == "HUD ELEMENT" || t.text == "TARGET CAMERA"),
-            "The HUD ships unconfigurable: no HUD rows on the cockpit page");
+            "The retired HUD ELEMENT and TARGET CAMERA rows stay off the cockpit page");
+        CheckTacBoardSection(camera, canvas, height, clientCon, cockpitContent, tac);
+        CheckVisorTerrainSection(camera, canvas, height, clientCon, cockpitContent, config);
         Click(FindRowByName(cockpitContent, "RADIAL PRESETS"));
         Check(!config.TargetPresetWheel.Value, "RADIAL PRESETS must write its saved entry");
 
@@ -377,9 +384,205 @@ public static class SettingsUnityCheck
         }
         Check(objects == canvas.GetComponentsInChildren<Transform>(true).Length, "Page and mode changes must reuse the same tree");
         if (height == 420) Check(canvas.GetComponentsInChildren<ScrollRect>(true).Length > 0, "Every page keeps its scroll viewport");
+        // the options contract absent: the section says so instead of building controls
+        ModuleServices.Services.Remove(typeof(ITacBoardSettings));
+        Invoke(panel, "BuildTacBoardRows", clientCon.Page(CCockpit), CCockpit);
+        Check(HasText(cockpitContent, "TAC BOARD NOT INSTALLED"), "An absent TAC BOARD options contract reads unavailable");
         ModuleServices.Services.Remove(typeof(ISecondaryObjectivesView));
         Object.DestroyImmediate(canvas.gameObject);
         Object.DestroyImmediate(camera.gameObject);
+    }
+
+    /// <summary>
+    /// The TAC BOARD section on the COCKPIT tab: four groups, every control present with one line of help, and a toggle, a strip and a dial each writing through the contract
+    /// (<see cref="ITacBoardSettings"/>, here a plain object). Also the long page scrolled stop by stop so each part of it is rendered and gated, the page with the board
+    /// switched off (its options inert, RESET still live), and RESET TO DEFAULTS. Leaves the fixture at its defaults.
+    /// </summary>
+    private static void CheckTacBoardSection(Camera camera, Canvas canvas, int height, AvConsole clientCon, RectTransform content, TacBoardFixture tac)
+    {
+        foreach (string group in new[] { "TAC BOARD", "TAC BOARD PAGES", "TAC BOARD BLOCKS", "TAC BOARD EXTRAS" })
+            Check(content.Find("Section " + group) != null, "COCKPIT carries the " + group + " section");
+        foreach (string toggle in new[] { "TAC BOARD", "RADAR WARNING", "SHOT", "MISSILE CAM", "APPROACH", "WING", "STRIKE", "DOCK", "OBJECTIVE", "SYSTEMS",
+                                          "LAMPS", "SYSTEMS STRIP", "GAUGES", "NOTICES", "NAV DATA", "VISOR SWAY", "RESTYLE FEED AND MAP" })
+            Check(content.Find("Cell " + toggle) != null, "TAC BOARD switch " + toggle + " exists");
+        foreach (string dial in new[] { "SIZE", "OPACITY", "MOVE LEFT", "MOVE DOWN", "SHADE", "RWR HOLD", "PAGE MIN STAY" }) FindRowByName(content, dial);
+        foreach (string segment in new[] { "WIDE", "STACK", "FULL", "LEAN", "MIN", "AUTO", "OFF", "RESET TO DEFAULTS" })
+            Check(FindControl(content, segment) != null, "TAC BOARD control " + segment + " exists");
+        foreach (string label in new[] { "LAYOUT", "DECLUTTER", "PAGES" }) Check(HasText(content, label), "TAC BOARD choice " + label + " is labelled");
+        foreach (AvHelpTip tip in content.GetComponentsInChildren<AvHelpTip>(true))
+            Check(!string.IsNullOrEmpty(tip.Text) && tip.Text.Length <= 120 && tip.Text.IndexOf('\n') < 0, "A control's help is one short line: '" + tip.Text + "'");
+        foreach (AvControl control in content.GetComponentsInChildren<AvControl>(true))
+            Check(!string.IsNullOrEmpty(control.Help), "Control '" + control.Label + "' has help");
+        Check(HasText(content, "100%") && HasText(content, "45%") && HasText(content, "0 units") && HasText(content, "6 s") && HasText(content, "3 s"),
+            "The dials read the options as they stand: size, shade, offsets (in units, not pixels) and the two times");
+        Check(!HasSubText(content, " px"), "No dial names pixels: the offsets are design units, scaled by the screen's height");
+
+        // the long page, one stop at a time, each stop rendered and gated
+        ScrollRect scroll = clientCon.Root.GetComponentInChildren<ScrollRect>(true);
+        float view = scroll.viewport.rect.height, travel = Mathf.Max(0f, content.rect.height - view);
+        int stops = Mathf.CeilToInt(travel / (view * 0.85f));
+        for (int stop = 0; stop <= stops; stop++)
+        {
+            scroll.verticalNormalizedPosition = stops == 0 ? 1f : 1f - stop / (float)stops;
+            Render(camera, canvas, height, "client-cockpit-scroll-" + stop);
+        }
+        scroll.verticalNormalizedPosition = 1f;
+
+        // every switch flips its own option and no other (a swapped assignment would hide the wrong page), and flips it back
+        string[] cells = { "TAC BOARD", "RADAR WARNING", "SHOT", "MISSILE CAM", "APPROACH", "WING", "STRIKE", "DOCK", "OBJECTIVE", "SYSTEMS", "LAMPS", "SYSTEMS STRIP", "GAUGES", "NOTICES", "NAV DATA", "VISOR SWAY", "RESTYLE FEED AND MAP" };
+        for (int n = 1; n <= cells.Length; n++)
+        {
+            int at = n % cells.Length;      // TAC BOARD last: with the board off the others are inert
+            string before = tac.Switches();
+            Click(content.Find("Cell " + cells[at]));
+            string flipped = tac.Switches();
+            bool only = flipped.Length == before.Length;
+            for (int k = 0; only && k < before.Length; k++) only = (before[k] != flipped[k]) == (k == at);
+            Check(only, "The " + cells[at] + " switch flips its own option and no other: " + before + " -> " + flipped);
+            Click(content.Find("Cell " + cells[at]));
+            Check(tac.Switches() == before, "...and the second click puts it back");
+        }
+
+        // a toggle, a strip and a dial each change only their own option
+        Click(content.Find("Cell RADAR WARNING"));
+        Check(!tac.PageThreat && tac.PageShot && tac.PageSystems, "A page switch writes its own option and no other");
+        Click(FindControl(content, "STACK"));
+        Check(tac.Layout == BoardLayout.Stack, "The LAYOUT strip writes Layout");
+        Click(FindControl(content, "MIN"));
+        Check(tac.Declutter == BoardDeclutter.Minimal && tac.Layout == BoardLayout.Stack, "The DECLUTTER strip writes Declutter");
+        Click(FindControl(content, "OFF"));
+        Check(tac.ScopeMode == BoardScopeMode.Off, "The PAGES strip writes ScopeMode");
+        Click(Plus(content, "SIZE"));
+        Check(Mathf.Approximately(tac.Scale, 1.05f) && HasText(content, "105%"), "SIZE steps by 5% and reads as a percentage");
+        for (int i = 0; i < 20; i++) Click(Plus(content, "SIZE"));
+        Check(Mathf.Approximately(tac.Scale, 1.4f), "SIZE stops at 140%");
+        for (int i = 0; i < 30; i++) Click(Minus(content, "SIZE"));
+        Check(Mathf.Approximately(tac.Scale, .6f), "SIZE stops at 60%");
+        Click(Plus(content, "MOVE LEFT"));
+        Click(Plus(content, "MOVE DOWN"));
+        Click(Plus(content, "MOVE DOWN"));
+        Check(Mathf.Approximately(tac.OffsetX, 20f) && Mathf.Approximately(tac.OffsetY, 40f) && HasText(content, "40 units"), "MOVE LEFT and MOVE DOWN step by 20 units");
+        Click(Minus(content, "OPACITY"));
+        Click(Minus(content, "SHADE"));
+        Check(Mathf.Approximately(tac.Opacity, .95f) && Mathf.Approximately(tac.Shade, .4f), "OPACITY and SHADE step by 5%");
+        Click(Plus(content, "RWR HOLD"));
+        Click(Minus(content, "PAGE MIN STAY"));
+        Check(Mathf.Approximately(tac.ThreatHoldSeconds, 7f) && Mathf.Approximately(tac.PageMinSeconds, 2f) && HasText(content, "7 s"), "The two times step by whole seconds");
+        for (int i = 0; i < 40; i++) { Click(Minus(content, "RWR HOLD")); Click(Plus(content, "PAGE MIN STAY")); }
+        Check(Mathf.Approximately(tac.ThreatHoldSeconds, 2f) && Mathf.Approximately(tac.PageMinSeconds, 15f), "RWR HOLD stops at 2 s and PAGE MIN STAY at 15 s");
+        Click(content.Find("Cell GAUGES"));
+        Click(content.Find("Cell RESTYLE FEED AND MAP"));
+        Check(!tac.ShowGauges && !tac.Corners && tac.ShowLamps && tac.Sway, "The block and extra switches write their own options");
+
+        // with the board off every option is inert, and only RESET still works
+        Click(content.Find("Cell TAC BOARD"));
+        Check(!tac.Enabled, "The TAC BOARD switch writes Enabled");
+        Settle(clientCon);
+        float held = tac.Scale;
+        Click(Plus(content, "SIZE"));
+        Click(content.Find("Cell SHOT"));
+        Click(FindControl(content, "WIDE"));
+        Check(tac.Scale == held && tac.PageShot && tac.Layout == BoardLayout.Stack, "With the board off its options ignore clicks");
+        bool restyle = tac.Corners;
+        Click(content.Find("Cell RESTYLE FEED AND MAP"));
+        Check(tac.Corners != restyle, "...but the kill feed and map restyle is a switch of its own and stays live with the board off");
+        Render(camera, canvas, height, "client-cockpit-boardoff");
+        // RESET must be able to fail: first prove the options, the dials that read them and the locked controls are all away from their defaults ...
+        Check(!tac.IsDefault() && tac.ResetCount == 0 && HasText(content, "60%") && HasText(content, "40%") && HasText(content, "2 s") && HasText(content, "15 s") &&
+              !Plus(content, "SIZE").Interactable && !FindControl(content, "FULL").Interactable, "Before RESET the options, their dials and the board-off lock are away from the defaults");
+        Click(FindControl(content, "RESET TO DEFAULTS"));
+        Check(tac.ResetCount == 1 && tac.IsDefault(), "RESET TO DEFAULTS puts every option back through the contract, board off or not");
+        // ... and that the page shows the result at once, with no tick in between (Settle runs them below).
+        Check(HasText(content, "100%") && HasText(content, "45%") && HasText(content, "0 units") && HasText(content, "6 s") && HasText(content, "3 s") &&
+              !HasText(content, "60%") && !HasText(content, "40%") && !HasText(content, "2 s") && !HasText(content, "15 s"),
+            "RESET TO DEFAULTS shows the defaults on every dial at once, before the next tick");
+        Check(Plus(content, "SIZE").Interactable && FindControl(content, "FULL").Interactable, "and unlocks the controls the switched-off board had locked, at once");
+        Settle(clientCon);
+        Render(camera, canvas, height, "client-cockpit-reset");
+    }
+
+    /// <summary>
+    /// The VISOR TERRAIN section below the TAC BOARD: the TERRAIN GHOST dial, writing the saved level (a config entry, not a contract) in 5% steps between 0%
+    /// (off) and 100%, and the HOLO MAP controls: a switch, a 10 / 20 / 40 KM strip and a NORTH UP switch, each writing its own saved entry, with the strip and NORTH UP
+    /// inert while the switch is off. Every control of it has one short line of help. Leaves every setting at its default.
+    /// </summary>
+    private static void CheckVisorTerrainSection(Camera camera, Canvas canvas, int height, AvConsole clientCon, RectTransform content, CommandSettings config)
+    {
+        Check(content.Find("Section VISOR TERRAIN") != null, "COCKPIT carries the VISOR TERRAIN section");
+        Transform row = FindRowByName(content, "TERRAIN GHOST");
+        Check(Mathf.Approximately(config.TerrainGhost.Value, .35f) && HasText(content, "35%"), "TERRAIN GHOST reads its default, 35%");
+        foreach (AvControl control in row.GetComponentsInChildren<AvControl>(true))
+            Check(!string.IsNullOrEmpty(control.Help) && control.Help.Length <= 120 && control.Help.IndexOf('\n') < 0 && control.Help.Contains("0%"),
+                "TERRAIN GHOST has one short line of help that says 0% turns it off: '" + control.Help + "'");
+        Click(Plus(content, "TERRAIN GHOST"));
+        Check(Mathf.Approximately(config.TerrainGhost.Value, .4f) && HasText(content, "40%"), "TERRAIN GHOST steps up by 5% and writes its saved entry");
+        Click(Minus(content, "TERRAIN GHOST"));
+        Click(Minus(content, "TERRAIN GHOST"));
+        Check(Mathf.Approximately(config.TerrainGhost.Value, .3f) && HasText(content, "30%"), "...and down by 5%");
+        for (int i = 0; i < 30; i++) Click(Plus(content, "TERRAIN GHOST"));
+        Check(Mathf.Approximately(config.TerrainGhost.Value, 1f) && HasText(content, "100%") && !Plus(content, "TERRAIN GHOST").Interactable,
+            "TERRAIN GHOST stops at 100%");
+        for (int i = 0; i < 30; i++) Click(Minus(content, "TERRAIN GHOST"));
+        Check(config.TerrainGhost.Value == 0f && !Minus(content, "TERRAIN GHOST").Interactable && Plus(content, "TERRAIN GHOST").Interactable,
+            "TERRAIN GHOST stops at 0%, which is off");
+        CheckHoloControls(clientCon, content, config);
+        Settle(clientCon);
+        // The section is the tail of the long page: render the page scrolled to its foot, where the section is on screen.
+        ScrollRect scroll = clientCon.Root.GetComponentInChildren<ScrollRect>(true);
+        scroll.verticalNormalizedPosition = 0f;
+        Render(camera, canvas, height, "client-cockpit-visor-off");
+        var saved = new CommandSettings(new ConfigFile(config.ExpandedMapUi.ConfigFile.ConfigFilePath, false));
+        Check(saved.TerrainGhost.Value == 0f, "TERRAIN GHOST survives reloading the saved configuration");
+        config.TerrainGhost.Value = .35f;
+        Settle(clientCon);
+        Check(HasText(content, "35%"), "TERRAIN GHOST reads a level set from outside");
+        Render(camera, canvas, height, "client-cockpit-visor");
+        scroll.verticalNormalizedPosition = 1f;
+    }
+
+    /// <summary>The HOLO MAP switch, the HOLO RANGE strip and the NORTH UP switch: present, one short line of help each, defaults, each writing only its own saved entry, and the strip and NORTH UP inert while the switch is off.</summary>
+    private static void CheckHoloControls(AvConsole clientCon, RectTransform content, CommandSettings config)
+    {
+        Check(content.Find("Cell HOLO MAP") != null && content.Find("Cell NORTH UP") != null, "VISOR TERRAIN carries the HOLO MAP and NORTH UP switches");
+        foreach (string segment in new[] { "10 KM", "20 KM", "40 KM" }) Check(FindControl(content, segment) != null, "The HOLO RANGE strip has its " + segment + " segment");
+        Check(HasText(content, "HOLO RANGE"), "The HOLO RANGE strip is labelled");
+        Check(config.HoloMap.Value && config.HoloRangeKm.Value == 20 && !config.HoloNorthUp.Value, "The holo defaults are on, 20 km and heading up");
+        foreach (string cell in new[] { "HOLO MAP", "NORTH UP" })
+            foreach (AvControl control in content.Find("Cell " + cell).GetComponentsInChildren<AvControl>(true))
+                Check(!string.IsNullOrEmpty(control.Help) && control.Help.Length <= 120 && control.Help.IndexOf('\n') < 0, cell + " has one short line of help: '" + control.Help + "'");
+        foreach (string segment in new[] { "10 KM", "20 KM", "40 KM" })
+        {
+            string help = FindControl(content, segment).Help;
+            Check(!string.IsNullOrEmpty(help) && help.Length <= 120 && help.StartsWith(segment), segment + " has one short line of help that names it: '" + help + "'");
+        }
+        Check(content.Find("Cell HOLO MAP").GetComponentInChildren<AvControl>(true).Help.Contains("map key"), "The HOLO MAP help says what the map key does now");
+
+        Click(FindControl(content, "40 KM"));
+        Check(config.HoloRangeKm.Value == 40 && config.HoloMap.Value && !config.HoloNorthUp.Value, "The 40 KM segment writes HoloRangeKm and nothing else");
+        Click(FindControl(content, "10 KM"));
+        Check(config.HoloRangeKm.Value == 10, "The 10 KM segment writes 10");
+        Click(content.Find("Cell NORTH UP"));
+        Check(config.HoloNorthUp.Value && config.HoloRangeKm.Value == 10 && config.HoloMap.Value, "NORTH UP writes HoloNorthUp and nothing else");
+
+        // switched off, the strip and NORTH UP are inert
+        Click(content.Find("Cell HOLO MAP"));
+        Check(!config.HoloMap.Value, "HOLO MAP writes HoloMap");
+        Settle(clientCon);
+        Check(!FindControl(content, "40 KM").Interactable && !FindControl(content, "20 KM").Interactable, "With HOLO MAP off the range strip is locked");
+        Click(FindControl(content, "40 KM"));
+        Click(content.Find("Cell NORTH UP"));
+        Check(config.HoloRangeKm.Value == 10 && config.HoloNorthUp.Value, "...and NORTH UP and the strip ignore clicks");
+        var saved = new CommandSettings(new ConfigFile(config.ExpandedMapUi.ConfigFile.ConfigFilePath, false));
+        Check(!saved.HoloMap.Value && saved.HoloRangeKm.Value == 10 && saved.HoloNorthUp.Value, "The holo settings survive reloading the saved configuration");
+
+        // back to the defaults
+        Click(content.Find("Cell HOLO MAP"));
+        Settle(clientCon);
+        Check(config.HoloMap.Value && FindControl(content, "40 KM").Interactable, "HOLO MAP back on unlocks the strip");
+        Click(FindControl(content, "20 KM"));
+        Click(content.Find("Cell NORTH UP"));
+        Check(config.HoloMap.Value && config.HoloRangeKm.Value == 20 && !config.HoloNorthUp.Value, "The holo settings are back at their defaults");
+        Settle(clientCon);
     }
 
     /// <summary>Show one console through the panel's own switch (no click), then run its ticks as the game would.</summary>
@@ -438,6 +641,15 @@ public static class SettingsUnityCheck
         AvControl c = Array.Find(FindRowByName(scope, name).GetComponentsInChildren<AvControl>(true),
             x => x.transform.Find("Icon " + AvIcon.Plus) != null);
         if (c == null) throw new Exception("Row " + name + " has no + control");
+        return c;
+    }
+
+    /// <summary>The leading - control of the named dial or stepper row.</summary>
+    private static AvControl Minus(RectTransform scope, string name)
+    {
+        AvControl c = Array.Find(FindRowByName(scope, name).GetComponentsInChildren<AvControl>(true),
+            x => x.transform.Find("Icon " + AvIcon.Minus) != null);
+        if (c == null) throw new Exception("Row " + name + " has no - control");
         return c;
     }
 
@@ -630,10 +842,78 @@ public static class SettingsUnityCheck
         public void RequestCancel(int id) { }
     }
 
+    /// <summary>The TAC BOARD options as a plain object, the way the SET page meets them: through the contract only. Defaults are the board's own.</summary>
+    private sealed class TacBoardFixture : ITacBoardSettings
+    {
+        public int ResetCount;
+
+        public TacBoardFixture() { Defaults(); }
+
+        public bool Enabled { get; set; }
+        public BoardLayout Layout { get; set; }
+        public float Scale { get; set; }
+        public float OffsetX { get; set; }
+        public float OffsetY { get; set; }
+        public float Opacity { get; set; }
+        public float Shade { get; set; }
+        public BoardDeclutter Declutter { get; set; }
+        public BoardScopeMode ScopeMode { get; set; }
+        public bool PageThreat { get; set; }
+        public bool PageShot { get; set; }
+        public bool PageMissileCam { get; set; }
+        public bool PageApproach { get; set; }
+        public bool PageWing { get; set; }
+        public bool PageStrike { get; set; }
+        public bool PageDock { get; set; }
+        public bool PageObjective { get; set; }
+        public bool PageSystems { get; set; }
+        public float ThreatHoldSeconds { get; set; }
+        public float PageMinSeconds { get; set; }
+        public bool ShowLamps { get; set; }
+        public bool ShowSystemsStrip { get; set; }
+        public bool ShowGauges { get; set; }
+        public bool ShowTicker { get; set; }
+        public bool ShowNavData { get; set; }
+        public bool Sway { get; set; }
+        public bool Corners { get; set; }
+
+        public void ResetToDefaults() { ResetCount++; Defaults(); }
+
+        /// <summary>The seventeen switches as 0 and 1, in the order the page lists them: the board, nine pages, five blocks, sway, corners.</summary>
+        public string Switches()
+        {
+            bool[] all = { Enabled, PageThreat, PageShot, PageMissileCam, PageApproach, PageWing, PageStrike, PageDock, PageObjective, PageSystems, ShowLamps, ShowSystemsStrip, ShowGauges, ShowTicker, ShowNavData, Sway, Corners };
+            var text = new System.Text.StringBuilder();
+            foreach (bool b in all) text.Append(b ? '1' : '0');
+            return text.ToString();
+        }
+
+        private void Defaults()
+        {
+            Enabled = true; Layout = BoardLayout.Wide; Scale = 1f; OffsetX = 0f; OffsetY = 0f; Opacity = 1f; Shade = .45f;
+            Declutter = BoardDeclutter.Full; ScopeMode = BoardScopeMode.Auto;
+            PageThreat = PageShot = PageMissileCam = PageApproach = PageWing = PageStrike = PageDock = PageObjective = PageSystems = true;
+            ThreatHoldSeconds = 6f; PageMinSeconds = 3f;
+            ShowLamps = ShowSystemsStrip = ShowGauges = ShowTicker = ShowNavData = true;
+            Sway = Corners = true;
+        }
+
+        public bool IsDefault()
+        {
+            var fresh = new TacBoardFixture();
+            return Enabled == fresh.Enabled && Layout == fresh.Layout && Scale == fresh.Scale && OffsetX == fresh.OffsetX && OffsetY == fresh.OffsetY &&
+                   Opacity == fresh.Opacity && Shade == fresh.Shade && Declutter == fresh.Declutter && ScopeMode == fresh.ScopeMode &&
+                   PageThreat && PageShot && PageMissileCam && PageApproach && PageWing && PageStrike && PageDock && PageObjective && PageSystems &&
+                   ThreatHoldSeconds == fresh.ThreatHoldSeconds && PageMinSeconds == fresh.PageMinSeconds &&
+                   ShowLamps && ShowSystemsStrip && ShowGauges && ShowTicker && ShowNavData && Sway && Corners;
+        }
+    }
+
     private sealed class HudFixture : IHudBoard
     {
         public IHudLine Acquire(string owner, string channel, string key) => null;
         public void Notice(string channel, HudTone tone, string text, string detail = null) { }
+        public bool TryGetScreenBox(out float left, out float top, out float right, out float bottom) { left = top = right = bottom = 0f; return false; }
     }
 }
 #endif

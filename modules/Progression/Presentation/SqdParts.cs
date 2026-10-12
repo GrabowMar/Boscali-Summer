@@ -201,22 +201,35 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
     /// <summary>
     /// A prose block set as a quotation: a rail at the left and the text measured at the
-    /// width it will really be drawn at. Used for the pilot's service note.
+    /// width it will really be drawn at. Used for the pilot's service note and the paint shop's
+    /// note. An optional stencil caption heads the text; <see cref="Tone"/> repaints the rail.
     /// </summary>
     internal sealed class SqdQuote : AvPart
     {
-        private const float PadLeft = 16f, PadRight = 8f, PadY = 8f;
+        private const float PadLeft = 16f, PadRight = 8f, PadY = 8f, CaptionH = 14f;
         private readonly AvFrame frame;
         private readonly Image bar;
-        private readonly TMP_Text text;
+        private readonly TMP_Text text, caption;
+        private Color? tone;
 
-        public SqdQuote(RectTransform parent)
+        public SqdQuote(RectTransform parent, string captionText = null)
         {
             Rect = AvLay.Child(parent, "Quote");
             frame = AvFrame.Add(Rect, "Frame", default(AvChamfer)); AvLay.Fill(frame.rectTransform);
             bar = AvLay.Solid(Rect, "Bar", Color.clear);
+            caption = AvText.Make(Rect, "Caption", AvTextRole.Micro, captionText ?? "");
+            AvText.Fit(caption, false);
+            caption.gameObject.SetActive(!string.IsNullOrEmpty(captionText));
             text = AvText.Make(Rect, "Text", AvTextRole.Prose, "", TextAlignmentOptions.TopLeft, true);
             Restyle();
+        }
+
+        private float Head => caption.gameObject.activeSelf ? CaptionH + 2f : 0f;
+
+        /// <summary>The rail's colour; null returns it to the info hue.</summary>
+        public Color? Tone
+        {
+            set { tone = value; bar.color = tone ?? AvTheme.RailInfo; }
         }
 
         public void Set(string value)
@@ -228,20 +241,22 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         }
 
         public override float Measure(float width) =>
-            Mathf.Max(AvGridTokens.Row, PadY + AvText.Height(text, width - PadLeft - PadRight) + PadY);
+            Mathf.Max(AvGridTokens.Row, PadY + Head + AvText.Height(text, width - PadLeft - PadRight) + PadY);
 
         public override void Place(AvSlot s)
         {
             base.Place(s);
             AvLay.Place(bar.rectTransform, 0f, 0f, 3f, s.H);
-            AvLay.Place(text.rectTransform, PadLeft, PadY, s.W - PadLeft - PadRight, s.H - 2f * PadY);
+            AvLay.Place(caption.rectTransform, PadLeft, PadY - 2f, s.W - PadLeft - PadRight, CaptionH);
+            AvLay.Place(text.rectTransform, PadLeft, PadY + Head, s.W - PadLeft - PadRight, s.H - 2f * PadY - Head);
         }
 
         public override void Restyle()
         {
             AvStyle c = AvStyleHost.FuiStyle("card inert");
             frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), Color.clear);
-            bar.color = AvTheme.RailInfo;
+            bar.color = tone ?? AvTheme.RailInfo;
+            caption.color = AvInk.Muted;
             text.color = AvInk.Ink;
         }
     }
@@ -579,13 +594,15 @@ namespace BoscaliSummer.Modules.Progression.Presentation
     /// The PILOT page's skills summary: one row per qualification lane, its grades as pips (held /
     /// not yet), the lane name at the left and the count at the right. Rows share the part's height
     /// (within a cap), so the part can take a page's leftover height without stretching one giant cell.
+    /// A row tall enough for it adds one line saying how far the lane is held; one taller still names every grade.
     /// </summary>
     internal sealed class SkillLaneStrip : AvPart
     {
-        private const float GapY = 4f, MinRow = 30f, NameW = 112f, CountW = 40f, PadX = 10f, PipGap = 4f;
+        private const float GapY = 4f, MinRow = 30f, NoteRow = 40f, NameW = 112f, CountW = 40f, PadX = 10f, PipGap = 4f;
         private readonly int lanes, grades;
         private readonly AvFrame[] backs;
-        private readonly TMP_Text[] names, counts;
+        private readonly TMP_Text[] names, counts, notes;
+        private readonly string[][] gradeTitles;
         private readonly TMP_Text[][] gradeNames;
         private readonly Image[][] pips;
         private readonly bool[][] held;
@@ -595,7 +612,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         {
             lanes = laneNames.Length; grades = gradeCount;
             Rect = AvLay.Child(parent, "SkillLanes");
-            backs = new AvFrame[lanes]; names = new TMP_Text[lanes]; counts = new TMP_Text[lanes];
+            backs = new AvFrame[lanes]; names = new TMP_Text[lanes]; counts = new TMP_Text[lanes]; notes = new TMP_Text[lanes];
+            gradeTitles = new string[lanes][];
             gradeNames = new TMP_Text[lanes][];
             pips = new Image[lanes][]; held = new bool[lanes][]; closed = new bool[lanes];
             for (int l = 0; l < lanes; l++)
@@ -605,8 +623,11 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 AvText.Fit(names[l], false);
                 counts[l] = AvText.Make(Rect, "LaneCount " + l, AvTextRole.DataSmall, "0/" + grades, TextAlignmentOptions.MidlineRight);
                 AvText.Fit(counts[l], false);
+                notes[l] = AvText.Make(Rect, "LaneNote " + l, AvTextRole.Micro, "", TextAlignmentOptions.MidlineLeft);
+                AvText.Fit(notes[l], false);
                 pips[l] = new Image[grades]; held[l] = new bool[grades];
                 gradeNames[l] = new TMP_Text[grades];
+                gradeTitles[l] = new string[grades];
                 for (int g = 0; g < grades; g++)
                 {
                     pips[l][g] = AvLay.Solid(Rect, "Pip " + l + "." + g, Color.clear);
@@ -614,8 +635,9 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                     foreach (PerkDefinition perk in PerkCatalog.All)
                         if (perk.Lane == laneNames[l] && perk.Grade == g + 1)
                         { title = perk.Name.Replace(" Qualification", " AUTH"); help = perk.Name + ": " + perk.Description; break; }
+                    gradeTitles[l][g] = title.ToUpperInvariant();
                     gradeNames[l][g] = AvText.Make(Rect, "Grade " + l + "." + g, AvTextRole.Micro,
-                        title.ToUpperInvariant(), TextAlignmentOptions.TopLeft, true);
+                        gradeTitles[l][g], TextAlignmentOptions.TopLeft, true);
                     pips[l][g].raycastTarget = true;
                     AvHelpTip.Attach(pips[l][g].gameObject, help);
                     gradeNames[l][g].raycastTarget = true;
@@ -638,14 +660,18 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         public void SetLane(int lane, bool[] gradesHeld, bool laneClosed)
         {
             if (lane < 0 || lane >= lanes) return;
-            int taken = 0;
+            int taken = 0, top = -1;
             for (int g = 0; g < grades; g++)
             {
                 held[lane][g] = g < gradesHeld.Length && gradesHeld[g];
-                if (held[lane][g]) taken++;
+                if (held[lane][g]) { taken++; top = g; }
             }
             closed[lane] = laneClosed;
             counts[lane].text = taken + "/" + grades;
+            notes[lane].text = laneClosed ? "CLOSED · SUPPORT TOOL CAP REACHED"
+                : taken == 0 ? "NONE HELD · NEXT " + gradeTitles[lane][0]
+                : taken >= grades ? "ALL " + grades + " GRADES HELD"
+                : "HELD TO G" + (top + 1) + " · " + gradeTitles[lane][top];
             RestyleLane(lane);
         }
 
@@ -658,20 +684,23 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             float detailH = 0f, detailW = (s.W - 2f * PadX) / grades - PipGap;
             for (int l = 0; l < lanes; l++)
                 for (int g = 0; g < grades; g++) detailH = Mathf.Max(detailH, AvText.Height(gradeNames[l][g], detailW));
-            bool detailed = rowH >= 38f + detailH;
+            bool detailed = rowH >= 38f + detailH, noted = !detailed && rowH >= NoteRow;
             float pipsX = PadX + NameW + 6f, pipsW = s.W - pipsX - CountW - PadX - 4f;
-            float pipW = Mathf.Max(6f, (pipsW - (grades - 1) * PipGap) / Mathf.Max(1, grades)), pipH = Mathf.Min(rowH - 14f, 24f);
+            float pipW = Mathf.Max(6f, (pipsW - (grades - 1) * PipGap) / Mathf.Max(1, grades));
+            float pipH = noted ? 10f : Mathf.Min(rowH - 14f, 24f), lineH = detailed ? 24f : noted ? 24f : rowH;
             for (int l = 0; l < lanes; l++)
             {
                 float y = l * (rowH + GapY);
                 AvLay.Place(backs[l].rectTransform, 0f, y, s.W, rowH);
-                AvLay.Place(names[l].rectTransform, PadX, y, NameW, detailed ? 24f : rowH);
-                AvLay.Place(counts[l].rectTransform, s.W - PadX - CountW, y, CountW, detailed ? 24f : rowH);
+                AvLay.Place(names[l].rectTransform, PadX, y, NameW, lineH);
+                AvLay.Place(counts[l].rectTransform, s.W - PadX - CountW, y, CountW, lineH);
+                notes[l].gameObject.SetActive(noted);
+                AvLay.Place(notes[l].rectTransform, PadX, y + 25f, s.W - 2f * PadX, 14f);
                 for (int g = 0; g < grades; g++)
                 {
                     float x = detailed ? PadX + g * (s.W - 2f * PadX) / grades : pipsX + g * (pipW + PipGap);
                     float w = detailed ? (s.W - 2f * PadX) / grades - PipGap : pipW;
-                    AvLay.Place(pips[l][g].rectTransform, x, y + (detailed ? 25f : (rowH - pipH) * .5f), w, detailed ? 4f : pipH);
+                    AvLay.Place(pips[l][g].rectTransform, x, y + (detailed ? 25f : noted ? (lineH - pipH) * .5f : (rowH - pipH) * .5f), w, detailed ? 4f : pipH);
                     gradeNames[l][g].gameObject.SetActive(detailed);
                     if (detailed) AvLay.Place(gradeNames[l][g].rectTransform, x, y + 34f, w, rowH - 38f);
                 }
@@ -682,6 +711,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         {
             names[l].color = closed[l] ? AvTheme.Disabled : AvInk.Ink;
             counts[l].color = closed[l] ? AvTheme.Disabled : AvInk.Dim;
+            notes[l].color = closed[l] ? AvTheme.Disabled : AvInk.Dim;
             for (int g = 0; g < grades; g++)
             {
                 pips[l][g].color = held[l][g] ? AvInk.Key : closed[l] ? AvInk.Muted.WithAlpha(.15f) : AvInk.Muted.WithAlpha(.3f);

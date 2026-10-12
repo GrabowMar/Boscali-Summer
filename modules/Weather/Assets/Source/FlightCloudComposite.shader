@@ -68,7 +68,8 @@ Shader "Boscali/FlightCloudComposite"
                         float2 texel = centre + float2(x, y);
                         float2 tuv = (texel + 0.5) * _CloudLowResSize.zw;
                         float2 offset = texel - p;
-                        float spatial = exp(-dot(offset, offset) * 1.1);
+                        // 0.45: about one texel of blur. At 1.1 the kernel was so narrow that the dither of nearby cloud came through as speckle.
+                        float spatial = exp(-dot(offset, offset) * 0.45);
                         float texelDepth = tex2Dlod(_CloudLowResDepth, float4(tuv, 0, 0)).r;
                         float4 sample = tex2Dlod(_CloudLowResColour, float4(tuv, 0, 0));
                         // Visible clouds only need both opaque surfaces behind the cloud.
@@ -235,18 +236,20 @@ Shader "Boscali/FlightCloudComposite"
                 soft /= max(1e-5, softTotal);
                 if (total <= 1e-5) return Resolved(0.0, sceneDepth, sceneDepth);
                 float distance = distanceWeight > 1e-5 ? distanceSum / distanceWeight : freshData.g;
+                // One marched texel is one dithered sample: on its own it is grain. The nine-sample blend around it is the same sky with the dither averaged out.
+                float4 smooth = upsampled;
                 if (fresh) { upsampled = freshVal; distance = freshData.g; }
                 float cloudDepth = distance / viewLength;
                 // No history (first frame, a cut, a zoom): fresh texels are sharp, the rest
                 // fall back to the upsampled march. Sharpness returns over the next frames.
-                if (_CloudHistoryValid < 0.5 || _CloudChecker.w < 0.5) return Resolved(upsampled, sceneDepth, cloudDepth);
+                if (_CloudHistoryValid < 0.5 || _CloudChecker.w < 0.5) return Resolved(lerp(upsampled, smooth, 0.5), sceneDepth, cloudDepth);
 
                 // This texel's ray, out to the cloud distance its fresh neighbour measured,
                 // seen from last frame's camera.
                 float3 ray = view / viewLength;
                 float4 clip = mul(_CloudPrevMatrix, float4(ray * distance + _CloudCamDelta.xyz, 1.0));
                 float2 previous = clip.xy / clip.w * 0.5 + 0.5;
-                float4 fallback = fresh ? upsampled : soft;
+                float4 fallback = fresh ? lerp(upsampled, smooth, 0.5) : soft;
                 if (clip.w <= 0.0 || any(previous < 0.0) || any(previous > 1.0)) return Resolved(fallback, sceneDepth, cloudDepth);
                 // clip.w is this cloud point's previous eye depth. A changed terrain distance
                 // behind it cannot invalidate the visible cloud.
@@ -265,22 +268,28 @@ Shader "Boscali/FlightCloudComposite"
                     occludedHistory = true;
                 }
                 if (historyWeight <= 1e-5) return Resolved(fallback, sceneDepth, cloudDepth);
-                float4 carried = clamp(history, low, high);
+                float4 boxed = clamp(history, low, high);
                 // A single representative depth cannot reproject all the material in a
                 // nearby volume. Reduce history when translation is large relative to it.
                 // Distant skies keep the same temporal savings and accumulation.
                 float motion = max(saturate(length(_CloudCamDelta.xyz) / max(4.0, distance * 0.08)), _CloudCamDelta.w);
                 // Repeated bilinear history resampling softens moving features. Refresh in
                 // proportion to their movement on this target, retaining accumulation at rest.
-                motion = max(motion, 0.5 * saturate(length((previous - uv) * _CloudLowResSize.xy)));
+                // 0.5 here threw half the accumulated sky away on every frame of ordinary flight, which showed the raw dither as boiling grain.
+                motion = max(motion, 0.2 * saturate(length((previous - uv) * _CloudLowResSize.xy)));
                 // Fresh neighbours expose a local flash promptly without clearing sky history.
                 motion = max(motion, saturate(_CloudFlashChange * 12.0));
                 if (occludedHistory) motion = max(motion, 0.5);
+                // The clamp box comes from the nine quarter-size texels marched this frame, one of every four half-size texels. A cloud thinner than that (a far layer seen edge-on) is
+                // inside the box only on the frames whose marched row happens to cross it: clamped hard, it blinked on and off along the horizon. A sky that barely moves on screen
+                // keeps most of its history (a 15 % pull toward the box per frame still clears a cloud that has really gone); a moving one is clamped as before.
+                float4 carried = lerp(history, boxed, saturate(0.15 + motion * 3.0));
                 if (!fresh) return Resolved(lerp(carried, upsampled, motion), sceneDepth, cloudDepth);
                 // The clamp already pulled the carried value into the fresh range, so new and
-                // vanished cloud still converge within a few frames; dense texels track the
-                // fresh march faster to keep their detail crisp.
-                return Resolved(lerp(carried, freshVal, max(0.10 + 0.40 * freshVal.a, motion)), sceneDepth, cloudDepth);
+                // vanished cloud still converge within a few frames. A fresh texel enters half
+                // as its own sample and half as the blend around it, and at most a quarter per
+                // visit at rest (was a half of the raw sample for dense cloud: visible grain).
+                return Resolved(lerp(carried, lerp(freshVal, smooth, 0.5), max(0.08 + 0.17 * freshVal.a, motion)), sceneDepth, cloudDepth);
             }
             ENDHLSL
         }

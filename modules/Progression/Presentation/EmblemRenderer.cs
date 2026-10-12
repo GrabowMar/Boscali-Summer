@@ -16,8 +16,9 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         /// <summary>Card sprites: twice the largest size a panel shows them at.</summary>
         public const int CardSize = 128;
 
-        /// <summary>Tail markings: about a metre of fin at the livery atlas's texel density.</summary>
-        public const int PaintSize = 256;
+        /// <summary>Tail markings: twice the livery atlas's texel density on the largest fin, so the bake only ever
+        /// samples the drawing down and a keyline stays a keyline.</summary>
+        public const int PaintSize = 512;
 
         private const int MaximumCachedDesigns = 64;
         private const int MaximumCachedFiles = 16;

@@ -1,0 +1,41 @@
+{
+  "scenario": "readme-flight",
+  "verdict": "pass",
+  "status": "ok",
+  "error": null,
+  "checks": [
+    {
+      "check": "status_ok",
+      "ok": true,
+      "detail": "status ok:"
+    }
+  ],
+  "units_recorded": 0,
+  "run_dir": ".",
+  "execution": {
+    "run_in_background": true,
+    "focused": false,
+    "time_scale": 1,
+    "target_frame_rate": 60,
+    "vsync": 1,
+    "fixed_delta_time": 0.01666666753590107,
+    "maximum_delta_time": 0.10000001639127731
+  },
+  "boot_seconds": 29.687559127807617,
+  "restart_seconds": 0,
+  "restart_verified": null,
+  "real_seconds": 68.95289611816406,
+  "game_time": 65.83193969726562,
+  "simulated_seconds_per_real_second": 0.9547378420829773,
+  "wall_seconds": 110.47799809998833,
+  "timing": {
+    "wall_s": 110.47799939999823,
+    "boot_s": 29.687559127807617,
+    "quit_s": 2.456466800009366
+  },
+  "process_started": true,
+  "requested_execution": {
+    "time_scale": 1.0,
+    "frame_limit": null
+  }
+}

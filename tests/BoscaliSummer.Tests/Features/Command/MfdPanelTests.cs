@@ -60,10 +60,10 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(adm.Code == "ADM" && !adm.HasName && adm.Glyph == AvIcon.ListDetails,
                 "the deleted ADM bezel leaves no rail entry behind but keeps the neutral fallback icon");
             MfdRailEntry bdf = MfdRailCatalog.For("bdf");
-            TestAssert.That(bdf.Code == "BDF" && bdf.Glyph == AvIcon.BuildingBank, "codes are case-insensitive");
+            TestAssert.That(bdf.Code == "BDF" && bdf.Glyph == AvIcon.Crest, "codes are case-insensitive");
             MfdRailEntry faction = MfdRailCatalog.For("FAC");
             TestAssert.That(faction.Code == "FAC" && faction.Name == "FACTIONS" &&
-                            faction.Glyph == AvIcon.BuildingBank, "merged faction bezel is branded");
+                            faction.Glyph == AvIcon.Crest, "merged faction bezel is branded");
             TestAssert.That(VanillaMfdPanelCatalog.FromShortName("FAC") == VanillaMfdPanelId.Bdf &&
                             VanillaMfdPanelCatalog.Label(VanillaMfdPanelId.Bdf) == "FAC",
                 "merged faction screen has one header identity");
@@ -76,9 +76,28 @@ namespace BoscaliSummer.Tests.Features.Command
                             MfdRailCatalog.OrderRank("BDF") < MfdRailCatalog.OrderRank("PALA"),
                 "merged faction code leads native faction fallbacks");
             TestAssert.That(MfdRailCatalog.OrderRank("PALA") < MfdRailCatalog.OrderRank("MAP"),
-                "native faction fallback precedes unranked buttons");
-            TestAssert.That(MfdRailCatalog.OrderRank("MAP") == MfdRailCatalog.OrderRank("WMC"),
-                "unranked buttons share the tail of the order");
+                "native faction fallback precedes the map");
+            TestAssert.That(MfdRailCatalog.OrderRank("ENV") < MfdRailCatalog.OrderRank("MIS") &&
+                            MfdRailCatalog.OrderRank("OPS") < MfdRailCatalog.OrderRank("COM") &&
+                            MfdRailCatalog.OrderRank("RAD") < MfdRailCatalog.OrderRank("HUD") &&
+                            MfdRailCatalog.OrderRank("SET") < MfdRailCatalog.OrderRank("ADM"),
+                "keys gather by purpose: situation, tasking, comms, system, then unknown codes");
+            TestAssert.That(MfdRailCatalog.OrderRank("ADM") == MfdRailCatalog.OrderRank("SUD"),
+                "unknown codes share the tail of the order, so a stable sort keeps the game's own");
+            string[] codes = { "FAC", "MAP", "STR", "EVN", "ENV", "MIS", "TGT", "WMC", "OPS", "COM", "RAD", "HUD", "PILOT", "SET" };
+            for (int i = 0; i < codes.Length; i++)
+                for (int j = i + 1; j < codes.Length; j++)
+                    TestAssert.That(MfdRailCatalog.For(codes[i]).Glyph != MfdRailCatalog.For(codes[j]).Glyph,
+                        codes[i] + " and " + codes[j] + " must not share a glyph");
+
+            MfdRailPlan roomy = MfdRailPlan.Resolve(964f, 14, 4);
+            TestAssert.That(roomy.Fits && roomy.Header && roomy.Groups && roomy.KeyHeight >= 52f && roomy.KeyHeight <= MfdRailPlan.KeyMax,
+                "fourteen keys wear the header and group labels on a 1080p rail");
+            MfdRailPlan tight = MfdRailPlan.Resolve(964f, 18, 5);
+            TestAssert.That(tight.Fits && !tight.Groups && tight.KeyHeight >= MfdRailPlan.KeyMin,
+                "a crowded rail drops its group labels before its keys go under the pointer floor");
+            TestAssert.That(!MfdRailPlan.Resolve(964f, 24, 5).Fits, "a rail that cannot hold 44px keys reports that it does not fit");
+            TestAssert.That(MfdRailPlan.Resolve(964f, 0, 0).Fits, "an empty rail always fits");
             TestAssert.That(MfdRailCatalog.OrderRank("<PALA>") == MfdRailCatalog.OrderRank("PALA"),
                 "order rank uses the sanitised code");
             TestAssert.That(MfdRailCatalog.Sanitise("M<AP>", 8) == "MAP",
@@ -98,12 +117,12 @@ namespace BoscaliSummer.Tests.Features.Command
         private static void RunHostedEntryTests()
         {
             MfdRailEntry events = MfdRailCatalog.For("EVN");
-            TestAssert.That(events.HasName && events.Glyph == AvIcon.Activity,
+            TestAssert.That(events.HasName && events.Glyph == AvIcon.Burst,
                 "the hosted EVN button carries a readable rail entry");
             TestAssert.That(events.Glyph != MfdRailCatalog.For("MIS").Glyph,
                 "the event feed must not wear the mission flag");
             MfdRailEntry comms = MfdRailCatalog.For("COM");
-            TestAssert.That(comms.HasName && comms.Name == "COMMS" && comms.Glyph == AvIcon.Message2,
+            TestAssert.That(comms.HasName && comms.Name == "COMMS" && comms.Glyph == AvIcon.Headset,
                 "the hosted COM button reads as COMMS with its own glyph");
         }
 

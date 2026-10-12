@@ -22,8 +22,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// displayed value actually changes.
     /// Look (2026-10-07, base-game aligned; not configurable): bare HUD-ink numbers in the native
     /// weapon label font framed by thin corner brackets, thin tick scales for throttle and fuel,
-    /// and a black slab with a sharp outline for the target card -- the same symbology language as
-    /// the native flight HUD, no plates. Cues light brackets and text like annunciators: SPD on
+    /// and for the target card corner brackets over the feed with a soft shade behind its header (the visor look: no slab, no closed outline,
+    /// the "TGT" tag an open tag) -- the same symbology language as the native flight HUD, no plates. Cues light brackets and text like annunciators: SPD on
     /// over-G, ALT on low ground (radar altitude replaces its caption under 300 m; PULL UP in alert
     /// colour), the fuel scale on low fuel. HDG adds the compass point; the card shows range and closure.
     /// Legibility (2026-10-10): a dark scrim behind every box and bar label so thin ink survives bright haze, captions at
@@ -61,6 +61,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private AvVector symbols;
         private int lastSymbols;
         private const float Bracket = 9f, Stroke = 1.5f;
+        /// <summary>The target card's corner brackets: arm 10, hung on the card's own corners.</summary>
+        private const float CardArm = 10f;
+        /// <summary>The soft shade behind the card stands this far outside it (its feathered edge is HudSprites.FeatherEdge wide, so the card's edge is under the full part) at this alpha.</summary>
+        private const float CardShadeMargin = 44f, CardShadeAlpha = 0.45f;
         private float lastScale = 1f;
 
         private struct Box
@@ -102,6 +106,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         public bool Available => root != null;
+
+        /// <summary>The TAC BOARD's box on the screen (centre-origin, y up, canvas units; no size: no board): the boxes of the cluster keep clear of it (<see cref="ThirdPersonHudLayout.KeepClearOf"/>). Set by the board before <see cref="Present"/>.</summary>
+        public RectF Board;
+        /// <summary><see cref="Board"/> in the layout's units (the canvas over the text scale).</summary>
+        private RectF avoid;
 
         public bool Ensure()
         {
@@ -244,13 +253,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private TargetCardWidgets BuildTargetCard()
         {
             const float header = ThirdPersonHudLayout.TargetCardHeaderHeight;
-            var cardObject = new GameObject("TargetCard", typeof(RectTransform), typeof(Image));
+            var cardObject = new GameObject("TargetCard", typeof(RectTransform));
             RectTransform rect = (RectTransform)cardObject.transform;
             rect.SetParent(root, false);
             rect.pivot = new Vector2(0.5f, 0.5f);
-            Image backing = cardObject.GetComponent<Image>();
-            backing.raycastTarget = false;
-            backing.sprite = AvSprites.White;
+            // No slab: a feathered patch of shade a little larger than the card, under everything of it (first child), in the board's shade colour.
+            Image backing = HudSprites.Child(rect, "Shade", HudSprites.Feather, sliced: true);
+            backing.rectTransform.offsetMin = new Vector2(-CardShadeMargin, -CardShadeMargin);
+            backing.rectTransform.offsetMax = new Vector2(CardShadeMargin, CardShadeMargin);
+            backing.color = new Color(HudSprites.ShadeTint.r, HudSprites.ShadeTint.g, HudSprites.ShadeTint.b, CardShadeAlpha);
 
             var feedObject = new GameObject("Feed", typeof(RectTransform), typeof(RawImage));
             RectTransform feedRect = (RectTransform)feedObject.transform;
@@ -349,17 +360,18 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             float screenW = canvasRoot.rect.width / scale;
             float screenH = canvasRoot.rect.height / scale;
             if (screenW <= 0f || screenH <= 0f) return;
+            avoid = new RectF(Board.CenterX / scale, Board.CenterY / scale, Board.Width / scale, Board.Height / scale);
 
             ColorTheme theme = ThemeManager.Active.ColorTheme;
             Color ink = theme.AllClear;
             Color caution = theme.Warning;
             Color alert = theme.Alert;
 
-            RectF spdRect = ThirdPersonHudLayout.SpeedBox(screenW, screenH);
-            RectF altRect = ThirdPersonHudLayout.AltitudeBox(screenW, screenH);
+            RectF spdRect = ThirdPersonHudLayout.SpeedBox(screenW, screenH, avoid);
+            RectF altRect = ThirdPersonHudLayout.AltitudeBox(screenW, screenH, avoid);
             PositionRect(spd.Root, spdRect);
             PositionRect(alt.Root, altRect);
-            PositionRect(hdg.Root, ThirdPersonHudLayout.HeadingBox(screenW, screenH));
+            PositionRect(hdg.Root, ThirdPersonHudLayout.HeadingBox(screenW, screenH, avoid));
             PositionRect(spd.Track, ThirdPersonHudLayout.SideBar(spdRect, outwardIsLeft: true));
             PositionRect(alt.Track, ThirdPersonHudLayout.SideBar(altRect, outwardIsLeft: false));
 
@@ -432,27 +444,30 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             // Bank in 2 degree steps and slip in whole degrees: finer motion is not visible and would rebuild the mesh every tick in a turn.
             int key = (int)screenW * 7919 + (int)screenH * 31 + (int)(lastScale * 100f) * 977 + Code(spdLit) * 5 + Code(altLit) * 3 + Code(fuel) + Code(ink) * 17 +
-                (cardShown ? 11 : 0) + (flash ? 13 : 0) + Mathf.RoundToInt(bankDeg / 2f) * 104729 + Mathf.RoundToInt(slipDeg) * 7;
+                (cardShown ? 11 : 0) + (flash ? 13 : 0) + Mathf.RoundToInt(bankDeg / 2f) * 104729 + Mathf.RoundToInt(slipDeg) * 7 +
+                Mathf.RoundToInt(avoid.CenterX) * 15485863 + Mathf.RoundToInt(avoid.CenterY) * 32452843 + Mathf.RoundToInt(avoid.Width) * 49979687 + Mathf.RoundToInt(avoid.Height) * 67867967;
             if (key == lastSymbols) return;
             lastSymbols = key;
 
             AvQuadBuffer b = symbols.Buffer;
             b.Clear();
-            RectF spdRect = ThirdPersonHudLayout.SpeedBox(screenW, screenH);
-            RectF altRect = ThirdPersonHudLayout.AltitudeBox(screenW, screenH);
+            RectF spdRect = ThirdPersonHudLayout.SpeedBox(screenW, screenH, avoid);
+            RectF altRect = ThirdPersonHudLayout.AltitudeBox(screenW, screenH, avoid);
             Brackets(b, spdRect, (spdLit ?? ink).ToRgba());
             Brackets(b, altRect, (flash ? Color.clear : altLit ?? ink).ToRgba());
-            Brackets(b, ThirdPersonHudLayout.HeadingBox(screenW, screenH), ink.ToRgba().WithAlpha(0.8f));
+            Brackets(b, ThirdPersonHudLayout.HeadingBox(screenW, screenH, avoid), ink.ToRgba().WithAlpha(0.8f));
             Scale(b, ThirdPersonHudLayout.SideBar(spdRect, outwardIsLeft: true), ink.ToRgba());
             Scale(b, ThirdPersonHudLayout.SideBar(altRect, outwardIsLeft: false), fuel.ToRgba());
-            BankAndSlip(b, ThirdPersonHudLayout.HeadingBox(screenW, screenH), bankDeg, slipDeg, ink.ToRgba());
+            BankAndSlip(b, ThirdPersonHudLayout.HeadingBox(screenW, screenH, avoid), bankDeg, slipDeg, ink.ToRgba());
             if (cardShown)
             {
                 RectF card = ThirdPersonHudLayout.TargetCard(screenW, screenH, true);
                 Rgba line = ink.ToRgba().WithAlpha(0.9f);
-                Outline(b, card.Left, card.Bottom, card.Right, card.Top, Stroke, line);
-                float tagTop = card.Top - 4f, tagLeft = card.Left + 5f;
-                Outline(b, tagLeft, tagTop - (ThirdPersonHudLayout.TargetCardHeaderHeight - 7f), tagLeft + 34f, tagTop, 1f, line);
+                CornerBrackets(b, card.Left, card.Bottom, card.Right, card.Top, CardArm, Stroke, line);
+                // The "TGT" tag is an open tag (a tick on its left edge and a hairline under it), not a box.
+                float tagTop = card.Top - 4f, tagLeft = card.Left + 5f, tagBottom = tagTop - (ThirdPersonHudLayout.TargetCardHeaderHeight - 7f);
+                AvStrokes.Line(b, tagLeft, tagBottom, tagLeft, tagTop, 2f, line);
+                AvStrokes.Line(b, tagLeft, tagBottom, tagLeft + 34f, tagBottom, 1f, line.WithAlpha(0.55f));
                 AvStrokes.Line(b, card.Left, card.Top - ThirdPersonHudLayout.TargetCardHeaderHeight + 2f,
                     card.Right, card.Top - ThirdPersonHudLayout.TargetCardHeaderHeight + 2f, 1f, line.WithAlpha(0.5f));
             }
@@ -523,12 +538,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
         }
 
-        private static void Outline(AvQuadBuffer b, float x0, float y0, float x1, float y1, float w, Rgba c)
+        /// <summary>Four corner brackets round a rectangle (y up): an arm of <paramref name="arm"/> each way from every corner, nothing between them.</summary>
+        private static void CornerBrackets(AvQuadBuffer b, float l, float bt, float r, float t, float arm, float w, Rgba c)
         {
-            AvStrokes.Line(b, x0, y0, x1, y0, w, c);
-            AvStrokes.Line(b, x1, y0, x1, y1, w, c);
-            AvStrokes.Line(b, x1, y1, x0, y1, w, c);
-            AvStrokes.Line(b, x0, y1, x0, y0, w, c);
+            AvStrokes.Line(b, l, t, l + arm, t, w, c);
+            AvStrokes.Line(b, l, t, l, t - arm, w, c);
+            AvStrokes.Line(b, r, t, r - arm, t, w, c);
+            AvStrokes.Line(b, r, t, r, t - arm, w, c);
+            AvStrokes.Line(b, l, bt, l + arm, bt, w, c);
+            AvStrokes.Line(b, l, bt, l, bt + arm, w, c);
+            AvStrokes.Line(b, r, bt, r - arm, bt, w, c);
+            AvStrokes.Line(b, r, bt, r, bt + arm, w, c);
         }
 
         private static void PositionRect(RectTransform rt, RectF rect)
@@ -661,7 +681,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!show) return;
 
             PositionRect(card.Root, ThirdPersonHudLayout.TargetCard(screenW, screenH, true));
-            card.Backing.color = new Color(0.020f, 0.039f, 0.059f, 0.88f);
             card.TagText.color = ink;
             for (int i = 0; i < card.Reticle.Length; i++) card.Reticle[i].color = WithAlpha(ink, 0.7f);
             if (!ReferenceEquals(card.Feed.texture, cameraTexture)) card.Feed.texture = cameraTexture;

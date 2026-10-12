@@ -37,7 +37,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             /// <summary>Everything the three pages show, read once per refresh.</summary>
             private sealed class BoardModel
             {
-                public string MissionName = "NO MISSION LOADED", Brief = "WAITING FOR MISSION CONTROLLER DATA", Mode = "", Clock = "—";
+                public string MissionName = "NO MISSION LOADED", Brief = "STANDING BY FOR MISSION CONTROLLER", Mode = "", Clock = "—";
                 public bool HasBrief, HasHq;
                 public float Score;
                 public bool HasEscalation;
@@ -77,6 +77,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private AvControl leadContractOpen;
             private AvSection logSection;
             private AvList logList;
+            private AvNote boardLedger;
             private const string BrowseHelp = "Open the contract board and browse optional missions.";
 
             // OBJECTIVES page.
@@ -84,6 +85,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private AvSection checklistSection;
             private AvPagedStack<ChecklistRow> checklist;
             private AvRow objectivesEmpty;
+            private AvSection typeSection;
+            private TaskTypeTally typeTally;
 
             // CONTRACTS page.
             private MissionTaskPart tasking;
@@ -97,6 +100,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             private AvRow contractsEmpty;
             private AvControl openDesk;
+            private UnityEngine.UI.Image actionsBack;
             private MissionContractWindow contractWindow;
             private int secondaryFilter;
 
@@ -105,7 +109,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             public MissionPresenter(MFDScreen screen) : base(screen, VanillaMfdPanelId.Mis) { }
 
-            protected override string Title => "BOSCALI / MISSION";
+            private static readonly string[] PageTitles = { "OPERATION ORDER", "TASK LIST", "TASKING BOARD" };
+
+            protected override string Title => "MISSION CONTROL  /  OPERATION ORDER";
+
+            private void ShowTitle() => Console.SetTitle("MISSION CONTROL  /  " + PageTitles[Mathf.Clamp(selectedPage, 0, 2)]);
 
             protected override (AvIcon Icon, string Label)[] TabItems { get; } = new[]
             {
@@ -131,6 +139,21 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 BuildBriefPage(briefFlow);
                 BuildObjectivesPage(objectivesFlow);
                 BuildContractsPage(contractsFlow);
+                Console.Orders(0,
+                    "The lead task is the nearest open objective with a known fix.",
+                    "The ring under SCORE fills toward the next escalation gate.",
+                    "AT STAKE counts contracts in the field. An offer pays nothing until it is accepted.",
+                    "OPEN on the lead contract goes to the TASKING BOARD for accept and abort.");
+                Console.Orders(1,
+                    "Open tasks lead the list. Completed tasks are filed beneath them.",
+                    "The figure on the right is the distance to the task's nearest fix. No fix reads percent complete.",
+                    "Percent complete is the host's own figure. The strip under each task mirrors it.",
+                    "BY TASK TYPE counts done against issued for each kind of task.");
+                Console.Orders(2,
+                    "ACCEPT shares a task with the whole faction. HUD selection stays with this pilot.",
+                    "ABORT asks for confirmation, then the host applies the task's failure consequence.",
+                    "DESK opens the full tactical task desk with the same host actions.");
+                ShowTitle();
             }
 
             protected override void RefreshContent()
@@ -141,12 +164,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             protected override string AmbientStatus() =>
                 selectedPage == 2 ? secondaryStatus :
-                model.ObjectivesActive == 0 ? "NO ACTIVE OBJECTIVES" :
-                model.ObjectivesActive + " ACTIVE OBJECTIVES";
+                model.ObjectivesActive == 0 ? "NO OPEN TASKS" :
+                model.ObjectivesActive + " OPEN TASKS";
 
             protected override void OnPageChanged(int index)
             {
                 selectedPage = index;
+                ShowTitle();
                 taskActions?.CancelConfirmation();
                 taskActions?.SetShown(index==2);
                 RequestRefresh();
@@ -178,14 +202,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     AvButtonStyle.Primary));
                 if (leadContractOpen != null) leadContractOpen.Help = BrowseHelp;
 
-                logSection = page.Section(AvIcon.Activity, "LOG");
+                boardLedger = page.Add(new AvNote(page.Content, AvTextRole.DataSmall));
+                boardLedger.CollapseEmpty = true;
+
+                logSection = page.Section(AvIcon.Activity, "OPERATIONS LOG");
                 logList = page.Add(new AvList(page.Content, page.Ticker, MfdMissionBoard.LogShown, BindLogRow));
                 logSection.SetShown(false);
                 logList.SetShown(false);
 
-                trendSection = page.Section(AvIcon.ChartLine, "FUNDS", "NO SAMPLES");
-                trendChart = new AvLineChart(page.Content, 120f);
+                trendSection = page.Section(AvIcon.ChartLine, "FUNDS TREND", "NO OBSERVATIONS YET");
+                trendChart = new AvLineChart(page.Content, 100f);
                 trendChart.SetSeries(trendBuffer, 0, "—", "—", "—");
+                trendChart.SetShown(false);   // an empty plot says nothing the caption does not; it appears with its first trace
                 page.Add(trendChart, 1f);
             }
 
@@ -206,13 +234,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (run < 2)
                 {
                     trendChart.SetSeries(trendBuffer, 0, "—", "—", "—");
-                    trendSection.SetCaption(count == 0 ? "NO SAMPLES" : "NEEDS 2 SAMPLES");
+                    trendChart.SetShown(false);
+                    trendSection.SetCaption(count == 0 ? "NO OBSERVATIONS YET" : "NEEDS 2 OBSERVATIONS");
                     return;
                 }
+                trendChart.SetShown(true);
                 float lo = trendBuffer[0], hi = trendBuffer[0];
                 for (int i = 1; i < run; i++) { lo = Mathf.Min(lo, trendBuffer[i]); hi = Mathf.Max(hi, trendBuffer[i]); }
                 trendChart.SetSeries(trendBuffer, run, AvNum.Money(lo), AvNum.Money(hi), AvNum.Money(trendBuffer[run - 1]));
-                trendSection.SetCaption("LAST " + AvNum.Clock(Mathf.Max(0f, history.Time(count - 1) - history.Time(runStart))));
+                trendSection.SetCaption("LAST " + AvNum.Clock(Mathf.Max(0f, history.Time(count - 1) - history.Time(runStart))) + " ON FILE");
             }
 
             private void BindLogRow(int index, AvRow row)
@@ -224,7 +254,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             private void RenderBrief()
             {
-                hero.SetMission(model.MissionName, model.Mode, model.Clock, model.Brief, model.HasBrief);
+                hero.SetMission(model.MissionName, model.Mode, model.Clock == "—" ? "—" : "T+" + model.Clock, model.Brief, model.HasBrief);
 
                 int lead = LeadObjective();
                 if (lead >= 0)
@@ -280,6 +310,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
                 if (leadContractOpen != null)
                     leadContractOpen.gameObject.SetActive(preview != null || model.Offers + model.ActiveContracts > 0);
+                // The board's money, all from the same contract view the tiles above read.
+                boardLedger.Set(!model.Installed ? "" : "OFFERED " + Cash(model.Offered) + "   ·   IN FIELD " + Cash(model.AtStake) +
+                    "   ·   PAID OUT " + Cash(model.Paid));
 
                 int shown = Math.Min(log.Count, MfdMissionBoard.LogShown);
                 logSection.SetShown(shown > 0);
@@ -333,12 +366,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private void BuildObjectivesPage(AvFlow page)
             {
                 tally = page.Add(new ObjectiveTallyPart(page.Content));
-                checklistSection = page.Section(AvIcon.ListDetails, "CHECKLIST");
+                checklistSection = page.Section(AvIcon.ListDetails, "TASK LIST");
                 checklist = page.Add(new AvPagedStack<ChecklistRow>(page.Content, page.Ticker, ObjectivePageSize, 2f,
                     (parent, slot) => new ChecklistRow(parent), BindObjectiveRow));
                 objectivesEmpty = page.Add(new AvRow(page.Content));
                 objectivesEmpty.SetShown(false);
-
+                typeSection = page.Section(AvIcon.Stack2, "BY TASK TYPE", "DONE / ISSUED");
+                typeTally = page.Add(new TaskTypeTally(page.Content));
             }
 
             private void RenderObjectives()
@@ -348,13 +382,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 checklistSection.SetShown(any);
                 checklist.SetShown(any);
                 objectivesEmpty.SetShown(!any);
+                typeSection.SetShown(any);
+                typeTally.SetShown(any);
                 if (!any)
                 {
-                    objectivesEmpty.Set(model.HasHq ? "NO ACTIVE OBJECTIVES" : "OBJECTIVE FEED OFFLINE",
+                    objectivesEmpty.Set(model.HasHq ? "NO TASKS ISSUED" : "TASK FEED OFFLINE",
                         "", "", AvState.Inert);
                     checklist.SetCount(0);
                     return;
                 }
+                typeTally.Tally(model.Objectives, o => o.Kind, o => o.Phase == MissionPhase.Done);
 
                 int total = model.ObjectivesDone + model.ObjectivesActive;
                 float nearest = -1f;
@@ -367,6 +404,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 tally.Set(model.ObjectivesDone, total, nearest >= 0f ? MfdMissionBoard.Distance(nearest) : null,
                     model.ObjectivesDone == total ? AvState.Ready : AvState.Info);
                 checklistSection.SetCaption(model.ObjectiveSummary);
+                typeSection.SetCaption(model.ObjectivesDone + " DONE / " + total + " ISSUED");
                 checklist.SetCount(model.Objectives.Count);
             }
 
@@ -407,6 +445,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 tasking=page.Add(new MissionTaskPart(page.Content));
                 contractsEmpty=page.Add(new AvRow(page.Content));contractsEmpty.SetShown(false);
                 taskActions=new MissionTaskActions(Console.Root,RequestRefresh,ExposeTaskMap);Console.Ticker.Register(taskActions);
+                // The bar docks below the shrunken body; the console's bay cover still reckons with the full body, so an
+                // opaque ground under the bar keeps the cover's data plate from showing through it.
+                actionsBack=AvLay.Solid(Console.Root,"Mission actions ground",Color.clear);
+                actionsBack.transform.SetSiblingIndex(taskActions.Rect.GetSiblingIndex());
                 taskActions.SetShown(false);
             }
             private int SelectedIndex()
@@ -480,7 +522,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 AvLay.Place(scroll.viewport,0,0,Console.Root.rect.width,height);
                 if(scroll.verticalScrollbar!=null){var bar=(RectTransform)scroll.verticalScrollbar.transform;bar.sizeDelta=new Vector2(bar.sizeDelta.x,height-4);}
                 briefFlow.ViewportHeight=objectivesFlow.ViewportHeight=contractsFlow.ViewportHeight=height;
-                if(selectedPage==2)taskActions.Place(new AvSlot(14,top+height+8,Console.Root.rect.width-28,reserve-12));
+                actionsBack.gameObject.SetActive(selectedPage==2);
+                if(selectedPage==2)
+                {
+                    actionsBack.color=AvStyleHost.FuiColor("ground",AvTheme.Ground);
+                    AvLay.Place(actionsBack.rectTransform,2,top+height,Console.Root.rect.width-4,reserve);
+                    taskActions.Place(new AvSlot(14,top+height+8,Console.Root.rect.width-28,reserve-12));
+                }
             }
             private static BoardEmptyReason EmptyReason(bool installed,bool streamed)=>
                 !installed?BoardEmptyReason.Unavailable:!streamed?BoardEmptyReason.LinkLost:BoardEmptyReason.Ready;
@@ -514,7 +562,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (mission == null)
                 {
                     model.MissionName = "NO MISSION LOADED";
-                    model.Brief = "WAITING FOR MISSION CONTROLLER DATA";
+                    model.Brief = "STANDING BY FOR MISSION CONTROLLER";
                     model.HasBrief = false;
                     model.Mode = "";
                 }

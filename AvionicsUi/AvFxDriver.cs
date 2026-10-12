@@ -54,13 +54,24 @@ namespace NOAvionics
                 if (glass != null && glass.shader == null) glass = null;
                 if (glass == null)
                 {
-                    Shader s = AvBundle.Shader("NOA/UI/Glass");
+                    // Glass2 (avionics-fx.bundle) adds the live signal; the first-generation finish stays the fallback.
+                    Shader s = AvBundle.Shader("NOA/UI/Glass2");
+                    if (s == null) s = AvBundle.Shader("NOA/UI/Glass");
                     if (s == null) return null;
                     glass = new Material(s) { name = "NOA UI Glass (shared)" };
                     if (AvBundle.Noise != null) glass.SetTexture(NoiseId, AvBundle.Noise);
                 }
                 return glass;
             }
+        }
+
+        private static float kick;
+
+        /// <summary>A one-off break-up of every display (the airframe took a hit): full at once, gone in half a second.</summary>
+        public static void Kick(float strength)
+        {
+            kick = Mathf.Max(kick, Mathf.Clamp01(strength));
+            EnsureRunning();
         }
 
         public static void EnsureRunning()
@@ -79,13 +90,15 @@ namespace NOAvionics
             private void Update()
             {
                 Shader.SetGlobalFloat(NowId, Time.unscaledTime);
+                AvConsole.ParkHidden();
                 float target = 0f;
                 if (Tier == AvFxTier.Full && GlitchSource != null)
                 {
                     try { target = Mathf.Clamp01(GlitchSource()); } catch (Exception) { GlitchSource = null; }
                 }
                 glitch = Mathf.MoveTowards(glitch, target, Time.unscaledDeltaTime * 3f);
-                Shader.SetGlobalFloat(GlitchId, ReducedMotion ? 0f : glitch);
+                kick = Tier == AvFxTier.Full ? Mathf.MoveTowards(kick, 0f, Time.unscaledDeltaTime * 2f) : 0f;
+                Shader.SetGlobalFloat(GlitchId, ReducedMotion ? 0f : Mathf.Max(glitch, kick));
             }
         }
     }

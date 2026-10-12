@@ -23,9 +23,9 @@ namespace BoscaliSummer.Modules.Progression.Runtime
     /// </summary>
     internal readonly struct EmblemDesign : IEquatable<EmblemDesign>
     {
-        public const int ShapeCount = 8;
+        public const int ShapeCount = 11;
         public const int DivisionCount = 10;
-        public const int ChargeCount = 16;
+        public const int ChargeCount = 48;
         public const int AccentCount = 5;
         public const int TinctureCount = 12;
         public const int NumberCount = 100;
@@ -34,14 +34,26 @@ namespace BoscaliSummer.Modules.Progression.Runtime
         public const int AccentRing = 1, AccentStars = 2, AccentBars = 3, AccentLaurel = 4;
 
         public static readonly string[] ShapeNames =
-            { "SHIELD", "ROUNDEL", "DELTA", "BANNER", "HEX", "DIAMOND", "PATCH", "ARCH" };
+            { "SHIELD", "ROUNDEL", "DELTA", "BANNER", "HEX", "DIAMOND", "PATCH", "ARCH", "ARROWHEAD", "SAWBLADE", "COFFIN" };
         public static readonly string[] DivisionNames =
             { "PLAIN", "PALE", "FESS", "BEND", "QUARTERS", "CHEVRON", "CHIEF", "BARS", "RAYS", "CHECKS" };
         public static readonly string[] ChargeNames =
         {
-            "STAR", "BOLT", "WINGS", "CROSS", "CHEVRONS", "DART", "SWORD", "SPADE",
-            "SKULL", "CRESCENT", "SUN", "TRIDENT", "CROWN", "ARROW", "RETICLE", "ANCHOR",
+            "REACTOR ROSE", "CASH BAG", "NIGHT VIXEN", "REACTOR CAT", "KESTREL", "CROWN", "SIREN", "JACKPOT",
+            "RADAR RABBIT", "CRATER MOON", "LIGHTNING BOLT", "NUCLEAR TREFOIL", "DECK QUEEN", "PLAYING CARDS", "LITTLE GREMLIN", "MANTA",
+            "MOURNING WOLF", "RED WIDOW", "EMBER", "COMET GIRL", "CIRCUIT HEART", "DEAD RECKONING", "LOADED DICE", "FIREFLY",
+            "KINGFISHER", "DIAMONDBACK", "HORSESHOE", "BROKEN CHAIN", "ORBIT OWL", "RED TIDE", "DEAD MANS HAND", "ATOMIC WARHEAD",
+            "ALL IN CHIPS", "LUCKY SEVEN", "CHUD INTERCEPTOR", "BOMB HEART", "DECK RACCOON", "ACE PIGEON", "CROSSED DAGGERS", "TARGET LOCK",
+            "ROCKET RIDER", "HEATWAVE", "DEVIL DUCK", "FUEL VAMPIRE", "HANGAR GOBLIN", "CINDER DRAGON", "GHOST FLIGHT", "MISSILE MOTH",
         };
+
+        // Charges read without an article: cards, dice, chips, daggers.
+        private static readonly int[] Plural = { 13, 22, 32, 38 };
+
+        /// <summary>What an enemy wing may fly: the predators, the weapons and the omens, never the pin-ups or the jokes.</summary>
+        private static readonly int[] HostileCharges = { 4, 5, 9, 10, 11, 14, 15, 16, 17, 21, 25, 28, 29, 30, 31, 38, 39, 45, 47 };
+
+        private static readonly int[] AnyCharge = Sequence(ChargeCount);
         public static readonly string[] AccentNames = { "NONE", "RING", "STARS", "BARS", "LAUREL" };
         public static readonly string[] TinctureNames =
         {
@@ -97,8 +109,8 @@ namespace BoscaliSummer.Modules.Progression.Runtime
             Number = (byte)Wrap(number, NumberCount);
         }
 
-        /// <summary>Blue shield, gold wings inside a ring.</summary>
-        public static EmblemDesign Default => new EmblemDesign(0, 0, 2, AccentRing, 3, 0, 1, 0);
+        /// <summary>Blue shield, a white kestrel with red in its wings, inside a ring.</summary>
+        public static EmblemDesign Default => new EmblemDesign(0, 0, 4, AccentRing, 3, 2, 0, 0);
 
         public static readonly string DefaultText = Default.Encode();
 
@@ -198,22 +210,31 @@ namespace BoscaliSummer.Modules.Progression.Runtime
 
         /// <summary>Deterministic so a seed can be stored and reproduced across sessions. A roll
         /// always comes out legible: the charge contrasts with every tincture it can sit on.</summary>
-        public static EmblemDesign Random(int seed) => Roll(new Random(seed), AnyTincture, AnyTincture);
+        public static EmblemDesign Random(int seed) => Roll(new Random(seed), AnyTincture, AnyTincture, AnyCharge);
 
         /// <summary>Deterministic crest for an enemy squadron, derived from its wing identity.
         /// Every layer varies; the tinctures stay in the caution/danger band so a hostile crest
         /// never reads as the player's own emblem.</summary>
         public static EmblemDesign Hostile(string identity) =>
-            Roll(new Random((int)(Deterministic.HashString(identity) & 0x7FFFFFFF)), HostileField, HostileInk);
+            Roll(new Random((int)(Deterministic.HashString(identity) & 0x7FFFFFFF)), HostileField, HostileInk, HostileCharges);
 
         public static bool IsHostileTincture(int tincture) => Array.IndexOf(HostileField, tincture) >= 0;
 
-        private static EmblemDesign Roll(Random random, int[] fields, int[] inks)
+        public static bool IsHostileCharge(int charge) => Array.IndexOf(HostileCharges, charge) >= 0;
+
+        private static int[] Sequence(int count)
+        {
+            var all = new int[count];
+            for (int i = 0; i < count; i++) all[i] = i;
+            return all;
+        }
+
+        private static EmblemDesign Roll(Random random, int[] fields, int[] inks, int[] charges)
         {
             int shape = random.Next(ShapeCount);
             // Plain fields carry a charge best, so they stay the most common roll.
             int division = random.Next(100) < 30 ? 0 : 1 + random.Next(DivisionCount - 1);
-            int charge = random.Next(ChargeCount);
+            int charge = charges[random.Next(charges.Length)];
             int accent = random.Next(100) < 35 ? 0 : 1 + random.Next(AccentCount - 1);
             int field = fields[random.Next(fields.Length)];
             int ink = Pick(random, inks, field, LegibleContrast, field, LegibleContrast);
@@ -278,7 +299,7 @@ namespace BoscaliSummer.Modules.Progression.Runtime
                 default: text.Append(f); break;
             }
             string charge = ChargeNames[Charge];
-            bool plural = charge.EndsWith("S", StringComparison.Ordinal) && Charge != 3; // WINGS, CHEVRONS; never CROSS
+            bool plural = Array.IndexOf(Plural, Charge) >= 0;
             text.Append(plural ? ", " : "AEIOU".IndexOf(charge[0]) >= 0 ? ", AN " : ", A ").Append(charge)
                 .Append(' ').Append(TinctureBlazon[Ink]);
             switch (Accent)

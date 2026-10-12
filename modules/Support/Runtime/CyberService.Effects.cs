@@ -19,14 +19,27 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private readonly CyberRadarScaler scaler = new CyberRadarScaler();
         private readonly List<RevealJob> reveals = new List<RevealJob>(4);
 
+        private readonly List<Unit> radarUnits = new List<Unit>();
+        private float nextRadarScan;
+
+        /// <summary>True while any share-block or launch-block effect may be live: the per-detection and per-launch patches return before any other work when it is false. Set the frame an effect starts; refreshed every tick.</summary>
+        internal bool BlocksLive { get; private set; }
+
         partial void ResetEffects()
         {
             scaler.RestoreAll();
             reveals.Clear();
+            radarUnits.Clear();
+            nextRadarScan = 0f;
+            BlocksLive = false;
         }
 
         partial void TickEffects(float now)
         {
+            bool live = false;
+            foreach (var pair in factions)
+                if (pair.Value.Desk.Effects.AnyShareBlock(now) || pair.Value.Desk.Effects.AnyLaunchBlock(now)) { live = true; break; }
+            BlocksLive = live;
             ApplyRadarEffects(now);
             RunReveals(now);
         }
@@ -99,11 +112,22 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (!any && !scaler.Active) return;
             List<Unit> all = UnitRegistry.allUnits;
             if (all == null || all.Count > MaximumScanUnits) { scaler.RestoreAll(); return; } // too many units to scan: never leave a radar jammed unseen
-            scaler.Begin();
-            for (int i = 0; i < all.Count; i++)
+            // The radar-bearing ground units are collected every 5 s (and while none are known), not walked from the whole registry each tick.
+            if (radarUnits.Count == 0 || now >= nextRadarScan)
             {
-                Unit unit = all[i];
-                if (unit == null || unit.disabled || unit.NetworkHQ == null || unit is Aircraft || unit is Missile || !(unit.radar is Radar radar) || radar == null) continue;
+                nextRadarScan = now + 5f;
+                radarUnits.Clear();
+                for (int i = 0; i < all.Count; i++)
+                {
+                    Unit unit = all[i];
+                    if (unit != null && unit.NetworkHQ != null && !(unit is Aircraft) && !(unit is Missile) && unit.radar is Radar r && r != null) radarUnits.Add(unit);
+                }
+            }
+            scaler.Begin();
+            for (int i = 0; i < radarUnits.Count; i++)
+            {
+                Unit unit = radarUnits[i];
+                if (unit == null || unit.disabled || unit.NetworkHQ == null || !(unit.radar is Radar radar) || radar == null) continue;
                 int victim = manager.FactionKeyOf(unit.NetworkHQ);
                 GlobalPosition p = unit.transform.position.ToGlobalPosition();
                 float factor = 1f;

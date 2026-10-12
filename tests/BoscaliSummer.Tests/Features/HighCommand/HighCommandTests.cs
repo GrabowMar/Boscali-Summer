@@ -75,12 +75,19 @@ namespace BoscaliSummer.Tests.Features.HighCommand
 
             int displaced = tree.Promote(theater.Id, 12345);
             TestAssert.That(displaced == air.Id, "a direct report is promoted into the dead post");
-            TestAssert.That(theater.Status == CommanderStatus.Kia, "the dead post is marked KIA");
+            TestAssert.That(theater.Status == CommanderStatus.Active, "promotion never marks a post dead: there is no KIA state");
             TestAssert.That(theater.Person.Name == successor, "the successor keeps their identity at the new post");
+            TestAssert.That(theater.Person.Rank == CommandTier.Rank(CommandTier.Theater), "the promoted person takes the rank of the post");
             TestAssert.That(air.Person.Name != successor, "the vacated post receives a new name");
-            TestAssert.That(tree.KiaCount == 1 && tree.LiveCount == 5, "kills and lives stay consistent");
-            TestAssert.That(tree.Cohesion(0f) < 1f, "losing a post costs cohesion");
+            theater.Status = CommanderStatus.Disrupted;
+            TestAssert.That(tree.Cohesion(0f) < 1f, "a disrupted post costs cohesion");
             TestAssert.That(tree.Cohesion(0f) > 0f, "one loss is not a collapse");
+
+            CommandTree away = CommandTree.Generate(99, Sites);
+            away.Slots[1].Status = CommanderStatus.InTransit;
+            string travelling = away.Slots[1].Person.Name;
+            TestAssert.That(away.Promote(0, 5) != 1 && away.Slots[1].Person.Name == travelling && away.Slots[0].Person.Name != travelling,
+                "a commander away on a convoy is not promoted into the dead post");
         }
 
         /// <summary>
@@ -125,9 +132,12 @@ namespace BoscaliSummer.Tests.Features.HighCommand
             CommandTree tree = CommandTree.Generate(17, Sites);
             float full = tree.Cohesion(0f);
             tree.Promote(0, 1);
+            tree.Slots[0].Status = CommanderStatus.Disrupted;
             float afterTheater = tree.Cohesion(0f);
             tree.Promote(3, 2);
+            tree.Slots[3].Status = CommanderStatus.Disrupted;
             tree.Promote(4, 3);
+            tree.Slots[4].Status = CommanderStatus.Disrupted;
             float degraded = tree.Cohesion(0f);
 
             TestAssert.That(full == 1f, "full roster is full cohesion");
@@ -139,9 +149,9 @@ namespace BoscaliSummer.Tests.Features.HighCommand
 
             CommandSlot slot = tree.Slots[0];
             slot.Status = CommanderStatus.Disrupted;
-            float disrupted = tree.Cohesion(0f);
-            slot.Status = CommanderStatus.Kia;
-            TestAssert.That(disrupted > tree.Cohesion(0f), "a disrupted post still counts; a dead one does not");
+            TestAssert.That(tree.EffectiveWeight(slot) > 0f, "a disrupted post still counts");
+            slot.Person = null;
+            TestAssert.That(tree.EffectiveWeight(slot) == 0f, "a post with nobody in it does not");
             TestAssert.That(tree.LiveWeight >= 0f, "live weight never goes negative");
         }
 
@@ -155,7 +165,6 @@ namespace BoscaliSummer.Tests.Features.HighCommand
                 "a veteran is worth 20% more dead");
             TestAssert.That(CommandEconomy.BountyFunds(CommandTier.Base, 0, 0, 0, 1f) == 0,
                 "a disabled economy pays nothing");
-            TestAssert.That(CommandEconomy.BountyScore(CommandTier.Theater) == 20, "theater score");
 
             TestAssert.That(CommandEconomy.Stipend(0, 10f, 1f) == 0, "disabled stipend pays nothing");
             TestAssert.That(CommandEconomy.Stipend(200, 0f, 1f) == 0, "no live staff, no stipend");
@@ -182,12 +191,6 @@ namespace BoscaliSummer.Tests.Features.HighCommand
             TestAssert.That(log[0].Text.Length == CommandLog.MaximumText, "log text is clamped before it is stored");
             TestAssert.That(log[0].TargetId == -2 && log[0].Time == 999f, "faction-wide entries keep their id and time");
 
-            TestAssert.That(CommandLog.VisibleToObserver(50f, 40f),
-                "an event before the observer's last sighting is visible");
-            TestAssert.That(!CommandLog.VisibleToObserver(50f, 60f),
-                "an event after the last sighting is withheld");
-            TestAssert.That(!CommandLog.VisibleToObserver(0f, 10f), "no sight means no story");
-
             log.Clear();
             TestAssert.That(log.Count == 0, "clear empties the ring");
         }
@@ -200,13 +203,19 @@ namespace BoscaliSummer.Tests.Features.HighCommand
             TestAssert.That(!CommandSnapshotRules.ValidHeader(0.5f, 999, 1), "impossible staff count rejected");
             TestAssert.That(!CommandSnapshotRules.ValidHeader(0.5f, -1, 1), "negative staff count rejected");
 
-            TestAssert.That(CommandSnapshotRules.ValidNode(3, 1, 2, 0x3F, 12f, 0.25f, 100f, -200f),
-                "every defined node flag is accepted");
-            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 9, 0, 12f, 0.25f, 0f, 0f), "bad tier rejected");
-            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 2, 0x80, 12f, 0.25f, 0f, 0f), "unknown flag rejected");
-            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 2, 0, 12f, 2f, 0f, 0f), "weight above one rejected");
-            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 2, 0, 12f, 0.25f, float.PositiveInfinity, 0f),
+            TestAssert.That(CommandSnapshotRules.ValidNode(3, 1, 2, 0x7F, 12f, 0.25f, 100f, -200f, 0),
+                "every defined node flag, the claimed bit included, is accepted");
+            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 9, 0, 12f, 0.25f, 0f, 0f, 0), "bad tier rejected");
+            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 2, 0x80, 12f, 0.25f, 0f, 0f, 0), "unknown flag rejected");
+            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 2, 0, 12f, 2f, 0f, 0f, 0), "weight above one rejected");
+            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 2, 0, 12f, 0.25f, float.PositiveInfinity, 0f, 0),
                 "infinite coordinate rejected");
+            TestAssert.That(CommandSnapshotRules.ValidNode(3, 1, 2, 0, 12f, 0.25f, 0f, 0f, CommandSnapshotRules.MaximumBounty),
+                "the largest bounty is accepted");
+            TestAssert.That(!CommandSnapshotRules.ValidNode(3, 1, 2, 0, 12f, 0.25f, 0f, 0f, -1) &&
+                !CommandSnapshotRules.ValidNode(3, 1, 2, 0, 12f, 0.25f, 0f, 0f, CommandSnapshotRules.MaximumBounty + 1),
+                "a negative or oversized bounty is rejected");
+            TestAssert.That(CommandSnapshotRules.MaximumLogText == 96, "staff log text is bounded at 96 characters");
 
             TestAssert.That(CommandSnapshotRules.ValidLogRow(-1, (byte)CommanderLogTone.Staff, "", 0f),
                 "a faction-wide log row is accepted");

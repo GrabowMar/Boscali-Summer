@@ -110,6 +110,7 @@ public static class PresentationUnityCheck
         string[] methods = { "BuildPilotPage", "BuildSkillsPage", "BuildWingsPage", "BuildStudioPage", "BuildPlanePage" };
         string[] names = { "pilot", "skills", "wings", "studio", "plane" };
         for (int i = 0; i < methods.Length; i++) Call(panel, methods[i], console.Page(i));
+        Call(panel, "SetStandingOrders");
         console.Finish();
         // Content binds AFTER Finish and the page re-lays through the ticker, exactly as in the game.
         Settle(console);
@@ -252,10 +253,10 @@ public static class PresentationUnityCheck
     {
         object id = Get(panel, "pilotIdentity");
         if (populated)
-            Call(id, "Set", "LOCAL PROFILE", "DAYMAN", "M. FONTAINE", "3", "FLIGHT OFFICER", "GEN 1",
+            Call(id, "Set", "PERSONNEL JACKET · LOCAL PROFILE", "DAYMAN", "M. FONTAINE", "3", "FLIGHT OFFICER", "GEN 1",
                 "Awaiting aircraft", AvState.Info, portrait, crest, "BOSCALI SUMMER", AvState.Ready, "ACTIVE");
         else
-            Call(id, "Set", "PILOT DOSSIER", "RECORD PENDING", "—", "0", "ROOKIE", "GEN 1",
+            Call(id, "Set", "PERSONNEL JACKET · FORM 1-A", "RECORD PENDING", "—", "0", "ROOKIE", "GEN 1",
                 "NO STATUS ON FILE", AvState.Info, null, null, "NO SQUADRON NAME", AvState.Ready, "ACTIVE");
 
         string[] tiles = { "tileSortie", "tileTime", "tileFuel", "tileDeaths" };
@@ -265,7 +266,7 @@ public static class PresentationUnityCheck
                 populated && i == 3 ? AvState.Caution : AvState.Inert);
         Call(Get(panel, "pilotBackground"), "Set", populated
             ? "Flew medical supply routes along the coast before joining the reserves. Precise on the radio, calm under pressure, and never once late for a briefing."
-            : "No service background on file.");
+            : "No service background on file. One can be written in the Wing Command pilot studio.");
 
         object sortie = Get(panel, "sortieGrid");
         string[] sortieKeys = { "sortieAirframe", "sortieCondition", "sortieLife", "sortieMission" };
@@ -322,6 +323,7 @@ public static class PresentationUnityCheck
             Call(card, "SetPortrait", portrait);
             index++;
         }
+        Call(Get(panel, "wingsThreat"), "SetShown", true);
         Call(Get(panel, "wingsThreat"), "Set", new[] { .6f, .4f, .06f, .06f }, "2/4 ACTIVE", AvState.Caution);
     }
 
@@ -335,8 +337,7 @@ public static class PresentationUnityCheck
             canvas.GetType().GetMethod("Draw", All).Invoke(canvas, new[] { design.GetProperty("Default", All).GetValue(null) }));
         Call(Get(panel, "studioSquadronField"), "set_Text", "BOSCALI SUMMER");
         Call(Get(panel, "studioMessageText"), "SetShown", true);
-        // AvNote.Set is overloaded; the property setter is the unambiguous reflection target.
-        Call(Get(panel, "studioMessageText"), "set_Text", "Four fresh proofs printed. Tap one to adopt it.");
+        Call(Get(panel, "studioMessageText"), "Set", "Four fresh proofs printed. Tap one to adopt it.");
     }
 
     private static void SeedPlane(object panel)
@@ -354,8 +355,9 @@ public static class PresentationUnityCheck
         string[] systemValues = { "UP", "ON", "12 READY", "2 TRACKED" };
         for (int i = 0; i < systemValues.Length; i++)
             Call(systems, "Set", i, systemValues[i], i == 3 ? AvState.Danger : AvState.Inert);
-        Call(Get(panel, "planeSelected"), "Set", "AAM-10", "SELECTED STATION", "4 / 6", null, AvState.Info);
+        Call(Get(panel, "planeSelected"), "Set", "SELECTED · AAM-10", null, "4 / 6", null, AvState.Info);
         Call(Get(panel, "planeStoresSection"), "SetCaption", "1–4 OF 8");
+        Call(Get(panel, "planeFaultSection"), "SetCaption", "FOUR LOWEST PARTS");
         Call(Get(panel, "planeStorePager"), "SetShown", true);
         string[] storeNames = { "1  AAM-10", "2  AAM-10", "3  CBU-12", "4  20MM CANNON" };
         string[] ammo = { "4 / 6", "2 / 4", "3 / 3", "320" };
@@ -512,6 +514,8 @@ public static class PresentationUnityCheck
                 }
                 string prefix = "ace-hunt-" + state + (folded ? "-compact" : "-expanded");
                 Capture(root, 1920f, 1080f, prefix + "-1080p.png");
+                // The visor look has no plates: the same banner over a bright sky, where the ink and the shade alone carry it.
+                Capture(root, 1920f, 1080f, prefix + "-sky-1080p.png", new Color(.66f, .78f, .92f));
                 root.transform.localScale = Vector3.one * (720f / 1080f);
                 Capture(root, 1280f, 720f, prefix + "-720p.png");
             }
@@ -660,18 +664,20 @@ public static class PresentationUnityCheck
             if (!text.gameObject.activeInHierarchy || string.IsNullOrWhiteSpace(text.text) || text.name.StartsWith("Icon")) continue; // kit icon glyphs are not type
             text.ForceMeshUpdate();
             Check(text.fontSize >= 10f, name + " has unreadable type: " + text.text);
+            // The bay cover's big console-name stencil is a deliberate 16% watermark (the kit's own decor); its orders and plate text stay gated.
+            if (text.name == "Stencil" && text.transform.parent != null && text.transform.parent.name == "BayPlate") continue;
             Check(text.color.a >= .35f, name + " has near-invisible type: " + text.text);
         }
     }
 
-    private static void Capture(GameObject canvas, float width, float height, string file)
+    private static void Capture(GameObject canvas, float width, float height, string file, Color? background = null)
     {
         foreach (Image fill in canvas.GetComponentsInChildren<Image>(true))
             if (fill.name == "ScanCover") fill.enabled = false;
         foreach (AvReveal reveal in canvas.GetComponentsInChildren<AvReveal>(true)) reveal.Finish();
         Canvas.ForceUpdateCanvases();
         foreach (TMP_Text text in canvas.GetComponentsInChildren<TMP_Text>(true)) text.ForceMeshUpdate();
-        Camera camera = OrthoCamera("Capture", height * .5f, AvTheme.SurfaceInert);
+        Camera camera = OrthoCamera("Capture", height * .5f, background ?? AvTheme.SurfaceInert);
         CapturePng(camera, (int)width * 2, (int)height * 2, Path.GetFullPath(file));
         Object.DestroyImmediate(camera.gameObject);
         captures++;

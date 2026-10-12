@@ -14,20 +14,35 @@ namespace BoscaliSummer.Core.Game
     {
         private static readonly MissionClock Clock = new MissionClock();
         private static float nextWarning;
+        // One read per frame and mode: the clock is constant within a frame.
+        private static int heldFrame = -1, requiredFrame = -1;
+        private static float heldTime, requiredTime;
+        private static bool requiredOk;
 
         /// <summary>Support's clock: always returns a time, falling back to the last good one.</summary>
-        public static float Now() => Read(false, out _);
+        public static float Now()
+        {
+            int frame = Time.frameCount;
+            if (heldFrame != frame) { heldTime = Read(false, out _); heldFrame = frame; }
+            return heldTime;
+        }
 
         /// <summary>Weather's clock: false until a mission manager exists, the raw read passes the gate and the
         /// guarded clock has caught up with it. <paramref name="time"/> is still the held value when false.</summary>
         public static bool TryNow(out float time)
         {
-            time = Read(true, out bool ok);
-            return ok;
+            int frame = Time.frameCount;
+            if (requiredFrame != frame) { requiredTime = Read(true, out requiredOk); requiredFrame = frame; }
+            time = requiredTime;
+            return requiredOk;
         }
 
         /// <summary>A new mission legitimately restarts at zero: call when the scene ends.</summary>
-        public static void Reset() => Clock.Reset();
+        public static void Reset()
+        {
+            Clock.Reset();
+            heldFrame = requiredFrame = -1;
+        }
 
         private static float Read(bool requireManager, out bool ok)
         {

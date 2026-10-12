@@ -79,6 +79,7 @@ namespace BoscaliSummer.Tests.Features.Command
             TestDefensiveWeight();
             TestFalloffKernel();
             TestDisplayAndFrontlineHashes();
+            TestPublishedCopy();
         }
 
         /// <summary>
@@ -115,6 +116,51 @@ namespace BoscaliSummer.Tests.Features.Command
             a.EvaluateSectors(0f);
             TestAssert.That(a.DisplayHash == display && a.FrontlineHash == front,
                 "Re-evaluating a settled front without new observations changes no hash");
+        }
+
+        /// <summary>
+        /// The territory view evaluates a spare grid and publishes it by copy: the
+        /// published grid must read exactly like one that was evaluated in place.
+        /// </summary>
+        private static void TestPublishedCopy()
+        {
+            var direct = MakeFront();
+            var back = MakeFront();
+            var shown = new TacticalSectorGrid(1000f, 100000f);
+            for (int pass = 0; pass < 4; pass++)
+            {
+                Advance(direct, 30f, 1);
+                Advance(back, 30f, 1);
+                back.Prewarm();
+                shown.CopyResultFrom(back);
+
+                bool same = shown.DisplayHash == direct.DisplayHash && shown.FrontlineHash == direct.FrontlineHash &&
+                    shown.GridVersion == direct.GridVersion && shown.ClusterCount == direct.ClusterCount &&
+                    shown.FriendlySectorCount == direct.FriendlySectorCount &&
+                    shown.HostileSectorCount == direct.HostileSectorCount &&
+                    shown.ContestedSectorCount == direct.ContestedSectorCount &&
+                    shown.FrontlineSegmentCount == direct.FrontlineSegmentCount &&
+                    shown.FrontlineLengthMetres == direct.FrontlineLengthMetres &&
+                    shown.GetNodes().Count == direct.GetNodes().Count;
+                for (int r = 0; same && r < direct.ResolutionY; r++)
+                    for (int c = 0; c < direct.ResolutionX; c++)
+                        same &= shown.GetSectorHoldStrength(c, r) == direct.GetSectorHoldStrength(c, r) &&
+                            shown.GetSectorControl(c, r) == direct.GetSectorControl(c, r);
+                int traces = CopyTraces(direct, out FrontlineTracePoint[] points, out int[] lengths, out float[] pressure);
+                int shownTraces = CopyTraces(shown, out FrontlineTracePoint[] shownPoints,
+                    out int[] shownLengths, out float[] shownPressure);
+                same &= traces > 0 && traces == shownTraces;
+                for (int t = 0, i = 0; same && t < traces; t++)
+                {
+                    same &= lengths[t] == shownLengths[t] && pressure[t] == shownPressure[t];
+                    for (int end = i + lengths[t]; same && i < end; i++)
+                        same &= points[i].X == shownPoints[i].X && points[i].Z == shownPoints[i].Z;
+                }
+                Color32[] a = direct.BakeTexture(128, 128, true, 0.35f), b = shown.BakeTexture(128, 128, true, 0.35f);
+                for (int i = 0; same && i < a.Length; i++)
+                    same &= a[i].r == b[i].r && a[i].g == b[i].g && a[i].b == b[i].b && a[i].a == b[i].a;
+                TestAssert.That(same, "A published copy reads exactly like the grid evaluated in place (pass " + pass + ")");
+            }
         }
 
         private static void TestFalloffKernel()

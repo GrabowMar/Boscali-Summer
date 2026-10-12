@@ -35,7 +35,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     internal sealed class WmcStanceSlots : AvPart
     {
         public const int Count = StanceBook.Slots;
-        private const float CellH = 40f, Gap = 3f;
+        private const float CellH = 40f, SlimH = 22f, Gap = 3f;
 
         private sealed class Slot
         {
@@ -82,7 +82,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             return t;
         }
 
-        public override float Measure(float width) => 2f * CellH + Gap;
+        // The second row is one line tall while all three of its slots are empty: the order keys below sit 18 px higher.
+        private bool SlimRow => !slots[3].Filled && !slots[4].Filled && !slots[5].Filled;
+
+        public override float Measure(float width) => CellH + Gap + (SlimRow ? SlimH : CellH);
 
         public override void Place(AvSlot s)
         {
@@ -91,12 +94,15 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             for (int i = 0; i < Count; i++)
             {
                 float x = i % 3 * (w + Gap), y = i / 3 * (CellH + Gap);
+                bool slim = i >= 3 && SlimRow;
+                float h = slim ? SlimH : CellH;
                 Slot c = slots[i];
-                AvLay.Place(c.Frame.rectTransform, x, y, w, CellH);
-                AvLay.Place(c.Rail.rectTransform, x, y, 2f, CellH);
+                AvLay.Place(c.Frame.rectTransform, x, y, w, h);
+                AvLay.Place(c.Rail.rectTransform, x, y, 2f, h);
                 AvLay.Place(c.Hint.rectTransform, x + 6f, y + 2f, 34f, 18f);
+                if (c.Name.gameObject.activeSelf == slim) c.Name.gameObject.SetActive(!slim);
                 AvLay.Place(c.Name.rectTransform, x + 42f, y + 2f, w - 46f, 18f);
-                AvLay.Place(c.Detail.rectTransform, x + 42f, y + 20f, w - 46f, 18f);
+                AvLay.Place(c.Detail.rectTransform, x + 42f, y + (slim ? 2f : 20f), w - 46f, 18f);
             }
         }
 
@@ -108,10 +114,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvText.Set(s.Name, filled ? name + (on && edited ? " *" : "") : "—");
             AvText.Set(s.Detail, detail);
             if (s.On == on && s.Edited == edited && s.Filled == filled) return;
+            bool slim = SlimRow;
             s.On = on;
             s.Edited = edited;
             s.Filled = filled;
             Style(s);
+            if (slim != SlimRow) Changed();
         }
 
         private void Style(Slot s)

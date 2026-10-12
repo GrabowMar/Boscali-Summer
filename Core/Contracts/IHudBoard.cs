@@ -20,8 +20,8 @@ namespace BoscaliSummer.Core.Contracts
     /// <summary>
     /// The one cockpit HUD element Boscali presentation features draw their held status lines
     /// and transient notices through. The board owns the look, the stacking and the bounds; a
-    /// feature owns only its own words. Since 2026-10-07 nothing about the element is
-    /// configurable: it ships one tuned out-of-the-box presentation.
+    /// feature owns only its own words. How the board looks and what it shows is the pilot's
+    /// (<c>ITacBoardSettings</c>); a feature never sees those options.
     /// </summary>
     internal interface IHudBoard
     {
@@ -38,5 +38,11 @@ namespace BoscaliSummer.Core.Contracts
         /// stacking a duplicate.
         /// </summary>
         void Notice(string channel, HudTone tone, string text, string detail = null);
+
+        /// <summary>
+        /// The box the board covers on the screen, in device pixels from the screen's top-left corner (y down): false while the board is not drawn. A banner of another module that would sit across it steps
+        /// aside (the ace-hunt panel does).
+        /// </summary>
+        bool TryGetScreenBox(out float left, out float top, out float right, out float bottom);
     }
 }

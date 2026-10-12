@@ -29,11 +29,16 @@ namespace BoscaliSummer.Modules.Autopilot.Patches
             catch (Exception e) { Plugin.Logger?.LogError("Autopilot: radial injection failed while opening: " + e); }
         }
 
-        /// <summary>While the C-key menu is open the native wheel stays frozen: the pad press the menu reads is the wheel's own button, and a
-        /// press held past the wheel's delay would otherwise open the wheel over the menu.</summary>
+        /// <summary>While the interaction menu is open the native wheel stays frozen, and while the menu owns the Radial Menu binding the wheel never
+        /// sees that button held (its timed press is what opens it). The Weapon Wheel binding is untouched.</summary>
         [HarmonyPatch("Update")]
         [HarmonyPrefix]
-        private static bool Update_Prefix() => !Presentation.AceRadialMenuUi.IsOpenNow;
+        private static bool Update_Prefix()
+        {
+            if (Presentation.AceRadialMenuUi.IsOpenNow) return false;
+            Rewired.Player pad = Presentation.AceRadialMenuUi.OwnsRadialButton ? GameManager.playerInput : null;
+            return pad == null || !pad.GetButton(AceRadialInputSource.PadPress);
+        }
 
         [HarmonyPatch("OnDestroy")]
         [HarmonyPostfix]

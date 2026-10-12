@@ -405,13 +405,19 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 slot.gameObject.AddComponent<RectMask2D>();
         }
 
+        private static GameplayUI gameplayUi;
+        private static UnitDebug unitDebugUi;
+
         private static void AdoptNativeSurfaces(VirtualMFD mfd)
         {
             RectTransform top = MapUiAccess.GetMfdTopInstruments(mfd);
-            GameplayUI gameplay = Object.FindObjectOfType<GameplayUI>(true) ?? Object.FindObjectOfType<GameplayUI>();
+            // Scene-wide finds only when the cached object was destroyed (a layout rebuild runs often).
+            if (gameplayUi == null) gameplayUi = Object.FindObjectOfType<GameplayUI>(true) ?? Object.FindObjectOfType<GameplayUI>();
+            if (unitDebugUi == null) unitDebugUi = Object.FindObjectOfType<UnitDebug>(true);
+            GameplayUI gameplay = gameplayUi;
             RectTransform airbasePanel = MapUiAccess.GetSelectAirbasePanel(gameplay)?.transform as RectTransform;
             RectTransform spectatorPanel = MapUiAccess.GetSpectatorPanel(gameplay)?.transform as RectTransform;
-            UnitDebug unitDebugComponent = Object.FindObjectOfType<UnitDebug>(true);
+            UnitDebug unitDebugComponent = unitDebugUi;
             RectTransform unitDebugPanel = unitDebugComponent != null ? unitDebugComponent.transform as RectTransform : null;
 
             Adopt(ref instruments, top, instrumentsSlot,

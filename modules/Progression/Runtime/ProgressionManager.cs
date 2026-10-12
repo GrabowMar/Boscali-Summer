@@ -82,6 +82,8 @@ namespace BoscaliSummer.Modules.Progression.Runtime
         internal void RequestTune(Aircraft aircraft, int index) =>
             network?.RequestPlaneTune(aircraft, index);
 
+        internal bool HasTunes => network != null && network.HasTunes;
+
         internal byte TuneFor(Aircraft aircraft) => network?.TuneFor(aircraft) ?? PlaneEngineMap.Stock;
 
         internal string TuneFeedback { get; private set; }

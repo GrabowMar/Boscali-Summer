@@ -221,6 +221,9 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         // Pilot assignment.
 
+        /// <summary>Whether any aircraft has a squadron pilot assigned (the cheap gate before a perk lookup).</summary>
+        internal static bool AnyAssigned => assigned.Count > 0;
+
         /// <summary>Assigned squadron pilot for this aircraft, or null.</summary>
         public static WingPilot Of(Aircraft aircraft)
         {

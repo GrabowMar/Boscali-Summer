@@ -279,21 +279,12 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         }
     }
 
-    internal readonly struct MenuSummary
-    {
-        public MenuSummary(string key, string value, bool caution = false) { Key = key; Value = value; Caution = caution; }
-        public string Key { get; }
-        public string Value { get; }
-        public bool Caution { get; }
-    }
-
-    /// <summary>Everything the menu shows: ten categories at fixed angles plus the hub readout.</summary>
+    /// <summary>Everything the menu shows: ten categories at fixed angles.</summary>
     internal sealed class MenuModel
     {
         public const int BadgeChars = 8;
 
         public string AircraftName = "";
-        public List<MenuSummary> Summary = new List<MenuSummary>();
         public readonly List<MenuCategory> Categories = new List<MenuCategory>(10);
 
         public MenuCategory Category(string id)
@@ -340,7 +331,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public void Reconcile(MenuModel fresh)
         {
             AircraftName = fresh.AircraftName;
-            Summary = fresh.Summary;
             for (int i = 0; i < Categories.Count; i++)
             {
                 MenuCategory twin = fresh.Category(Categories[i].Id);

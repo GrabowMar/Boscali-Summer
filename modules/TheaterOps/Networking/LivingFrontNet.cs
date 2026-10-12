@@ -28,44 +28,33 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
         public byte Protocol;
         public string Faction;
         public int RequestId;
-        public bool Accepted;
-        public string Status;
+        public byte Code;
+        public string Detail;
+        public float LockSeconds;
         public int Session, HostEpoch;
     }
 
     [NetworkMessage]
     internal struct LivingFrontSnapshot
     {
-        public byte Protocol, Posture;
+        public byte Protocol;
         public bool HasSnapshot;
         public int Session, HostEpoch;
         public string Faction;
-        public TheaterFrontView[] Fronts;
-        public TheaterProposalView[] Proposals;
-        public TheaterLiveOperationView Operation;
-        public string[] Log;
+        public TheaterWarSnapshot Body;
     }
 
     /// <summary>Faction-private, host-authored war picture and validated player intent.</summary>
     internal sealed class LivingFrontNet : MonoBehaviour
     {
-        internal const byte ProtocolVersion = 2;
+        internal const byte ProtocolVersion = 3;
         private const int MaximumRecipients = 64;
         private const int MaximumPlayers = 64;
-        private const int MaximumFaction = 64;
-        private const int MaximumKey = 96;
-        private const int MaximumLabel = 64;
-        private const int MaximumStatus = 32;
-        private const int MaximumBrief = 160;
-        private const int MaximumForces = 256;
         private const float QueryInterval = 1f;
         private const float IntentInterval = 0.5f;
         private const float IntentTimeout = 8f;
+        private const float CommandSeconds = 6f;
 
-        private readonly List<TheaterFrontView> fronts = new List<TheaterFrontView>(LivingWarRules.MaximumFronts);
-        private readonly List<TheaterProposalView> proposals =
-            new List<TheaterProposalView>(LivingWarRules.MaximumOffers);
-        private readonly List<string> log = new List<string>(StaffLog.MaximumEntries);
         private readonly SenderThrottle nextQuery = new SenderThrottle(MaximumPlayers);
         private readonly SenderThrottle nextIntent = new SenderThrottle(MaximumPlayers);
         private readonly Dictionary<ulong, (int Session, FactionHQ HQ)> clientSessions =
@@ -80,12 +69,37 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
         private float nextRegistration, nextClientQuery, nextFactionCheck;
         private FactionHQ queriedHq;
         private int nextRequestId, pendingRequestId;
+        private TheaterCommandResult lastCommand;
+        private float lastCommandAt, firstQueryAt;
         private static int nextHostEpoch;
         private int hostEpoch = NewHostEpoch(), clientSession = 1, seenHostEpoch;
         private float pendingDeadline;
-        private string pendingFaction, commandStatus = "";
+        private string pendingFaction;
         internal bool CommandPending => pendingRequestId > 0;
-        internal string CommandStatus => commandStatus;
+
+        /// <summary>Queries sent since the last accepted snapshot (any snapshot, an empty one included).</summary>
+        internal int UnansweredQueries { get; private set; }
+        /// <summary>Unscaled seconds since the first of those queries; 0 while none is unanswered.</summary>
+        internal float SecondsSinceFirstQuery => UnansweredQueries > 0 ? Time.unscaledTime - firstQueryAt : 0f;
+
+        /// <summary>The host's last answer to this client's command; null once it is older than 6 s.</summary>
+        internal TheaterCommandResult LastCommand
+        {
+            get
+            {
+                if (lastCommand == null) return null;
+                float age = Time.unscaledTime - lastCommandAt;
+                if (age > CommandSeconds) return lastCommand = null;
+                lastCommand.SecondsAgo = age;
+                return lastCommand;
+            }
+        }
+
+        private void Remember(TheaterCommandCode code, string detail, float lockSeconds)
+        {
+            lastCommand = new TheaterCommandResult { Code = code, Detail = detail ?? "", LockSeconds = lockSeconds };
+            lastCommandAt = Time.unscaledTime;
+        }
 
         internal void Configure(LivingFrontService service)
         {
@@ -105,14 +119,14 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             nextClientQuery = -10f;
             nextQuery.Clear(); nextIntent.Clear();
             clientSessions.Clear();
-            fronts.Clear(); proposals.Clear(); log.Clear();
         }
 
         private void OnDestroy() => ResetScene();
 
         internal void ClearClientState()
         {
-            pendingRequestId = 0; pendingFaction = null; commandStatus = "";
+            pendingRequestId = 0; pendingFaction = null; lastCommand = null;
+            UnansweredQueries = 0;
             clientSession = clientSession >= int.MaxValue ? 1 : clientSession + 1;
             seenHostEpoch = 0;
             nextClientQuery = 0f;
@@ -127,7 +141,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             if (CommandPending && now >= pendingDeadline)
             {
                 pendingRequestId = 0;
-                commandStatus = "UNCONFIRMED · host reply timed out; refreshing staff";
+                Remember(TheaterCommandCode.Unconfirmed, "", 0f);
                 owner?.ClearRemoteState();
                 nextClientQuery = 0f;
             }
@@ -161,6 +175,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
                     // mission's transport current while gameplay clocks stand still.
                     nextClientQuery = now + (owner?.HasSnapshot == true &&
                         owner.SnapshotAgeSeconds <= LivingWarRules.SnapshotFreshSeconds ? 10f : 4f);
+                    if (UnansweredQueries++ == 0) firstQueryAt = now;
                     network.Client.Send(new LivingFrontQuery { Protocol = ProtocolVersion, Session = clientSession });
                 }
             }
@@ -178,7 +193,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             pendingRequestId = nextRequestId = nextRequestId >= int.MaxValue ? 1 : nextRequestId + 1;
             pendingFaction = hq.faction.factionName;
             pendingDeadline = Time.unscaledTime + IntentTimeout;
-            commandStatus = "PENDING · awaiting host";
+            lastCommand = null;
             client.Send(new LivingFrontIntent
             {
                 Protocol = ProtocolVersion, Kind = kind, Id = id,
@@ -209,21 +224,17 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             }
         }
 
+        // The published body is shared by every recipient; only the header Session differs.
         private LivingFrontSnapshot SnapshotOf(string faction)
         {
-            owner.CopySnapshot(faction, fronts, proposals, out TheaterLiveOperationView operation,
-                out TheaterWarPosture posture, log);
+            TheaterWarSnapshot body = owner.PublishedFor(faction);
             return new LivingFrontSnapshot
             {
                 Protocol = ProtocolVersion,
-                Faction = NetText.Clip(faction, MaximumFaction),
-                Posture = (byte)posture,
-                HasSnapshot = owner.HasSnapshotFor(faction),
+                Faction = NetText.Clip(faction, LivingFrontWire.MaximumFaction),
+                HasSnapshot = body != null,
                 HostEpoch = hostEpoch,
-                Fronts = fronts.ToArray(),
-                Proposals = proposals.ToArray(),
-                Operation = operation,
-                Log = log.ToArray(),
+                Body = body,
             };
         }
 
@@ -248,17 +259,14 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
                 clientSessions.TryGetValue(PlayerIdentity.Of(player), out var session) &&
                 session.Session == intent.Session && ReferenceEquals(session.HQ, player.HQ);
             bool allowed = valid && current && nextIntent.Allow(PlayerIdentity.Of(player), Time.unscaledTime, IntentInterval);
-            bool accepted = allowed && owner.ApplyIntent(player.HQ,
-                intent.Kind, intent.Id, intent.Revision, intent.Posture);
+            IntentReply reply = allowed
+                ? owner.ApplyIntent(player.HQ, intent.Kind, intent.Id, intent.Revision, intent.Posture, LivingFrontService.ActorOf(player))
+                : new IntentReply(!valid ? TheaterCommandCode.Invalid : !current ? TheaterCommandCode.SessionChanged : TheaterCommandCode.RateLimited);
             sender.Send(new LivingFrontResult
             {
                 Protocol = ProtocolVersion, Faction = player.HQ.faction.factionName,
-                RequestId = intent.RequestId, Accepted = accepted,
-                Session = intent.Session, HostEpoch = hostEpoch,
-                Status = accepted ? "ACCEPTED · staff updated" : !valid
-                    ? "REJECTED · invalid command" : !current
-                    ? "REJECTED · mission or faction changed" : !allowed
-                    ? "REJECTED · command rate limited" : "REJECTED · choice changed; review current options",
+                RequestId = intent.RequestId, Session = intent.Session, HostEpoch = hostEpoch,
+                Code = (byte)reply.Code, Detail = reply.Detail, LockSeconds = reply.LockSeconds,
             });
             if (current)
             {
@@ -274,11 +282,9 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
                 result.Session != clientSession || result.HostEpoch != seenHostEpoch ||
                 !CommandPending || result.RequestId != pendingRequestId ||
                 !GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq?.faction == null ||
-                result.Faction != pendingFaction || result.Faction != hq.faction.factionName ||
-                string.IsNullOrEmpty(result.Status) || result.Status.Length > MaximumBrief) return;
+                result.Faction != pendingFaction || result.Faction != hq.faction.factionName) return;
             pendingRequestId = 0;
-            commandStatus = (result.Accepted ? "ACCEPTED" : "REJECTED") + " · " +
-                (result.Accepted ? "staff updated" : result.Status.Replace("REJECTED · ", ""));
+            Remember((TheaterCommandCode)result.Code, result.Detail, result.LockSeconds);
             nextClientQuery = 0f;
         }
 
@@ -287,28 +293,19 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             if (snapshot.Protocol != ProtocolVersion || GameAccess.IsServer() || owner == null ||
                 snapshot.Session != clientSession || snapshot.HostEpoch <= 0 ||
                 snapshot.HostEpoch < seenHostEpoch ||
-                snapshot.Posture > (byte)TheaterWarPosture.Bold ||
-                snapshot.Fronts == null || snapshot.Fronts.Length > LivingWarRules.MaximumFronts ||
-                snapshot.Proposals == null || snapshot.Proposals.Length > LivingWarRules.MaximumOffers ||
-                snapshot.Log == null || snapshot.Log.Length > StaffLog.MaximumEntries ||
+                snapshot.HasSnapshot && snapshot.Body == null ||
                 !GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq?.faction == null ||
                 !string.Equals(snapshot.Faction, hq.faction.factionName, StringComparison.Ordinal)) return;
             seenHostEpoch = snapshot.HostEpoch;
+            UnansweredQueries = 0;
             if (!snapshot.HasSnapshot) { owner.ClearRemoteState(); nextClientQuery = 0f; return; }
-            owner.ApplyRemote(snapshot.Faction, snapshot.Fronts, snapshot.Proposals,
-                snapshot.Operation, (TheaterWarPosture)snapshot.Posture, snapshot.Log);
+            owner.ApplyRemote(snapshot.Body);
         }
 
         private static bool ValidIntent(byte kind, int id, int revision, byte posture) =>
             kind <= 2 && (kind == 2
                 ? id == 0 && revision == 0 && posture <= (byte)TheaterWarPosture.Bold
                 : id > 0 && revision > 0 && posture == 0);
-
-        private static string ReadText(NetworkReader reader, int max)
-        {
-            string value = reader.ReadString();
-            return value == null || value.Length > max ? null : value;
-        }
 
 
         private static readonly MirageSerializers Seams = new MirageSerializers(
@@ -347,167 +344,60 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             Seams.Install<LivingFrontResult>(
                 (Action<NetworkWriter, LivingFrontResult>)((w, v) =>
                 {
-                    w.WriteByte(v.Protocol); w.WriteString(NetText.Clip(v.Faction, MaximumFaction));
-                    w.WriteInt32(v.RequestId); w.WriteByte(v.Accepted ? (byte)1 : (byte)0);
-                    w.WriteString(NetText.Clip(v.Status, MaximumBrief));
+                    w.WriteByte(v.Protocol); w.WriteString(NetText.Clip(v.Faction, LivingFrontWire.MaximumFaction));
+                    w.WriteInt32(v.RequestId); w.WriteByte(v.Code);
+                    w.WriteString(NetText.Clip(v.Detail, LivingFrontWire.MaximumDetail)); w.WriteSingle(v.LockSeconds);
                     w.WriteInt32(v.Session); w.WriteInt32(v.HostEpoch);
                 }),
-                (Func<NetworkReader, LivingFrontResult>)(r =>
-                {
-                    byte protocol = r.ReadByte();
-                    if (protocol != ProtocolVersion) return default;
-                    var v = new LivingFrontResult { Protocol = protocol, Faction = r.ReadString(),
-                        RequestId = r.ReadInt32() };
-                    byte accepted = r.ReadByte(); v.Accepted = accepted == 1; v.Status = r.ReadString();
-                    v.Session = r.ReadInt32(); v.HostEpoch = r.ReadInt32();
-                    return accepted > 1 || v.RequestId <= 0 || v.Session <= 0 || v.HostEpoch <= 0 || string.IsNullOrEmpty(v.Faction) ||
-                        v.Faction.Length > MaximumFaction || string.IsNullOrEmpty(v.Status) ||
-                        v.Status.Length > MaximumBrief ? default : v;
-                }));
+                (Func<NetworkReader, LivingFrontResult>)ReadResult);
             Seams.Install<LivingFrontSnapshot>(
                 (Action<NetworkWriter, LivingFrontSnapshot>)WriteSnapshot,
                 (Func<NetworkReader, LivingFrontSnapshot>)ReadSnapshot);
         }
 
+        // A reader never throws into Mirage's handler: a violation, a short packet or a foreign protocol reads as default
+        // (Protocol 0), which every handler ignores.
+        private static LivingFrontResult ReadResult(NetworkReader r)
+        {
+            try
+            {
+                byte protocol = r.ReadByte();
+                if (protocol != ProtocolVersion) return default;
+                var v = new LivingFrontResult { Protocol = protocol, Faction = LivingFrontWire.Text(r, LivingFrontWire.MaximumFaction),
+                    RequestId = r.ReadInt32(), Code = r.ReadByte() };
+                v.Detail = LivingFrontWire.Text(r, LivingFrontWire.MaximumDetail); v.LockSeconds = r.ReadSingle();
+                v.Session = r.ReadInt32(); v.HostEpoch = r.ReadInt32();
+                return string.IsNullOrEmpty(v.Faction) || v.Detail == null || v.RequestId <= 0 || v.Code > (byte)TheaterCommandCode.NotAllowed ||
+                    !(v.LockSeconds >= 0f && v.LockSeconds <= 120f) || v.Session <= 0 || v.HostEpoch <= 0 ? default : v;
+            }
+            catch (Exception) { return default; }
+        }
+
         private static void WriteSnapshot(NetworkWriter w, LivingFrontSnapshot value)
         {
             w.WriteByte(value.Protocol);
-            w.WriteString(NetText.Clip(value.Faction, MaximumFaction));
-            w.WriteByte(value.Posture);
-            w.WriteByte(value.HasSnapshot ? (byte)1 : (byte)0);
+            w.WriteString(NetText.Clip(value.Faction, LivingFrontWire.MaximumFaction));
+            bool body = value.HasSnapshot && value.Body != null;
+            w.WriteByte(body ? (byte)1 : (byte)0);
             w.WriteInt32(value.Session); w.WriteInt32(value.HostEpoch);
-            int count = Math.Min(value.Fronts?.Length ?? 0, LivingWarRules.MaximumFronts);
-            w.WriteByte((byte)count);
-            for (int i = 0; i < count; i++)
-            {
-                TheaterFrontView front = value.Fronts[i];
-                w.WriteString(NetText.Clip(front.Key, MaximumKey));
-                w.WriteString(NetText.Clip(front.Label, MaximumLabel));
-                w.WriteSingle(front.X); w.WriteSingle(front.Z);
-                w.WriteString(NetText.Clip(front.Status, MaximumStatus));
-                w.WriteSingle(front.Pressure); w.WriteSingle(front.Trend);
-                w.WriteByte(front.Observed ? (byte)1 : (byte)0);
-                w.WriteSingle(front.AgeSeconds);
-            }
-            count = Math.Min(value.Proposals?.Length ?? 0, LivingWarRules.MaximumOffers);
-            w.WriteByte((byte)count);
-            for (int i = 0; i < count; i++)
-            {
-                TheaterProposalView offer = value.Proposals[i];
-                w.WriteInt32(offer.Id); w.WriteInt32(offer.Revision);
-                w.WriteString(NetText.Clip(offer.Kind, MaximumStatus));
-                w.WriteString(NetText.Clip(offer.Label, MaximumLabel));
-                w.WriteString(NetText.Clip(offer.TargetKey, MaximumKey));
-                w.WriteSingle(offer.X); w.WriteSingle(offer.Z);
-                w.WriteString(NetText.Clip(offer.Brief, MaximumBrief));
-                w.WriteString(NetText.Clip(offer.Risk, MaximumStatus));
-                w.WriteString(NetText.Clip(offer.Forces, MaximumForces));
-                w.WriteSingle(offer.SecondsRemaining);
-            }
-            TheaterLiveOperationView op = value.Operation;
-            w.WriteByte(op == null ? (byte)0 : (byte)1);
-            if (op != null)
-            {
-                w.WriteInt32(op.Id); w.WriteInt32(op.Revision);
-                w.WriteString(NetText.Clip(op.Kind, MaximumStatus));
-                w.WriteString(NetText.Clip(op.TargetKey, MaximumKey));
-                w.WriteString(NetText.Clip(op.Label, MaximumLabel));
-                w.WriteSingle(op.X); w.WriteSingle(op.Z);
-                w.WriteString(NetText.Clip(op.Phase, MaximumStatus));
-                w.WriteString(NetText.Clip(op.Summary, MaximumForces));
-                w.WriteByte((byte)Math.Min(Math.Max(op.GroundGroups, 0), 32));
-                w.WriteByte((byte)Math.Min(Math.Max(op.AirGroups, 0), 32));
-                w.WriteByte((byte)Math.Min(Math.Max(op.NavalGroups, 0), 32));
-            }
-            count = Math.Min(value.Log?.Length ?? 0, StaffLog.MaximumEntries);
-            w.WriteByte((byte)count);
-            for (int i = 0; i < count; i++)
-                w.WriteString(NetText.Clip(value.Log[i], StaffLog.MaximumTextLength));
+            if (body) LivingFrontWire.WriteBody(w, value.Body);
         }
 
         private static LivingFrontSnapshot ReadSnapshot(NetworkReader r)
         {
-            var value = new LivingFrontSnapshot { Protocol = r.ReadByte() };
-            if (value.Protocol != ProtocolVersion) return value;
-            value.Faction = ReadText(r, MaximumFaction);
-            value.Posture = r.ReadByte();
-            byte hasSnapshot = r.ReadByte();
-            if (hasSnapshot > 1 || value.Posture > (byte)TheaterWarPosture.Bold ||
-                string.IsNullOrEmpty(value.Faction)) return default;
-            value.HasSnapshot = hasSnapshot == 1;
-            value.Session = r.ReadInt32(); value.HostEpoch = r.ReadInt32();
-            if (value.Session <= 0 || value.HostEpoch <= 0) return default;
-            int count = r.ReadByte();
-            if (count > LivingWarRules.MaximumFronts) return value;
-            value.Fronts = new TheaterFrontView[count];
-            for (int i = 0; i < count; i++)
+            try
             {
-                string key = ReadText(r, MaximumKey);
-                string label = ReadText(r, MaximumLabel);
-                float x = r.ReadSingle(), z = r.ReadSingle();
-                string status = ReadText(r, MaximumStatus);
-                float pressure = r.ReadSingle(), trend = r.ReadSingle();
-                byte observedValue = r.ReadByte();
-                bool observed = observedValue == 1;
-                float age = r.ReadSingle();
-                if (string.IsNullOrEmpty(key) || label == null || status == null || !float.IsFinite(x) || !float.IsFinite(z) ||
-                    !float.IsFinite(pressure) || pressure < 0f || pressure > 1f ||
-                    !float.IsFinite(trend) || trend < -1f || trend > 1f ||
-                    !float.IsFinite(age) || age < -1f || age > 86400f || observedValue > 1) return default;
-                value.Fronts[i] = new TheaterFrontView(key, label, x, z, status,
-                    pressure, trend, observed, age);
+                byte protocol = r.ReadByte();
+                if (protocol != ProtocolVersion) return default;
+                var value = new LivingFrontSnapshot { Protocol = protocol, Faction = LivingFrontWire.Text(r, LivingFrontWire.MaximumFaction) };
+                byte hasSnapshot = r.ReadByte();
+                value.Session = r.ReadInt32(); value.HostEpoch = r.ReadInt32();
+                if (string.IsNullOrEmpty(value.Faction) || hasSnapshot > 1 || value.Session <= 0 || value.HostEpoch <= 0) return default;
+                value.HasSnapshot = hasSnapshot == 1;
+                if (value.HasSnapshot && !LivingFrontWire.ReadBody(r, value.Faction, out value.Body)) return default;
+                return value;
             }
-            count = r.ReadByte();
-            if (count > LivingWarRules.MaximumOffers) return default;
-            value.Proposals = new TheaterProposalView[count];
-            for (int i = 0; i < count; i++)
-            {
-                int id = r.ReadInt32(), revision = r.ReadInt32();
-                string kind = ReadText(r, MaximumStatus);
-                string label = ReadText(r, MaximumLabel);
-                string key = ReadText(r, MaximumKey);
-                float x = r.ReadSingle(), z = r.ReadSingle();
-                string brief = ReadText(r, MaximumBrief);
-                string risk = ReadText(r, MaximumStatus);
-                string forces = ReadText(r, MaximumForces);
-                float seconds = r.ReadSingle();
-                if (id <= 0 || revision <= 0 || string.IsNullOrEmpty(key) ||
-                    label == null || brief == null || risk == null || forces == null ||
-                    !float.IsFinite(x) || !float.IsFinite(z) || !ValidKind(kind) ||
-                    !float.IsFinite(seconds) || seconds < 0f || seconds > LivingWarRules.OfferSeconds) return default;
-                value.Proposals[i] = new TheaterProposalView(id, revision, kind, label,
-                    key, x, z, brief, risk, forces, seconds);
-            }
-            byte hasOperation = r.ReadByte();
-            if (hasOperation > 1) return default;
-            if (hasOperation == 1)
-            {
-                int id = r.ReadInt32(), revision = r.ReadInt32();
-                string kind = ReadText(r, MaximumStatus);
-                string key = ReadText(r, MaximumKey);
-                string label = ReadText(r, MaximumLabel);
-                float x = r.ReadSingle(), z = r.ReadSingle();
-                string phase = ReadText(r, MaximumStatus);
-                string summary = ReadText(r, MaximumForces);
-                int ground = r.ReadByte(), air = r.ReadByte(), naval = r.ReadByte();
-                if (id <= 0 || revision <= 0 || string.IsNullOrEmpty(key) ||
-                    label == null || phase == null || summary == null ||
-                    !float.IsFinite(x) || !float.IsFinite(z) || !ValidKind(kind) ||
-                    ground > 32 || air > 32 || naval > 32) return default;
-                value.Operation = new TheaterLiveOperationView(id, revision, kind, key,
-                    label, x, z, phase, summary, ground, air, naval);
-            }
-            count = r.ReadByte();
-            if (count > StaffLog.MaximumEntries) return default;
-            value.Log = new string[count];
-            for (int i = 0; i < count; i++)
-            {
-                value.Log[i] = ReadText(r, StaffLog.MaximumTextLength);
-                if (value.Log[i] == null) return default;
-            }
-            return value;
+            catch (Exception) { return default; }
         }
-
-        private static bool ValidKind(string kind) => kind == "ASSAULT" || kind == "DEFEND" || kind == "RECON";
     }
 }

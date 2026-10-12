@@ -22,75 +22,7 @@ namespace BoscaliSummer.Tests.Features.Command
             PercentRefusesToInventPrecision();
             KilometresReadsAsDistance();
             PressureStateDoesNotOverstateNoise();
-            RosterDrawsTheChainOfCommand();
-            RosterSurvivesAMissingParent();
             KnownAirDefenceReadsHonestly();
-        }
-
-        private static void RosterDrawsTheChainOfCommand()
-        {
-            // The generated staff: one theater commander, two component commanders, and
-            // three base commanders that answer to components 2 and 1 alternately. The
-            // host lists slots in generation order, which is not reporting order, so the
-            // console has to re-order before its trunk lines mean anything.
-            int[] ids = { 0, 1, 2, 3, 4, 5 };
-            int[] parents = { -1, 0, 0, 2, 1, 2 };
-            int[] order = new int[6];
-            bool[] visited = new bool[6];
-            int written = CommandRosterOrder.Sort(ids.Length, ids, parents, order, visited);
-
-            TestAssert.That(written == 6, "every post is placed");
-            TestAssert.That(order[0] == 0, "the theater commander leads the chain");
-            TestAssert.That(Before(order, 1, 4), "a component is drawn above the base that answers to it");
-            TestAssert.That(Before(order, 2, 3) && Before(order, 2, 5),
-                "the other component is drawn above its own bases");
-            TestAssert.That(Before(order, 4, 2),
-                "one component's whole branch is drawn before the next component");
-            TestAssert.That(Before(order, 1, 2), "posts that share a parent keep their given order");
-            TestAssert.That(EachOnce(order), "no post is drawn twice");
-        }
-
-        private static void RosterSurvivesAMissingParent()
-        {
-            // An absent parent is a root; a cycle the host does not produce still has to
-            // terminate with every post placed exactly once.
-            int[] ids = { 7, 8, 9 };
-            int[] parents = { 99, 9, 8 };
-            int[] order = new int[3];
-            bool[] visited = new bool[3];
-            int written = CommandRosterOrder.Sort(3, ids, parents, order, visited);
-
-            TestAssert.That(written == 3, "a cycle still places every post");
-            TestAssert.That(order[0] == 0, "a post whose parent is absent leads its own branch");
-            TestAssert.That(EachOnce(order), "a cycle does not duplicate a post");
-            TestAssert.That(CommandRosterOrder.Sort(0, ids, parents, order, visited) == 0,
-                "an empty roster writes nothing");
-            TestAssert.That(CommandRosterOrder.Sort(3, null, parents, order, visited) == 0,
-                "a null roster is not a crash");
-        }
-
-        private static bool Before(int[] order, int first, int second) =>
-            IndexOf(order, first) < IndexOf(order, second);
-
-        private static int IndexOf(int[] order, int value)
-        {
-            for (int i = 0; i < order.Length; i++)
-            {
-                if (order[i] == value) return i;
-            }
-            return int.MaxValue;
-        }
-
-        private static bool EachOnce(int[] order)
-        {
-            for (int i = 0; i < order.Length; i++)
-            {
-                for (int j = i + 1; j < order.Length; j++)
-                {
-                    if (order[i] == order[j]) return false;
-                }
-            }
-            return true;
         }
 
         private static void PressureStateDoesNotOverstateNoise()

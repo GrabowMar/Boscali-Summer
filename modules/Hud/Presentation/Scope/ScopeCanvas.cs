@@ -29,13 +29,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly float[] ysort = new float[MaxPoints + 2], cx0 = new float[MaxPoints], cx1 = new float[MaxPoints], cxm = new float[MaxPoints];
         private readonly string surface;
         private ScopePalette pal;
-        private float u = 1f, height, ox, oy, pixel = 1f;
+        private float u = 1f, height, ox, oy, lift, pixel = 1f;
 
         /// <summary><paramref name="name"/> names the surface in the buffer-overflow log (one line per surface: the shell, the page, the overlay and the frame each fill their own buffer).</summary>
         public ScopeCanvas(AvQuadBuffer quads, ScopeText words, string name = "scope") { q = quads; text = words; surface = name; }
 
         /// <summary>The board unit: canvas pixels per design unit.</summary>
         public float Unit => u;
+
+        /// <summary>Decorative furniture (the caption shelf) is drawn: <see cref="BoardEffective.Furniture"/>, set by the board before it paints. Everything else furniture-like (brackets, ticks, markers) stays at every declutter level.</summary>
+        public bool Furniture { get; set; } = true;
 
         /// <summary>
         /// Start a frame: clear the buffer and the word pool. <paramref name="heightPx"/> is the surface's height in canvas units and <paramref name="devicePixel"/> the size of one
@@ -48,7 +51,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             u = unit;
             pixel = devicePixel > 0.001f ? devicePixel : 1f;
             height = heightPx;
-            ox = oy = 0f;
+            ox = oy = lift = 0f;
+            chipSet = false;
             q.Clear();
             text?.Begin();
         }
@@ -61,6 +65,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>Move the origin (design units from the surface's top-left): a page strip or a gauge cell draws as if at (0, 0).</summary>
         public void Origin(float x, float y) { ox = x; oy = y; }
+
+        /// <summary>Draw everything this many design units higher than it says, whatever the origin (the page body is the painters' own, lifted under the page's header shelf): until the next <see cref="Begin"/>.</summary>
+        public void Raise(float units) { lift = units; }
 
         // ------------------------------------------------------------------------------------------------ maths
 
@@ -103,7 +110,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private float X(float x) => (ox + x) * u;
 
-        private float Y(float y) => height - (oy + y) * u;
+        private float Y(float y) => height - (oy + y - lift) * u;
 
         private Rgba C(ScopeTone tone, float alpha) => pal.Of(tone, alpha);
 
@@ -113,8 +120,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>A coordinate of an axis-aligned line snapped to the device pixel grid (an odd number of pixels wide to a pixel centre).</summary>
         private float Snap(float v, float lw) => ((int)Math.Round(lw / pixel) & 1) == 1 ? Mathf.Floor(v / pixel) * pixel + pixel * 0.5f : Mathf.Round(v / pixel) * pixel;
 
-        /// <summary>An edge of a rectangle on the device pixel grid.</summary>
-        private float Edge(float v) => Mathf.Round(v / pixel) * pixel;
+        /// <summary>
+        /// The y of a horizontal line on the device pixel grid: the row is counted from the TOP of the surface, where the design counts it (LAYOUT.md 0: a line at y 6 is the row from 6 to 7, its centre at floor(y) + 0.5). The canvas
+        /// counts from its bottom, where the same floor would land the line one row too high.
+        /// </summary>
+        private float SnapY(float v, float lw) => height - Snap(height - v, lw);
+
+        /// <summary>An edge of a rectangle on the device pixel grid. Half a pixel goes UP: Mathf.Round takes it to the even pixel, so a 3 high bar centred on a whole unit came out 2 or 4 high by the parity of its row.</summary>
+        private float Edge(float v) => Mathf.Floor(v / pixel + 0.5f) * pixel;
 
         // ------------------------------------------------------------------------------------------------ lines
 
@@ -124,7 +137,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             float lw = Lw(w), ax = X(x1), ay = Y(y1), bx = X(x2), by = Y(y2);
             if (ax == bx) ax = bx = Snap(ax, lw);
-            else if (ay == by) ay = by = Snap(ay, lw);
+            else if (ay == by) ay = by = SnapY(ay, lw);
             Rgba c = C(tone, alpha);
             if (dash <= 0f) { AvStrokes.Line(q, ax, ay, bx, by, lw, c); return; }
             DashedPx(ax, ay, bx, by, Math.Max(pixel, Edge(dash * u)), Math.Max(pixel, Edge(gap * u)), Edge(offset * u), lw, c);      // whole pixels: a 1 px dash never lands half on a pixel and drops out
@@ -172,7 +185,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>A filled rectangle.</summary>
         public void Fill(float x, float y, float w, float h, ScopeTone tone = Ink, float alpha = 1f)
         {
-            if (w <= 0f || h <= 0f) return;
+            if (w <= 0f || h <= 0f || !KeepFill(x, y, w, h, tone, alpha)) return;
             float x0 = Edge(X(x)), y0 = Edge(Y(y + h)), x1 = Math.Max(Edge(X(x + w)), x0 + pixel), y1 = Math.Max(Edge(Y(y)), y0 + pixel);
             AvStrokes.Fill(q, x0, y0, x1 - x0, y1 - y0, C(tone, alpha));
         }
@@ -184,6 +197,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public void Box(float x, float y, float w, float h, ScopeTone tone = Ink, float alpha = 1f, float lw = 1f, ScopeTone fill = Bg, float fillAlpha = 0f,
             float chamTL = 0f, float chamTR = 0f, float chamBR = 0f, float chamBL = 0f)
         {
+            if (OpenBox(x, y, w, h, tone, alpha, lw, fill, fillAlpha, chamTL + chamTR + chamBR + chamBL > 0f)) return;
             if (fillAlpha > 0f)
             {
                 if (chamTL + chamTR + chamBR + chamBL <= 0f) Fill(x, y, w, h, fill, fillAlpha);
@@ -194,9 +208,23 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 }
             }
             if (lw <= 0f) return;
+            if (lw == 1f && chamTL + chamTR + chamBR + chamBL <= 0f) { Outline(x, y, w, h, tone, alpha); return; }
             float a = lw % 2f == 1f ? 0.5f : 0f;
             BoxPath(x, y, w, h, chamTL, chamTR, chamBR, chamBL, a, out int m);
             Path(m, tone, alpha, lw);
+        }
+
+        /// <summary>
+        /// A 1 unit outline of a square-cornered box as four filled strips (the top and bottom rows whole, the sides between them), so every pixel of it is covered once, corners included. A stroked path puts its
+        /// corner pixels on the knife edge of two butt-ended lines, and which of them the GPU fills varied: a 4 x 4 lamp came out with two opposite corners missing.
+        /// </summary>
+        private void Outline(float x, float y, float w, float h, ScopeTone tone, float alpha)
+        {
+            if (w <= 2f || h <= 2f) { Fill(x, y, w, h, tone, alpha); return; }
+            Fill(x, y, w, 1f, tone, alpha);
+            Fill(x, y + h - 1f, w, 1f, tone, alpha);
+            Fill(x, y + 1f, 1f, h - 2f, tone, alpha);
+            Fill(x + w - 1f, y + 1f, 1f, h - 2f, tone, alpha);
         }
 
         private void BoxPath(float x, float y, float w, float h, float tl, float tr, float br, float bl, float a, out int n)
@@ -220,7 +248,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             float rp = r * u, cxp = X(cx), cyp = Y(cy);
             if (rp <= 0f) return;
-            if (fillAlpha > 0f) AvStrokes.Ring(q, cxp, cyp, rp * 0.5f, Segs(rp, 360f), rp, C(fill, fillAlpha));
+            if (fillAlpha > 0f && KeepPoly(fill, fillAlpha)) AvStrokes.Ring(q, cxp, cyp, rp * 0.5f, Segs(rp, 360f), rp, C(fill, fillAlpha));
             if (w <= 0f) return;
             if (dash <= 0f) AvStrokes.Ring(q, cxp, cyp, rp, Segs(rp, 360f), Lw(w), C(tone, alpha));
             else DashedArcPx(cxp, cyp, rp, 90f, 90f - 360f, dash * u, gap * u, offset * u, Lw(w), C(tone, alpha));
@@ -298,7 +326,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>Fill the scratch path (even-odd; any simple polygon, concave too) as horizontal trapezoids.</summary>
         public void FillPoly(int n, ScopeTone tone, float alpha)
         {
-            if (n < 3) return;
+            if (n < 3 || !KeepPoly(tone, alpha)) return;
             int m = 0;
             for (int i = 0; i < n; i++) ysort[m++] = py[i];
             Array.Sort(ysort, 0, m);
@@ -356,19 +384,21 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         // ------------------------------------------------------------------------------------------------ words
 
-        /// <summary>The width in design units of <paramref name="s"/> at <paramref name="size"/> (the face is monospaced).</summary>
-        public static float TextW(ReadOnlySpan<char> s, float size = 12f) => s.Length * ScopeText.DesignAdvance * size;
+        /// <summary>The width in design units of <paramref name="s"/> at <paramref name="size"/> (the face is monospaced; a '.' between two digits is <see cref="PageInk.DotAdvance"/> wide).</summary>
+        public static float TextW(ReadOnlySpan<char> s, float size = 12f) => (s.Length * ScopeText.DesignAdvance - PageInk.Decimals(s) * (ScopeText.DesignAdvance - PageInk.DotAdvance)) * size;
 
         /// <summary>One word. (<paramref name="x"/>, <paramref name="y"/>) is the anchor by <paramref name="align"/>; y is the MIDDLE of the line. Returns the width.</summary>
         public float Text(ReadOnlySpan<char> s, float x, float y, ScopeTone tone = Ink, float size = 12f, ScopeAlign align = ScopeAlign.Left, bool bold = false, float alpha = 1f)
         {
+            if (Open) PageText(s, x, y, size, ref tone, ref bold, ref alpha);
+            if ((tone == Dim || tone == Faint) && alpha < ScopePalette.DimTextFloor) alpha = ScopePalette.DimTextFloor;      // DIM text stays readable: 0.62 of the ink at the least
             Rgba c = C(tone, alpha);
             // TMP centres the line box, the canvas "middle" baseline the em box: the glyphs sit a little low unless nudged up.
             text?.Draw(s, X(x), Y2(y) - size * u * LineNudge, size * u, align, new Color(c.R, c.G, c.B, c.A), bold);
             return TextW(s, size);
         }
 
-        private float Y2(float y) => (oy + y) * u;
+        private float Y2(float y) => (oy + y - lift) * u;
 
         /// <summary>Like <see cref="Text"/> but shrunk (to <paramref name="minSize"/>) and then cut with an ellipsis to fit <paramref name="maxW"/>.</summary>
         public float FitText(ReadOnlySpan<char> s, float x, float y, float maxW, ScopeTone tone = Ink, float size = 12f, float minSize = 12f, ScopeAlign align = ScopeAlign.Left, bool bold = false, float alpha = 1f)

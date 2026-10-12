@@ -7,14 +7,14 @@ using NOAvionics;
 namespace BoscaliSummer
 {
     [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
-    // Soft: Vanguard's embedded .nobp needs Blueprinter loaded first; everything else runs without it.
+    // Soft: the embedded content bundle (BoscaliSummer.Assets.nobp) needs Blueprinter loaded first; everything else runs without it.
     [BepInDependency("com.nikkorap.blueprinter", BepInDependency.DependencyFlags.SoftDependency)]
     // Avionics is compiled in; consumers already handle an unavailable optional Wing service.
     public sealed class Plugin : BaseUnityPlugin
     {
         public const string PluginGuid = "com.marci.boscalisummer";
         public const string PluginName = "Boscali Summer";
-        public const string PluginVersion = "0.2.0";
+        public const string PluginVersion = "0.2.1";
 
         internal static new ManualLogSource Logger { get; private set; }
         internal static ModConfiguration Settings { get; private set; }

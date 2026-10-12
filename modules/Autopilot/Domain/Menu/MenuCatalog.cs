@@ -14,6 +14,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
     internal static class MenuCatalog
     {
         public const int MaxLabel = 22, MaxState = 30, MaxDesc = 48;
+        /// <summary>The steps of the two TAC BOARD cycle rows, in the order of the <c>BoardDeclutter</c> and <c>BoardLayout</c> contract enums (a press moves to the next, wrapping).</summary>
+        public static readonly string[] BoardDeclutters = { "FULL", "LEAN", "MIN" }, BoardLayouts = { "WIDE", "STACK" };
         private const string D = MenuText.Dot;
         private const string X = MenuText.Times;
 
@@ -40,7 +42,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                     if (c.EmptyBody.Length == 0) c.EmptyBody = "NOT AVAILABLE RIGHT NOW";
                     c.Badge = c.Reason; c.BadgeShow = true; c.BadgeAlert = false;
                 }
-            model.Summary = Summary(w);
             return model;
         }
 
@@ -72,19 +73,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             c.Badge = MenuText.Upper(text, MenuModel.BadgeChars);
             c.BadgeShow = show;
             c.BadgeAlert = alert;
-        }
-
-        private static List<MenuSummary> Summary(MenuWorld w)
-        {
-            var list = new List<MenuSummary>(4);
-            int fuel = (int)Math.Round(Math.Max(0f, Math.Min(1f, w.Fuel)) * 100f);
-            list.Add(new MenuSummary("FUEL", fuel + "%", w.Fuel < 0.2f));
-            if (w.Gear != GearPhase.None)
-                list.Add(w.Gear == GearPhase.Extending || w.Gear == GearPhase.Retracting ? new MenuSummary("GEAR", "MOVING", true)
-                    : new MenuSummary("GEAR", w.Gear == GearPhase.Down ? "DN" : "UP"));
-            if (w.Targets > 0) list.Add(new MenuSummary("TGT", w.Targets.ToString()));
-            if (w.Wingmen > 0) list.Add(new MenuSummary("WING", w.Wingmen.ToString()));
-            return list;
         }
 
         // ------------------------------------------------------------------ WEAPONS
@@ -502,6 +490,20 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 MenuRow view = MenuRow.Action("view/mslview", "missile-view", "ENTER MISSILE VIEW", Cut(w.MissileStatus, MaxState), "FOLLOW YOUR MISSILES IN FLIGHT", "MISSILE VIEW");
                 if (!w.CanEnterMissileView) view.Blocked = "NO MISSILE IN FLIGHT";
                 c.Rows.Add(b.Reg(view));
+            }
+            if (w.BoardAvailable)
+            {
+                c.Rows.Add(b.Reg(MenuRow.Toggle("view/board", "hardpoint", w.BoardOn,
+                    F("SHOW TAC BOARD", "CURRENT: OFF", "RESTORE THE TAC BOARD", "TAC BOARD ON"),
+                    F("HIDE TAC BOARD", "CURRENT: ON", "GO BACK TO STOCK PANELS", "TAC BOARD OFF"), checkbox: false)));
+                // the two look rows keep their place while the board is off, dimmed with the reason: a row is never added mid-session
+                MenuRow declutter = MenuRow.Cycle("view/declutter", "target-filter", "SET HUD DECLUTTER", "HUD DECLUTTER: ",
+                    BoardDeclutters, Math.Max(0, Math.Min(BoardDeclutters.Length - 1, w.BoardDeclutter)), "HUD DECLUTTER: ");
+                MenuRow layout = MenuRow.Cycle("view/boardlayout", "shape", "SET BOARD LAYOUT", "BOARD LAYOUT: ",
+                    BoardLayouts, Math.Max(0, Math.Min(BoardLayouts.Length - 1, w.BoardLayout)), "BOARD LAYOUT: ");
+                if (!w.BoardOn) declutter.Blocked = layout.Blocked = "TAC BOARD: OFF";
+                c.Rows.Add(b.Reg(declutter));
+                c.Rows.Add(b.Reg(layout));
             }
             if (w.Camera == ViewKind.Orbit) Badge(c, "EXTERNAL", show: true);
             else if (w.Missiles > 0) Badge(c, w.Missiles + " MSL", show: true);

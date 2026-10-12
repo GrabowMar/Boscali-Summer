@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace NOAvionics
 {
-    /// <summary>Chrome icons as glyphs of the bundled Tabler SDF font: crisp at any size, tinted by vertex colour, batched with text.</summary>
+    /// <summary>Chrome icons as glyphs of the bundled NOA Icons SDF font: crisp at any size, tinted by vertex colour, batched with text.</summary>
     public static class AvIcons
     {
         public static bool Available => AvType.Face(AvFace.Icons) != null && AvBundle.Font(AvTypeScale.AssetName(AvFace.Icons)) != null;

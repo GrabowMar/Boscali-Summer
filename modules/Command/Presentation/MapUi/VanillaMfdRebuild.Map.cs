@@ -24,6 +24,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             private const int NativeLayerCount = 6;
             private const int OverlayLayerCount = 4;
+            private const int OverlayCount = OverlayLayerCount;
 
             private static readonly string[] LayerNames =
                 { "OBJECTIVES", "TARGET DETAILS", "JAMMING", "GRID LABELS", "PILOTS", "AIRBASES" };
@@ -33,6 +34,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 { "CONTROL FIELD", "FRONT LINE", "SENSOR CONTOURS", "SATELLITE MAP" };
             private static readonly string[] OverlaySubtitles =
                 { "Sector control", "Control boundary", "Sensor coverage", "Terrain imagery" };
+            private static readonly string[] OverlayBriefs =
+            {
+                "Who holds each sector. Source: actual ground units, airbases.",
+                "Boundary of the two held areas. Source: the control field.",
+                "Hostile radar and optical/IR reach over you. Source: tracks your side holds; terrain masking is not applied.",
+                "Terrain imagery under the symbols in place of the plain vector base.",
+            };
             private static readonly string[] HoverNames = { "OFF", "UNIT INFO", "AMMUNITION", "ORDERS" };
             private static readonly string[] HoverNotes =
                 { "No hover tooltip", "Unit information", "Weapon and ammunition", "Current unit orders" };
@@ -64,7 +72,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private MfdPagingGrid layers, overlays, hover, sizes;
             private AvControl presetAll, presetNone, presetDefaults;
             private AvNote detailSummary, previewCaption;
-            private AvSlab overlaySlab;
+            private readonly AvRow[] overlayRows = new AvRow[OverlayCount];
             private AvMetric[] metrics;
             private int selectedPage;
             private int visibleLayers;
@@ -72,7 +80,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             public MapPresenter(MFDScreen screen, MapOptions options)
                 : base(screen, VanillaMfdPanelId.Map) { this.options = options; }
 
-            protected override string Title => "MAP";
+            protected override string Title => PageTitles[0];
+
+            private static readonly string[] PageTitles = { "TACTICAL PLOT / LAYER CONTROL", "TACTICAL PLOT / SYMBOLOGY" };
 
             protected override (AvIcon Icon, string Label)[] TabItems => new[]
             {
@@ -123,9 +133,22 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 BuildLayers(CreatePage());
                 BuildReadability(CreatePage());
+
+                // A page that ends above the footer prints these on its bay cover, most important first.
+                Console.Orders(0,
+                    "Left-click a tile to show or hide that layer.",
+                    "ALL ON and HIDE ALL act on the game layers and the Boscali overlays together.",
+                    "DEFAULTS restores the game's own settings: every layer on, unit tooltips, full-size symbols.",
+                    "An overlay that reads WAIT has no map or faction headquarters to draw from yet.");
+                Console.Orders(1,
+                    "Frame shape names the side; the glyph names the platform class.",
+                    "Shape carries the side without colour, so a symbol reads on any display scheme.",
+                    "Symbol size scales every contact on the map. The sample above shows the change.",
+                    "Pick what the hover tooltip shows: unit information, ammunition or current orders.");
             }
             protected override void OnPageChanged(int index)
             {
+                Console.SetTitle(PageTitles[Mathf.Clamp(index, 0, PageTitles.Length - 1)]);
                 selectedPage = index;
                 RequestRefresh();
             }
@@ -134,20 +157,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             private void BuildLayers(AvFlow page)
             {
-                page.Section(AvIcon.Filter, "LAYERS", "GAME");
+                page.Section(AvIcon.Filter, "GAME LAYERS", "STOCK MAP OPTIONS");
                 layers = new MfdPagingGrid(page.Content, 3, 2, pager: false, rowHeight: 56f, tile: true);
                 layers.SetGlyphs(i => LayerGlyphs[Mathf.Clamp(i, 0, LayerGlyphs.Length - 1)]);
                 AddGrid(page, layers);
 
-                page.Section(AvIcon.Scale, "OVERLAYS", "BOSCALI");
+                page.Section(AvIcon.Scale, "THEATER OVERLAYS", "BOSCALI PLOT");
                 overlays = new MfdPagingGrid(page.Content, 2, 2, pager: false, rowHeight: 56f, tile: true);
                 overlays.SetGlyphs(i => OverlayGlyphs[Mathf.Clamp(i, 0, OverlayGlyphs.Length - 1)]);
                 AddGrid(page, overlays);
 
-                overlaySlab = page.Add(new AvSlab(page.Content, "WAITING", AvState.Inert));
-                // The overlay legend sits under the overlay toggles it explains (it used to live on READABILITY).
-                page.Add(new LegendCard(page.Content));
-
+                // The master switches sit with the tiles they set; the brief and the ink key below can scroll.
                 AvButtons presetRow = page.Buttons(
                     new AvControl.Spec("ALL ON", () => SetAllLayers(true), AvButtonStyle.Default, AvIcon.LayersSubtract),
                     new AvControl.Spec("HIDE ALL", () => SetAllLayers(false), AvButtonStyle.Default, AvIcon.X),
@@ -156,6 +176,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 presetNone = presetRow.Controls[1];
                 presetDefaults = presetRow.Controls[2];
 
+                // What each overlay draws and where its data comes from, with its live state.
+                page.Section(AvIcon.InfoCircle, "OVERLAY BRIEF", "WHAT IT DRAWS · WHERE FROM");
+                for (int i = 0; i < OverlayCount; i++)
+                {
+                    overlayRows[i] = page.Add(new AvRow(page.Content));
+                    overlayRows[i].Set(OverlayNames[i], OverlayBriefs[i], "—", AvState.Inert);
+                }
+
+                // The overlay legend sits under the overlay toggles it explains (it used to live on READABILITY).
+                page.Add(new LegendCard(page.Content));
             }
             private bool NativeLayer(int index)
             {
@@ -249,7 +279,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             private void BuildReadability(AvFlow page)
             {
-                page.Section(AvIcon.Focus2, "SYMBOLS");
+                page.Section(AvIcon.Focus2, "SYMBOL SAMPLE", "THE MAP'S OWN SPRITES");
                 var preview = new AvCard(page.Content, page.Ticker, page.Inner, "UNIT SIGNATURE  /  SCALE SAMPLE");
                 page.Add(preview);
                 AvFlow previewFlow = preview.Flow;
@@ -260,7 +290,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 previewCaption = new AvNote(previewFlow.Content, "");
                 previewFlow.Add(previewCaption);
 
-                page.Section(AvIcon.Eye, "HOVER", "TOOLTIP");
+                page.Section(AvIcon.Eye, "HOVER READOUT", "TOOLTIP");
                 hover = new MfdPagingGrid(page.Content, 4, 1, pager: false, rowHeight: 56f, tile: true);
                 hover.SetGlyphs(i => HoverGlyphs[Mathf.Clamp(i, 0, HoverGlyphs.Length - 1)]);
                 AddGrid(page, hover);
@@ -268,13 +298,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 detailSummary = new AvNote(page.Content, "");
                 page.Add(detailSummary);
 
-                page.Section(AvIcon.Focus2, "SIZE", "SYMBOLS");
+                page.Section(AvIcon.Focus2, "SYMBOL SCALE", "ALL CONTACTS");
                 sizes = new MfdPagingGrid(page.Content, 3, 1, pager: false, rowHeight: 56f, tile: true);
                 sizes.SetGlyphs(i => SizeGlyphs[Mathf.Clamp(i, 0, SizeGlyphs.Length - 1)]);
                 AddGrid(page, sizes);
 
-                page.Section(AvIcon.Focus2, "KEY");
-                page.Add(new SymbolKey(page.Content), 1f);
+                page.Section(AvIcon.Focus2, "SYMBOL KEY", "FRAME = SIDE · GLYPH = TYPE");
+                page.Add(new SymbolKey(page.Content));
             }
             /// <summary>The colour a contact side wears on the map: the tints the game gives friendly and
             /// hostile icons, and a neutral grey. Shape carries the same distinction without colour.</summary>
@@ -283,11 +313,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 : side == MapSide.Hostile ? AvTheme.RailDanger
                 : AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
 
-            /// <summary>Builds one framed contact symbol exactly as the map draws it: plate, then glyph.</summary>
+            /// <summary>Builds one contact symbol exactly as the map draws it: a frameless glyph.</summary>
             private static void MakeSymbol(RectTransform parent, MapSide side, MapGlyph glyph,
                 out Image plate, out Image mark)
             {
-                plate = NewSymbolImage(parent, "Plate", MapSymbolAtlas.Plate(side), SideTint(side));
+                // The map draws no frame; the plate only keeps the tile's layout and stays hidden.
+                plate = NewSymbolImage(parent, "Plate", null, Color.clear);
+                plate.enabled = false;
                 mark = NewSymbolImage(parent, "Glyph", MapSymbolAtlas.Glyph(glyph), SideTint(side));
             }
 
@@ -298,6 +330,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Image image = go.GetComponent<Image>();
                 image.sprite = sprite;
                 image.color = tint;
+                // A spriteless Image draws a solid square; an icon the game has not loaded shows nothing.
+                image.enabled = sprite != null;
                 image.raycastTarget = false;
                 RectTransform rect = image.rectTransform;
                 rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
@@ -361,8 +395,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             /// class. Painted from the same sprites the map draws with.</summary>
             private sealed class SymbolKey : AvPart
             {
-                private const int Columns = 4;
-                private const float Pitch = 64f, Inset = 12f, Size = 32f;
+                private const int Columns = 6;
+                private const float Pitch = 62f, Inset = 12f, Size = 32f;
                 private static readonly (string Label, MapSide Side, MapGlyph Glyph)[] Entries =
                 {
                     ("FRIENDLY", MapSide.Friendly, MapGlyph.Armor), ("HOSTILE", MapSide.Hostile, MapGlyph.Armor),
@@ -428,7 +462,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             /// fills) rather than a styled AvCard.</summary>
             private sealed class LegendCard : AvPart
             {
-                private const float Pitch = 26f, BlockW = 10f, BlockH = 12f, Inset = 12f;
+                private const float Pitch = 24f, BlockW = 10f, BlockH = 12f, Inset = 12f;
                 private readonly AvFrame frame;
                 private readonly Image[] left, right;
                 private readonly TMP_Text[] labels;
@@ -548,8 +582,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     ? "Restore the game's defaults: every layer on, unit tooltips and full-size symbols."
                     : "Map is not available yet.";
 
-                overlaySlab.Set(!overlaysReady ? "WAITING" : source.HasControlData ? "CONTROL LIVE" : "NO GROUND DATA",
-                    !overlaysReady ? AvState.Inert : source.HasControlData ? AvState.Ready : AvState.Caution);
+                for (int i = 0; i < OverlayCount; i++)
+                    SetOverlayRow(i, OverlayReady(i), OverlayReady(i) && OverlayLayer(i), overlaysReady && source.HasControlData);
 
                 metrics[0].Set(overlaysReady ? AvNum.Fixed(source.CellMetres, 0) : "—", "M",
                     overlaysReady ? 1f : 0f, overlaysReady ? AvState.Ready : AvState.Inert);
@@ -571,6 +605,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     ? Mathf.Clamp(options.iconSize, .1f, 2f) : 1f;
                 foreach (SymbolTile tile in previewTiles) tile.SetState(available, scale);
                 previewCaption.Set(available ? SizeLabel() : "—");
+            }
+
+            /// <summary>One overlay's brief row. The control field also states whether it has ground presence to draw from.</summary>
+            private void SetOverlayRow(int index, bool ready, bool shown, bool controlData)
+            {
+                bool field = index == 0;
+                string word = !ready ? "WAIT" : !shown ? "OFF" : field && !controlData ? "NO DATA" : field ? "LIVE" : "ON";
+                overlayRows[index].Set(OverlayNames[index], OverlayBriefs[index], word,
+                    !shown ? AvState.Inert : field && !controlData ? AvState.Caution : AvState.Ready);
             }
 
             /// <summary>The whole set is only as large as the overlays that can actually draw.</summary>
@@ -612,7 +655,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 ? "WAITING FOR MAP"
                 : selectedPage == 0
                     ? AvNum.Fixed(visibleLayers, 0) + "/" + AvNum.Fixed(ShownLayerTarget(), 0) + " LAYERS"
-                    : "LIT = SELECTED";
+                    : "SYMBOLOGY · LIT = SELECTED";
         }
     }
 }

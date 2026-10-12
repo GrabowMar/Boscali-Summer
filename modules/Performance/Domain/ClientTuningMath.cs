@@ -7,19 +7,20 @@ namespace BoscaliSummer.Modules.Performance.Domain
     /// a Unity setting in the cheaper direction and the runtime restores the captured
     /// game value exactly when the toggle goes off, so these compose with any graphics
     /// preset instead of replacing it. Values follow the community's proven picks: the
-    /// 1.5 LOD floor is what MpClientOpt ships, and a 2 km shadow cap keeps near-field
+    /// 1.5 LOD bias cap is what MpClientOpt ships, and a 1 km shadow cap (the game ships 2 km) keeps near-field
     /// shadows while dropping the far cascade work pilots never see from the cockpit.
     /// </summary>
     internal static class ClientTuningMath
     {
-        public const float LodBiasFloor = 1.5f;
-        public const float ShadowDistanceCapMeters = 2000f;
+        public const float LodBiasCap = 1.5f;
+        public const float ShadowDistanceCapMeters = 1000f;
         public const int FrameRateCapFps = 60;
 
         public static float PlanLodBias(float current, bool enabled)
         {
             if (!enabled) return current;
-            return Math.Max(current, LodBiasFloor);
+            // Unity: a lower bias swaps to cheaper LODs sooner. The game ships 4.0.
+            return current <= 0f ? current : Math.Min(current, LodBiasCap);
         }
 
         public static float PlanShadowDistance(float current, bool enabled)

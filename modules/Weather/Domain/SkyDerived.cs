@@ -10,8 +10,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
     /// </summary>
     internal static class SkyDerived
     {
-        /// <summary>Grazing views stack cumulus groups, so the horizon reads about this many times the ground fraction (spec 4.1; tuned on the seam metric in slice 4).</summary>
-        public const float HorizonStack = 1.5f;
+        /// <summary>Grazing views stack cumulus groups, so the horizon reads this many times the ground fraction (spec 4.1). 5.3 is the seam metric result on sky 8 (mean A 0.483, B 0.492) once the deck path is the slab's real chord; the spec's 1.5 start value left B at 0.07.</summary>
+        public const float HorizonStack = 5.3f;
 
         public static void Apply(ref SkyParams sky)
         {
@@ -107,9 +107,15 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public static float ClassConditions(in SkyParams s)
         {
             float m = SkyCover(LowCover(s), s.Mid.Cover, s.OpacityMid, s.High.Cover, s.OpacityHigh);
-            float rain = s.StratRain * Gate(RainCover(s));
-            float conditions = G(m) + 0.12f * (1f - (float)Math.Exp(-rain / 1.5f)) +
-                Scalar.Clamp01(s.Convective) * (0.30f + 0.25f * Scalar.Clamp01(s.Severity));
+            return ClassConditions(m, s.StratRain * Gate(RainCover(s)), s.Convective, s.Severity);
+        }
+
+        /// <summary>The same measure from its four inputs: the opacity-weighted sky cover, the gated stratiform rain in mm/h, the row's Convective and Severity. A sampled point
+        /// passes its own values (<c>WeatherPoint.ClassSampled</c>, a readout only); a row passes its nominal ones.</summary>
+        public static float ClassConditions(float skyCover, float gatedRain, float convective, float severity)
+        {
+            float conditions = G(skyCover) + 0.12f * (1f - (float)Math.Exp(-gatedRain / 1.5f)) +
+                Scalar.Clamp01(convective) * (0.30f + 0.25f * Scalar.Clamp01(severity));
             return Math.Min(1f, conditions);
         }
 

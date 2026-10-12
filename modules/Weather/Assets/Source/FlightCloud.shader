@@ -20,8 +20,8 @@ Shader "Boscali/FlightCloud"
         float3 _CloudWorldOffset, _CloudCameraForward, _CloudSunDirection, _CloudCameraPos;
         float3 _CloudSunColor, _CloudAmbientColor, _CloudGroundColor, _CloudFogColor;
         float2 _CloudWindOffset, _CloudAltitudeBounds, _CloudHeroBounds;
-        float _CloudSteps, _CloudFarSteps, _CloudStorm, _WeatherMapSpan, _WeatherFarSpan;
-        float _CloudBase, _CloudHeightShift;
+        float _CloudSteps, _CloudFarSteps, _WeatherMapSpan, _WeatherFarSpan;
+        float _CloudBase;
         float _CloudAirExtinction;
         // Lightning flash envelope, 0..1 (LightningDirector.FlashNow).
         float _CloudFlash;
@@ -33,15 +33,18 @@ Shader "Boscali/FlightCloud"
         sampler2D _TapeTex;
         float4 _TapeInfo;   // x = texel count, y = 1 / texel count, z = 1 / texel metres
         float4 _TapeFrame;  // xy = tape axis u (unit, toward upwind), z = meander amplitude (m), w = meander wavelength (m)
-        float4 _TapeFrame2; // x = meander phase, y = D, the tape offset at the map origin (m)
+        float4 _TapeFrame2; // x = meander phase, y = D, the tape offset at the map origin (m), z = spacing of the cloud-street rows (m), w = their phase
         float4 _TapeChord;  // x,y = middle layer chord y0,y1 (m); z,w = high layer chord y0,y1
         float4 _TapeFlags;  // x = a middle layer exists on the tape, y = a high layer exists, z = the tape is one texel (read _TapeConstLow)
         float4 _TapeConstLow0, _TapeConstLow1, _TapeConstLow2; // rows 0-2 of a one-texel tape: live play reads these instead of the texture
+        // The noise decorrelation of this tape (NoiseXform.cs): per noise layer cos, sin, offset x, offset z. Every tap of the shared noise
+        // volume reads the position NoiseXZ gives it; none divides a raw world coordinate (a source scan and a grep prove it).
+        float4 _NoiseXf0, _NoiseXf1, _NoiseXf2, _NoiseXf3, _NoiseXf4, _NoiseXf5;
         float2 _CloudWindDir;
         // Radians one screen pixel spans: sets the noise level of detail by footprint.
         float _CloudPixelAngle;
-        // The horizon deck: an analytic cloud plane continuing the weather past the march.
-        float _HorizonDeck, _HorizonDepth, _HorizonCover;
+        // The horizon deck: an analytic cloud plane continuing the weather past the march, at the tape's fixed deck altitude (BakedTape.DeckAltitude).
+        float _HorizonDeck;
         // Set-piece storms: xy position, z heading (radians), w kind; B: size, top,
         // strength, extent. Static scenery the weather state builds up or lets decay.
         float4 _HeroA[5];
@@ -50,9 +53,7 @@ Shader "Boscali/FlightCloud"
         float _FogBank;
         float4 _CloudEye; // centre x/z, radius, faded strength
         float _HeroCount;
-        // Frontal boundary (SkySplit): A = normal x, normal z, offset, width;
-        // B = amount, meander amplitude, wavelength, phase.
-        float4 _SplitA, _SplitB;
+
         // 0..1 how deep the camera is inside cloud: near-field density and wisps.
         // Reduced-resolution march: world view rays through the screen corners (rows:
         // bottom-left, bottom-right, top-left, top-right) and the target size (w, h, 1/w, 1/h).
@@ -75,12 +76,21 @@ Shader "Boscali/FlightCloud"
         // Dominant density body's own normalized height. Capture after the primary sample;
         // subsequent shadow-density samples overwrite it. Empty samples always reset it.
         static float gLocalLightingHeight = 0.0;
+        // Round 6: how much a lit sample belongs to a smooth deck (the low layer won the sample and its genus is a sheet), 0 elsewhere. Captured like the height.
+        static float gDeckSheet = 0.0;
         // The low-genus row of the sample being shaded. A primary sample fetches its own; the sun taps of that march sample
         // (gLowReuse, set by MarchSky) reuse it: they lie within 1.5 km and a ramp is at least 12 km wide.
         static bool gLowValid = false;
         static bool gLowReuse = false;
 
         // Near march limit: beyond it the far map's level of detail takes over.
+        // The weather map profiles: the cloud-base byte spans 0-4096 m (CloudMaps.BaseRange); the structure
+        // tops 0-16000 m (CloudMaps.VolumeTop).
+        #define CLOUD_BASE_RANGE 4096.0
+        // Cloud streets (StreetMath.cs): the body field is stretched along the wind by 1 + STREET_STRETCH * Streets, and rows of
+        // amplitude STREET_ROW_AMP * Streets run across it.
+        #define STREET_STRETCH 3.0
+        #define STREET_ROW_AMP 0.45
         #define CLOUD_NEAR_LIMIT 45000.0
         #define CLOUD_FAR_LIMIT 220000.0
         // Thin layers and the horizon deck reach this far along sky pixels; haze hides the rest.
@@ -118,20 +128,132 @@ Shader "Boscali/FlightCloud"
             return true;
         }
 
+        #define NOISE_LOW 0
+        #define NOISE_MID 1
+        #define NOISE_HIGH 2
+        #define NOISE_HORIZON 3
+        #define NOISE_MID_ALIGNED 4
+        #define NOISE_HIGH_ALIGNED 5
+
+        float4 NoiseXf(int layer)
+        {
+            if (layer == 0) return _NoiseXf0;
+            if (layer == 1) return _NoiseXf1;
+            if (layer == 2) return _NoiseXf2;
+            if (layer == 3) return _NoiseXf3;
+            if (layer == 4) return _NoiseXf4;
+            return _NoiseXf5;
+        }
+
+        // Where the noise volume is read for a position: TapeFrame.NoiseXZ in BakedTape.cs is the twin. The aligned layers (streak taps)
+        // carry no rotation, so a stretch along the wind stays along the wind.
+        float2 NoiseXZ(float2 xz, int layer)
+        {
+            float4 t = NoiseXf(layer);
+            return float2(t.x * xz.x - t.y * xz.y + t.z, t.y * xz.x + t.x * xz.y + t.w);
+        }
+
+        // A world position as the point the low volume's noise is read at: (NoiseXZ(x, z), y).
+        float3 NoiseG(float3 g, int layer)
+        {
+            float2 n = NoiseXZ(g.xz, layer);
+            return float3(n.x, g.y, n.y);
+        }
+
+        // Smooth two-channel value noise from an integer hash (SmoothNoise.cs is the twin; change both together). The look pass's warps need a bounded
+        // slope, which the noise volume's fine octaves cannot give (they folded the warped coordinate over a third of the plane).
+        #define SALT_BEND 0x1B3Du
+        #define SALT_CURL 0x2C57u
+        #define SALT_MEANDER 0x3E91u
+        #define SALT_LOBE_A 0x4A05u
+        #define SALT_LOBE_B 0x5D73u
+        #define SALT_CELL_A 0x6A11u
+        #define SALT_CELL_B 0x6A22u
+        #define SALT_CELL_C 0x6A33u
+        #define SALT_CELL_S 0x6A44u
+        #define SALT_STREAK_WIDTH 0x7A10u
+        #define SALT_STREAK_A 0x7A21u
+        #define SALT_STREAK_B 0x7A32u
+        #define SALT_STREAK_SEG 0x7A43u
+        #define SALT_ROWS 0x8B15u
+        #define SALT_MESO 0x9D41u
+        #define SALT_DECK_A 0x9C21u
+        #define SALT_DECK_B 0x9C32u
+
+        uint SmoothHash(int x, int z, uint salt)
+        {
+            uint h = (uint)x * 0x27D4EB2Fu + (uint)z * 0x165667B1u + salt * 0x9E3779B1u;
+            h ^= h >> 15; h *= 0x85EBCA6Bu;
+            h ^= h >> 13; h *= 0xC2B2AE35u;
+            h ^= h >> 16;
+            return h;
+        }
+
+        float2 SmoothNoise2(float2 uv, uint salt)
+        {
+            float2 f = floor(uv);
+            int2 i = (int2)f;
+            float2 t = uv - f;
+            t = t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+            uint h00 = SmoothHash(i.x, i.y, salt), h10 = SmoothHash(i.x + 1, i.y, salt);
+            uint h01 = SmoothHash(i.x, i.y + 1, salt), h11 = SmoothHash(i.x + 1, i.y + 1, salt);
+            const float k = 1.0 / 65535.0;
+            float2 v00 = float2(h00 & 0xFFFFu, h00 >> 16) * k, v10 = float2(h10 & 0xFFFFu, h10 >> 16) * k;
+            float2 v01 = float2(h01 & 0xFFFFu, h01 >> 16) * k, v11 = float2(h11 & 0xFFFFu, h11 >> 16) * k;
+            return lerp(lerp(v00, v10, t.x), lerp(v01, v11, t.x), t.y);
+        }
+
+        // Cloud streets (StreetMath.Compress, Rows and Body are the twins). The share of the along-wind coordinate removed before the
+        // noise is read, the 0..1 rows across the wind (the broad noise bends them) and the body value with the rows added.
+        float StreetCompress(float streets)
+        {
+            float k = STREET_STRETCH * streets;
+            return k / (1.0 + k);
+        }
+
+        float StreetRows(float across, float wobble)
+        {
+            return 0.5 + 0.5 * sin(6.2831853 * across / _TapeFrame2.z + _TapeFrame2.w + wobble);
+        }
+
+        float StreetBody(float body, float streets, float rows)
+        {
+            return saturate(body + streets * STREET_ROW_AMP * (rows - 0.5));
+        }
+
         float LodFor(float foot, float period);
+        float LadderMix(float raw0, float raw1, float w, float mean);
 
         // Individual cloud bodies: cellular noise at non-integer scales (so the 64^3
         // tile never visibly repeats), in [0, 1]. Coverage thresholds it into separate
         // clouds with sky between them, the way broken and scattered decks really look.
         // The raw weighted sum of the three lobe taps at one lobe size (mean about 0.5), before the remap.
-        float BodiesRaw(float3 g, float scale, float lod)
+        // Lobe dropout and amplitude variance from the broad tap's lobe (B) and erosion (G) channels (SlabMath.LobeKeep is the twin): a lobe-channel value under 0.38
+        // removes the lobe (0.40 stays inside the hole), over 0.56 keeps it; the erosion channel scales the rest by 0.5-1.4; 1.475 restores the mean.
+        float LobeKeep(float lobe, float erosion)
+        {
+            return lerp(0.40, 1.0, smoothstep(0.38, 0.56, lobe)) * lerp(0.5, 1.4, smoothstep(0.3, 0.7, erosion)) * 1.475;
+        }
+
+        float BodiesRaw(float3 ng, float scale, float lod)
         {
             float period = scale * 4.0;
-            float a = tex3Dlod(_CloudNoiseTex, float4(g.xz / period, g.y / (period * 0.9), lod)).b;
-            float b = tex3Dlod(_CloudNoiseTex, float4(float2(g.z, -g.x) / (period * 2.73) + 0.37,
-                g.y / (period * 2.1), lod)).r;
-            float c = tex3Dlod(_CloudNoiseTex, float4(g.xz / (period * 0.29) + float2(0.17, 0.61),
-                g.y / (period * 0.24), max(lod, LodFor(gFoot, period * 0.29)))).b;
+            float a = tex3Dlod(_CloudNoiseTex, float4(ng.xz / period, ng.y / (period * 0.9), lod)).b;
+            float4 bt = tex3Dlod(_CloudNoiseTex, float4(float2(ng.z, -ng.x) / (period * 2.73) + 0.37,
+                ng.y / (period * 2.1), lod));
+            float b = bt.r;
+            // Lobe size varies inside a group (SlabMath.LobeSmall): where the slow field b is high a second, smaller lobe tap (0.6, turned 37 degrees) takes over.
+            float fineMix = smoothstep(0.46, 0.60, b);
+            if (fineMix > 0.0)
+            {
+                float2 nrp = float2(ng.x * 0.8 + ng.z * 0.6, ng.z * 0.8 - ng.x * 0.6);
+                float pf = period * 0.6;
+                float a2 = tex3Dlod(_CloudNoiseTex, float4(nrp / pf + float2(0.29, 0.17), ng.y / (period * 0.9), max(lod, LodFor(gFoot, pf)))).b;
+                a = LadderMix(a, a2, fineMix, 0.5);
+            }
+            a *= LobeKeep(bt.b, bt.g);
+            float c = tex3Dlod(_CloudNoiseTex, float4(ng.xz / (period * 0.29) + float2(0.17, 0.61),
+                ng.y / (period * 0.24), max(lod, LodFor(gFoot, period * 0.29)))).b;
             return a * 0.65 + b * 0.15 + c * 0.20;
         }
 
@@ -140,9 +262,9 @@ Shader "Boscali/FlightCloud"
             return saturate((raw - 0.22) * 2.5);
         }
 
-        float Bodies(float3 g, float scale, float lod)
+        float Bodies(float3 ng, float scale, float lod)
         {
-            return BodiesRemap(BodiesRaw(g, scale, lod));
+            return BodiesRemap(BodiesRaw(ng, scale, lod));
         }
 
         // The feature-size ladders (Ladder.cs): sqrt(2) steps, 700 m lobes and 250 m periods.
@@ -166,24 +288,14 @@ Shader "Boscali/FlightCloud"
             return mean + (lerp(raw0, raw1, w) - mean) * rsqrt((1.0 - w) * (1.0 - w) + w * w);
         }
 
-        // The body scale of a rung: a deck's lobe, or a frontal shield's larger lump (a sheet fades to a fixed 5.2 km).
-        // INTERIM(slice 4): the front parameters of LadderScale and BodiesLadder go with the frontal shield; its scale lerps with
-        // sheetBlend, the one scale that varies by design (CloudBodies.LadderScale is the twin).
-        float LadderScale(float rung, float front, float sheetBlend)
-        {
-            float lobe = LobeMetres(rung);
-            return front > 0.5 ? lerp(max(1800.0, lobe * 1.35), 5200.0, sheetBlend) : lobe;
-        }
-
         // Bodies at a lobe rung index: one call in steady state, two inside a ramp (CloudBodies.BodiesLadder is the twin).
-        float BodiesLadder(float3 g, float rungIndex, float lod, float front, float sheetBlend)
+        // Noise is never sampled at a scale that varies in space or time: the scale is the rung's lobe.
+        float BodiesLadder(float3 ng, float rungIndex, float lod)
         {
             float2 sp = LadderSplit(rungIndex);
-            // A sheet front is one fixed 5.2 km scale at every rung: no second tap, and no contrast boost of two identical fields.
-            if (front > 0.5 && sheetBlend >= 0.999) sp.y = 0.0;
             float raw0 = 0.0, raw1 = 0.0;
-            if (sp.y < 0.98) raw0 = BodiesRaw(g, LadderScale(sp.x, front, sheetBlend), lod);
-            if (sp.y > 0.02) raw1 = BodiesRaw(g, LadderScale(sp.x + 1.0, front, sheetBlend), lod);
+            if (sp.y < 0.98) raw0 = BodiesRaw(ng, LobeMetres(sp.x), lod);
+            if (sp.y > 0.02) raw1 = BodiesRaw(ng, LobeMetres(sp.x + 1.0), lod);
             return BodiesRemap(LadderMix(raw0, raw1, sp.y, 0.5));
         }
 
@@ -234,6 +346,20 @@ Shader "Boscali/FlightCloud"
             if (i0 == i1) return a;
             float4 b = tex2Dlod(_TapeTex, float4((i1 + 0.5) * _TapeInfo.y, v, 0, 0));
             return lerp(a, b, u - fl);
+        }
+
+        // Row 2 of the tape at s (Streets, HorizonCover, HorizonDepth in z, w): the horizon deck's cover and depth. A one-texel tape reads the bound constant.
+        float4 TapeDeckRow(float s) { return _TapeFlags.z > 0.5 ? _TapeConstLow2 : TapeRow(2.0, s); }
+
+        // The share of the deck the march did not reach (spec 7.3): the deck's chord [t0, t1] is the deck plane thickened to its depth along the ray;
+        // 0 while the whole chord lies inside 220 km, 1 once it starts beyond it. Needs rayY != 0. The density check probes this function.
+        float DeckWeight(float roY, float rayY, float hd)
+        {
+            float yb = _HorizonDeck - 0.4 * hd, yt = _HorizonDeck + 0.6 * hd;
+            float ta = (yb - roY) / rayY, tb = (yt - roY) / rayY;
+            float t0 = max(0.0, min(ta, tb)), t1 = max(ta, tb);
+            float hw = 0.5 * max(t1 - t0, 0.25 * CLOUD_FAR_LIMIT);
+            return saturate((0.5 * (t0 + t1) + hw - CLOUD_FAR_LIMIT) / (2.0 * hw));
         }
 
         struct LowRow
@@ -290,24 +416,15 @@ Shader "Boscali/FlightCloud"
             return o;
         }
 
-        // Mirror of SkySplit.Share: 0 on the open side of the front, 1 behind it.
-        float SplitShare(float2 xz)
-        {
-            if (_SplitB.x <= 0.0) return 1.0;
-            float along = -xz.x * _SplitA.y + xz.y * _SplitA.x;
-            float phase = along * (6.2831853 / _SplitB.z) + _SplitB.w;
-            float offset = _SplitA.z + _SplitB.y * (sin(phase) - sin(_SplitB.w) +
-                0.35 * (sin(phase * 2.1 + _SplitB.w) - sin(_SplitB.w * 2.1 + _SplitB.w)));
-            return smoothstep(-_SplitA.w, _SplitA.w, offset - dot(xz, _SplitA.xy));
-        }
 
         // Cauliflower erosion for the set-pieces: two octaves of the base channel at a
         // non-integer scale ratio and rotated against each other, so a wall tens of km wide
         // never shows the 64^3 tile as a regular grid of lumps (bubble wrap).
         float Billow(float3 g, float lod)
         {
-            float a = tex3Dlod(_CloudNoiseTex, float4(g.xz / 12000.0 + 0.43, g.y / 10000.0 + 0.11, lod)).b;
-            float b = tex3Dlod(_CloudNoiseTex, float4(float2(g.z, -g.x) / 4200.0 + 0.71, g.y / 3600.0 + 0.57, lod)).b;
+            float3 ng = NoiseG(g, NOISE_LOW);
+            float a = tex3Dlod(_CloudNoiseTex, float4(ng.xz / 12000.0 + 0.43, ng.y / 10000.0 + 0.11, lod)).b;
+            float b = tex3Dlod(_CloudNoiseTex, float4(float2(ng.z, -ng.x) / 4200.0 + 0.71, ng.y / 3600.0 + 0.57, lod)).b;
             return saturate((a * 0.65 + b * 0.35 - 0.22) * 2.5);
         }
 
@@ -319,7 +436,8 @@ Shader "Boscali/FlightCloud"
 
         float HeroNoise(float3 g, float scale, float lod)
         {
-            return tex3Dlod(_CloudNoiseTex, float4(g.xz / scale + 0.17, g.y / (scale * 0.8) + 0.23, lod)).r;
+            float3 ng = NoiseG(g, NOISE_LOW);
+            return tex3Dlod(_CloudNoiseTex, float4(ng.xz / scale + 0.17, ng.y / (scale * 0.8) + 0.23, lod)).r;
         }
 
         // Bounding circle of a set-piece on the ground (xy centre, z radius). Mirrored by
@@ -504,7 +622,7 @@ Shader "Boscali/FlightCloud"
             if (_WeatherEnvelopeOn < 0.5 || min(uv.x, uv.y) < 0.05 || max(uv.x, uv.y) > 0.95) return false;
             float4 e = tex2Dlod(_WeatherEnvelopeTex, float4(uv, 0, 0));
             if (e.r <= 0.0) return true;
-            return g.y > e.g * 16000.0 + _CloudHeightShift + 800.0 || g.y < e.b * 16000.0 + _CloudHeightShift - 800.0;
+            return g.y > e.g * 16000.0 + 800.0 || g.y < e.b * 16000.0 - 800.0;
         }
 
         // True near a set-piece this ray passes (the envelope does not know about them).
@@ -574,10 +692,10 @@ Shader "Boscali/FlightCloud"
         }
 
         // Boundary erosion at edge scale k (1 = the 1250 m erosion and 340 / 300 m micro periods). CloudBodies.EdgeDetail is the twin.
-        float EdgeDetail(float3 g, float coarse, float k, float edge, float sheetBlend)
+        float EdgeDetail(float3 ng, float coarse, float k, float edge, float sheetBlend)
         {
             float lod = max(coarse, LodFor(gFoot, 1250.0 * k));
-            float3 n2 = float3((g.xz - _CloudWindOffset * 1.7) / (1250.0 * k), g.y / (1250.0 * k));
+            float3 n2 = float3((ng.xz - _CloudWindOffset * 1.7) / (1250.0 * k), ng.y / (1250.0 * k));
             float d1 = tex3Dlod(_CloudNoiseTex, float4(n2, lod)).r;
             float nearDetail = saturate(1.0 - lod);
             // Cumulus edges take the rounded Worley lobes (B) for the near octave, so
@@ -589,7 +707,7 @@ Shader "Boscali/FlightCloud"
             float close = saturate(1.0 - gFoot / 3.0);
             if (close > 0.0 && edge > 0.35)
             {
-                float micro = tex3Dlod(_CloudNoiseTex, float4(g.xz / (340.0 * k) + 0.19, g.y / (300.0 * k) + 0.83, 0.0)).g;
+                float micro = tex3Dlod(_CloudNoiseTex, float4(ng.xz / (340.0 * k) + 0.19, ng.y / (300.0 * k) + 0.83, 0.0)).g;
                 detail = lerp(detail, detail * 0.65 + micro * 0.35, close);
             }
             return detail;
@@ -598,9 +716,12 @@ Shader "Boscali/FlightCloud"
         float Density(float3 world, float coarse)
         {
             gLocalLightingHeight = 0.0;
+            gDeckSheet = 0.0;
             // A primary sample fetches its own genus row; the sun taps of one march sample reuse it.
             if (!gLowReuse) gLowValid = false;
             float3 g = world + _CloudWorldOffset;
+            // The low volume's noise is read where this tape's rotation and offset put it.
+            float3 ng = NoiseG(g, NOISE_LOW);
             // Filter the 1250 m detail to what one pixel and one step can resolve.
             float lod = max(coarse, LodFor(gFoot, 1250.0));
             float bodyLod = max(coarse, LodFor(gFoot, 24000.0));
@@ -608,7 +729,7 @@ Shader "Boscali/FlightCloud"
             float heroHeight = gLocalLightingHeight;
             if (gHeroOnly) return hero;
             if (g.y < _CloudAltitudeBounds.x || g.y > _CloudAltitudeBounds.y) return hero;
-            float3 n1 = float3((g.xz - _CloudWindOffset) / 24000.0, 0.37);
+            float3 n1 = float3((ng.xz - _CloudWindOffset) / 24000.0, 0.37);
             float2 broad = tex3Dlod(_CloudNoiseTex, float4(n1, bodyLod)).rg;
             // Warp the meteorological boundary at cloud scale; otherwise a smooth
             // front map reads as a vertical polygon even when its rain band is curved.
@@ -616,8 +737,8 @@ Shader "Boscali/FlightCloud"
             float4 weather, profile;
             float farShare;
             if (!SampleWeather(warped, weather, profile, farShare)) return hero;
-            float layer = weather.r, front = weather.g, cell = weather.b;
-            if (max(layer, max(front, cell)) < 0.025) return hero;
+            float layer = weather.r, cell = weather.b;
+            if (max(layer, cell) < 0.025) return hero;
             // The low genus of this sample, read from the tape at the warped position: one s serves cover and genus (spec 7.3).
             if (!gLowValid) { gLow = TapeLow(_TapeFlags.z > 0.5 ? 0.0 : TapeS(warped)); gLowValid = true; }
             LowRow row = gLow;
@@ -625,23 +746,36 @@ Shader "Boscali/FlightCloud"
             float puffLod = max(coarse, LodFor(gFoot, max(1200.0, LobeMetres(lobe.x) * 4.0)));
             // The far map cannot resolve erosion detail; keep its envelope smooth.
             coarse = max(coarse, farShare);
-            float baseY = profile.b * 16000.0 + _CloudHeightShift;
-            float topY = max(baseY + 280.0, weather.a * 16000.0 + _CloudHeightShift);
-            float frontBase = profile.r * 16000.0 + _CloudHeightShift;
-            float frontCrown = max(frontBase + 300.0, profile.g * 16000.0 + _CloudHeightShift);
+            float baseY = profile.b * CLOUD_BASE_RANGE;
+            float topY = max(baseY + 280.0, weather.a * 16000.0);
             float towerBlend = smoothstep(0.18, 0.60, row.anvil);
             float capTop = baseY + max(280.0, max(row.puffDepth, row.deckDepth)) * 1.15;
             float columnTop = max(baseY + 280.0, lerp(min(topY, capTop), topY, towerBlend));
             float deckTop = baseY + max(row.puffDepth, row.deckDepth) + row.baseWobble * 0.5;
-            float lowFloor = front > 0.02 ? min(baseY, frontBase) : baseY;
-            if (g.y < lowFloor - 700.0 - gVert || g.y > max(deckTop, max(columnTop, frontCrown)) + 600.0 + gVert) return hero;
+            float lowFloor = baseY;
+            if (g.y < lowFloor - 700.0 - gVert || g.y > max(deckTop, columnTop) + 600.0 + gVert) return hero;
 
             float smooth = saturate(row.deckSmooth);
             float sheetBlend = smoothstep(0.45, 0.85, smooth);
             bool sheet = sheetBlend >= 0.999;
             float3 gw = g + float3((broad.r - 0.5) * 1400.0, 0.0, (broad.g - 0.5) * 1400.0);
+            // Cloud streets: where the row asks, the body field is stretched along the wind and given rows across it.
+            float streets = saturate(row.streets);
+            float3 gs = gw;
+            if (streets > 0.0) gs.xz -= _TapeFrame.xy * (dot(gw.xz, _TapeFrame.xy) * StreetCompress(streets));
+            float3 ngw = NoiseG(gs, NOISE_LOW);
             float puffBody = 0.72;
-            if (!sheet) puffBody = lerp(BodiesLadder(gw, row.lobeRung, puffLod, 0.0, sheetBlend), 0.72, sheetBlend);
+            if (!sheet)
+            {
+                // Warp before the lobe lookup (SlabMath.LobeWarp; CloudBodies.WarpLobes is the twin): two octaves of smooth noise, fades out with streets.
+                float2 lobeWarp = (SmoothNoise2(ngw.xz / 3500.0 + float2(0.23, 0.41), SALT_LOBE_A) - 0.5) +
+                    (SmoothNoise2(ngw.xz / 1500.0 + float2(0.61, 0.17), SALT_LOBE_B) - 0.5) * 0.3;
+                ngw.xz += lobeWarp * (min(LobeMetres(row.lobeRung) * 1.6, 2200.0) * (1.0 - streets));
+                float bodies = BodiesLadder(ngw, row.lobeRung, puffLod);
+                if (streets > 0.0)
+                    bodies = StreetBody(bodies, streets, StreetRows(dot(gw.xz, float2(-_TapeFrame.y, _TapeFrame.x)), (broad.g - 0.5) * 4.0));
+                puffBody = lerp(bodies, 0.72, sheetBlend);
+            }
             float relief = lerp(0.55, 1.0, smoothstep(0.2, 0.85, puffBody));
             float localAnvil = LocalAnvil(columnTop - baseY, row.anvil);
             float localTowerBlend = smoothstep(0.18, 0.60, localAnvil);
@@ -671,30 +805,6 @@ Shader "Boscali/FlightCloud"
                 }
             }
 
-            // Fronts use the same profile at a larger scale. A thin shield stays stratiform.
-            float frontShape = 0.0;
-            float frontHeight = 0.0;
-            float frontDepth = frontCrown - frontBase;
-            if (front > 0.02)
-            {
-                float frontBody = BodiesLadder(gw + 5311.0, row.lobeRung, sheet ? bodyLod : puffLod, 1.0, sheetBlend);
-                float fm = CoverMask(frontBody, saturate(front * 1.05));
-                float frontFloor = frontBase + (frontBody - 0.5) * min(220.0, row.baseWobble + 40.0);
-                float frontTop = frontCrown + (broad.r - 0.5) * min(1200.0, frontDepth * 0.25) -
-                    (1.0 - fm) * min(frontDepth * 0.25, 900.0);
-                frontHeight = saturate((g.y - frontFloor) / max(1.0, frontTop - frontFloor));
-                float uplift = smoothstep(3500.0, 6500.0, frontDepth);
-                float thin = lerp(0.35, 1.0, smoothstep(900.0, 2200.0, frontDepth));
-                if (gVert > 40.0)
-                    frontShape = saturate(fm) * LayerOverlap(g.y, frontFloor, frontTop) * thin;
-                else
-                {
-                    float fh = (g.y - frontFloor) / max(1.0, frontTop - frontFloor);
-                    float frontAnvil = LocalAnvil(frontDepth, row.anvil);
-                    frontShape = ShapeMass(fm, ShapeProfile(fh, LocalDome(lerp(0.25, row.dome, uplift), frontAnvil), frontAnvil)) *
-                        BaseGate(g.y, frontFloor, max(row.baseSharp, 80.0)) * thin;
-                }
-            }
 
             // Towers follow the cell footprint: narrow with height, flare where the genus has an anvil.
             // Cumulus is carved into puffs. A cumulonimbus stays one mass.
@@ -712,16 +822,16 @@ Shader "Boscali/FlightCloud"
 
             // Detail noise only on the boundary. The interior of a deck is one mass, and an
             // empty sample never pays for the 3D taps.
-            float coarseShape = max(layerShape, max(frontShape, towerShape));
+            float coarseShape = max(layerShape, towerShape);
             float edge = saturate(1.0 - abs(coarseShape - 0.42) * 2.4);
             float detail = 0.5;
             if (coarse < 1.0 && row.billow > 0.01 && edge > 0.08)
             {
                 // The edge texture follows the lobe (spec 4.2): the erosion periods scale with the rung's lobe, and inside a
                 // ramp the two rungs' textures mix by the weight of their bodies.
-                if (lobe.y < 0.98) detail = EdgeDetail(g, coarse, EdgeScale(LobeMetres(lobe.x)), edge, sheetBlend);
+                if (lobe.y < 0.98) detail = EdgeDetail(ng, coarse, EdgeScale(LobeMetres(lobe.x)), edge, sheetBlend);
                 if (lobe.y > 0.02)
-                    detail = lerp(detail, EdgeDetail(g, coarse, EdgeScale(LobeMetres(lobe.x + 1.0)), edge, sheetBlend),
+                    detail = lerp(detail, EdgeDetail(ng, coarse, EdgeScale(LobeMetres(lobe.x + 1.0)), edge, sheetBlend),
                         lobe.y < 0.98 ? lobe.y : 1.0);
             }
             // Erosion only removes the boundary; signed noise used to create detached wisps.
@@ -729,7 +839,6 @@ Shader "Boscali/FlightCloud"
             // GPU only; CloudBodies is the shape without boundary erosion.
             float nibble = max(0.0, lerp(0.72, 0.65, sheetBlend) - detail) * row.billow * edge * lerp(0.70, 0.45, sheetBlend);
             layerShape = saturate(layerShape - nibble);
-            frontShape = saturate(frontShape - nibble);
             towerShape = saturate(towerShape - nibble);
             // Heaped cloud gets a steeper boundary ramp after erosion (GPU only, like the
             // nibble): lobes end in a crisp sunlit rim instead of a soft halo.
@@ -737,7 +846,6 @@ Shader "Boscali/FlightCloud"
             layerShape = lerp(layerShape, saturate((layerShape - 0.08) * 1.6), crisp);
             towerShape = lerp(towerShape, saturate((towerShape - 0.08) * 1.6), crisp);
             float layerDensity = saturate((layerShape - 0.12) / 0.70) * smoothstep(0.02, 0.10, layer);
-            float frontDensity = saturate((frontShape - 0.12) / 0.72) * smoothstep(0.04, 0.20, front);
             float towerDensity = towerShape;
 
             // Fractus (scud): ragged fragments hanging under rain-bearing bases.
@@ -748,15 +856,14 @@ Shader "Boscali/FlightCloud"
             // from a pixel footprint of 30 m and is skipped from 60 m. gFoot is 0 in the density check and the cookie, so the CPU twin is unchanged.
             if (rain > 0.02 && gFoot < 60.0 && g.y < floorY && g.y > floorY - 700.0)
             {
-                float frag = tex3Dlod(_CloudNoiseTex, float4(g.xz / 900.0 + 0.29, g.y / 420.0 + 0.61, lod)).r;
+                float frag = tex3Dlod(_CloudNoiseTex, float4(ng.xz / 900.0 + 0.29, ng.y / 420.0 + 0.61, lod)).r;
                 float band = smoothstep(floorY - 700.0, floorY - 450.0, g.y) * (1.0 - smoothstep(floorY - 180.0, floorY, g.y));
                 scud = smoothstep(0.62, 0.78, frag + rain * 0.35) * band * saturate(rain * 6.0) * (1.0 - smoothstep(30.0, 60.0, gFoot));
             }
             float keep = EyeCloudKeep(g);
             float field = hero;
             gLocalLightingHeight = heroHeight;
-            if (layerDensity * 0.55 * keep > field) { field = layerDensity * 0.55 * keep; gLocalLightingHeight = layerHeight; }
-            if (frontDensity * 0.60 * keep > field) { field = frontDensity * 0.60 * keep; gLocalLightingHeight = frontHeight; }
+            if (layerDensity * 0.55 * keep > field) { field = layerDensity * 0.55 * keep; gLocalLightingHeight = layerHeight; gDeckSheet = sheetBlend; }
             if (towerDensity * 0.85 * keep > field) { field = towerDensity * 0.85 * keep; gLocalLightingHeight = height01; }
             if (scud * 0.4 * keep > field) { field = scud * 0.4 * keep; gLocalLightingHeight = saturate((g.y - floorY + 700.0) / 700.0); }
             // Near-field carving: filaments and thin slots around the camera, so flying inside
@@ -767,11 +874,11 @@ Shader "Boscali/FlightCloud"
             float carveFade = saturate(1.0 - gFoot / 120.0);
             if (carveFade > 0.01 && field > 0.03 && field < 0.98)
             {
-                float cav = tex3Dlod(_CloudNoiseTex, float4(g.xz / 900.0 + 0.71, g.y / 760.0 + 0.29, LodFor(gFoot, 900.0))).g;
+                float cav = tex3Dlod(_CloudNoiseTex, float4(ng.xz / 900.0 + 0.71, ng.y / 760.0 + 0.29, LodFor(gFoot, 900.0))).g;
                 float carveKeep = 1.0 - 0.7 * smoothstep(0.25, 0.6, field);
                 field = saturate(field - (cav - 0.48) * 1.1 * carveFade * carveKeep);
             }
-            if (field <= 0.0) gLocalLightingHeight = 0.0;
+            if (field <= 0.0) { gLocalLightingHeight = 0.0; gDeckSheet = 0.0; }
             return field;
         }
 
@@ -779,6 +886,7 @@ Shader "Boscali/FlightCloud"
         float DensityOrEmpty(float3 world, float coarse)
         {
             gLocalLightingHeight = 0.0;
+            gDeckSheet = 0.0;
             float3 g = world + _CloudWorldOffset;
             if (!NearHero(g) && EmptyAt(g)) return 0.0;
             return Density(world, coarse);
@@ -832,89 +940,146 @@ Shader "Boscali/FlightCloud"
             return min(5.0, l + saturate(l));
         }
 
+        // The thin-layer rank law (SlabMath.Rank): the rank of a pattern value is its place in the pattern's own distribution, a Gaussian CDF
+        // in the tanh form. The argument is clamped so tanh cannot overflow. SlabSigma is SlabMath.PatternSigma (the measured spreads).
+        float SlabRank(float pattern, float sigma)
+        {
+            float z = clamp((pattern - 0.52) / sigma, -5.0, 5.0);
+            return 0.5 + 0.5 * tanh(0.7978846 * (z + 0.044715 * z * z * z));
+        }
+
+        float SlabSigma(float3 wts)
+        {
+            float s = wts.x + wts.y + wts.z;
+            return s <= 0.0 ? 0.071 : max(0.02, (wts.x * 0.071 + wts.y * 0.115 + wts.z * 0.082) / s);
+        }
+
         // The weighted pattern value (about 0.52 on average) of a layer at one period. Streak and cell taps fade to their mean
-        // once filtered past what the pixel resolves; a morphology with no weight is not fetched.
-        float SlabPattern(float3 g, LayerRow row, float scale, float2 low, float foot, float3 wts)
+        // once filtered past what the pixel resolves; a morphology with no weight is not fetched. sizeMask (0 large cells, 1 small) is
+        // SlabMath.SizeMask of the mesoscale size field.
+        // The share of an octave that survives the pixel footprint: full while the footprint is under a twentieth of its lattice, gone from a third (a hash noise has no mip chain,
+        // so a lattice finer than the pixel would alias into the stipple the horizon showed). The CPU twin is at footprint zero.
+        float OctaveFade(float foot, float lattice)
+        {
+            return 1.0 - smoothstep(0.05, 0.35, foot / lattice);
+        }
+
+        float SlabPattern(float3 g, float layer, LayerRow row, float scale, float2 low, float sizeMask, float patchMask, float foot, float3 wts)
         {
             if (wts.x + wts.y + wts.z <= 0.0) return 0.52;
-            float2 warp = (low - 0.5) * scale * 1.6;
+            // Streak layers keep 30 % of the 27 km warp (SlabMath.StreakWarpCut): it bent fibres into marbled ribbons.
+            float2 warp = (low - 0.5) * scale * (1.6 * (1.0 - 0.7 * wts.z / (wts.x + wts.y + wts.z)));
             float2 p = g.xz + warp;
             float2 w = float2(dot(p, _CloudWindDir), dot(p, float2(-_CloudWindDir.y, _CloudWindDir.x)));
+            // Rounded taps read the noise where the layer's rotation puts it; streak taps keep their stretch along the wind, so they take
+            // the layer's offset only (the aligned layers carry no rotation). The fog bank (layer 2) takes the high layer's.
+            float2 np = NoiseXZ(p, layer < 0.5 ? NOISE_MID : NOISE_HIGH);
+            float2 nsw = NoiseXZ(w, layer < 0.5 ? NOISE_MID_ALIGNED : NOISE_HIGH_ALIGNED);
             float streak = 0.52, cells = 0.52;
             float2 bend = float2(0.0, 0.0);
             if (wts.z > 0.0)
             {
-                float2 sw = w;
+                // Round 5 streaks (CloudBodies.SlabPattern is the twin): two octaves of smooth value noise stretched along the wind (fibres and broad streaks turned 7 degrees),
+                // their weights shifted by a low-frequency width field, broken into dashes of random length by a low-frequency along-wind mask. Only low frequencies bend the coordinate.
+                float span = scale * row.aspect;
+                float2 sac = nsw;
                 if (row.curl > 0.01)
-                {
-                    // Curl bends the streak coordinate with low-frequency vector noise: hooked cirrus. One fixed sign.
-                    float2 bend = tex3Dlod(_CloudNoiseTex, float4(p / (scale * 3.1) + 0.61, 0.33, 1.5)).rg - 0.5;
-                    sw += bend * scale * 2.0 * row.curl;
-                }
-                float along = scale * row.aspect;
-                float lod1 = SlabLod(foot, scale), lod2 = SlabLod(foot, scale * 1.73);
-                float s1 = tex3Dlod(_CloudNoiseTex, float4(sw.x / along, sw.y / scale, g.y / (scale * 0.6) + 0.17, lod1)).r;
-                float2 w2 = float2(sw.x * 0.982 - sw.y * 0.191, sw.x * 0.191 + sw.y * 0.982);
-                float fine2 = saturate(4.0 - lod2);
-                float s2 = fine2 > 0.0 ? lerp(0.52, tex3Dlod(_CloudNoiseTex, float4(w2.x / (along * 1.73) + 0.53,
-                    w2.y / (scale * 1.73) + 0.29, g.y / (scale * 1.1) + 0.61, lod2)).r, fine2) : 0.52;
-                streak = s1 * 0.6 + s2 * 0.4;
+                    sac += (SmoothNoise2(np / (scale * 3.1) + 0.61, SALT_CURL) - 0.5) * scale * 0.8 * row.curl;
+                float2 ms = SmoothNoise2(np / (scale * 3.0) + float2(0.29, 0.83), SALT_MEANDER);
+                sac.y += (ms.y - 0.5) * scale * 0.9;
+                sac.x += (ms.x - 0.5) * span * 0.15;
+                float widthField = SmoothNoise2(float2(sac.x / (span * 2.5) + 0.13, sac.y / (scale * 3.0) + 0.71), SALT_STREAK_WIDTH).x;
+                float nA = SmoothNoise2(float2(sac.x / (span * 1.4) + 0.37, sac.y / (scale * 0.12) + 0.81), SALT_STREAK_A).x;
+                float2 rb = float2(sac.x * 0.9925462 + sac.y * 0.1218693, sac.y * 0.9925462 - sac.x * 0.1218693);
+                float nB = SmoothNoise2(float2(rb.x / (span * 0.8) + 0.53, rb.y / (scale * 0.28) + 0.29), SALT_STREAK_B).x;
+                float seg = SmoothNoise2(float2(sac.x / (span * 0.9) + 0.77, sac.y / (scale * 0.8) + 0.23), SALT_STREAK_SEG).x;
+                float sw = smoothstep(0.2, 0.8, widthField);
+                float wA = 0.35 + 0.65 * (1.0 - sw), wB = 0.45 + 0.55 * sw;
+                float segF = 0.25 + 1.25 * smoothstep(0.25, 0.75, seg);
+                streak = 0.52 + 0.36 * ((wA * OctaveFade(foot, scale * 0.12) * (nA - 0.5) + wB * OctaveFade(foot, scale * 0.28) * (nB - 0.5)) * rsqrt(wA * wA + wB * wB)) * segF;
             }
             if (wts.x + wts.y > 0.0)
             {
-                // Rounded cells from the smooth base channel, also at two scales. The cell tile repeats every cs metres and read as a lattice
-                // (sky 20), so a vector noise at 3.3 cs bends the coordinate by up to ~1/3 cs (Task 13); it filters to nothing with distance.
+                // Round 5 cells (CloudBodies.CellField is the twin): a thresholded sum of three octaves of smooth value noise at 1, 2.3 and 5.1 x 0.14 scale, turned 19, 37 and 71
+                // degrees; the coarse octave warps the mid one and both warp the fine one, and a low-frequency size field shifts the weights between fine and coarse.
+                // Each octave fades out as the pixel footprint nears its lattice (OctaveFade).
                 float cs = scale * 0.45;
-                bend = tex3Dlod(_CloudNoiseTex, float4(p / (cs * 3.3) + 0.57, 0.19 + g.y / (cs * 2.9), SlabLod(foot, cs * 3.3))).rg - 0.5;
-                float2 pc = p + bend * cs * 2.2;
-                float lodC = SlabLod(foot, cs);
-                float c1 = tex3Dlod(_CloudNoiseTex, float4(pc / cs + 0.41, g.y / (cs * 0.8), lodC)).r;
-                float fineC = saturate(4.0 - lodC);
-                float c2 = fineC > 0.0 ? lerp(0.52, tex3Dlod(_CloudNoiseTex, float4(float2(pc.y, -pc.x) / (cs * 2.37) + 0.13,
-                    g.y / (cs * 1.9) + 0.77, SlabLod(foot, cs * 2.37))).r, fineC) : 0.52;
-                cells = c1 * 0.62 + c2 * 0.38;
+                bend = SmoothNoise2(np / (cs * 4.0) + 0.57, SALT_BEND) - 0.5;
+                float2 q = np + bend * cs;
+                float l1 = scale * 0.14;
+                float2 r3 = float2(q.x * 0.3255682 + q.y * 0.9455186, q.y * 0.3255682 - q.x * 0.9455186);
+                float2 n3 = SmoothNoise2(r3 / (l1 * 5.1) + float2(0.11, 0.43), SALT_CELL_C);
+                float2 r2 = float2(q.x * 0.7986355 + q.y * 0.6018150, q.y * 0.7986355 - q.x * 0.6018150);
+                r2 += (n3 - 0.5) * (l1 * 2.3 * 0.8);
+                float2 n2 = SmoothNoise2(r2 / (l1 * 2.3) + float2(0.53, 0.19), SALT_CELL_B);
+                float2 r1 = float2(q.x * 0.9455186 + q.y * 0.3255682, q.y * 0.9455186 - q.x * 0.3255682);
+                r1 += ((n2 - 0.5) + (n3 - 0.5)) * (l1 * 1.2);
+                float n1 = SmoothNoise2(r1 / l1 + float2(0.31, 0.77), SALT_CELL_A).x;
+                float sizeField = SmoothNoise2(q / (l1 * 12.0) + float2(0.7, 0.2), SALT_CELL_S).x;
+                float sblend = smoothstep(0.2, 0.8, sizeField + (sizeMask - 0.5) * 0.5);
+                float w1 = 0.2 + 0.45 * sblend, w2 = 0.7, w3 = 1.0 - 0.7 * sblend;
+                cells = 0.52 + 0.071 * (w1 * OctaveFade(foot, l1) * (n1 - 0.5) + w2 * OctaveFade(foot, l1 * 2.3) * (n2 - 0.5) + w3 * OctaveFade(foot, l1 * 5.1) * (n3 - 0.5))
+                    * rsqrt(w1 * w1 + w2 * w2 + w3 * w3) / 0.226;
             }
             float ripples = cells;
             if (wts.y > 0.0)
             {
-                // Parallel rows (altocumulus undulatus, cirrocumulus ripples): their amplitude fades once the row spacing
-                // is filtered past what the pixel resolves, so the horizon never moires.
+                // Parallel rows (altocumulus undulatus, cirrocumulus ripples), only where the Ripples weight is above 0.05 (SlabWeights drops the rest): their amplitude fades once
+                // the row spacing is filtered past what the pixel resolves, so the horizon never moires. Round 5: the wavelength varies by about a third (a phase noise of 3 cycles on a
+                // lattice of 7 wavelengths), two row sets (1 and 1.43 wavelengths, turned 17 degrees) mix at a weight that follows the size field so rows meet in dislocations, and the
+                // patch mask gates the amplitude.
                 float wavelength = max(1.0, row.rippleWave);
                 float rippleKeep = 1.0 - smoothstep(1.0, 3.0, LodFor(foot, wavelength));
-                // The rows meander and break up with the cell bend (Task 13): perfectly straight, equal stripes read as a zebra (sky 18).
-                float rows = 0.55 + 0.45 * sin(w.y / wavelength * 6.2831853 + warp.x / scale * 2.0 + bend.x * 6.0);
-                float rowKeep = saturate(0.8 + bend.y * 3.5);
+                float2 rowN = SmoothNoise2(np / (wavelength * 7.0) + float2(0.41, 0.17), SALT_ROWS);
+                float rows1 = 0.55 + 0.45 * sin((w.y / wavelength + 3.0 * (rowN.x - 0.5)) * 6.2831853 + warp.x / scale * 3.0 + bend.x * 4.0);
+                float across2 = w.y * 0.9563 + w.x * 0.2924;
+                float rows2 = 0.55 + 0.45 * sin((across2 / (wavelength * 1.43) + 3.0 * (rowN.y - 0.5)) * 6.2831853 + warp.y / scale * 3.0 + bend.y * 3.6 + 1.7);
+                float rows = lerp(rows1, rows2, 0.25 + 0.5 * sizeMask);
+                float rowKeep = saturate(0.7 + bend.y * 3.5) * lerp(0.35, 1.0, patchMask);
                 // rows averages 0.55: dividing by it keeps the pattern's mean at the cells' (CloudBodies.SlabPattern is the twin).
                 ripples = cells * lerp(1.0, rows / 0.55, 0.8 * rippleKeep * rowKeep);
             }
             return dot(wts, float3(cells, ripples, streak)) / (wts.x + wts.y + wts.z);
         }
 
-        // One thin layer's 2D field at a map point: pattern, flattening from the veil weight, the legacy front thinning, the
+        // One thin layer's 2D field at a map point: pattern, flattening from the veil weight, the
         // edge from SlabCoverMask (with the Detail-independent rank, the covered area follows Cover) and the interior density
         // from Detail. No altitude profile and no strength.
-        float Slab2D(float3 g, LayerRow row, float foot, float2 splitMul)
+        float Slab2D(float3 g, float layer, LayerRow row, float foot)
         {
             float cover = row.cover * EyeCloudKeep(g);
             if (cover <= 0.005) return 0.0;
             // Mesoscale patches (a layer is never uniform across the whole map) and a slow warp
             // that bends the streaks (hooked cirrus) and breaks the tile period: one fetch.
-            float2 low = tex3Dlod(_CloudNoiseTex, float4(g.xz / 27000.0 + 0.27, 0.71, 1.5)).rg;
+            float2 nlow = NoiseXZ(g.xz, layer < 0.5 ? NOISE_MID : NOISE_HIGH);
+            // Round 6: the two mesoscale fetches are trilinear reads of a coarse mip, whose iso-contours are straight lines: the patch mask drew triangles and diamonds (sky 11). Bend the
+            // lookup point by smooth noise first (SlabMath.MesoWarpTile / MesoWarpAmp; CloudBodies.Slab2D is the twin). Hash noise has no mip chain, so it fades with the footprint.
+            nlow += (SmoothNoise2(nlow / 2400.0 + float2(0.37, 0.19), SALT_MESO) - 0.5) * (900.0 * OctaveFade(foot, 2400.0));
+            float2 low = tex3Dlod(_CloudNoiseTex, float4(nlow / 27000.0 + 0.27, 0.71, 1.5)).rg;
             float patch = low.g;
+            // The patch field (R) and the cell-size field (G) of a second mesoscale fetch at another tile (SlabMath.PatchTile).
+            float2 mk = tex3Dlod(_CloudNoiseTex, float4(nlow / 31000.0 + float2(0.63, 0.19), 0.37, 1.5)).rg;
+            float sizeMask = smoothstep(0.15, 0.85, mk.y);
             float4 wts = SlabWeights(row);
             float2 sp = LadderSplit(row.periodRung);
             float pat0 = 0.0, pat1 = 0.0;
-            if (sp.y < 0.98) pat0 = SlabPattern(g, row, PeriodMetres(sp.x), low, foot, wts.xyz);
-            if (sp.y > 0.02) pat1 = SlabPattern(g, row, PeriodMetres(sp.x + 1.0), low, foot, wts.xyz);
+            float patchMask = smoothstep(0.38, 0.66, mk.x);
+            if (sp.y < 0.98) pat0 = SlabPattern(g, layer, row, PeriodMetres(sp.x), low, sizeMask, patchMask, foot, wts.xyz);
+            if (sp.y > 0.02) pat1 = SlabPattern(g, layer, row, PeriodMetres(sp.x + 1.0), low, sizeMask, patchMask, foot, wts.xyz);
             float pattern = LadderMix(pat0, pat1, sp.y, 0.52);
-            // The cover law (SlabMath.RankGain): the rank does not depend on Detail, so a layer covers about its Cover however crisp or
-            // flat it is; Detail only scales the density inside the cover (the return below).
-            float rank = saturate(0.5 + (pattern - 0.52) * 4.5);
+            // The cover law (SlabMath.Rank): the rank is the pattern's place in its own distribution, so a layer covers about its Cover
+            // however crisp or flat it is; Detail only scales the density inside the cover (the return below).
+            float rank = SlabRank(pattern, SlabSigma(wts.xyz) * 1.25);
             float body = lerp(rank, 0.7 + 0.3 * rank, wts.w);
-            // Ahead of the front (share 0) and behind it (share 1) the layer differs. INTERIM(slice 4): the split goes with the front.
-            cover *= lerp(splitMul.x, splitMul.y, SplitShare(g.xz));
-            float c = saturate(cover * (0.55 + 0.9 * saturate(0.5 + (patch - 0.52) * 3.16)));
-            return SlabCoverMask(body, c, row.softness) * lerp(1.0, body, row.detail);
+            // The mesoscale cover: the old slow modulation, times the patch mask that clusters the cover into patches and clears the lanes between
+            // (SlabMath.PatchMask / Patchiness / PatchFactor / CoverTrim).
+            float patchiness = (1.0 - smoothstep(0.6, 1.0, cover)) * (1.0 - wts.w);
+            float c = saturate(cover * lerp(1.05 + (1.4 * wts.z + 1.2 * (1.0 - wts.z - wts.w)) * (1.0 - smoothstep(0.02, 0.3, cover)), 1.0, wts.w) * (0.55 + 0.9 * saturate(0.5 + (patch - 0.52) * 3.16)) *
+                lerp(1.0, smoothstep(0.38, 0.66, mk.x) * 2.17, patchiness));
+            // How deep a point sits inside the cover (0 at the edge, 1 at the top rank): Detail turns it into density.
+            float depth = saturate((rank - (1.0 - c)) / max(c, 0.05));
+            float interior = lerp(0.2 + 0.8 * depth, body, wts.w);
+            return SlabCoverMask(body, c, row.softness) * lerp(1.0, interior, lerp(sqrt(row.detail), row.detail, wts.w));
         }
 
         // The layer's vertical profile saturate(5.2 h (1 - h)) and its integral (SlabMath.Profile / Integral).
@@ -962,6 +1127,30 @@ Shader "Boscali/FlightCloud"
             SlabLayer back;
         };
 
+        // Look pass round 4, the tone shoulder: cloud light is linear HDR (a sunlit face toward the sun summed to 2-3) and the display
+        // clipped every sunlit lobe to flat 255 white (about 17 of 47 skies). Linear up to the knee, then a tanh roll-off to one: the lit
+        // side keeps its form, and storms flashed by lightning stop clipping too. Per channel, so the warm sun tint desaturates to white
+        // in the brightest parts, as film does. GPU-only (the CPU twins are densities).
+        // Round 6: a rational shoulder (t / (1 + t)) instead of tanh. tanh reached its ceiling within a knee width, so every lit face above about 1.6 came out the same flat
+        // white (7-37 % of the sky pixels of skies 10, 17, 23, 27, 41 over 0.93); this one keeps gradation up to a light of 3 and costs less.
+        float3 CloudShoulder(float3 x, float knee, float room)
+        {
+            float3 t = max(x - knee, 0.0) / room;
+            return min(x, knee) + room * t / (1.0 + t);
+        }
+
+        // Round 4: the in-scatter toward a cloud takes the cloud's own shade. Airlight was the full horizon colour for every sample, so a
+        // shaded base 15 km away came out at about half the luminance of the fog (lit/dark of distant fair-weather cumulus stuck at 1.7,
+        // overcast sheets at 1.1-1.4: flat). Air in the shadow of a cloud or a deck is dimmer too; the fog keeps 35 % of its brightness
+        // at black and all of it from a luminance of 0.85 up, so lit tops and clear sky are unchanged.
+        float3 ShadedFog(float3 light)
+        {
+            float l = dot(light, float3(0.2126, 0.7152, 0.0722));
+            // Round 6: the shaded airlight is darker (0.35 -> 0.10 of the fog at black, curved) and sky-blue, so a distant shaded base keeps its depth against a lit top.
+            float s = saturate(l / 0.85);
+            return _CloudFogColor * lerp(0.10, 1.0, pow(s, 1.4)) * lerp(float3(0.84, 0.95, 1.14), 1.0, s);
+        }
+
         void AddSlabSample(inout SlabLayer layer, float optical, float3 light, float distance)
         {
             float contribution = (1.0 - layer.opacity) * (1.0 - exp(-optical));
@@ -975,8 +1164,8 @@ Shader "Boscali/FlightCloud"
             if (layer.opacity <= 0.0) return;
             float depth = layer.weightedDistance / layer.opacity;
             float fade = 1.0 - smoothstep(CLOUD_HORIZON_FADE, CLOUD_HORIZON_LIMIT, depth);
-            float air = AirTransmittance(depth, ro.y, ro.y + ray.y * depth);
-            layer.colour = lerp(_CloudFogColor * layer.opacity, layer.colour, air) * fade;
+            float air = pow(AirTransmittance(depth, ro.y, ro.y + ray.y * depth), 0.7); // round 6: cloud is hazed at 0.7 of the ground haze
+            layer.colour = lerp(ShadedFog(layer.colour / layer.opacity) * layer.opacity, layer.colour, air) * fade;
             layer.opacity *= fade;
             layer.weightedDistance *= fade;
         }
@@ -1021,10 +1210,14 @@ Shader "Boscali/FlightCloud"
             // under about 1 km to its mean, so cirrocumulus and altocumulus cells (periods 250-1000 m) drew nothing. Chords of several samples
             // keep the blur to their step: the samples are that far apart.
             bool single = samples < 1.5;
+            // Round 6: a thin layer along a slant. The pixel's ground footprint is 1 / sin(elevation) longer than it is wide, so the pattern is filtered by that (the single sample was
+            // filtered by the isotropic footprint only: the stipple strip and the converging wedges at the horizon were cell patterns aliased along the view). And the optical depth of
+            // a thin layer grows as sin(elevation) ^ -0.85, not ^ -1: at 10 degrees cirrus of strength 0.12 was five times as opaque as overhead and filled the lower sky.
+            float sinE = max(abs(ray.y), 0.02);
+            float aniso = 1.0 + 4.0 * (1.0 - smoothstep(0.06, 0.22, sinE));
+            float slantGain = layer < 1.5 ? pow(sinE, 0.15) : 1.0;
             float patternFoot = single ? 0.0 : stepLength * 0.5 * slant;
-            // INTERIM(slice 4): the legacy front thins the middle layer ahead of it and thickens the high one.
-            float2 splitMul = layer < 0.5 ? float2(1.0 - 0.75 * _SplitB.x, 1.0)
-                : layer < 1.5 ? float2(1.0 + 0.4 * _SplitB.x, 1.0 - 0.3 * _SplitB.x) : float2(1.0, 1.0);
+
             [loop]
             for (int n = 0; n < 24; n++)
             {
@@ -1035,18 +1228,31 @@ Shader "Boscali/FlightCloud"
                 LayerRow row;
                 if (layer > 1.5) row = FogRow(); else row = TapeLayer(TapeS(g.xz), layer);
                 if (row.cover <= 0.005) continue;
+                // Round 6: a thin layer dissolves into the haze over the last five degrees (its streaks and cells, foreshortened to nothing, were the converging wedges and stipple at the
+                // horizon of skies 2, 3, 5 and 7); a full deck keeps its horizon.
+                float horizonKeep = layer < 1.5 ? lerp(smoothstep(0.02, 0.09, sinE), 1.0, smoothstep(0.45, 0.75, row.cover)) : 1.0;
                 // The altitudes this sample's piece of the chord spans, against the local layer.
                 float yA = ro.y + ray.y * (t0 + n * stepLength), yB = ro.y + ray.y * (t0 + (n + 1.0) * stepLength);
                 float overlap = SlabOverlap(yA, yB, row.baseY, row.baseY + row.thick);
                 if (overlap <= 0.002) continue;
                 g.y = row.baseY + 0.5 * row.thick;
-                float d = Slab2D(g, row, max(t * _CloudPixelAngle, patternFoot), splitMul) * row.strength;
+                float d = Slab2D(g, layer, row, max(t * _CloudPixelAngle * aniso, patternFoot)) * row.strength * slantGain * horizonKeep;
                 if (d <= 0.002) continue;
                 // Thin cloud: its own depth toward the sun is all that shades it.
                 float toSun = row.thick * 0.5 / max(0.12, _CloudSunDirection.y);
                 float direct = exp(-d * toSun * 0.003);
-                float3 light = _CloudAmbientColor * 0.8 * 0.8 +
-                    _CloudSunColor * (direct * phase * 0.6 + 0.22);
+                // Look pass round 4: the old constant 0.22 sun fill lit a thick sheet the same from every direction (lit/dark 1.1-1.5, luma
+                // deviation under 0.02). It is now a dim base plus a glow toward the sun (hotspot, the reference's "light hotspot where the sun
+                // is"), and the sum goes through the shoulder so a thin layer facing the sun no longer clips flat white.
+                float slabGlow = saturate((phase - 0.5) / 1.5);
+                // A full deck of thin layer has no structure to light either (sky 27): the same two mesoscale lights as the low decks, gated by the layer's cover.
+                float deckGate = layer < 1.5 ? smoothstep(0.55, 0.9, row.cover) : 0.0;
+                // Darkens by at most 0.15 and brightens by up to 0.75: the density check holds that a middle layer seen through 40 km of air is visibly present (colour over 0.4; its probe sits at slabN 0.35,
+                // where the colour is 0.50 x this factor), and the deck needs both sides to read as structure (lit/dark of the altostratus decks 31, 33, 38 fell under 1.5 when it only brightened).
+                float slabN = SmoothNoise2(g.xz / 5200.0 + float2(0.37, 0.58), SALT_DECK_A).x * 0.65 + SmoothNoise2(g.xz / 1900.0 + float2(0.81, 0.12), SALT_DECK_B).x * 0.35;
+                float slabMod = 1.0 + deckGate * (slabN < 0.5 ? 1.0 : 1.5) * (slabN - 0.5);
+                float3 light = CloudShoulder((_CloudAmbientColor * float3(0.85, 0.96, 1.18) * 0.64 +
+                    _CloudSunColor * (direct * lerp(1.0, phase, 0.6) * 0.7 + 0.08 + 0.60 * slabGlow)) * slabMod, 0.62, 0.30);
                 float segmentStart = t0 + n * stepLength;
                 float frontLength = clamp(splitDistance - segmentStart, 0.0, stepLength);
                 float backLength = stepLength - frontLength;
@@ -1136,8 +1342,7 @@ Shader "Boscali/FlightCloud"
                 float4 weather, profile;
                 float farShare;
                 if (!SampleWeather(p.xz, weather, profile, farShare) || profile.a <= 0.02) continue;
-                float frontShare = weather.g / max(0.001, weather.r + weather.g + weather.b);
-                float baseY = lerp(profile.b, profile.r, saturate(frontShare)) * 16000.0 + _CloudHeightShift;
+                float baseY = profile.b * CLOUD_BASE_RANGE;
                 if (!ClipRainCurtainHeight(ro.y, ray.y, baseY + 40.0, s0, s1)) continue;
                 t = lerp(s0, s1, clamp(jitter, 0.1, 0.9));
                 p = ro + ray * t;
@@ -1153,7 +1358,7 @@ Shader "Boscali/FlightCloud"
                 float extinction = 0.00022 * pow(rain, 0.85) * heightGate * rangeGate * mapGate;
                 if (extinction <= 0.0) continue;
 
-                float coverShade = 1.0 - 0.75 * saturate(max(weather.r, max(weather.g, weather.b)));
+                float coverShade = 1.0 - 0.75 * saturate(max(weather.r, weather.b));
                 float3 light = _CloudAmbientColor * 0.55 + _CloudGroundColor * 0.10 +
                     _CloudSunColor * (0.02 * coverShade * min(max(phase, 0.0), 2.0));
                 if (_CloudFlash > 0.001)
@@ -1301,6 +1506,14 @@ Shader "Boscali/FlightCloud"
             float phase = 0.58 * Phase(cosine, 0.58) + 0.08 * Phase(cosine, 0.82) + 0.34 * Phase(cosine, -0.25);
             // One broad secondary lobe per ray; reuse the measured sun optical depth below.
             float secondaryPhase = 0.70 * Phase(cosine, 0.18) + 0.30;
+            // Look pass round 4: dense cloud scatters many times, which washes the anisotropy out, so a body samples a mild version of the
+            // phase and only thin cloud (rims, sheets: low density) gets the silver-lining lobe, at 0.85 of its excess. Sunlit faces then sit at about
+            // the same brightness from every direction instead of 2-3 x brighter toward the sun (the blown whites).
+            float phaseBody = lerp(1.0, phase, 0.35);
+            float phaseRim = max(0.0, phase - phaseBody) * 0.85;
+            // The hotspot: sun light that gets through a sheet or a deck is forward-scattered, so a thick layer glows around the sun (the
+            // references' "light hotspot where the sun is") and is otherwise a flat grey. 0 beyond about 60 degrees from the sun.
+            float sunGlow = 0.55 * pow(saturate((phase - 0.5) / 1.5), 2.0);
             float awayFromSun = saturate(0.5 - 0.5 * cosine);
             // Integer avalanche removes IGN's visible diagonal lattice. This changes ray
             // sample placement only: the actual cloud field and detail stay anchored.
@@ -1390,6 +1603,7 @@ Shader "Boscali/FlightCloud"
                     // Shadow probes also evaluate Density and overwrite its local profile.
                     // Keep the primary sample's height within its own cloud body.
                     float localLightingHeight = gLocalLightingHeight;
+                    float deckSheet = gDeckSheet;
                     if (hero)
                     {
                         if (d <= 0.003 && tHero > fineUntil) { tHero += fine * 4.0; stride = true; continue; }
@@ -1421,7 +1635,7 @@ Shader "Boscali/FlightCloud"
                             else optical += tap * (coarseSun ? 3000.0 : k == 0 ? 340.0 : 2300.0);
                         }
                         gLowReuse = false;
-                        optical *= 0.0021;
+                        optical *= 0.0040; // round 4: 0.0021 left fair-weather bodies lit through (flat 1.7-1.8 lit/dark)
                         float h = saturate(localLightingHeight);
                         float direct = exp(-optical);
                         // The upward tap was only skipped when the sun was already out.
@@ -1442,12 +1656,17 @@ Shader "Boscali/FlightCloud"
                         // keeps bases and buried cores darker than exposed crowns. No
                         // density-independent sun floor remains inside an opaque storm.
                         float secondaryAccess = lerp(0.35, 1.0, h) * exp(-above * 0.5);
-                        float scattered = 0.22 * exp(-optical * 0.24) * secondaryPhase * secondaryAccess;
+                        // Round 4: 0.22 -> 0.12 (its decay follows the steeper optical depth). The fill was sun-coloured and as bright as the shade itself, which greyed the shaded sides and
+                        // capped lit/dark near 1.8; the shade is now the sky's blue (below) and this is only the in-cloud glow.
+                        float scattered = 0.12 * exp(-optical * 0.13) * secondaryPhase * secondaryAccess;
+                        float phaseHere = phaseBody + phaseRim * exp(-d * 2.2);
                         // Shade is lit by blue sky, not grey: a cool tint keeps sunlit lobes and
                         // shadowed lobes apart, like the reference flight footage.
-                        float3 light = _CloudAmbientColor * float3(0.90, 0.97, 1.10) * skyAccess * 0.72 +
+                        // Round 4: the shade is sky-blue light with a floor (0.19 of the ambient, tinted blue 0.80/0.96/1.25 so the shade reads (39,61,97)-like rather than slate; the open-sky part is 0.40, was 0.72, whose exposed shaded sides sat near 0.4 luminance against 0.95 lit): a base is never black (the references' darkest
+                        // 3 % is (39,61,97) in blue-sky scenes, (48,66,94) under a Cb), and lit/dark of towers stays under 4.4.
+                        float3 light = _CloudAmbientColor * float3(0.80, 0.96, 1.25) * (skyAccess * 0.40 + 0.19) +
                             _CloudGroundColor * (1.0 - h) * exp(-d) +
-                            _CloudSunColor * (direct * phase * 0.75 + scattered);
+                            _CloudSunColor * (direct * phaseHere * 0.55 + scattered + sunGlow * exp(-optical * 0.10));
                         // Lightning: the bolt's light scattering off the droplets around it. It
                         // reaches the shadowed cores the sun cannot, so the whole storm flickers.
                         if (_CloudFlash > 0.001)
@@ -1465,7 +1684,8 @@ Shader "Boscali/FlightCloud"
                         if (wispFade > 0.01)
                         {
                             float3 wg = world + _CloudWorldOffset;
-                            float3 wispN = tex3Dlod(_CloudNoiseTex, float4(wg.xz / 1200.0 + 0.47, wg.y / 1000.0 + 0.13, LodFor(gFoot, 1200.0))).rgb;
+                            float3 nwg = NoiseG(wg, NOISE_LOW);
+                            float3 wispN = tex3Dlod(_CloudNoiseTex, float4(nwg.xz / 1200.0 + 0.47, nwg.y / 1000.0 + 0.13, LodFor(gFoot, 1200.0))).rgb;
                             float wisp = wispN.x * 0.45 + wispN.y * 0.20 + wispN.z * 0.35;
                             // Smaller ragged filaments supply parallax as the aircraft crosses
                             // the volume. Filter them out before a march interval can alias them.
@@ -1473,12 +1693,22 @@ Shader "Boscali/FlightCloud"
                                 (1.0 - smoothstep(20.0, 70.0, gFoot));
                             if (filamentFade > 0.01)
                             {
-                                float filament = tex3Dlod(_CloudNoiseTex, float4(wg.xz / 360.0 + 0.19,
-                                    wg.y / 300.0 + 0.67, LodFor(gFoot, 360.0))).g;
+                                float filament = tex3Dlod(_CloudNoiseTex, float4(nwg.xz / 360.0 + 0.19,
+                                    nwg.y / 300.0 + 0.67, LodFor(gFoot, 360.0))).g;
                                 wisp += (filament - 0.5) * 0.55 * filamentFade;
                             }
                             light *= 1.0 + (wisp - 0.5) * 1.1 * (0.5 + saturate(d)) * wispFade;
                         }
+                        float deckMul = 1.0;
+                        if (deckSheet > 0.01)
+                        {
+                            // Round 6: a smooth deck has no density structure to light, so its base was one grey (luma deviation 0.03-0.05 of skies 29, 34, 35, 36, 40). The transmitted
+                            // light varies with the deck's thickness at two mesoscales (5.2 km and 1.9 km, hash noise anchored to the world). Light only: density, the CPU twin and shadows agree.
+                            float3 dg = world + _CloudWorldOffset;
+                            float deckN = SmoothNoise2(dg.xz / 5200.0 + float2(0.37, 0.58), SALT_DECK_A).x * 0.65 + SmoothNoise2(dg.xz / 1900.0 + float2(0.81, 0.12), SALT_DECK_B).x * 0.35;
+                            deckMul = 1.0 + 1.4 * (deckN - 0.5) * deckSheet; // applied after the haze blend below: a deck is mostly airlight at 5-30 km and the modulation of its own light vanished in it
+                        }
+                        light = CloudShoulder(light, 0.62, 0.40);
                         // Integrate actual density along this ray. A camera-wide multiplier
                         // made the same edge eight times more opaque after entering it.
                         // Dense cloud within a few hundred metres closes in: the far-tuned
@@ -1491,8 +1721,8 @@ Shader "Boscali/FlightCloud"
                         // opacity-weighted distance jumped where that distance jumps (grazing
                         // rays crossing from the near map to the far map drew a step above
                         // the horizon under overcast).
-                        float sampleAir = AirTransmittance(t, ro.y, ro.y + ray.y * t);
-                        colour += contribution * lerp(_CloudFogColor, light, sampleAir);
+                        float sampleAir = pow(AirTransmittance(t, ro.y, ro.y + ray.y * t), 0.7); // round 6: lit tops and shaded bases keep more of their contrast at 20-30 km
+                        colour += contribution * deckMul * lerp(ShadedFog(light), light, sampleAir);
                         weightedDistance += contribution * t;
                         
                         transmittance *= absorb;
@@ -1513,50 +1743,54 @@ Shader "Boscali/FlightCloud"
             colour = rainyCloud.rgb;
             opacity = rainyCloud.a;
 
-            // Horizon deck: past the march the weather continues as one analytic plane at
-            // the deck's altitude, with the far map's own outer coverage, so the clouds
-            // run on to the horizon instead of ending in a ring.
+            // Horizon deck (spec 7.3): one plane at the tape's deck altitude; cover and depth per hit from the tape, and the deck supplies exactly the part of
+            // its chord the march did not reach (wDeck): 0 while the whole chord is inside 220 km, 1 once it starts beyond it.
             float horizonT = (_HorizonDeck - ro.y) / ray.y;
             // Sky pixels carry no occluder: let the deck run past the horizon limit there
             // (aerial perspective whitens it), so its far edge never draws a line.
             float deckLimit = sceneDistance >= CLOUD_HORIZON_LIMIT ? 2e7 : sceneDistance;
-            if (_HorizonCover > 0.01 && horizonT > CLOUD_FAR_LIMIT * 0.75 && horizonT < deckLimit)
+            if (ray.y != 0.0 && horizonT > 0.0 && horizonT < deckLimit)
             {
                 float2 hp = ro.xz + ray.xz * horizonT;
-                float hn = tex3Dlod(_CloudNoiseTex, float4(hp / 52000.0 + 0.31, 0.47, 3.0)).r * 0.62 +
-                    tex3Dlod(_CloudNoiseTex, float4(float2(hp.y, -hp.x) / 141000.0 + 0.77, 0.19, 3.5)).r * 0.38;
-                float hBody = saturate(0.5 + (hn - 0.52) * 3.16);
-                float hCover = CoverMask(hBody, _HorizonCover * (1.0 - _SplitB.x * (1.0 - SplitShare(hp))));
-                float hPath = min(_HorizonDepth / max(0.015, abs(ray.y)), 150000.0);
-                // A distance fade collapses to less than a pixel when the camera flies near
-                // the deck's altitude (hundreds of km per milliradian), drawing a hard step.
-                // Dissolve by view angle instead: always about four texels into the haze.
-                float angleFade = smoothstep(0.0, _CloudPixelAngle * 4.0, abs(ray.y));
-                float hOpacity = hCover * (1.0 - exp(-hPath * 0.00003)) *
-                    smoothstep(CLOUD_FAR_LIMIT * 0.75, CLOUD_FAR_LIMIT, horizonT) *
-                    angleFade;
-                bool below = ro.y < _HorizonDeck;
-                float3 hLight = below
-                    ? _CloudAmbientColor * 0.5 + _CloudGroundColor * 0.25 + _CloudSunColor * 0.06
-                    : _CloudAmbientColor * 0.8 + _CloudSunColor * (phase * 0.35 + 0.2);
-                float hAir = AirTransmittance(horizonT, ro.y, _HorizonDeck);
-                float3 hColour = lerp(_CloudFogColor * hOpacity, hLight * hOpacity, hAir);
-                float oldOpacity = opacity;
-                float oldDistance = cloudDistance;
-                if (horizonT < cloudDistance)
+                float4 hRow = TapeDeckRow(TapeS(hp));            // row 2: Streets, HorizonCover (z), HorizonDepth (w)
+                float hd = max(1.0, hRow.w);
+                float wDeck = DeckWeight(ro.y, ray.y, hd);
+                if (hRow.z > 0.01 && wDeck > 0.001)
                 {
-                    colour = hColour + (1.0 - hOpacity) * colour;
-                    opacity = hOpacity + (1.0 - hOpacity) * opacity;
-                    if (opacity > 0.002)
-                        cloudDistance = (hOpacity * horizonT + (1.0 - hOpacity) * oldOpacity * oldDistance) / opacity;
-                }
-                else
-                {
-                    float contribution = (1.0 - opacity) * hOpacity;
-                    colour += (1.0 - opacity) * hColour;
-                    opacity += contribution;
-                    if (opacity > 0.002)
-                        cloudDistance = (oldOpacity * oldDistance + contribution * horizonT) / opacity;
+                    float2 nhp = NoiseXZ(hp, NOISE_HORIZON);
+                    float hn = tex3Dlod(_CloudNoiseTex, float4(nhp / 52000.0 + 0.31, 0.47, 3.0)).r * 0.62 +
+                        tex3Dlod(_CloudNoiseTex, float4(float2(nhp.y, -nhp.x) / 141000.0 + 0.77, 0.19, 3.5)).r * 0.38;
+                    float hBody = saturate(0.5 + (hn - 0.52) * 3.16);
+                    float hCover = CoverMask(hBody, saturate(hRow.z));
+                    float hPath = min(hd / max(0.0002, abs(ray.y)), 150000.0); // the slab's real chord; a 0.015 floor capped a grazing ray's optical depth at 0.45 (300 m)
+                    // A distance fade collapses to less than a pixel when the camera flies near
+                    // the deck's altitude (hundreds of km per milliradian), drawing a hard step.
+                    // Dissolve by view angle instead: always about four texels into the haze.
+                    float angleFade = smoothstep(0.0, _CloudPixelAngle * 4.0, abs(ray.y));
+                    float hOpacity = hCover * (1.0 - exp(-hPath * 0.00003)) * wDeck * angleFade;
+                    bool below = ro.y < _HorizonDeck;
+                    float3 hLight = below
+                        ? _CloudAmbientColor * 0.5 + _CloudGroundColor * 0.25 + _CloudSunColor * 0.06
+                        : _CloudAmbientColor * 0.8 + _CloudSunColor * (phase * 0.35 + 0.2);
+                    float hAir = AirTransmittance(horizonT, ro.y, _HorizonDeck);
+                    float3 hColour = lerp(_CloudFogColor * hOpacity, hLight * hOpacity, hAir);
+                    float oldOpacity = opacity;
+                    float oldDistance = cloudDistance;
+                    if (horizonT < cloudDistance)
+                    {
+                        colour = hColour + (1.0 - hOpacity) * colour;
+                        opacity = hOpacity + (1.0 - hOpacity) * opacity;
+                        if (opacity > 0.002)
+                            cloudDistance = (hOpacity * horizonT + (1.0 - hOpacity) * oldOpacity * oldDistance) / opacity;
+                    }
+                    else
+                    {
+                        float contribution = (1.0 - opacity) * hOpacity;
+                        colour += (1.0 - opacity) * hColour;
+                        opacity += contribution;
+                        if (opacity > 0.002)
+                            cloudDistance = (oldOpacity * oldDistance + contribution * horizonT) / opacity;
+                    }
                 }
             }
 
@@ -1641,24 +1875,6 @@ Shader "Boscali/FlightCloud"
             ENDHLSL
         }
 
-        Pass
-        {
-            Name "WeatherMapBlend"
-            Tags { "LightMode"="BoscaliWeatherMapBlend" }
-            Blend Off
-            Cull Off
-            HLSLPROGRAM
-            #pragma vertex vert_img
-            #pragma fragment blendMap
-            sampler2D _MainTex, _CloudMapTarget;
-            float _WeatherMapBlend;
-            float4 blendMap(v2f_img i) : SV_Target
-            {
-                return lerp(tex2D(_MainTex, i.uv), tex2D(_CloudMapTarget, i.uv), _WeatherMapBlend);
-            }
-            ENDHLSL
-        }
-
         // Reduced resolution: a full-screen triangle into the cloud target (colour) and a
         // depth target (the scene eye depth each texel marched against), which the composite
         // uses to upsample without halos along terrain edges. Drawn by the render pass only.
@@ -1721,6 +1937,51 @@ Shader "Boscali/FlightCloud"
                     min(eyeDepth, cloudDistance / viewLength) : eyeDepth;
                 o.depth = float4(upsampleDepth, cloudDistance, 0.0, 0.0);
                 return o;
+            }
+            ENDHLSL
+        }
+
+        // Reflection probe: the same march drawn straight onto a probe face and blended over the
+        // sky and terrain it already holds, so water and airframes reflect the clouds. One sample
+        // per texel, no temporal update. Drawn by CloudProbePass only, when the probe refreshes.
+        Pass
+        {
+            Name "CloudProbe"
+            Tags { "LightMode"="BoscaliCloudProbe" }
+            Blend One OneMinusSrcAlpha
+            ZWrite Off
+            ZTest Always
+            Cull Off
+            HLSLPROGRAM
+            #pragma vertex probeVert
+            #pragma fragment probeFrag
+            #pragma target 3.5
+
+            struct probeV2f { float4 pos : SV_POSITION; };
+
+            probeV2f probeVert(uint id : SV_VertexID)
+            {
+                probeV2f o;
+                float2 p = float2((id << 1) & 2, id & 2);
+                o.pos = float4(p * 2.0 - 1.0, 0.5, 1.0);
+                return o;
+            }
+
+            float4 probeFrag(probeV2f i) : SV_Target
+            {
+                float2 uv = i.pos.xy * _CloudLowResSize.zw;
+                float3 bottom = lerp(_CloudFrustum[0].xyz, _CloudFrustum[1].xyz, uv.x);
+                float3 top = lerp(_CloudFrustum[2].xyz, _CloudFrustum[3].xyz, uv.x);
+                float3 view = lerp(bottom, top, uv.y);
+                float viewLength = length(view);
+                float rawDepth = tex2Dlod(_CameraDepthTexture, float4(uv, 0, 0)).r;
+                #if defined(UNITY_REVERSED_Z)
+                float sceneDistance = rawDepth <= 0.000001 ? CLOUD_HORIZON_LIMIT : LinearEyeDepth(rawDepth) * viewLength;
+                #else
+                float sceneDistance = rawDepth >= 0.999999 ? CLOUD_HORIZON_LIMIT : LinearEyeDepth(rawDepth) * viewLength;
+                #endif
+                float cloudDistance;
+                return MarchSky(_CloudCameraPos, view / viewLength, sceneDistance, i.pos.xy, cloudDistance);
             }
             ENDHLSL
         }

@@ -24,6 +24,7 @@ namespace BoscaliSummer.Tests.Features.Command
             StrPanelTests.Run();
             StrRevampTests.Run();
             GridLabelsTests.Run();
+            MapFixTests.Run();
         }
 
         private static void TestReadoutFormatting()
@@ -149,7 +150,7 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(grid.FriendlySectorCount > 0, "Allied sectors exist");
             TestAssert.That(grid.HostileSectorCount > 0, "Hostile sectors exist");
             TestAssert.That(grid.TotalNodesCount == 2, "2 strategic nodes registered");
-            TestAssert.That(grid.FriendlySectorCount + grid.HostileSectorCount + grid.ContestedSectorCount == grid.TotalSectors,
+            TestAssert.That(grid.FriendlySectorCount + grid.HostileSectorCount + grid.ContestedSectorCount + grid.NeutralSectorCount == grid.TotalSectors,
                 "Opposing strategic influence divides the theater without gaps");
 
             // 5. Test 66% Force Superiority Rule & Contested Clashes
@@ -189,7 +190,7 @@ namespace BoscaliSummer.Tests.Features.Command
             grid.EvaluateSectors();
             TestAssert.That(grid.FriendlySectorCount > 0, "Allied territory forms from synthesized depot node");
             TestAssert.That(grid.HostileSectorCount > 0, "Hostile territory forms from synthesized depot node");
-            TestAssert.That(grid.FriendlySectorCount + grid.HostileSectorCount + grid.ContestedSectorCount == grid.TotalSectors,
+            TestAssert.That(grid.FriendlySectorCount + grid.HostileSectorCount + grid.ContestedSectorCount + grid.NeutralSectorCount == grid.TotalSectors,
                 "Strategic influence covers the theater without airbases");
 
             // 9. Test Ground Force Seeding Fallback (zero nodes registered at all)
@@ -199,6 +200,23 @@ namespace BoscaliSummer.Tests.Features.Command
             grid.EvaluateSectors();
             TestAssert.That(grid.FriendlySectorCount > 0, "Fallback ground forces seed friendly wavefront");
             TestAssert.That(grid.HostileSectorCount > 0, "Fallback ground forces seed hostile wavefront");
+
+            // 10. The tested contested rule (ControlFieldCore): contact makes a battle; strategic influence and a one-sided push do not.
+            grid.ResetAll();
+            grid.AddAirbasePresence(-15000f, 0f, false, 32000f);
+            grid.AddAirbasePresence(15000f, 0f, true, 32000f);
+            grid.EvaluateSectors();
+            TestAssert.That(grid.ContestedSectorCount == 0, "two opposing airbases and no troops contest nothing");
+            grid.AddTroopPresence(5000f, 0f, 2.5f, false);
+            grid.EvaluateSectors();
+            TestAssert.That(grid.ContestedSectorCount == 0, "one vehicle across the bisector with nobody opposing it contests nothing");
+            grid.ResetAll();
+            grid.AddTroopPresence(0f, 0f, 2.0f, false);
+            grid.AddTroopPresence(0f, 0f, 2.0f, true);
+            grid.EvaluateSectors();
+            TestAssert.That(grid.ContestedSectorCount >= 1, "both sides in one cell at ratio 0.5 is a battle");
+            grid.ResetAll();
+            TestAssert.That(float.IsNaN(grid.TerritoryControlRatio), "an emptied board stays unknown, not 50/50");
         }
     }
 }

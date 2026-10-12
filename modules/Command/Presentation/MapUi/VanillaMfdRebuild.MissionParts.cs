@@ -40,7 +40,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             private const float Pad = 12f, ClockW = 104f, PctW = 64f;
             private readonly AvFrame frame;
-            private readonly TMP_Text keyIcon, key, clock, name, meta, objIcon, objWord, objPct, objTitle, fixKey, fixValue, brief;
+            private readonly TMP_Text keyIcon, key, clock, name, meta, objIcon, objWord, objPct, objTitle, fixKey, fixValue, situation, brief;
             private readonly Image ruleTop, ruleBottom;
             private readonly AvGaugeGraphic bar;
             private bool hasBrief = true, hasObjective, hasFix;
@@ -52,7 +52,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(8f)); AvLay.Fill(frame.rectTransform);
                 frame.Bracket = 8f;
                 keyIcon = AvIcons.Make(Rect, AvIcon.Flag, AvGridTokens.IconHead, Color.white);
-                key = AvText.Make(Rect, "Key", AvTextRole.Micro, "MISSION", TextAlignmentOptions.MidlineLeft);
+                key = AvText.Make(Rect, "Key", AvTextRole.Micro, "OPERATION ORDER", TextAlignmentOptions.MidlineLeft);
                 clock = AvText.Make(Rect, "Clock", AvTextRole.DataStrong, "—", TextAlignmentOptions.MidlineRight);
                 name = AvText.Make(Rect, "Name", AvTextRole.Title, "LOADING MISSION", TextAlignmentOptions.TopLeft, true);
                 meta = AvText.Make(Rect, "Meta", AvTextRole.DataSmall, "", TextAlignmentOptions.TopLeft, true);
@@ -65,6 +65,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 fixKey = AvText.Make(Rect, "FixKey", AvTextRole.Micro, "NEAREST FIX", TextAlignmentOptions.MidlineLeft);
                 fixValue = AvText.Make(Rect, "FixValue", AvTextRole.DataStrong, "", TextAlignmentOptions.MidlineRight);
                 ruleBottom = AvLay.Solid(Rect, "RuleBottom", Color.clear);
+                situation = AvText.Make(Rect, "Situation", AvTextRole.Micro, "SITUATION", TextAlignmentOptions.MidlineLeft);
                 brief = AvText.Make(Rect, "Brief", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
                 Restyle();
             }
@@ -72,7 +73,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             public void SetMission(string missionName, string modeLine, string clockText, string briefText, bool hasBriefText)
             {
                 name.text = missionName ?? "";
-                meta.text = modeLine ?? "";
+                key.text = string.IsNullOrEmpty(modeLine) ? "OPERATION ORDER" : "OPERATION ORDER  \u00b7  " + modeLine;
+                meta.text = "";
                 clock.text = clockText ?? "—";
                 brief.text = briefText ?? "";
                 brief.fontStyle = hasBriefText ? FontStyles.Normal : FontStyles.Italic;
@@ -153,6 +155,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     y += 2f;
                     if (place) AvLay.Place(ruleBottom.rectTransform, Pad, y, iw, 1f);
                     y += 9f;
+                    if (place) AvLay.Place(situation, Pad, y, iw, 14f);
+                    y += 16f;
                     if (place) AvLay.Place(brief, Pad, y, iw, bh);
                     y += bh;
                 }
@@ -171,6 +175,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 fixKey.gameObject.SetActive(hasFix);
                 fixValue.gameObject.SetActive(hasFix);
                 ruleBottom.gameObject.SetActive(brief.text.Length > 0);
+                situation.gameObject.SetActive(brief.text.Length > 0);
                 Lay(s.W, true);
             }
 
@@ -181,7 +186,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
                 frame.SetVerticesDirty();
                 Color keyColor = StyleColor("metric-key", AvTheme.RailInfo);
-                keyIcon.color = keyColor; key.color = keyColor; fixKey.color = keyColor;
+                keyIcon.color = keyColor; key.color = keyColor; fixKey.color = keyColor; situation.color = keyColor;
                 clock.color = StyleColor("readout", AvTheme.TextPrimary);
                 name.color = StyleColor("title", AvTheme.TextPrimary);
                 meta.color = StyleColor("row-sub", AvTheme.Dim);
@@ -217,7 +222,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(8f)); AvLay.Fill(frame.rectTransform);
                 frame.Bracket = 8f;
                 value = AvText.Make(Rect, "Value", AvTextRole.Display, "0/0", TextAlignmentOptions.MidlineLeft);
-                caption = AvText.Make(Rect, "Caption", AvTextRole.Micro, "DONE", TextAlignmentOptions.MidlineLeft);
+                caption = AvText.Make(Rect, "Caption", AvTextRole.Micro, "TASKS DONE", TextAlignmentOptions.MidlineLeft);
                 sideKey = AvText.Make(Rect, "SideKey", AvTextRole.Micro, "NEAREST FIX", TextAlignmentOptions.MidlineRight);
                 sideValue = AvText.Make(Rect, "SideValue", AvTextRole.DataStrong, "—", TextAlignmentOptions.MidlineRight);
                 segments = MakeBar(Rect, "Segments", AvGaugeShape.Segments);
@@ -260,6 +265,80 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 segments.Track = AvStyleHost.FuiFill("gauge-track", AvTheme.Hairline);
                 segments.FillColor = segments.FillEnd = StateFill(state);
                 segments.SetVerticesDirty();
+            }
+        }
+
+        /// <summary>
+        /// Done against issued for each kind of task, one tile per kind, packed three to a line. The kinds are the
+        /// objective-type words of <see cref="MfdMissionLabels"/>; a kind with no task issued has no tile.
+        /// </summary>
+        private sealed class TaskTypeTally : AvPart
+        {
+            private const int Columns = 3;
+            private const float Gap = 5f;
+            private static readonly string[] Words =
+                { "DESTROY", "CAPTURE", "REACH", "HOLD", "SURVEIL", "SORTIE", "AIR LOSS", "LINKED", "BRIEF", "OBJECTIVE" };
+            private readonly AvGauge[] tiles = new AvGauge[Words.Length];
+            private readonly int[] done = new int[Words.Length], issued = new int[Words.Length];
+            private int shown;
+
+            public TaskTypeTally(RectTransform parent)
+            {
+                Rect = AvLay.Child(parent, "TaskTypeTally");
+                for (int i = 0; i < tiles.Length; i++)
+                {
+                    tiles[i] = new AvGauge(Rect, Words[i]);
+                    tiles[i].Rect.gameObject.SetActive(false);
+                }
+            }
+
+            public void Tally<T>(System.Collections.Generic.List<T> items, System.Func<T, string> kind, System.Func<T, bool> isDone)
+            {
+                System.Array.Clear(done, 0, done.Length);
+                System.Array.Clear(issued, 0, issued.Length);
+                for (int i = 0; i < items.Count; i++)
+                {
+                    int at = System.Array.IndexOf(Words, kind(items[i]));
+                    if (at < 0) at = Words.Length - 1;
+                    issued[at]++;
+                    if (isDone(items[i])) done[at]++;
+                }
+                shown = 0;
+                for (int i = 0; i < tiles.Length; i++)
+                {
+                    bool has = issued[i] > 0;
+                    tiles[i].Rect.gameObject.SetActive(has);
+                    if (!has) continue;
+                    shown++;
+                    tiles[i].Set(done[i] / (float)issued[i], done[i] + "/" + issued[i],
+                        done[i] == issued[i] ? AvState.Ready : AvState.Info);
+                    tiles[i].Help = Words[i] + " tasks: " + done[i] + " complete of " + issued[i] + " issued.";
+                }
+                Changed();
+            }
+
+            public override float Measure(float width)
+            {
+                int lines = (shown + Columns - 1) / Columns;
+                return lines == 0 ? 0f : lines * 48f + (lines - 1) * Gap;
+            }
+
+            public override void Place(AvSlot s)
+            {
+                base.Place(s);
+                float w = (s.W - (Columns - 1) * Gap) / Columns;
+                int at = 0;
+                for (int i = 0; i < tiles.Length; i++)
+                {
+                    if (issued[i] == 0) continue;
+                    tiles[i].Place(new AvSlot((at % Columns) * (w + Gap), (at / Columns) * (48f + Gap), w, 48f));
+                    at++;
+                }
+            }
+
+            public override void Restyle()
+            {
+                foreach (AvGauge tile in tiles) tile.Restyle();
             }
         }
 

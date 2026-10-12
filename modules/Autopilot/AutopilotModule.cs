@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.Autopilot
             RadialMenuAccess.Initialise();
             context.Logger.LogInfo("Autopilot land=local ownship native-autopilot takeover; radial=" +
                 (RadialMenuAccess.Available ? "native wheel entry" : "native wheel unavailable") +
-                "; interaction menu key=" + settings.AceRadialKey.Value);
+                "; interaction menu on " + (settings.ReplaceNativeWheel.Value ? "the Radial Menu binding" : "no binding") + ", extra key=" + settings.AceRadialKey.Value);
         }
     }
 }

@@ -1,40 +1,93 @@
 {
-  "captured_date": "2026-10-11",
+  "captured_date": "2026-10-12",
   "timezone": "Europe/Warsaw",
   "tool": "nomodkit sim run",
-  "mission": "Free Flight",
+  "mission": "Free Flight (flight run), Escalation (command run)",
   "mode": "scripted single-player development capture",
   "game_version_target": "0.34.2",
   "mod_version": "0.2.0",
-  "mod_dll_sha256": "8c17fbb2ba02e89cfa615d700641f29ab371bc6f7028f84c31e9f5705cf05380",
-  "capture_result": "status ok; four captures visually inspected",
-  "staging": "Player seated in FS-20 Vortex; scripted level flight; exterior and cockpit views; STR and OPS console opening. Existing development settings and other installed plugins retained.",
+  "mod_dll_sha256": "4f8b22aceec07a9fedb1f6ce67706bb0e1a799a3aeec08d6ee0597df7f9745c7",
+  "capture_result": "status ok on every run; eleven captures visually inspected",
+  "staging": "Flight run: player seated in an FS-20 Vortex with two scripted FS-20s ahead, scripted level flight, library skies pinned through the weather console path, exterior and cockpit views, the weather console and an inert line-up of the VANGUARD models. Command run: player orbiting at 9000 m over a running Escalation war with the STR and OPS consoles opened. Existing development settings and other installed plugins retained.",
   "image_processing": "None. Original PNG captures copied without editing.",
-  "limitations": "Single short capture run only. Not a performance benchmark, gameplay acceptance test or multiplayer test. Terrain and aircraft include native Nuclear Option assets. Development settings and Free Flight support allocation are not representative of balanced gameplay.",
+  "limitations": "Short capture runs only. Not a performance benchmark, gameplay acceptance test or multiplayer test. The flight run was made twice; coast.png comes from the first pass (same scenario before the wingmen were moved ahead of the camera), every other flight image from the second. The DLL is the development build installed that day, not the 0.2.0 release package. Terrain and aircraft include native Nuclear Option assets. Development settings and support allocation are not representative of balanced gameplay.",
   "files": [
     {
-      "file": "cockpit.png",
-      "sha256": "e3930b9ca534aa265bacea4bef635af3bc090337b2f83c8ae88e4ce60dcf104d",
+      "file": "formation.png",
+      "sha256": "fa02498837faf7d4df3c6712bc05c7bf2cd223e892d8b90bd17c1dda27e25ee6",
       "width": 1920,
-      "height": 1080
+      "height": 1080,
+      "run": "flight"
+    },
+    {
+      "file": "cockpit.png",
+      "sha256": "87794e0168b92b15e0aab99cd6cc2a24298ed521b7f56a55e6acb1eafc630d4f",
+      "width": 1920,
+      "height": 1080,
+      "run": "flight"
+    },
+    {
+      "file": "cockpit-storm.png",
+      "sha256": "f5b73560c7c4fd36de566864edf41828c1321e0338051200959fd1ba23f711d5",
+      "width": 1920,
+      "height": 1080,
+      "run": "flight"
+    },
+    {
+      "file": "coast.png",
+      "sha256": "1fb1526ee45ed13edf0871f979855116493c39103d96d857e2787139e7c6651d",
+      "width": 1920,
+      "height": 1080,
+      "run": "flight"
+    },
+    {
+      "file": "weather-console.png",
+      "sha256": "0b8e8e2b9b854a2cc943304cbb8bbbf5b982f862490b456684b5c3514514258f",
+      "width": 1920,
+      "height": 1080,
+      "run": "flight"
+    },
+    {
+      "file": "vanguard.png",
+      "sha256": "65a04464a4bcf688e29a3afd468b5ff4f03444f07c00162c5871b65171b3c5f9",
+      "width": 1920,
+      "height": 1080,
+      "run": "flight"
     },
     {
       "file": "command.png",
-      "sha256": "7d909c1644a32df4b071fcb5f2f05856babda407f00a7fdfccf5f929c1114add",
+      "sha256": "421257d532eaca7c7d65501b92ed864443ff73295f7d5279818c0bbbca04d9ef",
       "width": 1920,
-      "height": 1080
+      "height": 1080,
+      "run": "command"
+    },
+    {
+      "file": "sitrep.png",
+      "sha256": "d6f2c67e96100a7c77540ebe4e89fd28670c9803fe77c097d697080cfc77eb65",
+      "width": 1920,
+      "height": 1080,
+      "run": "command"
     },
     {
       "file": "support.png",
-      "sha256": "7b431ba5da105678ef4d95502ed3ffe30d5801504508f8d75dff5437ab1abbe0",
+      "sha256": "b0aea8c1360b01485c70f3ec8ef360260d7afef20dd4930267d8bcde32891ad8",
       "width": 1920,
-      "height": 1080
+      "height": 1080,
+      "run": "command"
     },
     {
-      "file": "vortex-flight.png",
-      "sha256": "68df3b780bd9183a48bb285adbcda8eebdeafea81d79464290074be66ab3be20",
+      "file": "support-space.png",
+      "sha256": "26b176ed7f1059d27c40de5d7c9ec8bdb143d6bb6fd51b63e53412d9c49c8574",
       "width": 1920,
-      "height": 1080
+      "height": 1080,
+      "run": "command"
+    },
+    {
+      "file": "support-cyber.png",
+      "sha256": "024f2a070c63d53bc0fb31e10e28dfa922510d00b74de58ca11ebbdd1e88b3f8",
+      "width": 1920,
+      "height": 1080,
+      "run": "command"
     }
   ]
 }

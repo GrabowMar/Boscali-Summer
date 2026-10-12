@@ -22,7 +22,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
     {
         private const int MaxMarkers = OperationBoard.MaximumCards;
         private const float ContentSeconds = 0.5f;
-        private const float ServerRefreshSeconds = 2f;
         private const float EdgeMarginX = 170f;
         private const float EdgeMarginY = 130f;
 
@@ -32,7 +31,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         private ContractMarker[] markers;
         private readonly ContractCard[] cards = new ContractCard[MaxMarkers];
         private int cardCount;
-        private float nextContent, nextServer, textSize;
+        private float nextContent, textSize;
         private bool styleWarned;
 
         internal void Configure(OperationsManager owner)
@@ -46,7 +45,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             VanillaHudStyle.Invalidate();
             if (root != null) Destroy(root);
             root = null; canvasRect = null; markers = null; cardCount = 0;
-            nextContent = 0f; nextServer = 0f; textSize = 0f;
+            nextContent = 0f; textSize = 0f;
             for (int i = 0; i < cards.Length; i++) cards[i] = default;
         }
 
@@ -65,11 +64,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 Pull();
             }
             if (cardCount == 0) { Hide(); return; }
-            if (Time.unscaledTime >= nextServer)
-            {
-                nextServer = Time.unscaledTime + ServerRefreshSeconds;
-                manager.Refresh();
-            }
 
             Camera camera = SceneSingleton<CameraStateManager>.i != null
                 ? SceneSingleton<CameraStateManager>.i.mainCamera

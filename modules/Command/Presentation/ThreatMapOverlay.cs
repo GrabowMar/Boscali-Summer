@@ -100,6 +100,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private Vector2 theater;
         private float nextRefresh;
         private bool initialized;
+        private int lastBakeHash;
+        private bool bakeHashValid;
 
         /// <summary>True once the map is on screen and the overlay can be drawn at all.</summary>
         public bool Available => initialized && dynamicMap != null;
@@ -416,6 +418,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 hideFlags = HideFlags.HideAndDontSave,
             };
 
+            bakeHashValid = false;
             field = new float[width * height];
             pixels = new Color32[width * height];
             Array.Clear(pixels, 0, pixels.Length);
@@ -431,6 +434,26 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
             int width = fieldTexture.width;
             int height = fieldTexture.height;
+
+            // Skip the splat, recolour and upload when no emitter moved a cell or changed radius by 100 m.
+            float alpha = settings != null ? settings.OverlayOpacity.Value : 0.35f;
+            float cellX = theater.x / (width - 1);
+            float cellY = theater.y / (height - 1);
+            int hash = unchecked((width * 397 ^ height) * 397 ^ alpha.GetHashCode());
+            hash = unchecked(hash * 397 ^ TrackedEmitters);
+            hash = unchecked(hash * 397 ^ theater.GetHashCode());
+            for (int i = 0; i < TrackedEmitters; i++)
+            {
+                Sample s = samples[i];
+                hash = unchecked(hash * 31 + Mathf.RoundToInt(s.Position.x / cellX));
+                hash = unchecked(hash * 31 + Mathf.RoundToInt(s.Position.z / cellY));
+                hash = unchecked(hash * 31 + Mathf.RoundToInt(s.RadarRadius / 100f));
+                hash = unchecked(hash * 31 + Mathf.RoundToInt(s.OpticalRadius / 100f));
+            }
+            if (bakeHashValid && hash == lastBakeHash) return;
+            bakeHashValid = true;
+            lastBakeHash = hash;
+
             Array.Clear(field, 0, field.Length);
 
             for (int i = 0; i < TrackedEmitters; i++)

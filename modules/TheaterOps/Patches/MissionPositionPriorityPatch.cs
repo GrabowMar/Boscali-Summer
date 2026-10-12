@@ -3,7 +3,6 @@ using System.Reflection;
 using BoscaliSummer.Modules.TheaterOps.Domain;
 using BoscaliSummer.Modules.TheaterOps.Runtime;
 using HarmonyLib;
-using NOAvionics;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.TheaterOps.Patches
@@ -15,9 +14,9 @@ namespace BoscaliSummer.Modules.TheaterOps.Patches
     ///
     /// <list type="bullet">
     /// <item>advance — a ground vehicle enrolled in a battle group (nothing else is
-    /// steered);</item>
-    /// <item>delivery — the sort key FactionHQ uses to pick which depot or airbase delivers
-    /// reinforcements.</item>
+    /// steered; the hook only reads what GroundFrontService decided);</item>
+    /// <item>delivery — the sort key FactionHQ uses to pick which depot delivers
+    /// reinforcements (depots only: an airbase keeps vanilla's order).</item>
     /// </list>
     ///
     /// <para>Both targets take an <c>out</c> parameter, so the overloads are resolved by
@@ -34,25 +33,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Patches
             return service != null && hq != null && hq.faction != null &&
                    service.TryGetDirective(hq.faction.factionName, out directive);
         }
-
-        private static int wingFrame = -1;
-        private static int[] wingIds = Array.Empty<int>();
-
-        /// <summary>
-        /// Whether an aircraft flies in the local player's Wing Command wing. Reads the
-        /// published wing board once per frame and stops there when it is empty, so an AI
-        /// destination query never pays WingLink's reflective fallback.
-        /// </summary>
-        internal static bool IsWingMember(Aircraft aircraft)
-        {
-            int frame = Time.frameCount;
-            if (wingFrame != frame)
-            {
-                wingFrame = frame;
-                wingIds = PresenceBoard.GetInts(PresenceBoard.WingMemberIds);
-            }
-            return wingIds.Length > 0 && PresenceBoard.Contains(wingIds, aircraft.persistentID.GetHashCode());
-        }
     }
 
     [HarmonyPatch]
@@ -65,24 +45,19 @@ namespace BoscaliSummer.Modules.TheaterOps.Patches
         [HarmonyPostfix]
         private static void Postfix(Unit unit, ref GlobalPosition destination, ref bool __result)
         {
-            // Each enrolled group follows its own sector assignment. Unenrolled units and
-            // every aircraft keep vanilla's own answer.
+            // Each enrolled group follows its own assignment. Unenrolled units and every aircraft keep vanilla's own answer.
+            GroundProbe.AdvanceRan++;
             if (!(unit is GroundVehicle vehicle)) return;
-            if (GroundFrontService.Active?.HasRtsCommander() == true) return;
-            GroundFrontService front = GroundFrontService.Active;
-            if (front == null || !front.IsEnrolled(vehicle)) return;
-            if (front.TryGetDestination(vehicle, out GlobalPosition frontDestination))
+            GroundProbe.AdvanceGround++;
+            if (!(GroundFrontService.Active is { } front)) return;
+            // The poll runs inside vanilla's per-vehicle navigation: a fault in the read must hand the answer back to vanilla, not unwind into it.
+            try
             {
+                if (!front.TryGetDestination(vehicle, out GlobalPosition frontDestination)) return;
                 destination = frontDestination;
                 __result = true;
-                return;
             }
-            // A living-front assignment with no safe ground destination yields to vanilla.
-            if (LivingFrontService.Active?.Authoritative == true) return;
-            if (!MissionPositionPriorityQuery.TryGetDirective(TheaterPriorityService.Active,
-                unit.NetworkHQ, out PriorityDirective directive)) return;
-            destination = new GlobalPosition(directive.X, directive.Y, directive.Z);
-            __result = true;
+            catch (Exception error) { GroundFrontService.LogFault("destination query", error); }
         }
 
         private static MethodBase ResolveOrThrow(Type[] parameters)
@@ -106,13 +81,19 @@ namespace BoscaliSummer.Modules.TheaterOps.Patches
         private static void Postfix(
             FactionHQ factionHQ, Transform transform, ref float distance, ref bool __result)
         {
+            GroundProbe.DeliveryRan++;
             TheaterPriorityService service = TheaterPriorityService.Active;
             if (transform == null ||
                 !MissionPositionPriorityQuery.TryGetDirective(service, factionHQ, out PriorityDirective directive))
                 return;
+            // airbasesSorted decides which field launches the faction's AI jets: funnelling every sortie through the airbase nearest the effort would
+            // punish a pilot who ignores the staff. Only the depot order (where a bought wave leaves) follows the effort.
+            if (transform.GetComponent<VehicleDepot>() == null) { GroundProbe.AirbaseSkips++; return; }
 
             distance = FastMath.Distance(
                 new GlobalPosition(directive.X, directive.Y, directive.Z), transform.GlobalPosition());
+            GroundProbe.DepotRewrites++;
+            GroundProbe.DeliveryReplaced++;
             __result = true;
         }
 

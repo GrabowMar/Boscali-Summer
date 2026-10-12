@@ -12,10 +12,10 @@ namespace BoscaliSummer.Modules.Weather.Domain
     internal static class RainSkyMath
     {
         /// <summary>Storm fog density relative to vanilla's; about half the visibility.</summary>
-        public const float MaxFogMultiplier = 1.9f;
+        public const float MaxFogMultiplier = 2.6f;
 
         /// <summary>Floor for ambient dimming so a storm never turns the cockpit black.</summary>
-        public const float MinAmbientMultiplier = 0.78f;
+        public const float MinAmbientMultiplier = 0.62f;
 
         public static float FogMultiplier(float rain) => 1f + (MaxFogMultiplier - 1f) * Scalar.Clamp01(rain);
 
@@ -28,8 +28,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
             float k = Scalar.Clamp01(rain);
             if (k <= 0f) return;
             float lum = 0.2126f * r + 0.7152f * g + 0.0722f * b;
-            float grey = 0.35f * k;
-            float dark = 1f - 0.14f * k;
+            float grey = 0.55f * k;
+            float dark = 1f - 0.28f * k;
             r = Scalar.Clamp01((r + (lum - r) * grey) * dark);
             g = Scalar.Clamp01((g + (lum - g) * grey) * dark);
             b = Scalar.Clamp01((b + (lum - b) * grey) * dark);
@@ -37,11 +37,11 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         public static float AmbientMultiplier(float rain) => 1f - (1f - MinAmbientMultiplier) * Scalar.Clamp01(rain);
 
-        /// <summary>Ambient kept under a cloud deck: a full overcast overhead takes 28 %.</summary>
-        public static float ShadeAmbient(float shade) => 1f - 0.28f * Scalar.Clamp01(shade);
+        /// <summary>Ambient kept under a cloud deck: a full overcast overhead takes 55 % (start value for the capped native conditions, tuned on the bench; spec 8.1).</summary>
+        public static float ShadeAmbient(float shade) => 1f - 0.55f * Scalar.Clamp01(shade);
 
-        /// <summary>Extra low haze under a cloud deck: up to 35 % thicker.</summary>
-        public static float ShadeFog(float shade) => 1f + 0.35f * Scalar.Clamp01(shade);
+        /// <summary>Extra low haze under a cloud deck: up to twice as thick.</summary>
+        public static float ShadeFog(float shade) => 1f + 1.0f * Scalar.Clamp01(shade);
 
         /// <summary>
         /// True when a value read back equals the one we last wrote (float re-read noise

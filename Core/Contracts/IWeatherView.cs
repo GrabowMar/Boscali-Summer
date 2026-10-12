@@ -1,8 +1,8 @@
 namespace BoscaliSummer.Core.Contracts
 {
     /// <summary>
-    /// What a sky-dependent sensor needs from the weather at one point: total cloud cover (0 clear, 1 overcast),
-    /// the local deck bounds in metres, rain intensity 0..1 and whether it is night. A value, not a handle.
+    /// What a sky-dependent sensor needs from the weather at one point: the opacity-weighted sky cover of all three levels (0 clear, 1 overcast),
+    /// the bounds in metres of the deck a pilot is under (the lowest opaque layer, else the lowest layer with cover), rain intensity 0..1 and whether it is night. A value, not a handle.
     /// </summary>
     internal readonly struct WeatherViewSample
     {

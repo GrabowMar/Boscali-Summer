@@ -55,7 +55,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
     /// <summary>
     /// One sky: the low-cloud genus, two thin layers and the CPU-only weather columns, all floats so a keyframe blend
-    /// is a plain lerp (spec 4.1). <see cref="SkyColumns"/> flattens it to the 60-float row the baked tape stores and
+    /// is a plain lerp (spec 4.1). <see cref="SkyColumns"/> flattens it to the 57-float row the baked tape stores and
     /// the shader reads. A sky has exactly one low genus, one base and one deck depth.
     /// </summary>
     internal struct SkyParams
@@ -75,30 +75,22 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public float Convective, Severity, BaseVariation, StratRain, RainBase;
         public float WindFactor, Turbulence, Haze, Qnh, Temperature, OpacityMid, OpacityHigh;
 
-        // INTERIM(slice 3/4): the legacy cloud machinery (dry cumulus clusters, frontal shield, sky split) still runs
-        // on these until the lattice and the front markers replace it.
-        public float Cumulus, Frontal, Split;
-
         public SkyLayer Layer(int index) => index == 0 ? Mid : High;
 
         /// <summary>Lerp of every column. A layer that is absent on one side takes the other side's base, thickness, period rung, aspect and
         /// ripple wavelength first, so a layer fading in never sweeps through altitudes or scales; aspect and ripple wavelength are held at
-        /// the nearer side unless <paramref name="holdScales"/> is false.</summary>
-        public static SkyParams Lerp(in SkyParams a, in SkyParams b, float t, bool holdScales = true)
+        /// the nearer side.</summary>
+        public static SkyParams Lerp(in SkyParams a, in SkyParams b, float t)
         {
             SkyParams x = a, y = b;
             Inherit(ref x.Mid, in b.Mid); Inherit(ref y.Mid, in a.Mid);
             Inherit(ref x.High, in b.High); Inherit(ref y.High, in a.High);
             SkyParams result = Blend(x, y, t);
-            if (holdScales)
-            {
-                // Aspect and RippleWavelength divide the noise coordinate, so lerping them would slide the pattern through scales across a
-                // ramp (spec 6: noise is never sampled at a scale that varies in space or time). Hold them at the nearer keyframe's value;
-                // the texel lerp of the baked tape softens the step over one texel (732 m). INTERIM(slice 4): the legacy class fade
-                // (StateTable.At) passes holdScales = false and keeps today's smooth change of the high layer's streak length.
-                Hold(ref result.Mid, in x.Mid, in y.Mid, t);
-                Hold(ref result.High, in x.High, in y.High, t);
-            }
+            // Aspect and RippleWavelength divide the noise coordinate, so lerping them would slide the pattern through scales across a
+            // ramp (spec 6: noise is never sampled at a scale that varies in space or time). Hold them at the nearer keyframe's value;
+            // the texel lerp of the baked tape softens the step over one texel (732 m).
+            Hold(ref result.Mid, in x.Mid, in y.Mid, t);
+            Hold(ref result.High, in x.High, in y.High, t);
             return result;
         }
 
@@ -108,7 +100,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             layer.RippleWavelength = t < 0.5f ? from.RippleWavelength : to.RippleWavelength;
         }
 
-        /// <summary>Plain lerp of all 60 columns (CumulusLevel included) with no layer inheritance and no hold: what the tape texel lerp does on the CPU and the GPU.</summary>
+        /// <summary>Plain lerp of all 57 columns (CumulusLevel included) with no layer inheritance and no hold: what the tape texel lerp does on the CPU and the GPU.</summary>
         public static SkyParams Blend(in SkyParams a, in SkyParams b, float t)
         {
             float[] x = lerpA ?? (lerpA = new float[SkyColumns.Count]);
@@ -135,7 +127,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
     /// <summary>The column table of <see cref="SkyParams"/>: array order, names and where each column sits in the shader texture.</summary>
     internal static class SkyColumns
     {
-        public const int Count = 60;
+        public const int Count = 57;
 
         public static readonly string[] Names =
         {
@@ -148,7 +140,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             "HighVeil", "HighCurl", "HighAspect", "HighRippleWavelength", "CloudBase", "SheetCover",
             "CumulusCover", "CapacityCover", "CumulusLevel", "Convective", "Severity", "BaseVariation",
             "StratRain", "RainBase", "WindFactor", "Turbulence", "Haze", "Qnh",
-            "Temperature", "OpacityMid", "OpacityHigh", "Cumulus", "Frontal", "Split",
+            "Temperature", "OpacityMid", "OpacityHigh",
         };
 
         /// <summary>Shader texture row of each column, or -1 for CPU-only columns (spec 7.2: rows 0-2 low genus, 3-6 mid, 7-10 high).</summary>
@@ -158,7 +150,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5,
             6, 6, 7, 7, 7, 7, 8, 8, 8, 8, 9, 9,
             9, 9, 10, 10, -1, -1, -1, -1, -1, -1, -1, -1,
-            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+            -1, -1, -1, -1, -1, -1, -1, -1, -1,
         };
 
         public static readonly sbyte[] GpuChannel =
@@ -167,7 +159,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3,
             0, 1, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1,
             2, 3, 0, 1, -1, -1, -1, -1, -1, -1, -1, -1,
-            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+            -1, -1, -1, -1, -1, -1, -1, -1, -1,
         };
 
         public static void Write(in SkyParams s, float[] to, int at)
@@ -229,9 +221,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
             to[at + 54] = s.Temperature;
             to[at + 55] = s.OpacityMid;
             to[at + 56] = s.OpacityHigh;
-            to[at + 57] = s.Cumulus;
-            to[at + 58] = s.Frontal;
-            to[at + 59] = s.Split;
         }
 
         public static SkyParams Read(float[] from, int at)
@@ -294,9 +283,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
             s.Temperature = from[at + 54];
             s.OpacityMid = from[at + 55];
             s.OpacityHigh = from[at + 56];
-            s.Cumulus = from[at + 57];
-            s.Frontal = from[at + 58];
-            s.Split = from[at + 59];
             return s;
         }
 

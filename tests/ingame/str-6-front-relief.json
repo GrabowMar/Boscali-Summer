@@ -1,0 +1,520 @@
+{
+  "name": "str-6-front-relief",
+  "description": "STR slice U4 live proof on the relief map, mission Terminal Control: the Station Board panel plumbing of U2 and U3 plus the map overlay of U4: the overlay draws a tag per proposal and front (overlay.tags), a raycast at a tag and at the first friendly airbase icon hits the right thing (Probe, ProbeAt), a click on a tag selects it and opens the card, and the card's primary button picks the proposal through the hub (Press map.card.primary) and the effort goes live; the overlay's cost stays inside the budget. Sorties (pres-sortie), redirect, wing, stale and held-wave blocks wait for the sorties, wing and wave work of S7 and S10. Absorbs str-6-front-plumbing-relief. The pick lock and picker name (lockSeconds 60..121, pickedByLocal) belong to the engine slice S4 and are asserted there.",
+  "mission": "Terminal Control",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 390,
+  "environment": {
+    "config": {
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "faction": "Boscali",
+      "near": [
+        50000,
+        15000
+      ],
+      "altitude": 9000,
+      "speed": 200,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "player",
+      "program": [
+        {
+          "orbit": {
+            "bank": 30,
+            "seconds": 540
+          }
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Open",
+      "args": {
+        "page": "board"
+      },
+      "store": "o0"
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "args": {},
+      "store": "a0"
+    },
+    {
+      "op": "wait",
+      "seconds": 60
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "args": {},
+      "store": "a1"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.ProbeAt",
+      "args": {
+        "kind": "airbase",
+        "n": 1
+      },
+      "store": "pa"
+    },
+    {
+      "op": "capture",
+      "name": "str-overlay-proposals",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Press",
+      "args": {
+        "id": "tab.sitrep"
+      },
+      "store": "t1"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "args": {},
+      "store": "a1s"
+    },
+    {
+      "op": "capture",
+      "name": "str-sitrep",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Press",
+      "args": {
+        "id": "tab.info"
+      },
+      "store": "t2"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "args": {},
+      "store": "a1l"
+    },
+    {
+      "op": "capture",
+      "name": "str-info",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Press",
+      "args": {
+        "id": "tab.board"
+      },
+      "store": "t3"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Focus",
+      "args": {
+        "kind": "proposal",
+        "index": 1
+      },
+      "store": "f1"
+    },
+    {
+      "op": "wait",
+      "seconds": 6
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "args": {},
+      "store": "a2"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Probe",
+      "args": {
+        "id": "map.tag.prop.1"
+      },
+      "store": "pr1"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Press",
+      "args": {
+        "id": "posture.bold"
+      },
+      "store": "p1"
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "args": {},
+      "store": "a3"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Select",
+      "args": {
+        "id": "map.tag.prop.1"
+      },
+      "store": "sel1"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "args": {},
+      "store": "a2s"
+    },
+    {
+      "op": "capture",
+      "name": "str-overlay-card",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Press",
+      "args": {
+        "id": "map.card.primary"
+      },
+      "store": "k1"
+    },
+    {
+      "op": "wait",
+      "seconds": 6
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "args": {},
+      "store": "a4"
+    },
+    {
+      "op": "capture",
+      "name": "str-overlay-operation",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Focus",
+      "args": {
+        "kind": "effort"
+      },
+      "store": "f2"
+    },
+    {
+      "op": "wait",
+      "seconds": 6
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "args": {},
+      "store": "a5"
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "args": {},
+      "store": "rc"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_equals",
+      "path": "a0.hub",
+      "value": true
+    },
+    {
+      "check": "result_above",
+      "path": "a0.view.revision",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a1.view.fronts",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "a1.check.frontsDelta",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "a1.view.proposals",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "a1.check.proposalsDelta",
+      "max": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "f1.ok",
+      "value": true
+    },
+    {
+      "check": "result_above",
+      "path": "a2.link.selectedKind",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "a2.map.focusOffset",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "a2.map.focusOffset",
+      "max": 0.08
+    },
+    {
+      "check": "result_above",
+      "path": "p1.pressed",
+      "min": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "a3.view.posture",
+      "value": 2
+    },
+    {
+      "check": "result_above",
+      "path": "k1.pressed",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a4.view.effort.live",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "a4.check.effortDelta",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "a4.view.effort.idChanges",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a5.map.focusOffset",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "a5.map.focusOffset",
+      "max": 0.08
+    },
+    {
+      "check": "result_above",
+      "path": "a0.panel.present",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a0.panel.screenActive",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a1.view.ageSeconds",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "a1.view.ageSeconds",
+      "max": 15
+    },
+    {
+      "check": "result_above",
+      "path": "t1.ok",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a1s.panel.page",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "a1s.panel.page",
+      "max": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a1l.panel.page",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "t3.ok",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "p1.ok",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "k1.ok",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a1.overlay.visible",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a1.overlay.tags.prop",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a1.overlay.tags.front",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "a1.overlay.overflow",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "a0.overlay.present",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "pa.found",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "pa.hit",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "pr1.found",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "pr1.hit",
+      "min": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "sel1.ok",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "a2s.link.selectedKind",
+      "value": 2
+    },
+    {
+      "check": "result_above",
+      "path": "a2s.overlay.card",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a4.overlay.tags.effort",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "rc.overlay.msPerSecond",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "rc.overlay.msPerSecond",
+      "max": 25
+    },
+    {
+      "check": "result_below",
+      "path": "rc.overlay.rebuildsPerSecond",
+      "max": 16
+    },
+    {
+      "check": "result_below",
+      "path": "rc.overlay.overflow",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "a1.overlay.relief",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "a2.map.flat",
+      "max": 0
+    },
+    {
+      "check": "log_match",
+      "pattern": "Exception",
+      "max": 0
+    }
+  ]
+}

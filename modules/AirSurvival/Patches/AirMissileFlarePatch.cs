@@ -30,9 +30,9 @@ namespace BoscaliSummer.Modules.AirSurvival.Patches
         private static void Postfix(Pilot pilot)
         {
             Aircraft aircraft = pilot?.aircraft;
-            if (aircraft == null || !GameAccess.IsServer() || !aircraft.IsServer ||
-                !aircraft.LocalSim || aircraft.disabled || aircraft.Player != null ||
-                pilot.dead || pilot.playerControlled || pilot.currentState is not AIPilotCombatModes)
+            if (aircraft == null || aircraft.Player != null || pilot.dead || pilot.playerControlled ||
+                !aircraft.IsServer || !aircraft.LocalSim || aircraft.disabled ||
+                pilot.currentState is not AIPilotCombatModes || !GameAccess.IsServer())
                 return;
 
             float now = Time.timeSinceLevelLoad;

@@ -86,6 +86,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         public readonly DamageWatch Damage = new DamageWatch();
         /// <summary>Out of weapons in formation, called once (a field: updated in place).</summary>
         public WinchesterLatch Winchester;
+        /// <summary>Stores left (0-1), sampled at 1 Hz with the hull (the fight's winchester check reads it).</summary>
+        public float Ammo = 1f;
         /// <summary>The RADAR doctrine's last toggle (a field: updated in place).</summary>
         public RadarGate RadarGate;
 
@@ -103,6 +105,9 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         public int Number => Seat + 2;
 
         public bool OnGround => Ground != null && !Ground.Done;
+
+        /// <summary>Flying for the wing and free to be sent: not released, alive, off the ground, not recovering or settling.</summary>
+        public bool Sendable => !Released && Alive && !OnGround && Recovery == null && Settle == null;
 
         /// <summary>Flying for the wing: an ejection that has started (the aircraft's flag) ends it at once.</summary>
         public bool Alive => Aircraft != null && !Aircraft.disabled && !Aircraft.HasEjected() && Pilot != null && !Pilot.dead && !Pilot.ejected;

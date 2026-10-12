@@ -31,6 +31,13 @@ namespace BoscaliSummer.Tests.Features.Weather
                 "Alpha must rise monotonically");
             TestAssert.That(RainVisualMath.StreakAlpha(2f) == RainVisualMath.StreakAlpha(1f), "Alpha must clamp high");
 
+            // Cloud air: a sheet rides smoother than cumulus, a storm core is the roughest
+            float sheetAir = RainVisualMath.CloudRoughness(0f, 0f, 0.5f);
+            float cumulusAir = RainVisualMath.CloudRoughness(0.8f, 0f, 0.2f);
+            TestAssert.That(sheetAir > 0f && sheetAir < cumulusAir * 0.5f, "A sheet deck must ride much smoother than cumulus");
+            TestAssert.That(RainVisualMath.CloudRoughness(1f, 1f, 1f) == 1f && RainVisualMath.CloudRoughness(0.8f, 0.6f, 0.9f) > cumulusAir,
+                "A storm core must be the roughest air and stay bounded");
+
             // 3. Gust factor: bounded, deterministic, breathing
             for (float t = 0f; t < 30f; t += 0.5f)
             {

@@ -13,8 +13,8 @@ namespace BoscaliSummer.Tests.Features.Events
             SelectionIsStableAndAvoidsRepeats();
             DurationStaysInsideItsWindow();
             EffectStrengthScalesTheModifier();
-            ResponseOnlyMovesThePriceInThePlayersFavour();
-            DecisionRoutesStayBounded();
+            EffectSummaryReadsAsABadge();
+            TempoIsDistinctFromPrice();
         }
 
         private static void CatalogIsWellFormed()
@@ -171,67 +171,15 @@ namespace BoscaliSummer.Tests.Features.Events
                 "negative strength is clamped off");
         }
 
-        private static void ResponseOnlyMovesThePriceInThePlayersFavour()
+        private static void EffectSummaryReadsAsABadge()
         {
-            TestAssert.That(EventSelector.ResponseKind(1.25f) == EventResponseKind.Contain,
-                "a penalty invites contain");
-            TestAssert.That(EventSelector.ResponseKind(0.75f) == EventResponseKind.Leverage,
-                "a discount invites leverage");
-            TestAssert.That(EventSelector.ResponseKind(1f) == EventResponseKind.None,
-                "a neutral event offers no response");
-
-            TestAssert.That(Near(EventSelector.ApplyResponse(1.5f, EventResponseKind.Contain), 1.25f),
-                "contain halves the penalty");
-            TestAssert.That(Near(EventSelector.ApplyResponse(0.6f, EventResponseKind.Leverage), 0.4f),
-                "leverage deepens the discount");
-            TestAssert.That(Near(EventSelector.ApplyResponse(1.5f, EventResponseKind.None), 1.5f),
-                "no response changes nothing");
-
-            TestAssert.That(EventSelector.ResponseCost(1f) == 0, "a neutral event costs nothing");
-            int light = EventSelector.ResponseCost(1.1f);
-            int heavy = EventSelector.ResponseCost(1.5f);
-            TestAssert.That(light >= 200 && heavy > light, "cost grows with severity");
-            TestAssert.That(heavy % 50 == 0, "cost is rounded to a readable figure");
-
             TestAssert.That(EventSelector.EffectSummary(1.25f) == "+25% SUPPORT COST", "surcharge badge");
             TestAssert.That(EventSelector.EffectSummary(0.6f) == "-40% SUPPORT COST", "discount badge");
             TestAssert.That(EventSelector.EffectSummary(1f) == "NO EFFECT", "neutral badge");
-
-            for (int i = 0; i < EventCatalog.Count; i++)
-            {
-                EventDefinition entry = EventCatalog.At(i);
-                float effective = EventSelector.EffectiveSupportMultiplier(entry.SupportCostMultiplier, 1f);
-                EventResponseKind kind = EventSelector.ResponseKind(effective);
-                if (kind == EventResponseKind.None) continue;
-                TestAssert.That(EventSelector.ResponseCost(effective) > 0, "a real modifier has a price");
-                TestAssert.That(EventSelector.ApplyResponse(effective, kind) < effective,
-                    "a response only ever lowers the multiplier in the player's favour");
-            }
         }
 
-        private static void DecisionRoutesStayBounded()
+        private static void TempoIsDistinctFromPrice()
         {
-            TestAssert.That(EventSelector.TreasuryCost(1f) == 0,
-                "a cost-neutral event cannot spend faction funds on a price response");
-            TestAssert.That(EventSelector.TreasuryCost(1.35f) > 20 &&
-                EventSelector.TreasuryCost(1.5f) > EventSelector.TreasuryCost(1.35f),
-                "treasury price rises with event severity");
-            TestAssert.That(EventSelector.ApplyResponse(
-                EventSelector.ApplyResponse(0.6f, EventResponseKind.Treasury),
-                EventResponseKind.Leverage) >= 0.3f,
-                "a personal response stacked after a faction discount cannot make support free");
-            foreach (float multiplier in new[] { 0.6f, 0.85f, 1.15f, 1.5f, 2f })
-            {
-                float baseline = EventSelector.ApplyResponse(multiplier,
-                    EventSelector.ResponseKind(multiplier));
-                foreach (EventResponseKind kind in new[]
-                    { EventResponseKind.Treasury, EventResponseKind.Contract, EventResponseKind.Perk })
-                {
-                    float answer = EventSelector.ApplyResponse(multiplier, kind);
-                    TestAssert.That(answer >= 0.3f && answer < baseline,
-                        "alternate response improves the price without making support free");
-                }
-            }
             bool neutralCostWithTempo = false;
             foreach (EventDefinition entry in EventCatalog.All)
                 neutralCostWithTempo |= entry.SupportCostMultiplier == 1f &&

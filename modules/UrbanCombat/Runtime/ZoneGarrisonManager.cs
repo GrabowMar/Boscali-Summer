@@ -111,6 +111,20 @@ namespace BoscaliSummer.Garrisons
             if (marking != null) marking.SetShellDamage(frac);
         }
 
+        /// <summary>Test seam for StrongpointAutomation: any shell that currently holds a live nest, and that nest.</summary>
+        internal static MapBuilding AnyStrongpointShell(out Building nest)
+        {
+            nest = null;
+            if (Instance == null) return null;
+            foreach (ShellState state in Instance.shellStates.Values)
+                if (state.Map != null && state.Defense != null && !state.Defense.disabled)
+                {
+                    nest = state.Defense;
+                    return state.Map;
+                }
+            return null;
+        }
+
         /// <summary>
         /// Cheap candidacy probe so the damage patch checks siege strongpoint status before
         /// doing the armour maths: siegeless scenes and unoccupied shells never count.
@@ -971,7 +985,14 @@ namespace BoscaliSummer.Garrisons
             GameObject shell, Airbase airbase, Vector3 center, float radius,
             HashSet<int> seen, List<GameObject> result)
         {
-            if (shell == null || !shell.activeInHierarchy || GarrisonOccupancy.IsOccupied(shell) ||
+            if (shell == null) return;
+            // Cheap far-away rejection first: the exact test below uses the shell's bounds centre, which sits
+            // within a few tens of metres of its origin, so 500 m of margin never drops a shell that passes it.
+            Vector3 origin = shell.transform.position - center;
+            origin.y = 0f;
+            float reach = radius + 500f;
+            if (origin.sqrMagnitude > reach * reach) return;
+            if (!shell.activeInHierarchy || GarrisonOccupancy.IsOccupied(shell) ||
                 !shell.scene.IsValid() || shell.scene != airbase.gameObject.scene) return;
             Building networkBuilding = shell.GetComponentInParent<Building>();
             if (networkBuilding != null && (networkBuilding.disabled || networkBuilding.NetworkHQ != null)) return;

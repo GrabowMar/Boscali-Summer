@@ -54,6 +54,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
     {
         public static float ParkedSeconds = 2f, ClaimAhead = 80f, NodeClearRadius = 15f, FollowGap = 40f, QueueReach = 400f;
         public static float ObstacleCorridor = 15f, ObstacleGap = 30f, ObstacleLookahead = 150f, PassMargin = 2f, ForeignHalfSpan = 8f;
+        public static float VehicleHalfWidth = 3f, VehicleGap = 8f;
         /// <summary>Behind a member: at least its own length plus this, centre to centre (day-1 sim: a 40 m gap put an SFB-81's nose
         /// into the tail ahead).</summary>
         public static float FollowMargin = 10f;
@@ -449,7 +450,14 @@ namespace BoscaliSummer.Modules.Wing.Domain
         {
             if (relocationWanted)
             {
-                if ((s.Pos - relocateFrom).Horizontal.Length > RelocateCancelMetres) relocationWanted = false;
+                // Live 2026-10-12 (highway strip): #2's one relocation was asked for while #3 held the goal, never happened, and
+                // was cancelled when #2 drove on — then it wedged at 85 % throttle for six minutes with the watchdog spent.
+                // A relocation that never happened does not count as the one.
+                if ((s.Pos - relocateFrom).Horizontal.Length > RelocateCancelMetres)
+                {
+                    relocationWanted = false;
+                    Watchdog.Rearm(s.Pos);
+                }
                 else if (Relocate(s, p.SpanM, time, events, slot)) return new ControlOutput { Brake = 1f };
             }
             float along = Along(s.Pos);
@@ -1158,6 +1166,13 @@ namespace BoscaliSummer.Modules.Wing.Domain
             {
                 float at = OnPathAt(o, along, s, foreign, out _);
                 if (at - gap < stop) stop = at - gap;
+            }
+            // A truck is narrow and parks beside taxiways: only one the wing would sweep counts, and the stop is close.
+            float truck = 0.5f * p.SpanM + VehicleHalfWidth, truckGap = 0.5f * p.LengthM + VehicleGap;
+            foreach (Vec3 o in traffic.Vehicles)
+            {
+                float at = OnPathAt(o, along, s, truck, out _);
+                if (at - truckGap < stop) stop = at - truckGap;
             }
             foreach (KeyValuePair<int, Vec3> m in traffic.Positions)
             {

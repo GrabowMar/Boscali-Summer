@@ -78,7 +78,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         internal void Clear()
         {
-            legend.text = "WAITING FOR MISSION STATISTICS";
+            legend.text = "STANDING BY FOR MISSION STATISTICS";
             scale.text = "—";
             for (int i = 0; i < 4; i++)
             {

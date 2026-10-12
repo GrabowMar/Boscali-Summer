@@ -19,7 +19,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
     {
         private const int MaxTags = OperationBoard.MaximumCards;
         private const float ContentSeconds = 0.5f;
-        private const float ServerRefreshSeconds = 2f;
         private const float MinimumRingPixels = 24f;
         private const float RingAlpha = 0.35f;
 
@@ -34,7 +33,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         private readonly Vector2[] positions = new Vector2[MaxTags];
         private readonly bool[] shown = new bool[MaxTags];
         private int cardCount;
-        private float nextContent, nextServer;
+        private float nextContent;
 
         internal void Configure(OperationsManager owner)
         {
@@ -47,7 +46,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             if (root != null) Destroy(root);
             root = null; rootRect = null; tags = null; ringSprite = null; style = default;
             cardCount = 0; warned = false;
-            nextContent = 0f; nextServer = 0f;
+            nextContent = 0f;
             for (int i = 0; i < cards.Length; i++)
             {
                 cards[i] = default;
@@ -78,12 +77,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 nextContent = Time.unscaledTime + ContentSeconds;
                 Pull();
             }
-            if (Time.unscaledTime >= nextServer)
-            {
-                nextServer = Time.unscaledTime + ServerRefreshSeconds;
-                manager.Refresh();
-            }
-
             if (!manager.IsFresh)
             {
                 cardCount = 0;
@@ -164,7 +157,11 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 tag.Apply(card, style, caution ? colours.Warning : style.LabelColour);
 
                 Color colour = caution ? colours.Warning : colours.AllClear;
-                float diameter = 2f * card.Radius * factor;
+                // The relief pins the native sheet at zoom 1, so a flat diameter would keep one pixel size at every relief zoom
+                // and orbit: ask the projection how far the radius spans on screen; a flat map answers false and keeps the flat maths.
+                float diameter = projected && projection.TryScale(card.X, card.Z, card.Radius, out float units)
+                    ? 2f * units
+                    : 2f * card.Radius * factor;
                 tag.SetRing(card.Radius > 0f && ringSprite != null && diameter * zoom >= MinimumRingPixels,
                     diameter, new Color(colour.r, colour.g, colour.b, RingAlpha));
             }

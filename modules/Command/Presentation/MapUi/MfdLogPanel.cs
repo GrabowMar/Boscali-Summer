@@ -27,6 +27,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private sealed class Entry
         {
             public string Text;
+            public string Stamp;
             public float CapturedAt;
             public float ExpiresAt;
             public bool KillFeed;
@@ -551,9 +552,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
             }
 
+            MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
             history.Insert(0, new Entry
             {
                 Text = text,
+                // The mission clock when the report came in; a dash when no mission clock exists to read.
+                Stamp = mission != null ? AvNum.Clock(mission.MissionTime) : "--:--",
                 CapturedAt = now,
                 ExpiresAt = now + RetentionSeconds,
                 KillFeed = killFeed,
@@ -590,7 +594,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (count++ > 0) text.Append('\n');
                 string line = MfdLogTone.Plain(entry.Text);
                 MfdLogTone.Kind kind = MfdLogTone.Classify(line);
-                text.Append("<color=#").Append(MfdLogTone.Hex(kind)).Append(">")
+                text.Append("<color=#").Append(MfdLogTone.StampHex).Append(">").Append(entry.Stamp).Append("</color>  ")
+                    .Append("<color=#").Append(MfdLogTone.Hex(kind)).Append(">")
                     .Append(MfdLogTone.Label(kind)).Append("  //</color>  ")
                     .Append(MfdLogTone.Paint(line));
             }

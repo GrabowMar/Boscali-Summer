@@ -10,7 +10,7 @@ using UnityEngine;
 namespace BoscaliSummer.Garrisons
 {
     /// <summary>
-    /// Fires HALO paratroopers (Airborne.nobp mount) and Ibis fast-rope from the troops weapon trigger. Only the
+    /// Fires HALO paratroopers (Blueprinter mount) and Ibis fast-rope from the troops weapon trigger. Only the
     /// server decides where a stick ends up; every peer with a screen just watches it drop.
     /// </summary>
     internal sealed class AirAssaultController : MonoBehaviour, ISceneService, IAirAssaultObservation
@@ -41,7 +41,7 @@ namespace BoscaliSummer.Garrisons
         private static Airbase[] cachedAirbases;
 
         /// <summary>
-        /// The HALO paratrooper mount from Airborne.nobp (modules/UrbanCombat/Assets/Editor/AirborneBuilder.cs).
+        /// The HALO paratrooper mount from the mod's Blueprinter bundle (modules/UrbanCombat/Assets/Editor/AirborneBuilder.cs).
         /// Blueprinter registers it and adds it to the Tarantula and Aryx Chimera cargo bays; without
         /// Blueprinter it does not exist.
         /// </summary>

@@ -26,6 +26,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             bool exploit = CyberRules.Exploit(def.Node);
             CyberEffect e = CyberPackages.Package(def, job.CallId, job.Aim.X, job.Aim.Z, f.Key, exploit, SupportManager.MissionNow());
             if (!f.Desk.Effects.Add(e)) return false;
+            BlocksLive = true;
             Plugin.Logger?.LogInfo("[Support.Cyber] " + def.Label + " fired by " + job.Pilot + " at " + job.Aim.X.ToString("0") + "," + job.Aim.Z.ToString("0") + ".");
             return true;
         }
@@ -43,6 +44,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             int id = -(1 + (perkEffectSerial++ & 0x3FFFFFFF)); // negative: never collides with a TASKED call id
             CyberEffect e = CyberPackages.Package(def, id, (float)at.x, (float)at.z, f.Key, exploit, SupportManager.MissionNow(), quality);
             if (!f.Desk.Effects.Add(e)) return false;
+            BlocksLive = true;
             Plugin.Logger?.LogInfo("[Support.Cyber] " + def.Label + " perk at " + ((float)at.x).ToString("0") + "," + ((float)at.z).ToString("0") + " for " + ((int)(e.Until - SupportManager.MissionNow())) + " s.");
             return true;
         }

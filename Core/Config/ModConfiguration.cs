@@ -6,6 +6,7 @@ using BoscaliSummer.Modules.DynamicOperations.Configuration;
 using BoscaliSummer.Modules.Events.Configuration;
 using BoscaliSummer.Modules.FireAndDestruction.Configuration;
 using BoscaliSummer.Modules.HighCommand.Configuration;
+using BoscaliSummer.Modules.Hud.Configuration;
 using BoscaliSummer.Modules.Immersion.Configuration;
 using BoscaliSummer.Modules.Intel.Configuration;
 using BoscaliSummer.Modules.Progression.Configuration;
@@ -48,10 +49,12 @@ namespace BoscaliSummer.Core.Config
         public QoLSettings QoL { get; }
         public AutopilotSettings Autopilot { get; }
         public ImmersionSettings Immersion { get; }
+        public HudSettings TacBoard { get; }
         public DiagnosticSettings Diagnostics { get; }
         public WeatherSettings Weather { get; }
         public PerformanceSettings Performance { get; }
         public CinematographySettings Cinematography { get; }
+        public BoscaliSummer.Modules.Effects.Configuration.EffectsSettings Effects { get; }
 
         public ModConfiguration(ConfigFile config)
         {
@@ -77,10 +80,12 @@ namespace BoscaliSummer.Core.Config
                 QoL = new QoLSettings(config);
                 Autopilot = new AutopilotSettings(config);
                 Immersion = new ImmersionSettings(config);
+                TacBoard = new HudSettings(config);
                 Diagnostics = new DiagnosticSettings(config);
                 Weather = new WeatherSettings(config);
                 Performance = new PerformanceSettings(config);
                 Cinematography = new CinematographySettings(config);
+                Effects = new BoscaliSummer.Modules.Effects.Configuration.EffectsSettings(config);
                 LegacyConfigMigration.RemoveEntries(config);
                 // Last, so every module's entries are present to be sorted into the
                 // F1 window's plain and advanced halves.

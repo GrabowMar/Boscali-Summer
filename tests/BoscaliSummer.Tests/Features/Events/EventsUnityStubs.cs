@@ -20,18 +20,51 @@ public class MFDScreen : MonoBehaviour
     public TextMeshProUGUI label; public Image highlight;
 }
 
-public class AircraftInfo { public float maxSpeed, stallSpeed, emptyWeight; }
-public class AircraftDefinition
+// The slice of the game's encyclopedia the field archive reads. Names and types mirror Assembly-CSharp; the
+// production build, which compiles the same sources against the real game, is the proof that they match.
+// `disabled` is private in the game and public here so a fixture can file a definition the shelves must skip.
+public struct RoleIdentity { public float antiSurface, antiAir, antiMissile, antiRadar; }
+public class UnitDefinition
 {
-    public string unitName, code, description;
-    public AircraftInfo aircraftInfo;
+    public RoleIdentity roleIdentity;
+    public string jsonKey, unitName, bogeyName, description, code;
+    public float visibleRange, radarSize;
+    public Sprite mapIcon;
+    public int captureCapacity;
+    public float captureStrength, captureDefense, length, width, height, value, mass, manpower, armorTier, damageTolerance;
     public GameObject unitPrefab;
-    public bool IsAllowed(bool flag) => true;
+    public bool disabled;
+    public bool IsAllowed(bool includeEventContent) => !disabled;
 }
+public class AircraftInfo { public float emptyWeight, maxSpeed, stallSpeed, maneuverability, maxWeight; }
+public class AircraftDefinition : UnitDefinition { public AircraftInfo aircraftInfo; }
+public class VehicleDefinition : UnitDefinition { }
+public enum ShipType { CV, LHA, LFD, DDG, FFG, FFL, LC, PB }
+public class ShipInfo { public float mass, topSpeed; }
+public class ShipDefinition : UnitDefinition { public ShipInfo shipInfo; public ShipType shipType; }
+public class BuildingDefinition : UnitDefinition { }
+public class MissileDefinition : UnitDefinition { public float GetMass() => unitPrefab.GetComponent<Missile>().GetMass(); }
+public struct TargetRequirements { public float maxRange; }
+public class WeaponInfo { public TargetRequirements targetRequirements; public float costPerRound; }
+public class GroundVehicle : MonoBehaviour { public float topSpeed; public float GetTopSpeed() => topSpeed; }
+public class Missile : MonoBehaviour
+{
+    public WeaponInfo info; public float mass, yield, burnTime, deltaV;
+    public WeaponInfo GetWeaponInfo() => info;
+    public float GetYield() => yield;
+    public float GetTotalBurnTime() => burnTime;
+    public float CalcDeltaV() => deltaV;
+    public float GetMass() => mass;
+}
+public class MissileSeeker : MonoBehaviour { public string seekerType; public virtual string GetSeekerType() => seekerType; }
 public class Encyclopedia
 {
     public static Encyclopedia i;
     public List<AircraftDefinition> aircraft = new List<AircraftDefinition>();
+    public List<VehicleDefinition> vehicles = new List<VehicleDefinition>();
+    public List<ShipDefinition> ships = new List<ShipDefinition>();
+    public List<BuildingDefinition> buildings = new List<BuildingDefinition>();
+    public List<MissileDefinition> missiles = new List<MissileDefinition>();
 }
 
 public class MissionManager { public float MissionTime; }
@@ -97,25 +130,6 @@ namespace Rewired
 
 namespace BoscaliSummer.Modules.Events.Runtime
 {
-    internal readonly struct EventDecisionQuote
-    {
-        public string Label { get; }
-        public int Cost { get; }
-        public string Unit { get; }
-        public float EffectiveMultiplier { get; }
-        public bool Available { get; }
-        public string Reason { get; }
-        public bool Shared { get; }
-
-        public EventDecisionQuote(string label, int cost, string unit,
-            float effectiveMultiplier, bool available, string reason, bool shared)
-        {
-            Label = label; Cost = cost; Unit = unit;
-            EffectiveMultiplier = effectiveMultiplier; Available = available;
-            Reason = reason; Shared = shared;
-        }
-    }
-
     /// <summary>The slice of the real manager the panel reads; the harness scripts every value.</summary>
     internal sealed class EventsManager : MonoBehaviour
     {
@@ -126,24 +140,8 @@ namespace BoscaliSummer.Modules.Events.Runtime
         internal TheaterBalance Balance { get; set; } = TheaterBalance.Unknown;
         internal int SupersFired { get; set; }
         internal bool LocalTargeted { get; set; }
-        internal string Signal => "";
         public float SupportCostMultiplier { get; set; } = 1f;
         internal float LocalSupportCooldownMultiplier { get; set; } = 1f;
-        internal float LocalBaseMultiplier { get; set; } = 1f;
-        internal EventResponseKind LocalResponse { get; set; }
-        internal EventResponseKind LocalFactionResponse { get; set; }
-        internal readonly List<EventResponseKind> Requests = new List<EventResponseKind>();
-        internal Func<EventResponseKind, EventDecisionQuote> QuoteFn;
-
-        internal EventDecisionQuote Quote(EventResponseKind kind) => QuoteFn(kind);
-        internal void RequestResponse(EventResponseKind kind) => Requests.Add(kind);
-
-        internal static string ResponseLabel(EventResponseKind kind) =>
-            kind == EventResponseKind.Contain ? "CONTAIN" :
-            kind == EventResponseKind.Leverage ? "LEVERAGE" :
-            kind == EventResponseKind.Treasury ? "TREASURY DIRECTIVE" :
-            kind == EventResponseKind.Contract ? "CONTRACT INTELLIGENCE" :
-            kind == EventResponseKind.Perk ? "PILOT CHANNEL" : "NONE";
     }
 }
 #endif

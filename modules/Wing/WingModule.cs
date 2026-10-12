@@ -79,6 +79,9 @@ namespace BoscaliSummer.Modules.Wing
             context.AddComponent<BridgeState>();
             context.AddService<IWingSquad>(new WingSquadService());
             context.AddService<IWingOrders>(new WingRadialOrders());
+            var sorties = new WingSortieOrders();
+            runtime.Register(sorties);
+            context.AddService<IWingSortieOrders>(sorties);
 
             context.Logger.LogInfo($"Wing {WingLog.FullVersion} loaded.");
             context.Logger.LogInfo(new WingDiagnostic(WingDiagnosticEvent.PluginReady, 0));

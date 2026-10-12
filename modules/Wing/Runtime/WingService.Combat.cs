@@ -813,6 +813,14 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             return false;
         }
 
+        /// <summary>Some sendable member has a loaded station that fits this target, by the game's own analysis.</summary>
+        public bool CanAttackAny(Unit target)
+        {
+            foreach (WingMember m in Members)
+                if (m.Sendable && CanAttack(m, target)) return true;
+            return false;
+        }
+
         public static float TargetAccuracyMetres = 1000f, EnergyChargeMin = 0.6f;
 
         /// <summary>A loaded, non-cargo, non-nuclear station (an energy weapon only when charged), as the game's own choice
@@ -875,7 +883,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     AnchorDistance = area != null ? new Vec3(at.X - area.Center.X, 0f, at.Z - area.Center.Z).Length
                         : anchor.Present ? (anchor.Pos - at).Length : 0f,
                     LeashMetres = leash,
-                    Ammo = AmmoFraction(m.Aircraft), Bingo = bingo,
+                    Ammo = m.Ammo, Bingo = bingo,
                     NoTargetSeconds = m.NoTargetClock = NativeTarget(m) != null ? 0f : m.NoTargetClock + dt,
                 };
                 if (!CombatSupervisor.TakeBack(s, out TransitionReason reason)) continue;

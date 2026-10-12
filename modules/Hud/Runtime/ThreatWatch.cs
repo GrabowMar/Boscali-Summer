@@ -41,7 +41,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             public Unit Unit;
             public string Name;
             public float LockAt, SpikeAt, Since;
-            public bool Active, IsLock;
+            public bool Active, IsLock, Held;
         }
 
         private Aircraft subscribed;
@@ -52,6 +52,9 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         private Unit lockEmitter, spikeEmitter;
         private float lastLock = float.NegativeInfinity, lastSpike = float.NegativeInfinity;
         private float lockSince, spikeSince;
+
+        /// <summary>How long the THREAT page keeps a radar after its newest warning (the pilot's option, set by the board each tick). The LOCK and SPKE lamps keep their own shorter holds.</summary>
+        public float Hold = BoardOptions.Default.ThreatHoldSeconds;
 
         public ThreatPicture Read(Aircraft aircraft, BoardFrame frame)
         {
@@ -141,15 +144,17 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             for (int i = emitterCount - 1; i >= 0; i--)
             {
                 ref EmitterRec e = ref emitters[i];
+                // A radar stays until Hold seconds after its newest warning; once its lock has run out it reads as the search form, and without a fresh warning in that form it is Held.
                 bool locked = now - e.LockAt < HudThreats.LockHold, spiked = now - e.SpikeAt < HudThreats.SpikeHold;
-                if (e.Unit == null || e.Unit.disabled || (!locked && !spiked)) { emitters[i] = emitters[--emitterCount]; emitters[emitterCount] = default; continue; }
+                if (e.Unit == null || e.Unit.disabled || !HudThreats.Retained(now, e.LockAt, e.SpikeAt, Hold)) { emitters[i] = emitters[--emitterCount]; emitters[emitterCount] = default; continue; }
                 if (!e.Active || e.IsLock != locked) { e.Since = now; e.Active = true; e.IsLock = locked; }
+                e.Held = !locked && !spiked;
             }
             for (int i = 0; i < emitterCount && emitterOut < into.Length; i++)
             {
                 EmitterRec e = emitters[i];
                 Vector3 rel = e.Unit.transform.position - own.position;
-                into[emitterOut++] = new ThreatEmitter { Id = e.Unit.GetInstanceID(), Name = e.Name, Lock = e.IsLock, BearingDeg = Bearing(own, rel), RangeM = rel.magnitude, AgeS = now - e.Since };
+                into[emitterOut++] = new ThreatEmitter { Id = e.Unit.GetInstanceID(), Name = e.Name, Lock = e.IsLock, Held = e.Held, BearingDeg = Bearing(own, rel), RangeM = rel.magnitude, AgeS = now - e.Since };
             }
         }
 

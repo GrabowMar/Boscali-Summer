@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
     /// shown targets are fixed and history is a GPU copy of them.</summary>
     internal sealed class CloudLowRes : IDisposable
     {
-        private const int MarchPass = 2;
+        private const int MarchPass = 1;
         private const int ResolvePass = 1;
         private static readonly int ColourId = Shader.PropertyToID("_CloudLowResColour");
         private static readonly int DepthId = Shader.PropertyToID("_CloudLowResDepth");

@@ -61,7 +61,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (!TryDesk(owner, out CyberDesk desk) || !float.IsFinite(seconds) || seconds <= 0f) return false;
             float now = SupportManager.MissionNow();
             int id = 1000000 + (++opsEffectSerial);
-            return desk.Effects.Add(new CyberEffect(EffectKind.SamBlock, EffectSource.Package, id, manager.FactionKeyOf(owner), target.Victim, target.X, target.Z, 3000f, 0u, 1f, now + seconds));
+            bool added = desk.Effects.Add(new CyberEffect(EffectKind.SamBlock, EffectSource.Package, id, manager.FactionKeyOf(owner), target.Victim, target.X, target.Z, 3000f, 0u, 1f, now + seconds));
+            if (added) BlocksLive = true;
+            return added;
         }
 
         private int VictimOf(FactionCyber f, CyberEvent e)

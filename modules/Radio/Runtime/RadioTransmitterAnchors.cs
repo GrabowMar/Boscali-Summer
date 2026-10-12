@@ -61,9 +61,30 @@ namespace BoscaliSummer.Modules.Radio.Runtime
 
         public void Tick(float now, bool force = false)
         {
-            if (!force && now < nextRefresh) return;
+            if (!force && now < nextRefresh)
+            {
+                RefreshListener();
+                return;
+            }
             nextRefresh = now + RefreshSeconds;
             Refresh();
+        }
+
+        // The listener moves with the aircraft; the tower/airbase rebuild above is the expensive part.
+        private void RefreshListener()
+        {
+            try
+            {
+                Aircraft aircraft = GameManager.GetLocalPlayer<Player>(out Player local) && local != null ? local.Aircraft : null;
+                listenerValid = aircraft != null;
+                if (!listenerValid) return;
+                listenerPosition = aircraft.transform.position;
+                listenerHeight = listenerPosition.y;
+            }
+            catch
+            {
+                listenerValid = false;
+            }
         }
 
         public bool TryGet(string stationId, out RadioTower tower)

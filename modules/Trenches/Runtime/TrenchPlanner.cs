@@ -375,65 +375,105 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         public static bool TryGrowBelt(TrenchLine line, ITerritoryIngress territory,
             float[] airfieldX = null, float[] airfieldZ = null, int airfieldCount = 0)
         {
-            if (line == null || territory == null) return false;
+            PlanJob job = BeginGrowBelt(line, territory, airfieldX, airfieldZ, airfieldCount);
+            while (job.Steps.MoveNext()) { }
+            return job.Planned;
+        }
+
+        /// <summary>
+        /// <see cref="TryGrowBelt"/> as a job for <see cref="StepPlan"/>: a belt probes the
+        /// ground at every station down the depth ladder, which cost up to 8 ms in one
+        /// frame. <see cref="PlanJob.Planned"/> is the result. The line only changes in the
+        /// job's last step, and the job shares this class's buffers with window planning.
+        /// </summary>
+        public static PlanJob BeginGrowBelt(TrenchLine line, ITerritoryIngress territory,
+            float[] airfieldX = null, float[] airfieldZ = null, int airfieldCount = 0)
+        {
+            var job = new PlanJob { Line = line };
+            job.Steps = GrowBeltSteps(job, line, territory, airfieldX, airfieldZ, airfieldCount);
+            return job;
+        }
+
+        private sealed class BeltResult
+        {
+            public bool Ok;
+            public Vector3[] Trace;
+        }
+
+        private static IEnumerator<bool> GrowBeltSteps(PlanJob job, TrenchLine line, ITerritoryIngress territory,
+            float[] airfieldX, float[] airfieldZ, int airfieldCount)
+        {
+            if (line == null || territory == null) yield break;
             switch (line.Stage)
             {
                 case TrenchStage.Scrape:
                     line.Stage = TrenchStage.FireTrench;
-                    return true;
+                    job.Planned = true;
+                    yield break;
 
                 case TrenchStage.FireTrench:
                     if (line.Support == null)
                     {
-                        if (!TryBuildBelt(line, territory, out Vector3[] support, airfieldX, airfieldZ, airfieldCount)) return false;
-                        line.Support = support; // null once the stage advances without it
+                        var support = new BeltResult();
+                        IEnumerator<bool> building = BuildBeltSteps(support, line, territory, airfieldX, airfieldZ, airfieldCount);
+                        while (building.MoveNext()) yield return false;
+                        if (!support.Ok) yield break;
+                        line.Support = support.Trace; // null once the stage advances without it
                     }
                     if (line.Links == null) BuildLinks(line);
                     line.SupportAnchors = SampleAnchors(line.Support, AnchorSpacing);
                     line.BeltRefusals = 0;
                     line.Stage = TrenchStage.Support;
-                    return true;
+                    job.Planned = true;
+                    yield break;
 
                 case TrenchStage.Support:
                     if (line.Redoubt == null)
                     {
-                        if (!TryBuildBelt(line, territory, out Vector3[] redoubt, airfieldX, airfieldZ, airfieldCount)) return false;
-                        line.Redoubt = redoubt;
+                        var redoubt = new BeltResult();
+                        IEnumerator<bool> building = BuildBeltSteps(redoubt, line, territory, airfieldX, airfieldZ, airfieldCount);
+                        while (building.MoveNext()) yield return false;
+                        if (!redoubt.Ok) yield break;
+                        line.Redoubt = redoubt.Trace;
                     }
                     line.RedoubtAnchors = SampleAnchors(line.Redoubt, AnchorSpacing);
                     line.BeltRefusals = 0;
                     line.Stage = TrenchStage.Redoubt;
-                    return true;
+                    job.Planned = true;
+                    yield break;
 
                 case TrenchStage.Redoubt:
-                    if (line.Spurs == null && !TryBuildSaps(line, territory, airfieldX, airfieldZ, airfieldCount) && !NoteBeltRefusal(line)) return false;
+                    if (line.Spurs == null && !TryBuildSaps(line, territory, airfieldX, airfieldZ, airfieldCount) && !NoteBeltRefusal(line)) yield break;
                     line.BeltRefusals = 0;
                     line.Stage = TrenchStage.Saps;
-                    return true;
+                    job.Planned = true;
+                    yield break;
 
                 default:
-                    return false; // A finished position adds nothing else.
+                    yield break; // A finished position adds nothing else.
             }
         }
 
         /// <summary>
         /// The belt trace the current stage adds, tried down the depth ladder: doctrine depth
         /// first, then shallower rungs, so a position on a narrow band still gets a rear line
-        /// closer in. True with a null trace once the stage has refused often enough to
+        /// closer in. Ok with a null trace once the stage has refused often enough to
         /// advance without it: the belt never holds the defender budget hostage.
         /// </summary>
-        private static bool TryBuildBelt(TrenchLine line, ITerritoryIngress territory, out Vector3[] trace,
-            float[] airfieldX = null, float[] airfieldZ = null, int airfieldCount = 0)
+        private static IEnumerator<bool> BuildBeltSteps(BeltResult result, TrenchLine line, ITerritoryIngress territory,
+            float[] airfieldX, float[] airfieldZ, int airfieldCount)
         {
-            trace = null;
             for (int rung = 0; rung < TrenchTraceMath.BeltLadderLength; rung++)
             {
                 float depth = TrenchTraceMath.BeltDepth(line.Stage, rung);
                 if (float.IsNaN(depth)) break;
-                if (TryBuildBeltTrace(line, territory, depth - TrenchTraceMath.FireDepth, out trace, airfieldX, airfieldZ, airfieldCount)) return true;
+                IEnumerator<bool> tracing = BuildBeltTraceSteps(result, line, territory, depth - TrenchTraceMath.FireDepth,
+                    airfieldX, airfieldZ, airfieldCount);
+                while (tracing.MoveNext()) yield return false;
+                if (result.Ok) yield break;
             }
-            trace = null;
-            return NoteBeltRefusal(line);
+            result.Trace = null;
+            result.Ok = NoteBeltRefusal(line);
         }
 
         /// <summary>Counts one refusal; true when the stage may now advance without its trace.</summary>
@@ -447,15 +487,17 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         /// A trace parallel to the fire line, further onto the owned side, trimmed to the
         /// ground that accepts it. A rear trace may be shorter than the fire line.
         /// </summary>
-        private static bool TryBuildBeltTrace(TrenchLine line, ITerritoryIngress territory,
-            float extraDepth, out Vector3[] trace, float[] airfieldX = null, float[] airfieldZ = null, int airfieldCount = 0)
+        private static IEnumerator<bool> BuildBeltTraceSteps(BeltResult result, TrenchLine line, ITerritoryIngress territory,
+            float extraDepth, float[] airfieldX, float[] airfieldZ, int airfieldCount)
         {
-            trace = null;
+            result.Ok = false;
+            result.Trace = null;
             int faction = line.OwnerHq != null ? line.OwnerHq.GetInstanceID() : 0;
             int count = line.Curve.Length;
             Array.Clear(valid, 0, count);
             for (int i = 0; i < count; i++)
             {
+                yield return false;
                 Vector3 p = line.Base[i] + line.Inward[i] * (line.Offset[i] + extraDepth);
                 if (!TrenchTerrain.TryGround(p, out Vector3 ground)) continue;
                 if (!Diggable(territory, faction, ground)) continue;
@@ -469,16 +511,17 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             int runs = TrenchTraceMath.SplitRuns(valid, count,
                 Mathf.Max(1, Mathf.CeilToInt(TrenchTraceMath.BeltMinRunLength / Mathf.Max(1f, line.StationSpacing))),
                 runStarts, runLengths, MaximumRuns);
-            if (runs <= 0) return false;
+            if (runs <= 0) yield break;
             int best = 0;
             for (int r = 1; r < runs; r++)
                 if (runLengths[r] > runLengths[best]) best = r;
             int start = (int)runStarts[best];
             int length = (int)runLengths[best];
-            trace = new Vector3[length];
+            var trace = new Vector3[length];
             for (int j = 0; j < length; j++)
                 trace[j] = new Vector3(curveX[start + j], height[start + j, 0], curveZ[start + j]);
-            return true;
+            result.Trace = trace;
+            result.Ok = true;
         }
 
         /// <summary>Short communication trenches joining the fire and support traces.</summary>

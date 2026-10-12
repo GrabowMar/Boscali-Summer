@@ -74,7 +74,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// text.</summary>
     internal sealed class WmcPlanCard : AvPart
     {
-        private const float CardH = 248f, SlotBox = 11f, Ring = 16f;
+        private const float CardH = 248f, EmptyH = 44f, SlotBox = 11f, Ring = 16f;
         private readonly AvFrame card;
         private readonly AvVector vector;
         private readonly TMP_Text caption, scaleWord, leaderWord, empty;
@@ -110,7 +110,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             return t;
         }
 
-        public override float Measure(float w) => CardH;
+        // No shape to draw (a client, or no wing yet): a one-line card, not a 248 px blank.
+        private bool Blank => data == null || data.Shape == null;
+
+        public override float Measure(float w) => Blank ? EmptyH : CardH;
 
         public override void Place(AvSlot s)
         {
@@ -126,8 +129,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         /// <summary>The card shows <paramref name="d"/>; call after the data changes.</summary>
         public void Show(StationData d, string note)
         {
+            bool was = Blank;
             data = d;
-            AvText.Set(empty, d == null || d.Shape == null ? note ?? "" : "");
+            AvText.Set(empty, Blank ? note ?? "" : "");
+            if (was != Blank) Changed();
             Draw();
         }
 
@@ -539,7 +544,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Restyle();
         }
 
-        public override float Measure(float width) => RowH;
+        // The preset words under the track only take their band when a preset is in range.
+        private bool Worded => valid[0] || valid[1] || valid[2] || valid[3];
+
+        public override float Measure(float width) => Worded ? RowH : TrackY + TrackH + 4f;
 
         public override void Place(AvSlot s)
         {
@@ -555,11 +563,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             min = rangeMin;
             max = Math.Max(rangeMax, rangeMin + 1f);
             now = metresNow;
+            bool was = Worded;
             for (int i = 0; i < 4; i++)
             {
                 metres[i] = presetMetres[i];
                 valid[i] = presetMetres[i] >= min - 0.5f && presetMetres[i] <= max + 0.5f;
             }
+            if (was != Worded) Changed();
             Layout();
         }
 

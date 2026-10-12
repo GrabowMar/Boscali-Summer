@@ -24,7 +24,7 @@ namespace BoscaliSummer.Tests.Avionics
             foreach (AvIcon icon in Enum.GetValues<AvIcon>())
             {
                 if (icon == AvIcon.None) continue;
-                string name = AvIconTable.TablerName(icon);
+                string name = AvIconTable.Name(icon);
                 TestAssert.That(icons.GetProperty(name).GetString() == ((int)AvIconTable.Char(icon)).ToString("x4"),
                     "baked glyph matches runtime icon " + name);
             }

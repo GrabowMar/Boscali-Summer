@@ -26,7 +26,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             dockA = slide; dockX = -side * 24f * (1f - slide);
             listA = slide * swap; listX = dockX + side * 14f * (1f - swap);
             MenuRect R = Shift(d.Rect, dockX);
-            Fill(R, A(P.Plate, dockA)); Frame(R, 1f, A(P.Ink, dockA));
+            Fill(R, A(P.Panel, dockA)); Frame(R, 1f, A(P.Ink, dockA));
             PaintHeader(d, cat, R);
             if (d.Empty) PaintEmpty(d, cat);
             else
@@ -139,7 +139,15 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
                 if (blocked) { Fill(r, A(P.Ink.WithAlpha(0.14f), a)); AvStrokes.DashedLine(q, r.L, H - r.T, r.R, H - r.T, 4f, 3f, 1f, A(P.InkDim, a)); AvStrokes.DashedLine(q, r.L, H - r.B, r.R, H - r.B, 4f, 3f, 1f, A(P.InkDim, a)); bracket = P.InkDim; }
                 else if (amber) { Fill(r, A(P.Amber.WithAlpha(0.14f), a)); Frame(r, 1f, A(P.Amber, a)); bracket = P.Amber; num = P.Amber; }
                 else { Fill(r, A(P.InkHi, a)); label = icon = num = right = P.OnInk; state = P.OnInk2; }
-                Brackets(r, A(bracket, a));
+                // HOLD flick: the brackets close on the row once release will run it; every other way of focusing shows them at once
+                if (c.Mode != MenuMode.Hold || !c.FocusFromPointer || c.Armed || blocked || amber) Brackets(r, A(bracket, a));
+            }
+            else if (!back && dr.Index == c.Predicted)
+            {
+                // the row last run here: a chevron in the margin, where the keys land first
+                float my = r.T + r.H / 2f, mh = 5f * T;
+                Line(r.L + 1f, my - mh, r.L + 1f + 4f * T, my, 1.5f * T, A(P.InkHi, a));
+                Line(r.L + 1f + 4f * T, my, r.L + 1f, my + mh, 1.5f * T, A(P.InkHi, a));
             }
             if (!back && row.Kind == MenuKind.Picker && row.Selected) Fill(r.L, r.T, 3f, r.H, A(focus && !amber ? P.OnInk : P.InkHi, a));
 
@@ -156,7 +164,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             if (!iconless)
             {
                 string id = back ? "back" : row.Kind == MenuKind.Danger ? (row.WarnIcon ?? row.Icon) : row.IconNow;
-                Glyph(id, x + 18f * t, r.T + r.H / 2f, 32f * t, 1.9f, A(icon, a));
+                Glyph(id, x + 18f * t, r.T + r.H / 2f, 32f * t, A(icon, a));
                 x += 36f * t + 9f * t;
             }
 
@@ -202,7 +210,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         private void PaintRight(MenuRow row, float rx, MenuRect r, float a, Rgba col, bool focus, bool blocked)
         {
             float t = T, cy = r.T + r.H / 2f, x = rx;
-            if (row.Ping != null) { Glyph(row.Ping, x + 9f * t, cy, 18f * t, 1.8f, A(col, a)); x += 18f * t + 8f * t; }
+            if (row.Ping != null) { Glyph(row.Ping, x + 9f * t, cy, 18f * t, A(col, a)); x += 18f * t + 8f * t; }
             switch (row.Kind)
             {
                 case MenuKind.Toggle when row.ArmedPip:

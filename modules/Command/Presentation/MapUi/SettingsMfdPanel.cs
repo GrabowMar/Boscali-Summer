@@ -148,7 +148,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     ? "Host controls are saved automatically."
                     : "Locked. These are the host's values for this server.";
             }
-            if (page == CPerf || page == CImmersion) return "Changes apply now. No mission or game restart.";
+            if (page == CPerf || page == CImmersion || page == CCockpit) return "Changes apply now. No mission or game restart.";
             return "Saved automatically. Hover a control for help.";
         }
 

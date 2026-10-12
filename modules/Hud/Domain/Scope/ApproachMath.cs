@@ -187,7 +187,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const float LocPerDot = 1.25f, GsPerDot = 0.35f, LocDotPx = 44f, GsDotPx = 18f;
         /// <summary>Cautions: a localizer 2.0 degrees off, a glideslope 0.6 degrees off, a speed 10 km/h off.</summary>
         public const float CautionLocDeg = 2.0f, CautionGsDeg = 0.6f, CautionSpeedMps = 10f / 3.6f;
-        /// <summary>The speed word reads ON SPD inside 5 km/h; the bar spans +-20 km/h.</summary>
+        /// <summary>The speed word reads ON SPD inside 5 km/h; the ruler spans +-20 km/h.</summary>
         public const float OnSpeedMps = 5f / 3.6f, SpeedBarMps = 20f / 3.6f;
         /// <summary>Assumed deceleration for the predicted stopping point (m/s2), the prototype's v^2 / 8.</summary>
         public const float RolloutDecel = 4f;
@@ -209,6 +209,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static bool SpeedCaution(float deltaMps) => Math.Abs(deltaMps) >= CautionSpeedMps;
 
         public static bool OnSpeed(float deltaMps) => Math.Abs(deltaMps) < OnSpeedMps;
+
+        /// <summary>Where the SPD ruler's index mark sits, 0..1 across it: the middle at the speed the approach wants, an end at +-<see cref="SpeedBarMps"/> (20 km/h) off it.</summary>
+        public static float RulerFrac(float deltaMps) => 0.5f + 0.5f * Clamp(deltaMps / SpeedBarMps, -1f, 1f);
 
         /// <summary>0..1 through the current stage: distance to the field for INTERCEPT, distance to the touchdown point for GLIDE (from 6 km; over a pad the height left of a 60 m descent),
         /// touchdown time for FLARE, speed bled off against <paramref name="rolloutRef"/> for ROLLOUT.</summary>

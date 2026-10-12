@@ -9,7 +9,10 @@ namespace BoscaliSummer.Modules.Hud.Domain
     /// </summary>
     internal static class ScopeStr
     {
-        private static readonly string[] Ints = new string[1000];
+        /// <summary>Whole numbers below this are cached (a thousand rounds, a 1200 kJ capacitor, an altitude in feet are all four digits).</summary>
+        public const int IntCache = 10000;
+
+        private static readonly string[] Ints = new string[IntCache];
         private static readonly string[] Pcts = new string[101];
         private static readonly char[] Scratch = new char[128];
 
@@ -20,7 +23,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         public static string SpeedUnitSp(NOAvionics.AvUnits units) => SpeedUnitsSp[units == NOAvionics.AvUnits.Imperial ? 1 : 0];
 
-        /// <summary>"7", cached for 0..999.</summary>
+        /// <summary>"7", cached (made on first use) for 0 to <see cref="IntCache"/> - 1: a value of a thousand or more does not allocate in a steady frame either.</summary>
         public static string Int(int n)
         {
             if ((uint)n >= Ints.Length) return n.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -84,18 +87,64 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return new ReadOnlySpan<char>(Scratch, 0, n);
         }
 
-        /// <summary>"K92 22KM": the name (upper case, cut with an ellipsis so the whole fits <paramref name="maxChars"/>, left out when three characters of it do not fit), a space and the distance in the player's units.</summary>
-        public static ReadOnlySpan<char> Distance(string name, float metres, NOAvionics.AvUnits units, int maxChars)
+        /// <summary>"K92 22KM": the name (upper case, cut with an ellipsis so the whole fits <paramref name="maxChars"/>, left out when three characters of it do not fit), a space and the distance in the player's units. With
+        /// <paramref name="wholeWords"/> the name is cut to the whole words that fit instead (the first word alone cut when it is too long), with no ellipsis.</summary>
+        public static ReadOnlySpan<char> Distance(string name, float metres, NOAvionics.AvUnits units, int maxChars, bool wholeWords = false)
         {
             int dist = NOAvionics.AvUnitTable.DistanceReading(Scratch, 100, metres, units) - 100;   // measured in the tail of the scratch, then moved up
             int room = maxChars - dist - 1, n = 0;
-            string upper = string.IsNullOrEmpty(name) || room < 3 ? "" : name.Trim().ToUpperInvariant();     // no room for a name: the distance alone
-            if (upper.Length > room) { n = Put(0, upper.Substring(0, room - 1)); Scratch[n++] = '…'; }
-            else n = Put(0, upper);
+            if (!string.IsNullOrEmpty(name) && room >= 3 && wholeWords)
+            {
+                // The whole words that fit (ThreatMath.TagName), never an ellipsis: the game's font draws "…" about two and a half cells wide, so "HYPE… 37KM" ran past the call box's 84 units in game
+                // and a cut after a space read "MSV … 19KM".
+                n = ThreatMath.TagName(name, new Span<char>(Scratch, 0, room), room);
+                for (int i = 0; i < n; i++) Scratch[i] = char.ToUpperInvariant(Scratch[i]);
+            }
+            else if (!string.IsNullOrEmpty(name) && room >= 3)      // no room for a name: the distance alone. Trimmed and upper-cased straight into the scratch: this runs every frame on a live page, so it builds no string
+            {
+                int a = 0, b = name.Length;
+                while (a < b && char.IsWhiteSpace(name[a])) a++;
+                while (b > a && char.IsWhiteSpace(name[b - 1])) b--;
+                bool cut = b - a > room;
+                n = cut ? room - 1 : b - a;
+                for (int i = 0; i < n; i++) Scratch[i] = char.ToUpperInvariant(name[a + i]);
+                if (cut) Scratch[n++] = '…';
+            }
             if (n > 0) Scratch[n++] = ' ';
             Array.Copy(Scratch, 100, Scratch, n, dist);
             for (int i = n; i < n + dist; i++) Scratch[i] = char.ToUpperInvariant(Scratch[i]);
             return new ReadOnlySpan<char>(Scratch, 0, n + dist);
+        }
+
+        /// <summary>The base's name on a row of its own: upper case, trimmed, cut with an ellipsis so it fits <paramref name="maxChars"/>; empty with no name or no room.</summary>
+        public static ReadOnlySpan<char> Name(string name, int maxChars)
+        {
+            if (string.IsNullOrEmpty(name) || maxChars < 1) return default;
+            int a = 0, b = name.Length;
+            while (a < b && char.IsWhiteSpace(name[a])) a++;
+            while (b > a && char.IsWhiteSpace(name[b - 1])) b--;
+            int len = Math.Min(Math.Min(b - a, maxChars), Scratch.Length), keep = b - a > len ? len - 1 : len;
+            for (int i = 0; i < keep; i++) Scratch[i] = char.ToUpperInvariant(name[a + i]);
+            if (keep < len) Scratch[keep] = '…';
+            return new ReadOnlySpan<char>(Scratch, 0, len);
+        }
+
+        /// <summary>Blank characters kept between the distance and the margin figure on the SYSTEMS strip's base line.</summary>
+        public const int MarginGap = 1;
+
+        /// <summary>
+        /// How the base line (the name, a space and the distance at the left, a margin figure at the right edge) spends <paramref name="totalChars"/> so the NAME stays whole: the margin gives way first
+        /// and never takes room from the name. 0: the margin of <paramref name="fullChars"/> characters fits with <see cref="MarginGap"/> blank after the distance; 1: its short form of
+        /// <paramref name="shortChars"/> does (0: it has none); 2: the margin is left out. <paramref name="room"/> is what the name, space and distance may take (pass it to <see cref="Distance"/>, which cuts a name
+        /// that cannot fit even then).
+        /// </summary>
+        public static int FitMargin(string name, float metres, NOAvionics.AvUnits units, int totalChars, int fullChars, int shortChars, out int room)
+        {
+            int dist = NOAvionics.AvUnitTable.DistanceReading(Scratch, 100, metres, units) - 100;
+            int whole = (string.IsNullOrEmpty(name) ? 0 : name.Trim().Length + 1) + dist;
+            int form = whole + MarginGap + fullChars <= totalChars ? 0 : shortChars > 0 && whole + MarginGap + shortChars <= totalChars ? 1 : 2;
+            room = form == 2 ? totalChars : totalChars - MarginGap - (form == 0 ? fullChars : shortChars);
+            return form;
         }
 
         private static int Put(int at, string s)
