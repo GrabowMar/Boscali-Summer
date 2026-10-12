@@ -112,6 +112,21 @@ namespace BoscaliSummer.Modules.Command.Domain
                    stale.ToString(CultureInfo.InvariantCulture) + " STALE)";
         }
 
+        /// <summary>Distinct known enemy air-defence sites among the first count rings (two cones at one site are one site); -1 while the picture is not ready, so the board prints a dash, never a zero.</summary>
+        public static int KnownSites(bool ready, AirDefenceRing[] rings, int count)
+        {
+            if (!ready || rings == null) return -1;
+            if (count > rings.Length) count = rings.Length;
+            int sites = 0;
+            for (int i = 0; i < count; i++)
+            {
+                bool counted = false;
+                for (int j = 0; j < i && !counted; j++) counted = rings[j].SiteHash == rings[i].SiteHash;
+                if (!counted) sites++;
+            }
+            return sites;
+        }
+
         /// <summary>
         /// Pressure as a word, for rows whose figure column already carries the number.
         /// Below the noise floor it is not pressure, it is a rounding artefact, and calling

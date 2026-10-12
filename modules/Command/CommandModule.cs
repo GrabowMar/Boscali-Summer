@@ -57,6 +57,7 @@ namespace BoscaliSummer.Modules.Command
             context.AddService<IMapProjection>(new MfdMapProjection());
             ThreatMapOverlay threats = context.AddSceneService<ThreatMapOverlay>(54);
             context.AddService<ThreatMapOverlay>(threats);
+            context.AddSceneService<StrViewHub>(55).Configure(context.Settings.Command);
             StrMfdPanel strategic = context.AddSceneService<StrMfdPanel>(56);
             context.AddSceneService<MapUiManager>(57);
             context.AddSceneService<SettingsMfdPanel>(58)

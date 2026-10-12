@@ -151,6 +151,8 @@
     <Compile Include="..\..\modules\Command\Domain\StrTagPlacer.cs" Link="Features\Command\StrTagPlacer.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrWords.cs" Link="Features\Command\StrWords.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrGate.cs" Link="Features\Command\StrGate.cs" />
+    <Compile Include="..\..\modules\Command\Domain\StrFeedStamp.cs" Link="Features\Command\StrFeedStamp.cs" />
+    <Compile Include="..\..\modules\Command\Domain\StrAnchors.cs" Link="Features\Command\StrAnchors.cs" />
     <Compile Include="..\..\modules\Command\Domain\RebuildGate.cs" Link="Features\Command\RebuildGate.cs" />
     <Compile Include="..\..\modules\Command\Domain\MapClickRules.cs" Link="Features\Command\MapClickRules.cs" />
     <Compile Include="..\..\modules\Command\Domain\FlatFocus.cs" Link="Features\Command\FlatFocus.cs" />
