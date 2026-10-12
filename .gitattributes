@@ -1,8 +1,7 @@
 # Normalise text to LF in the repository; each checkout picks its own line endings.
 * text=auto
-
 *.cs diff=csharp
-
 *.png binary
 *.ogg binary
 *.bundle binary
+*.nobp filter=lfs diff=lfs merge=lfs -text
