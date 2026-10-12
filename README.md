@@ -186,14 +186,20 @@ The settings file is `com.marci.boscalisummer.cfg` in `BepInEx/config/`. Systems
 
 **TAC BOARD options**
 
-The TAC BOARD HUD has its own options. They are yours alone, apply at once and can be changed in flight, from whichever of these is handiest:
+The TAC BOARD (the weapons, systems and warning display at the top of the screen) has a new look: helmet-visor symbology with no panel behind it, spread wide along the top edge so it covers less of the sides. The classic narrow column is still there as the **STACK** layout. The board has its own options. They are yours alone, apply at once and can be changed in flight, from whichever of these is handiest:
 
-- **SET → THIS PILOT → COCKPIT** — the options that change the board, in three groups. **Board**: on/off, declutter level and opacity. **Pages**: whether the scope shows pages at all, one switch per page (radar warning, shot, missile cam, approach, wing, strike, dock, objective, systems), how long a radar warning is held and the minimum time a page stays. **Blocks**: the lamp row, systems strip, gauge row and notice line. **Reset to defaults** puts every option back.
-- **C menu → VIEW** — **Show/Hide TAC BOARD** and **Set HUD declutter** (full, lean, min).
+- **SET → THIS PILOT → COCKPIT** — every option, in four groups. **Board**: on/off, layout (wide or stack), declutter level, size, position, opacity and shade. **Pages**: whether the board's page area shows pages at all, one switch per page (radar warning, shot, missile cam, approach, wing, strike, dock, objective, systems), how long a radar warning is held and the minimum time a page stays. **Blocks**: the lamp row, systems strip, gauge row and notice line. **Extras**: visor sway, restyling the kill feed and map, and **Reset to defaults**.
+- **C menu → VIEW** — **Show/Hide TAC BOARD**, **Set HUD declutter** (full, lean, min) and **Set board layout** (wide, stack).
 - **F1** — the **TAC BOARD** switch; with **Advanced settings** on, the whole **TacBoard** section.
-- **Config file** — the same options under `[TacBoard]` in `com.marci.boscalisummer.cfg`. Layout (`Wide` or `Stack`), Scale, OffsetX, OffsetY and Shade work from here and from F1's advanced view (the settings console has no rows for them yet); Sway and Corners are saved there, but the board does not draw them yet, so changing them does nothing for now.
+- **Config file** — the same options under `[TacBoard]` in `com.marci.boscalisummer.cfg`.
 
-A page that is switched off also stops posting its notices on the notice line, so leave the radar-warning page on unless you really want it gone.
+What each group does:
+
+- **Board** — **TAC BOARD** off hides the board and gives back the game's own weapon, countermeasure and power panels. **Layout** is wide or stack. **Size** runs from 60 % to 140 %, **move left** and **move down** slide the board away from the top-right corner, **opacity** fades the ink and **shade** sets the soft dark band behind it (0 % draws none).
+- **Declutter** — full shows everything the switches allow; lean drops the gauge row, unlit lamps and captions; min keeps only the lock, spike and missile lamps and the pages that matter in a fight.
+- **Pages** — switch a page off and it never takes the page area and stops posting its notices, so leave the radar-warning page on unless you really want it gone. **RWR hold** is how many seconds the radar-warning page keeps a contact after its last warning, and **page min stay** how long a page (SYSTEMS excepted) holds the area once shown, so a flickering contact no longer makes the page pop on and off.
+- **Blocks** — the lamp row, the compact systems strip (it needs the SYSTEMS page), the gauge row and the notice line, each on or off.
+- **Extras** — **visor sway** lets the symbols lag a little behind head movement, **restyle feed and map** draws the kill feed and the map frame in the board's look, and **reset to defaults** puts every option back.
 
 > [!WARNING]
 > **Multiplayer is experimental.** Everyone, including the host, must run the **same mod version**. The host controls shared rules such as fires, destruction, progression, support prices and events. Matching versions is required; multiplayer may still be unreliable.
