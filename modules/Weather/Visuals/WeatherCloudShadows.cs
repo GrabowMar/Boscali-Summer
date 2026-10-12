@@ -240,11 +240,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                                 float altitude = lower + (s + 0.5f) * dy;
                                 float t = (altitude - py) / direction.y;
                                 float wx = px + direction.x * t, wz = pz + direction.z * t;
-                                depth += body.Density(p, wx, altitude, wz) * rayStep * 0.0021f;
+                                depth += body.Density(p, wx, altitude, wz) * rayStep * 0.0034f;
                             }
                             // A soft border fades the shadows out toward the cookie's edge.
                             float edge = Math.Min(Math.Min(x, Size - 1 - x), Math.Min(y, Size - 1 - y)) / 24f;
-                            float shade = 0.62f * (1f - (float)Math.Exp(-depth)) * Scalar.Clamp01(edge);
+                            float shade = 0.85f * (1f - (float)Math.Exp(-depth)) * Scalar.Clamp01(edge);
                             pixels[y * Size + x] = (byte)Math.Round((1f - shade) * 255f);
                         }
                     }
