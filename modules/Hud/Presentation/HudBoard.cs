@@ -62,9 +62,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The pilot's options as of the last 10 Hz tick (the defaults until the module configures the board); what later features of the board read.</summary>
         private BoardOptions options = BoardOptions.Default;
 
-        // Target closure: range delta between 10 Hz reads of the same target.
-        private Unit closureTarget;
-        private float closureRange, closureTime;
+        // The selected target's range and closure (10 Hz reads of the same target): the third-person card's and the cockpit's NAV DATA block's.
+        private readonly TargetReadout targetReadout = new TargetReadout();
 
         private void Awake()
         {
@@ -120,7 +119,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private static readonly string[] ReadSites =
         {
             "Hud.Read.Missiles", "Hud.Read.Shots", "Hud.Read.Systems", "Hud.Read.Threats", "Hud.Read.Countermeasures", "Hud.Read.Fuel", "Hud.Read.Damage",
-            "Hud.Read.SystemsFeed", "Hud.Read.Stores", "Hud.Read.CombatFeeds",
+            "Hud.Read.SystemsFeed", "Hud.Read.Stores", "Hud.Read.Nav", "Hud.Read.CombatFeeds",
         };
 
         private void LateUpdate()
@@ -219,6 +218,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                         case 6: damageWatch.Read(hudAircraft, frame); break;
                         case 7: systemsFeed.Update(hudAircraft, frame, damageWatch.Rotary); break;
                         case 8: storesFeed.Update(hudAircraft, frame, combat); break;
+                        case 9: NavReader.Read(hudAircraft, frame, !viewingOwnExternally && !viewingMissile, targetReadout); break;      // after the fuel watch: HOME and FUEL come from it
                         default:
                             threatFeed.Update(hudAircraft, frame);
                             shotFeed.Update(hudAircraft);
@@ -304,21 +304,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         /// <summary>Range to the first selected target and its closure rate (positive = closing).</summary>
-        private void ReadTarget(Aircraft aircraft, out float range, out float closure)
-        {
-            range = closure = float.NaN;
-            if (aircraft.weaponManager == null) return;
-            var targets = aircraft.weaponManager.GetTargetList();
-            if (targets == null || targets.Count == 0 || targets[0] == null) { closureTarget = null; return; }
-            Unit target = targets[0];
-            range = Vector3.Distance(aircraft.transform.position, target.transform.position);
-            float now = Time.unscaledTime;
-            if (ReferenceEquals(target, closureTarget) && now > closureTime + 0.05f)
-                closure = (closureRange - range) / (now - closureTime);
-            closureTarget = target;
-            closureRange = range;
-            closureTime = now;
-        }
+        private void ReadTarget(Aircraft aircraft, out float range, out float closure) => targetReadout.Read(aircraft, out _, out range, out closure);
 
         private static NOAvionics.AvUnits AvUnitsOf(int unitSystem) =>
             unitSystem == (int)NOAvionics.AvUnits.Imperial ? NOAvionics.AvUnits.Imperial : NOAvionics.AvUnits.Metric;
@@ -386,7 +372,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             cluster?.Destroy();
             cluster = null;
             nextRead = 0;
-            closureTarget = null;
+            targetReadout.Release();
             bootAircraft = null;
             threats.Release();
             fuelWatch.Release();

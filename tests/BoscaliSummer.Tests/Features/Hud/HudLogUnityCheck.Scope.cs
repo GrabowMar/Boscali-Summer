@@ -140,7 +140,7 @@ public static partial class HudLogUnityCheck
         string[] names = pages.Length == 0 ? ScopePageNames : pages;
         foreach (string page in names)
         {
-            if (page == "shell" || page == "frame" || page == "lines" || page == "corners" || page == "repair") continue;      // the board shell (HudLogUnityCheck.Scope.Shell.cs), its frame (HudLogUnityCheck.Scope.Frame.cs), the wing lines (HudLogUnityCheck.Scope.Lines.cs) and the other corners (HudLogUnityCheck.Scope.Corners.cs) and the review fixes (HudLogUnityCheck.Scope.Repair.cs), below
+            if (page == "shell" || page == "frame" || page == "lines" || page == "corners" || page == "nav" || page == "repair") continue;      // the board shell (HudLogUnityCheck.Scope.Shell.cs), its frame (HudLogUnityCheck.Scope.Frame.cs), the wing lines (HudLogUnityCheck.Scope.Lines.cs) and the other corners (HudLogUnityCheck.Scope.Corners.cs) and the review fixes (HudLogUnityCheck.Scope.Repair.cs), below
             Check(Array.IndexOf(ScopePageNames, page) >= 0, "Unknown scope page in -pages: " + page);
             int drawn = 0;
             if (page != "stores") foreach (var shot in ScopeShotTimes) if (RenderScope(page, shot.t, new Vector2(shot.w, shot.h))) drawn++;
@@ -153,6 +153,7 @@ public static partial class HudLogUnityCheck
         if (pages.Length == 0 || Array.IndexOf(pages, "lines") >= 0) ScopeLines();
         if (pages.Length == 0 || Array.IndexOf(pages, "stores") >= 0) ScopeStoresBlocks();
         if (pages.Length == 0 || Array.IndexOf(pages, "corners") >= 0) ScopeCorners();
+        if (pages.Length == 0 || Array.IndexOf(pages, "nav") >= 0) ScopeNav();
         if (pages.Length == 0 || Array.IndexOf(pages, "repair") >= 0) ScopeRepair();
     }
 

@@ -11,7 +11,40 @@ namespace BoscaliSummer.Core.Ui
     /// </summary>
     internal static class HudSprites
     {
-        private static Sprite chamfer, bandPlain, bandFaded;
+        private static Sprite chamfer, bandPlain, bandFaded, feather;
+
+        /// <summary>The visor look's shade colour, rgb(2, 12, 8): what a soft patch behind symbology is tinted (the TAC BOARD's sun band and clouds are the same colour); its alpha is the caller's.</summary>
+        public static readonly Color ShadeTint = new Color(2f / 255f, 12f / 255f, 8f / 255f, 1f);
+
+        /// <summary>Texels of the soft edge of a <see cref="Feather"/> (and so canvas units, drawn 9-sliced at multiplier 1).</summary>
+        public const int FeatherEdge = 40;
+
+        /// <summary>
+        /// A soft patch of shade for the visor look: a white alpha mask, full in the middle and falling smoothly to nothing over its last <see cref="FeatherEdge"/> texels all round (the product of two edge profiles, so the corners are
+        /// round), 9-sliced so the fall-off keeps its size on any rectangle. Tint it with <see cref="ShadeTint"/> at the alpha the symbology needs; place the image that much larger than what it backs so the full part lies under the ink.
+        /// There is no hard edge anywhere: ink is read through it, not on a plate.
+        /// </summary>
+        public static Sprite Feather => feather != null ? feather : (feather = BakeFeather("BoscaliHud_Feather"));
+
+        private static Sprite BakeFeather(string name)
+        {
+            const int edge = FeatherEdge, size = edge * 2 + 4;
+            Texture2D texture = NewMask(name, size, size);
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float ax = Profile(Mathf.Min(x + 0.5f, size - x - 0.5f) / edge), ay = Profile(Mathf.Min(y + 0.5f, size - y - 0.5f) / edge);
+                    texture.SetPixel(x, y, new Color(1f, 1f, 1f, ax * ay));
+                }
+            return Finish(texture, new Vector4(edge, edge, edge, edge));
+        }
+
+        /// <summary>The mean of u and its smoothstep (the board's cloud field's profile: its steepest slope is 1.25), clamped to 0..1.</summary>
+        private static float Profile(float u)
+        {
+            u = Mathf.Clamp01(u);
+            return 0.5f * u + 0.5f * u * u * (3f - 2f * u);
+        }
 
         /// <summary>The base game's HUD panel shape: a dark slab with its lower-left corner cut at 45°.
         /// 9-sliced so the cut stays 14 px at any size.</summary>

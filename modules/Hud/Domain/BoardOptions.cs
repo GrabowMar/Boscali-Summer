@@ -26,6 +26,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public bool SystemsCriticalOnly;
         public bool ShowGauges;
         public bool ShowTicker;
+        /// <summary>The NAV DATA block (bottom right, cockpit view) may show: its switch, and not at Minimal. Its caption shelf follows <see cref="Furniture"/>.</summary>
+        public bool ShowNavData;
         /// <summary>Decorative captions and shelves are drawn (the painters' <c>ScopeCanvas.Furniture</c> flag; brackets, ticks and markers stay at every level).</summary>
         public bool Furniture;
 
@@ -64,7 +66,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public BoardScopeMode ScopeMode;
         public bool PageThreat, PageShot, PageMissileCam, PageApproach, PageWing, PageStrike, PageDock, PageObjective, PageSystems;
         public float ThreatHoldSeconds, PageMinSeconds;
-        public bool ShowLamps, ShowSystemsStrip, ShowGauges, ShowTicker;
+        public bool ShowLamps, ShowSystemsStrip, ShowGauges, ShowTicker, ShowNavData;
         public bool Sway, Corners;
 
         /// <summary>The pages Minimal keeps: THREAT, MISSILE CAM, SHOT, APPROACH and SYSTEMS (in its critical form).</summary>
@@ -78,7 +80,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             Declutter = BoardDeclutter.Full, ScopeMode = BoardScopeMode.Auto,
             PageThreat = true, PageShot = true, PageMissileCam = true, PageApproach = true, PageWing = true, PageStrike = true, PageDock = true, PageObjective = true, PageSystems = true,
             ThreatHoldSeconds = 6f, PageMinSeconds = 3f,
-            ShowLamps = true, ShowSystemsStrip = true, ShowGauges = true, ShowTicker = true,
+            ShowLamps = true, ShowSystemsStrip = true, ShowGauges = true, ShowTicker = true, ShowNavData = true,
             Sway = true, Corners = true,
         };
 
@@ -110,8 +112,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
             (PageSystems ? CuePriority.Bit(ScopePage.Systems) : 0));
 
         /// <summary>
-        /// The switches with the declutter level applied. Full: everything the switches allow. Lean: no gauge row, no unlit lamps, no decorative captions, and the compact SYSTEMS
-        /// strip only while something is not nominal. Minimal: as Lean, and of the lamps only LOCK / SPKE / MSL, of the pages only THREAT, MISSILE CAM, SHOT, APPROACH and the
+        /// The switches with the declutter level applied. Full: everything the switches allow. Lean: no gauge row, no unlit lamps, no decorative captions (NAV DATA keeps its rows, not its shelf), and the compact SYSTEMS
+        /// strip only while something is not nominal. Minimal: as Lean, no NAV DATA, and of the lamps only LOCK / SPKE / MSL, of the pages only THREAT, MISSILE CAM, SHOT, APPROACH and the
         /// critical form of SYSTEMS. The scope mode Off leaves no pages at all (but <see cref="BoardEffective.Voiced"/> keeps the ones the switches allow).
         /// </summary>
         public readonly BoardEffective Effective()
@@ -131,6 +133,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 SystemsCriticalOnly = minimal,
                 ShowGauges = ShowGauges && full,
                 ShowTicker = ShowTicker,
+                ShowNavData = ShowNavData && !minimal,
                 Furniture = full,
             };
         }

@@ -403,7 +403,7 @@ public static class SettingsUnityCheck
         foreach (string group in new[] { "TAC BOARD", "TAC BOARD PAGES", "TAC BOARD BLOCKS", "TAC BOARD EXTRAS" })
             Check(content.Find("Section " + group) != null, "COCKPIT carries the " + group + " section");
         foreach (string toggle in new[] { "TAC BOARD", "RADAR WARNING", "SHOT", "MISSILE CAM", "APPROACH", "WING", "STRIKE", "DOCK", "OBJECTIVE", "SYSTEMS",
-                                          "LAMPS", "SYSTEMS STRIP", "GAUGES", "NOTICES", "VISOR SWAY", "RESTYLE FEED AND MAP" })
+                                          "LAMPS", "SYSTEMS STRIP", "GAUGES", "NOTICES", "NAV DATA", "VISOR SWAY", "RESTYLE FEED AND MAP" })
             Check(content.Find("Cell " + toggle) != null, "TAC BOARD switch " + toggle + " exists");
         foreach (string dial in new[] { "SIZE", "OPACITY", "MOVE LEFT", "MOVE DOWN", "SHADE", "RWR HOLD", "PAGE MIN STAY" }) FindRowByName(content, dial);
         foreach (string segment in new[] { "WIDE", "STACK", "FULL", "LEAN", "MIN", "AUTO", "OFF", "RESET TO DEFAULTS" })
@@ -429,7 +429,7 @@ public static class SettingsUnityCheck
         scroll.verticalNormalizedPosition = 1f;
 
         // every switch flips its own option and no other (a swapped assignment would hide the wrong page), and flips it back
-        string[] cells = { "TAC BOARD", "RADAR WARNING", "SHOT", "MISSILE CAM", "APPROACH", "WING", "STRIKE", "DOCK", "OBJECTIVE", "SYSTEMS", "LAMPS", "SYSTEMS STRIP", "GAUGES", "NOTICES", "VISOR SWAY", "RESTYLE FEED AND MAP" };
+        string[] cells = { "TAC BOARD", "RADAR WARNING", "SHOT", "MISSILE CAM", "APPROACH", "WING", "STRIKE", "DOCK", "OBJECTIVE", "SYSTEMS", "LAMPS", "SYSTEMS STRIP", "GAUGES", "NOTICES", "NAV DATA", "VISOR SWAY", "RESTYLE FEED AND MAP" };
         for (int n = 1; n <= cells.Length; n++)
         {
             int at = n % cells.Length;      // TAC BOARD last: with the board off the others are inert
@@ -873,15 +873,16 @@ public static class SettingsUnityCheck
         public bool ShowSystemsStrip { get; set; }
         public bool ShowGauges { get; set; }
         public bool ShowTicker { get; set; }
+        public bool ShowNavData { get; set; }
         public bool Sway { get; set; }
         public bool Corners { get; set; }
 
         public void ResetToDefaults() { ResetCount++; Defaults(); }
 
-        /// <summary>The sixteen switches as 0 and 1, in the order the page lists them: the board, nine pages, four blocks, sway, corners.</summary>
+        /// <summary>The seventeen switches as 0 and 1, in the order the page lists them: the board, nine pages, five blocks, sway, corners.</summary>
         public string Switches()
         {
-            bool[] all = { Enabled, PageThreat, PageShot, PageMissileCam, PageApproach, PageWing, PageStrike, PageDock, PageObjective, PageSystems, ShowLamps, ShowSystemsStrip, ShowGauges, ShowTicker, Sway, Corners };
+            bool[] all = { Enabled, PageThreat, PageShot, PageMissileCam, PageApproach, PageWing, PageStrike, PageDock, PageObjective, PageSystems, ShowLamps, ShowSystemsStrip, ShowGauges, ShowTicker, ShowNavData, Sway, Corners };
             var text = new System.Text.StringBuilder();
             foreach (bool b in all) text.Append(b ? '1' : '0');
             return text.ToString();
@@ -893,7 +894,7 @@ public static class SettingsUnityCheck
             Declutter = BoardDeclutter.Full; ScopeMode = BoardScopeMode.Auto;
             PageThreat = PageShot = PageMissileCam = PageApproach = PageWing = PageStrike = PageDock = PageObjective = PageSystems = true;
             ThreatHoldSeconds = 6f; PageMinSeconds = 3f;
-            ShowLamps = ShowSystemsStrip = ShowGauges = ShowTicker = true;
+            ShowLamps = ShowSystemsStrip = ShowGauges = ShowTicker = ShowNavData = true;
             Sway = Corners = true;
         }
 
@@ -904,7 +905,7 @@ public static class SettingsUnityCheck
                    Opacity == fresh.Opacity && Shade == fresh.Shade && Declutter == fresh.Declutter && ScopeMode == fresh.ScopeMode &&
                    PageThreat && PageShot && PageMissileCam && PageApproach && PageWing && PageStrike && PageDock && PageObjective && PageSystems &&
                    ThreatHoldSeconds == fresh.ThreatHoldSeconds && PageMinSeconds == fresh.PageMinSeconds &&
-                   ShowLamps && ShowSystemsStrip && ShowGauges && ShowTicker && Sway && Corners;
+                   ShowLamps && ShowSystemsStrip && ShowGauges && ShowTicker && ShowNavData && Sway && Corners;
         }
     }
 
