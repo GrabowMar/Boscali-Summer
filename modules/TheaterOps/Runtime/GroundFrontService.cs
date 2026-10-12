@@ -101,6 +101,9 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             internal float AllFrozenSince;
             internal float FirstOnEffortAfter = -1f;
             internal int RekeysThisOperation;
+            /// <summary>A withdrawing group keeps its key and its place on the effort for the operation it began withdrawing under; a new assignment would re-form it on the spot.</summary>
+            internal bool WithdrawSeen;
+            internal int WithdrawOpId;
         }
 
         /// <summary>Everything the service keeps per faction.</summary>
@@ -496,6 +499,11 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             {
                 Group group = mine[k];
                 bool wasOnEffort = facts[k].Held;
+                if (group.Stage == GroundStage.Withdraw)
+                {
+                    if (!group.WithdrawSeen) { group.WithdrawSeen = true; group.WithdrawOpId = opId; }
+                    if (group.WithdrawOpId == opId) continue;
+                }
                 if (hasOp && chosen[k])
                 {
                     if (!group.OnEffort || group.OpId != op.Id)
@@ -540,6 +548,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             if (group.Stage == GroundStage.Contact) EndContact(fs, group, now);
             group.Key = key;
             group.ReportedRally = false;
+            group.WithdrawSeen = false;
             if (group.Stage == GroundStage.Withdraw) group.Formed = group.Members.Count;
             group.Stage = GroundStage.Rally;
             group.StageSince = now;
