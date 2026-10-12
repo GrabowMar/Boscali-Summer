@@ -136,10 +136,16 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     SortieLink link = sorties.Objectives[i]?.Link;
                     if (link != null && link.Tied && link.OperationLive) tied++;
                 }
+            // The lanes the board lists: the first MaxFronts of the snapshot, minus the operation's own front while an operation is on the board (the hero lane carries it, StrViewBuilder).
+            int lanes = 0;
+            TheaterFrontView[] fronts = snap?.Fronts;
+            string opKey = vm.Mode == StrBoardMode.Operation ? snap?.Operation?.TargetKey : null;
+            for (int i = 0; fronts != null && i < Math.Min(fronts.Length, StrViewModel.MaxFronts); i++)
+                if (fronts[i] != null && (string.IsNullOrEmpty(opKey) || fronts[i].Key != opKey)) lanes++;
             r["check"] = new Dictionary<string, object>
             {
                 { "proposalsDelta", Math.Abs(vm.ProposalCount - (snap?.Proposals?.Length ?? 0)) },
-                { "frontsDelta", Math.Abs(vm.FrontCount - Math.Min(StrViewModel.MaxFronts, snap?.Fronts?.Length ?? 0)) },
+                { "frontsDelta", Math.Abs(vm.FrontCount - lanes) },
                 { "sortiesDelta", Math.Abs(vm.SortieCount + vm.SortieMore - tied) },
                 { "effortDelta", Math.Abs((vm.Effort.Live ? vm.Effort.OperationId : 0) - (snap?.Operation?.Id ?? 0)) },
             };

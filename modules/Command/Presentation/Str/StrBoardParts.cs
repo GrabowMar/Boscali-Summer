@@ -33,10 +33,25 @@ namespace BoscaliSummer.Modules.Command.Presentation
             Hub = hub;
         }
 
+        private AvSlot lastSlot;
+        private bool placed;
+
+        /// <summary>Remembers the slot the flow gave this part, so a bind can place it again (see <see cref="Bind"/>).</summary>
+        public override void Place(AvSlot slot)
+        {
+            lastSlot = slot;
+            placed = true;
+            base.Place(slot);
+        }
+
         public void Bind(StrViewModel vm)
         {
             Vm = vm;
             Apply(vm);
+            // The flow re-lays a page only when a part's height moved. A change that only moves children inside the same height (the lock chip of a pick,
+            // a REDIRECT button that turns on) would leave them unplaced at the part's origin, a black block over the card, so a part that has been placed
+            // places itself again in its slot after every bind. A height change still goes through the flow, which places with the new slot.
+            if (placed && Shown) Place(lastSlot);
         }
 
         protected abstract void Apply(StrViewModel vm);
