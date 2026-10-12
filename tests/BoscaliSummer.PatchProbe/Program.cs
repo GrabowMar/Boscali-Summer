@@ -1037,7 +1037,13 @@ foreach (string type in new[] {
     "BoscaliSummer.Modules.TheaterOps.Domain.PriorityTable",
     "BoscaliSummer.Modules.TheaterOps.Domain.ReinforcementGatePolicy",
     "BoscaliSummer.Core.Contracts.ITheaterWarView",
-    "BoscaliSummer.Core.Contracts.ITheaterAirStationView" })
+    "BoscaliSummer.Core.Contracts.ITheaterAirStationView",
+    // S2 freeze: the cross-module doors that later slices implement.
+    "BoscaliSummer.Core.Contracts.IOperationFocusSource",
+    "BoscaliSummer.Core.Contracts.ISortieOutcomeSource",
+    "BoscaliSummer.Core.Contracts.IConvoyPurchase",
+    "BoscaliSummer.Core.Contracts.IWingSortieOrders",
+    "BoscaliSummer.Core.Contracts.ISortieWingOrderSource" })
     if (pluginAssembly.GetType(type, false) == null) throw new TypeLoadException(type);
 Type highCommandSnapshot = pluginAssembly.GetType("BoscaliSummer.Modules.HighCommand.Networking.HighCommandSnapshot", true)!;
 Type commanderWire = pluginAssembly.GetType("BoscaliSummer.Modules.HighCommand.Networking.CommanderWire", true)!;
@@ -1343,7 +1349,7 @@ static void ProbeOperationSerialization(Assembly plugin, Assembly mirage)
     object EnumValue(string name, byte value) => Enum.ToObject(plugin.GetType("BoscaliSummer.Core.Contracts." + name, true)!, value);
     Type phaseType = plugin.GetType("BoscaliSummer.Core.Contracts.ObjectivePhase", true)!;
     Type taskingType = plugin.GetType("BoscaliSummer.Core.Contracts.ObjectiveTasking", true)!;
-    object Tasking(byte family = 8, float age = 0f, bool duplicatePhase = false)
+    object Tasking(byte family = 8, float age = 0f, bool duplicatePhase = false, int subject = -1)
     {
         Array phases = Array.CreateInstance(phaseType, 3);
         string[] phaseNames = { "JOIN", "COVER", "TRANSFER" };
@@ -1352,7 +1358,7 @@ static void ProbeOperationSerialization(Assembly plugin, Assembly mirage)
                 EnumValue("ObjectivePhaseStatus", i == 0 ? (byte)2 : i == 1 ? (byte)1 : (byte)0), i == 0 ? 1f : i == 1 ? .55f : 0f), i);
         return Activator.CreateInstance(taskingType, EnumValue("ObjectiveFamily", family), EnumValue("ObjectiveAsset", 2),
             EnumValue("ObjectiveContact", 2), age, "Cover the truck.", "", "Keep the eastern line supplied.", phases,
-            EnumValue("ObjectiveLifecycle", 1), "Ends the sortie without an award.", EnumValue("ObjectiveAllegiance", 1))!;
+            EnumValue("ObjectiveLifecycle", 1), "Ends the sortie without an award.", EnumValue("ObjectiveAllegiance", 1), subject)!;
     }
     object TypedCard(object tasking) => Activator.CreateInstance(cardType, 124, "COVER THE SUPPLY RUN", "Host briefing", "Supply truck", "COVER", "Morale +3",
         .55f, 702f, 1400, 125, false, false, true, true, 12500f, -6750f, 1500f, "ROOK 1", tasking)!;

@@ -71,6 +71,9 @@
     <Compile Include="..\..\Core\Contracts\IObservationSource.cs" Link="Framework\IObservationSource.cs" />
     <Compile Include="..\..\Core\Contracts\IHostSettingsView.cs" Link="Framework\IHostSettingsView.cs" />
     <Compile Include="..\..\Core\Contracts\ISecondaryObjectivesView.cs" Link="Framework\ISecondaryObjectivesView.cs" />
+    <Compile Include="..\..\Core\Contracts\OperationFocus.cs" Link="Framework\OperationFocus.cs" />
+    <Compile Include="..\..\Core\Contracts\IWingSortieOrders.cs" Link="Framework\IWingSortieOrders.cs" />
+    <Compile Include="..\..\Core\Math\MapScale.cs" Link="Core\Math\MapScale.cs" />
     <Compile Include="..\..\Core\Contracts\ITerritoryIngress.cs" Link="Framework\ITerritoryIngress.cs" />
     <Compile Include="..\..\modules\QoL\Runtime\ObservationStore.cs" Link="Features\QoL\ObservationStore.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdTargetPresets.cs" Link="Features\Command\MfdTargetPresets.cs" />

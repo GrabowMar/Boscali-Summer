@@ -1728,6 +1728,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             mapY = at.y;
             return true;
         }
+
+        public bool TryScale(float worldX, float worldZ, float metres, out float mapUnits)
+        {
+            mapUnits = 0f;
+            if (!(metres > 0f) || !TryProject(worldX, worldZ, out float x0, out float y0) ||
+                !TryProject(worldX + metres, worldZ, out float x1, out float y1) ||
+                !TryProject(worldX, worldZ + metres, out float x2, out float y2)) return false;
+            return BoscaliSummer.Core.Math.MapScale.Mean(Mathf.Sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0)),
+                Mathf.Sqrt((x2 - x0) * (x2 - x0) + (y2 - y0) * (y2 - y0)), out mapUnits);
+        }
     }
 
     [HarmonyPatch(typeof(GridLabels), "LateUpdate")]
