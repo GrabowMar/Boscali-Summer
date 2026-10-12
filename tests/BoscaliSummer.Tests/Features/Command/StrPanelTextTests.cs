@@ -23,6 +23,8 @@ namespace BoscaliSummer.Tests.Features.Command
             TheProposalPlateSplitsItsPrice();
             TheLogNoteNamesItsCause();
             ControlIdsFollowTheGrammar();
+            TheBannerInkSeparatesAPickFromAnOutage();
+            ItemIdsResolveAgainstTheModel();
         }
 
         private static void EveryModeHasOneShape()
@@ -94,7 +96,7 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(line.Contains(rich.Wave.GroupText) && line.Contains("COST 1,850") && line.Contains("POOL 7,400"), "the wave line carries group, price and pool: " + line);
             TestAssert.That(StrPanelText.WaveCheck(rich).Contains("AFFORDABLE") && !StrPanelText.WaveCheck(rich).Contains("NOT"), "a covered price says so");
             StrViewModel held = StrFixtures.Model("wave-held");
-            TestAssert.That(StrPanelText.WaveCheck(held).Contains("SHORT"), "a held wave says the pool is short: " + StrPanelText.WaveCheck(held));
+            TestAssert.That(StrPanelText.WaveCheck(held).Contains("OVER THE POOL") && StrPanelText.WaveCheck(held).StartsWith(StrWords.No), "an uncovered price says it is over the pool: " + StrPanelText.WaveCheck(held));
             StrViewModel unknown = StrFixtures.Model("unknown");
             TestAssert.That(StrPanelText.WaveCheck(unknown) == "", "an unknown price claims neither a check nor a cross");
             TestAssert.That(StrPanelText.WaveLine(unknown).Contains("COST " + Dash), "an unknown price prints a dash: " + StrPanelText.WaveLine(unknown));
@@ -171,6 +173,34 @@ namespace BoscaliSummer.Tests.Features.Command
             foreach (string id in bad) TestAssert.That(!StrControlIds.IsValid(id), (id ?? "null") + " is not a legal id");
             TestAssert.That(StrControlIds.Prop(2, "pick") == "prop.2.pick" && StrControlIds.Front(8, "redirect") == "front.8.redirect" && StrControlIds.Sortie(3, "wing") == "sortie.3.wing", "the builders spell the grammar");
             TestAssert.That(StrControlIds.Posture(TheaterWarPosture.Bold) == "posture.bold" && StrControlIds.Tab(1) == "tab.sitrep", "posture and tab ids");
+        }
+
+        private static void TheBannerInkSeparatesAPickFromAnOutage()
+        {
+            TestAssert.That(StrPanelText.BannerInk(StrBoardMode.Proposals, false) == StrInkRole.Effort, "a deck to pick from is the effort amber");
+            TestAssert.That(StrPanelText.BannerInk(StrBoardMode.Operation, true) == StrInkRole.Caution && StrPanelText.BannerInk(StrBoardMode.Operation, false) == StrInkRole.Muted, "a stale operation board is a caution, a current one is quiet");
+            TestAssert.That(StrPanelText.BannerInk(StrBoardMode.Waiting, false) == StrPanelText.BannerInk(StrBoardMode.Assessing, false), "the two modes that wait share the cyan");
+            TestAssert.That(StrPanelText.BannerInk(StrBoardMode.NoAnswer, false) != StrPanelText.BannerInk(StrBoardMode.Waiting, false), "no answer reads differently from still waiting");
+        }
+
+        private static void ItemIdsResolveAgainstTheModel()
+        {
+            StrViewModel rich = StrFixtures.Model("rich");
+            TestAssert.That(StrControlIds.TryItem(rich, "effort", out StrItemId e) && e == rich.Effort.Id && e.Kind == StrItemKind.Effort, "the effort tag names the live operation");
+            TestAssert.That(StrControlIds.TryItem(rich, "map.tag.effort.1", out e) && e == rich.Effort.Id, "the map tag spelling resolves too");
+            TestAssert.That(StrControlIds.TryItem(rich, "map.tag.prop.2", out StrItemId p) && p == rich.Proposals[1].Id && p.Kind == StrItemKind.Proposal, "prop.2 is the second proposal");
+            TestAssert.That(StrControlIds.TryItem(rich, "front.1", out StrItemId f) && f == rich.Fronts[0].Id, "front.1 is the first front row");
+            TestAssert.That(StrControlIds.TryItem(rich, "sortie.3", out StrItemId s) && s == rich.Sorties[2].Id, "sortie.3 is the third ticket");
+            TestAssert.That(StrControlIds.TryItem(rich, "post.2", out StrItemId po) && po == rich.Posts[1].Id && po.Kind == StrItemKind.Post, "post.2 is the second office");
+            foreach (string bad in new[] { "", null, "prop", "prop.0", "prop.9", "prop.x", "sortie.99", "front.1.pick", "banana.1", "post.3", "effort.2" })
+                TestAssert.That(!StrControlIds.TryItem(rich, bad, out StrItemId none) && none.IsNone, (bad ?? "null") + " names nothing");
+            TestAssert.That(!StrControlIds.TryItem(StrFixtures.Model("proposals"), "effort", out _), "no operation, no effort tag");
+            TestAssert.That(!StrControlIds.TryItem(null, "prop.1", out _), "no model, no item");
+
+            int lane1 = StrControlIds.RedirectLane(rich, 1), lane2 = StrControlIds.RedirectLane(rich, 2);
+            TestAssert.That(lane1 >= 1 && !rich.Fronts[lane1 - 1].Offer.IsNone, "the first redirect is a lane that has an offer");
+            TestAssert.That(lane2 > lane1 || lane2 == 0, "the second redirect comes after the first");
+            TestAssert.That(StrControlIds.RedirectLane(rich, 0) == 0 && StrControlIds.RedirectLane(rich, 99) == 0 && StrControlIds.RedirectLane(null, 1) == 0, "no such redirect, no lane");
         }
     }
 }

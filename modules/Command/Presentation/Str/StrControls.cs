@@ -27,6 +27,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         private readonly Dictionary<string, Entry> map = new Dictionary<string, Entry>(64);
 
+        /// <summary>Ids registered over an existing id since the last Clear: two parts claiming one id is a bug the harness fails on.</summary>
+        internal int Collisions { get; private set; }
+
         /// <summary>
         /// Registers or replaces an id. <paramref name="press"/> returns the answer of the one command path (StrAct); it runs only after the
         /// gate allowed it. A null gate is always allowed.
@@ -34,6 +37,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
         internal void Register(string id, Func<StrAct> gate, Func<StrAct> press)
         {
             if (string.IsNullOrEmpty(id) || press == null) return;
+            if (map.ContainsKey(id)) Collisions++;
             map[id] = new Entry { Gate = gate, Press = press };
         }
 
@@ -60,7 +64,11 @@ namespace BoscaliSummer.Modules.Command.Presentation
             return new PressResult(done.Allowed, done);
         }
 
-        internal void Clear() => map.Clear();
+        internal void Clear()
+        {
+            map.Clear();
+            Collisions = 0;
+        }
 
         private static StrAct Unknown(string id) =>
             new StrAct(StrWhy.NoBoard, "NO CONTROL NAMED " + (string.IsNullOrEmpty(id) ? "NOTHING" : id.ToUpperInvariant()) + " ON THIS PAGE");

@@ -13,6 +13,22 @@ namespace BoscaliSummer.Modules.Command.Domain
     {
         private static readonly char[] Space = { ' ' };
 
+        /// <summary>The ink of a banner's slab and frame: the amber of a pick to make, cyan while the staff works, grey when nothing is wrong and nothing is offered.</summary>
+        public static StrInkRole BannerInk(StrBoardMode mode, bool stale)
+        {
+            switch (mode)
+            {
+                case StrBoardMode.Operation: return stale ? StrInkRole.Caution : StrInkRole.Muted;
+                case StrBoardMode.Proposals: return StrInkRole.Effort;
+                case StrBoardMode.Assessing: return StrInkRole.Offered;
+                case StrBoardMode.StaffOff:
+                case StrBoardMode.HostLacksStaff: return StrInkRole.Effort;
+                case StrBoardMode.Waiting: return StrInkRole.Offered;
+                case StrBoardMode.NoAnswer: return StrInkRole.Caution;
+                default: return StrInkRole.Muted;
+            }
+        }
+
         /// <summary>The four digits "mmss" of a countdown flap, or "" for an unknown (negative) time; saturates at 99:59.</summary>
         public static string Flap(int seconds)
         {
@@ -62,8 +78,8 @@ namespace BoscaliSummer.Modules.Command.Domain
             if (vm == null || vm.Wave == null || !vm.Wave.Present) return "";
             switch (vm.Wave.Affordable)
             {
-                case StrTri.Yes: return StrWords.Yes + " AFFORDABLE";
-                case StrTri.No: return StrWords.No + " POOL SHORT";
+                case StrTri.Yes: return "AFFORDABLE";
+                case StrTri.No: return StrWords.No + " OVER THE POOL";
                 default: return "";
             }
         }
@@ -86,7 +102,7 @@ namespace BoscaliSummer.Modules.Command.Domain
 
         public static string PlateState(StrProposalRow row) => row != null && row.Recommended ? "DEFAULT" : "OPEN";
 
-        /// <summary>"WAVE 1,850 ✓" as the word and the price the plate stacks.</summary>
+        /// <summary>"WAVE 1,850 OK" as the word and the price the plate stacks.</summary>
         public static void PlateWave(StrProposalRow row, out string word, out string price)
         {
             string text = row?.WaveText ?? "";
@@ -134,5 +150,41 @@ namespace BoscaliSummer.Modules.Command.Domain
         public static string Sortie(int n, string verb) => "sortie." + n.ToString(CultureInfo.InvariantCulture) + "." + verb;
 
         public const string Replan = "replan", HeroLocate = "hero.locate";
+
+        /// <summary>
+        /// The board item a tag or lane id names ("map.tag.prop.1", "prop.1", "front.2", "sortie.3", "post.1", "effort"), resolved against the model in model order
+        /// (the order the map tags are numbered in). False when the id is not an item id or the row is not there.
+        /// </summary>
+        public static bool TryItem(StrViewModel vm, string id, out StrItemId item)
+        {
+            item = StrItemId.None;
+            if (vm == null || string.IsNullOrEmpty(id)) return false;
+            if (id.StartsWith("map.tag.", StringComparison.Ordinal)) id = id.Substring(8);
+            string[] parts = id.Split('.');
+            if (parts.Length < 1 || parts.Length > 2) return false;
+            int n = 1;
+            if (parts.Length == 2 && !int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out n)) return false;
+            int i = n - 1;
+            if (i < 0) return false;
+            switch (parts[0])
+            {
+                case "effort": if (!vm.Effort.Live || parts.Length == 2 && n != 1) return false; item = vm.Effort.Id; return true;
+                case "prop": if (parts.Length != 2 || i >= vm.ProposalCount) return false; item = vm.Proposals[i].Id; return true;
+                case "front": if (parts.Length != 2 || i >= vm.FrontCount) return false; item = vm.Fronts[i].Id; return true;
+                case "sortie": if (parts.Length != 2 || i >= vm.SortieCount) return false; item = vm.Sorties[i].Id; return true;
+                case "post": if (parts.Length != 2 || i >= vm.PostCount) return false; item = vm.Posts[i].Id; return true;
+                default: return false;
+            }
+        }
+
+        /// <summary>The 1-based lane of the index-th front (1-based) that the staff offers, or 0: what the sim's redirect alias presses.</summary>
+        public static int RedirectLane(StrViewModel vm, int index)
+        {
+            if (vm == null || index < 1) return 0;
+            int seen = 0;
+            for (int i = 0; i < vm.FrontCount && i < StrViewModel.MaxFronts; i++)
+                if (!vm.Fronts[i].Offer.IsNone && ++seen == index) return i + 1;
+            return 0;
+        }
     }
 }

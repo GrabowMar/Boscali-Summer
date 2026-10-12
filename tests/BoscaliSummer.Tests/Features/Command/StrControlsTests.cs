@@ -60,8 +60,9 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(c.Count == 2 && c.Ids.OrderBy(s => s).SequenceEqual(new[] { "posture.bold", "replan" }), "a blank id and a null press register nothing: " + string.Join(",", c.Ids));
             c.Press("replan");
             TestAssert.That(said == "second", "the later registration wins");
+            TestAssert.That(c.Collisions == 1, "a second claim on one id is counted: " + c.Collisions);
             c.Clear();
-            TestAssert.That(c.Count == 0 && !c.Has("replan") && !c.Press("replan").Ok, "clear leaves nothing to press");
+            TestAssert.That(c.Count == 0 && c.Collisions == 0 && !c.Has("replan") && !c.Press("replan").Ok, "clear leaves nothing to press and no collisions");
         }
 
         private static void AVerbThatDeclinesIsNotAnOk()

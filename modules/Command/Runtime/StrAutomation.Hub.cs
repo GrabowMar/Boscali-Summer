@@ -9,7 +9,7 @@ using static BoscaliSummer.Core.Diagnostics.AutomationArgs;
 
 namespace BoscaliSummer.Modules.Command.Runtime
 {
-    // The hub's read-back and the map locate (annex 05 P11), in the final nested shape so the panel slice keeps them as they are.
+    // The hub's read-back and the map locate (annex 05 P11): the nested view, map, link and check blocks of Read, and Focus.
     public static partial class StrAutomation
     {
         // The last point Focus flew to: the relief eases there over the next frames, so the offset is read later, by Read.
@@ -40,37 +40,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
             r["map"] = MapBlock();
             return r;
         }
-
-#if !PUBLIC_RELEASE
-        /// <summary>
-        /// One press through the hub, the path a click takes (gate, verb, rebuild): {action: pick|posture|replan|accept, index (1-based, for pick and
-        /// accept), arg (the posture, 0..2)}. Returns allowed (the gate said yes), sent (a verb went out), reasonCode (StrWhy) and the words.
-        /// Mutates the game, so it runs in a nomodkit scenario only. The panel slice replaces it with Press.
-        /// </summary>
-        public static Dictionary<string, object> Act(Dictionary<string, object> args)
-        {
-            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NOMODKIT_SIM_SCENARIO"))) return Fail("Act", "requires a nomodkit scenario");
-            StrViewHub hub = StrViewHub.Active;
-            if (hub == null) return Fail("Act", "no STR hub in this scene");
-            hub.TickNow();
-            int index = (int)Number(args, "index", 1f);
-            StrActionKind kind;
-            StrItemId id = StrItemId.None;
-            switch (Text(args, "action"))
-            {
-                case "pick": kind = StrActionKind.Pick; id = Item(hub.Current, "proposal", index); break;
-                case "posture": kind = StrActionKind.Posture; break;
-                case "replan": kind = StrActionKind.Replan; break;
-                case "accept": kind = StrActionKind.Accept; id = Item(hub.Current, "sortie", index); break;
-                default: return Fail("Act", "unknown action '" + Text(args, "action") + "'");
-            }
-            StrAct act = hub.Run(kind, id, (int)Number(args, "arg", 0f));
-            return new Dictionary<string, object>
-            {
-                { "ok", true }, { "allowed", act.Allowed ? 1 : 0 }, { "sent", act.Sent ? 1 : 0 }, { "reasonCode", (int)act.Why }, { "text", act.Text }, { "textLen", act.Text.Length },
-            };
-        }
-#endif
 
         private static StrItemId Item(StrViewModel vm, string kind, int index)
         {

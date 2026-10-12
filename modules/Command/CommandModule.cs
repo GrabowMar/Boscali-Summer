@@ -57,7 +57,8 @@ namespace BoscaliSummer.Modules.Command
             context.AddService<IMapProjection>(new MfdMapProjection());
             ThreatMapOverlay threats = context.AddSceneService<ThreatMapOverlay>(54);
             context.AddService<ThreatMapOverlay>(threats);
-            context.AddSceneService<StrViewHub>(55).Configure(context.Settings.Command);
+            StrViewHub strHub = context.AddSceneService<StrViewHub>(55);
+            strHub.Configure(context.Settings.Command);
             StrMfdPanel strategic = context.AddSceneService<StrMfdPanel>(56);
             context.AddSceneService<MapUiManager>(57);
             context.AddSceneService<SettingsMfdPanel>(58)
@@ -71,7 +72,7 @@ namespace BoscaliSummer.Modules.Command
             manager.Configure(moraleNet);
             overlay.Configure(context.Settings.Command, manager, compat, territory);
             threats.Configure(context.Settings.Command);
-            strategic.Configure(context.Settings.Command, manager, overlay, context.Logger);
+            strategic.Configure(context.Settings.Command, strHub, context.Logger);
         }
     }
 }

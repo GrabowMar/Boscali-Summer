@@ -53,7 +53,7 @@
       "op": "call",
       "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Open",
       "args": {
-        "tab": 0
+        "page": "board"
       },
       "store": "o0"
     },
@@ -79,6 +79,54 @@
     },
     {
       "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Press",
+      "args": {
+        "id": "tab.sitrep"
+      },
+      "store": "t1"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "args": {},
+      "store": "a1s"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Press",
+      "args": {
+        "id": "tab.log"
+      },
+      "store": "t2"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "args": {},
+      "store": "a1l"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Press",
+      "args": {
+        "id": "tab.board"
+      },
+      "store": "t3"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
       "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Focus",
       "args": {
         "kind": "proposal",
@@ -98,10 +146,9 @@
     },
     {
       "op": "call",
-      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Act",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Press",
       "args": {
-        "action": "posture",
-        "arg": 2
+        "id": "posture.bold"
       },
       "store": "p1"
     },
@@ -117,10 +164,9 @@
     },
     {
       "op": "call",
-      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Act",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Press",
       "args": {
-        "action": "pick",
-        "index": 1
+        "id": "prop.1.pick"
       },
       "store": "k1"
     },
@@ -221,7 +267,7 @@
     },
     {
       "check": "result_above",
-      "path": "p1.sent",
+      "path": "p1.pressed",
       "min": 1
     },
     {
@@ -231,7 +277,7 @@
     },
     {
       "check": "result_above",
-      "path": "k1.sent",
+      "path": "k1.pressed",
       "min": 1
     },
     {
@@ -258,6 +304,61 @@
       "check": "result_below",
       "path": "a5.map.focusOffset",
       "max": 0.08
+    },
+    {
+      "check": "result_above",
+      "path": "a0.panel.present",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a0.panel.screenActive",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a1.view.ageSeconds",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "a1.view.ageSeconds",
+      "max": 15
+    },
+    {
+      "check": "result_above",
+      "path": "t1.ok",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a1s.panel.page",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "a1s.panel.page",
+      "max": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a1l.panel.page",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "t3.ok",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "p1.ok",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "k1.ok",
+      "min": 1
     },
     {
       "check": "log_match",

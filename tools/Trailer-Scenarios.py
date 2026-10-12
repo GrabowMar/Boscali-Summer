@@ -41,7 +41,7 @@ weather+=[call(CAP,action='panel',label='ENV'),wait(3)]+record('cw-env',8)
 write('cw-weather',weather,180)
 
 ui=[dict(op='seat',id='player',altitude=2000,speed=180,heading=0),atmosphere(10),wait(25),call(CAP,'installed_ui',action='ui_catalog')]
-for tab,name in [(0,'situation'),(1,'command'),(2,'operations')]:
+for tab,name in [(0,'board'),(1,'sitrep'),(2,'log')]:
     ui += [call(STR+'Open',name,tab=tab),wait(3)] + record('cw-str-'+name,8)
 for tab,name in [(1,'support'),(2,'space'),(3,'cyber'),(4,'sof'),(5,'board')]:
     ui += [call(OPS+'Open',name,tab=tab),wait(3)] + record('cw-ops-'+name,8)
