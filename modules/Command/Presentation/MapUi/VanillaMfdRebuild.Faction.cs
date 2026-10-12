@@ -34,6 +34,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private static readonly string[] ResourceLabels = { "FUNDS", "WARHEADS", "MANPOWER", "MORALE" };
             private static readonly string[] ClassLabels = { "BUILDINGS", "VEHICLES", "SHIPS", "AIRCRAFT" };
             private static readonly string[] LedgerLabels = { "RESERVES", "LOSSES", "VALUE", "MANPOWER" };
+            private static readonly string[] PageTitles = { "TREASURY RETURNS", "ORDER OF BATTLE", "LOSS RETURN", "THE MANDATE" };
+            private static readonly string[] LedgerTitles = { "RESERVE RETURN", "LOSS RETURN", "VALUE RETURN", "MANPOWER RETURN" };
             private const int AttritionLimit = 32;
 
             private readonly InfoPanel_Faction source;
@@ -71,7 +73,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private AvNote economyHeadline;
             private AvNote economyEffect;
             private AvNote economyContract;
-            private ImageTile mandateFlag;
             private AvNote mandateHeadline;
             private AvNote mandateEffect;
             private AvNote politicalEvent;
@@ -79,6 +80,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private AvNote politicalBrief;
             private AvNote politicalMission;
             private AvNote politicalMissionDetail;
+            private AvSection historySection;
+            private AvList bandList;
+            private string factionTitle = "";
             private int selectedFaction;
             private int definitionGroup;
             private bool definitionsLoaded;
@@ -98,7 +102,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 this.otherSource = otherSource;
             }
 
-            protected override string Title => "FACTION";
+            protected override string Title => "FACTION  /  TREASURY RETURNS";
 
             protected override (AvIcon Icon, string Label)[] TabItems { get; } = new[]
             {
@@ -135,11 +139,42 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 BuildLedgerPage(CreatePage());
                 BuildStatusPage(CreatePage());
                 SelectDefinitions(0);
+                Console.Orders(0,
+                    "Each trace keeps its own scale. Compare the figures, not the slopes.",
+                    "A break in a trace is a missed observation, never a zero.",
+                    "The order in force reprices support call-ins. Contract pay follows morale.",
+                    "OPPOSITION shows the other side's returns as last synced from the host.");
+                Console.Orders(1,
+                    "Types run busiest first. Ties go to the heavier losses, then to name.",
+                    "The strip under a type is its lost share of everything it fielded.",
+                    "RSV is mobile reserve supply. A dash means the figure does not apply.",
+                    "Pick a class to open its manifest. PREV and NEXT turn the form.");
+                Console.Orders(2,
+                    "RESERVES, LOSSES, VALUE and MANPOWER are four views of the same four classes.",
+                    "Both bars share one scale. The thin lower bar is the second series in the legend.",
+                    "Losses are the host's mission accounting, not an estimate.",
+                    "The loss form lists the hardest-hit unit types, heaviest first.");
+                Console.Orders(3,
+                    "The mandate is the host's 0-100 morale. It starts at 50.",
+                    "Events and contract results move it. Below 50 new contracts pay less; above, more.",
+                    "AIRBASES lists the faction's bases. PLAYERS lists crews by score.",
+                    "A dispatch is the event in force. A directive is the faction's lead contract.");
+                ShowTitle();
             }
             protected override void OnPageChanged(int index)
             {
                 selectedPage = index;
+                ShowTitle();
                 RequestRefresh();
+            }
+
+            // The header names the faction and the return on this page; a name too long to share the line goes.
+            private void ShowTitle()
+            {
+                string page = selectedPage == 2 ? LedgerTitles[(int)ledgerMode] : PageTitles[Mathf.Clamp(selectedPage, 0, 3)];
+                // ponytail: 48 characters is what the header holds above the 11 px floor; longer names drop out.
+                Console.SetTitle(string.IsNullOrEmpty(factionTitle) || factionTitle.Length + 5 + page.Length > 48
+                    ? page : factionTitle + "  /  " + page);
             }
 
             protected override void RefreshContent()
@@ -161,41 +196,49 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 {
                     for (int i = 0; i < resourceMetrics.Length; i++)
                         resourceMetrics[i].Set("—", "NO HQ", 0f, AvState.Inert);
-                    factionHeader.Set("FACTION HQ UNAVAILABLE",
-                        "Waiting for the selected faction and its live mission data.");
-                    factionHeader.Logo.enabled = false;
-                    definitionGrid.Set(Array.Empty<UnitDefinition>(), null, "UNIT MANIFEST", "STATISTICS UNAVAILABLE");
-                    attritionRoster.Set(Array.Empty<UnitDefinition>(), null, "ATTRITION / UNIT TYPE", "STATISTICS UNAVAILABLE");
+                    factionTitle = "";
+                    ShowTitle();
+                    factionHeader.Set("NO RETURN FROM FACTION HQ",
+                        "Standing by for the selected faction and its live mission data.");
+                    factionHeader.SetLogo(null);
+                    definitionGrid.Set(Array.Empty<UnitDefinition>(), null, "FORM 7 / UNITS ON STRENGTH", "STATISTICS UNAVAILABLE");
+                    attritionRoster.Set(Array.Empty<UnitDefinition>(), null, "FORM 12-B / LOSSES BY TYPE", "STATISTICS UNAVAILABLE");
                     SetForceTotals(null);
                     foreach (AvGauge row in ledgerRows) row.Set(0f, "\u2014", AvState.Inert);
                     ledgerChart.Chart.Clear();
                     history.Clear("FACTION HQ UNAVAILABLE");
-                    economyHeadline.Set("FACTION HQ UNAVAILABLE");
+                    historySection.SetCaption("FORM 31-T / NO RETURN");
+                    economyHeadline.Set("NO RETURN FROM FACTION HQ");
                     economyEffect.Set("SUPPORT COST / UNAVAILABLE");
                     economyContract.Set("CONTRACT / UNAVAILABLE");
                     eventStrip.Bar.Set(0f, "\u2014", AvState.Inert);
+                    eventStrip.Bar.SetShown(false);
+                    eventStrip.Changed();
                     mandateHeadline.Set("REPORT UNAVAILABLE");
                     mandateEffect.Set("CONTRACT EFFECT / UNAVAILABLE");
-                    mandateFlag.Image.enabled = false;
+                    mandateStrip.SetSeal(null);
                     moraleBar.Set(0f, "\u2014", AvState.Inert);
                     politicalEvent.Set("DISPATCH UNAVAILABLE");
                     politicalEffect.Set("\u2014"); politicalBrief.Set("\u2014");
                     politicalMission.Set("DIRECTIVE UNAVAILABLE"); politicalMissionDetail.Set("\u2014");
-                    directorySummary.Set("DIRECTORY / UNAVAILABLE");
+                    directorySummary.Set("REGISTER / UNAVAILABLE");
+                    bandMorale = float.NaN;
+                    bandList.SetCount(BandNames.Length);
                     infoGrid.SetData(0, _ => "", _ => false, null);
                     RefreshSegments();
                     return;
                 }
 
                 string name = hq.faction == null ? "FACTION" : hq.faction.factionName;
+                string upperName = (name ?? "FACTION").ToUpperInvariant();
+                if (upperName != factionTitle) { factionTitle = upperName; ShowTitle(); }
 
                 string extended = hq.faction == null ? null : hq.faction.factionExtendedName;
                 factionHeader.Set(name ?? "FACTION", (string.IsNullOrEmpty(extended)
-                    ? "LIVE THEATER ORDER OF BATTLE" : extended.ToUpperInvariant()) +
+                    ? "FACTION STAFF RETURN" : extended.ToUpperInvariant()) +
                     "  ·  SCORE " + AvNum.Fixed(hq.factionScore, 1));
                 Sprite logo = hq.faction == null ? null : hq.faction.factionColorLogo;
-                factionHeader.Logo.sprite = logo;
-                factionHeader.Logo.enabled = logo != null;
+                factionHeader.SetLogo(logo);
 
                 RefreshResources(hq);
                 if (selectedPage == 1)
@@ -214,13 +257,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             protected override string AmbientStatus()
             {
-                if (observedHq == null) return "WAITING FOR FACTION HQ";
+                if (observedHq == null) return "STANDING BY FOR FACTION HQ";
                 switch (selectedPage)
                 {
-                    case 0: return "ECONOMY";
-                    case 1: return "FORCES • LIVE / LOST";
-                    case 2: return "LEDGER • " + ledgerMode.ToString().ToUpperInvariant();
-                    default: return "POLITICS";
+                    case 0: return "TREASURY • OBSERVED RETURNS";
+                    case 1: return "ORDER OF BATTLE • LIVE / LOST";
+                    case 2: return LedgerTitles[(int)ledgerMode] + " • FORM 12-B";
+                    default: return "THE MANDATE • MORALE 0-100";
                 }
             }
 
@@ -285,13 +328,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 economyHeadline = eventStrip.Headline;
                 economyEffect = eventStrip.Effect;
                 economyContract = eventStrip.Contract;
-                economyHeadline.Set("AWAITING DISPATCH");
+                economyHeadline.Set("STANDING BY FOR DISPATCH");
                 economyEffect.Set("SUPPORT COST / BASELINE");
                 economyContract.Set("—");
-                eventStrip.Bar.Help = "Event countdown: the share of the current local event still to run. The clock beside it is the " +
+                eventStrip.Bar.Help = "Order in force: the share of the current local event still to run. The clock beside it is the " +
                                       "time left; when it empties, prices return to baseline.";
 
-                history = page.Add(new HistoryCard(page.Content));
+                historySection = page.Section(AvIcon.ChartLine, "TREASURY RETURNS", "FORM 31-T / NO OBSERVATIONS");
+                history = page.Add(new HistoryCard(page.Content), 1f);
                 history.Help = "Independent resource scales. One observation every " +
                     AvNum.Seconds(MfdResourceHistory.Interval, 0) + "; up to " +
                     AvNum.Seconds(MfdResourceHistory.Capacity * MfdResourceHistory.Interval, 0) +
@@ -338,6 +382,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 float eventLeft = EventRemaining(current, out eventClock);
                 eventStrip.Bar.Set(eventLeft, eventClock,
                     current == null ? AvState.Inert : applies ? AvState.Caution : AvState.Info);
+                eventStrip.Bar.SetShown(current != null);   // no order in force, no countdown frame
                 eventStrip.Tone(current == null ? AvState.Inert : applies ? AvState.Caution : AvState.Info);
                 SecondaryObjectiveView contract = FeaturedContract(hq);
                 economyContract.Set(contract == null
@@ -357,6 +402,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (count == renderedResourceCount && (count == 0 || latest == renderedResourceTime)) return;
                 renderedResourceCount = count;
                 renderedResourceTime = latest;
+                float onFile = count > 0 ? latest - resourceHistory.Time(0) : 0f;
+                historySection.SetCaption("FORM 31-T / " + (count == 0 || !float.IsFinite(onFile)
+                    ? "NO OBSERVATIONS" : AvNum.Clock(Mathf.Max(0f, onFile)) + " ON FILE"));
 
                 for (int series = 0; series < ResourceLabels.Length; series++)
                 {
@@ -477,7 +525,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                         live += current;
                         if (current > 0) activeTypes++;
                     }
-                definitionGrid.Set(definitions, hq, ClassLabels[definitionGroup] + " / MANIFEST",
+                definitionGrid.Set(definitions, hq, "FORM 7 / " + ClassLabels[definitionGroup] + " ON STRENGTH",
                     hq?.missionStatsTracker == null ? "STATISTICS UNAVAILABLE" :
                     activeTypes + " ACTIVE TYPES / " + live + " LIVE");
             }
@@ -581,6 +629,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private void SelectLedger(int selected)
             {
                 ledgerMode = (LedgerMode)Mathf.Clamp(selected, 0, 3);
+                ShowTitle();
                 RequestRefresh();
             }
 
@@ -638,7 +687,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     lostTotal += ScanAttrition(tracker, encyclopedia.ships);
                     lostTotal += ScanAttrition(tracker, encyclopedia.aircraft);
                 }
-                attritionRoster.Set(lossDefinitions, hq, "ATTRITION / UNIT TYPE",
+                attritionRoster.Set(lossDefinitions, hq, "FORM 12-B / LOSSES BY TYPE",
                     tracker == null || encyclopedia == null ? "STATISTICS UNAVAILABLE" :
                     lostTotal + " LOST / TOP " + lossDefinitions.Count + " TYPES");
             }
@@ -741,7 +790,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 BuildFactionSelector(page);
                 mandateStrip = page.Add(new MandateStrip(page.Content));
-                mandateFlag = mandateStrip.Flag;
                 moraleBar = mandateStrip.Bar;
                 mandateHeadline = mandateStrip.Headline;
                 mandateEffect = mandateStrip.Effect;
@@ -772,6 +820,30 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 directorySummary = page.Add(new AvNote(page.Content, AvTextRole.DataSmall));
                 infoGrid = new MfdPagingGrid(page.Content, 1, 12, readOnly: true, rowHeight: 40f);
                 AddGrid(page, infoGrid);
+
+                // The bands are the mandate's own rule (names and thresholds from MandateName, prices from the
+                // contract multiplier), so the table reads the same on every faction.
+                page.Section(AvIcon.Scale, "MANDATE BANDS", "CONTRACT PRICING BY MORALE");
+                bandList = page.Add(new AvList(page.Content, page.Ticker, BandNames.Length, BindBandRow));
+                bandList.SetCount(BandNames.Length);
+            }
+
+            private static readonly string[] BandNames = { "MOBILIZED HOME FRONT", "STEADFAST MANDATE", "WAR WEARY", "CABINET IN CRISIS" };
+            private static readonly float[] BandFloor = { 80f, 50f, 25f, 0f };
+            private float bandMorale = float.NaN;
+
+            private static int BandOf(float morale) => morale >= 80f ? 0 : morale >= 50f ? 1 : morale >= 25f ? 2 : 3;
+
+            private void BindBandRow(int index, AvRow row)
+            {
+                float lo = BandFloor[index], hi = index == 0 ? 100f : BandFloor[index - 1];
+                string lowPrice = "x" + AvNum.Fixed(FactionMoraleState.ContractMultiplier(lo), 2);
+                string highPrice = "x" + AvNum.Fixed(FactionMoraleState.ContractMultiplier(hi), 2);
+                bool current = float.IsFinite(bandMorale) && BandOf(bandMorale) == index;
+                row.Set(BandNames[index], "MORALE " + AvNum.Fixed(lo, 0) + "-" + AvNum.Fixed(hi, 0) + "   ·   PAY " + lowPrice + " TO " + highPrice,
+                    current ? "NOW" : "", current ? (index < 2 ? AvState.Ready : AvState.Caution) : AvState.Inert);
+                row.Help = BandNames[index] + ": morale " + AvNum.Fixed(lo, 0) + " to " + AvNum.Fixed(hi, 0) +
+                           ". New contracts are priced at " + lowPrice + " to " + highPrice + " of base, locked when offered.";
             }
             private void SelectInfo(int selected)
             {
@@ -786,9 +858,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 float morale = FactionResourceHistoryStore.Morale(hq);
                 Sprite seal = hq.faction == null ? null : hq.faction.factionColorLogo;
-                mandateFlag.Image.sprite = seal;
-                mandateFlag.Image.enabled = seal != null;
+                mandateStrip.SetSeal(seal);
                 bool known = float.IsFinite(morale);
+                bandMorale = known ? morale : float.NaN;
+                bandList.SetCount(BandNames.Length);   // rebinds the rows: the band holding the morale reads NOW
                 SecondaryObjectiveView contract = FeaturedContract(hq);
                 mandateHeadline.Set(known ? MandateName(morale) : "REPORT UNAVAILABLE",
                     !known ? AvState.Inert : morale >= 50f ? AvState.Ready : AvState.Caution);
@@ -871,8 +944,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     }
                 }
 
-                directorySummary.Set((infoMode == InfoMode.Airbases ? "BASE NETWORK / " : "PERSONNEL / ") +
-                    infoRows.Count + (infoMode == InfoMode.Airbases ? " REGISTERED / OPERATIONS BELOW" : " CONNECTED / SCORE ORDER"));
+                directorySummary.Set((infoMode == InfoMode.Airbases ? "BASE REGISTER / " : "PERSONNEL ROLL / ") +
+                    infoRows.Count + (infoMode == InfoMode.Airbases ? " ON FILE / OPERATIONS BELOW" : " CONNECTED / SCORE ORDER"));
                 directorySummary.Changed();
                 if (infoRows.Count == 0)
                 {
@@ -889,8 +962,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     subs: i => infoSubs[i]);
             }
 
-            private static string MandateName(float morale) => morale >= 80f ? "MOBILIZED HOME FRONT" :
-                morale >= 50f ? "STEADFAST MANDATE" : morale >= 25f ? "WAR WEARY" : "CABINET IN CRISIS";
+            private static string MandateName(float morale) => BandNames[BandOf(morale)];
 
             private static string EventClock(ActiveEventView active)
             {
@@ -984,13 +1056,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 public override void Restyle() => PaintFrame();
             }
 
-            /// <summary>Bounded, paged unit ledger; spare height reveals more named records, never anonymous tiles.</summary>
+            /// <summary>
+            /// Bounded, paged unit ledger; spare height reveals more named records, never anonymous tiles. Lines
+            /// the records do not fill stay on the form as empty ruled rows, and a total line closes the table.
+            /// </summary>
             private sealed class UnitRosterPart : FramedPart
             {
-                private const int Capacity = 12;
-                private const float RowHeight = 34f, HeaderHeight = 58f, FooterHeight = 28f;
+                private const int Capacity = 20;
+                private const float RowHeight = 28f, HeaderHeight = 58f, TotalHeight = 26f, FooterHeight = 28f;
                 private readonly bool losses;
-                private readonly TMP_Text title, summary, columns, pageText, empty;
+                private readonly TMP_Text title, summary, columns, pageText, empty, totalName, totalLive, totalLost, totalExtra;
+                private readonly Image totalRule;
                 private readonly TMP_Text[] names = new TMP_Text[Capacity], live = new TMP_Text[Capacity],
                     lost = new TMP_Text[Capacity], extra = new TMP_Text[Capacity];
                 private readonly Image[] icons = new Image[Capacity];
@@ -1025,6 +1101,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                         bars[i] = new AvStepProgress(rows[i], "RecordedLossShare");
                     }
                     empty = AvText.Make(Rect, "Empty", AvTextRole.ProseSmall);
+                    totalRule = AvLay.Solid(Rect, "TotalRule", AvTheme.Hairline);
+                    totalName = AvText.Make(Rect, "TotalName", AvTextRole.Label, losses ? "LISTED TYPES" : "CLASS TOTAL");
+                    totalLive = AvText.Make(Rect, "TotalLive", AvTextRole.DataStrong, "", TextAlignmentOptions.MidlineRight);
+                    totalLost = AvText.Make(Rect, "TotalLost", AvTextRole.DataStrong, "", TextAlignmentOptions.MidlineRight);
+                    totalExtra = AvText.Make(Rect, "TotalExtra", AvTextRole.DataStrong, "", TextAlignmentOptions.MidlineRight);
+                    AvText.Fit(totalName, false); AvText.Fit(totalLive, false); AvText.Fit(totalLost, false); AvText.Fit(totalExtra, false);
                     previous = AvControl.Make(Rect, new AvControl.Spec("PREV", () => { page--; Render(); }));
                     next = AvControl.Make(Rect, new AvControl.Spec("NEXT", () => { page++; Render(); }));
                     pageText = AvText.Make(Rect, "Page", AvTextRole.Micro, "", TextAlignmentOptions.Midline);
@@ -1065,8 +1147,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     {
                         int at = page * visible + row;
                         bool shown = row < visible && at < count;
-                        rows[row].gameObject.SetActive(shown);
-                        if (!shown) continue;
+                        rows[row].gameObject.SetActive(row < visible);
+                        if (!shown)
+                        {
+                            // An unfilled line of the form: the rule only, nothing that could pass for a record.
+                            names[row].text = live[row].text = lost[row].text = extra[row].text = "";
+                            icons[row].enabled = false;
+                            bars[row].SetProgress(0, 1);
+                            AvHelpTip.Attach(names[row].gameObject, "");
+                            continue;
+                        }
                         int current = liveAt(at), dead = lostAt(at), reserve = reserveAt(at);
                         bool known = current >= 0 && dead >= 0;
                         names[row].text = nameAt(at);
@@ -1081,18 +1171,44 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                         AvHelpTip.Attach(names[row].gameObject, helpAt(at) +
                             ". Strip: lost / (live + lost), recorded mission accounting. RSV: current mobile reserve supply; dash means not applicable.");
                     }
+                    RenderTotals();
                     previous.Interactable = page > 0;
                     next.Interactable = page + 1 < pages;
                     pageText.text = "PAGE " + (page + 1) + "/" + pages + "  /  " + count + " TYPES";
                 }
 
-                public override float Measure(float width) => HeaderHeight + 4f * RowHeight + FooterHeight;
+                // Sums over every record of the form, not just the page on show; a type with no figure adds nothing.
+                private void RenderTotals()
+                {
+                    int sumLive = 0, sumLost = 0, sumReserve = 0, known = 0, reserveKnown = 0;
+                    for (int at = 0; at < count; at++)
+                    {
+                        int current = liveAt(at), dead = lostAt(at), reserve = reserveAt(at);
+                        if (current < 0 || dead < 0) continue;
+                        known++; sumLive += current; sumLost += dead;
+                        if (reserve >= 0) { reserveKnown++; sumReserve += reserve; }
+                    }
+                    bool any = known > 0;
+                    totalLive.text = any ? AvNum.Fixed(sumLive, 0) : "\u2014";
+                    totalLost.text = any ? AvNum.Fixed(sumLost, 0) : "\u2014";
+                    totalExtra.text = !any ? "\u2014" : losses
+                        ? AvNum.Fixed(sumLive + sumLost > 0 ? 100f * sumLost / (sumLive + sumLost) : 0f, 0) + "%"
+                        : reserveKnown > 0 ? AvNum.Fixed(sumReserve, 0) : "\u2014";
+                    bool shownTotals = count > 0;
+                    totalRule.gameObject.SetActive(shownTotals); totalName.gameObject.SetActive(shownTotals);
+                    totalLive.gameObject.SetActive(shownTotals); totalLost.gameObject.SetActive(shownTotals);
+                    totalExtra.gameObject.SetActive(shownTotals);
+                }
+
+                public override float Measure(float width) => HeaderHeight + 4f * RowHeight + TotalHeight + FooterHeight;
 
                 public override void Place(AvSlot slot)
                 {
                     base.Place(slot);
                     float w = slot.W - 2f * Inset;
-                    visible = Mathf.Clamp(Mathf.FloorToInt((slot.H - HeaderHeight - FooterHeight) / RowHeight), 4, Capacity);
+                    float room = slot.H - HeaderHeight - TotalHeight - FooterHeight;
+                    visible = Mathf.Clamp(Mathf.FloorToInt(room / RowHeight), 4, Capacity);
+                    float pitch = Mathf.Clamp(room / visible, RowHeight, RowHeight * 1.4f);   // the remainder is spread, not left as a gap
                     AvLay.Place(title.rectTransform, Inset, 7f, w, 18f);
                     AvLay.Place(summary.rectTransform, Inset, 25f, w, 14f);
                     AvLay.Place(columns.rectTransform, Inset, 41f, w * .58f, 14f);
@@ -1100,15 +1216,22 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     EnsureHeadings(w);
                     for (int i = 0; i < Capacity; i++)
                     {
-                        AvLay.Place(rows[i], Inset, HeaderHeight + i * RowHeight, w, RowHeight);
-                        AvLay.Place(icons[i].rectTransform, 0, 3f, 20f, 20f);
-                        AvLay.Place(names[i].rectTransform, 25f, 0, w * .56f - 25f, 27f);
-                        AvLay.Place(live[i].rectTransform, w * .57f, 0, w * .12f, 27f);
-                        AvLay.Place(lost[i].rectTransform, w * .71f, 0, w * .12f, 27f);
-                        AvLay.Place(extra[i].rectTransform, w * .85f, 0, w * .15f, 27f);
-                        AvLay.Place(bars[i].Rect, 25f, 29f, w - 25f, 2f);
+                        float text = pitch - 3f;
+                        AvLay.Place(rows[i], Inset, HeaderHeight + i * pitch, w, pitch);
+                        AvLay.Place(icons[i].rectTransform, 0, (text - 18f) * .5f, 18f, 18f);
+                        AvLay.Place(names[i].rectTransform, 25f, 0, w * .56f - 25f, text);
+                        AvLay.Place(live[i].rectTransform, w * .57f, 0, w * .12f, text);
+                        AvLay.Place(lost[i].rectTransform, w * .71f, 0, w * .12f, text);
+                        AvLay.Place(extra[i].rectTransform, w * .85f, 0, w * .15f, text);
+                        AvLay.Place(bars[i].Rect, 25f, pitch - 2f, w - 25f, 2f);
                     }
-                    AvLay.Place(empty.rectTransform, Inset, HeaderHeight + 10f, w, 35f);
+                    AvLay.Place(empty.rectTransform, Inset + 25f, HeaderHeight, w - 25f, pitch - 3f);
+                    float ty = HeaderHeight + visible * pitch + 2f;
+                    AvLay.Place(totalRule.rectTransform, Inset, ty, w, 1f);
+                    AvLay.Place(totalName.rectTransform, Inset + 25f, ty + 2f, w * .56f - 25f, TotalHeight - 4f);
+                    AvLay.Place(totalLive.rectTransform, Inset + w * .57f, ty + 2f, w * .12f, TotalHeight - 4f);
+                    AvLay.Place(totalLost.rectTransform, Inset + w * .71f, ty + 2f, w * .12f, TotalHeight - 4f);
+                    AvLay.Place(totalExtra.rectTransform, Inset + w * .85f, ty + 2f, w * .15f, TotalHeight - 4f);
                     float y = slot.H - FooterHeight;
                     AvLay.Place(previous.Rect, Inset, y, 54f, 22f);
                     AvLay.Place(next.Rect, slot.W - Inset - 54f, y, 54f, 22f);
@@ -1138,6 +1261,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     title.color = AvTheme.RailInfo;
                     summary.color = columns.color = pageText.color = AvTheme.Dim;
                     empty.color = AvTheme.TextPrimary;
+                    totalRule.color = AvTheme.Hairline;
+                    totalName.color = totalLive.color = AvTheme.TextPrimary;
+                    totalLost.color = AvTheme.Warning; totalExtra.color = AvTheme.Dim;
                     for (int i = 0; i < Capacity; i++)
                     {
                         names[i].color = live[i].color = AvTheme.TextPrimary;
@@ -1158,7 +1284,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 {
                     Headline = new AvNote(Rect, AvTextRole.Head, true);
                     Effect = new AvNote(Rect, AvTextRole.Prose);
-                    Bar = new AvHazardBar(Rect, "EVENT");
+                    Bar = new AvHazardBar(Rect, "ORDER IN FORCE");
                     Contract = new AvNote(Rect, AvTextRole.ProseSmall);
                     Restyle();
                 }
@@ -1168,7 +1294,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 public override float Measure(float width)
                 {
                     float w = width - 2f * Inset;
-                    return 8f + Headline.Measure(w) + 2f + Effect.Measure(w) + 5f + Bar.Measure(w) + 5f + Contract.Measure(w) + 8f;
+                    return 8f + Headline.Measure(w) + 2f + Effect.Measure(w) + 5f + (Bar.Shown ? Bar.Measure(w) + 5f : 0f) +
+                        Contract.Measure(w) + 8f;
                 }
 
                 public override void Place(AvSlot s)
@@ -1178,8 +1305,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     Headline.Place(new AvSlot(Inset, y, w, h)); y += h + 2f;
                     h = Effect.Measure(w);
                     Effect.Place(new AvSlot(Inset, y, w, h)); y += h + 5f;
-                    h = Bar.Measure(w);
-                    Bar.Place(new AvSlot(Inset, y, w, h)); y += h + 5f;
+                    if (Bar.Shown)
+                    {
+                        h = Bar.Measure(w);
+                        Bar.Place(new AvSlot(Inset, y, w, h)); y += h + 5f;
+                    }
                     Contract.Place(new AvSlot(Inset, y, w, Contract.Measure(w)));
                 }
 
@@ -1228,9 +1358,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 {
                     base.Place(slot);
                     float w = (slot.W - Gap) * .5f, y = 0f;
+                    float spare = Mathf.Max(0f, slot.H - Measure(slot.W)) * .5f;   // the page's leftover height deepens both rows
                     for (int row = 0; row < 2; row++)
                     {
-                        float h = Mathf.Max(Tiles[row * 2].Measure(w), Tiles[row * 2 + 1].Measure(w));
+                        float h = Mathf.Max(Tiles[row * 2].Measure(w), Tiles[row * 2 + 1].Measure(w)) + spare;
                         for (int col = 0; col < 2; col++)
                             Tiles[row * 2 + col].Place(new AvSlot(col * (w + Gap), y, w, h));
                         y += h + Gap;
@@ -1280,8 +1411,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     AvLay.Place(title.rectTransform, Inset, 8f, w * .58f, 18f);
                     AvLay.Place(current.rectTransform, Inset + w * .58f, 8f, w * .42f, 18f);
                     AvLay.Place(units.rectTransform, Inset, 26f, w, 14f);
-                    Chart.Place(new AvSlot(Inset, 40f, w, PlotHeight));
-                    AvLay.Place(movement.rectTransform, Inset, 44f + PlotHeight, w, Mathf.Max(16f, AvText.Height(movement, w)));
+                    float note = Mathf.Max(16f, AvText.Height(movement, w));
+                    float plot = Mathf.Max(PlotHeight, slot.H - 40f - 4f - note - 8f);
+                    Chart.Place(new AvSlot(Inset, 40f, w, plot));
+                    AvLay.Place(movement.rectTransform, Inset, 44f + plot, w, note);
                 }
 
                 public override void Restyle()
@@ -1312,8 +1445,23 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     Restyle();
                 }
 
+                private float FlagSpace => Flag.Image.enabled ? FlagSize + 8f : 0f;
+                private AvSlot lastSlot;
+                private bool placed;
+
+                /// <summary>The faction roundel; no roundel, no blank column. Its arrival moves the text, so the strip re-places itself.</summary>
+                public void SetSeal(Sprite sprite)
+                {
+                    bool on = sprite != null;
+                    Flag.Image.sprite = sprite;
+                    if (Flag.Image.enabled == on) return;
+                    Flag.Image.enabled = on;
+                    if (placed) Place(lastSlot);
+                    Changed();
+                }
+
                 private float RowHeight(float w) =>
-                    Mathf.Max(FlagSize, Headline.Measure(w - FlagSize - 8f) + 2f + Effect.Measure(w - FlagSize - 8f));
+                    Mathf.Max(Flag.Image.enabled ? FlagSize : 0f, Headline.Measure(w - FlagSpace) + 2f + Effect.Measure(w - FlagSpace));
 
                 public override float Measure(float width)
                 {
@@ -1324,7 +1472,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 public override void Place(AvSlot s)
                 {
                     base.Place(s);
-                    float w = s.W - 2f * Inset, tx = Inset + FlagSize + 8f, tw = w - FlagSize - 8f, row = RowHeight(w);
+                    lastSlot = s; placed = true;
+                    float w = s.W - 2f * Inset, tx = Inset + FlagSpace, tw = w - FlagSpace, row = RowHeight(w);
                     Flag.Place(new AvSlot(Inset, 8f, FlagSize, FlagSize));
                     float hh = Headline.Measure(tw), eh = Effect.Measure(tw);
                     float y = 8f + Mathf.Max(0f, (row - hh - 2f - eh) * 0.5f);
@@ -1436,26 +1585,45 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 public Image Logo { get; }
 
+                private AvSlot lastSlot;
+                private bool placed;
+
+                /// <summary>The faction roundel; its arrival or loss moves the text, which the flow would not notice by height alone.</summary>
+                public void SetLogo(Sprite sprite)
+                {
+                    bool on = sprite != null;
+                    Logo.sprite = sprite;
+                    if (Logo.enabled == on) return;
+                    Logo.enabled = on;
+                    if (placed) Place(lastSlot);
+                    Changed();
+                }
+
                 public void Set(string factionName, string extended)
                 {
                     string n = factionName ?? "", s = extended ?? "";
-                    if (name.text != n) name.text = n;
-                    if (subtitle.text != s) subtitle.text = s;
+                    if (name.text != n) { name.text = n; Changed(); }
+                    if (subtitle.text != s) { subtitle.text = s; Changed(); }
                 }
+
+                private float Indent => Logo.enabled ? TextX : 0f;
 
                 public override float Measure(float width)
                 {
-                    return Mathf.Max(LogoSize, AvText.Height(name, width - TextX));
+                    float w = width - Indent;
+                    return Mathf.Max(Logo.enabled ? LogoSize : 0f,
+                        AvText.Height(name, w) + (subtitle.text.Length > 0 ? 2f + AvText.Height(subtitle, w) : 0f));
                 }
 
                 public override void Place(AvSlot s)
                 {
                     base.Place(s);
-                    float w = s.W - TextX, nh = AvText.Height(name, w);
+                    lastSlot = s; placed = true;
+                    float w = s.W - Indent, nh = AvText.Height(name, w);
                     AvLay.Place(Logo.rectTransform, 0f, 0f, LogoSize, LogoSize);
-                    AvLay.Place(name.rectTransform, TextX, 0f, w, nh);
-                    subtitle.gameObject.SetActive(false);
-                    AvHelpTip.Attach(name.gameObject, subtitle.text);
+                    AvLay.Place(name.rectTransform, Indent, 0f, w, nh);
+                    subtitle.gameObject.SetActive(subtitle.text.Length > 0);
+                    AvLay.Place(subtitle.rectTransform, Indent, nh + 2f, w, AvText.Height(subtitle, w));
                 }
 
                 public override void Restyle()

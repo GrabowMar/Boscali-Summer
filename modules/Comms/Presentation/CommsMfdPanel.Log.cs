@@ -8,20 +8,17 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 {
     internal sealed partial class CommsMfdPanel
     {
-        private const int LogRows = 20;
+        private const int LogRows = 24;
         private const int MinLogRows = 3;
         private const int PlayerRows = 10;
 
-        // Part heights, gaps and padding of the COMMS page with no player lines, biased a few px high; each player line
-        // (two players side by side) adds 33 px. The log takes what is left.
-        private const float LogFixedHeight = 244f;
-
         private AvSection logSection;
-        private AvRow[] logRows;
+        private NetRow[] logRows;
         private readonly CommsFeedLine[] logBound = new CommsFeedLine[LogRows];
 
         private AvSection playersSection;
-        private AvRow[] playerRows;
+        private NetRow rosterEmpty;
+        private NetRow[] playerRows;
         private AvControl[] playerMutes;
         private readonly ulong[] playerIds = new ulong[PlayerRows];
 
@@ -31,6 +28,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             logRows = null;
             for (int i = 0; i < logBound.Length; i++) logBound[i] = null;
             playersSection = null;
+            rosterEmpty = null;
             playerRows = null;
             playerMutes = null;
             for (int i = 0; i < playerIds.Length; i++) playerIds[i] = 0;
@@ -38,16 +36,18 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
         private void BuildLogPage(AvFlow p)
         {
-            // The mute list is short and its keys should not move, so it leads: players two to a line, then the log
+            // The mute list is short and its keys should not move, so it leads: stations two to a line, then the log
             // takes every row the page has left.
-            playersSection = p.Section(AvIcon.UsersGroup, "PLAYERS", "");
-            playerRows = new AvRow[PlayerRows];
+            playersSection = p.Section(AvIcon.UsersGroup, "STATIONS HEARD", "");
+            rosterEmpty = p.Add(new NetRow(p.Content, AvTextRole.Head, 0f, 0f, 0f));
+            rosterEmpty.Set("", "", "NO STATIONS HEARD YET · THEY LIST HERE ONCE THEY POST", "", AvState.Inert);
+            playerRows = new NetRow[PlayerRows];
             playerMutes = new AvControl[PlayerRows];
             for (int i = 0; i < PlayerRows; i++)
             {
                 int row = i;
-                playerRows[i] = new AvRow(p.Content);
-                playerMutes[i] = playerRows[i].AddTrailing(new AvControl.Spec("MUTE", () =>
+                playerRows[i] = new NetRow(p.Content, AvTextRole.Head, 0f, 0f, 0f);
+                playerMutes[i] = playerRows[i].AddKey(new AvControl.Spec("MUTE", () =>
                 {
                     if (playerIds[row] != 0) comms.State.ToggleMute(playerIds[row]);
                 }));
@@ -55,13 +55,19 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             }
             for (int i = 0; i < PlayerRows; i += 2) p.Row(playerRows[i], playerRows[i + 1]);
 
-            logSection = p.Section(AvIcon.ListDetails, "COMMS LOG", "");
-            logRows = new AvRow[LogRows];
+            logSection = p.Section(AvIcon.ListDetails, "NET LOG", "");
+            logRows = new NetRow[LogRows];
             for (int i = 0; i < LogRows; i++)
             {
                 int row = i;
-                logRows[i] = p.Add(new AvRow(p.Content, () => OpenLogLine(row)));
+                logRows[i] = p.Add(new NetRow(p.Content, AvTextRole.DataSmall, 36f, 124f, 36f, () => OpenLogLine(row)));
             }
+
+            console.Orders(TabComms,
+                "Calls go to your team. Those that mean 'here' also ping your aircraft's position.",
+                "Click a log line that carries a position to flash it on the map.",
+                "Mute hides a station's marks and calls on your screen only. They are not told.",
+                "A post to ALL reaches both sides; the host can switch ALL off.");
         }
 
         private void RefreshLog(float now)
@@ -69,7 +75,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             if (logRows == null) return;
             CommsClientState state = comms.State;
 
-            // ---- players: alphabetical, so a row never jumps out from under the pointer.
+            // ---- stations: alphabetical, so a row never jumps out from under the pointer.
             var seen = new List<KeyValuePair<ulong, string>>(state.Seen);
             seen.Sort((a, b) => string.CompareOrdinal(a.Value, b.Value));
             int players = 0;
@@ -78,7 +84,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 if (seen[i].Key == comms.LocalId) continue;
                 bool muted = state.IsMuted(seen[i].Key);
                 playerIds[players] = seen[i].Key;
-                playerRows[players].Set(seen[i].Value + (muted ? " · MUTED" : ""), null, "", muted ? AvState.Inert : AvState.Info);
+                playerRows[players].Set("", "", seen[i].Value + (muted ? " · MUTED" : ""), "", muted ? AvState.Inert : AvState.Info);
                 playerMutes[players].Label = muted ? "UNMUTE" : "MUTE";
                 playerMutes[players].Help = muted
                     ? "Unmute: show this player's marks and calls again."
@@ -92,51 +98,52 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 playerIds[i] = 0;
                 Show(playerRows[i], false);
             }
+            Show(rosterEmpty, players == 0);
             playersSection.SetCaption(players == 0
-                ? "NOBODY ELSE HERE YET"
+                ? ""
                 : AvNum.Fixed(players, 0) + (players == 1 ? " PLAYER" : " PLAYERS") +
                   (state.MutedCount > 0 ? " · " + AvNum.Fixed(state.MutedCount, 0) + " MUTED" : ""));
 
-            // ---- the log, sized to what is left of the page
+            // ---- the log, sized to what is left of the page; a line that wraps takes the room it needs
             IReadOnlyList<CommsFeedLine> feed = state.Feed;
-            int fit = FitRows(console.Page(TabComms), LogFixedHeight + ((players + 1) / 2) * 33f, LogRows, MinLogRows);
-            int shown = 0;
-            for (int i = feed.Count - 1; i >= 0 && shown < fit; i--)
+            AvFlow page = console.Page(TabComms);
+            float width = page.Inner;
+            float room = page.ViewportHeight <= 0f ? float.MaxValue : page.ViewportHeight - FixedHeight(page, logRows);
+            float used = 0f;
+            int shown = 0, eligible = 0;
+            bool full = false;
+            for (int i = feed.Count - 1; i >= 0; i--)
             {
                 CommsFeedLine line = feed[i];
                 if ((line.Kind != CommsFeedKind.Call && line.Kind != CommsFeedKind.System) || state.IsMuted(line.Author)) continue;
+                eligible++;
+                if (full || shown >= LogRows) continue;
+                NetRow row = logRows[shown];
+                row.Set(Ago(now - line.Time), Who(line.Author, line.AuthorName), line.Text,
+                    line.Channel == CommsChannel.All && line.Kind != CommsFeedKind.System ? "ALL" : "", ToneState(line.Tone));
+                float h = row.Measure(width) + AvGridTokens.Gap;
+                if (shown >= MinLogRows && used + h > room) { full = true; continue; }
+                used += h;
                 logBound[shown] = line;
-                string channel = line.Channel == CommsChannel.All && line.Kind != CommsFeedKind.System ? "[ALL] " : "";
-                string text = channel +
-                    Who(line.Author, line.AuthorName) + " · " + line.Text;
-                logRows[shown].Set(text, null, Ago(now - line.Time), ToneState(line.Tone));
-                logRows[shown].Help = line.HasPosition ? "Flash this position on the map." : null;
-                Show(logRows[shown], true);
+                row.Help = line.HasPosition ? "Flash this position on the map." : null;
+                Show(row, true);
                 shown++;
             }
             if (shown == 0)
             {
                 logBound[0] = null;
-                logRows[0].Set("NO TRAFFIC YET · SEND A CALL ABOVE", null, "", AvState.Inert);
+                logRows[0].Set("", "", "NET QUIET · NO TRAFFIC HELD. SEND A BREVITY CALL ABOVE.", "", AvState.Inert);
                 logRows[0].Help = null;
                 Show(logRows[0], true);
                 shown = 1;
             }
-            // Fitted rows stay on the page as ruled blanks, so a short log does not leave a dead band.
-            int pad = Math.Max(shown, fit);
-            for (int i = shown; i < pad; i++)
-            {
-                logBound[i] = null;
-                logRows[i].Set("", null, "", AvState.Inert);
-                logRows[i].Help = null;
-                Show(logRows[i], true);
-            }
-            for (int i = pad; i < LogRows; i++)
+            for (int i = shown; i < LogRows; i++)
             {
                 logBound[i] = null;
                 Show(logRows[i], false);
             }
-            logSection.SetCaption(feed.Count == 0 ? "" : "CLICK: FIND ON MAP");
+            logSection.SetCaption(eligible == 0 ? ""
+                : (shown < eligible ? "NEWEST " + AvNum.Fixed(shown, 0) + " OF " + AvNum.Fixed(eligible, 0) : "NEWEST FIRST") + " · CLICK: FIND ON MAP");
         }
 
         private void OpenLogLine(int row)

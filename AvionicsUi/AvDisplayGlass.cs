@@ -24,6 +24,28 @@ namespace NOAvionics
         private static readonly int TintColorId = Shader.PropertyToID("_TintColor");
         private static readonly int TintStrengthId = Shader.PropertyToID("_TintStrength");
         private static readonly int LightId = Shader.PropertyToID("_Light");
+        private static readonly int LifeId = Shader.PropertyToID("_Life");
+        private static readonly int BootId = Shader.PropertyToID("_NOA_Boot");
+        private static float life = .6f;
+
+        /// <summary>
+        /// Live signal (0..1) of the full-display finish: the power-on raster, the slow refresh sweep and how hard a
+        /// jam or hit breaks the picture up. 0 is a still display. Needs the Glass2 shader; ignored without it.
+        /// </summary>
+        public static void ConfigureLife(float value)
+        {
+            life = Mathf.Clamp01(value);
+            revision++;
+        }
+
+        // The raster opens from a line each time the full display comes on (shader side: _NOA_Boot).
+        private void PowerOn()
+        {
+            if (shaderMode && effects && life > 0f && !AvFxDriver.ReducedMotion && Application.isPlaying)
+                Shader.SetGlobalFloat(BootId, Time.unscaledTime);
+        }
+
+        private void OnEnable() => PowerOn();
 
         // Presentation values only: the owning feature binds and persists its settings.
         public static void Configure(bool enabled, float glass, bool adaptToLight,
@@ -58,6 +80,7 @@ namespace NOAvionics
                 glass.material = glassMat;
                 driver.shaderMode = true;
                 AvFxDriver.EnsureRunning();
+                driver.PowerOn();
             }
             else
             {
@@ -119,6 +142,7 @@ namespace NOAvionics
                 m.SetColor(TintColorId, Tints[tintIndex]);
                 m.SetFloat(TintStrengthId, tintIndex > 0 ? tintStrength : 0f);
                 m.SetFloat(LightId, level);
+                m.SetFloat(LifeId, AvFxDriver.ReducedMotion ? 0f : life);
                 image.color = Color.white;
                 // Stays on while effects are on: the EMP/jam glitch draws through this quad too.
                 image.enabled = effects;

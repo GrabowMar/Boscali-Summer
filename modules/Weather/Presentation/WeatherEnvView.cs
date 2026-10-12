@@ -102,6 +102,14 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             Console.Tabs((AvIcon.Cloud, "WEATHER"), (AvIcon.Wind, "SKY & AIR"));
             BuildWeatherPage(Console.Page(PageWeather));
             BuildSkyPage(Console.Page(PageSky));
+            Console.Orders(PageWeather,
+                "Read the flight category first: IFR and LIFR are instrument weather.",
+                "The layer chart sets cloud base and top against your own height.",
+                "The forecast strip and the cover trend read left to right, now to one hour out.");
+            Console.Orders(PageSky,
+                "Check sun and moon before a night sortie; moonlight decides what you can see.",
+                "The wind dial gives where it blows from and to; crab into it on final.",
+                "Air thins with height: expect less lift and less thrust the higher you fly.");
         }
 
         public void Finish() => Console.Finish();

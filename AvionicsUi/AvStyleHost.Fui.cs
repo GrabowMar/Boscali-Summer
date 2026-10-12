@@ -21,12 +21,19 @@ namespace NOAvionics
             }
         }
 
+        /// <summary>The Custom scheme's palette text (<see cref="AvThemes.CustomPalette"/>); the host mod keeps it current.</summary>
+        public static string CustomPalette = AvThemes.CustomPalette(190f, 200f, 0.6f);
+
+        /// <summary>A scheme's palette sheet: the pilot's override file, else the shipped (or generated) one.</summary>
+        public static string PaletteText(AvThemeId id) =>
+            ReadFile(AvThemes.OverrideFile(id)) ?? (id == AvThemeId.Custom ? CustomPalette : ReadResource(AvThemes.PaletteResource(id)));
+
         /// <summary>Compose palette + base, parse, and bump the generation. Never throws; keeps the old sheet on total failure.</summary>
         public static void SetTheme(AvThemeId id)
         {
             try
             {
-                string palette = ReadFile(AvThemes.OverrideFile(id)) ?? ReadResource(AvThemes.PaletteResource(id));
+                string palette = PaletteText(id);
                 string baseSheet = ReadFile(AvThemes.BaseOverrideFile) ?? ReadResource(AvThemes.BaseResource);
                 AvStyleSheet parsed = AvStyleSheet.Parse(AvThemes.Compose(palette, baseSheet));
                 foreach (string e in parsed.Errors) Warn("avionics.fui (" + id + ") " + e);

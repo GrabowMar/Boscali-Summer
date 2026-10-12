@@ -30,6 +30,12 @@ namespace NOAvionics
         private AvChip[] chips = new AvChip[0];
         private AvMetric[] metrics = new AvMetric[0];
         private AvTabBar tabs;
+        private readonly AvBayPlate bay;
+        private readonly string[][] orders;
+        private readonly TMP_Text bootText;
+        private readonly string id;
+        private int bootLine = -1;
+        private bool booted;
 
         public RectTransform Root { get; }
         public AvTicker Ticker { get; }
@@ -41,6 +47,8 @@ namespace NOAvionics
         private AvConsole(RectTransform host, string id, string title, int pages, float w, float h)
         {
             width = w; height = h; PageCount = Math.Max(1, pages);
+            this.id = id ?? "";
+            orders = new string[PageCount][];
             Root = AvLay.Child(host, "AvConsole " + id);
             AvLay.Place(Root, 0f, 0f, w, h);
             AvLay.Nest(Root, true);
@@ -66,6 +74,7 @@ namespace NOAvionics
             AvLay.Nest(live, false);
 
             bodyRect = AvLay.Child(Root, "Body");
+            bay = new AvBayPlate(bodyRect, this.id);   // first child: pages draw over it
             scrollView = new AvScrollView(bodyRect, false);
             viewport = scrollView.Viewport;
 
@@ -81,6 +90,8 @@ namespace NOAvionics
 
             scanCover = AvLay.Solid(bodyRect, "ScanCover", Color.clear);
             scanCover.enabled = false;
+            bootText = AvText.Make(bodyRect, "Boot", AvTextRole.DataSmall, "", TextAlignmentOptions.TopLeft);
+            bootText.enabled = false;
 
             var decorGo = new GameObject("Decor", typeof(RectTransform), typeof(CanvasRenderer));
             decorGo.transform.SetParent(Root, false);
@@ -92,6 +103,10 @@ namespace NOAvionics
             Root.gameObject.AddComponent<AvHelpScope>().Footer = Footer;
             Ticker.Register(Footer);
             Ticker.Add(-1, AvTickRate.Fast, EndScan);
+            Ticker.Add(-1, AvTickRate.Fast, BootTick);
+            Ticker.Add(-1, AvTickRate.Slow, Footer.Tick);
+            Ticker.Add(-1, AvTickRate.Slow, SeatBay);
+            Ticker.Shown = Wake;
             Restyle();
             Ticker.Register(new RestyleHook(this));
         }
@@ -135,6 +150,18 @@ namespace NOAvionics
 
         public AvFlow Page(int index) => flows[Mathf.Clamp(index, 0, PageCount - 1)];
 
+        /// <summary>
+        /// Standing orders for a page: two to four short usage notes in the unit's own voice. They print on the bay
+        /// cover that fills the page when its content ends above the footer, most important first (the cover
+        /// drops trailing lines that do not fit).
+        /// </summary>
+        public void Orders(int page, params string[] lines)
+        {
+            if (page < 0 || page >= PageCount) return;
+            orders[page] = lines;
+            SeatBay();
+        }
+
         public void SetPage(int index)
         {
             index = Mathf.Clamp(index, 0, PageCount - 1);
@@ -154,6 +181,7 @@ namespace NOAvionics
             bool changed = CurrentPage != index;
             CurrentPage = index;
             if (changed) { StartScan(); PageChanged?.Invoke(index); }
+            SeatBay();
         }
 
         public void Finish()
@@ -161,6 +189,16 @@ namespace NOAvionics
             Layout();
             foreach (AvFlow f in flows) f.Relayout();
             SetPage(CurrentPage < 0 ? 0 : CurrentPage);
+        }
+
+        // The bay cover takes whatever the current page leaves between its last part and the footer.
+        private void SeatBay()
+        {
+            if (CurrentPage < 0) return;
+            float content = flows[CurrentPage].ContentHeight;
+            // The placed body, not the height Layout chose: a console may shrink its body to dock a bar under it (MIS).
+            bay.Set(AvGridTokens.Pad, content, width - 2f * AvGridTokens.Pad - AvGridTokens.Gutter,
+                bodyRect.sizeDelta.y - content - AvGridTokens.Pad, CurrentPage, orders[CurrentPage]);
         }
 
         private void Layout()
@@ -197,6 +235,7 @@ namespace NOAvionics
             scrollView.Place(width, bodyH);
             foreach (AvFlow f in flows) f.ViewportHeight = bodyH;
             AvLay.Place(scanCover.rectTransform, 0f, 0f, width, bodyH);
+            AvLay.Place(bootText.rectTransform, AvGridTokens.Pad + 4f, AvGridTokens.Pad, width - 2f * AvGridTokens.Pad - 8f, 96f);
             for (int i = 0; i < PageCount; i++) { pageRects[i].anchoredPosition = Vector2.zero; }
         }
 
@@ -218,6 +257,41 @@ namespace NOAvionics
             if (scanCover.enabled && Time.unscaledTime >= scanUntil) scanCover.enabled = false;
         }
 
+        private static readonly string[] BootSteps = { "BIT", "BUS A/B", "SYMBOLOGY" };
+
+        // Back on screen: the first time a console powers up it prints its self-test, after that a scan wipe.
+        private void Wake()
+        {
+            if (AvFxPacking.Resolve(AvFxKind.Scan, AvFxDriver.Tier, AvFxDriver.ReducedMotion) == AvFxKind.None ||
+                AvFxDriver.FxMaterial == null) return;
+            if (booted) { StartScan(); return; }
+            booted = true;
+            if (scanFx == null) scanFx = AvFx.On(scanCover);
+            scanFx.Clear();
+            scanCover.color = AvStyleHost.FuiColor("ground", AvTheme.Ground);
+            scanCover.enabled = true;
+            scanUntil = float.MaxValue;
+            bootText.text = "";
+            bootText.enabled = true;
+            bootLine = 0;
+        }
+
+        private void BootTick()
+        {
+            if (bootLine < 0) return;
+            if (bootLine == 0) bootText.text = id + " DISPLAY PROCESSOR · " + AvPortalMath.Serial(id);
+            else if (bootLine <= BootSteps.Length) bootText.text += "\n" + BootSteps[bootLine - 1].PadRight(12, '.') + " OK";
+            else
+            {
+                bootLine = -1;
+                bootText.enabled = false;
+                scanUntil = 0f;   // if the wipe cannot play (FX switched off meanwhile) the cover still clears next tick
+                StartScan();
+                return;
+            }
+            bootLine++;
+        }
+
         private void Restyle()
         {
             AvStyle c = AvStyleHost.FuiStyle("console");
@@ -231,6 +305,8 @@ namespace NOAvionics
             pageIndex.color = AvStyleHost.FuiInk("page-index", AvTheme.Dim);
             serial.color = decor.color = AvStyleHost.FuiFill("decor", AvTheme.Hairline);
             serial.color = AvStyleHost.FuiInk("decor", AvTheme.Disabled);
+            bootText.color = AvStyleHost.FuiInk("section-title", AvTheme.RailInfo);
+            bay.Restyle();
             scrollView.Restyle();
         }
 

@@ -52,6 +52,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
         private AvSection responseSection;
         private ResponseDeskPart responseDesk;
         private AvGauge directorPosture, directorBases, directorSupers;
+        private AvSection onCallSection;
+        private AvGauge[] onCall;
         private AvEqualizer historyEq;
         private float[] logBars;
         private EventTimelinePart timeline;
@@ -59,6 +61,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
         private const int RecentRecords = 3;
         private const int VisibleLogRows = 5;
+        private AvSection archiveSection;
         private ArchiveTilePart[] tiles;
         private EventCaseFilePart deskCase;
         private AvButtons deskCaseAction;
@@ -95,10 +98,13 @@ namespace BoscaliSummer.Modules.Events.Presentation
             responseSection = null;
             responseDesk = null;
             directorPosture = directorBases = directorSupers = null;
+            onCallSection = null;
+            onCall = null;
             historyEq = null;
             logBars = null;
             timeline = null;
             historyCapacity = 0;
+            archiveSection = null;
             tiles = null;
             deskCase = null;
             deskCaseAction = null;
@@ -167,6 +173,15 @@ namespace BoscaliSummer.Modules.Events.Presentation
             historyCapacity = Mathf.Max(1, settings.HistoryLength.Value);
             BuildDispatchPage(console.Page(TabDispatch));
             BuildDeskPage(console.Page(TabDesk));
+            console.Orders(TabDispatch,
+                "One dispatch runs at a time. COST and RESET price it for your side; LEFT is its clock.",
+                "Answer a priced dispatch with one route. A locked route names what it still needs.",
+                "A superevent carries timed orders: NEXT is the order due, QUEUED orders follow it.",
+                "The log keeps this mission's finished dispatches, newest first.");
+            console.Orders(TabDesk,
+                "Pull a drawer to read its cards. The archive is a local copy and sends nothing.",
+                "The case file is the dispatch running now, or the last one closed.",
+                "RECENT opens the dossier of a finished dispatch.");
             console.Finish();
             return console.Root;
         }
@@ -175,9 +190,9 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
         private void BuildDispatchPage(AvFlow p)
         {
-            // The hero soaks up spare height only while the theater is quiet (a designed standby banner).
-            hero = p.Add(new EventHeroPart(p.Content), 1f);
-            hero.BindCalm("STANDBY");
+            // The live dispatch. A quiet theater shows one standby row and leaves the page to the bay cover.
+            hero = p.Add(new EventHeroPart(p.Content));
+            hero.BindCalm("STANDING BY FOR DIRECTOR REPORT");
 
             responseSection = p.Section(AvIcon.Scale, "RESPONSE", "AWAITING");
             responseDesk = p.Add(new ResponseDeskPart(p.Content, events.RequestResponse));
@@ -196,6 +211,25 @@ namespace BoscaliSummer.Modules.Events.Presentation
             directorBases.Set(0f, "—", AvState.Inert);
             directorSupers.Set(0f, "—", AvState.Inert);
 
+            // While the theater is quiet the page also says what the director holds on call: the authored catalog,
+            // counted by tier. The numbers are the catalog's own; the rings are each tier's share of it.
+            EventDefinition[] catalog = EventCatalog.All;
+            onCallSection = p.Section(AvIcon.Database, "ON CALL", AvNum.Fixed(catalog.Length, 0) + " DOSSIERS");
+            onCall = new AvGauge[3];
+            EventTier[] tiers = { EventTier.Minor, EventTier.Medium, EventTier.Super };
+            string[] tierNames = { "MINOR", "MEDIUM", "SUPER" };
+            AvState[] tierStates = { AvState.Info, AvState.Caution, AvState.Danger };
+            for (int i = 0; i < onCall.Length; i++)
+            {
+                int held = 0;
+                foreach (EventDefinition definition in catalog) if (definition.Tier == tiers[i]) held++;
+                onCall[i] = new AvGauge(p.Content, tierNames[i]);
+                onCall[i].Set(catalog.Length > 0 ? held / (float)catalog.Length : 0f, AvNum.Fixed(held, 0), tierStates[i]);
+                onCall[i].Help = "ON CALL: the " + tierNames[i].ToLowerInvariant() + " dispatches in the director's authored catalog, " +
+                    AvNum.Fixed(held, 0) + " of " + AvNum.Fixed(catalog.Length, 0) + ". Their dossiers are in the EVENTS drawer on the DESK page.";
+            }
+            p.Row(onCall[0], onCall[1], onCall[2]);
+
             // Finished events as bars (tall = superevent, short = minor), newest first; it grows into spare height.
             logBars = new float[Mathf.Max(1, historyCapacity)];
             historyEq = p.Add(new AvEqualizer(p.Content, "EVENT LOG", 36f), 1f);
@@ -207,31 +241,26 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
         private void BuildDeskPage(AvFlow p)
         {
-            // One row of four archive doors (names match the archive's own tabs); the case file below grows.
-            tiles = new ArchiveTilePart[4];
-            string[] labels = { "AIRCRAFT", "EVENTS", "WORLD", "MANUAL" };
-            string[] notes =
-            {
-                "AIRCRAFT: every native aircraft with a rotating model viewer and its performance figures.",
-                "EVENTS: a dossier for every authored theater event, with its price effect, window and timed orders.",
-                "WORLD: short files on life behind the front line.",
-                "MANUAL: how to read a dispatch and issue orders. Start here if the desk is new to you.",
-            };
-            AvIcon[] icons = { AvIcon.Plane, AvIcon.AlertTriangle, AvIcon.Map2, AvIcon.Bookmark };
+            // The archive's eight drawers, in the library's own tab order: two rows of four. The case file below grows.
+            archiveSection = p.Section(AvIcon.Database, "FIELD ARCHIVE", "RECORDS HELD");
+            tiles = new ArchiveTilePart[ArchiveShelf.Count];
             for (int i = 0; i < tiles.Length; i++)
             {
-                int section = i;
-                tiles[i] = new ArchiveTilePart(p.Content, icons[i], labels[i], () => OpenArchive(section));
-                tiles[i].Help = notes[i] + " Opens the field archive.";
+                int shelf = i;
+                tiles[i] = new ArchiveTilePart(p.Content, ArchiveShelf.Icons[i], ArchiveShelf.Names[i],
+                    "DWR " + ArchiveUi.Two(i + 1), () => OpenArchive(shelf));
+                tiles[i].Help = ArchiveShelf.Help[i] + " Opens the field archive at this drawer.";
             }
             p.Row(tiles[0], tiles[1], tiles[2], tiles[3]);
+            p.Row(tiles[4], tiles[5], tiles[6], tiles[7]);
 
-            deskCase = p.Add(new EventCaseFilePart(p.Content), 1f);
-            deskCase.Help = "CASE FILE: the running event, or the last one filed: poster, tier, target, price effect and time left. Older dossiers are listed under RECENT.";
-            deskCase.Bind("AWAITING REPORT", "NO CASE FILED", "", AvIcon.Radar2, null, AvState.Inert);
+            // The case file takes the page's spare height only while it has a poster to show.
+            deskCase = p.Add(new EventCaseFilePart(p.Content));
+            deskCase.Help = "CASE FILE: the running dispatch, or the last one filed: poster, tier, target, price effect and time left. Older dossiers are listed under RECENT.";
+            BindNoCase();
             deskCaseAction = p.Buttons(new AvControl.Spec("OPEN CASE DOSSIER", () =>
             {
-                if (deskCaseCatalog >= 0) OpenArchive(1, deskCaseCatalog);
+                if (deskCaseCatalog >= 0) OpenArchive(ArchiveShelf.Events, deskCaseCatalog);
             }, AvButtonStyle.Quiet, AvIcon.Bookmark));
             deskCaseAction.Controls[0].Help = "Read this event's catalog dossier, including its authored effects and timed orders.";
             deskCaseAction.SetShown(false);
@@ -243,13 +272,19 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 int slot = i;
                 recentRows[i] = p.Add(new AvRow(p.Content, () =>
                 {
-                    if (recentCatalog[slot] >= 0) OpenArchive(1, recentCatalog[slot]);
+                    if (recentCatalog[slot] >= 0) OpenArchive(ArchiveShelf.Events, recentCatalog[slot]);
                 }));
                 recentRows[i].Help = "Open this dossier in the field archive.";
             }
             recentSection.SetShown(false);
             foreach (AvRow row in recentRows) row.SetShown(false);
         }
+
+        /// <summary>The desk before the director has issued anything this mission.</summary>
+        private void BindNoCase() =>
+            deskCase.Bind("NO CASE FILED", "AWAITING DIRECTOR REPORT",
+                "A case opens when the director issues a dispatch. The last one closed stays on file.",
+                AvIcon.Radar2, null, AvState.Inert);
 
         private void OpenArchive(int section, int record = 0)
         {
@@ -349,7 +384,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
                     hero.BindActive(current, TierState(current.Tier), Consequence(current, aimedAtLocal),
                         ConsequenceHelp(current, aimedAtLocal));
                 else
-                    hero.BindCalm(events.Available ? "SCANNING" : "NO MISSION");
+                    hero.BindCalm(events.Available ? "DIRECTOR SCANNING THE GROUND BALANCE" : "NO MISSION ON THE NET");
             }
 
             if (current != null)
@@ -371,12 +406,14 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 responseDesk.SetShown(false);
             }
 
+            onCallSection.SetShown(current == null);
+            foreach (AvGauge gauge in onCall) gauge.SetShown(current == null);
             RefreshTimeline(current, history, now, historyOff);
             RefreshDesk(current, history, now);
 
             string ambient = current != null
-                ? "EVENT // " + current.Title.ToUpperInvariant()
-                : events.Available ? "NO EVENT" : "NO MISSION";
+                ? "DISPATCH LIVE // " + current.Title.ToUpperInvariant()
+                : events.Available ? "THEATER QUIET // DIRECTOR SCANNING" : "NO MISSION ON THE NET";
             string status = !string.IsNullOrEmpty(events.Signal) ? events.Signal
                 : !string.IsNullOrEmpty(MapPicker.Prompt) ? MapPicker.Prompt
                 : ambient;
@@ -421,14 +458,24 @@ namespace BoscaliSummer.Modules.Events.Presentation
             ActiveEventView file = current ?? (history.Count > 0 ? history[history.Count - 1] : null);
             deskCaseCatalog = file != null ? CatalogIndexOf(file.Id) : -1;
             deskCaseAction?.SetShown(deskCaseCatalog >= 0);
-            int aircraft = Encyclopedia.i?.aircraft?.Count ?? 0;
-            tiles[0].SetCount(AvNum.Fixed(aircraft, 0) + " RECORDS");
-            tiles[1].SetCount(AvNum.Fixed(EventCatalog.All.Length, 0) + " RECORDS");
-            tiles[2].SetCount(AvNum.Fixed(EventDocs.World.Length, 0) + " RECORDS");
-            tiles[3].SetCount(AvNum.Fixed(EventDocs.Guide.Length, 0) + " RECORDS");
+            int held = 0;
+            for (int i = 0; i < tiles.Length; i++)
+            {
+                int records = ArchiveShelf.CountOf(i);
+                held += records;
+                tiles[i].SetCount(records);
+            }
+            archiveSection.SetCaption(AvNum.Thousands(held) + " RECORDS HELD");
+            // The poster card grows into the page; an empty file stays one row and the bay cover takes the rest.
+            float grow = file != null ? 1f : 0f;
+            if (deskCase.Grow != grow)
+            {
+                deskCase.Grow = grow;
+                console.Page(TabDesk).RequestRelayout();
+            }
             if (file == null)
             {
-                deskCase.Bind("AWAITING REPORT", "NO CASE FILED", "", AvIcon.Radar2, null, AvState.Inert);
+                BindNoCase();
             }
             else
             {

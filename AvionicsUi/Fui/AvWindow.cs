@@ -104,6 +104,7 @@ namespace NOAvionics
             scrollView.Place(w, h - TitleH - footerH);
             Footer.Place(new AvSlot(0f, h - footerH, w, footerH));
             Ticker.Add(-1, AvTickRate.Fast, UpdateBlur);
+            Ticker.Add(-1, AvTickRate.Slow, Footer.Tick);
             Ticker.Register(new Hook(this));
             Restyle();
             go.SetActive(false);

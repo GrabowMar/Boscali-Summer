@@ -96,6 +96,8 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         internal void OnPlayerHit(float pierceDamage, float blastDamage)
         {
             vitals.AddHit(blastDamage);
+            // Every display loses its picture for a moment; a blast shakes it harder than a round going through.
+            NOAvionics.AvFxDriver.Kick(blastDamage > pierceDamage ? 0.9f : 0.6f);
             if (settings.AirframeAudioEnabled.Value) foley?.Hit(pierceDamage, blastDamage);
         }
 

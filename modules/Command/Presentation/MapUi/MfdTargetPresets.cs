@@ -8,14 +8,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             { "ALL", "HOSTILE", "AIR", "GROUND", "SEA", "SEAD", "FRIENDLY", "LASER" };
         public static readonly string[] Descriptions =
         {
-            "All factions and unit classes; laser filter off.",
-            "Enemy units across all classes.",
-            "Enemy aircraft; missiles excluded.",
-            "Enemy ground vehicles and buildings.",
+            "Every side and class open; laser filter off. The default gate.",
+            "Enemy units of every class.",
+            "Enemy aircraft only; missiles excluded.",
+            "Enemy ground vehicles and structures.",
             "Enemy ships only.",
-            "Enemy AAA, IR SAM, radar SAM and radar vehicles.",
-            "Friendly units across all classes.",
-            "All classes and factions, restricted to lased targets.",
+            "Enemy air defence: AAA, IR SAM, radar SAM and radar vehicles.",
+            "Friendly units of every class.",
+            "Every side and class, held to lased targets only.",
         };
 
         public static bool Faction(MfdTargetPreset preset, bool friendly) =>

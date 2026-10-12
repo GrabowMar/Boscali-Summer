@@ -61,22 +61,22 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             // One strip of four: the hunt state first, then the hostile wing counts.
             huntTile = new AvStatTile(p.Content, "HUNT");
             huntTile.Set("STANDBY", AvState.Info);
-            wingsTotalTile = new AvStatTile(p.Content, "WINGS");
+            wingsTotalTile = new AvStatTile(p.Content, "ACE WINGS");
             wingsActiveTile = new AvStatTile(p.Content, "ACTIVE");
             wingsAliveTile = new AvStatTile(p.Content, "ALIVE");
             p.Row(huntTile, wingsTotalTile, wingsActiveTile, wingsAliveTile);
 
-            friendlySection = p.Section(AvIcon.UsersGroup, "FLIGHT", null);
+            friendlySection = p.Section(AvIcon.UsersGroup, "YOUR FLIGHT", null);
             wingLeadRow = p.Add(new SqdRosterRow(p.Content, true));
             wingLeadRow.Set("RECORD PENDING", null, null, null, AvState.Info);
             for (int i = 0; i < wingmanSlots.Length; i++)
                 wingmanSlots[i] = p.Add(new SqdRosterRow(p.Content));
-            wingTeamNote = p.Add(new SqdEmptyCard(p.Content, AvIcon.UsersGroup, "NO WINGMEN",
-                "Recruit in Wing Command."));
+            wingTeamNote = p.Add(new SqdEmptyCard(p.Content, AvIcon.UsersGroup, "NO WINGMEN ON YOUR WING",
+                "Recruit pilots in Wing Command and they fly with you."));
 
-            hostileSection = p.Section(AvIcon.Skull, "HOSTILE", null);
-            hostileEmpty = p.Add(new SqdEmptyCard(p.Content, AvIcon.Radar2, "NO ACES YET",
-                "Ace kill: +1 skill point."));
+            hostileSection = p.Section(AvIcon.Skull, "RECOGNITION BOARD", null);
+            hostileEmpty = p.Add(new SqdEmptyCard(p.Content, AvIcon.Radar2, "NO ACE WINGS ON RECORD",
+                "Aces are filed here as you meet them. An ace kill earns +1 skill point."));
             for (int i = 0; i < WingRowsPerPage; i++)
                 wingRows.Add(p.Add(new HostileWingCard(p.Content)));
 
@@ -93,8 +93,9 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             nextWings = wingsPager.Controls[1];
 
             // Every known hostile wing as one bar (height = its tier, dim = destroyed): the whole roster at a glance, and it takes the leftover height.
-            wingsThreat = p.Add(new AvEqualizer(p.Content, "THREAT", 36f), 1f);
-            wingsThreat.Help = "THREAT: one bar per known hostile ace wing, taller is a higher tier, a stub is a wing that is gone. Open the cards above for who they are and what they hunt.";
+            wingsThreat = p.Add(new AvEqualizer(p.Content, "ORDER OF BATTLE", 36f), 1f);
+            wingsThreat.Help = "ORDER OF BATTLE: one bar per known hostile ace wing, taller is a higher tier, a stub is a wing that is gone. The cards above say who they are and what they hunt.";
+            wingsThreat.SetShown(false);
         }
 
         // ---- ACES refresh -------------------------------------------------------------------
@@ -125,14 +126,12 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             }
             wingsThreat.Set(threatValues, count == 0 ? "NO WINGS" : active + "/" + count + " ACTIVE", active > 0 ? AvState.Caution : AvState.Inert);
             bool any = count > 0;
-            wingsTotalTile.SetShown(any);
-            wingsActiveTile.SetShown(any);
-            wingsAliveTile.SetShown(any);
+            wingsThreat.SetShown(any);   // an empty chart is a 300 px grid that says nothing: the bay cover and its orders take the page instead
             wingsTotalTile.Set(AvNum.Thousands(count));
             wingsActiveTile.Set(AvNum.Thousands(active), active > 0 ? AvState.Caution : AvState.Inert);
             wingsAliveTile.Set(AvNum.Thousands(alive), alive > 0 ? AvState.Caution : AvState.Inert);
 
-            hostileSection.SetCaption(count == 0 ? "NO CONTACTS"
+            hostileSection.SetCaption(count == 0 ? "NO ACES FILED"
                 : count == 1 ? "1 OF 1 WING"
                 : AvNum.Thousands(first + 1) + "–" + AvNum.Thousands(last) + " OF " + AvNum.Thousands(count) + " WINGS");
             hostileEmpty.SetShown(count == 0);
@@ -210,7 +209,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
             friendlySection.SetCaption(total > 0
                 ? AvNum.Thousands(total) + (total == 1 ? " WINGMAN" : " WINGMEN") + " · " + AvNum.Thousands(flying) + " AIRBORNE"
-                : WingLink.Available ? "AWAITING RECRUITS" : "WMC OFFLINE");
+                : WingLink.Available ? "AWAITING RECRUITS" : "WING COMMAND OFFLINE");
             wingTeamNote.SetShown(total == 0);
 
             for (int i = 0; i < wingmanSlots.Length; i++)
@@ -280,13 +279,15 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private sealed class HostileWingCard : AvPart
         {
             private const float CardH = 122f, LeftW = 54f, TextX = 72f, Pad = 10f;
-            private const int ThreatPips = 5;
+            private const int ThreatPips = 5, TallyMax = 12;
             private readonly AvFrame frame;
             private readonly Image rail;
             private readonly AvPortrait crest, portrait;
             private readonly TMP_Text symbol, wing, ace, skill, status, threatWord, members, target, noSkills;
             private readonly Image[] pips = new Image[ThreatPips];
+            private readonly Image[] tally = new Image[TallyMax];
             private readonly SqdBar aliveBar;
+            private int aliveCount, totalCount;
             private readonly AvFrame[] badgeFrames = new AvFrame[AceSkillCatalog.MaximumSkills];
             private readonly TMP_Text[] badgeText = new TMP_Text[AceSkillCatalog.MaximumSkills];
             private AvState state = AvState.Inert;
@@ -317,6 +318,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 members = AvText.Make(Rect, "Members", AvTextRole.DataSmall);
                 AvText.Fit(members, false);
                 aliveBar = new SqdBar(Rect, "Alive");
+                for (int i = 0; i < tally.Length; i++) tally[i] = AvLay.Solid(Rect, "Tally" + i, Color.clear);
                 target = AvText.Make(Rect, "Target", AvTextRole.Micro);
                 AvText.Fit(target, false);
                 noSkills = AvText.Make(Rect, "NoSkills", AvTextRole.Micro, "NO ACTIVE THREAT SKILLS");
@@ -344,6 +346,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 status.text = statusText ?? "";
                 members.text = AvNum.Thousands(alive) + " / " + AvNum.Thousands(total) + " ALIVE";
                 aliveFraction = total <= 0 ? 0f : Mathf.Clamp01(alive / (float)total);
+                aliveCount = Mathf.Max(0, alive);
+                totalCount = Mathf.Max(0, total);
                 target.text = alive <= 0 ? "WING NO LONGER ACTIVE"
                     : string.IsNullOrEmpty(targetName) ? "TARGET: NORMAL OPERATIONS" : "TARGET: " + targetName;
                 threat = Mathf.Clamp(tier, 1, ThreatPips);
@@ -398,8 +402,10 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 AvLay.Place(threatWord.rectTransform, TextX + pips.Length * 17f + 6f, rowY, 84f, 16f);
                 float memberX = TextX + pips.Length * 17f + 96f;
                 AvLay.Place(members.rectTransform, memberX, rowY, 92f, 16f);
-                aliveBar.Place(memberX + 98f, rowY + 6f, Mathf.Max(20f, s.W - Pad - memberX - 98f), 4f);
+                float stripX = memberX + 98f, stripW = Mathf.Max(20f, s.W - Pad - stripX);
+                aliveBar.Place(stripX, rowY + 6f, stripW, 4f);
                 aliveBar.Set(aliveFraction, SqdTone.Rail(state));
+                PlaceTally(stripX, rowY, stripW);
 
                 float badgeW = 54f; // 4 codes (TOUGH/NOTCH/GHOST/...) at Micro caps need ~42 px
                 int shown = 0;
@@ -414,11 +420,31 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 AvLay.Place(target.rectTransform, TextX, 104f, tw, 14f);
             }
 
+            /// <summary>
+            /// The wing's muster as painted tally marks, one per member: a tall mark is still flying, a stub is gone.
+            /// Past <see cref="TallyMax"/> members the strength bar says it instead.
+            /// </summary>
+            private void PlaceTally(float x, float y, float w)
+            {
+                bool marks = totalCount > 0 && totalCount <= TallyMax;
+                aliveBar.SetShown(!marks);
+                float pitch = marks ? Mathf.Min(14f, w / totalCount) : 0f, markW = Mathf.Max(3f, pitch - 3f);
+                for (int i = 0; i < tally.Length; i++)
+                {
+                    bool shown = marks && i < totalCount;
+                    tally[i].gameObject.SetActive(shown);
+                    if (!shown) continue;
+                    bool flying = i < aliveCount;
+                    AvLay.Place(tally[i].rectTransform, x + i * pitch, y + (flying ? 3f : 10f), markW, flying ? 10f : 3f);
+                }
+            }
+
             public override void Restyle()
             {
                 AvStyle c = AvStyleHost.FuiStyle("card inert");
                 frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
                 Color tone = SqdTone.Rail(state);
+                for (int i = 0; i < tally.Length; i++) tally[i].color = i < aliveCount ? tone : AvTheme.Hairline;
                 rail.color = tone;
                 wing.color = AvInk.Ink;
                 symbol.color = tone;

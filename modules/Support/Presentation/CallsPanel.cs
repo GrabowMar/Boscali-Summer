@@ -185,6 +185,13 @@ namespace BoscaliSummer.Modules.Support.Presentation
                     if (r.Front == front) perkRows[r.Id] = p1.Add(new PerkRowPart(p1.Content, id => calls?.Press(id), r.Id));
             }
 
+            console.Orders(0,
+                "This board is the summary; OPEN a front to work it in its own window.",
+                "Readiness and superiority belong to the faction and are shared by every pilot on your side.");
+            console.Orders(1,
+                "Arm a perk, aim it, then FIRE. ABORT disarms and spends nothing.",
+                "A perk that cannot be armed gives its reason on the status strip.",
+                "The quick keys work the ORDER row without this page open.");
             console.Finish();
             console.SetPage(0);
             OnPage(0);

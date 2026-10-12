@@ -57,9 +57,21 @@ namespace BoscaliSummer.Modules.Command.Configuration
         public ConfigEntry<AvFxTier> AvionicsFxTier { get; }
         public ConfigEntry<bool> AvionicsBlurBehind { get; }
         public ConfigEntry<bool> AvionicsReducedMotion { get; }
+        public ConfigEntry<float> DisplayLife { get; }
+        public ConfigEntry<float> AvionicsCustomKeyHue { get; }
+        public ConfigEntry<float> AvionicsCustomGlassHue { get; }
+        public ConfigEntry<float> AvionicsCustomGlassTint { get; }
 
         public CommandSettings(ConfigFile config)
         {
+            DisplayLife = config.Bind("Command", "DisplayLife", 0.6f,
+                new ConfigDescription("Live signal on the maximized MFD: the power-on raster, the slow refresh sweep and harder jam and hit break-up. 0 keeps the display still.", new AcceptableValueRange<float>(0f, 1f)));
+            AvionicsCustomKeyHue = config.Bind("Avionics", "CustomKeyHue", 190f,
+                new ConfigDescription("Custom scheme: hue of keys and selection, in degrees.", new AcceptableValueRange<float>(0f, 360f)));
+            AvionicsCustomGlassHue = config.Bind("Avionics", "CustomGlassHue", 200f,
+                new ConfigDescription("Custom scheme: hue of the panel glass, in degrees.", new AcceptableValueRange<float>(0f, 360f)));
+            AvionicsCustomGlassTint = config.Bind("Avionics", "CustomGlassTint", 0.6f,
+                new ConfigDescription("Custom scheme: how much of its hue the panel glass carries (0 = neutral grey).", new AcceptableValueRange<float>(0f, 1f)));
             DisplayEffects = config.Bind("Command", "DisplayEffects", true,
                 "Enable client-local MFD glass and display overlays. OFF gives a clean display.");
             DisplayAutoLight = config.Bind("Command", "DisplayAutoLight", true,
@@ -75,7 +87,7 @@ namespace BoscaliSummer.Modules.Command.Configuration
             DisplayTintStrength = config.Bind("Command", "DisplayTintStrength", 0.25f,
                 new ConfigDescription("Color wash strength; limited to preserve symbols and warning colors.", new AcceptableValueRange<float>(0f, 1f)));
             AvionicsTheme = config.Bind("Avionics", "Theme", AvThemeId.Portal,
-                "Panel color theme: Portal, Steel, Ace, Phosphor, FieldOps (FIELD OPS), Amber (AMBER CRT), Glass (GLASS MFD), NightOps (NIGHT OPS). Unknown saved names fall back to Portal.");
+                "Panel color theme: Portal, Steel, Ace, Phosphor, FieldOps (FIELD OPS), Amber (AMBER CRT), Glass (GLASS MFD), NightOps (NIGHT OPS), Custom (built from the three Custom* keys). Unknown saved names fall back to Portal.");
             AvionicsFxTier = config.Bind("Avionics", "FxTier", AvFxTier.Full,
                 "Panel effects: Off (none), Lite (glass and static glow), Full (shine, scan-in, alerts, EMP glitch).");
             AvionicsBlurBehind = config.Bind("Avionics", "BlurBehind", false,

@@ -65,6 +65,14 @@ public static class UnityCheckHarness
         AvFxDriver.Configure(fx, false);
     }
 
+    /// <summary>Synthetic ambient lines, set on every domain load, so previews show the idle footer column the game fills from live state.</summary>
+    [InitializeOnLoadMethod]
+    private static void SyntheticAmbient()
+    {
+        AvAmbient.Maker = "BOSCALI AVIONICS WORKS";
+        AvAmbient.Status = line => line == 0 ? "T+00:42:10" : line == 1 ? "14:32 LOCAL" : "NET HOST";
+    }
+
     /// <summary>Writes the result file and exits the editor (0 on pass, 1 on fail).</summary>
     public static void Finish(string result, bool pass, string file = "result.txt")
     {
