@@ -32,6 +32,9 @@ public sealed class CloudBench : MonoBehaviour
         public WeatherRegimeType State;
         /// <summary>Library sky to pin (0-46), or -1 for the class state.</summary>
         public int Sky = -1;
+        /// <summary>A story to pin (0-4) and the held tape offset D in km: the story cross-sections of the contact sheets (-Only story-). 255 = none.</summary>
+        public byte Story = WeatherKey.None;
+        public float OffsetKm;
         /// <summary>A grazing view (pitch 1 degree) of a sky: rendered and saved, never measured.</summary>
         public bool Grazing;
         public byte Sets;
@@ -248,6 +251,12 @@ public sealed class CloudBench : MonoBehaviour
         // that the native aircraft can sustain flight at this altitude.
         if (Array.Exists(filters, filter => filter == "map" || filter.Contains("map-")))
             AddMapViews(scenes);
+        // Explicit opt-in (-Only story-): the first stories' cross-sections at held offsets (slice 4a contact sheets), looking up the tape axis and back down it.
+        if (Array.Exists(filters, filter => filter.StartsWith("story-")))
+            foreach (var cut in new[] { (0, 0f), (0, 150f), (0, 215f), (0, 250f), (0, 300f), (1, 200f), (1, 245f) })
+                foreach (string way in new[] { "fwd", "back" })
+                    scenes.Add(new Scene { Name = "story-" + cut.Item1 + "-o" + cut.Item2 + "-" + way, State = WeatherRegimeType.Overcast, Story = (byte)cut.Item1,
+                        OffsetKm = cut.Item2, Camera = new Vector3(0, 1500, 0), Pitch = 6, Place = 11 });
         if (skies != null)
         {
             // The sky sheets run alone: one pose under each selected sky, from 300 m, the horizon at 65 % of the frame height; a sky whose
@@ -270,7 +279,7 @@ public sealed class CloudBench : MonoBehaviour
             if (filters.Length > 0 && !Array.Exists(filters, filter => s.Name.Contains(filter))) continue;
             // The key has no front turn: the three front-turn scenes render the unturned sky (slice 4b retires them).
             var key = new WeatherKey(s.Seed, 0f, false, (byte)s.State, s.Sets, s.Salt, s.Anchor, 0f, 25000f,
-                skyPin: s.Sky >= 0 && !skyClass ? (byte)s.Sky : WeatherKey.None);
+                story: s.Story, skyPin: s.Sky >= 0 && !skyClass ? (byte)s.Sky : WeatherKey.None, offset: s.OffsetKm * 1000f);
             if (s.Preset.HasValue) key = WeatherScenarios.Apply(s.Preset.Value, key, true, 0f, 0f, 0f, 1f);
             const float time = 900f;
             var field = new WeatherField();
@@ -326,7 +335,7 @@ public sealed class CloudBench : MonoBehaviour
             else if (s.Place == 11)
             {
                 // Along the tape axis (up the wind, the direction cloud streets run), or across it when the name says so.
-                s.Yaw = Mathf.Atan2(field.Frame.UX, field.Frame.UZ) * Mathf.Rad2Deg + (s.Name.Contains("across") ? 90f : 0f);
+                s.Yaw = Mathf.Atan2(field.Frame.UX, field.Frame.UZ) * Mathf.Rad2Deg + (s.Name.Contains("across") ? 90f : s.Name.EndsWith("-back") ? 180f : 0f);
             }
             else if (s.Place == 4 && s.LookAtHero >= 0 && s.LookAtHero < field.SuperstructureCount)
             {
