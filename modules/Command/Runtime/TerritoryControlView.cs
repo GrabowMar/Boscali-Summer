@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
@@ -12,6 +13,10 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private sealed class Field
         {
             internal TacticalSectorGrid Grid;
+            // Evaluation history lives here: every pass advances the spare grid on a
+            // worker, then the result is copied into Grid on the main thread.
+            internal TacticalSectorGrid Back;
+            internal Task Job;
             internal float Updated = -1;
             internal ulong Snapshot;
             internal bool Evaluated;
@@ -73,8 +78,18 @@ namespace BoscaliSummer.Modules.Command.Runtime
             {
                 if (fields.Count >= 8) return null;
                 // Aligned through the map's own grid offset: one cell is one base-grid square.
-                field = new Field { Grid = new TacticalSectorGrid(cellSize, map.MapSize.x, map.MapSize.y, map.OffsetX, map.OffsetY) };
+                field = new Field
+                {
+                    Grid = new TacticalSectorGrid(cellSize, map.MapSize.x, map.MapSize.y, map.OffsetX, map.OffsetY),
+                    Back = new TacticalSectorGrid(cellSize, map.MapSize.x, map.MapSize.y, map.OffsetX, map.OffsetY)
+                };
                 fields.Add(hq, field);
+            }
+            // Readers keep the last complete field until the pass in flight lands.
+            if (field.Job != null)
+            {
+                if (!field.Job.IsCompleted) return field.Grid;
+                Publish(field);
             }
             float now = Time.timeSinceLevelLoad;
             if (field.Updated >= 0 && now - field.Updated < 0.5f) return field.Grid;
@@ -107,16 +122,47 @@ namespace BoscaliSummer.Modules.Command.Runtime
             field.Updated = consumed;
 
             field.Snapshot = snapshot;
-            field.Grid.Clear();
-            compatibility.ReconcileMissionNodes(field.Grid, hq);
+            // Only the node reconcile touches Unity; the rest is plain arrays, so it
+            // runs on a worker and no frame pays for the whole field. The first pass
+            // stays synchronous: its caller expects an evaluated grid.
+            field.Back.Clear();
+            compatibility.ReconcileMissionNodes(field.Back, hq);
+            bool first = !field.Evaluated;
+            field.Evaluated = true;
+            if (first)
+            {
+                Evaluate(field, elapsed);
+                field.Grid.CopyResultFrom(field.Back);
+            }
+            else field.Job = Task.Run(() => Evaluate(field, elapsed));
+            return field.Grid;
+        }
+
+        /// <summary>Worker-safe: reads the frozen observation list, writes only the spare grid.</summary>
+        private static void Evaluate(Field field, float elapsed)
+        {
+            TacticalSectorGrid grid = field.Back;
             for (int i = 0; i < field.Observations.Count; i++)
             {
                 Observation observation = field.Observations[i];
-                field.Grid.AddTroopPresence(observation.X, observation.Z, observation.Weight, observation.Hostile);
+                grid.AddTroopPresence(observation.X, observation.Z, observation.Weight, observation.Hostile);
             }
-            field.Grid.EvaluateSectors(elapsed);
-            field.Evaluated = true;
-            return field.Grid;
+            grid.EvaluateSectors(elapsed);
+            grid.Prewarm();
+        }
+
+        private static void Publish(Field field)
+        {
+            Task job = field.Job;
+            field.Job = null;
+            if (job.IsFaulted)
+            {
+                // The spare grid is half-advanced: restart its history from the published field.
+                Plugin.Logger?.LogWarning("[COM] Territory evaluation failed: " + job.Exception?.GetBaseException().Message);
+                field.Back.CopyResultFrom(field.Grid);
+                return;
+            }
+            field.Grid.CopyResultFrom(field.Back);
         }
 
         private static ulong HashObservation(ulong hash, float x, float z, bool hostile, float gridCellSize)

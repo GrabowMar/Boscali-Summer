@@ -330,6 +330,55 @@ namespace BoscaliSummer.Modules.Command.Runtime
             GridVersion++;
         }
 
+        /// <summary>Finishes the lazy display clusters and front traces, so the first reader pays nothing.</summary>
+        internal void Prewarm()
+        {
+            EnsureDisplay();
+            if (!tracesReady) StitchTraces();
+        }
+
+        /// <summary>
+        /// Takes over everything another grid of the same layout evaluated: the territory
+        /// view evaluates a spare grid off the main thread and publishes it here in one
+        /// step, so readers of this grid never see a half-advanced field. Scratch buffers
+        /// and the baked pixel buffer stay this grid's own.
+        /// </summary>
+        internal void CopyResultFrom(TacticalSectorGrid other)
+        {
+            if (other.ResolutionX != ResolutionX || other.ResolutionY != ResolutionY || other.CellSize != CellSize ||
+                other.OriginX != OriginX || other.OriginZ != OriginZ)
+                throw new InvalidOperationException("Territory grids differ in layout.");
+            int cells = TotalSectors;
+            Array.Copy(other.holdStrength, holdStrength, cells);
+            Array.Copy(other.friendlyForce, friendlyForce, cells);
+            Array.Copy(other.hostileForce, hostileForce, cells);
+            Array.Copy(other.sectorStates, sectorStates, cells);
+            Array.Copy(other.frontBand, frontBand, cells);
+            Array.Copy(other.nodeAnchors, nodeAnchors, cells);
+            Array.Copy(other.frontSegments, frontSegments, other.FrontlineSegmentCount);
+            Array.Copy(other.displayClusters, displayClusters, other.displayQuadCount);
+            Array.Copy(other.tracePoints, tracePoints, other.tracePointCount);
+            Array.Copy(other.traceLengths, traceLengths, other.traceCount);
+            Array.Copy(other.tracePressure, tracePressure, other.traceCount);
+            nodes.Clear();
+            nodes.AddRange(other.nodes);
+            hasEvaluated = other.hasEvaluated;
+            GridVersion = other.GridVersion;
+            displayHash = other.displayHash;
+            displayQuadCount = other.displayQuadCount;
+            displayDirty = other.displayDirty;
+            FrontlineHash = other.FrontlineHash;
+            FrontlineSegmentCount = other.FrontlineSegmentCount;
+            FrontlineLengthMetres = other.FrontlineLengthMetres;
+            traceCount = other.traceCount;
+            tracePointCount = other.tracePointCount;
+            tracesReady = other.tracesReady;
+            FriendlySectorCount = other.FriendlySectorCount;
+            HostileSectorCount = other.HostileSectorCount;
+            ContestedSectorCount = other.ContestedSectorCount;
+            NeutralSectorCount = other.NeutralSectorCount;
+        }
+
         public bool WorldToCell(float worldX, float worldZ, out int col, out int row)
         {
             col = row = 0;
