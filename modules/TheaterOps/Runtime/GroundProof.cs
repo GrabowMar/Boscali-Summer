@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
     }
 
 #if !PUBLIC_RELEASE
-    /// <summary>Read-only ground-war readback for the unattended STR proof (<c>tests/ingame/str-ground-*.json</c>): per faction the
+    /// <summary>Read-only ground-war readback for the unattended STR proof (<c>tests/ingame/str-1-ground-*.json</c>): per faction the
     /// staff's war state, the enrolled ground groups and vehicles, and the postfix counters. Nothing here assigns, enrols
     /// or clears (it never calls <c>TryGetGroundAssignment</c>, which writes on read). Dev tooling, compiled out of public releases
     /// and inert outside a sim run. Results are nested dictionaries without dots in key names, so a check path can reach any value;

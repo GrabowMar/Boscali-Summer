@@ -136,7 +136,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         private static readonly MethodInfo SetDestination =
             AccessTools.Method(typeof(ShipAI), "SetDestination", new[] { typeof(GlobalPosition) });
         // One exception disables routing; ResetForScene clears it so a failure in one mission does not outlive the scene (D8, N-25).
-        internal static bool Failed { get; private set; }
+        internal static bool Failed;
 
         internal static void Reset() => Failed = false;
 
@@ -167,6 +167,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             {
                 Failed = true;
                 Debug.LogWarning("Boscali naval routing disabled: " + exception.GetType().Name);
+                Plugin.Logger?.LogWarning("[TheaterOps] naval routing disabled until the scene resets: " + exception.Message);
             }
         }
     }

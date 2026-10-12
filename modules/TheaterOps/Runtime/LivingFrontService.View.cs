@@ -145,7 +145,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         public bool TryGetFocus(int factionInstanceId, out OperationFocus focus)
         {
             focus = default;
-            if (!Authoritative) return false;
+            if (!Authoritative || MissionOver) return false;
             foreach (FactionWar war in wars.Values)
             {
                 if (war.HQ == null || war.HQ.GetInstanceID() != factionInstanceId) continue;

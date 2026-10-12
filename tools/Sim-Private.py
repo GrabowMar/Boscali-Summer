@@ -7,7 +7,7 @@ that pid. It never deploys and never touches the Steam install: it refuses a gam
 
 Run from Git Bash (the toml names the private install; deploy the worktree build to it first with the nomodkit `deploy`):
   NOMODKIT_CONFIG=C:/Users/marci/dev/no-private-str/nomodkit-str.toml PYTHONPATH=C:/Users/marci/dev/nomodkit/src \\
-    C:/Users/marci/dev/nomodkit/.venv/Scripts/python.exe tools/Sim-Private.py tests/ingame/str-ground-tc.json \\
+    C:/Users/marci/dev/nomodkit/.venv/Scripts/python.exe tools/Sim-Private.py tests/ingame/str-1-ground-tc.json \\
     [--mission NAME] [--out DIR] [--dry-run]
 
 --dry-run loads and validates everything, prints the command it would run and launches nothing.
