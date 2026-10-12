@@ -48,7 +48,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 Vector3 position;
                 if (friendly) position = unit.transform.position.ToGlobalPosition().AsVector3();
                 else if (unit.disabled || !TryKnownPosition(hq, unit, out position)) continue;
-                if (!Finite(position) || DistanceToOwnedBase(position, hq, out Airbase anchor) > 25000f * 25000f || anchor == null) continue;
+                if (!Finite(position) || tie.IsLive && !InFocus(position) ||
+                    DistanceToOwnedBase(position, hq, out Airbase anchor) > (tie.IsLive ? AnchorCap : 25000f * 25000f) || anchor == null) continue;
                 bool ground = unit is GroundVehicle || unit is Building;
                 if (friendly)
                 {
