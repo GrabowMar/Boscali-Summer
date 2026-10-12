@@ -25,6 +25,11 @@ namespace NOAvionics
 
         public int ActivePage { get; set; }
 
+        /// <summary>Raised each time the console or window comes back on screen (never in an offline harness).</summary>
+        public Action Shown;
+
+        private void OnEnable() { if (Application.isPlaying) Shown?.Invoke(); }
+
         public bool Add(int page, AvTickRate rate, Action tick)
         {
             if (tick == null || entries.Count >= MaxEntries) return false;

@@ -144,6 +144,10 @@
     <EmbeddedResource Include="AvionicsUi\Assets\avionics-ui.bundle" Condition="Exists('AvionicsUi\Assets\avionics-ui.bundle')">
       <LogicalName>NOAvionics.avionics-ui.bundle</LogicalName>
     </EmbeddedResource>
+    <!-- Second-generation UI shaders (Glass2), built by tools/Compile-AvionicsFxAssets.ps1. Optional as well. -->
+    <EmbeddedResource Include="AvionicsUi\Assets\avionics-fx.bundle" Condition="Exists('AvionicsUi\Assets\avionics-fx.bundle')">
+      <LogicalName>NOAvionics.avionics-fx.bundle</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup Label="Radio station assets">

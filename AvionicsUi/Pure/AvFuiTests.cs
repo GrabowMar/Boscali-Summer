@@ -12,6 +12,7 @@ namespace NOAvionics.Tests
             if (assert == null) throw new ArgumentNullException(nameof(assert));
             TestPalettesDefineEveryRole(assert);
             TestPaletteContrast(assert);
+            TestCustomPaletteSweep(assert);
             TestComposeLetsPaletteWin(assert);
             TestNumbers(assert);
             TestTypeScale(assert);
@@ -47,8 +48,35 @@ namespace NOAvionics.Tests
             }
         }
 
+        // Custom has no sheet file: it is generated, here from the default knobs.
         private static AvStyleSheet Composed(AvThemeId id) =>
-            AvStyleSheet.Parse(AvThemes.Compose(Sheet(ThemeFile(id)), Sheet("avionics.fui.avss")));
+            AvStyleSheet.Parse(AvThemes.Compose(
+                id == AvThemeId.Custom ? AvThemes.CustomPalette(190f, 200f, 0.6f) : Sheet(ThemeFile(id)), Sheet("avionics.fui.avss")));
+
+        // Whatever the pilot dials in, every text role must still read at 4.5:1 on every surface.
+        private static void TestCustomPaletteSweep(Action<bool, string> assert)
+        {
+            string[] inks = { "ink", "ink-dim", "ink-muted", "key", "ready", "caution", "danger", "info", "select" };
+            string[] grounds = { "ground", "surface", "surface-raised", "surface-inert", "surface-sunken" };
+            for (float key = 0f; key < 360f; key += 30f)
+                for (float glass = 0f; glass < 360f; glass += 45f)
+                    foreach (float tint in new[] { 0f, 0.6f, 1f })
+                    {
+                        AvStyleSheet s = AvStyleSheet.Parse(AvThemes.CustomPalette(key, glass, tint));
+                        assert(!s.HasErrors, "custom " + key + "/" + glass + "/" + tint + " parses");
+                        Rgba ground = Live(s.Paint("ground", default(Rgba))).WithAlpha(1f);
+                        foreach (string bg in grounds)
+                        {
+                            Rgba back = Live(s.Paint(bg, default(Rgba))).Over(ground);
+                            foreach (string ink in inks)
+                            {
+                                float c = Rgba.Contrast(Live(s.Paint(ink, default(Rgba))).Over(back), back);
+                                if (c < 4.5f) assert(false, "custom " + key + "/" + glass + "/" + tint + ": " + ink + " on " + bg + " contrast " + c.ToString("0.00"));
+                            }
+                        }
+                    }
+            assert(true, "custom palette sweep");
+        }
 
         private static string ThemeFile(AvThemeId id) => "avionics." + id.ToString().ToLowerInvariant() + ".avss";
 

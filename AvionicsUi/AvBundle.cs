@@ -60,6 +60,44 @@ namespace NOAvionics
             catch (Exception e) { log?.Invoke("avionics-ui.bundle unreadable: " + e.Message); }
             if (bytes == null) { attempted = true; log?.Invoke("avionics-ui.bundle not embedded; using vanilla fonts, no UI effects"); return; }
             LoadFromBytes(bytes, log);
+            LoadFx(log);
+        }
+
+        public const string FxResourceName = "NOAvionics.avionics-fx.bundle";
+        private static AssetBundle fxBundle;
+
+        /// <summary>
+        /// The second-generation UI shaders (Glass2), shipped as their own small bundle so the font bundle never has
+        /// to be re-baked for an effect. Optional: without it every caller keeps the first-generation shader.
+        /// </summary>
+        private static void LoadFx(Action<string> log)
+        {
+            if (fxBundle != null) return;
+            try
+            {
+                using (Stream s = typeof(AvBundle).Assembly.GetManifestResourceStream(FxResourceName))
+                {
+                    if (s == null || s.Length <= 0 || s.Length > 512 * 1024) return;
+                    var bytes = new byte[s.Length];
+                    int read = 0;
+                    while (read < bytes.Length) { int n = s.Read(bytes, read, bytes.Length - read); if (n <= 0) break; read += n; }
+                    LoadFxFromBytes(bytes, log);
+                }
+            }
+            catch (Exception e) { log?.Invoke("avionics-fx.bundle error: " + e.Message); }
+        }
+
+        /// <summary>Public so an offline Unity check can load the bundle file it was handed.</summary>
+        public static void LoadFxFromBytes(byte[] bytes, Action<string> log)
+        {
+            if (fxBundle != null || bytes == null) return;
+            fxBundle = AssetBundle.LoadFromMemory(bytes);
+            if (fxBundle == null) { log?.Invoke("avionics-fx.bundle failed to load; first-generation UI shaders stay in use"); return; }
+            int count = 0;
+            foreach (Shader shader in fxBundle.LoadAllAssets<Shader>())
+                if (shader != null && shader.isSupported) { Shaders[shader.name] = shader; count++; }
+                else if (shader != null) log?.Invoke("UI shader unsupported on this GPU: " + shader.name);
+            log?.Invoke("avionics-fx.bundle loaded: " + count + " shaders");
         }
 
         /// <summary>Load from raw bytes. Public so offline Unity checks (another assembly) can exercise the failure paths.</summary>
@@ -100,6 +138,8 @@ namespace NOAvionics
         public static void ResetForTests()
         {
             if (bundle != null) bundle.Unload(true);
+            if (fxBundle != null) fxBundle.Unload(true);
+            fxBundle = null;
             bundle = null; attempted = false; Available = false; noise = null;
             Fonts.Clear(); Shaders.Clear();
         }

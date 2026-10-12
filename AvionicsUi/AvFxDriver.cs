@@ -54,7 +54,9 @@ namespace NOAvionics
                 if (glass != null && glass.shader == null) glass = null;
                 if (glass == null)
                 {
-                    Shader s = AvBundle.Shader("NOA/UI/Glass");
+                    // Glass2 (avionics-fx.bundle) adds the live signal; the first-generation finish stays the fallback.
+                    Shader s = AvBundle.Shader("NOA/UI/Glass2");
+                    if (s == null) s = AvBundle.Shader("NOA/UI/Glass");
                     if (s == null) return null;
                     glass = new Material(s) { name = "NOA UI Glass (shared)" };
                     if (AvBundle.Noise != null) glass.SetTexture(NoiseId, AvBundle.Noise);
