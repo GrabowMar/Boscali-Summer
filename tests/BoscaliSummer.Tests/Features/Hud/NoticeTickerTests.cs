@@ -15,6 +15,21 @@ namespace BoscaliSummer.Tests.Features.Hud
             Waiting();
             Bounded();
             Words();
+            RadarNotice();
+        }
+
+        /// <summary>A radar's notice (THREAT's "SPIKE - HYPERION CLASS CARRIER" with its range as the detail): the ticker pages the text, then the detail alone on the line, so the detail has to say what it is (it read a bare "36KM" in game).</summary>
+        private static void RadarNotice()
+        {
+            string detail = ThreatMath.RangeDetail(36000f, NOAvionics.AvUnits.Metric);
+            TestAssert.That(detail == "RANGE 36KM", "A radar's range reads RANGE 36KM: " + detail);
+            var t = new NoticeTicker();
+            t.Push("rwr", HudTone.Caution, "SPIKE - HYPERION CLASS CARRIER", detail, 0f);
+            t.Peek(0f, out TickerLine line);
+            TestAssert.That(NoticeTicker.Words(line) == "SPIKE - HYPERION CLASS CARRIER", "The text shows first");
+            t.Peek(NoticeTicker.PhaseSeconds + 0.1f, out line);
+            TestAssert.That(NoticeTicker.Words(line) == "RANGE 36KM", "...then the detail, which says what the figure is: " + NoticeTicker.Words(line));
+            TestAssert.That(ThreatMath.RangeDetail(123000f, NOAvionics.AvUnits.Metric) == "RANGE 123KM" && ThreatMath.RangeDetail(4100f, NOAvionics.AvUnits.Metric).StartsWith("RANGE "), "...for any range: " + ThreatMath.RangeDetail(123000f, NOAvionics.AvUnits.Metric));
         }
 
         private static void Basics()

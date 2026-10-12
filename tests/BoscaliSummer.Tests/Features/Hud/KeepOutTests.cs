@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Modules.Hud.Domain;
+using NOAvionics;
 
 namespace BoscaliSummer.Tests.Features.Hud
 {
@@ -13,7 +14,80 @@ namespace BoscaliSummer.Tests.Features.Hud
             ChipNames();
             ClipOut();
             RadarTags();
+            CallLine();
             FreeSpot();
+            RadarCluster();
+        }
+
+        /// <summary>The call box's second line (the nearest radar's name and range in ten characters): the whole words that fit, the range whole, never an ellipsis (in game "HYPE... 37KM" and "MSV ... 19KM" read as two different cuts and the game's ellipsis glyph is wide).</summary>
+        private static void CallLine()
+        {
+            string Line(string name, float metres) => ScopeStr.Distance(name, metres, AvUnits.Metric, 10, true).ToString();
+            TestAssert.That(Line("HYPERION", 37000f) == "HYPER 37KM", "A first word too long for its room is cut, with no ellipsis: " + Line("HYPERION", 37000f));
+            TestAssert.That(Line("MSV RADAR", 19000f) == "MSV 19KM", "A cut that falls on a space keeps the whole words and no blank before the range: " + Line("MSV RADAR", 19000f));
+            TestAssert.That(Line("T9K41", 18000f) == "T9K41 18KM" && Line("SA-19", 11000f) == "SA-19 11KM" && Line("t9k41", 18000f) == "T9K41 18KM", "A name that fits stays whole, upper case: " + Line("T9K41", 18000f));
+            TestAssert.That(Line("SHARD CLASS", 45000f) == "SHARD 45KM" && Line("ZSU", 4100f) == "ZSU 4.1KM", "SHARD CLASS gives its second word, ZSU keeps its whole: " + Line("SHARD CLASS", 45000f) + " / " + Line("ZSU", 4100f));
+            TestAssert.That(Line(null, 37000f) == "37KM" && Line("  ", 37000f) == "37KM" && ScopeStr.Distance("SA-19", 123000f, AvUnits.Metric, 8, true).ToString() == "123KM", "No name, or no room for three characters of one: the range alone");
+            foreach (string name in new[] { "HYPERION CLASS CARRIER", "SHARD CLASS CORVETTE", "T9K41 BOLTSTRIKE", "MSV RADAR", "HLT RADAR TRUCK", "FS-20 VORTEX", "A" })
+                foreach (float km in new[] { 0.5f, 4.1f, 19f, 37f, 99f, 120f })
+                {
+                    string line = Line(name, km * 1000f);
+                    TestAssert.That(line.Length <= 10 && !line.Contains("…") && !line.Contains(" ... ") && line.EndsWith("M") && !line.StartsWith(" "), "[" + name + ", " + km + " km] reads [" + line + "]: at most ten characters, no ellipsis, the range whole");
+                }
+        }
+
+        /// <summary>
+        /// THREAT's radar tags with the radars the game's mission put round the player (read off the in-game captures: three of a carrier group at about 185 degrees, a SAM site at about 212 and one more at 229, the longest names
+        /// 22 characters): every tag stays inside the scope and clear of the page's own boxes, of the other tags by <see cref="KeepOut.Gap"/> (two tags touched in game) and of every spoke (a spoke ran through the first
+        /// letter of HYPERION and through "HLT RADAR"), where the page's tags are the placement's only business. The first scene is the cruise capture, two radars on one bearing.
+        /// </summary>
+        private static void RadarCluster()
+        {
+            const float CX = 220f, CY = 164f, R = 130f, H = 31f;
+            var scenes = new[]
+            {
+                (names: new[] { "SHARD CLASS CORVETTE", "HYPERION CLASS CARRIER" }, bearing: new[] { 186f, 187f }, km: new[] { 37f, 37f }),
+                (names: new[] { "SHARD CLASS CORVETTE", "HYPERION CLASS CARRIER", "HLT RADAR TRUCK", "MSV RADAR", "T9K41 BOLTSTRIKE", "T9K41 BOLTSTRIKE", "T9K41 BOLTSTRIKE" },
+                    bearing: new[] { 185f, 186f, 187f, 211f, 212.5f, 214f, 229f }, km: new[] { 45f, 45f, 38f, 18.5f, 18f, 18f, 20f }),
+            };
+            foreach (var scene in scenes)
+            {
+                int n = scene.names.Length;
+                var fixedBoxes = new[] { new[] { CX - 13f, CY - 13f, 26f, 26f }, new[] { 328f, 30f, 98f, 54f }, new[] { 328f, 230f, 98f, 66f }, new[] { 3f, 34f, 76f, 30f } };
+                var keep = new KeepOut();
+                foreach (float[] b in fixedBoxes) keep.Add(b[0], b[1], b[2], b[3]);
+                var rings = new[] { (5, 2), (10, 3), (20, 3) };      // the ring labels "5S" "10S" "20S" at 152 degrees, as ThreatPage.Rings keeps them out
+                foreach (var ring in rings)
+                {
+                    float r = R * (float)Math.Sqrt(ring.Item1 / 20f), a = 152f * (float)Math.PI / 180f;
+                    keep.Add(CX + (float)Math.Sin(a) * r - 4f, CY - (float)Math.Cos(a) * r - 8f, (float)Math.Round(ring.Item2 * 7.8f) + 16f, 18f);
+                }
+                var spokes = new float[4 * n];
+                for (int i = 0; i < n; i++)
+                {
+                    float a = scene.bearing[i] * (float)Math.PI / 180f;
+                    spokes[4 * i] = CX + (float)Math.Sin(a) * R; spokes[4 * i + 1] = CY - (float)Math.Cos(a) * R;
+                    spokes[4 * i + 2] = CX + (float)Math.Sin(a) * R * 0.56f; spokes[4 * i + 3] = CY - (float)Math.Cos(a) * R * 0.56f;
+                }
+                var x = new float[n]; var y = new float[n]; var w = new float[n];
+                for (int i = 0; i < n; i++)
+                {
+                    int chars = Math.Max(Tag(scene.names[i]).Length, ScopeStr.Distance("", scene.km[i] * 1000f, AvUnits.Metric, 8).Length);
+                    w[i] = chars * 7.8f + 8f;
+                    keep.PlaceRadar(CX, CY, R, scene.bearing[i], w[i], H, spokes, 2f, 436f, 30f, 296f, out x[i], out y[i]);
+                }
+                for (int i = 0; i < n; i++)
+                {
+                    string tag = n + " radars, [" + scene.names[i] + "] at " + x[i] + ", " + y[i];
+                    TestAssert.That(x[i] >= 2f && x[i] + w[i] <= 436f && y[i] >= 30f && y[i] + H <= 296f, "Inside the scope: " + tag);
+                    foreach (float[] b in fixedBoxes)
+                        TestAssert.That(KeepOut.Overlap(x[i], y[i], w[i], H, b[0], b[1], b[2], b[3]) == 0f, "Clear of the page's own boxes: " + tag);
+                    for (int j = 0; j < n; j++)
+                        if (j != i) TestAssert.That(KeepOut.Overlap(x[i] - KeepOut.Gap, y[i] - KeepOut.Gap, w[i] + 2f * KeepOut.Gap, H + 2f * KeepOut.Gap, x[j], y[j], w[j], H) == 0f, "Clear of tag " + j + " by the gap: " + tag + " and " + x[j] + ", " + y[j]);
+                    for (int s = 0; s < n; s++)
+                        TestAssert.That(KeepOut.SegHits(x[i], y[i], w[i], H, spokes[4 * s], spokes[4 * s + 1], spokes[4 * s + 2], spokes[4 * s + 3], 24) == 0, "No spoke (" + scene.bearing[s] + " degrees) through the tag: " + tag);
+                }
+            }
         }
 
         private static string Tag(string name)
@@ -132,6 +206,14 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(!keep.LeaderCrosses(150f, 90f, 160f, 120f, 310f, 170f), "...one that runs clear of every label is drawn");
             TestAssert.That(!keep.LeaderCrosses(260f, 150f, 330f, 170f, 310f, 170f), "...the wedge's box and the marker's own box are not in the way");
             TestAssert.That(!keep.LeaderCrosses(230f, 90f, 230f, 130f, 310f, 170f), "...nor is the label the leader belongs to");
+
+            // A leader asked for once every label is down (THREAT draws the radars' leaders last): the label it belongs to is named, not "the last one", and a label placed after it counts.
+            var late = new KeepOut();
+            late.Add(200f, 100f, 60f, 17f);      // the tag the leader belongs to
+            TestAssert.That(!late.LeaderCrosses(230f, 200f, 230f, 117f, 230f, 200f, 0), "A leader into its own tag crosses nothing");
+            late.Add(210f, 140f, 40f, 17f);      // a tag placed after it, on its way
+            TestAssert.That(late.LeaderCrosses(230f, 200f, 230f, 117f, 230f, 200f, 0), "...until a tag placed after it stands on its way (drawn as its tag was placed, the leader ran through it: HLT R|ADAR in game)");
+            TestAssert.That(!late.LeaderCrosses(230f, 200f, 230f, 160f, 230f, 200f, 0), "...and one that stops short of it is clear");
         }
 
         private static void ChipNames()

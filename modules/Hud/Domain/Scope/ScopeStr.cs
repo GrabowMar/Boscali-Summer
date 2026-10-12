@@ -87,12 +87,20 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return new ReadOnlySpan<char>(Scratch, 0, n);
         }
 
-        /// <summary>"K92 22KM": the name (upper case, cut with an ellipsis so the whole fits <paramref name="maxChars"/>, left out when three characters of it do not fit), a space and the distance in the player's units.</summary>
-        public static ReadOnlySpan<char> Distance(string name, float metres, NOAvionics.AvUnits units, int maxChars)
+        /// <summary>"K92 22KM": the name (upper case, cut with an ellipsis so the whole fits <paramref name="maxChars"/>, left out when three characters of it do not fit), a space and the distance in the player's units. With
+        /// <paramref name="wholeWords"/> the name is cut to the whole words that fit instead (the first word alone cut when it is too long), with no ellipsis.</summary>
+        public static ReadOnlySpan<char> Distance(string name, float metres, NOAvionics.AvUnits units, int maxChars, bool wholeWords = false)
         {
             int dist = NOAvionics.AvUnitTable.DistanceReading(Scratch, 100, metres, units) - 100;   // measured in the tail of the scratch, then moved up
             int room = maxChars - dist - 1, n = 0;
-            if (!string.IsNullOrEmpty(name) && room >= 3)      // no room for a name: the distance alone. Trimmed and upper-cased straight into the scratch: this runs every frame on a live page, so it builds no string
+            if (!string.IsNullOrEmpty(name) && room >= 3 && wholeWords)
+            {
+                // The whole words that fit (ThreatMath.TagName), never an ellipsis: the game's font draws "…" about two and a half cells wide, so "HYPE… 37KM" ran past the call box's 84 units in game
+                // and a cut after a space read "MSV … 19KM".
+                n = ThreatMath.TagName(name, new Span<char>(Scratch, 0, room), room);
+                for (int i = 0; i < n; i++) Scratch[i] = char.ToUpperInvariant(Scratch[i]);
+            }
+            else if (!string.IsNullOrEmpty(name) && room >= 3)      // no room for a name: the distance alone. Trimmed and upper-cased straight into the scratch: this runs every frame on a live page, so it builds no string
             {
                 int a = 0, b = name.Length;
                 while (a < b && char.IsWhiteSpace(name[a])) a++;

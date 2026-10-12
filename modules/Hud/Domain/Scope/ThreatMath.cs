@@ -114,6 +114,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static ThreatSeeker ClassOf(string seeker) =>
             seeker == "IR" ? ThreatSeeker.Ir : seeker == "SARH" || seeker == "ARH" ? ThreatSeeker.Radar : ThreatSeeker.Other;
 
+        /// <summary>The detail of a radar's ticker notice ("RANGE 36KM"): the ticker pages a notice's text, then its detail, each alone on its line, so a bare "36KM" said nothing in game (the second page of "SPIKE - HYPERION CLASS CARRIER").</summary>
+        public static string RangeDetail(float metres, NOAvionics.AvUnits units) => ScopeStr.Distance("RANGE", metres, units, 16).ToString();
+
         /// <summary>The widest a radar's tag on the scope is, in characters: the game's names run to 22 ("HYPERION CLASS CARRIER" in game) and three tags that wide cannot share the plot.</summary>
         public const int TagChars = 12;
 
@@ -121,20 +124,23 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// A radar's name as its tag on the scope prints it: whole when it fits <see cref="TagChars"/>, else the whole words that do ("HYPERION CLASS CARRIER" reads HYPERION; the ticker and the gauge line carry the full name),
         /// a first word that is itself too long cut, never an ellipsis (the precedent of <c>ShotMath.ChipName</c>). Written into <paramref name="into"/> (at least <see cref="TagChars"/> long); returns the length.
         /// </summary>
-        public static int TagName(string name, Span<char> into)
+        public static int TagName(string name, Span<char> into) => TagName(name, into, TagChars);
+
+        /// <summary><see cref="TagName(string,Span{char})"/> for any width: the whole words of <paramref name="name"/> that fit <paramref name="max"/> characters (<paramref name="into"/> holds at least that many).</summary>
+        public static int TagName(string name, Span<char> into, int max)
         {
-            if (string.IsNullOrEmpty(name)) return 0;
+            if (string.IsNullOrEmpty(name) || max < 1) return 0;
             int a = 0, b = name.Length;
             while (a < b && name[a] == ' ') a++;
             while (b > a && name[b - 1] == ' ') b--;
             int len = b - a;
-            if (len > TagChars)
+            if (len > max)
             {
-                int cut = TagChars;
+                int cut = max;
                 if (name[a + cut] != ' ')      // a word straddles the limit: back up to the space before it
                     while (cut > 0 && name[a + cut - 1] != ' ') cut--;
                 while (cut > 0 && name[a + cut - 1] == ' ') cut--;
-                len = cut > 0 ? cut : TagChars;      // the first word alone is too long: cut it
+                len = cut > 0 ? cut : max;      // the first word alone is too long: cut it
             }
             for (int i = 0; i < len; i++) into[i] = name[a + i];
             return len;

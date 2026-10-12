@@ -40,6 +40,9 @@ public static partial class HudLogUnityCheck
         return true;
     }
 
+    private static readonly string[] LongNames = { "HYPERION CLASS CARRIER", "SHARD CLASS CORVETTE", "HLT RADAR TRUCK", "MSV RADAR", "T9K41 BOLTSTRIKE", "T9K41 BOLTSTRIKE", "T9K41 BOLTSTRIKE" };
+    private static readonly float[] LongBearing = { 186f, 185f, 187f, 211f, 212.5f, 214f, 229f }, LongKm = { 12f, 13.4f, 16f, 18.4f, 18f, 18f, 20f };
+
     static partial void FixtureThreat(float t, ScopeScene s)
     {
         var list = new System.Collections.Generic.List<SimMissile>();
@@ -66,11 +69,10 @@ public static partial class HudLogUnityCheck
         int emitterCount = 0;
         if (s.Variant == "longnames")
         {
-            // What the game's first run showed: a carrier, a corvette, a SAM, a radar and a truck within a few degrees of one bearing (the ones that printed over each other) and a bandit; the nearest, spiking us, has the longest name.
-            string[] names = { "HYPERION CLASS CARRIER", "SHARD CLASS CORVETTE", "T9K41 BOLTSTRIKE", "MSV RADAR", "HLT RADAR TRUCK", "FS-20 VORTEX" };
-            float[] bearing = { 183f, 187f, 192f, 190f, 197f, 176f }, km = { 12f, 13.4f, 18f, 18.4f, 16f, 14f };
-            for (int i = 0; i < names.Length; i++)
-                emitters.SetValue(s.Fill(s.Domain("ThreatEmitter"), "Id", i + 1, "Name", names[i], "Lock", false, "BearingDeg", bearing[i], "RangeM", km[i] * 1000f, "AgeS", 3f), emitterCount++);
+            // What the game's runs showed: a carrier group (the carrier, a corvette, a truck) round 186 degrees and a SAM site (a radar and three T9K41) round 212 and 229, the names that printed over each other and the spokes that ran
+            // through the tags; the nearest, spiking us, has the longest name.
+            for (int i = 0; i < LongNames.Length; i++)
+                emitters.SetValue(s.Fill(s.Domain("ThreatEmitter"), "Id", i + 1, "Name", LongNames[i], "Lock", false, "BearingDeg", LongBearing[i], "RangeM", LongKm[i] * 1000f, "AgeS", 3f), emitterCount++);
         }
         else
         {
@@ -145,7 +147,18 @@ public static partial class HudLogUnityCheck
         Check(tagged, "THREAT: the carrier's tag reads HYPERION (" + tag + ")");
         // The call box's second line is a name and a range ("HYPE… 12KM"): found by its range, so a line the box cut off ("HYPERI… 1…", seen in game) is not found at all.
         Check(sub != null, "THREAT: the call box's second line keeps its range whole, the name gives way (" + tag + ")");
-        Check(sub != null && sub.Length <= 10 && sub.IndexOf('…') == sub.LastIndexOf('…'), "...and it fits the 84 units the box has (ten characters, one cut at most): [" + sub + "] (" + tag + ")");
+        // In whole words, with no ellipsis ("HYPE... 37KM" and "MSV ... 19KM" in game: the font draws the ellipsis wide and a cut after a space left a blank before it).
+        Check(sub != null && sub.Length <= 10 && sub.IndexOf('…') < 0 && sub.IndexOf("...", StringComparison.Ordinal) < 0 && !sub.StartsWith("HYPERION"), "...and it fits the 84 units the box has, in whole words with no ellipsis: [" + sub + "] (" + tag + ")");
+        // The radars' spokes run from the rim (centre 220, 164, radius 130 in the page's own units) in to 0.56 of it: none goes through a tag's words (the dashed spoke ran through the first letter of HYPERION and through "HLT RADAR" in game).
+        // The page's body is drawn 10 units higher than those numbers say (ScopeLayout.Lift of a full page), and the page rectangle's top-left is its origin.
+        foreach (var w in words)
+            for (int i = 0; i < LongBearing.Length; i++)
+                for (int k = 0; k <= 40; k++)
+                {
+                    float a = LongBearing[i] * Mathf.Deg2Rad, r = 130f * Mathf.Lerp(1f, 0.56f, k / 40f), px = 220f + Mathf.Sin(a) * r, py = 10f - (164f - Mathf.Cos(a) * r);
+                    Check(!(px > w.ink.xMin + 1f && px < w.ink.xMax - 1f && py > w.ink.yMin + 1f && py < w.ink.yMax - 1f),
+                        "THREAT with the game's radar names: the spoke at " + LongBearing[i] + " degrees runs through [" + w.text + "] (" + tag + ")");
+                }
         if (t >= 1f)
         {
             bool env = false;

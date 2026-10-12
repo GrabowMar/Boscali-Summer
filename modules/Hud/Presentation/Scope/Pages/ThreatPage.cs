@@ -42,6 +42,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The radars' spokes (x1, y1, x2, y2 each, at most eight radars), so a tag that has to move off the others stays off the lines too.</summary>
         private readonly float[] spokeSegs = new float[4 * 8];
         private int spokeSegCount;
+        /// <summary>The leader each radar's tag asks for (from its spoke's rim point to its box), kept until every label of the scope is down: a leader is drawn only if it crosses none (<see cref="Leaders"/>).</summary>
+        private struct Leader { public float X0, Y0, X1, Y1, Alpha; public int Own; public bool Moved; public ScopeTone Tone; }
+        private readonly Leader[] leaders = new Leader[8];
+        private int leaderCount;
         private int cueBaseFor = -1;
 
         private string headlineText = "";
@@ -143,7 +147,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 ThreatEmitter e = d.Emitters[i];
                 if (!e.Held && New(e.Lock ? lockSaid : spikeSaid, e.Id, now - e.AgeS))
-                    env.Notice?.Invoke("rwr", e.Lock ? HudTone.Warning : HudTone.Caution, (e.Lock ? "LOCK - " : "SPIKE - ") + Name(e), ScopeStr.Distance("", e.RangeM, env.Units, 10).ToString());
+                    env.Notice?.Invoke("rwr", e.Lock ? HudTone.Warning : HudTone.Caution, (e.Lock ? "LOCK - " : "SPIKE - ") + Name(e), ThreatMath.RangeDetail(e.RangeM, env.Units));
             }
         }
 
@@ -254,7 +258,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 At(d.Missiles[i].BearingDeg, Rr(d.Missiles[i].TtiS), out float mx, out float my);
                 keep.Add(mx - 11f, my - 11f, 22f, 22f);
             }
-            spokeSegCount = 0;
+            spokeSegCount = leaderCount = 0;
             for (int i = 0; i < d.EmitterCount && spokeSegCount + 4 <= spokeSegs.Length; i++, spokeSegCount += 4)
             {
                 At(d.Emitters[i].BearingDeg, R, out spokeSegs[spokeSegCount], out spokeSegs[spokeSegCount + 1]);
@@ -268,6 +272,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             for (int pass = 0; pass < 2; pass++)
                 for (int i = 0; i < d.MissileCount; i++)
                     if ((i == near) == (pass == 1)) Missile(g, i, i == near);
+            Leaders(g);
             g.Jet(CX, CY, 0f, 9f, Ink, true);
             if (near >= 0 && d.Missiles[near].TtiS <= ThreatMath.WarnS) g.Ring(CX, CY, 15f, Red, 0.35f + 0.5f * ScopeCanvas.Pulse(t, 3f));
             g.Text("TTI RINGS", 5f, 41f, Dim);
@@ -355,47 +360,27 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             name = name.Slice(0, ThreatMath.TagName(Name(e), name));
             ReadOnlySpan<char> range = ScopeStr.Distance("", e.RangeM, units, 8);
             float w = Math.Max(ScopeCanvas.TextW(name, 12f), ScopeCanvas.TextW(range, 12f)) + 8f, h = 31f;
-            Label(b, w, h, out float bx, out float by);
-            float fx = bx, fy = by;
-            keep.Free(w, h, new ReadOnlySpan<float>(spokeSegs, 0, spokeSegCount), 2f, RB, 30f, 296f, ref bx, ref by);
-            bool moved = bx != fx || by != fy;
-            keep.Add(bx, by, w, h);
+            int own = keep.Count;
+            bool moved = keep.PlaceRadar(CX, CY, R, b, w, h, new ReadOnlySpan<float>(spokeSegs, 0, spokeSegCount), 2f, RB, 30f, 296f, out float bx, out float by);
             g.Fill(bx, by, w, h, Bg, a);
             g.Box(bx, by, w, h, tone, a, 1f, tone, lockOn ? 0.25f : 0.14f);
             g.Text(name, bx + w / 2f, by + 9f, tone, 12f, ScopeAlign.Center, true, a);
             g.Text(range, bx + w / 2f, by + 22f, tone, 12f, ScopeAlign.Center, false, a * 0.95f);
             At(b, R + 1f, out float attx, out float atty);
-            float lx = Mathf.Clamp(attx, bx, bx + w), ly = Mathf.Clamp(atty, by, by + h);
-            if (!moved || !keep.LeaderCrosses(attx, atty, lx, ly, attx, atty)) g.Line(attx, atty, lx, ly, tone, a * 0.7f);      // a tag that had to move away from its spoke is tied to it only by a line that crosses no other label
+            if (leaderCount < leaders.Length && keep.Count > own)
+                leaders[leaderCount++] = new Leader { X0 = attx, Y0 = atty, X1 = Mathf.Clamp(attx, bx, bx + w), Y1 = Mathf.Clamp(atty, by, by + h), Alpha = a * 0.7f, Own = own, Moved = moved, Tone = tone };
         }
 
         /// <summary>
-        /// Where a radar's tag goes: the first of six spots that sits on no other label, marker or corner box (outside the rim at the spoke, nudged along the rim either way, then inside the
-        /// rim); each spot costs for how far the scope's edges moved it and for what it overlaps.
+        /// The radars' leaders, once every tag is down: a tag that had to move away from its spoke is tied to it only by a line that crosses no label (one drawn as its tag was placed ran through the tags placed after it:
+        /// "HLT R|ADAR" in game); a tag that stands at its spoke always has its short line.
         /// </summary>
-        private void Label(float bearing, float w, float h, out float x, out float y)
+        private void Leaders(ScopeCanvas g)
         {
-            float best = float.MaxValue;
-            x = y = 0f;
-            for (int i = 0; i < 6; i++)
+            for (int i = 0; i < leaderCount; i++)
             {
-                float cx, cy;
-                if (i < 5)
-                {
-                    float nudge = i == 0 ? 0f : i == 1 ? 14f : i == 2 ? -14f : i == 3 ? 28f : -28f, bb = bearing + nudge;
-                    At(bb, R + 4f, out float ax, out float ay);
-                    cx = ax + Mathf.Sin(bb * Mathf.Deg2Rad) * (w / 2f) - w / 2f;
-                    cy = ay - Mathf.Cos(bb * Mathf.Deg2Rad) * (h / 2f) - h / 2f;
-                }
-                else
-                {
-                    At(bearing, R - 22f, out float qx, out float qy);
-                    cx = qx - w / 2f;
-                    cy = qy - h / 2f;
-                }
-                float rx = Mathf.Round(Mathf.Clamp(cx, 2f, RB - w)), ry = Mathf.Round(Mathf.Clamp(cy, 30f, 296f - h));
-                float cost = i * 2f + (Math.Abs(rx - cx) + Math.Abs(ry - cy)) * 2f + keep.OverlapCost(rx, ry, w, h) * 0.5f;
-                if (cost < best) { best = cost; x = rx; y = ry; }
+                Leader l = leaders[i];
+                if (!l.Moved || !keep.LeaderCrosses(l.X0, l.Y0, l.X1, l.Y1, l.X0, l.Y0, l.Own)) g.Line(l.X0, l.Y0, l.X1, l.Y1, l.Tone, l.Alpha);
             }
         }
 
@@ -584,8 +569,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 case ThreatCue.Spike:
                     {
                         int e = BestEmitter();
-                        // The characters the box holds (10 in 84 units): the name gives way to the range, never the other way (12 overran the box in game and FitText cut "HYPERI... 3..").
-                        if (e >= 0) g.FitText(ScopeStr.Distance(Name(d.Emitters[e]), d.Emitters[e].RangeM, units, (int)(w / (ScopeText.DesignAdvance * 12f))), x, y, w, tone, 12f, 12f, ScopeAlign.Center);
+                        // The characters the box holds (10 in 84 units): the name gives way to the range, never the other way (12 overran the box in game and FitText cut "HYPERI... 3.."), and it gives way by whole words,
+                        // not an ellipsis (the game's font draws one two and a half cells wide: "HYPE... 37KM" ran to the box's brackets, and a cut after a space read "MSV ... 19KM").
+                        if (e >= 0) g.FitText(ScopeStr.Distance(Name(d.Emitters[e]), d.Emitters[e].RangeM, units, (int)(w / (ScopeText.DesignAdvance * 12f)), true), x, y, w, tone, 12f, 12f, ScopeAlign.Center);
                         break;
                     }
                 case ThreatCue.Inbound:

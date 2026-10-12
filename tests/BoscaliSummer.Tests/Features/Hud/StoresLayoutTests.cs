@@ -30,6 +30,16 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(tip - low >= 2f, "Without a cost row the marker's base stays 2 clear of the stub tip (" + low + " over " + tip + ")");
             TestAssert.That(tip - (StoresLayout.JamMarkY + 0.6f * 3f + 1f) < 2f, "(+59 under that block is what touched it: " + (StoresLayout.JamMarkY + 0.6f * 3f + 1f) + " over " + tip + ")");
             TestAssert.That(StoresLayout.JamMark(false) >= StoresLayout.CellsTop + StoresMath.CellH, "...and it is still under the cells");
+
+            // At a full charge the fill's edge is the block's right edge less 2, right over the shelf stub below (a node at the shelf's end, the stub rising 8 on to a tip at the block's edge): in game the triangle's base was 3 above that
+            // tip. Under a block with no room the marker stops at the shelf's node, which puts the stub 7 under the triangle's right corner.
+            float w = ScopeLayout.SatW, full = StoresMath.Cells(w) * StoresMath.CellPitch - (StoresMath.CellPitch - StoresMath.CellW), node = StoresLayout.ExpShelf(w), nextTop = ScopeLayout.SatH - ScopeLayout.CostRow + ScopeLayout.BlockGap;
+            float StubY(float x) => nextTop + StoresLayout.ShelfY - Math.Max(0f, Math.Min(8f, x - node));      // the stub's height at x: level with the shelf at its node, 8 higher at the tip (x = node + 8)
+            float baseY = StoresLayout.JamMark(false) + 0.6f * 3f + 1f, markerX = StoresLayout.JamMarkX(full, false, w);
+            TestAssert.That(StubY(full + 3f) - baseY < 6f, "(unclamped, at a full charge the triangle's right corner is " + (StubY(full + 3f) - baseY) + " over the stub)");
+            TestAssert.That(StubY(markerX + 3f) - baseY >= 6f, "Without a cost row the marker at a full charge keeps its base 6 clear of the stub: " + (StubY(markerX + 3f) - baseY) + " at x " + markerX);
+            TestAssert.Near(StoresLayout.JamMarkX(60f, false, w), 60f, "...a marker left of the node rides the fill's edge as it did");
+            TestAssert.Near(StoresLayout.JamMarkX(full, true, w), full, "...and with room below (a cost row, or STACK) it rides the edge all the way");
         }
 
         /// <summary>The jammer's row sits under the dispenser rows there are: flares only put it where the chaff row would be, no dispenser where the flares' row is (it sat 41 under the flares in game).</summary>

@@ -104,6 +104,12 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// </summary>
         public static float JamMark(bool room) => room ? JamMarkY : TickBottom;
 
+        /// <summary>
+        /// The jammer marker's x from the block's left: the fill's edge (<paramref name="edge"/>), but under a block with no room below it (WIDE without a cost row) no further right than the shelf node of the block below, whose stub rises from it
+        /// to a tip at the block's right edge: at a full charge the marker stood right over that tip, 3 clear of it in game (the capacitor's last cell is 2 short of the block's edge, the triangle 3 either side of it).
+        /// </summary>
+        public static float JamMarkX(float edge, bool room, float width) => room ? edge : Math.Min(edge, ExpShelf(width));
+
         /// <summary>STACK's PWR BUS (216 wide) keeps its cells, rate word and cost label inside 196, so the rate word ends well short of the EXPENDABLES block beside it.</summary>
         public const float StackPwrInset = 20f;
 
