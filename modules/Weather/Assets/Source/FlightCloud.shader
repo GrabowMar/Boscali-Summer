@@ -1940,6 +1940,51 @@ Shader "Boscali/FlightCloud"
             }
             ENDHLSL
         }
+
+        // Reflection probe: the same march drawn straight onto a probe face and blended over the
+        // sky and terrain it already holds, so water and airframes reflect the clouds. One sample
+        // per texel, no temporal update. Drawn by CloudProbePass only, when the probe refreshes.
+        Pass
+        {
+            Name "CloudProbe"
+            Tags { "LightMode"="BoscaliCloudProbe" }
+            Blend One OneMinusSrcAlpha
+            ZWrite Off
+            ZTest Always
+            Cull Off
+            HLSLPROGRAM
+            #pragma vertex probeVert
+            #pragma fragment probeFrag
+            #pragma target 3.5
+
+            struct probeV2f { float4 pos : SV_POSITION; };
+
+            probeV2f probeVert(uint id : SV_VertexID)
+            {
+                probeV2f o;
+                float2 p = float2((id << 1) & 2, id & 2);
+                o.pos = float4(p * 2.0 - 1.0, 0.5, 1.0);
+                return o;
+            }
+
+            float4 probeFrag(probeV2f i) : SV_Target
+            {
+                float2 uv = i.pos.xy * _CloudLowResSize.zw;
+                float3 bottom = lerp(_CloudFrustum[0].xyz, _CloudFrustum[1].xyz, uv.x);
+                float3 top = lerp(_CloudFrustum[2].xyz, _CloudFrustum[3].xyz, uv.x);
+                float3 view = lerp(bottom, top, uv.y);
+                float viewLength = length(view);
+                float rawDepth = tex2Dlod(_CameraDepthTexture, float4(uv, 0, 0)).r;
+                #if defined(UNITY_REVERSED_Z)
+                float sceneDistance = rawDepth <= 0.000001 ? CLOUD_HORIZON_LIMIT : LinearEyeDepth(rawDepth) * viewLength;
+                #else
+                float sceneDistance = rawDepth >= 0.999999 ? CLOUD_HORIZON_LIMIT : LinearEyeDepth(rawDepth) * viewLength;
+                #endif
+                float cloudDistance;
+                return MarchSky(_CloudCameraPos, view / viewLength, sceneDistance, i.pos.xy, cloudDistance);
+            }
+            ENDHLSL
+        }
     }
     Fallback Off
 }
