@@ -24,8 +24,8 @@ $panel += (Get-ChildItem -LiteralPath "$repo/modules/Command/Presentation/Str" -
 # What StrViewBuilder and the panel read: the domain rules (pure), and the contracts they name. TheaterWords is System-only; the builder calls
 # TheaterWords.Empty, Command, Wave, Ground and Posture.
 $domain = @(
-    'StrContracts', 'StrViewModel', 'StrViewBuilder', 'StrViewBuilder.Rows', 'StrViewBuilder.Sitrep', 'StrWords', 'StrOrdinals', 'StrGate', 'StrStrokes',
-    'StrAnchors', 'StrPagePlan', 'StrPanelText', 'TheaterReadout'
+    'StrContracts', 'StrViewModel', 'StrViewBuilder', 'StrViewBuilder.Rows', 'StrViewBuilder.Sitrep', 'StrViewBuilder.Staff', 'StrWords', 'StrOrdinals', 'StrGate', 'StrStrokes',
+    'StrAnchors', 'StrOrgLayout', 'StrPagePlan', 'StrPanelText', 'TheaterReadout'
 ) | ForEach-Object { "$repo/modules/Command/Domain/$_.cs" }
 $contracts = @(
     'ITheaterWarView', 'TheaterWords', 'ISecondaryObjectivesView', 'OperationFocus', 'IWingSortieOrders', 'IThreatPicture'

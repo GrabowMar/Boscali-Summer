@@ -34,7 +34,7 @@ namespace BoscaliSummer.Tests.Features.Command
                 }
             }
             TestAssert.That(StrWords.Flavour(StrBoardMode.StaffOff) != StrWords.Flavour(StrBoardMode.HostLacksStaff), "staff off here and staff off on the host read differently");
-            TestAssert.That(StrWords.Flavour(StrBoardMode.StaffOff).Contains("LOG needs the staff"), "the StaffOff line does not claim the log works");
+            TestAssert.That(StrWords.Flavour(StrBoardMode.StaffOff).Contains("staff log needs the staff"), "the StaffOff line does not claim the log works");
             TestAssert.That(StrWords.Flavour(StrBoardMode.HostLacksStaff).Contains("dashes"), "the HostLacksStaff line admits the dashes");
             TestAssert.That(StrWords.NoAnswerWhy().Contains("30 s") && StrWords.NoAnswerDo().Contains("F1"), "NoAnswer has its own why and do");
         }

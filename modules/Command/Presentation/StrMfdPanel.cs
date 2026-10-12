@@ -12,14 +12,14 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Command.Presentation
 {
     /// <summary>
-    /// The STR bezel: the Station Board (design D1). Tabs BOARD, SITREP and LOG under four pinned tiles; a function of <see cref="StrViewModel"/>, bound to the
+    /// The STR bezel: the Station Board (design D1). Tabs BOARD, SITREP and INFO under four pinned tiles; a function of <see cref="StrViewModel"/>, bound to the
     /// hub's model each time its revision changes. No part reads a service, a clock or a status string, and a press goes to the hub through
     /// <see cref="Controls"/>, the one command path. It only exists beside the maximised relief map.
     /// </summary>
     internal sealed partial class StrMfdPanel : MonoBehaviour, ISceneService
     {
         private const float Width = AvTokens.PanelWidth;
-        private const int PageBoard = 0, PageSitrep = 1, PageLog = 2;
+        private const int PageBoard = 0, PageSitrep = 1, PageInfo = 2;
         private const int MaxLanes = StrViewModel.MaxFronts;
 
         // ---- Dependencies ----------------------------------------------------------------
@@ -47,8 +47,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
         // SITREP
         private AvSection sortieSection;
         private readonly AvRow[] sensors = new AvRow[4];
-        // LOG
+        // INFO
         private StrNote logNote;
+        private readonly AvRow[] misc = new AvRow[StrViewModel.MiscCount];
 
         /// <summary>The scene's panel, for the automation hooks.</summary>
         internal static StrMfdPanel Active { get; private set; }
@@ -92,6 +93,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             logNote = null;
             for (int i = 0; i < lanes.Length; i++) lanes[i] = null;
             for (int i = 0; i < sensors.Length; i++) sensors[i] = null;
+            for (int i = 0; i < misc.Length; i++) misc[i] = null;
             nextLog = 0f;
         }
 
@@ -155,16 +157,16 @@ namespace BoscaliSummer.Modules.Command.Presentation
             AvTabBar tabBar = console.Tabs(
                 (AvIcon.Stack2, "BOARD"),
                 (AvIcon.Radar2, "SITREP"),
-                (AvIcon.ListDetails, "LOG"));
+                (AvIcon.InfoCircle, "INFO"));
             TabHelp.Apply(tabBar,
                 "The live operation, the staff's proposals, the platforms and the posture.",
                 "Force balance, sensors, the alert level and the AI sortie board.",
-                "The staff's own log, newest line first.");
+                "Your chain of command and the enemy posts you have confirmed, the staff's log, and report ages and host switches.");
             metrics = console.Metrics("SECTORS", "AIR", "GROUND", "POOL");
 
             BuildBoard(console.Page(PageBoard));
             BuildSitrep(console.Page(PageSitrep));
-            BuildLog(console.Page(PageLog));
+            BuildInfo(console.Page(PageInfo));
             console.Finish();
             console.SetPage(PageBoard);
             return console.Root;
@@ -204,11 +206,15 @@ namespace BoscaliSummer.Modules.Command.Presentation
             Add(p, new StrSortieBoard(p.Content, Controls, hub));
         }
 
-        private void BuildLog(AvFlow p)
+        private void BuildInfo(AvFlow p)
         {
-            p.Section(AvIcon.ListDetails, "STAFF TELETYPE", "NEWEST FIRST · ROW NUMBERS, NOT CLOCK TIMES");
+            p.Section(AvIcon.UsersGroup, "CHAIN OF COMMAND", "READ ONLY · THE STAFF RUNS ITSELF");
+            Add(p, new StrChainPart(p.Content, Controls, hub));
+            p.Section(AvIcon.ListDetails, "STAFF LOG", "NEWEST FIRST · ROW NUMBERS, NOT CLOCK TIMES");
             Add(p, new StrTeletype(p.Content, Controls, hub));
             logNote = p.Add(new StrNote(p.Content, AvIcon.ListDetails));
+            p.Section(AvIcon.Activity, "MISC", "REPORT AGES · THE HOST · HOST SWITCHES");
+            for (int i = 0; i < misc.Length; i++) misc[i] = p.Add(new AvRow(p.Content));
         }
 
         // ---- Binding ---------------------------------------------------------------------
@@ -225,6 +231,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             BindTiles(vm);
             BindSensors(vm);
             BindLog(vm);
+            BindMisc(vm);
             console.Footer.Set(vm.FooterStatus + "\n" + vm.FooterNote, vm.Stale ? AvState.Caution : AvState.Inert);
             boundModel = vm;
             boundRevision = hub.Revision;
@@ -276,6 +283,15 @@ namespace BoscaliSummer.Modules.Command.Presentation
             sensors[1].Set("KNOWN AD", "ENEMY AIR DEFENCE YOUR SIDE KNOWS ABOUT. INTEL MAY BE INCOMPLETE", vm.KnownAdText, vm.KnownAdText == "NOT AVAILABLE" ? AvState.Inert : AvState.Info);
             sensors[2].Set("FRONT", frontRest.Length > 0 ? "THE FRONT LINE" + StrWords.Dot + frontRest : "THE FRONT LINE", frontValue, frontValue == StrWords.Dash ? AvState.Inert : AvState.Info);
             sensors[3].Set("CONTESTED BASES", "AIRBASES UNDER CAPTURE", vm.ContestedBasesText, vm.ContestedBasesText == StrWords.Dash ? AvState.Inert : vm.ContestedBasesText == "0" ? AvState.Info : AvState.Caution);
+        }
+
+        private void BindMisc(StrViewModel vm)
+        {
+            for (int i = 0; i < misc.Length; i++)
+            {
+                StrMiscLine line = vm.Misc[i];
+                if (line.Key != null) misc[i].Set(line.Key, line.Text, line.Value, line.State);
+            }
         }
 
         private void BindLog(StrViewModel vm)

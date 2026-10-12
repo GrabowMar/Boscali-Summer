@@ -57,7 +57,7 @@ namespace BoscaliSummer.Tests.Features.Command
             c.Register("replan", null, () => { said = "second"; return new StrAct(StrWhy.None, "second"); });
             c.Register("posture.bold", null, () => new StrAct(StrWhy.None, "bold"));
             c.Register("", null, () => new StrAct(StrWhy.None, ""));
-            c.Register("tab.log", null, null);
+            c.Register("tab.info", null, null);
             TestAssert.That(c.Count == 2 && c.Ids.OrderBy(s => s).SequenceEqual(new[] { "posture.bold", "replan" }), "a blank id and a null press register nothing: " + string.Join(",", c.Ids));
             c.Press("replan");
             TestAssert.That(said == "second", "the later registration wins");

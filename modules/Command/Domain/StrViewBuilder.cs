@@ -38,10 +38,10 @@ namespace BoscaliSummer.Modules.Command.Domain
             bool armed = nowUnscaled < ui.ReplanArmedUntil;
             // The decaying numbers (report age, time since publication, waiting, post feed age) enter the key by whole second, so a reader that
             // refreshes them every tick still builds once per second, not once per tick.
-            int sinceKey = Sec(feeds.WarSincePublished), ageKey = Sec(feeds.WarAgeSeconds), waitKey = Sec(feeds.WaitSeconds), postsKey = Sec(feeds.PostsAgeSeconds);
+            int sinceKey = Sec(feeds.WarSincePublished), ageKey = Sec(feeds.WarAgeSeconds), waitKey = Sec(feeds.WaitSeconds), postsKey = Sec(feeds.PostsAgeSeconds), censusKey = Sec(feeds.CensusAgeSeconds);
             if (into.Built && into.BuiltStamp == feeds.Stamp && into.BuiltSecond == second && into.BuiltNotice == noticeOn &&
                 into.BuiltArmed == armed && into.BuiltSince == sinceKey && into.BuiltAge == ageKey && into.BuiltWait == waitKey &&
-                into.BuiltPostsAge == postsKey && SameUi(in into.BuiltUi, in ui))
+                into.BuiltPostsAge == postsKey && into.BuiltCensusAge == censusKey && SameUi(in into.BuiltUi, in ui))
                 return false;
 
             var w = new Worker(into, in feeds, in ui, platforms, sorties, nowUnscaled, noticeOn, armed);
@@ -50,7 +50,7 @@ namespace BoscaliSummer.Modules.Command.Domain
             bool first = !into.Built;
             into.Built = true; into.BuiltStamp = feeds.Stamp; into.BuiltSecond = second;
             into.BuiltNotice = noticeOn; into.BuiltArmed = armed; into.BuiltUi = ui;
-            into.BuiltSince = sinceKey; into.BuiltAge = ageKey; into.BuiltWait = waitKey; into.BuiltPostsAge = postsKey;
+            into.BuiltSince = sinceKey; into.BuiltAge = ageKey; into.BuiltWait = waitKey; into.BuiltPostsAge = postsKey; into.BuiltCensusAge = censusKey;
             if (!w.Changed && !first) return false;
             into.Revision++;
             return true;
@@ -171,10 +171,12 @@ namespace BoscaliSummer.Modules.Command.Domain
                 Effort();
                 Sorties();
                 Posts();
+                Staff();
                 Wave();
                 Tiles();
                 Sitrep();
                 Log();
+                Misc();
                 Banner();
                 Footer(hasSnap);
                 Gates();

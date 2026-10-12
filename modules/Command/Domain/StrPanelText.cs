@@ -150,7 +150,14 @@ namespace BoscaliSummer.Modules.Command.Domain
 
         public static string RiskChip(StrProposalRow row) => "RISK " + (row == null || string.IsNullOrEmpty(row.RiskText) ? StrWords.Dash : row.RiskText);
 
-        /// <summary>What the LOG tab says when it has no lines: the staff has not written yet, or there is no staff report to read.</summary>
+        /// <summary>The count beside the OWN / ENEMY switch.</summary>
+        public static string StaffCount(StrStaffView s, bool enemy)
+        {
+            int n = enemy ? s.EnemyCount : s.OwnCount;
+            return enemy ? n + " CONFIRMED" : n + (n == 1 ? " POST" : " POSTS");
+        }
+
+        /// <summary>What the staff log says when it has no lines: the staff has not written yet, or there is no staff report to read.</summary>
         public static void LogNote(StrViewModel vm, out string title, out string detail)
         {
             bool report = vm != null && (vm.Mode == StrBoardMode.Operation || vm.Mode == StrBoardMode.Proposals || vm.Mode == StrBoardMode.Assessing ||
@@ -171,13 +178,13 @@ namespace BoscaliSummer.Modules.Command.Domain
     internal static class StrControlIds
     {
         private static readonly Regex Grammar = new Regex(
-            @"^(tab\.(board|sitrep|log)|posture\.(cautious|steady|bold)|replan|hero\.locate|prop\.[1-3]\.(pick|locate)|front\.[1-8]\.(redirect|locate)|" +
+            @"^(tab\.(board|sitrep|info)|info\.(side\.(own|enemy)|post\.[1-8]|locate)|posture\.(cautious|steady|bold)|replan|hero\.locate|prop\.[1-3]\.(pick|locate)|front\.[1-8]\.(redirect|locate)|" +
             @"sortie\.[1-3]\.(accept|wing|locate)|layer\.(fronts|operation|sorties)|map\.card\.(primary|secondary|close)|map\.tag\.(effort|prop|front|sortie|post)\.[1-9][0-9]*)$",
             RegexOptions.CultureInvariant);
 
         public static bool IsValid(string id) => !string.IsNullOrEmpty(id) && Grammar.IsMatch(id);
 
-        public static string Tab(int page) => page == 0 ? "tab.board" : page == 1 ? "tab.sitrep" : "tab.log";
+        public static string Tab(int page) => page == 0 ? "tab.board" : page == 1 ? "tab.sitrep" : "tab.info";
 
         public static string Posture(TheaterWarPosture posture) =>
             posture == TheaterWarPosture.Cautious ? "posture.cautious" : posture == TheaterWarPosture.Bold ? "posture.bold" : "posture.steady";
@@ -186,7 +193,9 @@ namespace BoscaliSummer.Modules.Command.Domain
         public static string Front(int n, string verb) => "front." + n.ToString(CultureInfo.InvariantCulture) + "." + verb;
         public static string Sortie(int n, string verb) => "sortie." + n.ToString(CultureInfo.InvariantCulture) + "." + verb;
 
-        public const string Replan = "replan", HeroLocate = "hero.locate";
+        public const string Replan = "replan", HeroLocate = "hero.locate", InfoLocate = "info.locate";
+        public static string InfoSide(bool enemy) => enemy ? "info.side.enemy" : "info.side.own";
+        public static string InfoPost(int n) => "info.post." + n.ToString(CultureInfo.InvariantCulture);
 
         /// <summary>
         /// The board item a tag or lane id names ("map.tag.prop.1", "prop.1", "front.2", "sortie.3", "post.1", "effort"), resolved against the model in model order

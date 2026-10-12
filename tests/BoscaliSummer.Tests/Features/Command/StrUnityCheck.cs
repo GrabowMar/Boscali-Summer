@@ -31,7 +31,9 @@ public static class StrUnityCheck
     private const float Width = AvTokens.PanelWidth;
     private const BindingFlags Private = BindingFlags.NonPublic | BindingFlags.Instance;
     private static readonly float[] Heights = { 596f, 896f, 1500f };
-    private static readonly string[] PageNames = { "board", "sitrep", "log" };
+    private static readonly string[] PageNames = { "board", "sitrep", "info" };
+    // The INFO tab is also rendered at 596 for these, and its ENEMY side where there is a board to read.
+    private static readonly string[] InfoFixtures = { "rich", "client", "staffoff", "unknown" };
 
     private static int captures, fixturesRendered, pressesChecked;
     private static readonly List<string> Notes = new List<string>();
@@ -83,7 +85,7 @@ public static class StrUnityCheck
             var report = new StringBuilder();
             report.AppendLine("PASS: the real STR Station Board rendered offline on kit v2 for " + fixturesRendered + " fixture x height builds; gate clean (" + PanelGate.CheckedTexts +
                 " texts checked: no overflow, no 11px-floor breach, no gutter entry, contrast >= 4.5, no part or text overlap, honest unknowns, every glyph in the font, every id resolves and every disabled control says why, " + pressesChecked + " presses by id reach the verb their button stands for, fold at " + spec.foldLine + ", mockup spec, effort ink).");
-            report.AppendLine(captures + " captures at 480 wide: BOARD at 596, 896 and 1500 for all " + StrFixtures.Names.Length + " fixtures, SITREP and LOG at 896.");
+            report.AppendLine(captures + " captures at 480 wide: BOARD at 596, 896 and 1500 for all " + StrFixtures.Names.Length + " fixtures, SITREP and INFO at 896, INFO also at 596 for rich, client, staffoff and unknown, and the ENEMY side for rich and client.");
             report.AppendLine("Content is bound after Finish() through the harness hub (the real builder over StrFixtures feeds) and advanced with Ticker.TickNow(), as the game does.");
             report.AppendLine("Renders (path | bytes | note):");
             foreach (string note in Notes) report.AppendLine(note);
@@ -196,24 +198,57 @@ public static class StrUnityCheck
             string where = fixture + "@" + height + "/" + PageNames[page];
             GatePage(b, where, page);
             SpecPage(b, fixture, page, height, where, spec);
-            if (page == 0 || Mathf.Approximately(height, 896f))
+            bool info = page == 2 && Array.IndexOf(InfoFixtures, fixture) >= 0;
+            if (page == 0 || Mathf.Approximately(height, 896f) || (info && height < 700f))
             {
                 string file = "renders/" + fixture + "-" + PageNames[page] + "-" + height + ".png";
                 string path = Capture(b.Canvas, height, file);
                 if (page == 0 && Mathf.Approximately(height, 896f)) Notes.Add(path + " | " + new FileInfo(path).Length + " bytes | " + fixture + " BOARD at 896");
-                if (page == 0 && height < 700f)
+                if ((page == 0 || info) && height < 700f)
                 {
                     ScrollRect scroll = b.Canvas.GetComponentInChildren<ScrollRect>();
                     if (scroll != null && scroll.content.rect.height > scroll.viewport.rect.height + 1f)
                     {
                         scroll.verticalNormalizedPosition = 0f;
-                        Capture(b.Canvas, height, "renders/" + fixture + "-board-" + height + "-bottom.png");
+                        Capture(b.Canvas, height, "renders/" + fixture + "-" + PageNames[page] + "-" + height + "-bottom.png");
                         scroll.verticalNormalizedPosition = 1f;
                     }
                 }
             }
         }
+        if ((fixture == "rich" || fixture == "client") && height < 1000f) EnemySide(b, fixture, height);
         Object.DestroyImmediate(b.Canvas);
+    }
+
+    /// <summary>The INFO tab's ENEMY side (rich and client have a board to read), reached by the control id a click uses and gated like any page.</summary>
+    private static void EnemySide(Built b, string fixture, float height)
+    {
+        AvConsole con = b.Console;
+        con.SetPage(2);
+        Settle(con);
+        pressesChecked++;
+        StrControls.PressResult side = b.Panel.Controls.Press("info.side.enemy");
+        if (!side.Ok) PanelGate.Fail(fixture + "@" + height + "/info-enemy", "ENEMY was refused: " + side.Act.Text);
+        Settle(con);
+        string where = fixture + "@" + height + "/info-enemy";
+        GatePage(b, where, 2);
+        Capture(b.Canvas, height, "renders/" + fixture + "-info-enemy-" + height + ".png");
+        ScrollRect scroll = b.Canvas.GetComponentInChildren<ScrollRect>();
+        if (height < 700f && scroll != null && scroll.content.rect.height > scroll.viewport.rect.height + 1f)
+        {
+            scroll.verticalNormalizedPosition = 0f;
+            Capture(b.Canvas, height, "renders/" + fixture + "-info-enemy-" + height + "-bottom.png");
+            scroll.verticalNormalizedPosition = 1f;
+        }
+        if (fixture == "rich" && Mathf.Approximately(height, 896f))
+        {
+            // The second officer of the enemy staff is on the strike list: its dossier carries a live LOCATE.
+            b.Panel.Controls.Press("info.post.2");
+            Settle(con);
+            GatePage(b, fixture + "@896/info-enemy-2", 2);
+            Capture(b.Canvas, height, "renders/rich-info-enemy-2-896.png");
+        }
+        con.SetPage(0);
     }
 
     /// <summary>Overflow, floor, gutter, contrast, overlap, icons, collisions, honesty, reasons and unique ids of the page in view.</summary>
@@ -311,6 +346,7 @@ public static class StrUnityCheck
         ExpectVerb(r, "front.1.redirect", "pick ");
         ExpectVerb(r, "replan", null);               // the first press only arms
         ExpectVerb(r, "replan", "cancel ");          // the second inside the window calls the operation off
+        ExpectLocate(r);
         Object.DestroyImmediate(r.Canvas);
 
         Built t = Build("wing-tasked", 896f);
@@ -330,6 +366,21 @@ public static class StrUnityCheck
         if (refused.Ok || c.Hub.Sent.Count != 0 || refused.Act.Why != StrWhy.HostOnly)
             PanelGate.Fail("press", "a client's SEND WING must be refused with HostOnly and reach no verb: ok=" + refused.Ok + " why=" + refused.Act.Why + " sent=[" + string.Join(", ", c.Hub.Sent) + "]");
         Object.DestroyImmediate(c.Canvas);
+    }
+
+    /// <summary>INFO: an enemy officer on the strike list locates its post through the hub; one off the list is refused with its reason and selects nothing.</summary>
+    private static void ExpectLocate(Built b)
+    {
+        pressesChecked += 4;
+        b.Panel.Controls.Press("info.side.enemy");
+        b.Panel.Controls.Press("info.post.1");
+        StrControls.PressResult off = b.Panel.Controls.Press("info.locate");
+        if (off.Ok || off.Act.Text.Length < 12 || !b.Hub.Ui.Selected.IsNone)
+            PanelGate.Fail("press info.locate", "an officer off the strike list must be refused with a reason and select nothing: ok=" + off.Ok + " '" + off.Act.Text + "'");
+        b.Panel.Controls.Press("info.post.2");
+        StrControls.PressResult on = b.Panel.Controls.Press("info.locate");
+        if (!on.Ok || b.Hub.Ui.Selected != new StrItemId(StrItemKind.Post, 12))
+            PanelGate.Fail("press info.locate", "an officer on the strike list must locate post 12: ok=" + on.Ok + " selected=" + b.Hub.Ui.Selected.Kind + "/" + b.Hub.Ui.Selected.Key);
     }
 
     /// <summary>Presses <paramref name="id"/>; the fake must have recorded exactly one verb starting with <paramref name="verb"/>, or none when it is null.</summary>

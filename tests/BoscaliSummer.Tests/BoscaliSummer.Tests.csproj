@@ -142,6 +142,7 @@
     <Compile Include="..\..\Core\Modules\ModuleGraph.cs" Link="Framework\FeatureGraph.cs" />
     <Compile Include="..\..\Core\Services\ServiceRegistry.cs" Link="Framework\ServiceRegistry.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrPagePlan.cs" Link="Features\Command\StrPagePlan.cs" />
+    <Compile Include="..\..\modules\Command\Domain\StrOrgLayout.cs" Link="Features\Command\StrOrgLayout.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrPanelText.cs" Link="Features\Command\StrPanelText.cs" />
     <Compile Include="..\..\modules\Command\Presentation\Str\StrControls.cs" Link="Features\Command\StrControls.cs" />
     <Compile Include="..\..\modules\Command\Domain\TacticalTheaterState.cs" Link="Features\Command\TacticalTheaterState.cs" />
@@ -168,6 +169,7 @@
     <Compile Include="..\..\modules\Command\Domain\StrViewBuilder.cs" Link="Features\Command\StrViewBuilder.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrViewBuilder.Rows.cs" Link="Features\Command\StrViewBuilder.Rows.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrViewBuilder.Sitrep.cs" Link="Features\Command\StrViewBuilder.Sitrep.cs" />
+    <Compile Include="..\..\modules\Command\Domain\StrViewBuilder.Staff.cs" Link="Features\Command\StrViewBuilder.Staff.cs" />
     <Compile Include="..\..\modules\Command\Domain\ControlFieldCore.cs" Link="Features\Command\ControlFieldCore.cs" />
     <Compile Include="..\..\modules\HighCommand\Domain\CommandEconomy.cs" Link="Features\HighCommand\CommandEconomy.cs" />
     <Compile Include="..\..\modules\HighCommand\Domain\CommandLog.cs" Link="Features\HighCommand\CommandLog.cs" />

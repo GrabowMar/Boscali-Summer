@@ -357,7 +357,7 @@ def merged_smoke():
         wait(5), S("Open", "o0", page="board"),                      # about 150 s: the pilot opens the map and the Station Board
         wait(4), S("Read", "a0"), shot("live-merged-board"),
         S("Press", "t1", id="tab.sitrep"), wait(1), S("Read", "a1s"), shot("live-merged-sitrep"),
-        S("Press", "t2", id="tab.log"), wait(1), S("Read", "a1l"), shot("live-merged-log"),
+        S("Press", "t2", id="tab.info"), wait(1), S("Read", "a1l"), shot("live-merged-info"),
         S("Press", "t3", id="tab.board"), wait(1),
         S("Verb", "pk", verb="redirect", index=1),                   # the staff already picked, so the pilot's pick through the panel's own verb is a REDIRECT on the first lane that holds an offer
         wait(10), S("Read", "a2"), read("r2"), gcall("Read", "g2"), shot("live-merged-picked"),
