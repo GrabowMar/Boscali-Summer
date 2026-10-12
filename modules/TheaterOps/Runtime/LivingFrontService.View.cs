@@ -98,6 +98,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 {
                     Id = op.Id, Revision = op.Revision, Kind = op.Kind, TargetKey = op.Key, Name = op.Name, X = op.X, Z = op.Z,
                     OriginX = op.OriginX, OriginZ = op.OriginZ, Radius = LivingWarRules.RadiusOf(op.Kind), Phase = op.Phase, PhaseNote = op.PhaseNote,
+                    Forces = op.Forces,
                     ElapsedSeconds = Mathf.Clamp(now - op.Started, 0f, 3600f), LimitSeconds = LivingWarRules.OperationLimitSeconds, Progress = op.Progress,
                     PickedBy = op.PickedBy, PickedById = op.PickedById, PickedByStaff = op.PickedByStaff,
                     LockSeconds = op.PickedByStaff ? 0f : Mathf.Clamp(op.LockUntil - now, 0f, LivingWarRules.PickLockSeconds),
@@ -263,64 +264,24 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             war.Posture = body.Posture;
         }
 
-        // ---- The old ground assignment table, kept until the ground slice replaces it ------------------------------------------
+        // ---- IGroundWarSource: what the ground service reads of the war -------------------------------------------------------------
 
-        private const float AssignmentRadius = 12000f;
-
-        internal bool TryGetGroundAssignment(FactionHQ hq, int groupId, float x, float z, out PriorityDirective directive, out bool offensive)
+        bool IGroundWarSource.TryGetOperation(FactionHQ hq, out GroundOperation operation)
         {
-            directive = default; offensive = false;
-            if (!Authoritative || !float.IsFinite(x) || !float.IsFinite(z) || hq?.faction == null ||
-                !wars.TryGetValue(hq.faction.factionName, out FactionWar war)) return false;
-            if (war.GroupAssignments.TryGetValue(groupId, out var assigned))
-            {
-                if (war.Active != null && war.Active.Key == assigned.Key &&
-                    Scalar.Distance2DSquared(x, z, war.Active.X, war.Active.Z) <= AssignmentRadius * AssignmentRadius)
-                {
-                    Operation active = war.Active;
-                    directive = new PriorityDirective(active.Key, active.Name, active.X, 0f, active.Z);
-                    offensive = assigned.Offensive;
-                    return true;
-                }
-                for (int i = 0; i < war.Reads.Count; i++)
-                {
-                    WarFrontRead held = war.Reads[i];
-                    if (!held.Live || held.Key != assigned.Key || Scalar.Distance2DSquared(x, z, held.X, held.Z) > AssignmentRadius * AssignmentRadius) continue;
-                    directive = new PriorityDirective(held.Key, held.Name, held.X, 0f, held.Z);
-                    return true;
-                }
-                war.GroupAssignments.Remove(groupId);
-            }
-            float nearest = AssignmentRadius * AssignmentRadius;
-            string key = null, label = null;
-            float targetX = 0f, targetZ = 0f;
-            bool attack = false;
-            // Reserve some local groups for the chosen operation; the rest keep nearby stretches of the front alive. Never send a local group across the map.
-            if (war.Active != null && groupId % 3 == 0)
-            {
-                Operation op = war.Active;
-                float distance = Scalar.Distance2DSquared(x, z, op.X, op.Z);
-                if (distance <= nearest)
-                {
-                    nearest = distance; key = op.Key; label = op.Name;
-                    targetX = op.X; targetZ = op.Z; attack = op.Kind != TheaterOpKind.Defend;
-                }
-            }
-            if (key == null)
-                for (int i = 0; i < war.Reads.Count; i++)
-                {
-                    WarFrontRead front = war.Reads[i];
-                    if (!front.Live) continue;
-                    float distance = Scalar.Distance2DSquared(x, z, front.X, front.Z);
-                    if (distance > nearest) continue;
-                    nearest = distance; key = front.Key; label = front.Name;
-                    targetX = front.X; targetZ = front.Z;
-                }
-            if (key == null) return false;
-            if (war.GroupAssignments.Count < 16) war.GroupAssignments[groupId] = (key, attack);
-            directive = new PriorityDirective(key, label, targetX, 0f, targetZ);
-            offensive = attack;
+            operation = default;
+            if (!Authoritative || MissionOver || hq?.faction == null || !wars.TryGetValue(hq.faction.factionName, out FactionWar war) || war.Active == null) return false;
+            Operation op = war.Active;
+            operation = new GroundOperation(op.Id, op.Key, op.Name, op.Kind, op.X, op.Z, op.Started);
             return true;
+        }
+
+        int IGroundWarSource.CopyFronts(FactionHQ hq, List<GroundFront> into)
+        {
+            into.Clear();
+            if (!Authoritative || hq?.faction == null || !wars.TryGetValue(hq.faction.factionName, out FactionWar war)) return 0;
+            for (int i = 0; i < war.Fronts.Count && into.Count < 8; i++)
+                into.Add(new GroundFront(war.Fronts[i].Key, war.Fronts[i].Name, war.Fronts[i].X, war.Fronts[i].Z));
+            return into.Count;
         }
     }
 }

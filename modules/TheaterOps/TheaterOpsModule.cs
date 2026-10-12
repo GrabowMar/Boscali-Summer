@@ -40,7 +40,7 @@ namespace BoscaliSummer.Modules.TheaterOps
             naval.Configure(context.Settings.TheaterOps);
             living.Configure(context.Settings.TheaterOps, priority, livingNetwork, naval);
             livingNetwork.Configure(living);
-            groundFront.Configure(context.Settings.TheaterOps, priority);
+            groundFront.Configure(context.Settings.TheaterOps, living);
             network.Configure(priority);
             hudLine.Configure(living);
 

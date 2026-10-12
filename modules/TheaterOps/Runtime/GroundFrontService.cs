@@ -15,31 +15,30 @@ using BoscaliSummer.Core.Math;
 namespace BoscaliSummer.Modules.TheaterOps.Runtime
 {
     /// <summary>
-    /// Host-side destinations for uncommanded mobile AI vehicles. Groups may be assigned to
-    /// separate living-front sectors. Vanilla owns spawning, driving, targeting and player orders.
+    /// Host-side destinations for uncommanded mobile AI vehicles. One writer assigns groups (AssignGroups, pure GroundTasking) to the staff's operation or the
+    /// front they stand near; the MissionPosition advance hook only reads. Vanilla owns spawning, driving, targeting and player orders.
     /// </summary>
-    internal sealed class GroundFrontService : MonoBehaviour, ISceneService
+    internal sealed partial class GroundFrontService : MonoBehaviour, ISceneService
     {
         internal static GroundFrontService Active { get; private set; }
 
-        private const int MaximumGroups = 16;
+        private const int MaximumGroups = 32;
         private const int MaximumFactions = 8;
         private const int MaximumMembers = MaximumGroups * FrontlineTactics.GroupSize;
-        private const float AssignmentRadius = 12000f;
+        private const int MaximumFronts = 8;
+        private const int MaximumSightings = 256;
+        private const int SweepUnitsPerPass = 256;
         private const float UpdateSeconds = 2f;
         private const float TraceSeconds = 5f;
-        private const float JoinSeconds = 20f;
-        private const float ContactMeters = 700f;
-        private const float ContactHoldSeconds = 25f;
+        private const float StaleSeconds = 6f;
+        private const float StallLockSeconds = 300f;
+        private const float AllFrozenStallSeconds = 120f;
         private const float PincerFlankMeters = 750f;
-        private const int ScanCellsPerUpdate = 128;
-        private const int ScanUnitsPerUpdate = 64;
+        private const float StagingReachMeters = 30000f;
         private static readonly FieldInfo NavigateObjectives =
             AccessTools.Field(typeof(GroundVehicle), "navigateToObjectives");
         private static readonly FieldInfo CommandedDestination =
             AccessTools.Field(typeof(GroundVehicle), "commandedDestination");
-
-        internal enum Stage { Rally, Line, Assault, Contact, Withdraw }
 
         internal sealed class Member
         {
@@ -47,17 +46,25 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             internal Group Group;
             internal int Lane;
             internal bool HasDestination;
+            /// <summary>True when no slot candidate could be placed and the member holds where it stood (the hook answers that point, never the enemy objective).</summary>
+            internal bool Degraded;
             internal GlobalPosition Destination;
             internal float HoldX, HoldZ;
+            /// <summary>The SlotSearch candidate that last worked; -1 tries the staged point first.</summary>
+            internal int SlotIndex = -1;
+            /// <summary>A frozen member tries the full candidate list again at this mission second.</summary>
+            internal float RetryAt;
+            internal float AnsweredAt = -1000f;
+            internal GlobalPosition Answer;
         }
 
-        /// <summary>One faction's front traces, copied every few seconds.</summary>
+        /// <summary>One faction's front traces, copied every few seconds. Count is -1 until the first copy.</summary>
         private sealed class FrontTrace
         {
             internal readonly FrontlineTracePoint[] Points = new FrontlineTracePoint[FrontlineTraceLimits.MaximumPoints];
             internal readonly int[] Lengths = new int[FrontlineTraceLimits.MaximumTraces];
             internal readonly float[] Pressure = new float[FrontlineTraceLimits.MaximumTraces];
-            internal int Count;
+            internal int Count = -1;
             internal float Next;
         }
 
@@ -68,43 +75,79 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             internal readonly List<Member> Members = new List<Member>(FrontlineTactics.GroupSize);
             internal FactionHQ HQ;
             internal string Key;
-            internal bool Offensive;
-            internal bool Defending;
-            internal bool Sealed;
-            internal bool ReportedRally;
+            internal float FixX, FixZ;
+            internal bool Offensive, Defending;
+            /// <summary>The only definition of "on the effort": the staff's last assignment chose this group for operation OpId.</summary>
+            internal bool OnEffort;
+            internal int OpId;
+            internal bool FromDepot;
+            internal bool Sealed, ReportedRally;
             internal int Formed;
-            internal Stage Stage;
-            internal Stage BeforeContact;
-            internal float Born, StageSince, ContactUntil;
-            internal float NoAssignmentSince;
+            internal GroundStage Stage = GroundStage.Rally;
+            internal GroundStage BeforeContact;
+            internal float Born, StageSince;
             internal float CenterX, CenterZ, TangentX, TangentZ, FriendlyX, FriendlyZ;
-            internal bool HasFront;
+            internal float CentroidX, CentroidZ;
+            internal bool HasFront, HasSide;
+            internal ContactClock Contact;
+            internal float ContactEntered;
+            internal Approach Approach;
+            internal bool Closing;
+            internal int Eta = -1;
+            internal float TargetX, TargetZ;
+            internal string StalledKey;
+            internal float StalledUntil;
+            internal float AllFrozenSince;
+            internal float FirstOnEffortAfter = -1f;
+            internal int RekeysThisOperation;
         }
 
-        private readonly Dictionary<GroundVehicle, Member> members =
-            new Dictionary<GroundVehicle, Member>(MaximumMembers);
+        /// <summary>Everything the service keeps per faction.</summary>
+        private sealed class FactionState
+        {
+            internal FactionHQ HQ;
+            internal readonly FrontTrace Trace = new FrontTrace();
+            internal readonly List<Vector2> Sightings = new List<Vector2>(MaximumSightings);
+            internal readonly List<GroundFront> Fronts = new List<GroundFront>(MaximumFronts);
+            /// <summary>Published at the end of each sweep; -1 until the first sweep ends.</summary>
+            internal int Eligible = -1, Ungrouped, SupportSeen, SupportNavigating;
+            internal int SweepEligible, SweepUngrouped, SweepSupportSeen, SweepSupportNavigating;
+            /// <summary>The operation the groups were last assigned against (0 none), for the per-operation counters and the carrier test.</summary>
+            internal int OpId;
+            internal string OpKey;
+            internal float MaxContactDwell;
+            internal int Rekeys, EffortSwaps;
+        }
+
+        private readonly Dictionary<GroundVehicle, Member> members = new Dictionary<GroundVehicle, Member>(MaximumMembers);
         private readonly List<Group> groups = new List<Group>(MaximumGroups);
-        private readonly Dictionary<FactionHQ, FrontTrace> traces = new Dictionary<FactionHQ, FrontTrace>(8);
+        private readonly Dictionary<FactionHQ, FactionState> factions = new Dictionary<FactionHQ, FactionState>(MaximumFactions);
         private readonly List<FactionHQ> factionHqs = new List<FactionHQ>(MaximumFactions);
+        private readonly Dictionary<GroundVehicle, bool> supportCache = new Dictionary<GroundVehicle, bool>(256);
+
+        // Scratch for AssignGroups and Enroll, sized once: a pass allocates nothing.
+        private readonly GroupFacts[] facts = new GroupFacts[MaximumGroups];
+        private readonly bool[] chosen = new bool[MaximumGroups];
+        private readonly Group[] mine = new Group[MaximumGroups];
+        private readonly OpenGroup[] open = new OpenGroup[MaximumGroups];
+        private readonly Group[] openGroups = new Group[MaximumGroups];
+        private readonly float[] frontX = new float[MaximumFronts], frontZ = new float[MaximumFronts];
 
         /// <summary>Chainloader's plugin list is fixed once the game runs; looked up once.</summary>
         private static int rtsInstalled = -1;
 
         private TheaterOpsSettings settings;
-        private TheaterPriorityService priority;
+        private IGroundWarSource war;
         private ITerritoryIngress territory;
         private int nextGroupId = 1;
-        private int nextScanCell;
-        private int nextScanUnit;
-        private GridSquare[] scanCells;
-        private GridSquare scanCell;
-        private float nextUpdate;
-        private bool warnedConflict;
+        private int sweepCursor;
+        private float nextUpdate, lastPass;
+        private bool adapterOn, warnedConflict;
 
-        internal void Configure(TheaterOpsSettings config, TheaterPriorityService priorityService)
+        internal void Configure(TheaterOpsSettings config, IGroundWarSource warSource)
         {
             settings = config;
-            priority = priorityService;
+            war = warSource;
         }
 
         private void Awake() => Active = this;
@@ -117,438 +160,122 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
 
         public void ResetForScene()
         {
-            members.Clear();
-            groups.Clear();
-            traces.Clear();
+            ClearGroups();
+            factions.Clear();
             factionHqs.Clear();
+            supportCache.Clear();
             territory = null;
             nextGroupId = 1;
-            nextScanCell = 0;
-            nextScanUnit = 0;
-            scanCells = null;
-            scanCell = null;
-            nextUpdate = 0f;
+            sweepCursor = 0;
+            nextUpdate = lastPass = 0f;
+            adapterOn = false;
         }
 
-        /// <summary>Called after depot exit, or by the bounded scene-unit scan.</summary>
-        internal void Enroll(GroundVehicle vehicle)
+        private void ClearGroups()
         {
-            if (!Eligible(vehicle))
-                return;
-            ReconcileGroupShares();
-            if (members.ContainsKey(vehicle) || members.Count >= MaximumMembers) return;
-            FactionHQ hq = vehicle.NetworkHQ;
-            if (hq == null || hq.faction == null) return;
-
-            float now = Time.timeSinceLevelLoad;
-            GlobalPosition here = vehicle.GlobalPosition();
-            Group group = null;
-            PriorityDirective directive = default;
-            bool offensive = false;
-            for (int i = groups.Count - 1; i >= 0; i--)
-            {
-                Group candidate = groups[i];
-                if (candidate.HQ == hq && !candidate.Sealed &&
-                    candidate.Members.Count < FrontlineTactics.GroupSize && now - candidate.Born < JoinSeconds &&
-                    TryAssign(hq, candidate.Id, here.x, here.z, out directive, out offensive) &&
-                    candidate.Key == directive.Key)
-                {
-                    group = candidate;
-                    break;
-                }
-            }
-            if (group == null)
-            {
-                if (!CanCreateGroup(hq)) return;
-                if (!TryAssign(hq, nextGroupId, here.x, here.z, out directive, out offensive)) return;
-                group = new Group
-                {
-                    Id = nextGroupId++,
-                    HQ = hq,
-                    Key = directive.Key,
-                    Offensive = offensive,
-                    Born = now,
-                    StageSince = now
-                };
-                groups.Add(group);
-            }
-            var member = new Member { Vehicle = vehicle, Group = group, Lane = group.Members.Count };
-            group.Members.Add(member);
-            group.Formed++;
-            if (group.Members.Count == FrontlineTactics.GroupSize) group.Sealed = true;
-            members.Add(vehicle, member);
-            nextUpdate = 0f;
+            members.Clear();
+            groups.Clear();
+            sweepCursor = 0;
         }
 
-        /// <summary>Patch-side membership test: only enrolled vehicles follow the effort.</summary>
-        internal bool IsEnrolled(GroundVehicle vehicle) =>
-            Eligible(vehicle) && members.TryGetValue(vehicle, out Member member) &&
-            ReferenceEquals(vehicle.NetworkHQ, member.Group.HQ);
+        /// <summary>The settings object the proof's Tactics verb writes.</summary>
+        internal TheaterOpsSettings Settings => settings;
 
-        /// <summary>Patch-side lookup; failure leaves the vanilla destination untouched.</summary>
-        internal bool TryGetDestination(GroundVehicle vehicle, out GlobalPosition destination)
-        {
-            destination = default;
-            if (!Eligible(vehicle) ||
-                !members.TryGetValue(vehicle, out Member member) ||
-                !member.HasDestination || !ReferenceEquals(vehicle.NetworkHQ, member.Group.HQ))
-                return false;
-            Group group = member.Group;
-            GlobalPosition here = vehicle.GlobalPosition();
-            if (!TryAssign(group.HQ, group.Id, here.x, here.z,
-                    out PriorityDirective current, out bool offensive) ||
-                group.Key != current.Key || group.Offensive != offensive ||
-                group.Defending != IsDefending(group.HQ, current.Key, offensive))
-                return false;
-            destination = member.Destination;
-            return true;
-        }
-
-        // Read-only views for the sim proof hook (GroundProof): nothing here assigns, enrols or clears.
-        internal IReadOnlyList<Group> Groups => groups;
-        internal bool TacticsEnabled => settings != null && settings.FrontlineTacticsEnabled.Value;
         /// <summary>The engine's GroundSteering capability: adapter on, host authority, no Ground Control RTS.</summary>
         internal bool SteeringAvailable => AdapterEnabled;
 
-        /// <summary>Eligible for the staff to give an order. The ground slice narrows it (not support, not slung, not in a stalled group).</summary>
-        internal bool CanCarry(GroundVehicle vehicle) => Eligible(vehicle);
+        private bool AdapterEnabled => settings != null && settings.Enabled.Value && settings.FrontlineTacticsEnabled.Value &&
+            !HasRtsCommander() && war != null && GameAccess.IsServer();
 
-        private void Update()
-        {
-            if (Time.timeSinceLevelLoad < nextUpdate) return;
-            nextUpdate = Time.timeSinceLevelLoad + UpdateSeconds;
-            if (!AdapterEnabled)
-            {
-                if (groups.Count > 0) ResetForScene();
-                nextUpdate = Time.timeSinceLevelLoad + UpdateSeconds;
-                return;
-            }
-            ReconcileGroupShares();
-            ScanInitialUnits();
-            if (groups.Count == 0) return;
-            if (territory == null) ModuleServices.TryGet(out territory);
-            float now = Time.timeSinceLevelLoad;
-            for (int i = groups.Count - 1; i >= 0; i--)
-            {
-                Group group = groups[i];
-                FactionHQ hq = group.HQ;
-                // A group keeps its identity while the war changes its sector assignment.
-                PriorityDirective directive = default;
-                bool offensive = false;
-                GlobalPosition groupPosition = group.Members.Count > 0 &&
-                    group.Members[0].Vehicle != null
-                    ? group.Members[0].Vehicle.GlobalPosition()
-                    : default;
-                bool hasDirective = hq != null && hq.faction != null &&
-                    TryAssign(hq, group.Id, groupPosition.x, groupPosition.z,
-                        out directive, out offensive);
-                for (int j = group.Members.Count - 1; j >= 0; j--)
-                {
-                    Member member = group.Members[j];
-                    if (member.Vehicle != null && !member.Vehicle.disabled &&
-                        ReferenceEquals(member.Vehicle.NetworkHQ, hq) &&
-                        AutoNavigating(member.Vehicle))
-                        continue;
-                    members.Remove(member.Vehicle);
-                    group.Members.RemoveAt(j);
-                    group.Sealed = true;
-                }
-                // A spent (withdrawing) group is released to vanilla when the effort moves on, so
-                // the 16-group table keeps room for the next offensive's waves.
-                if (group.Members.Count == 0 ||
-                    (hasDirective && group.Key != directive.Key && group.Stage == Stage.Withdraw))
-                {
-                    foreach (Member member in group.Members) members.Remove(member.Vehicle);
-                    groups.RemoveAt(i);
-                    continue;
-                }
-                // A new effort re-keys the group; its vehicles stay together instead of
-                // dissolving back to vanilla's nearest-objective spread.
-                if (!hasDirective)
-                {
-                    ClearDestinations(group);
-                    if (LivingFrontService.Active?.Authoritative == true)
-                    {
-                        if (group.NoAssignmentSince <= 0f) group.NoAssignmentSince = now;
-                        else if (now - group.NoAssignmentSince >= 30f)
-                        {
-                            foreach (Member member in group.Members) members.Remove(member.Vehicle);
-                            groups.RemoveAt(i);
-                        }
-                    }
-                    continue;
-                }
-                group.NoAssignmentSince = 0f;
-                if (group.Key != directive.Key) Rekey(group, directive, offensive, now);
-                else
-                {
-                    group.Offensive = offensive;
-                    if (!offensive && group.Stage == Stage.Assault)
-                        SetStage(group, Stage.Line, now);
-                    if (!offensive && group.Stage == Stage.Contact &&
-                        group.BeforeContact == Stage.Assault)
-                        group.BeforeContact = Stage.Line;
-                }
-                if (!group.Sealed && now - group.Born >= JoinSeconds) group.Sealed = true;
-                RefreshGroup(group, directive, TraceOf(hq, now), now);
-            }
-        }
+        private bool Eligible(GroundVehicle vehicle) =>
+            AdapterEnabled && AutoNavigating(vehicle) && !vehicle.IsSlung() && !IsSupport(vehicle);
 
-        /// <summary>The side's front, re-copied at most every few seconds per faction.</summary>
-        private FrontTrace TraceOf(FactionHQ hq, float now)
-        {
-            if (!traces.TryGetValue(hq, out FrontTrace trace))
-            {
-                if (traces.Count >= 8) traces.Clear();
-                trace = new FrontTrace();
-                traces.Add(hq, trace);
-            }
-            if (now >= trace.Next)
-            {
-                trace.Next = now + TraceSeconds;
-                trace.Count = territory == null ? 0 : Mathf.Clamp(territory.CopyFrontlineTraces(hq.GetInstanceID(),
-                    trace.Points, trace.Lengths, trace.Pressure), 0, FrontlineTraceLimits.MaximumTraces);
-            }
-            return trace;
-        }
-
-        private void RefreshGroup(Group group, PriorityDirective directive, FrontTrace trace, float now)
-        {
-            int axis = PincerAxisOf(group);
-            if (group.Axis != axis)
-            {
-                group.Axis = axis;
-                if (group.ReportedRally) ReportStage(group);
-            }
-            group.Defending = IsDefending(group.HQ, directive.Key, group.Offensive);
-            if (group.Defending)
-            {
-                // A rear objective is defended at its own position, independent of the front.
-                group.HasFront = true;
-                group.CenterX = directive.X;
-                group.CenterZ = directive.Z;
-                GlobalPosition here = group.Members[0].Vehicle.GlobalPosition();
-                float dx = here.x - directive.X, dz = here.z - directive.Z;
-                float square = dx * dx + dz * dz;
-                float inverse = square > 1f ? 1f / (float)Math.Sqrt(square) : 0f;
-                group.FriendlyX = inverse > 0f ? dx * inverse : 0f;
-                group.FriendlyZ = inverse > 0f ? dz * inverse : 1f;
-                group.TangentX = group.FriendlyZ;
-                group.TangentZ = -group.FriendlyX;
-            }
-            else
-            {
-                group.HasFront = trace.Count > 0 && FrontlineTactics.TrySlot(trace.Points, trace.Lengths, trace.Count,
-                    directive.X, directive.Z, 0, out group.CenterX, out group.CenterZ,
-                    out group.TangentX, out group.TangentZ, AssignmentRadius);
-                if (!group.HasFront) { ClearDestinations(group); return; }
-                group.CenterX += group.Axis * PincerFlankMeters * group.TangentX;
-                group.CenterZ += group.Axis * PincerFlankMeters * group.TangentZ;
-                if (Scalar.Distance2DSquared(group.CenterX, group.CenterZ, directive.X, directive.Z) >
-                    AssignmentRadius * AssignmentRadius) { ClearDestinations(group); return; }
-
-                float nx = -group.TangentZ, nz = group.TangentX;
-                int factionId = group.HQ.GetInstanceID();
-                float sign = 0f;
-                // Command's control field has kilometre cells; close probes often share one cell.
-                for (int probe = 450; probe <= 3600 && sign == 0f; probe *= 2)
-                {
-                    bool left = territory.TryGetHoldStrength(factionId,
-                        group.CenterX + nx * probe, group.CenterZ + nz * probe, out float leftHold);
-                    bool right = territory.TryGetHoldStrength(factionId,
-                        group.CenterX - nx * probe, group.CenterZ - nz * probe, out float rightHold);
-                    if (left && right && Mathf.Abs(leftHold - rightHold) >= .05f)
-                        sign = leftHold > rightHold ? 1f : -1f;
-                }
-                if (sign == 0f)
-                {
-                    // An ambiguous or off-map normal must never send a group behind enemy lines.
-                    ClearDestinations(group);
-                    return;
-                }
-                group.FriendlyX = nx * sign;
-                group.FriendlyZ = nz * sign;
-            }
-            if (group.Sealed && !group.ReportedRally)
-            {
-                group.ReportedRally = true;
-                ReportStage(group);
-            }
-
-            if (group.Sealed && FrontlineTactics.ShouldWithdraw(group.Members.Count, group.Formed))
-                SetStage(group, Stage.Withdraw, now);
-            else if (group.Stage != Stage.Withdraw)
-            {
-                GroundVehicle lead = group.Members[0].Vehicle;
-                bool contact = lead != null && group.HQ.TryGetNearestGroundEnemy(
-                    lead.GlobalPosition(), out TrackingInfo tracked) && tracked != null &&
-                    Scalar.Distance2DSquared(lead.GlobalPosition().x, lead.GlobalPosition().z,
-                        tracked.lastKnownPosition.x, tracked.lastKnownPosition.z) <
-                    ContactMeters * ContactMeters;
-                if (contact)
-                {
-                    group.ContactUntil = now + ContactHoldSeconds;
-                    if (group.Stage != Stage.Contact)
-                    {
-                        group.BeforeContact = group.Stage;
-                        foreach (Member member in group.Members)
-                        {
-                            GlobalPosition here = member.Vehicle.GlobalPosition();
-                            member.HoldX = here.x;
-                            member.HoldZ = here.z;
-                        }
-                        SetStage(group, Stage.Contact, now);
-                    }
-                }
-                else if (group.Stage == Stage.Contact && now >= group.ContactUntil)
-                    SetStage(group, group.BeforeContact, now);
-
-                if (group.Stage == Stage.Rally || group.Stage == Stage.Line)
-                {
-                    int ready = 0;
-                    float depth = group.Stage == Stage.Rally ? 650f : 180f;
-                    foreach (Member member in group.Members)
-                    {
-                        GlobalPosition here = member.Vehicle.GlobalPosition();
-                        float x = group.CenterX + group.FriendlyX * depth +
-                                  LaneOffset(member.Lane) * group.TangentX;
-                        float z = group.CenterZ + group.FriendlyZ * depth +
-                                  LaneOffset(member.Lane) * group.TangentZ;
-                        if (Scalar.Distance2DSquared(here.x, here.z, x, z) < 300f * 300f) ready++;
-                    }
-                    if (group.Stage == Stage.Rally && group.Sealed &&
-                        FrontlineTactics.ShouldAdvance(ready, group.Members.Count, now - group.StageSince))
-                        SetStage(group, Stage.Line, now);
-                    else if (group.Stage == Stage.Line && group.Offensive &&
-                        now - group.StageSince >= 15f &&
-                        FrontlineTactics.ShouldAdvance(ready, group.Members.Count, now - group.StageSince))
-                        SetStage(group, Stage.Assault, now);
-                }
-            }
-
-            foreach (Member member in group.Members)
-            {
-                float lateral = LaneOffset(member.Lane);
-                float x, z;
-                switch (group.Stage)
-                {
-                    case Stage.Rally:
-                        x = group.CenterX + group.FriendlyX * 650f + group.TangentX * lateral;
-                        z = group.CenterZ + group.FriendlyZ * 650f + group.TangentZ * lateral;
-                        break;
-                    case Stage.Line:
-                        x = group.CenterX + group.FriendlyX * 180f + group.TangentX * lateral;
-                        z = group.CenterZ + group.FriendlyZ * 180f + group.TangentZ * lateral;
-                        break;
-                    case Stage.Contact:
-                        x = member.HoldX; z = member.HoldZ;
-                        break;
-                    case Stage.Withdraw:
-                        x = group.CenterX + group.FriendlyX * 1400f + group.TangentX * lateral;
-                        z = group.CenterZ + group.FriendlyZ * 1400f + group.TangentZ * lateral;
-                        break;
-                    default:
-                        x = directive.X + group.TangentX *
-                            (lateral + group.Axis * PincerFlankMeters);
-                        z = directive.Z + group.TangentZ *
-                            (lateral + group.Axis * PincerFlankMeters);
-                        break;
-                }
-                RaycastHit ground = default;
-                member.HasDestination = float.IsFinite(x) && float.IsFinite(z) &&
-                    PathfindingAgent.RaycastTerrain(new GlobalPosition(x, 0f, z), out ground) &&
-                    ground.point.y >= Datum.LocalSeaY && ground.normal.y >= .55f;
-                if (member.HasDestination)
-                    member.Destination = ground.point.ToGlobalPosition();
-            }
-        }
-
-        private void Rekey(Group group, PriorityDirective directive, bool offensive, float now)
-        {
-            group.Key = directive.Key;
-            group.Offensive = offensive;
-            group.ReportedRally = false;
-            ClearDestinations(group);
-            SetStage(group, Stage.Rally, now);
-        }
-
-        private void SetStage(Group group, Stage stage, float now)
-        {
-            if (group.Stage == stage) return;
-            group.Stage = stage;
-            group.StageSince = now;
-            ReportStage(group);
-        }
-
-        private void ReportStage(Group group)
-        {
-            string line = "FRONT GROUP " + group.Id + " — " +
-                group.Stage.ToString().ToUpperInvariant() +
-                (group.Axis < 0 ? " LEFT AXIS" : group.Axis > 0 ? " RIGHT AXIS" : "") +
-                " (" + group.Members.Count + "/" + group.Formed + ")";
-            Plugin.Logger?.LogInfo("[THEATER OPS] " + line);
-        }
-
-        private int PincerAxisOf(Group group)
-        {
-            if (!group.Offensive || !group.Sealed || group.Members.Count < 3 ||
-                group.Stage == Stage.Withdraw) return 0;
-            int first = int.MaxValue, second = int.MaxValue, viable = 0;
-            foreach (Group candidate in groups)
-            {
-                if (!candidate.Offensive || !candidate.Sealed || candidate.Members.Count < 3 ||
-                    candidate.Stage == Stage.Withdraw || candidate.HQ != group.HQ ||
-                    candidate.Key != group.Key) continue;
-                viable++;
-                if (candidate.Id < first) { second = first; first = candidate.Id; }
-                else if (candidate.Id < second) second = candidate.Id;
-            }
-            int rank = group.Id == first ? 0 : group.Id == second ? 1 : 2;
-            return FrontlineTactics.PincerAxis(rank, viable);
-        }
-
-        private static float LaneOffset(int lane)
-        {
-            int column = lane == 0 ? 0 : (lane + 1) / 2 * (lane % 2 == 1 ? 1 : -1);
-            return column * FrontlineTactics.LaneSpacing;
-        }
-
-        private static void ClearDestinations(Group group)
-        {
-            foreach (Member member in group.Members) member.HasDestination = false;
-        }
-
-
-        private bool HasAuthority => GameAccess.IsServer() &&
-            (LivingFrontService.Active?.Authoritative == true || priority?.Authoritative == true);
-
-        private bool AdapterEnabled => settings != null && settings.Enabled.Value &&
-            settings.FrontlineTacticsEnabled.Value && !HasRtsCommander() && HasAuthority;
-
-        private bool Eligible(GroundVehicle vehicle) => AdapterEnabled && AutoNavigating(vehicle);
-
-        private static bool IsDefending(FactionHQ hq, string key, bool offensive) =>
-            !offensive && LivingFrontService.Active?.IsDefending(hq, key) == true;
-
-        private bool TryAssign(FactionHQ hq, int groupId, float x, float z,
-            out PriorityDirective directive, out bool offensive)
-        {
-            directive = default;
-            offensive = false;
-            LivingFrontService war = LivingFrontService.Active;
-            if (war != null && war.Authoritative)
-                return war.TryGetGroundAssignment(hq, groupId, x, z,
-                    out directive, out offensive) && directive.IsValid;
-            if (priority == null || !priority.Authoritative || hq == null || hq.faction == null ||
-                !priority.TryGetDirective(hq.faction.factionName, out directive)) return false;
-            return directive.IsValid;
-        }
-
-        private static bool AutoNavigating(GroundVehicle vehicle) =>
+        internal static bool AutoNavigating(GroundVehicle vehicle) =>
             vehicle != null && vehicle.IsServer && !vehicle.disabled && !vehicle.GetHoldPosition() &&
             vehicle.UnitCommand != null && NavigateObjectives != null &&
             CommandedDestination != null && (bool)NavigateObjectives.GetValue(vehicle) &&
             !(bool)CommandedDestination.GetValue(vehicle);
+
+        /// <summary>True while a player's order owns the vehicle: vanilla then never asks the destination query about it.</summary>
+        internal static bool IsCommanded(GroundVehicle vehicle) => vehicle != null && CommandedDestination != null && (bool)CommandedDestination.GetValue(vehicle);
+
+        /// <summary>Artillery, rearm and repair vehicles answer the same destination query to shell or serve, so they never join a formation. Typed references: a game update that renames one breaks the build.</summary>
+        private bool IsSupport(GroundVehicle vehicle)
+        {
+            if (vehicle == null) return false;
+            if (supportCache.TryGetValue(vehicle, out bool known)) return known;
+            bool support = vehicle.GetComponentInChildren<MobileArtilleryAI>(true) != null ||
+                           vehicle.GetComponentInChildren<RearmVehicleAI>(true) != null ||
+                           vehicle.GetComponentInChildren<Rearmer>(true) != null ||
+                           vehicle.GetComponentInChildren<Repairer>(true) != null;
+            if (supportCache.Count >= 1024) supportCache.Clear();
+            supportCache[vehicle] = support;
+            return support;
+        }
+
+        internal bool HasRtsCommander()
+        {
+            if (rtsInstalled < 0)
+                rtsInstalled = Chainloader.PluginInfos.ContainsKey("com.groundcontrol.rts") ? 1 : 0;
+            bool installed = rtsInstalled == 1;
+            if (installed && !warnedConflict)
+            {
+                warnedConflict = true;
+                Plugin.Logger?.LogWarning("[THEATER OPS] Ground Control RTS owns ground orders; frontline tactics disabled.");
+            }
+            return installed;
+        }
+
+        // ---- Enrolment ------------------------------------------------------------------------------------------------------
+
+        /// <summary>Depot-exit patch passes true, the sweep false. No distance gate: a vehicle joins the nearest forming group or starts one.</summary>
+        internal void Enroll(GroundVehicle vehicle, bool fromDepot)
+        {
+            if (!Eligible(vehicle)) return;
+            if (factionHqs.Count == 0) ReconcileGroupShares();
+            TryEnroll(vehicle, fromDepot);
+        }
+
+        private bool TryEnroll(GroundVehicle vehicle, bool fromDepot)
+        {
+            if (members.ContainsKey(vehicle)) return true;
+            if (members.Count >= MaximumMembers) return false;
+            FactionHQ hq = vehicle.NetworkHQ;
+            if (hq == null || hq.faction == null) return false;
+
+            float now = Time.timeSinceLevelLoad;
+            GlobalPosition here = vehicle.GlobalPosition();
+            int openCount = 0;
+            for (int i = 0; i < groups.Count && openCount < open.Length; i++)
+            {
+                Group candidate = groups[i];
+                if (candidate.HQ != hq || candidate.Stage == GroundStage.Withdraw || candidate.Members.Count == 0) continue;
+                GroundVehicle leader = candidate.Members[0].Vehicle;
+                if (leader == null) continue;
+                GlobalPosition at = leader.GlobalPosition();
+                open[openCount] = new OpenGroup(candidate.Id, at.x, at.z, candidate.Members.Count, now - candidate.Born);
+                openGroups[openCount++] = candidate;
+            }
+            int picked = GroupFormation.Pick(open, openCount, here.x, here.z);
+            Group group;
+            if (picked >= 0) group = openGroups[picked];
+            else
+            {
+                if (!CanCreateGroup(hq)) return false;
+                group = new Group { Id = nextGroupId++, HQ = hq, Born = now, StageSince = now, FromDepot = fromDepot };
+                groups.Add(group);
+            }
+            int used = 0;
+            foreach (Member other in group.Members) used |= 1 << other.Lane;
+            int lane = GroupFormation.FreeLane(used);
+            if (lane < 0) return false;
+            var member = new Member { Vehicle = vehicle, Group = group, Lane = lane };
+            group.Members.Add(member);
+            group.Formed++;
+            if (group.Members.Count == FrontlineTactics.GroupSize) group.Sealed = true;
+            members.Add(vehicle, member);
+            return true;
+        }
 
         private bool CanCreateGroup(FactionHQ hq)
         {
@@ -567,10 +294,11 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 if (candidate == null || candidate.faction == null ||
                     string.IsNullOrEmpty(candidate.faction.factionName) || factionHqs.Contains(candidate)) continue;
                 factionHqs.Add(candidate);
+                if (!factions.ContainsKey(candidate)) factions.Add(candidate, new FactionState { HQ = candidate });
                 if (factionHqs.Count >= MaximumFactions) break;
             }
             int allowance = MaximumGroups / Math.Max(1, factionHqs.Count);
-            // ponytail: at most 16 groups; the bounded double scan avoids another ownership index.
+            // ponytail: at most 32 groups; the bounded double scan avoids another ownership index.
             for (int i = groups.Count - 1; i >= 0; i--)
             {
                 Group group = groups[i];
@@ -584,55 +312,279 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             }
         }
 
-        private void ScanInitialUnits()
+        /// <summary>
+        /// A cursor over the registry's unit list, 256 units a pass: a vehicle the sweep has not met yet (mission-placed, or spawned by anything but a depot) joins
+        /// a group. At the end of each sweep the per-faction tallies are published; they are -1 until the first sweep ends.
+        /// </summary>
+        private void Sweep()
         {
-            if (members.Count >= MaximumMembers) return;
-            GridSquare[] cells = BattlefieldGrid.gridLookup;
-            if (cells == null || cells.Length == 0) return;
-            if (!ReferenceEquals(scanCells, cells))
+            List<Unit> all = UnitRegistry.allUnits;
+            if (all == null) return;
+            if (sweepCursor == 0)
+                foreach (FactionState fs in factions.Values)
+                    fs.SweepEligible = fs.SweepUngrouped = fs.SweepSupportSeen = fs.SweepSupportNavigating = 0;
+            int end = Math.Min(all.Count, sweepCursor + SweepUnitsPerPass);
+            for (; sweepCursor < end; sweepCursor++)
             {
-                scanCells = cells;
-                nextScanCell = nextScanUnit = 0;
-                scanCell = null;
+                if (!(all[sweepCursor] is GroundVehicle vehicle) || vehicle.disabled) continue;
+                FactionHQ hq = vehicle.NetworkHQ;
+                if (hq == null || !factions.TryGetValue(hq, out FactionState fs)) continue;
+                bool support = IsSupport(vehicle);
+                if (support) fs.SweepSupportSeen++;
+                bool navigating = AutoNavigating(vehicle);
+                if (navigating && !vehicle.IsSlung())
+                {
+                    if (support) { fs.SweepSupportNavigating++; continue; }
+                    fs.SweepEligible++;
+                    if (!members.ContainsKey(vehicle) && !TryEnroll(vehicle, false)) fs.SweepUngrouped++;
+                }
             }
-            int checkedUnits = 0;
-            for (int visited = 0; visited < ScanCellsPerUpdate; visited++)
+            if (sweepCursor < all.Count) return;
+            sweepCursor = 0;
+            foreach (FactionState fs in factions.Values)
             {
-                if (nextScanCell >= cells.Length) nextScanCell = 0;
-                GridSquare cell = cells[nextScanCell];
-                if (!ReferenceEquals(scanCell, cell))
-                {
-                    scanCell = cell;
-                    nextScanUnit = 0;
-                }
-                if (cell?.units != null)
-                {
-                    while (nextScanUnit < cell.units.Count)
-                    {
-                        if (checkedUnits >= ScanUnitsPerUpdate) return;
-                        Unit unit = cell.units[nextScanUnit++];
-                        checkedUnits++;
-                        if (unit is GroundVehicle vehicle) Enroll(vehicle);
-                    }
-                }
-                nextScanCell++;
-                nextScanUnit = 0;
-                scanCell = null;
-                if (checkedUnits >= ScanUnitsPerUpdate) return;
+                fs.Eligible = fs.SweepEligible;
+                fs.Ungrouped = fs.SweepUngrouped;
+                fs.SupportSeen = fs.SweepSupportSeen;
+                fs.SupportNavigating = fs.SweepSupportNavigating;
             }
         }
 
-        internal bool HasRtsCommander()
+        // ---- The pass ---------------------------------------------------------------------------------------------------------
+
+        private void Update()
         {
-            if (rtsInstalled < 0)
-                rtsInstalled = Chainloader.PluginInfos.ContainsKey("com.groundcontrol.rts") ? 1 : 0;
-            bool installed = rtsInstalled == 1;
-            if (installed && !warnedConflict)
+            float now = Time.timeSinceLevelLoad;
+            if (now < nextUpdate) return;
+            nextUpdate = now + UpdateSeconds;
+            adapterOn = AdapterEnabled;
+            lastPass = now;
+            if (!adapterOn)
             {
-                warnedConflict = true;
-                Plugin.Logger?.LogWarning("[THEATER OPS] Ground Control RTS owns ground orders; frontline tactics disabled.");
+                if (groups.Count > 0 || members.Count > 0) ClearGroups();
+                return;
             }
-            return installed;
+            ReconcileGroupShares();
+            if (territory == null) ModuleServices.TryGet(out territory);
+            Sweep();
+            for (int i = groups.Count - 1; i >= 0; i--)
+            {
+                Group group = groups[i];
+                Prune(group);
+                if (group.Members.Count == 0) { groups.RemoveAt(i); continue; }
+                Locate(group);
+            }
+            for (int i = 0; i < factionHqs.Count; i++)
+            {
+                FactionHQ hq = factionHqs[i];
+                if (!factions.TryGetValue(hq, out FactionState fs)) continue;
+                CopyTrace(fs, now);
+                CopySightings(fs, now);
+                AssignGroups(fs, now);
+            }
+            for (int i = groups.Count - 1; i >= 0; i--) RefreshGroup(groups[i], now);
+        }
+
+        /// <summary>
+        /// Removes members that are gone: a destroyed vehicle stays a casualty of its group, one a player or another mod took over (commanded, held, captured, slung)
+        /// leaves the formation, so it cannot make the rest withdraw.
+        /// </summary>
+        private void Prune(Group group)
+        {
+            for (int j = group.Members.Count - 1; j >= 0; j--)
+            {
+                Member member = group.Members[j];
+                GroundVehicle vehicle = member.Vehicle;
+                bool destroyed = vehicle == null || vehicle.disabled;
+                if (!destroyed && ReferenceEquals(vehicle.NetworkHQ, group.HQ) && AutoNavigating(vehicle) && !vehicle.IsSlung()) continue;
+                group.Formed = GroupLedger.FormedAfterLoss(group.Formed, destroyed);
+                members.Remove(member.Vehicle);
+                group.Members.RemoveAt(j);
+                group.Sealed = true;
+            }
+        }
+
+        /// <summary>The group's position is the centroid of its live members.</summary>
+        private static void Locate(Group group)
+        {
+            float x = 0f, z = 0f;
+            foreach (Member member in group.Members)
+            {
+                GlobalPosition at = member.Vehicle.GlobalPosition();
+                x += at.x; z += at.z;
+            }
+            group.CentroidX = x / group.Members.Count;
+            group.CentroidZ = z / group.Members.Count;
+        }
+
+        /// <summary>The side's front, re-copied at most every few seconds per faction, for every faction (a faction with no vehicles must still learn it has no front).</summary>
+        private void CopyTrace(FactionState fs, float now)
+        {
+            FrontTrace trace = fs.Trace;
+            if (now < trace.Next && trace.Count >= 0) return;
+            trace.Next = now + TraceSeconds;
+            trace.Count = territory == null ? 0 : Mathf.Clamp(territory.CopyFrontlineTraces(fs.HQ.GetInstanceID(),
+                trace.Points, trace.Lengths, trace.Pressure), 0, FrontlineTraceLimits.MaximumTraces);
+        }
+
+        /// <summary>
+        /// One pass over the tracking database per faction: a hostile vehicle, or a hostile defensive building, seen within the fresh window. The database never ages,
+        /// so a sighting counts only while it is fresh. Positions only; each group tests its lead against them.
+        /// </summary>
+        private static void CopySightings(FactionState fs, float now)
+        {
+            fs.Sightings.Clear();
+            var database = fs.HQ.trackingDatabase;
+            if (database == null) return;
+            foreach (KeyValuePair<PersistentID, TrackingInfo> pair in database)
+            {
+                TrackingInfo info = pair.Value;
+                if (info == null || !ContactRule.Fresh(now - info.lastSpottedTime)) continue;
+                if (!info.TryGetUnit(out Unit unit) || unit == null || unit.disabled || ReferenceEquals(unit.NetworkHQ, fs.HQ)) continue;
+                bool vehicle = unit is GroundVehicle;
+                bool defence = unit is Building building && building.definition is BuildingDefinition definition && definition.buildingType == BuildingType.DEF;
+                if (!vehicle && !defence) continue;
+                if (!float.IsFinite(info.lastKnownPosition.x) || !float.IsFinite(info.lastKnownPosition.z)) continue;
+                fs.Sightings.Add(new Vector2(info.lastKnownPosition.x, info.lastKnownPosition.z));
+                if (fs.Sightings.Count >= MaximumSightings) break;
+            }
+        }
+
+        // ---- Assignment: the one writer ----------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Decides, once per pass, which of the faction's groups carry the staff's operation (pure GroundTasking.Choose) and which hold the front they stand near.
+        /// Everything else reads these fields: the hook, the report, the proof. A group that is neither on the effort nor within reach of a front has no key and
+        /// reads vanilla.
+        /// </summary>
+        private void AssignGroups(FactionState fs, float now)
+        {
+            FactionHQ hq = fs.HQ;
+            GroundOperation op = default;
+            bool hasOp = war != null && war.TryGetOperation(hq, out op);
+            int opId = hasOp ? op.Id : 0;
+            if (opId != fs.OpId)
+            {
+                fs.OpId = opId;
+                fs.Rekeys = fs.EffortSwaps = 0;
+                foreach (Group group in groups)
+                    if (group.HQ == hq) group.RekeysThisOperation = 0;
+            }
+            fs.OpKey = hasOp ? op.Key : null;
+
+            int fronts = war != null ? Math.Min(war.CopyFronts(hq, fs.Fronts), MaximumFronts) : 0;
+            for (int i = 0; i < fronts; i++) { frontX[i] = fs.Fronts[i].X; frontZ[i] = fs.Fronts[i].Z; }
+
+            int count = 0;
+            for (int i = 0; i < groups.Count && count < MaximumGroups; i++)
+            {
+                Group group = groups[i];
+                if (group.HQ != hq) continue;
+                bool usable = group.Stage != GroundStage.Withdraw && !(hasOp && group.StalledKey == op.Key && now < group.StalledUntil);
+                bool held = hasOp && group.OnEffort && group.OpId == op.Id;
+                bool wave = group.FromDepot && (now - group.Born < GroundTasking.WaveSeconds || held);
+                facts[count] = new GroupFacts(group.Id, group.CentroidX, group.CentroidZ, usable, held, wave);
+                mine[count++] = group;
+            }
+            if (hasOp) GroundTasking.Choose(facts, count, op.X, op.Z, op.Kind, chosen);
+            for (int k = 0; k < count; k++)
+            {
+                Group group = mine[k];
+                if (hasOp && chosen[k])
+                {
+                    if (!group.OnEffort || group.OpId != op.Id)
+                    {
+                        group.OnEffort = true;
+                        group.OpId = op.Id;
+                        if (group.FirstOnEffortAfter < 0f) group.FirstOnEffortAfter = now - group.Born;
+                    }
+                    Assign(fs, group, op.Key, op.X, op.Z, op.Kind == TheaterOpKind.Assault, op.Kind == TheaterOpKind.Defend, now);
+                    continue;
+                }
+                if (hasOp && facts[k].Held && facts[k].Usable) fs.EffortSwaps++;
+                group.OnEffort = false;
+                int front = GroundTasking.NearestFront(group.CentroidX, group.CentroidZ, frontX, frontZ, fronts);
+                if (front >= 0) Assign(fs, group, fs.Fronts[front].Key, fs.Fronts[front].X, fs.Fronts[front].Z, false, false, now);
+                else Assign(fs, group, null, 0f, 0f, false, false, now);
+            }
+        }
+
+        private static void Assign(FactionState fs, Group group, string key, float fixX, float fixZ, bool offensive, bool defending, float now)
+        {
+            if (key != group.Key)
+            {
+                if (group.Key != null && key != null)
+                {
+                    group.RekeysThisOperation++;
+                    fs.Rekeys = Math.Max(fs.Rekeys, group.RekeysThisOperation);
+                }
+                Rekey(fs, group, key, now);
+            }
+            group.FixX = fixX; group.FixZ = fixZ;
+            group.Offensive = offensive; group.Defending = defending;
+            // Not on an attack any more: an assaulting group settles on the line.
+            if (!offensive && group.Stage == GroundStage.Assault) SetStage(group, GroundStage.Line, now);
+            if (!offensive && group.Stage == GroundStage.Contact && group.BeforeContact == GroundStage.Assault) group.BeforeContact = GroundStage.Line;
+        }
+
+        /// <summary>A new key puts the group back in Rally, keeping its destinations until the same pass places the new ones (nothing is cleared, so nothing falls back to vanilla in between).</summary>
+        private static void Rekey(FactionState fs, Group group, string key, float now)
+        {
+            if (group.Stage == GroundStage.Contact) EndContact(fs, group, now);
+            group.Key = key;
+            group.ReportedRally = false;
+            if (group.Stage == GroundStage.Withdraw) group.Formed = group.Members.Count;
+            group.Stage = GroundStage.Rally;
+            group.StageSince = now;
+            group.Approach = default;
+            group.Closing = false;
+            group.Eta = -1;
+            group.AllFrozenSince = 0f;
+            foreach (Member member in group.Members) member.SlotIndex = -1;
+        }
+
+        private static void SetStage(Group group, GroundStage stage, float now)
+        {
+            if (group.Stage == stage) return;
+            group.Stage = stage;
+            group.StageSince = now;
+            group.Approach = default;
+            foreach (Member member in group.Members) member.SlotIndex = -1;
+            ReportStage(group);
+        }
+
+        private static void EndContact(FactionState fs, Group group, float now)
+        {
+            if (group.ContactEntered <= 0f) return;
+            fs.MaxContactDwell = Math.Max(fs.MaxContactDwell, now - group.ContactEntered);
+            group.ContactEntered = 0f;
+        }
+
+        private static void ReportStage(Group group)
+        {
+            string line = "FRONT GROUP " + group.Id + " — " +
+                group.Stage.ToString().ToUpperInvariant() +
+                (group.Axis < 0 ? " LEFT AXIS" : group.Axis > 0 ? " RIGHT AXIS" : "") +
+                " (" + group.Members.Count + "/" + group.Formed + ")";
+            Plugin.Logger?.LogInfo("[THEATER OPS] " + line);
+        }
+
+        private int PincerAxisOf(Group group)
+        {
+            if (!group.Offensive || !group.Sealed || group.Members.Count < 3 ||
+                group.Stage == GroundStage.Withdraw) return 0;
+            int first = int.MaxValue, second = int.MaxValue, viable = 0;
+            foreach (Group candidate in groups)
+            {
+                if (!candidate.Offensive || !candidate.Sealed || candidate.Members.Count < 3 ||
+                    candidate.Stage == GroundStage.Withdraw || candidate.HQ != group.HQ ||
+                    candidate.Key != group.Key) continue;
+                viable++;
+                if (candidate.Id < first) { second = first; first = candidate.Id; }
+                else if (candidate.Id < second) second = candidate.Id;
+            }
+            int rank = group.Id == first ? 0 : group.Id == second ? 1 : 2;
+            return FrontlineTactics.PincerAxis(rank, viable);
         }
     }
 }

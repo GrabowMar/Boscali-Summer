@@ -31,10 +31,11 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
 
     /// <summary>
     /// One host-run staff per faction. It reads real units and front geometry, keeps a live deck of up to three operations, runs the pilot's pick
-    /// and reports it all in one immutable snapshot (annex 01). The ground side is shimmed until the ground slice: no report, so no phase and no NoForces.
+    /// and reports it all in one immutable snapshot (annex 01). It is also the ground service's window on the war (IGroundWarSource) and reads the ground report back
+    /// for the phase, the forces and the NoForces rule.
     /// </summary>
     internal sealed partial class LivingFrontService : MonoBehaviour, ISceneService, ITheaterWarView, ITheaterAirStationView,
-        ITheaterWarHost, IOperationFocusSource
+        ITheaterWarHost, IOperationFocusSource, IGroundWarSource
     {
         internal static LivingFrontService Active { get; private set; }
         internal bool Authoritative => settings != null && settings.Enabled.Value && GameAccess.IsServer();
@@ -100,7 +101,9 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             internal float X, Z, OriginX, OriginZ, Started, InitialHold, HoldNow, PhaseSince, Progress = -1f;
             internal TheaterPhase Phase;
             internal TheaterPhaseNote PhaseNote;
-            internal Sustained Gain, Loss, Clear, NotLive;
+            internal Sustained Gain, Loss, Clear, NotLive, NoForces;
+            /// <summary>The ground report as of the last review, never mutated after it is built (the snapshot shares it).</summary>
+            internal TheaterForcesView Forces = new TheaterForcesView();
             // Who picked it and until when other pilots are locked out. A staff pick locks nobody.
             internal ulong PickedById;
             internal string PickedBy = "";
@@ -125,8 +128,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             internal readonly Dictionary<string, FrontMemo> Baseline = new Dictionary<string, FrontMemo>(MaximumRemembered);
             internal readonly Dictionary<string, float> ObservedAt = new Dictionary<string, float>(MaximumRemembered);
             internal readonly Dictionary<string, float> PaidUntil = new Dictionary<string, float>(MaximumRemembered);
-            // Retired with the old assignment table when the ground slice lands.
-            internal readonly Dictionary<int, (string Key, bool Offensive)> GroupAssignments = new Dictionary<int, (string, bool)>(16);
             internal TheaterWarPosture Posture = TheaterWarPosture.Steady;
             internal Operation Active;
             internal int Revision, NextId = 1, ObjectiveCursor;
@@ -336,9 +337,5 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
 
         /// <summary>Read-only view of every faction's staff for the sim proof hooks; the view properties advance nothing, this does not either.</summary>
         internal IReadOnlyDictionary<string, FactionWar> Wars => wars;
-
-        internal bool IsDefending(FactionHQ hq, string key) => Authoritative && hq?.faction != null &&
-            wars.TryGetValue(hq.faction.factionName, out FactionWar war) &&
-            war.Active?.Kind == TheaterOpKind.Defend && war.Active.Key == key;
     }
 }

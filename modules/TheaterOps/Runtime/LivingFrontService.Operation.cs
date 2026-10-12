@@ -13,21 +13,15 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
     internal sealed partial class LivingFrontService
     {
         private bool SteeringAvailable => GroundFrontService.Active?.SteeringAvailable == true;
+        private readonly GroundMark[] markBuffer = new GroundMark[ForcesBuilder.MaxMarks];
 
-        /// <summary>The ground side is shimmed until the ground slice: the reason is whatever the settings and an RTS commander say, else unknown. Shown only after two reviews agree.</summary>
-        private GroundReason RawGroundReason()
-        {
-            GroundFrontService ground = GroundFrontService.Active;
-            if (ground == null || settings == null) return GroundReason.Unknown;
-            if (!settings.FrontlineTacticsEnabled.Value) return GroundReason.TacticsOff;
-            if (ground.HasRtsCommander()) return GroundReason.RtsOwnsOrders;
-            return ground.SteeringAvailable ? GroundReason.Ready : GroundReason.Unknown;
-        }
+        /// <summary>Why the faction's ground steering runs or not, as the ground service measures it; unknown when that service is absent. Shown only after two reviews agree.</summary>
+        private GroundReason RawGroundReason(FactionHQ hq) => GroundFrontService.Active?.ReasonFor(hq) ?? GroundReason.Unknown;
 
         /// <summary>A flip of the reason (depot-fresh vehicles turning NO_VEHICLES into READY, say) must not flicker the cards: it shows after two reviews agree.</summary>
         private void Debounce(FactionWar war)
         {
-            GroundReason raw = RawGroundReason();
+            GroundReason raw = RawGroundReason(war.HQ);
             if (raw == war.GroundPending) war.GroundShown = raw;
             war.GroundPending = raw;
         }
@@ -225,8 +219,20 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             float clear = op.Clear.Update(live && read.Held && read.HostileNear == 0, now);
             float notLive = op.NotLive.Update(!live, now);
 
-            // The ground report arrives with the ground slice: until then there is no phase to derive and no NoForces to judge.
-            TheaterPhase phase = OpPhaseRules.Derive(op.Kind, new PhaseInput { HaveReport = false, NearestToFixMeters = -1f }, out TheaterPhaseNote note);
+            // The ground report is measured from the vehicles. A report that could not be established yet (the first sweep or trace copy has not finished, this peer is
+            // not the host) is no report: the phase stays Awaiting without blaming anything, the forces read as dashes and NoForces is not judged.
+            GroundFrontService ground = GroundFrontService.Active;
+            GroundOpReport report = default;
+            bool haveReport = ground != null && ground.TryReport(war.HQ.faction.factionName, op.Key, out report) &&
+                report.Reason != GroundReason.Pending && report.Reason != GroundReason.NotHost && report.Reason != GroundReason.Unknown;
+            bool steering = haveReport && report.Steering;
+            if (!haveReport) report = GroundOpReport.Unavailable(GroundReason.Unknown);
+            int marks = steering ? ground.CopyMarks(war.HQ.faction.factionName, op.Key, markBuffer) : 0;
+            op.Forces = ForcesBuilder.Of(report, markBuffer, marks);
+            // Zero groups while forces exist: a carrier within reach, or groups of ours stalled on this key (they stop being carriers, which is how an all-stalled
+            // effort reaches this rule at all). A convoy still driving from far away is not "no forces".
+            float noForces = op.NoForces.Update(steering && op.CarrierBased && report.Groups == 0 && (found && read.Carriers > 0 || report.Stalled > 0), now);
+            TheaterPhase phase = OpPhaseRules.Derive(op.Kind, ForcesBuilder.PhaseOf(report, haveReport), out TheaterPhaseNote note);
             if (phase != op.Phase || note != op.PhaseNote)
             {
                 op.Phase = phase; op.PhaseNote = note; op.PhaseSince = now;
@@ -236,13 +242,13 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
 
             OpEnd end = OutcomeRules.Evaluate(new OutcomeInput
             {
-                Kind = op.Kind, Source = op.Source, Found = found, Live = live, Steering = false, HaveReport = false, HasHold = op.HasHold,
+                Kind = op.Kind, Source = op.Source, Found = found, Live = live, Steering = steering, HaveReport = haveReport, HasHold = op.HasHold,
                 CarrierBased = op.CarrierBased, Held = read.Held, Observed = read.Observed,
                 ObjectiveSecured = objectiveSecured, ObjectiveClosed = objectiveClosed, LostDefense = lostDefense,
                 Elapsed = now - op.Started, HoldAtOrigin = op.HoldNow, InitialHold = op.InitialHold,
-                GainSeconds = gain, LossSeconds = loss, ClearSeconds = clear, NoForcesSeconds = 0f, NotLiveSeconds = notLive,
+                GainSeconds = gain, LossSeconds = loss, ClearSeconds = clear, NoForcesSeconds = noForces, NotLiveSeconds = notLive,
                 NearFriendly = read.NearFriendly, HostileNear = read.HostileNear, ReachFriendlyGround = read.ReachFriendlyGround,
-                ReachFriendly = read.Friendly, InitialGround = op.InitialGround, Groups = 0,
+                ReachFriendly = read.Friendly, InitialGround = op.InitialGround, Groups = steering ? report.Groups : 0,
             });
             if (end.Outcome != TheaterOutcome.None) EndOperation(war, end.Outcome, end.Why, now, "");
         }
@@ -288,7 +294,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             ClearOperationDirective(war);
             naval?.ClearObjective(war.HQ, op.Key);
             war.Active = null;
-            war.GroupAssignments.Clear();
             war.DeadlineArmed = false;
             war.Revision++;
         }

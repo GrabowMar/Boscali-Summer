@@ -8,6 +8,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Patches
     {
         [HarmonyPostfix]
         private static void Postfix(GroundVehicle __instance) =>
-            GroundFrontService.Active?.Enroll(__instance);
+            GroundFrontService.Active?.Enroll(__instance, true);
     }
 }
