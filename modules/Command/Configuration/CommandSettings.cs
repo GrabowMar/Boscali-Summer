@@ -62,6 +62,7 @@ namespace BoscaliSummer.Modules.Command.Configuration
         public ConfigEntry<bool> AvionicsBlurBehind { get; }
         public ConfigEntry<bool> AvionicsReducedMotion { get; }
         public ConfigEntry<float> DisplayLife { get; }
+        public ConfigEntry<float> TerrainGhost { get; }
         public ConfigEntry<float> AvionicsCustomKeyHue { get; }
         public ConfigEntry<float> AvionicsCustomGlassHue { get; }
         public ConfigEntry<float> AvionicsCustomGlassTint { get; }
@@ -70,6 +71,8 @@ namespace BoscaliSummer.Modules.Command.Configuration
         {
             DisplayLife = config.Bind("Command", "DisplayLife", 0.6f,
                 new ConfigDescription("Live signal on the maximized MFD: the power-on raster, the slow refresh sweep and harder jam and hit break-up. 0 keeps the display still.", new AcceptableValueRange<float>(0f, 1f)));
+            TerrainGhost = config.Bind("Command", "TerrainGhost", 0.35f,
+                new ConfigDescription("Visor terrain ghost: a very faint wire relief of the real ground around and below your aircraft, drawn over the cockpit view in the HUD's colours. Ground that can hit you glows amber. 0 turns it off, 1 is clearly visible. Needs a map with baked terrain. Applies now; no restart.", new AcceptableValueRange<float>(0f, 1f)));
             AvionicsCustomKeyHue = config.Bind("Avionics", "CustomKeyHue", 190f,
                 new ConfigDescription("Custom scheme: hue of keys and selection, in degrees.", new AcceptableValueRange<float>(0f, 360f)));
             AvionicsCustomGlassHue = config.Bind("Avionics", "CustomGlassHue", 200f,

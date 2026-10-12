@@ -44,6 +44,7 @@ public static class SettingsUnityCheck
                 "mode switch and remembered mode, toggles, background replacement and row reveal, disabled dependencies, +/- bounds, " +
                 "the COCKPIT tab's TAC BOARD section (four groups, every control with one line of help, a toggle, a strip and a dial writing through the options contract, " +
                 "inert options with the board off, RESET TO DEFAULTS, the long page rendered stop by stop), " +
+                "the COCKPIT tab's VISOR TERRAIN section (the TERRAIN GHOST dial in 5% steps from 0% to 100%, its help, its saved level), " +
                 "host-only lock on SERVER rows and the flat page tree (no GameObject churn) are checked. Game adapters are stubbed; in-game acceptance remains required.");
             EditorApplication.Exit(0);
         }
@@ -350,6 +351,7 @@ public static class SettingsUnityCheck
         Check(!Array.Exists(cockpitContent.GetComponentsInChildren<TMP_Text>(true), t => t.text == "HUD ELEMENT" || t.text == "TARGET CAMERA"),
             "The retired HUD ELEMENT and TARGET CAMERA rows stay off the cockpit page");
         CheckTacBoardSection(camera, canvas, height, clientCon, cockpitContent, tac);
+        CheckVisorTerrainSection(camera, canvas, height, clientCon, cockpitContent, config);
         Click(FindRowByName(cockpitContent, "RADIAL PRESETS"));
         Check(!config.TargetPresetWheel.Value, "RADIAL PRESETS must write its saved entry");
 
@@ -497,6 +499,43 @@ public static class SettingsUnityCheck
         Check(Plus(content, "SIZE").Interactable && FindControl(content, "FULL").Interactable, "and unlocks the controls the switched-off board had locked, at once");
         Settle(clientCon);
         Render(camera, canvas, height, "client-cockpit-reset");
+    }
+
+    /// <summary>
+    /// The VISOR TERRAIN section below the TAC BOARD: one dial, TERRAIN GHOST, writing the saved level (a config entry, not a contract) in 5% steps between 0%
+    /// (off) and 100%, every control of it with one short line of help. Leaves the level at its default.
+    /// </summary>
+    private static void CheckVisorTerrainSection(Camera camera, Canvas canvas, int height, AvConsole clientCon, RectTransform content, CommandSettings config)
+    {
+        Check(content.Find("Section VISOR TERRAIN") != null, "COCKPIT carries the VISOR TERRAIN section");
+        Transform row = FindRowByName(content, "TERRAIN GHOST");
+        Check(Mathf.Approximately(config.TerrainGhost.Value, .35f) && HasText(content, "35%"), "TERRAIN GHOST reads its default, 35%");
+        foreach (AvControl control in row.GetComponentsInChildren<AvControl>(true))
+            Check(!string.IsNullOrEmpty(control.Help) && control.Help.Length <= 120 && control.Help.IndexOf('\n') < 0 && control.Help.Contains("0%"),
+                "TERRAIN GHOST has one short line of help that says 0% turns it off: '" + control.Help + "'");
+        Click(Plus(content, "TERRAIN GHOST"));
+        Check(Mathf.Approximately(config.TerrainGhost.Value, .4f) && HasText(content, "40%"), "TERRAIN GHOST steps up by 5% and writes its saved entry");
+        Click(Minus(content, "TERRAIN GHOST"));
+        Click(Minus(content, "TERRAIN GHOST"));
+        Check(Mathf.Approximately(config.TerrainGhost.Value, .3f) && HasText(content, "30%"), "...and down by 5%");
+        for (int i = 0; i < 30; i++) Click(Plus(content, "TERRAIN GHOST"));
+        Check(Mathf.Approximately(config.TerrainGhost.Value, 1f) && HasText(content, "100%") && !Plus(content, "TERRAIN GHOST").Interactable,
+            "TERRAIN GHOST stops at 100%");
+        for (int i = 0; i < 30; i++) Click(Minus(content, "TERRAIN GHOST"));
+        Check(config.TerrainGhost.Value == 0f && !Minus(content, "TERRAIN GHOST").Interactable && Plus(content, "TERRAIN GHOST").Interactable,
+            "TERRAIN GHOST stops at 0%, which is off");
+        Settle(clientCon);
+        // The section is the tail of the long page: render the page scrolled to its foot, where the section is on screen.
+        ScrollRect scroll = clientCon.Root.GetComponentInChildren<ScrollRect>(true);
+        scroll.verticalNormalizedPosition = 0f;
+        Render(camera, canvas, height, "client-cockpit-visor-off");
+        var saved = new CommandSettings(new ConfigFile(config.ExpandedMapUi.ConfigFile.ConfigFilePath, false));
+        Check(saved.TerrainGhost.Value == 0f, "TERRAIN GHOST survives reloading the saved configuration");
+        config.TerrainGhost.Value = .35f;
+        Settle(clientCon);
+        Check(HasText(content, "35%"), "TERRAIN GHOST reads a level set from outside");
+        Render(camera, canvas, height, "client-cockpit-visor");
+        scroll.verticalNormalizedPosition = 1f;
     }
 
     /// <summary>Show one console through the panel's own switch (no click), then run its ticks as the game would.</summary>

@@ -67,6 +67,7 @@ namespace BoscaliSummer.Modules.Command
                     context.HostSettings, context.ClientSettings);
             context.AddSceneService<FactionResourceRecorder>(59);
             context.AddSceneService<StrMapOverlay>(60);
+            context.AddSceneService<TerrainGhostOverlay>(61).Configure(context.Settings.Command);
 
             TerritoryControlView territory = context.AddSceneService<TerritoryControlView>(52);
             territory.Configure(compat, context.Settings.Command.GridCellSizeMetres.Value);

@@ -42,6 +42,8 @@
     <Compile Include="..\..\modules\Command\Domain\ThreatEnvelope.cs" Link="Features\Command\ThreatEnvelope.cs" />
     <Compile Include="..\..\modules\Command\Domain\ReliefRig.cs" Link="Features\Command\ReliefRig.cs" />
     <Compile Include="..\..\modules\Command\Domain\ReliefHoles.cs" Link="Features\Command\ReliefHoles.cs" />
+    <Compile Include="..\..\modules\Command\Domain\TerrainHeightField.cs" Link="Features\Command\TerrainHeightField.cs" />
+    <Compile Include="..\..\modules\Command\Domain\TerrainGhostGrid.cs" Link="Features\Command\TerrainGhostGrid.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdResourceHistory.cs" Link="Features\Command\MfdResourceHistory.cs" />
     <Compile Include="..\..\modules\Support\Runtime\SupportEffectPolicy.cs" Link="Features\Support\SupportEffectPolicy.cs" />
     <Compile Include="..\..\modules\Autopilot\Runtime\AutopilotLandPolicy.cs" Link="Features\Autopilot\AutopilotLandPolicy.cs" />
