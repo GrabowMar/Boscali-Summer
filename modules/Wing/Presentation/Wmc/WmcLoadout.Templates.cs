@@ -29,7 +29,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             int at = airframe != null ? airframes.IndexOf(airframe) : -1;
             if (airframe == null)
-                airRow.Set(airframes.Count > 0 ? "NO AIRFRAME" : "NO AIRFRAME · none with readable hardpoints is in this game", "", null, Color.clear);
+                airRow.Set(airframes.Count > 0 ? "NO AIRFRAME" : "NO AIRFRAME · NONE READABLE YET", "", null, Color.clear);
             else
                 airRow.Set(SupplyWords.Code(airframe.code, airframe.unitName) + " " + SupplyWords.Name(airframe.unitName, airframe.code).ToUpperInvariant(),
                     at >= 0 ? "· " + (at + 1) + " / " + airframes.Count : "", IconFactory.Aircraft(airframe), Color.clear);

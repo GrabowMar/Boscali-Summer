@@ -33,7 +33,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// up; the scale fits the route. The drawing is a kit <see cref="AvVector"/>, the numbers are kit text.</summary>
     internal sealed class WmcRouteMap : AvPart
     {
-        private const float CardH = 200f, Margin = 26f;
+        private const float CardH = 200f, EmptyH = 44f, Margin = 26f;
         private readonly AvFrame card;
         private readonly AvVector vector;
         private readonly TMP_Text caption, empty;
@@ -61,7 +61,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Restyle();
         }
 
-        public override float Measure(float w) => CardH;
+        // No points yet: one line that says how to draw, not a 200 px blank card.
+        private bool Blank => data == null || data.Count == 0;
+
+        public override float Measure(float w) => Blank ? EmptyH : CardH;
 
         public override void Place(AvSlot s)
         {
@@ -75,8 +78,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public void Show(RouteData d, string emptyWord)
         {
+            bool was = Blank;
             data = d;
-            AvText.Set(empty, d == null || d.Count == 0 ? emptyWord ?? "" : "");
+            AvText.Set(empty, Blank ? emptyWord ?? "" : "");
+            if (was != Blank) Changed();
             Draw();
         }
 

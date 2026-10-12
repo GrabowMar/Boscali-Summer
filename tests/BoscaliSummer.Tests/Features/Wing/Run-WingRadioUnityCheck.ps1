@@ -3,7 +3,8 @@ param(
     [string]$PreviewDirectory = (Join-Path $env:TEMP ("BoscaliWingRadioCheck-" + [guid]::NewGuid().ToString("N"))),
     [string]$ProductionDll,
     [string]$AtlasStyles,
-    [switch]$RadioOnly
+    [switch]$RadioOnly,
+    [switch]$WingOnly
 )
 $ErrorActionPreference = "Stop"
 . "$PSScriptRoot/../../../UnityCheck.Common.ps1"
@@ -47,7 +48,7 @@ Copy-Item -LiteralPath "$PSScriptRoot/WingRadioUnityCheck.cs", $UnityCheckHarnes
 Set-Content -LiteralPath "$PreviewDirectory/production-dll.sha256" -Value (Get-FileHash -LiteralPath "$PreviewDirectory/Assets/BoscaliSummer.dll").Hash
 Set-Content -LiteralPath "$PreviewDirectory/preview-mode.txt" -Value $(if ($RadioOnly) { 'RadioOnly' } else { 'WingRadioHistorical' })
 Export-UnityCheckHashes "$PreviewDirectory/input-manifest.csv" (@((Get-Item -LiteralPath "$PreviewDirectory/Assets/BoscaliSummer.dll"), (Get-Item -LiteralPath "$PreviewDirectory/preview-mode.txt"), (Get-ChildItem -LiteralPath "$PreviewDirectory/NOAvionics" -Filter '*.avss'), (Get-ChildItem -LiteralPath "$PreviewDirectory/Assets/Harness" -File)) | ForEach-Object { $_ })
-$executeMethod = if ($RadioOnly) { 'WingRadioUnityCheck.RunRadioOnly' } else { 'WingRadioUnityCheck.Run' }
+$executeMethod = if ($RadioOnly) { 'WingRadioUnityCheck.RunRadioOnly' } elseif ($WingOnly) { 'WingRadioUnityCheck.RunWingOnly' } else { 'WingRadioUnityCheck.Run' }
 $process = Invoke-UnityCheck $Unity $PreviewDirectory $executeMethod
 Write-Output "Results and renders: $PreviewDirectory"
 Show-UnityCheckResult $PreviewDirectory -LogTail 80
