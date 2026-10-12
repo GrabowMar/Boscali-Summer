@@ -1,0 +1,111 @@
+{
+  "name": "str-3-reduced-dom",
+  "description": "STR engine proof in Domination, ground steering without vehicles (D9): a hostile tracked at an owned airbase produces a DEFEND card, and no assault or recon card exists without a carrier.",
+  "mission": "Domination",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 400,
+  "environment": {
+    "config": {
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "faction": "Boscali",
+      "near": [
+        0,
+        0
+      ],
+      "altitude": 9000,
+      "speed": 200,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "player",
+      "program": [
+        {
+          "orbit": {
+            "bank": 30,
+            "seconds": 300
+          }
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Read",
+      "args": {},
+      "store": "r0"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Track",
+      "args": {
+        "faction": "Boscali",
+        "seconds": 40
+      },
+      "store": "t1"
+    },
+    {
+      "op": "wait",
+      "seconds": 25
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Read",
+      "args": {},
+      "store": "r1"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "t1.planted",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "r1.war.boscali.defendCards",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "r1.war.boscali.assaultCardsWithoutCarriers",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "r1.war.boscali.faults",
+      "max": 0
+    },
+    {
+      "check": "log_match",
+      "pattern": "\\[TheaterOps\\].*staff fault",
+      "max": 0
+    },
+    {
+      "check": "log_match",
+      "pattern": "Exception",
+      "max": 0
+    }
+  ]
+}

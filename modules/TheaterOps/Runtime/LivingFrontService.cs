@@ -142,9 +142,9 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             /// <summary>Host: the mission clock when published. Client: the unscaled clock at receipt.</summary>
             internal float PublishedAt;
             // Proof counters (WarProof reads them; nothing else does).
+            internal int HostileFixes, PostsHit;
             internal int StaffPicks, PilotPicks, StaffOverrides, Redirects, TrendWrites, RewardPaidTotal, ResultFunds;
             internal float FirstDeckAt = -1f, StaffPickedAt = -1f, AgeAtRefreshMax = -1f;
-            internal TheaterCommandCode LastCode;
         }
 
         internal void Configure(TheaterOpsSettings config, TheaterPriorityService priorityService, LivingFrontNet transport,
@@ -253,17 +253,25 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         /// <summary>One guarded review. A fault backs the next one off, ends an operation past its ceiling without sensing, and publishes the unhealthy picture.</summary>
         private void Review(FactionWar war, float now)
         {
-            war.NextReview = now + LivingWarRules.ReviewSeconds;
-            // The first deck is due at 15 s and a staff pick at its deadline, both finer than the 10 s cadence.
-            if (now < war.FirstDealAt) war.NextReview = Math.Min(war.NextReview, war.FirstDealAt);
-            else if (war.DeadlineArmed && war.Active == null) war.NextReview = Math.Min(war.NextReview, Math.Max(now + 1f, war.OfferDeadline));
             reviewWar = war; reviewNow = now;
-            if (Guard.Run(war.Faults, now, reviewBody, LogFault, war.HQ.faction.factionName)) return;
+            if (Guard.Run(war.Faults, now, reviewBody, LogFault, war.HQ.faction.factionName))
+            {
+                war.NextReview = NextReviewAfter(war, now);
+                return;
+            }
             war.NextReview = now + war.Faults.NextDelay(LivingWarRules.ReviewSeconds);
             EnforceCeiling(war, now);
             if (!war.Faults.Healthy && war.SensedAt >= 0f)
                 try { Publish(war, now); }
                 catch (Exception) { /* the last good picture stays up and its age keeps growing, which is the honest state of a faulting staff */ }
+        }
+
+        /// <summary>Every 10 s, except that the first deck is due at 15 s and the staff's pick at its deadline, both finer than the cadence (so this runs after the review armed it).</summary>
+        private static float NextReviewAfter(FactionWar war, float now)
+        {
+            float next = now + LivingWarRules.ReviewSeconds;
+            if (now < war.FirstDealAt) return Math.Min(next, war.FirstDealAt);
+            return war.DeadlineArmed && war.Active == null ? Math.Min(next, Math.Max(now + 1f, war.OfferDeadline)) : next;
         }
 
         /// <summary>

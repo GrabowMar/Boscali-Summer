@@ -1,6 +1,6 @@
 {
-  "name": "str-ground-tc",
-  "description": "STR slice 0 proof on the unrepaired code, mission Terminal Control: do ground groups form, get staged destinations from the advance postfix, and move toward them. Read-only measurement; see tools/Str-Ground-Scenarios.py.",
+  "name": "str-1-ground-tc",
+  "description": "STR ground proof, mission Terminal Control: do ground groups form, get staged destinations from the advance postfix, and move toward them. Read-only measurement; see tools/Str-Scenarios.py.",
   "mission": "Terminal Control",
   "mods": [
     "boscalisummer"

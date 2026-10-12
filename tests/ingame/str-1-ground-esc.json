@@ -1,6 +1,6 @@
 {
-  "name": "str-ground-esc",
-  "description": "STR slice 0 proof on the unrepaired code, mission Escalation: do ground groups form, get staged destinations from the advance postfix, and move toward them. Read-only measurement; see tools/Str-Ground-Scenarios.py.",
+  "name": "str-1-ground-esc",
+  "description": "STR ground proof, mission Escalation: do ground groups form, get staged destinations from the advance postfix, and move toward them. Read-only measurement; see tools/Str-Scenarios.py.",
   "mission": "Escalation",
   "mods": [
     "boscalisummer"

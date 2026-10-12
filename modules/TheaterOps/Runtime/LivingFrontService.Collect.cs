@@ -70,8 +70,12 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         /// <summary>One pass over the units into the contact list the rings count. Hostile units count only while the faction has a fresh track on them.</summary>
         private void ScanContacts(FactionWar war, float now)
         {
+#if !PUBLIC_RELEASE
+            WarProof.BeforeScan(war.HQ, now);
+#endif
             fixes.Clear(); ownGround.Clear();
             war.GroundSeen = false;
+            war.HostileFixes = 0;
             List<Unit> all = UnitRegistry.allUnits;
             if (all == null) return;
             FactionHQ hq = war.HQ;
@@ -102,6 +106,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 }
                 if (!float.IsFinite(at.x) || !float.IsFinite(at.z)) continue;
                 fixes.Add(new ContactFix(at.x, at.z, kind));
+                if (kind == ContactKind.HostileSurface || kind == ContactKind.HostileAir) war.HostileFixes++;
                 if (kind == ContactKind.FriendlyGround || kind == ContactKind.FriendlyCarrier) ownGround.Add(new Vector2(at.x, at.z));
             }
         }
@@ -211,6 +216,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 int hostile = rings.NearHostile + rings.HostileAirNear;
                 if (hostile > 0) postScratch.Add((hostile, i));
             }
+            war.PostsHit = postScratch.Count;
             postScratch.Sort((a, b) => a.Hostile != b.Hostile ? b.Hostile.CompareTo(a.Hostile) : string.CompareOrdinal(war.Places[a.Index].Id, war.Places[b.Index].Id));
             for (int i = 0, added = 0; i < postScratch.Count && added < LivingWarRules.ReservedBaseSlots && war.Candidates.Count < LivingWarRules.MaximumFronts; i++)
             {

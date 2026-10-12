@@ -17,6 +17,11 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
     /// </summary>
     public static class WarProof
     {
+        // The contact Track keeps planted: vanilla rewrites the position of a unit it can see, so the plant is renewed right before every contact scan.
+        private static FactionHQ plantHq;
+        private static Unit plantUnit;
+        private static float plantX, plantZ, plantUntil;
+
         private static bool InSimRun => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NOMODKIT_SIM_SCENARIO"));
 
         public static Dictionary<string, object> Read(Dictionary<string, object> args)
@@ -69,28 +74,38 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             }
             return new Dictionary<string, object>
             {
-                { "healthy", w.Faults.Healthy }, { "faults", w.Faults.Faults },
+                { "healthy", Flag(w.Faults.Healthy) }, { "faults", w.Faults.Faults },
                 { "reason", snapshot != null ? snapshot.Reason.ToString() : "" }, { "emptyReason", snapshot != null ? snapshot.Reason.ToString() : "" },
                 { "groundReason", snapshot != null ? snapshot.GroundReason.ToString() : "" },
                 { "deckCount", w.Deck.Count }, { "deckIds", string.Join(",", ids) },
+                {
+                    // Why the last ranking rejected what it did, and what it had to rank: the first thing to read when a card is missing.
+                    "tally", new Dictionary<string, object>
+                    {
+                        { "candidates", w.Tally.Candidates }, { "badFix", w.Tally.BadFix }, { "gone", w.Tally.Gone }, { "noPresence", w.Tally.NoPresence },
+                        { "noSteering", w.Tally.NoSteering }, { "noCarrier", w.Tally.NoCarrier }, { "heldQuiet", w.Tally.HeldQuiet },
+                        { "postureRatio", w.Tally.PostureRatio }, { "vetoed", w.Tally.Vetoed }, { "baseCandidates", BaseCandidates(w) },
+                        { "places", w.Places.Count }, { "ownedPlaces", OwnedPlaces(w) }, { "hostileFixes", w.HostileFixes }, { "postsHit", w.PostsHit },
+                    }
+                },
                 { "frontsCount", w.Fronts.Count }, { "frontsNamed", named }, { "frontsIdLike", idLike },
                 { "firstDeckAt", w.FirstDeckAt }, { "staffPickedAt", w.StaffPickedAt },
                 { "staffPicks", w.StaffPicks }, { "pilotPicks", w.PilotPicks }, { "staffOverrides", w.StaffOverrides }, { "redirects", w.Redirects },
                 { "vetoes", w.Vetoes.Count(now) }, { "vetoedKeyInDeck", vetoedInDeck },
                 { "assaultCardsWithoutCarriers", noCarrier }, { "defendCards", defend },
-                { "opLive", op != null }, { "opKey", op != null ? op.Key : "" },
+                { "opLive", Flag(op != null) }, { "opKey", op != null ? op.Key : "" },
                 { "opKind", op != null ? op.Kind.ToString() : "" }, { "opSource", op != null ? op.Source.ToString() : "" },
                 { "opPhase", op != null ? op.Phase.ToString() : "" }, { "opPhaseNote", op != null ? op.PhaseNote.ToString() : "" },
                 { "opElapsed", op != null ? now - op.Started : -1f },
                 { "awaitingSeconds", op != null && op.Phase == TheaterPhase.Awaiting ? now - op.PhaseSince : op != null ? 0f : -1f },
-                { "forcesGroups", forces != null && forces.Groups != 255 ? forces.Groups : -1 }, { "forcesKnown", forces != null && forces.Groups != 255 },
+                { "forcesGroups", forces != null && forces.Groups != 255 ? forces.Groups : -1 }, { "forcesKnown", Flag(forces != null && forces.Groups != 255) },
                 { "lockSeconds", op != null && !op.PickedByStaff ? Mathf.Max(0f, op.LockUntil - now) : 0f },
-                { "pickedByStaff", op != null && op.PickedByStaff },
+                { "pickedByStaff", Flag(op != null && op.PickedByStaff) },
                 { "age", SnapshotAge.Host(now, w.SensedAt) }, { "ageAtRefreshMax", w.AgeAtRefreshMax },
-                { "canCommand", isLocal ? living.CanCommand : snapshot != null && w.Faults.Healthy },
+                { "canCommand", Flag(isLocal ? living.CanCommand : snapshot != null && w.Faults.Healthy) },
                 { "lastCommandCode", isLocal ? (living.LastCommand?.Code ?? TheaterCommandCode.None).ToString() : TheaterCommandCode.None.ToString() },
-                { "resultOutcomeSet", ended }, { "resultOutcome", last != null ? last.Outcome.ToString() : "" },
-                { "resultWhy", last != null ? last.Why.ToString() : "" }, { "resultWhyIsTimeLimit", last != null && last.Why == TheaterWhy.TimeLimit },
+                { "resultOutcomeSet", Flag(ended) }, { "resultOutcome", last != null ? last.Outcome.ToString() : "" },
+                { "resultWhy", last != null ? last.Why.ToString() : "" }, { "resultWhyIsTimeLimit", Flag(last != null && last.Why == TheaterWhy.TimeLimit) },
                 { "resultFunds", last != null ? last.Funds : 0 }, { "resultMorale", last != null ? last.Morale : 0 },
                 { "rewardPaidTotal", w.RewardPaidTotal },
                 { "staffPickSeconds", snapshot != null ? snapshot.StaffPickSeconds : -1f },
@@ -104,6 +119,30 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                     }
                 },
             };
+        }
+
+        /// <summary>Called by the contact scan just before it reads the tracking database (see Track).</summary>
+        internal static void BeforeScan(FactionHQ hq, float now)
+        {
+            if (plantUnit == null || !ReferenceEquals(hq, plantHq) || !(now < plantUntil) || plantUnit.disabled) return;
+            if (!hq.trackingDatabase.TryGetValue(plantUnit.persistentID, out TrackingInfo info) || info == null) info = new TrackingInfo(plantUnit);
+            info.lastKnownPosition = new GlobalPosition(plantX, 0f, plantZ);
+            info.lastSpottedTime = now;
+            hq.trackingDatabase[plantUnit.persistentID] = info;
+        }
+
+        private static int OwnedPlaces(LivingFrontService.FactionWar w)
+        {
+            int count = 0;
+            foreach (Place p in w.Places) if (p.Owned) count++;
+            return count;
+        }
+
+        private static int BaseCandidates(LivingFrontService.FactionWar w)
+        {
+            int count = 0;
+            foreach (LivingFrontService.FrontCandidate c in w.Candidates) if (c.Source == FrontSource.Base) count++;
+            return count;
         }
 
         /// <summary>A front name that is a key or a grid label rather than a place: an underscore, the old FRONT gx/gz label or an S: key.</summary>
@@ -161,13 +200,13 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             return new Dictionary<string, object>
             {
                 { "ok", true }, { "code", code.ToString() }, { "detail", detail }, { "lockSeconds", lockSeconds },
-                { "opKeyBefore", before }, { "opKeyAfter", after }, { "keyChanged", before != after },
+                { "opKeyBefore", before }, { "opKeyAfter", after }, { "keyChanged", Flag(before != after) },
             };
         }
 
         /// <summary>
-        /// {faction, radius}: plants a fresh track, at the centre of an owned airbase, on an existing hostile unit (a ground vehicle if one exists), so the next review counts a
-        /// hostile at an owned base without a spawn. The tracked fix is what the engine reads; the unit itself stays where it is. Call it again inside 30 s to keep the contact fresh.
+        /// {faction, seconds (default 30)}: for that long, before every contact scan of the faction, plants a fresh track at the centre of an owned airbase on an existing hostile
+        /// ground vehicle (the best-hidden one), so the review counts a hostile at an owned base without a spawn. The tracked fix is what the engine reads; the unit stays where it is.
         /// </summary>
         public static Dictionary<string, object> Track(Dictionary<string, object> args)
         {
@@ -181,21 +220,23 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             foreach (Place place in war.Places)
                 if (place.Owned && (!havePost || string.CompareOrdinal(place.Id, post.Id) < 0)) { post = place; havePost = true; }
             if (!havePost) return Failure("WarProof", "Track", faction + " holds no airbase");
+            // Any hostile ground vehicle will do; one nobody of ours tracks is best, since vanilla rewrites the position of a unit it sees.
             Unit pick = null;
             foreach (Unit unit in UnitRegistry.allUnits)
             {
-                if (unit == null || unit.disabled || unit.NetworkHQ == null || ReferenceEquals(unit.NetworkHQ, hq)) continue;
-                if (unit is GroundVehicle) { pick = unit; break; }
-                if (pick == null && (unit is Aircraft || unit is Ship)) pick = unit;
+                if (unit == null || unit.disabled || unit.NetworkHQ == null || ReferenceEquals(unit.NetworkHQ, hq) || !(unit is GroundVehicle)) continue;
+                bool tracked = hq.trackingDatabase.ContainsKey(unit.persistentID);
+                if (pick == null || !tracked && hq.trackingDatabase.ContainsKey(pick.persistentID)) pick = unit;
+                if (!tracked) break;
             }
             if (pick == null) return Failure("WarProof", "Track", "no hostile unit to track");
-            if (!hq.trackingDatabase.TryGetValue(pick.persistentID, out TrackingInfo info) || info == null) info = new TrackingInfo(pick);
-            info.lastKnownPosition = new GlobalPosition(post.X, 0f, post.Z);
-            info.lastSpottedTime = Time.timeSinceLevelLoad;
-            hq.trackingDatabase[pick.persistentID] = info;
+            plantHq = hq; plantUnit = pick; plantX = post.X; plantZ = post.Z; plantUntil = Time.timeSinceLevelLoad + Mathf.Max(1f, Number(args, "seconds", 30f));
+            BeforeScan(hq, Time.timeSinceLevelLoad);
+            bool readsBack = HostileContact.TryRead(hq, pick, Time.timeSinceLevelLoad, out GlobalPosition seen);
             return new Dictionary<string, object>
             {
-                { "ok", true }, { "planted", true }, { "unit", pick.name }, { "baseId", post.Id }, { "baseName", post.Name }, { "baseX", post.X }, { "baseZ", post.Z },
+                { "ok", true }, { "planted", 1 }, { "readsBack", Flag(readsBack) }, { "seenX", seen.x }, { "seenZ", seen.z },
+                { "unit", pick.name }, { "baseId", post.Id }, { "baseName", post.Name }, { "baseX", post.X }, { "baseZ", post.Z },
             };
         }
 
@@ -230,6 +271,9 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 if (candidate?.faction != null && Key(candidate.faction.factionName) == Key(name)) { hq = candidate; faction = candidate.faction.factionName; return true; }
             return false;
         }
+
+        // 1 or 0: a scenario check compares numbers, and a bool is not one.
+        private static int Flag(bool value) => value ? 1 : 0;
 
         private static string Key(string faction) =>
             (faction ?? "none").ToLowerInvariant().Replace('.', '_').Replace(' ', '_');
