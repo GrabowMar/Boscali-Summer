@@ -85,7 +85,7 @@ public static class StockMfdUnityCheck
         {
             console.SetPage(page);
             Check(console.CurrentPage == page, name + ": SetPage(" + page + ") must land on that page.");
-            console.SetTitle(Title(name, page));
+            if (name != "Target" && name != "Map" && name != "Hud") console.SetTitle(Title(name, page)); // those three set their own page titles
             console.Footer.Set("OFFLINE LAYOUT PREVIEW \u00b7 SYNTHETIC DATA", AvState.Inert);
             for (int i = 0; i < 2; i++) console.Ticker.TickNow();
             Canvas.ForceUpdateCanvases();
@@ -149,7 +149,7 @@ public static class StockMfdUnityCheck
             Grid(presenter, "hover", new[] { "OFF", "UNIT INFO", "AMMUNITION", "ORDERS" },
                 new[] { "No hover tooltip", "Unit information", "Weapon and ammunition", "Current unit orders" }, true);
             Grid(presenter, "sizes", new[] { "SMALL 60%", "MEDIUM 80%", "LARGE 100%" }, new[] { "COMPACT", "BALANCED", "FULL SIZE" }, true);
-            ((AvSlab)Field(presenter, "overlaySlab")).Set("CONTROL FIELD / LIVE GROUND PRESENCE", AvState.Ready);
+            for (int i = 0; i < 4; i++) Call(presenter, "SetOverlayRow", i, true, i != 2, true);
             Note(presenter, "detailSummary", "UNIT INFO is selected. Hover a map unit to inspect it.");
             Note(presenter, "previewCaption", "MEDIUM 80% \u2022 Frame shape marks the side; jets keep the game's own silhouette.");
             foreach (object tile in (Array)Field(presenter, "previewTiles")) Call(tile, "SetState", true, .8f);
@@ -167,9 +167,17 @@ public static class StockMfdUnityCheck
             Grid(presenter, "vehicleGrid", new[] { "TRUCK", "UGV", "LCV", "AFV", "MBT", "ART", "AAA", "IR SAM", "R SAM", "RADAR" },
                 new[] { "Supply trucks", "Unmanned ground", "Light combat", "Armored vehicles", "Main battle tanks", "Field artillery",
                     "Anti-air guns", "Heat-seeking SAM", "Radar-guided SAM", "Search radars" }, false, true);
-            Grid(presenter, "selectedGrid", new[] { "DARKREACH 21", "REVETMENT EAST AIRBASE", "TANK COMPANY NORTH" }, null);
+            Grid(presenter, "selectedGrid", new[] { "DARKREACH 21", "REVETMENT EAST AIRBASE", "TANK COMPANY NORTH" },
+                new[] { "AIRCRAFT \u00b7 HOSTILE \u00b7 3.2 KM", "STRUCTURE \u00b7 HOSTILE \u00b7 18.0 KM", "VEHICLE \u00b7 HOSTILE \u00b7 12.4 KM" });
             Grid(presenter, "candidateGrid", new[] { "RAVEN 3", "AAA BATTERY SOUTH", "SAM SITE ECHO", "CHICANE 11", "PATROL BOAT" },
-                new[] { "3.2 KM \u00b7 KNOWN POSITION", "8.9 KM \u00b7 KNOWN POSITION", "12.4 KM \u00b7 KNOWN POSITION", "18.0 KM \u00b7 KNOWN POSITION", "31.5 KM \u00b7 KNOWN POSITION" });
+                new[] { "3.2 KM \u00b7 BRG 047 \u00b7 HOSTILE", "8.9 KM \u00b7 BRG 112 \u00b7 HOSTILE", "12.4 KM \u00b7 BRG 150 \u00b7 HOSTILE", "18.0 KM \u00b7 BRG 291 \u00b7 FRIENDLY", "31.5 KM \u00b7 BRG 203 \u00b7 UNKNOWN" });
+            Call(presenter, "SetRangeBands", new[] { 2, 1, 1, 1, 0 }, 0, true);
+            ((AvRow)Field(presenter, "focusRow")).Set("RAVEN 3", "HOSTILE \u00b7 AIRCRAFT \u00b7 BRG 047", "3.2 KM", AvState.Danger);
+            Call(Field(presenter, "filterGate"), "Set", "FRIENDLY \u00b7 ENEMY", 2, 2, "AIRCRAFT \u00b7 MISSILES \u00b7 GROUND \u00b7 SHIPS", 4, 5,
+                "ALL BUT LCV \u00b7 ART \u00b7 R SAM", 7, 10, "LINKS", "HUD LINK OFF  \u00b7  LASER ONLY OFF \u2014 LASED OR NOT", "FREE", AvState.Inert);
+            Call(Field(presenter, "presetGate"), "Set", "ENEMY", 1, 2, "AIRCRAFT \u00b7 GROUND", 2, 5, "EVERY VEHICLE TYPE", 10, 10,
+                "LASER", "LASER ONLY OFF \u2014 LASED OR NOT", "ANY", AvState.Inert);
+            Section(presenter, "gateSection", "3 ON LIST");
             Grid(presenter, "groupGrid", new[] { "GROUP 1", "GROUP 2", "GROUP 3" }, new[] { "3 STORED", "0 STORED", "1 STORED" });
             Grid(presenter, "quickGrid", new[] { "AIR DEFENCE", "HOSTILE GROUND", "EMPTY" }, new[] { "SLOT 1 \u00b7 F5", "SLOT 2 \u00b7 F6", "SLOT 3 \u00b7 F7" });
             Grid(presenter, "presetGrid", new[] { "ALL", "AIR DEFENCE", "HOSTILE GROUND", "NAVAL", "AIRCRAFT", "CUSTOM" },
@@ -182,14 +190,12 @@ public static class StockMfdUnityCheck
             Section(presenter, "presetSection", "1 / 8 SAVED");
             Section(presenter, "selectedSection", "3 TRACKED");
             ((AvReadout)Field(presenter, "presetReadout")).Set("ALL", "ACTIVE PROFILE", "Built-in. Every known contact, friend and foe.");
-            ((AvSlab)Field(presenter, "cameraSlab")).Set("RECON MARK", AvState.Ready);
-            var cameraTiles = (AvGauge[])Field(presenter, "cameraRings");
-            cameraTiles[0].Set(.315f, "6.3", AvState.Info);
-            cameraTiles[1].Set(412f / 3000f, "412", AvState.Info);
-            ((AvHazardBar)Field(presenter, "cameraAge")).Set(.85f, "18 S", AvState.Info);
+            Call(presenter, "SetCameraSlab", "RECON MARK", AvState.Ready);
+            // The mark readout (rings, age, life, grid and armed rows) in one call: position, armed name, held, range km, elevation m, age s, bearing.
+            Call(presenter, "SetCameraTelemetry", "X 12040 \u00b7 Z -8810", "", true, 6.3f, 412f, 18f, 112);
             var camera = (AvRow[])Field(presenter, "cameraRows");
-            camera[0].Set("GRID (X / Z)", "X 12040 \u00b7 Z -8810", "", AvState.Info);
-            camera[1].Set("ARMED CALL-IN", "NONE (ARM IN OPS)", "", AvState.Inert);
+            camera[2].Set("CAMERA VIEW", "Targeting camera is live. MARK records the point under its cross-hair.", "LIVE", AvState.Ready);
+            camera[3].Set("DELIVERY", "Needs an armed call-in. Arm one on OPS / SUPPORT.", "WAIT", AvState.Inert);
         }
         if (name == "Faction")
         {
@@ -256,6 +262,11 @@ public static class StockMfdUnityCheck
             ((AvGauge)Field(presenter, "strikeRing")).Set(1f, "4/4", AvState.Ready);
             ((AvGauge)Field(presenter, "militaryRing")).Set(4f / 6f, "4/6", AvState.Ready);
             ((AvGauge)Field(presenter, "civilianRing")).Set(0f, "OFF", AvState.Inert);
+            Call(presenter, "SetModeBrief", 0, "AIM-9X SIDEWINDER", "SAFE", AvState.Inert, 3, 6);
+            Call(presenter, "FillBrief", Field(presenter, "vehicleBrief"), "AAA · IR SAM · R SAM · RADAR",
+                "TRUCK · UGV · LCV · AFV · MBT · ART", 4, 10, "vehicle", "NAV");
+            Call(presenter, "FillBrief", Field(presenter, "buildingBrief"), "EW RADAR · DEPOT · HANGAR · MUNITIONS",
+                "CIVILIAN · INDUSTRY · FORTIFY", 4, 7, "structure", "NAV");
         }
         if (name == "Mission") SeedMission(presenter);
         if (name == "MissionEmpty") Call(presenter, "Render");
