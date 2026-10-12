@@ -51,6 +51,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private readonly ManualLogSource logger;
         private readonly CloudVolumeUniforms uniforms = new CloudVolumeUniforms();
         private readonly WeatherCloudPass pass = new WeatherCloudPass();
+        private readonly CloudProbePass probePass = new CloudProbePass();
         private readonly Action<Camera, Matrix4x4, Matrix4x4> onRender;
         private Material material, compositeMaterial;
         private Texture3D noise;
@@ -251,6 +252,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             displayedFrame = field.Frame;
             displayedHeading = field.PrevailingHeading;
             renderer.enabled = !wantHalfResolution || halfResolution;
+            probePass.Bind(renderer.enabled ? material : null);
             if (renderer.enabled)
             {
                 HideReason = null;
@@ -354,6 +356,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         {
             RainCurtainsEnabled = false;
             Invalidate();
+            probePass.Dispose();
             pass.Dispose();
             if (root != null) UnityEngine.Object.Destroy(root);
             if (material != null) UnityEngine.Object.Destroy(material);
@@ -382,6 +385,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             HideReason = reason;
             if (renderer != null) renderer.enabled = false;
             pass.Dispose();
+            probePass.Bind(null);
             halfResolution = false;
             shadows.Restore();
             RestoreSkyClouds();

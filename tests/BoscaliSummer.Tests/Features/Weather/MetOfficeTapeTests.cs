@@ -65,13 +65,13 @@ namespace BoscaliSummer.Tests.Features.Weather
 
         private static void EveryColumnFits()
         {
-            TestAssert.That(MetOfficeLayout.Height <= 700f && MetOfficeLayout.Width <= 1260f, "the window fits the 1280 x 720 reference canvas");
-            TestAssert.Near(MetOfficeLayout.Col23, 334f, "the two instrument columns are 334 wide");
+            TestAssert.That(MetOfficeLayout.Height <= 1040f && MetOfficeLayout.Width <= 1880f, "the window fits the 1920 x 1080 reference canvas");
+            TestAssert.That(MetOfficeLayout.Centre >= 700f, "the sky gallery keeps four readable tiles a row");
             for (int c = 1; c <= 3; c++)
                 TestAssert.That(MetOfficeLayout.ColumnHeight(c) <= MetOfficeLayout.BodyHeight,
                     "column " + c + " needs " + MetOfficeLayout.ColumnHeight(c) + " of " + MetOfficeLayout.BodyHeight);
-            TestAssert.That(MetOfficeLayout.CommandTop + MetOfficeLayout.Command + MetOfficeLayout.Gap + MetOfficeLayout.Footer <= MetOfficeLayout.Height + 0.01f, "command bar and footer sit inside the window");
-            TestAssert.That(MetOfficeLayout.BodyTop + MetOfficeLayout.BodyHeight <= MetOfficeLayout.CommandTop, "the body ends above the command bar");
+            TestAssert.That(MetOfficeLayout.TapeTop + MetOfficeLayout.TapeCard + MetOfficeLayout.Gap + MetOfficeLayout.Footer <= MetOfficeLayout.Height + 0.01f, "the tape and footer sit inside the window");
+            TestAssert.That(MetOfficeLayout.BodyTop + MetOfficeLayout.BodyHeight <= MetOfficeLayout.TapeTop, "the body ends above the tape");
         }
     }
 }

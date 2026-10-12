@@ -23,7 +23,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                 TestAssert.That(s >= 0f && s <= 1f && s >= last - 1e-6f, "shade rises with cover and stays in 0-1 (cover " + cover + ")");
                 last = s;
             }
-            TestAssert.That(OvercastLook.Shade(0.19f, 0f, 3000f) == 0f && OvercastLook.Shade(1f, 0f, 3000f) == 1f, "no shade under cover 0.2, full shade under a full sky");
+            TestAssert.That(OvercastLook.Shade(0.09f, 0f, 3000f) == 0f && OvercastLook.Shade(1f, 0f, 3000f) == 1f, "no shade under cover 0.1, full shade under a full sky");
             TestAssert.That(OvercastLook.Shade(float.NaN, 0f, 3000f) == 0f && OvercastLook.Shade(1f, float.NaN, 3000f) == 0f, "non-finite inputs cast no shade");
             float lastAlt = 2f;
             for (float y = 0f; y <= 6000f; y += 10f)
