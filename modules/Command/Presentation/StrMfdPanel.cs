@@ -536,12 +536,12 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
             if (console != null && console.CurrentPage == TabCmd)
             {
-                TheaterLiveOperationView active = theaterWar?.ActiveOperation;
+                TheaterOperationView active = theaterWar?.ActiveOperation;
                 text += " · " + (theaterWar == null || !theaterWar.Available
                     ? "theater staff unavailable"
                     : !theaterWar.HasSnapshot ? "waiting for staff report"
-                    : theaterWar.SnapshotAgeSeconds > 15f ? "staff report stale · awaiting host refresh"
-                    : active == null ? "staff observing fronts" : active.Label + " / " + active.Phase);
+                    : !theaterWar.IsFresh ? "staff report stale · awaiting host refresh"
+                    : active == null ? "staff observing fronts" : active.Name + " / " + TheaterWords.Phase(active.Phase, active.PhaseNote));
             }
             return text;
         }

@@ -38,7 +38,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     {
                         if (war.ActiveOperation == null) return Fail("Verb", "no proposals and no operation");
                         Dictionary<string, object> skipped = Read(null);
-                        skipped["sent"] = false; skipped["skipped"] = "staff already selected " + war.ActiveOperation.Label;
+                        skipped["sent"] = false; skipped["skipped"] = "staff already selected " + war.ActiveOperation.Name;
                         return skipped;
                     }
                     sent = war.RequestPick(war.Proposals[0].Id, war.Proposals[0].Revision);
@@ -91,17 +91,18 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 r["warAge"] = war.SnapshotAgeSeconds;
                 r["warCanCommand"] = war.CanCommand;
                 r["warPending"] = war.CommandPending;
-                r["warStatus"] = war.CommandStatus ?? "";
+                r["warStatus"] = war.LastCommand != null ? war.LastCommand.Code.ToString() : "";
                 r["posture"] = war.Posture.ToString();
                 r["proposals"] = war.Proposals?.Count ?? 0;
                 r["fronts"] = war.Fronts?.Count ?? 0;
                 var fronts = new List<string>();
                 if (war.Fronts != null)
                     foreach (TheaterFrontView f in war.Fronts)
-                        fronts.Add(f.Label + " | " + f.Status + " | " + f.Pressure.ToString("0.00") + (f.Observed ? "" : " | unobserved") +
+                        fronts.Add(f.Name + " | " + TheaterWords.FrontStatus(f.Status) + " | " + f.Pressure.ToString("0.00") + (f.Observed ? "" : " | unobserved") +
                                    " | nearest own ground " + NearestOwnGroundKm(f.X, f.Z).ToString("0.0") + " km");
                 r["frontList"] = string.Join(" ;; ", fronts);
-                r["activeOp"] = war.ActiveOperation != null ? war.ActiveOperation.Kind + " " + war.ActiveOperation.Label + " / " + war.ActiveOperation.Phase : "";
+                r["activeOp"] = war.ActiveOperation != null ? TheaterWords.Kind(war.ActiveOperation.Kind) + " " + war.ActiveOperation.Name + " / " +
+                    TheaterWords.Phase(war.ActiveOperation.Phase, war.ActiveOperation.PhaseNote) : "";
                 r["opsLog"] = war.StaffLog?.Count ?? 0;
             }
             r["ok"] = true;   // a readout; the flags above say what is missing

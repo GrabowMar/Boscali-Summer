@@ -47,7 +47,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         private NavalFrontService naval;
         private float nextRoll;
         private int cursor;
-        private string localCommandStatus = "";
+        private TheaterCommandResult hostCommand;
+        private float hostCommandAt;
         private FactionHQ viewHq;
 
         internal sealed class FrontCandidate
@@ -65,8 +66,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             internal bool Objective;
             internal float X, Z, Started, InitialHold;
             internal int InitialFriendly;
-            internal int GroundGroups, AirGroups, NavalGroups;
-            internal string Summary;
+            internal int GroundGroups;
         }
 
         internal sealed class FactionWar
@@ -74,9 +74,9 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             internal FactionHQ HQ;
             internal readonly List<FrontCandidate> Candidates = new List<FrontCandidate>(LivingWarRules.MaximumFronts);
             internal readonly List<WarFrontRead> Reads = new List<WarFrontRead>(LivingWarRules.MaximumFronts);
-            internal readonly List<TheaterFrontView> Fronts = new List<TheaterFrontView>(LivingWarRules.MaximumFronts);
-            internal readonly List<TheaterProposalView> Proposals =
-                new List<TheaterProposalView>(LivingWarRules.MaximumOffers);
+            internal readonly List<LegacyFront> Fronts = new List<LegacyFront>(LivingWarRules.MaximumFronts);
+            internal readonly List<LegacyProposal> Proposals =
+                new List<LegacyProposal>(LivingWarRules.MaximumOffers);
             internal readonly StaffLog Log = new StaffLog();
             internal readonly Dictionary<int, (string Key, bool Offensive)> GroupAssignments =
                 new Dictionary<int, (string, bool)>(16);
@@ -84,11 +84,11 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             internal Operation Active;
             internal int Revision, NextId = 1;
             internal float NextReview, NextOffer, OfferDeadline, NextReinforce;
-            internal float NextClock;
             internal bool OfferedOnce;
-            internal bool HasSnapshot;
             internal int ObjectiveCursor;
-            internal float SnapshotAt, FrontClockAt;
+            /// <summary>The picture the pilot sees and the wire carries: built by LegacySnapshot on the host, received on a client.</summary>
+            internal TheaterWarSnapshot Published;
+            internal float PublishedAt;
         }
 
         internal void Configure(TheaterOpsSettings config, TheaterPriorityService priorityService,
@@ -113,7 +113,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         {
             wars.Clear(); hqs.Clear(); choices.Clear(); territory = null;
             nextRoll = 0f; cursor = 0;
-            viewHq = null; localCommandStatus = "";
+            viewHq = null; hostCommand = null;
             network?.ResetScene();
         }
 
@@ -143,7 +143,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             {
                 // Validate the painted deck in order; an invalid first option cannot
                 // strand a later valid option or silently become another target.
-                TheaterProposalView[] offered = war.Proposals.ToArray();
+                LegacyProposal[] offered = war.Proposals.ToArray();
                 bool picked = false;
                 for (int i = 0; i < offered.Length && !picked; i++)
                     picked = Pick(war, offered[i].Id, offered[i].Revision, true);
@@ -151,7 +151,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 {
                     war.Log.Add("STAFF OPTIONS EXPIRED · REASSESSING");
                     Offer(war, now);
-                    network?.Broadcast(war.HQ.faction.factionName);
+                    Publish(war, now);
                 }
             }
         }
@@ -186,7 +186,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         internal void ClearRemoteState()
         {
             if (GameAccess.IsServer()) return;
-            wars.Clear(); localCommandStatus = "";
+            wars.Clear(); hostCommand = null;
         }
 
         private void Review(FactionWar war, float now)
@@ -195,8 +195,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             bool contactChanged = Sense(war);
             if (war.Proposals.Count > 0 && !RefreshOffers(war))
                 Offer(war, now, war.OfferDeadline);
-            war.HasSnapshot = true;
-            war.SnapshotAt = Time.unscaledTime;
             bool finished = AdvanceOperation(war, now);
             float largestChange = 0f;
             for (int i = 0; i < war.Fronts.Count; i++)
@@ -221,7 +219,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                     new GlobalPosition(war.Active.X, 0f, war.Active.Z), role);
             }
             if (war.Active != null) CountOperationForces(war);
-            network?.Broadcast(war.HQ.faction.factionName);
+            Publish(war, now);
         }
 
         private static void CountOperationForces(FactionWar war)
@@ -229,25 +227,14 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             Operation op = war.Active;
             op.GroundGroups = GroundFrontService.Active?.CountGroups(
                 war.HQ.faction.factionName, op.Key) ?? 0;
-            op.AirGroups = 0;
-            op.NavalGroups = 0;
-            List<Unit> units = UnitRegistry.allUnits;
-            if (units == null) return;
-            int cap = Math.Min(units.Count, MaximumUnitScan);
-            for (int i = 0; i < cap; i++)
-            {
-                Unit unit = units[i];
-                if (unit == null || unit.disabled || !ReferenceEquals(unit.NetworkHQ, war.HQ))
-                    continue;
-                GlobalPosition point = unit.GlobalPosition();
-                if (Scalar.Distance2DSquared(point.x, point.z, op.X, op.Z) >
-                    PresenceRadius * PresenceRadius) continue;
-                if (unit is Aircraft) op.AirGroups++;
-                else if (unit is Ship) op.NavalGroups++;
-            }
-            op.Summary = AimOf(op.Kind, op.Key, op.Objective) + ". Assigned: " +
-                op.GroundGroups + " ground groups. Nearby: " + op.AirGroups +
-                " aircraft, " + op.NavalGroups + " ships. Convoy <=35% pool /120s; native gates.";
+        }
+
+        /// <summary>Rebuild the picture from the staff's own state and send it to the faction's clients.</summary>
+        private void Publish(FactionWar war, float now)
+        {
+            war.Published = LegacySnapshot.Build(war, now);
+            war.PublishedAt = Time.unscaledTime;
+            network?.Broadcast(war.HQ.faction.factionName);
         }
 
         private bool Sense(FactionWar war)
@@ -265,7 +252,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             CountUnits(war);
             ModuleServices.TryGet(out IThreatPicture picture);
             war.Reads.Clear(); war.Fronts.Clear();
-            war.FrontClockAt = Time.unscaledTime;
             bool contactChanged = false;
             for (int i = 0; i < war.Candidates.Count; i++)
             {
@@ -296,8 +282,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 }
                 war.Reads.Add(new WarFrontRead(front.Key, front.Label, front.X, front.Z,
                     pressure, front.Friendly, front.Hostile, front.Objective, front.Held, observed));
-                war.Fronts.Add(new TheaterFrontView(front.Key, front.Label, front.X, front.Z,
-                    status, pressure, trend, observed, observed ? 0f : -1f));
+                war.Fronts.Add(new LegacyFront(front.Key, front.Label, front.X, front.Z,
+                    status, pressure, trend, observed));
             }
             return contactChanged;
         }
@@ -514,11 +500,10 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         {
             for (int i = 0; i < war.Proposals.Count; i++)
             {
-                TheaterProposalView offer = war.Proposals[i];
+                LegacyProposal offer = war.Proposals[i];
                 if (!TryCurrentOffer(war, offer, out WarFrontRead front)) return false;
-                war.Proposals[i] = new TheaterProposalView(offer.Id, offer.Revision, offer.Kind,
-                    offer.Label, offer.TargetKey, offer.X, offer.Z, offer.Brief,
-                    RiskOf(front), ForcesOf(front), offer.SecondsRemaining);
+                war.Proposals[i] = new LegacyProposal(offer.Id, offer.Revision, offer.Kind,
+                    offer.Label, offer.TargetKey, offer.X, offer.Z, RiskOf(front));
             }
             return true;
         }
@@ -526,19 +511,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         private static string RiskOf(WarFrontRead front) => !front.Observed ? "UNKNOWN"
             : front.Hostile > front.Friendly ? "HIGH" : "MODERATE";
 
-        private static string ForcesOf(WarFrontRead front) =>
-            front.Friendly + (front.Friendly == 1 ? " friendly unit" : " friendly units") + " / " +
-            (front.Observed ? front.Hostile + " tracked hostile" : "resistance unknown");
-
-        private static string AimOf(string kind, string key, bool objective) =>
-            kind == "DEFEND" ? "Retain held ground; clear observed pressure"
-            : kind == "RECON" ? "Observe this uncertain front; resistance unknown"
-            : !objective ? "Gain signed control of this sector"
-            : MissionManager.Objectives?.GetObjective(key)?.SavedObjective?.ObjectiveTypeEnum ==
-                ObjectiveType.DestroyUnits ? "Destroy native mission targets at this fix"
-                : "Secure the capture target at this fix";
-
-        private static bool TryCurrentOffer(FactionWar war, TheaterProposalView offer, out WarFrontRead front)
+        private static bool TryCurrentOffer(FactionWar war, LegacyProposal offer, out WarFrontRead front)
         {
             front = default;
             for (int i = 0; i < war.Reads.Count; i++)
@@ -561,11 +534,9 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             for (int i = 0; i < choices.Count; i++)
             {
                 WarOffer offer = choices[i];
-                string brief = AimOf(offer.Kind, offer.Front.Key, offer.Front.Objective);
-                war.Proposals.Add(new TheaterProposalView(war.NextId++, war.Revision,
+                war.Proposals.Add(new LegacyProposal(war.NextId++, war.Revision,
                     offer.Kind, offer.Front.Label, offer.Front.Key, offer.Front.X, offer.Front.Z,
-                    brief + ".", RiskOf(offer.Front), ForcesOf(offer.Front),
-                    Mathf.Max(0f, war.OfferDeadline - now)));
+                    RiskOf(offer.Front)));
             }
             war.OfferedOnce = true;
             war.NextOffer = now + LivingWarRules.MinimumOfferGap;
@@ -629,7 +600,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             if (!Authoritative || war == null || war.HQ == null || war.Active != null ||
                 war.Revision != revision || war.Proposals.Count == 0 ||
                 !automatic && Time.timeSinceLevelLoad >= war.OfferDeadline) return false;
-            TheaterProposalView chosen = null;
+            LegacyProposal chosen = null;
             for (int i = 0; i < war.Proposals.Count; i++)
                 if (war.Proposals[i].Id == id && war.Proposals[i].Revision == revision)
                     chosen = war.Proposals[i];
@@ -653,7 +624,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             priority?.SetDirectedFix(war.HQ, chosen.TargetKey, chosen.Label, chosen.X, chosen.Z);
             // NextReinforce belongs to the faction, not the selected operation.
             war.Log.Add((automatic ? "STAFF SELECTED " : "SELECTED ") + chosen.Kind + " " + chosen.Label);
-            network?.Broadcast(war.HQ.faction.factionName);
+            Publish(war, Time.timeSinceLevelLoad);
             return true;
         }
 
@@ -675,7 +646,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 // Calling off is also the route to a new choice when the field changes.
                 Sense(war);
                 Offer(war, Time.timeSinceLevelLoad);
-                network?.Broadcast(hq.faction.factionName);
+                Publish(war, Time.timeSinceLevelLoad);
                 return true;
             }
             if (kind != 2 || posture > (byte)TheaterWarPosture.Bold) return false;
@@ -686,7 +657,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 Sense(war);
                 Offer(war, Time.timeSinceLevelLoad, war.OfferDeadline);
             }
-            network?.Broadcast(hq.faction.factionName);
+            Publish(war, Time.timeSinceLevelLoad);
             return true;
         }
 
@@ -723,7 +694,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 }
                 for (int i = 0; i < war.Fronts.Count; i++)
                 {
-                    TheaterFrontView held = war.Fronts[i];
+                    LegacyFront held = war.Fronts[i];
                     if (held.Key != assigned.Key || Scalar.Distance2DSquared(x, z, held.X, held.Z) >
                         AssignmentRadius * AssignmentRadius) continue;
                     directive = new PriorityDirective(held.Key, held.Label, held.X, 0f, held.Z);
@@ -751,7 +722,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             if (key == null)
                 for (int i = 0; i < war.Fronts.Count; i++)
                 {
-                    TheaterFrontView front = war.Fronts[i];
+                    LegacyFront front = war.Fronts[i];
                     float distance = Scalar.Distance2DSquared(x, z, front.X, front.Z);
                     if (distance > nearest) continue;
                     nearest = distance; key = front.Key; label = front.Label;
@@ -776,41 +747,43 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
 
         // The view is always scoped to the local player's faction. Clients only read host snapshots.
         public bool Available => settings != null && settings.Enabled.Value;
-        public bool HasSnapshot => Available && LocalState()?.HasSnapshot == true;
-        public float SnapshotAgeSeconds => !HasSnapshot ? -1f : Authoritative ? 0f
-            : Mathf.Max(0f, Time.unscaledTime - LocalState().SnapshotAt);
+        public bool IsHost => GameAccess.IsServer();
+        public TheaterWarSnapshot Snapshot => Available ? LocalState()?.Published : null;
+        public bool HasSnapshot => Snapshot != null;
+        // Legacy (throw-away until the engine slice): the host reports 0; a client counts from receipt.
+        public float SnapshotAgeSeconds => !HasSnapshot ? -1f : Authoritative ? 0f : SecondsSincePublished;
+        public float SecondsSincePublished => !HasSnapshot ? -1f : Mathf.Max(0f, Time.unscaledTime - LocalState().PublishedAt);
+        public bool IsFresh => HasSnapshot && SnapshotAgeSeconds <= LivingWarRules.SnapshotFreshSeconds;
+        public TheaterViewState State
+        {
+            get
+            {
+                if (!Available) return TheaterViewState.StaffOff;
+                if (!GameAccess.TryGetLocalFaction(out _)) return TheaterViewState.NoFaction;
+                if (HasSnapshot) return IsFresh ? TheaterViewState.Live : TheaterViewState.Stale;
+                return network != null && network.UnansweredQueries >= 2 && network.SecondsSinceFirstQuery >= 12f
+                    ? TheaterViewState.HostLacksModule : TheaterViewState.WaitingForHost;
+            }
+        }
         public bool CommandPending => network?.CommandPending == true;
-        public string CommandStatus => Authoritative ? localCommandStatus : network?.CommandStatus ?? "";
-        public bool CanCommand => HasSnapshot && SnapshotAgeSeconds <= LivingWarRules.SnapshotFreshSeconds &&
-            !CommandPending && GameAccess.TryGetLocalFaction(out _);
+        public TheaterCommandResult LastCommand
+        {
+            get
+            {
+                if (!Authoritative) return network?.LastCommand;
+                float age = Time.unscaledTime - hostCommandAt;
+                if (hostCommand == null || age > 6f) return hostCommand = null;
+                hostCommand.SecondsAgo = age;
+                return hostCommand;
+            }
+        }
+        public bool CanCommand => IsFresh && !CommandPending && GameAccess.TryGetLocalFaction(out _);
         public TheaterWarPosture Posture => LocalState()?.Posture ?? TheaterWarPosture.Steady;
-        public IReadOnlyList<TheaterFrontView> Fronts
-        {
-            get { FactionWar war = LocalState(); UpdateFrontClock(war);
-                return (IReadOnlyList<TheaterFrontView>)war?.Fronts ?? Array.Empty<TheaterFrontView>(); }
-        }
-        public IReadOnlyList<TheaterProposalView> Proposals
-        {
-            get
-            {
-                FactionWar war = LocalState();
-                UpdateProposalClock(war);
-                return (IReadOnlyList<TheaterProposalView>)war?.Proposals ??
-                    Array.Empty<TheaterProposalView>();
-            }
-        }
-        public TheaterLiveOperationView ActiveOperation
-        {
-            get
-            {
-                Operation op = LocalState()?.Active;
-                if (op == null) return null;
-                return new TheaterLiveOperationView(op.Id, op.Revision, op.Kind, op.Key, op.Label,
-                    op.X, op.Z, op.Phase, op.Summary ?? "Forces moving",
-                    op.GroundGroups, op.AirGroups, op.NavalGroups);
-            }
-        }
-        public IReadOnlyList<string> StaffLog => LocalState()?.Log.Entries ?? Array.Empty<string>();
+        public IReadOnlyList<TheaterFrontView> Fronts => Snapshot?.Fronts ?? Array.Empty<TheaterFrontView>();
+        public IReadOnlyList<TheaterProposalView> Proposals => Snapshot?.Proposals ?? Array.Empty<TheaterProposalView>();
+        public TheaterOperationView ActiveOperation => Snapshot?.Operation;
+        public IReadOnlyList<string> StaffLog => Snapshot?.Log ?? Array.Empty<string>();
+
         public void Refresh()
         {
             GameAccess.TryGetLocalFaction(out FactionHQ hq);
@@ -818,41 +791,10 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             {
                 viewHq = hq;
                 if (!GameAccess.IsServer()) { ClearRemoteState(); network?.ClearClientState(); }
-                localCommandStatus = "";
-            }
-            FactionWar war = LocalState();
-            UpdateProposalClock(war); UpdateFrontClock(war);
-        }
-
-        private static void UpdateFrontClock(FactionWar war)
-        {
-            if (war == null) return;
-            float elapsed = Mathf.Max(0f, Time.unscaledTime - war.FrontClockAt);
-            if (elapsed < 1f) return;
-            war.FrontClockAt = Time.unscaledTime;
-            for (int i = 0; i < war.Fronts.Count; i++)
-            {
-                TheaterFrontView old = war.Fronts[i];
-                war.Fronts[i] = new TheaterFrontView(old.Key, old.Label, old.X, old.Z,
-                    old.Status, old.Pressure, old.Trend, old.Observed,
-                    old.AgeSeconds < 0f ? -1f : old.AgeSeconds + elapsed);
+                hostCommand = null;
             }
         }
 
-        private static void UpdateProposalClock(FactionWar war)
-        {
-            if (war == null || war.Proposals.Count == 0 || Time.timeSinceLevelLoad < war.NextClock)
-                return;
-            war.NextClock = Time.timeSinceLevelLoad + 1f;
-            float remaining = Mathf.Max(0f, war.OfferDeadline - Time.timeSinceLevelLoad);
-            for (int i = 0; i < war.Proposals.Count; i++)
-            {
-                TheaterProposalView old = war.Proposals[i];
-                war.Proposals[i] = new TheaterProposalView(old.Id, old.Revision, old.Kind,
-                    old.Label, old.TargetKey, old.X, old.Z, old.Brief, old.Risk,
-                    old.Forces, remaining);
-            }
-        }
         public bool RequestPick(int proposalId, int revision) =>
             Request(0, proposalId, revision, 0);
         public bool RequestCancel(int operationId, int revision) =>
@@ -865,65 +807,26 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             if (!CanCommand || !GameAccess.TryGetLocalFaction(out FactionHQ hq)) return false;
             if (!Authoritative) return network != null && network.SendIntent(kind, id, revision, posture);
             bool accepted = ApplyIntent(hq, kind, id, revision, posture);
-            localCommandStatus = accepted ? "ACCEPTED · staff updated"
-                : "REJECTED · choice changed; review current options";
+            hostCommand = new TheaterCommandResult
+            { Code = accepted ? TheaterCommandCode.Accepted : TheaterCommandCode.StaleChoice };
+            hostCommandAt = Time.unscaledTime;
             return accepted;
         }
 
-        internal void CopySnapshot(string faction, List<TheaterFrontView> fronts,
-            List<TheaterProposalView> proposals, out TheaterLiveOperationView operation,
-            out TheaterWarPosture posture, List<string> log)
-        {
-            fronts.Clear(); proposals.Clear(); log.Clear();
-            operation = null; posture = TheaterWarPosture.Steady;
-            if (!wars.TryGetValue(faction, out FactionWar war)) return;
-            UpdateProposalClock(war); UpdateFrontClock(war);
-            posture = war.Posture;
-            for (int i = 0; i < war.Fronts.Count; i++) fronts.Add(war.Fronts[i]);
-            for (int i = 0; i < war.Proposals.Count; i++) proposals.Add(war.Proposals[i]);
-            Operation op = war.Active;
-            if (op != null)
-                operation = new TheaterLiveOperationView(op.Id, op.Revision, op.Kind, op.Key,
-                    op.Label, op.X, op.Z, op.Phase, op.Summary ?? "Forces moving",
-                    op.GroundGroups, op.AirGroups, op.NavalGroups);
-            for (int i = 0; i < war.Log.Count; i++) log.Add(war.Log.Entries[i]);
-        }
+        /// <summary>The picture the transport sends for a faction; null before the host's first review.</summary>
+        internal TheaterWarSnapshot PublishedFor(string faction) =>
+            wars.TryGetValue(faction, out FactionWar war) ? war.Published : null;
 
-        internal void ApplyRemote(string faction, IReadOnlyList<TheaterFrontView> fronts,
-            IReadOnlyList<TheaterProposalView> proposals, TheaterLiveOperationView operation,
-            TheaterWarPosture posture, IReadOnlyList<string> log)
+        internal void ApplyRemote(TheaterWarSnapshot body)
         {
-            if (GameAccess.IsServer() || string.IsNullOrEmpty(faction) ||
-                !GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq?.faction?.factionName != faction) return;
+            if (GameAccess.IsServer() || body == null || string.IsNullOrEmpty(body.Faction) ||
+                !GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq?.faction?.factionName != body.Faction) return;
             viewHq = hq;
-            FactionWar war = StateOf(faction);
+            FactionWar war = StateOf(body.Faction);
             if (war == null) return;
-            war.Fronts.Clear(); war.Proposals.Clear(); war.Log.Clear();
-            war.HasSnapshot = true;
-            war.SnapshotAt = war.FrontClockAt = Time.unscaledTime;
-            for (int i = 0; fronts != null && i < fronts.Count && i < LivingWarRules.MaximumFronts; i++)
-                war.Fronts.Add(fronts[i]);
-            for (int i = 0; proposals != null && i < proposals.Count && i < LivingWarRules.MaximumOffers; i++)
-                war.Proposals.Add(proposals[i]);
-            war.OfferDeadline = Time.timeSinceLevelLoad +
-                (war.Proposals.Count > 0 ? Mathf.Max(0f, war.Proposals[0].SecondsRemaining) : 0f);
-            war.NextClock = 0f;
-            for (int i = log != null ? Math.Min(log.Count,
-                BoscaliSummer.Modules.TheaterOps.Domain.StaffLog.MaximumEntries) - 1 : -1; i >= 0; i--)
-                war.Log.Add(log[i]);
-            war.Posture = posture;
-            war.Active = operation == null ? null : new Operation
-            {
-                Id = operation.Id, Revision = operation.Revision, Kind = operation.Kind,
-                Key = operation.TargetKey, Label = operation.Label, X = operation.X,
-                Z = operation.Z, Phase = operation.Phase, Summary = operation.Summary,
-                GroundGroups = operation.GroundGroups, AirGroups = operation.AirGroups,
-                NavalGroups = operation.NavalGroups,
-            };
+            war.Published = body;
+            war.PublishedAt = Time.unscaledTime;
+            war.Posture = body.Posture;
         }
-
-        internal bool HasSnapshotFor(string faction) =>
-            wars.TryGetValue(faction, out FactionWar war) && war.HasSnapshot;
-
     }
 }

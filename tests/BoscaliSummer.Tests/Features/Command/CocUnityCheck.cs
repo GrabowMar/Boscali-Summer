@@ -148,57 +148,75 @@ public static class CocUnityCheck
     private sealed class WarStub : ITheaterWarView
     {
         private readonly WarMode mode;
+
+        private static TheaterFrontView Front(string key, string name, float x, float z, TheaterFrontStatus status, float pressure,
+            float trend, bool observed) => new TheaterFrontView
+        {
+            Key = key, Name = name, X = x, Z = z, Status = status, Pressure = pressure, Trend = trend, Observed = observed,
+            ObservedAgeSeconds = observed ? 0f : -1f,
+        };
+
+        private static TheaterProposalView Offer(int id, TheaterOpKind kind, string name, string key, float x, float z, TheaterRisk risk) =>
+            new TheaterProposalView { Id = id, Revision = 3, Kind = kind, Name = name, TargetKey = key, X = x, Z = z, Radius = 4000f, Risk = risk };
+
         public WarStub(WarMode mode)
         {
             this.mode = mode;
             bool rich = mode == WarMode.Rich, basic = mode == WarMode.Basic;
             Fronts = rich ? new[]
                 {
-                    new TheaterFrontView("ridge", "NORTH RIDGE", 1200f, 1700f, "IN CONTACT", .75f, .1f, true, 0f),
-                    new TheaterFrontView("harbor", "HARBOR RUMOR", float.NaN, float.NaN, "UNCONFIRMED", .2f, 0f, false, 45f),
-                    new TheaterFrontView("depot", "WEST DEPOT", -2000f, 900f, "UNDER PRESSURE", .62f, .05f, true, 0f),
-                    new TheaterFrontView("pass", "EASTERN PASS", 2800f, -600f, "HOLDING", .18f, -.05f, true, 0f),
-                    new TheaterFrontView("strip", "CAPTURE AIRSTRIP", -500f, -2200f, "UNCONFIRMED", 0f, 0f, false, -1f),
-                    new TheaterFrontView("f45", "FRONT -5/-4", -5000f, -4000f, "UNCONFIRMED", 0f, 0f, false, -1f),
-                    new TheaterFrontView("f81", "FRONT -8/-1", -8000f, -1000f, "UNDER PRESSURE", 1f, .1f, true, 0f),
+                    Front("ridge", "NORTH RIDGE", 1200f, 1700f, TheaterFrontStatus.InContact, .75f, .1f, true),
+                    Front("harbor", "HARBOR RUMOR", 0f, 0f, TheaterFrontStatus.Unconfirmed, 0f, 0f, false),
+                    Front("depot", "WEST DEPOT", -2000f, 900f, TheaterFrontStatus.UnderPressure, .62f, .05f, true),
+                    Front("pass", "EASTERN PASS", 2800f, -600f, TheaterFrontStatus.Holding, .18f, -.05f, true),
                 }
                 : basic ? new[]
                 {
-                    new TheaterFrontView("ridge", "NORTH RIDGE", 1200f, 1700f, "IN CONTACT", .75f, .1f, true, 0f),
-                    new TheaterFrontView("harbor", "HARBOR RUMOR", float.NaN, float.NaN, "UNCONFIRMED", .2f, 0f, false, 45f),
+                    Front("ridge", "NORTH RIDGE", 1200f, 1700f, TheaterFrontStatus.InContact, .75f, .1f, true),
+                    Front("harbor", "HARBOR RUMOR", 0f, 0f, TheaterFrontStatus.Unconfirmed, 0f, 0f, false),
                 }
                 : new TheaterFrontView[0];
             Proposals = rich ? new[]
                 {
-                    new TheaterProposalView(1, 3, "EXPLOIT", "NORTH RIDGE", "ridge", 1200f, 1700f,
-                        "Pressure is shifting toward the ridge; a combined push could take it before the line reforms.", "MEDIUM", "2 ground, 1 air", 38f),
-                    new TheaterProposalView(2, 3, "DEFEND", "HARBOR", "harbor", -1400f, -800f,
-                        "Reinforce the approach.", "LOW", "1 ground, 1 naval", 31f),
-                    new TheaterProposalView(3, 3, "ASSAULT", "WEST DEPOT", "depot", -2000f, 900f,
-                        "Depot garrison is thin but the road is covered by known air defence.", "HIGH", "MISSION FORCES", 12f),
+                    Offer(1, TheaterOpKind.Assault, "NORTH RIDGE", "ridge", 1200f, 1700f, TheaterRisk.Moderate),
+                    Offer(2, TheaterOpKind.Defend, "HARBOR", "harbor", -1400f, -800f, TheaterRisk.Unknown),
+                    Offer(3, TheaterOpKind.Assault, "WEST DEPOT", "depot", -2000f, 900f, TheaterRisk.High),
                 }
                 : basic ? new[]
                 {
-                    new TheaterProposalView(1, 3, "EXPLOIT", "NORTH RIDGE", "ridge", 1200f, 1700f, "Pressure is shifting.", "MEDIUM", "2 ground, 1 air", 38f),
-                    new TheaterProposalView(2, 3, "DEFEND", "HARBOR", "harbor", -1400f, -800f, "Reinforce the approach.", "LOW", "1 ground, 1 naval", 38f),
+                    Offer(1, TheaterOpKind.Assault, "NORTH RIDGE", "ridge", 1200f, 1700f, TheaterRisk.Moderate),
+                    Offer(2, TheaterOpKind.Defend, "HARBOR", "harbor", -1400f, -800f, TheaterRisk.Unknown),
                 }
                 : new TheaterProposalView[0];
             ActiveOperation = mode == WarMode.Rich || basic
-                ? new TheaterLiveOperationView(7, 3, "ASSAULT", "ridge", "NORTH RIDGE", 1200f, 1700f,
-                    "IN CONTACT", "Ground and air groups are pressing the ridge from two axes.", rich ? 7 : 2, rich ? 3 : 1, 0)
+                ? new TheaterOperationView
+                {
+                    Id = 7, Revision = 3, Kind = TheaterOpKind.Assault, TargetKey = "ridge", Name = "NORTH RIDGE", X = 1200f, Z = 1700f,
+                    OriginX = 1200f, OriginZ = 1700f, Radius = 4000f, Phase = TheaterPhase.InContact,
+                }
                 : null;
+            Snapshot = mode == WarMode.Unavailable ? null : new TheaterWarSnapshot
+            {
+                Faction = "BDF", Fronts = (TheaterFrontView[])Fronts, Proposals = (TheaterProposalView[])Proposals,
+                Operation = ActiveOperation, Log = new[] { "Ridge pressure rose." },
+            };
         }
 
         public bool Available => mode != WarMode.Unavailable;
+        public bool IsHost => false;
+        public TheaterViewState State => mode == WarMode.Unavailable ? TheaterViewState.StaffOff : TheaterViewState.Live;
+        public TheaterWarSnapshot Snapshot { get; }
         public bool CanCommand => mode != WarMode.Unavailable;
         public bool HasSnapshot => mode != WarMode.Unavailable;
         public float SnapshotAgeSeconds => 2f;
+        public float SecondsSincePublished => 2f;
+        public bool IsFresh => HasSnapshot;
         public bool CommandPending => false;
-        public string CommandStatus => "";
+        public TheaterCommandResult LastCommand => null;
         public TheaterWarPosture Posture => mode == WarMode.Rich ? TheaterWarPosture.Bold : TheaterWarPosture.Steady;
         public IReadOnlyList<TheaterFrontView> Fronts { get; }
         public IReadOnlyList<TheaterProposalView> Proposals { get; }
-        public TheaterLiveOperationView ActiveOperation { get; }
+        public TheaterOperationView ActiveOperation { get; }
         public IReadOnlyList<string> StaffLog { get; } = new[] { "Ridge pressure rose." };
         public void Refresh() { }
         public bool RequestPick(int proposalId, int revision) => true;

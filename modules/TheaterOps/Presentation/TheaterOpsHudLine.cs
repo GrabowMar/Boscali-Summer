@@ -51,34 +51,36 @@ namespace BoscaliSummer.Modules.TheaterOps.Presentation
             text = null;
             if (war == null || !war.Available) return false;
             war.Refresh();
+            TheaterCommandResult last = war.LastCommand;
             if (!war.HasSnapshot)
             {
-                bool unconfirmed = (war.CommandStatus ?? "").StartsWith("UNCONFIRMED", System.StringComparison.OrdinalIgnoreCase);
+                bool unconfirmed = last != null && last.Code == TheaterCommandCode.Unconfirmed;
                 text = unconfirmed ? "STAFF COMMAND UNCONFIRMED" : "WAITING FOR STAFF";
-                detail = unconfirmed ? war.CommandStatus : "Host faction report requested";
+                detail = unconfirmed ? TheaterWords.Command(last.Code, last.Detail, last.LockSeconds)
+                    : TheaterWords.ViewState(war.State, 0f);
                 tone = unconfirmed ? HudTone.Caution : HudTone.Info;
                 return true;
             }
-            if (war.SnapshotAgeSeconds > 15f)
+            if (war.State == TheaterViewState.Stale)
             {
                 text = "STALE STAFF REPORT";
-                detail = "Recovering host report · commands disabled";
+                detail = TheaterWords.ViewState(TheaterViewState.Stale, war.SnapshotAgeSeconds);
                 tone = HudTone.Caution;
                 return true;
             }
             if (war.CommandPending)
             {
                 text = "STAFF COMMAND PENDING";
-                detail = war.CommandStatus;
+                detail = "AWAITING HOST";
                 tone = HudTone.Info;
                 return true;
             }
-            TheaterLiveOperationView operation = war.ActiveOperation;
+            TheaterOperationView operation = war.ActiveOperation;
             if (operation != null)
             {
-                text = operation.Kind + " · " + operation.Label;
-                detail = operation.Phase + " · " + operation.Summary;
-                tone = operation.Phase == "IN CONTACT" ? HudTone.Caution : HudTone.Info;
+                text = TheaterWords.Kind(operation.Kind) + " · " + operation.Name;
+                detail = TheaterWords.Phase(operation.Phase, operation.PhaseNote);
+                tone = operation.Phase == TheaterPhase.InContact ? HudTone.Caution : HudTone.Info;
             }
             else if (war.Proposals.Count > 0)
             {

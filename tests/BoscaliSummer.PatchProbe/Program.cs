@@ -1040,6 +1040,8 @@ foreach (string type in new[] {
     "BoscaliSummer.Modules.TheaterOps.Domain.ReinforcementGatePolicy",
     "BoscaliSummer.Core.Contracts.ITheaterWarView",
     "BoscaliSummer.Core.Contracts.ITheaterAirStationView",
+    "BoscaliSummer.Core.Contracts.ITheaterWarHost",
+    "BoscaliSummer.Core.Contracts.ITheaterCensusSource",
     // S2 freeze: the cross-module doors that later slices implement.
     "BoscaliSummer.Core.Contracts.IOperationFocusSource",
     "BoscaliSummer.Core.Contracts.ISortieOutcomeSource",
@@ -1095,7 +1097,8 @@ foreach (var contract in new[] {
     ("BoscaliSummer.Modules.TheaterOps.Networking.TheaterPriorityQuery", new[] { "Protocol:System.Byte" }),
     ("BoscaliSummer.Modules.TheaterOps.Networking.LivingFrontQuery", new[] { "Protocol:System.Byte", "Session:System.Int32" }),
     ("BoscaliSummer.Modules.TheaterOps.Networking.LivingFrontIntent", new[] { "Protocol:System.Byte", "Kind:System.Byte", "Posture:System.Byte", "Id:System.Int32", "Revision:System.Int32", "RequestId:System.Int32", "Session:System.Int32", "HostEpoch:System.Int32" }),
-    ("BoscaliSummer.Modules.TheaterOps.Networking.LivingFrontSnapshot", new[] { "Protocol:System.Byte", "Posture:System.Byte", "HasSnapshot:System.Boolean", "Session:System.Int32", "HostEpoch:System.Int32", "Faction:System.String", "Fronts:BoscaliSummer.Core.Contracts.TheaterFrontView[]", "Proposals:BoscaliSummer.Core.Contracts.TheaterProposalView[]", "Operation:BoscaliSummer.Core.Contracts.TheaterLiveOperationView", "Log:System.String[]" }),
+    ("BoscaliSummer.Modules.TheaterOps.Networking.LivingFrontResult", new[] { "Protocol:System.Byte", "Faction:System.String", "RequestId:System.Int32", "Code:System.Byte", "Detail:System.String", "LockSeconds:System.Single", "Session:System.Int32", "HostEpoch:System.Int32" }),
+    ("BoscaliSummer.Modules.TheaterOps.Networking.LivingFrontSnapshot", new[] { "Protocol:System.Byte", "HasSnapshot:System.Boolean", "Session:System.Int32", "HostEpoch:System.Int32", "Faction:System.String", "Body:BoscaliSummer.Core.Contracts.TheaterWarSnapshot" }),
     ("BoscaliSummer.Modules.Comms.Networking.CommsUpMessage", new[] { "Protocol:System.Byte", "Op:System.Byte", "Channel:System.Byte", "Kind:System.Byte", "Style:System.Byte", "Size:System.Byte", "Target:System.UInt32", "Points:System.Int32[]", "Text:System.String", "Items:System.String[]" }),
     ("BoscaliSummer.Modules.Comms.Networking.CommsDownMessage", new[] { "Protocol:System.Byte", "Event:System.Byte", "Id:System.UInt32", "Author:System.UInt64", "AuthorName:System.String", "Faction:System.Int32", "Channel:System.Byte", "Kind:System.Byte", "Style:System.Byte", "Size:System.Byte", "Flags:System.Byte", "Ttl:System.Single", "Points:System.Int32[]", "Text:System.String", "Items:System.String[]", "Values:System.Int32[]", "Players:System.UInt64[]", "Ids:System.UInt32[]" }),
     ("BoscaliSummer.Modules.Weather.Networking.WeatherSyncMessage", new[] { "Protocol:System.Byte", "TargetConditions:System.Single", "TargetCloudHeight:System.Single", "TargetWindX:System.Single", "TargetWindZ:System.Single", "TargetTurbulence:System.Single", "MissionTimeSeconds:System.UInt32", "ForcedRain:System.Single", "FieldSeed:System.UInt32", "FieldStory:System.Byte", "FieldSkyPin:System.Byte", "FieldSalt:System.Byte", "FieldMissionClass:System.Byte", "FieldOpeningBase:System.Single", "FieldHeading:System.Single", "FieldEpoch:System.Single", "FieldOffset:System.Single", "FieldSystemSpeed:System.Single", "FieldDynamic:System.Boolean", "FieldManual:System.Boolean", "FieldSets:System.Byte", "FieldHasAnchor:System.Boolean", "FieldAnchorX:System.Single", "FieldAnchorZ:System.Single", "FieldSetOriginSquall:System.Single", "FieldSetOriginSupercell:System.Single", "FieldSetOriginCell:System.Single" }),
@@ -2294,40 +2297,310 @@ static void ProbeTheaterOpsSerialization(Assembly plugin, Assembly mirage)
         (byte)Get(Decode(stateType, new byte[] { 9 }), "Active") != 0)
         throw new InvalidOperationException("TheaterOps did not reject an unknown state header");
 
+    // ---- Living Front protocol 3 (spec 6.1): one body, built by reflection so a renamed field fails here.
     Type livingNet = plugin.GetType("BoscaliSummer.Modules.TheaterOps.Networking.LivingFrontNet", true)!;
-    if ((byte)livingNet.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 2)
+    if ((byte)livingNet.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 3)
         throw new InvalidOperationException("Living Front protocol changed without updating its probe");
     livingNet.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
-    Type livingQueryType = plugin.GetType("BoscaliSummer.Modules.TheaterOps.Networking.LivingFrontQuery", true)!;
+    string netNs = "BoscaliSummer.Modules.TheaterOps.Networking.";
+    Type livingQueryType = plugin.GetType(netNs + "LivingFrontQuery", true)!;
     object livingQuery = Activator.CreateInstance(livingQueryType)!;
-    Set(livingQuery, "Protocol", (byte)2); Set(livingQuery, "Session", 5);
+    Set(livingQuery, "Protocol", (byte)3); Set(livingQuery, "Session", 5);
     Roundtrip(livingQueryType, livingQuery, "living query");
-    Type livingIntentType = plugin.GetType("BoscaliSummer.Modules.TheaterOps.Networking.LivingFrontIntent", true)!;
+    Type livingIntentType = plugin.GetType(netNs + "LivingFrontIntent", true)!;
     object livingIntent = Activator.CreateInstance(livingIntentType)!;
-    Set(livingIntent, "Protocol", (byte)2); Set(livingIntent, "RequestId", 11); Set(livingIntent, "Session", 5); Set(livingIntent, "HostEpoch", 3); Set(livingIntent, "Kind", (byte)0);
+    Set(livingIntent, "Protocol", (byte)3); Set(livingIntent, "RequestId", 11); Set(livingIntent, "Session", 5); Set(livingIntent, "HostEpoch", 3); Set(livingIntent, "Kind", (byte)0);
     Set(livingIntent, "Posture", (byte)0); Set(livingIntent, "Id", 7);
     Set(livingIntent, "Revision", 4);
     Roundtrip(livingIntentType, livingIntent, "living intent");
-    Type frontType = plugin.GetType("BoscaliSummer.Core.Contracts.TheaterFrontView", true)!;
-    object front = Activator.CreateInstance(frontType, new object[]
-        { "sector-1", "NORTH FRONT", 123f, 456f, "IN CONTACT", .6f, .2f, true, 0f })!;
-    Array frontArray = Array.CreateInstance(frontType, 1);
-    frontArray.SetValue(front, 0);
-    Type livingSnapshotType = plugin.GetType("BoscaliSummer.Modules.TheaterOps.Networking.LivingFrontSnapshot", true)!;
-    object livingSnapshot = Activator.CreateInstance(livingSnapshotType)!;
-    Set(livingSnapshot, "Protocol", (byte)2); Set(livingSnapshot, "HasSnapshot", true); Set(livingSnapshot, "Session", 5); Set(livingSnapshot, "HostEpoch", 3); Set(livingSnapshot, "Posture", (byte)1);
-    Set(livingSnapshot, "Faction", "Coalition"); Set(livingSnapshot, "Fronts", frontArray);
-    Set(livingSnapshot, "Proposals", Array.CreateInstance(
-        plugin.GetType("BoscaliSummer.Core.Contracts.TheaterProposalView", true)!, 0));
-    Set(livingSnapshot, "Log", new[] { "CONTACT NORTH" });
-    object livingDecoded = Decode(livingSnapshotType, Encode(livingSnapshotType, livingSnapshot));
-    if ((string)Get(livingDecoded, "Faction") != "Coalition" ||
-        ((Array)Get(livingDecoded, "Fronts")).Length != 1 ||
-        ((string[])Get(livingDecoded, "Log"))[0] != "CONTACT NORTH")
-        throw new InvalidOperationException("Living Front snapshot did not roundtrip");
 
+    Type snapshotType = plugin.GetType(netNs + "LivingFrontSnapshot", true)!;
+    Type resultType = plugin.GetType(netNs + "LivingFrontResult", true)!;
+    Type CT(string name) => plugin.GetType("BoscaliSummer.Core.Contracts." + name, true)!;
+    object New(string name) => Activator.CreateInstance(CT(name))!;
+    object En(string name, int value) => Enum.ToObject(CT(name), value);
+    Array Arr(string name, params object[] items)
+    {
+        Array array = Array.CreateInstance(CT(name), items.Length);
+        for (int i = 0; i < items.Length; i++) array.SetValue(items[i], i);
+        return array;
+    }
+    void SetAll(object target, params object[] pairs) { for (int i = 0; i < pairs.Length; i += 2) Set(target, (string)pairs[i], pairs[i + 1]); }
+    void Same(object a, object b, string path)
+    {
+        if (a == null || b == null) { if (a != b) throw new InvalidOperationException("Living Front " + path + " changed: null"); return; }
+        Type t = a.GetType();
+        if (t.IsPrimitive || t.IsEnum || t == typeof(string))
+        {
+            if (!Equals(a, b)) throw new InvalidOperationException("Living Front " + path + " changed: " + a + " -> " + b);
+            return;
+        }
+        if (a is Array xa)
+        {
+            Array xb = (Array)b;
+            if (xa.Length != xb.Length) throw new InvalidOperationException("Living Front " + path + " length changed");
+            for (int i = 0; i < xa.Length; i++) Same(xa.GetValue(i), xb.GetValue(i), path + "[" + i + "]");
+            return;
+        }
+        foreach (FieldInfo f in t.GetFields(BindingFlags.Public | BindingFlags.Instance)) Same(f.GetValue(a), f.GetValue(b), path + "." + f.Name);
+        foreach (PropertyInfo p in t.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            if (p.GetIndexParameters().Length == 0) Same(p.GetValue(a), p.GetValue(b), path + "." + p.Name);
+    }
+    object Front(int i, string name = null, float x = float.NaN)
+    {
+        object f = New("TheaterFrontView");
+        SetAll(f, "Key", "sector:" + i, "Name", name ?? "FRONT " + i, "X", float.IsNaN(x) ? 1000f * i : x, "Z", -500f * i, "Pressure", .1f * i, "Trend", .1f * i - .4f,
+            "ObservedAgeSeconds", i % 2 == 0 ? 0f : 45f, "Status", En("TheaterFrontStatus", i % 4), "Observed", i % 2 == 0,
+            "Objective", (i & 2) != 0, "Held", (i & 4) != 0, "NearFriendly", (byte)i, "NearHostile", (byte)(i + 1), "Carriers", (byte)254);
+        return f;
+    }
+    object Proposal(int i)
+    {
+        object p = New("TheaterProposalView");
+        SetAll(p, "Id", i + 1, "Revision", 3, "Kind", En("TheaterOpKind", i % 3), "Name", "PROPOSAL " + i, "TargetKey", "key:" + i, "X", 100f * i, "Z", -100f * i,
+            "Radius", 4000f, "Pressure", .3f * i, "Risk", En("TheaterRisk", i % 3), "Carrier", En("TheaterCarrier", i % 3),
+            "FriendlyGround", (byte)(3 + i), "FriendlyOther", (byte)255, "HostileTracked", (byte)i, "Recommended", i == 0);
+        return p;
+    }
+    object Operation(int marks = 8)
+    {
+        object forces = New("TheaterForcesView");
+        object[] list = new object[marks];
+        for (int i = 0; i < marks; i++) { list[i] = New("TheaterForceMark"); SetAll(list[i], "X", 100f * i, "Z", -50f * i, "Stage", (byte)(i % 6), "Alive", (byte)(i % 7)); }
+        SetAll(forces, "Groups", (byte)4, "Vehicles", (byte)11, "Formed", (byte)12, "Rally", (byte)1, "Line", (byte)1, "Assault", (byte)1, "Contact", (byte)1, "Withdraw", (byte)0,
+            "Moving", (byte)5, "Steered", (byte)6, "OnSlot", (byte)3, "Stalled", (byte)192, "EtaSeconds", (ushort)3600, "NearestToFixMeters", 8200f,
+            "Marks", Arr("TheaterForceMark", list));
+        object op = New("TheaterOperationView");
+        SetAll(op, "Id", 7, "Revision", 3, "Kind", En("TheaterOpKind", 1), "TargetKey", "key:op", "Name", "PORT AURELIA", "X", 1200f, "Z", 1700f, "OriginX", -3000f, "OriginZ", 900f,
+            "Radius", 4000f, "Phase", En("TheaterPhase", 3), "PhaseNote", En("TheaterPhaseNote", 2), "ElapsedSeconds", 95f, "LimitSeconds", 600f, "Progress", .42f, "Forces", forces,
+            "PickedBy", "VIPER 1-1", "PickedById", 76561198000000001UL, "PickedByStaff", true, "LockSeconds", 118f);
+        return op;
+    }
+    object Wave(int ws = 1, int block = 8, int credits = 2, int perWave = 3, int cost = 1850, int pool = 7400, float depotX = 12500f, bool depotKnown = true, int bought = 5, float lastAgo = 120f) =>
+        Activator.CreateInstance(CT("TheaterWaveView"), En("WaveState", ws), En("WaveBlock", block), credits, perWave, "TARANTULA COLUMN", cost, pool, 20, bought, lastAgo, depotKnown, depotX, -6750f)!;
+    object Outcome(int seq = 4, int credits = 3) => Activator.CreateInstance(CT("TheaterOutcomeView"), seq, "SORTIE COMPLETE", "VIPER 1-1", 4242.5f, -300f, true, false, credits)!;
+    object Census()
+    {
+        object c = New("TheaterCensus");
+        SetAll(c, "Known", true, "AirFriendly", (short)12, "AirParked", (short)3, "AirHostileTracked", (short)2, "GroundFriendly", (short)40, "GroundHostileTracked", (short)22,
+            "ShipsFriendly", (short)1, "ShipsHostileTracked", (short)0, "BasesFriendly", (short)4, "BasesHostile", (short)3, "BasesNeutral", (short)1, "BasesContested", (short)2, "Radars", (short)6,
+            "SectorsFriendly", (short)30, "SectorsHostile", (short)25, "SectorsContested", (short)9, "SectorsNeutral", (short)2, "SortieCap", (short)3, "SortieSead", (short)1,
+            "SortieCas", (short)2, "SortieStrike", (short)1, "SortieTransit", (short)0, "FrontMetres", 130000f, "Threat", (byte)3, "ThreatWhy", En("TheaterThreatWhy", 4));
+        return c;
+    }
+    object Body(int fronts = 8, int proposals = 3, bool operation = true, bool wave = true, bool result = true, bool outcome = true, int marks = 8)
+    {
+        object body = New("TheaterWarSnapshot");
+        object[] f = new object[fronts], p = new object[proposals];
+        for (int i = 0; i < fronts; i++) f[i] = Front(i, i == 0 ? new string('N', 32) : null, i == 0 ? 1234.5f : float.NaN);
+        for (int i = 0; i < proposals; i++) p[i] = Proposal(i);
+        object last = New("TheaterResultView");
+        SetAll(last, "OperationId", 6, "Kind", En("TheaterOpKind", 0), "Name", "HARBOR", "Outcome", En("TheaterOutcome", 1), "Why", En("TheaterWhy", 11), "AgeSeconds", 300f, "Funds", 150, "Morale", -4);
+        SetAll(body, "Faction", "Coalition", "Posture", En("TheaterWarPosture", 2), "Caps", En("TheaterCaps", 0x1FF), "Reason", En("TheaterEmptyReason", 16), "ReasonSeconds", 12f, "SensedAgeSeconds", 3f,
+            "StaffPickSeconds", 44f, "GroundReason", En("GroundReason", 7), "Fronts", Arr("TheaterFrontView", f), "Proposals", Arr("TheaterProposalView", p),
+            "Operation", operation ? Operation(marks) : null, "Wave", wave ? Wave(depotX: 777.25f) : null, "LastResult", result ? last : null,
+            "LastOutcome", outcome ? Outcome() : null, "Census", Census(),
+            "Log", new[] { "L1", "L2", "L3", "L4", "L5", "L6", "L7", new string('G', 64) });
+        return body;
+    }
+    object WithWave(object body, object wave) { Set(body, "Wave", wave); return body; }
+    object Header(object body, byte protocol = 3, bool has = true)
+    {
+        object h = Activator.CreateInstance(snapshotType)!;
+        SetAll(h, "Protocol", protocol, "HasSnapshot", has, "Session", 5, "HostEpoch", 3, "Faction", "Coalition", "Body", body);
+        return h;
+    }
+    byte[] Wire(object body) => Encode(snapshotType, Header(body));
+    bool Accepted(byte[] bytes) => (byte)Get(Decode(snapshotType, bytes), "Protocol") == 3;
+    void Refused(byte[] bytes, string what)
+    {
+        if (Accepted(bytes)) throw new InvalidOperationException("Living Front accepted " + what);
+    }
+    int Find(byte[] data, byte[] pattern)
+    {
+        for (int i = 0; i + pattern.Length <= data.Length; i++)
+        {
+            int k = 0;
+            while (k < pattern.Length && data[i + k] == pattern[k]) k++;
+            if (k == pattern.Length) return i;
+        }
+        throw new InvalidOperationException("Living Front probe could not find a marker in the wire");
+    }
+    int FirstDiff(byte[] a, byte[] b)
+    {
+        for (int i = 0; i < Math.Min(a.Length, b.Length); i++) if (a[i] != b[i]) return i;
+        throw new InvalidOperationException("Living Front probe found no difference");
+    }
+    byte[] Patched(byte[] data, int index, byte value) { byte[] copy = (byte[])data.Clone(); copy[index] = value; return copy; }
+    MethodInfo[] writerExt = mirage.GetTypes().Where(t => t.IsAbstract && t.IsSealed)
+        .SelectMany(t => t.GetMethods(flags)).Where(m => m.IsStatic && m.GetParameters().Length == 2 && m.GetParameters()[0].ParameterType == writerType).ToArray();
+    byte[] WriteString(string text)
+    {
+        object w = Activator.CreateInstance(writerType, 256)!;
+        MethodInfo own = writerType.GetMethods(flags).FirstOrDefault(m => m.Name == "WriteString" && m.GetParameters().Length == 1);
+        if (own != null) own.Invoke(w, new object[] { text });
+        else writerExt.First(m => m.Name == "WriteString").Invoke(null, new object[] { w, text });
+        return (byte[])writerType.GetMethod("ToArray")!.Invoke(w, null)!;
+    }
+    // One more character in the string that holds `marker`: a well-formed wire the writer (which clips) could never produce.
+    byte[] Lengthen(byte[] data, string marker)
+    {
+        int w = WriteString(marker).Length - marker.Length;
+        long length = 0;
+        byte[] enc = WriteString(marker);
+        for (int i = w - 1; i >= 0; i--) length = (length << 8) | enc[i];
+        int at = Find(data, System.Text.Encoding.UTF8.GetBytes(marker));
+        byte[] output = new byte[data.Length + 1];
+        Array.Copy(data, output, at);
+        length++;
+        for (int i = 0; i < w; i++) output[at - w + i] = (byte)(length >> (8 * i));
+        output[at + marker.Length] = (byte)marker[0];
+        Array.Copy(data, at + marker.Length, output, at + marker.Length + 1, data.Length - at - marker.Length);
+        return output;
+    }
+
+    // Full snapshot: every enum, every flag, 8 fronts, 3 proposals, an operation with 8 marks, wave, result, outcome, census, 8 log lines.
+    object fullBody = Body();
+    object fullHeader = Header(fullBody);
+    object decodedHeader = Decode(snapshotType, Encode(snapshotType, fullHeader));
+    Same(Get(fullHeader, "Body"), Get(decodedHeader, "Body"), "Body");
+    if ((string)Get(Get(decodedHeader, "Body"), "Faction") != "Coalition" || (int)Get(decodedHeader, "Session") != 5 || (int)Get(decodedHeader, "HostEpoch") != 3)
+        throw new InvalidOperationException("Living Front header did not roundtrip");
+    // Informational numbers are clamped, never trusted.
+    object clamped = Decode(snapshotType, Wire(WithWave(Body(), Wave(pool: 5000000, cost: -50, bought: 20000, lastAgo: float.NaN))));
+    object clampedWave = Get(Get(clamped, "Body"), "Wave");
+    if ((int)clampedWave.GetType().GetProperty("Pool")!.GetValue(clampedWave)! != 1000000 || (int)clampedWave.GetType().GetProperty("Cost")!.GetValue(clampedWave)! != -1 ||
+        (int)clampedWave.GetType().GetProperty("Bought")!.GetValue(clampedWave)! != 10000 || (float)clampedWave.GetType().GetProperty("LastBoughtAgo")!.GetValue(clampedWave)! != -1f)
+        throw new InvalidOperationException("Living Front wave numbers were not clamped");
+    // A snapshot nobody has measured: every unknown encoding comes back as the same sentinel.
+    object unknownBody = New("TheaterWarSnapshot");
+    Set(unknownBody, "Faction", "Coalition");
+    Set(unknownBody, "Fronts", Arr("TheaterFrontView", Front(1)));
+    object unobserved = ((Array)Get(unknownBody, "Fronts")).GetValue(0)!;
+    SetAll(unobserved, "Observed", false, "ObservedAgeSeconds", -1f, "NearHostile", (byte)255, "Pressure", 0f, "Trend", 0f);
+    object bare = Operation(0);
+    Set(bare, "Forces", New("TheaterForcesView"));
+    Set(bare, "Progress", -1f);
+    Set(unknownBody, "Operation", bare);
+    object unknownBack = Get(Decode(snapshotType, Wire(unknownBody)), "Body");
+    Same(unknownBody, unknownBack, "Unknown");
+    object unknownForces = Get(Get(unknownBack, "Operation"), "Forces");
+    object unknownCensus = Get(unknownBack, "Census");
+    if ((byte)Get(unknownForces, "Groups") != 255 || (ushort)Get(unknownForces, "EtaSeconds") != 65535 || (float)Get(unknownForces, "NearestToFixMeters") != -1f ||
+        (bool)Get(unknownCensus, "Known") || (short)Get(unknownCensus, "AirFriendly") != -1 || (float)Get(((Array)Get(unknownBack, "Fronts")).GetValue(0)!, "ObservedAgeSeconds") != -1f ||
+        (float)Get(unknownBack, "StaffPickSeconds") != -1f || Convert.ToInt32(Get(unknownBack, "GroundReason")) != 255 || (byte)Get(((Array)Get(unknownBack, "Fronts")).GetValue(0)!, "NearHostile") != 255)
+        throw new InvalidOperationException("Living Front unknown encodings changed");
+    // No snapshot yet: the header alone.
+    object empty = Decode(snapshotType, Encode(snapshotType, Header(null, has: false)));
+    if ((bool)Get(empty, "HasSnapshot") || Get(empty, "Body") != null || (byte)Get(empty, "Protocol") != 3)
+        throw new InvalidOperationException("Living Front empty snapshot changed");
+    // Result: every command code.
+    for (int code = 0; code <= 9; code++)
+    {
+        object result = Activator.CreateInstance(resultType)!;
+        SetAll(result, "Protocol", (byte)3, "Faction", "Coalition", "RequestId", 11, "Code", (byte)code, "Detail", "VIPER 1-1", "LockSeconds", 30f, "Session", 5, "HostEpoch", 3);
+        Roundtrip(resultType, result, "living result " + code);
+    }
+    object ResultWith(string field, object value)
+    {
+        object result = Activator.CreateInstance(resultType)!;
+        SetAll(result, "Protocol", (byte)3, "Faction", "Coalition", "RequestId", 11, "Code", (byte)1, "Detail", "VIPER 1-1", "LockSeconds", 30f, "Session", 5, "HostEpoch", 3);
+        Set(result, field, value);
+        return result;
+    }
+    bool ResultOk(object result) => (byte)Get(Decode(resultType, Encode(resultType, result)), "Protocol") == 3;
+    foreach (object bad in new[] { ResultWith("Code", (byte)10), ResultWith("LockSeconds", float.NaN), ResultWith("LockSeconds", -1f), ResultWith("LockSeconds", 121f),
+        ResultWith("RequestId", 0), ResultWith("Session", 0), ResultWith("HostEpoch", 0), ResultWith("Faction", "") })
+        if (ResultOk(bad)) throw new InvalidOperationException("Living Front accepted a bad result");
+    byte[] okLong = Lengthen(Encode(resultType, ResultWith("Detail", new string('D', 20))), new string('D', 20));
+    if ((byte)Get(Decode(resultType, okLong), "Protocol") != 3 || ((string)Get(Decode(resultType, okLong), "Detail")).Length != 21)
+        throw new InvalidOperationException("Living Front probe cannot lengthen a string");
+    if ((byte)Get(Decode(resultType, Lengthen(Encode(resultType, ResultWith("Detail", new string('D', 24))), new string('D', 24))), "Protocol") != 0)
+        throw new InvalidOperationException("Living Front accepted a 25-character result detail");
+
+    // Protocol 2 and a truncated payload.
+    Refused(Encode(snapshotType, Header(fullBody, protocol: 2)), "a protocol 2 payload");
+    byte[] full = Encode(snapshotType, fullHeader);
+    if (!Accepted(full)) throw new InvalidOperationException("Living Front probe control failed");
+    Refused(full.Take(full.Length / 2).ToArray(), "a truncated payload");
+    Refused(full.Take(full.Length - 1).ToArray(), "a payload one byte short");
+
+    // Structural violations written through the object path (the writer passes these bytes as they are).
+    void Bad(string what, Action<object> mutate)
+    {
+        object body = Body();
+        mutate(body);
+        Refused(Wire(body), what);
+    }
+    object Front0(object body) => ((Array)Get(body, "Fronts")).GetValue(0)!;
+    object Proposal0(object body) => ((Array)Get(body, "Proposals")).GetValue(0)!;
+    object Forces(object body) => Get(Get(body, "Operation"), "Forces");
+    object Mark0(object body) => ((Array)Get(Forces(body), "Marks")).GetValue(0)!;
+    void CensusSet(object body, string field, object value) { object c = Get(body, "Census"); Set(c, field, value); Set(body, "Census", c); }
+    Bad("NaN pressure", b => Set(Front0(b), "Pressure", float.NaN));
+    Bad("pressure 1.5", b => Set(Front0(b), "Pressure", 1.5f));
+    Bad("front status 4", b => Set(Front0(b), "Status", En("TheaterFrontStatus", 4)));
+    Bad("an empty front key", b => Set(Front0(b), "Key", ""));
+    Bad("a non-finite front coordinate", b => Set(Front0(b), "X", float.PositiveInfinity));
+    Bad("carrier 3", b => Set(Proposal0(b), "Carrier", En("TheaterCarrier", 3)));
+    Bad("kind 3", b => Set(Proposal0(b), "Kind", En("TheaterOpKind", 3)));
+    Bad("risk 3", b => Set(Proposal0(b), "Risk", En("TheaterRisk", 3)));
+    Bad("proposal id 0", b => Set(Proposal0(b), "Id", 0));
+    Bad("threat 6", b => CensusSet(b, "Threat", (byte)6));
+    Bad("threat reason 7", b => CensusSet(b, "ThreatWhy", En("TheaterThreatWhy", 7)));
+    Bad("a census count of 16385", b => CensusSet(b, "Radars", (short)16385));
+    Bad("reason 17", b => Set(b, "Reason", En("TheaterEmptyReason", 17)));
+    Bad("posture 3", b => Set(b, "Posture", En("TheaterWarPosture", 3)));
+    Bad("caps 0x200", b => Set(b, "Caps", En("TheaterCaps", 0x200)));
+    Bad("why 12", b => Set(Get(b, "LastResult"), "Why", En("TheaterWhy", 12)));
+    Bad("outcome 0", b => Set(Get(b, "LastResult"), "Outcome", En("TheaterOutcome", 0)));
+    Bad("morale 11", b => Set(Get(b, "LastResult"), "Morale", 11));
+    Bad("ground reason 8", b => Set(b, "GroundReason", En("GroundReason", 8)));
+    Bad("ground reason 254", b => Set(b, "GroundReason", En("GroundReason", 254)));
+    Bad("groups 33", b => Set(Forces(b), "Groups", (byte)33));
+    Bad("vehicles 193", b => Set(Forces(b), "Vehicles", (byte)193));
+    Bad("stalled 193", b => Set(Forces(b), "Stalled", (byte)193));
+    Bad("eta 3601", b => Set(Forces(b), "EtaSeconds", (ushort)3601));
+    Bad("stage 6", b => Set(Mark0(b), "Stage", (byte)6));
+    Bad("alive 7", b => Set(Mark0(b), "Alive", (byte)7));
+    Bad("a NaN distance", b => Set(Forces(b), "NearestToFixMeters", float.NaN));
+    Bad("a non-finite mark", b => Set(Mark0(b), "X", float.PositiveInfinity));
+    Bad("lock 121", b => Set(Get(b, "Operation"), "LockSeconds", 121f));
+    Bad("phase 7", b => Set(Get(b, "Operation"), "Phase", En("TheaterPhase", 7)));
+    Bad("a wave state 3", b => Set(b, "Wave", Wave(ws: 3)));
+    Bad("a wave block 9", b => Set(b, "Wave", Wave(block: 9)));
+    Bad("7 wave credits", b => Set(b, "Wave", Wave(credits: 7)));
+    Bad("0 credits per wave", b => Set(b, "Wave", Wave(perWave: 0)));
+    Bad("10 credits per wave", b => Set(b, "Wave", Wave(perWave: 10)));
+    Bad("a non-finite depot", b => Set(b, "Wave", Wave(depotX: float.NaN)));
+    Bad("a wave switched off with a short pool", b => Set(b, "Wave", Wave(ws: 0, block: 8)));
+    Bad("a blocked wave with no block", b => Set(b, "Wave", Wave(ws: 2, block: 0)));
+    Bad("outcome seq 0", b => Set(b, "LastOutcome", Outcome(seq: 0)));
+    Bad("outcome credits 7", b => Set(b, "LastOutcome", Outcome(credits: 7)));
+    if (!Accepted(Wire(WithWave(Body(), Wave(ws: 0, block: 1))))) throw new InvalidOperationException("Living Front refused a wave that is switched off");
+
+    // Structural violations that need hand-edited wire.
+    byte[] Fronts1() => Wire(Body(fronts: 1, proposals: 0, operation: false, wave: false, result: false, outcome: false));
+    byte[] Fronts0() => Wire(Body(fronts: 0, proposals: 0, operation: false, wave: false, result: false, outcome: false));
+    Refused(Patched(Fronts1(), FirstDiff(Fronts0(), Fronts1()), 9), "a 9th front");
+    byte[] Props1() => Wire(Body(fronts: 0, proposals: 1, operation: false, wave: false, result: false, outcome: false));
+    Refused(Patched(Props1(), FirstDiff(Fronts0(), Props1()), 4), "a 4th proposal");
+    byte[] Marks1() => Wire(Body(fronts: 0, proposals: 0, operation: true, wave: false, result: false, outcome: false, marks: 1));
+    byte[] Marks0() => Wire(Body(fronts: 0, proposals: 0, operation: true, wave: false, result: false, outcome: false, marks: 0));
+    Refused(Patched(Marks1(), FirstDiff(Marks0(), Marks1()), 9), "a 9th mark");
+    int frontX = Find(full, BitConverter.GetBytes(1234.5f));
+    Refused(Patched(full, frontX + 21, 0x80), "a front with flag bit 7");
+    object shortName = Body();
+    Set(Front0(shortName), "Name", new string('M', 30));
+    if (!Accepted(Lengthen(Wire(shortName), new string('M', 30)))) throw new InvalidOperationException("Living Front probe cannot lengthen a front name");
+    Refused(Lengthen(full, new string('N', 32)), "a 33-character front name");
+    byte[] withWave = Wire(Body());
+    byte[] withoutWave = Wire(WithWave(Body(), null));
+    Refused(Patched(withWave, FirstDiff(withoutWave, withWave), 2), "wave present 2");
+    Refused(Patched(withWave, Find(withWave, BitConverter.GetBytes(777.25f)) - 1, 2), "depot known 2");
+    Refused(Patched(withWave, Find(withWave, BitConverter.GetBytes(4242.5f)) + 8, 2), "counted 2");
     Console.WriteLine("  TheaterOps protocol-3 serializers: query, active priority, clear sentinel, unknown-header rejection");
-    Console.WriteLine("  Living Front protocol-2 serializers: faction snapshot, front, query, and validated intent roundtrip");
+    Console.WriteLine("  Living Front protocol-3 serializers: full snapshot, every result code, unknown encodings, clamps, refusals through the object path and hand-edited wire, query, intent");
 }
 
 sealed class ProbeSignatureNames : ISignatureTypeProvider<string, object>

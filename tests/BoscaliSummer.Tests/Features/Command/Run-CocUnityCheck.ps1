@@ -30,6 +30,7 @@ Copy-Item -LiteralPath `
     "$repo/Core/Contracts/IActiveEventsView.cs", `
     "$repo/Core/Contracts/ITheaterStrikePicture.cs", `
     "$repo/Core/Contracts/ITheaterWarView.cs", `
+    "$repo/Core/Contracts/TheaterWords.cs", `
     "$repo/Core/Contracts/ITerritoryIngress.cs", `
     "$repo/Core/Contracts/IThreatPicture.cs", `
     "$PSScriptRoot/SettingsUnityStubs.cs", `

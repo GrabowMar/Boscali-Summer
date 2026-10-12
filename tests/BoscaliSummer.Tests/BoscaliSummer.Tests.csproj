@@ -154,6 +154,7 @@
     <Compile Include="..\..\modules\HighCommand\Domain\SeedStream.cs" Link="Features\HighCommand\SeedStream.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\PriorityDirective.cs" Link="Features\TheaterOps\PriorityDirective.cs" />
     <Compile Include="..\..\Core\Contracts\ITheaterWarView.cs" Link="Framework\ITheaterWarView.cs" />
+    <Compile Include="..\..\Core\Contracts\TheaterWords.cs" Link="Framework\TheaterWords.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\LivingWarRules.cs" Link="Features\TheaterOps\LivingWarRules.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\NavalTask.cs" Link="Features\TheaterOps\NavalTask.cs" />
     <Compile Include="..\..\modules\AirSurvival\Domain\AirStationPolicy.cs" Link="Features\AirSurvival\AirStationPolicy.cs" />
