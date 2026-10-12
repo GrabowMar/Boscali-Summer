@@ -1965,6 +1965,10 @@ static void ProbeTacBoardConfig(Assembly plugin)
         object[] changed = Values(settings);
         for (int i = 0; i < options.Length; i++)
             if (Equals(changed[i], defaults[i])) throw new InvalidOperationException("TAC BOARD probe could not move " + options[i].Name + " off its default");
+        // the moved values must really be on disk before the reset: a file nobody wrote reads back as the defaults, which would let the "saved" check below pass on its own
+        object[] onDisk = Values(Activator.CreateInstance(settingsType, Activator.CreateInstance(configFile, path, true))!);
+        for (int i = 0; i < options.Length; i++)
+            if (!Equals(onDisk[i], changed[i])) throw new InvalidOperationException("TAC BOARD probe: the moved " + options[i].Name + " was not saved (file has " + onDisk[i] + ", set " + changed[i] + ")");
         contract.GetMethod("ResetToDefaults")!.Invoke(settings, null);
         object[] reset = Values(settings);
         object[] saved = Values(Activator.CreateInstance(settingsType, Activator.CreateInstance(configFile, path, true))!);

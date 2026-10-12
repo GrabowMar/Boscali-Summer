@@ -100,15 +100,15 @@ namespace BoscaliSummer.Modules.Hud.Configuration
                     new AcceptableValueRange<float>(BoardOptions.HoldMin, BoardOptions.HoldMax)));
 
             PageMinSeconds = config.Bind(section, "PageMinSeconds", d.PageMinSeconds,
-                new ConfigDescription("Minimum seconds a page stays on the scope once it has appeared." + live,
+                new ConfigDescription("Minimum seconds a page holds the board's page area once it has appeared; the SYSTEMS page is exempt." + live,
                     new AcceptableValueRange<float>(0f, BoardOptions.DwellMax)));
 
             ShowLamps = config.Bind(section, "ShowLamps", d.ShowLamps,
                 "Show the lamp row: the aircraft's switch states and the threat lamps." + live);
             ShowSystemsStrip = config.Bind(section, "ShowSystemsStrip", d.ShowSystemsStrip,
-                "Show the compact systems strip the scope falls back to in cruise." + live);
+                "Show the compact systems strip the page area falls back to in cruise; it needs the SYSTEMS page." + live);
             ShowGauges = config.Bind(section, "ShowGauges", d.ShowGauges,
-                "Show the gauge row under the scope." + live);
+                "Show the gauge row under the board's page area." + live);
             ShowTicker = config.Bind(section, "ShowTicker", d.ShowTicker,
                 "Show the notice line at the foot of the board." + live);
 

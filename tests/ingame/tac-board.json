@@ -1,9 +1,30 @@
 {
+  "_note": "The TAC BOARD in the cockpit: cruise, then a missile shot, with the pilot's [TacBoard] options set for the run only (environment.config, put back afterwards; the keys must already be in com.marci.boscalisummer.cfg, so launch the game once with this build first). One look per run, chosen by variables: the default run is WIDE at scale 1, shade 0.45, board on; --set look=stack --set layout=Stack | --set look=scale07 --set scale=0.7 | --set look=shade0 --set shade=0 | --set look=off --set enabled=false. The off run shows the game's own weapon, countermeasure and power panels; the default run is the board on again. The captures are named cruise-<look>, shot-<look>, shot-later-<look> and after-<look>; dock/fire/msl in results.json are the geometry and tracker probes. Nothing here asserts the board itself: the evidence is the screenshots (a live off-then-on within one run needs a HudAutomation config hook).",
   "name": "tac-board",
+  "description": "TAC BOARD looks in the cockpit: wide, stack, scale 0.7, shade 0, board off.",
   "mods": [
     "boscalisummer"
   ],
   "timeout_s": 240,
+  "vars": {
+    "look": "wide",
+    "layout": "Wide",
+    "scale": 1.0,
+    "shade": 0.45,
+    "enabled": true
+  },
+  "environment": {
+    "config": {
+      "boscalisummer": {
+        "TacBoard": {
+          "Layout": "${layout}",
+          "Scale": "${scale}",
+          "Shade": "${shade}",
+          "Enabled": "${enabled}"
+        }
+      }
+    }
+  },
   "ops": [
     {
       "op": "seat",
@@ -48,7 +69,7 @@
     },
     {
       "op": "capture",
-      "name": "cruise"
+      "name": "cruise-${look}"
     },
     {
       "op": "call",
@@ -62,7 +83,7 @@
     },
     {
       "op": "capture",
-      "name": "shot"
+      "name": "shot-${look}"
     },
     {
       "op": "call",
@@ -76,7 +97,7 @@
     },
     {
       "op": "capture",
-      "name": "shot-later"
+      "name": "shot-later-${look}"
     },
     {
       "op": "wait",
@@ -84,7 +105,7 @@
     },
     {
       "op": "capture",
-      "name": "after"
+      "name": "after-${look}"
     },
     {
       "op": "end"

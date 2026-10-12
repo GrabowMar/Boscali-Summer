@@ -58,7 +58,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             w.CanExfil = Service<IAirAssaultOrders>()?.CanRequestExfil == true;
         }
 
-        /// <summary>The TAC BOARD's two VIEW rows. The cycle index is the contract enum's value, in the order of <c>MenuCatalog.BoardDeclutters</c>.</summary>
+        /// <summary>The TAC BOARD's three VIEW rows. The cycle indices are the contract enums' values, in the order of <c>MenuCatalog.BoardDeclutters</c> and <c>BoardLayouts</c>.</summary>
         private static void ReadBoard(MenuWorld w)
         {
             ITacBoardSettings board = Service<ITacBoardSettings>();
@@ -66,6 +66,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             w.BoardAvailable = true;
             w.BoardOn = board.Enabled;
             w.BoardDeclutter = (int)board.Declutter;
+            w.BoardLayout = (int)board.Layout;
         }
 
         private static void ReadRadio(MenuWorld w)
@@ -166,6 +167,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "view/mslexit": return () => Service<IMissileView>()?.Exit();
                 case "view/board": return OnBoard(board => board.Enabled = !board.Enabled);
                 case "view/declutter": return OnBoard(board => board.Declutter = (BoardDeclutter)(((int)board.Declutter + 1) % MenuCatalog.BoardDeclutters.Length));
+                case "view/boardlayout": return OnBoard(board => board.Layout = (BoardLayout)(((int)board.Layout + 1) % MenuCatalog.BoardLayouts.Length));
                 case "defence/drones": return StrikeOrScreen;
             }
             if (row.Id.StartsWith("comms/c", StringComparison.Ordinal)) return () => Service<IQuickCalls>()?.Call(index);
