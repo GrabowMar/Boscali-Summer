@@ -523,7 +523,7 @@ public sealed class CloudBench : MonoBehaviour
         var body = new CloudBodies(noise, size, field.Tape, field.Frame, field.PrevailingHeading, 0f, field);
         Vector3 direction = new Vector3(0.35f, -0.72f, 0.6f).normalized;
         Vector3 right = Vector3.Cross(Vector3.up, direction).normalized, up = Vector3.Cross(direction, right);
-        float baseY = field.Params.CloudBase;
+        float baseY = field.RowAt(0f, 0f).CloudBase;
         float lower = Mathf.Max(0f, baseY - 800f), upper = 12000f, dy = (upper - lower) / samples;
         float rayStep = dy / Mathf.Max(0.06f, -direction.y), sink = 0f;
         var timer = Stopwatch.StartNew();
@@ -558,7 +558,7 @@ public sealed class CloudBench : MonoBehaviour
         LowGenus genus = field.Tape.GenusAt(0f);
         if (baseVariation > 0f && mode == "")
         {
-            SkyParams sky = field.Params;
+            SkyParams sky = field.RowAt(0f, 0f);
             sky.BaseVariation = baseVariation;
             var tape = new BakedTape(1);
             tape.SetConstant(sky, genus);
@@ -569,12 +569,12 @@ public sealed class CloudBench : MonoBehaviour
             // B': the sky B renders, as a 4096-texel tape of that one sky. IsConstant is false, so BindTape sends no uniforms and the shader
             // fetches and lerps three low-genus rows per sample and evaluates TapeS with its sines. The origin sits inside the tape (s about
             // 1500 km of 3000), so both texels of a lerp are fetched, as on a real tape.
-            SkyParams sky = field.Params;
+            SkyParams sky = field.RowAt(0f, 0f);
             return new TapeFixture(BakedTape.TwoKeyframes(sky, sky, 1500000f, 12000f, genus, genus), new TapeFrame(90f, 1500000f, 10000f, 80000f, 0.7f));
         }
         if (mode == "ladder")
         {
-            SkyParams sky = field.Params;
+            SkyParams sky = field.RowAt(0f, 0f);
             sky.LobeRung += 0.5f;
             sky.Mid.PeriodRung += 0.5f;
             sky.High.PeriodRung += 0.5f;
@@ -586,7 +586,7 @@ public sealed class CloudBench : MonoBehaviour
         {
             // The scene's own sky on one side and the same sky a rung or more away on the other (two lobe rungs, three period rungs,
             // a 15 % higher base), joined by a 12 km ramp through the origin and bent by a 10 km meander.
-            SkyParams left = field.Params, right = left;
+            SkyParams left = field.RowAt(0f, 0f), right = left;
             right.LobeRung += 2f;
             right.Mid.PeriodRung += 3f;
             right.High.PeriodRung += 3f;
@@ -599,7 +599,7 @@ public sealed class CloudBench : MonoBehaviour
         if (mode == "mix")
         {
             // The worst-case morphology mix: both thin layers carry all four morphologies at weight 0.25 and a curl.
-            SkyParams sky = field.Params;
+            SkyParams sky = field.RowAt(0f, 0f);
             sky.Mid = SkyArchetypes.Layer(LayerKind.AcFloccus).ToLayer(0.6f);
             sky.High = SkyArchetypes.Layer(LayerKind.CirrusSpissatus).ToLayer(0.5f);
             for (int i = 0; i < 2; i++)

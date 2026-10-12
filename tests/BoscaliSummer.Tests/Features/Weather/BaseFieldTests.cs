@@ -45,7 +45,7 @@ namespace BoscaliSummer.Tests.Features.Weather
         {
             var field = new WeatherField();
             field.Build(new WeatherKey(17u, 0f, false, skyPin: 7), 600f, 40960f, 40960f);
-            float variation = field.Params.BaseVariation;
+            float variation = field.RowAt(0f, 0f).BaseVariation;
             TestAssert.That(variation == 150f, "sky 8 is a Humilis: 150 m of variation");
             float low = float.MaxValue, high = float.MinValue;
             for (float z = -40000f; z <= 40000f; z += 2000f)
@@ -53,7 +53,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             {
                 WeatherPoint p = field.Sample(x, z);
                 field.Frame.ToTape(x, z, out float qx, out float qz);
-                float expected = field.Params.CloudBase + variation * new BaseHeightField(field.Key.LayoutSeed).At(qx, qz);
+                float expected = field.RowAt(0f, 0f).CloudBase + variation * new BaseHeightField(field.Key.LayoutSeed).At(qx, qz);
                 TestAssert.That(Math.Abs(p.CloudBase - expected) < 0.01f && p.BaseVariation == variation, "the base is the row's base plus the field");
                 low = Math.Min(low, p.CloudBase); high = Math.Max(high, p.CloudBase);
             }
@@ -106,7 +106,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             var field = new WeatherField();
             var key = new WeatherKey(17u, 0f, false, skyPin: 7);
             field.Build(key, 600f, 40960f, 40960f);
-            SkyParams sky = field.Params;
+            SkyParams sky = field.RowAt(0f, 0f);
             sky.BaseVariation = 400f;
             var tape = new BakedTape(1);
             tape.SetConstant(sky, LowGenus.Humilis);

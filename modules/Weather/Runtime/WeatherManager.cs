@@ -1413,7 +1413,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             forcedRainIntensity = null;
             transitionProgress = 0f;
 
-            // AUTO is the only way to unpin (the old WithMissionClass did it): a pinned sky goes back to the class tape and is placed again like a capture.
+            // AUTO is the only way to unpin: a pinned sky goes back to the class tape and is placed again like a capture.
             bool wasPinned = fieldKey.SkyPin < SkyLibrary.Count;
             WeatherKey resumed = TapeSwitch.Held(fieldKey, fieldKey.Rebased(missionTime, consoleAuto || settings.TapeMoves.Value,
                 TapePace.Speed(settings.Pace.Value, baselineWindSpeed)));

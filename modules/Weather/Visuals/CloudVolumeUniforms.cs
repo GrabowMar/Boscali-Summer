@@ -189,7 +189,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         internal void Apply(Material material, WeatherField field, in CloudFrame frame, Texture noise)
         {
-            SkyParams sky = field.Params;
+            SkyParams sky = field.RowAt(0f, 0f);
             material.SetTexture(NoiseId, noise);
             material.SetFloat(BaseId, sky.CloudBase);
             material.SetVector(OffsetId, frame.WorldOffset);

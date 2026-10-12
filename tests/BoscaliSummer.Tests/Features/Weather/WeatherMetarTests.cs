@@ -53,7 +53,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                 string line = WeatherMetar.Line(field.Sample(0f, 0f));
                 string[] parts = line.Split(' ');
                 TestAssert.That(line.Length > 0 && parts.Length <= 5, "sky " + (i + 1) + " reads '" + line + "'");
-                if (field.Params.Mid.Cover > 0.9f) TestAssert.That(line.Contains("OVC"), "sky " + (i + 1) + ": an opaque deck reads OVC, got " + line);
+                if (field.RowAt(0f, 0f).Mid.Cover > 0.9f) TestAssert.That(line.Contains("OVC"), "sky " + (i + 1) + ": an opaque deck reads OVC, got " + line);
             }
         }
     }

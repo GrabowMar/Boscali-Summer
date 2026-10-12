@@ -121,8 +121,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             TestAssert.That(SkyParams.Lerp(streaked, other, 0.49f).Mid.Aspect == 5f && SkyParams.Lerp(streaked, other, 0.51f).Mid.Aspect == 3f &&
                 SkyParams.Lerp(streaked, other, 0.3f).Mid.RippleWavelength == 900f && SkyParams.Lerp(streaked, other, 0.7f).Mid.RippleWavelength == 600f,
                 "two present layers hold aspect and ripple wavelength at the nearer side (spec 6: never sample a scale that varies)");
-            TestAssert.That(Math.Abs(SkyParams.Lerp(streaked, other, 0.3f, holdScales: false).Mid.Aspect - 4.4f) < 1e-5f &&
-                Math.Abs(SkyParams.Blend(streaked, other, 0.5f).Mid.Aspect - 4f) < 1e-6f, "the legacy class fade and the texel lerp are plain lerps");
+            TestAssert.That(Math.Abs(SkyParams.Blend(streaked, other, 0.5f).Mid.Aspect - 4f) < 1e-6f, "the texel lerp is a plain lerp");
         }
 
         private static void LadderValuesAndSplit()

@@ -45,7 +45,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             var field = new WeatherField();
             var cells = new StormCell[StormLattice.EnumerateCap];
             field.Build(Held(WeatherRegimeType.Clear), 600f, HalfX, HalfZ);
-            TestAssert.That(field.ActiveCellCount(0f, 0f, 80000f) == 0 && field.FrontCount == 0, "clear sky has no cells or fronts");
+            TestAssert.That(field.ActiveCellCount(0f, 0f, 80000f) == 0, "clear sky has no cells");
             for (int i = -3; i <= 3; i++)
             {
                 WeatherPoint p = field.Sample(i * 12000f, i * 7000f);
@@ -158,7 +158,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             float x0 = field.SuperstructureAt(0).X;
             field.Build(forced.WithLayoutSalt(1), 600f, HalfX, HalfZ);
             TestAssert.That(field.SuperstructureCount == 1 && field.SuperstructureAt(0).X != x0, "a re-roll moves the set-piece");
-            TestAssert.That(WeatherTimeline.Evaluate(forced.WithLayoutSalt(1), 600f).To == WeatherRegimeType.Clear,
+            TestAssert.That(SkyMath.ClassOf(field.RowAt(0f, 0f)) == WeatherRegimeType.Clear,
                 "a re-roll leaves the weather state alone");
             TestAssert.That(!forced.Equals(forced.WithLayoutSalt(1)) && !forced.Equals(Held(WeatherRegimeType.Clear)),
                 "set-pieces and layout are part of the synced key");
@@ -220,9 +220,6 @@ namespace BoscaliSummer.Tests.Features.Weather
             TestAssert.That(StateTable.FromConditions(0.05f) == WeatherRegimeType.Clear, "clear band");
             TestAssert.That(StateTable.FromConditions(0.7f) == WeatherRegimeType.Overcast, "overcast band");
             TestAssert.That(StateTable.FromConditions(1f) == WeatherRegimeType.Storm, "storm band");
-            TestAssert.That(StateTable.At(2.5f).SheetCover > StateTable.Get(WeatherRegimeType.Scattered).SheetCover &&
-                StateTable.At(2.5f).SheetCover < StateTable.Get(WeatherRegimeType.Broken).SheetCover,
-                "a fade sits between its neighbours");
         }
 
         private static void DomainStaysFreeOfUnity()

@@ -33,7 +33,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                     {
                         field.Build(key, 900f + offset * 60f, 60000f, 60000f, 13f);
                         WeatherPoint point = field.Sample(0f, 0f);
-                        var step = new ForecastStep(offset, point.Cover, point.CloudBase, 0f, field.Timeline.Dominant);
+                        var step = new ForecastStep(offset, point.Cover, point.CloudBase, 0f, SkyMath.ClassOf(field.RowAt(0f, 0f)));
                         TestAssert.That(step.Regime.Type == (WeatherRegimeType)state, "held forecast keeps selected state despite local gaps");
                     }
                 }
@@ -63,13 +63,13 @@ namespace BoscaliSummer.Tests.Features.Weather
                 "combined lenses sit beside the eye");
             TestAssert.That(!wave.WithoutAnchor().HasAnchor && wave.WithAnchor(12f, 34f).AnchorZ == 34f, "placement and default placement");
             field.Build(wave, 900f, 60000f, 60000f, 13f);
-            uint layout = field.Timeline.Layout;
+            uint layout = field.Key.LayoutSeed;
             field.Build(wave.WithLayoutSalt(8), 900f, 60000f, 60000f, 13f);
-            TestAssert.That(field.Timeline.Layout != layout && field.Timeline.Dominant == WeatherRegimeType.Fair, "reroll changes layout without changing state");
+            TestAssert.That(field.Key.LayoutSeed != layout && SkyMath.ClassOf(field.RowAt(0f, 0f)) == WeatherRegimeType.Fair, "reroll changes layout without changing state");
 
             var eyeKey = WeatherScenarios.Apply(WeatherScenario.HurricaneEye, dirty, true, 0f, 0f, 0f, 1f);
             field.Build(eyeKey, 900f, 60000f, 60000f, 13f);
-            var bodies = new CloudBodies(CloudNoise3D.Generate(64, 47), 64, field.Params, field.PrevailingHeading, 0f, field);
+            var bodies = new CloudBodies(CloudNoise3D.Generate(64, 47), 64, field.RowAt(0f, 0f), field.PrevailingHeading, 0f, field);
             Superstructure eye = Find(field, Superstructures.StormEyeSet);
             foreach (float y in new[] { 2500f, 4100f, 7000f, 10000f })
                 TestAssert.That(bodies.Density(field.Sample(0f, 0f), 0f, y, 0f) < 0.001f, "upper eye stays clear through low and middle decks");

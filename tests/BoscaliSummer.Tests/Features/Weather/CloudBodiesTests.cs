@@ -42,8 +42,8 @@ namespace BoscaliSummer.Tests.Features.Weather
             var field = new WeatherField();
             field.Build(key, 900f, 60000f, 60000f, 13f);
             TestAssert.That(field.SuperstructureCount >= 2, "a storm holds set-pieces, got " + field.SuperstructureCount);
-            var withHeroes = new CloudBodies(noise, 64, field.Params, field.PrevailingHeading, 0f, field);
-            var withoutHeroes = new CloudBodies(noise, 64, field.Params, field.PrevailingHeading);
+            var withHeroes = new CloudBodies(noise, 64, field.RowAt(0f, 0f), field.PrevailingHeading, 0f, field);
+            var withoutHeroes = new CloudBodies(noise, 64, field.RowAt(0f, 0f), field.PrevailingHeading);
             var empty = new WeatherPoint();
             for (int i = 0; i < field.SuperstructureCount; i++)
             {

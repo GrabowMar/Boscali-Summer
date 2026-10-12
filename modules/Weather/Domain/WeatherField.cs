@@ -119,15 +119,11 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public WeatherTape TapeSource { get; private set; }
         /// <summary>True when D follows the mission clock (<c>Build(..., moving: true)</c>); the live manager holds D at the key's Offset until slice 5.</summary>
         public bool Moving { get; private set; }
-        // SHIM(task 15): the legacy surface, inert, until the last consumers move. Deleted with WeatherTimeline, SkySplit and WeatherFronts.
-        public TimelineState Timeline => HeldTimeline();
-        public SkyParams Params => RowAt(0f, 0f);
-        /// <summary>Where every per-sample genus and thin-layer row is read from: one keyframe (<see cref="Params"/>) in slices 2-3, a fixture's baked tape in the density check and the bench.</summary>
+        /// <summary>Where every per-sample genus and thin-layer row is read from: one keyframe (<see cref="RowAt"/>) in slices 2-3, a fixture's baked tape in the density check and the bench.</summary>
         public TapeSampler Tape { get; private set; }
         public TapeFrame Frame { get; private set; }
         /// <summary>Everything the lattices resolve from: the tape identity, the tape and its frame (spec 6). Rebuilt with every Build.</summary>
         public LatticeSource Lattice { get; private set; }
-        public int FrontCount => 0;
         /// <summary>Scenery storms outside the theater; see <see cref="Superstructures"/>.</summary>
         public int SuperstructureCount { get; private set; }
 
@@ -137,14 +133,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>Downwind heading of the layout's prevailing wind; fixed for the key.</summary>
         public float PrevailingHeading { get; private set; }
         public bool IsBuilt => Key != null;
-
-        public FrontState Front(int index) => default;
-
-        private TimelineState HeldTimeline()
-        {
-            WeatherRegimeType cls = Key.SkyPin < SkyLibrary.Count ? SkyLibrary.ClassOf(Key.SkyPin) : SkyMath.ClassOf(RowAt(0f, 0f));
-            return new TimelineState { From = cls, To = cls, Blend = 1f, Level = (int)cls, GrowthLevel = (int)cls, StepStart = Key.Epoch, NextChangeAt = float.PositiveInfinity, Next = cls, Layout = Key.LayoutSeed };
-        }
 
         /// <summary>The tape row at a world point: the local sky, with the low genus, the base, the thin layers and every CPU column.</summary>
         public SkyParams RowAt(float x, float z) => tapeIsConstant ? constantRow : Tape.At(Frame.S(x, z));

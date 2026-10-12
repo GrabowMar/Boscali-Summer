@@ -90,8 +90,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         internal int ShadowUpdates => shadows.UpdateCount;
         internal string ShadowFailure => shadows.FailureReason ?? string.Empty;
         internal bool Active => renderer != null && renderer.enabled && near.Current != null && noise != null;
-        internal bool DeckActive => Active && activeField.Params.SheetCover > 0.75f &&
-            activeField.Params.Convective < 0.25f;
+        internal bool DeckActive => Active && activeField.RowAt(0f, 0f).SheetCover > 0.75f &&
+            activeField.RowAt(0f, 0f).Convective < 0.25f;
         /// <summary>True while the reduced-resolution pass draws the sky.</summary>
         internal bool HalfResolution => Active && halfResolution;
         internal bool RainCurtainsEnabled { get; private set; }

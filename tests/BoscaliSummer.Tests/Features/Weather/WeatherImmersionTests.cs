@@ -63,8 +63,8 @@ namespace BoscaliSummer.Tests.Features.Weather
             field.Build(new WeatherKey(73, 0f, false, (byte)WeatherRegimeType.Clear,
                 Superstructures.SupercellSet), 60f, 40000f, 40000f);
             Superstructure hero = field.SuperstructureAt(0);
-            var settledHero = new CloudBodies(noise, 2, field.Params, field: field);
-            var hiddenHero = new CloudBodies(noise, 2, field.Params, field: field,
+            var settledHero = new CloudBodies(noise, 2, field.RowAt(0f, 0f), field: field);
+            var hiddenHero = new CloudBodies(noise, 2, field.RowAt(0f, 0f), field: field,
                 shownHeroes: new float[Superstructures.MaxCount], nearDetail: true);
             TestAssert.That(settledHero.Heroes(hero.X, 3000f, hero.Z) > 0.5f &&
                 hiddenHero.Heroes(hero.X, 3000f, hero.Z) == 0f,

@@ -60,8 +60,8 @@ namespace BoscaliSummer.Tests.Features.Weather
             var key = new WeatherKey(5150u, 100f, true, (byte)WeatherRegimeType.Fair, layoutSalt: 2, headingDeg: 70f);
             WeatherKey moved = key.Rebased(900f, false).WithSets(5).WithAnchor(100f, 200f);
             TestAssert.That(moved.LayoutSeed == key.LayoutSeed, "Epoch, Offset, Dynamic, Sets and Anchor never move the noise");
-            TestAssert.That(key.WithSkyPin(4).LayoutSeed == key.LayoutSeed && key.WithMissionClass((byte)WeatherRegimeType.Storm).LayoutSeed == key.LayoutSeed,
-                "a sky pin or a mission class never moves the noise (they do change the tape: the lattice re-rolls)");
+            TestAssert.That(key.WithSkyPin(4).LayoutSeed == key.LayoutSeed,
+                "a sky pin never moves the noise (they do change the tape: the lattice re-rolls)");
             TestAssert.That(key.WithSkyPin(4).TapeId != key.TapeId, "the lattice salt is the tape identity");
             TestAssert.That(key.WithLayoutSalt(3).LayoutSeed != key.LayoutSeed &&
                 new WeatherKey(5151u, 100f, true, (byte)WeatherRegimeType.Fair, layoutSalt: 2, headingDeg: 70f).LayoutSeed != key.LayoutSeed,

@@ -149,10 +149,10 @@ namespace BoscaliSummer.Tests.Features.Weather
                     float u = (x + 0.5f) / CloudMaps.NearSize, v = (z + 0.5f) / CloudMaps.NearSize;
                     WeatherPoint actual = CloudBodies.SampleMap(maps.Near, maps.NearProfiles, CloudMaps.NearSize, u, v);
                     WeatherPoint truth = field.Sample((u * 2f - 1f) * 50000f, (v * 2f - 1f) * 50000f);
-                    CloudGenus genus = CloudShape.Resolve(field.Params);
+                    CloudGenus genus = CloudShape.Resolve(field.RowAt(0f, 0f));
                     // The packed top is widened by the base variation (spec 6: Fill widens bottom and visualTop by BaseVariation).
                     float lowTop = Math.Max(truth.LowTop, truth.CloudBase + Math.Max(genus.PuffDepth,
-                        field.Params.DeckDepth) + genus.BaseWobble * 0.5f) + truth.BaseVariation;
+                        field.RowAt(0f, 0f).DeckDepth) + genus.BaseWobble * 0.5f) + truth.BaseVariation;
                     TestAssert.That(Math.Abs(actual.LowTop - lowTop) <= 16000f / 255f * 0.51f,
                         "The packed ordinary ceiling mirrors field truth within half a height texel");
                     TestAssert.That(Math.Abs(actual.CloudBase - truth.CloudBase) <= CloudMaps.BaseRange / 255f * 0.51f,

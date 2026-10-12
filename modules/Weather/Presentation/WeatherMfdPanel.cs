@@ -107,7 +107,10 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             WeatherField localField = weather.Field;
             WeatherPoint localPoint = weather.LocalWeather;
             bool built = localField != null && localField.IsBuilt;
-            if (built) regime = RegimeSnapshot.FromType(localField.Timeline.To);
+            if (built)
+                regime = RegimeSnapshot.FromType(localField.Key.SkyPin < SkyLibrary.Count
+                    ? SkyLibrary.ClassOf(localField.Key.SkyPin) // a pinned sky shows its nominal class, never the jittered instance's sampled one
+                    : SkyMath.ClassOf(localField.RowAt(weather.FieldPosition.x, weather.FieldPosition.y)));
             // A pinned sky shows its own name (spec 8.4); the class code and briefing stay the regime's.
             string skyName = built && localField.Key.SkyPin < SkyLibrary.Count ? SkyLibrary.Get(localField.Key.SkyPin).Name : regime.Name;
             float deck = built ? localPoint.CloudBase : weather.CurrentCloudHeight;
@@ -123,33 +126,10 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             SolarData solar = weather.GetSolarData();
             LunarData lunar = weather.GetLunarData();
 
-            WeatherField stateField = weather.Field;
-            bool dynamicField = stateField != null && stateField.Key.Dynamic;
-            float missionNow = NetworkSceneSingleton<MissionManager>.i != null
-                ? NetworkSceneSingleton<MissionManager>.i.MissionTime : 0f;
-            float nextIn = dynamicField ? Mathf.Max(0f, stateField.Timeline.NextChangeAt - missionNow) : 0f;
-            string countdown = AvNum.Clock(nextIn);
-
+            // The tape is held until slice 5: there is no step to count down to, so the NEXT cell reads HELD and the footer says whose hold it is.
             string nextText = "HELD";
             float nextFrac = 0f;
-            string footer;
-            if (weather.IsManualOverride)
-                footer = "HELD // CTRL+O // " + regime.Name;
-            else if (dynamicField)
-            {
-                TimelineState timeline = stateField.Timeline;
-                string now = RegimeSnapshot.FromType(timeline.To).Name;
-                string next = RegimeSnapshot.FromType(timeline.Next).Name;
-                float interval = WeatherTimeline.IntervalMinutes * 60f;
-                nextText = timeline.Blend < 1f ? AvNum.Percent(timeline.Blend) : countdown;
-                nextFrac = timeline.Blend < 1f ? timeline.Blend : Mathf.Clamp01(1f - nextIn / interval);
-                footer = timeline.Blend < 1f
-                    ? "SHIFT > " + now + " " + AvNum.Percent(timeline.Blend)
-                    : timeline.Next == timeline.To
-                        ? now + " // HOLD " + countdown
-                        : now + " > " + next + " " + countdown;
-            }
-            else footer = "HELD // MISSION";
+            string footer = weather.IsManualOverride ? "HELD // CTRL+O // " + regime.Name : "HELD // TAPE";
 
             var data = new EnvData
             {

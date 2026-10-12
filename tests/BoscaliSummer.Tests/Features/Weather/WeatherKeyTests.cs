@@ -200,10 +200,6 @@ namespace BoscaliSummer.Tests.Features.Weather
             TestAssert.That(new WeatherKey(1u, -0f, true, offset: -0f).Equals(new WeatherKey(1u, 0f, true)), "negative zero equals zero");
             TestAssert.That(new WeatherKey(1u, 0f, true, 9, sets: 0xFF).Sets == Superstructures.AllSets, "sets are masked");
             TestAssert.That(new WeatherKey(1u, 0f, true).MissionClass == WeatherKey.None, "no class means 255");
-            TestAssert.That(new WeatherKey(1u, 0f, true, 7).OpeningState() == new WeatherKey(1u, 0f, true).OpeningState(),
-                "an out-of-table class opens like auto, never like Storm");
-            TestAssert.That(new WeatherKey(1u, 0f, true, 6).OpeningState() == WeatherRegimeType.Storm &&
-                new WeatherKey(1u, 0f, true, 0).OpeningState() == WeatherRegimeType.Clear, "an authored class opens as itself");
         }
     }
 }

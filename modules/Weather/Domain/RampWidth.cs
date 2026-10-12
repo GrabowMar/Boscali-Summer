@@ -14,7 +14,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public static float Metres(in SkyParams a, in SkyParams b, float markerPeakRain = 0f)
         {
             // Lerp at 0 and 1 gives both rows with an absent layer's geometry inherited from its neighbour: a fade-in sweeps no altitude.
-            SkyParams x = SkyParams.Lerp(a, b, 0f, false), y = SkyParams.Lerp(a, b, 1f, false);
+            SkyParams x = SkyParams.Lerp(a, b, 0f), y = SkyParams.Lerp(a, b, 1f);
             float dC = Max(Math.Abs(x.SheetCover - y.SheetCover), Math.Abs(x.CumulusCover - y.CumulusCover), Math.Abs(x.Mid.Cover - y.Mid.Cover),
                 Math.Abs(x.High.Cover - y.High.Cover), Math.Abs(x.Convective - y.Convective));
             float dR = Math.Abs(x.StratRain - y.StratRain), rHi = Math.Max(x.StratRain, y.StratRain);
