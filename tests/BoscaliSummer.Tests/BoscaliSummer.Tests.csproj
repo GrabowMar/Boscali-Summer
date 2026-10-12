@@ -34,6 +34,7 @@
     <Compile Include="..\..\modules\Performance\Domain\ClientTuningMath.cs" Link="Features\Performance\ClientTuningMath.cs" />
     <Compile Include="..\..\modules\Session\Domain\HostValueLedger.cs" Link="Features\Session\HostValueLedger.cs" />
     <Compile Include="..\..\modules\Progression\Domain\PlaneEngineMap.cs" Link="Features\Progression\PlaneEngineMap.cs" />
+    <Compile Include="..\..\modules\Progression\Domain\AceHuntPlacement.cs" Link="Features\Progression\AceHuntPlacement.cs" />
     <Compile Include="..\..\modules\PlayerSpawnPriority\SpawnPriorityPolicy.cs" Link="Features\PlayerSpawnPriority\SpawnPriorityPolicy.cs" />
     <Compile Include="..\..\modules\Support\Domain\TheaterGrid.cs" Link="Features\Support\TheaterGrid.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\SettingsChoices.cs" Link="Features\Command\SettingsChoices.cs" />

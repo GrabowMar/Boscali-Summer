@@ -291,6 +291,9 @@ foreach ((string typeName, string fieldName) in fields)
     ("Countermeasure", "displayImage", "UnityEngine.Sprite"),
     ("CombatHUD", "weaponStatus", "WeaponStatus"),
     ("CombatHUD", "countermeasureBackground", "UnityEngine.GameObject"),
+    // Screen corners (2026-10-12): NativeScreenCorners finds the kill feed's plate (the child called Darkener under MessageUI's background box) and the minimised map's plate (DynamicMap's background).
+    ("MessageUI", "messageBackground", "UnityEngine.GameObject"),
+    ("DynamicMap", "mapBackground", "UnityEngine.UI.Image"),
     ("Gun", "reloadTime", "System.Single"),
     ("MissileLauncher", "reloadTime", "System.Single"),
     ("PowerSupply", "maxCharge", "System.Single"),

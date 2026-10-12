@@ -103,6 +103,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public bool Available => root != null;
 
+        /// <summary>The TAC BOARD's box on the screen (centre-origin, y up, canvas units; no size: no board): the boxes of the cluster keep clear of it (<see cref="ThirdPersonHudLayout.KeepClearOf"/>). Set by the board before <see cref="Present"/>.</summary>
+        public RectF Board;
+        /// <summary><see cref="Board"/> in the layout's units (the canvas over the text scale).</summary>
+        private RectF avoid;
+
         public bool Ensure()
         {
             if (root != null && canvasRoot != null) return true;
@@ -349,17 +354,18 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             float screenW = canvasRoot.rect.width / scale;
             float screenH = canvasRoot.rect.height / scale;
             if (screenW <= 0f || screenH <= 0f) return;
+            avoid = new RectF(Board.CenterX / scale, Board.CenterY / scale, Board.Width / scale, Board.Height / scale);
 
             ColorTheme theme = ThemeManager.Active.ColorTheme;
             Color ink = theme.AllClear;
             Color caution = theme.Warning;
             Color alert = theme.Alert;
 
-            RectF spdRect = ThirdPersonHudLayout.SpeedBox(screenW, screenH);
-            RectF altRect = ThirdPersonHudLayout.AltitudeBox(screenW, screenH);
+            RectF spdRect = ThirdPersonHudLayout.SpeedBox(screenW, screenH, avoid);
+            RectF altRect = ThirdPersonHudLayout.AltitudeBox(screenW, screenH, avoid);
             PositionRect(spd.Root, spdRect);
             PositionRect(alt.Root, altRect);
-            PositionRect(hdg.Root, ThirdPersonHudLayout.HeadingBox(screenW, screenH));
+            PositionRect(hdg.Root, ThirdPersonHudLayout.HeadingBox(screenW, screenH, avoid));
             PositionRect(spd.Track, ThirdPersonHudLayout.SideBar(spdRect, outwardIsLeft: true));
             PositionRect(alt.Track, ThirdPersonHudLayout.SideBar(altRect, outwardIsLeft: false));
 
@@ -432,20 +438,21 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             // Bank in 2 degree steps and slip in whole degrees: finer motion is not visible and would rebuild the mesh every tick in a turn.
             int key = (int)screenW * 7919 + (int)screenH * 31 + (int)(lastScale * 100f) * 977 + Code(spdLit) * 5 + Code(altLit) * 3 + Code(fuel) + Code(ink) * 17 +
-                (cardShown ? 11 : 0) + (flash ? 13 : 0) + Mathf.RoundToInt(bankDeg / 2f) * 104729 + Mathf.RoundToInt(slipDeg) * 7;
+                (cardShown ? 11 : 0) + (flash ? 13 : 0) + Mathf.RoundToInt(bankDeg / 2f) * 104729 + Mathf.RoundToInt(slipDeg) * 7 +
+                Mathf.RoundToInt(avoid.CenterX) * 15485863 + Mathf.RoundToInt(avoid.CenterY) * 32452843 + Mathf.RoundToInt(avoid.Width) * 49979687 + Mathf.RoundToInt(avoid.Height) * 67867967;
             if (key == lastSymbols) return;
             lastSymbols = key;
 
             AvQuadBuffer b = symbols.Buffer;
             b.Clear();
-            RectF spdRect = ThirdPersonHudLayout.SpeedBox(screenW, screenH);
-            RectF altRect = ThirdPersonHudLayout.AltitudeBox(screenW, screenH);
+            RectF spdRect = ThirdPersonHudLayout.SpeedBox(screenW, screenH, avoid);
+            RectF altRect = ThirdPersonHudLayout.AltitudeBox(screenW, screenH, avoid);
             Brackets(b, spdRect, (spdLit ?? ink).ToRgba());
             Brackets(b, altRect, (flash ? Color.clear : altLit ?? ink).ToRgba());
-            Brackets(b, ThirdPersonHudLayout.HeadingBox(screenW, screenH), ink.ToRgba().WithAlpha(0.8f));
+            Brackets(b, ThirdPersonHudLayout.HeadingBox(screenW, screenH, avoid), ink.ToRgba().WithAlpha(0.8f));
             Scale(b, ThirdPersonHudLayout.SideBar(spdRect, outwardIsLeft: true), ink.ToRgba());
             Scale(b, ThirdPersonHudLayout.SideBar(altRect, outwardIsLeft: false), fuel.ToRgba());
-            BankAndSlip(b, ThirdPersonHudLayout.HeadingBox(screenW, screenH), bankDeg, slipDeg, ink.ToRgba());
+            BankAndSlip(b, ThirdPersonHudLayout.HeadingBox(screenW, screenH, avoid), bankDeg, slipDeg, ink.ToRgba());
             if (cardShown)
             {
                 RectF card = ThirdPersonHudLayout.TargetCard(screenW, screenH, true);

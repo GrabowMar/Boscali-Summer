@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Hud.Domain;
 using BoscaliSummer.Modules.Hud.Runtime;
 using HarmonyLib;
@@ -135,6 +136,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             bool stale = NativeTakeover.Stale(Time.unscaledTime, presentedAt);
             if (stale && root != null && root.gameObject.activeSelf) root.gameObject.SetActive(false);      // Repaint shows it again when Present resumes
+            // The other corners are the board's too: they follow its life (a stale or hidden board stands them down) and the board's gate (a pause, the maximised map, cinematic mode).
+            cornersSuppressed = !CockpitOverlayGate.NotSuppressed();
+            CornersFrame(root != null && hasBoard && !stale, false);
             if (corner == null) return;
             CombatHUD hud = SceneSingleton<CombatHUD>.i;
             bool alive = root != null && hasBoard && !stale && !headerFault && root.gameObject.activeInHierarchy;

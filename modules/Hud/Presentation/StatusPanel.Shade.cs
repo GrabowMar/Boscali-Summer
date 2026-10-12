@@ -15,6 +15,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private RectTransform shadeRect;
         private Image shadeBand;
+        private Vector2 shadeBandBase;
         private RawImage shadeField;
         private Texture2D fieldTexture;
         /// <summary>The blocks <see cref="fieldTexture"/> was last baked for: it is baked again only when they change (a block coming or going, the layout, the page's height once it has settled).</summary>
@@ -28,19 +29,19 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             CanvasGroup group = shadeRect.gameObject.AddComponent<CanvasGroup>();
             group.ignoreParentGroups = true;
             group.interactable = group.blocksRaycasts = false;
-            shadeBand = ShadeChild<Image>("SunBand");
+            shadeBand = ShadeChild<Image>(shadeRect, "SunBand");
             shadeBand.sprite = HudSprites.SunBand(0f);
             shadeBand.type = Image.Type.Sliced;
-            shadeField = ShadeChild<RawImage>("CloudField");
+            shadeField = ShadeChild<RawImage>(shadeRect, "CloudField");
         }
 
-        /// <summary>A top-left anchored, input-transparent child of the shade whose size and place are set every paint (off until the first one: a graphic no one has placed would be a white square).</summary>
-        private T ShadeChild<T>(string name) where T : MaskableGraphic
+        /// <summary>A top-left anchored, input-transparent child of a shade (the board's, or the feed's) whose size and place are set every paint (off until the first one: a graphic no one has placed would be a white square).</summary>
+        private static T ShadeChild<T>(RectTransform parent, string name) where T : MaskableGraphic
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(T));
             go.SetActive(false);
             var rect = (RectTransform)go.transform;
-            rect.SetParent(shadeRect, false);
+            rect.SetParent(parent, false);
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0f, 1f);
             T graphic = go.GetComponent<T>();
             graphic.raycastTarget = false;
@@ -65,7 +66,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 if (fieldTexture == null || !ShadeField.SameBlocks(fieldFor, geo))
                 {
-                    BakeField(geo, area);
+                    BakeField(geo, area, ref fieldTexture, shadeField, ref fieldBytes);
                     fieldFor = geo;
                 }
                 PlaceBox(shadeField.rectTransform, area);
@@ -80,6 +81,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Sprite sprite = HudSprites.SunBand(fadedTop ? ScopeLayout.BandFadeTop / ScopeLayout.BandHeight : 0f);
             if (shadeBand.sprite != sprite) shadeBand.sprite = sprite;
             PlaceBox(shadeBand.rectTransform, new BoardRect(-ScopeLayout.BandRamp, -ScopeLayout.MarginTop * baseUnit / unit, geo.Width + margin + ScopeLayout.BandRamp * 2f, ScopeLayout.BandHeight));
+            shadeBandBase = shadeBand.rectTransform.anchoredPosition;      // the band stays hung from the top of the screen while the board sways
+            shadeBand.rectTransform.anchoredPosition = shadeBandBase - new Vector2(0f, swayShift.y);
             float ramp = HudSprites.BandRamp / (ScopeLayout.BandRamp * unit);
             if (shadeBand.pixelsPerUnitMultiplier != ramp) shadeBand.pixelsPerUnitMultiplier = ramp;
             var band = new Color(ShadeColor.r, ShadeColor.g, ShadeColor.b, ScopeLayout.BandAlpha * strength);
@@ -87,32 +90,35 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         /// <summary>
-        /// Bake the cloud field over <paramref name="area"/> into <see cref="fieldTexture"/>: white, the field as its alpha, a texel <see cref="ScopeLayout.CloudCell"/> box units across (bilinear when stretched). The
-        /// texture is made once, resized when the area is and written in place: nothing is allocated per bake. Once per change of the blocks (<see cref="PaintShade"/> is given where the page is going, not each frame of
-        /// its wipe), a few milliseconds for a live WIDE board.
+        /// Bake the cloud field over <paramref name="area"/> into <paramref name="texture"/> (the board's, or the feed's): white, the field as its alpha, a texel <see cref="ScopeLayout.CloudCell"/> box units across (bilinear
+        /// when stretched), shown by <paramref name="image"/>. The texture is made once, resized when the area is and written in place: nothing is allocated per bake. Once per change of the blocks (<see cref="PaintShade"/>
+        /// is given where the page is going, not each frame of its wipe), a few milliseconds for a live WIDE board.
         /// </summary>
-        private void BakeField(in BoardGeometry geo, in BoardRect area)
+        private static void BakeField(in BoardGeometry geo, in BoardRect area, ref Texture2D texture, RawImage image, ref byte[] bytes)
         {
             ShadeField.Texels(area, out int w, out int h);
-            if (fieldTexture == null)
+            if (texture == null)
             {
-                fieldTexture = new Texture2D(w, h, TextureFormat.RGBA32, false) { name = "BoscaliHud_CloudField", filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.HideAndDontSave };
-                shadeField.texture = fieldTexture;
+                texture = new Texture2D(w, h, TextureFormat.RGBA32, false) { name = "BoscaliHud_CloudField", filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.HideAndDontSave };
+                image.texture = texture;
             }
-            else if (fieldTexture.width != w || fieldTexture.height != h) fieldTexture.Reinitialize(w, h);
-            if (fieldBytes == null || fieldBytes.Length < w * h) fieldBytes = new byte[w * h];
-            ShadeField.Bake(geo, area, fieldBytes);
-            NativeArray<Color32> texels = fieldTexture.GetRawTextureData<Color32>();
+            else if (texture.width != w || texture.height != h) texture.Reinitialize(w, h);
+            if (bytes == null || bytes.Length < w * h) bytes = new byte[w * h];
+            ShadeField.Bake(geo, area, bytes);
+            NativeArray<Color32> texels = texture.GetRawTextureData<Color32>();
             for (int j = 0; j < h; j++)      // texel row 0 is the bottom, the bake's the top
             {
                 int from = (h - 1 - j) * w, to = j * w;
-                for (int i = 0; i < w; i++) texels[to + i] = new Color32(255, 255, 255, fieldBytes[from + i]);
+                for (int i = 0; i < w; i++) texels[to + i] = new Color32(255, 255, 255, bytes[from + i]);
             }
-            fieldTexture.Apply(false, false);
+            texture.Apply(false, false);
         }
 
         /// <summary>A surface placed over a rectangle of the box (board units): its top-left on the device pixel grid, its size in whole pixels.</summary>
-        private void PlaceBox(RectTransform rect, in BoardRect r) => PlaceOnGrid(rect, r.X * unit, r.Y * unit, Whole(r.W * unit), Whole(r.H * unit));
+        private void PlaceBox(RectTransform rect, in BoardRect r) => PlaceBoxAt(rect, r, unit);
+
+        /// <summary>A surface placed over a rectangle in design units of <paramref name="u"/> canvas units each.</summary>
+        private void PlaceBoxAt(RectTransform rect, in BoardRect r, float u) => PlaceOnGrid(rect, r.X * u, r.Y * u, Whole(r.W * u), Whole(r.H * u));
 
         private void DestroyShade()
         {

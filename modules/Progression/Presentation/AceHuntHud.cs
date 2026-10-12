@@ -1,7 +1,9 @@
+using BoscaliSummer.Modules.Progression.Domain;
 using BoscaliSummer.Modules.Progression.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Services;
 using NOAvionics;
 using NuclearOption.Networking;
 using TMPro;
@@ -23,6 +25,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private static readonly Color Secondary = new Color32(194, 201, 201, 255);
         private ISquadView squad;
         private GameObject root;
+        private Canvas bannerCanvas;
         private TMP_Text callsign, identity, status, proficiency, formation, returning, crestCaption;
         private Image portrait, crest, compactCrest;
         private TMP_Text portraitFallback;
@@ -61,6 +64,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             { shownHuntId = squad.ActiveHuntId; introducedAt = Time.unscaledTime; }
             root.SetActive(true);
             AnimateCollapse();
+            ClearBoard();
             EnemyWingView wing = squad.GetEnemyWing(squad.ActiveEnemyWingIndex);
             string ace = wing.AceName ?? "UNKNOWN";
             int separator = ace.IndexOf(" / ", System.StringComparison.Ordinal);
@@ -104,7 +108,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         {
             root = new GameObject("Boscali Ace Hunt", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
             root.transform.SetParent(transform, false);
-            Canvas canvas = root.GetComponent<Canvas>();
+            Canvas canvas = bannerCanvas = root.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 5;
             canvas.pixelPerfect = true;
@@ -196,6 +200,24 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
             foreach (Graphic graphic in root.GetComponentsInChildren<Graphic>(true))
                 graphic.raycastTarget = false;
+        }
+
+        /// <summary>
+        /// Steps both panels sideways, clear of the TAC BOARD's box (<see cref="AceHuntPlacement"/>): the board's stores side stands under the right end of the centred panel. Both panels are centred on the screen
+        /// at x 0, so the shift is their anchored x; it is written only when it changes (a few times a second at most: the board's box changes with its page and the pilot's options).
+        /// </summary>
+        private void ClearBoard()
+        {
+            float k = bannerCanvas != null && bannerCanvas.scaleFactor > 0f ? 1f / bannerCanvas.scaleFactor : 1f, left = 0f, top = 0f, right = 0f, bottom = 0f;
+            bool boxed = ModuleServices.TryGet(out IHudBoard board) && board.TryGetScreenBox(out left, out top, out right, out bottom);
+            float screenW = Screen.width * k;
+            Dodge(expandedPanel, boxed ? AceHuntPlacement.Shift(screenW, 704f, 48f, 184f, left * k, top * k, right * k, bottom * k) : 0f);
+            Dodge(compactPanel, boxed ? AceHuntPlacement.Shift(screenW, 420f, 8f, 36f, left * k, top * k, right * k, bottom * k) : 0f);
+        }
+
+        private static void Dodge(RectTransform panel, float x)
+        {
+            if (panel != null && panel.anchoredPosition.x != x) panel.anchoredPosition = new Vector2(x, panel.anchoredPosition.y);
         }
 
         private void AnimateCollapse()

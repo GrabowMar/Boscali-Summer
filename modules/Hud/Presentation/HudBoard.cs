@@ -32,6 +32,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly WingviewCameraState wingview = new WingviewCameraState();
         private readonly ThirdPersonHudCenter hudCenterProjection = new ThirdPersonHudCenter();
         private readonly NativeFlightNumberHider flightNumberHider = new NativeFlightNumberHider();
+        private readonly VisorSwayDriver visorSway = new VisorSwayDriver();
         private readonly ThreatWatch threats = new ThreatWatch();
         private readonly CountermeasureWatch countermeasures = new CountermeasureWatch();
         private readonly FuelWatch fuelWatch = new FuelWatch();
@@ -109,6 +110,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public void Notice(string channel, HudTone tone, string text, string detail = null) =>
             store.Notice(channel, tone, text, detail);
 
+        public bool TryGetScreenBox(out float left, out float top, out float right, out float bottom)
+        {
+            left = top = right = bottom = 0f;
+            return panel != null && panel.TryGetScreenBox(out left, out top, out right, out bottom);
+        }
+
         /// <summary>The board's 10 Hz readers, in order (the stores and threat feeds read the frame the watchers before them filled): the sites a reader that throws is reported under.</summary>
         private static readonly string[] ReadSites =
         {
@@ -123,6 +130,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             catch (Exception e) { PatchGuard.Report("Hud.Tick", e); }
             // Every frame, whatever happened above (fail open): a board that is not up and fresh gives the native boxes it replaces back.
             panel?.TickNatives();
+            if (panel != null)
+            {
+                // The visor's lag (the option Sway): zero in a pause, the map and a cinematic, and while the board is off.
+                visorSway.Tick(Time.unscaledDeltaTime, options.Sway && options.Enabled && BoscaliSummer.Core.Game.CockpitOverlayGate.NotSuppressed());
+                panel.ApplySway(visorSway.X, visorSway.Y);
+            }
         }
 
         private void Tick()
@@ -211,6 +224,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // A board that cannot be presented must not take the third-person cluster below down with it (and TickNatives takes a board that stopped presenting off the screen).
             try { panel.Present(frame); }
             catch (Exception e) { PatchGuard.Report("Hud.Present", e); }
+            cluster.Board = panel.KeepClearBox;      // the third-person cluster keeps clear of the board's box
 
             // The cockpit already has its own native tac screen for this feed; the card only
             // earns its space in the external views this module can force the HUD into.
@@ -360,6 +374,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             missileTracker.Release();
             missileTracks.Clear();
             store.Reset();
+            visorSway.Reset();
             panel?.Destroy();
             panel = null;
             cluster?.Destroy();

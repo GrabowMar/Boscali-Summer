@@ -778,6 +778,7 @@ public static class SettingsUnityCheck
     {
         public IHudLine Acquire(string owner, string channel, string key) => null;
         public void Notice(string channel, HudTone tone, string text, string detail = null) { }
+        public bool TryGetScreenBox(out float left, out float top, out float right, out float bottom) { left = top = right = bottom = 0f; return false; }
     }
 }
 #endif

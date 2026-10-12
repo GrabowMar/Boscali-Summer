@@ -30,6 +30,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>Something on the board blinks, so its flash phase is part of what it draws.</summary>
         private bool beat => shellBeat || scopeBeat || header.Beat;
         private float now;
+        /// <summary>Where the visor's lag has put the symbology (<see cref="ApplySway"/>): whole device pixels in dock units, y up; zero while the head is still or the option is off. <see cref="rootBase"/> is the root's place without it.</summary>
+        private Vector2 swayShift, rootBase;
+        /// <summary>The box's distance from the screen's right edge as the last repaint placed it (dock units).</summary>
+        private float boxFromRight;
+        /// <summary>The board's box on the screen as the third-person cluster lays out (centre-origin, y up, dock units = canvas units; no size while the board is not drawn): what the cluster and the other modules' banners keep clear of.</summary>
+        public RectF BoardBox { get; private set; }
         // One device pixel in the board's own units, and where the dock's origin falls inside a device pixel: what every edge is laid on (see ScopeCanvas.Begin).
         private float pixel = 1f, phaseX, phaseY;
         private AvUnits units;
@@ -116,6 +122,39 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             hasBoard = true;
             Repaint(true);
             presentedAt = Time.unscaledTime;
+            CornersFrame(true, true);
+        }
+
+        /// <summary>The board's box (<see cref="BoardBox"/>) while it is on the screen, else no size.</summary>
+        public RectF KeepClearBox => root != null && root.gameObject.activeInHierarchy ? BoardBox : default;
+
+        /// <summary>The board's box in device pixels from the screen's top-left corner (y down): false while the board is not drawn. <c>IHudBoard.TryGetScreenBox</c>.</summary>
+        public bool TryGetScreenBox(out float left, out float top, out float right, out float bottom)
+        {
+            RectF box = KeepClearBox;
+            left = top = right = bottom = 0f;
+            if (box.Width <= 0f || !(pixel > 0f)) return false;
+            left = (box.Left + screenW * 0.5f) / pixel;
+            right = (box.Right + screenW * 0.5f) / pixel;
+            top = (screenH * 0.5f - box.Top) / pixel;
+            bottom = (screenH * 0.5f - box.Bottom) / pixel;
+            return true;
+        }
+
+        /// <summary>
+        /// Every frame: put the symbology where the visor's lag puts it (<see cref="VisorSway"/>, in board units, y up): the board's root and the corners' roots move together, in whole device pixels, and only when the pixel
+        /// offset changes (a position write and nothing else). The sun band stays hung from the top of the screen.
+        /// </summary>
+        public void ApplySway(float x, float y)
+        {
+            if (root == null || !(pixel > 0f)) return;
+            float perUnit = baseUnit / pixel;
+            var shift = new Vector2(VisorSway.Pixels(x, perUnit) * pixel, VisorSway.Pixels(y, perUnit) * pixel);
+            if (shift == swayShift) return;
+            swayShift = shift;
+            root.anchoredPosition = rootBase + shift;
+            if (shadeBand != null) shadeBand.rectTransform.anchoredPosition = shadeBandBase - new Vector2(0f, shift.y);
+            PlaceCornerRoots();
         }
 
         private Action<string, HudTone, string, string> systemsNotice;
@@ -201,6 +240,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 header.Clear();
                 Show(root, false);
+                BoardBox = default;
                 return;
             }
             Show(root, true);
@@ -212,10 +252,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             cruise.GaugeLines = 0;
             cruise.Ticker = false;
             PlaceBoard(geo, ScopeLayout.Compute(cruise).Height, out float fromTop);
-            Vector2 rootPosition = new Vector2(OnGrid(cornerX - dock.rect.xMin, phaseX), OnGrid(cornerY - dock.rect.yMin, phaseY));
+            rootBase = new Vector2(OnGrid(cornerX - dock.rect.xMin, phaseX), OnGrid(cornerY - dock.rect.yMin, phaseY));
+            Vector2 rootPosition = rootBase + swayShift;
             if (root.anchoredPosition != rootPosition) root.anchoredPosition = rootPosition;
             Vector2 rootSize = new Vector2(Whole(geo.Width * unit), Whole(geo.Height * unit));
             if (root.sizeDelta != rootSize) root.sizeDelta = rootSize;
+            BoardBox = ScopeLayout.Box(screenW, screenH, boxFromRight, fromTop, rootSize.x, rootSize.y);
             blocks.PageH = target;      // the shade goes where the page is going: its field is baked once for a page change, not on every frame of the wipe
             PaintShade(ScopeLayout.Compute(blocks), fromTop);
 

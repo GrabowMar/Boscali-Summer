@@ -156,6 +156,13 @@ namespace BoscaliSummer.Modules.Hud.Domain
             fromTop = Math.Min((MarginTop + offsetY) * baseUnit, Math.Max(0f, screenH - boxH * unit));
         }
 
+        /// <summary>
+        /// The box as a rectangle of the screen, centre-origin with y up (what <c>ThirdPersonHudLayout</c> works in): <paramref name="fromRight"/> and <paramref name="fromTop"/> are <see cref="Anchor"/>'s, the box
+        /// <paramref name="boxW"/> x <paramref name="boxH"/> (all in the same units as the screen).
+        /// </summary>
+        public static RectF Box(float screenW, float screenH, float fromRight, float fromTop, float boxW, float boxH) =>
+            new RectF(screenW * 0.5f - fromRight - boxW * 0.5f, screenH * 0.5f - fromTop - boxH * 0.5f, boxW, boxH);
+
         /// <summary>How far the painters' body is drawn above its own origin (the old header band less the shelf row): 4 compact, 10 full.</summary>
         public static float Lift(bool compact) => (compact ? HeadCompact : Head) - ShelfRow;
 

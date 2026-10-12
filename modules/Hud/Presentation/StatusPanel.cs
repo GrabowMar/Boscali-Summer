@@ -18,7 +18,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// columns (the stores side at the left: HERO weapon, PWR BUS, EXPENDABLES; the wing at the right: lamp line, the scope's page, gauge line, notice ticker), and the classic STACK column. A block with nothing to say
     /// takes no room. One design unit is a 1080p pixel scaled by the screen's height (never under 0.85) and the pilot's Scale. The board hides the native weapon, countermeasure and capacitor boxes it replaces through
     /// <see cref="NativeCorner"/> and nothing else native; every other Unity object it touches is its own. The class is partial: <c>StatusPanel.Board.cs</c> orchestrates (update, layout, placement),
-    /// <c>StatusPanel.Stores.cs</c> is the stores side, <c>StatusPanel.Wing.cs</c> and <c>StatusPanel.Page.cs</c> the wing side, <c>StatusPanel.Shade.cs</c> the shade.
+    /// <c>StatusPanel.Stores.cs</c> is the stores side, <c>StatusPanel.Wing.cs</c> and <c>StatusPanel.Page.cs</c> the wing side, <c>StatusPanel.Shade.cs</c> the shade, <c>StatusPanel.Corners.cs</c> the kill feed's and the map's corners
+    /// (the sway of the whole symbology is <see cref="ApplySway"/>, in <c>StatusPanel.Board.cs</c>).
     /// </summary>
     internal sealed partial class StatusPanel
     {
@@ -95,6 +96,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             corner?.Dispose();
             corner = new NativeCorner();
             corner.Find(hud, panelRect, root);
+            FindCorners();
         }
 
         /// <summary>The native pieces the board is fonted from are parameters, so an offline render can stand in for them.</summary>
@@ -219,6 +221,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void PlaceBoard(in BoardGeometry geo, float holdHeight, out float fromTop)
         {
             ScopeLayout.Anchor(screenW, screenH, baseUnit, unit, Options.OffsetX, Options.OffsetY, geo.Width, holdHeight, out float fromRight, out fromTop);
+            boxFromRight = fromRight;
             cornerX = screenRight - fromRight;
             cornerY = screenTop - fromTop;
             if (underNative)
@@ -232,6 +235,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public void Hide()
         {
             corner?.Release();
+            StandDownCorners();
+            BoardBox = default;
             header.Clear();
             if (root != null && root.gameObject.activeSelf) root.gameObject.SetActive(false);
         }
@@ -244,6 +249,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             corner?.Dispose();
             corner = null;
+            DestroyCorners();
+            BoardBox = default;
+            swayShift = rootBase = default;
             header.Clear();
             if (root != null) UnityEngine.Object.Destroy(root.gameObject);
             root = null;

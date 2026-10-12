@@ -38,5 +38,11 @@ namespace BoscaliSummer.Core.Contracts
         /// stacking a duplicate.
         /// </summary>
         void Notice(string channel, HudTone tone, string text, string detail = null);
+
+        /// <summary>
+        /// The box the board covers on the screen, in device pixels from the screen's top-left corner (y down): false while the board is not drawn. A banner of another module that would sit across it steps
+        /// aside (the ace-hunt panel does).
+        /// </summary>
+        bool TryGetScreenBox(out float left, out float top, out float right, out float bottom);
     }
 }
