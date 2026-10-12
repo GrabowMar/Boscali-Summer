@@ -187,13 +187,5 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 default: return "";
             }
         }
-
-        internal void Restyle()
-        {
-            primary.Restyle();
-            secondary.Restyle();
-            close.Restyle();
-            shown = StrItemId.None;
-        }
     }
 }

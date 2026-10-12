@@ -136,10 +136,11 @@ namespace BoscaliSummer.Tests.Features.Command
 
             post.Ticket = Sortie(vm, false).Id;
             StrCardPlan ticketed = Card(vm, post.Id);
-            TestAssert.That(ticketed.Primary.Act == StrCardAct.Accept && ticketed.Primary.Target == Sortie(vm, false).Id, "an offered strike ticket makes ACCEPT the primary button, aimed at the ticket");
-            TestAssert.That(ticketed.Secondary.Act == StrCardAct.Focus && ticketed.Secondary.Target == post.Id, "FOCUS stays on the post");
+            TestAssert.That(ticketed.Primary.Act == StrCardAct.Focus && ticketed.Primary.Target == post.Id, "FOCUS stays the post card's primary button (annex 05 P10; the str-4-posts step 10 presses it)");
+            TestAssert.That(ticketed.Secondary.Act == StrCardAct.Accept && ticketed.Secondary.Target == Sortie(vm, false).Id, "an offered strike ticket adds its ACCEPT as the secondary button, aimed at the ticket");
             post.Ticket = Sortie(vm, true).Id;
-            TestAssert.That(Card(vm, post.Id).Primary.Act == StrCardAct.Focus, "a ticket that is already accepted is not offered again");
+            StrCardPlan taken = Card(vm, post.Id);
+            TestAssert.That(taken.Primary.Act == StrCardAct.Focus && taken.Secondary.Act == StrCardAct.None, "a ticket that is already accepted is not offered again");
         }
 
         private static void AnItemThatLeftTheBoardBuildsNothing()

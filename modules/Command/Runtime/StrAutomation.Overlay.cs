@@ -26,17 +26,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
             var r = new Dictionary<string, object> { { "ok", true }, { "found", 0 }, { "hit", 0 }, { "blockedBy", "" } };
             if (!overlay.TryGetTagScreenPoint(item, out Vector2 at)) return r;
             r["found"] = 1;
-            GameObject first = FirstAt(at, out int count);
+            GameObject first = FirstAt(at);
             StrMapTag tag = first != null ? first.GetComponentInParent<StrMapTag>() : null;
-            StrMapTag shown = overlay.Tag(item);
-            Canvas canvas = shown.GetComponentInParent<Canvas>();
-            r["debug"] = new Dictionary<string, object>
-            {
-                { "x", at.x }, { "y", at.y }, { "results", count }, { "es", EventSystem.current != null ? 1 : 0 }, { "esAny", Resources.FindObjectsOfTypeAll<EventSystem>().Length },
-                { "canvasMode", canvas != null ? (int)canvas.rootCanvas.renderMode : -1 }, { "nested", canvas != null && !canvas.isRootCanvas ? 1 : 0 },
-                { "raycasters", Object.FindObjectsOfType<UnityEngine.UI.GraphicRaycaster>().Length },
-                { "plateRaycast", shown.GetComponentInChildren<UnityEngine.UI.Graphic>().raycastTarget ? 1 : 0 },
-            };
             bool hit = tag != null && tag.Id == item;
             r["hit"] = hit ? 1 : 0;
             r["blockedBy"] = hit || first == null ? "" : first.name;
@@ -62,19 +53,13 @@ namespace BoscaliSummer.Modules.Command.Runtime
             RectTransform viewport = map.mapBackground.rectTransform;
             // The airbase icons live in the scene, not in map.mapIcons (which holds the unit icons).
             AirbaseMapIcon[] icons = Object.FindObjectsOfType<AirbaseMapIcon>();
-            int withAirbase = 0, friendly = 0, active = 0, onScreen = 0;
             for (int i = 0; i < icons.Length; i++)
             {
                 AirbaseMapIcon icon = icons[i];
-                if (icon.airbase == null) continue;
-                withAirbase++;
-                if (icon.airbase.CurrentHQ != map.HQ) continue;
-                friendly++;
+                if (icon.airbase == null || icon.airbase.CurrentHQ != map.HQ) continue;
                 if (icon.iconImage == null || !icon.iconImage.gameObject.activeInHierarchy) continue;
-                active++;
                 // Only icons on screen count: one behind the map edge cannot be raycast.
                 if (!viewport.rect.Contains(viewport.InverseTransformPoint(icon.iconImage.transform.position))) continue;
-                onScreen++;
                 if (++seen != want) continue;
                 Vector2 at = RectTransformUtility.WorldToScreenPoint(camera, icon.iconImage.transform.position);
                 r["found"] = 1;
@@ -85,20 +70,13 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 r["blockedBy"] = ours ? first.name : "";
                 r["icon"] = first != null && (first.GetComponentInParent<AirbaseMapIcon>() == icon || first.GetComponent<AirbaseHitTarget>()?.Icon == icon) ? 1 : 0;
             }
-            r["debug"] = new Dictionary<string, object>
-            {
-                { "airbaseObjects", icons.Length }, { "withAirbase", withAirbase }, { "friendly", friendly }, { "active", active }, { "onScreen", onScreen }, { "hasHq", map.HQ != null ? 1 : 0 },
-            };
             return r;
         }
 
-        private static GameObject FirstAt(Vector2 screen) => FirstAt(screen, out _);
-
         // What the pointer would hit: the event system's own RaycastAll. The game keeps its event system disabled while the cursor is locked (a sim run never unlocks
         // it), so then a disabled one is used if any exists, and otherwise every active GraphicRaycaster is asked and the results are put in the event system's order.
-        private static GameObject FirstAt(Vector2 screen, out int count)
+        private static GameObject FirstAt(Vector2 screen)
         {
-            count = 0;
             EventSystem es = EventSystem.current;
             if (es == null)
             {
@@ -113,7 +91,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 foreach (UnityEngine.UI.GraphicRaycaster raycaster in Object.FindObjectsOfType<UnityEngine.UI.GraphicRaycaster>()) raycaster.Raycast(data, results);
                 results.Sort(Order);
             }
-            count = results.Count;
             return results.Count > 0 ? results[0].gameObject : null;
         }
 

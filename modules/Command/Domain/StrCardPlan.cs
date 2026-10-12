@@ -125,12 +125,10 @@ namespace BoscaliSummer.Modules.Command.Domain
             Line(p.BountyText, p.Capped ? "CAPPED" : "");
             Line(p.TraitText);
             Line(p.SeenText);
+            // Annex 05 P10 and 9.4 step 10: FOCUS is the post card's primary button; a ticket on offer adds its ACCEPT beside it.
+            Primary = Focus(vm, id);
             if (ticket != null && ticket.Offered)
-            {
-                Primary = new StrCardButton { Label = "ACCEPT", Act = StrCardAct.Accept, Target = ticket.Id, Gate = ticket.Accept };
-                Secondary = Focus(vm, id);
-            }
-            else Primary = Focus(vm, id);
+                Secondary = new StrCardButton { Label = "ACCEPT", Act = StrCardAct.Accept, Target = ticket.Id, Gate = ticket.Accept };
         }
 
         private static StrCardButton Focus(StrViewModel vm, StrItemId id) =>

@@ -200,12 +200,5 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             v.Commit();
         }
-
-        internal void Restyle(StrViewModel vm, in StrUiState ui)
-        {
-            fronts.Restyle(); operation.Restyle(); sorties.Restyle();
-            legendBuilt = false;
-            BindPlate(vm, in ui);
-        }
     }
 }

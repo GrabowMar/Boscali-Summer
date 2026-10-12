@@ -157,11 +157,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (RectTransformUtility.ScreenPointToWorldPointInRectangle(root, screenCentre, camera, out Vector3 at)) root.position = at;
         }
 
-        internal void Restyle()
-        {
-            lane.Restyle();
-        }
-
         public void OnPointerClick(PointerEventData e)
         {
             if (e.button != PointerEventData.InputButton.Left || Owner == null) return;
