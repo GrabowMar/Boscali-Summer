@@ -187,6 +187,10 @@
       "store": "leash"
     },
     {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
       "op": "call",
       "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Ticket",
       "args": {

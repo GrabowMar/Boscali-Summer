@@ -486,7 +486,9 @@ def wing():
         pr("w0"),
         call(WING_AUTO + "Launch", "launch", lead="player", count=2, field="nearest"),
         wait(100), pr("w1"), wait(100), pr("w2"), wait(100), pr("w3"), wait(100), pr("w4"), wait(100), pr("w5"),            # the wing rolls, lifts off and rejoins: measured at well over 180 s
-        call(WING_PROOF + "Leash", "leash", metres=60000),          # the first strike card is 31 km away (run 4 printed it): reach is 0.9 x the leash
+        # The first strike card is 31 km away (run 4 printed it): reach is 0.9 x the leash. The console reads the wing desk's refusal at 1 Hz, so the lever needs a second to be seen: the
+        # first press of run 5 came 0 s after it and was refused on the old distance (the second, 20 s later, tasked the wing).
+        call(WING_PROOF + "Leash", "leash", metres=60000), wait(2),
         T("send1", act="wing"), wait(4), pr("t1"), sx("Read", "a1"), shot("live-wing-tasked"),
         call(WING_PROOF + "Funnel", "fn"), wait(3), pr("t2"), sx("Read", "a2"),
         T("send2", act="wing"), wait(4), pr("t3"), wr("k0"),
