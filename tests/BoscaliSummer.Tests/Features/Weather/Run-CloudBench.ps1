@@ -37,7 +37,7 @@ Copy-Item "$repo/Core/Math/Deterministic.cs", "$repo/Core/Math/Scalar.cs" "$fixt
 Copy-Item "$repo/Core/Contracts/FxBudget.cs", "$repo/Core/Contracts/IClientEffect.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/Core/Fx/*.cs" "$fixture/Assets/Code/" -Exclude SfxClips.cs
 foreach ($f in 'CloudNoise3D.cs', 'CloudMaps.cs', 'CloudBodies.cs', 'CloudVolumeUniforms.cs', 'CloudLowRes.cs', 'TapeTexture.cs') { Copy-Item "$repo/modules/Weather/Visuals/$f" "$fixture/Assets/Code/" }
-Copy-Item "$PSScriptRoot/CloudBench.cs", "$PSScriptRoot/CloudBenchSkies.cs", "$PSScriptRoot/SkyMetrics.cs" "$fixture/Assets/Code/"
+Copy-Item "$PSScriptRoot/CloudBench.cs", "$PSScriptRoot/CloudBenchSkies.cs", "$PSScriptRoot/CloudBenchSeam.cs", "$PSScriptRoot/SkyMetrics.cs" "$fixture/Assets/Code/"
 function Copy-Shader([string]$from, [string]$to, [string]$rename = '') {
     $text = Get-Content -Raw $from
     $text = $text -replace '"RenderPipeline"="UniversalPipeline"\s*', ''

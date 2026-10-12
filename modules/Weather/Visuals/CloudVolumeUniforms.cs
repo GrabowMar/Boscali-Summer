@@ -13,7 +13,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         public int PixelHeight;
         /// <summary>Altitude range of the weather cloud (before set-pieces), </summary>
         public float Bottom, Top;
-        public float HorizonCover;
         public Vector3 SunDirection;
         public Color SunColor, Ambient, Ground, Fog;
         public float Extinction;
@@ -55,7 +54,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static readonly int FlashAId = Shader.PropertyToID("_CloudFlashA");
         private static readonly int FlashBId = Shader.PropertyToID("_CloudFlashB");
         private static readonly int FlashChangeId = Shader.PropertyToID("_CloudFlashChange");
-        private static readonly int StormId = Shader.PropertyToID("_CloudStorm");
         private static readonly int RainVisualsId = Shader.PropertyToID("_CloudRainVisuals");
         // The weather tape (TapeTexture, BakedTape): the shader reads every per-sample genus and thin-layer column from it.
         private static readonly int TapeTexId = Shader.PropertyToID("_TapeTex");
@@ -76,9 +74,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             Shader.PropertyToID("_NoiseXf3"), Shader.PropertyToID("_NoiseXf4"), Shader.PropertyToID("_NoiseXf5"),
         };
         private static readonly int WindDirId = Shader.PropertyToID("_CloudWindDir");
-        private static readonly int HorizonCoverId = Shader.PropertyToID("_HorizonCover");
         private static readonly int HorizonDeckId = Shader.PropertyToID("_HorizonDeck");
-        private static readonly int HorizonDepthId = Shader.PropertyToID("_HorizonDepth");
         private static readonly int PixelAngleId = Shader.PropertyToID("_CloudPixelAngle");
         private static readonly int StepsId = Shader.PropertyToID("_CloudSteps");
         private static readonly int FarStepsId = Shader.PropertyToID("_CloudFarSteps");
@@ -231,7 +227,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             material.SetVector(FlashBId, frame.FlashB);
             Shader.SetGlobalFloat(FlashChangeId, Mathf.Abs(frame.Flash - previousFlash));
             previousFlash = frame.Flash;
-            material.SetFloat(StormId, sky.Severity);
             material.SetFloat(RainVisualsId, frame.RainVisualsEnabled ? 1f : 0f);
             // The low genus of every sample is a row of the field's tape (it fades with the state).
             BindTape(material, field);
@@ -239,14 +234,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
             WeatherMath.HeadingToVector(field.PrevailingHeading, out float windX, out float windZ);
             material.SetVector(WindDirId, new Vector2(windX, windZ));
-            // Horizon deck: the far ring's cover, plus a distant band of cumulus in fair skies.
-            // An overcast deck continues past the march: rays that reach its base beyond 220 km
-            // (just above the horizon under or inside it) otherwise showed a bright sky sliver.
-            // INTERIM(slice 4): the deck continues the far ring's cover with the sky's baked HorizonCover and HorizonDepth columns;
-            // reading the tape alone, with the march hand-off, comes with the horizon-deck work of slice 4.
-            material.SetFloat(HorizonCoverId, Mathf.Clamp01(Mathf.Max(frame.HorizonCover, sky.HorizonCover)));
-            material.SetFloat(HorizonDeckId, sky.CloudBase + sky.HorizonDepth * 0.4f);
-            material.SetFloat(HorizonDepthId, sky.HorizonDepth);
+            // Horizon deck (spec 7.3): one plane at the tape's deck altitude, fixed per tape; cover and depth per hit come from the tape rows in the shader.
+            material.SetFloat(HorizonDeckId, field.Tape.Tape.DeckAltitude);
 
             material.SetFloat(PixelAngleId,
                 2f * Mathf.Tan(frame.FieldOfView * 0.5f * Mathf.Deg2Rad) / Mathf.Max(1, frame.PixelHeight));

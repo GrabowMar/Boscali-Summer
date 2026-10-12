@@ -167,6 +167,14 @@ public sealed class CloudBench : MonoBehaviour
         camera.AddCommandBuffer(CameraEvent.BeforeForwardAlpha, cmd);
         var readback = new Texture2D(Width, Height, TextureFormat.RGB24, false);
 
+        // The deck seam metric (spec 7.3, CloudBenchSeam): its own render loop, run alone with -Only seam (skies 8, 15 and 29, or CLOUD_BENCH_SKIES).
+        if (Array.Exists(filters, filter => filter == "seam"))
+        {
+            ground.SetActive(false);
+            CloudBenchSeam.Run(log, skies != null ? skies.Skies : new[] { 7, 14, 28 }, camera, target, cmd, cube, march, noise, HalfExtent);
+            return;
+        }
+
         var scenes = new List<Scene>
         {
             new Scene { Name = "broken-high", State = WeatherRegimeType.Broken, Camera = new Vector3(0, 7000, 0), Yaw = 30, Pitch = -6 },
@@ -406,7 +414,6 @@ public sealed class CloudBench : MonoBehaviour
                     FieldOfView = camera.fieldOfView,
                     PixelHeight = mode == "half" || mode == "temporal" ? Height / 2 : Height,
                     Bottom = maps.Bottom, Top = maps.Top,
-                    HorizonCover = maps.HorizonCover,
                     SunDirection = sun,
                     SunColor = s.Name.Contains("night") ? new Color(.13f, .16f, .24f) : new Color(1.9f, 1.8f, 1.6f),
                     Ambient = s.Name.Contains("night") ? new Color(.022f, .029f, .045f) :

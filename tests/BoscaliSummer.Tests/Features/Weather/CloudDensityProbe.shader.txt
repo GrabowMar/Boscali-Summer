@@ -18,7 +18,7 @@ Shader "Hidden/Boscali/CloudDensityProbe"
             #pragma vertex vert_img
             #pragma fragment Probe
             sampler2D _DensityProbePositions;
-            float _ProbeRainMode, _ProbeSlabMode, _ProbeAirMode, _ProbeTapeMode, _ProbeMaskMode, _ProbeOverlapMode, _ProbeLayer, _ProbeNoiseMode;
+            float _ProbeRainMode, _ProbeSlabMode, _ProbeAirMode, _ProbeTapeMode, _ProbeDeckMode, _ProbeMaskMode, _ProbeOverlapMode, _ProbeLayer, _ProbeNoiseMode;
             float _ProbeRayMode, _ProbeRaySceneDistance;
             float3 _ProbeRayOrigin, _ProbeRayDirection;
             float3 _ProbeRainOrigin, _ProbeRainRay;
@@ -65,6 +65,14 @@ Shader "Hidden/Boscali/CloudDensityProbe"
                     }
                     LayerRow row = TapeLayer(s, _ProbeTapeMode < 2.5 ? 0.0 : 1.0);
                     return float4(row.baseY, row.thick, row.cover, row.periodRung);
+                }
+                if (_ProbeDeckMode > 0.5)
+                {
+                    // The horizon deck at a hit: x, z = the hit point on the deck plane, y, w = the eye altitude and the ray's y (positions texture);
+                    // returns the tape's deck cover and depth there and the weight the march hands the deck.
+                    float4 p = tex2Dlod(_DensityProbePositions, float4(i.uv, 0, 0));
+                    float4 hRow = TapeDeckRow(TapeS(p.xz));
+                    return float4(hRow.z, hRow.w, DeckWeight(p.y, p.w, max(1.0, hRow.w)), 0);
                 }
                 if (_ProbeMaskMode > 0.5)
                 {

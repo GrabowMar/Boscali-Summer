@@ -28,7 +28,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// 1.4 km boundary warp and the bilinear footprint). Where r is zero, or a point lies
         /// outside [b, g] with margins, no cloud can be drawn and the march skips its density.</summary>
         internal readonly byte[] Envelope = new byte[EnvelopeSize * EnvelopeSize * 4];
-        internal float Bottom, Top, HorizonCover;
+        internal float Bottom, Top;
         /// <summary>Maximum encoded precipitation alpha across both displayed map levels, 0..1.</summary>
         internal float RainMaximum;
         internal int Revision;
@@ -45,7 +45,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             float bottom = VolumeTop, top = 0f;
             Fill(snapshot, nearHalf, NearSize, result.Near, result.NearProfiles, ref bottom, ref top, ref result.RainMaximum);
             Fill(snapshot, farHalf, FarSize, result.Far, result.FarProfiles, ref bottom, ref top, ref result.RainMaximum, areaMean: true);
-            result.HorizonCover = RingCover(result.Far, FarSize);
             BuildEnvelope(result.Near, result.NearProfiles, result.Envelope);
             result.Bottom = Math.Max(-30f, bottom - 800f);
             result.Top = Math.Min(VolumeTop, Math.Max(bottom + 2000f, top + 1600f));
@@ -151,24 +150,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 into[i + 2] = Math.Min(a[i + 2], b[i + 2]);
                 into[i + 3] = 255;
             }
-        }
-
-        /// <summary>Mean sheet cover on the far map's outer ring: what the horizon deck
-        /// continues with, so the two agree where they meet.</summary>
-        internal static float RingCover(byte[] pixels, int size)
-        {
-            float sum = 0f;
-            int n = 0;
-            int ring = size / 10;
-            for (int z = 0; z < size; z++)
-            for (int x = 0; x < size; x++)
-            {
-                if (x >= ring && x < size - ring && z >= ring && z < size - ring) continue;
-                int i = (z * size + x) * 4;
-                sum += pixels[i] / 255f;
-                n++;
-            }
-            return n > 0 ? sum / n : 0f;
         }
 
         /// <summary>A cloud-base byte (metres / <see cref="BaseRange"/>) in the units of the 16 km structure tops, rounded down so the envelope stays conservative.</summary>

@@ -20,7 +20,7 @@ Shader "Boscali/FlightCloud"
         float3 _CloudWorldOffset, _CloudCameraForward, _CloudSunDirection, _CloudCameraPos;
         float3 _CloudSunColor, _CloudAmbientColor, _CloudGroundColor, _CloudFogColor;
         float2 _CloudWindOffset, _CloudAltitudeBounds, _CloudHeroBounds;
-        float _CloudSteps, _CloudFarSteps, _CloudStorm, _WeatherMapSpan, _WeatherFarSpan;
+        float _CloudSteps, _CloudFarSteps, _WeatherMapSpan, _WeatherFarSpan;
         float _CloudBase;
         float _CloudAirExtinction;
         // Lightning flash envelope, 0..1 (LightningDirector.FlashNow).
@@ -43,8 +43,8 @@ Shader "Boscali/FlightCloud"
         float2 _CloudWindDir;
         // Radians one screen pixel spans: sets the noise level of detail by footprint.
         float _CloudPixelAngle;
-        // The horizon deck: an analytic cloud plane continuing the weather past the march.
-        float _HorizonDeck, _HorizonDepth, _HorizonCover;
+        // The horizon deck: an analytic cloud plane continuing the weather past the march, at the tape's fixed deck altitude (BakedTape.DeckAltitude).
+        float _HorizonDeck;
         // Set-piece storms: xy position, z heading (radians), w kind; B: size, top,
         // strength, extent. Static scenery the weather state builds up or lets decay.
         float4 _HeroA[5];
@@ -346,6 +346,20 @@ Shader "Boscali/FlightCloud"
             if (i0 == i1) return a;
             float4 b = tex2Dlod(_TapeTex, float4((i1 + 0.5) * _TapeInfo.y, v, 0, 0));
             return lerp(a, b, u - fl);
+        }
+
+        // Row 2 of the tape at s (Streets, HorizonCover, HorizonDepth in z, w): the horizon deck's cover and depth. A one-texel tape reads the bound constant.
+        float4 TapeDeckRow(float s) { return _TapeFlags.z > 0.5 ? _TapeConstLow2 : TapeRow(2.0, s); }
+
+        // The share of the deck the march did not reach (spec 7.3): the deck's chord [t0, t1] is the deck plane thickened to its depth along the ray;
+        // 0 while the whole chord lies inside 220 km, 1 once it starts beyond it. Needs rayY != 0. The density check probes this function.
+        float DeckWeight(float roY, float rayY, float hd)
+        {
+            float yb = _HorizonDeck - 0.4 * hd, yt = _HorizonDeck + 0.6 * hd;
+            float ta = (yb - roY) / rayY, tb = (yt - roY) / rayY;
+            float t0 = max(0.0, min(ta, tb)), t1 = max(ta, tb);
+            float hw = 0.5 * max(t1 - t0, 0.25 * CLOUD_FAR_LIMIT);
+            return saturate((0.5 * (t0 + t1) + hw - CLOUD_FAR_LIMIT) / (2.0 * hw));
         }
 
         struct LowRow
@@ -1729,51 +1743,54 @@ Shader "Boscali/FlightCloud"
             colour = rainyCloud.rgb;
             opacity = rainyCloud.a;
 
-            // Horizon deck: past the march the weather continues as one analytic plane at
-            // the deck's altitude, with the far map's own outer coverage, so the clouds
-            // run on to the horizon instead of ending in a ring.
+            // Horizon deck (spec 7.3): one plane at the tape's deck altitude; cover and depth per hit from the tape, and the deck supplies exactly the part of
+            // its chord the march did not reach (wDeck): 0 while the whole chord is inside 220 km, 1 once it starts beyond it.
             float horizonT = (_HorizonDeck - ro.y) / ray.y;
             // Sky pixels carry no occluder: let the deck run past the horizon limit there
             // (aerial perspective whitens it), so its far edge never draws a line.
             float deckLimit = sceneDistance >= CLOUD_HORIZON_LIMIT ? 2e7 : sceneDistance;
-            if (_HorizonCover > 0.01 && horizonT > CLOUD_FAR_LIMIT * 0.75 && horizonT < deckLimit)
+            if (ray.y != 0.0 && horizonT > 0.0 && horizonT < deckLimit)
             {
                 float2 hp = ro.xz + ray.xz * horizonT;
-                float2 nhp = NoiseXZ(hp, NOISE_HORIZON);
-                float hn = tex3Dlod(_CloudNoiseTex, float4(nhp / 52000.0 + 0.31, 0.47, 3.0)).r * 0.62 +
-                    tex3Dlod(_CloudNoiseTex, float4(float2(nhp.y, -nhp.x) / 141000.0 + 0.77, 0.19, 3.5)).r * 0.38;
-                float hBody = saturate(0.5 + (hn - 0.52) * 3.16);
-                float hCover = CoverMask(hBody, _HorizonCover);
-                float hPath = min(_HorizonDepth / max(0.015, abs(ray.y)), 150000.0);
-                // A distance fade collapses to less than a pixel when the camera flies near
-                // the deck's altitude (hundreds of km per milliradian), drawing a hard step.
-                // Dissolve by view angle instead: always about four texels into the haze.
-                float angleFade = smoothstep(0.0, _CloudPixelAngle * 4.0, abs(ray.y));
-                float hOpacity = hCover * (1.0 - exp(-hPath * 0.00003)) *
-                    smoothstep(CLOUD_FAR_LIMIT * 0.75, CLOUD_FAR_LIMIT, horizonT) *
-                    angleFade;
-                bool below = ro.y < _HorizonDeck;
-                float3 hLight = below
-                    ? _CloudAmbientColor * 0.5 + _CloudGroundColor * 0.25 + _CloudSunColor * 0.06
-                    : _CloudAmbientColor * 0.8 + _CloudSunColor * (phase * 0.35 + 0.2);
-                float hAir = AirTransmittance(horizonT, ro.y, _HorizonDeck);
-                float3 hColour = lerp(_CloudFogColor * hOpacity, hLight * hOpacity, hAir);
-                float oldOpacity = opacity;
-                float oldDistance = cloudDistance;
-                if (horizonT < cloudDistance)
+                float4 hRow = TapeDeckRow(TapeS(hp));            // row 2: Streets, HorizonCover (z), HorizonDepth (w)
+                float hd = max(1.0, hRow.w);
+                float wDeck = DeckWeight(ro.y, ray.y, hd);
+                if (hRow.z > 0.01 && wDeck > 0.001)
                 {
-                    colour = hColour + (1.0 - hOpacity) * colour;
-                    opacity = hOpacity + (1.0 - hOpacity) * opacity;
-                    if (opacity > 0.002)
-                        cloudDistance = (hOpacity * horizonT + (1.0 - hOpacity) * oldOpacity * oldDistance) / opacity;
-                }
-                else
-                {
-                    float contribution = (1.0 - opacity) * hOpacity;
-                    colour += (1.0 - opacity) * hColour;
-                    opacity += contribution;
-                    if (opacity > 0.002)
-                        cloudDistance = (oldOpacity * oldDistance + contribution * horizonT) / opacity;
+                    float2 nhp = NoiseXZ(hp, NOISE_HORIZON);
+                    float hn = tex3Dlod(_CloudNoiseTex, float4(nhp / 52000.0 + 0.31, 0.47, 3.0)).r * 0.62 +
+                        tex3Dlod(_CloudNoiseTex, float4(float2(nhp.y, -nhp.x) / 141000.0 + 0.77, 0.19, 3.5)).r * 0.38;
+                    float hBody = saturate(0.5 + (hn - 0.52) * 3.16);
+                    float hCover = CoverMask(hBody, saturate(hRow.z));
+                    float hPath = min(hd / max(0.015, abs(ray.y)), 150000.0);
+                    // A distance fade collapses to less than a pixel when the camera flies near
+                    // the deck's altitude (hundreds of km per milliradian), drawing a hard step.
+                    // Dissolve by view angle instead: always about four texels into the haze.
+                    float angleFade = smoothstep(0.0, _CloudPixelAngle * 4.0, abs(ray.y));
+                    float hOpacity = hCover * (1.0 - exp(-hPath * 0.00003)) * wDeck * angleFade;
+                    bool below = ro.y < _HorizonDeck;
+                    float3 hLight = below
+                        ? _CloudAmbientColor * 0.5 + _CloudGroundColor * 0.25 + _CloudSunColor * 0.06
+                        : _CloudAmbientColor * 0.8 + _CloudSunColor * (phase * 0.35 + 0.2);
+                    float hAir = AirTransmittance(horizonT, ro.y, _HorizonDeck);
+                    float3 hColour = lerp(_CloudFogColor * hOpacity, hLight * hOpacity, hAir);
+                    float oldOpacity = opacity;
+                    float oldDistance = cloudDistance;
+                    if (horizonT < cloudDistance)
+                    {
+                        colour = hColour + (1.0 - hOpacity) * colour;
+                        opacity = hOpacity + (1.0 - hOpacity) * opacity;
+                        if (opacity > 0.002)
+                            cloudDistance = (hOpacity * horizonT + (1.0 - hOpacity) * oldOpacity * oldDistance) / opacity;
+                    }
+                    else
+                    {
+                        float contribution = (1.0 - opacity) * hOpacity;
+                        colour += (1.0 - opacity) * hColour;
+                        opacity += contribution;
+                        if (opacity > 0.002)
+                            cloudDistance = (oldOpacity * oldDistance + contribution * horizonT) / opacity;
+                    }
                 }
             }
 

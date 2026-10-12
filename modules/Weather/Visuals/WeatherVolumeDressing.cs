@@ -70,7 +70,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private bool blendUnavailable;
         private WeatherKey mapKey;
         private float volumeBottom, volumeTop = CloudMaps.VolumeTop;
-        private float horizonCover, previousHorizonCover;
         private float rainMaximum, previousRainMaximum;
         private bool halfResolution;
         private Vector3 lightDirection = Vector3.up;
@@ -249,7 +248,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 PixelHeight = halfResolution && pass.Height > 0 ? pass.Height : camera.pixelHeight,
                 Bottom = mapBlend < 1f ? Mathf.Min(volumeBottom, previousBottom) : volumeBottom,
                 Top = mapBlend < 1f ? Mathf.Max(volumeTop, previousTop) : volumeTop,
-                HorizonCover = Mathf.Lerp(previousHorizonCover, horizonCover, mapBlend),
                 SunDirection = sunDirection,
                 SunColor = sunColor,
                 Ambient = RenderSettings.ambientSkyColor * RenderSettings.ambientIntensity * 0.45f +
@@ -453,10 +451,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             {
                 previousBottom = first ? result.Bottom : volumeBottom;
                 previousTop = first ? result.Top : volumeTop;
-                previousHorizonCover = first ? result.HorizonCover : horizonCover;
                 previousRainMaximum = first ? result.RainMaximum : rainMaximum;
             }
-            horizonCover = result.HorizonCover;
             rainMaximum = result.RainMaximum;
             volumeBottom = result.Bottom;
             volumeTop = result.Top;
