@@ -172,6 +172,7 @@
     <Compile Include="..\..\modules\TheaterOps\Domain\EmptyReasonRules.cs" Link="Features\TheaterOps\EmptyReasonRules.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\ViewStateRules.cs" Link="Features\TheaterOps\ViewStateRules.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\FaultLedger.cs" Link="Features\TheaterOps\FaultLedger.cs" />
+    <Compile Include="..\..\modules\Command\Domain\ThreatLevelRules.cs" Link="Features\Command\ThreatLevelRules.cs" />
     <Compile Include="..\..\Core\Contracts\IThreatPicture.cs" Link="Framework\IThreatPicture.cs" />
     <Compile Include="..\..\modules\Intel\Domain\*.cs" LinkBase="Features\Intel\Domain" />
     <Compile Include="..\..\modules\Events\Domain\EventDefinition.cs" Link="Features\Events\EventDefinition.cs" />

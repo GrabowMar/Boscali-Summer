@@ -41,6 +41,17 @@ namespace BoscaliSummer.Modules.Command.Domain
             hostileShare = Math.Max(0, hostile) / (float)total;
         }
 
+        /// <summary>
+        /// The one allied-share definition: friendly / (friendly + hostile), the same number as <c>TerritoryControlRatio</c>.
+        /// NaN unless both counts are known (not negative) and their sum is above zero, so an empty board never reads as a confident 0 or 100.
+        /// </summary>
+        public static float AlliedShare(int friendly, int hostile)
+        {
+            if (friendly < 0 || hostile < 0) return float.NaN;
+            long total = (long)friendly + hostile;
+            return total == 0 ? float.NaN : friendly / (float)total;
+        }
+
         /// <summary>A ratio as whole percent. NaN and infinity read as an unknown dash.</summary>
         public static string Percent(float ratio) => AvNum.PercentWhole(ratio);
 
