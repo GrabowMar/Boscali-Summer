@@ -10,89 +10,29 @@ namespace BoscaliSummer.Tests.Features.Weather
     {
         public static void Run()
         {
-            ClassSkiesAreDesignatedRows();
-            ClassRowsAreExemptFromClassOf();
-            FieldReadsOneKeyframeTape();
+            FieldReadsTheBakedTape();
             FixtureTapeVariesTheGenusAndLayers();
             MapsEncloseTheLocalDeck();
             BodiesReadTheirRowFromTheTape();
         }
 
-        private static void ClassSkiesAreDesignatedRows()
+        private static void FieldReadsTheBakedTape()
         {
-            float[] lobes = { 2f, 1f, 3f, 4f, 3f, 3f, 5f };
-            for (int i = 0; i < StateTable.Count; i++)
-            {
-                SkyParams row = StateTable.Get((WeatherRegimeType)i);
-                TestAssert.That(row.LobeRung == lobes[i], "class " + i + " snaps its old puff scale to rung " + lobes[i] + ", got " + row.LobeRung);
-                TestAssert.That(Math.Abs(row.Mid.Strength - 0.42f) < 1e-6f && Math.Abs(row.High.Strength - 0.12f) < 1e-6f,
-                    "class " + i + " keeps today's layer strengths 0.42 and 0.12");
-                TestAssert.That(row.HorizonDepth >= 300f && row.CapacityCover >= 0.36f && row.BaseVariation >= 150f,
-                    "class rows have a horizon depth, the capacity of their lattice genus and its base variation");
-                TestAssert.That(row.CumulusLevel == CumulusLevels.For(row.CumulusCover, row.CapacityCover) && (row.CumulusCover > 0f) == (row.CumulusLevel > 0f),
-                    "and the activation level that makes the lattice reach their cumulus cover");
-                TestAssert.That(Math.Abs(row.HorizonCover - Math.Max(0.9f * row.SheetCover, 0.6f * row.CumulusCover + 0.2f * row.Convective)) < 1e-6f,
-                    "class " + i + " keeps today's horizon uniform (INTERIM), not the baked library formula");
-            }
-            SkyParams overcast = StateTable.Get(WeatherRegimeType.Overcast);
-            TestAssert.That(Math.Abs(overcast.Mid.Base - 3390f) < 0.5f && Math.Abs(overcast.Mid.Thick - 1570f) < 0.5f && overcast.Mid.Cover == 0.45f,
-                "the Overcast row's old middle layer (cover 0.45, sheet 0.90) is a deck at 3390 m, 1570 m thick");
-            TestAssert.That(Math.Abs(overcast.High.Thick - 880f) < 0.5f && Math.Abs(overcast.High.Aspect - 1.3f) < 1e-4f && overcast.High.Base == 8600f,
-                "and its old high veil (0.95) is a deck 880 m thick with aspect 1.3");
-            TestAssert.That(overcast.Mid.Veil > 0.8f && overcast.Mid.Streaks + overcast.Mid.Ripples + overcast.Mid.Veil > 0.99f,
-                "a near-sheet middle layer is mostly veil");
-            SkyParams fair = StateTable.Get(WeatherRegimeType.Fair);
-            TestAssert.That(Math.Abs(fair.CumulusCover - 0.21f) < 1e-6f, "Fair carries half of its old cumulus level as cover");
-            TestAssert.That(StateTable.LatticeGenus == LowGenus.Mediocris, "every class sky builds its lattice from one genus, so a fade never swaps the groups");
-            SkyParams halfway = StateTable.At(2.5f);
-            TestAssert.That(Math.Abs(halfway.LobeRung - 3.5f) < 1e-5f && halfway.SheetCover > StateTable.Get(WeatherRegimeType.Scattered).SheetCover, "a fade between two class skies blends their columns, the lobe rung going fractional for the ladder");
-            TestAssert.That(halfway.CumulusLevel == CumulusLevels.For(halfway.CumulusCover, halfway.CapacityCover), "but the cumulus level is recomputed from the blended cover, never blended");
-            TestAssert.That(Math.Abs(halfway.HorizonCover - Math.Max(0.9f * halfway.SheetCover, 0.6f * halfway.CumulusCover + 0.2f * halfway.Convective)) < 1e-6f,
-                "and the horizon cover of a fade is the uniform on the faded row, not the fade of two uniforms");
-        }
-
-        private static void ClassRowsAreExemptFromClassOf()
-        {
-            // INTERIM(slice 4): the seven class rows are the old state table back-derived (opacity 0.7 / 0.15, CumulusCover = Cumulus * 0.5, the old
-            // Convective term), not library skies, and ClassConditions reads four of them one class up. Nominal readings: Clear 0.046, Fair 0.253,
-            // Scattered 0.504 (Broken), Broken 0.639 (Overcast), Overcast 0.768 (Rain), Rain 1.000 (Storm), Storm 1.000. They cannot be retuned
-            // to pass without changing today's picture: the layer strengths are pinned at 0.42 and 0.12, Overcast still reads 0.766 (Rain) with no
-            // cumulus cover at all, Broken reads Broken only with essentially none, and the Rain row's convective term alone adds 0.21. Slice 4 deletes the rows with the legacy
-            // timeline, and the class of a point is read from library skies only. This test pins the exemption, so that slice 4's ClassSampled
-            // and airbase match cannot inherit the offset unnoticed: a row never reads lower than its own class and at most one higher,
-            // and Clear, Fair and Storm read as themselves.
-            for (int i = 0; i < StateTable.Count; i++)
-            {
-                var own = (WeatherRegimeType)i;
-                WeatherRegimeType read = SkyMath.ClassOf(StateTable.Get(own));
-                TestAssert.That(read >= own && (int)read - i <= 1, "class row " + own + " reads as " + read + ": never lower, at most one class up");
-            }
-            foreach (WeatherRegimeType c in new[] { WeatherRegimeType.Clear, WeatherRegimeType.Fair, WeatherRegimeType.Storm })
-                TestAssert.That(SkyMath.ClassOf(StateTable.Get(c)) == c, c + " reads as its own class");
-        }
-
-        private static void FieldReadsOneKeyframeTape()
-        {
-            foreach (WeatherRegimeType state in (WeatherRegimeType[])Enum.GetValues(typeof(WeatherRegimeType)))
+            foreach (int sky in new[] { 0, 7, 36 })
             {
                 var field = new WeatherField();
-                field.Build(new WeatherKey(73u, 0f, false, (byte)state), 600f, 40000f, 40000f);
-                TestAssert.That(field.Tape.IsValid && field.Tape.IsConstant, "the live field has a one-keyframe tape");
-                SkyParams row = field.Tape.At(12345f);
-                TestAssert.That(row.CloudBase == field.Params.CloudBase && row.LobeRung == field.Params.LobeRung && row.Mid.Cover == field.Params.Mid.Cover,
-                    "its row is the sky the timeline shows");
-                WeatherPoint p = field.Sample(5000f, -3000f);
-                TestAssert.That(p.DeckTop >= p.CloudBase + 280f && p.MidCover == field.Params.Mid.Cover && p.HighBase == field.Params.High.Base,
-                    "a sample carries the local deck top and thin layers");
+                field.Build(new WeatherKey(73u, 0f, false, 2, skyPin: (byte)sky), 600f, 40000f, 40000f);
+                TestAssert.That(field.Tape.IsValid && !field.Tape.IsConstant && field.Tape.Tape.Texels == BakedTape.FullTexels && ReferenceEquals(field.Tape.Tape, field.TapeSource.Baked), "the live field reads the tape's baked array");
+                float s = field.Frame.S(5000f, -3000f);
+                TestAssert.That(field.Tape.At(s).CloudBase == field.RowAt(5000f, -3000f).CloudBase, "RowAt is the baked row at that s");
             }
             var again = new WeatherField();
             var key = new WeatherKey(73u, 0f, false, (byte)WeatherRegimeType.Broken);
             again.Build(key, 600f, 40000f, 40000f);
             WeatherPoint before = again.Sample(1000f, 1000f);
-            again.UseFixtureTape(TapeSampler.Constant(WithLobe(again.Params, 5f)), new TapeFrame(0f, 0f));
+            again.UseFixtureTape(TapeSampler.Constant(WithLobe(again.RowAt(0f, 0f), 5f)), new TapeFrame(0f, 0f));
             again.Build(key, 600f, 40000f, 40000f);
-            TestAssert.That(again.Tape.IsConstant && again.Tape.At(0f).LobeRung == again.Params.LobeRung && again.Sample(1000f, 1000f).DeckTop == before.DeckTop,
-                "the next Build restores the one-keyframe tape");
+            TestAssert.That(!again.Tape.IsConstant && again.Sample(1000f, 1000f).DeckTop == before.DeckTop, "the next Build restores the baked tape");
         }
 
         private static SkyParams WithLobe(SkyParams s, float rung) { s.LobeRung = rung; return s; }

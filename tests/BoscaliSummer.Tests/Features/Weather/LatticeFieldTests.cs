@@ -12,7 +12,6 @@ namespace BoscaliSummer.Tests.Features.Weather
         public static void Run()
         {
             SampleIsTheLatticeBlock();
-            ClassSkiesReachTheirCumulusCover();
             NearestCloudIsAGroupWithAnExtent();
             StreetSkyHasStreetZones();
             LatticeFollowsTheTapeIdentityOnly();
@@ -38,24 +37,6 @@ namespace BoscaliSummer.Tests.Features.Weather
                     TestAssert.That(Math.Abs(p.ClusterCover - (1f - clear)) < 1e-6f && p.CellShape >= shape - 1e-6f,
                         "the sample is the lattice block around the point (key " + key.Seed + ")");
                 }
-            }
-        }
-
-        private static void ClassSkiesReachTheirCumulusCover()
-        {
-            foreach (WeatherRegimeType state in new[] { WeatherRegimeType.Fair, WeatherRegimeType.Scattered, WeatherRegimeType.Broken })
-            {
-                double sum = 0; int n = 0;
-                float wanted = StateTable.Get(state).CumulusCover;
-                for (uint seed = 1; seed <= 24; seed++)
-                {
-                    var field = new WeatherField();
-                    field.Build(new WeatherKey(seed * 9973u, 0f, false, (byte)state), 600f, Half, Half);
-                    for (int iz = 0; iz < 21; iz++)
-                    for (int ix = 0; ix < 21; ix++) { sum += field.Sample(ix * 5000f - 50000f, iz * 5000f - 50000f).ClusterCover; n++; }
-                }
-                float achieved = (float)(sum / n);
-                TestAssert.That(Math.Abs(achieved - wanted) < 0.035f, state + ": the lattice reaches " + wanted + ", got " + achieved);
             }
         }
 

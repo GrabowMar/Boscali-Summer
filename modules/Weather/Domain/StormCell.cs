@@ -157,8 +157,10 @@ namespace BoscaliSummer.Modules.Weather.Domain
             SkyParams row = src.RowAt(x, z, out _);
 
             float conv = Scalar.Clamp01(row.Convective);
-            // INTERIM(slice 4): the marker bias of 5.3 adds to conv here, at the cell centre; CapacityCell is 1.
-            float level = Scalar.Clamp01(conv);
+            // Beading (spec 5.3): the line raises the activation of a cell that already stands near it. The bias is read at the cell centre, so a cell's
+            // strength stays a constant of the cell in the tape frame; CapacityCell is 1.
+            float bias = src.Markers == null || src.Markers.Count == 0 ? 0f : src.Markers.BiasAt(src.Frame.STape(x, z), src.Frame.MeanderSlope(src.Frame.Across(x, z)));
+            float level = Scalar.Clamp01(conv + bias);
             float rank = LatticeHash.Unit(salt, gx, gz, k, SlotRank);
             float severeAt = LatticeHash.Unit(salt, gx, gz, k, SlotSevere);
             float severeBlend = WeatherMath.Smoothstep(severeAt, severeAt + 0.15f, Scalar.Clamp01(row.Severity));

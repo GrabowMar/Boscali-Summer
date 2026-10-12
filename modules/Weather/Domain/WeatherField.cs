@@ -25,6 +25,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
     {
         public float RainRate;
         public float Cover;
+        /// <summary>max(low cover, mid cover x opacity) of the local row: what Gate() reads to let stratiform rain fall (spec 5.3).</summary>
+        public float RainCover;
         /// <summary>Top of the low deck from the local row (base + max(puff depth, deck depth) + half the wobble): the envelope's conservative ceiling.</summary>
         public float DeckTop;
         /// <summary>The local thin layers: cover and altitude range from the tape row at this point (spec 8.2).</summary>
@@ -97,7 +99,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// effects only; native wind keeps the mission's own speed.</summary>
         public const float BaseWindSpeed = 7f;
 
-        private readonly FrontState[] fronts = new FrontState[WeatherFronts.MaxFronts];
         private readonly CellCache<CumulusGroup> cumulusCache = new CellCache<CumulusGroup>();
         private readonly CellCache<StormCell> stormCache = new CellCache<StormCell>();
         /// <summary>The base-height field of the current layout seed (it remembers the last lattice cell it read).</summary>
@@ -110,25 +111,28 @@ namespace BoscaliSummer.Modules.Weather.Domain
         private bool tapeIsConstant;
         /// <summary>The noise rotation and offsets of the current layout seed, built once per seed (spec 6).</summary>
         private NoiseXform noiseXform;
+        private MarkerSet tapeMarkers = MarkerSet.Empty;
 
-        private readonly BakedTape constantTape = new BakedTape(1);
 
         public WeatherKey Key { get; private set; }
         public float Time { get; private set; }
         public float HalfX { get; private set; }
         public float HalfZ { get; private set; }
         public float HourOfDay { get; private set; }
-        public TimelineState Timeline { get; private set; }
-        /// <summary>The frontal boundary across the map in BROKEN and worse skies.</summary>
-        public SkySplit Split { get; private set; }
-        /// <summary>INTERIM(slice 4): the sky the legacy timeline (or a pin) shows. Per-sample genus and layer rows come from <see cref="Tape"/>.</summary>
-        public SkyParams Params { get; private set; }
+        /// <summary>The tape this field was built from (null after UseFixtureTape): markers, fronts and segments for the console and the tests.</summary>
+        public WeatherTape TapeSource { get; private set; }
+        /// <summary>True when D follows the mission clock (<c>Build(..., moving: true)</c>); the live manager holds D at the key's Offset until slice 5.</summary>
+        public bool Moving { get; private set; }
+        // SHIM(task 15): the legacy surface, inert, until the last consumers move. Deleted with WeatherTimeline, SkySplit and WeatherFronts.
+        public TimelineState Timeline => HeldTimeline();
+        public SkySplit Split => default;
+        public SkyParams Params => RowAt(0f, 0f);
         /// <summary>Where every per-sample genus and thin-layer row is read from: one keyframe (<see cref="Params"/>) in slices 2-3, a fixture's baked tape in the density check and the bench.</summary>
         public TapeSampler Tape { get; private set; }
         public TapeFrame Frame { get; private set; }
         /// <summary>Everything the lattices resolve from: the tape identity, the tape and its frame (spec 6). Rebuilt with every Build.</summary>
         public LatticeSource Lattice { get; private set; }
-        public int FrontCount { get; private set; }
+        public int FrontCount => 0;
         /// <summary>Scenery storms outside the theater; see <see cref="Superstructures"/>.</summary>
         public int SuperstructureCount { get; private set; }
 
@@ -139,11 +143,20 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public float PrevailingHeading { get; private set; }
         public bool IsBuilt => Key != null;
 
-        public FrontState Front(int index) => fronts[index];
+        public FrontState Front(int index) => default;
+
+        private TimelineState HeldTimeline()
+        {
+            WeatherRegimeType cls = Key.SkyPin < SkyLibrary.Count ? SkyLibrary.ClassOf(Key.SkyPin) : SkyMath.ClassOf(RowAt(0f, 0f));
+            return new TimelineState { From = cls, To = cls, Blend = 1f, Level = (int)cls, GrowthLevel = (int)cls, StepStart = Key.Epoch, NextChangeAt = float.PositiveInfinity, Next = cls, Layout = Key.LayoutSeed };
+        }
+
+        /// <summary>The tape row at a world point: the local sky, with the low genus, the base, the thin layers and every CPU column.</summary>
+        public SkyParams RowAt(float x, float z) => tapeIsConstant ? constantRow : Tape.At(Frame.S(x, z));
 
         public Superstructure SuperstructureAt(int index) => superstructures[index];
 
-        public void Build(WeatherKey key, float time, float halfX, float halfZ, float hourOfDay = 12f, float hazeScale = 1f)
+        public void Build(WeatherKey key, float time, float halfX, float halfZ, float hourOfDay = 12f, float hazeScale = 1f, bool moving = false)
         {
             Key = key ?? throw new ArgumentNullException(nameof(key));
             Time = time;
@@ -152,38 +165,21 @@ namespace BoscaliSummer.Modules.Weather.Domain
             HourOfDay = hourOfDay;
             HazeScale = Scalar.Clamp(hazeScale, 0.05f, 1f);
 
-            // INTERIM(slice 4): a pinned sky holds one library instance; otherwise the legacy timeline walks the class skies.
-            bool pinned = key.SkyPin < SkyLibrary.Count;
-            TimelineState timeline = pinned
-                ? WeatherTimeline.Held(key, SkyLibrary.ClassOf(key.SkyPin))
-                : WeatherTimeline.Evaluate(key, time);
-            Timeline = timeline;
-            SkyParams sky = pinned
-                ? SkyLibrary.Instance(key.SkyPin, SkyLibrary.PinSeed(key), key.OpeningBase)
-                : StateTable.At(timeline.Level);
-            Params = sky;
-            // INTERIM(slice 4): the legacy timeline grows cumulus and convection slower than the sheet fades (GrowthLevel), so the
-            // one-keyframe tape carries those activation columns from the growth sky. A pinned sky is its own growth sky.
-            SkyParams convection = pinned ? sky : StateTable.At(timeline.GrowthLevel);
-            SkyParams row = sky;
-            row.CumulusCover = convection.CumulusCover;
-            row.CapacityCover = convection.CapacityCover;
-            row.CumulusLevel = convection.CumulusLevel;
-            row.Convective = convection.Convective;
-            row.Severity = convection.Severity;
-            constantTape.SetConstant(row, pinned ? SkyLibrary.Get(key.SkyPin).Genus.Genus : StateTable.LatticeGenus);
-            Tape = new TapeSampler(constantTape);
-            tapeIsConstant = true;
-            constantRow = row;
+            // The tape is a pure function of the tape identity and shared (spec 5); D is the key's offset, or follows the mission clock when asked (the tests of
+            // rigidity, and slice 5). Slice 4a holds D at the offset the opening gave: windows, cookie and temporal path slide in slice 5.
+            WeatherTape tape = WeatherTape.For(key);
+            TapeSource = tape;
+            Moving = moving;
+            Tape = new TapeSampler(tape.Baked);
+            tapeIsConstant = false;
             if (noiseXform == null || noiseXform.LayoutSeed != key.LayoutSeed) noiseXform = new NoiseXform(key.LayoutSeed);
-            Frame = new TapeFrame(key.HeadingDeg, 0f, noise: noiseXform);
+            float d = moving ? (float)key.OffsetAt(time) : key.Offset;
+            Frame = tape.Frame(key.HeadingDeg, d, noiseXform);
+            tapeMarkers = tape.Markers;
             ResetLattice();
             PrevailingHeading = key.DownwindHeading; // the mission wind's heading, set once at capture
 
-            Split = SkySplit.From(timeline.Layout, sky.Split, HalfX, HalfZ, PrevailingHeading, 0); // INTERIM(slice 4): no front turn
-            FrontCount = WeatherFronts.Fill(fronts, timeline.Layout, sky, HalfX, HalfZ, PrevailingHeading, Split);
-
-            SuperstructureCount = Superstructures.Fill(superstructures, timeline.Layout, convection,
+            SuperstructureCount = Superstructures.Fill(superstructures, key.LayoutSeed, RowAt(0f, 0f),
                 HalfX, HalfZ, PrevailingHeading, key.Sets, key.HasAnchor, key.AnchorX, key.AnchorZ);
         }
 
@@ -193,13 +189,15 @@ namespace BoscaliSummer.Modules.Weather.Domain
             Tape = tape;
             Frame = frame;
             tapeIsConstant = tape.IsConstant;
+            tapeMarkers = MarkerSet.Empty;
+            TapeSource = null;
             if (tapeIsConstant) constantRow = tape.At(0f);
             ResetLattice();
         }
 
         private void ResetLattice()
         {
-            Lattice = new LatticeSource(Key.TapeId, Key.LayoutSeed, Tape, Frame);
+            Lattice = new LatticeSource(Key.TapeId, Key.LayoutSeed, Tape, Frame, tapeMarkers);
             cumulusCache.Reset();
             cumulusNear.Reset();
             stormCache.Reset();
@@ -252,46 +250,39 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         public WeatherPoint Sample(float x, float z)
         {
-            SkyParams p = Params;
-            // The per-sample row: the low genus, the base and the thin layers are read from the tape at this point's position.
-            SkyParams local = tapeIsConstant ? constantRow : Tape.At(Frame.S(x, z));
+            // The per-sample row: the low genus, the base, the thin layers and every CPU column are read from the tape at this point's position.
+            float s = Frame.S(x, z);
+            SkyParams local = tapeIsConstant ? constantRow : Tape.At(s);
+            SkyParams p = local;
             var point = new WeatherPoint();
             // The lattices live in the tape frame (spec 3.1): q = p + u * D, with D 0 until the tape moves (slice 5).
             Frame.ToTape(x, z, out float qx, out float qz);
 
             // Area (stratiform) rain and the sheet, broken up by the static patch field so a
             // thinning deck opens in patches instead of fading uniformly.
-            float patch = Patch(x, z);
-            // Behind the frontal boundary the full deck; ahead of it the sky opens.
-            float split = Split.Cover(x, z);
-            float areaRain = p.StratRain * 2.2f * WeatherMath.Smoothstep(0.45f, 0.8f, patch) * split;
-            float sheet = p.SheetCover * split;
+            float patch = PatchAt(qx, qz);
+            float areaRain = p.StratRain * 2.2f * WeatherMath.Smoothstep(0.45f, 0.8f, patch);
+            float sheet = p.SheetCover;
             float coverBase = Scalar.Clamp01(sheet + (patch - 0.5f) * (0.10f + 0.55f * sheet));
             point.BackgroundCover = coverBase;
 
             float windSpeed = BaseWindSpeed * p.WindFactor;
             float turbulence = p.Turbulence;
 
-            float frontRain = 0f;
-            float clearFront = 1f;
-            float veer = 0f;
-            float frontWeight = 0f, frontBaseSum = 0f, frontTopSum = 0f;
-            for (int i = 0; i < FrontCount; i++)
+            // Front markers (spec 5.3): thin overlays on the keyframe blend. A marker adds rain, gust, veer and a QNH dip; it never adds cover. The distance
+            // d is measured across the wavy line: (s - s_k) / sqrt(1 + M'(a)^2), negative before the line arrives.
+            float coreRain = 0f, markerGust = 0f, veer = 0f, qnhDip = 0f;
+            for (int i = 0; i < tapeMarkers.Count; i++)
             {
-                FrontState front = fronts[i];
-                FrontEffect effect = WeatherFronts.Profile(front.Kind, front.SignedDistance(x, z));
-                frontRain += effect.Rain * front.Strength;
-                float cover = effect.Cover * front.Strength;
-                clearFront *= 1f - cover;
-                float underside = Scalar.Clamp(p.CloudBase + effect.BaseOffset, 250f, 8500f);
-                frontWeight += cover;
-                frontBaseSum += underside * cover;
-                frontTopSum += (underside + effect.Depth) * cover;
-                veer += effect.VeerDegrees * front.Strength;
-                windSpeed += effect.WindBoost * front.Strength;
-                turbulence += effect.Turbulence * front.Strength;
+                TapeMarker marker = tapeMarkers.Items[i];
+                if (Math.Abs(s - marker.S) > FrontLine.Reach * 1.5f) continue;
+                float d = tapeMarkers.Distance(i, s, Frame.MeanderSlope(Frame.Across(x, z)));
+                LineEffect effect = FrontLine.Line(marker.Kind, d);
+                coreRain += effect.Rain * marker.Strength;
+                markerGust += effect.Gust * marker.Strength;
+                veer += effect.VeerDegrees * marker.Strength;
+                qnhDip += effect.QnhDip * marker.Strength;
             }
-
             WeatherMath.HeadingToVector(PrevailingHeading + veer, out float windX, out float windZ);
             windX *= windSpeed;
             windZ *= windSpeed;
@@ -350,26 +341,21 @@ namespace BoscaliSummer.Modules.Weather.Domain
             CumulusLattice.Sample(Lattice, cumulusCache, cumulusNear, qx, qz, out float clearClusters, out float groupShape, out float groupCrown);
             if (groupShape > point.CellShape) point.CellShape = groupShape;
 
-            float rain = Math.Min(areaRain + frontRain + cellRain, MaxRainRate);
+            // Rain = (keyframe rain + marker core) * Gate(RainCover) + cell rain, capped at 120 mm/h (spec 5.3). The gate keeps a core from raining under
+            // open sky; a cell supplies its own cover, so cell rain is never gated.
+            float rainCover = SkyMath.RainCover(local);
+            float stratiform = (areaRain + coreRain) * SkyMath.Gate(rainCover);
+            float rain = Math.Min(stratiform + cellRain, MaxRainRate);
             point.RainRate = rain;
-            point.ConvectiveShare = rain > 0.01f ? cellRain / (areaRain + frontRain + cellRain) : 0f;
-            point.Cover = Scalar.Clamp01(1f - (1f - coverBase) * clearFront * clearCells * clearClusters);
-            point.FrontCover = Scalar.Clamp01(1f - clearFront);
+            point.RainCover = rainCover;
+            point.ConvectiveShare = rain > 0.01f ? Math.Min(1f, cellRain / (stratiform + cellRain)) : 0f;
+            point.Cover = Scalar.Clamp01(1f - (1f - coverBase) * clearCells * clearClusters);
             point.ClusterCover = Scalar.Clamp01(1f - clearClusters);
             point.CellCover = Scalar.Clamp01(1f - clearCells);
-
-            if (frontWeight > 0f)
-            {
-                point.FrontBase = frontBaseSum / frontWeight;
-                point.FrontTop = frontTopSum / frontWeight;
-            }
 
             // The local row's base with the base-height field added (spec 6), and the rain-bearing lowering taken off.
             float cloudBase = local.CloudBase + local.BaseVariation * baseField.At(qx, qz) -
                 300f * WeatherMath.Smoothstep(0f, 15f, rain);
-            // A front may lower the rain-bearing ceiling, but a high leading shield must not
-            // lift low cloud; the shield renders through FrontBase/FrontTop.
-            cloudBase = WeatherMath.Lerp(cloudBase, Math.Min(cloudBase, point.FrontBase), point.FrontCover);
             point.CloudBase = Scalar.Clamp(cloudBase, 250f, 3600f);
             point.BaseVariation = local.BaseVariation;
             float stratiformCover = Scalar.Clamp01(1f - (1f - coverBase) * clearClusters);
@@ -381,8 +367,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             // Fair and stratocumulus stay at the genus depth. A cumulonimbus keeps the cell's full column.
             crown = WeatherMath.Lerp(Math.Min(crown, CloudShape.TowerCap(point.CloudBase, genus, local.DeckDepth)), crown, genus.TowerBlend);
             point.LowTop = Math.Max(point.CloudBase + deck * (0.5f + 0.5f * stratiformCover), crown);
-            point.CloudTop = Math.Max(point.LowTop,
-                WeatherMath.Lerp(point.CloudBase, point.FrontTop, point.FrontCover));
+            point.CloudTop = point.LowTop;
 
             point.DeckTop = point.CloudBase + Math.Max(genus.PuffDepth, local.DeckDepth) + genus.BaseWobble * 0.5f;
             point.MidCover = local.Mid.Cover; point.MidBase = local.Mid.Base; point.MidTop = local.Mid.Top;
@@ -397,18 +382,12 @@ namespace BoscaliSummer.Modules.Weather.Domain
             point.WindUp = vertical;
             float outflow = (float)Math.Sqrt(outX * outX + outZ * outZ);
             point.Turbulence = Scalar.Clamp01(turbulence);
-            point.Gust = 0.35f * windSpeed * point.Turbulence + outflow;
+            point.Gust = 0.35f * windSpeed * point.Turbulence + outflow + markerGust;
             point.LightningRate = lightning;
             point.CoreDepth = Scalar.Clamp01(core);
             point.Hail = hail;
 
-            float frontDip = 0f;
-            for (int i = 0; i < FrontCount; i++)
-            {
-                float d = fronts[i].SignedDistance(x, z);
-                frontDip += 3f * fronts[i].Strength * (float)Math.Exp(-(d / 15000f) * (d / 15000f));
-            }
-            point.Qnh = p.Qnh - frontDip + (patch - 0.5f) * 2f;
+            point.Qnh = p.Qnh - qnhDip + (patch - 0.5f) * 2f;
 
             float diurnal = 5f * (float)Math.Sin((HourOfDay - 9f) / 24f * 2f * Math.PI);
             point.Temperature = p.Temperature + diurnal - 4f * WeatherMath.Smoothstep(0f, 15f, rain);
@@ -440,7 +419,13 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         /// <summary>The static patch field in [0, 1] that breaks up area rain and cover.</summary>
         public float Patch(float x, float z)
-            => WeatherMath.Fbm(Key.Seed ^ 0x5eedu, x / PatchScale, z / PatchScale);
+        {
+            Frame.ToTape(x, z, out float qx, out float qz);
+            return PatchAt(qx, qz);
+        }
+
+        /// <summary>The patch field lives in the tape frame (spec 3.1), so it slides with the weather.</summary>
+        private float PatchAt(float qx, float qz) => WeatherMath.Fbm(Key.Seed ^ 0x5eedu, qx / PatchScale, qz / PatchScale);
 
         public static PrecipitationKind Classify(float rain)
         {

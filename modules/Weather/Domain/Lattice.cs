@@ -10,8 +10,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
     /// </summary>
     internal readonly struct LatticeSource
     {
-        public LatticeSource(uint salt, uint layoutSeed, TapeSampler tape, TapeFrame frame)
+        public LatticeSource(uint salt, uint layoutSeed, TapeSampler tape, TapeFrame frame, MarkerSet markers = null)
         {
+            Markers = markers;
             Salt = salt;
             LayoutSeed = layoutSeed;
             Tape = tape;
@@ -30,6 +31,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public readonly uint LayoutSeed;
         public readonly TapeSampler Tape;
         public readonly TapeFrame Frame;
+        /// <summary>The tape's front markers: a storm cell's activation level is raised by the beading bias at its centre (spec 5.3). Null for a fixture tape.</summary>
+        public readonly MarkerSet Markers;
         /// <summary>The cumulus level and the convective share of a one-keyframe tape; -1 when the tape varies in space.</summary>
         public readonly float ConstantCumulusLevel, ConstantConvective;
         /// <summary>The largest candidates-per-cell N the tape can ask for (the genus own N for a one-keyframe tape, else the largest of all):

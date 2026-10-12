@@ -98,14 +98,8 @@ namespace BoscaliSummer.Tests.Features.Weather
                 var field = new WeatherField();
                 var key = new WeatherKey(73u, 0f, true, (byte)WeatherRegimeType.Fair, skyPin: bad);
                 field.Build(key, 1300f, 40000f, 40000f);
-                var legacy = new WeatherField();
-                legacy.Build(new WeatherKey(73u, 0f, true, (byte)WeatherRegimeType.Fair), 1300f, 40000f, 40000f);
-                TestAssert.That(field.Timeline.Step == legacy.Timeline.Step && field.Params.SheetCover == legacy.Params.SheetCover,
-                    "a pin outside the library (" + bad + ") plays the legacy timeline");
+                TestAssert.That(field.TapeSource.Keyframes.Length > 1, "a pin outside the library (" + bad + ") builds the auto tape");
             }
-            var moving = new WeatherField();
-            moving.Build(new WeatherKey(73u, 0f, true, (byte)WeatherRegimeType.Fair), 3600f, 40000f, 40000f);
-            TestAssert.That(moving.Timeline.Step > 3 && float.IsFinite(moving.Timeline.NextChangeAt), "an unpinned moving key still steps");
         }
 
         private static void SkiesWithNoLowLayerStayHigh()
