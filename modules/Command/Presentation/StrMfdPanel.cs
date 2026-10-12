@@ -415,7 +415,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             FactionHQ hq = map != null ? map.HQ : null;
-            if (hq != null) command.UpdateTelemetry(hq);
 
             TacticalTheaterState state = command.TheaterState;
 

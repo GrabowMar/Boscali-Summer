@@ -15,7 +15,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private const int BaseTextureWidth = 1024;
 
         private CommandSettings settings;
-        private CommandManager command;
 
         private DynamicMap dynamicMap;
         private GameObject overlayObj;
@@ -83,10 +82,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
             MfdMapDeck.ApplyAppearance(settings);
         }
 
-        public void Configure(CommandSettings config, CommandManager manager, MissionMapCompatibilityEngine compat, TerritoryControlView control)
+        public void Configure(CommandSettings config, MissionMapCompatibilityEngine compat, TerritoryControlView control)
         {
             settings = config;
-            command = manager;
             compatibilityEngine = compat;
             territory = control;
 
@@ -324,7 +322,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 if (localHq == null)
                 {
                     if (frontlineGraphic != null) frontlineGraphic.SetSource(null);
-                    command?.SyncSectorTelemetry(sectorGrid);
                     return;
                 }
 
@@ -335,7 +332,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
                     return;
                 }
                 sectorGrid = current;
-                command?.SyncSectorTelemetry(sectorGrid);
                 if (!paintMap) return;
                 GetTextureSize(out int texW, out int texH);
                 EnsureTexture(texW, texH);

@@ -3,9 +3,9 @@ namespace BoscaliSummer.Modules.Command.Domain
     /// <summary>
     /// The theater picture, as one mutable bag the strategic panel reads.
     ///
-    /// <para>Every field here is written each telemetry pass. Fields that nothing produces
-    /// do not belong: a counter that is reset to zero and never filled looks exactly like a
-    /// counter reporting "none", and the panel has no way to tell the reader apart.</para>
+    /// <para>Every field here is written by <c>CommandManager.ApplyCensus</c> from the host's census, once a second, whether or not any
+    /// panel is open. An unknown count is -1 and an unknown ratio is NaN: a counter that is zero and never filled looks exactly like a
+    /// counter reporting "none", and a reader has no way to tell the two apart.</para>
     /// </summary>
     internal sealed class TacticalTheaterState
     {
@@ -44,9 +44,11 @@ namespace BoscaliSummer.Modules.Command.Domain
         public SortieTally Sorties;
 
         public float AirSuperiorityRatio = float.NaN;
-        public int DefconLevel = 3;
-        public string PrimaryThreatDescription = "NOMINAL";
-        public string ActiveThreatWarning = "AIRSPACE NOMINAL";
+
+        /// <summary>1 maximum to 5 nominal; 0 = not measured (the host census has not arrived), which the ticker never reads as an alert.</summary>
+        public int DefconLevel;
+        public string PrimaryThreatDescription = "";
+        public string ActiveThreatWarning = "";
 
         public void Reset()
         {
@@ -75,9 +77,9 @@ namespace BoscaliSummer.Modules.Command.Domain
             Sorties.Reset();
 
             AirSuperiorityRatio = float.NaN;
-            DefconLevel = 3;
-            PrimaryThreatDescription = "NOMINAL";
-            ActiveThreatWarning = "AIRSPACE NOMINAL";
+            DefconLevel = 0;
+            PrimaryThreatDescription = "";
+            ActiveThreatWarning = "";
         }
     }
 }

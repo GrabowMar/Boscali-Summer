@@ -461,7 +461,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 return;
             }
 
-            if (defcon <= 2)
+            if (defcon >= 1 && defcon <= 2)
             {
                 PushUrgent(new HeadlineItem(
                     "DEFCON ALERT",

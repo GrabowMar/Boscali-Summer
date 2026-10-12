@@ -766,7 +766,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
     {
         public BoscaliSummer.Modules.Command.Domain.TacticalTheaterState TheaterState { get; } =
             new BoscaliSummer.Modules.Command.Domain.TacticalTheaterState();
-        public void UpdateTelemetry(FactionHQ hq) { }
     }
 }
 

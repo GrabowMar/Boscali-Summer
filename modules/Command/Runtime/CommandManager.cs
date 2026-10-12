@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Modules.Command.Networking;
@@ -9,15 +10,39 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Runtime
 {
-    internal sealed class CommandManager : MonoBehaviour, ISceneService, IFactionMoraleView
+    internal sealed class CommandManager : MonoBehaviour, ISceneService, IFactionMoraleView, ITheaterCensusSource
     {
         public static CommandManager Active { get; internal set; }
 
+        /// <summary>How often the bag the ticker reads is refreshed (unscaled seconds). Cheap: it copies a published census.</summary>
+        private const float CensusSeconds = 1f;
+
+        /// <summary>How often a host without a Living Front snapshot measures its own faction (unscaled seconds): three passes over the unit registries.</summary>
+        private const float LocalMeasureSeconds = 10f;
+
         private IOperationOutcomeSource operationOutcomes;
         private IActiveEventsView activeEvents;
+        private ITheaterWarHost warHost;
+        private ITheaterWarView warView;
         private FactionMoraleNet moraleNet;
+        private TerritoryControlView territory;
+        private float nextCensus, nextLocalMeasure;
+        private TheaterCensus localCensus = TheaterCensus.Unmeasured;
+
+        /// <summary>What <see cref="ApplyCensus"/> last applied. The Station Board reads it for SITREP when the war view has no snapshot, so the panel causes no scan of its own.</summary>
+        internal TheaterCensus LastCensus { get; private set; } = TheaterCensus.Unmeasured;
+
+        /// <summary>Unscaled time of the last measured census; -1 while none has been measured.</summary>
+        internal float LastCensusAt { get; private set; } = -1f;
 
         private void Update()
+        {
+            ResolveSources();
+            TickCensus(Time.unscaledTime);
+        }
+
+        /// <summary>Re-points the three morale subscriptions when a service appears or changes. Never returns early: the census tick runs after it.</summary>
+        private void ResolveSources()
         {
             ModuleServices.TryGet(out IOperationOutcomeSource source);
             if (!ReferenceEquals(source, operationOutcomes))
@@ -27,10 +52,19 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 if (operationOutcomes != null) operationOutcomes.MoraleAwarded += OnOperationMorale;
             }
             ModuleServices.TryGet(out IActiveEventsView events);
-            if (ReferenceEquals(events, activeEvents)) return;
-            if (activeEvents != null) activeEvents.MoraleAwarded -= OnOperationMorale;
-            activeEvents = events;
-            if (activeEvents != null) activeEvents.MoraleAwarded += OnOperationMorale;
+            if (!ReferenceEquals(events, activeEvents))
+            {
+                if (activeEvents != null) activeEvents.MoraleAwarded -= OnOperationMorale;
+                activeEvents = events;
+                if (activeEvents != null) activeEvents.MoraleAwarded += OnOperationMorale;
+            }
+            ModuleServices.TryGet(out ITheaterWarHost host);
+            if (!ReferenceEquals(host, warHost))
+            {
+                if (warHost != null) warHost.MoraleAwarded -= OnOperationMorale;
+                warHost = host;
+                if (warHost != null) warHost.MoraleAwarded += OnOperationMorale;
+            }
         }
 
         private void OnOperationMorale(int faction, float delta)
@@ -61,9 +95,10 @@ namespace BoscaliSummer.Modules.Command.Runtime
             return moraleNet != null && moraleNet.TryGet(factionName, out morale);
         }
 
-        public void Configure(FactionMoraleNet network)
+        public void Configure(FactionMoraleNet network, TerritoryControlView control)
         {
             moraleNet = network;
+            territory = control;
             Active = this;
             Plugin.Logger?.LogInfo("[COM] Faction Morale ready: host-owned, 0–100; new contract rewards scale from 0.8x to 1.1x.");
         }
@@ -74,6 +109,13 @@ namespace BoscaliSummer.Modules.Command.Runtime
             operationOutcomes = null;
             if (activeEvents != null) activeEvents.MoraleAwarded -= OnOperationMorale;
             activeEvents = null;
+            if (warHost != null) warHost.MoraleAwarded -= OnOperationMorale;
+            warHost = null;
+            warView = null;
+            nextCensus = nextLocalMeasure = 0f;
+            localCensus = TheaterCensus.Unmeasured;
+            LastCensus = TheaterCensus.Unmeasured;
+            LastCensusAt = -1f;
             TheaterState.Reset();
             Morale.Reset();
             moraleNet?.ResetScene();
@@ -84,69 +126,185 @@ namespace BoscaliSummer.Modules.Command.Runtime
         {
             if (operationOutcomes != null) operationOutcomes.MoraleAwarded -= OnOperationMorale;
             if (activeEvents != null) activeEvents.MoraleAwarded -= OnOperationMorale;
+            if (warHost != null) warHost.MoraleAwarded -= OnOperationMorale;
             moraleNet?.ResetScene();
             if (Active == this) Active = null;
         }
 
-        public void SyncSectorTelemetry(TacticalSectorGrid grid)
-        {
-            if (grid == null) return;
-            TheaterState.FriendlySectorCount = grid.FriendlySectorCount;
-            TheaterState.HostileSectorCount = grid.HostileSectorCount;
-            TheaterState.ContestedSectorCount = grid.ContestedSectorCount;
-            TheaterState.NeutralSectorCount = grid.NeutralSectorCount;
-            TheaterState.TerritoryControlRatio = grid.TerritoryControlRatio;
-            TheaterState.ActiveClashesCount = grid.ActiveClashesCount;
-            TheaterState.FrontlineSegmentCount = grid.FrontlineSegmentCount;
-            TheaterState.FrontlineLengthMetres = grid.FrontlineLengthMetres;
-
-            // Which bases are being argued over is a property of the field, not of the
-            // airbase list: an airbase is contested when the ground around it is.
-            int contested = 0;
-            IReadOnlyList<TacticalSectorGrid.TacticalNode> nodes = grid.GetNodes();
-            for (int i = 0; i < nodes.Count; i++)
-            {
-                if (nodes[i].IsAirbase && nodes[i].IsContested) contested++;
-            }
-            TheaterState.ContestedAirbaseCount = contested;
-        }
-
-
         /// <summary>
-        /// Count every airbase in the theater, not just the ones this HQ already holds.
-        ///
-        /// <para><c>FactionHQ.GetAirbases()</c> is the faction's own list, so classifying it
-        /// by owner can only ever produce friendly bases — the enemy count read zero for as
-        /// long as it was on screen. The fixed catalogue is the same source the sector grid
-        /// reconciles nodes from, so the two boards now agree.</para>
+        /// The one writer of the theater bag. The war snapshot's census wins (the host measured it for this faction, and a client receives it);
+        /// a host without a snapshot, for example with TheaterOps off, measures its own faction; anything else is not measured and reads as such.
         /// </summary>
-        private void CountAirbases(FactionHQ localHq)
+        private void TickCensus(float now)
         {
-            if (FactionRegistry.airbaseLookup == null) return;
+            if (now < nextCensus) return;
+            nextCensus = now + CensusSeconds;
 
-            foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
+            if (warView == null) ModuleServices.TryGet(out warView);
+            TheaterWarSnapshot snapshot = warView != null ? warView.Snapshot : null;
+            if (snapshot != null && snapshot.Census.Known)
             {
-                // A carrier holds no ground and belongs on no territorial tally.
-                if (airbase == null || airbase.AttachedAirbase || airbase.UnitDestroyed()) continue;
-
-                if (airbase.CurrentHQ == null) TheaterState.NeutralAirbaseCount++;
-                else if (airbase.CurrentHQ == localHq) TheaterState.FriendlyAirbaseCount++;
-                else TheaterState.HostileAirbaseCount++;
+                ApplyCensus(snapshot.Census, now);
+                return;
             }
+            if (GameAccess.IsServer() && GameAccess.TryGetLocalFaction(out FactionHQ hq) && hq != null)
+            {
+                if (now >= nextLocalMeasure)
+                {
+                    nextLocalMeasure = now + LocalMeasureSeconds;
+                    if (!TryMeasure(hq, out localCensus)) localCensus = TheaterCensus.Unmeasured;
+                }
+                ApplyCensus(localCensus, now);
+                return;
+            }
+            ApplyCensus(TheaterCensus.Unmeasured, now);
         }
 
         /// <summary>
-        /// Add one friendly aircraft to the sortie board, by what its AI pilot is pointed at.
+        /// Remembers the census (the Station Board reads it) and writes it into the bag the news ticker reads; see <see cref="CensusBag"/>.
+        /// </summary>
+        internal void ApplyCensus(in TheaterCensus c, float now)
+        {
+            LastCensus = c;
+            LastCensusAt = c.Known ? now : -1f;
+
+            CensusBag.Apply(TheaterState, c);
+        }
+
+        /// <summary>
+        /// Host only: counts one faction's side of the war from the registries. Aircraft are split into airborne and parked, hostile units count only
+        /// while the faction tracks them (<see cref="HostileContact"/>, the same fresh window the engine's contact scan uses), and the sector, front and
+        /// contested-base figures come from that faction's own control field. Anything that could not be established stays -1.
+        /// </summary>
+        public bool TryMeasure(FactionHQ hq, out TheaterCensus census)
+        {
+            census = TheaterCensus.Unmeasured;
+            if (hq == null || !GameAccess.IsServer()) return false;
+
+            float now = Time.timeSinceLevelLoad;
+            TheaterCensus c = TheaterCensus.Unmeasured;
+            bool pilots = GameAccess.AiPilotCombatAvailable;
+            SortieTally sorties = default;
+
+            IReadOnlyList<Aircraft> allAircraft = UnitRegistry.allAircraft;
+            if (allAircraft != null)
+            {
+                int airborne = 0, parked = 0, hostile = 0;
+                for (int i = 0; i < allAircraft.Count; i++)
+                {
+                    Aircraft ac = allAircraft[i];
+                    if (ac == null || ac.disabled) continue;
+                    bool landed = ac.IsLanded();
+                    if (ac.NetworkHQ == hq)
+                    {
+                        if (landed) parked++;
+                        else
+                        {
+                            airborne++;
+                            if (pilots) TallySortie(ac, ref sorties);
+                        }
+                    }
+                    else if (!landed && HostileContact.TryRead(hq, ac, now, out _)) hostile++;
+                }
+                c.AirFriendly = Count(airborne);
+                c.AirParked = Count(parked);
+                c.AirHostileTracked = Count(hostile);
+            }
+
+            List<Unit> allUnits = UnitRegistry.allUnits;
+            if (allUnits != null)
+            {
+                int groundOwn = 0, groundHostile = 0, shipsOwn = 0, shipsHostile = 0;
+                for (int i = 0; i < allUnits.Count; i++)
+                {
+                    Unit u = allUnits[i];
+                    if (u == null || u.disabled) continue;
+                    bool ground = u is GroundVehicle;
+                    if (!ground && !(u is Ship)) continue;
+                    if (u.NetworkHQ == hq)
+                    {
+                        if (ground) groundOwn++; else shipsOwn++;
+                    }
+                    else if (HostileContact.TryRead(hq, u, now, out _))
+                    {
+                        if (ground) groundHostile++; else shipsHostile++;
+                    }
+                }
+                c.GroundFriendly = Count(groundOwn);
+                c.GroundHostileTracked = Count(groundHostile);
+                c.ShipsFriendly = Count(shipsOwn);
+                c.ShipsHostileTracked = Count(shipsHostile);
+            }
+
+            // Every airbase in the theater, not only the ones this HQ already holds: the faction's own list can only ever be friendly.
+            if (FactionRegistry.airbaseLookup != null)
+            {
+                int own = 0, theirs = 0, neutral = 0;
+                foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
+                {
+                    // A carrier holds no ground and belongs on no territorial tally.
+                    if (airbase == null || airbase.AttachedAirbase || airbase.UnitDestroyed()) continue;
+                    if (airbase.CurrentHQ == null) neutral++;
+                    else if (airbase.CurrentHQ == hq) own++;
+                    else theirs++;
+                }
+                c.BasesFriendly = Count(own);
+                c.BasesHostile = Count(theirs);
+                c.BasesNeutral = Count(neutral);
+            }
+
+            // Which of our bases are being argued over is a property of the field, not of the airbase list: a friendly base with hostile presence in its cell.
+            TacticalSectorGrid grid = territory != null ? territory.Read(hq) : null;
+            if (grid != null)
+            {
+                IReadOnlyList<TacticalSectorGrid.TacticalNode> nodes = grid.GetNodes();
+                int contested = 0;
+                for (int i = 0; i < nodes.Count; i++)
+                {
+                    TacticalSectorGrid.TacticalNode node = nodes[i];
+                    if (node.IsAirbase && node.IsContested && node.Faction == SectorControl.Friendly) contested++;
+                }
+                c.BasesContested = Count(contested);
+                c.SectorsFriendly = Count(grid.FriendlySectorCount);
+                c.SectorsHostile = Count(grid.HostileSectorCount);
+                c.SectorsContested = Count(grid.ContestedSectorCount);
+                c.SectorsNeutral = Count(grid.NeutralSectorCount);
+                c.FrontMetres = grid.FrontlineLengthMetres;
+            }
+
+            // Emitters on the friendly network. This is a radar count, and the panel says so.
+            if (GameAccess.HqSensorsAvailable)
+            {
+                List<Radar> radars = GameAccess.GetHqRadars(hq);
+                if (radars != null) c.Radars = Count(radars.Count);
+            }
+
+            if (pilots)
+            {
+                c.SortieCap = Count(sorties.Cap); c.SortieSead = Count(sorties.Sead); c.SortieCas = Count(sorties.Cas);
+                c.SortieStrike = Count(sorties.Strike); c.SortieTransit = Count(sorties.Transit);
+            }
+
+            c.Known = true;
+            c.Threat = ThreatLevelRules.Level(c, out TheaterThreatWhy why);
+            c.ThreatWhy = why;
+            census = c;
+            return true;
+        }
+
+        private static short Count(int n) => (short)Math.Min(n, short.MaxValue);
+
+        /// <summary>
+        /// Add one airborne friendly aircraft to the sortie tally, by what its AI pilot is pointed at. A parked jet is never tallied: it is
+        /// on the apron, not on a sortie.
         ///
         /// <para>Player-flown aircraft are excluded because a sortie board reports what the
         /// theater is doing on its own; and Wing Command's recruited wing is excluded
         /// because those aircraft are under the player's orders, not the theater's. Reading
         /// them here would double-count the same jets on two different consoles.</para>
         /// </summary>
-        private void TallySortie(Aircraft aircraft)
+        private void TallySortie(Aircraft aircraft, ref SortieTally tally)
         {
-            if (!GameAccess.AiPilotCombatAvailable) return;
-
             Pilot[] pilots = aircraft != null ? aircraft.pilots : null;
             if (pilots == null || pilots.Length == 0) return;
 
@@ -159,7 +317,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 ? KindOf(GameAccess.GetAiCurrentTarget(combat))
                 : SortieTarget.None;
 
-            TheaterState.Sorties.Add(SortieClassifier.Classify(target));
+            tally.Add(SortieClassifier.Classify(target));
         }
 
         /// <summary>
@@ -198,94 +356,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
             return emits ? SortieTarget.Emitter
                  : target is GroundVehicle ? SortieTarget.Vehicle : SortieTarget.Structure;
-        }
-
-        public void UpdateTelemetry(FactionHQ localHq)
-        {
-            if (localHq == null) return;
-
-            TheaterState.FriendlyAircraftCount = 0;
-            TheaterState.HostileAircraftCount = 0;
-            TheaterState.FriendlyAirbaseCount = 0;
-            TheaterState.HostileAirbaseCount = 0;
-            TheaterState.NeutralAirbaseCount = 0;
-            TheaterState.ContestedAirbaseCount = 0;
-            TheaterState.FriendlyRadarCount = 0;
-            TheaterState.FriendlyGroundUnitsCount = 0;
-            TheaterState.HostileGroundUnitsCount = 0;
-            TheaterState.Sorties.Reset();
-
-            IReadOnlyList<Aircraft> allAircraft = UnitRegistry.allAircraft;
-            if (allAircraft != null)
-            {
-                for (int i = 0; i < allAircraft.Count; i++)
-                {
-                    Aircraft ac = allAircraft[i];
-                    if (ac == null || ac.disabled) continue;
-                    if (ac.NetworkHQ == localHq)
-                    {
-                        TheaterState.FriendlyAircraftCount++;
-                        TallySortie(ac);
-                    }
-                    else if (localHq.IsTargetBeingTracked(ac)) TheaterState.HostileAircraftCount++;
-                }
-            }
-
-            int totalAir = TheaterState.FriendlyAircraftCount + TheaterState.HostileAircraftCount;
-            TheaterState.AirSuperiorityRatio = totalAir > 0
-                ? (float)TheaterState.FriendlyAircraftCount / totalAir
-                : float.NaN;
-
-            CountAirbases(localHq);
-
-            // Ground & Naval Forces
-            List<Unit> allUnits = UnitRegistry.allUnits;
-            if (allUnits != null)
-            {
-                for (int i = 0; i < allUnits.Count; i++)
-                {
-                    Unit u = allUnits[i];
-                    if (u == null || u.disabled) continue;
-                    if (u is GroundVehicle || u is Ship)
-                    {
-                        if (u.NetworkHQ == localHq) TheaterState.FriendlyGroundUnitsCount++;
-                        else if (localHq.IsTargetBeingTracked(u)) TheaterState.HostileGroundUnitsCount++;
-                    }
-                }
-            }
-
-            // Emitters on the friendly network. This is a radar count, and the panel says so.
-            if (GameAccess.HqSensorsAvailable)
-            {
-                List<Radar> radars = GameAccess.GetHqRadars(localHq);
-                if (radars != null) TheaterState.FriendlyRadarCount = radars.Count;
-            }
-
-            // Defcon & Early Warning status
-            if (TheaterState.HostileAircraftCount > 0 && (TheaterState.AirSuperiorityRatio < 0.35f || TheaterState.HostileAircraftCount > TheaterState.FriendlyAircraftCount * 2))
-            {
-                TheaterState.DefconLevel = 1;
-                TheaterState.PrimaryThreatDescription = "AIR DEFENSE ALERT";
-                TheaterState.ActiveThreatWarning = "RED ALERT: HEAVY AIR THREAT DETECTED";
-            }
-            else if (TheaterState.ContestedSectorCount > 0)
-            {
-                TheaterState.DefconLevel = 2;
-                TheaterState.PrimaryThreatDescription = "ACTIVE GROUND BATTLE";
-                TheaterState.ActiveThreatWarning = "AMBER ALERT: " + TheaterState.ContestedSectorCount + " CONTESTED SECTORS IN CONFLICT";
-            }
-            else if (TheaterState.AirSuperiorityRatio > 0.65f && TheaterState.FriendlyAirbaseCount >= TheaterState.HostileAirbaseCount)
-            {
-                TheaterState.DefconLevel = 4;
-                TheaterState.PrimaryThreatDescription = "AIR DOMINANCE";
-                TheaterState.ActiveThreatWarning = "AIR DOMINANCE ESTABLISHED";
-            }
-            else
-            {
-                TheaterState.DefconLevel = 3;
-                TheaterState.PrimaryThreatDescription = "CONTESTED THEATER";
-                TheaterState.ActiveThreatWarning = "AIRSPACE NOMINAL / PATROLS ACTIVE";
-            }
         }
     }
 }
