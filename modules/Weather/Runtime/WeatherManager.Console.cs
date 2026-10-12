@@ -64,10 +64,12 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             bool settled = action == "settle" && SetTapeMoves(true) && SetPace(TapePace.DefaultPace);
             if (action == "open" && (console == null || !console.IsOpen)) ToggleConsole();
             else if (action == "close" && console != null && console.IsOpen) console.Close();
+            // Press first, then read: the commands apply at once, so the readout shows the state after the press.
+            bool pressed = action == "press" && console != null && control.HasValue && console.IsOpen && console.Press(control.Value);
             Dictionary<string, object> readout;
             if (console == null) { readout = MetOfficeWindow.InputState(); readout["open"] = 0; }
             else readout = console.Readout();
-            if (console != null && action == "press") readout["pressed"] = control.HasValue && console.IsOpen && console.Press(control.Value) ? 1 : 0;
+            if (action == "press") readout["pressed"] = pressed ? 1 : 0;
             if (action == "settle") readout["settled"] = settled ? 1 : 0;
             return readout;
         }
