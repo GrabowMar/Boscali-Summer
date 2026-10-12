@@ -68,6 +68,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 BuildPerformancePage(c.Page(CPerf), CPerf);
             }
 
+            ApplyOrders(c, server);
             c.Ticker.Add(-1, AvTickRate.Slow, () => RefreshChrome(c, mode, server));
             c.Finish();
             return c;

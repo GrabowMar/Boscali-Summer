@@ -54,6 +54,45 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             flow.Ticker.Add(page, AvTickRate.Slow, Refresh);
         }
 
+        /// <summary>Standing orders for every SET page; they print on the bay cover under a short page.</summary>
+        private static void ApplyOrders(AvConsole c, bool server)
+        {
+            if (server)
+            {
+                string[] rules =
+                {
+                    "The host sets these rules for every pilot on the net.",
+                    "A client reads them locked; ask the host to change one.",
+                    "Each change is logged under SESSION CHANGES with its age.",
+                };
+                c.Orders(SWorld, rules);
+                c.Orders(SForces, rules);
+                c.Orders(SEffects, rules);
+                c.Orders(STasking,
+                    "The host issues faction tasking from this board.",
+                    "Pilots take and fly the tasks from the MIS console.");
+                return;
+            }
+            c.Orders(CDisplay,
+                "Pick a scheme first: every console repaints at once.",
+                "LIVE SIGNAL 0% with REDUCED MOTION gives a still display.",
+                "Caution stays amber and danger red in every scheme.");
+            c.Orders(CMap,
+                "EXPANDED LAYOUT off returns the game's own map screen.",
+                "Raise MAP DARKENING before you lower CONSOLE OPACITY.",
+                "Custom backdrops come from the wallpapers folder; RESCAN after adding one.");
+            c.Orders(CCockpit,
+                "RADIAL PRESETS puts the TGT quick slots on the cockpit wheel.",
+                "The presets themselves are built on the TGT console, not here.");
+            c.Orders(CImmersion,
+                "Every cue on this page is felt by this pilot only.",
+                "Turn a single cue down before you switch the whole set off.");
+            c.Orders(CPerf,
+                "Watch FRAME TIME while you change a budget.",
+                "FX TIER LITE keeps the glass and drops the moving effects.",
+                "Changes apply in this mission; no restart.");
+        }
+
         private SetRingCell HueRing(AvFlow flow, SetRingRow row, int page, string title, ConfigEntry<float> entry,
             string help, Func<bool> enabled, Func<string> reason) =>
             Ring(flow, row, page, title, () => AvNum.Fixed(entry.Value, 0) + " DEG", () => Mathf.Clamp01(entry.Value / 360f),

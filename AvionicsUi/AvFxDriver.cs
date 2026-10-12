@@ -65,6 +65,15 @@ namespace NOAvionics
             }
         }
 
+        private static float kick;
+
+        /// <summary>A one-off break-up of every display (the airframe took a hit): full at once, gone in half a second.</summary>
+        public static void Kick(float strength)
+        {
+            kick = Mathf.Max(kick, Mathf.Clamp01(strength));
+            EnsureRunning();
+        }
+
         public static void EnsureRunning()
         {
             if (updater != null) return;
@@ -87,7 +96,8 @@ namespace NOAvionics
                     try { target = Mathf.Clamp01(GlitchSource()); } catch (Exception) { GlitchSource = null; }
                 }
                 glitch = Mathf.MoveTowards(glitch, target, Time.unscaledDeltaTime * 3f);
-                Shader.SetGlobalFloat(GlitchId, ReducedMotion ? 0f : glitch);
+                kick = Tier == AvFxTier.Full ? Mathf.MoveTowards(kick, 0f, Time.unscaledDeltaTime * 2f) : 0f;
+                Shader.SetGlobalFloat(GlitchId, ReducedMotion ? 0f : Mathf.Max(glitch, kick));
             }
         }
     }
