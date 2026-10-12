@@ -96,6 +96,31 @@ namespace BoscaliSummer.Modules.Command.Runtime
             return r;
         }
 
+        /// <summary>
+        /// <c>{act (accept|wing), chip (default STRIKE)}</c>: presses the first ticket with that family chip the verb applies to (accept needs an offered one, wing an accepted one)
+        /// through the panel's own control, so the gate, the verbs and the wing desk are the production path. Returns the ticket's index and the press result.
+        /// </summary>
+        public static Dictionary<string, object> Ticket(Dictionary<string, object> args)
+        {
+            if (!InScenario("Ticket", out Dictionary<string, object> refusal)) return refusal;
+            StrViewHub hub = StrViewHub.Active;
+            if (hub == null) return Fail("Ticket", "no STR hub in this scene");
+            hub.TickNow();
+            StrViewModel vm = hub.Current;
+            string act = Text(args, "act") ?? "wing";
+            string chip = Text(args, "chip") ?? "STRIKE";
+            for (int i = 0; i < vm.SortieCount; i++)
+            {
+                StrSortieRow row = vm.Sorties[i];
+                if (row.ChipText != chip) continue;
+                if (act == "accept" ? !row.Offered : !row.Active) continue;
+                Dictionary<string, object> r = PressId("Ticket", StrControlIds.Sortie(i + 1, act));
+                r["index"] = i + 1; r["contractId"] = row.ContractId;
+                return r;
+            }
+            return new Dictionary<string, object> { { "ok", 0 }, { "pressed", 0 }, { "index", 0 }, { "reason", "no matching ticket" }, { "reasonLen", 18 } };
+        }
+
         /// <summary><c>{on}</c>: flip Command/MapRelief3D for the flat-map run. Mutates the client config, so it runs in a scenario only.</summary>
         public static Dictionary<string, object> Relief(Dictionary<string, object> args)
         {

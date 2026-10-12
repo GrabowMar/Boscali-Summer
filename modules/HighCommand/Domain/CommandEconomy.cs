@@ -20,9 +20,6 @@ namespace BoscaliSummer.Modules.HighCommand.Domain
             return (int)Math.Round(value);
         }
 
-        public static int BountyScore(int tier) =>
-            tier == CommandTier.Theater ? 20 : tier == CommandTier.Component ? 10 : 5;
-
         public static int Stipend(int baseAmount, float liveWeight, float cohesion)
         {
             if (baseAmount <= 0 || liveWeight <= 0f) return 0;

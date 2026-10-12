@@ -23,7 +23,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             WingAcks.Push(o, r);
             string text = r.Accepted ? r.Ack : r.Reason;
             if (!string.IsNullOrEmpty(text)) WingToast.Show(text);
-            if (r.Accepted && o.Source == OrderSource.Player) ApplyDefaultStance(o);
+            if (r.Accepted && o.Source == OrderSource.Player) { ApplyDefaultStance(o); WingSortieOrders.OnPlayerOrder(o); }
             return r;
         }
     }

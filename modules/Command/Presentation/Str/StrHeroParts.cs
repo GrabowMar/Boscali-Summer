@@ -109,7 +109,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             AvText.Set(sortieCaption, StrPanelText.SortiesCaption(vm));
             bool noSorties = vm.SortieCount == 0;
             none.gameObject.SetActive(noSorties);
-            AvText.Set(none, noSorties ? (vm.SortiesAvailable ? "NO SORTIE IS TIED TO THIS OPERATION. Tying sorties to it is not in this build yet." : "NO SORTIE LIST FROM THE HOST YET.") : "");
+            AvText.Set(none, noSorties ? (vm.SortiesAvailable ? "NO SORTIE IS TIED TO THIS OPERATION YET. SCOUT OR WAIT FOR CONTACT." : "NO SORTIE LIST FROM THE HOST YET.") : "");
             string moreText = StrPanelText.MoreOnTheMap(vm);
             more.gameObject.SetActive(moreText.Length > 0);
             AvText.Set(more, moreText);

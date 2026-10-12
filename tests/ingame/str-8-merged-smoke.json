@@ -410,23 +410,13 @@
     },
     {
       "check": "result_below",
-      "path": "a0.view.sorties",
-      "max": 0
-    },
-    {
-      "check": "result_below",
       "path": "a0.view.posts",
       "max": 0
     },
     {
-      "check": "result_equals",
+      "check": "result_above",
       "path": "a0.view.wave.credits",
-      "value": -1
-    },
-    {
-      "check": "result_below",
-      "path": "a0.overlay.tags.sortie",
-      "max": 0
+      "min": 0
     },
     {
       "check": "result_below",

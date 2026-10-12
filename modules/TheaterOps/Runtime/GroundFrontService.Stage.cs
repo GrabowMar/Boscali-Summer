@@ -122,7 +122,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         {
             foreach (Member member in group.Members)
             {
-                if (member.Degraded && now < member.RetryAt) continue;
+                if ((member.Degraded || member.Marched) && now < member.RetryAt) continue;
                 float lateral = LaneOffset(member.Lane);
                 float x, z;
                 bool exact = false;
@@ -152,7 +152,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                         Freeze(member, now, 10f);
                         continue;
                 }
-                if (TryPlace(member, group, x, z, exact)) continue;
+                if (TryPlace(member, group, x, z, exact)) { member.Marched = false; continue; }
+                if (!exact && TryMarch(member, x, z, now)) continue;
                 if (!member.Degraded && CanDiagnose(group, "slot")) Say(group, "no usable slot for lane " + member.Lane + " at " + (int)x + "," + (int)z + ", group " +
                     (int)Scalar.Distance2D(group.CentroidX, group.CentroidZ, x, z) + " m away, staged point " + Terrain(x, z));
                 Freeze(member, now, 10f);
@@ -176,6 +177,27 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             return false;
         }
 
+        /// <summary>
+        /// The staged point has no usable ground anywhere near it (a front at the water's edge): the member goes as far toward it as dry ground leads from where it stands,
+        /// and asks again in 10 s. A member that cannot move even one step toward it holds as before.
+        /// </summary>
+        private static bool TryMarch(Member member, float x, float z, float now)
+        {
+            GlobalPosition from = member.Vehicle.GlobalPosition();
+            float dx = x - from.x, dz = z - from.z, length = (float)Math.Sqrt(dx * dx + dz * dz);
+            if (!(length > 1f)) return false;
+            float ux = dx / length, uz = dz / length;
+            float reach = LandMarch.Reach(length, along => Usable(from.x + ux * along, from.z + uz * along, out _));
+            if (CanDiagnose(member.Group, "march")) Say(member.Group, "march " + (int)reach + " of " + (int)length + " m toward the staged point; just past it " +
+                Terrain(from.x + ux * (reach + LandMarch.ShoreMarginMeters + LandMarch.StepMeters), from.z + uz * (reach + LandMarch.ShoreMarginMeters + LandMarch.StepMeters)));
+            if (reach <= 0f || !Ground(from.x + ux * reach, from.z + uz * reach, member)) return false;
+            member.Marched = true;
+            member.SlotIndex = -1;
+            member.RetryAt = now + 10f;
+            GroundProbe.SlotMarches++;
+            return true;
+        }
+
         private static bool TryAt(Member member, Group group, float x, float z, int index)
         {
             float px, pz;
@@ -196,12 +218,18 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             return true;
         }
 
-        /// <summary>A usable point: dry, not too steep. Writes the member's destination on success.</summary>
+        /// <summary>A usable point: terrain under it, dry, not too steep.</summary>
+        private static bool Usable(float x, float z, out RaycastHit ground)
+        {
+            ground = default;
+            return float.IsFinite(x) && float.IsFinite(z) && PathfindingAgent.RaycastTerrain(new GlobalPosition(x, 0f, z), out ground) &&
+                ground.point.y >= Datum.LocalSeaY && ground.normal.y >= .55f;
+        }
+
+        /// <summary>A usable point becomes the member's destination.</summary>
         private static bool Ground(float x, float z, Member member)
         {
-            if (!float.IsFinite(x) || !float.IsFinite(z)) return false;
-            if (!PathfindingAgent.RaycastTerrain(new GlobalPosition(x, 0f, z), out RaycastHit ground) ||
-                ground.point.y < Datum.LocalSeaY || ground.normal.y < .55f) return false;
+            if (!Usable(x, z, out RaycastHit ground)) return false;
             member.Destination = ground.point.ToGlobalPosition();
             member.HasDestination = true;
             member.Degraded = false;
@@ -222,6 +250,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 GroundProbe.SlotFallbacks++;
             }
             member.HasDestination = true;
+            member.Marched = false;
             member.RetryAt = now + retryIn;
         }
 
@@ -256,7 +285,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
 
         private static void ClearDestinations(Group group)
         {
-            foreach (Member member in group.Members) { member.HasDestination = false; member.Degraded = false; }
+            foreach (Member member in group.Members) { member.HasDestination = false; member.Degraded = false; member.Marched = false; }
         }
 
         private static float LaneOffset(int lane)

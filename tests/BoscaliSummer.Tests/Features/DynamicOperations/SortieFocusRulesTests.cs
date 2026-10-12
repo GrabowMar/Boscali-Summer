@@ -16,6 +16,7 @@ namespace BoscaliSummer.Tests.Features.DynamicOperations
             [OperationKind.Capture] = new[] { A },
             [OperationKind.Interdict] = new[] { A, D },
             [OperationKind.Intercept] = new[] { A, D },
+            [OperationKind.StrikePost] = new[] { A, D },
             [OperationKind.SupplyInterdict] = new[] { A },
             [OperationKind.ElectronicWarfare] = new[] { A },
             [OperationKind.Jam] = new[] { A, R },

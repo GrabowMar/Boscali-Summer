@@ -54,6 +54,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             internal int SlotIndex = -1;
             /// <summary>A frozen member tries the full candidate list again at this mission second.</summary>
             internal float RetryAt;
+            /// <summary>The destination is the furthest dry ground toward a staged point that had none (LandMarch); it is asked again at RetryAt.</summary>
+            internal bool Marched;
             internal float AnsweredAt = -1000f;
             internal GlobalPosition Answer;
         }
@@ -567,7 +569,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             group.Closing = false;
             group.Eta = -1;
             group.AllFrozenSince = 0f;
-            foreach (Member member in group.Members) member.SlotIndex = -1;
+            foreach (Member member in group.Members) { member.SlotIndex = -1; member.RetryAt = 0f; }
         }
 
         private static void SetStage(Group group, GroundStage stage, float now)
@@ -576,7 +578,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             group.Stage = stage;
             group.StageSince = now;
             group.Approach = default;
-            foreach (Member member in group.Members) member.SlotIndex = -1;
+            foreach (Member member in group.Members) { member.SlotIndex = -1; member.RetryAt = 0f; }
             ReportStage(group);
         }
 

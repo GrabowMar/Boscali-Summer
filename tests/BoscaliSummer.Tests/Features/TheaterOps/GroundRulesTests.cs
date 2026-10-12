@@ -36,6 +36,7 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
             SlotSearchOffsets();
             SlotPullWalksTowardTheGroupAndStopsAtIt();
             SlotPullRefusesWhatItCannotMeasure();
+            LandMarchStopsAtTheFirstWetSample();
             FrontSideProbeWinsThenHistoryThenCentroid();
             FrontSideNeverGuessesWhenNothingIsKnown();
             LedgerCountsOnlyTakenOverVehiclesAsGone();
@@ -399,6 +400,21 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
             since = float.NaN;
             TestAssert.That(!FrozenClock.Step(ref since, true, 100f), "a NaN start is a new freeze, not a stall");
             TestAssert.Near(since, 100f, "stamped again");
+        }
+
+        // ---- LandMarch (the last tier: the staged point and everything pulled from it are water, so the member goes as far as dry ground leads)
+
+        private static void LandMarchStopsAtTheFirstWetSample()
+        {
+            // Land for the first 1000 m, then sea: the member goes to the last dry sample, less the shore margin.
+            TestAssert.Near(LandMarch.Reach(8000f, d => d <= 1000f), 1000f - LandMarch.ShoreMarginMeters, "stops at the shore");
+            // Land again beyond the sea is not reachable: the first wet sample ends the march.
+            TestAssert.Near(LandMarch.Reach(8000f, d => d <= 1000f || d >= 3000f), 1000f - LandMarch.ShoreMarginMeters, "does not cross the water");
+            TestAssert.Near(LandMarch.Reach(8000f, d => true), 8000f, "all dry reaches the point itself");
+            TestAssert.Near(LandMarch.Reach(1000f, d => false), 0f, "wet from the first step is no move");
+            TestAssert.Near(LandMarch.Reach(150f, d => true), 150f, "a short way is walked to its end");
+            TestAssert.Near(LandMarch.Reach(50000f, d => true), LandMarch.StepMeters * LandMarch.MaxSteps, "capped");
+            TestAssert.Near(LandMarch.Reach(float.NaN, d => true), 0f, "a length that is not a number is no move");
         }
 
         // ---- SlotPull (the second tier of the slot search: the line is at water, the group is the only known land)

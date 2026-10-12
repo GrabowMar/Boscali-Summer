@@ -12,13 +12,13 @@ namespace BoscaliSummer.Tests.Features.DynamicOperations
         private const WingSortieIntent D = WingSortieIntent.Destroy, C = WingSortieIntent.Cover, O = WingSortieIntent.Observe, N = WingSortieIntent.None;
 
         // The annex W4a table, written out independently of the rule so a drift in either one fails.
-        // StrikePost has no enum value yet: S11 adds it here (Destroy) together with the enum value.
         private static readonly Dictionary<OperationKind, WingSortieIntent> Table = new Dictionary<OperationKind, WingSortieIntent>
         {
             [OperationKind.Interdict] = D,
             [OperationKind.Intercept] = D,
             [OperationKind.SupplyInterdict] = D,
             [OperationKind.ElectronicWarfare] = D,
+            [OperationKind.StrikePost] = D,
             [OperationKind.Capture] = C,
             [OperationKind.Defend] = C,
             [OperationKind.Patrol] = C,

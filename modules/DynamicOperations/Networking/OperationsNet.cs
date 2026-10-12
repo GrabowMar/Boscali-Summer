@@ -35,6 +35,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
     internal sealed class OperationsNet : MonoBehaviour
     {
         internal const byte ProtocolVersion = 5;
+        // The transport keeps the local snapshot fresh itself, so an offer reaches a pilot who never opened a surface.
+        private const float HeartbeatSeconds = 3f;
         private const int MaximumOperationId = 1000000;
         private const int MaximumSubjectId = 63;
         private OperationsManager manager;
@@ -88,6 +90,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
                 pendingOperationId = 0;
                 manager.SetLocalStatus("Host link unavailable; secondary state cleared.");
             }
+            if (!pending && now - lastQuery >= HeartbeatSeconds && manager.WantsHeartbeat) Request();
             if (now < nextRegistration) return;
             nextRegistration = now + 0.5f;
             NetworkManagerNuclearOption network = GameAccess.NetworkManagerOrNull;

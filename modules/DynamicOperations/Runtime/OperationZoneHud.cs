@@ -26,7 +26,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         private const int MaxRows = 1;
         private static readonly string[] CardKeys = { "card0" };
         private const float ContentSeconds = 0.25f;
-        private const float ServerRefreshSeconds = 2f;
 
         private OperationsManager manager;
         private IHudBoard board;
@@ -37,8 +36,9 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         private readonly ContractCard[] cards = new ContractCard[OperationBoard.MaximumCards];
         private readonly ContractCard[] selected = new ContractCard[MaxRows];
         private readonly float[] distances = new float[MaxRows];
-        private float nextContent, nextServer;
+        private float nextContent;
         private bool wanted;
+        private int announced;
 
         internal void Configure(OperationsManager owner)
         {
@@ -51,8 +51,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             ReleaseLines();
             Clear();
             nextContent = 0f;
-            nextServer = 0f;
             wanted = false;
+            announced = 0;
             VanillaHudStyle.Invalidate();
         }
 
@@ -70,11 +70,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 nextContent = Time.unscaledTime + ContentSeconds;
                 Refresh();
             }
-            if (wanted && Time.unscaledTime >= nextServer)
-            {
-                nextServer = Time.unscaledTime + ServerRefreshSeconds;
-                manager.Refresh();
-            }
         }
 
         private void Refresh()
@@ -87,6 +82,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 return;
             }
 
+            if (manager.IsFresh) AnnounceOffers();
             IReadOnlyList<SecondaryObjectiveView> views = manager.Objectives;
             int count = 0;
             if (manager.IsFresh && manager.SelectedForHud >= 0 && views != null)
@@ -118,6 +114,25 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 if (lines[row] != null) lines[row].Release();
 
             wanted = shown > 0;
+        }
+
+        /// <summary>One cockpit notice per scan for offers the operation tied; ids only grow, so a watermark never fills up and goes silent.</summary>
+        private void AnnounceOffers()
+        {
+            IReadOnlyList<SecondaryObjectiveView> offers = manager.Objectives;
+            if (offers == null || !ModuleServices.TryGet(out IHudBoard hud)) return;
+            int fresh = 0, highest = announced;
+            string place = string.Empty;
+            for (int i = 0; i < offers.Count; i++)
+            {
+                SecondaryObjectiveView offer = offers[i];
+                if (offer.Id <= announced || !offer.IsOffered || offer.Link == null || !offer.Link.Tied) continue;
+                fresh++;
+                place = offer.Link.Place;
+                if (offer.Id > highest) highest = offer.Id;
+            }
+            announced = highest;
+            if (fresh > 0) hud.Notice("sorties", HudTone.Info, "SORTIES · " + place, fresh + " NEW · MIS > SECONDARY");
         }
 
         private void Write(int row, in ContractCard card, float distance, bool isInside, bool metric)

@@ -122,6 +122,35 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 { "posts", vm.PostCount }, { "effort", effort }, { "wave", wave }, { "alertLevel", vm.AlertLevel },
                 { "bannerTitleLen", vm.Banner.Head.Length }, { "bannerDoLen", vm.Banner.Do.Length }, { "footerLen", vm.FooterStatus.Length },
             };
+            var tickets = new Dictionary<string, object>();
+            int ticketsWithPost = 0, wingTasked = 0;
+            for (int i = 0; i < vm.SortieCount; i++)
+            {
+                StrSortieRow row = vm.Sorties[i];
+                if (row.PostId >= 0) ticketsWithPost++;
+                if (row.HasWing && (row.WingState == WingSortieState.Tasked || row.WingState == WingSortieState.OnStation)) wingTasked++;
+                tickets["t" + (i + 1)] = new Dictionary<string, object>
+                {
+                    { "contractId", row.ContractId }, { "postId", row.PostId }, { "chip", row.ChipText }, { "offered", row.Offered ? 1 : 0 }, { "active", row.Active ? 1 : 0 },
+                    { "hasWing", row.HasWing ? 1 : 0 }, { "wingState", (int)row.WingState }, { "wingLabel", row.WingLabel }, { "wingText", row.WingText },
+                    { "wingRefusal", row.WingRefusal }, { "wingAllowed", row.Wing.Allowed ? 1 : 0 }, { "wingGate", row.Wing.Text },
+                };
+            }
+            var postRows = new Dictionary<string, object>();
+            int postRowsWithTicket = 0;
+            for (int i = 0; i < vm.PostCount; i++)
+            {
+                StrPostRow row = vm.Posts[i];
+                if (row.Ticket.Kind != StrItemKind.None) postRowsWithTicket++;
+                postRows["p" + (i + 1)] = new Dictionary<string, object>
+                {
+                    { "id", row.PostId }, { "name", row.Name }, { "site", row.Site }, { "bounty", row.BountyText }, { "capped", row.Capped ? 1 : 0 }, { "seen", row.SeenText },
+                    { "x", row.X }, { "z", row.Z }, { "hasTicket", row.Ticket.Kind != StrItemKind.None ? 1 : 0 },
+                };
+            }
+            r["tickets"] = tickets;
+            r["postRows"] = postRows;
+            r["ticketCheck"] = new Dictionary<string, object> { { "withPost", ticketsWithPost }, { "postRowsWithTicket", postRowsWithTicket }, { "wingTasked", wingTasked } };
             r["map"] = MapBlock();
             StrUiState ui = hub.Ui;
             r["link"] = new Dictionary<string, object>

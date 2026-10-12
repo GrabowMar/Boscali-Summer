@@ -5,7 +5,6 @@ namespace BoscaliSummer.Modules.HighCommand.Domain
         Active = 0,
         InTransit = 1,
         Disrupted = 2,
-        Kia = 3,
     }
 
     /// <summary>
@@ -27,8 +26,6 @@ namespace BoscaliSummer.Modules.HighCommand.Domain
 
         /// <summary>Mission time the post stops reading as under fire; 0 when never hit.</summary>
         public float AlertUntil = 0f;
-
-        public bool Alive => Status != CommanderStatus.Kia;
 
         public CommandSlot(int id, int parentId, int tier, string role, string siteName)
         {

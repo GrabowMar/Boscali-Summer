@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 {
-    internal sealed partial class OperationsManager : MonoBehaviour, ISceneService, ISecondaryObjectivesView, IOperationOutcomeSource
+    internal sealed partial class OperationsManager : MonoBehaviour, ISceneService, ISecondaryObjectivesView, IOperationOutcomeSource, ISortieOutcomeSource, ISortieWingOrderSource
     {
         private sealed class Target
         {
@@ -20,6 +20,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             public Airbase Base;
             public Unit Unit;
             public FactionHQ OriginalOwner;
+            /// <summary>The office id of a STRIKE COMMAND POST target (the staff board row), else -1.</summary>
+            public int SubjectId = -1;
             public string Name, Outcome;
             public Vector3 Position;
             public float Radius = 1500f, LastJam = -100f;
@@ -28,6 +30,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             public bool Serviced;
             public bool OnStation;
             public ObjectiveAsset Asset;
+            public FocusRole Role;
+            public string Place = string.Empty;
             public Aircraft ReturnAircraft, Observer;
             public readonly InterdictionState Life = new InterdictionState();
 
@@ -56,6 +60,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             public OperationKind? PendingFollowOn;
             public int PendingChainDepth;
             public bool CompletedContract;
+            public OperationFocus Focus;
+            public bool HasFocus => Focus.IsLive;
         }
 
         private readonly Dictionary<FactionHQ, FactionBoard> boards = new Dictionary<FactionHQ, FactionBoard>();
@@ -73,9 +79,13 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         private bool hasSnapshot;
         private bool pendingCancel;
         private IAirAssaultObservation assault;
+        private IOperationFocusSource focusSource;
+        // The operation a generation pass is tied to; default in the untied pass (and everywhere outside Fill).
+        private OperationFocus tie;
         private readonly System.Random random = new System.Random();
         public static OperationsManager Active { get; private set; }
         public event Action<int, float> MoraleAwarded;
+        public event Action<SortieOutcome> Finished;
 
         public bool HasCompletedContract(int factionInstanceId)
         {
@@ -87,6 +97,11 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                     return entry.Value.CompletedContract;
             return false;
         }
+
+        /// <summary>True while a local pilot with a faction could be shown sorties: the transport then keeps its own snapshot fresh with no surface open.</summary>
+        internal bool WantsHeartbeat => settings != null && settings.Enabled.Value && MissionManager.IsRunning &&
+            ReferenceEquals(missionIdentity, MissionManager.CurrentMission) &&
+            GameManager.GetLocalPlayer<Player>(out Player pilot) && pilot != null && pilot.HQ != null;
 
         public IReadOnlyList<SecondaryObjectiveView> Objectives { get; private set; } = Array.Empty<SecondaryObjectiveView>();
         public string Status { get; private set; } = "Waiting for a running mission.";
@@ -128,7 +143,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             jammers.Clear();
             foreach (Candidate candidate in candidates) { candidate.Unit = null; candidate.Base = null; candidate.Count = 0; }
             missionIdentity = null; previousTime = 0f; nextTick = 0f;
-            viewHq = null;
+            viewHq = null; focusSource = null; tie = default; wingOrders = null;
             hasSnapshot = false; SelectedForHud = 0;
             EndAction(string.Empty);
             network?.ResetScene();
@@ -177,7 +192,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             {
                 if (!GameManager.GetLocalPlayer<Player>(out Player local) || local == null || local.HQ != viewHq ||
                     Time.unscaledTime - lastSnapshot > 6f)
-                    SetLocalStatus("Refresh SECONDARY to receive current faction objectives.");
+                    SetLocalStatus("Waiting for the host's faction objectives.");
                 return;
             }
             float now = mission.MissionTime;
@@ -218,10 +233,12 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 
         private void TickBoard(FactionHQ hq, FactionBoard board, float now, float elapsed, Player participant)
         {
+            ReconcileFocus(hq, board, now);
             for (int i = board.Targets.Count - 1; i >= 0; i--)
             {
                 Target target = board.Targets[i];
                 Operation op = target.Mission;
+                if (!op.IsLive) ReleaseWing(op.Id);          // every ending (observed, expired, cancelled) is seen here within a second
                 if (!op.IsLive && now - op.EndedAt >= 60f)
                 { target.Unwatch(); board.Targets.RemoveAt(i); continue; }
                 if (IsExtended(op.Kind))
@@ -239,14 +256,15 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 bool neutralized = target.Life.Neutralized || target.Unit != null && target.Unit.disabled;
                 if (op.Kind == OperationKind.Rappel || op.Kind == OperationKind.Rooftop)
                     valid &= assault?.Available == true && (target.Inserted || target.ShellId == 0 || assault.IsRooftopAvailable(target.ShellId));
-                bool present = op.Kind == OperationKind.Jam ? now - target.LastJam <= 1.5f : HasPlayerOnStation(hq, target);
+                bool present = op.Kind == OperationKind.Jam ? now - target.LastJam <= 1.5f : HasPlayerOnStation(hq, target) || WingOnStation(op);
                 target.OnStation = present;
                 op.Observe(now, elapsed, valid, owned, neutralized, present, target.Inserted);
                 if (!op.IsLive) target.Unwatch();
                 if (op.TryTakeAward()) Pay(hq, board, target, participant);
             }
             board.Rules.Prune(now);
-            if (participant != null && !generatedThisTick && now >= board.NextGeneration && board.Rules.HasCapacity)
+            if (participant != null && !generatedThisTick && now >= board.NextGeneration &&
+                (board.Rules.HasCapacity || board.HasFocus && HasUncoveredOffer(board)))
             {
                 generatedThisTick = true;
                 // The escalation ladder can change at any time; each offer is priced and paced
@@ -271,8 +289,21 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             float scale = validTempo
                 ? OperationTempo.RewardScale(mission.currentEscalation, mission.tacticalThreshold, mission.strategicThreshold)
                 : OperationTempo.ConventionalReward;
+            // Pass one offers what the faction's operation asks for; pass two is the general board of old and fills what is left.
+            if (board.HasFocus)
+            {
+                tie = board.Focus;
+                try { Fill(hq, board, now, only, chainDepth, scale); }
+                finally { tie = default; }
+            }
+            Fill(hq, board, now, only, chainDepth, scale);
+        }
+
+        private void Fill(FactionHQ hq, FactionBoard board, float now, OperationKind? only, int chainDepth, float scale)
+        {
             Airbase capture = ClosestCaptureCandidate(hq, board);
             Unit strike = FindStrikeCandidate(hq, board, out Airbase strikeBase, out Airbase defend);
+            if (tie.IsLive) defend = FocusDefendBase(hq, board);
             List<Unit> units = UnitRegistry.allUnits;
             int count = Math.Min(4096, units?.Count ?? 0);
             GatherMissionCandidates(hq, board, units, count, now);
@@ -283,7 +314,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             foreach (OperationKind kind in kinds)
             {
                 if (only.HasValue && kind != only.Value) continue;
-                if (!board.Rules.HasCapacity) break;
+                if (tie.IsLive && !SortieFocusRules.Allows(tie.Role, kind)) continue;
+                if (!board.Rules.HasCapacity && !(tie.IsLive && board.Rules.PickDisplaced(kind, tie) != null)) break;
                 if (HasKind(board, kind)) continue;
                 if (kind == OperationKind.Capture && capture != null)
                     Add(board, now, kind, capture, null, hq, rewards.CanOffer(OperationReward.Fortification, hq) ? OperationReward.Fortification : OperationReward.None, 1800, 150, scale, chainDepth);
@@ -291,6 +323,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                     Add(board, now, kind, defend, null, hq, rewards.CanOffer(OperationReward.Convoy, hq) ? OperationReward.Convoy : OperationReward.None, 1200, 100, scale, chainDepth);
                 else if (kind == OperationKind.Interdict && strike != null)
                     Add(board, now, kind, strikeBase, strike, hq, OperationReward.None, 800, 75, scale, chainDepth);
+                else if (kind == OperationKind.StrikePost) AddStrikePost(hq, board, now, scale, chainDepth);
                 else if (kind == OperationKind.Intercept || kind == OperationKind.Jam || IsExtended(kind))
                 {
                     AddMissionCandidate(hq, board, kind, now, scale, chainDepth);
@@ -302,7 +335,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                     for (int i = 0; i < bases.Count; i++)
                     {
                         Airbase anchor = bases[(start + i) % bases.Count];
-                        if (anchor.CurrentHQ != hq || board.Rules.WasIssued(kind, anchor.GetInstanceID())) continue;
+                        if (anchor.CurrentHQ != hq || board.Rules.WasIssued(kind, anchor.GetInstanceID()) ||
+                            tie.IsLive && !InFocus(anchor.center.GlobalPosition().AsVector3())) continue;
                         Vector3 position = anchor.center.GlobalPosition().AsVector3();
                         int shellId = 0;
                         if (kind == OperationKind.Rooftop && (!assault.TryRooftop(position.x, position.z, out shellId, out position.x, out position.z) ||
@@ -330,14 +364,20 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         private Airbase ClosestCaptureCandidate(FactionHQ hq, FactionBoard board)
         {
             Airbase capture = null;
-            float nearestFront = 40000f * 40000f;
+            float nearestFront = tie.IsLive ? float.MaxValue : 40000f * 40000f;
             for (int i = 0; i < bases.Count; i++)
             {
                 Airbase candidate = bases[i];
                 if (candidate.CurrentHQ == null || candidate.CurrentHQ == hq ||
                     candidate.SavedAirbase == null || !candidate.SavedAirbase.Capturable ||
                     board.Rules.WasIssued(OperationKind.Capture, candidate.GetInstanceID())) continue;
-                float distance = DistanceToOwnedBase(candidate.center.GlobalPosition().AsVector3(), hq, out _);
+                Vector3 at = candidate.center.GlobalPosition().AsVector3();
+                float distance = DistanceToOwnedBase(at, hq, out _);
+                if (tie.IsLive)
+                {
+                    if (!InFocus(at) || distance > AnchorCap) continue;
+                    distance = FocusSquared(at);
+                }
                 if (distance < nearestFront) { nearestFront = distance; capture = candidate; }
             }
             return capture;
@@ -355,7 +395,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             {
                 Unit unit = units[i];
                 if (unit == null || unit.disabled || unit.NetworkHQ == null || unit.NetworkHQ == hq ||
-                    !(unit is GroundVehicle || unit is Building) || unit.definition == null) continue;
+                    !(unit is GroundVehicle || unit is Building) || unit.definition == null || IsStrikePostUnit(board, unit)) continue;
                 TrackingInfo tracking = hq.GetTrackingData(unit.persistentID);
                 float age = tracking == null ? float.NaN : Time.timeSinceLevelLoad - tracking.lastSpottedTime;
                 if (tracking == null || !float.IsFinite(age) || age < 0f || age > 30f ||
@@ -364,13 +404,17 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 if (!Finite(known)) continue;
                 float distance = DistanceToOwnedBase(known, hq, out Airbase anchor);
                 if (anchor == null) continue;
-                if (unit is GroundVehicle && distance < closestThreat &&
+                if (tie.IsLive)
+                {
+                    if (!InFocus(known) || distance > AnchorCap) continue;
+                }
+                else if (unit is GroundVehicle && distance < closestThreat &&
                     !board.Rules.WasIssued(OperationKind.Defend, anchor.GetInstanceID()))
                 { closestThreat = distance; defend = anchor; }
-                if (distance > 15000f * 15000f || board.Rules.WasIssued(OperationKind.Interdict, unit.GetInstanceID())) continue;
+                if (!tie.IsLive && distance > 15000f * 15000f || board.Rules.WasIssued(OperationKind.Interdict, unit.GetInstanceID())) continue;
                 float role = 1f + Mathf.Clamp(unit.definition.roleIdentity.antiAir, 0f, 3f) * 2f +
                     Mathf.Clamp(unit.definition.roleIdentity.antiSurface, 0f, 3f);
-                float score = role / (1000000f + distance);
+                float score = role / (1000000f + (tie.IsLive ? FocusSquared(known) : distance));
                 if (score > bestThreat) { bestThreat = score; strike = unit; strikeBase = anchor; }
             }
             return strike;
@@ -396,6 +440,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         private Target Add(FactionBoard board, float now, OperationKind kind, Airbase airbase, Unit unit,
             FactionHQ hq, OperationReward reward, int money, int xp, float tempoScale, int chainDepth = 0, int shellId = 0)
         {
+            Operation replaced = tie.IsLive ? board.Rules.PickDisplaced(kind, tie) : null;
             int targetId = shellId != 0 ? shellId : unit != null ? unit.GetInstanceID() : airbase.GetInstanceID();
             float multiplier = settings.RewardMultiplier.Value;
             if (!float.IsFinite(multiplier)) multiplier = 1f;
@@ -405,11 +450,13 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 morale.TryGetContractMultiplier(hq.GetInstanceID(), out float moodScale))
                 scale *= moodScale;
             var op = new Operation(++nextId, targetId, kind, reward, now,
-                Mathf.RoundToInt(money * scale), Mathf.RoundToInt(xp * scale), chainDepth);
+                Mathf.RoundToInt(money * scale), Mathf.RoundToInt(xp * scale), chainDepth, tie.OperationId, tie.AnchorKey);
+            if (replaced != null) Displace(board, replaced);
             if (!board.Rules.TryAdd(op)) return null;
             var target = new Target
             {
                 Mission = op, Base = airbase, Unit = unit,
+                Role = tie.IsLive ? tie.Role : FocusRole.None, Place = tie.IsLive ? tie.Label : string.Empty,
                 Asset = kind == OperationKind.Rappel || kind == OperationKind.Rooftop ? ObjectiveAsset.Site :
                     unit == null ? ObjectiveAsset.Base : kind == OperationKind.Rescue ? ObjectiveAsset.Personnel :
                     unit is Aircraft ? ObjectiveAsset.Aircraft : unit is GroundVehicle ? ObjectiveAsset.GroundVehicle : ObjectiveAsset.Site,
@@ -424,6 +471,19 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             target.Watch();
             board.Targets.Add(target);
             return target;
+        }
+
+        // A tied sortie takes the slot of an offered card the operation does not cover; the key is freed with the card.
+        private static void Displace(FactionBoard board, Operation replaced)
+        {
+            for (int i = 0; i < board.Targets.Count; i++)
+            {
+                if (!ReferenceEquals(board.Targets[i].Mission, replaced)) continue;
+                board.Targets[i].Unwatch();
+                board.Targets.RemoveAt(i);
+                break;
+            }
+            board.Rules.Withdraw(replaced.Id);
         }
 
         private void Pay(FactionHQ hq, FactionBoard board, Target target, Player participant)
@@ -474,6 +534,21 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             target.Outcome = OperationsNet.Text(target.Outcome);
             Plugin.Logger?.LogInfo("[Operations] Completed " + op.Kind + " #" + op.Id + ": " + target.Name + ". " + target.Outcome);
             SeedFollowOn(board, op);
+            RaiseFinished(hq, op, target);
+        }
+
+        /// <summary>The identity of a paid sortie for whoever credits it; a subscriber that throws never breaks the payout.</summary>
+        private void RaiseFinished(FactionHQ hq, Operation op, Target target)
+        {
+            if (Finished == null) return;
+            Vector3 at = Finite(target.Position) ? target.Position :
+                target.Base != null ? target.Base.center.GlobalPosition().AsVector3() : Vector3.zero;
+            try
+            {
+                Finished(new SortieOutcome(hq.GetInstanceID(), op.Id, OperationTitles.Title(op.Kind), op.FocusId, op.FocusAnchor,
+                    at.x, at.z, op.AcceptedBy, WingTasked(op.Id)));
+            }
+            catch (Exception ex) { Plugin.Logger?.LogWarning("[Operations] Finished subscriber failed: " + ex.Message); }
         }
 
         /// <summary>
@@ -502,11 +577,68 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             return best;
         }
 
-        private static bool HasKind(FactionBoard board, OperationKind kind)
+        // In the tied pass an offered card the operation does not cover does not count: a tied sortie of that kind may replace it.
+        private bool HasKind(FactionBoard board, OperationKind kind)
         {
             for (int i = 0; i < board.Targets.Count; i++)
-                if (board.Targets[i].Mission.Kind == kind && board.Targets[i].Mission.IsLive) return true;
+            {
+                Operation card = board.Targets[i].Mission;
+                if (card.Kind != kind || !card.IsLive) continue;
+                if (tie.IsLive && card.State == OperationState.Offered && !tie.Covers(card.FocusId, card.FocusAnchor)) continue;
+                return true;
+            }
             return false;
+        }
+
+        private static float AnchorCap => SortieFocusRules.MaximumAnchorMetres * SortieFocusRules.MaximumAnchorMetres;
+
+        private float FocusSquared(Vector3 position)
+        {
+            float dx = position.x - tie.X, dz = position.z - tie.Z;
+            return dx * dx + dz * dz;
+        }
+
+        private bool InFocus(Vector3 position)
+        {
+            float radius = SortieFocusRules.ClampRadius(tie.Radius);
+            return FocusSquared(position) <= radius * radius;
+        }
+
+        /// <summary>DEFEND needs no hostile: the owned base inside the operation's radius nearest its point.</summary>
+        private Airbase FocusDefendBase(FactionHQ hq, FactionBoard board)
+        {
+            Airbase best = null;
+            float nearest = float.MaxValue;
+            for (int i = 0; i < bases.Count; i++)
+            {
+                Airbase candidate = bases[i];
+                if (candidate.CurrentHQ != hq || board.Rules.WasIssued(OperationKind.Defend, candidate.GetInstanceID())) continue;
+                Vector3 at = candidate.center.GlobalPosition().AsVector3();
+                float distance = FocusSquared(at);
+                if (InFocus(at) && distance < nearest) { nearest = distance; best = candidate; }
+            }
+            return best;
+        }
+
+        private static bool HasUncoveredOffer(FactionBoard board)
+        {
+            for (int i = 0; i < board.Targets.Count; i++)
+            {
+                Operation card = board.Targets[i].Mission;
+                if (card.State == OperationState.Offered && !board.Focus.Covers(card.FocusId, card.FocusAnchor)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Stores the faction's live operation every tick; a new one arms generation at once. Withdraws nothing.</summary>
+        private void ReconcileFocus(FactionHQ hq, FactionBoard board, float now)
+        {
+            if (focusSource == null) ModuleServices.TryGet(out focusSource);
+            OperationFocus focus = default;
+            try { if (focusSource != null && !focusSource.TryGetFocus(hq.GetInstanceID(), out focus)) focus = default; }
+            catch (Exception ex) { focus = default; Plugin.Logger?.LogWarning("[Operations] Operation focus unreadable: " + ex.Message); }
+            if (focus.IsLive && focus.OperationId != board.Focus.OperationId) board.NextGeneration = now;
+            board.Focus = focus;
         }
 
         private static bool Usable(Airbase airbase) => airbase != null && !airbase.disabled &&
@@ -649,11 +781,19 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             snapshot.Status = "Accept up to " + OperationBoard.MaximumActive +
                 " faction contracts. Holds reset when interrupted. Money is before tax; XP is mission score.";
             snapshot.Cards = new SecondaryObjectiveView[board.Targets.Count];
+            bool tiedLive = false;
             for (int i = 0; i < board.Targets.Count; i++)
             {
                 Target target = board.Targets[i]; Operation op = target.Mission;
                 bool active = op.State == OperationState.Active;
-                bool marker = active && MarkerPosition(player.HQ, target);
+                bool known = op.IsLive && MarkerPosition(player.HQ, target) && Finite(target.Position);
+                bool marker = active && known;
+                bool tied = op.FocusId > 0;
+                bool covered = tied && board.HasFocus && board.Focus.Covers(op.FocusId, op.FocusAnchor);
+                tiedLive |= covered && op.IsLive;
+                var link = new SortieLink(op.FocusId, tied ? target.Role : FocusRole.None, tied ? target.Place : string.Empty, covered,
+                    known, known ? target.Position.x : 0f, known ? target.Position.z : 0f,
+                    known ? Mathf.Clamp(target.Radius, 0f, SortieLink.MaximumRadius) : 0f, known && WingOnStation(op));
                 snapshot.Cards[i] = new SecondaryObjectiveView(op.Id,
                     OperationTitles.Title(op.Kind), op.Returning ? "Return in the same aircraft and land within 1 km of the marked friendly base." : Description(op.Kind), target.Name,
                     active && op.Returning ? "ACTIVE / RETURN TO BASE" : active && !marker ? "ACTIVE / CONTACT LOST" : op.State.ToString().ToUpperInvariant(),
@@ -661,8 +801,9 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                     op.Progress, op.IsLive ? Mathf.Clamp(op.Deadline - now, 0f, 1200f) : 0f, op.Money, op.Xp,
                     op.State == OperationState.Completed, op.State == OperationState.Offered, active, marker,
                     marker ? target.Position.x : 0f, marker ? target.Position.z : 0f, marker ? target.Radius : 0f,
-                    op.AcceptedBy, Tasking(player.HQ, target, marker));
+                    op.AcceptedBy, Tasking(player.HQ, target, marker), link);
             }
+            if (board.HasFocus && !tiedLive) snapshot.Status = SortieFocusRules.ThinBoardStatus(board.Focus.Label);
             return snapshot;
         }
 
@@ -694,7 +835,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         {
             Operation op = target.Mission;
             ObjectiveAsset asset = op.Returning ? ObjectiveAsset.Base : target.Asset;
-            bool fixedSite = op.Returning || ReferenceEquals(target.Unit, null) ||
+            bool fixedSite = op.Returning || ReferenceEquals(target.Unit, null) || op.Kind == OperationKind.StrikePost ||
                 op.Kind == OperationKind.DamageAssessment && target.Life.Neutralized;
             float age = -1f;
             ObjectiveContact contact = op.State != OperationState.Active ? ObjectiveContact.Unavailable :
@@ -719,7 +860,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 owner.faction != null && FactionHelper.EmptyOrNoFactionOrNeutral(owner.faction.factionName)
                     ? ObjectiveAllegiance.Neutral : ObjectiveAllegiance.Hostile;
             return OperationPresentation.Build(op, target.OnStation, target.Life.Neutralized, asset, contact, age,
-                target.Outcome, target.Base != null ? target.Base.name : string.Empty, allegiance);
+                target.Outcome, target.Base != null ? target.Base.name : string.Empty, allegiance, target.SubjectId);
         }
 
         private static string Description(OperationKind kind) => kind switch
@@ -741,6 +882,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             OperationKind.ElectronicWarfare => "Neutralize this tracked enemy that recently jammed your faction. Its native jamming ends with its destruction.",
             OperationKind.SortieReport => "Observe this tracked contact from above within 1.5 km for 30s, then land the same aircraft at the marked friendly base.",
             OperationKind.BattlefieldSurvey => "Survey this friendly wreck or damaged building from above within 1.5 km for 30s with a clear terrain sightline.",
+            OperationKind.StrikePost => "Destroy this enemy command post. Killing the commander pays a one-time bounty; the sortie pays either way.",
             _ => "Follow the marked objective."
         };
     }

@@ -6,7 +6,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
     {
         public static ObjectiveTasking Build(Operation op, bool onStation, bool neutralized, ObjectiveAsset asset,
             ObjectiveContact contact, float contactAgeSeconds, string effect, string returnBase,
-            ObjectiveAllegiance allegiance = ObjectiveAllegiance.Unknown)
+            ObjectiveAllegiance allegiance = ObjectiveAllegiance.Unknown, int subjectId = -1)
         {
             ObjectiveLifecycle lifecycle = op.State switch
             {
@@ -84,6 +84,11 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
                     conditions = new[] { "Capture this forward base. Faction effort counts after acceptance." };
                     current = 0;
                     break;
+                case OperationKind.StrikePost:
+                    titles = new[] { "DESTROY" };
+                    conditions = new[] { "Destroy the command post. The commander dies with it unless away on a convoy; the sortie pays either way." };
+                    current = 0;
+                    break;
                 default:
                     titles = new[] { op.Kind == OperationKind.Intercept ? "INTERCEPT" : "STRIKE" };
                     conditions = new[] { op.Kind == OperationKind.Intercept
@@ -113,7 +118,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
                 (op.Kind == OperationKind.SupplyEscort || op.Kind == OperationKind.RepairCover) && held
                     ? "Awaiting native " + (op.Kind == OperationKind.SupplyEscort ? "supply transfer." : "repair completion.") : "";
             return new ObjectiveTasking(Family(op.Kind), asset, contact, contactAgeSeconds, next, blocker, effect, phases, lifecycle,
-                active ? OperationFailure.DismissalMessage(true) : string.Empty, allegiance);
+                active ? OperationFailure.DismissalMessage(true) : string.Empty, allegiance, subjectId);
         }
 
         private static bool TimedGate(OperationKind kind, int index) => kind switch
@@ -146,13 +151,14 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
             OperationKind.Intercept => "Intercept and neutralize the tracked hostile aircraft.",
             OperationKind.SupplyInterdict => "Neutralize the tracked hostile supply truck.",
             OperationKind.ElectronicWarfare => "Neutralize the tracked hostile jammer.",
+            OperationKind.StrikePost => "Destroy the marked command post.",
             _ => "Neutralize the marked hostile target."
         };
 
         public static ObjectiveFamily Family(OperationKind kind) => kind switch
         {
             OperationKind.Capture or OperationKind.Defend => ObjectiveFamily.Control,
-            OperationKind.Interdict => ObjectiveFamily.Strike,
+            OperationKind.Interdict or OperationKind.StrikePost => ObjectiveFamily.Strike,
             OperationKind.Intercept or OperationKind.Patrol => ObjectiveFamily.AirCover,
             OperationKind.Jam or OperationKind.ElectronicWarfare => ObjectiveFamily.Electronic,
             OperationKind.Rappel or OperationKind.Rooftop => ObjectiveFamily.Insertion,

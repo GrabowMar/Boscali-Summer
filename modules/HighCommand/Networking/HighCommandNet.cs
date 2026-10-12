@@ -112,7 +112,7 @@ namespace BoscaliSummer.Modules.HighCommand.Networking
             if (pending && now - lastQuery >= 6f)
             {
                 pending = false;
-                manager.SetLocalStatus("Host link unavailable; staff board cleared.");
+                manager.SetLocalStatus(StaffWords.NoAnswer);
             }
             if (now < nextRegistration) return;
             nextRegistration = now + 0.5f;
@@ -132,13 +132,13 @@ namespace BoscaliSummer.Modules.HighCommand.Networking
         {
             if (!GameManager.GetLocalPlayer<Player>(out Player player) || player == null || player.HQ == null)
             {
-                manager.SetLocalStatus("Join a faction to see its chain of command.");
+                manager.SetLocalStatus(StaffWords.NoFaction);
                 return;
             }
             if (requestedHq != player.HQ)
             {
                 ResetClient(); requestedHq = player.HQ;
-                manager.SetLocalStatus("Waiting for the staff board.");
+                manager.SetLocalStatus(StaffWords.WaitingBoard);
             }
             if (pending || Time.unscaledTime - lastQuery < 4f) return;
             lastQuery = Time.unscaledTime;

@@ -54,7 +54,7 @@ namespace BoscaliSummer.Modules.HighCommand.Domain
 
         public float EffectiveWeight(CommandSlot slot)
         {
-            if (slot == null || slot.Person == null || slot.Status == CommanderStatus.Kia) return 0f;
+            if (slot == null || slot.Person == null) return 0f;
             float weight = CommandTier.Weight(slot.Tier) * CommandTraits.WeightMultiplier(slot.Person.Traits);
             if (slot.Status == CommanderStatus.Disrupted) weight *= 0.5f;
             return weight;
@@ -96,37 +96,22 @@ namespace BoscaliSummer.Modules.HighCommand.Domain
             return value;
         }
 
-        public int LiveCount
-        {
-            get
-            {
-                int count = 0;
-                for (int i = 0; i < slots.Count; i++)
-                    if (slots[i].Alive) count++;
-                return count;
-            }
-        }
-
-        public int KiaCount => slots.Count - LiveCount;
-
         /// <summary>
-        /// Kill the person in <paramref name="slotId"/> and move the next in line into the
-        /// post. Returns the slot that received a freshly assigned person (-1 when the dead
-        /// post itself was refilled with a new name).
+        /// Replace the person in <paramref name="slotId"/>: the next in line (a direct report who is not away on a
+        /// convoy) moves into the post and takes its rank. Returns the slot that received a freshly assigned person
+        /// (-1 when the post itself was refilled with a new name). The slot's status is the caller's to set.
         /// </summary>
         public int Promote(int slotId, int newSeed)
         {
             CommandSlot dead = Find(slotId);
-            if (dead == null || dead.Status == CommanderStatus.Kia) return -1;
-
-            dead.Status = CommanderStatus.Kia;
+            if (dead == null) return -1;
 
             CommandSlot successor = null;
             float best = 0f;
             for (int i = 0; i < slots.Count; i++)
             {
                 CommandSlot candidate = slots[i];
-                if (candidate.ParentId != dead.Id || !candidate.Alive || candidate.Person == null) continue;
+                if (candidate.ParentId != dead.Id || candidate.Status == CommanderStatus.InTransit || candidate.Person == null) continue;
                 float weight = EffectiveWeight(candidate);
                 if (successor == null || weight > best) { successor = candidate; best = weight; }
             }
@@ -138,6 +123,7 @@ namespace BoscaliSummer.Modules.HighCommand.Domain
             }
 
             dead.Person = successor.Person;
+            dead.Person.Rank = CommandTier.Rank(dead.Tier);
             successor.Person = CommanderGenerator.Create(unchecked(newSeed + 7919), successor.Tier);
             return successor.Id;
         }

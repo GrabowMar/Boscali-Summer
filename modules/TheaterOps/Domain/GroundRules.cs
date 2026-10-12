@@ -217,6 +217,29 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
         }
     }
 
+    /// <summary>
+    /// The last tier of the slot search, for a front at the water's edge: the staged point and everything pulled from it have no dry ground, so the member goes as far toward it
+    /// as dry ground leads from where it stands, instead of holding there for ever.
+    /// </summary>
+    internal static class LandMarch
+    {
+        internal const float StepMeters = 200f, ShoreMarginMeters = 100f;
+        internal const int MaxSteps = 60;
+
+        /// <summary>Metres along the way to <paramref name="length"/> that are dry from the start (dryAt is asked at each step and at the end); 0 when not even the first sample is dry. Stops short of the shore.</summary>
+        internal static float Reach(float length, Func<float, bool> dryAt)
+        {
+            if (!float.IsFinite(length) || length <= 0f) return 0f;
+            float limit = Math.Min(length, StepMeters * MaxSteps), last = 0f;
+            for (float at = Math.Min(StepMeters, limit); ; at = Math.Min(at + StepMeters, limit))
+            {
+                if (!dryAt(at)) return last > 0f ? Math.Max(last - ShoreMarginMeters, 0f) : 0f;
+                last = at;
+                if (at >= limit) return limit;
+            }
+        }
+    }
+
     /// <summary>Which side of a front line is friendly when the control field gives no clear answer: the last good side, then the side the group stands on, else none (hold in place).</summary>
     internal static class FrontSide
     {

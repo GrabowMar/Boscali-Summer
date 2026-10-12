@@ -104,6 +104,9 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         public bool OnGround => Ground != null && !Ground.Done;
 
+        /// <summary>Flying for the wing and free to be sent: not released, alive, off the ground, not recovering or settling.</summary>
+        public bool Sendable => !Released && Alive && !OnGround && Recovery == null && Settle == null;
+
         /// <summary>Flying for the wing: an ejection that has started (the aircraft's flag) ends it at once.</summary>
         public bool Alive => Aircraft != null && !Aircraft.disabled && !Aircraft.HasEjected() && Pilot != null && !Pilot.dead && !Pilot.ejected;
     }

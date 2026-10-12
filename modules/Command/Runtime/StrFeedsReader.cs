@@ -133,14 +133,30 @@ namespace BoscaliSummer.Modules.Command.Runtime
             hub.NoteSortieAnswer(sorties.ActionResult, now);
         }
 
-        // Enemy command posts arrive with the high command repair (the trimmed view with global positions); until then the feed is not available,
-        // which the board prints as such rather than as an empty list. The wing line is host only (RefreshWing).
+        // Enemy command posts: the confirmed rows of the high command view, copied as they are (global metres, display names). A board that has not
+        // arrived or has gone stale is not available, which the board prints as such rather than as an empty list. The wing line is host only (RefreshWing).
         private static void ReadPostsAndWing(ref StrFeeds into, StrViewHub hub, bool slow)
         {
             into.PostsAvailable = false;
             into.PostsAgeSeconds = -1f;
             into.Posts = hub.PostBuffer;
             into.PostCount = 0;
+            if (ModuleServices.TryGet(out IHighCommandView staff) && staff.Available)
+            {
+                into.PostsAvailable = true;
+                into.PostsAgeSeconds = staff.AgeSeconds;
+                System.Collections.Generic.IReadOnlyList<CommanderView> rows = staff.Commanders;
+                for (int i = 0; i < rows.Count && into.PostCount < hub.PostBuffer.Length; i++)
+                {
+                    CommanderView row = rows[i];
+                    if (row == null || row.IsFriendly) continue;
+                    hub.PostBuffer[into.PostCount++] = new StrPostIn
+                    {
+                        Id = row.Id, Bounty = row.Bounty, Name = row.Rank + " " + row.Name, Rank = row.Rank, Role = row.Role, Site = row.Site, Trait = row.Bonus,
+                        IntelAge = row.IntelAge, X = row.X, Z = row.Z, BountyCapped = row.BountyClaimed,
+                    };
+                }
+            }
 
             if (slow) RefreshWing(into.IsHost, into.Sorties, hub);
             into.Wing = hub.WingBuffer;

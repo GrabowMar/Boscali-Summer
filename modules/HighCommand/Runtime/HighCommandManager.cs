@@ -23,13 +23,11 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
         private const int MaximumFactions = 8;
         private const int MaximumAssets = 32;
         private const int MaximumConvoys = 8;
-        private const float IntelMemorySeconds = 45f;
-        private const float IntelPostRadius = 2600f;
-        private const float IntelConvoyRadius = 4200f;
+        private const float IntelPostRadius = StaffWords.PostSightMetres;
         private const float TransferDwellSeconds = 60f;
         private const float TransferTimeoutSeconds = 900f;
         private const float RefreshSeconds = 4f;
-        private const float SignalSeconds = 75f;
+        private const float StaleSeconds = 20f;
         private const float AlertSeconds = 12f;
 
         internal enum AssetKind : byte
@@ -84,7 +82,10 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
             public int FactionToken;
             public CommandTree Tree;
             public readonly List<string> Sites = new List<string>(CommandTree.MaximumSites);
-            public readonly Vector3[] Anchors = new Vector3[CommandTier.MaximumSlots];
+            /// <summary>GLOBAL metres (a local position goes stale at every floating-origin shift).</summary>
+            public readonly Vector3[] AnchorsGlobal = new Vector3[CommandTier.MaximumSlots];
+            /// <summary>Scene object name of a base to its display name: the name is the key, the display name is what players read.</summary>
+            public Dictionary<string, string> Labels = new Dictionary<string, string>();
             public readonly bool[] HasAnchor = new bool[CommandTier.MaximumSlots];
             public readonly float[] RespawnAt = new float[CommandTier.MaximumSlots];
             public readonly bool[] RespawnScheduled = new bool[CommandTier.MaximumSlots];
@@ -94,8 +95,6 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
             public int SpawnSerial;
             public int SeedSerial;
             public int RespawnSerial;
-            public string Signal;
-            public float SignalUntil;
             public readonly CommandLog Log = new CommandLog();
         }
 
@@ -104,11 +103,11 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
         private readonly Dictionary<int, AssetWatch> assetLookup = new Dictionary<int, AssetWatch>(MaximumAssets);
         private readonly Dictionary<int, PersistentID> lastDamage = new Dictionary<int, PersistentID>(MaximumAssets);
         private readonly List<Convoy> convoys = new List<Convoy>(MaximumConvoys);
-        private readonly float[,] sight = new float[MaximumFactions, MaximumFactions * CommandTier.MaximumSlots];
+        private readonly PostIntel intel = new PostIntel();
+        private readonly BountyLedger bounties = new BountyLedger();
+        private readonly PostCandidate[] pickScratch = new PostCandidate[32];
         private readonly List<CommanderView> viewCommanders = new List<CommanderView>(CommandSnapshotRules.MaximumNodes);
         private readonly List<CommanderLogLine> viewLog = new List<CommanderLogLine>(CommandLog.Capacity);
-        private readonly List<CommanderLogLine> viewHostileLog = new List<CommanderLogLine>(CommandLog.Capacity);
-        private readonly CommandLogEntry[] hostileScratch = new CommandLogEntry[CommandSnapshotRules.MaximumLogRows];
 
         private HighCommandSettings settings;
         private HighCommandNet network;
@@ -117,33 +116,23 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
         private float nextTick;
         private float lastRefreshRequest = -100f;
         private string status = "Waiting for a running mission.";
-        private string signal = "";
-        private float cohesion;
-        private int active, kia;
+        private float appliedAt = float.NegativeInfinity;
         private FactionHQ viewHq;
         private bool wasEnabled;
 
+        /// <summary>Funds paid as command-post bounties this mission (the sim reads it: it stays 0 unless a real death was paid).</summary>
+        internal int BountyPaidTotal { get; private set; }
+
+        /// <summary>The office the last STRIKE COMMAND POST pick named (the sim kills it); -1 before any pick.</summary>
+        internal int LastPickId { get; private set; } = -1;
+
         // ---- IHighCommandView -------------------------------------------------------------
 
-        public bool Available => viewHq != null;
-        public string Status => status;
-        public string Signal => signal;
-        public float FriendlyCohesion => cohesion;
-        public int FriendlyActive => active;
-        public int FriendlyKia => kia;
+        public float AgeSeconds => float.IsNegativeInfinity(appliedAt) ? float.PositiveInfinity : Time.unscaledTime - appliedAt;
+        public bool Available => viewHq != null && AgeSeconds <= StaleSeconds;
+        public string Status => viewHq != null && AgeSeconds > StaleSeconds ? StaffWords.Stale(AgeSeconds) : status;
         public IReadOnlyList<CommanderView> Commanders => viewCommanders;
         public IReadOnlyList<CommanderLogLine> Log => viewLog;
-        public IReadOnlyList<CommanderLogLine> HostileLog => viewHostileLog;
-
-        public bool TryGetCohesion(FactionHQ hq, out float value)
-        {
-            value = 0f;
-            if (settings == null || !settings.Enabled.Value || !GameAccess.IsServer()) return false;
-            FactionCommand command = FindFaction(hq);
-            if (command == null || command.Tree == null) return false;
-            value = command.Tree.Cohesion(0f);
-            return true;
-        }
 
         public void Refresh()
         {
@@ -172,18 +161,16 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
             assetLookup.Clear();
             lastDamage.Clear();
             convoys.Clear();
-            Array.Clear(sight, 0, sight.Length);
+            intel.Clear();
+            bounties.Clear();
+            BountyPaidTotal = 0;
             viewCommanders.Clear();
             viewLog.Clear();
-            viewHostileLog.Clear();
-            Array.Clear(hostileScratch, 0, hostileScratch.Length);
             missionIdentity = null;
             nextTick = 0f;
             viewHq = null;
-            status = "Waiting for a running mission.";
-            signal = "";
-            cohesion = 0f;
-            active = kia = 0;
+            appliedAt = float.NegativeInfinity;
+            status = StaffWords.WaitingMission;
             network?.ResetScene();
         }
 
@@ -200,7 +187,7 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
             {
                 if (wasEnabled) ResetForScene();
                 wasEnabled = false;
-                status = "Chain of command is disabled on this host.";
+                status = StaffWords.ModuleOff;
                 return;
             }
             wasEnabled = true;
@@ -216,15 +203,11 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
             if (current == null || mission == null || !MissionManager.IsRunning)
             {
                 if (factions.Count > 0) ResetForScene();
-                status = "Waiting for a running mission.";
+                status = StaffWords.WaitingMission;
                 return;
             }
-            if (!GameAccess.IsServer())
-            {
-                if (!GameManager.GetLocalPlayer<Player>(out Player local) || local == null || local.HQ != viewHq)
-                    status = "Waiting for the staff board.";
-                return;
-            }
+            Refresh();       // the board is kept fresh with no surface open: the host applies its own snapshot, a client sends its query
+            if (!GameAccess.IsServer()) return;
 
             float now = mission.MissionTime;
             if (!float.IsFinite(now)) return;
@@ -271,7 +254,8 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
                 if (FindFaction(hq) != null || factions.Count >= MaximumFactions) continue;
 
                 var sites = new List<string>(CommandTree.MaximumSites);
-                CollectSites(hq, sites);
+                var labels = new Dictionary<string, string>();
+                CollectSites(hq, sites, labels);
                 if (sites.Count == 0) continue;
 
                 int seed = unchecked((int)Deterministic.Hash(
@@ -285,11 +269,12 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
                     NextStipend = MissionTime + Math.Max(30, settings.StipendIntervalSeconds.Value),
                     NextTransfer = MissionTime + NextTransferDelay(),
                     SeedSerial = seed,
+                    Labels = labels,
                 };
                 command.Sites.AddRange(sites);
                 factions.Add(command);
                 Plugin.Logger?.LogInfo("[HighCommand] Staff formed for " + command.FactionName + ": " +
-                                command.Tree.LiveCount + " posts over " + sites.Count + " bases.");
+                                command.Tree.Slots.Count + " posts over " + sites.Count + " bases.");
             }
         }
 
@@ -318,7 +303,7 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
                 for (int s = 0; s < command.Tree.Slots.Count; s++)
                 {
                     CommandSlot slot = command.Tree.Slots[s];
-                    if (!slot.Alive || slot.Person == null) continue;
+                    if (slot.Person == null) continue;
                     traitMultiplier = Mathf.Max(traitMultiplier, CommandTraits.StipendMultiplier(slot.Person.Traits));
                 }
 
@@ -355,96 +340,108 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
                 Log = Array.Empty<CommanderLogWire>(),
                 HostileLog = Array.Empty<CommanderLogWire>(),
             };
-            if (player == null || player.HQ == null) return snapshot;
+            if (player == null || player.HQ == null) { snapshot.Status = StaffWords.NoFaction; return snapshot; }
             FactionCommand own = FindFaction(player.HQ);
-            if (own == null)
-            {
-                snapshot.Status = "No staff has formed for your faction.";
-                return snapshot;
-            }
+            if (own == null) { snapshot.Status = StaffWords.NoStaff; return snapshot; }
 
             float now = MissionTime;
             int observer = factions.IndexOf(own);
             var nodes = new List<CommanderWire>(CommandSnapshotRules.MaximumNodes);
-            AppendFactionNodes(own, own, observer, now, nodes, true);
-            for (int i = 0; i < factions.Count && nodes.Count < CommandSnapshotRules.MaximumNodes; i++)
+            float total = Mathf.Max(1f, own.Tree.TotalWeight);
+            for (int i = 0; i < own.Tree.Slots.Count && nodes.Count < CommandSnapshotRules.MaximumNodes; i++)
+                nodes.Add(OwnWire(own, observer, own.Tree.Slots[i], total, now));
+            int enemies = 0;
+            for (int f = 0; f < factions.Count; f++)
             {
-                if (factions[i] == own) continue;
-                AppendFactionNodes(factions[i], own, observer, now, nodes, false);
+                if (f == observer) continue;
+                FactionCommand owner = factions[f];
+                for (int i = 0; i < owner.Tree.Slots.Count && nodes.Count < CommandSnapshotRules.MaximumNodes; i++)
+                {
+                    int key = GlobalId(f, owner.Tree.Slots[i].Id);
+                    if (!intel.TryGet(observer, key, now, out PostSighting seen)) continue;
+                    nodes.Add(EnemyWire(owner, key, owner.Tree.Slots[i], own, seen));
+                    enemies++;
+                }
             }
 
             snapshot.Nodes = nodes.ToArray();
             snapshot.Log = BuildLog(own, now);
-            snapshot.HostileLog = BuildHostileLog(own, observer, now);
             snapshot.Cohesion = own.Tree.Cohesion(0f);
-            snapshot.Active = own.Tree.LiveCount;
-            snapshot.Kia = own.Tree.KiaCount;
-            snapshot.Signal = now < own.SignalUntil ? own.Signal : "";
+            snapshot.Active = own.Tree.Slots.Count;
+            snapshot.Status = enemies == 0 ? StaffWords.NoEnemyPost : "";
             return snapshot;
         }
 
-        /// <summary>Every post is listed. An unconfirmed enemy post keeps its identity and
-        /// role — the console hosts both staffs — while disposition stays behind intel.</summary>
-        private void AppendFactionNodes(FactionCommand owner, FactionCommand observerCommand, int observer,
-            float now, List<CommanderWire> nodes, bool friendly)
+        /// <summary>An own post: everything about it, with its current (global) position.</summary>
+        private CommanderWire OwnWire(FactionCommand owner, int index, CommandSlot slot, float totalWeight, float now)
         {
-            float total = Mathf.Max(1f, owner.Tree.TotalWeight);
-            for (int i = 0; i < owner.Tree.Slots.Count && nodes.Count < CommandSnapshotRules.MaximumNodes; i++)
-            {
-                CommandSlot slot = owner.Tree.Slots[i];
-                bool known = friendly || IsKnown(observerCommand, owner, slot, now);
-                nodes.Add(BuildWire(owner, observerCommand, slot, friendly, known, total, now));
-            }
-        }
-
-        private CommanderWire BuildWire(FactionCommand owner, FactionCommand observer, CommandSlot slot,
-            bool friendly, bool known, float totalWeight, float now)
-        {
-            byte flags = 0;
-            if (friendly) flags |= CommanderWire.Friendly;
-            if (known) flags |= CommanderWire.Known;
-            if (!slot.Alive) flags |= CommanderWire.Kia;
-            // An unconfirmed post is not allowed to leak where its commander is or whether
-            // they are moving; only identity and office cross the wire.
-            if (known && slot.Status == CommanderStatus.InTransit) flags |= CommanderWire.Transit;
-            if (known && slot.Status == CommanderStatus.Disrupted) flags |= CommanderWire.Disrupted;
-            if ((friendly || known) && now < slot.AlertUntil) flags |= CommanderWire.Alert;
+            byte flags = (byte)(CommanderWire.Friendly | CommanderWire.Known);
+            if (slot.Status == CommanderStatus.InTransit) flags |= CommanderWire.Transit;
+            if (slot.Status == CommanderStatus.Disrupted) flags |= CommanderWire.Disrupted;
+            if (now < slot.AlertUntil) flags |= CommanderWire.Alert;
 
             AssetWatch asset = FindActiveAsset(owner, slot);
-            // The wire carries an absolute position: the map places icons at global metres
-            // times its own display factor, so a local transform would be shifted by the
-            // floating datum. A post between spawns reports the base it was anchored to
-            // rather than the map origin, which is what piled the gaps at the centre.
+            // The wire carries an absolute position: the map places icons at global metres, so a local
+            // transform would be shifted by the floating datum. A post between spawns reports its base.
             GlobalPosition position = asset?.Unit != null
                 ? asset.Unit.transform.position.ToGlobalPosition()
                 : owner.HasAnchor[slot.Id]
-                    ? owner.Anchors[slot.Id].ToGlobalPosition()
+                    ? new GlobalPosition(owner.AnchorsGlobal[slot.Id].x, owner.AnchorsGlobal[slot.Id].y, owner.AnchorsGlobal[slot.Id].z)
                     : default;
-            string location = !friendly && !known ? "UNCONFIRMED"
-                : slot.Status == CommanderStatus.InTransit && asset != null
-                    ? "EN ROUTE · " + (FindConvoy(owner, slot)?.DestinationName ?? "UNKNOWN")
-                    : slot.SiteName;
-
+            string site = Label(owner, slot.SiteName);
             return new CommanderWire
             {
-                // Global id: slot ids are only unique inside one tree, and the board lists
-                // every faction, so the faction index is folded into the wire identity.
-                Id = GlobalId(factions.IndexOf(owner), slot.Id),
-                ParentId = slot.ParentId < 0 ? -1 : GlobalId(factions.IndexOf(owner), slot.ParentId),
+                Id = GlobalId(index, slot.Id),
+                ParentId = slot.ParentId < 0 ? -1 : GlobalId(index, slot.ParentId),
                 Tier = (byte)slot.Tier,
                 Flags = flags,
                 TraitMask = (byte)(slot.Person?.Traits ?? CommandTrait.None),
                 Seed = slot.Person?.Seed ?? 0,
-                IntelAge = friendly || !known ? -1f : Mathf.Max(0f, now - LastSight(factions.IndexOf(observer), owner, slot)),
+                IntelAge = -1f,
                 Weight = Mathf.Clamp01(owner.Tree.EffectiveWeight(slot) / totalWeight),
-                X = friendly || known ? position.x : 0f,
-                Z = friendly || known ? position.z : 0f,
+                X = position.x,
+                Z = position.z,
                 Name = slot.Person?.Name ?? "UNKNOWN",
                 Rank = slot.Person?.Rank ?? CommandTier.Rank(slot.Tier),
                 Role = slot.Role,
-                Location = location,
+                Location = slot.Status == CommanderStatus.InTransit && asset != null
+                    ? "EN ROUTE · " + Label(owner, FindConvoy(owner, slot)?.DestinationName) : site,
+                Site = site,
+                Bounty = 0,
             };
         }
+
+        /// <summary>A confirmed enemy post, only: where the observer last saw the building and how long ago. No internal state of the staff leaks (no travel, disruption or alert).</summary>
+        private CommanderWire EnemyWire(FactionCommand owner, int key, CommandSlot slot, FactionCommand observer, PostSighting seen)
+        {
+            bool claimed = bounties.Claimed(observer.Hq.GetInstanceID(), key);
+            string site = Label(owner, slot.SiteName);
+            return new CommanderWire
+            {
+                Id = key,
+                ParentId = slot.ParentId < 0 ? -1 : GlobalId(FactionOf(key), slot.ParentId),
+                Tier = (byte)slot.Tier,
+                Flags = (byte)(CommanderWire.Known | (claimed ? CommanderWire.Claimed : 0)),
+                TraitMask = (byte)(slot.Person?.Traits ?? CommandTrait.None),
+                Seed = slot.Person?.Seed ?? 0,
+                IntelAge = seen.Age,
+                Weight = 0f,
+                X = seen.X,
+                Z = seen.Z,
+                Name = slot.Person?.Name ?? "UNKNOWN",
+                Rank = slot.Person?.Rank ?? CommandTier.Rank(slot.Tier),
+                Role = slot.Role,
+                Location = site,
+                Site = site,
+                Bounty = claimed ? 0 : BountyFor(slot),
+            };
+        }
+
+        /// <summary>What killing this post pays a human faction that has not yet taken the office; 0 when pay is off.</summary>
+        private int BountyFor(CommandSlot slot) =>
+            !settings.EconomyEnabled.Value || slot.Person == null ? 0 :
+            Mathf.Clamp(CommandEconomy.BountyFunds(slot.Tier, settings.BountyBaseFunds.Value, settings.BountyComponentFunds.Value,
+                settings.BountyTheaterFunds.Value, CommandTraits.BountyMultiplier(slot.Person.Traits)), 0, CommandSnapshotRules.MaximumBounty);
 
         /// <summary>The local faction's own log, complete: its own staff has no fog.</summary>
         private CommanderLogWire[] BuildLog(FactionCommand owner, float now)
@@ -466,55 +463,6 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
         }
 
         /// <summary>
-        /// Enemy events this faction had eyes on: an entry is sent when the observer's last
-        /// sight of the subject post is at or after the event, so the log cannot narrate a
-        /// post the roster is still hiding.
-        /// </summary>
-        private CommanderLogWire[] BuildHostileLog(FactionCommand own, int observer, float now)
-        {
-            int shown = 0;
-            for (int f = 0; f < factions.Count; f++)
-            {
-                FactionCommand owner = factions[f];
-                if (owner == own) continue;
-                for (int i = 0; i < owner.Log.Count; i++)
-                {
-                    CommandLogEntry entry = owner.Log[i];
-                    if (entry.TargetId < 0) continue;
-                    // The subject is read from the id, not from the ring's owner: an
-                    // observer's own log also carries contact reports about enemy posts.
-                    int subjectIndex = FactionOf(entry.TargetId);
-                    if (subjectIndex < 0 || subjectIndex >= factions.Count || subjectIndex == observer) continue;
-                    FactionCommand subject = factions[subjectIndex];
-                    CommandSlot slot = subject.Tree.Find(LocalId(entry.TargetId));
-                    if (slot == null || !CommandLog.VisibleToObserver(LastSight(observer, subject, slot), entry.Time))
-                        continue;
-
-                    int at = shown;
-                    while (at > 0 && hostileScratch[at - 1].Time < entry.Time) at--;
-                    if (at >= CommandSnapshotRules.MaximumLogRows) continue;
-                    for (int j = Math.Min(shown, CommandSnapshotRules.MaximumLogRows - 1); j > at; j--)
-                        hostileScratch[j] = hostileScratch[j - 1];
-                    hostileScratch[at] = entry;
-                    if (shown < CommandSnapshotRules.MaximumLogRows) shown++;
-                }
-            }
-
-            var rows = new CommanderLogWire[shown];
-            for (int i = 0; i < shown; i++)
-            {
-                rows[i] = new CommanderLogWire
-                {
-                    TargetId = hostileScratch[i].TargetId,
-                    Tone = (byte)hostileScratch[i].Tone,
-                    Text = CommandLog.Bounded(hostileScratch[i].Text),
-                    Age = LogAge(hostileScratch[i].Time, now),
-                };
-            }
-            return rows;
-        }
-
-        /// <summary>
         /// The ring never expires entries, so a quiet faction's oldest line can outlive the
         /// wire's age bound; clamping keeps that line "15+ minutes old" instead of making every
         /// remote client reject the whole snapshot.
@@ -530,64 +478,119 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
         {
             viewCommanders.Clear();
             viewLog.Clear();
-            viewHostileLog.Clear();
             AppendLog(viewLog, snapshot.Log);
-            AppendLog(viewHostileLog, snapshot.HostileLog);
-            cohesion = snapshot.Cohesion;
-            active = snapshot.Active;
-            kia = snapshot.Kia;
-            signal = snapshot.Signal ?? "";
-            if (!string.IsNullOrEmpty(snapshot.Status)) status = snapshot.Status;
+            appliedAt = Time.unscaledTime;
+            status = snapshot.Status ?? "";
 
             CommanderWire[] nodes = snapshot.Nodes;
-            if (nodes == null) return;
-            bool host = GameAccess.IsServer();
-            int localFaction = PortraitFactions.Local;
-            int enemyFaction = host ? -1 : PortraitFactions.OpposingLocal;
-            for (int i = 0; i < nodes.Length && viewCommanders.Count < CommandSnapshotRules.MaximumNodes; i++)
+            if (nodes != null)
             {
-                CommanderWire node = nodes[i];
-                var traits = (CommandTrait)node.TraitMask;
-                bool friendly = (node.Flags & CommanderWire.Friendly) != 0;
-                bool isKia = (node.Flags & CommanderWire.Kia) != 0;
-                int portraitFaction = friendly ? localFaction : enemyFaction;
-                int owner = FactionOf(node.Id);
-                if (host && owner >= 0 && owner < factions.Count)
-                    portraitFaction = PortraitFactions.Of(factions[owner].Hq);
-                viewCommanders.Add(new CommanderView(
-                    node.Id, node.ParentId, node.Tier,
-                    friendly,
-                    (node.Flags & CommanderWire.Known) != 0,
-                    isKia,
-                    (node.Flags & CommanderWire.Transit) != 0,
-                    (node.Flags & CommanderWire.Disrupted) != 0,
-                    (node.Flags & CommanderWire.Alert) != 0,
-                    node.Name, node.Rank, node.Role, node.Location,
-                    CommandTraits.BonusLine(traits),
-                    CommanderGenerator.Bio(node.Seed, traits),
-                    node.Seed,
-                    // Every staff post is a commander. The shared identity generator
-                    // keeps faces stable and selects clothing/equipment for this role.
-                    WingLink.PersonnelPortrait(node.Name, "", PortraitRole.Commander, portraitFaction),
-                    node.IntelAge, node.Weight, node.X, node.Z));
-            }
-
-            if (GameAccess.IsServer() && viewCommanders.Count > 0)
-            {
-                FactionCommand own = ViewCommand();
-                if (own != null)
+                bool host = GameAccess.IsServer();
+                int localFaction = PortraitFactions.Local;
+                int enemyFaction = host ? -1 : PortraitFactions.OpposingLocal;
+                for (int i = 0; i < nodes.Length && viewCommanders.Count < CommandSnapshotRules.MaximumNodes; i++)
                 {
-                    signal = MissionTime < own.SignalUntil ? own.Signal : "";
-                    viewHq = own.Hq;
+                    CommanderWire node = nodes[i];
+                    var traits = (CommandTrait)node.TraitMask;
+                    bool friendly = (node.Flags & CommanderWire.Friendly) != 0;
+                    int portraitFaction = friendly ? localFaction : enemyFaction;
+                    int owner = FactionOf(node.Id);
+                    if (host && owner >= 0 && owner < factions.Count)
+                        portraitFaction = PortraitFactions.Of(factions[owner].Hq);
+                    viewCommanders.Add(new CommanderView(
+                        node.Id, node.Tier, friendly, (node.Flags & CommanderWire.Alert) != 0,
+                        node.Name, node.Rank, node.Role, node.Site,
+                        friendly ? CommandTraits.BonusLine(traits) : CommandTraits.StrikeLine(traits),
+                        CommanderGenerator.Bio(node.Seed, traits),
+                        node.Seed,
+                        // Every staff post is a commander. The shared identity generator
+                        // keeps faces stable and selects clothing/equipment for this role.
+                        WingLink.PersonnelPortrait(node.Name, "", PortraitRole.Commander, portraitFaction),
+                        node.IntelAge, node.X, node.Z, node.Bounty, (node.Flags & CommanderWire.Claimed) != 0));
                 }
             }
-            else if (viewCommanders.Count > 0 && GameManager.GetLocalPlayer<Player>(out Player local) && local != null)
+
+            if (viewCommanders.Count == 0) viewHq = null;
+            else if (GameAccess.IsServer())
+            {
+                FactionCommand own = ViewCommand();
+                if (own != null) viewHq = own.Hq;
+            }
+            else if (GameManager.GetLocalPlayer<Player>(out Player local) && local != null)
             {
                 viewHq = local.HQ;
             }
         }
 
-        internal void SetLocalStatus(string value) => status = value;
+        /// <summary>The board is not usable (no mission, no faction, no answer): drop it and say why.</summary>
+        internal void SetLocalStatus(string value)
+        {
+            viewCommanders.Clear();
+            viewLog.Clear();
+            viewHq = null;
+            appliedAt = float.NegativeInfinity;
+            status = value;
+        }
+
+        /// <summary>Host only: the nearest confirmed standing enemy post this faction has not already taken the bounty of.</summary>
+        public bool TryPickStrikePost(FactionHQ attacker, float nearX, float nearZ, float maxMetres,
+            Predicate<int> skip, out CommandPostTarget target)
+        {
+            target = default;
+            if (settings == null || !settings.Enabled.Value || !GameAccess.IsServer() || attacker == null) return false;
+            int observer = FactionIndex(attacker);
+            if (observer < 0) return false;
+            float now = MissionTime;
+            bool fix = float.IsFinite(nearX) && float.IsFinite(nearZ);
+            int count = 0;
+            for (int f = 0; f < factions.Count; f++)
+            {
+                if (f == observer) continue;
+                FactionCommand owner = factions[f];
+                for (int s = 0; s < owner.Tree.Slots.Count && count < pickScratch.Length; s++)
+                {
+                    CommandSlot slot = owner.Tree.Slots[s];
+                    int key = GlobalId(f, slot.Id);
+                    Unit building = FindAsset(owner, slot, AssetKind.Post)?.Unit;
+                    // A commander away on a convoy would pay no bounty: the host does not offer a card it knows would pay nothing.
+                    if (building == null || building.disabled || building.NetworkHQ != owner.Hq || slot.Status == CommanderStatus.InTransit ||
+                        !intel.TryGet(observer, key, now, out PostSighting seen)) continue;
+                    pickScratch[count++] = new PostCandidate
+                    {
+                        Id = key, Tier = slot.Tier,
+                        Distance = fix ? Mathf.Sqrt((seen.X - nearX) * (seen.X - nearX) + (seen.Z - nearZ) * (seen.Z - nearZ)) : NearestOwnedBase(attacker, seen.X, seen.Z),
+                        Claimed = bounties.Claimed(attacker.GetInstanceID(), key),
+                    };
+                }
+            }
+            int pick = StrikePostRules.Pick(pickScratch, count, maxMetres, skip);
+            if (pick < 0) return false;
+            int id = pickScratch[pick].Id;
+            FactionCommand picked = factions[FactionOf(id)];
+            CommandSlot chosen = picked.Tree.Find(LocalId(id));
+            Unit post = FindAsset(picked, chosen, AssetKind.Post).Unit;
+            intel.TryGet(observer, id, now, out PostSighting at);
+            LastPickId = id;
+            target = new CommandPostTarget(id, post, at.X, at.Y, at.Z, chosen.Person?.Rank ?? "", chosen.Person?.Name ?? "", chosen.Role,
+                Label(picked, chosen.SiteName), BountyFor(chosen));
+            return true;
+        }
+
+        /// <summary>Metres from a global point to the nearest airbase the faction owns; NaN when it owns none.</summary>
+        private static float NearestOwnedBase(FactionHQ hq, float x, float z)
+        {
+            float best = float.NaN;
+            int inspected = 0;
+            foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
+            {
+                if (++inspected > 64) break;
+                if (airbase == null || airbase.CurrentHQ != hq || airbase.center == null) continue;
+                GlobalPosition at = airbase.center.GlobalPosition();
+                float d = Mathf.Sqrt((at.x - x) * (at.x - x) + (at.z - z) * (at.z - z));
+                if (float.IsNaN(best) || d < best) best = d;
+            }
+            return best;
+        }
 
         private static void AppendLog(List<CommanderLogLine> target, CommanderLogWire[] rows)
         {

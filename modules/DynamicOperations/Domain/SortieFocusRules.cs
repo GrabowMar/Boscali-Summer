@@ -25,6 +25,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
                     return role == FocusRole.Assault;
                 case OperationKind.Interdict:
                 case OperationKind.Intercept:
+                case OperationKind.StrikePost:
                     return role == FocusRole.Assault || role == FocusRole.Defend;
                 case OperationKind.Jam:
                     return role == FocusRole.Assault || role == FocusRole.Recon;
