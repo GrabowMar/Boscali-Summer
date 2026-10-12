@@ -170,7 +170,10 @@ namespace BoscaliSummer.Tests.Features.Hud
 
         private static void Cells()
         {
-            TestAssert.That(StoresMath.Cells(180f) == 20 && StoresMath.Cells(216f) == 24, "WIDE's 180 holds 20 cells, STACK's 216 holds 24");
+            TestAssert.That(StoresMath.Cells(180f) == 20 && StoresMath.Cells(196f) == 22, "WIDE's 180 holds 20 cells, STACK's inner 196 holds 22");
+            TestAssert.That(StoresLayout.PwrInner(false, 180f) == 180f && StoresLayout.PwrInner(true, 216f) == 196f, "PWR BUS's inner row is the block's own in WIDE and 196 of 216 in STACK");
+            TestAssert.That(StoresMath.Cells(StoresLayout.PwrInner(true, 216f)) * StoresMath.CellPitch - (StoresMath.CellPitch - StoresMath.CellW) == 196f, "...and STACK's 22 cells end exactly at the rate word's right edge");
+            TestAssert.That(StoresMath.UnlitTickX > 0f && StoresMath.UnlitTickX < StoresMath.CellW - 1f, "An unlit cell's tick stands inside its slot");
             TestAssert.That(StoresMath.Cells(1f) == 1, "A row always has a cell");
             TestAssert.That(StoresMath.LitCells(1f, 20) == 20 && StoresMath.LitCells(0f, 20) == 0 && StoresMath.LitCells(0.5f, 20) == 10, "Lit cells are the share of the row");
             TestAssert.That(StoresMath.LitCells(43f / 500f, 20) == 2 && StoresMath.LitCells(0.024f, 20) == 0 && StoresMath.LitCells(0.026f, 20) == 1, "...rounded to the nearest cell");

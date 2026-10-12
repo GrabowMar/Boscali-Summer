@@ -166,8 +166,10 @@ namespace BoscaliSummer.Modules.Hud.Domain
         // ---- PWR BUS (LAYOUT.md 3.2)
 
         public const float CellW = 7f, CellH = 10f, CellPitch = 9f;
+        /// <summary>An unlit cell is a 1 x <see cref="CellH"/> DIM tick this far into its slot (the middle of the 7), not an outline.</summary>
+        public const float UnlitTickX = 3f;
 
-        /// <summary>How many cells a row <paramref name="width"/> units wide holds (each <see cref="CellW"/> wide, <see cref="CellPitch"/> apart): 20 in WIDE's 180, 24 in STACK's 216.</summary>
+        /// <summary>How many cells a row <paramref name="width"/> units wide holds (each <see cref="CellW"/> wide, <see cref="CellPitch"/> apart): 20 in WIDE's 180, 22 in STACK's inner 196 (<see cref="StoresLayout.PwrInner"/>).</summary>
         public static int Cells(float width) => Math.Max(1, (int)Math.Floor((width + CellPitch - CellW) / CellPitch));
 
         /// <summary>The lit cells for a charge share <paramref name="frac"/> of <paramref name="cells"/>.</summary>

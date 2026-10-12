@@ -500,6 +500,7 @@ public static partial class HudLogUnityCheck
                 Check(StoresTint(v.Art[0].color, StoresInk) && v.Art[0].color.a > 0.99f, tag + ": SAFE tints the art INK");
                 StoresArtFills(v, 2, "weaponicon_radarJammer", new Rect(v.Exp.x, v.Exp.y + 66f - 7f, 14f, 14f), tag);
                 Check(Mathf.Abs(v.Word("43").Label.color.r - StoresAmber.r) < 0.01f, tag + ": a charge at 8 % is amber");
+                Check(Mathf.Abs(v.Word("CHG +5/S").Ink.xMax - (v.Pwr.x + (isStack ? 196f : 180f))) < 3f, tag + ": the rate word ends at the inner width (WIDE 180, STACK 196 of 216): " + v.Word("CHG +5/S").Ink.xMax);
                 Check(Mathf.Abs(v.Exp.y - (isStack ? 124f : 70f)) < 0.01f, tag + ": EXPENDABLES sits where the geometry has it (WIDE y 70 with no cost row)");
                 if (!isStack) Check(Mathf.Abs(v.Word("EXPENDABLES").Ink.center.y - (v.Exp.y + 6f)) < 2f, tag + ": EXPENDABLES' shelf is 6 under its top");
             });
