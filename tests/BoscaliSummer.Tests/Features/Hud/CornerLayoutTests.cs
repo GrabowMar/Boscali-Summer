@@ -3,50 +3,15 @@ using BoscaliSummer.Modules.Hud.Domain;
 
 namespace BoscaliSummer.Tests.Features.Hud
 {
-    /// <summary>The furniture of the two screen corners (LAYOUT.md 7), from the native rectangle.</summary>
+    /// <summary>The furniture of the minimised map's corner (LAYOUT.md 7), from the native rectangle (DL EVT LOG's is EventLogTests').</summary>
     internal static class CornerLayoutTests
     {
         public static void Run()
         {
-            Feed();
             Map();
         }
 
         private static void At(float actual, float expected, string what) => TestAssert.That(Math.Abs(actual - expected) < 0.01f, what + ": " + actual + ", want " + expected);
-
-        /// <summary>DL EVT LOG: the game's box is 0..475 by 0..90 for four lines (the mock's lines at 21, 39, 58, 76). Brackets at x 2, corners at y 3 and 86, arms 10; the shelf's line at y 98 from x 2, 150 wide.</summary>
-        private static void Feed()
-        {
-            CornerFurniture f = CornerLayout.Feed(0f, 0f, 475f, 90f, 1f);
-            At(f.X0, 2f, "Feed brackets stand 2 in from the box");
-            At(f.Y0, 3f, "...the top corner 3 under its top (the game's first line starts higher than the mock drew it: its capitals reach up to y 9)");
-            At(f.Y1, 86f, "...the bottom corner 4 over its bottom");
-            At(f.Arm, 10f, "...arms of 10");
-            TestAssert.That(!f.Both && f.Present, "Two brackets on the left only");
-            At(f.ShelfX, 2f, "The shelf starts at x 2");
-            At(f.ShelfY + 6f, 98f, "...its line at y 98 (6 under the block top the painter is given)");
-            At(f.ShelfW, 150f, "...150 wide");
-
-            // The box grows and moves with its lines and the screen: one line, and a box that is not at the corner.
-            CornerFurniture one = CornerLayout.Feed(0f, 0f, 300f, 34f, 1f);
-            TestAssert.That(one.Present && one.Arm * 2f < one.Y1 - one.Y0, "One line (a 34 high box, as in game): the brackets do not meet: " + one.Arm);
-            // The corner clears the first letter of a one line box: its capitals reach y 9 (seen in game), the top arm is 6 over them.
-            TestAssert.That(one.Y0 <= 9f - 6f + 0.01f, "...and the top arm at y " + one.Y0 + " stays over the capitals (y 9 down), not through them");
-            TestAssert.That(one.Y1 >= 21f + 5f, "...the bottom arm at y " + one.Y1 + " under the line (its baseline at y 21, descenders to 25)");
-            CornerFurniture tiny = CornerLayout.Feed(0f, 0f, 300f, 22f, 1f);
-            TestAssert.That(tiny.Present && tiny.Arm < 10f && tiny.Arm * 2f < tiny.Y1 - tiny.Y0, "A box too short for arms of 10: they shrink so the two brackets do not meet: " + tiny.Arm);
-            CornerFurniture low = CornerLayout.Feed(40f, 200f, 515f, 290f, 1f);
-            At(low.X0, 42f, "A box 40 over: the brackets follow");
-            At(low.Y0, 203f, "...and 200 down");
-            At(low.ShelfY + 6f, 298f, "...and so does the shelf");
-
-            // At 720p a canvas unit is 0.667 of a pixel and a design unit 0.85: the box is carried into design units (k 0.784), the mock's own offsets (design units) apply to it.
-            float k = 1f / 1.275f;
-            CornerFurniture small = CornerLayout.Feed(0f, 0f, 475f, 90f, k);
-            At(small.X0, 2f, "At 720p the feed brackets are still 2 from the box's edge");
-            At(small.Y1, 90f * k - 4f, "...the bottom corner 4 over its bottom (in design units)");
-            At(small.ShelfY + 6f, 90f * k + 8f, "...and the shelf 8 under it");
-        }
 
         /// <summary>TAC MAP: the plate is 0..320 by 760..1080; brackets (4, 766) to (316, 1068) = 312 x 302, arm 18; the shelf INSIDE the frame at its lower left (its line 14 over the bottom bracket line, from x 10, 104 wide).</summary>
         private static void Map()

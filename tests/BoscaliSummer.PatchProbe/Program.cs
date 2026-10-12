@@ -134,7 +134,9 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("CombatHUD", "UpdateHitMarkers"),
     ("HUDUnitMarker", "UpdatePosition"),
     ("HUDUnitMarker", "JammingDistortion"),
-    ("HUDTurretCrosshair", "Refresh")
+    ("HUDTurretCrosshair", "Refresh"),
+    // DL EVT LOG (2026-10-13): EventFeedPatch is a postfix on the one place every line of the game's message feed passes.
+    ("MessageFeed", "Enqueue")
 };
 
 foreach ((string typeName, string fieldName) in new[]
@@ -296,6 +298,10 @@ foreach ((string typeName, string fieldName) in fields)
     ("CombatHUD", "countermeasureBackground", "UnityEngine.GameObject"),
     // Screen corners (2026-10-12): NativeScreenCorners finds the kill feed's plate (the child called Darkener under MessageUI's background box) and the minimised map's plate (DynamicMap's background).
     ("MessageUI", "messageBackground", "UnityEngine.GameObject"),
+    // DL EVT LOG (2026-10-13): NativeScreenCorners hides the feed's two text objects behind owned CanvasGroups while the mod's log is drawn, and shows them whole while the chat input (MessageUI.chat) is open.
+    ("MessageUI", "messageText", "TMPro.TextMeshProUGUI"),
+    ("MessageUI", "killFeedText", "TMPro.TextMeshProUGUI"),
+    ("MessageUI", "chat", "ChatBox"),
     ("DynamicMap", "mapBackground", "UnityEngine.UI.Image"),
     ("Gun", "reloadTime", "System.Single"),
     ("MissileLauncher", "reloadTime", "System.Single"),
@@ -627,6 +633,7 @@ string[] patchTypes =
     ,"BoscaliSummer.Modules.Trenches.Runtime.TrenchWorksDetectionPatch"
     ,"BoscaliSummer.Modules.Hud.Patches.WingviewCameraPatch"
     ,"BoscaliSummer.Modules.Hud.Patches.ShotDetonatePatch"
+    ,"BoscaliSummer.Modules.Hud.Patches.EventFeedPatch"
     ,"BoscaliSummer.Modules.Weather.Patches.CloudSeekerPatch"
 };
 
