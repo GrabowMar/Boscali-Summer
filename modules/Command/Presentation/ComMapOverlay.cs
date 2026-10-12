@@ -177,7 +177,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             isMapMaximized = DynamicMap.mapMaximized;
 
             // Build the raster and vector map surfaces only when the large map opens.
-            // STR still reads sector telemetry while flying with the map closed.
+            // The sector counts the board and the ticker read come from CommandManager's census, so nothing here needs to run while the map is closed.
             if (isMapMaximized && !initialized) TryInitialize();
 
             // Strict visibility control: Overlay is strictly for the Maximized Theater Map!

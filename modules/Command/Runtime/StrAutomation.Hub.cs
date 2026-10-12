@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
+using System.Text.RegularExpressions;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.Command.Domain;
@@ -66,6 +68,16 @@ namespace BoscaliSummer.Modules.Command.Runtime
             };
         }
 
+        // The old grid label ("FRONT 3/-2") is not a place name; a board that prints one has lost the place book.
+        private static readonly Regex GridLabel = new Regex(@"^\s*FRONT\s*-?\d+\s*/\s*-?\d+\s*$", RegexOptions.IgnoreCase);
+
+        private static void NoteName(string name, StringBuilder names, ref int idLike)
+        {
+            if (string.IsNullOrEmpty(name) || GridLabel.IsMatch(name)) idLike++;
+            if (names.Length > 0) names.Append('|');
+            names.Append(name ?? "");
+        }
+
         // view, map and check: what the hub built, the map's pose, and the model's differences from the host's own snapshot (must be 0).
         private static void AddHub(Dictionary<string, object> r)
         {
@@ -93,8 +105,17 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 { "credits", vm.Wave.Present ? vm.Wave.Credits : -1 }, { "perWave", vm.Wave.Present ? vm.Wave.PerWave : -1 },
                 { "cost", vm.Wave.Cost }, { "pool", vm.Wave.Pool }, { "held", vm.Wave.Held ? 1 : 0 }, { "affordable", (int)vm.Wave.Affordable },
             };
+            // What the pilot reads, not what the engine sent: the four header tiles (1 = a value, 0 = a dash) and the place names the board prints.
+            var tiles = new Dictionary<string, object>();
+            for (int i = 0; i < vm.Tiles.Length; i++)
+                tiles[(vm.Tiles[i].Key ?? "tile" + i).ToLowerInvariant()] = !string.IsNullOrEmpty(vm.Tiles[i].Value) && vm.Tiles[i].Value != StrWords.Dash ? 1 : 0;
+            int idLike = 0;
+            var names = new StringBuilder();
+            for (int i = 0; i < vm.FrontCount; i++) NoteName(vm.Fronts[i].Name, names, ref idLike);
+            for (int i = 0; i < vm.ProposalCount; i++) NoteName(vm.Proposals[i].Name, names, ref idLike);
             r["view"] = new Dictionary<string, object>
             {
+                { "tiles", tiles }, { "nameIdLike", idLike }, { "names", names.ToString() },
                 { "modeCode", (int)vm.Mode }, { "modeName", vm.Mode.ToString() }, { "stale", vm.Stale ? 1 : 0 }, { "posture", (int)vm.Posture },
                 { "ageSeconds", float.IsNaN(vm.AgeSeconds) ? -1f : vm.AgeSeconds }, { "canCommand", vm.CanCommand ? 1 : 0 }, { "revision", vm.Revision },
                 { "proposals", vm.ProposalCount }, { "fronts", vm.FrontCount }, { "sorties", vm.SortieCount }, { "sortieAccepted", accepted },

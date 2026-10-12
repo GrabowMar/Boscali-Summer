@@ -17,6 +17,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Configuration
                     "AI ground groups follow the staff's operation: they form up behind the line, then advance. Off: vehicles keep the game's own orders; the staff still plans.",
                     () => rtsOwnsOrders() ? RtsOwnsOrders : null)
                 .Toggle(2, settings.AiStaffConvoys, "AI STAFF CONVOYS",
-                    "AI-only factions buy one combat convoy every 2 minutes while their operation runs, and only when their pool holds at least twice the price. Off (default): AI factions get no staff convoys, so a pilot who ignores the staff is not out-reinforced.");
+                    "Not active in this build: the reinforcement desk that would spend it is not built, so this switch changes nothing. Planned: AI-only factions buy one combat convoy every 2 minutes while their operation runs, and only when their pool holds at least twice the price. Off (default).");
     }
 }

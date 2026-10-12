@@ -120,7 +120,6 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
         private string signal = "";
         private float cohesion;
         private int active, kia;
-        private int highlightedId = -1;
         private FactionHQ viewHq;
         private bool wasEnabled;
 
@@ -135,9 +134,6 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
         public IReadOnlyList<CommanderView> Commanders => viewCommanders;
         public IReadOnlyList<CommanderLogLine> Log => viewLog;
         public IReadOnlyList<CommanderLogLine> HostileLog => viewHostileLog;
-        public int HighlightedId => highlightedId;
-
-        public void Highlight(int id) => highlightedId = id;
 
         public bool TryGetCohesion(FactionHQ hq, out float value)
         {
@@ -188,7 +184,6 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
             signal = "";
             cohesion = 0f;
             active = kia = 0;
-            highlightedId = -1;
             network?.ResetScene();
         }
 

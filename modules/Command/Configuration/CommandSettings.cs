@@ -101,10 +101,10 @@ namespace BoscaliSummer.Modules.Command.Configuration
                 "STR layer on the expanded map: platform badges with lane bars and the proposal tags. The layer plate's FRONTS switch changes it in game.");
 
             StrOverlayOperation = config.Bind("Command", "StrOverlayOperation", true,
-                "STR layer on the expanded map: the main effort's ring, axis, ground groups and the reinforcement route. The layer plate's OPERATION switch changes it in game.");
+                "STR layer on the expanded map: the main effort's ring, axis and ground groups, and the reinforcement route once a wave desk reports a depot (none does in this build). The layer plate's OPERATION switch changes it in game.");
 
             StrOverlaySorties = config.Bind("Command", "StrOverlaySorties", true,
-                "STR layer on the expanded map: the sorties tied to the operation, and enemy command posts. The layer plate's SORTIES switch changes it in game.");
+                "STR layer on the expanded map: the sorties tied to the operation, and enemy command posts (this build ties no sortie and reports no post yet). The layer plate's SORTIES switch changes it in game.");
 
             ThreatHeat = config.Bind("Command", "ThreatHeat", true,
                 "Tracked hostile sensor coverage as range contours. The local faction's tracked picture and your aircraft's detection envelope drive it. The MAP bezel's SENSOR CONTOURS layer switches it in game.");

@@ -8,6 +8,9 @@ Blocks, in the spec's naming (docs/superpowers/specs/2026-10-12-str-repair-desig
   str-2-war-tc                         P2 engine blocks that need no ground report (slice 4): names, deck timing, staff pick, lock, redirect, veto,
                                        command expiry, host age, an own-base DEFEND, focus, faults
   str-3-reduced-ff / str-3-reduced-dom P3 reduced missions: the Free Flight deck, the Domination own-base DEFEND
+  str-8-merged-smoke                   the merged build (engine S4, census S5, ground S6 and the Station Board panel and map overlay) in one Escalation run: the panel opened through
+                                       StrAutomation at about 150 s, place names, known census tiles, a live operation with ground groups, a pick through the panel verb with its lock and picker,
+                                       the deferred features printing their honest empty states, screenshots of the panel beside the map
   census (slice 5)                     the str-2-war-tc census block (threat level on the ticker with STR never opened, parked jets are not sorties, the
                                        contested-base cross-check) and the Free Flight grid check (no contested sectors on a quiet map)
 
@@ -318,6 +321,67 @@ def reduced_dom():
          below("d2.ground.boscali.members", 0), below("d2.ground.primeva.members", 0), below("d2.hook.overrides", 0)])
 
 
+def merged_smoke():
+    """The merged build in one Escalation run. Boscali is the pilot faction (its ground closes on this map, slice 6). The seat ignores STR for 145 s, so the staff has picked
+    (45 s after its deck) and an operation has run for about a minute when the panel is opened through StrAutomation. Everything the panel prints is read from the panel
+    (StrAutomation.Read: tile values, place names, effort, picker and lock), everything the engine and the ground sent is read from WarProof, GroundProof and CensusProof, and
+    the two sides must agree (the check block of Read). The sorties tie, the wave desk, SEND WING and the command posts are deferred: the panel must print their empty states
+    (no tied sortie, no post, wave credits -1) and nothing may claim otherwise. A measured -1 is unknown and must not pass an 'at least'."""
+    sx = "BoscaliSummer.Modules.Command.Runtime.StrAutomation."
+    S = lambda name, store, **a: call(sx + name, store, **a)
+    shot = lambda name: {"op": "capture", "name": name, "hide_ui": False}
+    k, kf, g = ".war.boscali", ".war.primeva", ".ground.boscali"
+    ops = [
+        {"op": "seat", "id": "player", "faction": "Boscali", "near": [-5000, 30000], "altitude": 9000, "speed": 200, "heading": 0},
+        {"op": "fly", "id": "player", "program": [{"orbit": {"bank": 30, "seconds": 520}}]},
+        wait(140), read("r1"), gcall("Read", "g1"), census("c1"),
+        wait(5), S("Open", "o0", page="board"),                      # about 150 s: the pilot opens the map and the Station Board
+        wait(4), S("Read", "a0"), shot("live-merged-board"),
+        S("Press", "t1", id="tab.sitrep"), wait(1), S("Read", "a1s"), shot("live-merged-sitrep"),
+        S("Press", "t2", id="tab.log"), wait(1), S("Read", "a1l"), shot("live-merged-log"),
+        S("Press", "t3", id="tab.board"), wait(1),
+        S("Verb", "pk", verb="redirect", index=1),                   # the staff already picked, so the pilot's pick through the panel's own verb is a REDIRECT on the first lane that holds an offer
+        wait(10), S("Read", "a2"), read("r2"), gcall("Read", "g2"), shot("live-merged-picked"),
+        wait(45), S("Read", "a3"), read("r3"), gcall("Read", "g3"), shot("live-merged-groups"),
+        {"op": "end"},
+    ]
+    checks = [{"check": "status_ok"}]
+    for kk in (k, kf):
+        checks += [above("r1" + kk + ".frontsNamed", 1), below("r1" + kk + ".frontsIdLike", 0), above("r1" + kk + ".deckCount", 1), below("r3" + kk + ".faults", 0)]
+    checks += [above("r1" + k + ".opLive", 1)]
+    # The panel is open, on the board page, and agrees with the host's snapshot.
+    checks += [equals("a0.hub", True), above("a0.panel.present", 1), above("a0.panel.screenActive", 1), below("a0.panel.page", 0), above("a0.overlay.present", 1), above("a0.overlay.visible", 1),
+               above("a0.view.revision", 1), above("a0.view.fronts", 1), above("a0.view.proposals", 1), above("a0.view.effort.live", 1), below("a0.overlay.overflow", 0)]
+    checks += within("a0.view.ageSeconds", 0, 15)
+    checks += [below("a0.check.frontsDelta", 0), below("a0.check.proposalsDelta", 0), below("a0.check.effortDelta", 0)]
+    # Place names on the panel (not "FRONT gx/gz" and not keys), and the three census tiles hold values; the alert level is a measured 1..5.
+    checks += [below("a0.view.nameIdLike", 0), above("a0.overlay.tags.front", 1), above("a0.overlay.tags.prop", 1)]
+    checks += [above("a0.view.tiles.sectors", 1), above("a0.view.tiles.air", 1), above("a0.view.tiles.ground", 1)] + within("a0.view.alertLevel", 1, 5)
+    checks += [above("c1.census.known", 1)] + within("c1.census.threat", 1, 5) + [equals("c1.check.tickerLevelDelta", 0)]
+    # Deferred features print their empty states: no sortie is tied, no command post is listed, the wave desk reports nothing (credits -1).
+    checks += [below("a0.view.sorties", 0), below("a0.view.posts", 0), equals("a0.view.wave.credits", -1), below("a0.overlay.tags.sortie", 0), below("a0.overlay.tags.post", 0)]
+    checks += [above("a1s.panel.page", 1), below("a1s.panel.page", 1), above("a1l.panel.page", 2), above("t1.ok", 1), above("t2.ok", 1), above("t3.ok", 1)]
+    # The pick: the verb went out, the engine took it as a pilot's, the lock and the picker are on the panel and agree with the engine, the staff did not override.
+    checks += [above("pk.ok", 1), above("pk.pressed", 1), above("a2.view.effort.pickedByLocal", 1), below("a2.view.effort.pickedByStaff", 0), above("a2.view.effort.live", 1)]
+    checks += within("a2.view.effort.lockSeconds", 60, 121) + [above("r2" + k + ".pilotPicks", 1), below("r2" + k + ".staffOverrides", 0)] + within("r2" + k + ".lockSeconds", 60, 121)
+    checks += [below("a2.check.effortDelta", 0), above("a2.view.effort.idChanges", 1)]
+    # The ground report reaches the panel: the pilot faction's operation holds at least one ground group, on the panel, in the snapshot and in the ground service.
+    checks += [above("a3.view.effort.groups", 1), above("r3" + k + ".forcesGroups", 1), above("g3" + g + ".assigned", 1), above("g3" + g + ".opActive", 1),
+               below("a3.check.effortDelta", 0), below("a3.check.frontsDelta", 0)]
+    checks += [{"check": "log_match", "pattern": r"\[TheaterOps\].*staff fault", "max": 0}, {"check": "log_match", "pattern": "Exception", "max": 0}]
+    return {
+        "name": "str-8-merged-smoke",
+        "description": "STR merged build smoke, mission Escalation: the Station Board opened at about 150 s over a live operation, place names, known census tiles, a pick through the panel verb with "
+                       "its lock and picker, the pilot faction's ground groups on the panel, and the deferred features' empty states; screenshots of the panel beside the map. See tools/Str-Scenarios.py.",
+        "mission": "Escalation",
+        "mods": ["boscalisummer"],
+        "timeout_s": 700,
+        "environment": {"config": {"bepinex": {"Logging.Disk": {"WriteUnityLog": True}}, "boscalisummer": {"TheaterOps": {"FrontlineTacticsEnabled": True}}}},
+        "ops": ops,
+        "checks": checks,
+    }
+
+
 def write(doc):
     with open(os.path.join(REPO, "tests", "ingame", doc["name"] + ".json"), "w", encoding="utf-8", newline="\r\n") as f:
         f.write(json.dumps(doc, indent=2) + "\n")
@@ -334,3 +398,4 @@ if __name__ == "__main__":
     write(war_tc())
     write(reduced_ff())
     write(reduced_dom())
+    write(merged_smoke())

@@ -58,8 +58,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 into.WaitSeconds = 0f;
                 into.WarCanCommand = into.WarPending = false;
                 into.WarLast = null;
-                into.Census = TheaterCensus.Unmeasured;
-                into.CensusAgeSeconds = -1f;
+                ReadOwnCensus(ref into, now);
                 hub.WaitingSince = -1f;
                 return;
             }
@@ -90,10 +89,31 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 into.WaitSeconds = 0f;
             }
 
-            // The census exists only inside a snapshot. Without one the host's own counts (CommandManager.LastCensus, the census slice) are not
-            // wired yet, so this reads as not measured, and the builder prints dashes and NOT MEASURED.
-            into.Census = snapshot != null ? snapshot.Census : TheaterCensus.Unmeasured;
-            into.CensusAgeSeconds = snapshot != null ? into.WarAgeSeconds : -1f;
+            // The snapshot's census wins when the host measured it (the same rule CommandManager.TickCensus applies to the ticker's bag); without one
+            // a host reads the census CommandManager measured for its own faction, and a client reads it as not measured.
+            if (snapshot != null && snapshot.Census.Known)
+            {
+                into.Census = snapshot.Census;
+                into.CensusAgeSeconds = into.WarAgeSeconds;
+            }
+            else ReadOwnCensus(ref into, now);
+        }
+
+        // CommandManager.LastCensus is what TickCensus last applied: the host's own TryMeasure result (every 10 s, so the board adds no scan) or
+        // TheaterCensus.Unmeasured, with LastCensusAt -1 until a measured one exists. Its age is unscaled now minus that stamp.
+        private static void ReadOwnCensus(ref StrFeeds into, float now)
+        {
+            CommandManager command = CommandManager.Active;
+            if (into.IsHost && command != null && command.LastCensus.Known && command.LastCensusAt >= 0f)
+            {
+                into.Census = command.LastCensus;
+                into.CensusAgeSeconds = Math.Max(0f, now - command.LastCensusAt);
+            }
+            else
+            {
+                into.Census = TheaterCensus.Unmeasured;
+                into.CensusAgeSeconds = -1f;
+            }
         }
 
         private static void ReadSorties(ref StrFeeds into, StrViewHub hub, float now)

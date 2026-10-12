@@ -104,7 +104,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             Bind(fronts, "layer.fronts", "FRONTS", ui.ShowFronts, "Platform badges and lane bars of every front.");
             Bind(operation, "layer.operation", "OPERATION", ui.ShowOperation, "The main effort, its axis, groups and wave route, and the proposals.");
-            Bind(sorties, "layer.sorties", "SORTIES", ui.ShowSorties, "Sortie markers and zones, and the enemy command posts.");
+            Bind(sorties, "layer.sorties", "SORTIES", ui.ShowSorties, "Sortie markers and zones, and the enemy command posts when the host reports any.");
             string line = StrPanelText.LayerLine(vm);
 
             float x = 8f, y = 6f;
