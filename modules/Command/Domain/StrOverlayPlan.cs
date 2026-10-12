@@ -35,6 +35,8 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>Plate text and second line ("P1 NORTH RIDGE", "75% ▲ RISING"); the model's words.</summary>
         public string Text, Sub;
         public StrInkRole Ink;
+        /// <summary>The lane's own words ("75% ▲ RISING") for a tag whose Sub names the place: the effort's. "" otherwise.</summary>
+        public string Note;
         /// <summary>Hostile share and trend for the plate's lane bar (NaN = hatched or none).</summary>
         public float Value, Trend;
         /// <summary>A ghost (proposal while an operation runs), hovered, selected.</summary>
@@ -65,7 +67,7 @@ namespace BoscaliSummer.Modules.Command.Domain
         private int inkQuads, pulseQuads;
 
         // Joined words, remembered per item so that toggling a layer or adding an item moves nobody else's slot.
-        private const int EffortSlot = 0, FrontSlots = 1, ProposalSlots = 9, SortieSlots = 12, PostSlots = 17;
+        private const int EffortSlot = 0, FrontSlots = 1, ProposalSlots = 9, SortieSlots = 12, PostSlots = 17, EffortNote = MaxTags * 2 - 2;
         private readonly string[] joinA = new string[MaxTags * 2], joinB = new string[MaxTags * 2], joinSep = new string[MaxTags * 2], joinOut = new string[MaxTags * 2];
 
         private static readonly string[] LegendLabels =
@@ -124,7 +126,7 @@ namespace BoscaliSummer.Modules.Command.Domain
             // The effort plate is first so that first-fit placement never displaces it.
             if (op && live)
                 AddTag(StrTagKind.Effort, e.Id, e.X, e.Z, Join(EffortSlot * 2, e.Tag, " ", e.KindText), Join(EffortSlot * 2 + 1, e.FrontTag, " ", e.Name),
-                       StrInkRole.Effort, Unit(e.Pressure), Unit(e.Trend), false, vm);
+                       StrInkRole.Effort, Unit(e.Pressure), Unit(e.Trend), false, vm, Join(EffortNote, e.PressureText, " ", e.TrendText));
 
             // 1. a cross at each front anchor
             if (fronts)
@@ -148,7 +150,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                 if (AxisStart(e, out float sx, out float sz)) AddPrim(StrShape.DashedArrow, StrInkRole.Effort, e.Id, sx, sz, e.X, e.Z, 0f, e.Advancing);
                 int marks = e.Marks == null ? 0 : Math.Min(e.MarkCount, e.Marks.Length);
                 for (int k = 0; k < marks; k++)
-                    if (Finite(e.Marks[k].X, e.Marks[k].Z)) AddPrim(StrShape.Box, StrInkRole.Own, e.Id, e.Marks[k].X, e.Marks[k].Z, 0f, 0f, 0f, false);
+                    if (Finite(e.Marks[k].X, e.Marks[k].Z)) AddPrim(StrShape.Box, StrInkRole.Effort, e.Id, e.Marks[k].X, e.Marks[k].Z, 0f, 0f, 0f, false);
                 StrWaveView w = vm.Wave;
                 if (w != null && w.Present && w.DepotKnown && Finite(w.DepotX, w.DepotZ))
                     AddPrim(StrShape.DashedLine, StrInkRole.Wave, e.Id, w.DepotX, w.DepotZ, e.X, e.Z, 0f, false);
@@ -278,12 +280,12 @@ namespace BoscaliSummer.Modules.Command.Domain
             if (pulse) pulseQuads += Quads(shape); else inkQuads += Quads(shape);
         }
 
-        private void AddTag(StrTagKind kind, StrItemId id, float x, float z, string text, string sub, StrInkRole ink, float value, float trend, bool ghost, StrViewModel vm)
+        private void AddTag(StrTagKind kind, StrItemId id, float x, float z, string text, string sub, StrInkRole ink, float value, float trend, bool ghost, StrViewModel vm, string note = "")
         {
             if (TagCount >= MaxTags) return;
             Tags[TagCount++] = new StrTagSpec
             {
-                Id = id, Kind = kind, X = x, Z = z, Text = text ?? "", Sub = sub ?? "", Ink = ink, Value = value, Trend = trend,
+                Id = id, Kind = kind, X = x, Z = z, Text = text ?? "", Sub = sub ?? "", Note = note ?? "", Ink = ink, Value = value, Trend = trend,
                 Ghost = ghost, Hot = Is(vm.HoverId, id), Selected = Is(vm.SelectedId, id),
             };
         }

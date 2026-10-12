@@ -15,6 +15,7 @@ namespace BoscaliSummer.Tests.Features.Command
             RegisteringAgainReplacesAndClearEmpties();
             AVerbThatDeclinesIsNotAnOk();
             AControlWithoutAGateIsAlwaysAllowed();
+            RemoveForgetsOneIdAndLeavesTheRest();
         }
 
         private static void APressRunsTheGateThenTheVerb()
@@ -71,6 +72,16 @@ namespace BoscaliSummer.Tests.Features.Command
             c.Register("sortie.1.wing", () => new StrAct(StrWhy.None, ""), () => new StrAct(StrWhy.WingRefused, "THE WING DID NOT TAKE THE ORDER"));
             StrControls.PressResult r = c.Press("sortie.1.wing");
             TestAssert.That(!r.Ok && r.Act.Why == StrWhy.WingRefused, "a verb the host refused is reported, not an ok");
+        }
+
+        private static void RemoveForgetsOneIdAndLeavesTheRest()
+        {
+            var c = new StrControls();
+            c.Register("map.card.primary", null, () => new StrAct(StrWhy.None, "", true));
+            c.Register("layer.fronts", null, () => new StrAct(StrWhy.None, "", true));
+            c.Remove("map.card.primary"); c.Remove("map.card.primary"); c.Remove(null);
+            TestAssert.That(!c.Has("map.card.primary") && !c.Press("map.card.primary").Ok, "a removed id is gone, and removing it twice or removing nothing is harmless");
+            TestAssert.That(c.Has("layer.fronts") && c.Press("layer.fronts").Ok && c.Count == 1, "the other ids stay");
         }
 
         private static void AControlWithoutAGateIsAlwaysAllowed()

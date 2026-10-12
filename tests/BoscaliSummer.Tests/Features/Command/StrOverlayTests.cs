@@ -150,7 +150,7 @@ namespace BoscaliSummer.Tests.Features.Command
                 switch (s.Shape)
                 {
                     case StrShape.Cross: TestAssert.That(s.Id.Kind == StrItemKind.Front, "a cross names its front"); break;
-                    case StrShape.Box: TestAssert.That(s.Id == vm.Effort.Id && s.Ink == StrInkRole.Own, "a group box is the effort's, ink Own: only our own groups are drawn"); break;
+                    case StrShape.Box: TestAssert.That(s.Id == vm.Effort.Id && s.Ink == StrInkRole.Effort, "a group box is the effort's and amber like the rest of the live operation (frame C: only our own groups are drawn)"); break;
                     case StrShape.DashedLine: TestAssert.That(s.Id == vm.Effort.Id && s.Ink == StrInkRole.Wave, "the wave route is the effort's, ink Wave"); break;
                     case StrShape.DashedArrow: TestAssert.That(s.Id == vm.Effort.Id && s.Ink == StrInkRole.Effort, "the axis is the effort's, ink Effort"); break;
                     case StrShape.Diamond: TestAssert.That(s.Id.Kind == StrItemKind.Sortie && s.Ink == StrInkRole.Offered, "an offered sortie is ink Offered"); break;
@@ -485,6 +485,7 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(eff.Kind == StrTagKind.Effort && eff.Text == e.Tag + " " + e.KindText && eff.Text == "01 MAIN EFFORT", "the effort tag carries the main effort chip: " + eff.Text);
             TestAssert.That(eff.Sub == e.FrontTag + " " + e.Name && eff.Sub == "P1 KESTREL CROSSING", "and its front's platform and place: " + eff.Sub);
             TestAssert.That(eff.Ink == StrInkRole.Effort && eff.X == e.X && eff.Z == e.Z && eff.Value == e.Pressure && eff.Trend == e.Trend && !eff.Ghost, "at the fix, with the front's lane value");
+            TestAssert.That(eff.Note == e.PressureText + " " + e.TrendText && eff.Note.Length > 0, "and the lane's own words (pressure and trend): " + eff.Note);
 
             for (int k = 0; k < vm.FrontCount; k++)
             {

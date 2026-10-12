@@ -41,6 +41,12 @@ namespace BoscaliSummer.Modules.Command.Presentation
             map[id] = new Entry { Gate = gate, Press = press };
         }
 
+        /// <summary>Forgets one id (the map card leaves none behind when it hides).</summary>
+        internal void Remove(string id)
+        {
+            if (id != null) map.Remove(id);
+        }
+
         internal bool Has(string id) => id != null && map.ContainsKey(id);
 
         internal IEnumerable<string> Ids => map.Keys;

@@ -37,7 +37,7 @@ public sealed class PreviewTrailIcon : UnitMapIcon
     private void OnDestroy() { }
 }
 
-public static class MapOverlayUnityCheck
+public static partial class MapOverlayUnityCheck
 {
     private const BindingFlags All = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
     private const string Prefix = "BoscaliSummer.Modules.";
@@ -86,6 +86,8 @@ public static class MapOverlayUnityCheck
             if (!nonWingOnly) Call(T("Wing.Runtime.WingLog"), "Init", new ManualLogSource("MapPreview"));
             Directory.CreateDirectory("renders");
             PointerGuard();
+            StrCases();
+            if (!strOnly) {
             foreach (Vector2 size in new[] { new Vector2(1280,720), new Vector2(1920,1080) })
                 foreach (float zoom in new[] { .7f, 1f, 1.8f }) {
                     foreach (string state in new[] { "empty", "calm", "contested" }) Case(size, zoom, "control", state);
@@ -99,6 +101,7 @@ public static class MapOverlayUnityCheck
                     foreach (string state in new[] { "empty", "populated", "faded", "cleared" }) Case(size,zoom,"aircraft-trails",state);
                 }
             foreach (Vector2 size in new[] { new Vector2(1280,720), new Vector2(1920,1080) }) Case(size,8f,"trenches","stages");
+            }
         } catch (Exception error) { failures.Add("exception: " + error); Debug.LogException(error); }
         File.WriteAllLines("measurements.tsv", measurements); File.WriteAllLines("captures.tsv", captures);
         File.WriteAllText("failures.txt", string.Join("\n", failures));

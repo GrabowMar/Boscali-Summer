@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Modules.Command.Presentation;
+using BoscaliSummer.Modules.Command.Presentation.MapUi;
 using UnityEngine;
 using static BoscaliSummer.Core.Diagnostics.AutomationArgs;
 
@@ -107,18 +108,28 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
         private static Dictionary<string, object> PressId(string hook, string id)
         {
+            // The overlay's own controls: the layer toggles and the card's buttons (they live on the map, not on the panel).
+            if (id != null && (id.StartsWith("layer.") || id.StartsWith("map.card.")))
+            {
+                StrMapOverlay overlay = StrMapOverlay.Active;
+                if (overlay == null) return Fail(hook, "no STR overlay in this scene");
+                StrViewHub.Active?.TickNow();
+                overlay.RefreshNow();
+                return Result(overlay.Controls.Press(id));
+            }
             StrMfdPanel panel = StrMfdPanel.Active;
             if (panel == null || panel.Console == null) return Fail(hook, "no STR screen is built yet (open the map first)");
             // The ids belong to the model the panel last bound: bring both up to date before pressing, so a press never meets a stale id.
             StrViewHub.Active?.TickNow();
             panel.BindNow();
-            StrControls.PressResult r = panel.Controls.Press(id);
-            return new Dictionary<string, object>
-            {
-                { "ok", r.Ok ? 1 : 0 }, { "pressed", r.Act.Sent ? 1 : 0 }, { "reasonCode", (int)r.Act.Why },
-                { "reason", r.Act.Text }, { "reasonLen", r.Act.Text.Length },
-            };
+            return Result(panel.Controls.Press(id));
         }
+
+        private static Dictionary<string, object> Result(StrControls.PressResult r) => new Dictionary<string, object>
+        {
+            { "ok", r.Ok ? 1 : 0 }, { "pressed", r.Act.Sent ? 1 : 0 }, { "reasonCode", (int)r.Act.Why },
+            { "reason", r.Act.Text }, { "reasonLen", r.Act.Text.Length },
+        };
 
         private static Dictionary<string, object> PointAt(string hook, Dictionary<string, object> args, bool select)
         {
@@ -159,6 +170,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     } },
             };
             AddHub(r);
+            AddOverlay(r);
             r["ok"] = true;   // a readout; the blocks above say what is missing
             return r;
         }
