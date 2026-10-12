@@ -17,7 +17,6 @@ Copy-Item -LiteralPath `
     "$repo/modules/Command/Presentation/StrConsoleParts.cs", `
     "$repo/modules/Command/Presentation/StrSituationParts.cs", `
     "$repo/modules/Command/Presentation/StrCommandParts.cs", `
-    "$repo/modules/Command/Presentation/StrOperationsParts.cs", `
     "$repo/modules/Command/Presentation/StrNodeBoard.cs", `
     "$repo/modules/Command/Presentation/StrLogBoard.cs", `
     "$repo/modules/Command/Domain/CommandRosterOrder.cs", `

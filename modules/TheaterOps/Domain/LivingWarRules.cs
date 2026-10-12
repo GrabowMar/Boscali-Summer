@@ -65,9 +65,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
                 return 1f + (front.Objective ? 1f : 0f) + front.Pressure;
             }
             // Counts are observed local presence, not a combat-power prediction.
-            float minimumRatio = posture == TheaterWarPosture.Cautious ? 1.25f
-                : posture == TheaterWarPosture.Bold ? .75f : 1f;
-            if (ours < theirs * minimumRatio) return float.NegativeInfinity;
+            if (ours < theirs * PostureRule.Ratio(posture)) return float.NegativeInfinity;
             kind = "ASSAULT";
             float appetite = posture == TheaterWarPosture.Bold ? 2f
                 : posture == TheaterWarPosture.Cautious ? -2f : 0f;

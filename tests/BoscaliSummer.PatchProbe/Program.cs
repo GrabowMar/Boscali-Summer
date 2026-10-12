@@ -1412,14 +1412,15 @@ static void ProbeOperationSerialization(Assembly plugin, Assembly mirage)
     Reject(Encode(snapshotType, Snapshot(1, Card(0.5f, link: Link(operation: 0, role: 0, place: "", live: true, known: false, x: 0f, z: 0f, radius: 0f)))));
     Reject(Encode(snapshotType, Snapshot(1, Card(0.5f, link: Link(x: float.NaN)))));
     Reject(Encode(snapshotType, Snapshot(1, Card(0.5f, link: Link(known: false, x: 5f, z: 0f, radius: 0f)))));
-    // The flags byte is the 13th from the end of a snapshot whose last field is a link: patch it to 8.
+    // The flags byte is the 13th from the end of a snapshot whose last field is a link: patch it to 15 (the three real bits plus bit 3).
+    // Patching it to 8 would also clear SiteKnown and be refused for the 12500 left in X, so the flags rule would never be tested.
     byte[] flagBytes = (byte[])writerType.GetMethod("ToArray")!.Invoke(Encode(snapshotType, Snapshot(1, Card(0.5f, link: Link()))), null)!;
-    flagBytes[flagBytes.Length - 13] = 8;
+    flagBytes[flagBytes.Length - 13] = 15;
     object flagReader = Activator.CreateInstance(readerType)!;
     try
     {
         readerType.GetMethod("Reset", new[] { typeof(byte[]) })!.Invoke(flagReader, new object[] { flagBytes });
-        try { ((Delegate)mirage.GetType("Mirage.Serialization.Reader`1", true)!.MakeGenericType(snapshotType).GetProperty("Read", flags)!.GetValue(null)!).DynamicInvoke(flagReader); throw new InvalidOperationException("Link flags 8 were accepted"); }
+        try { ((Delegate)mirage.GetType("Mirage.Serialization.Reader`1", true)!.MakeGenericType(snapshotType).GetProperty("Read", flags)!.GetValue(null)!).DynamicInvoke(flagReader); throw new InvalidOperationException("Link flags 15 were accepted"); }
         catch (TargetInvocationException error) when (error.InnerException is InvalidOperationException) { }
     }
     finally { ((IDisposable)flagReader).Dispose(); }

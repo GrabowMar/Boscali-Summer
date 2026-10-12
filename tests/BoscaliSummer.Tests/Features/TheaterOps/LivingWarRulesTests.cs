@@ -24,6 +24,25 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
             TestAssert.That(LivingWarRules.Opening(0f, .3f, false, false, 150f, 120f) &&
                 !LivingWarRules.Opening(0f, .3f, false, false, 100f, 120f),
                 "contact pressure opens offers after the cooldown");
+            AssaultNeedsTheRatioTheCaptionPrints();
+        }
+
+        // TheaterWords.Posture prints PostureRule.Ratio; the assault rule must apply that same number (4 hostile, so ceil(4 x ratio) friendly).
+        private static void AssaultNeedsTheRatioTheCaptionPrints()
+        {
+            foreach (TheaterWarPosture posture in new[] { TheaterWarPosture.Cautious, TheaterWarPosture.Steady, TheaterWarPosture.Bold })
+            {
+                int needed = (int)System.Math.Ceiling(4f * PostureRule.Ratio(posture));
+                TestAssert.That(Offered(posture, needed - 1) == 0, posture + " refuses an assault one friendly short of its ratio");
+                TestAssert.That(Offered(posture, needed) == 1, posture + " assaults at exactly its ratio");
+            }
+        }
+
+        private static int Offered(TheaterWarPosture posture, int friendly)
+        {
+            var offers = new List<WarOffer>();
+            LivingWarRules.Choose(new[] { new WarFrontRead("sector", "Sector", 100, 100, .3f, friendly, 4, false, false, true) }, posture, offers);
+            return offers.Count;
         }
     }
 }
