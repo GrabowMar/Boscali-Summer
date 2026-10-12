@@ -6,8 +6,8 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Weather.Presentation
 {
     /// <summary>
-    /// The inside of the STORY card (R3, R5): nine step pips, the tape strip and its meta line. Today the strip draws the legacy sky step (this class, then the next one at the step)
-    /// and the pips stay empty; with the tape (4B) it draws the story's segments and markers from the same model fields.
+    /// The inside of the STORY card (R3, R5): nine step pips, the tape strip and its meta line. The strip draws the tape's segments and markers around the camera
+    /// from the same model fields as the pips, and reads HELD while the tape does not move.
     /// </summary>
     internal sealed class MetStoryBody : EnvPart
     {

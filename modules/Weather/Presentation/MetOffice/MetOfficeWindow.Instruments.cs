@@ -24,7 +24,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             AvFlow f = Column("InstrumentColumn", MetOfficeLayout.Pad + MetOfficeLayout.Col1 + MetOfficeLayout.ColGap, MetOfficeLayout.Col23);
 
             skyCard = Card(f, "SKY NOW");
-            skyCard.SetTag(0, "R1b 4B", MetAvail.Tape4B); skyCard.SetTag(1, "R1", MetAvail.Live);
+            skyCard.SetTag(0, "R1b", MetAvail.Live); skyCard.SetTag(1, "R1", MetAvail.Live);
             sky = skyCard.Add(new MetSkyBody(skyCard.Content), MetOfficeLayout.SkyCard - MetOfficeLayout.CardChrome);
             sky.SetHelp("SKY NOW: the class and cover over you, the sky's name, a METAR line from the layers above you and the three layers with their bases.");
 

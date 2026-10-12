@@ -29,7 +29,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             if (length < 0.001f) { forwardX = 0f; forwardZ = 1f; length = 1f; }
             bool anchor = hasCamera && ahead >= 0f;
             // One key edit: the tape fields and the frame survive; the dynamic flag goes through Rebased so the tape position is continuous.
-            WeatherKey keyed = basis.WithStory(story).WithSkyPin(pin).WithSets(sets);
+            WeatherKey keyed = basis.With(story, pin, sets);
             keyed = anchor
                 ? keyed.WithAnchor(x + forwardX / length * ahead, z + forwardZ / length * ahead)
                 : keyed.WithoutAnchor();

@@ -141,5 +141,10 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public static string RainNote(float? intensity) =>
             "RAIN " + (!intensity.HasValue ? "AUTO" : intensity.Value <= 0.01f ? "DRY" : (intensity.Value < 0.5f ? "LIGHT " : "HEAVY ") + AvNum.Fixed(intensity.Value * 100f, 0) + "%");
         public static string ScenarioNote(int scenario) => MetCatalog.ScenarioNames[scenario] + " ▲ CUT";
+        /// <summary>The STORY stepper's value: "FRONTAL SYSTEM 1 / 5" for a chosen story, "AUTO · COLD FRONT" while the mission class picks (the story under the camera), "— / 5" with no tape.</summary>
+        public static string StoryValue(int pick, int count, string storyUnderCamera, bool hasStory) =>
+            pick >= 0 ? (storyUnderCamera ?? "").ToUpperInvariant() + " " + (pick + 1) + " / " + count
+            : hasStory ? "AUTO · " + (storyUnderCamera ?? "").ToUpperInvariant() : "— / " + count;
+        public static string StoryNote(int story) => story < 0 || story >= WeatherStories.Count ? "STORY AUTO ▲ CUT" : "STORY " + (story + 1) + " " + WeatherStories.Name(story).ToUpperInvariant() + " ▲ CUT";
     }
 }

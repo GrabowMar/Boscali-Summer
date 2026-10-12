@@ -160,16 +160,16 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         }
     }
 
-    /// <summary>The mockup's footer legend of the availability tags: LIVE works now, 4B arrives with the tape console, S5 with tape motion, in the three tint colours the cards' tags use. Sits on its own plate.</summary>
+    /// <summary>The mockup's footer legend of the availability tags: LIVE works now, S5 arrives with tape motion, in the two tint colours the cards' tags use. Sits on its own plate.</summary>
     internal sealed class MetTagLegend : AvPart
     {
         public const float Width = 98f;
-        private static readonly string[] Words = { "LIVE", "4B", "S5" };
-        private static readonly MetAvail[] Avail = { MetAvail.Live, MetAvail.Tape4B, MetAvail.Motion5 };
-        private static readonly float[] Widths = { 38f, 26f, 26f };
+        private static readonly string[] Words = { "LIVE", "S5" };
+        private static readonly MetAvail[] Avail = { MetAvail.Live, MetAvail.Motion5 };
+        private static readonly float[] Widths = { 38f, 26f };
         private readonly Image plate;
-        private readonly AvFrame[] box = new AvFrame[3];
-        private readonly TMP_Text[] text = new TMP_Text[3];
+        private readonly AvFrame[] box = new AvFrame[2];
+        private readonly TMP_Text[] text = new TMP_Text[2];
 
         public MetTagLegend(RectTransform parent)
         {
@@ -205,7 +205,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             plate.color = EnvInk.Role("ground");
             for (int i = 0; i < box.Length; i++)
             {
-                Color tint = EnvInk.Role(Avail[i] == MetAvail.Live ? "key" : Avail[i] == MetAvail.Tape4B ? "info" : "caution");
+                Color tint = EnvInk.Role(Avail[i] == MetAvail.Live ? "key" : "caution");
                 box[i].Paint(Color.clear, tint);
                 text[i].color = tint;
             }
@@ -272,14 +272,14 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
         public void SetCaption(string text) { if (AvText.Set(caption, text) && placed) Place(lastSlot); }
 
-        /// <summary>A tag on the header's right edge: <paramref name="word"/> in the colour of when the feature arrives (LIVE cyan, 4B blue, S5 amber). Index 0 is the rightmost.</summary>
+        /// <summary>A tag on the header's right edge: <paramref name="word"/> in the colour of when the feature arrives (LIVE cyan, S5 amber). Index 0 is the rightmost.</summary>
         public void SetTag(int index, string word, MetAvail avail)
         {
             tagAvail[index] = avail;
             bool on = !string.IsNullOrEmpty(word);
             tagBox[index].gameObject.SetActive(on); tagText[index].gameObject.SetActive(on);
             AvText.Set(tagText[index], word);
-            AvHelpTip.Attach(tagBox[index].gameObject, on ? MetCatalog.TagHelp : null);   // what LIVE, 4B and S5 mean: the legend the footer of the mockup carried
+            AvHelpTip.Attach(tagBox[index].gameObject, on ? MetCatalog.TagHelp : null);   // what LIVE and S5 mean: the legend the footer of the mockup carried
             Restyle();
             if (placed) Place(lastSlot);
         }
@@ -347,7 +347,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             if (hasRail) rail.color = EnvInk.State(railState == AvState.Info ? AvState.Ready : railState);
             for (int i = 0; i < tagBox.Length; i++)
             {
-                Color tint = EnvInk.Role(tagAvail[i] == MetAvail.Live ? "key" : tagAvail[i] == MetAvail.Tape4B ? "info" : "caution");
+                Color tint = EnvInk.Role(tagAvail[i] == MetAvail.Live ? "key" : "caution");
                 tagBox[i].Paint(Color.clear, tint);
                 tagText[i].color = tint;
             }

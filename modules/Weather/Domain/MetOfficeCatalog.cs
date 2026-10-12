@@ -55,13 +55,13 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>The recipe each scenario applies on this build (WeatherScenarios.Apply), in the two lines the button shows.</summary>
         public static readonly string[] ScenarioRecipe =
         {
-            "STORM · EYE HERE", "RAIN · SQL+CELL", "FAIR · LENT +25 KM", "CLEAR · FOG BANK", "OVERCAST", "AUTO · NO SETS",
+            "SKY 44 · EYE HERE", "COLD FRONT · SQL+SC", "SKY 8 · LENT +25 KM", "SKY 1 · FOG BANK", "FRONTAL SYSTEM", "AUTO · NO SETS",
         };
         /// <summary>The part of a scenario that arrives with tape motion; null when the whole recipe is live.</summary>
         public static readonly string[] ScenarioLater = { null, "F5", null, null, "F5", null };
 
         // Sentences of the parts that are not controls (each at most HelpLimit characters; MetOfficeRulesTests checks them all).
-        public const string TagHelp = "TAGS: LIVE works now. 4B arrives with the tape console. S5 arrives with tape motion. R1 to R10 name the readouts of the brief.";
+        public const string TagHelp = "TAGS: LIVE works now. S5 arrives with tape motion; until then the tape is held and fronts stand still. R1 to R10 name the readouts.";
         /// <summary>The title-bar chips: SMOOTH, FADE 20 S, CUT.</summary>
         public static readonly string[] ChipHelp =
         {
@@ -112,7 +112,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             }
         }
 
-        public static string AvailTag(MetAvail avail) => avail == MetAvail.Live ? "LIVE" : avail == MetAvail.Tape4B ? "4B" : "S5";
+        public static string AvailTag(MetAvail avail) => avail == MetAvail.Live ? "LIVE" : "S5";
 
         /// <summary>Key legend text for the command bar (the printable key, or BKSP).</summary>
         public static string KeyLabel(char key) => key == BackspaceKey ? "BKSP" : key == '\0' ? "" : key.ToString().ToUpperInvariant();
@@ -121,21 +121,21 @@ namespace BoscaliSummer.Modules.Weather.Domain
         {
             var t = new MetControlInfo[Enum.GetValues(typeof(MetControl)).Length];
             void Add(MetControl id, string name, MetEffect fx, MetAvail avail, char key, string help) => t[(int)id] = new MetControlInfo(id, name, fx, avail, key, help);
-            const MetAvail L = MetAvail.Live, B = MetAvail.Tape4B, F = MetAvail.Motion5;
+            const MetAvail L = MetAvail.Live, F = MetAvail.Motion5;
             Add(MetControl.Hold, "HOLD TAPE", MetEffect.Smooth, L, 'h',
                 "HOLD / RESUME freezes or releases the tape. Wind, rain and light follow the camera. SMOOTH. The sky holds until the tape moves (slice 5).");
             Add(MetControl.PaceDown, "PACE -", MetEffect.Smooth, L, ',',
                 "PACE slower: v = clamp(speed x wind, 18, 45) m/s. SMOOTH. Shared with SET SERVER. The sky holds until the tape moves (slice 5).");
             Add(MetControl.PaceUp, "PACE +", MetEffect.Smooth, L, '.',
                 "PACE faster: v = clamp(speed x wind, 18, 45) m/s. SMOOTH. Shared with SET SERVER. The sky holds until the tape moves (slice 5).");
-            Add(MetControl.StoryAuto, "STORY AUTO", MetEffect.Cut, B, '\0',
-                "STORY AUTO lets the mission class pick the story for the whole tape. CUT. Arrives with the tape console (4B).");
-            Add(MetControl.StoryPrev, "STORY <", MetEffect.Cut, B, '\0',
-                "STORY repeats the chosen story for the whole tape and ignores the mission class. CUT. Arrives with the tape console (4B).");
-            Add(MetControl.StoryNext, "STORY >", MetEffect.Cut, B, 's',
-                "STORY repeats the chosen story for the whole tape and ignores the mission class. CUT. Arrives with the tape console (4B).");
+            Add(MetControl.StoryAuto, "STORY AUTO", MetEffect.Cut, L, '\0',
+                "STORY AUTO lets the mission class pick the story for the whole tape. CUT: the tape is placed again like a capture. A pinned sky still wins.");
+            Add(MetControl.StoryPrev, "STORY <", MetEffect.Cut, L, '\0',
+                "STORY repeats the chosen story for the whole tape and ignores the mission class. CUT: the tape is placed again. A pinned sky still wins.");
+            Add(MetControl.StoryNext, "STORY >", MetEffect.Cut, L, 's',
+                "STORY repeats the chosen story for the whole tape and ignores the mission class. CUT: the tape is placed again. A pinned sky still wins.");
             Add(MetControl.PinAuto, "AUTO", MetEffect.Cut, L, '\0',
-                "AUTO unpins the sky and resumes the changing weather (a held tape runs again) from the sky on screen. Rain override stays. CUT.");
+                "AUTO unpins the sky and puts the tape back on the mission's story; a held tape resumes. Rain override stays. CUT.");
             Add(MetControl.PinClass, "PIN CLASS", MetEffect.Cut, L, '\0',
                 "A class pins its first sky; the arrows then walk that class in number order, one sky per press. CUT: the whole tape becomes that sky.");
             Add(MetControl.PinPrev, "SKY <", MetEffect.Cut, L, '\0', "Previous sky of the class: pins it at once. CUT.");
@@ -148,7 +148,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             Add(MetControl.Front10, "FRONT IN 10", MetEffect.Cut, F, '\0', "FRONT IN 10 MIN. Disabled: arrives with tape motion (S5).");
             Add(MetControl.Front30, "FRONT IN 30", MetEffect.Cut, F, '\0', "FRONT IN 30 MIN. Disabled: arrives with tape motion (S5).");
             Add(MetControl.Reroll, "RE-ROLL", MetEffect.Cut, L, 'r',
-                "RE-ROLL: new layout salt, new cloud, cell and set-piece sites and sky variants. Class and pin stay. CUT: one hard swap.");
+                "RE-ROLL: new layout salt: new cloud, cell and set-piece sites and sky variants; the tape is placed again. Story and pin stay. CUT.");
             string[] setHelp =
             {
                 "SQUALL LINE: a storm wall on the upwind horizon with a shelf cloud on its leading edge. Click again to switch it off. FADE 20 S.",
@@ -177,11 +177,11 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 Add(From(MetControl.RainAuto, i), "RAIN " + RainNames[i], MetEffect.None, L, i == 0 ? 'w' : '\0', rainHelp[i]);
             string[] scenHelp =
             {
-                "HURRICANE EYE: a storm sky with the eye on you, walls all around, clear sky above. Overwrites class, pin, sets, anchor and rain. CUT.",
-                "SQUALL ASSAULT: rain squall with a squall line and a supercell on the horizon. Overwrites class, pin, sets, anchor, rain. Front-in-5 arrives S5.",
-                "MOUNTAIN WAVE: fair sky with lenticular clouds 25 km ahead of you. Overwrites class, pin, sets, anchor and rain. CUT.",
-                "SEA FOG: clear sky over a fog bank in the sea and valleys. Overwrites class, pin, sets, anchor and rain. CUT.",
-                "FRONTAL PASSAGE: overcast with a front across the map. Overwrites class, pin, sets, anchor and rain. Front-in-5 arrives S5.",
+                "HURRICANE EYE: sky 44 pinned with the eye on you, walls all around, clear sky above. Overwrites story, pin, sets, anchor and rain. CUT.",
+                "SQUALL ASSAULT: a cold front with a squall line and a supercell on the horizon. Overwrites story, pin, sets, anchor, rain. Front-in-5 arrives S5.",
+                "MOUNTAIN WAVE: fair sky 8 with lenticular clouds 25 km ahead of you. Overwrites story, pin, sets, anchor and rain. CUT.",
+                "SEA FOG: clear sky 1 over a fog bank in the sea and valleys. Overwrites story, pin, sets, anchor and rain. CUT.",
+                "FRONTAL PASSAGE: the frontal system story, cirrus to nimbostratus to a cold line. Overwrites pin, sets, anchor, rain. Front-in-5 arrives S5.",
                 "RESET ALL: unpin, story auto, sets off, anchor off, rain auto, tape moving. CUT. Always one click, always here.",
             };
             for (int i = 0; i < Scenarios.Length; i++)

@@ -1038,7 +1038,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         // The mission-led opening (spec 5.5.3). Slice 4a holds D at the offset Solve gives, so only the held cases apply (class-only, pinned story, sky pin):
         // placeFront is false until slice 5 moves the tape and passes the key's Dynamic flag here.
         private static WeatherKey PlaceOpening(WeatherKey key) =>
-            key.WithOffset(TapeOpening.Solve(WeatherTape.For(key), key, false).Offset);
+            TapeCuts.Place(key);
 
         private WeatherKey NewFieldKey(float epoch, bool dynamic, byte missionClass, uint seed)
         {
@@ -1577,7 +1577,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         internal void RerollLayout()
         {
             if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return;
-            fieldKey = fieldKey.WithLayoutSalt(unchecked((byte)(fieldKey.LayoutSalt + 1)));
+            fieldKey = TapeCuts.Reroll(fieldKey, now);
             RekeyAndSync(now);
             NotifyPlayer("NEW CLOUD LAYOUT", forcedRainIntensity);
         }

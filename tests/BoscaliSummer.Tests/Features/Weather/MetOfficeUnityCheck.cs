@@ -89,7 +89,7 @@ public static class MetOfficeUnityCheck
         public bool ClearPlacement() { Calls.Add("default"); return true; }
         public bool SetRain(float? intensity) { Calls.Add("rain " + (intensity.HasValue ? intensity.Value.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) : "auto")); return true; }
         public bool Scenario(WeatherScenario scenario) { Calls.Add("scenario " + scenario); return true; }
-        public bool SetStory(int story) { Calls.Add("story " + story); return true; }          // the 4B and S5 controls are disabled, so no click reaches these two
+        public bool SetStory(int story) { Calls.Add("story " + story); return true; }          // the STORY stepper's presses reach this one; Front in N (S5) is disabled, so no click reaches FrontIn
         public bool FrontIn(int minutes) { Calls.Add("front " + minutes); return true; }
     }
 
@@ -101,7 +101,7 @@ public static class MetOfficeUnityCheck
         to.SkyNumber = from.SkyNumber; to.SkyName = from.SkyName; to.Metar = from.Metar; to.PinnedSky = from.PinnedSky;
         Array.Copy(from.Layers, to.Layers, from.Layers.Length);
         to.Running = from.Running; to.HeldBy = from.HeldBy; to.Pace = from.Pace; to.SpeedMps = from.SpeedMps; to.WindMps = from.WindMps; to.WindFromDeg = from.WindFromDeg;
-        to.HasStory = from.HasStory; to.StoryName = from.StoryName; to.SkyRole = from.SkyRole; to.StoryIndex = from.StoryIndex; to.StoryCount = from.StoryCount;
+        to.HasStory = from.HasStory; to.StoryName = from.StoryName; to.StoryPick = from.StoryPick; to.SkyRole = from.SkyRole; to.StoryIndex = from.StoryIndex; to.StoryCount = from.StoryCount;
         to.Pending = from.Pending; Array.Copy(from.Segments, to.Segments, from.Segments.Length);
         to.BlockCount = from.BlockCount; to.MarkCount = from.MarkCount; to.StripNote = from.StripNote;
         Array.Copy(from.Blocks, to.Blocks, from.Blocks.Length); Array.Copy(from.Marks, to.Marks, from.Marks.Length);
@@ -150,7 +150,7 @@ public static class MetOfficeUnityCheck
         m.Sets[4] = new MetSetPiece { Forced = true, Present = true, Placed = true, X = 21f, Z = 21f, Strength = 1f };
         m.Sets[0] = new MetSetPiece { Forced = false, Present = true, Placed = true, X = 20f, Z = 60f, Strength = 0.4f };
         m.AnchorMark = 1;                                                        // the host put the anchor 30 km ahead
-        for (int i = 0; i < 9; i++) m.Segments[i] = default;                      // no story yet (4B)
+        for (int i = 0; i < 9; i++) m.Segments[i] = default;                      // this fixture draws no story segments
         m.BlockCount = 2;
         m.Blocks[0] = new MetBlock { FromMin = -93f, ToMin = 14f, Class = WeatherRegimeType.Broken, Label = "BKN" };
         m.Blocks[1] = new MetBlock { FromMin = 14f, ToMin = 93f, Class = WeatherRegimeType.Overcast, Label = "OVC" };
@@ -371,7 +371,7 @@ public static class MetOfficeUnityCheck
     private static readonly string[][] MustByStage =
     {
         new[] { "WEATHER // MET OFFICE", "SMOOTH", "FADE 20 S", "CUT", "SYS", "MET" },
-        new[] { "SYNOPTIC CHART", "NEXT FRONTS", "IDENTITY", "RE-ROLL", "R4", "R8", "4B", "THEATER", "WARM", "COLD", "OCCL.", "SQUALL", "CELL", "SET-PC", "CAM", "ANCHOR" },
+        new[] { "SYNOPTIC CHART", "NEXT FRONTS", "IDENTITY", "RE-ROLL", "R4", "R8", "ETA S5", "THEATER", "WARM", "COLD", "OCCL.", "SQUALL", "CELL", "SET-PC", "CAM", "ANCHOR" },
         new[] { "SKY NOW", "PIN SKY", "OUTLOOK 60 MIN", "SET-PIECES", "METAR", "COVER", "HIGH", "MID", "LOW", "CLR", "FEW", "SCT", "BKN", "OVC", "RA+", "TS", "AUTO", "SQUALL LINE", "SUPERCELL",
             "DISTANT CB", "STORM EYE", "LENTICULARS", "SEA FOG", "RAIN", "R1", "LIVE", "NOW" },
         new[] { "STORY", "TIME", "SCENARIOS", "LOG", "PACE", "FRONT IN", "HURRICANE EYE", "SQUALL ASSAULT", "MOUNTAIN WAVE", "FRONTAL PASSAGE", "RESET ALL", "S5", "R3", "TAPE" },
@@ -585,6 +585,9 @@ public static class MetOfficeUnityCheck
             case MetControl.PinPrev: return "pin 27";           // BKN is skies 22-28: the picker starts on 22 (index 21); a step back wraps to 28 (index 27) ...
             case MetControl.PinNext: return "pin 21";           // ... and a step on wraps to 22 again
             case MetControl.PinSelected: return "pin 21";
+            case MetControl.StoryAuto: return "story -1";
+            case MetControl.StoryPrev: return "story 4";            // from AUTO a step back wraps to the last of the five stories ...
+            case MetControl.StoryNext: return "story 0";            // ... and a step on goes to the first
             case MetControl.Reroll: return "reroll";
             case MetControl.AnchorHere: return "ahead 0";
             case MetControl.AnchorAhead: return "ahead 30000";
@@ -596,7 +599,7 @@ public static class MetOfficeUnityCheck
             default:
                 if (id >= MetControl.SetSquall && id <= MetControl.SetSeaFog) return "sets " + (byte)(forced ^ MetCatalog.SetBits[MetCatalog.SetIndex(id)]);
                 if (id >= MetControl.ScenHurricane && id <= MetControl.ScenReset) return "scenario " + MetCatalog.Scenarios[MetCatalog.ScenarioIndex(id)];
-                return null;                                    // story and front-in-N: disabled until 4B / S5, so no request
+                return null;                                    // front-in-N: disabled until S5, so no request
         }
     }
 
@@ -622,7 +625,7 @@ public static class MetOfficeUnityCheck
         }
 
         // The command line, in the order of its buttons (Hold, Pace, Story, Pin sky, Front in 5, Re-roll, Rain, Reset all); the picker still stands on sky 22.
-        string[] bar = { "tape False", "pace 4", null, "pin 21", null, "reroll", "rain 0.0", "scenario ResetAll" };
+        string[] bar = { "tape False", "pace 4", "story 0", "pin 21", null, "reroll", "rain 0.0", "scenario ResetAll" };
         Check(w.Probe("bar") == bar.Length, "the command line has " + w.Probe("bar") + " buttons");
         for (int i = 0; i < bar.Length; i++) { int at = i; Expect(world, "bar button " + i, () => w.ClickPart("bar", at), bar[i]); }
         world.Source.Pace = 6;

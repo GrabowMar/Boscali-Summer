@@ -54,7 +54,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                     AvText.Set(where[r], ""); AvText.Set(eta[r], "");
                 }
             }
-            AvText.Set(none, n == 0 ? "NONE IN ±150 KM · FRONTS ARRIVE WITH TAPE (4B)" : "");
+            AvText.Set(none, n == 0 ? "NONE IN ±150 KM · THIS TAPE HAS NO FRONT NEAR YOU" : "");
             Redraw();
         }
 

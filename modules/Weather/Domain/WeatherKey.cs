@@ -117,6 +117,14 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>Repeats one story for the whole tape (0-4), or hands the choice back to the mission class with <see cref="None"/>. A new tape identity, so a cut.</summary>
         public WeatherKey WithStory(byte story) => new WeatherKey(Seed, Epoch, Dynamic, MissionClass, Sets, LayoutSalt, HasAnchor, AnchorX, AnchorZ, story, SkyPin, OpeningBase,
             HeadingDeg, Offset, SystemSpeed, SetOriginSquall, SetOriginSupercell, SetOriginCell);
+
+        /// <summary>
+        /// One key edit for a preset (spec 9.3): the tape fields first (story and pin change the tape identity, so this is a cut), then the set-pieces. Scenarios build with it:
+        /// <c>basis.Rebased(...).With(story, pin, sets)</c>. Slice 5 latches each newly set bit's SetOrigin against the new Offset here (7.6).
+        /// </summary>
+        public WeatherKey With(byte story, byte skyPin, byte sets) =>
+            new WeatherKey(Seed, Epoch, Dynamic, MissionClass, sets, LayoutSalt, HasAnchor, AnchorX, AnchorZ, story, skyPin, OpeningBase,
+                HeadingDeg, Offset, SystemSpeed, SetOriginSquall, SetOriginSupercell, SetOriginCell);
         public WeatherKey WithLayoutSalt(byte salt) => Copy(salt: salt);
         public WeatherKey WithAnchor(float x, float z) => Copy(anchor: true, x: x, z: z);
         public WeatherKey WithoutAnchor() => Copy(anchor: false);

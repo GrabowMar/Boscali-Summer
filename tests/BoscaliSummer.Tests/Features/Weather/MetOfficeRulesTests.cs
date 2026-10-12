@@ -62,14 +62,12 @@ namespace BoscaliSummer.Tests.Features.Weather
 
         private static void ArrivalTagsMatchTheStaging()
         {
-            foreach (MetControl id in new[] { MetControl.StoryAuto, MetControl.StoryPrev, MetControl.StoryNext })
-                TestAssert.That(MetCatalog.Info(id).Avail == MetAvail.Tape4B, id + " waits for the tape console (4B)");
             foreach (MetControl id in new[] { MetControl.Front2, MetControl.Front5, MetControl.Front10, MetControl.Front30 })
                 TestAssert.That(MetCatalog.Info(id).Avail == MetAvail.Motion5, id + " waits for tape motion (S5)");
             foreach (MetControl id in new[] { MetControl.Hold, MetControl.PaceUp, MetControl.PinSelected, MetControl.PinAuto, MetControl.Reroll,
-                MetControl.SetSupercell, MetControl.AnchorAhead, MetControl.RainHeavy, MetControl.ScenReset })
+                MetControl.SetSupercell, MetControl.AnchorAhead, MetControl.RainHeavy, MetControl.ScenReset, MetControl.StoryAuto, MetControl.StoryPrev, MetControl.StoryNext })
                 TestAssert.That(MetCatalog.Info(id).Avail == MetAvail.Live, id + " is live now");
-            TestAssert.That(MetCatalog.AvailTag(MetAvail.Tape4B) == "4B" && MetCatalog.AvailTag(MetAvail.Motion5) == "S5", "tag words");
+            TestAssert.That(MetCatalog.AvailTag(MetAvail.Live) == "LIVE" && MetCatalog.AvailTag(MetAvail.Motion5) == "S5", "tag words");
         }
 
         private static void HostSeatAndClockGates()
