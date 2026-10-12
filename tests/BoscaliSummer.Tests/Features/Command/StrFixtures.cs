@@ -44,7 +44,7 @@ namespace BoscaliSummer.Tests.Features.Command
                 case "assessing": return Live(Reason(Snapshot(), TheaterEmptyReason.FirstReview, 12f));
                 case "noopening": return NoOpening();
                 case "reduced": return Reduced();
-                case "staffoff": { StrFeeds f = Base(); f.WarAvailable = false; f.War = null; f.WarAgeSeconds = -1f; f.WarSincePublished = -1f; f.WarCanCommand = false; f.Census = KnownCensus(); f.CensusAgeSeconds = 3f; return Stamped(f); }
+                case "staffoff": { StrFeeds f = Base(); f.StaffPresent = false; f.PostsAvailable = false; f.WarAvailable = false; f.War = null; f.WarAgeSeconds = -1f; f.WarSincePublished = -1f; f.WarCanCommand = false; f.Census = KnownCensus(); f.CensusAgeSeconds = 3f; return Stamped(f); }
                 case "hostlacks": { StrFeeds f = Base(); f.IsHost = false; f.WarState = TheaterViewState.HostLacksModule; f.War = null; f.WarAgeSeconds = -1f; f.WarSincePublished = -1f; f.WarCanCommand = false; f.SortiesAvailable = false; return Stamped(f); }
                 case "nofaction": { StrFeeds f = Base(); f.FactionCode = ""; f.WarState = TheaterViewState.NoFaction; f.War = null; f.WarAgeSeconds = -1f; f.WarSincePublished = -1f; f.WarCanCommand = false; return Stamped(f); }
                 case "waiting": { StrFeeds f = Base(); f.IsHost = false; f.WarState = TheaterViewState.WaitingForHost; f.War = null; f.WarAgeSeconds = -1f; f.WarSincePublished = -1f; f.WarCanCommand = false; f.WaitSeconds = 8f; return Stamped(f); }
@@ -59,7 +59,7 @@ namespace BoscaliSummer.Tests.Features.Command
                         f.Wing[1].State = WingSortieState.Tasked; f.Wing[1].Words = "WING TASKED"; f.Wing[1].Intent = WingSortieIntent.Cover;
                         return Stamped(f);
                     }
-                case "client": { StrFeeds f = Rich(); f.IsHost = false; f.Wing = new StrWingIn[0]; f.WingCount = 0; return Stamped(f); }
+                case "client": { StrFeeds f = Rich(); f.IsHost = false; f.War.GroundReason = GroundReason.Unknown; f.Wing = new StrWingIn[0]; f.WingCount = 0; return Stamped(f); }
                 default: throw new ArgumentException("unknown fixture " + name);
             }
         }
@@ -74,7 +74,7 @@ namespace BoscaliSummer.Tests.Features.Command
                 IsHost = true, LocalId = Local, FactionCode = "BDF", HasOwn = true, OwnX = 0f, OwnZ = 0f,
                 WarAvailable = true, WarState = TheaterViewState.Live, WarAgeSeconds = 4f, WarSincePublished = 4f, WarCanCommand = true,
                 SortiesAvailable = true, SortiesFresh = true, SortieActiveLimit = 3, Sorties = new SecondaryObjectiveView[0],
-                PostsAvailable = true, PostsAgeSeconds = 2f, Posts = new StrPostIn[0], Wing = new StrWingIn[0],
+                PostsAvailable = true, PostsAgeSeconds = 2f, Posts = new StrPostIn[0], Wing = new StrWingIn[0], StaffPresent = true, StaffStatus = "", Officers = new StrOfficerIn[0],
                 PickerPrompt = "", KnownAirDefence = 6, Census = Unmeasured(), CensusAgeSeconds = -1f,
             };
         }
@@ -95,7 +95,7 @@ namespace BoscaliSummer.Tests.Features.Command
             {
                 Faction = "BDF", Posture = TheaterWarPosture.Steady, Reason = TheaterEmptyReason.None, StaffPickSeconds = -1f,
                 Caps = TheaterCaps.StaffRunning | TheaterCaps.GroundSteering | TheaterCaps.GroundWar | TheaterCaps.HumanPilot | TheaterCaps.TerritoryField,
-                Census = KnownCensus(),
+                Census = KnownCensus(), GroundReason = GroundReason.Ready,
                 Fronts = new[]
                 {
                     Front("@1,-2", "KESTREL CROSSING", 2400f, -1800f, 0.62f, 0.12f, TheaterFrontStatus.InContact),
@@ -208,6 +208,14 @@ namespace BoscaliSummer.Tests.Features.Command
                 Trait = "VETERAN +20% BOUNTY", IntelAge = intelAge, X = x, Z = z, BountyCapped = capped,
             };
 
+        public static StrOfficerIn Officer(int id, int tier, bool own, string rank, string name, string site, float intelAge = -1f, bool confirmed = true,
+            bool alert = false, string trait = "", float x = 0f, float z = 0f, string role = "") =>
+            new StrOfficerIn
+            {
+                Id = id, Tier = tier, Own = own, Alert = alert, Confirmed = confirmed || own, Rank = rank, Name = name, Role = role, Site = site, Trait = trait,
+                IntelAge = intelAge, X = x, Z = z,
+            };
+
         // ---- the named fixtures that need more than one block ------------------------------------------------------------------
 
         private static StrFeeds Rich()
@@ -232,6 +240,18 @@ namespace BoscaliSummer.Tests.Features.Command
             f.WingCount = 3;
             f.Posts = new[] { Post(12, "COL. IMRE DANKOV", 3000, 360f, 3100f, 5000f), Post(5, "MAJ. VERA STOLL", 1800, 45f, 6400f, 1100f) };
             f.PostCount = 2;
+            f.Officers = new[]
+            {
+                Officer(0, 0, true, "GEN.", "MARA OKONKWO", "HIGH COMMAND", role: "THEATER COMMANDER", trait: "STRATEGIC MIND +10% INCOME"),
+                Officer(1, 1, true, "COL.", "ILYA BRANDT", "PORT AURELIA", role: "AIR COMPONENT CMDR", trait: "LOGISTICS MIND +15% STIPEND" + StrWords.Dot + "FAST SORTIES +5% PATROL"),
+                Officer(2, 1, true, "COL.", "TESS HARKER", "KESTREL AIRBASE", role: "GROUND COMPONENT CMDR", alert: true, trait: "NO STAFF BONUS"),
+                Officer(3, 2, true, "MAJ.", "DEV PATEL", "HARBOR AIRFIELD", role: "BASE COMMANDER", trait: "SUPPLY HAWK +5% PAY"),
+                Officer(4, 2, true, "CPT.", "NOA LINDQVIST", "RIDGE STRIP", role: "BASE COMMANDER"),
+                Officer(14, 0, false, "GEN.", "KORVIN ASH", "CAPITAL BARRACKS", intelAge: 520f, x: 900f, z: 7200f, role: "THEATER COMMANDER", trait: "IRON WILL +25% BOUNTY"),
+                Officer(12, 1, false, "COL.", "IMRE DANKOV", "PORT AURELIA", intelAge: 360f, x: 3100f, z: 5000f, role: "GROUND COMPONENT CMDR", trait: "VETERAN +20% BOUNTY"),
+                Officer(5, 2, false, "MAJ.", "VERA STOLL", "NORTH RIDGE BASE", intelAge: 45f, x: 6400f, z: 1100f, role: "BASE COMMANDER", trait: "NO STAFF BONUS"),
+            };
+            f.OfficerCount = 8;
             return Stamped(f);
         }
 
@@ -268,6 +288,7 @@ namespace BoscaliSummer.Tests.Features.Command
             s.Operation.PickedBy = ""; s.Operation.PickedById = 0UL; s.Operation.PickedByStaff = true; s.Operation.LockSeconds = 0f;
             s.Wave = new TheaterWaveView(WaveState.Earning, WaveBlock.None, 0, 3, "", -1, -1, -1, 0, -1f, false, 0f, 0f);
             s.Census = Unmeasured();
+            s.GroundReason = GroundReason.Unknown;
             StrFeeds f = Live(s);
             f.WarAgeSeconds = -1f; f.WarSincePublished = -1f; f.HasOwn = false; f.KnownAirDefence = -1; f.PostsAvailable = false; f.CensusAgeSeconds = -1f;
             f.SortiesFresh = true;
@@ -282,6 +303,12 @@ namespace BoscaliSummer.Tests.Features.Command
         {
             if (!Fine(f.OwnX) || !Fine(f.OwnZ) || !Fine(f.WarAgeSeconds) || !Fine(f.WarSincePublished) || !Fine(f.WaitSeconds) || !Fine(f.PostsAgeSeconds) || !Fine(f.CensusAgeSeconds))
                 return "a feed number is not finite";
+            if (f.Officers != null && (f.OfficerCount < 0 || f.OfficerCount > f.Officers.Length || f.OfficerCount > 2 * StrViewModel.MaxOfficers)) return "officer count";
+            for (int i = 0; f.Officers != null && i < f.OfficerCount; i++)
+            {
+                StrOfficerIn o = f.Officers[i];
+                if (!Fine(o.X) || !Fine(o.Z) || !Fine(o.IntelAge) || o.IntelAge > 600f || o.Tier < 0 || o.Tier > 2) return "officer " + i;
+            }
             if (f.Posts != null && (f.PostCount < 0 || f.PostCount > f.Posts.Length || f.PostCount > StrViewModel.MaxPosts + 3)) return "post count";
             for (int i = 0; i < f.PostCount; i++)
             {

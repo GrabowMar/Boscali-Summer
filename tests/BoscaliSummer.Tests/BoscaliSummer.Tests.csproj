@@ -163,6 +163,7 @@
     <Compile Include="..\..\modules\Command\Domain\StrViewBuilder.cs" Link="Features\Command\StrViewBuilder.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrViewBuilder.Rows.cs" Link="Features\Command\StrViewBuilder.Rows.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrViewBuilder.Sitrep.cs" Link="Features\Command\StrViewBuilder.Sitrep.cs" />
+    <Compile Include="..\..\modules\Command\Domain\StrViewBuilder.Staff.cs" Link="Features\Command\StrViewBuilder.Staff.cs" />
     <Compile Include="..\..\modules\Command\Domain\ControlFieldCore.cs" Link="Features\Command\ControlFieldCore.cs" />
     <Compile Include="..\..\modules\HighCommand\Domain\CommandEconomy.cs" Link="Features\HighCommand\CommandEconomy.cs" />
     <Compile Include="..\..\modules\HighCommand\Domain\CommandLog.cs" Link="Features\HighCommand\CommandLog.cs" />

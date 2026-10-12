@@ -1,4 +1,5 @@
 using BoscaliSummer.Core.Contracts;
+using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Domain
 {
@@ -135,6 +136,47 @@ namespace BoscaliSummer.Modules.Command.Domain
         public StrItemId Ticket;
     }
 
+    /// <summary>Why the chain of command reads as it does: a roster, no high command module, or no board from the host.</summary>
+    internal enum StrStaffMode : byte { Roster, Off, NoBoard }
+
+    /// <summary>One officer of the INFO tab's chain of command, every word ready to print. A sealed post (an enemy one nobody confirmed) holds no detail of the officer.</summary>
+    internal sealed class StrOfficerRow
+    {
+        public int Id, Tier;
+        public bool Own, Sealed;
+        /// <summary>"COL.", "IMRE DANKOV", "GROUND COMPONENT CMDR", the display base name or a dash.</summary>
+        public string Rank = "", Name = "", Role = "", Site = "";
+        /// <summary>"AT POST", "UNDER FIRE", "SEEN 6 MIN AGO", "SEALED"; the dossier's intel line; the ink of the status word.</summary>
+        public string StatusText = "", SeenText = "";
+        public StrInkRole Ink;
+        /// <summary>The officer's trait lines ("VETERAN +20% BOUNTY"), at most three.</summary>
+        public string[] Traits = { "", "", "" };
+        public int TraitCount;
+        /// <summary>The post row LOCATE flies to (enemy officers on the strike list), or None; LocateWhy says why not.</summary>
+        public StrItemId Locate;
+        public string LocateWhy = "";
+        public Sprite Portrait;
+    }
+
+    /// <summary>The INFO tab's chain of command: both sides, each in tree order (theater, components, bases), or the stated reason there is none.</summary>
+    internal sealed class StrStaffView
+    {
+        public StrStaffMode Mode;
+        /// <summary>Headline, why and what to do while the mode is not Roster.</summary>
+        public string Head = "", Why = "", Do = "";
+        public StrOfficerRow[] Own = new StrOfficerRow[StrViewModel.MaxOfficers], Enemy = new StrOfficerRow[StrViewModel.MaxOfficers];
+        public int OwnCount, EnemyCount;
+        /// <summary>The line under each side's list: why it is empty, or the fog rule.</summary>
+        public string OwnNote = "", EnemyNote = "";
+    }
+
+    /// <summary>One MISC line: key, what it is, the value, and the state ink of the value.</summary>
+    internal struct StrMiscLine
+    {
+        public string Key, Text, Value;
+        public NOAvionics.AvState State;
+    }
+
     /// <summary>The reinforcement wave (R4): earned count, price, pool, whether the pool covers it, and why it is held.</summary>
     internal sealed class StrWaveView
     {
@@ -190,7 +232,7 @@ namespace BoscaliSummer.Modules.Command.Domain
     /// <summary>Everything the panel and the overlay display, filled in place by StrViewBuilder.</summary>
     internal sealed class StrViewModel
     {
-        public const int MaxProposals = 3, MaxFronts = 8, MaxSorties = 5, MaxPosts = 6, MaxMarks = 8, MaxLog = 8, MaxChecks = 6;
+        public const int MaxProposals = 3, MaxFronts = 8, MaxSorties = 5, MaxPosts = 6, MaxMarks = 8, MaxLog = 8, MaxChecks = 6, MaxOfficers = 8, MiscCount = 7;
 
         /// <summary>Bumps only when a displayed value changed.</summary>
         public int Revision;
@@ -219,6 +261,8 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>Sorties tied to the operation beyond what the board draws ("+n MORE ON THE MAP").</summary>
         public int SortieMore;
         public StrPostRow[] Posts = new StrPostRow[MaxPosts]; public int PostCount;
+        public StrStaffView Staff = new StrStaffView();
+        public StrMiscLine[] Misc = new StrMiscLine[MiscCount];
         public StrWaveView Wave = new StrWaveView();
         public StrTile[] Tiles = new StrTile[4];
         public StrBalance Sectors, Air, Ground, Airbases;
@@ -244,6 +288,6 @@ namespace BoscaliSummer.Modules.Command.Domain
         internal long BuiltSecond;
         internal bool BuiltNotice, BuiltArmed;
         internal StrUiState BuiltUi;
-        internal int BuiltSince, BuiltAge, BuiltWait, BuiltPostsAge;   // whole seconds of the decaying feed numbers
+        internal int BuiltSince, BuiltAge, BuiltWait, BuiltPostsAge, BuiltCensusAge;   // whole seconds of the decaying feed numbers
     }
 }

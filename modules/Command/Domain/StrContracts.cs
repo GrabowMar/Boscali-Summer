@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
+using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Domain
 {
@@ -86,6 +87,19 @@ namespace BoscaliSummer.Modules.Command.Domain
         public bool BountyCapped;                      // := CommanderView.BountyClaimed
     }
 
+    /// <summary>
+    /// One officer of the chain of command, copied from the high command feed by the reader: own posts and the enemy posts this faction has confirmed.
+    /// <see cref="Confirmed"/> is the fog rule's input: an enemy post that is not confirmed is built as a sealed row, never with its details.
+    /// </summary>
+    internal struct StrOfficerIn
+    {
+        public int Id, Tier;                           // CommanderView.Id; 0 theater, 1 component, 2 base
+        public bool Own, Alert, Confirmed;             // Alert := under fire (own only)
+        public string Name, Rank, Role, Site, Trait;   // Trait := CommanderView.Bonus
+        public float IntelAge, X, Z;                   // seconds since last confirmed, -1 for an own post; global metres
+        public Sprite Portrait;                        // borrowed, never destroyed here
+    }
+
     /// <summary>What the wing did on one sortie, copied from IWingSortieOrders by the reader (host only). N-08: no Kills.</summary>
     internal struct StrWingIn
     {
@@ -121,6 +135,11 @@ namespace BoscaliSummer.Modules.Command.Domain
         public float PostsAgeSeconds;
         public StrPostIn[] Posts;
         public int PostCount;
+        // chain of command: IHighCommandView. PostsAvailable and PostsAgeSeconds above are its Available and age.
+        public bool StaffPresent;          // the high command module is running for this peer (the service exists)
+        public string StaffStatus;         // the service's own words for an empty or old board, "" when none
+        public StrOfficerIn[] Officers;
+        public int OfficerCount;
         public StrWingIn[] Wing;
         public int WingCount;
         public string PickerPrompt;        // MapPicker.Prompt, "" when no gesture is armed

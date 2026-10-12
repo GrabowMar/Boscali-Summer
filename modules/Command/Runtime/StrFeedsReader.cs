@@ -141,15 +141,32 @@ namespace BoscaliSummer.Modules.Command.Runtime
             into.PostsAgeSeconds = -1f;
             into.Posts = hub.PostBuffer;
             into.PostCount = 0;
-            if (ModuleServices.TryGet(out IHighCommandView staff) && staff.Available)
+            into.StaffPresent = false;
+            into.StaffStatus = "";
+            into.Officers = hub.OfficerBuffer;
+            into.OfficerCount = 0;
+            if (ModuleServices.TryGet(out IHighCommandView staff))
+            {
+                into.StaffPresent = true;
+                into.StaffStatus = staff.Status ?? "";
+            }
+            if (staff != null && staff.Available)
             {
                 into.PostsAvailable = true;
                 into.PostsAgeSeconds = staff.AgeSeconds;
                 System.Collections.Generic.IReadOnlyList<CommanderView> rows = staff.Commanders;
-                for (int i = 0; i < rows.Count && into.PostCount < hub.PostBuffer.Length; i++)
+                for (int i = 0; i < rows.Count; i++)
                 {
                     CommanderView row = rows[i];
-                    if (row == null || row.IsFriendly) continue;
+                    if (row == null) continue;
+                    // The view lists only enemy posts this faction has confirmed, so every row it carries is Confirmed; a post nobody confirmed never reaches the panel.
+                    if (into.OfficerCount < hub.OfficerBuffer.Length)
+                        hub.OfficerBuffer[into.OfficerCount++] = new StrOfficerIn
+                        {
+                            Id = row.Id, Tier = row.Tier, Own = row.IsFriendly, Alert = row.Alert, Confirmed = true, Name = row.Name, Rank = row.Rank, Role = row.Role,
+                            Site = row.Site, Trait = row.Bonus, IntelAge = row.IntelAge, X = row.X, Z = row.Z, Portrait = row.Portrait,
+                        };
+                    if (row.IsFriendly || into.PostCount >= hub.PostBuffer.Length) continue;
                     hub.PostBuffer[into.PostCount++] = new StrPostIn
                     {
                         Id = row.Id, Bounty = row.Bounty, Name = row.Rank + " " + row.Name, Rank = row.Rank, Role = row.Role, Site = row.Site, Trait = row.Bonus,

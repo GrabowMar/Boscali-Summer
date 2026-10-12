@@ -19,7 +19,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
     {
         private static readonly string[] PostureIds = { "posture.cautious", "posture.steady", "posture.bold" };
 
-        /// <summary>Maximise the map, select the STR screen and show a page: <c>{page: "board"|"sitrep"|"log"}</c> or the legacy <c>{tab: 0..2}</c>.</summary>
+        /// <summary>Maximise the map, select the STR screen and show a page: <c>{page: "board"|"sitrep"|"info"}</c> or the legacy <c>{tab: 0..2}</c>.</summary>
         public static Dictionary<string, object> Open(Dictionary<string, object> args)
         {
             StrMfdPanel panel = StrMfdPanel.Active;
@@ -36,7 +36,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             {
                 case "board": return 0;
                 case "sitrep": return 1;
-                case "log": return 2;
+                case "info": return 2;
                 default: return Mathf.Clamp((int)Number(args, "tab", 0f), 0, 2);
             }
         }
