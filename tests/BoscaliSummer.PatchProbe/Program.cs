@@ -1043,7 +1043,6 @@ foreach (string type in new[] {
     "BoscaliSummer.Modules.TheaterOps.Networking.LivingFrontNet",
     "BoscaliSummer.Modules.TheaterOps.Networking.TheaterOpsNet",
     "BoscaliSummer.Modules.TheaterOps.Domain.PriorityTable",
-    "BoscaliSummer.Modules.TheaterOps.Domain.ReinforcementGatePolicy",
     // S3 sorties: the pure wave rules the reinforcement desk (S7) reads.
     "BoscaliSummer.Modules.TheaterOps.Domain.WavePolicy",
     "BoscaliSummer.Modules.TheaterOps.Domain.WaveLedger",

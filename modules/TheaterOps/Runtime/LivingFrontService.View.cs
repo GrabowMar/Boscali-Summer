@@ -110,6 +110,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                     OperationId = last.OperationId, Kind = last.Kind, Name = last.Name, Outcome = last.Outcome, Why = last.Why,
                     AgeSeconds = Mathf.Clamp(now - war.LastResultAt, 0f, 86400f), Funds = last.Funds, Morale = last.Morale,
                 };
+            snapshot.Wave = desk.View(war.HQ, now);
             snapshot.LastOutcome = desk.LastOutcome(war.HQ);
             snapshot.Log = new string[war.Log.Count];
             for (int i = 0; i < snapshot.Log.Length; i++) snapshot.Log[i] = war.Log.Entries[i];

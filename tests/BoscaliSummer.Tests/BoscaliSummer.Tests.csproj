@@ -184,7 +184,6 @@
     <Compile Include="..\..\modules\TheaterOps\Domain\LivingWarRules.cs" Link="Features\TheaterOps\LivingWarRules.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\NavalTask.cs" Link="Features\TheaterOps\NavalTask.cs" />
     <Compile Include="..\..\modules\AirSurvival\Domain\AirStationPolicy.cs" Link="Features\AirSurvival\AirStationPolicy.cs" />
-    <Compile Include="..\..\modules\TheaterOps\Domain\ReinforcementGate.cs" Link="Features\TheaterOps\ReinforcementGate.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\WaveLedger.cs" Link="Features\TheaterOps\WaveLedger.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\WavePolicy.cs" Link="Features\TheaterOps\WavePolicy.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\FocusHistory.cs" Link="Features\TheaterOps\FocusHistory.cs" />

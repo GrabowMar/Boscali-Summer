@@ -72,7 +72,6 @@ namespace BoscaliSummer.Modules.Events.Runtime
         private const int MaximumResponses = 64;
         private const int MaximumFactions = 8;
         private const int MaximumFactionPlayers = 64;
-        private const int MaximumConvoyGroups = 8;
 
         private static readonly ActiveEventStep[] NoSteps = new ActiveEventStep[0];
 
@@ -865,38 +864,17 @@ namespace BoscaliSummer.Modules.Events.Runtime
         /// </summary>
         private void FundConvoy(FactionHQ hq, float subsidy)
         {
-            if (hq == null || hq.faction == null || hq.preventDonation) return;
-            List<Faction.ConvoyGroup> groups = hq.faction.GetConvoyGroups();
-            if (groups == null) return;
-
-            int count = Mathf.Min(groups.Count, MaximumConvoyGroups);
-            Faction.ConvoyGroup chosen = null;
-            float chosenCost = float.MaxValue;
-            float available = Mathf.Max(0f, hq.factionFunds) + Mathf.Max(0f, subsidy);
-            for (int i = 0; i < count; i++)
+            if (hq == null || hq.faction == null) return;
+            // The pool has one door (the reinforcement desk's), so every convoy it pays is priced, gated and written to the staff log.
+            if (!ModuleServices.TryGet(out IConvoyPurchase purchase))
             {
-                Faction.ConvoyGroup group = groups[i];
-                if (group == null) continue;
-                float cost = group.GetCost();
-                if (!float.IsFinite(cost) || cost <= 0f || cost >= chosenCost || cost > available) continue;
-                if (hq.CmdGetDelaySpawnConvoy((byte)i) > 0f) continue;
-                chosen = group;
-                chosenCost = cost;
-            }
-            if (chosen == null)
-            {
-                Plugin.Logger?.LogInfo("[Events] Convoy beat skipped: no group ready within the event budget for " +
-                                hq.faction.factionName + ".");
+                Plugin.Logger?.LogInfo("[Events] Convoy beat skipped: no reinforcement desk.");
                 return;
             }
-
-            float shortfall = Mathf.Max(0f, chosenCost - Mathf.Max(0f, hq.factionFunds));
-            if (shortfall > 0f) hq.AddFunds(shortfall);
-            hq.AddFunds(-chosenCost);
-            hq.AddConvoy(chosen);
-            Plugin.Logger?.LogInfo("[Events] Convoy " + chosen.Name + " queued for " +
-                            hq.faction.factionName + " at " + chosenCost.ToString("F0") +
-                            " (event grant " + shortfall.ToString("F0") + ").");
+            if (purchase.TryBuyCheapest(hq.GetInstanceID(), subsidy, "EVENT", out string group, out int cost, out string why))
+                Plugin.Logger?.LogInfo("[Events] Convoy " + group + " queued for " + hq.faction.factionName + " at " + cost + ".");
+            else
+                Plugin.Logger?.LogInfo("[Events] Convoy beat skipped for " + hq.faction.factionName + ": " + why + ".");
         }
 
         // ---- Client apply -----------------------------------------------------------------

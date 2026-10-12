@@ -49,6 +49,7 @@ namespace BoscaliSummer.Modules.TheaterOps
             context.AddService<ITheaterAirStationView>(living);
             context.AddService<ITheaterWarHost>(living);
             context.AddService<IOperationFocusSource>(living);
+            context.AddService<IConvoyPurchase>(logistics);
 
             context.AddHostSettings(TheaterOpsHostSettings.Build(context.Settings.TheaterOps, groundFront.HasRtsCommander));
         }

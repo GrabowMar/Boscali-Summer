@@ -24,7 +24,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Presentation
         private HudTone sentTone;
         private int seenResult;
         private bool resultBaselined;
-        private int seenOutcome = -1;
+        private int seenOutcome = -1, seenBought = -1;
 
         internal void Configure(ITheaterWarView view)
         {
@@ -38,6 +38,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Presentation
             seenResult = 0;
             resultBaselined = false;
             seenOutcome = -1;
+            seenBought = -1;
         }
 
         private void Update()
@@ -81,8 +82,11 @@ namespace BoscaliSummer.Modules.TheaterOps.Presentation
             TheaterWarSnapshot snapshot = war != null && war.Available ? war.Snapshot : null;
             if (snapshot == null) return;
             TheaterOutcomeView outcome = snapshot.LastOutcome;
-            int seq = outcome != null ? outcome.Seq : 0;
-            if (seenOutcome < 0) { seenOutcome = seq; return; }
+            int seq = outcome != null ? outcome.Seq : 0, bought = snapshot.Wave != null ? snapshot.Wave.Bought : 0;
+            if (seenOutcome < 0) { seenOutcome = seq; seenBought = bought; return; }
+            if (bought > seenBought && snapshot.Wave != null)
+                board.Notice("sorties", HudTone.Info, "WAVE EN ROUTE", snapshot.Wave.Pool >= 0 ? "POOL " + snapshot.Wave.Pool : "POOL -");
+            seenBought = bought;
             if (seq == seenOutcome || outcome == null) return;
             seenOutcome = seq;
             string title = outcome.Title.ToUpperInvariant(), pilot = outcome.Pilot.ToUpperInvariant();

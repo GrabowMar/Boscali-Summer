@@ -47,9 +47,10 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             if (war == null) return;
             float now = Time.timeSinceLevelLoad;
             OperationFocus live = FocusOf(war);
-            bool changed = false;
-            Guard.Run(deskFaults, now, () => changed = desk.OnSortieFinished(war.HQ, outcome, live, war.Log, now), LogFault, "sortie credit");
-            if (changed && war.Published != null) Publish(war, now);
+            Guard.Run(deskFaults, now, () =>
+            {
+                if (desk.OnSortieFinished(war.HQ, outcome, live, war.Log, now) && war.Published != null) Publish(war, now);
+            }, LogFault, "sortie credit");
         }
 
         private void ReviewDesk(FactionWar war, float now)

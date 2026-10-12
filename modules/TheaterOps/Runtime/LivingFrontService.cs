@@ -152,6 +152,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             NavalFrontService navalService)
         {
             settings = config;
+            desk.Configure(config);
             priority = priorityService;
             network = transport;
             naval = navalService;

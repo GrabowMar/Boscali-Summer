@@ -3,7 +3,7 @@ using BoscaliSummer.Modules.TheaterOps.Domain;
 
 namespace BoscaliSummer.Tests.Features.TheaterOps
 {
-    /// <summary>When a reinforcement wave may be bought and which group it is (rulings R4, D3, D4; annex 03 C12). Replaces the ReinforcementGate tests at S7.</summary>
+    /// <summary>When a reinforcement wave may be bought and which group it is (rulings R4, D3, D4; annex 03 C12).</summary>
     internal static class WavePolicyTests
     {
         // Every gate passing, price 100, pool 150. A test breaks one thing at a time.

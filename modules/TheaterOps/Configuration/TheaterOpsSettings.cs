@@ -23,8 +23,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Configuration
                 "Let the staff steer AI ground vehicles: group them, stage them behind the line and advance them on the pilot's operation. " +
                 "Off: they keep the game's own orders. Vanilla supply and player orders remain authoritative.");
             AiStaffConvoys = config.Bind(section, "AiStaffConvoys", false,
-                "Host only. Not active in this build: the reinforcement desk that would spend it is not built, so this switch changes nothing. " +
-                "Planned: AI-only factions buy one combat convoy every 2 minutes while their operation runs, and only when their pool holds at least twice the price. Off (default).");
+                "Host only. AI-only factions buy one combat convoy from their own pool every 2 minutes while their operation runs, and only when the pool holds " +
+                "at least twice the price. Off (default): AI factions stay at vanilla strength. Factions with a pilot buy waves by finished sorties and ignore this.");
         }
     }
 }
