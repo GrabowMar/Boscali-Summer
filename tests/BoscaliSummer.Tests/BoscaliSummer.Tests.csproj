@@ -162,6 +162,7 @@
     <Compile Include="..\..\modules\AirSurvival\Domain\AirStationPolicy.cs" Link="Features\AirSurvival\AirStationPolicy.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\ReinforcementGate.cs" Link="Features\TheaterOps\ReinforcementGate.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\FrontlineTactics.cs" Link="Features\TheaterOps\FrontlineTactics.cs" />
+    <Compile Include="..\..\modules\TheaterOps\Domain\GroundTasking.cs" Link="Features\TheaterOps\GroundTasking.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\StaffLog.cs" Link="Features\TheaterOps\StaffLog.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\PlaceNames.cs" Link="Features\TheaterOps\PlaceNames.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\ContactCounts.cs" Link="Features\TheaterOps\ContactCounts.cs" />
