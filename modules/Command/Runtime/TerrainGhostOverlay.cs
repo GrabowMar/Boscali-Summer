@@ -15,8 +15,9 @@ namespace BoscaliSummer.Modules.Command.Runtime
     /// The visor's terrain ghost: a very faint wire relief of the real ground around and below the player's aircraft, so the pilot
     /// always senses the surroundings. One mesh and one material live for the scene; the mesh is the <see cref="TerrainGhostGrid"/>
     /// (heights rebuilt when the aircraft enters another cell, colours at most twice a second), drawn additively and without a depth
-    /// test by the main gameplay camera only. The grid is placed from the cell's global position every frame, after the floating
-    /// origin has shifted, or it would flash. Strength is the pilot's TerrainGhost setting times a slow fade that is open only
+    /// test by the main gameplay camera, or, in the cockpit view, by the cockpit overlay camera instead (never both in one frame),
+    /// so the glass and the cockpit's opaque parts do not cover it: see <see cref="GhostCockpitMath"/>. The grid is placed from the
+    /// cell's global position every frame, after the floating origin has shifted, or it would flash. Strength is the pilot's TerrainGhost setting times a slow fade that is open only
     /// while the aircraft flies and the HUD overlays are up. Fails open: no baked terrain for the map, or no shader, and it draws nothing.
     /// </summary>
     // Native CameraStateManager (order 2) shifts the floating origin first.
@@ -30,6 +31,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private const float RetryInterval = 2f;
         // After the cloud and smoke particle queues (2958 to 3001), before the overlay band: the ghost sits on the finished scene.
         private const int Queue = 3500;
+        // Which camera the last frame drew on, as the sim hook reports it.
+        private const string None = "none", MainCamera = "main", CockpitView = "cockpit";
         private static readonly GhostTint FallbackInk = new GhostTint(56, 222, 82);
         private static readonly GhostTint FallbackCaution = new GhostTint(243, 217, 74);
 
@@ -49,6 +52,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private bool seenPlane;
         private int glowing;
         private float rebuildMs;
+        private Camera cockpitCamera;
+        private string drawnOn = None;
 
         /// <summary>The sim hook's strength in place of the saved setting; memory only, cleared with the scene.</summary>
         internal float? StrengthOverride { get; set; }
@@ -61,6 +66,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
         private void LateUpdate()
         {
+            drawnOn = None;
             if (Application.isBatchMode || settings == null) return;
             float setting = Mathf.Clamp01(StrengthOverride ?? settings.TerrainGhost.Value);
             if (setting <= 0f)
@@ -91,8 +97,35 @@ namespace BoscaliSummer.Modules.Command.Runtime
             if (moved || Time.unscaledTime >= nextColours || Mathf.Abs(strength - paintedStrength) > .01f)
                 Refresh(cx, cz, strength, moved);
             Vector3 centre = new GlobalPosition(TerrainGhostGrid.Anchor(cellX), 0f, TerrainGhostGrid.Anchor(cellZ)).ToLocalPosition();
-            Graphics.DrawMesh(mesh, Matrix4x4.Translate(centre), material, 0, camera, 0, null,
+            Matrix4x4 model = Matrix4x4.Translate(centre);
+            Camera target = camera;
+            int layer = 0;
+            Camera cockpit = CockpitOverlay(cameras, out int cockpitLayer);
+            if (cockpit != null)
+            {
+                // Same screen position, inside the overlay camera's 5 m of depth: inverse(V_cockpit) x Scale x V_main x M.
+                GhostCockpitMath.Scales(cockpit.fieldOfView, camera.fieldOfView, cockpit.farClipPlane, out float lateral, out float depth);
+                model = cockpit.cameraToWorldMatrix * Matrix4x4.Scale(new Vector3(lateral, lateral, depth)) * camera.worldToCameraMatrix * model;
+                target = cockpit;
+                layer = cockpitLayer;
+            }
+            drawnOn = cockpit != null ? CockpitView : MainCamera;
+            Graphics.DrawMesh(mesh, model, material, layer, target, 0, null,
                 ShadowCastingMode.Off, false, null, LightProbeUsage.Off);
+        }
+
+        /// <summary>
+        /// The cockpit overlay camera while it is rendering (the cockpit view), through the game's own reference, cached and found again
+        /// once destroyed; null in every other view, or when it sees no layer to draw on (the main camera draws the ghost then).
+        /// </summary>
+        private Camera CockpitOverlay(CameraStateManager cameras, out int layer)
+        {
+            layer = 0;
+            if (cockpitCamera == null) cockpitCamera = cameras.cockpitCamRender;
+            Camera overlay = cockpitCamera;
+            if (overlay == null || !overlay.isActiveAndEnabled || cameras.currentState != cameras.cockpitState) return null;
+            layer = GhostCockpitMath.Layer(overlay.cullingMask);
+            return layer >= 0 ? overlay : null;
         }
 
         /// <summary>The living local aircraft, and whether it is airborne and fast enough for the ghost to be wanted.</summary>
@@ -185,6 +218,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 { "lastRebuildMs", rebuildMs },
                 { "fade", fade },
                 { "cautionVertices", glowing },
+                { "camera", drawnOn },
+                { "cockpitCamera", cockpitCamera != null },
             };
         }
 
@@ -197,6 +232,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
             vertices = null;
             field = null;
             shaderMissing = false;
+            cockpitCamera = null;
+            drawnOn = None;
             placed = seenPlane = false;
             fade = paintedStrength = nextColours = nextField = rebuildMs = 0f;
             glowing = 0;
