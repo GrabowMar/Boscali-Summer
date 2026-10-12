@@ -1875,24 +1875,6 @@ Shader "Boscali/FlightCloud"
             ENDHLSL
         }
 
-        Pass
-        {
-            Name "WeatherMapBlend"
-            Tags { "LightMode"="BoscaliWeatherMapBlend" }
-            Blend Off
-            Cull Off
-            HLSLPROGRAM
-            #pragma vertex vert_img
-            #pragma fragment blendMap
-            sampler2D _MainTex, _CloudMapTarget;
-            float _WeatherMapBlend;
-            float4 blendMap(v2f_img i) : SV_Target
-            {
-                return lerp(tex2D(_MainTex, i.uv), tex2D(_CloudMapTarget, i.uv), _WeatherMapBlend);
-            }
-            ENDHLSL
-        }
-
         // Reduced resolution: a full-screen triangle into the cloud target (colour) and a
         // depth target (the scene eye depth each texel marched against), which the composite
         // uses to upsample without halos along terrain edges. Drawn by the render pass only.

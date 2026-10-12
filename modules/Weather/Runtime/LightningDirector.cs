@@ -44,7 +44,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         {
             if (Application.isBatchMode || field == null || !field.IsBuilt || camera == null) { Reset(); return; }
             Vector3 observerGlobal = new Vector3((float)observer.x, (float)observer.y, (float)observer.z);
-            bool discontinuity = key == null || !key.Equals(field.Key) || previousTime < 0f ||
+            bool discontinuity = key == null || !field.Key.SameTape(key) || previousTime < 0f ||
                 missionTime < previousTime || missionTime - previousTime > 2.5f;
             if (discontinuity)
             {

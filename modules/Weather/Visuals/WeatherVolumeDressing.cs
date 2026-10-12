@@ -13,8 +13,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
     /// <summary>One world-anchored volume. Small 2D maps from WeatherField control the
     /// front, cell and cumulus density: a 256-square near map over the flight domain and a
     /// coarse far map (the level of detail beyond the mission area) out to the horizon. The
-    /// sky is static between weather steps: each step builds one map pair for its settled
-    /// state and crossfades into it on the mission clock.
+    /// tape is held: the maps are rebuilt only when the tape identity, the frame heading or D
+    /// changes, and the new pair replaces the old in one frame (no crossfade, one map slot).
     ///
     /// <para>Normally the sky is marched at half resolution by <see cref="WeatherCloudPass"/>
     /// and the camera-following cube only composites it. Balanced quality returns to native
@@ -44,8 +44,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static readonly int FarProfileTexId = Shader.PropertyToID("_WeatherFarProfileTex");
         private static readonly int EnvelopeTexId = Shader.PropertyToID("_WeatherEnvelopeTex");
         private static readonly int EnvelopeOnId = Shader.PropertyToID("_WeatherEnvelopeOn");
-        private static readonly int MapBlendId = Shader.PropertyToID("_WeatherMapBlend");
-        private static readonly int MapTargetId = Shader.PropertyToID("_CloudMapTarget");
         private static byte[] sharedNoise;
         private static int generatingNoise;
         private static Mesh cube;
@@ -54,28 +52,20 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private readonly CloudVolumeUniforms uniforms = new CloudVolumeUniforms();
         private readonly WeatherCloudPass pass = new WeatherCloudPass();
         private readonly Action<Camera, Matrix4x4, Matrix4x4> onRender;
-        private int mapStep = -1;
-        private float fadeStart, fadeLength;
         private Material material, compositeMaterial;
         private Texture3D noise;
         private readonly MapPair near = new MapPair("Weather", CloudMaps.NearSize);
         private readonly MapPair far = new MapPair("Weather Far", CloudMaps.FarSize);
-        // Empty space: the union of the fading and the arriving state's envelopes while a
-        // fade runs, the arriving one alone once it has landed.
+        // Empty space (CloudMaps.Envelope) of the maps on screen.
         private Texture2D envelope;
-        private byte[] envelopeShown, envelopeTo;
-        private bool envelopeUnionDue, envelopeFinalDue;
-        private float nextBlend;
-        private float blendedAt = -1f;
-        private bool blendUnavailable;
+        // The signature the maps were built for: tape identity plus frame heading (SameTape) and D (spec 9.2).
         private WeatherKey mapKey;
+        private float mapOffset;
         private float volumeBottom, volumeTop = CloudMaps.VolumeTop;
-        private float rainMaximum, previousRainMaximum;
+        private float rainMaximum;
         private bool halfResolution;
         private Vector3 lightDirection = Vector3.up;
 
-        /// <summary>0..1 how deep the camera is inside cloud, smoothed; read by the atmosphere.</summary>
-        private float previousBottom, previousTop;
         private int mapUpdates;
         private GameObject root;
         private MeshRenderer renderer;
@@ -108,7 +98,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         internal bool RainCurtainsEnabled { get; private set; }
         internal int TargetWidth => pass.Width;
         internal int TargetHeight => pass.Height;
-        internal long TargetBytes => pass.TargetBytes + near.BlendBytes + far.BlendBytes;
+        internal long TargetBytes => pass.TargetBytes;
 
         /// <summary>False once the shader or noise is known to be unavailable: the caller
         /// keeps native clouds. True before the first frame, so native clouds never pop in
@@ -159,36 +149,35 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 Invalidate();
                 ReleaseMaps();
                 mapKey = null;
-                mapStep = -1;
                 mapHalf = half;
                 farHalf = Mathf.Max(half * FarSpanScale, MinFarHalf);
             }
 
-            TimelineState timeline = field.Timeline;
-            if (!field.Key.Equals(mapKey) || timeline.Step != mapStep)
+            float mapOffsetNow = field.Frame.Offset;
+            if (!field.Key.SameTape(mapKey) || mapOffsetNow != mapOffset)
             {
-                // A new state (or a new key): build the settled sky of this step once.
+                // A new tape, a new frame heading or a new D: rebuild the maps once. Kinematic edits that leave D
+                // alone (Epoch, SystemSpeed, Dynamic, Sets, the anchor) only update uniforms.
                 Invalidate();
                 mapKey = field.Key;
-                mapStep = timeline.Step;
-                float settledAt = WeatherTimeline.SettledAt(field.Key, timeline);
+                mapOffset = mapOffsetNow;
                 if (near.Current == null)
                 {
                     // Preload: the first map is built on this frame, so the mission opens on
                     // its own sky instead of native clouds swapping out a moment later.
                     var watch = System.Diagnostics.Stopwatch.StartNew();
-                    Accept(CloudMaps.Build(field.Key, settledAt, field.HalfX, field.HalfZ, field.HourOfDay,
-                        mapHalf, farHalf), missionTime);
+                    Accept(CloudMaps.Build(field.Key, missionTime, field.HalfX, field.HalfZ, field.HourOfDay,
+                        mapHalf, farHalf));
                     uniforms.Settle(field);
                     logger?.LogInfo("[Weather] Cloud maps preloaded in " + watch.ElapsedMilliseconds +
                         " ms (near " + Mathf.RoundToInt(mapHalf / 1000f) + " km, far LOD " +
                         Mathf.RoundToInt(farHalf / 1000f) + " km half-span).");
                 }
-                else QueueMap(field, settledAt);
+                else QueueMap(field, missionTime);
             }
 
             CloudMaps ready = Interlocked.Exchange(ref readyMap, null);
-            if (ready != null && ready.Revision == Volatile.Read(ref mapRevision)) Accept(ready, missionTime);
+            if (ready != null && ready.Revision == Volatile.Read(ref mapRevision)) Accept(ready);
 
             GlobalPosition global = camera.transform.GlobalPosition();
             Vector3 local = camera.transform.position;
@@ -206,17 +195,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 root.transform.localRotation = Quaternion.identity;
                 root.transform.localScale = Vector3.one * 1000f;
             }
-            float mapBlend = FadeWeight(missionTime);
-            BlendMaps(mapBlend);
-            bool blended = !blendUnavailable && near.BlendReady && far.BlendReady;
-            material.SetTexture(MapTexId, blended ? (Texture)near.BlendedStructure : near.Current);
-            material.SetTexture(ProfileTexId, blended ? (Texture)near.BlendedProfiles : near.CurrentProfiles);
-            material.SetTexture(FarMapTexId, blended ? (Texture)far.BlendedStructure : far.Current);
-            material.SetTexture(FarProfileTexId, blended ? (Texture)far.BlendedProfiles : far.CurrentProfiles);
             CloudVolumeUniforms.ApplySpans(material, mapHalf, farHalf);
-            UpdateEnvelope(mapBlend);
-            material.SetTexture(EnvelopeTexId, envelope);
-            material.SetFloat(EnvelopeOnId, envelope != null ? 1f : 0f);
 
             // Keep native clouds until the reduced pass has proved it runs on this camera.
             bool passAvailable = wantHalfResolution && compositeMaterial != null;
@@ -237,8 +216,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             Vector3 sunDirection = source.Direction;
             Color sunColor = source.Colour;
             lightDirection = sunDirection;
-            RainCurtainsEnabled = rainVisualsEnabled &&
-                Mathf.Lerp(previousRainMaximum, rainMaximum, DisplayedBlend) > 0.02f;
+            RainCurtainsEnabled = rainVisualsEnabled && rainMaximum > 0.02f;
             var frame = new CloudFrame
             {
                 WorldOffset = offset,
@@ -246,8 +224,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 CameraForward = camera.transform.forward,
                 FieldOfView = camera.fieldOfView,
                 PixelHeight = halfResolution && pass.Height > 0 ? pass.Height : camera.pixelHeight,
-                Bottom = mapBlend < 1f ? Mathf.Min(volumeBottom, previousBottom) : volumeBottom,
-                Top = mapBlend < 1f ? Mathf.Max(volumeTop, previousTop) : volumeTop,
+                Bottom = volumeBottom,
+                Top = volumeTop,
                 SunDirection = sunDirection,
                 SunColor = sunColor,
                 Ambient = RenderSettings.ambientSkyColor * RenderSettings.ambientIntensity * 0.45f +
@@ -277,33 +255,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 ReplaceSkyClouds(level);
                 shadows.Update(level, field, camera);
             }
-        }
-
-        private void UpdateEnvelope(float mapBlend)
-        {
-            if (envelopeTo == null) return;
-            byte[] upload = null;
-            if (envelopeUnionDue)
-            {
-                upload = envelopeShown == null ? envelopeTo : new byte[envelopeTo.Length];
-                if (envelopeShown != null) CloudMaps.Union(envelopeShown, envelopeTo, upload);
-                envelopeUnionDue = false;
-                envelopeFinalDue = envelopeShown != null;
-            }
-            else if (envelopeFinalDue && mapBlend >= 1f)
-            {
-                upload = envelopeTo;
-                envelopeFinalDue = false;
-            }
-            if (upload == null) return;
-            if (envelope == null)
-            {
-                envelope = new Texture2D(CloudMaps.EnvelopeSize, CloudMaps.EnvelopeSize, TextureFormat.RGBA32, false, true)
-                { name = "Boscali Weather Envelope", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
-            }
-            envelope.LoadRawTextureData(upload);
-            envelope.Apply(false, false);
-            envelopeShown = upload;
         }
 
         /// <summary>At render time, with the camera's final pose: the reduced-resolution march
@@ -362,19 +313,15 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             return Mathf.Clamp01(bodies.Density(SampleDisplayedWeather(x, z), x, y, z));
         }
 
-        private float DisplayedBlend => !blendUnavailable && near.BlendReady && far.BlendReady
-            ? Mathf.Clamp01(blendedAt) : 1f;
-
         internal WeatherPoint SampleDisplayedWeather(float x, float z)
         {
             CloudBodies.MapWeights(x, z, mapHalf, farHalf, out float nearWeight, out float farFade);
             if (farFade <= 0f) return default;
-            // Match the last actual map blit, including held maps while an async replacement builds.
-            float blend = DisplayedBlend;
-            if (nearWeight >= 1f) return near.Sample(x, z, mapHalf, blend);
-            WeatherPoint outer = far.Sample(x, z, farHalf, blend);
+            // The maps on screen, including the held pair while an async replacement builds.
+            if (nearWeight >= 1f) return near.Sample(x, z, mapHalf);
+            WeatherPoint outer = far.Sample(x, z, farHalf);
             outer.BackgroundCover *= farFade; outer.CellShape *= farFade;
-            return nearWeight <= 0f ? outer : CloudBodies.BlendMaps(outer, near.Sample(x, z, mapHalf, blend), nearWeight);
+            return nearWeight <= 0f ? outer : CloudBodies.BlendMaps(outer, near.Sample(x, z, mapHalf), nearWeight);
         }
 
         /// <summary>Three bounded light-path taps; presentation estimate, not another ray march.</summary>
@@ -401,7 +348,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (compositeMaterial != null) UnityEngine.Object.Destroy(compositeMaterial);
             if (noise != null) UnityEngine.Object.Destroy(noise);
             ReleaseMaps();
-            mapStep = -1;
             shadows.Restore();
             uniforms.Reset();
             root = null;
@@ -435,49 +381,37 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             Interlocked.Exchange(ref readyMap, null);
         }
 
-        /// <summary>Crossfades from the sky on screen into a new map pair.</summary>
-        private void Accept(CloudMaps result, float missionTime)
+        /// <summary>Commits a map pair: the new maps replace the old in one frame (a cut), with their envelope and
+        /// volume bounds. The material is bound here; a rebuild reuses the same textures.</summary>
+        private void Accept(CloudMaps result)
         {
-            bool first = near.Current == null;
-            // Whichever map dominates the screen now becomes the fade's starting point.
-            bool shift = !first && FadeWeight(missionTime) >= 0.5f;
-            // The union covers the sky on screen now and the one arriving.
-            if (first) envelopeShown = null;
-            envelopeTo = result.Envelope;
-            envelopeUnionDue = true;
-            near.Accept(result.Near, result.NearProfiles, first, shift);
-            far.Accept(result.Far, result.FarProfiles, first, shift);
-            if (first || shift)
+            near.Accept(result.Near, result.NearProfiles);
+            far.Accept(result.Far, result.FarProfiles);
+            if (envelope == null)
             {
-                previousBottom = first ? result.Bottom : volumeBottom;
-                previousTop = first ? result.Top : volumeTop;
-                previousRainMaximum = first ? result.RainMaximum : rainMaximum;
+                envelope = new Texture2D(CloudMaps.EnvelopeSize, CloudMaps.EnvelopeSize, TextureFormat.RGBA32, false, true)
+                { name = "Boscali Weather Envelope", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
             }
+            envelope.LoadRawTextureData(result.Envelope);
+            envelope.Apply(false, false);
+            material.SetTexture(MapTexId, near.Current);
+            material.SetTexture(ProfileTexId, near.CurrentProfiles);
+            material.SetTexture(FarMapTexId, far.Current);
+            material.SetTexture(FarProfileTexId, far.CurrentProfiles);
+            material.SetTexture(EnvelopeTexId, envelope);
+            material.SetFloat(EnvelopeOnId, 1f);
             rainMaximum = result.RainMaximum;
             volumeBottom = result.Bottom;
             volumeTop = result.Top;
-            fadeStart = missionTime;
-            // Finish together with the weather: the map shows the settled state.
-            fadeLength = first ? 0f : Mathf.Max(WeatherTimeline.FadeSeconds * 0.5f,
-                result.SettledAt - missionTime);
-            nextBlend = 0f;
-            blendedAt = -1f;
             mapUpdates++;
         }
 
-        private float FadeWeight(float missionTime)
-        {
-            if (fadeLength <= 0f) return 1f;
-            float t = Mathf.Clamp01((missionTime - fadeStart) / fadeLength);
-            return t * t * (3f - 2f * t);
-        }
-
-        private void QueueMap(WeatherField field, float settledAt)
+        private void QueueMap(WeatherField field, float time)
         {
             if (Interlocked.CompareExchange(ref mapGenerating, 1, 0) != 0)
             {
-                // A worker is still on an older step; ask again next frame.
-                mapStep = -1;
+                // A worker is still on an older build; ask again next frame.
+                mapKey = null;
                 return;
             }
             int revision = Volatile.Read(ref mapRevision);
@@ -488,7 +422,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             {
                 try
                 {
-                    CloudMaps result = CloudMaps.Build(key, settledAt, halfX, halfZ, hour, nearHalf, outerHalf);
+                    CloudMaps result = CloudMaps.Build(key, time, halfX, halfZ, hour, nearHalf, outerHalf);
                     if (revision == Volatile.Read(ref mapRevision))
                     {
                         result.Revision = revision;
@@ -506,34 +440,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             far.Release();
             if (envelope != null) UnityEngine.Object.Destroy(envelope);
             envelope = null;
-            envelopeShown = envelopeTo = null;
-            envelopeUnionDue = envelopeFinalDue = false;
-            blendUnavailable = false;
-            nextBlend = 0f;
-            blendedAt = -1f;
-        }
-
-        private void BlendMaps(float blend)
-        {
-            // The sky is static between steps: once the fade has landed, the blended maps
-            // already hold the final state and need no more blits.
-            if (blendUnavailable || Time.unscaledTime < nextBlend || blendedAt >= 1f) return;
-            nextBlend = Time.unscaledTime + 0.25f;
-            if (!near.EnsureBlendTargets() || !far.EnsureBlendTargets())
-            {
-                near.ReleaseBlend(); far.ReleaseBlend();
-                blendUnavailable = true;
-                logger?.LogWarning("[Weather] Map blend target unavailable; using unblended weather maps.");
-                return;
-            }
-            // Interpolate the small maps once, instead of repeating four texture
-            // fetches in every view and sunlight ray sample at screen resolution.
-            RenderTexture saved = RenderTexture.active;
-            material.SetFloat(MapBlendId, blend);
-            near.Blit(material);
-            far.Blit(material);
-            RenderTexture.active = saved;
-            blendedAt = blend;
+            if (material != null) material.SetFloat(EnvelopeOnId, 0f);
         }
 
         private bool Prepare()
@@ -647,86 +554,38 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             return m;
         }
 
-        /// <summary>The older and newer keyframe of one map level and its blended copy.</summary>
+        /// <summary>The one map slot of one level: the texture pair on screen and its bytes for CPU sampling.</summary>
         private sealed class MapPair
         {
             private readonly string label;
             private readonly int size;
-            private Texture2D previous, previousProfiles;
-            private byte[] currentPixels, currentProfiles, previousPixels, previousProfilePixels;
+            private byte[] currentPixels, currentProfiles;
 
             internal Texture2D Current { get; private set; }
             internal Texture2D CurrentProfiles { get; private set; }
-            internal RenderTexture BlendedStructure { get; private set; }
-            internal RenderTexture BlendedProfiles { get; private set; }
-            internal bool BlendReady => BlendedStructure != null && BlendedProfiles != null &&
-                BlendedStructure.IsCreated() && BlendedProfiles.IsCreated();
-            internal long BlendBytes => BlendReady ? (long)size * size * 12L : 0L;
 
             internal MapPair(string label, int size) { this.label = label; this.size = size; }
 
-            /// <summary>The newer slot always receives the snapshot. <paramref name="shift"/>
-            /// first moves the newer texture into the older slot; a first keyframe fills both.</summary>
-            internal void Accept(byte[] pixels, byte[] profiles, bool first, bool shift)
+            /// <summary>Replaces the slot's pixels (the textures are reused).</summary>
+            internal void Accept(byte[] pixels, byte[] profiles)
             {
-                if (shift && !first)
-                {
-                    Texture2D t = previous; previous = Current; Current = t;
-                    t = previousProfiles; previousProfiles = CurrentProfiles; CurrentProfiles = t;
-                    previousPixels = currentPixels; previousProfilePixels = currentProfiles;
-                }
                 currentPixels = pixels; currentProfiles = profiles;
                 Current = Upload(Current, pixels, label + " Structure");
                 CurrentProfiles = Upload(CurrentProfiles, profiles, label + " Heights");
-                if (first)
-                {
-                    previousPixels = pixels; previousProfilePixels = profiles;
-                    previous = Upload(previous, pixels, label + " Structure");
-                    previousProfiles = Upload(previousProfiles, profiles, label + " Heights");
-                }
             }
 
-            internal WeatherPoint Sample(float x, float z, float half, float blend)
+            internal WeatherPoint Sample(float x, float z, float half)
             {
                 if (currentPixels == null || currentProfiles == null) return default;
                 float u = x / (half * 2f) + 0.5f, v = z / (half * 2f) + 0.5f;
-                WeatherPoint current = CloudBodies.SampleMap(currentPixels, currentProfiles, size, u, v);
-                return blend >= 1f || previousPixels == null ? current : CloudBodies.BlendMaps(
-                    CloudBodies.SampleMap(previousPixels, previousProfilePixels, size, u, v), current, blend);
-            }
-
-            internal bool EnsureBlendTargets()
-            {
-                if (BlendedStructure == null) BlendedStructure = Target(label + " Structure Blend", RenderTextureFormat.ARGB32);
-                if (BlendedProfiles == null) BlendedProfiles = Target(label + " Height Blend", RenderTextureFormat.ARGBHalf);
-                if ((BlendedStructure.IsCreated() || BlendedStructure.Create()) && FxRtPool.Own(BlendedStructure) &&
-                    (BlendedProfiles.IsCreated() || BlendedProfiles.Create()) && FxRtPool.Own(BlendedProfiles)) return true;
-                ReleaseBlend();
-                return false;
-            }
-
-            internal void Blit(Material material)
-            {
-                if (Current == null) return;
-                material.SetTexture(MapTargetId, Current);
-                Graphics.Blit(previous != null ? previous : Current, BlendedStructure, material, 1);
-                material.SetTexture(MapTargetId, CurrentProfiles);
-                Graphics.Blit(previousProfiles != null ? previousProfiles : CurrentProfiles, BlendedProfiles, material, 1);
+                return CloudBodies.SampleMap(currentPixels, currentProfiles, size, u, v);
             }
 
             internal void Release()
             {
-                Destroy(Current); Destroy(CurrentProfiles); Destroy(previous); Destroy(previousProfiles);
-                Current = CurrentProfiles = previous = previousProfiles = null;
-                currentPixels = currentProfiles = previousPixels = previousProfilePixels = null;
-                ReleaseBlend();
-            }
-
-            internal void ReleaseBlend()
-            {
-                if (BlendedStructure != null) { FxRtPool.Disown(BlendedStructure); BlendedStructure.Release(); UnityEngine.Object.Destroy(BlendedStructure); }
-                if (BlendedProfiles != null) { FxRtPool.Disown(BlendedProfiles); BlendedProfiles.Release(); UnityEngine.Object.Destroy(BlendedProfiles); }
-                BlendedStructure = BlendedProfiles = null;
+                Destroy(Current); Destroy(CurrentProfiles);
+                Current = CurrentProfiles = null;
+                currentPixels = currentProfiles = null;
             }
 
             private Texture2D Upload(Texture2D texture, byte[] pixels, string name)
@@ -739,10 +598,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 texture.Apply(false, false);
                 return texture;
             }
-
-            private RenderTexture Target(string name, RenderTextureFormat format)
-                => new RenderTexture(size, size, 0, format, RenderTextureReadWrite.Linear)
-                { name = "Boscali " + name, filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
 
             private static void Destroy(Texture2D texture)
             {

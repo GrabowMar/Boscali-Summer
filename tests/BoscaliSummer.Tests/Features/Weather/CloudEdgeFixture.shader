@@ -2,8 +2,7 @@ Shader "Hidden/Boscali/CloudEdgeFixture"
 {
     SubShader
     {
-        // CloudLowRes records production march pass 2. The first two slots stay unused.
-        Pass { }
+        // CloudLowRes records production march pass 1 (the map-blend pass is gone). The first slot stays unused.
         Pass { }
         Pass
         {

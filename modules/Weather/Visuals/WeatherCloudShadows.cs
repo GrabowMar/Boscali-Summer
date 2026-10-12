@@ -10,14 +10,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
     /// <summary>Cloud shadows through the native directional-light cookie: a camera-centred,
     /// 48 km, 256-square transmission map computed from the same cloud bodies the volume
     /// shader draws, so each cloud casts its own shadow on terrain, sea and aircraft.
-    /// Rebuilt on a worker when the camera moves far, the sun turns, or the weather steps;
-    /// the weather is static in between, so nothing needs rebuilding while it holds.</summary>
+    /// Rebuilt on a worker when the camera moves far, the sun turns, or the tape or D changes;
+    /// the weather is held in between, so nothing needs rebuilding while it holds.</summary>
     internal sealed class WeatherCloudShadows
     {
         private const int Size = 256;
         private const float Span = 48000f;
         private const float RecentreDistance = 9000f;
-        private const float SettlingRefreshSeconds = 20f;
         private const float BlendSeconds = 4f;
         private const float UploadSeconds = 0.25f;
         private readonly Color32[] blended = new Color32[Size * Size];
@@ -27,7 +26,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private LevelInfo owner;
         private LightState sun, moon;
         private WeatherKey key;
-        private int step = -1;
+        private float builtOffset;
         private Vector3 projectedDirection;
         private double centreX, centreZ;
         private float nextBuild, nextUpload, blendStart;
@@ -65,19 +64,19 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
             float now = Time.unscaledTime;
             GlobalPosition eye = camera.transform.GlobalPosition();
-            bool keyChanged = key == null || !key.Equals(field.Key);
+            // SameTape ignores D: a held offset edit (a rebased key, SetFixtureTape) would otherwise leave the cookie built for the old D.
+            bool keyChanged = key == null || !field.Key.SameTape(key) || field.Frame.Offset != builtOffset;
             bool turned = Vector3.Dot(projectedDirection, light.transform.forward) < 0.9986f;
             if (keyChanged || turned)
             {
                 Interlocked.Increment(ref revision);
                 Interlocked.Exchange(ref ready, null);
                 key = field.Key;
+                builtOffset = field.Frame.Offset;
                 projectedDirection = light.transform.forward;
-                step = -1;
                 nextBuild = 0f;
             }
-            // A new weather step, a drift away from the centre, or a still-settling sky rebuilds.
-            if (field.Timeline.Step != step) nextBuild = 0f;
+            // A drift away from the centre rebuilds.
             double dx = eye.x - centreX, dz = eye.z - centreZ;
             if (target == null || dx * dx + dz * dz > RecentreDistance * RecentreDistance) nextBuild = 0f;
 
@@ -102,10 +101,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (now >= nextBuild && elevation > 0.06f && Volatile.Read(ref generating) == 0)
             {
                 Queue(field, light, eye.x, eye.z);
-                step = field.Timeline.Step;
-                bool settling = field.Key.Dynamic &&
-                    field.Time < WeatherTimeline.SettledAt(field.Key, field.Timeline);
-                nextBuild = settling ? now + SettlingRefreshSeconds : float.PositiveInfinity;
+                nextBuild = float.PositiveInfinity;
             }
 
             if (texture == null)
@@ -129,7 +125,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 // through the deck so aircraft above the clouds lose the ground shadows.
                 strength *= 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(bottom, top, (float)eye.y));
                 float blend = Mathf.Clamp01((now - blendStart) / BlendSeconds);
-                // The cookie is static between weather steps: rebuild its 64k pixels only
+                // The cookie is static while the tape holds: rebuild its 64k pixels only
                 // while a new map fades in or the strength has moved.
                 // 2 % strength steps are invisible on ground shadows; finer steps rebuilt all
                 // 64k pixels at every 4 Hz tick while climbing through a deck.
@@ -176,7 +172,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             moon = default;
             owner = null;
             key = null;
-            step = -1;
             attached = false;
             target = null;
             nextBuild = 0f;

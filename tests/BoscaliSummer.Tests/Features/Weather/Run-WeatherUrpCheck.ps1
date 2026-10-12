@@ -10,12 +10,13 @@ Copy-Item (Get-ChildItem "$repo/modules/Weather/Domain/*.cs" | Where-Object { $_
 Copy-Item "$repo/Core/Math/Deterministic.cs", "$repo/Core/Math/Scalar.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/Core/Contracts/FxBudget.cs", "$repo/Core/Contracts/IClientEffect.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/Core/Fx/*.cs" "$fixture/Assets/Code/"
+Copy-Item "$repo/Core/Util/*.cs" "$fixture/Assets/Code/"
 foreach ($f in 'CloudNoise3D.cs', 'CloudMaps.cs', 'CloudBodies.cs', 'CloudVolumeUniforms.cs', 'CloudLowRes.cs', 'WeatherCloudPass.cs', 'TapeTexture.cs') {
     Copy-Item "$repo/modules/Weather/Visuals/$f" "$fixture/Assets/Code/"
 }
 Copy-Item "$PSScriptRoot/WeatherUrpCheck.cs" "$fixture/Assets/Code/"
 Copy-Item "$PSScriptRoot/CloudEdgeFixture.shader" "$fixture/Assets/Resources/"
-Copy-Item "$repo/modules/Immersion/Visuals/MaterialSlotClone.cs", "$repo/modules/Immersion/Audio/CockpitAudioFilter.cs" "$fixture/Assets/Code/"
+Copy-Item "$repo/modules/Immersion/Visuals/MaterialSlotClone.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/modules/Immersion/Runtime/CockpitCameraOffset.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/modules/Immersion/Domain/ImmersionMath.cs" "$fixture/Assets/Code/"
 # Keep production pipeline tags and shaders unchanged for the URP integration check.

@@ -3,7 +3,7 @@ using BoscaliSummer.Modules.Weather.Domain;
 
 namespace BoscaliSummer.Modules.Weather.Visuals
 {
-    /// <summary>The cloud renderer's weather maps for one settled state: a near map over the
+    /// <summary>The cloud renderer's weather maps for one tape and frame: a near map over the
     /// flight domain and a coarse far map (the level of detail out to the horizon), RGBA32
     /// bytes ready to upload. Pure: built on a worker, or once on the main thread to preload.
     /// Structure: sheet cover, (unused), cell shape, low/tower top. Profiles: (unused), (unused),
@@ -18,7 +18,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// <summary>The cloud-base byte spans 0-4096 m (16 m steps, spec 6): the base is clamped to 250-3600 m. The structure tops keep <see cref="VolumeTop"/>.</summary>
         internal const float BaseRange = 4096f;
 
-        internal readonly float SettledAt;
         internal readonly byte[] Near = new byte[NearSize * NearSize * 4];
         internal readonly byte[] NearProfiles = new byte[NearSize * NearSize * 4];
         internal readonly byte[] Far = new byte[FarSize * FarSize * 4];
@@ -33,15 +32,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         internal float RainMaximum;
         internal int Revision;
 
-        private CloudMaps(float settledAt) { SettledAt = settledAt; }
-
-        internal static CloudMaps Build(WeatherKey key, float settledAt, float halfX, float halfZ, float hour,
+        internal static CloudMaps Build(WeatherKey key, float time, float halfX, float halfZ, float hour,
             float nearHalf, float farHalf, TapeFixture fixture = null)
         {
             var snapshot = new WeatherField();
-            snapshot.Build(key, settledAt, halfX, halfZ, hour);
+            snapshot.Build(key, time, halfX, halfZ, hour);
             if (fixture != null) snapshot.UseFixtureTape(fixture.Sampler, fixture.Frame);
-            var result = new CloudMaps(settledAt);
+            var result = new CloudMaps();
             float bottom = VolumeTop, top = 0f;
             Fill(snapshot, nearHalf, NearSize, result.Near, result.NearProfiles, ref bottom, ref top, ref result.RainMaximum);
             Fill(snapshot, farHalf, FarSize, result.Far, result.FarProfiles, ref bottom, ref top, ref result.RainMaximum, areaMean: true);
@@ -137,18 +134,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 envelope[o + 1] = cover > 0 ? top : (byte)0;
                 envelope[o + 2] = cover > 0 ? bottom : (byte)255;
                 envelope[o + 3] = 255;
-            }
-        }
-
-        /// <summary>Per-texel union of two envelopes: what a crossfade between them can show.</summary>
-        internal static void Union(byte[] a, byte[] b, byte[] into)
-        {
-            for (int i = 0; i < into.Length; i += 4)
-            {
-                into[i] = Math.Max(a[i], b[i]);
-                into[i + 1] = Math.Max(a[i + 1], b[i + 1]);
-                into[i + 2] = Math.Min(a[i + 2], b[i + 2]);
-                into[i + 3] = 255;
             }
         }
 
