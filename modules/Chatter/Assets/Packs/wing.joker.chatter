@@ -1,0 +1,274 @@
+# Wingman personality: joker (gallows humour, sarcasm)
+
+@wing.copy status
+[joker] Copy, <lead>. On it, before it gets any worse.
+[joker] Wilco. Somebody has to do the hard jobs.
+[joker] Roger that, <lead>. Copy and moving.
+[joker] You ask, I do. Wilco.
+[joker] Copy. Adding it to the list of things nobody thanks me for.
+[joker night] Copy, <lead>. Can't see a thing anyway.
+[joker loss] Copy, <lead>. Wilco.
+
+@wing.unable status
+[joker] Unable, <lead>. Even my optimism has limits.
+[joker] Negative, can't be done. Unable.
+[joker] Unable. I'd love to, but physics said no.
+[joker] That's a no, <lead>. Unable.
+[joker] Unable. Put it on the pile with the maintenance requests.
+
+@wing.taskdone status
+[joker] Task complete. Where's my medal, <lead>?
+[joker] Done. Mark it down, somebody might read the paperwork.
+[joker] That's finished, <lead>. Nobody clap.
+[joker] Task done. Easier than the mess hall's coffee.
+[joker] Done and dusted. What's next on the menu?
+[joker aftercombat] Task done. My hands are still shaking.
+[joker loss] Task done. Heavy day, <lead>.
+
+@wing.taxiing ambient
+[joker] Taxiing. Smells like fresh paint and burnt breakfast.
+[joker] Leaving the spot, <lead>. Try not to bump the tug.
+[joker] Moving. The ground crew waved. I think it was a wave.
+[joker] Taxiing out. Yes, the brakes are fine. Mostly.
+[joker] Off the spot and on the taxiway. Glorious.
+[joker night] Taxiing in the dark. What could go wrong?
+
+@wing.holdingshort ambient
+[joker] Holding short. Admiring the runway, since it's free.
+[joker] Short of the runway, <lead>. Waiting like everyone else.
+[joker] The paperwork can catch up. Holding short.
+[joker] Stopped at the hold line. Nobody sneeze.
+[joker] Ready whenever you are, <lead>. Holding short.
+
+@wing.liningup ambient
+[joker] Lining up. Smile for the tower, it's the only audience.
+[joker] Entering the runway, <lead>. Pray for the tires.
+[joker] Lining up. Nice and straight, for once.
+[joker] On the runway now. Nobody breathe.
+[joker] Lined up, <lead>. Let's get this over with.
+[joker rain] Lining up. This runway is a puddle with lines.
+
+@wing.rolling status
+[joker] Rolling! Hold onto your lunch.
+[joker] Rolling, <lead>. Engines are loud, the pay's not.
+[joker] Takeoff roll. Maintenance swears it will hold together.
+[joker] Rolling now. Wish me luck, <lead>.
+[joker] We are rolling. Lead, don't wander off.
+[joker rain] Rolling. If it floats, it flies.
+
+@wing.airborne status
+[joker] Airborne, gear coming up, <lead>. Still got both wings.
+[joker] Airborne and closing on you, <lead>.
+[joker] Wheels up. Maintenance was wrong again, thankfully.
+[joker] Up and coming to join. Try not to speed up.
+[joker] Airborne, <lead>. Hold your position, I'm coming.
+
+@wing.down ambient
+[joker] Down and safe. Cheap thrill, free this time.
+[joker] On the ground, <lead>. The runway only grabbed a little.
+[joker] Down. Tell the crew it all came back in one piece.
+[joker] Wheels down, no fires. Good enough for me.
+[joker] Landed, <lead>. Now, about that dinner.
+[joker recovery] Down safe. Pie goes to the first one in.
+[joker rain] Down. Wet, cold, alive.
+[joker loss] Down. Quiet out there tonight.
+
+@wing.goaround status
+[joker] Going around. The runway and I had a disagreement.
+[joker] Don't tell the tower I was nervous, <lead>. Going around.
+[joker] Not happy with that one. Going around.
+[joker] Power up, going around. Let's try that again.
+[joker] Going around. It's not a failed landing, it's a bonus lap.
+[joker rain] Going around. Wet runway, dry sense of humour.
+
+@wing.engaging tactical
+[joker] Engaging. Time to earn the lousy pay.
+[joker] Engaging, <lead>. Stay close, I bite.
+[joker] I'm in. Engaging.
+[joker] Engaging! Somebody has to do it.
+[joker] Committing now. Cover me, <lead>.
+
+@wing.fox2 tactical
+[joker] Fox two on the <target>. Warm regards.
+[joker] Fox two, <target>. Hope it's got good manners.
+[joker] Heat's on, <target>. Fox two!
+[joker] Cheers, <target>. Fox two, away.
+[joker] Hot greetings incoming, <lead>. Fox two.
+
+@wing.fox3 tactical
+[joker] Fox three, <target>. Radar's got it, pray it does too.
+[joker] Fox three on the <target>. Cheap missile, expensive guess.
+[joker] Tracking the <target>. Fox three!
+[joker] Good luck, <target>. Fox three, <lead>.
+[joker] No refunds. Fox three, away.
+
+@wing.magnum tactical
+[joker] Magnum on the <target>. Radar's off, bad day.
+[joker] Magnum! Silence the <target>.
+[joker] They wanted attention, now they have it. Magnum, <target>.
+[joker] Quiet please, <lead>. Magnum.
+[joker] Magnum, away.
+
+@wing.rifle tactical
+[joker] Rifle on the <target>. Ground's about to get warmer.
+[joker] Rifle! <target> is on the menu.
+[joker] Rifle, <lead>. Dropping a surprise on the <target>.
+[joker] Rifle, away. Nothing personal.
+[joker] Rifle. Hope the <target> has insurance.
+
+@wing.splash tactical
+[joker] Splash one <target>. Put it on my tab.
+[joker] Splash! The <target> is done, <lead>.
+[joker] Splash one. One less <target> to worry about.
+[joker] Splash. Tell the gunners it wasn't their fault.
+[joker] Splash, <target>. Shop's closed.
+[joker loss] Splash, <target>. One for the ones we lost.
+
+@wing.bandit tactical
+[joker] Bandit, <bra>. Someone brought a party.
+[joker] Bandit! <bra>, <lead>.
+[joker] Bandit, <bra>. Look who's late.
+[joker] New bandit, <bra>. That's trouble, <lead>.
+[joker] Bandit <bra>, <type>. Not one of ours.
+
+@wing.contact status
+[joker] Contact, <bra>. Something on the ground. Not friendly.
+[joker] Ground contact, <bra>. Don't ask me to name it.
+[joker] Contact, <bra>. Possible target, <lead>.
+[joker] Contact on the ground, <bra>, <type>.
+[joker] Someone's hiding badly. Contact, <bra>.
+
+@wing.bogeydope tactical
+[joker] Nearest bandit, <bra>. Happy now, <lead>?
+[joker] Bandit, <bra>. Closest one, <lead>.
+[joker] Closest threat, <bra>. Don't say I didn't warn you.
+[joker] Got one at <bra>. Pick your poison.
+[joker] Bandit <bra>, <type>. That's the nearest.
+
+@wing.clean tactical
+[joker] Clean, <lead>. Nothing out there. Suspicious.
+[joker] Naked. Nothing on the scope.
+[joker] Picture is clean. Enjoy it while it lasts.
+[joker] Nobody wants to play today. Clean.
+[joker] Skies are clean, <lead>. For now.
+[joker aftercombat] Clean, <lead>. Everyone's gone shy.
+
+@wing.panic emergency
+[joker] Missile! Break, break!
+[joker] Defending! Missile on me!
+[joker] Inbound! Help, <lead>!
+[joker] Missile, missile! Going defensive!
+
+@wing.defensiveclear tactical
+[joker] Missile defeated. Not today, you.
+[joker] It's gone, clean. Wow.
+[joker] Defence worked, <lead>. Missile's gone.
+[joker] Missile's off my back. Back to work.
+[joker] Missile spoofed, I'm still here, <lead>.
+
+@wing.pullup emergency
+[joker] Pull up! Ground!
+[joker] Terrain, pulling up!
+[joker] Whoa, ground! Up, up!
+[joker] Pull up, pull up!
+
+@wing.breakoff emergency
+[joker] Break off! Break!
+[joker] Traffic, breaking off!
+[joker] Too close, breaking!
+[joker] Collision, breaking off, <lead>!
+
+@wing.maneuvering tactical
+[joker] Starting <detail>, <lead>. Watch the wingtips.
+[joker] <detail>, now. Hope that's what you meant.
+[joker] Executing <detail>. Stay clear of my tail.
+[joker] Flying <detail>. Not my favourite.
+[joker] Going <detail>. Wilco, <lead>.
+
+@wing.maneuverdone status
+[joker] Maneuver complete. Dizzy but fine.
+[joker] Done with the maneuver, <lead>. Where do you want me?
+[joker] That one's for the books. Maneuver done.
+[joker] Finished that turn. Back to formation, <lead>.
+[joker] Anyone need a bucket? Maneuver is over.
+
+@wing.fallingback tactical
+[joker] Falling back, <lead>. Too many for two of us.
+[joker] Disengaging. Outnumbered, and not stupid.
+[joker] Discretion, valour, you know. Falling back!
+[joker] Too many, I'm out. Falling back.
+[joker] Pulling out. Come with me, <lead>, they've got numbers.
+
+@wing.rejoining status
+[joker] Rejoining, <lead>. Save me a seat.
+[joker] Coming back to formation. Missed me?
+[joker] Disengaged, rejoining. Keep the formation tidy.
+[joker] Rejoin in progress, <lead>.
+[joker] Heading back to you. Hold your heading.
+[joker aftercombat] Rejoining, <lead>. That was quite enough.
+[joker loss] Rejoining, <lead>. Closing up the gap.
+
+@wing.winchester status
+[joker] Winchester. Nothing left but good looks.
+[joker] Winchester, <lead>. Heading home.
+[joker] I'm Winchester. Out of ammo and out of ideas.
+[joker] Winchester, going home. Tell the cook I'm coming.
+[joker] Empty racks, full of attitude. Winchester.
+[joker recovery] Winchester, heading home. Hopefully not for that stew again.
+
+@wing.outofammo status
+[joker] Out of ammo, <lead>. Staying with you anyway.
+[joker] Empty. No weapons, staying with the wing.
+[joker] Racks are empty, I'll just look scary.
+[joker] Out of ordnance. Still here to hold your formation.
+[joker] No missiles left. Good thing I'm charming.
+
+@wing.joker status
+[joker] Joker. <n> minutes to bingo, <lead>.
+[joker] Joker fuel. <n> minutes before bingo.
+[joker] <n> minutes to bingo, <lead>. Joker fuel.
+[joker] Fuel's low. Joker, <n> minutes to bingo.
+[joker] Down to <n> minutes, then I'm walking home.
+
+@wing.bingo status
+[joker] Bingo. Fuel for home only.
+[joker] Bingo fuel, <lead>. Heading home.
+[joker] Gas is gone, so am I. Bingo.
+[joker] I'm bingo. Cheerio, <lead>.
+[joker] Bingo fuel. Dinner time anyway.
+[joker recovery] Bingo. Pattern is all I've got, <lead>.
+
+@wing.fallingbehind status
+[joker] Falling behind, <lead>. Slow down a little.
+[joker] I can't keep up. Falling behind.
+[joker] Falling behind! Did you add a gear?
+[joker] Cannot stay with you, <lead>. Too fast.
+[joker] You're leaving me. Falling behind.
+
+@wing.damaged status
+[joker] I'm hit, <lead>. Still flying.
+[joker] Took damage. The aircraft says it's fine.
+[joker] Damaged! Maintenance will love this.
+[joker] Hit. Systems are complaining. So am I.
+[joker] Taking damage, <lead>. Still in the fight.
+
+@wing.airframelost tactical
+[joker] <n> is down, <lead>. Eyes open.
+[joker] Airframe lost, <n>. Damn.
+[joker] We lost <n>. Keep it tight, <lead>.
+[joker] Number <n> is gone. Stay sharp.
+[joker] <n> is down. Not funny, not today.
+
+@wing.ejected tactical
+[joker] <n> has ejected, <lead>. Mark the spot.
+[joker] Ejection, <n>. Look for a chute.
+[joker] <n> is out. Good luck down there.
+[joker] Eject, <n>. Somebody find him.
+[joker] Punched out, number <n>. Stay sharp, <lead>.
+
+@wing.escortlost tactical
+[joker] Escort is gone, <lead>. I'm sorry.
+[joker] We lost the escort. That's bad.
+[joker] The package is down. Mission failed, <lead>.
+[joker] Escort lost. Nothing funny about that.
+[joker] Lost our charge, <lead>. Regroup.

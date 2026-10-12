@@ -553,7 +553,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         private static WingPilot DefaultProvider(int index)
         {
             string callsign = PilotIdentity.Callsign(n => Random.Range(0, n), c => ContainsCallsign(c) || (SavedTaken != null && SavedTaken(c)));
-            var persona = (ChatterPersona)Random.Range(0, 4);
+            var persona = (ChatterPersona)Random.Range(0, ChatterPersonas.Count);
             return new WingPilot
             {
                 Name = PilotIdentity.Name(n => Random.Range(0, n)),

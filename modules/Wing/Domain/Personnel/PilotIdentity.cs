@@ -23,7 +23,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public static string Background(Func<int, int> next, ChatterPersona persona) =>
             Postings[next(Postings.Length)] + " " + Habits[next(Habits.Length)] + " " +
-            RadioHabits[(int)persona][next(RadioHabits[(int)persona].Length)];
+            RadioHabits[HabitOf[(int)persona]][next(RadioHabits[HabitOf[(int)persona]].Length)];
 
         private static readonly string[] Surnames =
         {
@@ -165,6 +165,25 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 "Answers compliments with a complaint about the coffee.",
                 "Insists the aircraft is the difficult half of the partnership.",
             },
+            new[]
+            {
+                "Reports everything twice and apologises for the second time.",
+                "Still keeps the first-solo photograph inside the helmet bag.",
+                "Asks the questions the rest of the flight stopped asking.",
+                "Writes down what the old hands say and reads it before every sortie.",
+                "Has not yet learned to sound calm, only to fly calm.",
+            },
+            new[]
+            {
+                "Uses fewer words on the radio than anyone on the base.",
+                "Was once timed at four syllables for an entire engagement.",
+                "Nobody has heard the voice change pitch, in the air or out of it.",
+                "Debriefs in numbers and leaves the adjectives to others.",
+                "Regards an exclamation mark as a maintenance fault.",
+            },
         };
+
+        // The sentences above are in the order they were written; a persona picks its own set (Veteran, Rookie, Hothead, Ice, Joker, Book).
+        private static readonly int[] HabitOf = { 2, 4, 1, 5, 3, 0 };
     }
 }

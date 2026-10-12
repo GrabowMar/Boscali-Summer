@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         internal static object[] CreatePilot(int seed)
         {
             var random = new System.Random(seed);
-            var persona = (ChatterPersona)random.Next(4);
+            var persona = (ChatterPersona)random.Next(ChatterPersonas.Count);
             return new object[]
             {
                 PilotIdentity.Name(random.Next),
@@ -244,9 +244,9 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         internal static void Chatter(string callsign, string context, string message)
         {
-            RadioDirector.Instance?.Report("INTERCEPT / " + Limit(callsign, 24),
-                "ENEMY:" + Limit(callsign, 32) + ":" + Limit(context, 64), message,
-                BoscaliSummer.Core.Contracts.ChatterUrgency.Tactical);
+            if (!BoscaliSummer.Core.Services.ModuleServices.TryGet<BoscaliSummer.Core.Contracts.IChatter>(out var radio)) return;
+            radio.Say(radio.Station(BoscaliSummer.Core.Chatter.ChatterNet.Enemy, Limit(callsign, 24)),
+                "enemy:" + Limit(callsign, 32) + ":" + Limit(context, 64), message, BoscaliSummer.Core.Chatter.ChatterPriority.Tactical);
         }
 
         /// <summary>Enroll while still seated, then read native evidence after ejection.

@@ -1,0 +1,275 @@
+# Wingman net: veteran (calm senior pilot, economical, dry warmth)
+
+@wing.copy status
+[veteran] Copy.
+[veteran] Wilco, <lead>.
+[veteran] Copy that. On it.
+[veteran] Understood. Moving.
+[veteran] Roger, I have it.
+[veteran rain] Copy. I will go slow in this weather.
+
+@wing.unable status
+[veteran] Unable.
+[veteran] Unable, <lead>. Cannot do that one.
+[veteran] Negative, unable. Not from here.
+[veteran] Unable. Give me another way to do it.
+[veteran] Cannot comply. Say again when it changes.
+[veteran loss] Unable. I will not leave anyone else out there alone.
+
+@wing.taskdone status
+[veteran] Task complete.
+[veteran] That is done, <lead>.
+[veteran] Done. Ready for the next one.
+[veteran] Finished. Nothing left to do there.
+[veteran] Complete. Clean job.
+
+@wing.taxiing ambient
+[veteran] Taxiing.
+[veteran] Rolling out to the runway, no hurry.
+[veteran] Moving. Easy does it.
+[veteran] Off the parking spot, taxiing.
+[veteran] Underway on the taxiway.
+
+@wing.holdingshort ambient
+[veteran] Holding short.
+[veteran] Short of the runway, waiting on you.
+[veteran] Stopped at the line. Checks are done.
+[veteran] Holding short, ready when you are.
+[veteran] At the hold line. Take your time.
+
+@wing.liningup ambient
+[veteran] Lining up.
+[veteran] On the runway, lined up.
+[veteran] Entering the runway now.
+[veteran] Runway is mine. Lined up.
+[veteran] Lined up and ready.
+
+@wing.rolling status
+[veteran] Rolling.
+[veteran] Takeoff roll, <lead>.
+[veteran] Throttle up, rolling.
+[veteran] Rolling now. See you upstairs.
+[veteran] Brakes off, rolling.
+[veteran night] Rolling. Watch the dark past the lights.
+
+@wing.airborne status
+[veteran] Airborne.
+[veteran] Wheels up, coming to join.
+[veteran] Airborne. Pulling in on you, <lead>.
+[veteran] Off the ground, joining.
+[veteran] Gear up. Airborne.
+
+@wing.down ambient
+[veteran] Down.
+[veteran] On the ground, rolling out.
+[veteran] Landed. Good to be back.
+[veteran] Wheels down, all in one piece.
+[veteran] Down and stopped. Home.
+[veteran recovery] Down safe. That is a good place to stop.
+[veteran loss] Down. Not everyone made it back, though.
+
+@wing.goaround status
+[veteran] Going around.
+[veteran] Not happy with it. Going around.
+[veteran] Waving it off, going around.
+[veteran] Going around. We will try again.
+[veteran] Missed the numbers. Going around, no fuss.
+
+@wing.engaging tactical
+[veteran] Engaging.
+[veteran] Engaging. Stay with me.
+[veteran] I am committing, engaging.
+[veteran] Engaged. Keep your head up.
+[veteran] Going in. Engaging now.
+[veteran night] Engaging. Trust your instruments.
+
+@wing.fox2 tactical
+[veteran] Fox two.
+[veteran] Fox two, <target>.
+[veteran] Fox two on the <target>.
+[veteran] Fox two. Heat seeker away at the <target>.
+[veteran] Fox two, <target>. Let it work.
+[veteran night] Fox two. The flash will find him, <target>.
+
+@wing.fox3 tactical
+[veteran] Fox three.
+[veteran] Fox three, <target>.
+[veteran] Fox three on the <target>, radar missile away.
+[veteran] Fox three. Keep him lit, <target>.
+[veteran] Fox three, <target>. Nothing to do but wait.
+
+@wing.magnum tactical
+[veteran] Magnum.
+[veteran] Magnum on the <target>.
+[veteran] Magnum, <target>. Radar goes quiet soon.
+[veteran] Magnum away, <target>.
+[veteran] Magnum. That <target> will not like it.
+
+@wing.rifle tactical
+[veteran] Rifle.
+[veteran] Rifle on the <target>.
+[veteran] Rifle, <target>. Missile off the rail.
+[veteran] Rifle away at the <target>.
+[veteran] Rifle. Ground target, <target>.
+
+@wing.splash tactical
+[veteran] Splash.
+[veteran] Splash, <target>.
+[veteran] Splash one <target>.
+[veteran] That is a splash. The <target> is gone.
+[veteran] Splash, <target>. Next.
+[veteran aftercombat] Splash, <target>. Good, now breathe.
+
+@wing.bandit tactical
+[veteran] Bandit, <bra>.
+[veteran] Bandit, <bra>. Looks like a <type>.
+[veteran] Bandit <bra>. Calm now, <lead>.
+[veteran] New bandit, <bra>, <type>.
+[veteran] Bandit at <bra>. I have eyes on it.
+[veteran night] Bandit, <bra>. Hard to see, but he is there.
+[veteran rain] Bandit, <bra>. Through the murk, a <type>.
+
+@wing.contact status
+[veteran] Contact, <bra>.
+[veteran] Contact, <bra>. A <type>.
+[veteran] Contact <bra>. Ground target, <type>.
+[veteran] New contact at <bra>, <type>.
+[veteran] Contact, <bra>. Marking it for you.
+[veteran night] Contact, <bra>. Someone is awake down there.
+
+@wing.bogeydope tactical
+[veteran] Nearest bandit, <bra>.
+[veteran] Bogey dope. Bandit <bra>, <type>.
+[veteran] Closest is a <type>, <bra>.
+[veteran] Bandit <bra>. Just the one for now.
+[veteran] Threat bearing <bra>. It is a <type>.
+
+@wing.clean tactical
+[veteran] Clean.
+[veteran] Nothing out there. Clean.
+[veteran] Skies are clean, <lead>.
+[veteran] Naked. Nothing on the scope.
+[veteran] Clean. Enjoy it while it lasts.
+[veteran aftercombat] Clean. We did that properly.
+
+@wing.panic emergency
+[veteran] Missile! Defending!
+[veteran] Missile inbound, breaking!
+[veteran] Defending!
+[veteran] Missile! Going defensive!
+
+@wing.defensiveclear tactical
+[veteran] Missile defeated. Defensive clear.
+[veteran] Clear. It missed.
+[veteran] Defeated it. Back in the fight.
+[veteran] Missile gone. No damage.
+[veteran] Defensive is over. Forget it, <lead>.
+
+@wing.pullup emergency
+[veteran] Pulling up!
+[veteran] Pull up, terrain!
+[veteran] Ground, pulling up!
+[veteran] Recovering, pulling up!
+
+@wing.breakoff emergency
+[veteran] Break off!
+[veteran] Breaking, traffic!
+[veteran] Collision! Breaking away!
+[veteran] Too close, break!
+
+@wing.maneuvering tactical
+[veteran] Maneuvering, <detail>.
+[veteran] Going <detail>.
+[veteran] Executing the <detail>, <lead>.
+[veteran] <detail>. Stay with me.
+[veteran] Flying a <detail> as ordered.
+
+@wing.maneuverdone status
+[veteran] Maneuver complete.
+[veteran] Out of the maneuver. Ready.
+[veteran] Maneuver flown. Back to normal.
+[veteran] That is finished. Resuming.
+[veteran] Maneuver done, <lead>.
+
+@wing.fallingback tactical
+[veteran] Falling back.
+[veteran] Too many of them. Falling back.
+[veteran] Disengaging. We are outnumbered.
+[veteran] Fall back, <lead>. Not a fair fight.
+[veteran] Pulling out. Better odds elsewhere.
+[veteran loss] Falling back. I will not lose another.
+
+@wing.rejoining status
+[veteran] Rejoining.
+[veteran] Coming back to formation.
+[veteran] Out of it. Rejoining on you, <lead>.
+[veteran] Disengaged, rejoining.
+[veteran] Back to the flight. Rejoining.
+
+@wing.winchester status
+[veteran] Winchester.
+[veteran] Winchester. Heading home.
+[veteran] I am Winchester, <lead>. Nothing left.
+[veteran] Winchester, going home to reload.
+[veteran] Out of ordnance. Winchester, RTB.
+[veteran recovery] Winchester. Already on the way home.
+
+@wing.outofammo status
+[veteran] Winchester. Staying with you.
+[veteran] No weapons left. I will stay in formation.
+[veteran] Empty. Staying with the wing.
+[veteran] Out of ammo, <lead>. Still your wingman.
+[veteran] Dry. I will watch your six.
+
+@wing.joker status
+[veteran] Joker, <n> minutes to bingo.
+[veteran] Joker. <n> minutes to bingo, <lead>.
+[veteran] Fuel is Joker. <n> minutes of play left.
+[veteran] Joker. About <n> minutes before Bingo.
+[veteran] Joker fuel, <n> minutes to bingo.
+[veteran night] Joker. Plan the landing in the dark.
+
+@wing.bingo status
+[veteran] Bingo.
+[veteran] Bingo fuel, <lead>.
+[veteran] Bingo. Time to head home.
+[veteran] I am at Bingo. Only the trip back.
+[veteran] Bingo. Fuel for home, nothing more.
+[veteran recovery] Bingo. Already pointed at home.
+
+@wing.fallingbehind status
+[veteran] Falling behind.
+[veteran] Cannot keep up, <lead>.
+[veteran] Dropping back. Slow down if you can.
+[veteran] I am losing you. Falling behind.
+[veteran] Behind the pace. I will catch up.
+
+@wing.damaged status
+[veteran] I am hit.
+[veteran] Damaged. Still flying.
+[veteran] Took a hit. Checking systems.
+[veteran] Damage. Nothing I cannot manage.
+[veteran] Hit, <lead>. She is still holding.
+[veteran aftercombat] Took a hit back there. Still airborne.
+
+@wing.airframelost tactical
+[veteran] <n> is down.
+[veteran] <n> is down. Eyes open.
+[veteran] We lost <n>. Stay sharp, <lead>.
+[veteran] <n> is gone. Keep flying.
+[veteran] Airframe lost, <n>.
+[veteran loss] <n> is down. Grieve on the ground.
+
+@wing.ejected tactical
+[veteran] <n> has ejected.
+[veteran] <n> ejected. I have a chute.
+[veteran] Chute out, <n>. Mark the position.
+[veteran] <n> got out. That is what counts.
+[veteran] <n> ejected, <lead>. Someone go get him.
+
+@wing.escortlost tactical
+[veteran] Escort lost.
+[veteran] The escort is gone, <lead>.
+[veteran] We lost the one we were guarding.
+[veteran] Escort down. We failed the job.
+[veteran] Lost the escort. Regroup.

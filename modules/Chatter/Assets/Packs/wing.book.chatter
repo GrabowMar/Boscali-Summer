@@ -1,0 +1,274 @@
+# Wingman personality: book (by the book, procedural, reliable)
+
+@wing.copy status
+[book] Copy, <lead>. Executing as briefed.
+[book] Wilco. Checklist started.
+[book] Roger, <lead>, order read back and accepted.
+[book] Understood. Proceeding per procedure.
+[book] Copy all. Commencing task.
+[book night] Copy, <lead>. Night procedures in effect.
+[book loss] Copy, <lead>. Wilco.
+
+@wing.unable status
+[book] Unable, <lead>. Outside briefed parameters.
+[book] Negative, unable to comply.
+[book] Unable. That isn't in the checklist, <lead>.
+[book] Request a revised task, <lead>. Unable as given.
+[book] Cannot comply. Standing by.
+
+@wing.taskdone status
+[book] Task complete, <lead>. Logging it.
+[book] As briefed, the task is complete.
+[book] Completed per procedure. Awaiting next task.
+[book] Done, <lead>. Checklist closed.
+[book] Nothing outstanding. Task finished.
+[book aftercombat] Task complete, <lead>. Debrief notes started.
+[book loss] Task complete, <lead>. Noting it for the debrief.
+
+@wing.taxiing ambient
+[book] Taxiing, <lead>. Brakes checked.
+[book] Leaving the spot per the taxi chart.
+[book] Taxi checks complete, moving.
+[book] Taxiing as briefed. Flight controls free.
+[book] Off the parking spot, following the line.
+[book night] Taxiing, lights on, <lead>. Night checks done.
+
+@wing.holdingshort ambient
+[book] Holding short, before takeoff checks.
+[book] Holding short of the runway, <lead>.
+[book] Stopped at the hold line. Pre-takeoff checklist.
+[book] Awaiting clearance as briefed. Holding short.
+[book] At the hold line. Flaps and trim set.
+
+@wing.liningup ambient
+[book] Lining up, checks complete.
+[book] Entering the runway, <lead>. Lights on.
+[book] Final items done. Lining up.
+[book] Runway entered, heading checked.
+[book] Lined up and ready, <lead>.
+[book rain] Lining up. Wet runway, rolling distance noted.
+
+@wing.rolling status
+[book] Rolling, <lead>. Engine instruments green.
+[book] Takeoff roll, as briefed.
+[book] Rolling. Speed checks on the call.
+[book] Beginning takeoff roll, <lead>.
+[book] Rolling now. Rotation at briefed speed.
+[book rain] Rolling. Wet runway technique applied.
+
+@wing.airborne status
+[book] Airborne, gear up, <lead>.
+[book] Wheels up, airborne. Joining as briefed.
+[book] Flaps up, gear checked. Airborne.
+[book] Positive rate, airborne, coming to join.
+[book] Closing on your position, <lead>. Airborne.
+[book night] Airborne, lights checked. Joining, <lead>.
+
+@wing.down ambient
+[book] Down, <lead>. Rollout normal.
+[book] Landed. Vacating the runway per procedure.
+[book] Wheels down, rollout complete. Landing checklist.
+[book] On the ground, brakes checked.
+[book] Stopped and down, <lead>.
+[book recovery] Down. Recovery complete, shutdown checks next.
+[book loss] Down, <lead>. Logging the loss for the debrief.
+
+@wing.goaround status
+[book] Going around, <lead>. Gear down, power up.
+[book] Unstable approach, going around.
+[book] Go around, go around. Climb straight ahead.
+[book] Missed approach, flying it again as briefed.
+[book] Approach not stable. Going around per procedure.
+
+@wing.engaging tactical
+[book] Engaging, <lead>, per the rules of engagement.
+[book] Committing. Engaging as briefed.
+[book] Master arm on, engaging.
+[book] The fight is on, <lead>. Engaging.
+[book] Commit, engaging. Weapons checks done.
+
+@wing.fox2 tactical
+[book] Fox two, <target>, shot per the briefed criteria.
+[book] Parameters met on the <target>. Fox two.
+[book] Fox two. Heat missile away at the <target>.
+[book] Target identified, <target>. Fox two, <lead>.
+[book] Awaiting the result. Fox two, away.
+
+@wing.fox3 tactical
+[book] Fox three, <target>, positively identified.
+[book] Radar lock held on the <target>. Fox three.
+[book] Radar missile away at the <target>. Fox three.
+[book] Timeline running, <lead>. Fox three.
+[book] Fox three, away, as briefed.
+
+@wing.magnum tactical
+[book] Magnum, <target>. Emitter confirmed.
+[book] Parameters met on the <target>. Magnum.
+[book] Anti-radiation missile away at the <target>. Magnum.
+[book] As briefed, <lead>. Magnum.
+[book] Magnum, away.
+
+@wing.rifle tactical
+[book] Rifle, <target>, identified and cleared.
+[book] Missile away at the <target>. Rifle.
+[book] Air-to-ground missile away at the <target>. Rifle.
+[book] Per the briefed target list, <lead>. Rifle.
+[book] Rifle, away.
+
+@wing.splash tactical
+[book] Splash one <target>, <lead>. Confirmed.
+[book] Splash, <target>. Kill confirmed on tape.
+[book] <target> destroyed. Splash one.
+[book] Reporting the kill as briefed. Splash.
+[book] Splash, <lead>. Target destroyed.
+[book loss] Splash, <target>. Kill logged, <lead>.
+
+@wing.bandit tactical
+[book] Bandit, <bra>, hostile as per ID.
+[book] Bandit! <bra>, <lead>.
+[book] Declared hostile. Bandit, <bra>.
+[book] New bandit, <bra>, <type>.
+[book] Calling it for the log. Bandit <bra>.
+
+@wing.contact status
+[book] Contact, <bra>. Ground target identified.
+[book] Ground contact, <bra>, <lead>.
+[book] New contact at <bra>, <type>. Reporting position.
+[book] Contact on the ground, <bra>. Awaiting tasking.
+[book] Logging a contact, <bra>. Report follows.
+
+@wing.bogeydope tactical
+[book] Nearest bandit, <bra>, <lead>.
+[book] Bandit, <bra>. Closest hostile.
+[book] Bandit <bra>, <type>. Nearest threat.
+[book] Picture: single bandit, <bra>.
+[book] Closest threat, <bra>. As requested.
+
+@wing.clean tactical
+[book] Clean, <lead>. No threats on the scope.
+[book] Picture clean. Scope is clear.
+[book] Naked, <lead>. No bandits.
+[book] Nothing within range. Clean.
+[book] Scope clear, as requested.
+[book aftercombat] Clean, <lead>. Recommend staying alert anyway.
+
+@wing.panic emergency
+[book] Missile! Defending!
+[book] Defending, missile inbound!
+[book] Break! Missile!
+[book] Missile, missile, defending!
+
+@wing.defensiveclear tactical
+[book] Missile defeated, <lead>. Resuming.
+[book] Defensive complete. Missile defeated.
+[book] Clean, missile is gone. Back on task.
+[book] The missile is gone. Checking systems.
+[book] Defeated it. Defensive done, <lead>.
+
+@wing.pullup emergency
+[book] Pull up! Ground proximity.
+[book] Terrain! Pulling up!
+[book] Pull up, pull up!
+[book] Ground avoidance engaged!
+
+@wing.breakoff emergency
+[book] Break off, break off!
+[book] Collision, breaking!
+[book] Traffic, breaking off, <lead>!
+[book] Too close, break!
+
+@wing.maneuvering tactical
+[book] Executing <detail>, as briefed.
+[book] <detail> started, <lead>.
+[book] Commencing <detail>, wilco.
+[book] Flying <detail> per the order.
+[book] Starting <detail> now.
+
+@wing.maneuverdone status
+[book] Maneuver complete, <lead>.
+[book] Returning to formation. Maneuver done.
+[book] Completed. Back to briefed position.
+[book] Reaction maneuver flown out, wilco.
+[book] Checks normal. Maneuver finished.
+
+@wing.fallingback tactical
+[book] Falling back, <lead>. Outnumbered.
+[book] Disengaging, outnumbered, per the plan.
+[book] Pulling out. Odds are outside limits.
+[book] Falling back to the rejoin point.
+[book] Outnumbered. I am disengaging.
+
+@wing.rejoining status
+[book] Rejoining, <lead>. Formation per the brief.
+[book] Coming back to formation.
+[book] Disengaged, rejoining on you.
+[book] Rejoin in progress, <lead>.
+[book] Returning to position as briefed.
+[book aftercombat] Rejoining, <lead>. Weapons status to follow.
+[book loss] Rejoining, <lead>. Closing the formation.
+
+@wing.winchester status
+[book] Winchester, <lead>. Returning to base.
+[book] Winchester. All weapons expended.
+[book] Out of weapons, Winchester, heading home.
+[book] Winchester, RTB per procedure.
+[book] Winchester. Notifying you, <lead>.
+[book recovery] Winchester. Inbound for the pattern as briefed.
+
+@wing.outofammo status
+[book] Weapons expended, <lead>. Remaining with the wing.
+[book] No ordnance remaining. Staying in formation.
+[book] Empty, remaining with the flight.
+[book] Out of ammo. Will support as briefed.
+[book] Racks empty, staying on you, <lead>.
+
+@wing.joker status
+[book] Joker, <n> minutes to bingo.
+[book] <n> minutes to bingo, <lead>. Joker fuel.
+[book] Joker fuel state, <n> minutes to bingo.
+[book] Fuel check. Bingo in <n> minutes.
+[book] Reached joker, <lead>. Bingo in <n>.
+
+@wing.bingo status
+[book] Bingo fuel, <lead>.
+[book] Bingo. Returning to base.
+[book] Bingo, per the fuel plan. Heading home.
+[book] Fuel at bingo, <lead>, RTB.
+[book] Bingo. Fuel for home only.
+[book recovery] Bingo. Entering the pattern per procedure.
+
+@wing.fallingbehind status
+[book] Falling behind, <lead>. Request speed reduction.
+[book] Unable to maintain pace. Falling behind.
+[book] I can't hold formation speed, <lead>.
+[book] Please reduce speed. Falling behind.
+[book] Speed exceeds my limits. Falling behind.
+
+@wing.damaged status
+[book] Damage taken, <lead>. Running checks.
+[book] I'm hit. Performing the damage checklist.
+[book] Damaged. Systems under review.
+[book] Hit, <lead>. Reporting damage.
+[book] Taking damage, assessing.
+[book rain] Hit, in rain. Adjusting the checklist.
+
+@wing.airframelost tactical
+[book] <n> is down, <lead>.
+[book] Airframe lost, number <n>.
+[book] We have lost <n>. Closing the formation.
+[book] Number <n> is down. Noting position.
+[book] Heads up, <lead>. <n> is down.
+
+@wing.ejected tactical
+[book] <n> has ejected, <lead>. Marking position.
+[book] Ejection, number <n>. Chute observed.
+[book] <n> is out. Noting the location.
+[book] Eject, eject, <n>. Reporting.
+[book] Number <n> ejected. Searching for a chute.
+
+@wing.escortlost tactical
+[book] Escort lost, <lead>.
+[book] The escorted aircraft is gone.
+[book] Escort is down. Reporting the loss.
+[book] Charge lost, <lead>. Awaiting orders.
+[book] We have lost the escort.

@@ -271,11 +271,11 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         /// <summary>Spec M7 §3: the launch on the radio (one Fox call per speaker per repeat window).</summary>
         private static void CallFox(WingMember m, WeaponStation w, Unit target)
         {
-            RadioDirector radio = RadioDirector.Instance;
+            WingChatter radio = WingChatter.Instance;
             if (radio == null) return;
             TargetRequirements req = w.WeaponInfo.targetRequirements;
             string type = target.definition != null ? target.definition.unitName : target.unitName;
-            radio.Say(m, RadioClass.Tactical, RadioCalls.ShotLine(target is Aircraft, req.minIR > 0f, req.minRadar > 0f), type, false);
+            radio.Shot(m, target is Aircraft, req.minIR > 0f, req.minRadar > 0f, type);
         }
 
         /// <summary>Missiles fired by Splash this mission (automation reads it).</summary>

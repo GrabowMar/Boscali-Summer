@@ -76,7 +76,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// <summary>A new pilot: a callsign not <paramref name="taken"/>, a name, a persona, a bio and a look, all inside the limits.</summary>
         public static CustomPilotRecord Generate(Func<int, int> next, Func<string, bool> taken)
         {
-            var persona = (ChatterPersona)next(4);
+            var persona = (ChatterPersona)next(ChatterPersonas.Count);
             string callsign = PilotText.Callsign(PilotIdentity.Callsign(next, c => taken != null && taken(PilotText.Callsign(c))));
             var r = new CustomPilotRecord
             {

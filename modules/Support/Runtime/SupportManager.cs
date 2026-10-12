@@ -760,10 +760,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
             SupportActionDefinition action = catalog.Find((SupportActionId)message.Action);
             string name = action != null ? action.Name : "Support";
             calls?.Answer(message.RequestId, result == SupportResult.Accepted, result == SupportResult.Accepted ? name : CallWordsFor(message));
-            if (ModuleServices.TryGet<IChatterChannel>(out var chatter))
-                chatter.Report("SUPPORT CONTROL", "SUPPORT:" + message.RequestId,
+            if (ModuleServices.TryGet<IChatter>(out var chatter))
+                chatter.Say(chatter.Station(BoscaliSummer.Core.Chatter.ChatterNet.Command, "SUPPORT CONTROL"), "support:" + message.RequestId,
                     result == SupportResult.Accepted ? name + " authorised. Request accepted." :
-                    name + ": " + CallWordsFor(message), ChatterUrgency.Status);
+                    name + ": " + CallWordsFor(message));
             if (result == SupportResult.Accepted)
             {
                 if ((SupportActionId)message.Action != SupportActionId.JtacUnlase)

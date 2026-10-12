@@ -11,7 +11,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public string Name { get; set; } = "UNKNOWN";
         public string Callsign { get; set; } = "PILOT";
         public string DialogueTag { get; set; }
-        public ChatterPersona Persona { get; set; } = ChatterPersona.Professional;
+        public ChatterPersona Persona { get; set; } = ChatterPersona.Veteran;
         public string Background { get; set; } = "";
         public int Xp { get; set; }
         public int Kills { get; set; }
@@ -134,11 +134,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
             if (string.IsNullOrWhiteSpace(tag)) tag = callsign.ToUpperInvariant();
 
             string personaStr = MiniJson.GetString(dict, "persona");
-            ChatterPersona persona = ChatterPersona.Professional;
+            ChatterPersona persona = ChatterPersona.Veteran;
             if (!string.IsNullOrWhiteSpace(personaStr))
             {
-                if (Enum.TryParse(personaStr, ignoreCase: true, out ChatterPersona parsed))
-                    persona = parsed;
+                persona = ChatterPersonas.Parse(personaStr);
             }
 
             string background = MiniJson.GetString(dict, "background") ?? "";

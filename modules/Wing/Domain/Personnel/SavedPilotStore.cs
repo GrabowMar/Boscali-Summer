@@ -180,7 +180,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 Callsign = callsign,
                 Name = name.Length > 0 ? name : callsign,
                 DialogueTag = PilotText.Tag(raw.DialogueTag),
-                Persona = Enum.IsDefined(typeof(ChatterPersona), raw.Persona) ? raw.Persona : ChatterPersona.Professional,
+                Persona = Enum.IsDefined(typeof(ChatterPersona), raw.Persona) ? raw.Persona : ChatterPersona.Veteran,
                 Background = PilotText.Bio(raw.Background),
                 Missions = keepRecord ? Math.Max(0, raw.Missions) : 0,
                 Sorties = keepRecord ? Math.Max(0, raw.Sorties) : 0,

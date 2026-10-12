@@ -66,9 +66,7 @@ namespace BoscaliSummer.Modules.Wing
             runtime.Register(wing);
             runtime.Register(new WingPlans());
             runtime.Register(new DebriefService());
-            var chatter = new RadioDirector();
-            runtime.Register(chatter);
-            context.AddService<IChatterChannel>(chatter);
+            runtime.Register(new WingChatter());
             runtime.Register(new SpawnService());
             runtime.Register(new PlayerAutopilot());
             runtime.Register(new WingHotkeys());
