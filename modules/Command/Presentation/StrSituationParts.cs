@@ -40,6 +40,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
         {
             switch (level)
             {
+                case 0: return "NOT MEASURED";
                 case 1: return "MAXIMUM READINESS";
                 case 2: return "HIGH ALERT";
                 case 3: return "ELEVATED";
@@ -49,18 +50,19 @@ namespace BoscaliSummer.Modules.Command.Presentation
         }
 
         public static AvState StateFor(int level) =>
-            level <= 2 ? AvState.Danger : level == 3 ? AvState.Caution : AvState.Ready;
+            level < 1 ? AvState.Inert : level <= 2 ? AvState.Danger : level == 3 ? AvState.Caution : AvState.Ready;
 
         public void Set(int level, string assessmentText, string countsText)
         {
-            int clamped = Mathf.Clamp(level, 1, 5);
+            // 0 is the census' "not measured": a dash and no ladder step, never DEFCON 1.
+            int clamped = level < 1 ? 0 : Mathf.Clamp(level, 1, 5);
             AvState s = StateFor(clamped);
-            bool changed = AvText.Set(number, clamped.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            bool changed = AvText.Set(number, clamped == 0 ? "\u2014" : clamped.ToString(System.Globalization.CultureInfo.InvariantCulture));
             changed |= AvText.Set(word, AvStates.Glyph(s) + WordFor(clamped));
             // The staff's sentence lives on hover; the panel body keeps only the number, the word and the ladder.
-            string tip = "DEFCON " + clamped + ": " + assessmentText;
+            string tip = clamped == 0 ? "DEFCON: not measured yet, the host has not reported a census." : "DEFCON " + clamped + ": " + assessmentText;
             AvHelpTip.Attach(frame.gameObject, string.IsNullOrEmpty(countsText) ? tip : tip + " · " + countsText);
-            ladder.Set(5 - clamped, s);
+            ladder.Set(clamped == 0 ? -1 : 5 - clamped, s);
             if (s != state) { state = s; Restyle(); }
             if (changed) Changed();
         }

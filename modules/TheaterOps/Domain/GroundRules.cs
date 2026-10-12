@@ -153,6 +153,24 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
         }
     }
 
+    /// <summary>A group none of whose members could be placed (all frozen, or no friendly side known) is stalled when that has lasted this long.</summary>
+    internal static class FrozenClock
+    {
+        /// <summary>Seconds with every member frozen before the group is stalled.</summary>
+        internal const float Seconds = 120f;
+
+        /// <summary>
+        /// since is the mission second the freeze began, 0 when none. True once a freeze that began at since has lasted Seconds. A pass in which some member
+        /// was placed, or a clock that is not a number, clears it: a NaN written into since would never read as a freeze again.
+        /// </summary>
+        internal static bool Step(ref float since, bool frozen, float now)
+        {
+            if (!frozen || !float.IsFinite(now)) { since = 0f; return false; }
+            if (!(since > 0f)) { since = now; return false; }
+            return now - since >= Seconds;
+        }
+    }
+
     /// <summary>Where to try next when the staged point is water or too steep; never forward of the line.</summary>
     internal static class SlotSearch
     {

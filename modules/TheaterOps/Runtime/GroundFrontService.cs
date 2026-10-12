@@ -32,7 +32,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         private const float TraceSeconds = 5f;
         private const float StaleSeconds = 6f;
         private const float StallLockSeconds = 300f;
-        private const float AllFrozenStallSeconds = 120f;
         private const float SettleSeconds = 20f;
         private const float PincerFlankMeters = 750f;
         private const float StagingReachMeters = 30000f;
@@ -173,6 +172,17 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             sweepCursor = 0;
             nextUpdate = lastPass = 0f;
             adapterOn = false;
+            diagnosed.Clear();
+            diagnosedTotal = faults = 0;
+        }
+
+        private static int faults;
+
+        /// <summary>The patches call this instead of letting an exception reach vanilla's spawn path or its per-vehicle destination query; the first few per scene are logged.</summary>
+        internal static void LogFault(string where, Exception error)
+        {
+            if (faults++ >= 3) return;
+            Plugin.Logger?.LogWarning("[THEATER OPS] ground steering fault in " + where + ": " + error);
         }
 
         private void ClearGroups()
@@ -366,7 +376,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             if (now < nextUpdate) return;
             nextUpdate = now + UpdateSeconds;
             adapterOn = AdapterEnabled;
-            lastPass = now;
             if (!adapterOn)
             {
                 if (groups.Count > 0 || members.Count > 0) ClearGroups();
@@ -391,6 +400,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 AssignGroups(fs, now);
             }
             for (int i = groups.Count - 1; i >= 0; i--) RefreshGroup(groups[i], now);
+            // Stamped when the pass has finished, not when it began: a pass that throws leaves the stamp to age, so within StaleSeconds the hook hands every vehicle back to vanilla.
+            lastPass = now;
         }
 
         /// <summary>

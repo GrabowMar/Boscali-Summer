@@ -31,6 +31,8 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
             EtaIsUnknownUntilThereIsARate();
             ClosingNeedsEvidence();
             MeasuredLeadsFromSliceZero();
+            FrozenClockStallsAfterTwoMinutesAndAPlacedPassClearsIt();
+            FrozenClockIgnoresAClockItCannotRead();
             SlotSearchOffsets();
             SlotPullWalksTowardTheGroupAndStopsAtIt();
             SlotPullRefusesWhatItCannotMeasure();
@@ -372,6 +374,31 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
             TestAssert.That(pastAlong == 0f && pastBack == 0f, "a refusal returns no offset");
             TestAssert.That(!SlotSearch.Offset(-1, out float lowAlong, out float lowBack), "index -1 refuses");
             TestAssert.That(lowAlong == 0f && lowBack == 0f, "a refusal returns no offset");
+        }
+
+        // ---- FrozenClock (a group none of whose members can be placed is stalled after two minutes)
+
+        private static void FrozenClockStallsAfterTwoMinutesAndAPlacedPassClearsIt()
+        {
+            float since = 0f;
+            TestAssert.That(!FrozenClock.Step(ref since, true, 100f), "the first frozen pass only starts the clock");
+            TestAssert.Near(since, 100f, "and stamps the second it began");
+            TestAssert.That(!FrozenClock.Step(ref since, true, 219.9f), "119.9 s frozen is not yet a stall");
+            TestAssert.That(FrozenClock.Step(ref since, true, 220f), "120 s frozen is a stall");
+            TestAssert.That(FrozenClock.Step(ref since, true, 400f), "and stays one while the freeze lasts");
+            TestAssert.That(!FrozenClock.Step(ref since, false, 401f) && since == 0f, "one pass with a member placed clears the clock");
+            TestAssert.That(!FrozenClock.Step(ref since, true, 402f), "a later freeze starts again from that pass");
+            TestAssert.Near(since, 402f, "not from the old one");
+            TestAssert.Near(FrozenClock.Seconds, 120f, "two minutes");
+        }
+
+        private static void FrozenClockIgnoresAClockItCannotRead()
+        {
+            float since = 50f;
+            TestAssert.That(!FrozenClock.Step(ref since, true, float.NaN) && since == 0f, "a NaN clock clears the freeze instead of storing the NaN");
+            since = float.NaN;
+            TestAssert.That(!FrozenClock.Step(ref since, true, 100f), "a NaN start is a new freeze, not a stall");
+            TestAssert.Near(since, 100f, "stamped again");
         }
 
         // ---- SlotPull (the second tier of the slot search: the line is at water, the group is the only known land)

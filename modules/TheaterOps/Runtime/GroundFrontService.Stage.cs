@@ -44,12 +44,14 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             if (frame == Frame.HoldInPlace)
             {
                 GroundProbe.FrameHold++;
-                Diagnose(group, "no friendly side known (hold in place)");
+                if (CanDiagnose(group, "side")) Say(group, "no friendly side known (hold in place)");
                 // Which side is ours is unknown: hold where we stand rather than guess and cross the line.
                 foreach (Member member in group.Members) Freeze(member, now, 0f);
                 group.Approach = default;
                 group.Closing = false;
                 group.Eta = -1;
+                // A side that stays unknown is a freeze like any other: the stall release applies, or the group would hold the effort's quota for ever.
+                if (FrozenClock.Step(ref group.AllFrozenSince, true, now)) MarkStalled(group, now);
                 return;
             }
             if (group.Sealed && !group.ReportedRally)
@@ -151,8 +153,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                         continue;
                 }
                 if (TryPlace(member, group, x, z, exact)) continue;
-                if (!member.Degraded) Diagnose(group, "no usable slot for lane " + member.Lane + " at " + (int)x + "," + (int)z + ", group " +
-                    (int)Scalar.Distance2D(group.CentroidX, group.CentroidZ, x, z) + " m away");
+                if (!member.Degraded && CanDiagnose(group, "slot")) Say(group, "no usable slot for lane " + member.Lane + " at " + (int)x + "," + (int)z + ", group " +
+                    (int)Scalar.Distance2D(group.CentroidX, group.CentroidZ, x, z) + " m away, staged point " + Terrain(x, z));
                 Freeze(member, now, 10f);
             }
         }
@@ -223,13 +225,31 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             member.RetryAt = now + retryIn;
         }
 
-        private static int diagnosed;
+        private const int DiagnosedPerKey = 3, DiagnosedPerScene = 48;
+        private static readonly System.Collections.Generic.Dictionary<string, int> diagnosed = new System.Collections.Generic.Dictionary<string, int>();
+        private static int diagnosedTotal;
 
-        /// <summary>The first few slot and side failures of a scene go to the log with their coordinates, so a stuck group can be told from a bad map.</summary>
-        private static void Diagnose(Group group, string what)
+        /// <summary>The first few slot failures and the first few side failures of each front or operation key in a scene go to the log with their coordinates, so a stuck group can be told from a bad map (one early key must not use up the allowance of the later ones).</summary>
+        private static bool CanDiagnose(Group group, string topic)
         {
-            if (diagnosed >= 12) return;
-            diagnosed++;
+            string key = (group.Key ?? string.Empty) + "|" + topic;
+            diagnosed.TryGetValue(key, out int seen);
+            if (seen >= DiagnosedPerKey || diagnosedTotal >= DiagnosedPerScene) return false;
+            diagnosed[key] = seen + 1;
+            diagnosedTotal++;
+            return true;
+        }
+
+        /// <summary>What the terrain says at a staged point that no member could use: no hit, below the sea, or too steep.</summary>
+        private static string Terrain(float x, float z)
+        {
+            if (!float.IsFinite(x) || !float.IsFinite(z)) return "not a number";
+            if (!PathfindingAgent.RaycastTerrain(new GlobalPosition(x, 0f, z), out RaycastHit hit)) return "no terrain hit";
+            return "y " + (int)hit.point.y + " (sea " + (int)Datum.LocalSeaY + "), slope normal " + hit.normal.y.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private static void Say(Group group, string what)
+        {
             Plugin.Logger?.LogInfo("[THEATER OPS] FRONT GROUP " + group.Id + " — " + group.Stage.ToString().ToUpperInvariant() + ": " + what + " (centre " + (int)group.CenterX + "," +
                 (int)group.CenterZ + ", fix " + (int)group.FixX + "," + (int)group.FixZ + ", key " + group.Key + ")");
         }
@@ -329,11 +349,10 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 // Every member is frozen: no target to close on. A freeze that lasts is a stall too.
                 group.Closing = false;
                 group.Eta = -1;
-                if (group.AllFrozenSince <= 0f) group.AllFrozenSince = now;
-                else if (now - group.AllFrozenSince >= AllFrozenStallSeconds) MarkStalled(group, now);
+                if (FrozenClock.Step(ref group.AllFrozenSince, true, now)) MarkStalled(group, now);
                 return;
             }
-            group.AllFrozenSince = 0f;
+            FrozenClock.Step(ref group.AllFrozenSince, false, now);
             group.TargetX = tx / staged;
             group.TargetZ = tz / staged;
             float distance = Scalar.Distance2D(group.CentroidX, group.CentroidZ, group.TargetX, group.TargetZ);

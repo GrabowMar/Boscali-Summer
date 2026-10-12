@@ -49,11 +49,15 @@ namespace BoscaliSummer.Modules.TheaterOps.Patches
             GroundProbe.AdvanceRan++;
             if (!(unit is GroundVehicle vehicle)) return;
             GroundProbe.AdvanceGround++;
-            if (GroundFrontService.Active is { } front && front.TryGetDestination(vehicle, out GlobalPosition frontDestination))
+            if (!(GroundFrontService.Active is { } front)) return;
+            // The poll runs inside vanilla's per-vehicle navigation: a fault in the read must hand the answer back to vanilla, not unwind into it.
+            try
             {
+                if (!front.TryGetDestination(vehicle, out GlobalPosition frontDestination)) return;
                 destination = frontDestination;
                 __result = true;
             }
+            catch (Exception error) { GroundFrontService.LogFault("destination query", error); }
         }
 
         private static MethodBase ResolveOrThrow(Type[] parameters)

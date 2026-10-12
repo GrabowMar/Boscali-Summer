@@ -443,7 +443,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             string prompt = MapPicker.Prompt;
             string status = !string.IsNullOrEmpty(alarm) ? alarm
                 : !string.IsNullOrEmpty(prompt) ? prompt : Ambient(state);
-            AvState footerState = state.DefconLevel <= 2 ? AvState.Danger
+            AvState footerState = state.DefconLevel < 1 ? AvState.Inert : state.DefconLevel <= 2 ? AvState.Danger
                 : state.DefconLevel == 3 ? AvState.Caution : AvState.Inert;
             console.Footer.Set(status, footerState);
         }
@@ -516,6 +516,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private string Ambient(TacticalTheaterState state)
         {
             string text = overlay == null || !overlay.HasControlData ? "sector field unavailable"
+                : state.ContestedSectorCount < 0 ? "sector field not measured yet"
                 : state.ContestedSectorCount > 0
                 ? state.ContestedSectorCount + " contested sector" +
                   (state.ContestedSectorCount == 1 ? "" : "s") + " · frontline " +
