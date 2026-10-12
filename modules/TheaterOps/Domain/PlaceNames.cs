@@ -62,7 +62,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
             if (text.Length > max)
             {
                 int cut = max;
-                for (int i = max; i >= max / 2 && i > 0; i--)
+                for (int i = max - 1; i >= max / 2 && i > 0; i--)
                     if (text[i] == ' ') { cut = i; break; }
                 text = text.Substring(0, cut);
             }
