@@ -474,7 +474,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 { "eligible", front.EligibleCount(hq) }, { "members", memberBuffer.Count }, { "ungrouped", stats.Ungrouped }, { "groups", groupBuffer.Count },
                 { "assigned", assigned }, { "assignedPeak", memo.AssignedPeak }, { "expected", expected }, { "quotaGap", Math.Max(0, expected - assigned) },
                 { "steered", steered }, { "landedGroups", landedGroups }, { "landedGroupsPeak", memo.LandedPeak }, { "strayed", strayed }, { "arrivedOrClosing", arrivedOrClosing }, { "closingPeak", memo.ClosingPeak },
-                { "onSlot", onSlot }, { "staged", stagedMembers }, { "frozen", frozen }, { "contactGroups", contactGroups }, { "withdrawGroups", withdrawGroups }, { "stalledGroups", stalledGroups },
+                { "onSlot", onSlot }, { "staged", stagedMembers }, { "frozen", frozen },
+                { "stagedShare", AliveShare(alive, stagedMembers, false) }, { "frozenShare", AliveShare(alive, frozen, true) }, { "contactGroups", contactGroups }, { "withdrawGroups", withdrawGroups }, { "stalledGroups", stalledGroups },
                 { "maxContactDwellS", stats.MaxContactDwell }, { "rekeysSincePick", stats.Rekeys }, { "effortSwaps", stats.EffortSwaps },
                 { "traceCount", front.TraceCount(hq) },
                 { "supportSeen", stats.SupportSeen }, { "supportNavigating", stats.SupportNavigating }, { "supportEnrolled", supportEnrolled },
@@ -485,6 +486,14 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 { "reportMoving", reportMoving }, { "movingDiff", reportMoving < 0 ? -1 : Math.Abs(reportMoving - arrivedOrClosing) },
                 { "slotDriftM", drift },
             };
+        }
+
+        /// <summary>The share of the live members that count, for the scenario's floor and ceiling; with no member at all, a value that fails both (a floor reads -1, a ceiling 2).</summary>
+        private static float AliveShare(Dictionary<int, int> alive, int count, bool ceiling)
+        {
+            int total = 0;
+            foreach (int n in alive.Values) total += n;
+            return total > 0 ? (float)count / total : ceiling ? 2f : -1f;
         }
 
         /// <summary>A depot-route late vehicle is whatever new vehicle of that definition and faction appeared since the call.</summary>

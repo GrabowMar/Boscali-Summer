@@ -128,6 +128,10 @@ def ground(name, mission, seat_at, esc):
     # of members the staff answered never falls under half at any named sample, and over the run most enrolled polls were answered (slice 0 saw 27 and 93 percent).
     for sample in ("p1", "p2", "p3", "p4", "p5"): checks += [above(sample + ".hook.answeredShare", 0.5)]
     checks += [above("p5.hook.overrideShare", 0.6)]
+    # Defect 1 of the defect pass (Terminal Control froze 85 and 75 percent of the ground at p5 and staged 0 and 12 percent): at the later readbacks, in both missions and for
+    # both factions, at least 40 percent of the live vehicles hold a staged destination and at most half are held in place. The fixed build reads 55-83 and 0-28 in Terminal Control.
+    for sample in ("p4", "p5"):
+        for f in (A, B): checks += [above(sample + f + ".stagedShare", 0.4), below(sample + f + ".frozenShare", 0.5)]
     checks += [below("p5.delivery.airbaseRewrites", 0), above("p5.delivery.calls", 1),
                equals("off" + A + ".reason", "TACTICS_OFF"), below("off" + A + ".members", 0), above("on" + A + ".members", 4),
                {"check": "log_match", "pattern": "Exception", "max": 0}]

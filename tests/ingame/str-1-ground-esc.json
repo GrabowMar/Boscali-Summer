@@ -533,6 +533,46 @@
       "min": 0.6
     },
     {
+      "check": "result_above",
+      "path": "p4.ground.boscali.stagedShare",
+      "min": 0.4
+    },
+    {
+      "check": "result_below",
+      "path": "p4.ground.boscali.frozenShare",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "p4.ground.primeva.stagedShare",
+      "min": 0.4
+    },
+    {
+      "check": "result_below",
+      "path": "p4.ground.primeva.frozenShare",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "p5.ground.boscali.stagedShare",
+      "min": 0.4
+    },
+    {
+      "check": "result_below",
+      "path": "p5.ground.boscali.frozenShare",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "p5.ground.primeva.stagedShare",
+      "min": 0.4
+    },
+    {
+      "check": "result_below",
+      "path": "p5.ground.primeva.frozenShare",
+      "max": 0.5
+    },
+    {
       "check": "result_below",
       "path": "p5.delivery.airbaseRewrites",
       "max": 0
