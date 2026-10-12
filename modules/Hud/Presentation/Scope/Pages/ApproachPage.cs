@@ -422,8 +422,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void Chrome(ScopeCanvas g)
         {
             g.Box(FbX, FbY, FbW, FbH + extra, Faint, 0.9f);
-            g.Line(FbX, VpY0, FbX + FbW, VpY0, Faint, 0.9f);
-            g.Line(FbX, vpY1, FbX + FbW, vpY1, Faint, 0.9f);
+            g.Line(FbX, vpY1, FbX + FbW, vpY1, Faint, 0.9f);      // the rule under the runway sub-header, the ladder | stats divider and the rule above SPD are gone (LAYOUT.md 12.4)
             g.Line(VpX1, VpY0, VpX1, vpY1, Faint, 0.9f);
             bool scales = d.Stage <= ApproachStage.Glide && d.HasIls && !d.Pad;
             float right = FbX + FbW - 6f;
@@ -513,10 +512,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Stat(g, "RA", ScopeStr.Cat("", (int)Math.Max(0f, Math.Round(AvUnitTable.Altitude(d.RadarAltM, units))), null), imperial ? "FT" : "M", sx, 70f);
             Stat(g, "V/S", ScopeStr.Cat("", AvUnitTable.Climb(-d.SinkMps, units), imperial ? 0 : 1, null), imperial ? "FPM" : "M/S", sx, 108f);
             if (d.HasWind) { Crosswind(); Stat(g, "XW", xwValue, ScopeStr.SpeedUnit(units), sx, 146f); }
-            g.Line(346f, 66f, 346f, 176f, Faint);
 
-            // Speed block: the delta bar around the speed the approach wants (centre = target, +-20 km/h); on the ground the ground speed and the brakes.
-            g.Line(x0, 188f, xr, 188f, Faint);
+            // Speed block: a short tick ruler with one index mark at the speed delta (centre = the speed the approach wants, +-20 km/h); on the ground the ground speed and the brakes.
             float by = 206f + extra, bw = 128f, bx = x0 + 2f, labelY = 224f + extra;
             string speedUnit = ScopeStr.SpeedUnitSp(units);
             if (d.Stage != ApproachStage.Rollout)
@@ -528,13 +525,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     bool caution = CautionSpeed, on = ApproachMath.OnSpeed(dv);
                     ScopeTone tone = caution ? Amber : Ink;
                     g.Text(on ? (d.Autoland ? "ON SPD" : "ON REF") : ScopeStr.Cat(dv > 0f ? "FAST " : "SLOW ", AvUnitTable.Speed(dv, units), 0, null, true), xr - 4f, 197f, on ? Hi : tone, 12f, ScopeAlign.Right, caution);
-                    g.Box(bx, by, bw, 10f, Dim, 0.85f);
-                    g.Fill(bx + 2f + Mathf.Round((bw - 4f) * 0.375f), by + 2f, Mathf.Round((bw - 4f) * 0.25f), 6f, Faint, 0.8f);
-                    float cx = bx + bw / 2f, vx = cx + ApproachMath.Clamp(dv / ApproachMath.SpeedBarMps, -1f, 1f) * (bw / 2f - 3f);
-                    g.Fill(Mathf.Round(Math.Min(cx, vx)), by + 2f, Math.Max(1f, Mathf.Round(Math.Abs(vx - cx))), 6f, tone);
-                    g.Line(cx, by - 3f, cx, by + 13f, Hi);
-                    g.Text("SLOW", bx, labelY, Dim, 12f, ScopeAlign.Left, false, 0.85f);
-                    g.Text("FAST", bx + bw, labelY, Dim, 12f, ScopeAlign.Right, false, 0.85f);
+                    Ruler(g, bx, by, bw, ApproachMath.RulerFrac(dv), caution ? Amber : Hi);
                 }
                 else g.Text(ScopeStr.Cat("", (int)Math.Round(AvUnitTable.Speed(d.SpeedMps, units)), speedUnit), xr - 4f, 197f, Hi, 12f, ScopeAlign.Right, true);
             }
@@ -542,7 +533,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 g.Text("GND SPD", x0 + 2f, 197f, Dim);
                 g.Text(ScopeStr.Cat("", (int)Math.Round(AvUnitTable.Speed(d.GroundMps, units)), speedUnit), xr - 4f, 197f, Hi, 12f, ScopeAlign.Right, true);
-                g.Bar(bx, by, bw, 10f, rolloutRef > 1f ? d.GroundMps / rolloutRef : 0f, Ink);
+                Ruler(g, bx, by, bw, rolloutRef > 1f ? d.GroundMps / rolloutRef : 0f, Hi);
                 g.Text("BRAKES", bx, labelY, Dim, 12f, ScopeAlign.Left, false, 0.85f);
                 g.Text(d.Autoland ? "AUTO" : d.Airbrake ? "ON" : "OFF", bx + bw, labelY, Hi, 12f, ScopeAlign.Right);
             }
@@ -550,6 +541,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // Configuration checks: the gear, and the airbrake (the game has no flaps).
             Chip(g, x0, 238f + extra, "GEAR", d.GearDown, true, t);
             Chip(g, x0 + 70f, 238f + extra, "BRK", !(d.Airbrake && d.Stage != ApproachStage.Rollout), false, t);
+        }
+
+        /// <summary>A short tick ruler (LAYOUT.md 12.4): nine DIM ticks, the middle one taller, and one 2 x 16 index mark at <paramref name="frac"/> across it. No track, no fill, no end labels.</summary>
+        private static void Ruler(ScopeCanvas g, float x, float y, float w, float frac, ScopeTone tone)
+        {
+            for (int k = 0; k <= 8; k++)
+            {
+                float tx = Mathf.Round(x + 2f + (w - 4f) * k / 8f), inset = k == 4 ? 0f : 3f;
+                g.Line(tx, y + inset, tx, y + 10f - inset, Dim);
+            }
+            g.Fill(Mathf.Round(x + 2f + (w - 4f) * ApproachMath.Clamp(frac, 0f, 1f)) - 1f, y - 3f, 2f, 16f, tone);
         }
 
         private static void Chip(ScopeCanvas g, float x, float y, string label, bool ok, bool flash, float t)

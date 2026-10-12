@@ -205,7 +205,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Line(CX, CY - 12f, CX, CY - 4f, Hi, 0.8f); g.Line(CX, CY + 4f, CX, CY + 12f, Hi, 0.8f);
         }
 
-        /// <summary>The target box: corner brackets (dashed until the seeker locks, amber on the last known place), the target's name above and the seeker's word below (LAST KNOWN once the target itself is gone).</summary>
+        /// <summary>The target box: corner brackets (dashed until the seeker locks, amber on the last known place), the target's name above and the seeker's word beside it (LAST KNOWN once the target itself is gone): the converging gates run below the box.</summary>
         private void TargetBox(ScopeCanvas g, float tx, float ty, float half, bool warn)
         {
             bool locked = d.Mode == CamMode.Locked;
@@ -221,13 +221,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             if (c > 1.01f) g.Ring(tx, ty, h2 * 1.25f, Hi, (1f - u) * 0.7f);
             if (warn) g.Text("?", tx, ty + 1f, Amber, 16f, ScopeAlign.Center, true);
-            // the name above and the word below, each kept whole between the frame and the tape
+            // the name above, kept whole between the frame and the tape; the word beside the box, on its right while it fits clear of the tape, else on its left (LAYOUT.md 12.7)
             string word = d.HasTarget ? MissileCamMath.ModeWord(d.Mode, true) : "LAST KNOWN";
-            float nameHalf = ScopeCanvas.TextW(d.Target) / 2f + 5f, wordHalf = ScopeCanvas.TextW(word) / 2f + 2f;
+            float nameHalf = ScopeCanvas.TextW(d.Target) / 2f + 5f;
             if (!string.IsNullOrEmpty(d.Target))
                 g.PlateTag(d.Target, Mathf.Clamp(tx, FX + 2f + nameHalf, TapeLeft - 2f - nameHalf), Mathf.Clamp(ty - h2 - 12f, FY + 22f, FY + FH - 40f), warn ? Amber : Ink, 12f, ScopeAlign.Center);
-            g.Text(word, Mathf.Clamp(tx, FX + 2f + wordHalf, TapeLeft - 2f - wordHalf), Mathf.Clamp(ty + h2 + 12f, FY + 40f, FY + FH - 14f),
-                warn ? Amber : locked ? Hi : Dim, 12f, ScopeAlign.Center, d.Mode != CamMode.DataLink);
+            bool right = tx + h2 + 8f + (float)Math.Ceiling(ScopeCanvas.TextW(word)) <= FX + FW - 100f;
+            g.Text(word, right ? tx + h2 + 8f : tx - h2 - 8f, Mathf.Clamp(ty, FY + 30f, FY + FH - 30f), warn ? Amber : locked ? Hi : Dim, 12f, right ? ScopeAlign.Left : ScopeAlign.Right, d.Mode != CamMode.DataLink);
         }
 
         /// <summary>The seeker block: the target against the seeker's cone (50 degrees at the rim), the mode, the angle off the boresight and the seeker's class.</summary>

@@ -36,6 +36,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly System.Collections.Generic.Dictionary<int, float> lockSaid = new System.Collections.Generic.Dictionary<int, float>(8), spikeSaid = new System.Collections.Generic.Dictionary<int, float>(8);
         private readonly int[] baseAmmo = new int[HudCm.MaxStations];
         private readonly KeepOut keep = new KeepOut();
+        private ScopeRect beam;
+        private bool hasBeam;
         private readonly float[] segs = new float[4 * 14], trailXY = new float[2 * 12], wedge = new float[2 * 14];
         private int cueBaseFor = -1;
 
@@ -237,6 +239,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             float t = now;
             keep.Clear();
+            hasBeam = false;
             keep.Add(CX - 13f, CY - 13f, 26f, 26f);
             keep.Add(COL - 4f, 30f, CW + 8f, 54f);          // the call box
             keep.Add(COL - 4f, 230f, CW + 8f, 66f);         // the time bars
@@ -261,7 +264,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 g.Text(ScopeStr.Cat("SAM ENV x", d.SamRings, null), 5f, 288f, d.SamRings > 0 ? Amber : Dim, 12f, ScopeAlign.Left, d.SamRings > 0);
         }
 
-        /// <summary>The notch wedge on the 3/9 line the nearest radar missile is to be steered into: hatched, dashed until it is beamed.</summary>
+        /// <summary>
+        /// The notch wedge on the 3/9 line the nearest radar missile is to be steered into: hatched, dashed until it is beamed (LAYOUT.md 12.2). Its box grown by 8 is a keep-out (labels stay off the hatch) and the
+        /// BEAM / BEAMED tag hangs 8 under its lowest point, 14 left of its inner end, which keeps it clear of the nearest missile's arc.
+        /// </summary>
         private void Wedge(ScopeCanvas g)
         {
             if (cueSide == 0 || (cue != ThreatCue.Beam && cue != ThreatCue.Chaff)) return;
@@ -274,9 +280,24 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.FillPoly(path, Ink, on ? 0.3f : 0.08f + 0.06f * ScopeCanvas.Pulse(now, 1.5f));
             g.Hatch(path, 5f, Ink, on ? 0.55f : 0.35f);
             g.Path(path, Ink, on ? 1f : 0.7f, 1f, true, on ? 0f : 3f, on ? 0f : 3f);
-            At(side, R * 0.55f, out float lx, out _);
-            ScopeRect r = g.PlateTag(on ? "BEAMED" : "BEAM", lx, CY + 21f, on ? Hi : Ink, 12f, ScopeAlign.Center);
-            keep.Add(r.X, r.Y, r.W, r.H);
+            float x0 = float.MaxValue, y0 = float.MaxValue, x1 = float.MinValue, y1 = float.MinValue;
+            for (int i = 0; i < n; i++)
+            {
+                x0 = Math.Min(x0, wedge[2 * i]); x1 = Math.Max(x1, wedge[2 * i]);
+                y0 = Math.Min(y0, wedge[2 * i + 1]); y1 = Math.Max(y1, wedge[2 * i + 1]);
+            }
+            keep.AddWedge(x0 - 8f, y0 - 8f, x1 - x0 + 16f, y1 - y0 + 16f);
+            At(side, R * 0.38f, out float lx, out _);
+            beam = g.PlateTag(on ? "BEAMED" : "BEAM", lx - 14f, Mathf.Floor(y1 + 17f), on ? Hi : Ink, 12f, ScopeAlign.Center);
+            hasBeam = true;
+            keep.Add(beam.X, beam.Y, beam.W, beam.H);
+        }
+
+        /// <summary>Whether the point of the TTI ring of radius <paramref name="r"/> at bearing <paramref name="a"/> is within 6 of the BEAM tag.</summary>
+        private bool OnBeamTag(float a, float r)
+        {
+            At(a, r, out float x, out float y);
+            return x > beam.X - 6f && x < beam.X + beam.W + 6f && y > beam.Y - 6f && y < beam.Y + beam.H + 6f;
         }
 
         private void Rings(ScopeCanvas g)
@@ -287,7 +308,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 float r = Rr(v);
                 g.Ring(CX, CY, r, v == 20 ? Dim : Faint, v == 20 ? 0.85f : 1f, 1f, Ink, 0f, v == 20 ? 0f : 4f, v == 20 ? 0f : 3f);
                 At(152f, r, out float x, out float y);
-                g.Text(ScopeStr.Cat("", v, "S"), x + 3f, y + 1f, Dim, 12f, ScopeAlign.Left, false, 0.9f);
+                ReadOnlySpan<char> label = ScopeStr.Cat("", v, "S");
+                g.Text(label, x + 3f, y + 1f, Dim, 12f, ScopeAlign.Left, false, 0.9f);
+                keep.Add(x - 4f, y - 8f, (float)Math.Round(ScopeCanvas.TextW(label)) + 16f, 18f);      // a ring's label is a keep-out too: the tags dodge it (LAYOUT.md 12.2)
             }
             for (int b = 0; b < 360; b += 10)
             {
@@ -393,7 +416,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 float al = nearest ? 1f : 0.6f;
                 if (nearest)
                 {
-                    g.Arc(CX, CY, r, b - 38f, b + 38f, Red, 0.7f);
+                    // the arc of its TTI ring stops 2 degrees short of the BEAM tag instead of running through its underline
+                    float a0 = b - 38f, a1 = b + 38f;
+                    if (hasBeam)
+                    {
+                        for (float a = b + 1f; a <= b + 38f; a++) if (OnBeamTag(a, r)) { a1 = a - 2f; break; }
+                        for (float a = b - 1f; a >= b - 38f; a--) if (OnBeamTag(a, r)) { a0 = a + 2f; break; }
+                    }
+                    if (a1 > a0 + 1f) g.Arc(CX, CY, r, a0, a1, Red, 0.7f);
                     g.Ring(CX, CY, r, Red, 0.16f);
                 }
                 g.Dashed(px, py, CX, CY, Red, nearest ? 0.8f : 0.45f, 1f, -t * 14f);
@@ -426,6 +456,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             float tw = (float)Math.Round(ScopeCanvas.TextW(label, 12f) + 8f), th = 17f;
             keep.Add(px - 10f, py - 10f, 20f, 20f);
             keep.Place(LabelSpots.Threat, px, py, tw, th, new ReadOnlySpan<float>(segs, 0, segCount), 2f, RB, 32f, 292f, out float x, out float y);
+            // a tag that had to move away from its missile is tied to it by a short leader that never runs through another label (LAYOUT.md 12.2)
+            float nx = Mathf.Clamp(px, x, x + tw), ny = Mathf.Clamp(py, y, y + th), dd = Mathf.Sqrt((px - nx) * (px - nx) + (py - ny) * (py - ny));
+            if (dd > 18f)
+            {
+                float ex = px - (px - nx) / dd * 12f, ey = py - (py - ny) / dd * 12f;
+                if (!keep.LeaderCrosses(nx, ny, ex, ey, px, py)) g.Line(nx, ny, ex, ey, Red, nearest ? 0.8f : 0.5f);
+            }
             if (nearest)
             {
                 g.Fill(x, y, tw, th, Red);

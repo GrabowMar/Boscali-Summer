@@ -12,6 +12,8 @@ using static UnityCheckHarness;
 //   gauges-threat                  four gauges in two rows of the gauge line, every word whole
 //   notice-red-x3                  a coalesced red notice: "x3" apart at the right end, the words clear of it (WIDE, STACK, 1280 x 720); once it reads no "x" at all
 //   threat-lamps-only              the lamp line with only the threat lamps, over the cruise strip's absence (MINIMAL on cruise with a lock)
+//   shot-timeline                  the SHOT page's strip: seven chips with names of five characters at most, no ellipsis (LAYOUT.md 12.3)
+//   (no shot)                      a translucent ring fill is no ink on a page surface: the quads of ScopeCanvas.Ring (LAYOUT.md 9 rule 1)
 public static partial class HudLogUnityCheck
 {
     private static void ScopeLines()
@@ -78,7 +80,33 @@ public static partial class HudLogUnityCheck
             Check(!Shown(status, "scopeRect"), tag + ": Minimal draws no cruise strip");
             Check(WordInk(status, "MSL 2", out Rect m) && Mathf.Abs(m.xMax - (LampsLeft(status) + 440f)) < 2.5f, tag + ": the last threat lamp ends at the line's right end: " + m.xMax);
         });
+        LinesShot("shot-timeline", hd, "shot", 6f, PilotOptions(), null, (status, tag) =>
+        {
+            List<string> words = BoardWords(status);
+            foreach (string w in new[] { "SKYWY", "GBU12", "AAM4", "DART" }) Check(words.Contains(w), tag + ": the timeline's chip reads " + w);
+            foreach (string w in words) Check(!w.Contains("…") && !w.Contains("..."), tag + ": nothing is cut with an ellipsis: " + w);
+        });
+        PageRing();
         ScopeReset();
+    }
+
+    /// <summary>A ring's translucent disc on a page surface (LAYOUT.md 9 rule 1: a path fill at 0.45 or under is dropped, at any size) draws no quad; on a surface that is not open, and a strong fill, it does.</summary>
+    private static void PageRing()
+    {
+        object tone = ToneOfScope("Ink");
+        int Quads(bool open, float fillAlpha)
+        {
+            var quads = new NOAvionics.AvQuadBuffer(2000);
+            object canvas = Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Presentation.ScopeCanvas"), quads, null, "ring-check");
+            canvas.GetType().GetProperty("Open", All).SetValue(canvas, open);
+            var rgb = new NOAvionics.Rgba(0.5f, 0.87f, 0.6f);
+            Call(canvas, "Begin", Activator.CreateInstance(Type(HudDomain + "ScopePalette"), rgb, rgb, rgb), 1f, 100f, 1f);
+            Call(canvas, "Ring", 50f, 50f, 20f, tone, 1f, 0f, tone, fillAlpha, 0f, 0f, 0f);      // no outline: only the disc
+            return quads.Count;
+        }
+        Check(Quads(true, 0.07f) == 0 && Quads(true, 0.45f) == 0, "A page's translucent ring fill (a zone, a seeker cone, the inner ring of a dock) draws no disc");
+        Check(Quads(true, 0.7f) > 0, "...a strong fill stays");
+        Check(Quads(false, 0.07f) > 0, "...and the shell's own surfaces keep theirs");
     }
 
     /// <summary>One board at one moment of a page's scenario under the pilot's options, with the stores header, optionally changed by <paramref name="more"/> before it is presented, judged by <paramref name="judge"/> and captured.</summary>

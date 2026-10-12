@@ -30,9 +30,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private int memoNext;
         private float lastTrace, heldAt = float.NegativeInfinity;
         private int lastHeld;
-        private readonly string[] perkNames = new string[StrikeMath.MaxTracks];
-        private readonly PerkPhase[] perkPhases = new PerkPhase[StrikeMath.MaxTracks];
-        private readonly float[] readyAt = new float[StrikeMath.MaxTracks];
         private readonly float[] allocTicks = new float[4];
         private string headlineText, rodSub, traceSub;
         private int headlineKey = -1, rodSubCost = -1, traceSubKey = -1;
@@ -100,7 +97,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             return ref memos[at];
         }
 
-        /// <summary>Events once: a friendly strike about to land close to the pilot, an impact, the trace crossing its marks, a node arriving, a perk becoming ready.</summary>
+        /// <summary>Events once: a friendly strike about to land close to the pilot, an impact, the trace crossing its marks, a node arriving.</summary>
         private void Edges(in ScopeEnv env)
         {
             for (int i = 0; i < d.TrackCount; i++)
@@ -132,14 +129,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 lastHeld = d.ChainHeld;
             }
             else { lastTrace = 0f; lastHeld = 0; }
-
-            for (int i = 0; i < d.PerkCount && i < perkNames.Length; i++)
-            {
-                PerkTile p = d.Perks[i];
-                if (p.State == PerkPhase.Ready && ReferenceEquals(perkNames[i], p.Name) && perkPhases[i] == PerkPhase.Cooling) readyAt[i] = now;
-                perkNames[i] = p.Name;
-                perkPhases[i] = p.State;
-            }
         }
 
         // ------------------------------------------------------------------------------------------------ headline

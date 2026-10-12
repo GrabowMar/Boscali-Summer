@@ -228,7 +228,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             float rp = r * u, cxp = X(cx), cyp = Y(cy);
             if (rp <= 0f) return;
-            if (fillAlpha > 0f) AvStrokes.Ring(q, cxp, cyp, rp * 0.5f, Segs(rp, 360f), rp, C(fill, fillAlpha));
+            if (fillAlpha > 0f && KeepPoly(fill, fillAlpha)) AvStrokes.Ring(q, cxp, cyp, rp * 0.5f, Segs(rp, 360f), rp, C(fill, fillAlpha));
             if (w <= 0f) return;
             if (dash <= 0f) AvStrokes.Ring(q, cxp, cyp, rp, Segs(rp, 360f), Lw(w), C(tone, alpha));
             else DashedArcPx(cxp, cyp, rp, 90f, 90f - 360f, dash * u, gap * u, offset * u, Lw(w), C(tone, alpha));

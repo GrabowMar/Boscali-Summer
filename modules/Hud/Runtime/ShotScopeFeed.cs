@@ -85,7 +85,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 bool inFlight = st == ShotState.InFlight;
                 float age = inFlight ? 0f : now - ledger.Time(i), frac = 0f;
                 if (inFlight) for (int s = 0; s < n; s++) if (shots[s].Id == ledger.Id(i)) frac = shots[s].Progress;
-                cells[k] = new ShotCell { Name = ledger.Name(i), State = st, Frac = frac, AgeS = age };
+                cells[k] = new ShotCell { Id = ledger.Id(i), Name = ledger.Name(i), State = st, Frac = frac, AgeS = age };
                 if (inFlight || age > ShotMath.ResultS || rc >= MaxResults) continue;
                 if (!ledger.TryPlace(i, out float px, out float py, out float pz) && !LastKnown(ledger.Id(i), out px, out py, out pz)) continue;
                 results[rc++] = new ShotResult { State = st, AgeS = age, Pos = new GPos(px, py, pz) };

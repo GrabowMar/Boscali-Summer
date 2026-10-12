@@ -73,6 +73,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
     /// <summary>One cell of the SHOT TIMELINE (the last eight shots, oldest first).</summary>
     internal struct ShotCell
     {
+        /// <summary>The weapon's id (<see cref="ShotMissile.Id"/>): the lead shot's cell is the one bracketed.</summary>
+        public int Id;
         public string Name;
         public ShotState State;
         /// <summary>Journey flown, 0..1, while it is in flight.</summary>

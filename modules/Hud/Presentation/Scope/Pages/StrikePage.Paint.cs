@@ -28,9 +28,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             for (int i = 0; i < n; i++) Track(g, d.Tracks[i], top + i * pitch, pitch, i == soon, p.Units);
             if (!lower) return;
 
-            float lowY = StrikeMath.LowerTop(n, p.H);
-            if (n > 0) g.Line(1f, lowY - 1f, W - 1f, lowY - 1f, Faint);
-            if (sat && cyber) g.Line(220f, lowY + 3f, 220f, p.H - 3f, Faint);
+            float lowY = StrikeMath.LowerTop(n, p.H);      // no rule above the blocks and none between them: the gap is the separator (LAYOUT.md 12.6)
             float oy = lowY - StrikeMath.LowerRef;       // the blocks keep the prototype's coordinates, moved to where they sit
             if (sat) { g.Origin(cyber ? 0f : HalfSat, oy); Sat(g); }
             if (cyber) { g.Origin(sat ? 0f : HalfCyber, oy); Cyber(g); }
@@ -117,7 +115,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 g.Fill(1f, y0, W - 2f, th - 1f, Ink, 0.07f);
                 g.Fill(2f, y0 + 5f, 2f, th - 11f, Hi);
             }
-            g.Line(1f, y0 + th - 1f, W - 1f, y0 + th - 1f, Faint);
 
             // left column: the weapon, where it is going, how far from us
             g.FitText(OpsScopeWords.Name(m.Kind), 9f, y0 + 10f + dy, 114f, idle ? Dim : Ink, 12f, 12f, ScopeAlign.Left, true);
@@ -269,7 +266,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             ScopeTone tone = late ? Amber : Ink;
             g.Text(d.SatCamera ? "SAT OPTICAL" : "SAT RADAR", 8f, 186f, Ink, 12f, ScopeAlign.Left, true);
             int contacts = d.SatContacts;
-            g.Text(contacts <= 0 ? "NO CONTACTS" : ScopeStr.Cat("", contacts, contacts == 1 ? " CONTACT" : " CONTACTS"), 216f, 186f, Dim, 12f, ScopeAlign.Right);
+            g.Text(contacts <= 0 ? "NO CONTACTS" : ScopeStr.Cat("", contacts, contacts == 1 ? " CONTACT" : " CONTACTS"), 204f, 186f, Dim, 12f, ScopeAlign.Right);      // 24 short of the CYBER block
 
             // a geostationary bird, parked over the footprint for the whole window
             const float ox = 74f, oy = 330f, R = 126f, a = -7f, gyL = 262f, rw = 33f;
@@ -372,42 +369,22 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         // ------------------------------------------------------------------------------------------------ perk strip
 
+        /// <summary>
+        /// The perk row (LAYOUT.md 12.6): three lamp-style items, no rings and no separators. A 4 x 4 marker 14 in from the column's left (filled INK when ready, BRIGHT when armed, a DIM hollow while cooling), the name 10
+        /// on (bold BRIGHT when lit, else INK) and the state word at the column's right end less 14 (RDY / ARMED bold BRIGHT, the cooldown clock DIM: a digit makes it INK).
+        /// </summary>
         public override void PaintStrip(ScopeCanvas g, in PagePaint p)
         {
             float cw = W / 3f;
             for (int i = 0; i < d.PerkCount && i < StrikeMath.MaxTracks; i++)
             {
                 PerkTile q = d.Perks[i];
-                bool cool = q.State == PerkPhase.Cooling, armed = q.State == PerkPhase.Armed;
-                float x = i * cw, cx = x + 17f, cy = 13f, frac = StrikeMath.PerkFill(q);
-                if (i > 0) g.Line(Mathf.Round(x), 4f, Mathf.Round(x), 22f, Faint);
-                g.Ring(cx, cy, 8.5f, Faint, 1f, 3f);
-                g.Arc(cx, cy, 8.5f, 0f, Math.Max(1f, 360f * Math.Max(0.004f, Math.Min(1f, frac)) - 0.01f), cool ? Dim : Hi, 1f, 3f);
-                if (armed) g.Ring(cx, cy, 12f, Hi, 0.4f + 0.5f * ScopeCanvas.Pulse(p.Now, 2f));
-                float since = p.Now - readyAt[i];
-                if (q.State == PerkPhase.Ready && since >= 0f && since < 1.4f) g.Ring(cx, cy, 9f + 5f * ScopeCanvas.EaseOut(since / 1.4f), Hi, 1f - since / 1.4f);
-                PerkGlyph(g, q.Front, cx, cy, cool ? Dim : Hi);
-                g.Text(q.Name, x + 32f, 14f, cool ? Ink : Hi, 12f, ScopeAlign.Left, !cool);
-                g.Text(OpsScopeWords.Perk(q), x + cw - 5f, 14f, cool ? Dim : Hi, 12f, ScopeAlign.Right, !cool);
+                bool cool = q.State == PerkPhase.Cooling;
+                float x = Mathf.Round(i * cw + 14f), cy = 10f;
+                g.Marker(x, cy, 4f, cool ? Dim : q.State == PerkPhase.Armed ? Hi : Ink, !cool);
+                g.Text(q.Name, x + 10f, cy, cool ? Ink : Hi, 12f, ScopeAlign.Left, !cool);
+                g.Text(OpsScopeWords.Perk(q), Mathf.Round(i * cw + cw - 14f), cy, cool ? Dim : Hi, 12f, ScopeAlign.Right, !cool);
             }
-        }
-
-        private static void PerkGlyph(ScopeCanvas g, PerkFront front, float x, float y, ScopeTone tone)
-        {
-            if (front == PerkFront.Space)
-            {
-                g.Diamond(x, y, 2.6f, tone, true);
-                g.Line(x - 5f, y, x - 3f, y, tone);
-                g.Line(x + 3f, y, x + 5f, y, tone);
-            }
-            else if (front == PerkFront.Cyber)
-            {
-                g.Box(x - 3f, y - 3f, 7f, 7f, tone);
-                g.Fill(Mathf.Round(x), Mathf.Round(y), 1f, 1f, tone);
-                g.Line(x - 5f, y, x - 3f, y, tone);
-                g.Line(x + 4f, y, x + 6f, y, tone);
-            }
-            else g.Chevron(x, y + 0.5f, 0f, 4f, tone, true);
         }
     }
 }

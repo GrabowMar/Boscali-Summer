@@ -100,6 +100,9 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(ApproachMath.GsCaution(0.6f) && !ApproachMath.GsCaution(-0.55f), "The glideslope cautions at 0.6 degrees");
             TestAssert.That(ApproachMath.SpeedCaution(11f / 3.6f) && !ApproachMath.SpeedCaution(9f / 3.6f), "Speed cautions at 10 km/h off");
             TestAssert.That(ApproachMath.OnSpeed(4f / 3.6f) && !ApproachMath.OnSpeed(6f / 3.6f), "ON SPD inside 5 km/h");
+            TestAssert.Near(ApproachMath.RulerFrac(0f), 0.5f, "The SPD index sits in the middle on the speed");
+            TestAssert.Near(ApproachMath.RulerFrac(10f / 3.6f), 0.75f, "...half way to the right end 10 km/h fast");
+            TestAssert.That(ApproachMath.RulerFrac(-50f) == 0f && ApproachMath.RulerFrac(50f) == 1f, "...and stops at the ends of the ruler");
 
             TestAssert.Near(IlsGuidance.ManualTarget(70f, 55f, 400f), 70f, "High up the manual target is the approach speed");
             TestAssert.Near(IlsGuidance.ManualTarget(70f, 55f, 10f), 55f, "Over the runway it is the landing speed");

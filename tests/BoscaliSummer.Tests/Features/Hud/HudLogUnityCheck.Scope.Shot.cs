@@ -30,6 +30,9 @@ public static partial class HudLogUnityCheck
 
         Array missiles = s.DomainArray("ShotMissile", 8), results = s.DomainArray("ShotResult", 8), cells = s.DomainArray("ShotCell", 8), targetArr = s.DomainArray("ShotTarget", 8);
         int mc = 0, rc = 0, cc = 0;
+        // the four shots before these three: the oldest chips of the timeline (the prototype's HIST)
+        foreach (var past in new[] { ("SKYWY", "Miss"), ("GBU12", "Hit"), ("DART", "Defeated"), ("SKYWY", "Hit") })
+            cells.SetValue(s.Fill(s.Domain("ShotCell"), "Id", 100 + cc, "Name", past.Item1, "State", s.DomainEnum("ShotState", past.Item2), "Frac", 1f, "AgeS", 30f), cc++);
         bool[] hot = new bool[3];
         int lead = -1, leadSim = -1;
         float leadTti = float.MaxValue;
@@ -65,12 +68,12 @@ public static partial class HudLogUnityCheck
                 hot[m.Target] = true;
                 if (tti < leadTti) { leadTti = tti; lead = mc; leadSim = i; }
                 mc++;
-                cells.SetValue(s.Fill(s.Domain("ShotCell"), "Name", m.Short, "State", s.DomainEnum("ShotState", "InFlight"), "Frac", p, "AgeS", 0f), cc++);
+                cells.SetValue(s.Fill(s.Domain("ShotCell"), "Id", i + 1, "Name", m.Short, "State", s.DomainEnum("ShotState", "InFlight"), "Frac", p, "AgeS", 0f), cc++);
             }
             else
             {
                 float age = t - m.T1;
-                cells.SetValue(s.Fill(s.Domain("ShotCell"), "Name", m.Short, "State", s.DomainEnum("ShotState", "Hit"), "Frac", 1f, "AgeS", age), cc++);
+                cells.SetValue(s.Fill(s.Domain("ShotCell"), "Id", i + 1, "Name", m.Short, "State", s.DomainEnum("ShotState", "Hit"), "Frac", 1f, "AgeS", age), cc++);
                 if (age < 3f) results.SetValue(s.Fill(s.Domain("ShotResult"), "State", s.DomainEnum("ShotState", "Hit"), "AgeS", age, "Pos", s.Fill(s.Domain("GPos"), "X", aim.x, "Y", aim.y, "Z", aim.z)), rc++);
             }
         }

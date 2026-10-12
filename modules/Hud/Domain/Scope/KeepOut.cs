@@ -8,18 +8,27 @@ namespace BoscaliSummer.Modules.Hud.Domain
     /// <summary>
     /// Keep-out placement for the scope's labels (HUD v8): every label takes the first of a few spots around its marker that does not sit on another
     /// label, a marker or a track line. Callers add what is already drawn with <see cref="Add"/>, then ask <see cref="Place"/> for each label (which
-    /// registers it too). Pure, allocation-free after construction.
+    /// registers it too). THREAT has one more rule (LAYOUT.md 12.2): the notch wedge's box (<see cref="AddWedge"/>) is dear to sit on and offers spots above and below it.
+    /// Pure, allocation-free after construction.
     /// </summary>
     internal sealed class KeepOut
     {
         public const int Capacity = 48;
 
         private readonly float[] box = new float[Capacity * 4];
-        private int count;
+        private int count, wedge = -1;
 
         public int Count => count;
 
-        public void Clear() => count = 0;
+        public void Clear() { count = 0; wedge = -1; }
+
+        /// <summary>The notch wedge's keep-out (its bounding box grown by 8): a THREAT label that overlaps it pays 4 per unit instead of 0.3 and may take a spot above or below it. At most one.</summary>
+        public void AddWedge(float x, float y, float w, float h)
+        {
+            if (count >= Capacity) return;
+            wedge = count;
+            Add(x, y, w, h);
+        }
 
         public void Add(float x, float y, float w, float h)
         {
@@ -30,27 +39,54 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         /// <summary>
         /// The best spot for a <paramref name="w"/> x <paramref name="h"/> label beside the marker at (<paramref name="px"/>, <paramref name="py"/>): the cheapest of the
-        /// spots by overlap with what is already placed (30 % of the overlapping area, 35 % for SHOT) and by sample points of <paramref name="segs"/>
-        /// (x1, y1, x2, y2 lines) that fall inside it, clamped into the given limits. <paramref name="preferSide"/> (SHOT only): -1 left, +1 right, 0 either.
+        /// spots by overlap with what is already placed (30 % of the overlapping area, 35 % for SHOT; THREAT: 4 per unit for the wedge, and 0.3 per unit of
+        /// the distance from the marker) and by sample points of <paramref name="segs"/> (x1, y1, x2, y2 lines) that fall inside it, clamped into the given limits.
+        /// THREAT adds five spots above and five below the wedge's box when there is one. <paramref name="preferSide"/> (SHOT only): -1 left, +1 right, 0 either.
         /// The label is registered as placed.
         /// </summary>
         public void Place(LabelSpots spots, float px, float py, float w, float h, ReadOnlySpan<float> segs, float xMin, float xMax, float yMin, float yMax,
             out float x, out float y, int preferSide = 0)
         {
             bool shot = spots == LabelSpots.Shot;
-            int n = shot ? 8 : 6;
+            int n = shot ? 8 : wedge < 0 ? 6 : 16;
             float bestCost = float.MaxValue;
             x = y = 0f;
             for (int i = 0; i < n; i++)
             {
-                Spot(shot, i, w, h, out float dx, out float dy);
+                float dx, dy;
+                if (i < (shot ? 8 : 6)) Spot(shot, i, w, h, out dx, out dy);
+                else
+                {
+                    // above the wedge's box, or well below it, centred on it and then 48 and 90 either side (LAYOUT.md 12.2)
+                    int j = i - 6, side = (j >> 1) == 0 ? 0 : (j >> 1) == 1 ? -48 : (j >> 1) == 2 ? 48 : (j >> 1) == 3 ? -90 : 90;
+                    float cx = box[wedge * 4] + box[wedge * 4 + 2] / 2f - w / 2f + side;
+                    dx = cx - px;
+                    dy = (j & 1) == 0 ? box[wedge * 4 + 1] - h - py : box[wedge * 4 + 1] + box[wedge * 4 + 3] + 22f - py;
+                }
                 float rx = (float)Math.Round(Clamp(px + dx, xMin, xMax - w)), ry = (float)Math.Round(Clamp(py + dy, yMin, yMax - h));
                 float cost = i * (shot ? 0.4f : 0.5f) + (preferSide < 0 && dx > 0f ? 3f : preferSide > 0 && dx < 0f ? 3f : 0f);
-                for (int k = 0; k < count; k++) cost += Overlap(rx, ry, w, h, box[k * 4], box[k * 4 + 1], box[k * 4 + 2], box[k * 4 + 3]) * (shot ? 0.35f : 0.3f);
+                if (!shot) cost += 0.3f * (float)Math.Sqrt((rx + w / 2f - px) * (rx + w / 2f - px) + (ry + h / 2f - py) * (ry + h / 2f - py));
+                for (int k = 0; k < count; k++) cost += Overlap(rx, ry, w, h, box[k * 4], box[k * 4 + 1], box[k * 4 + 2], box[k * 4 + 3]) * (shot ? 0.35f : k == wedge ? 4f : 0.3f);
                 for (int s = 0; s + 3 < segs.Length; s += 4) cost += SegHits(rx, ry, w, h, segs[s], segs[s + 1], segs[s + 2], segs[s + 3], shot ? 14 : 12) * (shot ? 10f : 12f);
                 if (cost < bestCost) { bestCost = cost; x = rx; y = ry; }
             }
             Add(x, y, w, h);
+        }
+
+        /// <summary>
+        /// THREAT's leader test: whether the line from (<paramref name="x1"/>, <paramref name="y1"/>) to (<paramref name="x2"/>, <paramref name="y2"/>) runs through a label or box other than the wedge, the label just placed
+        /// (the last one) and the marker's own box (centred within 14 of <paramref name="px"/>, <paramref name="py"/>): a leader never crosses another label.
+        /// </summary>
+        public bool LeaderCrosses(float x1, float y1, float x2, float y2, float px, float py)
+        {
+            for (int k = 0; k < count - 1; k++)
+            {
+                if (k == wedge) continue;
+                float bx = box[k * 4], by = box[k * 4 + 1], bw = box[k * 4 + 2], bh = box[k * 4 + 3];
+                if (Math.Abs(bx + bw / 2f - px) < 14f && Math.Abs(by + bh / 2f - py) < 14f) continue;
+                if (SegHits(bx, by, bw, bh, x1, y1, x2, y2, 12) > 0) return true;
+            }
+            return false;
         }
 
         /// <summary>The total area the rectangle overlaps of everything placed so far (a label's cost where it sits).</summary>

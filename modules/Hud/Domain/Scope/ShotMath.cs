@@ -189,5 +189,18 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         /// <summary>The prototype's TTI ring around a target: wide while the shot is far, shrinking onto it, capped at 34 units.</summary>
         public static float TtiRingRadius(float ttiS) => Math.Min(34f, 7f + 3f * (float.IsNaN(ttiS) ? 10f : Math.Max(0f, ttiS)));
+
+        /// <summary>The most characters a timeline chip's name has (LAYOUT.md 12.3: SKYWY, GBU12, DART; 39 units at 12, so a chip's content is 52 wide and the next chip's 10 clear).</summary>
+        public const int ChipChars = 5;
+
+        /// <summary>A weapon's short name as the timeline prints it: hyphens and spaces left out ("GBU-12" reads GBU12), cut to <see cref="ChipChars"/> characters, never an ellipsis. Written into <paramref name="into"/> (at least <see cref="ChipChars"/> long); returns the length.</summary>
+        public static int ChipName(string name, Span<char> into)
+        {
+            int n = 0;
+            if (name != null)
+                foreach (char c in name)
+                    if (c != '-' && c != ' ' && n < ChipChars) into[n++] = c;
+            return n;
+        }
     }
 }
