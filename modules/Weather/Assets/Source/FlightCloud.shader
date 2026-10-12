@@ -1142,6 +1142,25 @@ Shader "Boscali/FlightCloud"
             SlabLayer back;
         };
 
+        // Look pass round 4, the tone shoulder: cloud light is linear HDR (a sunlit face toward the sun summed to 2-3) and the display
+        // clipped every sunlit lobe to flat 255 white (about 17 of 47 skies). Linear up to the knee, then a tanh roll-off to one: the lit
+        // side keeps its form, and storms flashed by lightning stop clipping too. Per channel, so the warm sun tint desaturates to white
+        // in the brightest parts, as film does. GPU-only (the CPU twins are densities).
+        float3 CloudShoulder(float3 x, float knee, float room)
+        {
+            return min(x, knee) + room * tanh(max(x - knee, 0.0) / room);
+        }
+
+        // Round 4: the in-scatter toward a cloud takes the cloud's own shade. Airlight was the full horizon colour for every sample, so a
+        // shaded base 15 km away came out at about half the luminance of the fog (lit/dark of distant fair-weather cumulus stuck at 1.7,
+        // overcast sheets at 1.1-1.4: flat). Air in the shadow of a cloud or a deck is dimmer too; the fog keeps 35 % of its brightness
+        // at black and all of it from a luminance of 0.85 up, so lit tops and clear sky are unchanged.
+        float3 ShadedFog(float3 light)
+        {
+            float l = dot(light, float3(0.2126, 0.7152, 0.0722));
+            return _CloudFogColor * lerp(0.35, 1.0, saturate(l / 0.85));
+        }
+
         void AddSlabSample(inout SlabLayer layer, float optical, float3 light, float distance)
         {
             float contribution = (1.0 - layer.opacity) * (1.0 - exp(-optical));
@@ -1156,7 +1175,7 @@ Shader "Boscali/FlightCloud"
             float depth = layer.weightedDistance / layer.opacity;
             float fade = 1.0 - smoothstep(CLOUD_HORIZON_FADE, CLOUD_HORIZON_LIMIT, depth);
             float air = AirTransmittance(depth, ro.y, ro.y + ray.y * depth);
-            layer.colour = lerp(_CloudFogColor * layer.opacity, layer.colour, air) * fade;
+            layer.colour = lerp(ShadedFog(layer.colour / layer.opacity) * layer.opacity, layer.colour, air) * fade;
             layer.opacity *= fade;
             layer.weightedDistance *= fade;
         }
@@ -1225,8 +1244,12 @@ Shader "Boscali/FlightCloud"
                 // Thin cloud: its own depth toward the sun is all that shades it.
                 float toSun = row.thick * 0.5 / max(0.12, _CloudSunDirection.y);
                 float direct = exp(-d * toSun * 0.003);
-                float3 light = _CloudAmbientColor * 0.8 * 0.8 +
-                    _CloudSunColor * (direct * phase * 0.6 + 0.22);
+                // Look pass round 4: the old constant 0.22 sun fill lit a thick sheet the same from every direction (lit/dark 1.1-1.5, luma
+                // deviation under 0.02). It is now a dim base plus a glow toward the sun (hotspot, the reference's "light hotspot where the sun
+                // is"), and the sum goes through the shoulder so a thin layer facing the sun no longer clips flat white.
+                float slabGlow = saturate((phase - 0.5) / 1.5);
+                float3 light = CloudShoulder(_CloudAmbientColor * float3(0.85, 0.96, 1.18) * 0.64 +
+                    _CloudSunColor * (direct * lerp(1.0, phase, 0.6) * 0.7 + 0.08 + 0.60 * slabGlow), 0.85, 0.30);
                 float segmentStart = t0 + n * stepLength;
                 float frontLength = clamp(splitDistance - segmentStart, 0.0, stepLength);
                 float backLength = stepLength - frontLength;
@@ -1481,6 +1504,14 @@ Shader "Boscali/FlightCloud"
             float phase = 0.58 * Phase(cosine, 0.58) + 0.08 * Phase(cosine, 0.82) + 0.34 * Phase(cosine, -0.25);
             // One broad secondary lobe per ray; reuse the measured sun optical depth below.
             float secondaryPhase = 0.70 * Phase(cosine, 0.18) + 0.30;
+            // Look pass round 4: dense cloud scatters many times, which washes the anisotropy out, so a body samples a mild version of the
+            // phase and only thin cloud (rims, sheets: low density) gets the silver-lining lobe, at 0.85 of its excess. Sunlit faces then sit at about
+            // the same brightness from every direction instead of 2-3 x brighter toward the sun (the blown whites).
+            float phaseBody = lerp(1.0, phase, 0.35);
+            float phaseRim = max(0.0, phase - phaseBody) * 0.85;
+            // The hotspot: sun light that gets through a sheet or a deck is forward-scattered, so a thick layer glows around the sun (the
+            // references' "light hotspot where the sun is") and is otherwise a flat grey. 0 beyond about 60 degrees from the sun.
+            float sunGlow = 0.55 * pow(saturate((phase - 0.5) / 1.5), 2.0);
             float awayFromSun = saturate(0.5 - 0.5 * cosine);
             // Integer avalanche removes IGN's visible diagonal lattice. This changes ray
             // sample placement only: the actual cloud field and detail stay anchored.
@@ -1601,7 +1632,7 @@ Shader "Boscali/FlightCloud"
                             else optical += tap * (coarseSun ? 3000.0 : k == 0 ? 340.0 : 2300.0);
                         }
                         gLowReuse = false;
-                        optical *= 0.0021;
+                        optical *= 0.0040; // round 4: 0.0021 left fair-weather bodies lit through (flat 1.7-1.8 lit/dark)
                         float h = saturate(localLightingHeight);
                         float direct = exp(-optical);
                         // The upward tap was only skipped when the sun was already out.
@@ -1622,12 +1653,17 @@ Shader "Boscali/FlightCloud"
                         // keeps bases and buried cores darker than exposed crowns. No
                         // density-independent sun floor remains inside an opaque storm.
                         float secondaryAccess = lerp(0.35, 1.0, h) * exp(-above * 0.5);
-                        float scattered = 0.22 * exp(-optical * 0.24) * secondaryPhase * secondaryAccess;
+                        // Round 4: 0.22 -> 0.12 (its decay follows the steeper optical depth). The fill was sun-coloured and as bright as the shade itself, which greyed the shaded sides and
+                        // capped lit/dark near 1.8; the shade is now the sky's blue (below) and this is only the in-cloud glow.
+                        float scattered = 0.12 * exp(-optical * 0.13) * secondaryPhase * secondaryAccess;
+                        float phaseHere = phaseBody + phaseRim * exp(-d * 2.2);
                         // Shade is lit by blue sky, not grey: a cool tint keeps sunlit lobes and
                         // shadowed lobes apart, like the reference flight footage.
-                        float3 light = _CloudAmbientColor * float3(0.90, 0.97, 1.10) * skyAccess * 0.72 +
+                        // Round 4: the shade is sky-blue light with a floor (0.19 of the ambient, tinted blue 0.80/0.96/1.25 so the shade reads (39,61,97)-like rather than slate; the open-sky part is 0.40, was 0.72, whose exposed shaded sides sat near 0.4 luminance against 0.95 lit): a base is never black (the references' darkest
+                        // 3 % is (39,61,97) in blue-sky scenes, (48,66,94) under a Cb), and lit/dark of towers stays under 4.4.
+                        float3 light = _CloudAmbientColor * float3(0.80, 0.96, 1.25) * (skyAccess * 0.40 + 0.19) +
                             _CloudGroundColor * (1.0 - h) * exp(-d) +
-                            _CloudSunColor * (direct * phase * 0.75 + scattered);
+                            _CloudSunColor * (direct * phaseHere * 0.55 + scattered + sunGlow * exp(-optical * 0.10));
                         // Lightning: the bolt's light scattering off the droplets around it. It
                         // reaches the shadowed cores the sun cannot, so the whole storm flickers.
                         if (_CloudFlash > 0.001)
@@ -1660,6 +1696,7 @@ Shader "Boscali/FlightCloud"
                             }
                             light *= 1.0 + (wisp - 0.5) * 1.1 * (0.5 + saturate(d)) * wispFade;
                         }
+                        light = CloudShoulder(light, 0.6, 0.4);
                         // Integrate actual density along this ray. A camera-wide multiplier
                         // made the same edge eight times more opaque after entering it.
                         // Dense cloud within a few hundred metres closes in: the far-tuned
@@ -1673,7 +1710,7 @@ Shader "Boscali/FlightCloud"
                         // rays crossing from the near map to the far map drew a step above
                         // the horizon under overcast).
                         float sampleAir = AirTransmittance(t, ro.y, ro.y + ray.y * t);
-                        colour += contribution * lerp(_CloudFogColor, light, sampleAir);
+                        colour += contribution * lerp(ShadedFog(light), light, sampleAir);
                         weightedDistance += contribution * t;
                         
                         transmittance *= absorb;
