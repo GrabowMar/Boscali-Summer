@@ -44,6 +44,7 @@ public static class SettingsUnityCheck
                 "mode switch and remembered mode, toggles, background replacement and row reveal, disabled dependencies, +/- bounds, " +
                 "the COCKPIT tab's TAC BOARD section (four groups, every control with one line of help, a toggle, a strip and a dial writing through the options contract, " +
                 "inert options with the board off, RESET TO DEFAULTS, the long page rendered stop by stop), " +
+                "the COCKPIT tab's VISOR TERRAIN section (the TERRAIN GHOST dial in 5% steps from 0% to 100%, its help, its saved level; the HOLO MAP switch, the HOLO RANGE strip of 10, 20 and 40 KM and the NORTH UP switch, each with one line of help, writing their saved entries, the strip and NORTH UP waiting on the switch), " +
                 "host-only lock on SERVER rows and the flat page tree (no GameObject churn) are checked. Game adapters are stubbed; in-game acceptance remains required.");
             EditorApplication.Exit(0);
         }
@@ -350,6 +351,7 @@ public static class SettingsUnityCheck
         Check(!Array.Exists(cockpitContent.GetComponentsInChildren<TMP_Text>(true), t => t.text == "HUD ELEMENT" || t.text == "TARGET CAMERA"),
             "The retired HUD ELEMENT and TARGET CAMERA rows stay off the cockpit page");
         CheckTacBoardSection(camera, canvas, height, clientCon, cockpitContent, tac);
+        CheckVisorTerrainSection(camera, canvas, height, clientCon, cockpitContent, config);
         Click(FindRowByName(cockpitContent, "RADIAL PRESETS"));
         Check(!config.TargetPresetWheel.Value, "RADIAL PRESETS must write its saved entry");
 
@@ -497,6 +499,90 @@ public static class SettingsUnityCheck
         Check(Plus(content, "SIZE").Interactable && FindControl(content, "FULL").Interactable, "and unlocks the controls the switched-off board had locked, at once");
         Settle(clientCon);
         Render(camera, canvas, height, "client-cockpit-reset");
+    }
+
+    /// <summary>
+    /// The VISOR TERRAIN section below the TAC BOARD: the TERRAIN GHOST dial, writing the saved level (a config entry, not a contract) in 5% steps between 0%
+    /// (off) and 100%, and the HOLO MAP controls: a switch, a 10 / 20 / 40 KM strip and a NORTH UP switch, each writing its own saved entry, with the strip and NORTH UP
+    /// inert while the switch is off. Every control of it has one short line of help. Leaves every setting at its default.
+    /// </summary>
+    private static void CheckVisorTerrainSection(Camera camera, Canvas canvas, int height, AvConsole clientCon, RectTransform content, CommandSettings config)
+    {
+        Check(content.Find("Section VISOR TERRAIN") != null, "COCKPIT carries the VISOR TERRAIN section");
+        Transform row = FindRowByName(content, "TERRAIN GHOST");
+        Check(Mathf.Approximately(config.TerrainGhost.Value, .35f) && HasText(content, "35%"), "TERRAIN GHOST reads its default, 35%");
+        foreach (AvControl control in row.GetComponentsInChildren<AvControl>(true))
+            Check(!string.IsNullOrEmpty(control.Help) && control.Help.Length <= 120 && control.Help.IndexOf('\n') < 0 && control.Help.Contains("0%"),
+                "TERRAIN GHOST has one short line of help that says 0% turns it off: '" + control.Help + "'");
+        Click(Plus(content, "TERRAIN GHOST"));
+        Check(Mathf.Approximately(config.TerrainGhost.Value, .4f) && HasText(content, "40%"), "TERRAIN GHOST steps up by 5% and writes its saved entry");
+        Click(Minus(content, "TERRAIN GHOST"));
+        Click(Minus(content, "TERRAIN GHOST"));
+        Check(Mathf.Approximately(config.TerrainGhost.Value, .3f) && HasText(content, "30%"), "...and down by 5%");
+        for (int i = 0; i < 30; i++) Click(Plus(content, "TERRAIN GHOST"));
+        Check(Mathf.Approximately(config.TerrainGhost.Value, 1f) && HasText(content, "100%") && !Plus(content, "TERRAIN GHOST").Interactable,
+            "TERRAIN GHOST stops at 100%");
+        for (int i = 0; i < 30; i++) Click(Minus(content, "TERRAIN GHOST"));
+        Check(config.TerrainGhost.Value == 0f && !Minus(content, "TERRAIN GHOST").Interactable && Plus(content, "TERRAIN GHOST").Interactable,
+            "TERRAIN GHOST stops at 0%, which is off");
+        CheckHoloControls(clientCon, content, config);
+        Settle(clientCon);
+        // The section is the tail of the long page: render the page scrolled to its foot, where the section is on screen.
+        ScrollRect scroll = clientCon.Root.GetComponentInChildren<ScrollRect>(true);
+        scroll.verticalNormalizedPosition = 0f;
+        Render(camera, canvas, height, "client-cockpit-visor-off");
+        var saved = new CommandSettings(new ConfigFile(config.ExpandedMapUi.ConfigFile.ConfigFilePath, false));
+        Check(saved.TerrainGhost.Value == 0f, "TERRAIN GHOST survives reloading the saved configuration");
+        config.TerrainGhost.Value = .35f;
+        Settle(clientCon);
+        Check(HasText(content, "35%"), "TERRAIN GHOST reads a level set from outside");
+        Render(camera, canvas, height, "client-cockpit-visor");
+        scroll.verticalNormalizedPosition = 1f;
+    }
+
+    /// <summary>The HOLO MAP switch, the HOLO RANGE strip and the NORTH UP switch: present, one short line of help each, defaults, each writing only its own saved entry, and the strip and NORTH UP inert while the switch is off.</summary>
+    private static void CheckHoloControls(AvConsole clientCon, RectTransform content, CommandSettings config)
+    {
+        Check(content.Find("Cell HOLO MAP") != null && content.Find("Cell NORTH UP") != null, "VISOR TERRAIN carries the HOLO MAP and NORTH UP switches");
+        foreach (string segment in new[] { "10 KM", "20 KM", "40 KM" }) Check(FindControl(content, segment) != null, "The HOLO RANGE strip has its " + segment + " segment");
+        Check(HasText(content, "HOLO RANGE"), "The HOLO RANGE strip is labelled");
+        Check(config.HoloMap.Value && config.HoloRangeKm.Value == 20 && !config.HoloNorthUp.Value, "The holo defaults are on, 20 km and heading up");
+        foreach (string cell in new[] { "HOLO MAP", "NORTH UP" })
+            foreach (AvControl control in content.Find("Cell " + cell).GetComponentsInChildren<AvControl>(true))
+                Check(!string.IsNullOrEmpty(control.Help) && control.Help.Length <= 120 && control.Help.IndexOf('\n') < 0, cell + " has one short line of help: '" + control.Help + "'");
+        foreach (string segment in new[] { "10 KM", "20 KM", "40 KM" })
+        {
+            string help = FindControl(content, segment).Help;
+            Check(!string.IsNullOrEmpty(help) && help.Length <= 120 && help.StartsWith(segment), segment + " has one short line of help that names it: '" + help + "'");
+        }
+        Check(content.Find("Cell HOLO MAP").GetComponentInChildren<AvControl>(true).Help.Contains("map key"), "The HOLO MAP help says what the map key does now");
+
+        Click(FindControl(content, "40 KM"));
+        Check(config.HoloRangeKm.Value == 40 && config.HoloMap.Value && !config.HoloNorthUp.Value, "The 40 KM segment writes HoloRangeKm and nothing else");
+        Click(FindControl(content, "10 KM"));
+        Check(config.HoloRangeKm.Value == 10, "The 10 KM segment writes 10");
+        Click(content.Find("Cell NORTH UP"));
+        Check(config.HoloNorthUp.Value && config.HoloRangeKm.Value == 10 && config.HoloMap.Value, "NORTH UP writes HoloNorthUp and nothing else");
+
+        // switched off, the strip and NORTH UP are inert
+        Click(content.Find("Cell HOLO MAP"));
+        Check(!config.HoloMap.Value, "HOLO MAP writes HoloMap");
+        Settle(clientCon);
+        Check(!FindControl(content, "40 KM").Interactable && !FindControl(content, "20 KM").Interactable, "With HOLO MAP off the range strip is locked");
+        Click(FindControl(content, "40 KM"));
+        Click(content.Find("Cell NORTH UP"));
+        Check(config.HoloRangeKm.Value == 10 && config.HoloNorthUp.Value, "...and NORTH UP and the strip ignore clicks");
+        var saved = new CommandSettings(new ConfigFile(config.ExpandedMapUi.ConfigFile.ConfigFilePath, false));
+        Check(!saved.HoloMap.Value && saved.HoloRangeKm.Value == 10 && saved.HoloNorthUp.Value, "The holo settings survive reloading the saved configuration");
+
+        // back to the defaults
+        Click(content.Find("Cell HOLO MAP"));
+        Settle(clientCon);
+        Check(config.HoloMap.Value && FindControl(content, "40 KM").Interactable, "HOLO MAP back on unlocks the strip");
+        Click(FindControl(content, "20 KM"));
+        Click(content.Find("Cell NORTH UP"));
+        Check(config.HoloMap.Value && config.HoloRangeKm.Value == 20 && !config.HoloNorthUp.Value, "The holo settings are back at their defaults");
+        Settle(clientCon);
     }
 
     /// <summary>Show one console through the panel's own switch (no click), then run its ticks as the game would.</summary>

@@ -43,6 +43,13 @@
     <Compile Include="..\..\modules\Command\Domain\ReliefRig.cs" Link="Features\Command\ReliefRig.cs" />
     <Compile Include="..\..\modules\Command\Domain\ReliefHoles.cs" Link="Features\Command\ReliefHoles.cs" />
     <Compile Include="..\..\modules\Command\Domain\ReliefClusters.cs" Link="Features\Command\ReliefClusters.cs" />
+    <Compile Include="..\..\modules\Command\Domain\TerrainHeightField.cs" Link="Features\Command\TerrainHeightField.cs" />
+    <Compile Include="..\..\modules\Command\Domain\TerrainGhostGrid.cs" Link="Features\Command\TerrainGhostGrid.cs" />
+    <Compile Include="..\..\modules\Command\Domain\GhostCockpitMath.cs" Link="Features\Command\GhostCockpitMath.cs" />
+    <Compile Include="..\..\modules\Command\Domain\HoloMapState.cs" Link="Features\Command\HoloMapState.cs" />
+    <Compile Include="..\..\modules\Command\Domain\HoloView.cs" Link="Features\Command\HoloView.cs" />
+    <Compile Include="..\..\modules\Command\Domain\HoloGrid.cs" Link="Features\Command\HoloGrid.cs" />
+    <Compile Include="..\..\modules\Command\Domain\HoloMarks.cs" Link="Features\Command\HoloMarks.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdResourceHistory.cs" Link="Features\Command\MfdResourceHistory.cs" />
     <Compile Include="..\..\modules\Support\Runtime\SupportEffectPolicy.cs" Link="Features\Support\SupportEffectPolicy.cs" />
     <Compile Include="..\..\modules\Autopilot\Runtime\AutopilotLandPolicy.cs" Link="Features\Autopilot\AutopilotLandPolicy.cs" />

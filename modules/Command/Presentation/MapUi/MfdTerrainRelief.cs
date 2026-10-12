@@ -229,6 +229,33 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         internal static int HoveredStackCount => hoveredStackCount;
         internal static bool ClusterHidden(Image image) => image != null && hiddenIcons.Contains(image);
 
+        private static TerrainHeightField heightField;
+
+        /// <summary>
+        /// The baked elevation as a plain sampler for the visor terrain ghost. It loads the heightfield on first use, once,
+        /// whether or not the map was ever opened, and shares it with the relief; false while the map is not up yet, and for good
+        /// when this map has no matching baked terrain.
+        /// </summary>
+        internal static bool TryGetHeightField(out TerrainHeightField field)
+        {
+            field = null;
+            if (!ready && !unavailable)
+            {
+                DynamicMap map = SceneSingleton<DynamicMap>.i;
+                Image image = map != null && map.mapImage != null ? MapImageComponent(map.mapImage) : null;
+                if (image == null || image.sprite == null) return false;
+                if (owner != null && (owner != map || sprite != image.sprite)) Reset();
+                owner = map;
+                sprite = image.sprite;
+                if (!LoadHeightfield()) return false;
+            }
+            if (!ready) return false;
+            if (heightField == null)
+                heightField = new TerrainHeightField(heights, dryLand, Samples, source.MapSize.x / (Samples - 1), 0f);
+            field = heightField;
+            return true;
+        }
+
         /// <summary>Instant turn and tilt about the view centre; buttons ease through the navigator.</summary>
         internal static void Rotate(float yawDelta, float pitchDelta)
         {
@@ -1839,6 +1866,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             land = null;
             seaLevel = SeaLevel;
             dryLand = null;
+            heightField = null;
             highestModelPoint = 0f;
             peakMeters = 0f;
             shore = null;

@@ -110,6 +110,8 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("MountedTroops", "Fire"),
     ("DynamicMap", "Maximize"),
     ("DynamicMap", "Minimize"),
+    // HOLO MAP (2026-10-12): the map key reaches DynamicMap.Maximize from ExtraUiInput.Update (Rewired "Map"); HoloMapKeyScopePatch brackets that method.
+    ("ExtraUiInput", "Update"),
     ("DynamicMap", "CenterMinimizedMap"),
     ("DynamicMap", "MapControls"),
     ("GridLabels", "GridLabels_OnMapChanged"),
@@ -583,6 +585,8 @@ string[] patchTypes =
     "BoscaliSummer.Modules.Command.Presentation.MapUi.MfdSinglePanelPatch",
     "BoscaliSummer.Modules.Command.Patches.DynamicMapMaximizePatch",
     "BoscaliSummer.Modules.Command.Patches.DynamicMapMinimizePatch",
+    "BoscaliSummer.Modules.Command.Patches.HoloMapKeyScopePatch",
+    "BoscaliSummer.Modules.Command.Patches.HoloMapKeyPatch",
     "BoscaliSummer.Modules.Command.Patches.MapControlsPanelGuardPatch",
     "BoscaliSummer.Modules.Command.Patches.MapCursorPanelGuardPatch",
     "BoscaliSummer.Modules.Command.Patches.GridLabelsPatch",

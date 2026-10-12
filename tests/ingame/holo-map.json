@@ -1,0 +1,275 @@
+{
+  "_note": "The HOLO MAP in the cockpit, ONE run for four pictures. The player is seated in the cockpit view at 2500 m over the west of the island (map x -6 km, z +10 km, the place terrain-ghost.json uses), heading west (270) at 180 m/s; in the ~25 s the run lasts it flies about 4.5 km, well short of the massif (map x -18..-12 km, z +6..+14 km, peaks 1.3 to 1.6 km). A scenario cannot press the map key, so HoloMapAutomation.Configure opens the holo the way the key does from the corner map (SimOpen: the same availability test, the same state machine) and sets the range and orientation IN MEMORY ONLY (the saved HoloRangeKm / HoloNorthUp are never written; restore gives them back). Pictures: holo-20 (20 km, heading up, the default), holo-10 (10 km), holo-40-north (40 km, north up), holo-closed (the holo closed again: the corner map must be back and no hologram anywhere). Each Configure result is stored: active (HoloMap.Active), stage, additiveMaterial (the game's additive UI material was found), renderTexture (created), vertexCount, litVertices, marksDrawn (units, airbases and the player's aircraft), unitMarks, airbaseMarks, labelsUsed, lastRenderMs, mapHidden (the corner map faded out behind the hologram), grow (the 180 ms growth), rangeKm, northUp, failure. The checks assert those and that the Unity log has no Exception; nothing asserts the pixels: they are read off the four captures (the lines must read as projected light over the world, the rings and the stem on the sea-level plane, airbases named on leaders, the corner brackets and the HOLO MAP shelf with the radius and HDG UP / N UP at its right end).",
+  "name": "holo-map",
+  "description": "HOLO MAP in one cockpit run: 20 km heading up, 10 km, 40 km north up, then closed.",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 240,
+  "environment": {
+    "config": {
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "near": [
+        -6000,
+        10000
+      ],
+      "altitude": 2500,
+      "speed": 180,
+      "heading": 270,
+      "view": "cockpit"
+    },
+    {
+      "op": "record",
+      "ids": [
+        "*"
+      ],
+      "hz": 2
+    },
+    {
+      "op": "wait",
+      "seconds": 8
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {
+        "restore": true,
+        "open": true,
+        "rangeKm": 20,
+        "northUp": false
+      },
+      "store": "holo_open"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {},
+      "store": "holo_20"
+    },
+    {
+      "op": "capture",
+      "name": "holo-20"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {
+        "rangeKm": 10
+      },
+      "store": "holo_10_set"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {},
+      "store": "holo_10"
+    },
+    {
+      "op": "capture",
+      "name": "holo-10"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {
+        "rangeKm": 40,
+        "northUp": true
+      },
+      "store": "holo_40_set"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {},
+      "store": "holo_40"
+    },
+    {
+      "op": "capture",
+      "name": "holo-40-north"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {
+        "open": false
+      },
+      "store": "holo_close_set"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {
+        "restore": true
+      },
+      "store": "holo_closed"
+    },
+    {
+      "op": "capture",
+      "name": "holo-closed"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_open.active",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_open.stage",
+      "value": "Holo"
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_open.failure",
+      "value": ""
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_20.active",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_20.additiveMaterial",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_20.renderTexture",
+      "value": true
+    },
+    {
+      "check": "result_above",
+      "path": "holo_20.vertexCount",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "holo_20.litVertices",
+      "min": 100
+    },
+    {
+      "check": "result_above",
+      "path": "holo_20.marksDrawn",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "holo_20.labelsUsed",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "holo_20.lastRenderMs",
+      "min": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_20.mapHidden",
+      "value": true
+    },
+    {
+      "check": "result_above",
+      "path": "holo_20.grow",
+      "min": 0.9
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_20.rangeKm",
+      "value": 20
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_20.northUp",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_10.rangeKm",
+      "value": 10
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_10.active",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_40.rangeKm",
+      "value": 40
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_40.northUp",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_40.active",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_close_set.active",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_closed.active",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_closed.stage",
+      "value": "Mini"
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_closed.mapHidden",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_closed.rangeKm",
+      "value": 20
+    },
+    {
+      "check": "log_match",
+      "pattern": "Exception",
+      "max": 0
+    }
+  ]
+}
