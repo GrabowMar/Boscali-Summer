@@ -7,6 +7,7 @@ Tabler Icons webfont @tabler/icons-webfont@3.48.0 https://github.com/tabler/tabl
 Technique only (vertex-packed effect parameters, shiny/dissolve/transition): mob-sakai/UIEffect (MIT) -> MIT-UIEffect.txt
 Technique only (line/circle/gradient/outline mesh modifiers): Unity-UI-Extensions (BSD-3-Clause) -> BSD3-UnityUIExtensions.txt
 No source file from UIEffect or Unity-UI-Extensions is copied; any future copied file must name its source path and commit here.
+NOA Icons (the icon face in use since 2026-10-12): original glyphs drawn for this project in tools/Build-AvIcons.py, SVG copies in Icons/, baked into avionics-icons.bundle by tools/Compile-AvionicsIconAssets.ps1. The Tabler face still inside avionics-ui.bundle is no longer shown.
 Bundle built by tools/Compile-AvionicsUiAssets.ps1 with Unity 2022.3.62f3 + com.unity.textmeshpro 3.0.6.
 
 Original generated artwork, OpenAI image generation, 2026-09-29:

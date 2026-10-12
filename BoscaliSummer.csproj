@@ -146,6 +146,10 @@
     <EmbeddedResource Include="AvionicsUi\Assets\avionics-fx.bundle" Condition="Exists('AvionicsUi\Assets\avionics-fx.bundle')">
       <LogicalName>NOAvionics.avionics-fx.bundle</LogicalName>
     </EmbeddedResource>
+    <!-- NOA Angular icon font, built by tools/Build-AvIcons.py + tools/Compile-AvionicsIconAssets.ps1. Optional as well. -->
+    <EmbeddedResource Include="AvionicsUi\Assets\avionics-icons.bundle" Condition="Exists('AvionicsUi\Assets\avionics-icons.bundle')">
+      <LogicalName>NOAvionics.avionics-icons.bundle</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup Label="Radio station assets">
