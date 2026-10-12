@@ -17,6 +17,7 @@ namespace BoscaliSummer.Tests.Features.Command
             ACornerAnchorStaysInsideTheViewport();
             FortyAnchorsOnOneSpotNeverStackWhenARoomIsFree();
             RandomAnchorsNeverMeetAnyIconSquare();
+            ADenseClusterOfWidePlatesStillKeepsEveryPlateApart();
             AnUnplaceablePlateFallsBackToTheFirstDiagonal();
             ANonFiniteAnchorGetsNothingAndBlocksNothing();
         }
@@ -39,8 +40,8 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(se.X == 100f + StrTagPlacer.IconClear && se.Y + se.H == 100f - StrTagPlacer.IconClear, "candidate 2 is south-east");
             TestAssert.That(sw.X + sw.W == 100f - StrTagPlacer.IconClear && sw.Y + sw.H == 100f - StrTagPlacer.IconClear, "candidate 3 is south-west");
             RectF far = StrTagPlacer.Candidate(4, 100f, 100f, 60f, 20f);
-            TestAssert.That(far.X > ne.X && far.Y > ne.Y && far.W == 60f, "candidates 4 to 7 repeat the diagonals one ring further out");
-            TestAssert.That(StrTagPlacer.Candidates == 8, "eight candidates");
+            TestAssert.That(far.X > ne.X && far.Y > ne.Y && far.W == 60f, "candidates 4 to 7 repeat the diagonals one ring further out, and every ring after it one more");
+            TestAssert.That(StrTagPlacer.Candidates == 48, "twelve rings of four diagonals");
         }
 
         private static void ALoneAnchorTakesTheFirstDiagonal()
@@ -157,6 +158,25 @@ namespace BoscaliSummer.Tests.Features.Command
                     for (int j = 0; j < i; j++)
                         TestAssert.That(!placed[i].Overlaps(placed[j]), "crowd " + b + " plate " + i + " covers plate " + j);
                 }
+            }
+        }
+
+        private static void ADenseClusterOfWidePlatesStillKeepsEveryPlateApart()
+        {
+            // The east of the Escalation map: platforms, ghost proposals and a sortie within 70 px of each other, every plate wide and two rows tall. Eight diagonals are not
+            // enough room for nine of them; there is plenty of room on the map, so none may be left on top of another.
+            var vp = new RectF(0f, 0f, 1600f, 900f);
+            const int n = 9;
+            var ax = new float[n]; var ay = new float[n]; var w = new float[n]; var h = new float[n]; var placed = new RectF[n];
+            for (int i = 0; i < n; i++) { ax[i] = 1300f + (i % 3) * 30f; ay[i] = 500f + (i / 3) * 30f; w[i] = 130f + (i % 4) * 20f; h[i] = 40f; }
+            StrTagPlacer.Place(vp, ax, ay, w, h, n, placed);
+            for (int i = 0; i < n; i++)
+            {
+                TestAssert.That(vp.Contains(placed[i]), "cluster plate " + i + " is inside the viewport");
+                for (int j = 0; j < n; j++)
+                    TestAssert.That(!placed[i].Overlaps(new RectF(ax[j] - NativeIconHalf, ay[j] - NativeIconHalf, 2f * NativeIconHalf, 2f * NativeIconHalf)),
+                        "cluster plate " + i + " meets the icon of anchor " + j);
+                for (int j = 0; j < i; j++) TestAssert.That(!placed[i].Overlaps(placed[j]), "cluster plate " + i + " covers plate " + j);
             }
         }
 

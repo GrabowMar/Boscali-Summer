@@ -19,15 +19,16 @@ namespace BoscaliSummer.Modules.Command.Domain
     {
         /// <summary>Half the native airbase hit square (MfdTerrainRelief uses 34 px) plus a 3 px margin: the near corner of a plate is this far from its anchor on both axes.</summary>
         public const float IconClear = 20f;
-        /// <summary>Four diagonals at two distances, tried in order: north-east, north-west, south-east, south-west, near ring then far ring.</summary>
-        public const int Candidates = 8;
+        /// <summary>Four diagonals at twelve distances, tried in order: north-east, north-west, south-east, south-west, nearest ring first. A dense cluster of wide plates needs
+        /// the outer rings: eight places were all taken there and the plate was left on top of another (the pre-repair placer took the overlap).</summary>
+        public const int Candidates = 48;
 
         private const float FarRing = 14f;
 
         /// <summary>Candidate rectangle index 0..7 for a plate of size w by h around an anchor.</summary>
         public static RectF Candidate(int index, float ax, float ay, float w, float h)
         {
-            float d = IconClear + (index >= 4 ? FarRing : 0f);
+            float d = IconClear + (index >> 2) * FarRing;
             float x = (index & 1) == 0 ? ax + d : ax - d - w;
             float y = (index & 2) == 0 ? ay + d : ay - d - h;
             return new RectF(x, y, w, h);
