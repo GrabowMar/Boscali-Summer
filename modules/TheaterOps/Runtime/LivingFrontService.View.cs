@@ -110,6 +110,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                     OperationId = last.OperationId, Kind = last.Kind, Name = last.Name, Outcome = last.Outcome, Why = last.Why,
                     AgeSeconds = Mathf.Clamp(now - war.LastResultAt, 0f, 86400f), Funds = last.Funds, Morale = last.Morale,
                 };
+            snapshot.LastOutcome = desk.LastOutcome(war.HQ);
             snapshot.Log = new string[war.Log.Count];
             for (int i = 0; i < snapshot.Log.Length; i++) snapshot.Log[i] = war.Log.Entries[i];
             return snapshot;
@@ -150,10 +151,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             foreach (FactionWar war in wars.Values)
             {
                 if (war.HQ == null || war.HQ.GetInstanceID() != factionInstanceId) continue;
-                Operation op = war.Active;
-                if (op == null) return false;
-                focus = new OperationFocus(op.Id, LivingWarRules.RoleOf(op.Kind), op.Key, op.Name, op.X, op.Z, LivingWarRules.RadiusOf(op.Kind));
-                return true;
+                focus = FocusOf(war);
+                return focus.IsLive;
             }
             return false;
         }

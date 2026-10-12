@@ -21,6 +21,7 @@ namespace BoscaliSummer.Modules.DynamicOperations
             manager.Configure(context.Settings.DynamicOperations, network);
             context.AddService<ISecondaryObjectivesView>(manager);
             context.AddService<IOperationOutcomeSource>(manager);
+            context.AddService<ISortieOutcomeSource>(manager);
             context.AddSceneService<ContractHud>(52).Configure(manager);
             context.AddSceneService<ContractMapHud>(53).Configure(manager);
             context.AddSceneService<OperationZoneHud>(54).Configure(manager);

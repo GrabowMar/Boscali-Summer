@@ -171,6 +171,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         {
             wars.Clear(); hqs.Clear(); placeNames.Clear(); ranked.Clear(); offers.Clear(); fixes.Clear(); seeds.Clear();
             territory = null; picture = null; excluded = null; censusSource = null;
+            UnbindSorties();
             reviewWar = holdWar = vetoWar = null;
             nextRoll = 0f; cursor = 0;
             viewHq = null; hostCommand = null;
@@ -249,6 +250,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             if (picture == null) ModuleServices.TryGet(out picture);
             if (excluded == null) ModuleServices.TryGet(out excluded);
             if (censusSource == null) ModuleServices.TryGet(out censusSource);
+            BindSorties();
         }
 
         /// <summary>One guarded review. A fault backs the next one off, ends an operation past its ceiling without sensing, and publishes the unhealthy picture.</summary>
@@ -293,6 +295,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 Debounce(war);
                 war.Census = censusSource != null && censusSource.TryMeasure(war.HQ, out TheaterCensus census) ? census : TheaterCensus.Unmeasured;
                 AdvanceOperation(war, now);
+                ReviewDesk(war, now);
                 Maintain(war, now);
                 StaffPick(war, now);
                 DirectNaval(war);

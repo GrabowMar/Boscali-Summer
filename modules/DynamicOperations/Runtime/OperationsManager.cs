@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 {
-    internal sealed partial class OperationsManager : MonoBehaviour, ISceneService, ISecondaryObjectivesView, IOperationOutcomeSource
+    internal sealed partial class OperationsManager : MonoBehaviour, ISceneService, ISecondaryObjectivesView, IOperationOutcomeSource, ISortieOutcomeSource
     {
         private sealed class Target
         {
@@ -83,6 +83,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         private readonly System.Random random = new System.Random();
         public static OperationsManager Active { get; private set; }
         public event Action<int, float> MoraleAwarded;
+        public event Action<SortieOutcome> Finished;
 
         public bool HasCompletedContract(int factionInstanceId)
         {
@@ -529,6 +530,21 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             target.Outcome = OperationsNet.Text(target.Outcome);
             Plugin.Logger?.LogInfo("[Operations] Completed " + op.Kind + " #" + op.Id + ": " + target.Name + ". " + target.Outcome);
             SeedFollowOn(board, op);
+            RaiseFinished(hq, op, target);
+        }
+
+        /// <summary>The identity of a paid sortie for whoever credits it; a subscriber that throws never breaks the payout.</summary>
+        private void RaiseFinished(FactionHQ hq, Operation op, Target target)
+        {
+            if (Finished == null) return;
+            Vector3 at = Finite(target.Position) ? target.Position :
+                target.Base != null ? target.Base.center.GlobalPosition().AsVector3() : Vector3.zero;
+            try
+            {
+                Finished(new SortieOutcome(hq.GetInstanceID(), op.Id, OperationTitles.Title(op.Kind), op.FocusId, op.FocusAnchor,
+                    at.x, at.z, op.AcceptedBy, false));
+            }
+            catch (Exception ex) { Plugin.Logger?.LogWarning("[Operations] Finished subscriber failed: " + ex.Message); }
         }
 
         /// <summary>

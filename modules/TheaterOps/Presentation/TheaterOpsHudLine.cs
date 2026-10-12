@@ -24,6 +24,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Presentation
         private HudTone sentTone;
         private int seenResult;
         private bool resultBaselined;
+        private int seenOutcome = -1;
 
         internal void Configure(ITheaterWarView view)
         {
@@ -36,6 +37,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Presentation
             nextRefresh = 0f;
             seenResult = 0;
             resultBaselined = false;
+            seenOutcome = -1;
         }
 
         private void Update()
@@ -44,6 +46,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Presentation
             nextRefresh = Time.unscaledTime + RefreshSeconds;
             if (!ModuleServices.TryGet(out board)) return;
             AnnounceResult();
+            AnnounceSortie();
             if (!Read()) { sentText = null; return; }
             if (text == sentText && tone == sentTone) return;
             sentText = text;
@@ -67,6 +70,30 @@ namespace BoscaliSummer.Modules.TheaterOps.Presentation
             if (result.Outcome == TheaterOutcome.CalledOff || result.Outcome == TheaterOutcome.Redirected) return;
             board.Notice("theater", result.Outcome == TheaterOutcome.Secured ? HudTone.Info : HudTone.Caution,
                 TheaterWords.Result(result.Kind, result.Name, result.Outcome, result.Why, result.Funds, ""), TheaterWords.Why(result.Why));
+        }
+
+        /// <summary>
+        /// Every faction pilot hears a finished sortie, derived on each peer from the snapshot's newest outcome (channel "sorties", apart from the
+        /// staff line, so neither replaces the other). The first snapshot only sets the watermark: a late joiner is not shown history.
+        /// </summary>
+        private void AnnounceSortie()
+        {
+            TheaterWarSnapshot snapshot = war != null && war.Available ? war.Snapshot : null;
+            if (snapshot == null) return;
+            TheaterOutcomeView outcome = snapshot.LastOutcome;
+            int seq = outcome != null ? outcome.Seq : 0;
+            if (seenOutcome < 0) { seenOutcome = seq; return; }
+            if (seq == seenOutcome || outcome == null) return;
+            seenOutcome = seq;
+            string title = outcome.Title.ToUpperInvariant(), pilot = outcome.Pilot.ToUpperInvariant();
+            if (!outcome.Counted)
+            {
+                board.Notice("sorties", HudTone.Info, "SORTIE COMPLETE · " + title, pilot);
+                return;
+            }
+            int perWave = snapshot.Wave != null ? snapshot.Wave.CreditsPerWave : 3;
+            string front = snapshot.Operation != null && !string.IsNullOrEmpty(snapshot.Operation.Name) ? snapshot.Operation.Name.ToUpperInvariant() + " " : "";
+            board.Notice("sorties", HudTone.Info, front + "SORTIE DONE · WAVE " + System.Math.Min(outcome.Credits, perWave) + "/" + perWave, title + " · " + pilot);
         }
 
         private bool Read()
