@@ -34,7 +34,9 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
 
     internal sealed class OperationsNet : MonoBehaviour
     {
-        internal const byte ProtocolVersion = 4;
+        internal const byte ProtocolVersion = 5;
+        private const int MaximumOperationId = 1000000;
+        private const int MaximumSubjectId = 63;
         private OperationsManager manager;
         private HandlerSlot serverSlot, clientSlot;
         private HandlerSlot ServerHandlers => serverSlot ??= HandlerSlot.Of<OperationsQuery>(ReceiveQuery);
@@ -226,6 +228,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
                     w.WriteSingle(card.X); w.WriteSingle(card.Z); w.WriteSingle(card.Radius);
                     w.WriteString(PilotText(card.AcceptedBy));
                     WriteTasking(w, card.Tasking);
+                    WriteLink(w, card.Link);
                 }
             }),
             (Func<NetworkReader, OperationsSnapshot>)(r =>
@@ -248,6 +251,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
                     float x = r.ReadSingle(), z = r.ReadSingle(), radius = r.ReadSingle();
                     string acceptedBy = PilotText(r.ReadString());
                     ObjectiveTasking tasking = ReadTasking(r);
+                    SortieLink link = ReadLink(r);
                     if (!float.IsFinite(progress) || !float.IsFinite(remaining) || progress < 0f || progress > 1f ||
                         remaining < 0f || remaining > 1200f || money < 0 || money > 100000 || xp < 0 || xp > 10000 ||
                         !float.IsFinite(x) || !float.IsFinite(z) || !float.IsFinite(radius) || radius < 0f || radius > 1500f ||
@@ -255,7 +259,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
                         !ValidTasking(tasking, offered, active, complete, marker))
                         throw new InvalidOperationException("Invalid operations snapshot values.");
                     snapshot.Cards[i] = new SecondaryObjectiveView(id, title, description, target, status, reward,
-                        progress, remaining, money, xp, complete, offered, active, marker, x, z, radius, acceptedBy, tasking);
+                        progress, remaining, money, xp, complete, offered, active, marker, x, z, radius, acceptedBy, tasking, link);
                 }
                 return snapshot;
             }));
@@ -270,6 +274,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
             writer.WriteSingle(tasking.ContactAgeSeconds);
             writer.WriteString(Text(tasking.NextAction)); writer.WriteString(Text(tasking.Blocker)); writer.WriteString(Text(tasking.Effect));
             writer.WriteString(Text(tasking.AbortConsequence)); writer.WriteByte((byte)tasking.Allegiance);
+            writer.WritePackedInt32(tasking.SubjectId);
             if (tasking.Phases.Length > 3) throw new InvalidOperationException("Operations tasking exceeds phase limit.");
             writer.WriteByte((byte)tasking.Phases.Length);
             for (int i = 0; i < tasking.Phases.Length; i++)
@@ -290,20 +295,52 @@ namespace BoscaliSummer.Modules.DynamicOperations.Networking
             float age = reader.ReadSingle();
             string action = Text(reader.ReadString()), blocker = Text(reader.ReadString()), effect = Text(reader.ReadString());
             string abort = Text(reader.ReadString()); var allegiance = (ObjectiveAllegiance)reader.ReadByte();
+            int subject = reader.ReadPackedInt32();
             int count = reader.ReadByte();
             if (count > 3) throw new InvalidOperationException("Operations tasking exceeds phase limit.");
             var phases = new ObjectivePhase[count];
             for (int i = 0; i < count; i++)
                 phases[i] = new ObjectivePhase(reader.ReadByte(), Text(reader.ReadString()), Text(reader.ReadString()),
                     (ObjectivePhaseStatus)reader.ReadByte(), reader.ReadSingle());
-            return new ObjectiveTasking(family, asset, contact, age, action, blocker, effect, phases, lifecycle, abort, allegiance);
+            return new ObjectiveTasking(family, asset, contact, age, action, blocker, effect, phases, lifecycle, abort, allegiance, subject);
+        }
+
+        // Link flags: bit0 OperationLive, bit1 SiteKnown, bit2 WingCounts.
+        private static void WriteLink(NetworkWriter writer, SortieLink link)
+        {
+            writer.WriteByte(link == null ? (byte)0 : (byte)1);
+            if (link == null) return;
+            writer.WritePackedInt32(link.OperationId); writer.WriteByte((byte)link.Role);
+            writer.WriteString(NetText.Clip(link.Place, SortieLink.MaximumPlace));
+            writer.WriteByte((byte)((link.OperationLive ? 1 : 0) | (link.SiteKnown ? 2 : 0) | (link.WingCounts ? 4 : 0)));
+            writer.WriteSingle(link.X); writer.WriteSingle(link.Z); writer.WriteSingle(link.Radius);
+        }
+
+        private static SortieLink ReadLink(NetworkReader reader)
+        {
+            byte present = reader.ReadByte();
+            if (present == 0) return null;
+            if (present != 1) throw new InvalidOperationException("Invalid operations link presence.");
+            int operation = reader.ReadPackedInt32();
+            byte role = reader.ReadByte();
+            string place = NetText.Clip(reader.ReadString(), SortieLink.MaximumPlace);
+            byte flags = reader.ReadByte();
+            float x = reader.ReadSingle(), z = reader.ReadSingle(), radius = reader.ReadSingle();
+            bool live = (flags & 1) != 0, known = (flags & 2) != 0, wing = (flags & 4) != 0;
+            if (operation < 0 || operation > MaximumOperationId || role > (byte)FocusRole.Recon || flags > 7 ||
+                operation == 0 && (role != 0 || place.Length != 0 || live) ||
+                known && (!float.IsFinite(x) || !float.IsFinite(z) || !(radius >= 0f && radius <= SortieLink.MaximumRadius)) ||
+                !known && (x != 0f || z != 0f || radius != 0f))
+                throw new InvalidOperationException("Invalid operations link values.");
+            return new SortieLink(operation, (FocusRole)role, place, live, known, x, z, radius, wing);
         }
 
         private static bool ValidTasking(ObjectiveTasking tasking, bool offered, bool active, bool complete, bool marker)
         {
             // Legacy offline fixtures may omit tasking; protocol4 host cards always include it.
             if (tasking == null) return true;
-            if (tasking.Family > ObjectiveFamily.Logistics || tasking.Asset > ObjectiveAsset.Site ||
+            if (tasking.SubjectId < -1 || tasking.SubjectId > MaximumSubjectId ||
+                tasking.Family > ObjectiveFamily.Logistics || tasking.Asset > ObjectiveAsset.Site ||
                 tasking.Contact > ObjectiveContact.Lost || tasking.Lifecycle > ObjectiveLifecycle.Cancelled ||
                 tasking.Allegiance > ObjectiveAllegiance.Neutral ||
                 !float.IsFinite(tasking.ContactAgeSeconds) || tasking.ContactAgeSeconds < -1f || tasking.ContactAgeSeconds > 30f ||

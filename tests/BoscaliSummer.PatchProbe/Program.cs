@@ -1276,7 +1276,7 @@ static void ProbeOperationSerialization(Assembly plugin, Assembly mirage)
 {
     const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
     Type net = plugin.GetType("BoscaliSummer.Modules.DynamicOperations.Networking.OperationsNet", true)!;
-    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 4)
+    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 5)
         throw new InvalidOperationException("Operations protocol changed without updating its probe");
     net.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
     Type writerType = mirage.GetType("Mirage.Serialization.NetworkWriter", true)!;
@@ -1310,13 +1310,13 @@ static void ProbeOperationSerialization(Assembly plugin, Assembly mirage)
         catch (TargetInvocationException error) when (error.InnerException is InvalidOperationException) { return; }
         throw new InvalidOperationException("Malformed operations snapshot was accepted");
     }
-    object Card(float progress, float remaining = 300f, int money = 17, int xp = 29) =>
+    object Card(float progress, float remaining = 300f, int money = 17, int xp = 29, object link = null) =>
         Activator.CreateInstance(cardType, 123, new string('T', 150), "description", "target", "status", "reward", progress, remaining, money, xp, false,
-            false, true, true, 12500f, -6750f, 1500f, "<b>" + new string('P', 50))!;
+            false, true, true, 12500f, -6750f, 1500f, "<b>" + new string('P', 50), null, link)!;
     object Snapshot(int count, object card)
     {
         object snapshot = Activator.CreateInstance(snapshotType)!;
-        snapshotType.GetField("Protocol")!.SetValue(snapshot, (byte)4);
+        snapshotType.GetField("Protocol")!.SetValue(snapshot, (byte)5);
         snapshotType.GetField("Scene")!.SetValue(snapshot, 345u);
         snapshotType.GetField("Token")!.SetValue(snapshot, 678u);
         snapshotType.GetField("Status")!.SetValue(snapshot, new string('S', 200));
@@ -1326,7 +1326,7 @@ static void ProbeOperationSerialization(Assembly plugin, Assembly mirage)
         return snapshot;
     }
     object query = Activator.CreateInstance(queryType)!;
-    queryType.GetField("Protocol")!.SetValue(query, (byte)4);
+    queryType.GetField("Protocol")!.SetValue(query, (byte)5);
     queryType.GetField("OperationId")!.SetValue(query, 123);
     queryType.GetField("Action")!.SetValue(query, (byte)1);
     queryType.GetField("Scene")!.SetValue(query, uint.MaxValue);
@@ -1342,7 +1342,7 @@ static void ProbeOperationSerialization(Assembly plugin, Assembly mirage)
         throw new InvalidOperationException("Operations snapshot bounds/header roundtrip failed");
     object cardResult = output.GetValue(0)!;
     object expectedCard = Activator.CreateInstance(cardType, 123, new string('T', 128), "description", "target", "status", "reward", 0.75f, 300f, 17, 29, false,
-        false, true, true, 12500f, -6750f, 1500f, "b" + new string('P', 31))!;
+        false, true, true, 12500f, -6750f, 1500f, "b" + new string('P', 31), null, null)!;
     foreach (PropertyInfo property in cardType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         if (!Equals(property.GetValue(expectedCard), property.GetValue(cardResult))) throw new InvalidOperationException("Operations card roundtrip changed " + property.Name);
 
@@ -1360,8 +1360,8 @@ static void ProbeOperationSerialization(Assembly plugin, Assembly mirage)
             EnumValue("ObjectiveContact", 2), age, "Cover the truck.", "", "Keep the eastern line supplied.", phases,
             EnumValue("ObjectiveLifecycle", 1), "Ends the sortie without an award.", EnumValue("ObjectiveAllegiance", 1), subject)!;
     }
-    object TypedCard(object tasking) => Activator.CreateInstance(cardType, 124, "COVER THE SUPPLY RUN", "Host briefing", "Supply truck", "COVER", "Morale +3",
-        .55f, 702f, 1400, 125, false, false, true, true, 12500f, -6750f, 1500f, "ROOK 1", tasking)!;
+    object TypedCard(object tasking, object link = null) => Activator.CreateInstance(cardType, 124, "COVER THE SUPPLY RUN", "Host briefing", "Supply truck", "COVER", "Morale +3",
+        .55f, 702f, 1400, 125, false, false, true, true, 12500f, -6750f, 1500f, "ROOK 1", tasking, link)!;
     object typedInput = Tasking();
     object typedSnapshot = Decode(snapshotType, Encode(snapshotType, Snapshot(1, TypedCard(typedInput))));
     object typedResult = cardType.GetProperty("Tasking")!.GetValue(((Array)snapshotType.GetField("Cards")!.GetValue(typedSnapshot)!).GetValue(0))!;
@@ -1380,6 +1380,43 @@ static void ProbeOperationSerialization(Assembly plugin, Assembly mirage)
     Reject(Encode(snapshotType, Snapshot(1, TypedCard(Tasking(family: 255)))));
     Reject(Encode(snapshotType, Snapshot(1, TypedCard(Tasking(age: 31f)))));
     Reject(Encode(snapshotType, Snapshot(1, TypedCard(Tasking(duplicatePhase: true)))));
+    Reject(Encode(snapshotType, Snapshot(1, TypedCard(Tasking(subject: 64)))));
+    Reject(Encode(snapshotType, Snapshot(1, TypedCard(Tasking(subject: -2)))));
+    // v5: the sortie link and the subject id.
+    Type linkType = plugin.GetType("BoscaliSummer.Core.Contracts.SortieLink", true)!;
+    object Link(int operation = 7, byte role = 2, string place = null, bool live = true, bool known = true,
+        float x = 12500f, float z = -6750f, float radius = 1500f, bool wing = true) =>
+        Activator.CreateInstance(linkType, operation, EnumValue("FocusRole", role), place ?? new string('L', 41), live, known, x, z, radius, wing)!;
+    object linkRoundtrip = Decode(snapshotType, Encode(snapshotType, Snapshot(1, TypedCard(Tasking(subject: 63), Link()))));
+    object linkCard = ((Array)snapshotType.GetField("Cards")!.GetValue(linkRoundtrip)!).GetValue(0)!;
+    object linkBack = cardType.GetProperty("Link")!.GetValue(linkCard)!;
+    object linkWant = Link(place: new string('L', 40));
+    foreach (PropertyInfo property in linkType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        if (!Equals(property.GetValue(linkWant), property.GetValue(linkBack)))
+            throw new InvalidOperationException("Operations link roundtrip changed " + property.Name);
+    if ((int)taskingType.GetProperty("SubjectId")!.GetValue(cardType.GetProperty("Tasking")!.GetValue(linkCard))! != 63)
+        throw new InvalidOperationException("Operations tasking subject id changed");
+    object plainBack = ((Array)snapshotType.GetField("Cards")!.GetValue(Decode(snapshotType, Encode(snapshotType, Snapshot(1, Card(0.5f)))))!).GetValue(0)!;
+    if (cardType.GetProperty("Link")!.GetValue(plainBack) != null) throw new InvalidOperationException("An untied card grew a link");
+    Reject(Encode(snapshotType, Snapshot(1, Card(0.5f, link: Link(radius: 1501f)))));
+    Reject(Encode(snapshotType, Snapshot(1, Card(0.5f, link: Link(role: 4)))));
+    Reject(Encode(snapshotType, Snapshot(1, Card(0.5f, link: Link(operation: -1)))));
+    Reject(Encode(snapshotType, Snapshot(1, Card(0.5f, link: Link(operation: 1000001)))));
+    Reject(Encode(snapshotType, Snapshot(1, Card(0.5f, link: Link(operation: 0, role: 2, place: "", live: false, known: false, x: 0f, z: 0f, radius: 0f)))));
+    Reject(Encode(snapshotType, Snapshot(1, Card(0.5f, link: Link(operation: 0, role: 0, place: "", live: true, known: false, x: 0f, z: 0f, radius: 0f)))));
+    Reject(Encode(snapshotType, Snapshot(1, Card(0.5f, link: Link(x: float.NaN)))));
+    Reject(Encode(snapshotType, Snapshot(1, Card(0.5f, link: Link(known: false, x: 5f, z: 0f, radius: 0f)))));
+    // The flags byte is the 13th from the end of a snapshot whose last field is a link: patch it to 8.
+    byte[] flagBytes = (byte[])writerType.GetMethod("ToArray")!.Invoke(Encode(snapshotType, Snapshot(1, Card(0.5f, link: Link()))), null)!;
+    flagBytes[flagBytes.Length - 13] = 8;
+    object flagReader = Activator.CreateInstance(readerType)!;
+    try
+    {
+        readerType.GetMethod("Reset", new[] { typeof(byte[]) })!.Invoke(flagReader, new object[] { flagBytes });
+        try { ((Delegate)mirage.GetType("Mirage.Serialization.Reader`1", true)!.MakeGenericType(snapshotType).GetProperty("Read", flags)!.GetValue(null)!).DynamicInvoke(flagReader); throw new InvalidOperationException("Link flags 8 were accepted"); }
+        catch (TargetInvocationException error) when (error.InnerException is InvalidOperationException) { }
+    }
+    finally { ((IDisposable)flagReader).Dispose(); }
     Reject(Encode(snapshotType, Snapshot(1, Card(float.NaN))));
     Reject(Encode(snapshotType, Snapshot(1, Card(0.5f, float.PositiveInfinity))));
     Reject(Encode(snapshotType, Snapshot(1, Card(0.5f, 300f, -1))));
@@ -1389,7 +1426,7 @@ static void ProbeOperationSerialization(Assembly plugin, Assembly mirage)
     writerType.GetField("_bitPosition", flags)!.SetValue(excessiveCount, bitPosition - 8);
     writerType.GetMethod("WriteByte")!.Invoke(excessiveCount, new object[] { (byte)4 });
     Reject(excessiveCount);
-    Console.WriteLine("  Dynamic operations serializers v4: query/card/typed-tasking/phase roundtrip, 3-card/128-char/32-pilot bounds, non-finite/range/count/enum/duplicate-phase rejection");
+    Console.WriteLine("  Dynamic operations serializers v5: query/card/typed-tasking/phase/link/subject roundtrip, 3-card/128-char/32-pilot/40-place bounds, non-finite/range/count/enum/duplicate-phase/link-coupling rejection");
 }
 
 static void ProbeSquadSerialization(Assembly plugin, Assembly mirage)
