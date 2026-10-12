@@ -170,7 +170,9 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                     : chatter.Raise(evt, station);
                 if (said) return true;
             }
-            if (!ModuleServices.TryGet<IHudBoard>(out var board) || !board.TryGetScreenBox(out _, out _, out _, out _)) return false;
+            // No board on screen, or its ticker switched off by the pilot: the game's own box shows the notice.
+            if (!ModuleServices.TryGet<IHudBoard>(out var board) || !board.TryGetScreenBox(out _, out _, out _, out _) ||
+                ModuleServices.TryGet<ITacBoardSettings>(out var options) && !options.ShowTicker) return false;
             string plain = Tags.Replace(report, "").Trim();
             if (plain.Length == 0) return false;
             // The game colours its failure messages; everything else is routine.
