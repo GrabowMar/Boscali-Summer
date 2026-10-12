@@ -20,7 +20,8 @@ namespace BoscaliSummer.Tests.Features.Command
         }
 
         private static AvStyleSheet Composed(AvThemeId id) =>
-            AvStyleSheet.Parse(AvThemes.Compose(AvFuiTests.Sheet("avionics." + id.ToString().ToLowerInvariant() + ".avss"), AvFuiTests.Sheet("avionics.fui.avss")));
+            AvStyleSheet.Parse(AvThemes.Compose(id == AvThemeId.Custom ? AvThemes.CustomPalette(190f, 200f, 0.6f)
+                : AvFuiTests.Sheet("avionics." + id.ToString().ToLowerInvariant() + ".avss"), AvFuiTests.Sheet("avionics.fui.avss")));
 
         private static bool IsSentinel(AvPaint p) => p.Kind == AvColorRef.Fixed && Math.Abs(p.Value.G - 0.0123f) < 1e-5f;
 
