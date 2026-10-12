@@ -32,6 +32,8 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
             ClosingNeedsEvidence();
             MeasuredLeadsFromSliceZero();
             SlotSearchOffsets();
+            FrontSideProbeWinsThenHistoryThenCentroid();
+            FrontSideNeverGuessesWhenNothingIsKnown();
             LedgerCountsOnlyTakenOverVehiclesAsGone();
             AnUnavailableReportIsUnknownEverywhere();
             MarksKeepWhatTheyAreGiven();
@@ -368,6 +370,30 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
             TestAssert.That(pastAlong == 0f && pastBack == 0f, "a refusal returns no offset");
             TestAssert.That(!SlotSearch.Offset(-1, out float lowAlong, out float lowBack), "index -1 refuses");
             TestAssert.That(lowAlong == 0f && lowBack == 0f, "a refusal returns no offset");
+        }
+
+        // ---- FrontSide (annex 02 G5: an ambiguous side keeps the last good one, then the centroid's, else holds in place)
+
+        private static void FrontSideProbeWinsThenHistoryThenCentroid()
+        {
+            // The normal is (0, 1); the friendly side was (0, 1) before.
+            TestAssert.Near(FrontSide.Decide(1f, true, 0f, -1f, 0f, 1f, true, 0f, -900f), 1f, "a clear probe beats history and the centroid");
+            TestAssert.Near(FrontSide.Decide(-1f, false, 0f, 0f, 0f, 1f, true, 0f, 900f), -1f, "a clear probe, minus side");
+            TestAssert.Near(FrontSide.Decide(0f, true, 0f, 1f, 0f, 1f, true, 0f, -900f), 1f, "no probe: the last good side wins over the centroid");
+            TestAssert.Near(FrontSide.Decide(0f, true, 0f, 1f, 0f, -1f, false, 0f, 0f), -1f, "the front turned round, so the normal flipped: the same physical side is now minus");
+            TestAssert.Near(FrontSide.Decide(0f, true, 0.05f, 1f, 1f, 0f, true, 450f, 0f), 1f, "history nearly across the new normal is not used; the centroid is");
+            TestAssert.Near(FrontSide.Decide(0f, false, 0f, 0f, 0f, 1f, true, 0f, 400f), 1f, "centroid 400 m on the plus side");
+            TestAssert.Near(FrontSide.Decide(0f, false, 0f, 0f, 0f, 1f, true, 0f, -400f), -1f, "centroid 400 m on the minus side");
+            TestAssert.Near(FrontSide.Decide(0f, false, 0f, 0f, 0f, 1f, true, 300f, 300f), 1f, "only the part along the normal counts");
+        }
+
+        private static void FrontSideNeverGuessesWhenNothingIsKnown()
+        {
+            TestAssert.Near(FrontSide.Decide(0f, false, 0f, 0f, 0f, 1f, true, 0f, 299f), 0f, "a centroid 299 m from the line says nothing");
+            TestAssert.Near(FrontSide.Decide(0f, false, 0f, 0f, 0f, 1f, false, 0f, 5000f), 0f, "a Withdraw never uses the centroid");
+            TestAssert.Near(FrontSide.Decide(0f, false, 0f, 0f, 0f, 1f, true, float.NaN, float.NaN), 0f, "a NaN offset says nothing");
+            TestAssert.Near(FrontSide.Decide(float.NaN, true, float.NaN, float.NaN, 0f, 1f, true, 0f, 0f), 0f, "NaN everywhere holds in place");
+            TestAssert.Near(FrontSide.Decide(0f, true, 0f, 1f, float.NaN, float.NaN, true, 0f, 900f), 0f, "a NaN normal holds in place");
         }
 
         // ---- GroupLedger

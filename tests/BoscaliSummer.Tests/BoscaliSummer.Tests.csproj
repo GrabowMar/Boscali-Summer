@@ -183,6 +183,7 @@
     <Compile Include="..\..\modules\TheaterOps\Domain\FrontlineTactics.cs" Link="Features\TheaterOps\FrontlineTactics.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\GroundRules.cs" Link="Features\TheaterOps\GroundRules.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\GroundTasking.cs" Link="Features\TheaterOps\GroundTasking.cs" />
+    <Compile Include="..\..\modules\TheaterOps\Domain\ForcesBuilder.cs" Link="Features\TheaterOps\ForcesBuilder.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\StaffLog.cs" Link="Features\TheaterOps\StaffLog.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\PlaceNames.cs" Link="Features\TheaterOps\PlaceNames.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\ContactCounts.cs" Link="Features\TheaterOps\ContactCounts.cs" />

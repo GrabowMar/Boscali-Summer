@@ -172,6 +172,34 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
         }
     }
 
+    /// <summary>Which side of a front line is friendly when the control field gives no clear answer: the last good side, then the side the group stands on, else none (hold in place).</summary>
+    internal static class FrontSide
+    {
+        /// <summary>The remembered friendly direction counts while it still points this much along (or against) the new normal.</summary>
+        internal const float HistoryMinDot = 0.2f;
+        /// <summary>The group's centroid says which side it is on once it stands this far from the line, metres.</summary>
+        internal const float CentroidClearMeters = 300f;
+
+        /// <summary>+1 or -1 along the normal (normalX, normalZ) toward the friendly side, 0 when unknown. offset is the centroid minus the point on the line; a Withdraw passes allowCentroid false, since a group already across the line must not retreat further across it.</summary>
+        internal static float Decide(float probeSign, bool hasHistory, float lastFriendlyX, float lastFriendlyZ,
+            float normalX, float normalZ, bool allowCentroid, float offsetX, float offsetZ)
+        {
+            if (probeSign > 0f) return 1f;
+            if (probeSign < 0f) return -1f;
+            if (hasHistory)
+            {
+                float dot = lastFriendlyX * normalX + lastFriendlyZ * normalZ;
+                if (Math.Abs(dot) >= HistoryMinDot) return dot > 0f ? 1f : -1f;
+            }
+            if (allowCentroid)
+            {
+                float along = offsetX * normalX + offsetZ * normalZ;
+                if (Math.Abs(along) >= CentroidClearMeters) return along > 0f ? 1f : -1f;
+            }
+            return 0f;
+        }
+    }
+
     /// <summary>Casualty accounting for the withdrawal rule.</summary>
     internal static class GroupLedger
     {
