@@ -285,6 +285,10 @@ foreach ((string typeName, string fieldName) in fields)
     // Corner takeover (2026-10-10): NativeCorner hides the three boxes of the native TopRightPanel (weaponPanel, countermeasuresBackground, PowerPanel) behind owned CanvasGroups; the stores
     // feed reads the guns' LINK (WeaponManager.gunsLinked, pinned below), the reload times of guns and missile launchers and the capacitor's full charge.
     ("WeaponStatus", "weaponPanel", "UnityEngine.GameObject"),
+    // TAC BOARD stores art (2026-10-12): HERO and the jammer row draw the game's own weapon and countermeasure pictures (the sprites below) on the material of the native weapon panel's picture (weaponImage).
+    ("WeaponStatus", "weaponImage", "UnityEngine.UI.Image"),
+    ("WeaponInfo", "weaponIcon", "UnityEngine.Sprite"),
+    ("Countermeasure", "displayImage", "UnityEngine.Sprite"),
     ("CombatHUD", "weaponStatus", "WeaponStatus"),
     ("CombatHUD", "countermeasureBackground", "UnityEngine.GameObject"),
     ("Gun", "reloadTime", "System.Single"),

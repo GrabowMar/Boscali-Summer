@@ -17,7 +17,7 @@ namespace BoscaliSummer.Tests.Features.Hud
 
         private static BoardBlocks All(BoardLayout layout, float pageH, int gaugeLines = 1, bool ticker = true) => new BoardBlocks
         {
-            Layout = layout, Hero = true, Pwr = true, Exp = true, Lamps = true, PageH = pageH, GaugeLines = gaugeLines, Ticker = ticker,
+            Layout = layout, Hero = true, Pwr = true, PwrCost = true, Exp = true, Lamps = true, PageH = pageH, GaugeLines = gaugeLines, Ticker = ticker,
         };
 
         private static void Same(BoardRect r, float x, float y, float w, float h, string what)

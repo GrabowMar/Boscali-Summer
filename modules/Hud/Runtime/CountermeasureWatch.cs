@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Hud.Domain;
+using BoscaliSummer.Modules.Hud.Presentation;
 using HarmonyLib;
 using UnityEngine;
 
@@ -88,6 +89,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                     names[s] = part.displayName;
                     stations[s] = default;
                 }
+                if (stations[s].Icon == 0) stations[s].Icon = StoreIcons.Id(part.displayImage);
                 stations[s].Max += MaxOf(part);
                 stations[s].Chargeable |= part.chargeable;
                 stations[s].Mask |= MaskOf(part.GetThreatTypes());

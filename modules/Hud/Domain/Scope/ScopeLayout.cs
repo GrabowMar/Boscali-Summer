@@ -21,6 +21,10 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public BoardLayout Layout;
         /// <summary>HERO (the weapon), PWR BUS (the airframe has a capacitor) and EXPENDABLES (it has dispensers).</summary>
         public bool Hero, Pwr, Exp;
+        /// <summary>PWR BUS has its cost row (an energy weapon is fitted): 72 high, else 54 (<see cref="ScopeLayout.CostRow"/> less).</summary>
+        public bool PwrCost;
+        /// <summary>The caption shelves are off (Lean, Minimal): EXPENDABLES has no shelf row, so in WIDE it is <see cref="ScopeLayout.ExpShelfRow"/> shorter and its words move up by that much (the stores painter).</summary>
+        public bool NoShelves;
         public bool Lamps;
         /// <summary>The page's current height in board units, header included (animated between <see cref="ScopeLayout.Compact"/> and <see cref="ScopeLayout.Full"/>); 0: no page.</summary>
         public float PageH;
@@ -77,8 +81,10 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>The y of HERO and of the first SAT block (the top of their caption row); the lamp line is above, at 0.</summary>
         public const float BlockTop = 6f;
         public const float HeroX = 0f, HeroW = 272f, HeroH = 152f;
-        /// <summary>PWR BUS and EXPENDABLES: x 284, 180 x 72 each, <see cref="BlockGap"/> apart (EXPENDABLES at y 88, or at y 6 with no PWR BUS).</summary>
+        /// <summary>PWR BUS and EXPENDABLES: x 284, 180 x 72 each, <see cref="BlockGap"/> apart (EXPENDABLES at y 88, or at y 6 with no PWR BUS); see <see cref="CostRow"/> and <see cref="ExpShelfRow"/> for when they are shorter.</summary>
         public const float SatX = 284f, SatW = 180f, SatH = 72f;
+        /// <summary>PWR BUS without its cost row is <see cref="CostRow"/> shorter; EXPENDABLES without its shelf row is <see cref="ExpShelfRow"/> shorter (LAYOUT.md 3).</summary>
+        public const float CostRow = 18f, ExpShelfRow = 19f;
         public const float WingX = 476f, WingW = 440f;
         public const float LampH = 12f;
         /// <summary>The lamp line sits at the top of the caption row of the blocks beside it (y 6); the page starts under it (y 24) whether or not the lamp line is there.</summary>
@@ -120,8 +126,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
             else
             {
                 if (b.Hero) g.Hero = new BoardRect(HeroX, BlockTop, HeroW, HeroH);
-                if (b.Pwr) g.Pwr = new BoardRect(SatX, BlockTop, SatW, SatH);
-                if (b.Exp) g.Exp = new BoardRect(SatX, b.Pwr ? BlockTop + SatH + BlockGap : BlockTop, SatW, SatH);
+                if (b.Pwr) g.Pwr = new BoardRect(SatX, BlockTop, SatW, b.PwrCost ? SatH : SatH - CostRow);
+                if (b.Exp) g.Exp = new BoardRect(SatX, b.Pwr ? g.Pwr.Bottom + BlockGap : BlockTop, SatW, b.NoShelves ? SatH - ExpShelfRow : SatH);
                 if (b.Lamps) g.Lamps = new BoardRect(WingX, BlockTop, WingW, LampH);
                 y = WingBodyY;
             }

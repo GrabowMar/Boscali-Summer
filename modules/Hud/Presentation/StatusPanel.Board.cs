@@ -179,12 +179,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             transition.Update((int)selector.Page * 2 + (compact ? 1 : 0), target, now);
             var blocks = new BoardBlocks
             {
-                Layout = Options.Layout, Hero = header.HasWeapon, Pwr = header.HasCap, Exp = header.HasCm, Lamps = lampRow, PageH = transition.Height,
+                Layout = Options.Layout, Hero = header.HasWeapon, Pwr = header.HasCap, PwrCost = header.HasCost, Exp = header.HasCm, NoShelves = !allow.Furniture, Lamps = lampRow, PageH = transition.Height,
                 GaugeLines = gaugeLines, Ticker = allow.ShowTicker && board.HasTicker,
             };
             BoardGeometry geo = ScopeLayout.Compute(blocks);
-            // The stores header is drawn as one piece for now (StatusPanel.Stores.cs): the box reaches as low as it does.
-            if (geo.Height > 0f) geo.Height = Math.Max(geo.Height, ScopeLayout.BlockTop + header.Height);
             if (geo.Height <= 0f)
             {
                 header.Clear();
