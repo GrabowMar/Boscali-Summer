@@ -40,7 +40,7 @@ public static class BuildFxBundle
             }
             if (shader.name != "NOA/UI/Glass2") throw new Exception("Unexpected shader name: " + shader.name);
             var material = new Material(shader);
-            foreach (string property in new[] { "_Reflection", "_Scan", "_Edge", "_TintColor", "_TintStrength", "_Light", "_Frost", "_Life" })
+            foreach (string property in new[] { "_Reflection", "_Wear", "_Edge", "_Light", "_Frost", "_Life" })
                 if (!material.HasProperty(property)) throw new Exception("Glass2 material property missing: " + property);
             if (!shader.isSupported) throw new Exception("Glass2 is not supported on the build machine");
             UnityEngine.Object.DestroyImmediate(material);

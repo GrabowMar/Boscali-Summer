@@ -483,7 +483,7 @@ public static class ReliefUnityCheck
     // .60 3.26 / 20.0, .80 4.02 / 23.2, 1 5.14 / 26.8 (sea dL* friendly vs bare / sea dE76 friendly vs hostile); over land the same
     // tint reads 4.42 / 8.6. The spec's starting gate of 8 L* cannot be met by the plane alpha, which tops out at the raster's own
     // strength (alpha 40 of 255 at the default overlay opacity), so the L* gate is "friendly over sea reads at least as well as over land".
-    private const float SeaFriendlyLightness = 4.5f, SeaFriendlyHostile = 25f;
+    private const float SeaFriendlyLightness = 4.5f, SeaFriendlyHostile = 25f, LandFriendlyHostile = 10f;
 
     private static void CheckFieldContrast(DynamicMap map, Texture2D raster, Camera terrainCamera, float mapWidth)
     {
@@ -560,6 +560,10 @@ public static class ReliefUnityCheck
             throw new Exception("Friendly sector blue over sea differs from bare sea by only " + F(measured.x) + " in L*; wanted " + F(SeaFriendlyLightness) + ".");
         if (measured.y < SeaFriendlyHostile)
             throw new Exception("Friendly against hostile over sea differs by only " + F(measured.y) + " in dE76; wanted " + F(SeaFriendlyHostile) + ".");
+        // The land carries the same field as a light wash (2026-10-12): it must tell the two sides apart on the hillshade, and stay under the sea's strength.
+        Note("land field: friendly vs hostile dE76 " + F(measured.w) + " (gate " + F(LandFriendlyHostile) + ", under the sea's " + F(measured.y) + ")");
+        if (measured.w < LandFriendlyHostile || measured.w >= measured.y)
+            throw new Exception("Friendly against hostile over land reads " + F(measured.w) + " in dE76; wanted at least " + F(LandFriendlyHostile) + " and less than the sea's " + F(measured.y) + ".");
     }
 
     // CIE L*a*b* of an sRGB colour (D65): the gate is perceptual, not a byte difference.
@@ -899,7 +903,9 @@ public static class ReliefUnityCheck
         for (int i = 0; i < layer.childCount; i++)
         {
             Image plate = layer.GetChild(i).GetComponent<Image>();
-            if (!plate.enabled || plate.sprite == null) throw new Exception("A framed contact has no visible plate.");
+            // The plate is a clear hit target since the glyphs became miniatures: it carries no sprite of its own, it only has to be up.
+            if (!plate.enabled)
+                throw new Exception("A framed contact has no live plate: #" + i + " of " + layer.childCount + " at " + plate.transform.localPosition + ".");
         }
         Transform glyph = tankIcon.iconImage.transform;
         float glyphSize = Mathf.Max(glyph.lossyScale.x, glyph.lossyScale.y) * glyph.GetComponent<RectTransform>().rect.width;

@@ -64,8 +64,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public string Aircraft = "SELF";
         /// <summary>Radar altitude at or above the gear/flare threshold: not on the apron.</summary>
         public bool Airborne = true;
-        /// <summary>Live <c>Aircraft.GetFuelLevel()</c>, 0..1.</summary>
-        public float Fuel = 1f;
         public int Targets;
         /// <summary>Distance to the nearest selected target in kilometres, negative = none.</summary>
         public float NearestKm = -1f;

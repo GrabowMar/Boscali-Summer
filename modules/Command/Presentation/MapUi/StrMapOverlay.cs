@@ -40,6 +40,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         internal float LastRebuildMs, MsPerSecond, RebuildsPerSecond;
 
         private readonly RebuildGate gate = new RebuildGate(PoseSeconds);
+        // The relief commits a pose only when it renders the terrain, so its revision is already rate-limited: follow every one, or the layer trails the ground.
+        private readonly RebuildGate reliefGate = new RebuildGate(0f);
         private readonly System.Collections.Generic.List<StrMapTag> tags = new System.Collections.Generic.List<StrMapTag>(StrOverlayPlan.MaxTags);
         private readonly float[] ax = new float[StrOverlayPlan.MaxTags], ay = new float[StrOverlayPlan.MaxTags], tw = new float[StrOverlayPlan.MaxTags], th = new float[StrOverlayPlan.MaxTags];
         private readonly RectF[] placed = new RectF[StrOverlayPlan.MaxTags];
@@ -63,6 +65,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private StrLayers planLayers = StrLayers.None;
         private StrItemId planSelected, planHover;
         private bool cardDirty, warnedShape;
+        // A tag's words and size change only with the plan or the map's scale; a pan or an orbit just moves it. Refilling every tag on every pose was most of a rebuild.
+        private bool tagsStale = true;
+        private float tagsPx;
         private float windowStart = -1f, windowMs;
         private int windowRebuilds;
 
@@ -100,7 +105,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             StrViewModel vm = hub.Current;
             StrUiState ui = hub.Ui;
             StrLayers layers = (ui.ShowFronts ? StrLayers.Fronts : 0) | (ui.ShowOperation ? StrLayers.Operation : 0) | (ui.ShowSorties ? StrLayers.Sorties : 0);
-            if (!Visible) { Visible = true; chrome.SetShown(true); planRevision = -1; gate.Reset(); }
+            if (!Visible) { Visible = true; chrome.SetShown(true); planRevision = -1; gate.Reset(); reliefGate.Reset(); }
             bool worldOn = layers != StrLayers.None;
             if (root.gameObject.activeSelf != worldOn) root.gameObject.SetActive(worldOn);
 
@@ -118,9 +123,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Relief = projection != null;
             if (planChanged) chrome.BindLegend(Plan, map.mapBackground.rectTransform.rect.width);
 
-            bool poseChanged = gate.ShouldRebuild(Pose(map, projection), now);
+            if (planChanged) tagsStale = true;
+            bool poseChanged = (projection != null ? reliefGate : gate).ShouldRebuild(Pose(map, projection), now);
             bool rebuilt = false;
-            if (worldOn && (planChanged || poseChanged)) rebuilt = Rebuild(map, projection, now);
+            if (worldOn && (planChanged || poseChanged)) rebuilt = Rebuild(map, projection, now, planChanged);
             else if (!worldOn) Plan.TagCount = 0;
             if (worldOn && pulseCount > 0 && !AvFxDriver.ReducedMotion && now >= nextPulse && !rebuilt)
             {
@@ -129,7 +135,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 pulse.Commit();
                 PulseQuads = pulse.Buffer.Count;
             }
-            if (planChanged || rebuilt || cardDirty) UpdateCard(map, planChanged);
+            if (!rebuilt && (planChanged || cardDirty)) UpdateCard(map, planChanged);   // a rebuild places the card itself, between the tags and the ink
             if (planChanged || rebuilt) Account(now, (Stopwatch.GetTimestamp() - t0) * 1000f / Stopwatch.Frequency, rebuilt);
             else if (windowStart < 0f) windowStart = now;
             if (windowStart >= 0f && now - windowStart >= WindowSeconds)
@@ -233,13 +239,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             planModel = null; planRevision = -1; planLayers = StrLayers.None; planSelected = planHover = StrItemId.None;
             pulseCount = 0; cardDirty = false; warnedShape = false;
             Visible = false; Relief = false;
-            gate.Reset();
+            tagsStale = true;
+            gate.Reset(); reliefGate.Reset();
             windowStart = -1f; windowMs = 0f; windowRebuilds = 0;
         }
 
         // ---- the rebuild ----------------------------------------------------------------------------------------------------
 
-        private bool Rebuild(DynamicMap map, IMapProjection projection, float now)
+        private bool Rebuild(DynamicMap map, IMapProjection projection, float now, bool rebind)
         {
             float factor = map.mapDisplayFactor, zoom = Mathf.Abs(map.mapImage.transform.localScale.x);
             if (!(zoom > 1e-4f) || (projection == null && !(factor > 1e-6f))) return false;
@@ -255,26 +262,52 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             // Tags first: their sizes and places decide the leaders in the ink.
             int n = Plan.TagCount;
+            bool fill = tagsStale || !Mathf.Approximately(px, tagsPx);
+            tagsStale = false; tagsPx = px;
             for (int i = 0; i < n; i++)
             {
                 StrTagSpec s = Plan.Tags[i];
+                bool fresh = tags.Count <= i;
                 StrMapTag tag = TagAt(i);
                 bool ok = Project(projection, factor, s.X, s.Z, out float lx, out float ly);
                 anchorLocal[i] = new Vector2(lx, ly);
                 Vector2 sp = RectTransformUtility.WorldToScreenPoint(camera, image.TransformPoint(new Vector3(lx, ly, 0f)));
                 bool inside = ok && sp.x >= screen.xMin + ViewMargin && sp.x <= screen.xMax - ViewMargin && sp.y >= screen.yMin + ViewMargin && sp.y <= screen.yMax - ViewMargin;
-                tag.Show(in s, px);
+                if (fill || fresh) tag.Show(in s, px, false);
+                else if (!tag.gameObject.activeSelf) tag.gameObject.SetActive(true);
                 tag.AnchorLocal = anchorLocal[i];
-                Rect size = tag.ScreenBounds(camera);
-                ax[i] = inside ? sp.x : float.NaN; ay[i] = inside ? sp.y : float.NaN; tw[i] = size.width; th[i] = size.height;
+                ax[i] = inside ? sp.x : float.NaN; ay[i] = inside ? sp.y : float.NaN;
+                // Every plate is placed at its resting size; the hovered one keeps the size it had before it opened.
+                if (fill || fresh || !s.Hot) { Rect size = tag.ScreenBounds(camera); tw[i] = size.width; th[i] = size.height; }
+                if ((fill || fresh) && s.Hot) tag.Show(in s, px, true);
             }
             StrTagPlacer.Place(in view, ax, ay, tw, th, n, placed);
             for (int i = 0; i < n; i++)
             {
                 if (float.IsNaN(ax[i])) { tags[i].Hide(); continue; }
+                if (Plan.Tags[i].Hot)
+                {
+                    // The hovered plate opens where it rests, from its top-left corner and over its neighbours, so it never slides out from under the cursor.
+                    Rect open = tags[i].ScreenBounds(camera);
+                    placed[i] = new RectF(Mathf.Max(view.X, Mathf.Min(placed[i].X, view.X + view.W - open.width)), Mathf.Max(view.Y, placed[i].Y + placed[i].H - open.height), open.width, open.height);
+                    tags[i].Root.SetAsLastSibling();
+                }
                 tags[i].PlaceAt(new Vector2(placed[i].X + placed[i].W * 0.5f, placed[i].Y + placed[i].H * 0.5f), camera);
             }
             for (int i = n; i < tags.Count; i++) tags[i].Hide();
+
+            // The card owns the ground it covers: a plate left there draws through its words, so it rests until the card closes.
+            UpdateCard(map, rebind);
+            if (card.Visible)
+            {
+                Rect over = ScreenRect(card.Root, camera);
+                for (int i = 0; i < n; i++)
+                {
+                    if (float.IsNaN(ax[i]) || Plan.Tags[i].Id == CardPlan.Id || !over.Overlaps(new Rect(placed[i].X, placed[i].Y, placed[i].W, placed[i].H))) continue;
+                    tags[i].Hide();
+                    ax[i] = float.NaN;
+                }
+            }
 
             // The ink: shapes in plan order, then one leader per visible tag.
             AvQuadBuffer b = ink.Buffer, pb = pulse.Buffer;

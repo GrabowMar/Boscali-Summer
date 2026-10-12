@@ -106,17 +106,6 @@ namespace BoscaliSummer.Modules.Immersion.Domain
         }
 
         /// <summary>
-        /// How visible the sun flare is: 0 below the horizon, fading in over the first few degrees
-        /// of elevation, then scaled by what stands between the eye and the sun (0 clear, 1 blocked).
-        /// </summary>
-        public static float SunVisibility(float sunElevationDeg, float cloudOcclusion, bool terrainBlocked)
-        {
-            if (terrainBlocked || sunElevationDeg <= -1f) return 0f;
-            float horizon = Scalar.Clamp((sunElevationDeg + 1f) / 6f, 0f, 1f);
-            return horizon * Scalar.Clamp(1f - cloudOcclusion, 0f, 1f);
-        }
-
-        /// <summary>
         /// Airframe creak volume 0-1 from the specific-force jerk in G/s: silence below the
         /// threshold, then a quick ramp to a low ceiling.
         /// </summary>

@@ -2,217 +2,56 @@ using NOAvionics;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
-    /// The control rail: one thin column on the right of the maximised map holding every
-    /// button on the screen.
+    /// The MFD index: one column on the right of the maximised map with a key for every
+    /// screen the display can show.
     ///
-    /// The stock layout hangs a bezel column down each side of the map and leaves the mods'
-    /// map-overlay toggles floating somewhere else again, so the controls for one screen sit
-    /// in three places. Collecting them into a single rail gives the map one contiguous
-    /// rectangle, the panels one column of their own, and the player one place to look for
-    /// anything clickable.
+    /// <para>The rail owns its keys. The game's bezel buttons are stowed out of sight inside
+    /// the rail (<see cref="Stowage"/>) and stay exactly as the game made them; a key press is
+    /// forwarded to the stowed button's own <c>onClick</c>, so vanilla, the single-panel
+    /// patch and every hosted screen still see the press they always saw. Nothing vanilla is
+    /// repainted, which is why nothing has to be put back and why the game rewriting a bezel
+    /// label can no longer disturb the rail.</para>
     ///
-    /// Each borrowed button is branded with a vector glyph, the game's own short code, and
-    /// the word that code stands for, and lights up while its screen is the open one. The
-    /// code still leads because it is the dual-mod protocol's identity; the glyph and the
-    /// descriptor stop it from being a wall of three-letter noise.
-    ///
-    /// <para><b>Cross-mod seam.</b> The rail object is named <see cref="RailName"/> and that
-    /// name is the whole contract. Boscali Summer finds it with <c>GameObject.Find</c> and
-    /// parents its overlay toggles in; it does not reference this assembly, and nothing of a
-    /// custom type crosses the boundary. The <c>AppDomain</c> channel the rest of
-    /// <c>NOAvionics</c> uses cannot carry a <c>RectTransform</c>, which is why this seam is
-    /// a name rather than a registry entry.</para>
+    /// <para>Every colour comes from the live kit sheet, and the rail carries its own
+    /// <see cref="AvTicker"/>: a scheme change repaints it on the next frame, like any console.</para>
     /// </summary>
     internal static class MfdRail
     {
-        /// <summary>
-        /// The well-known name Boscali Summer looks for. Changing it is a breaking change to
-        /// the dual-mod contract: Wing Command must change its copy in the same release.
-        /// </summary>
+        /// <summary>The rail's object name on the map canvas; <see cref="MapUiPointer"/> guards its rectangle.</summary>
         public const string RailName = "NOAvionics.Rail";
 
-        /// <summary>
-        /// Height of one button in the rail.
-        ///
-        /// Deliberately larger than the stock bezel button. Those are small because they are
-        /// squeezed into a cockpit frame; a rail with a whole screen edge to itself has no
-        /// reason to inherit that constraint, and these are clicked mid-flight.
-        /// </summary>
-        private const float ButtonHeight = 60f;
-
-        /// <summary>Vertical gap between buttons.</summary>
-        private const float ButtonGap = 2f;
-
-        private const float CompactGap = 1f;
-
-        /// <summary>Desktop pointer target floor; below this the stock two-column bezel wins.</summary>
-        private const float MinimumButtonHeight = 44f;
-
-        /// <summary>Inset from the rail's own edges to a button.</summary>
-        private const float RailPad = 4f;
-
-        /// <summary>
-        /// Label size fallback for a button the catalog could not brand. Branded buttons
-        /// derive the code and descriptor sizes from their own slot height.
-        /// </summary>
-        private const float LabelSize = 24f;
-
-        /// <summary>Icon box at the left of a branded button.</summary>
-        private const float IconSize = 24f;
-
-        private const float IconBayWidth = 36f;
-        private const float IconInset = (IconBayWidth - IconSize) * 0.5f;
-        private const float HeaderHeight = 26f;
-
-        /// <summary>Where a branded label starts, clear of the icon column.</summary>
-        private const float LabelInset = 42f;
-
-        /// <summary>Distance from the top of the rail to the first button.</summary>
-        private const float RailTop = 4f;
-
         private static RectTransform rail;
-        private static float effectiveButtonHeight = ButtonHeight;
-        private static float effectiveButtonGap = ButtonGap;
-        private static float effectiveLabelSize = LabelSize;
-        private static bool showHeader;
-        private static int buttonCount;
-        private static RectTransform header;
-        private static TMP_Text headerText;
-        private static TMP_Text headerIcon;
+        private static RectTransform stowage;
+        private static Chrome chrome;
+        private static Vector2 laidSize;
+        private static readonly List<MfdRailKey> keys = new List<MfdRailKey>();
 
-        /// <summary>Y offset of the next free slot, measured down from the rail's top.</summary>
-        private static float cursor;
+        /// <summary>The keys in display order.</summary>
+        public static IReadOnlyList<MfdRailKey> Keys => keys;
 
         /// <summary>
-        /// The rail, if one has been built this mission.
-        ///
-        /// Wing Command's own callers use this; Boscali finds the same object by name.
+        /// The inactive holder the game's bezel buttons wait in while the rail stands in for
+        /// them. An inactive parent keeps them off screen whatever the game does to their own
+        /// active flag on each map open.
         /// </summary>
+        public static RectTransform Stowage => stowage;
+
         public static bool TryGetRail(out RectTransform rect)
         {
             rect = rail;
             return rail != null;
         }
 
-        /// <summary>Build (or re-find) the rail on the maximised map canvas.</summary>
-        public static RectTransform Ensure(Canvas canvas, MfdLayout.Columns columns)
-        {
-            if (canvas == null) return null;
+        /// <summary>False when even bare 44px keys would not fit; the caller then leaves the stock bezel alone.</summary>
+        public static bool Fits(float railHeight, int keyCount) => MfdRailPlan.Resolve(railHeight, keyCount, 0).Fits;
 
-            if (rail == null)
-            {
-                // A previous mission's rail can outlive this static field if the scene kept
-                // the canvas; adopt it rather than building a second one.
-                Transform existing = canvas.transform.Find(RailName);
-                rail = existing as RectTransform;
-            }
-
-            if (rail == null)
-            {
-                var go = new GameObject(RailName, typeof(RectTransform));
-                rail = go.GetComponent<RectTransform>();
-                rail.SetParent(canvas.transform, worldPositionStays: false);
-            }
-
-            AvFrame backdrop = rail.GetComponent<AvFrame>();
-            if (backdrop == null)
-            {
-                backdrop = rail.gameObject.AddComponent<AvFrame>();
-                backdrop.raycastTarget = false;
-                backdrop.Chamfer = AvChamfer.Diagonal(6f);
-                backdrop.Fill = true;
-            }
-            backdrop.Paint(AvStyleHost.FuiColor("surface", AvTheme.Surface), AvStyleHost.FuiColor("frame", AvTheme.Frame));
-            // Portal: corner brackets on the rail plate.
-            backdrop.Bracket = 8f;
-            backdrop.BracketColor = AvStyleHost.FuiColor("select", AvTheme.Accent).WithAlpha(0.8f);
-
-            rail.anchorMin = rail.anchorMax = rail.pivot = new Vector2(0.5f, 0.5f);
-            rail.sizeDelta = new Vector2(columns.Rail.width, columns.Rail.height);
-            rail.anchoredPosition = MfdLayout.CentreOf(columns.Rail);
-            rail.localScale = Vector3.one;
-            rail.SetAsLastSibling();
-
-            cursor = RailTop + (showHeader ? HeaderHeight : 0f);
-            UpdateHeader();
-            return rail;
-        }
-
-        /// <summary>
-        /// Choose the largest rail keys that fit the live screen count. Returns false when
-        /// even the 44px pointer-target floor would not fit, allowing the caller to leave
-        /// the stock two-column bezel untouched.
-        /// </summary>
-        public static bool PrepareCapacity(float railHeight, int itemCount)
-        {
-            effectiveButtonHeight = ButtonHeight;
-            effectiveButtonGap = ButtonGap;
-            effectiveLabelSize = LabelSize;
-            buttonCount = itemCount;
-            if (itemCount <= 0)
-            {
-                showHeader = false;
-                UpdateHeader();
-                return true;
-            }
-
-            float roomy = RailTop + RailPad + itemCount * ButtonHeight +
-                          Mathf.Max(0, itemCount - 1) * ButtonGap;
-            showHeader = roomy + HeaderHeight <= railHeight;
-            cursor = RailTop + (showHeader ? HeaderHeight : 0f);
-            UpdateHeader();
-            if (roomy <= railHeight) return true;
-
-            effectiveButtonGap = CompactGap;
-            effectiveButtonHeight = (railHeight - RailTop - RailPad -
-                                     Mathf.Max(0, itemCount - 1) * CompactGap) / itemCount;
-            if (effectiveButtonHeight < MinimumButtonHeight)
-            {
-                effectiveButtonHeight = ButtonHeight;
-                effectiveButtonGap = ButtonGap;
-                return false;
-            }
-
-            effectiveLabelSize = Mathf.Clamp(effectiveButtonHeight * 0.42f, 16f, LabelSize);
-            return true;
-        }
-
-        private static void UpdateHeader()
-        {
-            if (rail == null) return;
-            if (!showHeader)
-            {
-                if (header != null) header.gameObject.SetActive(false);
-                return;
-            }
-
-            if (header == null)
-            {
-                var go = new GameObject("IndexHeader", typeof(RectTransform));
-                header = go.GetComponent<RectTransform>();
-                header.SetParent(rail, false);
-                MfdChromeLay.Place(header, new Rect(0f, 0f, rail.rect.width, HeaderHeight));
-                headerIcon = AvIcons.Make(header, AvIcon.ListDetails, AvGridTokens.IconInline,
-                    AvStyleHost.FuiColor("ink-dim", AvTheme.Dim));
-                MfdChromeLay.Place(headerIcon.rectTransform, new Rect(10f, -3f, 14f, 14f));
-                headerText = AvText.Make(header, "Text", AvTextRole.Micro, "", TextAlignmentOptions.MidlineLeft);
-                MfdChromeLay.Place(headerText.rectTransform, new Rect(28f, -2f, rail.rect.width - 66f, 20f));
-                headerText.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
-                MfdChromeLay.Rule(header, "Rule", new Rect(4f, -HeaderHeight + 1f, rail.rect.width - 8f, 1f),
-                    AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.65f));
-                for (int i = 0; i < 3; i++)
-                    MfdChromeLay.Rule(header, "Tick" + i, new Rect(rail.rect.width - 27f + i * 5f, -11f, 3f, 2f),
-                        i == 2 ? AvStyleHost.FuiColor("select", AvTheme.Accent).WithAlpha(0.75f) : AvStyleHost.FuiColor("frame", AvTheme.Frame));
-            }
-            header.gameObject.SetActive(true);
-            if (headerText != null) headerText.text = "// MFD INDEX  " + MfdChromeLay.TwoDigits(buttonCount);
-        }
-
+        /// <summary>Bezel slots that drive a screen. A spare slot is a live button with nothing behind it.</summary>
         public static int Count(List<Button> buttons, List<MFDScreen> screens)
         {
             if (buttons == null || screens == null) return 0;
@@ -223,560 +62,412 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return count;
         }
 
-        /// <summary>
-        /// Claim the next slot down the rail.
-        ///
-        /// Both this mod's buttons and Boscali's overlay toggles advance the same cursor, so
-        /// the two mods' controls stack rather than overlapping — without either needing to
-        /// know how many buttons the other added.
-        /// </summary>
-        public static Rect NextSlot(float height = -1f)
+        /// <summary>Build (or move) the rail on the maximised map canvas.</summary>
+        public static RectTransform Ensure(Canvas canvas, MfdLayout.Columns columns)
         {
-            if (height <= 0f) height = effectiveButtonHeight;
-            float width = rail != null ? rail.rect.width - RailPad * 2f : MfdLayout.RailWidth - RailPad * 2f;
-            var slot = new Rect(RailPad, -cursor, width, height);
-            cursor += height + effectiveButtonGap;
-            return slot;
-        }
+            if (canvas == null) return null;
 
-        /// <summary>Forget the rail at the end of a mission; the next scene builds its own.</summary>
-        public static void Reset()
-        {
-            if (rail != null) Object.Destroy(rail.gameObject);
-            rail = null;
-            cursor = RailTop;
-            showHeader = false;
-            buttonCount = 0;
-            header = null;
-            headerText = null;
-            headerIcon = null;
-            effectiveButtonHeight = ButtonHeight;
-            effectiveButtonGap = ButtonGap;
-            effectiveLabelSize = LabelSize;
-        }
-
-        // ------------------------------------------------------------------- restyling
-
-        /// <summary>
-        /// What a vanilla bezel button looked like before the rail repainted it, so
-        /// <c>Minimize</c> can put it back exactly.
-        /// </summary>
-        internal sealed class ButtonSkin
-        {
-            public Button Owner;
-            public Selectable.Transition Transition;
-            public ColorBlock Colors;
-
-            public Image Background;
-            public Sprite Sprite;
-            public Image.Type Type;
-            public Color Color;
-
-            public TMP_Text Label;
-            public Color LabelColor;
-            public float LabelSize;
-            public float LabelSizeMin;
-            public float LabelSizeMax;
-            public FontStyles LabelStyle;
-            public bool LabelAutoSize;
-            public float LabelSpacing;
-            public string LabelText;
-            public bool LabelRichText;
-            public TextAlignmentOptions LabelAlignment;
-            public RectTransform LabelRect;
-            public Vector2 LabelAnchorMin;
-            public Vector2 LabelAnchorMax;
-            public Vector2 LabelPivot;
-            public Vector2 LabelPosition;
-            public Vector2 LabelSizeDelta;
-
-            /// <summary>The mod click cue added to a borrowed native button; removed on restore.</summary>
-            public AvClickSound Click;
-
-            /// <summary>The crisp frame drawn over the fill, plus the branded glyph the rail
-            /// added; destroyed on restore rather than undone value-by-value.</summary>
-            public GameObject Decoration;
-            public TMP_Text Icon;
-
-            /// <summary>
-            /// The ownership mark the rail leaves on the button. It carries the branded
-            /// text so a repeated adoption pass can re-assert the line instead of
-            /// branding its own output again.
-            /// </summary>
-            public MfdRailBrand Brand;
-
-            /// <summary>Fill a branded button returns to when it is not the open screen.</summary>
-            internal Color RestFill;
-            internal Image SelectionRail;
-            internal Image StateTick;
-            internal AvFrame Frame;
-            private bool latched;
-
-            /// <summary>
-            /// Whether this is the screen currently on the panel. Vanilla has no visual state
-            /// for the adopted buttons, so the rail has to say which one is open.
-            /// </summary>
-            public void SetLatched(bool on)
+            if (rail == null)
             {
-                if (latched == on) return;
-                latched = on;
-                Color select = AvStyleHost.FuiColor("select", AvTheme.Accent);
-                // R3: "ON"/"SELECTED" is an outline + LED + an 8% wash, never a solid fill.
-                if (Background != null)
-                {
-                    Background.color = on ? Color.Lerp(RestFill, select, 0.08f) : RestFill;
-                }
-                if (Icon != null) Icon.color = on ? select : AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
-                if (SelectionRail != null) SelectionRail.color = on ? select : Color.clear;
-                if (Frame != null) Frame.BracketColor = on ? select : AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.9f);
-                if (StateTick != null) StateTick.color = on ? select : AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.55f);
+                // A rail this session did not build has none of the parts the statics point at.
+                Transform stale = canvas.transform.Find(RailName);
+                if (stale != null) Kill(stale.gameObject);
+
+                var go = new GameObject(RailName, typeof(RectTransform));
+                rail = go.GetComponent<RectTransform>();
+                rail.SetParent(canvas.transform, worldPositionStays: false);
+                chrome = new Chrome(rail);
+                stowage = AvLay.Child(rail, "Stowed bezel");
+                stowage.gameObject.SetActive(false);
+
+                AvTicker ticker = go.AddComponent<AvTicker>();
+                ticker.Register(chrome);
+                ticker.Add(-1, AvTickRate.Fast, Refresh);
             }
 
-            public void Restore()
-            {
-                if (Owner != null)
-                {
-                    Owner.transition = Transition;
-                    Owner.colors = Colors;
-                }
+            rail.anchorMin = rail.anchorMax = rail.pivot = new Vector2(0.5f, 0.5f);
+            rail.sizeDelta = new Vector2(columns.Rail.width, columns.Rail.height);
+            rail.anchoredPosition = MfdLayout.CentreOf(columns.Rail);
+            rail.localScale = Vector3.one;
+            rail.SetAsLastSibling();
 
-                if (Click != null) Object.Destroy(Click);
-                Click = null;
-
-                if (Background != null)
-                {
-                    Background.sprite = Sprite;
-                    Background.type = Type;
-                    Background.color = Color;
-                }
-
-                if (Label != null)
-                {
-                    Label.enableAutoSizing = LabelAutoSize;
-                    Label.fontSizeMin = LabelSizeMin;
-                    Label.fontSizeMax = LabelSizeMax;
-                    Label.color = LabelColor;
-                    MfdChromeLay.RestoreCapturedSize(Label, LabelSize);
-                    Label.fontStyle = LabelStyle;
-                    Label.characterSpacing = LabelSpacing;
-                    Label.alignment = LabelAlignment;
-                    Label.richText = LabelRichText;
-                    Label.text = LabelText;
-                }
-
-                if (LabelRect != null)
-                {
-                    LabelRect.anchorMin = LabelAnchorMin;
-                    LabelRect.anchorMax = LabelAnchorMax;
-                    LabelRect.pivot = LabelPivot;
-                    LabelRect.anchoredPosition = LabelPosition;
-                    LabelRect.sizeDelta = LabelSizeDelta;
-                }
-
-                if (Decoration != null) Object.Destroy(Decoration);
-                Decoration = null;
-                Icon = null;
-
-                // Disabled first: Unity destroys at end of frame (and not at all in edit
-                // mode), so a same-frame restore-and-rebuild must already see the button
-                // as unmarked rather than skip its own fresh adoption.
-                if (Brand != null)
-                {
-                    Brand.enabled = false;
-                    Object.Destroy(Brand);
-                    Brand = null;
-                }
-            }
-
-            /// <summary>
-            /// Put the rail's line and colour back when the game has reset the label
-            /// underneath it.
-            ///
-            /// <c>InfoPanel_Faction</c> calls <c>VirtualMFD.SetupButtons</c> whenever a
-            /// faction panel refreshes, which rewrites every bezel label as its short
-            /// code, and the game's <c>TextStyleApplier</c> repaints the label with the
-            /// vanilla green at its first activation. The rail owns the borrowed label
-            /// while the map is maximised, so it restores the branded line on the next
-            /// tick.
-            /// </summary>
-            public void Reassert()
-            {
-                if (Brand != null) Brand.Reassert();
-            }
+            if (rail.sizeDelta != laidSize) Lay();
+            return rail;
         }
 
         /// <summary>
-        /// Repaint a stock bezel button in the panels' language, and return what it was.
-        ///
-        /// A vanilla <c>BDF</c> button next to the mod's <c>WMC</c> button used to be two
-        /// visibly different controls doing the same job. Only the button's own
-        /// <c>Image</c> and label are touched — no hierarchy changes — so restoring is a
-        /// matter of putting four values back.
+        /// Build the keys from the bezel's live slots, in the catalog's order. Safe to call
+        /// on every structure pass: nothing is rebuilt unless a screen appeared or went.
         /// </summary>
-        public static ButtonSkin Restyle(Button button)
-        {
-            if (button == null) return null;
-
-            var skin = new ButtonSkin();
-
-            Image bg = button.GetComponent<Image>();
-            if (bg != null)
-            {
-                skin.Background = bg;
-                skin.Sprite = bg.sprite;
-                skin.Type = bg.type;
-                skin.Color = bg.color;
-
-                // A dark, near-opaque key rather than a washed-out grey: the rail sits over
-                // a bright map, so anything translucent reads as murky. Decorate() now draws
-                // the button's frame as its own AvFrame mesh, so the fill itself only needs
-                // to read as a flat surface.
-                bg.sprite = null;
-                bg.type = Image.Type.Simple;
-                bg.color = AvStyleHost.FuiColor("surface", AvTheme.Surface);
-                skin.RestFill = bg.color;
-            }
-
-            TMP_Text label = button.GetComponentInChildren<TMP_Text>(true);
-            if (label != null)
-            {
-                skin.Label = label;
-                skin.LabelColor = label.color;
-                skin.LabelSize = label.fontSize;
-                skin.LabelSizeMin = label.fontSizeMin;
-                skin.LabelSizeMax = label.fontSizeMax;
-                skin.LabelStyle = label.fontStyle;
-                skin.LabelAutoSize = label.enableAutoSizing;
-                skin.LabelSpacing = label.characterSpacing;
-                skin.LabelText = label.text;
-                skin.LabelRichText = label.richText;
-                skin.LabelAlignment = label.alignment;
-                RectTransform labelRect = label.rectTransform;
-                if (labelRect != null)
-                {
-                    skin.LabelRect = labelRect;
-                    skin.LabelAnchorMin = labelRect.anchorMin;
-                    skin.LabelAnchorMax = labelRect.anchorMax;
-                    skin.LabelPivot = labelRect.pivot;
-                    skin.LabelPosition = labelRect.anchoredPosition;
-                    skin.LabelSizeDelta = labelRect.sizeDelta;
-                }
-
-                // Pin min == max rather than assign fontSize directly: TMP's auto-size pass
-                // then converges to exactly that value regardless of box width, the same
-                // pinned-size idiom AvText.Fit uses for kit-authored chrome.
-                label.enableAutoSizing = true;
-                label.fontSizeMin = effectiveLabelSize;
-                label.fontSizeMax = effectiveLabelSize;
-                label.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
-                label.fontStyle = FontStyles.Normal;
-                label.characterSpacing = 0f;
-                label.alignment = TextAlignmentOptions.Center;
-                label.enableWordWrapping = false;
-                label.overflowMode = TextOverflowModes.Overflow;
-                // Branding composes a two-line label with a size/colour tag; a label cloned
-                // from a prefab that disabled rich text would print those tags verbatim.
-                label.richText = true;
-            }
-
-            // A stock bezel button is a Selectable, so a flight stick can steer focus onto it
-            // and fire it. Every control the mods build already disables that; the vanilla
-            // ones the rail adopts have to be disarmed too.
-            AvInput.StripNavigation(button);
-
-            // The stock transition is SpriteSwap, so hovering would swap the restyled flat
-            // fill for a vanilla highlight frame. ColorTint multiplies the same dark key
-            // instead, keeping hover and press inside the rail's own language.
-            skin.Owner = button;
-            skin.Transition = button.transition;
-            skin.Colors = button.colors;
-            button.transition = Selectable.Transition.ColorTint;
-            // ColorTint multipliers, not paint: these ride the vanilla Selectable bridge (not
-            // an AvControl), so they stay numeric tint factors rather than theme roles. Built
-            // through Rgba/AvTheme.Unity so no literal Color escapes this kit-authored file.
-            button.colors = new ColorBlock
-            {
-                normalColor = Color.white,
-                highlightedColor = AvTheme.Unity(new Rgba(1.35f, 1.35f, 1.35f, 1f)),
-                pressedColor = AvTheme.Unity(new Rgba(0.70f, 0.70f, 0.70f, 1f)),
-                selectedColor = Color.white,
-                disabledColor = AvTheme.Unity(new Rgba(0.50f, 0.50f, 0.60f, 0.60f)),
-                colorMultiplier = 1f,
-                fadeDuration = 0.06f,
-            };
-
-            // The vanilla key has no avionics click; lend it one while the rail wears it.
-            skin.Click = button.GetComponent<AvClickSound>();
-            if (skin.Click == null) skin.Click = button.gameObject.AddComponent<AvClickSound>();
-
-            return skin;
-        }
-
-        /// <summary>Place a button into a rail slot.</summary>
-        public static void Place(Button button, Rect slot)
-        {
-            if (button == null || rail == null) return;
-
-            Transform t = button.transform;
-            if (t.parent != rail) t.SetParent(rail, worldPositionStays: false);
-
-            var rt = button.GetComponent<RectTransform>();
-            if (rt == null) return;
-
-            MfdChromeLay.Place(rt, slot);
-            rt.localRotation = Quaternion.identity;
-            t.SetAsLastSibling();
-        }
-
-        /// <summary>
-        /// A crisp <see cref="AvFrame"/> border over the flat fill, plus the branded icon and
-        /// two-line label.
-        ///
-        /// A flat <c>Image</c> fill alone reads as one dark blob with no definition; this draws
-        /// the kit v2 frame and ticks as a child instead, and is torn down as one object on
-        /// restore rather than undone value by value.
-        /// </summary>
-        private static void Decorate(Button button, ButtonSkin skin, Rect slot)
-        {
-            if (button == null || skin == null) return;
-
-            var go = new GameObject("AvDecoration", typeof(RectTransform));
-            var rt = go.GetComponent<RectTransform>();
-            rt.SetParent(button.transform, worldPositionStays: false);
-            AvLay.Fill(rt, 0f);
-            rt.SetAsLastSibling();
-
-            // The crisp button frame: one mesh instead of the old baked sliced sprite.
-            skin.Frame = MfdChromeLay.Outline(rt, "Frame", new Rect(0f, 0f, slot.width, slot.height),
-                AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.65f), AvChamfer.Diagonal(3f));
-            skin.Frame.Bracket = 5f;
-            skin.Frame.BracketColor = AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.9f);
-            MfdChromeLay.Rule(rt, "IconDivider", new Rect(IconBayWidth, -7f, 1f, slot.height - 14f),
-                AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.65f));
-            skin.SelectionRail = MfdChromeLay.Rule(rt, "SelectionRail", new Rect(0f, -2f, 3f, slot.height - 4f), Color.clear);
-            skin.StateTick = MfdChromeLay.Rule(rt, "StateTick", new Rect(slot.width - 11f, -slot.height * 0.5f, 7f, 1f),
-                AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.55f));
-
-            var brand = button.gameObject.AddComponent<MfdRailBrand>();
-            brand.Label = skin.Label;
-            brand.LabelColor = skin.Label != null ? skin.Label.color : AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
-            skin.Brand = brand;
-
-            Brand(button, skin, rt, slot);
-            skin.Decoration = go;
-        }
-
-        /// <summary>
-        /// Add the glyph and the code-plus-descriptor label to a button the rail borrowed.
-        /// The game's own code leads; the descriptor is the part a new player can read.
-        /// </summary>
-        private static void Brand(Button button, ButtonSkin skin, RectTransform decoration, Rect slot)
-        {
-            TMP_Text label = skin.Label;
-            if (label == null) return;
-
-            MfdChromeLay.Place(label.rectTransform,
-                new Rect(LabelInset, 0f, Mathf.Max(0f, slot.width - LabelInset - RailPad), slot.height));
-            label.alignment = TextAlignmentOptions.MidlineLeft;
-
-            string raw = label.text;
-            MfdRailEntry entry = MfdRailCatalog.For(raw);
-            float codeSize = Mathf.Clamp(slot.height * 0.31f, 13f, 18f);
-            float nameSize = Mathf.Clamp(slot.height * 0.21f, AvTypeScale.Floor, 12f);
-            // Pin min == max (see Restyle) rather than assign fontSize directly.
-            label.enableAutoSizing = true;
-            label.fontSizeMin = codeSize;
-            label.fontSizeMax = codeSize;
-
-            if (string.IsNullOrEmpty(entry.Code))
-            {
-                label.text = MfdRailCatalog.Sanitise(raw, 8);
-                Remember(skin, null, label.text);
-                return;
-            }
-
-            label.text = entry.HasName
-                ? entry.Code + "\n<size=" + AvNum.Fixed(nameSize, 1) +
-                  "><color=#" + ColorUtility.ToHtmlStringRGB(AvStyleHost.FuiColor("ink-dim", AvTheme.Dim)) + ">" + entry.Name +
-                  "</color></size>"
-                : entry.Code;
-            Remember(skin, entry.Code, label.text);
-
-            TMP_Text icon = AvIcons.Make(decoration, entry.Glyph, IconSize, AvStyleHost.FuiColor("ink", AvTheme.TextPrimary));
-            MfdChromeLay.Place(icon.rectTransform, new Rect(IconInset, -(slot.height - IconSize) * 0.5f, IconSize, IconSize));
-            skin.Icon = icon;
-        }
-
-        /// <summary>Record what the rail wrote, so a later pass can restore the exact line.</summary>
-        private static void Remember(ButtonSkin skin, string code, string text)
-        {
-            if (skin == null || skin.Brand == null) return;
-            skin.Brand.Code = code;
-            skin.Brand.Text = text;
-        }
-
-        /// <summary>
-        /// Lay both bezel columns down the rail in the catalog's preferred order.
-        ///
-        /// The game's columns arrive left-then-right. Sorting the merged sequence stably lets
-        /// the catalog's lead codes sit together while every unranked button keeps the
-        /// order the game gave it. Only placement changes: each button keeps its own click
-        /// binding and screen.
-        /// </summary>
-        public static int Adopt(
+        public static int Build(
             List<Button> left, List<MFDScreen> leftScreens,
-            List<Button> right, List<MFDScreen> rightScreens,
-            List<ButtonSkin> skins)
+            List<Button> right, List<MFDScreen> rightScreens)
         {
-            var pairs = new List<Pair>();
-            Collect(pairs, left, leftScreens);
-            Collect(pairs, right, rightScreens);
+            if (rail == null) return 0;
 
-            // Insertion sort: at a dozen buttons the stable order of equal ranks is worth
-            // more than the asymptotic win of List.Sort, which is not stable.
-            for (int i = 1; i < pairs.Count; i++)
+            var slots = new List<Slot>();
+            Collect(slots, left, leftScreens);
+            Collect(slots, right, rightScreens);
+
+            // Insertion sort: stable, so codes the catalog does not know keep the game's order.
+            for (int i = 1; i < slots.Count; i++)
             {
-                Pair pair = pairs[i];
+                Slot slot = slots[i];
                 int j = i - 1;
-                while (j >= 0 && pairs[j].Rank > pair.Rank)
+                while (j >= 0 && slots[j].Entry.Rank > slot.Entry.Rank)
                 {
-                    pairs[j + 1] = pairs[j];
+                    slots[j + 1] = slots[j];
                     j--;
                 }
-                pairs[j + 1] = pair;
+                slots[j + 1] = slot;
             }
 
-            int adopted = 0;
-            for (int i = 0; i < pairs.Count; i++)
+            // The same bezel as last time keeps its keys, and with them a pointer's hover.
+            bool same = slots.Count == keys.Count;
+            for (int i = 0; same && i < slots.Count; i++)
+                same = keys[i].Source == slots[i].Button && keys[i].Screen == slots[i].Screen && keys[i].Entry.Code == slots[i].Entry.Code;
+            if (same)
             {
-                if (AdoptOne(pairs[i].Button, pairs[i].Screen, skins)) adopted++;
+                Refresh();
+                return keys.Count;
             }
-            return adopted;
+
+            for (int i = 0; i < keys.Count; i++) Kill(keys[i].Rect.gameObject);
+            keys.Clear();
+            for (int i = 0; i < slots.Count; i++)
+                keys.Add(new MfdRailKey(rail, slots[i].Entry, i + 1, slots[i].Button, slots[i].Screen));
+
+            Lay();
+            Refresh();
+            return keys.Count;
         }
 
-        private struct Pair
+        private struct Slot
         {
             public Button Button;
             public MFDScreen Screen;
-            public int Rank;
+            public MfdRailEntry Entry;
         }
 
-        private static void Collect(List<Pair> into, List<Button> buttons, List<MFDScreen> screens)
+        private static void Collect(List<Slot> into, List<Button> buttons, List<MFDScreen> screens)
         {
-            if (buttons == null) return;
+            if (buttons == null || screens == null) return;
 
-            for (int i = 0; i < buttons.Count; i++)
+            for (int i = 0; i < buttons.Count && i < screens.Count; i++)
             {
-                Button button = buttons[i];
-                TMP_Text label = button == null ? null : button.GetComponentInChildren<TMP_Text>(true);
-                into.Add(new Pair
+                if (buttons[i] == null || screens[i] == null) continue;
+                into.Add(new Slot
                 {
-                    Button = button,
-                    Screen = screens != null && i < screens.Count ? screens[i] : null,
-                    Rank = MfdRailCatalog.OrderRank(RankCode(button, label)),
+                    Button = buttons[i],
+                    Screen = screens[i],
+                    Entry = MfdRailCatalog.For(CodeOf(buttons[i], screens[i])),
                 });
             }
         }
 
-        /// <summary>
-        /// The live ownership mark on a button, or null. Markers are released by being
-        /// disabled before destruction, so a released mark must never count as one.
-        /// </summary>
-        private static MfdRailBrand FindBrand(Button button)
+        private static string CodeOf(Button button, MFDScreen screen)
         {
-            if (button == null) return null;
-            MfdRailBrand[] marks = button.GetComponents<MfdRailBrand>();
-            for (int i = 0; i < marks.Length; i++)
-            {
-                if (marks[i] != null && marks[i].enabled) return marks[i];
-            }
-            return null;
-        }
-
-        /// <summary>
-        /// The clean short code behind a button's current label. A button the rail already
-        /// wears reports its branded line, not a code; the mark carries the code the
-        /// catalog matched so the lead ordering survives repeated adoption passes.
-        /// </summary>
-        private static string RankCode(Button button, TMP_Text label)
-        {
-            MfdRailBrand brand = FindBrand(button);
-            if (brand != null && !string.IsNullOrEmpty(brand.Code)) return brand.Code;
+            // The merged faction screen keeps a native HQ code underneath; the rail shows the merge.
+            if (screen == FactionMfdMergePatch.Screen) return "FAC";
+            if (!string.IsNullOrEmpty(screen.shortName)) return screen.shortName;
+            TMP_Text label = button.GetComponentInChildren<TMP_Text>(true);
             return label == null ? null : label.text;
         }
 
-        private static bool AdoptOne(Button button, MFDScreen screen, List<ButtonSkin> skins)
+        /// <summary>Light the key whose screen is on the panel. Runs on the rail's own 10 Hz tick and after a press.</summary>
+        public static void Refresh()
         {
-            // The stock bezel carries six slots per column with about three filled. A
-            // spare is a live GameObject with no screen behind it — vanilla only clears
-            // its Behaviour.enabled — so filtering on activeSelf would have put five
-            // blank buttons in the rail. Ask whether the slot drives a screen instead.
-            if (button == null || screen == null) return false;
+            for (int i = 0; i < keys.Count; i++)
+                keys[i].SetLatched(keys[i].Screen != null && keys[i].Screen.isActive);
+        }
 
-            if (screen == FactionMfdMergePatch.Screen)
+        private static void Lay()
+        {
+            if (rail == null) return;
+
+            float width = rail.sizeDelta.x;
+            float height = rail.sizeDelta.y;
+            int groups = 0;
+            for (int i = 0; i < keys.Count; i++)
+                if (i == 0 || keys[i].Entry.Group != keys[i - 1].Entry.Group) groups++;
+
+            MfdRailPlan plan = MfdRailPlan.Resolve(height, keys.Count, groups);
+            float y = MfdRailPlan.Pad;
+            chrome.LayHeader(plan.Header, width, keys.Count);
+            if (plan.Header) y += MfdRailPlan.HeaderHeight + MfdRailPlan.Gap;
+
+            int labels = 0;
+            for (int i = 0; i < keys.Count; i++)
             {
-                TMP_Text factionLabel = button.GetComponentInChildren<TMP_Text>(true);
-                if (factionLabel != null) factionLabel.text = "FAC";
+                if (plan.Groups && (i == 0 || keys[i].Entry.Group != keys[i - 1].Entry.Group))
+                {
+                    chrome.LayGroup(labels++, MfdRailCatalog.GroupName(keys[i].Entry.Group), y, width);
+                    y += MfdRailPlan.GroupHeight;
+                }
+                keys[i].Lay(new Rect(MfdRailPlan.Pad, -y, width - MfdRailPlan.Pad * 2f, plan.KeyHeight));
+                y += plan.KeyHeight + MfdRailPlan.Gap;
+            }
+            chrome.HideGroupsFrom(labels);
+            chrome.LayFooter(y, width, height);
+            laidSize = rail.sizeDelta;
+        }
+
+        /// <summary>Forget the rail; the next map open builds its own.</summary>
+        public static void Reset()
+        {
+            if (rail != null)
+            {
+                // The patch hands every bezel button back before it calls this. If one is
+                // still here, destroying it with the rail would leave the game holding a dead
+                // button, so it is released onto the canvas instead.
+                while (stowage != null && stowage.childCount > 0)
+                    stowage.GetChild(0).SetParent(rail.parent, worldPositionStays: false);
+                Kill(rail.gameObject);
+            }
+            rail = null;
+            stowage = null;
+            chrome = null;
+            laidSize = Vector2.zero;
+            keys.Clear();
+        }
+
+        // Hidden first: Destroy lands at the end of the frame, and a rebuild in the same frame must not draw both.
+        private static void Kill(GameObject go)
+        {
+            go.SetActive(false);
+            if (Application.isPlaying) Object.Destroy(go);
+            else Object.DestroyImmediate(go);
+        }
+
+        internal static Color Role(string role, Color fallback) => AvStyleHost.FuiColor(role, fallback);
+
+        /// <summary>The plate, the index header, the group labels and the scheme line; repaints the keys with itself.</summary>
+        private sealed class Chrome : AvPart
+        {
+            private readonly AvFrame plate;
+            private readonly AvFrame header;
+            private readonly AvFrame slab;
+            private readonly TMP_Text slabText;
+            private readonly TMP_Text title;
+            private readonly TMP_Text count;
+            private readonly TMP_Text footer;
+            private readonly List<TMP_Text> groupTexts = new List<TMP_Text>();
+            private readonly List<Image> groupRules = new List<Image>();
+
+            public Chrome(RectTransform root)
+            {
+                Rect = root;
+                plate = AvFrame.Add(root, "Plate", AvChamfer.Diagonal(8f));
+                AvLay.Fill(plate.rectTransform);
+                plate.Stroke = 1f;
+                plate.Bracket = 8f;
+
+                header = AvFrame.Add(root, "Header", AvChamfer.Diagonal(4f));
+                header.Stroke = 1f;
+                slab = AvFrame.Add(header.rectTransform, "Slab", default(AvChamfer));
+                slab.Stroke = 0f;
+                slabText = AvText.Make(header.rectTransform, "Id", AvTextRole.Head, "MFD", TextAlignmentOptions.Center);
+                title = AvText.Make(header.rectTransform, "Title", AvTextRole.Head, "INDEX");
+                count = AvText.Make(header.rectTransform, "Count", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineRight);
+                footer = AvText.Make(root, "Scheme", AvTextRole.Micro, "", TextAlignmentOptions.Center);
+                Restyle();
             }
 
-            // A repeated maximise offers buttons the rail already wears. Branding again
-            // would read the rail's own rich text back as a short code and paint the
-            // button with sanitised fragments ("BDFSIZE="), so the mark only re-asserts.
-            MfdRailBrand branded = FindBrand(button);
-            if (branded != null)
+            public void LayHeader(bool show, float width, int keyCount)
             {
-                branded.Reassert();
-                return false;
+                header.gameObject.SetActive(show);
+                if (!show) return;
+
+                float w = width - MfdRailPlan.Pad * 2f, h = MfdRailPlan.HeaderHeight;
+                MfdChromeLay.Place(header.rectTransform, new Rect(MfdRailPlan.Pad, -MfdRailPlan.Pad, w, h));
+                MfdChromeLay.Place(slab.rectTransform, new Rect(4f, -5f, 36f, h - 10f));
+                MfdChromeLay.Place(slabText.rectTransform, new Rect(4f, -5f, 36f, h - 10f));
+                MfdChromeLay.Place(title.rectTransform, new Rect(48f, 0f, w - 80f, h));
+                MfdChromeLay.Place(count.rectTransform, new Rect(w - 34f, 0f, 26f, h));
+                AvText.Set(count, MfdChromeLay.TwoDigits(keyCount));
             }
 
-            ButtonSkin skin = Restyle(button);
-            if (skin != null && skins != null) skins.Add(skin);
+            public void LayGroup(int slot, string name, float y, float width)
+            {
+                while (groupTexts.Count <= slot)
+                {
+                    groupTexts.Add(AvText.Make(Rect, "Group", AvTextRole.Micro));
+                    groupRules.Add(AvLay.Solid(Rect, "Group rule", Color.clear));
+                    Restyle();
+                }
 
-            Rect slot = NextSlot();
-            Place(button, slot);
-            Decorate(button, skin, slot);
-            return true;
+                TMP_Text text = groupTexts[slot];
+                text.gameObject.SetActive(true);
+                groupRules[slot].gameObject.SetActive(true);
+                AvText.Set(text, name);
+                float left = MfdRailPlan.Pad + 4f;
+                MfdChromeLay.Place(text.rectTransform, new Rect(left, -y, width - left * 2f, MfdRailPlan.GroupHeight));
+                float ruleLeft = left + AvText.Width(text) + 6f;
+                MfdChromeLay.Place(groupRules[slot].rectTransform,
+                    new Rect(ruleLeft, -(y + MfdRailPlan.GroupHeight * 0.5f), Mathf.Max(0f, width - MfdRailPlan.Pad - 2f - ruleLeft), 1f));
+            }
+
+            public void HideGroupsFrom(int slot)
+            {
+                for (int i = slot; i < groupTexts.Count; i++)
+                {
+                    groupTexts[i].gameObject.SetActive(false);
+                    groupRules[i].gameObject.SetActive(false);
+                }
+            }
+
+            /// <summary>Spare height under the last key names the scheme in force, rather than sitting empty.</summary>
+            public void LayFooter(float used, float width, float height)
+            {
+                bool show = height - used - MfdRailPlan.Pad >= 18f;
+                footer.gameObject.SetActive(show);
+                if (show) MfdChromeLay.Place(footer.rectTransform, new Rect(0f, -(height - MfdRailPlan.Pad - 18f), width, 18f));
+            }
+
+            public override void Restyle()
+            {
+                plate.Paint(AvStyleHost.FuiFill("console", AvTheme.Ground), AvStyleHost.FuiBorder("console", AvTheme.Frame));
+                plate.BracketColor = Role("select", AvTheme.Accent).WithAlpha(0.8f);
+                plate.SetVerticesDirty();
+                header.Paint(AvStyleHost.FuiFill("header", AvTheme.Surface), AvStyleHost.FuiBorder("header", AvTheme.Hairline));
+                slab.Paint(AvStyleHost.FuiFill("slab", AvTheme.Accent), Color.clear);
+                slabText.color = AvStyleHost.FuiInk("slab", Color.black);
+                title.color = AvStyleHost.FuiInk("title", AvTheme.TextPrimary);
+                count.color = AvStyleHost.FuiInk("page-index", AvTheme.Dim);
+                footer.color = Role("ink-muted", AvTheme.Disabled);
+                AvText.Set(footer, "SCHEME  " + AvStyleHost.Theme.ToString().ToUpperInvariant());
+                for (int i = 0; i < groupTexts.Count; i++)
+                {
+                    groupTexts[i].color = AvStyleHost.FuiInk("section-title", AvTheme.RailInfo);
+                    groupRules[i].color = Role("hairline", AvTheme.Hairline);
+                }
+                for (int i = 0; i < keys.Count; i++) keys[i].Restyle();
+            }
         }
     }
 
     /// <summary>
-    /// The rail's ownership mark on a borrowed bezel button.
-    ///
-    /// Vanilla re-runs <c>VirtualMFD.SetupButtons</c> whenever a faction panel refreshes,
-    /// resetting every bezel label to its short code, and a repeated map maximise runs
-    /// adoption over the same buttons. Without a mark the rail brands its own output:
-    /// the rich-text line is sanitised into fragments like <c>BDFSIZE=</c> and a second
-    /// decoration stacks on the first. The mark makes adoption idempotent, carries the
-    /// clean code for rail ordering, and lets the rail put its own line — and its own
-    /// colour — back after the game resets the label.
+    /// One key of the MFD index: glyph, the game's short code, the word the code stands for,
+    /// and its place in the index. The open screen's key carries the accent on its edge
+    /// rail, corner brackets, glyph and lamp, and reads ON where its number was.
     /// </summary>
-    internal sealed class MfdRailBrand : MonoBehaviour
+    internal sealed class MfdRailKey
     {
-        /// <summary>The catalog code the button was branded with, or null when unknown.</summary>
-        public string Code;
+        private const string Class = "rail-key";
+        private const float IconSize = 24f;
+        private const float IconBay = 40f;
+        private const float TextLeft = 48f;
 
-        /// <summary>The exact text the rail last wrote to the label.</summary>
-        public string Text;
+        public readonly MfdRailEntry Entry;
+        public readonly Button Source;
+        public readonly MFDScreen Screen;
 
-        /// <summary>
-        /// The code line's own colour while the rail wears the button.
-        ///
-        /// The vanilla bezel label is pure green, and the game's <c>TextStyleApplier</c>
-        /// re-applies that theme colour to an adopted label whenever its style refreshes
-        /// — long after <c>Restyle</c> painted it. Unlike the text rewrite, the game
-        /// leaves no trace to detect, so the rail re-asserts the colour like it does the
-        /// line.
-        /// </summary>
-        public Color LabelColor = Color.white;
+        private readonly AvFrame frame;
+        private readonly AvFx fx;
+        private readonly Image selection;
+        private readonly Image divider;
+        private readonly Image lamp;
+        private readonly TMP_Text icon;
+        private readonly TMP_Text code;
+        private readonly TMP_Text name;
+        private readonly TMP_Text index;
+        private readonly string ordinal;
+        private bool hover;
+        private bool pressed;
 
-        /// <summary>The label the rail restyles; null when the button had no text.</summary>
-        public TMP_Text Label;
+        public RectTransform Rect { get; }
+        public bool Latched { get; private set; }
 
-        public void Reassert()
+        /// <summary>The glyph's present colour: the accent while the key's screen is open.</summary>
+        public Color GlyphColor => icon.color;
+
+        public MfdRailKey(RectTransform parent, MfdRailEntry entry, int position, Button source, MFDScreen screen)
         {
-            if (Label == null) return;
-            if (Text != null && Label.text != Text) Label.text = Text;
-            if (Label.color != LabelColor) Label.color = LabelColor;
+            Entry = entry;
+            Source = source;
+            Screen = screen;
+            ordinal = MfdChromeLay.TwoDigits(position);
+
+            Rect = AvLay.Child(parent, "Key " + entry.Code);
+            frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(5f));
+            AvLay.Fill(frame.rectTransform);
+            frame.Stroke = 1f;
+            frame.Bracket = 5f;
+            selection = AvLay.Solid(Rect, "Selection", Color.clear);
+            divider = AvLay.Solid(Rect, "Divider", Color.clear);
+            lamp = AvLay.Solid(Rect, "Lamp", Color.clear);
+            icon = AvIcons.Make(Rect, entry.Glyph, IconSize, Color.white);
+            code = AvText.Make(Rect, "Code", AvTextRole.Title, entry.Code);
+            name = AvText.Make(Rect, "Name", AvTextRole.Micro, entry.Name);
+            index = AvText.Make(Rect, "Index", AvTextRole.DataSmall, ordinal, TextAlignmentOptions.MidlineRight);
+
+            AvHit hit = AvHit.On(frame);
+            hit.Hover = on => { hover = on; Restyle(); };
+            hit.Press = on => { pressed = on; Restyle(); };
+            hit.Click = e => { if (e.button == PointerEventData.InputButton.Left) Press(); };
+            fx = AvFx.On(frame);
+            Restyle();
+        }
+
+        /// <summary>Forward the press to the stowed bezel button, whose own binding opens or closes the screen.</summary>
+        public void Press()
+        {
+            if (Source != null) Source.onClick.Invoke();
+            MfdRail.Refresh();
+        }
+
+        public void SetLatched(bool on)
+        {
+            if (Latched == on) return;
+            Latched = on;
+            if (on) fx.Play(AvFxKind.Shine, 0.2f);
+            Restyle();
+        }
+
+        public void Lay(Rect slot)
+        {
+            float w = slot.width, h = slot.height;
+            MfdChromeLay.Place(Rect, slot);
+            MfdChromeLay.Place(selection.rectTransform, new Rect(0f, -3f, 3f, h - 6f));
+            MfdChromeLay.Place(icon.rectTransform, new Rect((IconBay - IconSize) * 0.5f + 2f, -(h - IconSize) * 0.5f, IconSize, IconSize));
+            MfdChromeLay.Place(divider.rectTransform, new Rect(IconBay, -8f, 1f, h - 16f));
+            MfdChromeLay.Place(index.rectTransform, new Rect(w - 36f, -4f, 30f, 14f));
+            MfdChromeLay.Place(lamp.rectTransform, new Rect(w - 12f, -(h - 12f), 6f, 6f));
+
+            AvText.Size(code, Mathf.Clamp(h * 0.31f, 14f, 19f));
+            float textWidth = w - TextLeft - 6f;
+            if (Entry.HasName)
+            {
+                MfdChromeLay.Place(code.rectTransform, new Rect(TextLeft, -h * 0.13f, textWidth, h * 0.44f));
+                MfdChromeLay.Place(name.rectTransform, new Rect(TextLeft, -h * 0.56f, textWidth, h * 0.30f));
+            }
+            else
+            {
+                MfdChromeLay.Place(code.rectTransform, new Rect(TextLeft, 0f, textWidth, h));
+            }
+        }
+
+        public void Restyle()
+        {
+            string state = pressed ? "pressed" : hover ? "hover" : Latched ? "latched" : null;
+            AvStyle style = AvStyleHost.FuiStyle(Class, state);
+            Color hairline = MfdRail.Role("hairline", AvTheme.Hairline);
+            Color edge = AvStyleHost.Resolve(style.Border, hairline);
+            Color ink = MfdRail.Role("ink", AvTheme.TextPrimary);
+            Color quiet = AvStyleHost.Resolve(style.Color, MfdRail.Role("ink-dim", AvTheme.Dim));
+            Color accent = AvStyleHost.Resolve(AvStyleHost.FuiStyle(Class, "latched").Rail, MfdRail.Role("caution", AvTheme.Warning));
+
+            frame.Paint(AvStyleHost.Resolve(style.Background, MfdRail.Role("surface-inert", AvTheme.Surface)), edge);
+            frame.BracketColor = Latched ? accent : edge;
+            frame.SetVerticesDirty();
+            selection.color = Latched ? accent : Color.clear;
+            divider.color = hairline;
+            lamp.color = Latched ? accent : MfdRail.Role("inert", AvTheme.Disabled);
+            icon.color = Latched ? accent : quiet;
+            code.color = ink;
+            name.color = Latched ? ink : quiet;
+            index.color = Latched ? accent : MfdRail.Role("ink-muted", AvTheme.Disabled);
+            AvText.Set(index, Latched ? "ON" : ordinal);
         }
     }
 }

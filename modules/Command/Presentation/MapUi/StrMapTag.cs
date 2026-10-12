@@ -13,7 +13,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// </summary>
     internal sealed class StrMapTag : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, IPointerExitHandler
     {
-        private const float RowH = 18f, Pad = 6f, LaneW = 84f, LaneH = 7f, MinW = 70f, MaxW = 300f, BoxPad = 10f, Gap = 4f;
+        private const float RowH = 18f, Pad = 6f, LaneW = 84f, LaneH = 7f, MinW = 70f, MaxW = 300f, BoxPad = 10f, Gap = 4f, RestPad = 4f, RestLaneW = 48f;
 
         internal StrItemId Id;
         internal StrTagKind Kind;
@@ -60,8 +60,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             gameObject.SetActive(false);
         }
 
-        /// <summary>Fills the tag from its spec, sizes it and counter-scales it. It is not placed yet.</summary>
-        internal void Show(in StrTagSpec s, float inverse)
+        /// <summary>
+        /// Fills the tag from its spec, sizes it and counter-scales it. It is not placed yet. A tag rests as one short row (the number, then the lane of a front
+        /// or the item's first words); <paramref name="full"/> opens the second row with the place and the lane's words, for the plate under the cursor.
+        /// </summary>
+        internal void Show(in StrTagSpec s, float inverse, bool full)
         {
             Id = s.Id; Kind = s.Kind;
             if (!gameObject.activeSelf) gameObject.SetActive(true);
@@ -75,8 +78,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // CROSSING") carrying the amber chip of the main effort, and its second row is the lane with the lane's own words.
             string number, rest, chipText = effort ? s.Text ?? "" : "", second = effort ? s.Note ?? "" : s.Sub ?? "";
             SplitNumber(effort ? s.Sub ?? "" : s.Text ?? "", out number, out rest);
-            bool twoRows = hasLane || (rest.Length > 0 && second.Length > 0);
-            string row1 = rest.Length > 0 || twoRows ? rest : second;
+            bool twoRows = full && (hasLane || (rest.Length > 0 && second.Length > 0)), laneFirst = hasLane && !twoRows;
+            string row1 = laneFirst ? "" : rest.Length > 0 || twoRows ? rest : second;
             if (!twoRows) second = "";
 
             box.SetActive(number.Length > 0);
@@ -92,22 +95,27 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             lane.SetActive(hasLane);
             if (hasLane) lane.Set(s.Value, s.Trend);
 
-            // Size: row one is the box, the title and the chip; row two is the lane and its words.
+            // Size: row one is the box, the title (or, at rest, the lane) and the chip; row two is the lane and its words.
+            float pad = full ? Pad : RestPad;
             float boxW = number.Length > 0 ? box.WidthFor() : 0f, chipW = effort && chipText.Length > 0 ? chip.WidthFor() : 0f;
-            float titleW = row1.Length > 0 ? Mathf.Ceil(AvText.Width(title)) : 0f;
-            float w1 = (boxW > 0f ? boxW + Gap : 0f) + titleW + (chipW > 0f ? 2f * Gap + chipW : 0f);
-            float w2 = (hasLane ? LaneW + 6f : 0f) + (second.Length > 0 ? Mathf.Ceil(AvText.Width(sub)) : 0f);
-            float w = Mathf.Clamp(Mathf.Max(w1, w2) + 2f * Pad, MinW, MaxW), h = 2f * Pad - 2f + RowH + (twoRows ? RowH - 2f : 0f);
+            float titleW = row1.Length > 0 ? Mathf.Ceil(AvText.Width(title)) : 0f, lane1 = laneFirst ? RestLaneW : 0f;
+            float w1 = boxW;
+            if (titleW > 0f) w1 += (w1 > 0f ? Gap : 0f) + titleW;
+            if (lane1 > 0f) w1 += (w1 > 0f ? Gap : 0f) + lane1;
+            if (chipW > 0f) w1 += (w1 > 0f ? 2f * Gap : 0f) + chipW;
+            float w2 = twoRows ? (hasLane ? LaneW + 6f : 0f) + (second.Length > 0 ? Mathf.Ceil(AvText.Width(sub)) : 0f) : 0f;
+            float w = Mathf.Clamp(Mathf.Max(w1, w2) + 2f * pad, full ? MinW : 0f, MaxW), h = 2f * pad - 2f + RowH + (twoRows ? RowH - 2f : 0f);
             root.sizeDelta = new Vector2(w, h);
 
-            float x = Pad;
-            if (boxW > 0f) { box.Place(x, Pad - 1f, boxW, RowH - 2f); x += boxW + Gap; }
-            float chipX = w - Pad - chipW;
-            AvLay.Place(title.rectTransform, x, Pad - 1f, Mathf.Max(20f, (chipW > 0f ? chipX - Gap : w - Pad) - x), RowH - 2f);
-            if (chipW > 0f) chip.Place(chipX, Pad - 1f, chipW, RowH - 2f);
-            float y2 = Pad - 1f + RowH, sx = Pad;
-            if (hasLane) { lane.Place(Pad, y2 + (RowH - 2f - LaneH) * 0.5f + 1f, LaneW, LaneH); sx += LaneW + 6f; }
-            AvLay.Place(sub.rectTransform, sx, y2 - 1f, Mathf.Max(20f, w - sx - Pad), RowH - 2f);
+            float x = pad, top = pad - 1f;
+            if (boxW > 0f) { box.Place(x, top, boxW, RowH - 2f); x += boxW + Gap; }
+            float chipX = w - pad - chipW;
+            AvLay.Place(title.rectTransform, x, top, Mathf.Max(20f, (chipW > 0f ? chipX - Gap : w - pad) - x), RowH - 2f);
+            if (chipW > 0f) chip.Place(chipX, top, chipW, RowH - 2f);
+            float y2 = top + RowH, sx = pad;
+            if (laneFirst) lane.Place(x, h - pad - StrLaneBar.PadBottom - LaneH, lane1, LaneH);   // low in the row: the notch head needs the room above the track
+            else if (hasLane) { lane.Place(pad, y2 + (RowH - 2f - LaneH) * 0.5f + 1f, LaneW, LaneH); sx += LaneW + 6f; }
+            AvLay.Place(sub.rectTransform, sx, y2 - 1f, Mathf.Max(20f, w - sx - pad), RowH - 2f);
 
             Paint(ink, fade, s.Hot, s.Selected);
         }
@@ -163,7 +171,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // An armed Support or Wing pick owns the next click; a drag that ends on a tag is a drag, not a click.
             if (MapPicker.IsBusy || MfdMapInteractions.BlockIconClick() || ReliefNavigator.BlockIconClick()) return;
             MfdMapInteractions.ConsumeClick();
-            Owner.Hub?.Select(Id, false);
+            Owner.Hub?.Select(Id, true);
         }
 
         public void OnPointerEnter(PointerEventData e) => Owner?.Hub?.Hover(Id);

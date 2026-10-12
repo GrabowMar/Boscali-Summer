@@ -59,12 +59,19 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             string cursor;
             if (MfdMapInteractions.Feedback != null)
                 cursor = MfdMapInteractions.Feedback;
+            // Says the orbit drag is live: a wheel button the game never sees leaves this line unchanged.
+            else if (ReliefNavigator.Turning)
+                cursor = "TURNING  /  DRAG SIDEWAYS TO TURN, UP OR DOWN TO TILT";
             else if (MfdTerrainRelief.HoveredStackCount >= 3)
                 cursor = MfdTerrainRelief.HoveredStackCount + " TRACKS  /  RIGHT CLICK TO SELECT STACK";
             else if (MfdTerrainRelief.TryInspectCursor(out GlobalPosition point, out float elevation))
+            {
+                // A dropped range mark turns the line into a ruler; the context card still carries the elevation.
+                string leg = MfdMapInteractions.FromMark(point);
                 cursor = "X " + AvNum.Signed(point.x / 1000f, 1) + "  Z " + AvNum.Signed(point.z / 1000f, 1) +
-                    " km  ·  TERRAIN ~" + AvNum.Fixed(elevation, 0) + " m";
-            else cursor = "SHIFT CLICK TO ADD  /  CTRL DRAG TO BOX  /  RMB ACTIONS";
+                    " km  ·  " + (leg != null ? "MARK " + leg : "TERRAIN ~" + AvNum.Fixed(elevation, 0) + " m");
+            }
+            else cursor = "CLICK ADDS  /  SHIFT BOX  /  CTRL+WHEEL TURN  /  RMB MENU";
             cursorLine.Set(cursor);
         }
 
@@ -97,18 +104,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             AvText.Fit(readout, false);
             float x = 139f;
             Button("-15°", 57f, -3f, () => ReliefNavigator.Turn(-15f),
-                "Turn the view 15 degrees left. Right or middle drag orbits freely.", ref x);
+                "Turn the view 15 degrees left. Ctrl + wheel does the same; a middle drag orbits freely.", ref x);
             Button("+15°", 57f, -3f, () => ReliefNavigator.Turn(15f),
-                "Turn the view 15 degrees right. Right or middle drag orbits freely.", ref x);
+                "Turn the view 15 degrees right. Ctrl + wheel does the same; a middle drag orbits freely.", ref x);
             Button("NORTH", 65f, -3f, ReliefNavigator.North,
                 "North up at the default terrain tilt.", ref x);
             Button("FIT", 60f, -3f, ReliefNavigator.Fit,
                 "Fit the whole mission map. Double-click the ground to zoom in there.", ref x);
             x = 6f;
             Button("TILT -10°", 82f, -32f, () => ReliefNavigator.Tilt(-10f),
-                "Lower the viewing angle by 10 degrees.", ref x);
+                "Lower the viewing angle by 10 degrees. Shift + wheel tilts in smaller steps.", ref x);
             Button("TILT +10°", 82f, -32f, () => ReliefNavigator.Tilt(10f),
-                "Raise the viewing angle by 10 degrees.", ref x);
+                "Raise the viewing angle by 10 degrees. Shift + wheel tilts in smaller steps.", ref x);
             followButton = Button("FREE PAN", 103f, -32f, ReliefNavigator.ToggleFollow,
                 "Follow your aircraft, or drag the map to move freely.", ref x);
             flyButton = Button("WASD OFF", 103f, -32f, ReliefNavigator.ToggleFly,

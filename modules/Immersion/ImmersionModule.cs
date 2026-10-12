@@ -52,7 +52,7 @@ namespace BoscaliSummer.Modules.Immersion
                 "Cockpit view: transonic Mach aerodynamic buffeting vibrations (Mach 0.86 - 1.12) and sound barrier crossing bump.",
                 context.Settings.Immersion.MachBuffetEnabled);
             context.AddClientSetting("IMMERSION", "SUN GLARE",
-                "Data-driven lens flare when looking towards the sun, occluded by terrain, buildings, and clouds.",
+                "Glare and fine rays around the sun as the eye sees them, dimmer and redder at low sun, hidden by terrain, buildings and clouds.",
                 context.Settings.Immersion.SunGlareEnabled);
             context.AddClientSetting("IMMERSION", "MFD NIGHT GLOW",
                 "Cockpit view: MFD glass night boost so instruments glow at dusk and night.",

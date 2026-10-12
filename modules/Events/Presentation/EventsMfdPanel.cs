@@ -14,10 +14,9 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Events.Presentation
 {
     /// <summary>
-    /// "EVN" — active dispatch, response desk, archive and field documentation. Kit v2 console: chrome
+    /// "EVN" — active dispatch, archive and field documentation. Kit v2 console: chrome
     /// (metrics/tabs/footer) from <see cref="AvConsole"/>, page content from <see cref="AvFlow"/>
-    /// sections, rows and the module's own <see cref="EventActiveCardPart"/> / <see cref="DecisionBoardPart"/>
-    /// / <see cref="EventCaseFilePart"/> parts.
+    /// sections, rows and the module's own <see cref="EventHeroPart"/> / <see cref="EventCaseFilePart"/> parts.
     /// </summary>
     internal sealed partial class EventsMfdPanel : MonoBehaviour, ISceneService
     {
@@ -49,8 +48,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
         private AvHelpTip costTip, resetTip, leftTip, logTip;
 
         private EventHeroPart hero;
-        private AvSection responseSection;
-        private ResponseDeskPart responseDesk;
         private AvGauge directorPosture, directorBases, directorSupers;
         private AvSection onCallSection;
         private AvGauge[] onCall;
@@ -95,8 +92,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
             metrics = null;
             costTip = resetTip = leftTip = logTip = null;
             hero = null;
-            responseSection = null;
-            responseDesk = null;
             directorPosture = directorBases = directorSupers = null;
             onCallSection = null;
             onCall = null;
@@ -175,7 +170,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
             BuildDeskPage(console.Page(TabDesk));
             console.Orders(TabDispatch,
                 "One dispatch runs at a time. COST and RESET price it for your side; LEFT is its clock.",
-                "Answer a priced dispatch with one route. A locked route names what it still needs.",
                 "A superevent carries timed orders: NEXT is the order due, QUEUED orders follow it.",
                 "The log keeps this mission's finished dispatches, newest first.");
             console.Orders(TabDesk,
@@ -193,11 +187,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
             // The live dispatch. A quiet theater shows one standby row and leaves the page to the bay cover.
             hero = p.Add(new EventHeroPart(p.Content));
             hero.BindCalm("STANDING BY FOR DIRECTOR REPORT");
-
-            responseSection = p.Section(AvIcon.Scale, "RESPONSE", "AWAITING");
-            responseDesk = p.Add(new ResponseDeskPart(p.Content, events.RequestResponse));
-            responseSection.SetShown(false);
-            responseDesk.SetShown(false);
 
             // The director's three rings need no section header: each ring names itself and carries its own tip.
             directorPosture = new AvGauge(p.Content, "POSTURE");
@@ -394,16 +383,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 hero.SetEffect(EffectText(current, summary, aimedAtLocal) + (tempo.Length > 0 ? " · " + tempo : "") +
                     " · " + (aimedAtLocal ? "YOUR SIDE" : "NOT YOUR SIDE"), effectState);
                 hero.SetScript(current, current.StartedAtMissionTime, now);
-
-                responseSection.SetShown(true);
-                responseDesk.SetShown(true);
-                responseSection.SetCaption(responseDesk.Refresh(events, aimedAtLocal));
-            }
-            else
-            {
-                responseDesk.SetStandby();
-                responseSection.SetShown(false);
-                responseDesk.SetShown(false);
             }
 
             onCallSection.SetShown(current == null);
@@ -414,12 +393,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
             string ambient = current != null
                 ? "DISPATCH LIVE // " + current.Title.ToUpperInvariant()
                 : events.Available ? "THEATER QUIET // DIRECTOR SCANNING" : "NO MISSION ON THE NET";
-            string status = !string.IsNullOrEmpty(events.Signal) ? events.Signal
-                : !string.IsNullOrEmpty(MapPicker.Prompt) ? MapPicker.Prompt
-                : ambient;
-            AvState footerState = !string.IsNullOrEmpty(events.Signal) ? AvState.Info
-                : !string.IsNullOrEmpty(MapPicker.Prompt) ? AvState.Caution
-                : AvState.Inert;
+            string status = !string.IsNullOrEmpty(MapPicker.Prompt) ? MapPicker.Prompt : ambient;
+            AvState footerState = !string.IsNullOrEmpty(MapPicker.Prompt) ? AvState.Caution : AvState.Inert;
             console.Footer.Set(status, footerState);
         }
 

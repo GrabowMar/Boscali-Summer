@@ -6,7 +6,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
     /// <summary>
     /// Colour tokens of the v7 menu. Ink, caution and alert follow the player's HUD theme (<see cref="AvTheme"/>: AllClear / Warning / Alert,
     /// with the kit's fixed fallbacks when no theme is up). Everything else is derived from the ink so a re-themed HUD re-themes the menu.
-    /// Plates are opaque, text colours are solid, and dimming is by colour token, never by alpha over the native HUD (alpha-blended text only
+    /// Ring plates are opaque, the dock tables and bars are translucent (<see cref="Panel"/>), text colours are solid, and dimming is by colour token, never by alpha over the native HUD (alpha-blended text only
     /// holds in Gamma space; the game runs Linear).
     /// </summary>
     internal sealed class MenuPalette
@@ -15,7 +15,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         private static Color cachedInk, cachedWarn, cachedAlert;
         private static int frame = -1;
 
-        public readonly Rgba Ink, InkHi, Ink2, InkDim, Hair, Txt, OnInk, OnInk2, Line, Plate, PlateHi, Amber, Red, Casing, Hub, Glow, Flash;
+        public readonly Rgba Ink, InkHi, Ink2, InkDim, Hair, Txt, OnInk, OnInk2, Line, Plate, PlateHi, Panel, Scrim, Amber, Red, Casing, Hub, Glow, Flash;
 
         private MenuPalette(Color ink, Color warn, Color alert, float dim)
         {
@@ -31,6 +31,9 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             OnInk2 = new Rgba(OnInk.R + (inkHi.r - OnInk.R) * 0.15f, OnInk.G + (inkHi.g - OnInk.G) * 0.15f, OnInk.B + (inkHi.b - OnInk.B) * 0.15f);
             Line = Rgb(ink, dim).WithAlpha(0.70f);
             Plate = new Rgba(0.008f, 0.071f, 0.039f, 1f); PlateHi = new Rgba(0.004f, 0.094f, 0.051f, 1f);
+            // the dock tables, the title and the help bar let the cockpit through; the grey scrim under everything keeps their text readable
+            Panel = Plate.WithAlpha(0.72f);
+            Scrim = new Rgba(0.09f, 0.10f, 0.10f, 0.30f);
             Amber = Rgb(warn, 1f); Red = Rgb(alert, 1f);
             Casing = new Rgba(0.004f, 0.063f, 0.039f, 0.85f);
             Hub = new Rgba(0.008f, 0.059f, 0.031f, 1f);

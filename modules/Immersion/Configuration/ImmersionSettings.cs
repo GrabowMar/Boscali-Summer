@@ -52,7 +52,7 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
                 "Reduce all added cockpit rotation to 25% and remove idle head breathing. Native camera motion is unchanged.");
 
             SunGlareEnabled = config.Bind(section, "SunGlareEnabled", true,
-                "Data-driven lens flare when looking towards the sun, occluded by terrain, buildings, and clouds.");
+                "Glare and fine rays around the sun as the eye sees them, dimmer and redder at low sun, hidden by terrain, buildings and clouds.");
 
             MfdGlowEnabled = config.Bind(section, "MfdGlowEnabled", true,
                 "Cockpit view: MFD glass night boost so instruments glow at dusk and night.");

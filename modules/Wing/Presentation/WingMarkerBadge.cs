@@ -88,8 +88,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
             label.gameObject.SetActive(true);
             AlignToScreen(label.rectTransform, canvas, camera);
-            label.rectTransform.anchoredPosition = new Vector2(0f, geometry.OuterRadiusPixels + 5f);
-            label.rectTransform.sizeDelta = new Vector2(120f, 18f);
+            // Offset in world space: anchoredPosition is in the icon's own space, which carries map zoom and heading.
+            // After AlignToScreen one local unit is one pixel, so lossyScale is world units per pixel.
+            RectTransform rt = label.rectTransform;
+            rt.position = host.rectTransform.position + rt.up * ((geometry.OuterRadiusPixels + 9f) * rt.lossyScale.y);
+            rt.sizeDelta = new Vector2(120f, 18f);
             if (label.color != color) label.color = color;
             if (!ReferenceEquals(label.text, text)) label.text = text;
         }

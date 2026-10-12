@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using BoscaliSummer.Modules.Command.Presentation.MapUi;
 using NOAvionics;
@@ -31,9 +32,10 @@ public static class RailUnityCheck
         "pulse", "control", "front", "grid", "weather",
     };
 
+    // The bezel as a Boscali mission shows it, in the game's own slot order.
     private static readonly string[] Labels =
     {
-        "BDF", "MAP", "MFD", "SUD", "DPS", "PALA", "TGT", "MIS", "RAD", "SET", "WMC", "STR",
+        "FAC", "MAP", "HUD", "PILOT", "OPS", "STR", "COM", "RAD", "TGT", "MIS", "SET", "WMC",
         "EVN", "ENV",
     };
 
@@ -45,6 +47,7 @@ public static class RailUnityCheck
 
             SetExecutablePath("RailCheck.exe");
             AvBundle.LoadFromBytes(File.ReadAllBytes("avionics-ui.bundle"), Debug.Log);
+            AvBundle.LoadIconsFromBytes(File.ReadAllBytes("avionics-icons.bundle"), Debug.Log);
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
             new GameObject("Events", typeof(EventSystem));
 
@@ -54,11 +57,12 @@ public static class RailUnityCheck
             CheckRail();
 
             File.WriteAllText("result.txt",
-                "PASS: every catalog glyph builds geometry; the rail brands borrowed buttons with code, descriptor and glyph; " +
-                "unknown codes keep the neutral glyph; a repeated adoption pass does not re-brand, stack a second decoration or " +
-                "rewrite the line; the full-screen finish is single, above planning rooms, and input-transparent; " +
-                "a reset label is re-asserted; the open screen latches; restore returns the vanilla label exactly; " +
-                "seven UI cues have bounded samples, soft starts and silent tails. " +
+                "PASS: every catalog glyph builds geometry; the rail builds one key of its own per screen slot, grouped by purpose, " +
+                "with code, descriptor and glyph, and none for a spare slot; unknown codes keep the neutral glyph in the last group; " +
+                "a rebuild replaces the keys instead of stacking them; a key press reaches the bezel button's own binding and the open " +
+                "screen's key latches; the bezel buttons are never altered; a scheme change repaints plate and keys; every rail text " +
+                "fits its box at 11 px or more; reset releases a stowed bezel button instead of destroying it; the full-screen finish " +
+                "is single, above planning rooms, and input-transparent; seven UI cues have bounded samples, soft starts and silent tails. " +
                 "Game adapters are stubbed; in-game acceptance remains required.");
             EditorApplication.Exit(0);
         }
@@ -194,84 +198,114 @@ public static class RailUnityCheck
 
         var buttons = new List<Button>();
         var screens = new List<MFDScreen>();
-        for (int i = 0; i < Labels.Length; i++)
+        for (int i = 0; i < Labels.Length; i++) AddSlot(buttons, screens, Labels[i]);
+        // A spare slot (a live button with no screen behind it) and a code the catalog does not know.
+        buttons.Add(MakeVanillaButton("-"));
+        screens.Add(null);
+        AddSlot(buttons, screens, "SUD");
+
+        Check(MfdRail.TryGetRail(out RectTransform rail) && rail.rect.width >= 150f, "the built rail must match the resolved column");
+        Check(MfdRail.Fits(columns.Rail.height, Labels.Length + 1), "the mission's screens must fit the rail");
+        Check(!MfdRail.Fits(columns.Rail.height, 40), "a bezel too long for 44px keys must be reported as not fitting");
+        int built = MfdRail.Build(buttons, screens, null, null);
+        Check(built == Labels.Length + 1, "every slot with a screen gets a key and the spare gets none, built=" + built);
+        MfdRailKey unknown = MfdRail.Keys[MfdRail.Keys.Count - 1];
+        Check(unknown.Entry.Code == "SUD" && !unknown.Entry.HasName && unknown.Entry.Group == MfdRailGroup.Aux,
+            "an unknown code keeps its code, no invented name, and the last place");
+        Check(Texts(unknown).Count(t => t.font == AvBundle.Font(AvTypeScale.AssetName(AvFace.Icons))) == 1,
+            "an unknown code still gets a glyph");
+
+        // The render shows the rail as a mission has it: the same slots without the unknown code.
+        buttons.RemoveAt(buttons.Count - 1);
+        screens.RemoveAt(screens.Count - 1);
+        built = MfdRail.Build(buttons, screens, null, null);
+        IReadOnlyList<MfdRailKey> keys = MfdRail.Keys;
+        Check(built == Labels.Length && keys.Count == Labels.Length && rail.GetComponentsInChildren<AvHit>(true).Length == Labels.Length,
+            "a rebuild replaces the keys instead of stacking a second set");
+        MfdRailKey first = keys[0];
+        Check(MfdRail.Build(buttons, screens, null, null) == Labels.Length && ReferenceEquals(MfdRail.Keys[0], first) && first.Rect != null,
+            "an unchanged bezel keeps the keys it has");
+        string order = string.Join(" ", keys.Select(k => k.Entry.Code));
+        Check(order == "FAC MAP STR EVN ENV MIS TGT WMC OPS COM RAD HUD PILOT SET",
+            "keys gather by purpose in the catalog's order, got " + order);
+        MfdRailKey map = keys[1];
+        Check(Texts(map).Any(t => t.text == "MAP") && Texts(map).Any(t => t.text == "TACTICAL"),
+            "a key carries the code and the word it stands for");
+        string groups = string.Join(" ", rail.GetComponentsInChildren<TMP_Text>(false).Where(t => t.name == "Group").Select(t => t.text));
+        Check(groups == "SITUATION TASKING COMMS SYSTEM", "each group of keys sits under its label, got " + groups);
+
+        map.Press();
+        Check(screens[1].isActive, "a key press must reach the bezel button's own binding");
+        Check(map.Latched && keys.Count(k => k.Latched) == 1, "exactly the open screen's key latches");
+        Check(Texts(map).Any(t => t.text == "ON"), "the open key says so in words, not by colour alone");
+        Color accent = AvStyleHost.FuiColor("caution", AvTheme.Warning);
+        Check(map.GlyphColor == accent && keys[2].GlyphColor != accent, "the open key's glyph takes the tab accent");
+        Check(buttons[1].GetComponentInChildren<TMP_Text>().text == "MAP" && buttons[1].GetComponent<Image>().sprite == AvSprites.Control &&
+            buttons[1].transform.childCount == 1, "the rail must leave the bezel button exactly as the game made it");
+
+        Canvas.ForceUpdateCanvases();
+        foreach (TMP_Text text in rail.GetComponentsInChildren<TMP_Text>(false))
         {
-            buttons.Add(MakeVanillaButton(Labels[i]));
-            screens.Add(new GameObject("Screen_" + Labels[i], typeof(MFDScreen)).GetComponent<MFDScreen>());
+            text.ForceMeshUpdate();
+            Check(text.fontSize >= AvTypeScale.Floor, "rail text below the 11 px floor: '" + text.text + "' at " + text.fontSize);
+            Check(text.preferredWidth <= text.rectTransform.rect.width + 0.5f,
+                "rail text wider than its box: '" + text.text + "' " + text.preferredWidth + " > " + text.rectTransform.rect.width);
         }
 
-        var skins = new List<MfdRail.ButtonSkin>();
-        Check(MfdRail.PrepareCapacity(columns.Rail.height, Labels.Length),
-            "fourteen keys (six vanilla screens, WMC, the claimed screens and hosted EVN/ENV) must fit the rail");
-        int adopted = MfdRail.Adopt(buttons, screens, null, null, skins);
-        Check(adopted == Labels.Length, "every slot with a screen must be adopted, adopted=" + adopted);
+        // One key hovered, so the render shows all three looks: rest, hover and open.
+        keys[6].Rect.GetComponentInChildren<AvHit>().Hover(true);
+        RenderRail(canvas, rail, "RAIL.png");
 
-        Check(skins[0].Label.text.Contains("BDF") && skins[1].Label.text.Contains("PALA"),
-            "PALA must sit directly below BDF");
-        Check(skins[2].Label.text.Contains("MAP") && skins[2].Label.text.Contains("TACTICAL"),
-            "MAP must be branded with its descriptor");
-        Check(skins[9].Label.text.Contains("SET") && skins[9].Label.text.Contains("SETTINGS"),
-            "SET must be branded with its descriptor");
-        Check(skins[12].Label.text.Contains("EVN") && skins[12].Label.text.Contains("EVENTS"),
-            "the hosted EVN button must be branded in the rail");
-        Check(skins[13].Label.text.Contains("ENV") && skins[13].Label.text.Contains("WEATHER"),
-            "the hosted ENV button must be branded in the rail");
-        Check(skins[4].Label.text == "SUD", "an unknown code keeps its sanitised code and no invented name");
-        Check(skins[4].Icon != null, "an unknown code still gets the neutral glyph");
-        Check(skins[2].Icon != null && skins[2].Icon.gameObject.activeSelf,
-            "a branded button must carry a glyph");
-        Check(skins[2].Label.alignment == TextAlignmentOptions.MidlineLeft,
-            "branded labels lead with the icon column");
+        // The bug this check exists for: the rail used to keep the colours of the scheme it was built under.
+        AvFrame plate = rail.Find("Plate").GetComponent<AvFrame>();
+        Color portalPlate = plate.FillColor, portalGlyph = map.GlyphColor;
+        AvStyleHost.SetTheme(AvThemeId.Phosphor);
+        rail.GetComponent<AvTicker>().RestyleAll();
+        Check(plate.FillColor != portalPlate, "a scheme change must repaint the rail plate");
+        Check(map.GlyphColor != portalGlyph && map.GlyphColor == AvStyleHost.FuiColor("caution", AvTheme.Warning),
+            "a scheme change must repaint the keys, the open one in the new scheme's accent");
+        RenderRail(canvas, rail, "RAIL-phosphor.png");
+        AvStyleHost.SetTheme(AvThemeId.Portal);
 
-        skins[1].SetLatched(true);
-        Check(skins[1].Background.color != skins[2].Background.color, "the open screen must read differently");
-        Check(skins[1].Icon.color == AvStyleHost.FuiColor("select", AvTheme.Accent), "a latched glyph takes the configured selection colour");
+        map.Press();
+        Check(!screens[1].isActive && !map.Latched, "pressing the open key closes its screen and unlatches the key");
 
-        // The game re-runs VirtualMFD.SetupButtons on faction refreshes and Maximize can
-        // fire more than once per opening; both must leave the rail's line intact.
-        string branded = skins[2].Label.text;
-        var secondPass = new List<MfdRail.ButtonSkin>();
-        int readopted = MfdRail.Adopt(buttons, screens, null, null, secondPass);
-        Check(readopted == 0 && secondPass.Count == 0,
-            "a repeated adoption pass must not re-brand buttons the rail already wears");
-        for (int i = 0; i < buttons.Count; i++)
-            Check(CountDecorations(buttons[i]) == 1, "a borrowed button must carry exactly one rail decoration");
-        Check(skins[2].Label.text == branded, "a repeated pass must not rewrite the branded line");
-        skins[2].Label.text = "MAP";
-        skins[2].Label.color = Color.green;
-        skins[2].Reassert();
-        Check(skins[2].Label.text == branded,
-            "the rail must put its line back after the game resets the label");
-        Check(skins[2].Label.color == AvStyleHost.FuiColor("ink", AvTheme.TextPrimary),
-            "the rail must put its label colour back after the game's style applier repaints it");
-
-        if (MfdRail.TryGetRail(out RectTransform rail))
-        {
-            Check(rail.rect.width >= 150f, "the built rail must match the resolved column");
-            var camera = OrthoCamera("Camera", 470f, new Color(.08f, .13f, .16f), Vector3.zero);
-            float top = rail.anchoredPosition.y + rail.rect.height * 0.5f;
-            camera.transform.position = new Vector3(rail.anchoredPosition.x, top - 8f - 462f, -10f);
-            Render(canvas, camera, 152, 940, "RAIL.png");
-            Object.DestroyImmediate(camera.gameObject);
-        }
-
-        for (int i = 0; i < skins.Count; i++) skins[i].Restore();
-        Check(skins[0].Label.text == "BDF", "restore must return the vanilla label text");
-        Check(skins[0].Decoration == null && skins[0].Icon == null,
-            "restore must remove the branding it added");
-        MfdRailBrand mark = buttons[0].GetComponent<MfdRailBrand>();
-        Check(mark == null || !mark.enabled,
-            "restore must release the rail's ownership mark");
+        // The game's buttons wait in the rail's stowage; losing the rail must never take one with it.
+        buttons[0].transform.SetParent(MfdRail.Stowage, false);
+        MfdRail.Reset();
+        Check(!MfdRail.TryGetRail(out _), "reset must forget the rail");
+        Check(buttons[0] != null && buttons[0].transform.parent == canvas.transform,
+            "reset must release a stowed bezel button, not destroy it");
 
         Object.DestroyImmediate(root);
     }
 
-    private static int CountDecorations(Button button)
+    private static void AddSlot(List<Button> buttons, List<MFDScreen> screens, string code)
     {
-        int count = 0;
-        for (int i = 0; i < button.transform.childCount; i++)
-            if (button.transform.GetChild(i).name == "AvDecoration") count++;
-        return count;
+        MFDScreen screen = new GameObject("Screen_" + code, typeof(MFDScreen)).GetComponent<MFDScreen>();
+        screen.shortName = code;
+        Button button = MakeVanillaButton(code);
+        // Stand-in for VirtualMFD.PressLeftButton: a press toggles its screen and closes the others.
+        button.onClick.AddListener(() =>
+        {
+            bool open = !screen.isActive;
+            foreach (MFDScreen other in screens) if (other != null) other.isActive = false;
+            screen.isActive = open;
+        });
+        buttons.Add(button);
+        screens.Add(screen);
+    }
+
+    private static TMP_Text[] Texts(MfdRailKey key) => key.Rect.GetComponentsInChildren<TMP_Text>(true);
+
+    private static void RenderRail(Canvas canvas, RectTransform rail, string file)
+    {
+        float half = rail.rect.height * 0.5f + 6f;
+        var camera = OrthoCamera("Camera", half, new Color(.08f, .13f, .16f), Vector3.zero);
+        camera.transform.position = new Vector3(rail.anchoredPosition.x, rail.anchoredPosition.y, -10f);
+        int height = Mathf.RoundToInt(half * 4f);
+        Render(canvas, camera, Mathf.RoundToInt(height * (rail.rect.width + 12f) / (half * 2f)), height, file);
+        Object.DestroyImmediate(camera.gameObject);
     }
 
     private static void CheckFinishTexture()

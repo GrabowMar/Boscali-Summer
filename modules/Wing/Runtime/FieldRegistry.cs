@@ -169,6 +169,13 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 Vec3 p = a.GlobalPosition().ToVec3();
                 if ((p - t.Field.Center).Horizontal.Length <= radius) t.Obstacles.Add(p);
             }
+            t.Vehicles.Clear();
+            foreach (Unit u in UnitRegistry.allUnits)
+            {
+                if (!(u is GroundVehicle) || u.disabled) continue;
+                Vec3 p = u.GlobalPosition().ToVec3();
+                if ((p - t.Field.Center).Horizontal.Length <= radius) t.Vehicles.Add(p);
+            }
             bool landing = false;
             if (e.Airbase.runways != null)
                 foreach (Airbase.Runway r in e.Airbase.runways)

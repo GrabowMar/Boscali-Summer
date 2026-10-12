@@ -12,18 +12,67 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// </summary>
     internal readonly struct MfdRailEntry
     {
-        public MfdRailEntry(string code, string name, AvIcon glyph)
+        public MfdRailEntry(string code, string name, AvIcon glyph, MfdRailGroup group, int place)
         {
             Code = code;
             Name = name;
             Glyph = glyph;
+            Group = group;
+            Rank = (int)group * 100 + place;
         }
 
         public readonly string Code;
         public readonly string Name;
         public readonly AvIcon Glyph;
+        public readonly MfdRailGroup Group;
+
+        /// <summary>Place in the rail: by group, then by the catalog's order inside it.</summary>
+        public readonly int Rank;
 
         public bool HasName => !string.IsNullOrEmpty(Name);
+    }
+
+    /// <summary>What a screen is for; the rail gathers its keys under these, in this order.</summary>
+    internal enum MfdRailGroup { Situation, Tasking, Comms, System, Aux }
+
+    /// <summary>
+    /// How the rail spends its height: full dress (index header and group labels) while the
+    /// keys stay comfortable, then the header alone, then bare keys down to the 44px pointer
+    /// floor. Below that it does not fit and the stock bezel is left alone.
+    /// </summary>
+    internal readonly struct MfdRailPlan
+    {
+        public const float KeyMax = 60f;
+        public const float KeyMin = 44f;
+        public const float Gap = 2f;
+        public const float Pad = 4f;
+        public const float HeaderHeight = 28f;
+        public const float GroupHeight = 16f;
+
+        public readonly bool Fits;
+        public readonly bool Header;
+        public readonly bool Groups;
+        public readonly float KeyHeight;
+
+        private MfdRailPlan(bool fits, bool header, bool groups, float keyHeight)
+        {
+            Fits = fits;
+            Header = header;
+            Groups = groups;
+            KeyHeight = (float)System.Math.Floor(System.Math.Min(KeyMax, keyHeight));
+        }
+
+        public static MfdRailPlan Resolve(float height, int keys, int groups)
+        {
+            if (keys <= 0) return new MfdRailPlan(true, true, false, KeyMax);
+
+            float body = height - Pad * 2f - (keys - 1) * Gap;
+            float dressed = (body - HeaderHeight - Gap - groups * GroupHeight) / keys;
+            if (dressed >= 52f) return new MfdRailPlan(true, true, true, dressed);
+            float headed = (body - HeaderHeight - Gap) / keys;
+            if (headed >= 48f) return new MfdRailPlan(true, true, false, headed);
+            return new MfdRailPlan(body / keys >= KeyMin, false, false, body / keys);
+        }
     }
 
     /// <summary>
@@ -45,49 +94,49 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public static MfdRailEntry For(string label)
         {
             string code = Sanitise(label, MaxCodeLength);
+            // FAC is the merged faction readout; the native HQ codes stay recognised for
+            // the moments the game shows them. Each screen wears a glyph of its own.
             switch (code)
             {
-                case "FAC": return new MfdRailEntry(code, "FACTIONS", AvIcon.BuildingBank);
-                case "BDF": return new MfdRailEntry(code, "BOSCALI HQ", AvIcon.BuildingBank);
-                case "PALA": return new MfdRailEntry(code, "PALA HQ", AvIcon.BuildingBank);
-                case "MAP": return new MfdRailEntry(code, "TACTICAL", AvIcon.Map2);
-                case "MFD": return new MfdRailEntry(code, "DISPLAY", AvIcon.Focus2);
-                case "HUD": return new MfdRailEntry(code, "SYMBOLOGY", AvIcon.Focus2);
-                case "TGT": return new MfdRailEntry(code, "TARGETS", AvIcon.Target);
-                case "MIS": return new MfdRailEntry(code, "MISSION", AvIcon.Flag);
-                case "WMC": return new MfdRailEntry(code, "WING CMD", AvIcon.Plane);
-                case "OPS": return new MfdRailEntry(code, "SUPPORT", AvIcon.Stack2);
-                case "STR": return new MfdRailEntry(code, "THEATER", AvIcon.ChartArrows);
-                case "SQD": return new MfdRailEntry(code, "PILOT", AvIcon.User);
-                case "PILOT": return new MfdRailEntry(code, "PERSONNEL", AvIcon.User);
-                case "RAD": return new MfdRailEntry(code, "RADIO", AvIcon.Antenna);
-                case "SET": return new MfdRailEntry(code, "SETTINGS", AvIcon.AdjustmentsHorizontal);
-                case "EVN": return new MfdRailEntry(code, "EVENTS", AvIcon.Activity);
-                case "COM": return new MfdRailEntry(code, "COMMS", AvIcon.Message2);
-                case "ENV": return new MfdRailEntry(code, "WEATHER", AvIcon.Cloud);
-                default: return new MfdRailEntry(code, null, NeutralGlyph);
+                case "FAC": return new MfdRailEntry(code, "FACTIONS", AvIcon.Crest, MfdRailGroup.Situation, 0);
+                case "BDF": return new MfdRailEntry(code, "BOSCALI HQ", AvIcon.Crest, MfdRailGroup.Situation, 1);
+                case "PALA": return new MfdRailEntry(code, "PALA HQ", AvIcon.Crest, MfdRailGroup.Situation, 2);
+                case "MAP": return new MfdRailEntry(code, "TACTICAL", AvIcon.Map2, MfdRailGroup.Situation, 3);
+                case "STR": return new MfdRailEntry(code, "THEATER", AvIcon.Territory, MfdRailGroup.Situation, 4);
+                case "EVN": return new MfdRailEntry(code, "EVENTS", AvIcon.Burst, MfdRailGroup.Situation, 5);
+                case "ENV": return new MfdRailEntry(code, "WEATHER", AvIcon.Cloud, MfdRailGroup.Situation, 6);
+                case "MIS": return new MfdRailEntry(code, "MISSION", AvIcon.Clipboard, MfdRailGroup.Tasking, 0);
+                case "TGT": return new MfdRailEntry(code, "TARGETS", AvIcon.Designator, MfdRailGroup.Tasking, 1);
+                case "WMC": return new MfdRailEntry(code, "WING CMD", AvIcon.Formation, MfdRailGroup.Tasking, 2);
+                case "OPS": return new MfdRailEntry(code, "SUPPORT", AvIcon.CallDown, MfdRailGroup.Tasking, 3);
+                case "COM": return new MfdRailEntry(code, "COMMS", AvIcon.Headset, MfdRailGroup.Comms, 0);
+                case "RAD": return new MfdRailEntry(code, "RADIO", AvIcon.Radio, MfdRailGroup.Comms, 1);
+                case "HUD": return new MfdRailEntry(code, "SYMBOLOGY", AvIcon.FlightPath, MfdRailGroup.System, 0);
+                case "MFD": return new MfdRailEntry(code, "DISPLAY", AvIcon.Focus2, MfdRailGroup.System, 1);
+                case "PILOT": return new MfdRailEntry(code, "PERSONNEL", AvIcon.Pilot, MfdRailGroup.System, 2);
+                case "SQD": return new MfdRailEntry(code, "PILOT", AvIcon.Pilot, MfdRailGroup.System, 3);
+                case "SET": return new MfdRailEntry(code, "SETTINGS", AvIcon.AdjustmentsHorizontal, MfdRailGroup.System, 4);
+                default: return new MfdRailEntry(code, null, NeutralGlyph, MfdRailGroup.Aux, 0);
             }
         }
 
         /// <summary>
-        /// Codes that lead the rail, in the order they lead it. Every other button keeps
-        /// the game's own order behind them. FAC is the merged faction readout; the
-        /// native codes remain recognised while the game is setting up its screens.
+        /// Rank in the rail's display order. The caller sorts stably, so codes this table
+        /// does not know share the last group and keep the order the game gave them.
         /// </summary>
-        private static readonly string[] LeadCodes = { "FAC", "BDF", "PALA" };
+        public static int OrderRank(string label) => For(label).Rank;
 
-        /// <summary>
-        /// Rank in the rail's display order: the lead codes first, everything else after.
-        /// The caller sorts stably, so unranked buttons keep the order the game gave them.
-        /// </summary>
-        public static int OrderRank(string label)
+        /// <summary>The label a group of keys sits under.</summary>
+        public static string GroupName(MfdRailGroup group)
         {
-            string code = Sanitise(label, MaxCodeLength);
-            for (int i = 0; i < LeadCodes.Length; i++)
+            switch (group)
             {
-                if (LeadCodes[i] == code) return i;
+                case MfdRailGroup.Situation: return "SITUATION";
+                case MfdRailGroup.Tasking: return "TASKING";
+                case MfdRailGroup.Comms: return "COMMS";
+                case MfdRailGroup.System: return "SYSTEM";
+                default: return "AUX";
             }
-            return LeadCodes.Length;
         }
 
         /// <summary>

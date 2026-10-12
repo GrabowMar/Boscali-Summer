@@ -56,6 +56,15 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// Deterministic gust multiplier in [0.75, 1.25] from slow beating harmonics,
         /// so squalls breathe instead of spraying uniformly.
         /// </summary>
+        /// <summary>
+        /// How rough the air is inside a cloud, 0..1. Cloud water weighs almost nothing; the
+        /// bumps come from the rising air that built the cloud. A sheet deck is nearly smooth,
+        /// cumulus is choppy and a storm core is violent.
+        /// </summary>
+        public static float CloudRoughness(float heapCover, float coreDepth, float turbulence) =>
+            Scalar.Clamp01(0.10f + 0.50f * Scalar.Clamp01(heapCover) + 0.60f * Scalar.Clamp01(coreDepth) +
+                0.20f * Scalar.Clamp01(turbulence));
+
         public static float GustFactor(float missionTime, int seed)
         {
             double g = 1.0

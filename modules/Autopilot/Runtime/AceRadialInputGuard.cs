@@ -27,6 +27,13 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             if (ownsCursorFlag) CursorManager.SetFlag(CursorFlags.SelectionMenu, true);
             Mouse mouse = TryMouse();
             if (mouse != null && mouse.enabled) { mouse.enabled = false; mouseTaken = true; }
+        }
+
+        /// <summary>Switching the keyboard off reads as a key release to the game: with the open key still down and younger than the game's click delay
+        /// that would be a tap (the default Radial Menu key is also Next Countermeasure on a tap). The host calls this once the key is up or too old to be one.</summary>
+        public static void TakeKeyboard()
+        {
+            if (!held || keyboardTaken) return;
             Keyboard keyboard = TryKeyboard();
             if (keyboard != null && keyboard.enabled) { keyboard.enabled = false; keyboardTaken = true; }
         }
@@ -43,8 +50,8 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             UnityEngine.Cursor.lockState = CursorManager.Visible ? UnityEngine.CursorLockMode.None : UnityEngine.CursorLockMode.Locked; // CursorManager's own rule
         }
 
-        /// <summary>HOLD mode flicks with a drawn reticle, so the OS cursor hides and stays inside the window (a flick or the release click must never land on another
-        /// application); LATCHED shows it again. Only while the guard is held.</summary>
+        /// <summary>The mouse points with the OS cursor in both modes; a controller steers a drawn reticle, so the cursor hides and stays inside the window.
+        /// Only while the guard is held.</summary>
         public static void SetCursorVisible(bool visible)
         {
             if (!held) return;

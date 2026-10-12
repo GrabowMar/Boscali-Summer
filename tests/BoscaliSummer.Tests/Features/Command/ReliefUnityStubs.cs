@@ -67,6 +67,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         internal static void Reset() { }
         internal static bool Following => false;
         internal static bool Flying => false;
+        internal static bool Turning => false;
         internal static bool BlockIconClick() => false;
         internal static bool BlockContextClick() => false;
         // The real Focus eases the rig to the point over the next frames (ReliefNavigator.FocusOn, ZoomTo); the harness lands it at once, so it
@@ -84,6 +85,28 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         internal static void North() { }
         internal static void Fit() { }
         internal static void ToggleFollow() { }
+    }
+    // The real read needs the control field, Intel's threat picture and a flying aircraft; the harness prints a full
+    // card of plausible rows, so it proves the layout holds the longest values, not the reads behind them.
+    internal static class MapContextRead
+    {
+        internal struct Row { internal string Key, Value; internal Color Tone; }
+        internal static Color Fill(DynamicMap map, GlobalPosition ground, GlobalPosition? mark,
+            System.Collections.Generic.List<Row> rows)
+        {
+            Color ink = NOAvionics.AvTheme.TextPrimary;
+            rows.Clear();
+            rows.Add(new Row { Key = "GROUND", Value = "CONTESTED  ·  FRONT LINE", Tone = NOAvionics.AvTheme.Warning });
+            rows.Add(new Row { Key = "FIX", Value = "X -20.5  Z 14.6 KM", Tone = ink });
+            rows.Add(new Row { Key = "TERRAIN", Value = "~1412 M", Tone = ink });
+            rows.Add(new Row { Key = "FROM YOU", Value = MfdMapInteractions.LegText(new GlobalPosition(38000f, 0f, -4000f), ground), Tone = ink });
+            rows.Add(new Row { Key = "ETA", Value = "03:12  AT PRESENT SPEED", Tone = ink });
+            rows.Add(new Row { Key = "FROM MARK", Value = MfdMapInteractions.LegText(new GlobalPosition(-9000f, 0f, 12000f), ground), Tone = NOAvionics.AvTheme.Accent });
+            rows.Add(new Row { Key = "AIR DEF", Value = "2 RINGS  ·  1240 M AGL", Tone = NOAvionics.AvTheme.Alert });
+            rows.Add(new Row { Key = "RECON", Value = "LAST SEEN 12m AGO", Tone = ink });
+            rows.Add(new Row { Key = "ENEMY", Value = "GROUND FORCE · AT · AD · ARTY", Tone = NOAvionics.AvTheme.Alert });
+            return NOAvionics.AvTheme.Warning;
+        }
     }
     internal static class MapUiPointer
     {

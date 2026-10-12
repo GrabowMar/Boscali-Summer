@@ -42,6 +42,7 @@
     <Compile Include="..\..\modules\Command\Domain\ThreatEnvelope.cs" Link="Features\Command\ThreatEnvelope.cs" />
     <Compile Include="..\..\modules\Command\Domain\ReliefRig.cs" Link="Features\Command\ReliefRig.cs" />
     <Compile Include="..\..\modules\Command\Domain\ReliefHoles.cs" Link="Features\Command\ReliefHoles.cs" />
+    <Compile Include="..\..\modules\Command\Domain\ReliefClusters.cs" Link="Features\Command\ReliefClusters.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdResourceHistory.cs" Link="Features\Command\MfdResourceHistory.cs" />
     <Compile Include="..\..\modules\Support\Runtime\SupportEffectPolicy.cs" Link="Features\Support\SupportEffectPolicy.cs" />
     <Compile Include="..\..\modules\Autopilot\Runtime\AutopilotLandPolicy.cs" Link="Features\Autopilot\AutopilotLandPolicy.cs" />
@@ -95,6 +96,7 @@
     <Compile Include="..\..\modules\Support\Runtime\SupportMapGesture.cs" Link="Features\Support\SupportMapGesture.cs" />
     <Compile Include="..\..\Core\Math\Deterministic.cs" Link="Core\Math\Deterministic.cs" />
     <Compile Include="..\..\Core\Math\Scalar.cs" Link="Core\Math\Scalar.cs" />
+    <Compile Include="..\..\Core\Math\SunDiscMath.cs" Link="Core\Math\SunDiscMath.cs" />
     <Compile Include="..\..\Core\Math\FlightLoad.cs" Link="Core\Math\FlightLoad.cs" />
     <Compile Include="..\..\Core\Game\MissionClock.cs" Link="Framework\MissionClock.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Buildings\ImpactScorchPolicy.cs" Link="Features\FireAndDestruction\ImpactScorchPolicy.cs" />
@@ -159,6 +161,7 @@
     <Compile Include="..\..\modules\Command\Domain\StrAnchors.cs" Link="Features\Command\StrAnchors.cs" />
     <Compile Include="..\..\modules\Command\Domain\RebuildGate.cs" Link="Features\Command\RebuildGate.cs" />
     <Compile Include="..\..\modules\Command\Domain\MapClickRules.cs" Link="Features\Command\MapClickRules.cs" />
+    <Compile Include="..\..\modules\Command\Domain\MapFix.cs" Link="Features\Command\MapFix.cs" />
     <Compile Include="..\..\modules\Command\Domain\FlatFocus.cs" Link="Features\Command\FlatFocus.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrOverlayPlan.cs" Link="Features\Command\StrOverlayPlan.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrCardPlan.cs" Link="Features\Command\StrCardPlan.cs" />

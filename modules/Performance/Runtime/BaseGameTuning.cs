@@ -4,6 +4,8 @@ using BoscaliSummer.Modules.Performance.Domain;
 using BoscaliSummer.Core.Diagnostics;
 using BoscaliSummer.Core.Lifecycle;
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 namespace BoscaliSummer.Modules.Performance.Runtime
 {
@@ -24,6 +26,10 @@ namespace BoscaliSummer.Modules.Performance.Runtime
         private float lodOriginal = 1f;
         private bool shadowApplied;
         private float shadowOriginal;
+        // The game renders with URP, which ignores QualitySettings.shadowDistance.
+        private UniversalRenderPipelineAsset shadowAsset;
+        private float lastCleanup = -CleanupSpacingSeconds;
+        private const float CleanupSpacingSeconds = 30f;
         private bool frameApplied;
         private int frameOriginal = -1;
 
@@ -57,6 +63,7 @@ namespace BoscaliSummer.Modules.Performance.Runtime
             bool usable = Usable;
             SyncLod(usable && settings.LodBiasFloor.Value);
             SyncShadow(usable && settings.ShadowDistanceCap.Value);
+            HoldShadowCap();
             SyncFrame(usable && settings.FrameRateCap.Value);
             BaseGameTuningReport.LodFloorActive = lodApplied;
             BaseGameTuningReport.ShadowCapActive = shadowApplied;
@@ -73,7 +80,7 @@ namespace BoscaliSummer.Modules.Performance.Runtime
                     lodOriginal = QualitySettings.lodBias;
                     QualitySettings.lodBias = ClientTuningMath.PlanLodBias(lodOriginal, true);
                     lodApplied = true;
-                    Plugin.Logger?.LogInfo("Performance: LOD bias floor on (game " +
+                    Plugin.Logger?.LogInfo("Performance: LOD bias cap on (game " +
                         lodOriginal.ToString("F2") + " -> " +
                         QualitySettings.lodBias.ToString("F2") + ").");
                 }
@@ -98,26 +105,47 @@ namespace BoscaliSummer.Modules.Performance.Runtime
             {
                 if (want)
                 {
-                    shadowOriginal = QualitySettings.shadowDistance;
-                    QualitySettings.shadowDistance =
-                        ClientTuningMath.PlanShadowDistance(shadowOriginal, true);
+                    var asset = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
+                    if (asset == null) return;
+                    shadowAsset = asset;
+                    shadowOriginal = asset.shadowDistance;
+                    asset.shadowDistance = ClientTuningMath.PlanShadowDistance(shadowOriginal, true);
                     shadowApplied = true;
                     Plugin.Logger?.LogInfo("Performance: shadow distance cap on (game " +
                         shadowOriginal.ToString("F0") + " m -> " +
-                        QualitySettings.shadowDistance.ToString("F0") + " m).");
+                        asset.shadowDistance.ToString("F0") + " m).");
                 }
                 else
                 {
-                    QualitySettings.shadowDistance = ClientTuningMath.RestoreShadowDistance(shadowOriginal, QualitySettings.shadowDistance);
+                    // Restore the asset we changed, even if a new quality preset swapped the active one.
                     shadowApplied = false;
+                    if (shadowAsset == null) return;
+                    shadowAsset.shadowDistance = ClientTuningMath.RestoreShadowDistance(shadowOriginal, shadowAsset.shadowDistance);
                     Plugin.Logger?.LogInfo("Performance: shadow distance restored to " +
-                        QualitySettings.shadowDistance.ToString("F0") + " m.");
+                        shadowAsset.shadowDistance.ToString("F0") + " m.");
+                    shadowAsset = null;
                 }
             }
             catch (Exception error)
             {
                 Plugin.Logger?.LogWarning("Performance: shadow cap tuning failed: " + error.Message);
             }
+        }
+
+        // The game writes its own shadow distance back after a mission loads (seen live:
+        // 1000 m became 2000 m again), so the cap is held, not set once.
+        private void HoldShadowCap()
+        {
+            if (!shadowApplied || shadowAsset == null) return;
+            if (!ReferenceEquals(GraphicsSettings.currentRenderPipeline, shadowAsset))
+            {
+                SyncShadow(false);
+                return;
+            }
+            float current = shadowAsset.shadowDistance;
+            if (current <= ClientTuningMath.ShadowDistanceCapMeters) return;
+            shadowOriginal = current;
+            shadowAsset.shadowDistance = ClientTuningMath.ShadowDistanceCapMeters;
         }
 
         private void SyncFrame(bool want)
@@ -149,6 +177,9 @@ namespace BoscaliSummer.Modules.Performance.Runtime
 
         private void RunCleanup()
         {
+            // A mission load fires several scene resets in a row; one cleanup covers them.
+            if (Time.realtimeSinceStartup - lastCleanup < CleanupSpacingSeconds) return;
+            lastCleanup = Time.realtimeSinceStartup;
             try
             {
                 Resources.UnloadUnusedAssets();

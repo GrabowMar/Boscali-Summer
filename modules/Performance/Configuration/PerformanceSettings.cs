@@ -17,11 +17,11 @@ namespace BoscaliSummer.Modules.Performance.Configuration
                 "Never changes game physics, camera distance, or graphics quality. " +
                 "Applies during the current mission; no restart required.");
             LodBiasFloor = config.Bind("Performance", "LodBiasFloor", false,
-                "Client-local Unity tuning: raise the LOD bias to at least 1.5 so distant " +
+                "Client-local Unity tuning: lower the LOD bias to at most 1.5 (game default 4) so distant " +
                 "models drop to cheaper levels sooner. Restored exactly when switched off. " +
                 "Applies immediately; no restart required.");
             ShadowDistanceCap = config.Bind("Performance", "ShadowDistanceCap", false,
-                "Client-local Unity tuning: cap shadow distance at 2000 m, dropping far " +
+                "Client-local Unity tuning: cap shadow distance at 1000 m (game default 2000 m), dropping far " +
                 "shadow-cascade work. Restored exactly when switched off. " +
                 "Applies immediately; no restart required.");
             FrameRateCap = config.Bind("Performance", "FrameRateCap", false,

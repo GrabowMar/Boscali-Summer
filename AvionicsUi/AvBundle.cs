@@ -149,18 +149,26 @@ namespace NOAvionics
                     var bytes = new byte[s.Length];
                     int read = 0;
                     while (read < bytes.Length) { int n = s.Read(bytes, read, bytes.Length - read); if (n <= 0) break; read += n; }
-                    iconBundle = AssetBundle.LoadFromMemory(bytes);
+                    LoadIconsFromBytes(bytes, log);
                 }
-                if (iconBundle == null) { log?.Invoke("avionics-icons.bundle failed to load; the older icon face stays in use"); return; }
-                foreach (TMP_FontAsset f in iconBundle.LoadAllAssets<TMP_FontAsset>())
-                {
-                    if (f == null) continue;
-                    if (sdf != null && f.material != null) f.material.shader = sdf;
-                    Fonts[f.name] = f;
-                }
-                log?.Invoke("avionics-icons.bundle loaded");
             }
             catch (Exception e) { log?.Invoke("avionics-icons.bundle error: " + e.Message); }
+        }
+
+        /// <summary>Public so an offline Unity check can render the icon face the game shows (call after <see cref="LoadFromBytes"/>).</summary>
+        public static void LoadIconsFromBytes(byte[] bytes, Action<string> log)
+        {
+            if (iconBundle != null || bytes == null) return;
+            iconBundle = AssetBundle.LoadFromMemory(bytes);
+            if (iconBundle == null) { log?.Invoke("avionics-icons.bundle failed to load; the older icon face stays in use"); return; }
+            Shader sdf = UnityEngine.Shader.Find("TextMeshPro/Distance Field");
+            foreach (TMP_FontAsset f in iconBundle.LoadAllAssets<TMP_FontAsset>())
+            {
+                if (f == null) continue;
+                if (sdf != null && f.material != null) f.material.shader = sdf;
+                Fonts[f.name] = f;
+            }
+            log?.Invoke("avionics-icons.bundle loaded");
         }
 
         public static TMP_FontAsset Font(string assetName) =>

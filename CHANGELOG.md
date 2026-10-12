@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **MFD index rail rebuilt**: the button column on the right of the map is a new panel in the
+  same style as the MFD consoles. Its keys now follow the colour scheme chosen on SET > DISPLAY the
+  moment it changes; before, the rail kept the colours it was first drawn with. Keys are grouped
+  under SITUATION, TASKING, COMMS and SYSTEM, each screen has its own redrawn icon, and the open
+  screen's key reads ON.
+
+- **Relief map pass**: the STR layer now moves with the terrain instead of trailing it during a
+  pan; the view redraws at up to 60 Hz while it moves (30 Hz when the frame rate is already low).
+  Contact stacks are grouped on the ground, by faction, so panning or turning the map no longer
+  reshuffles them, and a knot of units on a grid line reads as one count. Land now carries a light
+  red/blue control tint like the sea. Ctrl + wheel turns the view and Shift + wheel tilts it, next
+  to the middle-button drag. Reprojecting the contact roster costs far less per redraw.
+
+- **Event responses removed**: the RESPONSE desk on the EVN screen (contain / leverage, treasury
+  directive, contract intelligence, pilot channel) is gone. A world event now simply sets its
+  support price and reset time until it ends. Host and clients must run the same build.
 - **TAC BOARD HUD rework** (GitHub issue 8): a new helmet-visor look with no panel behind it,
   spread wide along the top edge of the screen; the classic column stays as the STACK layout.
   The selected weapon and the jammer are drawn with the game's own line-art pictures.
@@ -15,11 +31,12 @@
 - **Display grade (off by default)**: SET > CLIENT > PERF gains COLOUR GRADE and SHARPEN. Contrast,
   saturation, white balance and sharpening strength are in the F1 advanced view under Effects, and
   any `.cube` LUT dropped into `BepInEx/config/BoscaliSummer/luts` can be named there as the look.
-- **Squadron insignia, sharper and meaner**: badges are cut, not rounded (angular shield, bullet arch,
-  chamfered patch, heavier keylines), with three new shapes (ARROWHEAD, SAWBLADE, COFFIN). Every mark
-  is redrawn as patch art with cut-in detail. Fifteen new marks: EAGLE, WOLF, BULL, AXES, JOLLY ROGER, SHARK, BOMB; the jokes
-  COOL S, LOSS, SHADES, DUCK, MUSHROOM, STONKS; and two pieces of nose art, PINUP and BOMBSHELL. Enemy
-  ace wings never roll the jokes or the nose art. Existing insignia keep their layers.
+- **Squadron insignia redrawn**: badges are cut, not rounded (angular shield, bullet arch, chamfered
+  patch, heavier keylines), with three new shapes (ARROWHEAD, SAWBLADE, COFFIN). The centre marks are
+  replaced by 48 new four-colour drawings: pin-ups, predators, cards and dice, skulls, gremlins and
+  jokes. The mark's skin tone follows INK and its red follows SECOND. An insignia saved before this
+  keeps its shape and colours but shows the new mark with the same number. Enemy ace wings fly only
+  the predators, weapons and omens.
 - **Tail markings sit where they should**: the multirole wears its insignia on its fins (it was on
   the boom underneath), the fast bomber's is no longer cut by the fin's leading edge, and the ground
   attack jet's and trainer's stay clear of the formation-light strips. Markings are painted at twice

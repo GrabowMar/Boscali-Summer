@@ -13,7 +13,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public bool Warn { get; }
     }
 
-    /// <summary>The hub readout: the focused action and what it does, or null title for the status summary.</summary>
+    /// <summary>The hub readout: the focused action and what it does, shown under the hub while a row is focused.</summary>
     internal readonly struct MenuReadout
     {
         public MenuReadout(string title, string desc) { Title = title; Desc = desc; }
@@ -24,23 +24,23 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
     /// <summary>All the words the controller state turns into, as pure functions (the view only paints them).</summary>
     internal static class MenuHint
     {
-        // The pad's own Back button and d-pad are not wired (the host reads the stick and the one A button), so a pad user is told the keys that do work.
-        public static string BackGlyph(MenuDevice d) => d == MenuDevice.Mouse ? "RMB" : "BKSP";
+        // A controller has the one Radial Menu button and its stick or hat (whatever the player bound), so its legends name those, never A / B.
+        public static string BackGlyph(MenuDevice d) => d == MenuDevice.Mouse ? "RMB" : d == MenuDevice.Pad ? "STICK" : "BKSP";
 
-        /// <summary>The dock footer's back legend.</summary>
-        public static string BackFooter(MenuDevice d) => d == MenuDevice.Mouse ? "RMB" : "BKSP/0";
-
-        public static string Press(MenuDevice d) => d == MenuDevice.Pad ? "A" : d == MenuDevice.Mouse ? "CLICK" : "ENTER";
+        public static string Press(MenuDevice d) => d == MenuDevice.Pad ? "PRESS" : d == MenuDevice.Mouse ? "CLICK" : "ENTER";
 
         public static string RowLabel(MenuRow r) => (r.Verb != null ? r.Verb + " " : "") + r.Label;
 
         public static MenuHintParts Parts(MenuController c)
         {
-            bool hold = c.Mode == MenuMode.Hold;
+            bool hold = c.Mode == MenuMode.Hold, pad = c.Device == MenuDevice.Pad;
             MenuRow row = c.FocusedRow;
-            // the open key is configurable: a long name (LEFTSHIFT) would push the row label out of the 396 px segment, so only short names are spelled out
-            string release = c.Device == MenuDevice.Pad || c.OpenKeyName.Length > 4 ? "RELEASE" : "RELEASE " + c.OpenKeyName;
-            string key = hold ? (c.FocusFromPointer ? release : (c.Device == MenuDevice.Pad ? "A" : "ENTER")) : Press(c.Device);
+            // the extra open key is configurable: a long name (LEFTSHIFT) would push the row label out of the 396 px segment, so only short names are
+            // spelled out; the Radial Menu binding has no name here at all
+            string release = pad || c.OpenKeyName.Length == 0 || c.OpenKeyName.Length > 4 ? "RELEASE" : "RELEASE " + c.OpenKeyName;
+            string key = hold ? (c.FocusFromPointer || pad ? release : "ENTER") : Press(c.Device);
+            string enter = c.PadSteps ? "HAT UP" : "CENTRE STICK", turn = c.PadSteps ? "HAT LEFT / RIGHT" : "STICK";
+            int aimed = pad && c.Wheel && c.WheelAim >= 0 ? c.WheelSlot(c.WheelAim) : MenuController.SlotEmpty;
             string act;
             bool warn = false;
             if (c.Hold != null)
@@ -49,37 +49,44 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 if (act.Length > 34) act = act.Replace("HOLDING", "HOLD");
                 warn = true;
             }
+            else if (aimed == MenuController.SlotBack) act = enter + " · BACK";
+            else if (aimed == MenuController.SlotMore) act = enter + " · NEXT PAGE";
             else if (row != null && row != MenuRow.BackRow && row.IsBlocked) act = row.BlockedText;
             else if (row == MenuRow.BackRow) act = key + " · BACK";
             else if (row != null && row.NeedsHold)
             {
-                act = "HOLD " + (c.Device == MenuDevice.Pad ? "A" : c.Device == MenuDevice.Key ? "ENTER" : "LMB") + " 0.8 S · " + row.Label;
+                act = "HOLD " + (pad ? "BUTTON" : c.Device == MenuDevice.Key ? "ENTER" : "LMB") + " 0.8 S · " + row.Label;
                 warn = true;
             }
             else if (row != null && row.Kind == MenuKind.Picker) act = key + " · SELECT " + row.Label.Split('·')[0].Trim();
-            else if (row != null && row.Kind == MenuKind.Submenu) act = key + " · OPEN " + (row.HintNoun ?? row.Label);
+            else if (row != null && row.Kind == MenuKind.Submenu) act = (pad ? enter : key) + " · OPEN " + (row.HintNoun ?? row.Label);
             else if (row != null) act = key + " · " + RowLabel(row);
-            else if (c.Cat < 0 && c.Recalled != null) act = (hold ? "FLICK OR 1–0 · " : "CLICK OR 1–0 · ") + (c.Device == MenuDevice.Pad ? "A" : "SPACE") + " FOR " + c.Recalled.Label;
-            else if (c.Cat < 0) act = hold ? "FLICK OR 1–0 · PICK A CATEGORY" : "CLICK OR 1–0 · PICK A CATEGORY";
+            else if (c.Cat < 0 && pad) act = turn + " · AIM A CATEGORY";
+            else if (c.Cat < 0 && c.Recalled != null) act = (hold ? "POINT OR 1–0 · " : "CLICK OR 1–0 · ") + "SPACE FOR " + c.Recalled.Label;
+            else if (c.Cat < 0) act = hold ? "POINT OR 1–0 · PICK A CATEGORY" : "CLICK OR 1–0 · PICK A CATEGORY";
             else
             {
                 // the digits that act now: one per visible row
                 int n = Math.Min(c.Items.Count, c.Cap);
                 string keys = n > 1 ? " OR 1–" + n : n == 1 ? " OR 1" : "";
                 if (!c.Category.Available) act = c.Category.Reason.Length > 0 ? c.Category.Reason : "NOTHING AVAILABLE";
+                else if (pad) act = c.Wheel ? turn + " · AIM A ROW" : enter + " · OPEN " + c.Category.Label;
                 else act = hold ? "AIM" + keys + (c.Locked ? " · PULL BACK TO RE-AIM" : " · PICK A ROW") : "CLICK" + keys + " · PICK A ROW";
             }
             // a refused key says why in words for as long as a toast: the amber pulse alone is 180 ms of colour
             if (c.Refusal != null && c.Hold == null) { act = c.Refusal; warn = true; }
-            return new MenuHintParts(hold ? "HOLD MODE" : "LATCHED", act, BackGlyph(c.Device) + " BACK · " + (hold ? "ESC CANCEL" : "ESC CLOSE"), warn);
+            string back = pad ? (c.Wheel ? (c.PadSteps ? "HAT DOWN · BACK" : "AIM BACK · " + enter) : hold ? "RELEASE · CLOSE" : "PRESS · CLOSE")
+                : BackGlyph(c.Device) + " BACK · " + (hold ? "ESC CANCEL" : "ESC CLOSE");
+            return new MenuHintParts(hold ? "HOLD MODE" : "LATCHED", act, back, warn);
         }
 
         public static string FooterLeft(MenuController c) =>
             c.Category != null && c.Category.Available && c.Device == MenuDevice.Key ? "↑↓ ROW · ←→ RING" : "";
 
-        public static string FooterRight(MenuController c) => c.Sub != null ? "" : c.Device == MenuDevice.Mouse ? "RMB · BACK" : "BKSP/0 · BACK";
+        public static string FooterRight(MenuController c) =>
+            c.Sub != null ? "" : c.Device == MenuDevice.Mouse ? "RMB · BACK" : c.Device == MenuDevice.Pad ? "" : "BKSP/0 · BACK";
 
-        /// <summary>Null when nothing is focused: the hub then shows the status summary.</summary>
+        /// <summary>Null when nothing is focused: the hub then shows nothing.</summary>
         public static MenuReadout? Readout(MenuController c)
         {
             MenuRow row = c.FocusedRow;

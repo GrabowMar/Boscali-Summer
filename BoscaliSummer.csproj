@@ -174,6 +174,10 @@
     <EmbeddedResource Include="modules\Command\Assets\terrain_naval_intel.png">
       <LogicalName>BoscaliSummer.Command.terrain_naval_intel.png</LogicalName>
     </EmbeddedResource>
+    <!-- Plan-view ground vehicle map icons, baked by tools/Build-VehicleMapIcons.py. -->
+    <EmbeddedResource Include="modules\Command\Assetsehicle-map-icons.png">
+      <LogicalName>BoscaliSummer.Command.vehicle-map-icons.png</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
 

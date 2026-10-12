@@ -31,7 +31,6 @@ namespace BoscaliSummer.Modules.Command.Configuration
         public ConfigEntry<bool> MapTerrainImage { get; }
         public ConfigEntry<bool> MapRelief3D { get; }
         public ConfigEntry<bool> MapSymbology { get; }
-        public ConfigEntry<bool> MapMinis3D { get; }
         public ConfigEntry<float> MapTerrainOpacity { get; }
         public ConfigEntry<float> MapTrayOpacity { get; }
 
@@ -176,10 +175,7 @@ namespace BoscaliSummer.Modules.Command.Configuration
                 "Show a tilted tactical model from baked game terrain when the expanded map is open. The native map remains available when terrain data is missing or this is off.");
 
             MapSymbology = config.Bind("Command", "MapSymbology", true,
-                "Draw expanded-map contacts as frameless angular symbols, one glyph per platform class, tinted by side. Off keeps the game's bare icons.");
-
-            MapMinis3D = config.Bind("Command", "MapMinis3D", true,
-                "On the 3D relief map, stand a small low-poly model on the terrain for each contact instead of its flat symbol. Needs MapSymbology and MapRelief3D; the flat map always uses symbols.");
+                "Draw expanded-map contacts as frameless solid symbols, one silhouette per platform class, tinted by side. Off keeps the game's bare icons.");
 
             MapTerrainOpacity = config.Bind("Command", "MapTerrainOpacity", 1.0f,
                 new ConfigDescription(

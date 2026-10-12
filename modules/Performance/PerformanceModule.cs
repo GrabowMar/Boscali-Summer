@@ -24,12 +24,12 @@ namespace BoscaliSummer.Modules.Performance
                 "After sustained slow flight frames, halve scalable Boscali cosmetic budgets. " +
                 "Takes effect after sampling; no mission or game restart.",
                 context.Settings.Performance.Enabled);
-            context.AddClientSetting("BASE GAME", "LOD FLOOR",
-                "Raise the LOD bias to at least 1.5 so distant models simplify sooner. " +
+            context.AddClientSetting("BASE GAME", "LOD CAP",
+                "Lower the LOD bias to at most 1.5 (game default 4) so distant models simplify sooner. " +
                 "Client-local; the game's own value is restored when switched off.",
                 context.Settings.Performance.LodBiasFloor);
             context.AddClientSetting("BASE GAME", "SHADOW CAP",
-                "Cap shadow distance at 2000 m to drop far shadow-cascade work. " +
+                "Cap shadow distance at 1000 m (game default 2000 m) to drop far shadow-cascade work. " +
                 "Client-local; the game's own value is restored when switched off.",
                 context.Settings.Performance.ShadowDistanceCap);
             context.AddClientSetting("BASE GAME", "FPS CAP 60",

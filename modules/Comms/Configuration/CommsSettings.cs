@@ -25,7 +25,6 @@ namespace BoscaliSummer.Modules.Comms.Configuration
         public ConfigEntry<bool> CockpitPingMarkers { get; }
         public ConfigEntry<bool> PingSound { get; }
         public ConfigEntry<KeyCode> DrawHoldKey { get; }
-        public ConfigEntry<KeyCode> QuickPingKey { get; }
 
         public CommsSettings(ConfigFile config)
         {
@@ -66,9 +65,6 @@ namespace BoscaliSummer.Modules.Comms.Configuration
             DrawHoldKey = config.Bind(section, "DrawHoldKey", KeyCode.LeftShift,
                 "Hold this key and left-drag on the open map to draw with the current pen, without " +
                 "opening COM first. None disables it. Client-local.");
-            QuickPingKey = config.Bind(section, "QuickPingKey", KeyCode.Mouse2,
-                "Press this over the open map to drop the selected ping type at the cursor (middle " +
-                "mouse by default). None disables it. Client-local.");
         }
     }
 }

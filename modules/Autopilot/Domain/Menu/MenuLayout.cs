@@ -102,9 +102,9 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public readonly int[] Side;
         public readonly MenuRect[] Widest, KeyCap;
         public readonly float ExtL, ExtR;
-        public readonly MenuRect Readout, Hint, Title;
-        public readonly bool ReadoutCompact;
-        public readonly float ReadoutNameH, ReadoutActH, ToastTop;
+        /// <summary>The bottom console: the help bar on the screen edge and, on top of it, the focused action's name and description.</summary>
+        public readonly MenuRect Action, Hint;
+        public readonly float ToastTop;
 
         private readonly IMenuMetrics metrics;
         private readonly string[] labels;
@@ -120,7 +120,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             double cos18 = Math.Cos(18.0 * Math.PI / 180.0);
             Cy = (float)Math.Round(Math.Max(0.4815 * h, 300 * G + R * cos18 + Rd + 2));
             HudTop = (float)Math.Round(346f * G); BotMargin = (float)Math.Round(40f * G);
-            DockW = (float)Math.Round(384f * T); Gap = (float)Math.Round(66f * Rho);
+            DockW = (float)Math.Round(384f * T); Gap = (float)Math.Round(34f * Rho);
             KeyCapSize = (float)Math.Round(20f * T);
 
             DiscX = new float[Count]; DiscY = new float[Count]; PlateOne = new float[Count]; PlateTwo = new float[Count]; Anchor = new float[Count];
@@ -147,31 +147,17 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             }
             ExtR = extR; ExtL = extL;
 
-            int wing = IndexOf(cats, "wing"), radio = IndexOf(cats, "radio");
-            float roW = (float)Math.Round(Math.Min(200f * T, 2f * (Math.Abs(DiscX[wing] - Cx) - Rd - 20f * Rho)));
             float roTop = (float)Math.Round(Cy + HubR + 5f * Rho);
-            float lowDiscTop = DiscY[radio] - Rd;
-            ReadoutNameH = 22f * T; ReadoutActH = 62f * T;
-            float limit = lowDiscTop - roTop - 4f * Rho;
-            ReadoutCompact = limit < ReadoutNameH + 3f * T + ReadoutActH;
-            // the room the plates may use: from under the hub to just above the lower discs
-            Readout = MenuRect.Of(Cx - roW / 2f, roTop, roW, limit);
 
-            float bottom = Cy + R * (float)cos18 + Rd;
-            float hintW = (124f + 396f + 256f) * T;
-            Hint = MenuRect.Of(Cx - hintW / 2f, (float)Math.Round(bottom + 22f * T), hintW, 32f * T);
-            float titleW = m.Width("SELF INTERACTION", MenuFont.Title) * T + 44f * T + 2f;
-            Title = MenuRect.Of(Cx - titleW / 2f, (float)Math.Round(141f * G), titleW, 15f * T * 1.4f + 10f * T + 2f);
+            // the help bar sits on the bottom edge of the screen, under the dock's bottom margin, out of the way of the ring
+            float hintW = (124f + 396f + 256f) * T, hintH = 32f * T;
+            Hint = MenuRect.Of(Cx - hintW / 2f, (float)Math.Round(h - hintH - 4f * G), hintW, hintH);
+            float actionH = (float)Math.Round(46f * T);
+            Action = MenuRect.Of(Hint.L, Hint.T - actionH + 1f, hintW, actionH); // shares the help bar's top rule
             ToastTop = (float)Math.Round(roTop + 4f * Rho);
         }
 
         public static MenuLayout Compute(int w, int h, IReadOnlyList<MenuCategory> cats, IMenuMetrics m) => new MenuLayout(w, h, cats, m);
-
-        private static int IndexOf(IReadOnlyList<MenuCategory> cats, string id)
-        {
-            for (int i = 0; i < cats.Count; i++) if (cats[i].Id == id) return i;
-            throw new ArgumentException("category " + id + " is missing");
-        }
 
         // ---------------------------------------------------------------- ring
 
@@ -186,6 +172,14 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         }
 
         public bool PlateContains(int i, string badge, float x, float y) => Plate(i, badge).Contains(x, y);
+
+        /// <summary>The plate of a ring slot in the controller wheel: a row's label over its state line, hugging the text.</summary>
+        public MenuRect SlotPlate(int i, string label, string state)
+        {
+            float pw = (float)Math.Ceiling(Math.Max(metrics.Width(label, MenuFont.Plate), metrics.Width(state ?? "", MenuFont.Badge)) * T + 18f * T);
+            float l = Side[i] > 0 ? Anchor[i] : Anchor[i] - pw;
+            return MenuRect.Of(l, DiscY[i] - PlateTwo[i] / 2f, pw, PlateTwo[i]);
+        }
 
         public MenuRect Disc(int i) => new MenuRect(DiscX[i] - Rd, DiscY[i] - Rd, DiscX[i] + Rd, DiscY[i] + Rd);
 
@@ -342,10 +336,10 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             return d.Side > 0 ? new MenuRect(d.Rect.L - m, d.Rect.T - s, d.Rect.R + s, d.Rect.B + s) : new MenuRect(d.Rect.L - s, d.Rect.T - s, d.Rect.R + m, d.Rect.B + s);
         }
 
-        /// <summary>How far the hint bar must slide sideways so it never touches an open dock (1280x720).</summary>
+        /// <summary>How far the bottom console must slide sideways so it never touches an open dock.</summary>
         public float HintShift(DockLayout d)
         {
-            if (d == null || !(d.Rect.T < Hint.B && d.Rect.B > Hint.T)) return 0f;
+            if (d == null || !(d.Rect.T < Hint.B && d.Rect.B > Action.T)) return 0f;
             return d.Side > 0 ? Math.Min(0f, d.Rect.L - 12f - Hint.R) : Math.Max(0f, d.Rect.R + 12f - Hint.L);
         }
     }
