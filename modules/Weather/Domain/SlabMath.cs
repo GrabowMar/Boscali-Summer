@@ -40,6 +40,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>Tile in metres of the mesoscale fetch that carries the patch field (R) and the cell-size field (G): another tile than the
         /// 27 km warp fetch, so the two never line up.</summary>
         public const float PatchTile = 31000f;
+        /// <summary>Round 6: the lookup point of the two mesoscale fetches (warp and patch/size masks) is bent by SmoothNoise on a lattice of MesoWarpTile metres by up to MesoWarpAmp / 2 metres each way
+        /// (slope under 1 even at the steepest point of the quintic: 900 x 1.875 / 2400, no fold): the trilinear read of a coarse mip has straight iso-contours, so the patch mask drew triangles and diamonds.</summary>
+        public const float MesoWarpTile = 2400f, MesoWarpAmp = 900f;
         /// <summary>The domain warp of the pattern in scales (the 27 km fetch bends the pattern by up to WarpGain / 2 scales; kept at 1.6: 2.0 pushed the 8-bit parity of the cell probes past the density check tolerance) and the
         /// bend of the cell coordinate in cells (was 2.2).</summary>
         public const float WarpGain = 1.6f;
@@ -52,7 +55,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public const float StreakWarpCut = 0.7f;
         /// <summary>Streak meander: the across-coordinate of a streak is shifted by SmoothNoise on a lattice of MeanderTile scales, by up to Meander x 0.5 scales,
         /// so neighbouring fibres converge and part instead of running in parallel rows (the Morse rows of skies 8 and 9).</summary>
-        public const float MeanderTile = 3f, Meander = 0.5f;
+        public const float MeanderTile = 3f, Meander = 0.9f, MeanderAlong = 0.15f;
         /// <summary>How far the curl bends a streak coordinate, in scales per unit of Curl (was 2): hooked cirrus read as molten swirls with closed loops.</summary>
         public const float CurlGain = 0.8f;
         /// <summary>Look pass round 2: the phase bend of the two ripple row sets in radians per unit of bend (was 10 and 9: their gradient could cancel the rows' own,

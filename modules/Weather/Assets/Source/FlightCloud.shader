@@ -78,6 +78,8 @@ Shader "Boscali/FlightCloud"
         // Dominant density body's own normalized height. Capture after the primary sample;
         // subsequent shadow-density samples overwrite it. Empty samples always reset it.
         static float gLocalLightingHeight = 0.0;
+        // Round 6: how much a lit sample belongs to a smooth deck (the low layer won the sample and its genus is a sheet), 0 elsewhere. Captured like the height.
+        static float gDeckSheet = 0.0;
         // The low-genus row of the sample being shaded. A primary sample fetches its own; the sun taps of that march sample
         // (gLowReuse, set by MarchSky) reuse it: they lie within 1.5 km and a ramp is at least 12 km wide.
         static bool gLowValid = false;
@@ -177,6 +179,9 @@ Shader "Boscali/FlightCloud"
         #define SALT_STREAK_B 0x7A32u
         #define SALT_STREAK_SEG 0x7A43u
         #define SALT_ROWS 0x8B15u
+        #define SALT_MESO 0x9D41u
+        #define SALT_DECK_A 0x9C21u
+        #define SALT_DECK_B 0x9C32u
 
         uint SmoothHash(int x, int z, uint salt)
         {
@@ -720,6 +725,7 @@ Shader "Boscali/FlightCloud"
         float Density(float3 world, float coarse)
         {
             gLocalLightingHeight = 0.0;
+            gDeckSheet = 0.0;
             // A primary sample fetches its own genus row; the sun taps of one march sample reuse it.
             if (!gLowReuse) gLowValid = false;
             float3 g = world + _CloudWorldOffset;
@@ -894,8 +900,8 @@ Shader "Boscali/FlightCloud"
             float keep = EyeCloudKeep(g);
             float field = hero;
             gLocalLightingHeight = heroHeight;
-            if (layerDensity * 0.55 * keep > field) { field = layerDensity * 0.55 * keep; gLocalLightingHeight = layerHeight; }
-            if (frontDensity * 0.60 * keep > field) { field = frontDensity * 0.60 * keep; gLocalLightingHeight = frontHeight; }
+            if (layerDensity * 0.55 * keep > field) { field = layerDensity * 0.55 * keep; gLocalLightingHeight = layerHeight; gDeckSheet = sheetBlend; }
+            if (frontDensity * 0.60 * keep > field) { field = frontDensity * 0.60 * keep; gLocalLightingHeight = frontHeight; gDeckSheet = sheetBlend; }
             if (towerDensity * 0.85 * keep > field) { field = towerDensity * 0.85 * keep; gLocalLightingHeight = height01; }
             if (scud * 0.4 * keep > field) { field = scud * 0.4 * keep; gLocalLightingHeight = saturate((g.y - floorY + 700.0) / 700.0); }
             // Near-field carving: filaments and thin slots around the camera, so flying inside
@@ -910,7 +916,7 @@ Shader "Boscali/FlightCloud"
                 float carveKeep = 1.0 - 0.7 * smoothstep(0.25, 0.6, field);
                 field = saturate(field - (cav - 0.48) * 1.1 * carveFade * carveKeep);
             }
-            if (field <= 0.0) gLocalLightingHeight = 0.0;
+            if (field <= 0.0) { gLocalLightingHeight = 0.0; gDeckSheet = 0.0; }
             return field;
         }
 
@@ -918,6 +924,7 @@ Shader "Boscali/FlightCloud"
         float DensityOrEmpty(float3 world, float coarse)
         {
             gLocalLightingHeight = 0.0;
+            gDeckSheet = 0.0;
             float3 g = world + _CloudWorldOffset;
             if (!NearHero(g) && EmptyAt(g)) return 0.0;
             return Density(world, coarse);
@@ -1017,7 +1024,8 @@ Shader "Boscali/FlightCloud"
                 if (row.curl > 0.01)
                     sac += (SmoothNoise2(np / (scale * 3.1) + 0.61, SALT_CURL) - 0.5) * scale * 0.8 * row.curl;
                 float2 ms = SmoothNoise2(np / (scale * 3.0) + float2(0.29, 0.83), SALT_MEANDER);
-                sac.y += (ms.y - 0.5) * scale * 0.5;
+                sac.y += (ms.y - 0.5) * scale * 0.9;
+                sac.x += (ms.x - 0.5) * span * 0.15;
                 float widthField = SmoothNoise2(float2(sac.x / (span * 2.5) + 0.13, sac.y / (scale * 3.0) + 0.71), SALT_STREAK_WIDTH).x;
                 float nA = SmoothNoise2(float2(sac.x / (span * 1.4) + 0.37, sac.y / (scale * 0.12) + 0.81), SALT_STREAK_A).x;
                 float2 rb = float2(sac.x * 0.9925462 + sac.y * 0.1218693, sac.y * 0.9925462 - sac.x * 0.1218693);
@@ -1082,6 +1090,9 @@ Shader "Boscali/FlightCloud"
             // Mesoscale patches (a layer is never uniform across the whole map) and a slow warp
             // that bends the streaks (hooked cirrus) and breaks the tile period: one fetch.
             float2 nlow = NoiseXZ(g.xz, layer < 0.5 ? NOISE_MID : NOISE_HIGH);
+            // Round 6: the two mesoscale fetches are trilinear reads of a coarse mip, whose iso-contours are straight lines: the patch mask drew triangles and diamonds (sky 11). Bend the
+            // lookup point by smooth noise first (SlabMath.MesoWarpTile / MesoWarpAmp; CloudBodies.Slab2D is the twin). Hash noise has no mip chain, so it fades with the footprint.
+            nlow += (SmoothNoise2(nlow / 2400.0 + float2(0.37, 0.19), SALT_MESO) - 0.5) * (900.0 * OctaveFade(foot, 2400.0));
             float2 low = tex3Dlod(_CloudNoiseTex, float4(nlow / 27000.0 + 0.27, 0.71, 1.5)).rg;
             float patch = low.g;
             // The patch field (R) and the cell-size field (G) of a second mesoscale fetch at another tile (SlabMath.PatchTile).
@@ -1160,9 +1171,12 @@ Shader "Boscali/FlightCloud"
         // clipped every sunlit lobe to flat 255 white (about 17 of 47 skies). Linear up to the knee, then a tanh roll-off to one: the lit
         // side keeps its form, and storms flashed by lightning stop clipping too. Per channel, so the warm sun tint desaturates to white
         // in the brightest parts, as film does. GPU-only (the CPU twins are densities).
+        // Round 6: a rational shoulder (t / (1 + t)) instead of tanh. tanh reached its ceiling within a knee width, so every lit face above about 1.6 came out the same flat
+        // white (7-37 % of the sky pixels of skies 10, 17, 23, 27, 41 over 0.93); this one keeps gradation up to a light of 3 and costs less.
         float3 CloudShoulder(float3 x, float knee, float room)
         {
-            return min(x, knee) + room * tanh(max(x - knee, 0.0) / room);
+            float3 t = max(x - knee, 0.0) / room;
+            return min(x, knee) + room * t / (1.0 + t);
         }
 
         // Round 4: the in-scatter toward a cloud takes the cloud's own shade. Airlight was the full horizon colour for every sample, so a
@@ -1172,7 +1186,9 @@ Shader "Boscali/FlightCloud"
         float3 ShadedFog(float3 light)
         {
             float l = dot(light, float3(0.2126, 0.7152, 0.0722));
-            return _CloudFogColor * lerp(0.35, 1.0, saturate(l / 0.85));
+            // Round 6: the shaded airlight is darker (0.35 -> 0.10 of the fog at black, curved) and sky-blue, so a distant shaded base keeps its depth against a lit top.
+            float s = saturate(l / 0.85);
+            return _CloudFogColor * lerp(0.10, 1.0, pow(s, 1.4)) * lerp(float3(0.84, 0.95, 1.14), 1.0, s);
         }
 
         void AddSlabSample(inout SlabLayer layer, float optical, float3 light, float distance)
@@ -1188,7 +1204,7 @@ Shader "Boscali/FlightCloud"
             if (layer.opacity <= 0.0) return;
             float depth = layer.weightedDistance / layer.opacity;
             float fade = 1.0 - smoothstep(CLOUD_HORIZON_FADE, CLOUD_HORIZON_LIMIT, depth);
-            float air = AirTransmittance(depth, ro.y, ro.y + ray.y * depth);
+            float air = pow(AirTransmittance(depth, ro.y, ro.y + ray.y * depth), 0.7); // round 6: cloud is hazed at 0.7 of the ground haze
             layer.colour = lerp(ShadedFog(layer.colour / layer.opacity) * layer.opacity, layer.colour, air) * fade;
             layer.opacity *= fade;
             layer.weightedDistance *= fade;
@@ -1234,6 +1250,12 @@ Shader "Boscali/FlightCloud"
             // under about 1 km to its mean, so cirrocumulus and altocumulus cells (periods 250-1000 m) drew nothing. Chords of several samples
             // keep the blur to their step: the samples are that far apart.
             bool single = samples < 1.5;
+            // Round 6: a thin layer along a slant. The pixel's ground footprint is 1 / sin(elevation) longer than it is wide, so the pattern is filtered by that (the single sample was
+            // filtered by the isotropic footprint only: the stipple strip and the converging wedges at the horizon were cell patterns aliased along the view). And the optical depth of
+            // a thin layer grows as sin(elevation) ^ -0.85, not ^ -1: at 10 degrees cirrus of strength 0.12 was five times as opaque as overhead and filled the lower sky.
+            float sinE = max(abs(ray.y), 0.02);
+            float aniso = 1.0 + 4.0 * (1.0 - smoothstep(0.06, 0.22, sinE));
+            float slantGain = layer < 1.5 ? pow(sinE, 0.15) : 1.0;
             float patternFoot = single ? 0.0 : stepLength * 0.5 * slant;
             // INTERIM(slice 4): the legacy front thins the middle layer ahead of it and thickens the high one.
             float2 splitMul = layer < 0.5 ? float2(1.0 - 0.75 * _SplitB.x, 1.0)
@@ -1248,12 +1270,15 @@ Shader "Boscali/FlightCloud"
                 LayerRow row;
                 if (layer > 1.5) row = FogRow(); else row = TapeLayer(TapeS(g.xz), layer);
                 if (row.cover <= 0.005) continue;
+                // Round 6: a thin layer dissolves into the haze over the last five degrees (its streaks and cells, foreshortened to nothing, were the converging wedges and stipple at the
+                // horizon of skies 2, 3, 5 and 7); a full deck keeps its horizon.
+                float horizonKeep = layer < 1.5 ? lerp(smoothstep(0.02, 0.09, sinE), 1.0, smoothstep(0.45, 0.75, row.cover)) : 1.0;
                 // The altitudes this sample's piece of the chord spans, against the local layer.
                 float yA = ro.y + ray.y * (t0 + n * stepLength), yB = ro.y + ray.y * (t0 + (n + 1.0) * stepLength);
                 float overlap = SlabOverlap(yA, yB, row.baseY, row.baseY + row.thick);
                 if (overlap <= 0.002) continue;
                 g.y = row.baseY + 0.5 * row.thick;
-                float d = Slab2D(g, layer, row, max(t * _CloudPixelAngle, patternFoot), splitMul) * row.strength;
+                float d = Slab2D(g, layer, row, max(t * _CloudPixelAngle * aniso, patternFoot), splitMul) * row.strength * slantGain * horizonKeep;
                 if (d <= 0.002) continue;
                 // Thin cloud: its own depth toward the sun is all that shades it.
                 float toSun = row.thick * 0.5 / max(0.12, _CloudSunDirection.y);
@@ -1262,8 +1287,14 @@ Shader "Boscali/FlightCloud"
                 // deviation under 0.02). It is now a dim base plus a glow toward the sun (hotspot, the reference's "light hotspot where the sun
                 // is"), and the sum goes through the shoulder so a thin layer facing the sun no longer clips flat white.
                 float slabGlow = saturate((phase - 0.5) / 1.5);
-                float3 light = CloudShoulder(_CloudAmbientColor * float3(0.85, 0.96, 1.18) * 0.64 +
-                    _CloudSunColor * (direct * lerp(1.0, phase, 0.6) * 0.7 + 0.08 + 0.60 * slabGlow), 0.85, 0.30);
+                // A full deck of thin layer has no structure to light either (sky 27): the same two mesoscale lights as the low decks, gated by the layer's cover.
+                float deckGate = layer < 1.5 ? smoothstep(0.55, 0.9, row.cover) : 0.0;
+                // Darkens by at most 0.15 and brightens by up to 0.75: the density check holds that a middle layer seen through 40 km of air is visibly present (colour over 0.4; its probe sits at slabN 0.35,
+                // where the colour is 0.50 x this factor), and the deck needs both sides to read as structure (lit/dark of the altostratus decks 31, 33, 38 fell under 1.5 when it only brightened).
+                float slabN = SmoothNoise2(g.xz / 5200.0 + float2(0.37, 0.58), SALT_DECK_A).x * 0.65 + SmoothNoise2(g.xz / 1900.0 + float2(0.81, 0.12), SALT_DECK_B).x * 0.35;
+                float slabMod = 1.0 + deckGate * (slabN < 0.5 ? 1.0 : 1.5) * (slabN - 0.5);
+                float3 light = CloudShoulder((_CloudAmbientColor * float3(0.85, 0.96, 1.18) * 0.64 +
+                    _CloudSunColor * (direct * lerp(1.0, phase, 0.6) * 0.7 + 0.08 + 0.60 * slabGlow)) * slabMod, 0.62, 0.30);
                 float segmentStart = t0 + n * stepLength;
                 float frontLength = clamp(splitDistance - segmentStart, 0.0, stepLength);
                 float backLength = stepLength - frontLength;
@@ -1615,6 +1646,7 @@ Shader "Boscali/FlightCloud"
                     // Shadow probes also evaluate Density and overwrite its local profile.
                     // Keep the primary sample's height within its own cloud body.
                     float localLightingHeight = gLocalLightingHeight;
+                    float deckSheet = gDeckSheet;
                     if (hero)
                     {
                         if (d <= 0.003 && tHero > fineUntil) { tHero += fine * 4.0; stride = true; continue; }
@@ -1710,7 +1742,16 @@ Shader "Boscali/FlightCloud"
                             }
                             light *= 1.0 + (wisp - 0.5) * 1.1 * (0.5 + saturate(d)) * wispFade;
                         }
-                        light = CloudShoulder(light, 0.6, 0.4);
+                        float deckMul = 1.0;
+                        if (deckSheet > 0.01)
+                        {
+                            // Round 6: a smooth deck has no density structure to light, so its base was one grey (luma deviation 0.03-0.05 of skies 29, 34, 35, 36, 40). The transmitted
+                            // light varies with the deck's thickness at two mesoscales (5.2 km and 1.9 km, hash noise anchored to the world). Light only: density, the CPU twin and shadows agree.
+                            float3 dg = world + _CloudWorldOffset;
+                            float deckN = SmoothNoise2(dg.xz / 5200.0 + float2(0.37, 0.58), SALT_DECK_A).x * 0.65 + SmoothNoise2(dg.xz / 1900.0 + float2(0.81, 0.12), SALT_DECK_B).x * 0.35;
+                            deckMul = 1.0 + 1.4 * (deckN - 0.5) * deckSheet; // applied after the haze blend below: a deck is mostly airlight at 5-30 km and the modulation of its own light vanished in it
+                        }
+                        light = CloudShoulder(light, 0.62, 0.40);
                         // Integrate actual density along this ray. A camera-wide multiplier
                         // made the same edge eight times more opaque after entering it.
                         // Dense cloud within a few hundred metres closes in: the far-tuned
@@ -1723,8 +1764,8 @@ Shader "Boscali/FlightCloud"
                         // opacity-weighted distance jumped where that distance jumps (grazing
                         // rays crossing from the near map to the far map drew a step above
                         // the horizon under overcast).
-                        float sampleAir = AirTransmittance(t, ro.y, ro.y + ray.y * t);
-                        colour += contribution * lerp(ShadedFog(light), light, sampleAir);
+                        float sampleAir = pow(AirTransmittance(t, ro.y, ro.y + ray.y * t), 0.7); // round 6: lit tops and shaded bases keep more of their contrast at 20-30 km
+                        colour += contribution * deckMul * lerp(ShadedFog(light), light, sampleAir);
                         weightedDistance += contribution * t;
                         
                         transmittance *= absorb;

@@ -14,7 +14,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public const uint SaltBend = 0x1B3Du, SaltCurl = 0x2C57u, SaltMeander = 0x3E91u, SaltLobeA = 0x4A05u, SaltLobeB = 0x5D73u;
         /// <summary>Look pass round 5: the three cell octaves and their size field, the two streak octaves with the width field and the segment mask, the ripple wavelength field.</summary>
         public const uint SaltCellA = 0x6A11u, SaltCellB = 0x6A22u, SaltCellC = 0x6A33u, SaltCellSize = 0x6A44u,
-            SaltStreakWidth = 0x7A10u, SaltStreakA = 0x7A21u, SaltStreakB = 0x7A32u, SaltStreakSeg = 0x7A43u, SaltRows = 0x8B15u;
+            SaltStreakWidth = 0x7A10u, SaltStreakA = 0x7A21u, SaltStreakB = 0x7A32u, SaltStreakSeg = 0x7A43u, SaltRows = 0x8B15u, SaltMeso = 0x9D41u;
 
         /// <summary>The hash of one lattice corner: a murmur3-style finaliser over the corner and the salt.</summary>
         public static uint Hash(int x, int z, uint salt)

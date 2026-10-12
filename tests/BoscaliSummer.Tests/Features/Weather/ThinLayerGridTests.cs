@@ -107,6 +107,32 @@ namespace BoscaliSummer.Tests.Features.Weather
                 if (Fold(Map, x, z, 0.05f)) curlFolds++;
             }
             TestAssert.That(curlFolds == 0, "the curl never folds a streak: " + curlFolds + " of " + n);
+            // Round 6: the meander shifts a streak across (0.9 scales) and along (0.15 spans, a streak span of 8 scales): the same lattice of 3 scales, and the shifted coordinate must not fold.
+            int meanderFolds = 0;
+            for (int i = 0; i < n; i++)
+            {
+                float x = (float)(rng.NextDouble() * 400.0), z = (float)(rng.NextDouble() * 400.0);
+                void Map(float px, float pz, out float qx, out float qz)
+                {
+                    SmoothNoise.Vec2(px / SlabMath.MeanderTile + 0.29f, pz / SlabMath.MeanderTile + 0.83f, SmoothNoise.SaltMeander, out float a, out float b);
+                    qx = px + (a - 0.5f) * 8f * SlabMath.MeanderAlong; qz = pz + (b - 0.5f) * SlabMath.Meander;
+                }
+                if (Fold(Map, x, z, 0.05f)) meanderFolds++;
+            }
+            // Round 6: the bend of the mesoscale lookup point (in tiles: amplitude / tile).
+            int mesoFolds = 0;
+            for (int i = 0; i < n; i++)
+            {
+                float x = (float)(rng.NextDouble() * 400.0), z = (float)(rng.NextDouble() * 400.0);
+                void Map(float px, float pz, out float qx, out float qz)
+                {
+                    SmoothNoise.Vec2(px + 0.37f, pz + 0.19f, SmoothNoise.SaltMeso, out float a, out float b);
+                    qx = px + (a - 0.5f) * SlabMath.MesoWarpAmp / SlabMath.MesoWarpTile; qz = pz + (b - 0.5f) * SlabMath.MesoWarpAmp / SlabMath.MesoWarpTile;
+                }
+                if (Fold(Map, x, z, 0.05f)) mesoFolds++;
+            }
+            TestAssert.That(mesoFolds == 0, "the mesoscale lookup bend never folds: " + mesoFolds + " of " + n);
+            TestAssert.That(meanderFolds == 0, "the streak meander never folds a streak: " + meanderFolds + " of " + n);
         }
 
         private delegate void MapFn(float x, float z, out float qx, out float qz);

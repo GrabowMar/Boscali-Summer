@@ -477,6 +477,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (cover <= 0.005f) return 0f;
             // The visible slab's mesoscale patch and warp share this RG sample.
             frame.NoiseXZ(x, z, layer == 0 ? NoiseXform.Mid : NoiseXform.High, out float lnx, out float lnz);
+            SmoothNoise.Vec2(lnx / SlabMath.MesoWarpTile + 0.37f, lnz / SlabMath.MesoWarpTile + 0.19f, SmoothNoise.SaltMeso, out float mwx, out float mwz);
+            lnx += (mwx - 0.5f) * SlabMath.MesoWarpAmp; lnz += (mwz - 0.5f) * SlabMath.MesoWarpAmp;
             float lowR = Sample(lnx / 27000f + 0.27f, lnz / 27000f + 0.27f, 0.71f, 0);
             float lowG = Sample(lnx / 27000f + 0.27f, lnz / 27000f + 0.27f, 0.71f, 1);
             // The patch field (R) and the cell-size field (G) of the second mesoscale fetch (look pass round 1).
@@ -540,8 +542,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                     sa += (curlA - 0.5f) * scale * SlabMath.CurlGain * row.Curl;
                     sc += (curlB - 0.5f) * scale * SlabMath.CurlGain * row.Curl;
                 }
-                SmoothNoise.Vec2(pnx / (scale * SlabMath.MeanderTile) + 0.29f, pnz / (scale * SlabMath.MeanderTile) + 0.83f, SmoothNoise.SaltMeander, out _, out float meander);
+                SmoothNoise.Vec2(pnx / (scale * SlabMath.MeanderTile) + 0.29f, pnz / (scale * SlabMath.MeanderTile) + 0.83f, SmoothNoise.SaltMeander, out float meanderAlong, out float meander);
                 sc += (meander - 0.5f) * scale * SlabMath.Meander;
+                sa += (meanderAlong - 0.5f) * span * SlabMath.MeanderAlong;
                 SmoothNoise.Vec2(sa / (span * SlabMath.StreakWidthAlong) + 0.13f, sc / (scale * SlabMath.StreakWidthAcross) + 0.71f, SmoothNoise.SaltStreakWidth, out float widthField, out _);
                 SmoothNoise.Vec2(sa / (span * SlabMath.StreakAlongA) + 0.37f, sc / (scale * SlabMath.StreakAcrossA) + 0.81f, SmoothNoise.SaltStreakA, out float nA, out _);
                 float rax = sa * SlabMath.CosStreakB + sc * SlabMath.SinStreakB, rcz = sc * SlabMath.CosStreakB - sa * SlabMath.SinStreakB;
