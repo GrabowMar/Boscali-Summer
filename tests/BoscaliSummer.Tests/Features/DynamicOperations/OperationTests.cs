@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.DynamicOperations.Domain;
 
 namespace BoscaliSummer.Tests.Features.DynamicOperations
@@ -11,6 +12,8 @@ namespace BoscaliSummer.Tests.Features.DynamicOperations
             DefenseRequiresObservedOwnership();
             TerminalStatesCannotPay();
             BoardRetainsHistoryAndBounds();
+            WithdrawFreesOfferedCardsOnly();
+            PickDisplacedChoosesWhatATiedSortieMayReplace();
             InvalidTimeCannotChangeState();
             InterdictionDistinguishesDespawnFromCombat();
             AcceptanceAndContinuousTasks();
@@ -280,9 +283,107 @@ namespace BoscaliSummer.Tests.Features.DynamicOperations
                 op.Observe(now + 1f, 1f, valid: true, owned: true, neutralized: false);
                 session.Prune(now + 61f);
             }
-            TestAssert.That(session.Operations.Count == 0 && !session.HasCapacity &&
-                !session.TryAdd(Create(129, OperationKind.Capture, target: 129)),
-                "The 128-issued ceiling survives all completed-card pruning");
+            TestAssert.That(session.Operations.Count == 0 && session.HasCapacity &&
+                session.WasIssued(OperationKind.Capture, 0) && session.WasIssued(OperationKind.Capture, OperationBoard.MaximumIssued - 1),
+                "Issued history is a memory, not a ceiling: the board still takes cards after 128 issues and remembers all 128");
+            TestAssert.That(session.TryAdd(Create(129, OperationKind.Capture, target: 128, now: 9000f)),
+                "The 129th unique issue is accepted");
+            TestAssert.That(!session.WasIssued(OperationKind.Capture, 0) && session.WasIssued(OperationKind.Capture, 1) &&
+                session.WasIssued(OperationKind.Capture, 128),
+                "The oldest key is forgotten, the second is still remembered, the newest is remembered");
+            TestAssert.That(session.TryAdd(Create(130, OperationKind.Capture, target: 0, now: 9000f)) &&
+                !session.WasIssued(OperationKind.Capture, 1),
+                "A forgotten opportunity can be issued again, and each new issue forgets the next oldest");
+            TestAssert.That(!session.TryAdd(Create(131, OperationKind.Capture, target: 128, now: 9000f)),
+                "A remembered opportunity is still refused");
+        }
+
+        private static Operation Offer(int id, OperationKind kind, int target, int focusId = 0, string anchor = "")
+        {
+            return new Operation(id, target, kind, OperationReward.None, 10f, 1200, 100, 0, focusId, anchor);
+        }
+
+        private static void WithdrawFreesOfferedCardsOnly()
+        {
+            var board = new OperationBoard();
+            Operation offered = Offer(1, OperationKind.Capture, 10);
+            Operation active = Create(2, OperationKind.Defend, target: 11);
+            Operation done = Create(3, OperationKind.Capture, target: 12);
+            TestAssert.That(board.TryAdd(offered) && board.TryAdd(active) && board.TryAdd(done), "Three cards fit");
+            done.Observe(12f, 1f, valid: true, owned: true, neutralized: false);
+            TestAssert.That(done.State == OperationState.Completed, "The third card is terminal");
+            TestAssert.That(!board.Withdraw(2) && !board.Withdraw(3) && !board.Withdraw(99) && board.Operations.Count == 3,
+                "Only an Offered card can be withdrawn: not an Active, a terminal or an unknown id");
+            TestAssert.That(board.WasIssued(OperationKind.Capture, 12) && board.WasIssued(OperationKind.Defend, 11),
+                "A refused withdraw keeps the key");
+            TestAssert.That(board.Withdraw(1) && board.Operations.Count == 2 && !board.WasIssued(OperationKind.Capture, 10),
+                "Withdraw removes an Offered card and frees its key");
+            TestAssert.That(!board.Withdraw(1), "A withdrawn card cannot be withdrawn twice");
+            TestAssert.That(board.TryAdd(Offer(4, OperationKind.Capture, 10)), "A freed opportunity can be offered again");
+
+            var ring = new OperationBoard();
+            for (int i = 0; i < OperationBoard.MaximumIssued - 1; i++)
+            {
+                float now = i * 70f;
+                Operation op = Create(i + 1, OperationKind.Capture, target: i, now: now);
+                TestAssert.That(ring.TryAdd(op), "Ring fill " + i);
+                op.Observe(now + 1f, 1f, valid: true, owned: true, neutralized: false);
+                ring.Prune(now + 61f);
+            }
+            TestAssert.That(ring.TryAdd(Offer(500, OperationKind.Patrol, 1)) && ring.Withdraw(500),
+                "A card withdrawn from a nearly full history leaves no ghost in it");
+            TestAssert.That(ring.TryAdd(Offer(501, OperationKind.Capture, 1000)) && ring.WasIssued(OperationKind.Capture, 0),
+                "One new issue after the withdraw still fits the 128 memory");
+            TestAssert.That(ring.Withdraw(501) && ring.TryAdd(Offer(502, OperationKind.Capture, 1001)) &&
+                ring.TryAdd(Offer(503, OperationKind.Capture, 1002)) && !ring.WasIssued(OperationKind.Capture, 0) &&
+                ring.WasIssued(OperationKind.Capture, 1),
+                "The history evicts only when it really holds more than 128 keys");
+        }
+
+        private static void PickDisplacedChoosesWhatATiedSortieMayReplace()
+        {
+            var focus = new OperationFocus(7, FocusRole.Assault, "PORT", "PORT AURELIA", 0f, 0f, 8000f);
+            var board = new OperationBoard();
+            Operation tied = Offer(1, OperationKind.Capture, 10, focusId: 7, anchor: "PORT");
+            Operation general = Offer(2, OperationKind.Defend, 11);
+            Operation patrol = Offer(3, OperationKind.Patrol, 12);
+            TestAssert.That(board.TryAdd(tied) && board.TryAdd(general) && board.TryAdd(patrol), "A full board of Offered cards");
+            TestAssert.That(board.PickDisplaced(OperationKind.Interdict, focus) == general,
+                "A full board gives up the lowest-id card that is not tied to the live focus");
+            TestAssert.That(board.PickDisplaced(OperationKind.Patrol, focus) == patrol,
+                "A card of the same kind is preferred over a lower id");
+            TestAssert.That(board.PickDisplaced(OperationKind.Capture, focus) == general,
+                "The covered card of the same kind is never given up; the board gives up another");
+            TestAssert.That(board.PickDisplaced(OperationKind.Interdict, default) == null &&
+                board.PickDisplaced(OperationKind.Patrol, default) == null,
+                "A focus that is not live displaces nothing");
+
+            TestAssert.That(board.Withdraw(3) && board.PickDisplaced(OperationKind.Interdict, focus) == null,
+                "A board with room and no card of the kind displaces nothing");
+            TestAssert.That(board.PickDisplaced(OperationKind.Defend, focus) == general,
+                "A board with room still replaces a card of the same kind (one live card per kind)");
+
+            TestAssert.That(board.TryAccept(2, 11f), "The general card is accepted");
+            TestAssert.That(board.PickDisplaced(OperationKind.Defend, focus) == null,
+                "An Active card is never displaced");
+            TestAssert.That(board.TryAdd(Offer(4, OperationKind.Jam, 13, focusId: 3, anchor: "PORT")) &&
+                board.PickDisplaced(OperationKind.Interdict, focus) == null,
+                "A REPLAN to the same anchor (older id, same anchor) keeps its tied card covered");
+
+            var second = new OperationBoard();
+            Operation stale = Offer(5, OperationKind.Jam, 20, focusId: 3, anchor: "OLD ANCHOR");
+            Operation patrolA = Offer(6, OperationKind.Patrol, 21);
+            Operation patrolB = Offer(7, OperationKind.Patrol, 22);
+            TestAssert.That(second.TryAdd(stale) && second.TryAdd(patrolA) && second.TryAdd(patrolB), "A second full board");
+            TestAssert.That(second.PickDisplaced(OperationKind.Patrol, focus) == patrolA,
+                "Two cards of the same kind: the lower id goes");
+            TestAssert.That(second.PickDisplaced(OperationKind.Interdict, focus) == stale,
+                "A card tied to a closed operation with another anchor is replaceable, lowest id first");
+
+            Operation noAnchor = Offer(8, OperationKind.Recon, 23, focusId: 1, anchor: null);
+            Operation untied = Offer(9, OperationKind.Recon, 24);
+            TestAssert.That(noAnchor.FocusId == 1 && noAnchor.FocusAnchor == "" && untied.FocusId == 0 && untied.FocusAnchor == "",
+                "A missing anchor reads empty and a card made without a tie reads focus 0");
         }
 
         private static void InvalidTimeCannotChangeState()
