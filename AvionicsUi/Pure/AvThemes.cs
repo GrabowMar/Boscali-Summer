@@ -51,7 +51,8 @@ namespace NOAvionics
                 Role("ink-dim", Lift(Hsv(glassHue, 0.14f * t, 0.78f), raised), null) +
                 Role("ink-muted", Lift(Hsv(glassHue, 0.18f * t, 0.66f), raised), null) +
                 Role("key", key, null) + Role("select", key, null) + Role("ready", key, null) +
-                "  caution: #F5BA56;\n  danger: #FF695B;\n" + Role("info", info, null) +
+                // effort: the STR main-effort role other branches add to every palette; harmless until then.
+                "  caution: #F5BA56;\n  effort: #F5BA56;\n  danger: #FF695B;\n" + Role("info", info, null) +
                 Role("inert", Hsv(glassHue, 0.40f * t, 0.33f), "a6") + "  friendly: friendly;\n  hostile: hostile;\n}\n";
         }
 
