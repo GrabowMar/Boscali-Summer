@@ -30,6 +30,13 @@
 - **OPS fronts**: SPACE / CYBER / SOF fronts with directives, programmes and readiness.
 - **Squadron insignia**: layered crest editor, tail-fin markings for supported aircraft, and
   cosmetic crest sharing between players.
+- **Weather by role**: every player now gets native weather for their own seat. The host and a dedicated
+  server set fog, wind, turbulence and cloud height from the theater; each client from their own camera and
+  aircraft. The native sun no longer dies at a front (vanilla's grey-and-no-sun gate is never reached; the
+  overcast look comes from the mod), a client's fog, wind and cloud height keep following their own camera
+  and aircraft while the weather is held (the host's and a single player's are theater-level; light and rain
+  are always local), and the cloud height follows the deck you are under. The MET OFFICE gets a working STORY stepper (AUTO and the five stories), and the
+  ENV screen shows the story, the next front ahead and a forecast at your position (HELD while the tape is held).
 - **Weather and cockpit immersion**: 47 sky profiles, revised volumetric clouds and canopy
   rain, pilot body and breathing cues driven by native G-LOC, recorded pilot/effect audio,
   and a kneeboard picture-card gallery.
