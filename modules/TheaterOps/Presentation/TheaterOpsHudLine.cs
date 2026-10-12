@@ -22,6 +22,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Presentation
         private HudTone tone;
         private string sentText;
         private HudTone sentTone;
+        private int seenResult;
+        private bool resultBaselined;
 
         internal void Configure(ITheaterWarView view)
         {
@@ -32,6 +34,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Presentation
         {
             sentText = null;
             nextRefresh = 0f;
+            seenResult = 0;
+            resultBaselined = false;
         }
 
         private void Update()
@@ -39,11 +43,30 @@ namespace BoscaliSummer.Modules.TheaterOps.Presentation
             if (Time.unscaledTime < nextRefresh) return;
             nextRefresh = Time.unscaledTime + RefreshSeconds;
             if (!ModuleServices.TryGet(out board)) return;
+            AnnounceResult();
             if (!Read()) { sentText = null; return; }
             if (text == sentText && tone == sentTone) return;
             sentText = text;
             sentTone = tone;
             board.Notice("theater", tone, text, detail);
+        }
+
+        /// <summary>
+        /// A newly ended operation says how it ended, once. The first snapshot only sets the baseline, so joining late announces nothing; calling off or
+        /// redirecting is the pilot's own act and is not announced.
+        /// </summary>
+        private void AnnounceResult()
+        {
+            TheaterWarSnapshot snapshot = war != null && war.Available ? war.Snapshot : null;
+            if (snapshot == null) return;
+            TheaterResultView result = snapshot.LastResult;
+            int id = result != null ? result.OperationId : 0;
+            if (!resultBaselined) { resultBaselined = true; seenResult = id; return; }
+            if (id == seenResult || result == null) return;
+            seenResult = id;
+            if (result.Outcome == TheaterOutcome.CalledOff || result.Outcome == TheaterOutcome.Redirected) return;
+            board.Notice("theater", result.Outcome == TheaterOutcome.Secured ? HudTone.Info : HudTone.Caution,
+                TheaterWords.Result(result.Kind, result.Name, result.Outcome, result.Why, result.Funds, ""), TheaterWords.Why(result.Why));
         }
 
         private bool Read()

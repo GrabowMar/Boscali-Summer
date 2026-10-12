@@ -207,18 +207,11 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         // Read-only views for the sim proof hook (GroundProof): nothing here assigns, enrols or clears.
         internal IReadOnlyList<Group> Groups => groups;
         internal bool TacticsEnabled => settings != null && settings.FrontlineTacticsEnabled.Value;
-        internal bool Steering => AdapterEnabled;
+        /// <summary>The engine's GroundSteering capability: adapter on, host authority, no Ground Control RTS.</summary>
+        internal bool SteeringAvailable => AdapterEnabled;
 
-        internal int CountGroups(string faction, string key)
-        {
-            if (string.IsNullOrEmpty(faction) || string.IsNullOrEmpty(key)) return 0;
-            int count = 0;
-            foreach (Group group in groups)
-                if (group.HQ != null && group.HQ.faction != null &&
-                    group.HQ.faction.factionName == faction && group.Key == key &&
-                    group.Members.Count > 0) count++;
-            return count;
-        }
+        /// <summary>Eligible for the staff to give an order. The ground slice narrows it (not support, not slung, not in a stalled group).</summary>
+        internal bool CanCarry(GroundVehicle vehicle) => Eligible(vehicle);
 
         private void Update()
         {

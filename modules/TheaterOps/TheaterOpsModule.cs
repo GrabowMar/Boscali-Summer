@@ -38,7 +38,7 @@ namespace BoscaliSummer.Modules.TheaterOps
             priority.Configure(context.Settings.TheaterOps, network);
             logistics.Configure(context.Settings.TheaterOps);
             naval.Configure(context.Settings.TheaterOps);
-            living.Configure(context.Settings.TheaterOps, priority, logistics, livingNetwork, naval);
+            living.Configure(context.Settings.TheaterOps, priority, livingNetwork, naval);
             livingNetwork.Configure(living);
             groundFront.Configure(context.Settings.TheaterOps, priority);
             network.Configure(priority);
@@ -47,6 +47,8 @@ namespace BoscaliSummer.Modules.TheaterOps
             context.AddService<IEnemyIntentSource>(priority);
             context.AddService<ITheaterWarView>(living);
             context.AddService<ITheaterAirStationView>(living);
+            context.AddService<ITheaterWarHost>(living);
+            context.AddService<IOperationFocusSource>(living);
 
             context.AddHostSettings(TheaterOpsHostSettings.Build(context.Settings.TheaterOps, groundFront.HasRtsCommander));
         }

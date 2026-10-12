@@ -259,16 +259,14 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
                 clientSessions.TryGetValue(PlayerIdentity.Of(player), out var session) &&
                 session.Session == intent.Session && ReferenceEquals(session.HQ, player.HQ);
             bool allowed = valid && current && nextIntent.Allow(PlayerIdentity.Of(player), Time.unscaledTime, IntentInterval);
-            bool accepted = allowed && owner.ApplyIntent(player.HQ,
-                intent.Kind, intent.Id, intent.Revision, intent.Posture);
+            IntentReply reply = allowed
+                ? owner.ApplyIntent(player.HQ, intent.Kind, intent.Id, intent.Revision, intent.Posture, LivingFrontService.ActorOf(player))
+                : new IntentReply(!valid ? TheaterCommandCode.Invalid : !current ? TheaterCommandCode.SessionChanged : TheaterCommandCode.RateLimited);
             sender.Send(new LivingFrontResult
             {
                 Protocol = ProtocolVersion, Faction = player.HQ.faction.factionName,
                 RequestId = intent.RequestId, Session = intent.Session, HostEpoch = hostEpoch,
-                Code = (byte)(accepted ? TheaterCommandCode.Accepted : !valid ? TheaterCommandCode.Invalid
-                    : !current ? TheaterCommandCode.SessionChanged : !allowed ? TheaterCommandCode.RateLimited
-                    : TheaterCommandCode.StaleChoice),
-                Detail = "", LockSeconds = 0f,
+                Code = (byte)reply.Code, Detail = reply.Detail, LockSeconds = reply.LockSeconds,
             });
             if (current)
             {

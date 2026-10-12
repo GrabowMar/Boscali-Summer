@@ -60,11 +60,11 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                     war[name] = new Dictionary<string, object>
                     {
                         { "posture", w.Posture.ToString() },
-                        { "opLive", op != null }, { "opKey", op != null ? op.Key : "" }, { "opKind", op != null ? op.Kind : "" },
-                        { "opLabel", op != null ? op.Label : "" }, { "opPhase", op != null ? op.Phase : "" },
+                        { "opLive", op != null }, { "opKey", op != null ? op.Key : "" }, { "opKind", op != null ? op.Kind.ToString().ToUpperInvariant() : "" },
+                        { "opLabel", op != null ? op.Name : "" }, { "opPhase", op != null ? op.Phase.ToString().ToUpperInvariant() : "" },
                         { "opX", op != null ? op.X : 0f }, { "opZ", op != null ? op.Z : 0f },
                         { "opAge", op != null ? now - op.Started : -1f },
-                        { "proposals", w.Proposals.Count }, { "maxProposals", Peak(name + ".proposals", w.Proposals.Count) },
+                        { "proposals", w.Deck.Count }, { "maxProposals", Peak(name + ".proposals", w.Deck.Count) },
                         { "fronts", w.Fronts.Count },
                     };
                 }
@@ -157,7 +157,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 { "present", front != null },
                 { "tacticsEnabled", front != null && front.TacticsEnabled },
                 { "authoritative", living != null && living.Authoritative },
-                { "steering", front != null && front.Steering },
+                { "steering", front != null && front.SteeringAvailable },
                 { "groupList", groups },
             };
             foreach (KeyValuePair<string, Tally> pair in tallies)
