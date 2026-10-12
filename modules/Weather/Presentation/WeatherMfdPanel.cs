@@ -112,10 +112,13 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                     ? SkyLibrary.ClassOf(localField.Key.SkyPin) // a pinned sky shows its nominal class, never the jittered instance's sampled one
                     : SkyMath.ClassOf(localField.RowAt(weather.FieldPosition.x, weather.FieldPosition.y)));
             // A pinned sky shows its own name (spec 8.4); the class code and briefing stay the regime's.
-            string skyName = built && localField.Key.SkyPin < SkyLibrary.Count ? SkyLibrary.Get(localField.Key.SkyPin).Name : regime.Name;
+            bool hasBrief = weather.TryBriefing(out EnvBriefing brief);
+            string skyName = hasBrief ? brief.SkyName : regime.Name;
             float deck = built ? localPoint.CloudBase : weather.CurrentCloudHeight;
             float cloudTop = built ? localPoint.CloudTop : deck + 1500f;
             cloudTop = Mathf.Max(deck + 500f, cloudTop);
+            // Spec 8.2: the profile follows the deck the natives follow (the lowest opaque layer), not the low layer alone.
+            if (built) { deck = localPoint.NativeDeck; cloudTop = Mathf.Max(deck + 500f, localPoint.NativeDeckTop); }
 
             Domain.WeatherForecast.FormatWind(weather.CurrentWindVelocity.x, weather.CurrentWindVelocity.z,
                 out float kts, out int towards, out int from);
@@ -126,10 +129,11 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             SolarData solar = weather.GetSolarData();
             LunarData lunar = weather.GetLunarData();
 
-            // The tape is held until slice 5: there is no step to count down to, so the NEXT cell reads HELD and the footer says whose hold it is.
-            string nextText = "HELD";
-            float nextFrac = 0f;
-            string footer = weather.IsManualOverride ? "HELD // CTRL+O // " + regime.Name : "HELD // TAPE";
+            // Spec 8.4: HELD while the tape does not move, else the distance to the next front ahead. The footer says whose hold it is.
+            bool held = !hasBrief || brief.Held;
+            string nextText = held ? "HELD" : brief.NextKm >= 0f ? AvNum.Fixed(brief.NextKm, 0) + " KM" : "CLEAR";
+            float nextFrac = held || brief.NextKm < 0f ? 0f : Mathf.Clamp01(1f - brief.NextKm / 150f);
+            string footer = weather.IsManualOverride ? "HELD // CTRL+O // " + regime.Name : held ? "HELD // TAPE" : "TAPE // " + brief.Story.ToUpperInvariant();
 
             var data = new EnvData
             {
@@ -141,7 +145,12 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 Regime = regime.Type,
                 Code = regime.Code,
                 Name = skyName,
-                Metar = built ? WeatherMetar.Line(localPoint) : "",
+                Metar = hasBrief ? brief.Metar : (built ? WeatherMetar.Line(localPoint) : ""),
+                Story = hasBrief ? brief.Story : "",
+                Role = hasBrief ? brief.Role : "",
+                NextMarker = hasBrief ? brief.NextMarker : "",
+                ForecastHeld = hasBrief && brief.Held,
+                AtPosition = hasBrief && brief.AtPosition,
                 Briefing = regime.TacticalBriefing,
                 Cover = built ? localPoint.SkyCover : cond,
                 Deck = deck,
@@ -181,7 +190,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             data.DensityByAlt = densityCurve;
 
             ForecastStep[] steps = weather.GetForecastTimeline();
-            if (steps != null)
+            if (steps != null && !(hasBrief && brief.Held))
             {
                 int[] offsets = Domain.WeatherForecast.DefaultOffsetsMinutes;
                 data.Forecast = new EnvForecastRow[steps.Length];

@@ -1338,28 +1338,38 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             if (!TryMissionTime(out float missionTime)) return cachedForecast ?? Array.Empty<ForecastStep>();
             lastForecastSampleTime = now;
             int[] offsets = WeatherForecast.DefaultOffsetsMinutes;
-            cachedForecast = new ForecastStep[offsets.Length];
+            if (cachedForecast == null || cachedForecast.Length != offsets.Length) cachedForecast = new ForecastStep[offsets.Length];
 
-            for (int i = 0; i < offsets.Length; i++)
+            if (fieldKey == null)
             {
-                if (fieldKey == null)
-                {
+                for (int i = 0; i < offsets.Length; i++)
                     cachedForecast[i] = WeatherForecast.SampleForecast(currentConditions,
                         currentCloudHeight > 0f ? currentCloudHeight : 3000f,
                         missionSeed, missionTime, offsets[i]);
-                    continue;
-                }
-
-                float futureTime = missionTime + offsets[i] * 60f;
-                forecastField.Build(fieldKey, futureTime, fieldSpan.x * 0.5f,
-                    fieldSpan.y * 0.5f, LevelInfo.i != null ? LevelInfo.i.timeOfDay : 12f);
-                WeatherRegimeType forecastClass = SkyMath.ClassOf(forecastField.RowAt(fieldPosition.x, fieldPosition.y));
-                WeatherPoint point = forecastField.Sample(fieldPosition.x, fieldPosition.y);
-                cachedForecast[i] = new ForecastStep(offsets[i], point.LowCover, point.CloudBase,
-                    forcedRainIntensity ?? Mathf.Clamp01(point.RainRate / 20f), forecastClass);
+                return cachedForecast;
             }
 
+            // Spec 8.4: the weather at the aircraft's current position at t + offset, each read from the tape with D at that time. A held tape gives one sky at every offset,
+            // and the screen says HELD instead of drawing it.
+            Vector2 at = AircraftPosition();
+            EnvForecast.Fill(cachedForecast, forecastField, fieldKey, missionTime, fieldSpan.x * 0.5f, fieldSpan.y * 0.5f,
+                LevelInfo.i != null ? LevelInfo.i.timeOfDay : 12f, offsets, at.x, at.y, field.IsBuilt && field.Moving && fieldKey.Dynamic, forcedRainIntensity);
             return cachedForecast;
+        }
+
+        /// <summary>The ENV briefing of the sky over the followed aircraft (spec 8.4); false until the field is built from a tape.</summary>
+        internal bool TryBriefing(out EnvBriefing briefing)
+        {
+            briefing = default;
+            WeatherField f = Field;
+            if (f == null || f.TapeSource == null) return false;
+            Vector2 at = AircraftPosition();
+            CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
+            Aircraft aircraft = cameras != null ? cameras.followingUnit as Aircraft : null;
+            Vector3 v = aircraft != null && aircraft.rb != null ? aircraft.rb.velocity : Vector3.zero;
+            float groundSpeed = new Vector2(v.x, v.z).magnitude;
+            briefing = EnvBriefings.Build(f.TapeSource, f.Frame, f.Sample(at.x, at.y), at.x, at.y, groundSpeed, f.Moving && f.Key.Dynamic);
+            return true;
         }
 
         public SolarData GetSolarData()
