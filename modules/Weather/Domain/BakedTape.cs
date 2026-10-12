@@ -60,6 +60,17 @@ namespace BoscaliSummer.Modules.Weather.Domain
             return Amplitude * ((float)Math.Sin(f) + 0.35f * (float)Math.Sin(2.1f * f)) / 1.35f;
         }
 
+        /// <summary>M'(a): the slope of the meander across the tape. |M'| is at most 1 because the wavelength is at least 8.1 amplitudes.</summary>
+        public float MeanderSlope(float across)
+        {
+            if (Amplitude == 0f) return 0f;
+            float f = 2f * (float)Math.PI * across / Wavelength + Phase;
+            return Amplitude * (float)(2.0 * Math.PI / Wavelength) * ((float)Math.Cos(f) + 0.735f * (float)Math.Cos(2.1f * f)) / 1.35f;
+        }
+
+        /// <summary>The across coordinate a = dot(p, w) of a world point; w is u turned a quarter circle.</summary>
+        public float Across(float x, float z) => -x * UZ + z * UX;
+
         /// <summary>s = dot(p, u) + D + M(dot(p, w)); w is u turned a quarter circle.</summary>
         public float S(float x, float z) => x * UX + z * UZ + Offset + Meander(-x * UZ + z * UX);
     }
@@ -89,6 +100,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public float[] Data { get; }
         public bool IsConstant => Texels == 1;
         public float TexelMetres => SpanMetres / Texels;
+
+        /// <summary>The horizon deck's plane altitude, fixed per tape (spec 7.3): the length-weighted median low base + 0.4 * the median low depth. Set by the baker.</summary>
+        public float DeckAltitude { get; set; } = 1700f;
 
         /// <summary>Bumped whenever the contents change; the shader texture rebuilds on a new value.</summary>
         public int Revision { get; private set; }
