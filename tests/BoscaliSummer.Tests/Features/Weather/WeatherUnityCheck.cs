@@ -570,9 +570,9 @@ public sealed class WeatherUnityCheck : MonoBehaviour
             "Larger clouds use fewer particles");
         dressing.Apply(weather);
         Check(Mathf.Approximately(layer.SizeMin, 540f), "Repeated apply does not compound size");
-        dressing.Apply(weather, 1f, 1f);
+        dressing.Apply(weather, 1f);
         Check(layer.SizeMin > 540f && layer.SizeMax > 900f && layer.Thickness > 202.5f,
-            "Fronts and cell cores deepen native cloud shapes");
+            "Cell cores deepen native cloud shapes");
         dressing.Restore();
         Check(!dressing.Applied && layer.SizeMin == 300f && layer.SizeMax == 500f &&
             layer.MapScale == 250f && layer.Thickness == 150f &&
