@@ -237,6 +237,43 @@ B[*]: Night second.
     foreach (string id in d.Library.Events.Keys)
         if (id.StartsWith("wing.") && !WingCues.All.Any(c => c.Event == id)) problems.Add(id + ": in a pack but never raised");
 
+    // The other nets, as FlightNets, CommandNet and WingChatter raise them (docs/CHATTER_PACKS.md): event, priority, facts, who must have lines.
+    string[] anybody = { "*" }, enemyVoices = { "zealot", "merc", "conscript", "*" };
+    var stations = new (string Event, ChatterPriority Priority, string[] Facts, string[] Who)[]
+    {
+        ("command.event", ChatterPriority.Status, new[] { "title" }, anybody), ("command.operation", ChatterPriority.Status, new[] { "name", "phase" }, anybody),
+        ("command.insertion", ChatterPriority.Status, new string[0], anybody),
+        ("command.basetaken", ChatterPriority.Tactical, new[] { "base" }, anybody), ("command.baselost", ChatterPriority.Tactical, new[] { "base" }, anybody),
+        ("awacs.checkin", ChatterPriority.Status, new string[0], anybody),
+        ("awacs.bandit", ChatterPriority.Tactical, new[] { "bra", "type" }, anybody), ("awacs.bogeydope", ChatterPriority.Tactical, new[] { "bra", "type" }, anybody),
+        ("awacs.clean", ChatterPriority.Tactical, new string[0], anybody), ("awacs.missile", ChatterPriority.Emergency, new[] { "clock" }, anybody),
+        ("awacs.missileclear", ChatterPriority.Tactical, new string[0], anybody), ("awacs.splash", ChatterPriority.Tactical, new[] { "target" }, anybody),
+        ("tower.taxi", ChatterPriority.Status, new[] { "runway" }, anybody), ("tower.landing", ChatterPriority.Status, new[] { "runway" }, anybody),
+        ("tower.goaround", ChatterPriority.Status, new string[0], anybody), ("tower.airborne", ChatterPriority.Status, new string[0], anybody),
+        ("tower.welcome", ChatterPriority.Status, new string[0], anybody), ("tower.wingrolling", ChatterPriority.Status, new[] { "who" }, anybody),
+        ("tower.wingdown", ChatterPriority.Ambient, new[] { "who" }, anybody), ("tower.alarm", ChatterPriority.Emergency, new string[0], anybody),
+        ("enemy.spiked", ChatterPriority.Tactical, new string[0], enemyVoices), ("enemy.fox", ChatterPriority.Tactical, new string[0], enemyVoices),
+        ("enemy.lastwords", ChatterPriority.Tactical, new string[0], enemyVoices), ("enemy.matedown", ChatterPriority.Tactical, new[] { "who" }, enemyVoices),
+    };
+    foreach (var s in stations)
+    {
+        if (!d.Library.Events.TryGetValue(s.Event, out ChatterEventDef def)) { problems.Add(s.Event + ": no pack has it"); continue; }
+        if (def.Priority != s.Priority) problems.Add(s.Event + ": priority " + def.Priority + ", the code expects " + s.Priority);
+        foreach (string who in s.Who)
+            if (def.Lines.Count(l => l.Who == who && l.Need.Length == 0 && l.Forbid.Length == 0) < 3) problems.Add(s.Event + " [" + who + "]: fewer than 3 unconditioned lines");
+        foreach (ChatterLineDef line in def.Lines)
+        {
+            if (Array.IndexOf(s.Who, line.Who) < 0) problems.Add(s.Event + " " + line.Id + ": nobody on this net is '" + line.Who + "'");
+            foreach (string token in line.Tokens)
+                if (Array.IndexOf(s.Facts, token) < 0) problems.Add(s.Event + " " + line.Id + ": token <" + token + "> is not a fact of this event");
+            foreach (string c in line.Need.Concat(line.Forbid))
+                if (c != "night" && c != "rain") problems.Add(s.Event + " " + line.Id + ": condition '" + c + "' is not set for this net");
+            if (line.Text.Length > 110 || line.Text.Any(ch => ch > 126)) problems.Add(s.Event + " " + line.Id + ": too long or non-ASCII");
+        }
+    }
+    foreach (string id in d.Library.Events.Keys)
+        if (!id.StartsWith("wing.") && !stations.Any(s => s.Event == id)) problems.Add(id + ": in a pack but never raised");
+
     var six = new List<ChatterSpeaker>();
     for (int p = 0; p < ChatterPersonas.Count; p++) six.Add(Pilot("p" + p, ChatterPersonas.Key((ChatterPersona)p)));
     foreach (ChatterExchangeDef x in d.Library.Exchanges)

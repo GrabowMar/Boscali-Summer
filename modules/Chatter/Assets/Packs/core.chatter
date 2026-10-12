@@ -1,16 +1,1 @@
-# Boscali Summer: the command net.
-
-@command.event status
-[*] Theater update: <title>. Check the event desk.
-[*] All flights, theater update. <title>. Details are on the event desk.
-[*] Be advised: <title>. The event desk has the particulars.
-
-@command.operation status
-[*] <name>. Operation phase: <phase>.
-[*] Command to all flights: <name> is now <phase>.
-[*] <name>, phase <phase>. Carry on.
-
-@command.insertion status
-[*] Friendly insertion touchdown observed. Await ground status.
-[*] Ground element is down at the landing zone. Stand by for their report.
-[*] Insertion complete. Our troops are on the ground.
+# Shared token lists for every net. (Empty for now.)

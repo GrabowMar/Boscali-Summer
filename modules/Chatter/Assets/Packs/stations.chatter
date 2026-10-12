@@ -1,0 +1,198 @@
+# Ground and air stations: the command net, the AWACS net (SKYWATCH) and the tower net.
+
+# ---------------------------------------------------------------- command
+
+@command.event status
+[*] Theater update. <title>. The event desk has the details.
+[*] All flights, be advised: <title>. Details at the event desk.
+[*] Command to all stations. <title>. Read the event desk.
+[*] <title>. That is now in effect. Check the event desk.
+[*] Priority traffic: <title>. Acknowledge and stand by.
+[*] Theater has logged a development. <title>. Carry on.
+
+@command.operation status
+[*] Operation <name>. Phase is now <phase>.
+[*] All flights, <name> is <phase>. Adjust accordingly.
+[*] Command advises: <name>, phase <phase>. Acknowledge.
+[*] <name> status change. Phase <phase>. Stay sharp.
+[*] Operation <name> now reads <phase>. Orders follow if needed.
+[*] <name>, phase <phase>. Keep your flights tight.
+[* night] <name> is <phase>. Expect a long night.
+
+@command.insertion status
+[*] Insertion element is down. Ground control has them.
+[*] Friendly troops are on the ground. Keep the air clear.
+[*] Landing zone confirmed. The assault element is on the ground.
+[*] Air assault touched down. Cover them if you can.
+[*] Ground element reports boots down. Stay on station.
+[*] Insertion complete. They are on their own until relieved.
+
+@command.basetaken tactical
+[*] <base> is ours. Secure the perimeter.
+[*] Command confirms <base> captured. Good work out there.
+[*] <base> has fallen to our side. Hold what we took.
+[*] We have <base>. Engineers are moving up.
+[*] <base> is in friendly hands. Expect a counterattack.
+[*] Capture of <base> confirmed. Do not get comfortable.
+
+@command.baselost tactical
+[*] We have lost <base>. Reform and fall back.
+[*] <base> is gone. Command is reassessing.
+[*] Enemy forces hold <base>. Plan around it.
+[*] Be advised, <base> has been taken. Expect pressure on the next line.
+[*] <base> is lost. Redirect your sorties and stay alive.
+[*] Command confirms the loss of <base>. We take it back.
+
+# ---------------------------------------------------------------- AWACS
+
+@awacs.checkin status
+[*] Skywatch has you on radar. Picture is clean. Good hunting.
+[*] Radar contact. You are on my scope. Report any change.
+[*] Skywatch on station. I have you, and the picture is quiet.
+[*] You are radar contact, climbing out. I will call it if it moves.
+[*] Welcome to the party. Skywatch has your six.
+[*] Contact established. Nothing hostile in range, for now.
+[*] Skywatch is watching. Fly safe and bring everyone home.
+[*] I have you on the scope. Picture is yours when you need it.
+[* night] Radar contact. It is a dark one, so trust your instruments.
+[* rain] Skywatch has you through the weather. Expect clutter on the scope.
+
+@awacs.bandit tactical
+[*] Bandit, <bra>.
+[*] Bandit, <bra>. Type is <type>.
+[*] New hostile, <bra>. Looks like a <type>.
+[*] Bandit bearing <bra>. Your call.
+[*] Contact, <bra>, hostile <type>.
+[*] Hostile aircraft, <bra>. Confirm visual.
+[*] Fresh bandit, <bra>. A <type>, and it knows you are here.
+[*] Bandit, <bra>. Do not lose sight of him.
+[* night] Bandit, <bra>. He is dark, watch for his flare.
+
+@awacs.bogeydope tactical
+[*] Nearest threat, <bra>.
+[*] Bogey dope. Bandit <bra>, a <type>.
+[*] Closest hostile is <bra>. Type <type>.
+[*] Picture: one bandit, <bra>.
+[*] Nearest bandit, <bra>. Heads up.
+[*] You have a <type> at <bra>. He is the nearest.
+[*] Threat bearing <bra>. Nothing closer.
+[*] Bogey dope, <bra>. It is a <type>, so keep your speed.
+
+@awacs.clean tactical
+[*] Picture clean.
+[*] Nothing out there. Picture is clean.
+[*] Skywatch sees no hostiles. All quiet.
+[*] Clean scope from here. Stay alert.
+[*] No bandits on my picture. Enjoy it.
+[*] I have nothing hostile in range.
+[*] Sky is empty for now. It will not last.
+[*] Clean. Check your own six anyway.
+[* night] Picture clean. Quiet night, so far.
+
+@awacs.missile emergency
+[*] Missile launch, your <clock>. Break!
+[*] Missile, <clock>! Defend now!
+[*] Launch detected, <clock>. Break and flare!
+[*] Missile inbound, <clock>! Go defensive!
+[*] Shot at your <clock>! Break!
+[*] Missile at <clock>, closing. Notch it!
+
+@awacs.missileclear tactical
+[*] Missile is defeated. You are clear.
+[*] Clear. Nothing guiding on you now.
+[*] That one is gone. Well flown.
+[*] Skywatch shows no missiles. Take a breath.
+[*] You beat it. Reset and get your picture back.
+[*] Missile lost lock. Stay on your toes.
+[*] No more tracks on you. Nice break.
+[*] Threat cleared. Come back to heading.
+
+@awacs.splash tactical
+[*] Splash one <target>. Good kill.
+[*] Splash, <target>. Confirmed on my scope.
+[*] Kill confirmed. That <target> is down.
+[*] Splash. Target destroyed.
+[*] Good shooting. <target> is gone from my picture.
+[*] Scratch one. Skywatch confirms.
+[*] That is a kill. Nicely done.
+[*] <target> is out of the fight. Moving on.
+
+# ---------------------------------------------------------------- tower
+
+@tower.taxi status
+[*] You are cleared to taxi, <runway>. Hold short of the line.
+[*] Cleared to taxi, <runway>. Report holding short.
+[*] Taxi to the hold point, <runway>. Wind is light.
+[*] Cleared to taxi, <runway>. Mind the lead-in line.
+[*] You may taxi, <runway>. Nothing in your way.
+[*] Taxi, <runway>, via the main taxiway. Call at the hold.
+[*] Cleared to taxi, <runway>. Fuel trucks are clear.
+[* night] Cleared to taxi, <runway>. Follow the blue lights.
+[* rain] Cleared to taxi, <runway>. Taxiways are wet, go easy.
+
+@tower.landing status
+[*] Cleared to land, <runway>.
+[*] <runway>, cleared to land. Wind is calm.
+[*] You are cleared to land, <runway>. Welcome back.
+[*] Cleared to land, <runway>. Runway is clear.
+[*] Cleared to land, <runway>. Call down.
+[*] You are number one, cleared to land, <runway>.
+[*] Land, <runway>. We have the field ready for you.
+[* night] Cleared to land, <runway>. The lights are up and steady.
+[* rain] Cleared to land, <runway>. Runway is wet, expect poor braking.
+
+@tower.goaround status
+[*] Go around.
+[*] Go around, I say again, go around. Climb and maintain.
+[*] Tower sees you are off the approach. Go around.
+[*] Go around and set up again. No rush.
+[*] Missed approach. Fly the pattern again.
+[*] Go around, the field is yours when you are ready.
+[*] Break off. Go around and call downwind.
+[* rain] Go around. Visibility is down, give it another try.
+
+@tower.airborne status
+[*] Airborne. Contact departure.
+[*] You are off the ground. Good luck out there.
+[*] Wheels up, I have you. Tower is off the net.
+[*] Airborne, clear of the field. Have a good one.
+[*] Tower sees you airborne. Cleared on course.
+[*] Off the deck. Fly safe.
+[*] Airborne. We will keep the light on for you.
+[* night] Airborne. The runway lights fade behind you.
+
+@tower.welcome status
+[*] Welcome home.
+[*] Welcome back. Exit when able and taxi to parking.
+[*] You are down. Good to see you in one piece.
+[*] Down and safe. Taxi to parking, the crew is waiting.
+[*] Welcome home. Coffee is on, you earned it.
+[*] Nice landing. Taxi clear of the runway.
+[*] You made it back. Tower is glad to see you.
+[* night] Welcome home. Follow the lights in, we have the porch lit.
+[* rain] Welcome back. Wet one today, wasn't it? Taxi to parking.
+
+@tower.wingrolling status
+[*] <who> is rolling.
+[*] Tower sees <who> on the takeoff roll.
+[*] <who> is rolling. Runway is clear ahead.
+[*] <who> has started the roll. Good luck.
+[*] <who> rolling now. Watch for them off the end.
+[*] Takeoff roll, <who>. Stand by to join.
+[*] <who> is on the run. Look for them climbing.
+
+@tower.wingdown ambient
+[*] <who> is down.
+[*] <who> has landed and is clear of the runway.
+[*] Welcome back, <who>.
+[*] <who> is on the ground. Another one home.
+[*] <who> down safely. Taxiing to parking.
+[*] <who> landed. That is one more accounted for.
+[*] Tower has <who> on the ground.
+
+@tower.alarm emergency
+[*] Base under attack! Get airborne or take cover!
+[*] Alarm, alarm! Hostiles over the field! Scramble!
+[*] Tower to all aircraft: field is under attack. Launch now!
+[*] Incoming! Clear the runway and take cover!
+[*] We are hit! Scramble what you can!

@@ -9,9 +9,14 @@ namespace BoscaliSummer.Modules.Chatter
     internal sealed class ChatterModule : IModule
     {
         private static readonly ModuleMetadata Module = new ModuleMetadata("chatter", "Chatter");
+        private static readonly Type[] Patches =
+        {
+            typeof(BoscaliSummer.Modules.Chatter.Patches.ChatterKillPatch),
+            typeof(BoscaliSummer.Modules.Chatter.Patches.ChatterNoticePatch),
+        };
 
         public ModuleMetadata Metadata => Module;
-        public Type[] PatchTypes => Type.EmptyTypes;
+        public Type[] PatchTypes => Patches;
 
         public void Install(ModuleContext context)
         {

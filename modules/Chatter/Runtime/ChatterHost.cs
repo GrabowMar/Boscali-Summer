@@ -28,19 +28,26 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         private readonly Dictionary<string, ChatterSpeaker> stations = new Dictionary<string, ChatterSpeaker>(StringComparer.Ordinal);
         private readonly HashSet<string> warned = new HashSet<string>(StringComparer.Ordinal);
         private readonly CommandNet command = new CommandNet();
+        private FlightNets flight;
         private readonly Func<ChatterSpeaker, bool> canTalk = s => s.CanTalk == null || s.CanTalk();
         private ChatterStrip strip;
         private WingConfig settings;
         private ManualLogSource log;
         private float nextWorld;
 
+        public static ChatterHost Instance { get; private set; }
+
         public ChatterDirector Director => director;
+        /// <summary>The player's own nets (AWACS, tower, enemy); the patches hand it the game's kill messages and centre notices.</summary>
+        public FlightNets Flight => flight;
         public float Now => Time.time;
 
         public void Configure(WingConfig wing, ManualLogSource logger)
         {
             settings = wing;
             log = logger;
+            flight = new FlightNets(this);
+            Instance = this;
             director.Aired += OnAired;
             LoadPacks();
         }
@@ -67,6 +74,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             director.Reset(UnityEngine.Random.Range(1, int.MaxValue));
             stations.Clear();
             command.Reset();
+            flight?.Reset();
             ChatterAudio.Reset();
             strip?.Clear();
             nextWorld = 0f;
@@ -76,6 +84,8 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         {
             director.Aired -= OnAired;
             command.Reset();
+            flight?.Reset();
+            if (ReferenceEquals(Instance, this)) Instance = null;
             strip?.Destroy();
             strip = null;
         }
@@ -92,6 +102,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                     nextWorld = Time.time + 2f;
                     ReadWorld(me);
                     command.Tick(this, me);
+                    flight.Tick(me);
                     foreach (string evt in director.Unknown)
                         if (warned.Add(evt)) log?.LogWarning("[Chatter] no pack has the event '" + evt + "'; nothing is said for it.");
                 }

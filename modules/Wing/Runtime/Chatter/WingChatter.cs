@@ -179,6 +179,16 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 Raise(speaker, evt, evt + ":" + e.Member, ("n", (e.Member + 2).ToString(CultureInfo.InvariantCulture)));
             else if (evt == WingCues.Maneuvering) Raise(speaker, evt, null, ("detail", ManeuverWords(speaker.Brain.Reaction.Kind)));
             else Raise(speaker, evt);
+            // The tower answers a wingman who rolls or comes home.
+            if (evt == WingCues.Rolling || evt == WingCues.Down) TowerCall(speaker, evt == WingCues.Rolling ? "tower.wingrolling" : "tower.wingdown");
+        }
+
+        private void TowerCall(WingMember m, string evt)
+        {
+            var flight = BoscaliSummer.Modules.Chatter.Runtime.ChatterHost.Instance?.Flight;
+            if (flight == null || m.Aircraft == null) return;
+            ChatterSpeaker tower = flight.NearTower(m.Aircraft.transform.position);
+            if (tower != null) chatter.Raise(evt, tower, evt + ":" + m.Id.ToString(CultureInfo.InvariantCulture), ("who", SpeakerFor(m).Callsign));
         }
 
         private static string EventOf(in WingEvent e)
@@ -264,21 +274,25 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             WingMember speaker = null;
             foreach (WingMember m in w.Members)
                 if (!m.Released && m.Alive && !m.OnGround) { speaker = m; break; }
-            if (speaker == null || !active || !Radio())
+            if (!active || !Radio())
             {
-                answer = "No wingmen to ask";
+                answer = "No radio";
                 return false;
             }
+            // Nobody of the wing is up: the controller answers.
+            ChatterSpeaker awacs = speaker == null ? chatter.Station(ChatterNet.Awacs, BoscaliSummer.Modules.Chatter.Runtime.FlightNets.Awacs) : null;
             // Every question gets its own key: an answer is never a repeat of the one before.
             string key = "bogeydope:" + (++asks).ToString(CultureInfo.InvariantCulture);
             if (w.NearestAirThreat(w.Player, out Vec3 pos, out Vec3 vel, out string type))
             {
                 string bra = Bra.Format(w.Player.GlobalPosition().ToVec3(), pos, vel, PlayerSettings.unitSystem == PlayerSettings.UnitSystem.Imperial);
                 answer = "Bogey dope, " + bra + ". " + type + ".";
-                return Raise(speaker, WingCues.BogeyDope, key, ("bra", bra), ("type", string.IsNullOrEmpty(type) ? "bandit" : type));
+                if (string.IsNullOrEmpty(type)) type = "bandit";
+                return awacs != null ? chatter.Raise("awacs.bogeydope", awacs, key, ("bra", bra), ("type", type))
+                    : Raise(speaker, WingCues.BogeyDope, key, ("bra", bra), ("type", type));
             }
             answer = "Picture clean.";
-            return Raise(speaker, WingCues.Clean, key);
+            return awacs != null ? chatter.Raise("awacs.clean", awacs, key) : Raise(speaker, WingCues.Clean, key);
         }
 
         /// <summary>New air threats (and, scouting, ground units) called by the flying member nearest them, with BRA from the player.</summary>
