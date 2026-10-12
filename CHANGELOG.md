@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- **TAC BOARD HUD rework** (GitHub issue 8): a new helmet-visor look with no panel behind it,
+  spread wide along the top edge of the screen; the classic column stays as the STACK layout.
+  The selected weapon and the jammer are drawn with the game's own line-art pictures.
+  New options for layout, size, position, opacity, shade, declutter level, every page
+  and block, visor sway and the kill feed and map restyle, on SET > COCKPIT, the C menu (VIEW),
+  F1 and the `[TacBoard]` config section, with Reset to defaults. The radar-warning page now
+  holds a contact for a set time (6 s by default) and any page stays up a minimum time, so it no
+  longer pops on and off. Names and readouts that were cut off or overlapped now fit, and the
+  board scales down to 1280 x 720. Switching the board off keeps the kill feed and map restyle
+  (it has its own switch), and the visor sway follows the pilot's head, not the aircraft's own turns.
+
 ## 0.2.0 — first public alpha
 
 - **Wing Command is built in.** Remove the stand-alone Wing Command mod; AI wingmen, the WMC

@@ -28,6 +28,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public float ReloadLeftS;
         /// <summary>Seconds since the station last fired (large when it has not).</summary>
         public float FiredAgeS;
+        /// <summary>The weapon's own picture as a handle (0: none; the presentation's <c>StoreIcons</c> table says which sprite): the type stays free of Unity.</summary>
+        public int Icon;
     }
 
     /// <summary>
@@ -60,5 +62,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public float CapKj, CapMaxKj;
         /// <summary>The charge's measured rate, kJ per second: negative while something drains it.</summary>
         public float CapRate;
+        /// <summary>What one shot of the fitted energy weapon (a <see cref="StoreClass.Rail"/> station) takes from the capacitor, kJ; 0 when none is fitted or the game does not say (it does not today: no cost tick or label is drawn).</summary>
+        public float CapCostKj;
     }
 }

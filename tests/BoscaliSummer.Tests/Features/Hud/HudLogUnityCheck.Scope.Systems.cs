@@ -4,7 +4,8 @@ using UnityEngine;
 
 // SYSTEMS fixture: pages/systems.js sim(t), the 16 s loop. Fuel drains through JOKER; a hit at 4.5 s (FUEL LEAK, STR 88%); engine 1 out at
 // 8.5 s (STR 70%); fire 8.7 to 12.5 s; flares and chaff at 9 s; the jammer runs 9 to 11.5 s and recharges; BINGO at about 11 s while the
-// RTB turn brings the base arrow to the nose; the aircraft passes through a cloud deck at 14 s. The default gauges are the prototype's
+// RTB turn brings the base arrow to the nose; the aircraft passes through a cloud deck at 14 s. Variants at 2 s (nominal cruise): annex and longname put a base name 97 m away that
+// cannot share the base line with the margin figure (the name keeps the line), hardg is a 6.4 G pull (the G gauge, live only while pulling). The default gauges are the prototype's
 // (ace, perk, radio, ap); the dispensers, the jammer and the capacitor are the stores header's (HudLogUnityCheck.Scope.Stores.cs); the other pages' pips and the ticker are drawn by
 // their own fixtures / the notice that is live.
 public static partial class HudLogUnityCheck
@@ -26,6 +27,7 @@ public static partial class HudLogUnityCheck
         int structure = t < hitAt ? 100 : t < engAt ? 88 : 70;
         float altitude = 5.0f - 0.07f * t;
         bool bingo = margin <= 0f, joker = margin > 0f && margin <= 15f;
+        bool annex = s.Variant == "annex", longName = s.Variant == "longname", hardG = s.Variant == "hardg";
 
         // The airframe: a twin jet. Damage zones are sides of the airframe seen from above (1 left, 2 centre, 4 right).
         object damage = s.Domain("DamageState");
@@ -36,13 +38,13 @@ public static partial class HudLogUnityCheck
 
         object fuelState = s.Domain("FuelState");
         s.Fill(fuelState, "Valid", true, "Level", fuel / 100f, "EnduranceS", fuel / rate * 60f, "Bingo", bingo, "Joker", joker,
-            "Field", "K92", "FieldM", dist * 1000f, "FieldRelDeg", rel, "HasNeed", true, "Need", need / 100f,
+            "Field", annex ? "ANNEX CLIFF" : longName ? "AIRBASE CITY NORTH" : "K92", "FieldM", annex || longName ? 97f : dist * 1000f, "FieldRelDeg", rel, "HasNeed", true, "Need", need / 100f,
             "Tone", s.ContractEnum("HudTone", bingo || fuel <= 10f ? "Warning" : joker || fuel <= 25f ? "Caution" : "Info"));
 
         object systems = s.Domain("SystemsScope");
         s.Fill(systems, "Rotary", s.Variant == "rotary", "Damage", damage, "Fuel", fuelState, "HeadingDeg", hdg,
             "HasWind", true, "WindFromDeg", 270f, "WindMps", 18f / 1.94384f, "HasCloud", true, "InCloud", altitude < 4.1f && altitude > 3.2f,
-            "Units", NOAvionics.AvUnits.Metric, "G", 1f, "GLimit", 0f);
+            "Units", NOAvionics.AvUnits.Metric, "G", hardG ? 6.4f : 1f, "GLimit", hardG ? 9f : 0f);
         s.Publish(systems);
 
         // Lamps: FA lit, own radar emitting (a caution); the ENG lamp is lit by the page when an engine is out.

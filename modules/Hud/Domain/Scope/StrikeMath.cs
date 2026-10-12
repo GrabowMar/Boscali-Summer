@@ -101,9 +101,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         public static ScopeTone TraceTone(float trace) => trace >= TraceWarning ? ScopeTone.Red : trace >= TraceCaution ? ScopeTone.Amber : ScopeTone.Ink;
 
-        /// <summary>The perk ring's fill: cooled share while cooling, full otherwise.</summary>
-        public static float PerkFill(in PerkTile p) => p.State != PerkPhase.Cooling ? 1f : Clamp01(1f - p.Cooldown / Math.Max(1f, p.Total));
-
         /// <summary>The SAT window's share left (the countdown ring) and whether it is about to close (the last four seconds).</summary>
         public static float SatFill(float left, float total) => total <= 0f ? 0f : Clamp01(left / total);
 

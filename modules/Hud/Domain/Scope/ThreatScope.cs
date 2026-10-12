@@ -42,6 +42,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public float BearingDeg, RangeM;
         /// <summary>Seconds since it began painting us in this state (the spoke fades in over 0.3 s).</summary>
         public float AgeS;
+        /// <summary>No fresh warning inside the hold of its current form: the page keeps the radar only for the pilot's hold time, so the ticker does not announce it again.</summary>
+        public bool Held;
     }
 
     /// <summary>

@@ -20,8 +20,8 @@ from PIL import Image, ImageDraw
 # The takeover shots: the board flush in the top-right corner, the native panel painted out of the backdrop.
 SPEC_DEFAULT = Path("C:/Users/marci/dev/cmenu-hud/docs/superpowers/specs/2026-10-10-hud-v8-tac-board/takeover/shots")
 NAME = re.compile(r"^(?P<page>[a-z]+)-t(?P<t>[0-9.]+)-(?P<w>\d+)x(?P<h>\d+)\.png$")
-# The board's region of a 1080p screen: its right edge is x = 1912 and it starts at y = 8; the tallest board is 577 units.
-REGION_1080 = (1440, 0, 1920, 600)
+# The board's region of a 1080p screen: the WIDE box is 916 units wide, its right edge x = 1912, its top y = 6, a live page ends at y = 380; the classic STACK column is 448 wide and 586 tall.
+REGION_1080 = (960, 0, 1920, 600)
 
 
 def region(size):

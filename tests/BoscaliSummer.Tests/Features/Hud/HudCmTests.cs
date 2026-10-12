@@ -27,6 +27,8 @@ namespace BoscaliSummer.Tests.Features.Hud
             chaff.Ammo = 7; TestAssert.That(HudCm.Words(chaff) == "RDR 7 LOW", "LOW is a word on the tile, not only a colour");
             chaff.Ammo = 0; TestAssert.That(HudCm.Words(chaff) == "RDR 0 EMPTY", "EMPTY too");
             chaff.Ammo = 30; TestAssert.That(HudCm.Words(chaff) == "RDR 30" && HudCm.Words(jammer) == "JAM", "A healthy tile adds nothing");
+            TestAssert.That(HudCm.Word(flares) == "FLR" && HudCm.Word(chaff) == "CHF" && HudCm.Word(jammer) == "JAM", "A dispenser's row says FLR, CHF or JAM");
+            TestAssert.That(HudCm.Word(new CmStation { Tag = "SMO" }) == "SMO" && HudCm.Word(default) == "CM", "...else its tag, else CM");
 
             flares.Ammo = 72;
             TestAssert.That(HudCm.Counters(flares, "IR") && !HudCm.Counters(flares, "SARH"), "Flares answer IR seekers only");

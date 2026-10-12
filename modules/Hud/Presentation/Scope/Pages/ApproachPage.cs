@@ -35,7 +35,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private bool lastCautionSpeed, lastCautionIls, announced;
         private readonly ApproachCam cam = new ApproachCam();
         private readonly float[] world = new float[3 * 8], screen = new float[2 * 20], clipped = new float[2 * 24], tmp = new float[2 * 24];
-        private readonly float[] quad = new float[8], strip = new float[16];
+        private readonly float[] quad = new float[8];
 
         private string headlineText = "";
         private int headlineKey = -1;
@@ -125,7 +125,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void UpdateHeadline(AvUnits u)
         {
             int key;
-            string text;
+            string text = null;      // built only when the key changes (this runs at 10 Hz): a steady figure builds nothing
             ScopeTone tone = Hi;
             bool flash = false;
             float dv = d.SpeedMps - d.TargetMps;
@@ -134,21 +134,21 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 int v = (int)Math.Round(Math.Abs(AvUnitTable.Speed(dv, u)));
                 key = 2000 + v * 2 + (dv > 0f ? 1 : 0) + (u == AvUnits.Imperial ? 1000 : 0);
-                text = (dv > 0f ? "FAST +" : "SLOW -") + v;
+                if (key != headlineKey) text = (dv > 0f ? "FAST +" : "SLOW -") + v;
                 tone = Amber; flash = true;
             }
             else if (d.Stage == ApproachStage.Intercept && d.HasIls)
             {
                 int v = (int)Math.Round(Math.Abs(d.LocDeg) * 10f);
                 key = 20000 + v + (d.LocDeg < 0f ? 1000 : 0);
-                text = (d.LocDeg < 0f ? "LOC L " : "LOC R ") + (v / 10) + "." + (v % 10);
+                if (key != headlineKey) text = (d.LocDeg < 0f ? "LOC L " : "LOC R ") + (v / 10) + "." + (v % 10);
                 tone = CautionLoc ? Amber : Hi;
             }
             else if (d.Stage <= ApproachStage.Glide && d.HasIls)
             {
                 int v = (int)Math.Round(d.GsDeg * 10f);
                 key = 30000 + v;
-                text = "GS " + (v < 0 ? "-" : "+") + (Math.Abs(v) / 10) + "." + (Math.Abs(v) % 10);
+                if (key != headlineKey) text = "GS " + (v < 0 ? "-" : "+") + (Math.Abs(v) / 10) + "." + (Math.Abs(v) % 10);
                 tone = CautionGs ? Amber : Hi;
             }
             else if (d.Stage <= ApproachStage.Glide) { key = 4; text = d.Pad ? "PAD" : "FINAL"; }
@@ -422,8 +422,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void Chrome(ScopeCanvas g)
         {
             g.Box(FbX, FbY, FbW, FbH + extra, Faint, 0.9f);
-            g.Line(FbX, VpY0, FbX + FbW, VpY0, Faint, 0.9f);
-            g.Line(FbX, vpY1, FbX + FbW, vpY1, Faint, 0.9f);
+            g.Line(FbX, vpY1, FbX + FbW, vpY1, Faint, 0.9f);      // the rule under the runway sub-header, the ladder | stats divider and the rule above SPD are gone (LAYOUT.md 12.4)
             g.Line(VpX1, VpY0, VpX1, vpY1, Faint, 0.9f);
             bool scales = d.Stage <= ApproachStage.Glide && d.HasIls && !d.Pad;
             float right = FbX + FbW - 6f;
@@ -513,10 +512,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Stat(g, "RA", ScopeStr.Cat("", (int)Math.Max(0f, Math.Round(AvUnitTable.Altitude(d.RadarAltM, units))), null), imperial ? "FT" : "M", sx, 70f);
             Stat(g, "V/S", ScopeStr.Cat("", AvUnitTable.Climb(-d.SinkMps, units), imperial ? 0 : 1, null), imperial ? "FPM" : "M/S", sx, 108f);
             if (d.HasWind) { Crosswind(); Stat(g, "XW", xwValue, ScopeStr.SpeedUnit(units), sx, 146f); }
-            g.Line(346f, 66f, 346f, 176f, Faint);
 
-            // Speed block: the delta bar around the speed the approach wants (centre = target, +-20 km/h); on the ground the ground speed and the brakes.
-            g.Line(x0, 188f, xr, 188f, Faint);
+            // Speed block: a short tick ruler with one index mark at the speed delta (centre = the speed the approach wants, +-20 km/h); on the ground the ground speed and the brakes.
             float by = 206f + extra, bw = 128f, bx = x0 + 2f, labelY = 224f + extra;
             string speedUnit = ScopeStr.SpeedUnitSp(units);
             if (d.Stage != ApproachStage.Rollout)
@@ -528,13 +525,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     bool caution = CautionSpeed, on = ApproachMath.OnSpeed(dv);
                     ScopeTone tone = caution ? Amber : Ink;
                     g.Text(on ? (d.Autoland ? "ON SPD" : "ON REF") : ScopeStr.Cat(dv > 0f ? "FAST " : "SLOW ", AvUnitTable.Speed(dv, units), 0, null, true), xr - 4f, 197f, on ? Hi : tone, 12f, ScopeAlign.Right, caution);
-                    g.Box(bx, by, bw, 10f, Dim, 0.85f);
-                    g.Fill(bx + 2f + Mathf.Round((bw - 4f) * 0.375f), by + 2f, Mathf.Round((bw - 4f) * 0.25f), 6f, Faint, 0.8f);
-                    float cx = bx + bw / 2f, vx = cx + ApproachMath.Clamp(dv / ApproachMath.SpeedBarMps, -1f, 1f) * (bw / 2f - 3f);
-                    g.Fill(Mathf.Round(Math.Min(cx, vx)), by + 2f, Math.Max(1f, Mathf.Round(Math.Abs(vx - cx))), 6f, tone);
-                    g.Line(cx, by - 3f, cx, by + 13f, Hi);
-                    g.Text("SLOW", bx, labelY, Dim, 12f, ScopeAlign.Left, false, 0.85f);
-                    g.Text("FAST", bx + bw, labelY, Dim, 12f, ScopeAlign.Right, false, 0.85f);
+                    Ruler(g, bx, by, bw, ApproachMath.RulerFrac(dv), caution ? Amber : Hi);
                 }
                 else g.Text(ScopeStr.Cat("", (int)Math.Round(AvUnitTable.Speed(d.SpeedMps, units)), speedUnit), xr - 4f, 197f, Hi, 12f, ScopeAlign.Right, true);
             }
@@ -542,21 +533,32 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 g.Text("GND SPD", x0 + 2f, 197f, Dim);
                 g.Text(ScopeStr.Cat("", (int)Math.Round(AvUnitTable.Speed(d.GroundMps, units)), speedUnit), xr - 4f, 197f, Hi, 12f, ScopeAlign.Right, true);
-                g.Bar(bx, by, bw, 10f, rolloutRef > 1f ? d.GroundMps / rolloutRef : 0f, Ink);
+                Ruler(g, bx, by, bw, rolloutRef > 1f ? d.GroundMps / rolloutRef : 0f, Hi);
                 g.Text("BRAKES", bx, labelY, Dim, 12f, ScopeAlign.Left, false, 0.85f);
                 g.Text(d.Autoland ? "AUTO" : d.Airbrake ? "ON" : "OFF", bx + bw, labelY, Hi, 12f, ScopeAlign.Right);
             }
 
             // Configuration checks: the gear, and the airbrake (the game has no flaps).
             Chip(g, x0, 238f + extra, "GEAR", d.GearDown, true, t);
-            Chip(g, x0 + 68f, 238f + extra, "BRK", !(d.Airbrake && d.Stage != ApproachStage.Rollout), false, t);
+            Chip(g, x0 + 70f, 238f + extra, "BRK", !(d.Airbrake && d.Stage != ApproachStage.Rollout), false, t);
+        }
+
+        /// <summary>A short tick ruler (LAYOUT.md 12.4): nine DIM ticks, the middle one taller, and one 2 x 16 index mark at <paramref name="frac"/> across it. No track, no fill, no end labels.</summary>
+        private static void Ruler(ScopeCanvas g, float x, float y, float w, float frac, ScopeTone tone)
+        {
+            for (int k = 0; k <= 8; k++)
+            {
+                float tx = Mathf.Round(x + 2f + (w - 4f) * k / 8f), inset = k == 4 ? 0f : 3f;
+                g.Line(tx, y + inset, tx, y + 10f - inset, Dim);
+            }
+            g.Fill(Mathf.Round(x + 2f + (w - 4f) * ApproachMath.Clamp(frac, 0f, 1f)) - 1f, y - 3f, 2f, 16f, tone);
         }
 
         private static void Chip(ScopeCanvas g, float x, float y, string label, bool ok, bool flash, float t)
         {
             ScopeTone tone = ok ? Ink : Amber;
             bool lit = !ok && flash && (int)(t * 3f) % 2 == 0;
-            g.Box(x, y, 64f, 24f, tone, ok ? 0.85f : 1f, 1f, tone, ok ? 0.1f : lit ? 0.4f : 0.16f);
+            g.Box(x, y, 60f, 24f, tone, ok ? 0.85f : 1f, 1f, tone, ok ? 0.1f : lit ? 0.4f : 0.16f);
             if (ok) g.Check(x + 13f, y + 12f, 10f, Hi, 1f, 2f); else g.Cross(x + 13f, y + 12f, 8f, Amber, 1f, 2f);
             g.Text(label, x + 25f, y + 13f, ok ? Hi : Amber, 12f, ScopeAlign.Left, !ok);
         }
@@ -567,26 +569,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             if (!live || !d.Autoland) return;
             string[] names = d.Pad ? ApproachWords.Pad : ApproachWords.Runway;
-            g.PlateTag("AUTO", 4f, 13f, Ink);
-            float x0 = 46f, cw = (p.W - x0 - 4f) / names.Length, prog = Progress();
+            g.Text("AUTO", 4f, 13f, Ink, 12f, ScopeAlign.Left, true);
+            // The autoland chain (LAYOUT.md 12.4) as plain words: a ">" before each phase, the active one bold BRIGHT, the flown ones INK, the rest DIM, and one BRIGHT tick under the active word that grows with its progress.
+            float x0 = 56f, cw = (p.W - x0 - 4f) / names.Length, prog = Progress();
             for (int i = 0; i < names.Length; i++)
             {
-                float x = x0 + i * cw, nl = i > 0 ? 6f : 0f;
+                float x = x0 + i * cw, wordW = ScopeCanvas.TextW(names[i]), cx = x + 51.5f;
                 bool act = i == (int)d.Stage, done = i < (int)d.Stage;
-                int n = 0;
-                strip[n++] = x; strip[n++] = 3f;
-                strip[n++] = x + cw - 6f; strip[n++] = 3f;
-                strip[n++] = x + cw; strip[n++] = 13f;
-                strip[n++] = x + cw - 6f; strip[n++] = 23f;
-                strip[n++] = x; strip[n++] = 23f;
-                if (nl > 0f) { strip[n++] = x + nl; strip[n++] = 13f; }
-                int path = g.Poly(strip, n / 2);
-                if (act) g.FillPoly(path, Ink, 0.3f); else if (done) g.FillPoly(path, Ink, 0.08f);
-                g.Path(path, act ? Hi : done ? Ink : Faint, act ? 1f : done ? 0.55f : 0.9f);
-                float tx = x + nl + (cw - nl - 6f) / 2f + (done ? 6f : 0f);
-                if (done) g.Check(x + nl + 9f, 13f, 8f, Ink, 0.8f, 1.5f);
-                g.Text(names[i], tx, 14f, act ? Hi : Dim, 12f, ScopeAlign.Center, act, act || done ? 1f : 0.7f);
-                if (act) g.Fill(Mathf.Round(x + nl + 2f), 21f, Mathf.Round((cw - nl - 10f) * prog), 2f, Hi);
+                g.Text(">", x + 2f, 13f, Dim);
+                g.Text(names[i], cx, 13f, act ? Hi : done ? Ink : Dim, 12f, ScopeAlign.Center, act);
+                if (act) g.Fill(Mathf.Round(cx - wordW / 2f), 21f, Mathf.Round(Math.Max(6f, wordW * prog)), 2f, Hi);
             }
         }
     }

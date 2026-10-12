@@ -40,6 +40,12 @@ namespace BoscaliSummer.Modules.Hud.Domain
             };
         }
 
+        /// <summary>
+        /// The radar-warning page keeps a contact until <paramref name="hold"/> seconds after its newest warning (a lock or a search ping), so a radar that pings every few seconds stays
+        /// between pings. The lamps keep their own shorter holds (<see cref="LockHold"/>, <see cref="SpikeHold"/>); the option's range (BoardOptions.HoldMin) never goes under them.
+        /// </summary>
+        public static bool Retained(float now, float lockAt, float spikeAt, float hold) => now - Math.Max(lockAt, spikeAt) < hold;
+
         /// <summary>HI / LO / "" for a threat elevation in degrees.</summary>
         public static string HighLow(float elevationDeg) => elevationDeg > Level ? "HI" : elevationDeg < -Level ? "LO" : "";
 
@@ -194,23 +200,18 @@ namespace BoscaliSummer.Modules.Hud.Domain
     }
 
     /// <summary>
-    /// The spawn lamp test (the RWR's boot splash, as a real annunciator test), pure: lamps light one by one over
-    /// <see cref="Sweep"/>, all flash together until <see cref="Hold"/>, then the board goes live.
+    /// The spawn lamp test (the RWR's boot splash, as a real annunciator test), pure (LAYOUT.md 3.4): for the first <see cref="Hold"/> seconds lamp <c>i</c> is lit once <c>t</c> passes
+    /// <see cref="Step"/> x <c>i</c>, and stays lit; then the board goes live.
     /// </summary>
     internal static class LampTest
     {
-        public const float Sweep = 0.9f, Hold = 1.5f, Online = 2.6f;
+        public const float Step = 0.1f, Hold = 1.2f, Online = 2.6f;
 
         /// <summary>True while the test owns the lamps.</summary>
         public static bool Running(float t) => t >= 0f && t < Hold;
 
-        /// <summary>Whether lamp <paramref name="index"/> of <paramref name="count"/> is lit <paramref name="t"/> s into the test.</summary>
-        public static bool Lit(int index, int count, float t)
-        {
-            if (!Running(t)) return false;
-            if (t < Sweep) return t >= Sweep * index / Math.Max(1, count);
-            return (int)((t - Sweep) * 6f) % 2 == 0;
-        }
+        /// <summary>Whether lamp <paramref name="index"/> is lit <paramref name="t"/> s into the test.</summary>
+        public static bool Lit(int index, float t) => Running(t) && t > Step * index;
 
         public static string Caption(float t) => t < 0f || t >= Online ? null : Running(t) ? "LAMP TEST" : "SYSTEMS ONLINE";
     }

@@ -97,6 +97,26 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>"RDY" ready, "ON" while jamming, "CHG" while the capacitor recharges.</summary>
         public static string JamWord(in CmStation s) => s.Active ? "ON" : s.Charge >= 0.98f ? "RDY" : "CHG";
 
+        /// <summary>The G gauge is live from this absolute load (G) and for this many seconds after the load last was that high: level cruise has no G gauge.</summary>
+        public const float GaugeLiveG = 2.5f, GaugeHoldSeconds = 3f;
+
+        /// <summary>
+        /// Whether the G gauge is live at <paramref name="now"/>: the absolute load is at least <see cref="GaugeLiveG"/>, or was within <see cref="GaugeHoldSeconds"/>. <paramref name="lastAt"/> is the
+        /// clock of the last tick it was (start it at negative infinity, so a quiet airframe is not live).
+        /// </summary>
+        public static bool GaugeLive(float g, float now, ref float lastAt)
+        {
+            if (Math.Abs(g) >= GaugeLiveG) lastAt = now;
+            return now - lastAt <= GaugeHoldSeconds;
+        }
+
+        /// <summary>
+        /// The margin over BINGO as the base line of the SYSTEMS strip says it: "+90%", or "NO MARGIN" once it is gone. <paramref name="shortForm"/> is the one that gives way when the base name needs the room:
+        /// "+90" and "NO MGN". Composed in the shared scratch (see <see cref="ScopeStr"/>): use it at once.
+        /// </summary>
+        public static ReadOnlySpan<char> MarginWords(int points, bool shortForm) =>
+            points > 0 ? ScopeStr.Cat("+", points, shortForm ? null : "%") : shortForm ? "NO MGN" : "NO MARGIN";
+
         /// <summary>The wind's compass-from degrees as 1..360 (a calm north wind reads 360, never 000).</summary>
         public static int WindFromDegrees(float deg)
         {

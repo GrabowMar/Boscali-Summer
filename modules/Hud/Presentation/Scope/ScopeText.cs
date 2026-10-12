@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Modules.Hud.Domain;
 using NOAvionics;
 using TMPro;
 using UnityEngine;
@@ -29,7 +30,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             public float Size, Spacing, X, Y, W, H;
             public Color Color;
             public TextAlignmentOptions Alignment;
-            public bool Bold;
+            public bool Bold, Rich;
         }
 
         private readonly RectTransform parent;
@@ -38,6 +39,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly List<Slot> slots = new List<Slot>(64);
         private float advance = -1f, boldSpacing;
         private int used;
+        // The tags that take the clear width off either side of a decimal point (the point sits DotShift right of the centre of its narrower cell), and the scratch the marked-up word is built in (only a word with a decimal point is).
+        private char[] dotLead, dotTrail;
+        private char[] marked = new char[64];
 
         public ScopeText(RectTransform parent, TMP_FontAsset font, Material material)
         {
@@ -80,11 +84,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (s.Alignment != alignment) { s.Text.alignment = alignment; s.Alignment = alignment; }
             if (s.Color != color) { s.Text.color = color; s.Color = color; }
 
-            if (s.Length != text.Length || !text.SequenceEqual(new ReadOnlySpan<char>(s.Chars, 0, s.Length)))
+            // A decimal point is narrowed with <space> tags (the glyph keeps the geometry of every other character, so it sits on the baseline like them); a word with a "<" in it is never marked up.
+            bool rich = PageInk.Decimals(text) > 0 && text.IndexOf('<') < 0;
+            if (s.Rich != rich) { s.Text.richText = rich; s.Rich = rich; s.Length = -1; }
+            ReadOnlySpan<char> shown = rich ? Mark(text) : text;
+            if (s.Length != shown.Length || !shown.SequenceEqual(new ReadOnlySpan<char>(s.Chars, 0, s.Length)))
             {
-                if (s.Chars.Length < text.Length) s.Chars = new char[Math.Max(text.Length, s.Chars.Length * 2)];
-                text.CopyTo(s.Chars);
-                s.Length = text.Length;
+                if (s.Chars.Length < shown.Length) s.Chars = new char[Math.Max(shown.Length, s.Chars.Length * 2)];
+                shown.CopyTo(s.Chars);
+                s.Length = shown.Length;
                 s.Text.SetCharArray(s.Chars, 0, s.Length);
             }
 
@@ -101,6 +109,25 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (used < slots.Count) slots[used] = s; else slots.Add(s);
             used++;
         }
+
+        /// <summary>The word with the clear width of each decimal point taken off both its sides: the point's own cell is <see cref="PageInk.DotAdvance"/> wide.</summary>
+        private ReadOnlySpan<char> Mark(ReadOnlySpan<char> s)
+        {
+            int need = s.Length + PageInk.Decimals(s) * (dotLead.Length + dotTrail.Length);
+            if (marked.Length < need) marked = new char[need * 2];
+            int n = 0;
+            for (int i = 0; i < s.Length; i++)
+            {
+                if (!PageInk.IsDecimal(s, i)) { marked[n++] = s[i]; continue; }
+                dotLead.CopyTo(marked, n); n += dotLead.Length;
+                marked[n++] = '.';
+                dotTrail.CopyTo(marked, n); n += dotTrail.Length;
+            }
+            return new ReadOnlySpan<char>(marked, 0, n);
+        }
+
+        private char[] Space(float designEm) =>
+            ("<space=-" + (designEm * advance / DesignAdvance).ToString("0.#####", System.Globalization.CultureInfo.InvariantCulture) + "em>").ToCharArray();
 
         /// <summary>Hide everything and drop the labels' objects (the surface is being rebuilt or destroyed).</summary>
         public void Destroy()
@@ -125,6 +152,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             advance = normal / 100f;
             // characterSpacing is in hundredths of an em and both advances were measured at size 100: the difference brings bold back to regular.
             boldSpacing = Mathf.Clamp(normal - bold, -20f, 0f);
+            // What a decimal point gives back, in the font's own em (the labels' font size is the design size scaled so a character advances DesignAdvance): the point's glyph is centred in a full cell, so
+            // the lead takes its half of the narrowing less the shift to the right, the trail the rest.
+            float lead = (DesignAdvance - PageInk.DotAdvance) * 0.5f - PageInk.DotShift, trail = DesignAdvance - PageInk.DotAdvance - lead;
+            dotLead = Space(lead);
+            dotTrail = Space(trail);
         }
 
         private TextMeshProUGUI NewLabel()

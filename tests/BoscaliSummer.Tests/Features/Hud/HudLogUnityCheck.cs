@@ -50,9 +50,9 @@ public static partial class HudLogUnityCheck
             AvStyleHost.Configure(Directory.GetCurrentDirectory(), Debug.Log, Debug.LogWarning);
             new GameObject("Events", typeof(EventSystem));
             var colors = ScriptableObject.CreateInstance<ColorTheme>();
-            // The prototype's ink, amber and red (spec style.css), so a render lines up with shots/ colour for colour.
-            Set(colors, "allClear", (Color)new Color32(56, 222, 82, 255)); Set(colors, "warning", (Color)new Color32(243, 217, 74, 255));
-            Set(colors, "alert", (Color)new Color32(255, 80, 70, 255));
+            // The visor mock's ink, amber and red (LAYOUT.md 1: #7fdf9a, #ffd84a, #ffa094), so a render lines up with the shots colour for colour. The board takes them from the theme; they are not in the code.
+            Set(colors, "allClear", (Color)new Color32(127, 223, 154, 255)); Set(colors, "warning", (Color)new Color32(255, 216, 74, 255));
+            Set(colors, "alert", (Color)new Color32(255, 160, 148, 255));
             var theme = ScriptableObject.CreateInstance<ThemeGroup>(); theme.SetColorTheme(colors);
             typeof(ThemeManager).GetProperty("Active", All).SetValue(null, theme);
             string[] pages = ScopePagesArg();

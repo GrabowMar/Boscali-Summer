@@ -65,9 +65,6 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(StrikeMath.Close(Track(StrikeKind.Rod, 6f, range: 1400f, radius: 420f)) && !StrikeMath.Close(Track(StrikeKind.Rod, 6f, range: 1600f, radius: 420f)), "...and a rod keeps the flat 1.5 km");
             TestAssert.That(StrikeMath.Kinetic(StrikeKind.Rod) && StrikeMath.Kinetic(StrikeKind.Cruise) && !StrikeMath.Kinetic(StrikeKind.Decoy), "Kinetic kinds");
             TestAssert.That(StrikeMath.TraceTone(59f) == ScopeTone.Ink && StrikeMath.TraceTone(60f) == ScopeTone.Amber && StrikeMath.TraceTone(84f) == ScopeTone.Amber && StrikeMath.TraceTone(85f) == ScopeTone.Red, "Trace cautions at 60 and warns at 85");
-            var cooling = new PerkTile { State = PerkPhase.Cooling, Cooldown = 150f, Total = 300f };
-            TestAssert.Near(StrikeMath.PerkFill(cooling), 0.5f, "A perk's ring is the cooled share");
-            TestAssert.Near(StrikeMath.PerkFill(new PerkTile { State = PerkPhase.Ready, Total = 30f }), 1f, "A ready perk is a full ring");
             TestAssert.Near(StrikeMath.SatFill(10f, 20f), 0.5f, "The SAT window's ring is its share left");
             TestAssert.That(StrikeMath.SatLate(3.9f) && !StrikeMath.SatLate(4.1f) && !StrikeMath.SatLate(0f), "The window cautions in its last four seconds");
         }

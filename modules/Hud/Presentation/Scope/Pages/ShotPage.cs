@@ -13,13 +13,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// flies on the data-link or its seeker has not locked, solid once it has (an ARH carries an <b>A</b> tag and flashes at its pitbull), a bomb dashed to its splash point; beads
     /// travel along a dashed line; a shrinking ring around the target counts the time; tags carry the seconds and the phase (BOOST, MID, ACTIVE, TERM, FALL) over the target's name.
     /// A weapon that lost its living target turns hollow and flies off; results are stamped where they happened (HIT with a burst, MISS, DEFEATED in amber). Under the plan the
-    /// SHOT TIMELINE holds the last eight shots with a glyph for each result. Fed by <see cref="ShotScope"/> (Hud's own provider over the tracker, the book and the ledger);
+    /// SHOT TIMELINE holds the newest seven shots with a glyph for each result. Fed by <see cref="ShotScope"/> (Hud's own provider over the tracker, the book and the ledger);
     /// live while a delivery is in the air or a result is fresh. Events (away, pitbull, results) go to the ticker once.
     /// </summary>
     internal sealed class ShotPage : ScopePageBase
     {
         private const float OX = 220f, OY = 258f;
-        private const int Cap = 8;
+        private const int Cap = 8, Chips = 7;
 
         private ShotScope d;
         private bool live;
@@ -204,7 +204,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 bool far = v >= 20f, current = Math.Abs(v - shown) < 0.5f;
                 g.Ring(OX, OY, r, far ? Dim : Faint, far ? 0.8f : 1f, 1f, Ink, 0f, far ? 0f : 4f, far ? 0f : 3f);
                 if (OY - r > 44f)
-                    g.Text(current ? ScopeStr.Cat("", (int)v, "KM") : v == Math.Floor(v) ? ScopeStr.Cat("", (int)v, null) : ScopeStr.Cat("", v, 1, null), OX - 4f, OY - r + 1f, current ? Ink : Dim, 12f, ScopeAlign.Right, current);
+                {
+                    ReadOnlySpan<char> label = current ? ScopeStr.Cat("", (int)v, "KM") : v == Math.Floor(v) ? ScopeStr.Cat("", (int)v, null) : ScopeStr.Cat("", v, 1, null);
+                    g.Text(label, OX - 4f, OY - r + 1f, current ? Ink : Dim, 12f, ScopeAlign.Right, current);
+                    float lw = Mathf.Round(ScopeCanvas.TextW(label));
+                    keep.Add(OX - 4f - lw - 2f, OY - r - 8f, lw + 4f, 16f);      // a ring's label is a keep-out: the target tags and the missile tags dodge it (LAYOUT.md 9: it was under them)
+                }
             }
             g.Line(OX, OY, OX, 30f, Faint);
             for (int b = -60; b <= 60; b += 30)
@@ -399,25 +404,29 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         // ------------------------------------------------------------------------------------------------ strip: the SHOT TIMELINE
 
+        /// <summary>
+        /// LAYOUT.md 12.3: the newest seven shots at a pitch of 62 from x 8, no boxes: the glyph (centre x + 4.5), the name of at most five characters 13 in and, in flight, a progress line under it. Only the lead shot's
+        /// chip is bracketed (four BRIGHT brackets arm 4 at x - 4, 0, 60 x 22); a shot not yet born shows a dim "--".
+        /// </summary>
         public override void PaintStrip(ScopeCanvas g, in PagePaint p)
         {
             if (!live) return;
-            for (int i = 0; i < ShotLedger.Capacity; i++)
+            int first = Math.Max(0, d.CellCount - Chips), leadId = lead >= 0 ? d.Missiles[lead].Id : -1;
+            Span<char> name = stackalloc char[ShotMath.ChipChars];
+            for (int i = 0; i < Chips; i++)
             {
-                float x = 3f + i * 54f, y = 2f, w = 53f, h = 22f;
-                if (i >= d.CellCount)
+                float x = 8f + i * 62f, cy = 11f;
+                if (first + i >= d.CellCount)
                 {
-                    g.Box(x, y, w, h, Faint, 0.8f, 1f, Bg, 0f);
-                    g.Text("--", x + w / 2f, y + h / 2f + 1f, Faint, 12f, ScopeAlign.Center);
+                    g.Text("--", x + 26f, cy + 1f, Dim, 12f, ScopeAlign.Center);
                     continue;
                 }
-                ShotCell c = d.Cells[i];
-                bool fly = c.State == ShotState.InFlight, just = !fly && c.AgeS < 1.2f, fresh = fly && c.Frac <= 0.02f;
-                ScopeTone tone = fly ? Hi : c.State == ShotState.Defeated ? Amber : c.State == ShotState.Hit ? Ink : Dim;
-                g.Box(x, y, w, h, fly || just ? tone : Faint, fly || just ? 1f : 0.9f, 1f, fresh ? Hi : fly ? Ink : tone, fresh ? 0.45f : fly ? 0.14f : just ? 0.12f : 0f);
-                Glyph(g, x + 7f, y + h / 2f, c.State, fly);
-                g.FitText(c.Name, x + 13f, y + h / 2f + 1f, w - 15f, fly ? Hi : c.State == ShotState.Defeated ? Amber : c.State == ShotState.Miss ? Dim : Ink, 12f, 12f, ScopeAlign.Left, fly);
-                if (fly) g.Fill(x + 2f, y + h - 3f, Mathf.Round((w - 4f) * Mathf.Clamp01(c.Frac)), 2f, Hi);
+                ShotCell c = d.Cells[first + i];
+                bool fly = c.State == ShotState.InFlight;
+                if (fly && c.Id == leadId) g.Brackets(x - 4f, 0f, 60f, 22f, 4f, Hi);
+                Glyph(g, x + 4.5f, cy, c.State, fly);
+                g.Text(name.Slice(0, ShotMath.ChipName(c.Name, name)), x + 13f, cy + 1f, fly ? Hi : c.State == ShotState.Defeated ? Amber : c.State == ShotState.Miss ? Dim : Ink, 12f, ScopeAlign.Left, fly);
+                if (fly) g.Fill(x + 1f, 19f, Mathf.Round(51f * Mathf.Clamp01(c.Frac)), 2f, Hi);
             }
         }
 

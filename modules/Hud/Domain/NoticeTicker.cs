@@ -43,7 +43,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const float FreshSeconds = 1.2f;
         /// <summary>A notice with a detail line shows its text, then its detail, each for this long, alternating.</summary>
         public const float PhaseSeconds = 3f;
-        /// <summary>The longest page of a long text or detail: the board's ticker row holds about 45 characters of the mono face at 12 px beside its channel chip; a warning's "WARNING · " prefix takes ten of them.</summary>
+        /// <summary>The longest page of a long text or detail: the board's ticker row (440 wide) holds about 55 characters of the mono face at 12 px beside its tone tick and the repeat count; 44 keep clear of both, and a warning's "WARNING · " prefix takes ten of them.</summary>
         public const int PageChars = 44, WarningPageChars = 34;
         public const int MaxCount = 99;
 
@@ -147,24 +147,24 @@ namespace BoscaliSummer.Modules.Hud.Domain
             for (int i = 0; i < Capacity; i++) entries[i] = default;
         }
 
-        private static string TextWords(in TickerLine line) => line.Count > 1 ? line.Text + " x" + line.Count : line.Text;
+        /// <summary>The repeat count the ticker draws apart, in bold at the right end of its line ("x3"); null for a notice that came once.</summary>
+        public static string CountWord(in TickerLine line) => line.Count > 1 ? "x" + line.Count : null;
 
         /// <summary>
-        /// Which page shows now: the pages of the text (with "xN") first, then those of the detail, each for
+        /// Which page shows now: the pages of the text first, then those of the detail, each for
         /// <see cref="PhaseSeconds"/>, then round again. Always 0 for a short text without a detail.
         /// </summary>
         public static int Phase(in TickerLine line)
         {
-            int budget = Budget(line.Tone), pages = PageCount(TextWords(line), budget) + (string.IsNullOrEmpty(line.Detail) ? 0 : PageCount(line.Detail, budget));
+            int budget = Budget(line.Tone), pages = PageCount(line.Text, budget) + (string.IsNullOrEmpty(line.Detail) ? 0 : PageCount(line.Detail, budget));
             return pages <= 1 ? 0 : (int)(line.Age / PhaseSeconds) % pages;
         }
 
-        /// <summary>The words on the ticker now: a page of the text and its count, then a page of the detail.</summary>
+        /// <summary>The words on the ticker now: a page of the text, then a page of the detail (the repeat count is <see cref="CountWord"/>'s).</summary>
         public static string Words(in TickerLine line)
         {
-            string text = TextWords(line);
-            int budget = Budget(line.Tone), phase = Phase(line), textPages = PageCount(text, budget);
-            return phase < textPages ? Page(text, phase, budget) : Page(line.Detail, phase - textPages, budget);
+            int budget = Budget(line.Tone), phase = Phase(line), textPages = PageCount(line.Text, budget);
+            return phase < textPages ? Page(line.Text, phase, budget) : Page(line.Detail, phase - textPages, budget);
         }
 
         /// <summary>How many pages <paramref name="s"/> needs (at least 1).</summary>

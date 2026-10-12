@@ -232,6 +232,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private void BuildCockpitPage(AvFlow flow, int page)
         {
+            BuildTacBoardRows(flow, page);
             flow.Section(AvIcon.Camera, "COCKPIT", "TARGETING");
             AvCellGrid switches = flow.Grid(2);
             ToggleCell(flow, switches, page, "RADIAL PRESETS",

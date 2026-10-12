@@ -14,6 +14,8 @@ namespace BoscaliSummer.Tests.Features.Hud
             Fuel();
             Zones();
             Words();
+            GaugeHold();
+            BaseLine();
             Palette();
         }
 
@@ -76,6 +78,8 @@ namespace BoscaliSummer.Tests.Features.Hud
         private static void Words()
         {
             TestAssert.That(ScopeStr.Int(7) == "7" && ReferenceEquals(ScopeStr.Int(7), ScopeStr.Int(7)) && ScopeStr.Int(5000) == "5000", "Integers are cached");
+            TestAssert.That(ReferenceEquals(ScopeStr.Int(1000), ScopeStr.Int(1000)) && ReferenceEquals(ScopeStr.Int(9999), ScopeStr.Int(9999)) && ScopeStr.Int(1234) == "1234", "...four digits too: a thousand rounds, 1200 kJ, no string made per paint");
+            TestAssert.That(ScopeStr.Int(ScopeStr.IntCache) == "10000" && ScopeStr.Int(-3) == "-3", "...and what the cache does not hold is still right");
             TestAssert.That(ScopeStr.Pct(30) == "30%" && ReferenceEquals(ScopeStr.Pct(30), ScopeStr.Pct(30)) && ScopeStr.Pct(-4) == "0%" && ScopeStr.Pct(130) == "100%", "Percents are cached and clamped");
             TestAssert.That(ScopeStr.Cat("END ", 14, " MIN").ToString() == "END 14 MIN", "Cat composes text and an integer");
             TestAssert.That(ScopeStr.Cat("BINGO ", 14, "%  JOKER ", 29, "%").ToString() == "BINGO 14%  JOKER 29%", "Cat composes two integers");
@@ -84,9 +88,85 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(ScopeStr.Distance("k92", 22000f, AvUnits.Metric, 20).ToString() == "K92 22KM", "A distance reads in the player's units, upper case: " + ScopeStr.Distance("k92", 22000f, AvUnits.Metric, 20).ToString());
             string cut = ScopeStr.Distance("HighwayStrip2", 23000f, AvUnits.Metric, 10).ToString();
             TestAssert.That(cut.Length <= 10 && cut.EndsWith("23KM") && cut.Contains("…"), "A long name is cut so the distance always shows: " + cut);
+            TestAssert.That(ScopeStr.Distance("  Annex Cliff ", 97f, AvUnits.Metric, 20).ToString() == "ANNEX CLIFF 97M" && ScopeStr.Distance("   ", 97f, AvUnits.Metric, 20).ToString() == "97M", "A name is trimmed and upper-cased; a blank one is no name");
+            // The row runs every frame on a live page (THREAT's lock cue, STRIKE's CLOSE word): it builds no string.
+            ScopeStr.Distance("  Annex Cliff ", 97f, AvUnits.Metric, 20);
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < 200; i++) ScopeStr.Distance(i % 2 == 0 ? "  Annex Cliff " : "SA-19", 97f + i, AvUnits.Metric, i % 3 == 0 ? 8 : 20);
+            long made = GC.GetAllocatedBytesForCurrentThread() - before;
+            TestAssert.That(made == 0, "...and builds nothing per call: " + made + " bytes in 200 calls");
             TestAssert.Eq(SystemsMath.WindFromDegrees(0f), 360, "North reads 360");
             TestAssert.Eq(SystemsMath.WindFromDegrees(270f), 270, "270 reads 270");
             TestAssert.Eq(SystemsMath.WindFromDegrees(-90f), 270, "A negative bearing wraps");
+        }
+
+        /// <summary>The G gauge is live from 2.5 G and for 3 s after the load last was that high; level cruise has none.</summary>
+        private static void GaugeHold()
+        {
+            float at = float.NegativeInfinity;
+            TestAssert.That(!SystemsMath.GaugeLive(1f, 100f, ref at), "Level cruise: no G gauge");
+            TestAssert.That(!SystemsMath.GaugeLive(2.4f, 100.1f, ref at), "Under 2.5 G: none");
+            TestAssert.That(SystemsMath.GaugeLive(2.5f, 100.2f, ref at), "At 2.5 G it is live");
+            TestAssert.That(SystemsMath.GaugeLive(1f, 101f, ref at) && SystemsMath.GaugeLive(1f, 102.9f, ref at), "Back to 1 G it stays for the hold");
+            TestAssert.That(!SystemsMath.GaugeLive(1f, 103.3f, ref at), "...3 s after the load last was high, it goes");
+            TestAssert.That(!SystemsMath.GaugeLive(1f, 110f, ref at), "...and stays gone");
+            TestAssert.That(SystemsMath.GaugeLive(-3f, 111f, ref at), "A negative load counts by its size");
+            TestAssert.That(SystemsMath.GaugeLive(1f, 113.5f, ref at), "A new pull restarts the hold: 2.5 s after it, still live");
+            TestAssert.That(SystemsMath.GaugeLive(6f, 120f, ref at) && SystemsMath.GaugeLive(5f, 120.1f, ref at) && SystemsMath.GaugeLive(1f, 122.5f, ref at), "A hard pull keeps it up, and its hold runs from the last high tick");
+            TestAssert.That(!SystemsMath.GaugeLive(float.NaN, 130f, ref at), "A load that is not a number is not a pull");
+        }
+
+        /// <summary>The home base on the compact strip: the name has the line, the margin figure gives way, and the two never touch.</summary>
+        private static void BaseLine()
+        {
+            const int Line = 17;       // the strip's base line holds 17 characters of the board's face
+            string[] names = { "K92", "ANNEX CLIFF", "AIRBASE CITY NORTH", "AIRBASE CITY NORTH SECTOR 12" };
+            TestAssert.Eq(names[3].Length, 28, "The long test name is 28 characters");
+            foreach (AvUnits units in new[] { AvUnits.Metric, AvUnits.Imperial })
+                foreach (float metres in new[] { 97f, 800f, 4500f, 19000f, 123000f })
+                    foreach (int margin in new[] { 90, 100, 15, 0, -5 })
+                        foreach (string name in names)
+                        {
+                            int full = SystemsMath.MarginWords(margin, false).Length, shortChars = SystemsMath.MarginWords(margin, true).Length;
+                            int form = ScopeStr.FitMargin(name, metres, units, Line, full, shortChars, out int room);
+                            string line = ScopeStr.Distance(name, metres, units, room).ToString();
+                            string tag = name + " " + metres + " " + units + " margin " + margin + " form " + form + ": [" + line + "]";
+                            string distance = line.Substring(line.LastIndexOf(' ') + 1);
+                            int marginChars = form == 0 ? full : form == 1 ? shortChars : 0;
+                            TestAssert.That(line.Length + (form < 2 ? ScopeStr.MarginGap + marginChars : 0) <= Line, "The base line, a gap and the margin fit the line: " + tag);
+                            TestAssert.That(form == 2 || line.Length + ScopeStr.MarginGap + marginChars <= Line, "A margin shown always leaves its blank: " + tag);
+                            TestAssert.That(distance.Length > 0 && char.IsDigit(distance[0]), "The distance is never cut: " + tag);
+                            bool cut = line.Contains("…");
+                            // Name priority: a name is only cut when it cannot fit the line even with no margin at all.
+                            int whole = name.Length + 1 + distance.Length;
+                            TestAssert.That(cut == (whole > Line && line.Length > distance.Length), "A name is cut only when it cannot fit without the margin: " + tag);
+                            if (whole <= Line) TestAssert.That(line == name + " " + distance, "A name that fits is whole: " + tag);
+                            if (cut) TestAssert.That(form == 2, "A cut name has no margin beside it: " + tag);
+                        }
+
+            // The strip as the pilot sees it: 97 m from home, the margin 90 points.
+            int f0 = ScopeStr.FitMargin("ANNEX CLIFF", 97f, AvUnits.Metric, Line, 4, 3, out int r0);
+            TestAssert.That(f0 == 2 && ScopeStr.Distance("ANNEX CLIFF", 97f, AvUnits.Metric, r0).ToString() == "ANNEX CLIFF 97M", "ANNEX CLIFF keeps its name and gives up the margin");
+            int f1 = ScopeStr.FitMargin("K92", 19000f, AvUnits.Metric, Line, 4, 3, out int r1);
+            TestAssert.That(f1 == 0 && ScopeStr.Distance("K92", 19000f, AvUnits.Metric, r1).ToString() == "K92 19KM", "A short name has room for both");
+            int f2 = ScopeStr.FitMargin("AIRBASE CITY NORTH", 97f, AvUnits.Metric, Line, 4, 3, out int r2);
+            string north = ScopeStr.Distance("AIRBASE CITY NORTH", 97f, AvUnits.Metric, r2).ToString();
+            TestAssert.That(f2 == 2 && north.Length == Line && north.EndsWith(" 97M") && north.Contains("…"), "AIRBASE CITY NORTH takes the whole line, cut once: " + north);
+            int f3 = ScopeStr.FitMargin("K92", 800f, AvUnits.Metric, Line, SystemsMath.MarginWords(0, false).Length, SystemsMath.MarginWords(0, true).Length, out _);
+            TestAssert.Eq(f3, 1, "NO MARGIN gives way to NO MGN before it goes: the warning stays beside a short name");
+            TestAssert.That(SystemsMath.MarginWords(90, false).ToString() == "+90%" && SystemsMath.MarginWords(90, true).ToString() == "+90" &&
+                SystemsMath.MarginWords(0, false).ToString() == "NO MARGIN" && SystemsMath.MarginWords(-4, true).ToString() == "NO MGN", "The margin's words, long and short");
+
+            // The two-row base block (LAYOUT.md 3.5): the name has its own row, the distance and the margin share the one under it; the margin's fit does not count the name.
+            TestAssert.That(ScopeStr.Name("annex cliff", 17).ToString() == "ANNEX CLIFF" && ScopeStr.Name("  K92 ", 17).ToString() == "K92", "The base's name alone: upper case, trimmed");
+            string longName = ScopeStr.Name("AIRBASE CITY NORTH", 17).ToString();
+            TestAssert.That(longName == "AIRBASE CITY NOR…" && longName.Length == 17, "A name too long for its row is cut once with an ellipsis: " + longName);
+            TestAssert.That(ScopeStr.Name(null, 17).Length == 0 && ScopeStr.Name("K92", 0).Length == 0 && ScopeStr.Name("ABC", 1).ToString() == "…", "No name or no room: nothing; one character of room: just the cut");
+            int row = ScopeStr.FitMargin(null, 97f, AvUnits.Metric, 17, 4, 3, out _);
+            TestAssert.Eq(row, 0, "On its own row the distance (3) and the full margin (4) have room in 17");
+            TestAssert.Eq(ScopeStr.FitMargin(null, 97f, AvUnits.Metric, 7, 4, 3, out _), 1, "In 7 characters the short margin is what fits beside 97M");
+            TestAssert.Eq(ScopeStr.FitMargin(null, 97f, AvUnits.Metric, 4, 4, 3, out _), 2, "In 4 the margin is left out");
+            TestAssert.That(ScopeStr.Distance(null, 97f, AvUnits.Metric, 17).ToString() == "97M", "The distance row is the distance alone");
         }
 
         private static void Palette()
@@ -94,7 +174,8 @@ namespace BoscaliSummer.Tests.Features.Hud
             var pal = new ScopePalette(new Rgba(0.22f, 0.87f, 0.32f), new Rgba(0.95f, 0.85f, 0.29f), new Rgba(1f, 0.31f, 0.27f));
             Rgba ink = pal.Of(ScopeTone.Ink), hi = pal.Of(ScopeTone.Hi), dim = pal.Of(ScopeTone.Dim), faint = pal.Of(ScopeTone.Faint);
             TestAssert.That(hi.R > ink.R && hi.B > ink.B, "Hi is the ink pushed toward white");
-            TestAssert.That(dim.G < ink.G && dim.G > faint.G, "Dim and faint step down from the ink");
+            TestAssert.That(dim.G == ink.G && Math.Abs(dim.A - 0.7f) < 1e-5f && faint.G == dim.G && faint.A == dim.A, "Dim is the ink at 0.70 (there is no plate to mix it with), and faint is the same token: there is no fourth ink level");
+            TestAssert.Near(pal.Of(ScopeTone.Dim, 0.5f).A, 0.35f, "A dim token's alpha is multiplied by the alpha asked for");
             TestAssert.That(pal.Of(ScopeTone.Amber).R > 0.9f && pal.Of(ScopeTone.Red).R > 0.9f && pal.Of(ScopeTone.Red).G < 0.4f, "Amber and red are the theme's caution and warning");
             TestAssert.Near(pal.Of(ScopeTone.Ink, 0.5f).A, 0.5f, "A token takes an alpha");
             TestAssert.That(pal.Of(ScopeTone.Bg).G < pal.Of(ScopeTone.Plate).G, "The glass is darker than the plate");

@@ -20,7 +20,7 @@ using static UnityCheckHarness;
 //   and reproduces the prototype page's scenario for that t (pages/<id>.js sim(t)). Fixtures are the ONLY place scripted data lives.
 //   A fixture that does not touch the scene is a stub: that page is skipped.
 // Output: <page>-t<sec>-<W>x<H>.png (t = 2, 6, 10, 14 at 1920x1080 and t = 6 at 1280x720), the same names as the spec shots.
-// Command line (after -executeMethod): -pages systems,threat   only those pages' fixtures (default: all, plus the rest of the check; 'shell' = the board shell alone)
+// Command line (after -executeMethod): -pages systems,threat   only those pages' fixtures (default: all, plus the rest of the check; 'shell' = the board shell alone, 'frame' = the board's frame alone, 'lines' = the wing's lamp, gauge and ticker lines)
 //                                      -spec <spec folder>     draws the shots over the spec's cockpit capture (takeover/assets/bg-cockpit-hud-takeover.jpg: the native top-right panel painted out)
 public static partial class HudLogUnityCheck
 {
@@ -31,7 +31,9 @@ public static partial class HudLogUnityCheck
     private static readonly (string page, float t, string variant)[] ScopeVariants =
     {
         ("dock", 6f, "service-zone"), ("dock", 12f, "service-zone"), ("dock", 14f, "service-zone"),
-        ("systems", 10f, "rotary"), ("strike", 6f, "solo"), ("strike", 6f, "sat"), ("objective", 6f, "far"), ("objective", 6f, "bare"), ("missilecam", 8f, "blind"),
+        // The names the game gave its radars (seen in game: six at nearly one bearing, the longest 22 characters), no SAM envelope round us, then inside two.
+        ("threat", 0.5f, "longnames"), ("threat", 1.5f, "longnames"),
+        ("systems", 10f, "rotary"), ("systems", 2f, "annex"), ("systems", 2f, "longname"), ("systems", 2f, "hardg"), ("strike", 6f, "solo"), ("strike", 6f, "sat"), ("objective", 6f, "far"), ("objective", 6f, "bare"), ("missilecam", 8f, "blind"),
         // The stores header alone over the cruise strip: the default loadout, a gun and flares running low (chaff gone), an empty weapon, a gun reload with another station reloading,
         // an airframe without a capacitor, a flare call (DISPENSE) with the chaff selected, a bare helicopter (one dispenser, no jammer) and a gun-only aircraft with no countermeasures.
         ("stores", 6f, "default"), ("stores", 6f, "low"), ("stores", 6f, "empty"), ("stores", 6f, "reload"), ("stores", 6f, "nocap"), ("stores", 6f, "dispense"),
@@ -138,7 +140,7 @@ public static partial class HudLogUnityCheck
         string[] names = pages.Length == 0 ? ScopePageNames : pages;
         foreach (string page in names)
         {
-            if (page == "shell") continue;      // the board shell itself (HudLogUnityCheck.Scope.Shell.cs), below
+            if (page == "shell" || page == "frame" || page == "lines" || page == "corners" || page == "repair") continue;      // the board shell (HudLogUnityCheck.Scope.Shell.cs), its frame (HudLogUnityCheck.Scope.Frame.cs), the wing lines (HudLogUnityCheck.Scope.Lines.cs) and the other corners (HudLogUnityCheck.Scope.Corners.cs) and the review fixes (HudLogUnityCheck.Scope.Repair.cs), below
             Check(Array.IndexOf(ScopePageNames, page) >= 0, "Unknown scope page in -pages: " + page);
             int drawn = 0;
             if (page != "stores") foreach (var shot in ScopeShotTimes) if (RenderScope(page, shot.t, new Vector2(shot.w, shot.h))) drawn++;
@@ -147,6 +149,11 @@ public static partial class HudLogUnityCheck
             Debug.Log("[HudLogCheck] scope page " + page + ": " + (drawn > 0 ? drawn + " shots" : "stub fixture, skipped"));
         }
         if (pages.Length == 0 || Array.IndexOf(pages, "shell") >= 0) ScopeShell();
+        if (pages.Length == 0 || Array.IndexOf(pages, "frame") >= 0) ScopeFrame();
+        if (pages.Length == 0 || Array.IndexOf(pages, "lines") >= 0) ScopeLines();
+        if (pages.Length == 0 || Array.IndexOf(pages, "stores") >= 0) ScopeStoresBlocks();
+        if (pages.Length == 0 || Array.IndexOf(pages, "corners") >= 0) ScopeCorners();
+        if (pages.Length == 0 || Array.IndexOf(pages, "repair") >= 0) ScopeRepair();
     }
 
     /// <summary>The spec's cockpit capture with the native top-right panel painted out (the backdrop of the takeover shots), else the older clean capture, else a hazy sky.</summary>
@@ -172,7 +179,7 @@ public static partial class HudLogUnityCheck
 
     /// <summary>
     /// One page at one scenario time: the board built the way production builds it (stand-in native weapon cell and label in the mono face),
-    /// docked where the prototype puts it (right edge x = 1904, top y = 152 at 1080p), handed one frame by the page's fixture.
+    /// docked at the screen's top-right corner (8 units in from the right edge, 6 down at 1080p), handed one frame by the page's fixture.
     /// </summary>
     private static bool RenderScope(string page, float t, Vector2 size, string variant = null)
     {
@@ -203,6 +210,7 @@ public static partial class HudLogUnityCheck
             foreach (var label in canvas.GetComponentsInChildren<TextMeshProUGUI>(true))
                 if (label != null && label.gameObject.activeInHierarchy)
                     Check(!(label.text ?? "").Contains("BRAKE"), "Service-zone presentation must not instruct a brake-to-dock maneuver: " + tag);
+        if (variant == "longnames") ThreatLongNamesChecks(status, tag, t);
         Capture(canvas, tag + ".png");
         Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject); ScopeReset();
         return true;
@@ -228,7 +236,7 @@ public static partial class HudLogUnityCheck
         Set(frame, "Now", t); Set(frame, "BootAge", -1f); Set(frame, "Units", AvUnits.Metric);
     }
 
-    /// <summary>What every scope render must keep true: the board shows, every word stays inside the plate, nothing takes a click, no mesh overflowed.</summary>
+    /// <summary>What every scope render must keep true: the board shows, every word stays inside the board's box, nothing takes a click, no mesh overflowed.</summary>
     private static void ScopeChecks(object status, string tag)
     {
         var root = (RectTransform)Field(status, "root");
@@ -241,8 +249,19 @@ public static partial class HudLogUnityCheck
         {
             if (string.IsNullOrEmpty(label.text)) continue;
             label.ForceMeshUpdate();
-            Bounds b = label.textBounds;
-            Vector3[] box = { new Vector3(b.min.x, b.min.y), new Vector3(b.max.x, b.max.y) };
+            // The ink: the drawn glyphs' corners (textBounds is the line box, 1.3 em high: a 12 unit line at the very top of the box would fail on its padding).
+            TMP_TextInfo info = label.textInfo;
+            var lo = new Vector3(float.MaxValue, float.MaxValue);
+            var hi = new Vector3(float.MinValue, float.MinValue);
+            for (int i = 0; i < info.characterCount; i++)
+            {
+                TMP_CharacterInfo c = info.characterInfo[i];
+                if (!c.isVisible) continue;
+                lo = new Vector3(Mathf.Min(lo.x, c.bottomLeft.x), Mathf.Min(lo.y, c.bottomLeft.y));
+                hi = new Vector3(Mathf.Max(hi.x, c.topRight.x), Mathf.Max(hi.y, c.topRight.y));
+            }
+            if (lo.x > hi.x) continue;
+            Vector3[] box = { lo, hi };
             foreach (Vector3 p in box)
             {
                 Vector3 local = root.InverseTransformPoint(label.transform.TransformPoint(p));
