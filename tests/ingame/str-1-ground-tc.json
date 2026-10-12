@@ -1,6 +1,6 @@
 {
   "name": "str-1-ground-tc",
-  "description": "STR ground proof, mission Terminal Control: do ground groups form, get staged destinations from the advance postfix, and move toward them. Read-only measurement; see tools/Str-Scenarios.py.",
+  "description": "STR ground proof, mission Terminal Control: groups form, the staff's or the pilot's operation takes two thirds of the usable groups, the hook's answers are what vanilla steers to, a player order wins, late vehicles are found, and the live switch removes and restores every member. See tools/Str-Scenarios.py.",
   "mission": "Terminal Control",
   "mods": [
     "boscalisummer"
@@ -11,6 +11,11 @@
       "bepinex": {
         "Logging.Disk": {
           "WriteUnityLog": true
+        }
+      },
+      "boscalisummer": {
+        "TheaterOps": {
+          "FrontlineTacticsEnabled": true
         }
       }
     }
@@ -35,7 +40,7 @@
         {
           "orbit": {
             "bank": 30,
-            "seconds": 540
+            "seconds": 520
           }
         }
       ]
@@ -48,6 +53,162 @@
       "hz": 1
     },
     {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Arm",
+      "args": {
+        "kinds": "ASSAULT,DEFEND"
+      },
+      "store": "arm"
+    },
+    {
+      "op": "wait",
+      "seconds": 8
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
+      "args": {},
+      "store": "t0"
+    },
+    {
+      "op": "wait",
+      "seconds": 45
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
+      "args": {},
+      "store": "t1"
+    },
+    {
+      "op": "wait",
+      "seconds": 25
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
+      "args": {},
+      "store": "a1"
+    },
+    {
+      "op": "wait",
+      "seconds": 25
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
+      "args": {},
+      "store": "a2"
+    },
+    {
+      "op": "wait",
+      "seconds": 25
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
+      "args": {},
+      "store": "a3"
+    },
+    {
+      "op": "wait",
+      "seconds": 25
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
+      "args": {},
+      "store": "p1"
+    },
+    {
+      "op": "wait",
+      "seconds": 25
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
+      "args": {},
+      "store": "p2"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Late",
+      "args": {
+        "faction": "Boscali",
+        "count": 2,
+        "via": "depot"
+      },
+      "store": "late"
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
+      "args": {},
+      "store": "b1"
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
+      "args": {},
+      "store": "b2"
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
+      "args": {},
+      "store": "p3"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Order",
+      "args": {
+        "faction": "Boscali"
+      },
+      "store": "ord"
+    },
+    {
+      "op": "wait",
+      "seconds": 15
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
+      "args": {},
+      "store": "c1"
+    },
+    {
+      "op": "wait",
+      "seconds": 15
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
+      "args": {},
+      "store": "c2"
+    },
+    {
+      "op": "wait",
+      "seconds": 15
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
+      "args": {},
+      "store": "p4"
+    },
+    {
       "op": "wait",
       "seconds": 30
     },
@@ -55,7 +216,7 @@
       "op": "call",
       "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
       "args": {},
-      "store": "s01"
+      "store": "d1"
     },
     {
       "op": "wait",
@@ -65,7 +226,7 @@
       "op": "call",
       "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
       "args": {},
-      "store": "s02"
+      "store": "d2"
     },
     {
       "op": "wait",
@@ -75,7 +236,7 @@
       "op": "call",
       "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
       "args": {},
-      "store": "s03"
+      "store": "d3"
     },
     {
       "op": "wait",
@@ -85,107 +246,43 @@
       "op": "call",
       "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
       "args": {},
-      "store": "s04"
+      "store": "p5"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Tactics",
+      "args": {
+        "enabled": false
+      },
+      "store": "toff"
     },
     {
       "op": "wait",
-      "seconds": 30
+      "seconds": 8
     },
     {
       "op": "call",
       "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
       "args": {},
-      "store": "s05"
+      "store": "off"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Tactics",
+      "args": {
+        "enabled": true
+      },
+      "store": "ton"
     },
     {
       "op": "wait",
-      "seconds": 30
+      "seconds": 20
     },
     {
       "op": "call",
       "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
       "args": {},
-      "store": "s06"
-    },
-    {
-      "op": "wait",
-      "seconds": 30
-    },
-    {
-      "op": "call",
-      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
-      "args": {},
-      "store": "s07"
-    },
-    {
-      "op": "wait",
-      "seconds": 30
-    },
-    {
-      "op": "call",
-      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
-      "args": {},
-      "store": "s08"
-    },
-    {
-      "op": "wait",
-      "seconds": 30
-    },
-    {
-      "op": "call",
-      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
-      "args": {},
-      "store": "s09"
-    },
-    {
-      "op": "wait",
-      "seconds": 30
-    },
-    {
-      "op": "call",
-      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
-      "args": {},
-      "store": "s10"
-    },
-    {
-      "op": "wait",
-      "seconds": 30
-    },
-    {
-      "op": "call",
-      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
-      "args": {},
-      "store": "s11"
-    },
-    {
-      "op": "wait",
-      "seconds": 30
-    },
-    {
-      "op": "call",
-      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
-      "args": {},
-      "store": "s12"
-    },
-    {
-      "op": "wait",
-      "seconds": 30
-    },
-    {
-      "op": "call",
-      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
-      "args": {},
-      "store": "s13"
-    },
-    {
-      "op": "wait",
-      "seconds": 30
-    },
-    {
-      "op": "call",
-      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
-      "args": {},
-      "store": "s14"
+      "store": "on"
     },
     {
       "op": "end"
@@ -197,58 +294,253 @@
     },
     {
       "check": "result_equals",
-      "path": "s02.ground.steering",
-      "value": true
+      "path": "t1.ground.boscali.reason",
+      "value": "READY"
     },
     {
       "check": "result_above",
-      "path": "s08.ground.total.maxGroups",
+      "path": "t1.ground.boscali.eligible",
+      "min": 8
+    },
+    {
+      "check": "result_below",
+      "path": "t1.ground.boscali.ungrouped",
+      "max": 2
+    },
+    {
+      "check": "result_above",
+      "path": "t1.ground.boscali.traceCount",
       "min": 1
     },
     {
       "check": "result_above",
-      "path": "s14.counters.advanceRan",
+      "path": "t1.ground.primeva.groups",
+      "min": 4
+    },
+    {
+      "check": "result_equals",
+      "path": "t1.hook.h1",
+      "value": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "p1.pick.ok",
+      "value": 1
+    },
+    {
+      "check": "result_above",
+      "path": "p2.pick.sincePick",
+      "min": 20
+    },
+    {
+      "check": "result_above",
+      "path": "p3.pick.sincePick",
+      "min": 60
+    },
+    {
+      "check": "result_above",
+      "path": "p4.pick.sincePick",
+      "min": 110
+    },
+    {
+      "check": "result_above",
+      "path": "p5.pick.sincePick",
+      "min": 230
+    },
+    {
+      "check": "result_above",
+      "path": "p2.ground.boscali.assignedPeak",
       "min": 1
     },
     {
-      "check": "result_above",
-      "path": "s14.counters.advanceEnrolled",
-      "min": 1
+      "check": "result_below",
+      "path": "p2.ground.boscali.quotaGap",
+      "max": 0
     },
     {
       "check": "result_above",
-      "path": "s14.counters.enrolledPerMember",
-      "min": 3
+      "path": "p2.hook.overridesSincePick",
+      "min": 6
     },
     {
       "check": "result_above",
-      "path": "s14.counters.advanceReplaced",
-      "min": 1
-    },
-    {
-      "check": "result_above",
-      "path": "s14.war.total.maxOperations",
-      "min": 1
-    },
-    {
-      "check": "result_above",
-      "path": "s14.ground.total.maxAssigned",
-      "min": 1
-    },
-    {
-      "check": "result_above",
-      "path": "s14.ground.total.maxStaged",
+      "path": "p3.ground.boscali.landedGroupsPeak",
       "min": 2
     },
     {
       "check": "result_above",
-      "path": "s14.ground.total.maxLanded",
+      "path": "p3.hook.h2Fraction",
+      "min": 0.8
+    },
+    {
+      "check": "result_above",
+      "path": "p5.hook.h2Fraction",
+      "min": 0.8
+    },
+    {
+      "check": "result_above",
+      "path": "p3.ground.primeva.landedGroupsPeak",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "p3.ground.boscali.strayed",
+      "max": 2
+    },
+    {
+      "check": "result_above",
+      "path": "p3.ground.boscali.lateSpawned",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "p3.ground.boscali.lateEnrolled",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "p3.ground.boscali.waveOnEffort",
       "min": 1
     },
     {
       "check": "result_above",
-      "path": "s14.ground.total.bestClosing",
-      "min": 500
+      "path": "p3.ground.boscali.waveDelayS",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "p3.ground.boscali.waveDelayS",
+      "max": 10
+    },
+    {
+      "check": "result_above",
+      "path": "p4.ground.primeva.closingPeak",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "p4.ground.boscali.movingDiff",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "p4.ground.boscali.movingDiff",
+      "max": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "p4.order.held",
+      "value": 1
+    },
+    {
+      "check": "result_above",
+      "path": "p4.order.groupWithdrew",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "p4.order.groupWithdrew",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "p5.ground.boscali.maxContactDwellS",
+      "max": 100
+    },
+    {
+      "check": "result_below",
+      "path": "p5.ground.boscali.rekeysSincePick",
+      "max": 2
+    },
+    {
+      "check": "result_below",
+      "path": "p5.ground.boscali.supportEnrolled",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "p5.ground.boscali.effortSwaps",
+      "max": 2
+    },
+    {
+      "check": "result_below",
+      "path": "p5.ground.primeva.maxContactDwellS",
+      "max": 100
+    },
+    {
+      "check": "result_below",
+      "path": "p5.ground.primeva.rekeysSincePick",
+      "max": 2
+    },
+    {
+      "check": "result_below",
+      "path": "p5.ground.primeva.supportEnrolled",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "p5.ground.primeva.effortSwaps",
+      "max": 2
+    },
+    {
+      "check": "result_above",
+      "path": "p5.ground.boscali.assignedPeak",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "p1.hook.answeredShare",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "p2.hook.answeredShare",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "p3.hook.answeredShare",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "p4.hook.answeredShare",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "p5.hook.answeredShare",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "p5.hook.overrideShare",
+      "min": 0.6
+    },
+    {
+      "check": "result_below",
+      "path": "p5.delivery.airbaseRewrites",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "p5.delivery.calls",
+      "min": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "off.ground.boscali.reason",
+      "value": "TACTICS_OFF"
+    },
+    {
+      "check": "result_below",
+      "path": "off.ground.boscali.members",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "on.ground.boscali.members",
+      "min": 4
     },
     {
       "check": "log_match",

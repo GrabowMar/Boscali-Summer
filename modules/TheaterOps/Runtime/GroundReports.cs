@@ -28,11 +28,13 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         internal readonly bool Support;
         /// <summary>The seconds since the group's stage last changed.</summary>
         internal readonly float StageAge;
+        /// <summary>No slot could be placed: the member holds where it stood.</summary>
+        internal readonly bool Frozen;
 
         internal GroundMemberReport(GroundVehicle vehicle, int groupId, bool onEffort, bool hasStaged, float stagedX, float stagedZ,
-            float answeredAgo, float answerX, float answerZ, bool support, float stageAge)
+            float answeredAgo, float answerX, float answerZ, bool support, float stageAge, bool frozen)
         { Vehicle = vehicle; GroupId = groupId; OnEffort = onEffort; HasStaged = hasStaged; StagedX = stagedX; StagedZ = stagedZ;
-          AnsweredAgo = answeredAgo; AnswerX = answerX; AnswerZ = answerZ; Support = support; StageAge = stageAge; }
+          AnsweredAgo = answeredAgo; AnswerX = answerX; AnswerZ = answerZ; Support = support; StageAge = stageAge; Frozen = frozen; }
     }
 
     /// <summary>One group as the proof reads it.</summary>

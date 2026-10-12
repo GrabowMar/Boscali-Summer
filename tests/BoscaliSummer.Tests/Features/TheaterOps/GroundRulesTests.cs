@@ -32,6 +32,8 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
             ClosingNeedsEvidence();
             MeasuredLeadsFromSliceZero();
             SlotSearchOffsets();
+            SlotPullWalksTowardTheGroupAndStopsAtIt();
+            SlotPullRefusesWhatItCannotMeasure();
             FrontSideProbeWinsThenHistoryThenCentroid();
             FrontSideNeverGuessesWhenNothingIsKnown();
             LedgerCountsOnlyTakenOverVehiclesAsGone();
@@ -370,6 +372,37 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
             TestAssert.That(pastAlong == 0f && pastBack == 0f, "a refusal returns no offset");
             TestAssert.That(!SlotSearch.Offset(-1, out float lowAlong, out float lowBack), "index -1 refuses");
             TestAssert.That(lowAlong == 0f && lowBack == 0f, "a refusal returns no offset");
+        }
+
+        // ---- SlotPull (the second tier of the slot search: the line is at water, the group is the only known land)
+
+        private static void SlotPullWalksTowardTheGroupAndStopsAtIt()
+        {
+            // The group stands 4000 m due east of the staged point.
+            for (int step = 0; step < SlotPull.Steps; step++)
+            {
+                TestAssert.That(SlotPull.Offset(step, 4000f, 0f, out float dx, out float dz), "step " + step + " exists");
+                TestAssert.Near(dx, 500f * (step + 1), "step " + step + " is " + 500 * (step + 1) + " m along");
+                TestAssert.Near(dz, 0f, "and on the line to the group");
+            }
+            TestAssert.That(!SlotPull.Offset(SlotPull.Steps, 4000f, 0f, out _, out _), "no step past the last");
+            // A group 800 m away at 3-4-5 slope: the second step is clipped to the group itself and there is no third.
+            SlotPull.Offset(0, 480f, 640f, out float ax, out float az);
+            TestAssert.Near(ax, 300f, "unit vector x times 500"); TestAssert.Near(az, 400f, "unit vector z times 500");
+            TestAssert.That(SlotPull.Offset(1, 480f, 640f, out float bx, out float bz), "the clipped step exists");
+            TestAssert.Near(bx, 480f, "clipped to the group, x"); TestAssert.Near(bz, 640f, "clipped to the group, z");
+            TestAssert.That(!SlotPull.Offset(2, 480f, 640f, out _, out _), "past the group there is nothing to try");
+            // A group 300 m away: step 0 is the group itself, and that is all.
+            TestAssert.That(SlotPull.Offset(0, 0f, -300f, out float cx, out float cz) && Math.Abs(cx) < 0.01f && Math.Abs(cz + 300f) < 0.01f, "a near group is the one candidate");
+            TestAssert.That(!SlotPull.Offset(1, 0f, -300f, out _, out _), "and the only one");
+        }
+
+        private static void SlotPullRefusesWhatItCannotMeasure()
+        {
+            TestAssert.That(!SlotPull.Offset(-1, 4000f, 0f, out _, out _), "step -1 refuses");
+            TestAssert.That(!SlotPull.Offset(0, 0.4f, 0.3f, out _, out _), "a group standing on the slot has nowhere to pull to");
+            TestAssert.That(!SlotPull.Offset(0, float.NaN, 0f, out _, out _), "NaN refuses");
+            TestAssert.That(!SlotPull.Offset(0, float.PositiveInfinity, 0f, out float dx, out float dz) && dx == 0f && dz == 0f, "infinity refuses with no offset");
         }
 
         // ---- FrontSide (annex 02 G5: an ambiguous side keeps the last good one, then the centroid's, else holds in place)

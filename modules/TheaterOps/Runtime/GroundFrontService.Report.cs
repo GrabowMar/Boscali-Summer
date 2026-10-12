@@ -52,9 +52,11 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         /// <summary>Raw per-pass reason a faction's steering runs or not; Pending for an unknown HQ. The engine debounces it over two reviews.</summary>
         internal GroundReason ReasonFor(FactionHQ hq)
         {
-            if (hq == null || !factions.TryGetValue(hq, out FactionState fs)) return GroundReason.Pending;
+            if (hq == null) return GroundReason.Pending;
+            // A faction the passes have not met yet (or any faction while the switch is off, when no pass runs) has no counts: the causes that need none still answer.
+            bool known = factions.TryGetValue(hq, out FactionState fs);
             return GroundReasonRule.Decide(GameAccess.IsServer(), NavigateObjectives != null && CommandedDestination != null,
-                settings != null && settings.FrontlineTacticsEnabled.Value, HasRtsCommander(), fs.Eligible, fs.Trace.Count);
+                settings != null && settings.FrontlineTacticsEnabled.Value, HasRtsCommander(), known ? fs.Eligible : -1, known ? fs.Trace.Count : -1);
         }
 
         /// <summary>Eligible vehicles seen in the last finished sweep; -1 until the first sweep ends.</summary>
@@ -63,11 +65,12 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         /// <summary>Traces copied for the faction; -1 until the first copy.</summary>
         internal int TraceCount(FactionHQ hq) => hq != null && factions.TryGetValue(hq, out FactionState fs) ? fs.Trace.Count : -1;
 
-        private FactionState StateByName(string faction)
+        /// <summary>The registry's HQ of that faction name (the passes may not have met it yet, or may not run at all while the switch is off).</summary>
+        private static FactionHQ HqByName(string faction)
         {
             if (string.IsNullOrEmpty(faction)) return null;
-            for (int i = 0; i < factionHqs.Count; i++)
-                if (factionHqs[i].faction != null && factionHqs[i].faction.factionName == faction && factions.TryGetValue(factionHqs[i], out FactionState fs)) return fs;
+            foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
+                if (hq != null && hq.faction != null && hq.faction.factionName == faction) return hq;
             return null;
         }
 
@@ -79,15 +82,15 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         internal bool TryReport(string faction, string key, out GroundOpReport report)
         {
             report = default;
-            FactionState fs = StateByName(faction);
-            if (fs == null) return false;
-            GroundReason reason = ReasonFor(fs.HQ);
+            FactionHQ hq = HqByName(faction);
+            if (hq == null) return false;
+            GroundReason reason = ReasonFor(hq);
             if (reason != GroundReason.Ready) { report = GroundOpReport.Unavailable(reason); return true; }
             float now = Time.timeSinceLevelLoad;
             report = new GroundOpReport { Reason = GroundReason.Ready, EtaSeconds = -1, NearestToFixMeters = -1f };
             foreach (Group group in groups)
             {
-                if (group.HQ != fs.HQ) continue;
+                if (group.HQ != hq) continue;
                 if (group.StalledKey != null && group.StalledKey == key && now < group.StalledUntil) report.Stalled++;
                 if (!group.OnEffort || group.Key != key) continue;
                 report.Groups++;
@@ -119,13 +122,13 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         /// <summary>Up to 8 groups on the effort for this key, nearest the fix first; returns the count.</summary>
         internal int CopyMarks(string faction, string key, GroundMark[] into)
         {
-            FactionState fs = StateByName(faction);
-            if (fs == null || into == null || into.Length == 0) return 0;
+            FactionHQ hq = HqByName(faction);
+            if (hq == null || into == null || into.Length == 0) return 0;
             int count = 0;
             var near = new float[into.Length];
             foreach (Group group in groups)
             {
-                if (group.HQ != fs.HQ || !group.OnEffort || group.Key != key) continue;
+                if (group.HQ != hq || !group.OnEffort || group.Key != key) continue;
                 float distance = Scalar.Distance2DSquared(group.CentroidX, group.CentroidZ, group.FixX, group.FixZ);
                 var mark = new GroundMark(group.CentroidX, group.CentroidZ, group.Stage, (byte)Math.Min(group.Members.Count, 6));
                 int at = count;
@@ -170,7 +173,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 {
                     bool staged = member.HasDestination && !member.Degraded;
                     into.Add(new GroundMemberReport(member.Vehicle, group.Id, group.OnEffort, staged, member.Destination.x, member.Destination.z,
-                        member.AnsweredAt >= 0f ? now - member.AnsweredAt : -1f, member.Answer.x, member.Answer.z, IsSupport(member.Vehicle), now - group.StageSince));
+                        member.AnsweredAt >= 0f ? now - member.AnsweredAt : -1f, member.Answer.x, member.Answer.z, IsSupport(member.Vehicle), now - group.StageSince, member.Degraded));
                 }
             }
             return into.Count;

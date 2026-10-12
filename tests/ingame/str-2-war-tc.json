@@ -5,7 +5,7 @@
   "mods": [
     "boscalisummer"
   ],
-  "timeout_s": 600,
+  "timeout_s": 700,
   "environment": {
     "config": {
       "bepinex": {
@@ -478,6 +478,36 @@
       "check": "result_below",
       "path": "r10.war.boscali.age",
       "max": 8
+    },
+    {
+      "check": "result_above",
+      "path": "r2.war.boscali.opLive",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "r2.war.boscali.forcesGroups",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "r2.war.boscali.awaitingSeconds",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "r2.war.boscali.awaitingSeconds",
+      "max": 120
+    },
+    {
+      "check": "result_above",
+      "path": "r2.war.boscali.check.stageTallyDelta",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "r2.war.boscali.check.stageTallyDelta",
+      "max": 0
     },
     {
       "check": "result_above",

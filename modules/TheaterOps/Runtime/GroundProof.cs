@@ -22,8 +22,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         internal static int AdvanceUnassigned, AdvanceNoFront, AdvanceStale;
         /// <summary>Delivery postfix: every call, the calls that replaced the sort key, depot and airbase rewrites (airbase is never rewritten), airbase queries left alone.</summary>
         internal static int DeliveryRan, DeliveryReplaced, DepotRewrites, AirbaseRewrites, AirbaseSkips;
-        /// <summary>Members that found no usable slot candidate and hold where they stood.</summary>
-        internal static int SlotFallbacks;
+        /// <summary>Members that found no usable slot candidate and hold where they stood; group passes that held in place for want of a known friendly side, and passes with no line to stage behind.</summary>
+        internal static int SlotFallbacks, FrameHold, FrameNoFront;
     }
 
 #if !PUBLIC_RELEASE
@@ -39,10 +39,15 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
 
         private sealed class Memo
         {
-            internal readonly Dictionary<int, float> Distance = new Dictionary<int, float>();
-            internal readonly Dictionary<int, float> DistanceAt = new Dictionary<int, float>();
+            // One episode per group and (key, stage): the distance to the target when it was first read, when, and whether it ever closed 200 m or came within 600 m.
+            internal readonly Dictionary<int, Episode> Episodes = new Dictionary<int, Episode>();
+            // The most any single read has shown. The mission script can finish an objective operation within 90 s, so a check that must see "some group landed" or "some group
+            // closed" cannot depend on one named sample falling inside a live operation.
+            internal int LandedPeak, ClosingPeak, AssignedPeak;
             internal readonly Dictionary<int, Vector3> Target = new Dictionary<int, Vector3>();   // x = target x, y = stage, z = target z
         }
+
+        private sealed class Episode { internal string Key; internal GroundStage Stage; internal float Distance, At; internal bool Closed; }
 
         private sealed class LateOrder
         {
@@ -57,6 +62,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         private static readonly List<string> lateFactions = new List<string>();
         private static readonly List<LateOrder> pendingLate = new List<LateOrder>();
         private static readonly FieldInfo DepotSorted = AccessTools.Field(typeof(FactionHQ), "depotSorted");
+        private static readonly FieldInfo NavigateObjectives = AccessTools.Field(typeof(GroundVehicle), "navigateToObjectives");
 
         // The pick the seat made (Arm), the hook counters at that moment, and the one player order.
         private static float pickFirstAt = -1f;
@@ -71,9 +77,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
 
         // ---- Arm: the seated pilot picks ------------------------------------------------------------------------------------------
 
-        /// <summary>{kinds: "ASSAULT,DEFEND"}: sends the panel's own pick for the first card of the first listed kind (a sector or own-base front preferred over a mission objective,
-        /// which the mission script can finish by itself); takes the next kind when none appears 30 s after the first deck; picks again when no operation has lived for 10 s,
-        /// at most three picks.</summary>
+        /// <summary>{kinds: "ASSAULT,DEFEND"}: sends the panel's own pick for the first card of the first listed kind (a mission objective preferred, since a sector front can lie across
+        /// water from every vehicle); takes the next kind when none appears 30 s after the first deck; picks again when no operation has lived for 10 s, at most six picks.</summary>
         public static Dictionary<string, object> Arm(Dictionary<string, object> args)
         {
             if (!InSimRun) return Failure("GroundProof", "Arm", "requires a nomodkit scenario run");
@@ -105,7 +110,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 if (live) { noOperationSince = -1f; return; }
                 if (noOperationSince < 0f) noOperationSince = now;
                 TheaterWarSnapshot snapshot = view.Snapshot;
-                if (pickCount >= 3 || snapshot == null || snapshot.Proposals.Length == 0) return;
+                if (pickCount >= 6 || snapshot == null || snapshot.Proposals.Length == 0) return;
                 if (firstDeckAt < 0f) firstDeckAt = now;
                 if (pickCount > 0 && now - noOperationSince < 10f) return;
                 if (!view.CanCommand) return;
@@ -127,14 +132,15 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             {
                 // A kind that has no card 30 s after the first deck gives way to the next one listed.
                 while (kindIndex < Kinds.Length - 1 && !HasKind(snapshot, Kinds[kindIndex]) && now - firstDeckAt >= 30f) kindIndex++;
-                TheaterProposalView any = null;
+                // A mission objective first (the script can finish one early; the picker then picks again), else the first card of the kind.
+                TheaterProposalView objective = null, any = null;
                 foreach (TheaterProposalView card in snapshot.Proposals)
                 {
                     if (card.Kind.ToString().ToUpperInvariant() != Kinds[kindIndex]) continue;
-                    if (card.TargetKey.StartsWith("@") || card.TargetKey.StartsWith("#")) return card;
+                    if (objective == null && !card.TargetKey.StartsWith("@") && !card.TargetKey.StartsWith("#")) objective = card;
                     if (any == null) any = card;
                 }
-                return any;
+                return objective ?? any;
             }
 
             private static bool HasKind(TheaterWarSnapshot snapshot, string kind)
@@ -195,10 +201,11 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             foreach (GroundGroupReport g in groupBuffer) if (g.Alive > bestAlive) { best = g.Id; bestAlive = g.Alive; }
             GroundGroupReport group = default;
             foreach (GroundGroupReport g in groupBuffer) if (g.Id == best) group = g;
+            // A definition the placement rule accepts (an artillery piece or a heavy truck may not fit), preferring a member of the largest group.
             VehicleDefinition definition = null;
             foreach (GroundMemberReport m in memberBuffer)
-                if (m.GroupId == best && m.Vehicle != null && m.Vehicle.definition is VehicleDefinition d) definition = d;
-            if (best < 0 || definition == null) return Failure("GroundProof", "Late", "no live member to copy");
+                if (m.Vehicle != null && m.Vehicle.definition is VehicleDefinition d && GroundPlacement.Usable(d) && (definition == null || m.GroupId == best)) definition = d;
+            if (best < 0 || definition == null) return Failure("GroundProof", "Late", "no live member with a placeable definition");
             string faction = Key(hq.faction.factionName);
             if (!scan)
             {
@@ -210,18 +217,30 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             }
             Spawner spawner = NetworkSceneSingleton<Spawner>.i;
             if (spawner == null || !spawner.IsServer) return Failure("GroundProof", "Late", "no spawner on this peer");
-            float dx = group.X - group.FixX, dz = group.Z - group.FixZ, length = Mathf.Max(1f, Mathf.Sqrt(dx * dx + dz * dz));
-            int spawned = 0;
+            // Behind the group first (away from its fix), then around it: any dry, level spot 150 to 450 m from its centroid will do for a vehicle only the sweep can find.
+            // GroundPlacement works in local (floating-origin) coordinates at the terrain's own height: a member's transform is the anchor, not the global centroid.
+            Vector3 anchor = Vector3.zero;
+            foreach (GroundMemberReport m in memberBuffer) if (m.GroupId == best && m.Vehicle != null && !m.Vehicle.disabled) anchor = m.Vehicle.transform.position;
+            float dx = group.X - group.FixX, dz = group.Z - group.FixZ;
+            float baseAngle = Mathf.Atan2(dz, dx);
+            int spawned = 0, tried = 0;
             for (int i = 0; i < count; i++)
-            {
-                float behind = 150f + i * 60f;
-                var wanted = new Vector3(group.X + dx / length * behind, 0f, group.Z + dz / length * behind);
-                if (!GroundPlacement.TryPlace(definition, wanted, Quaternion.identity, out Vector3 position)) continue;
-                Unit unit = spawner.SpawnVehicle(definition.unitPrefab, position.ToGlobalPosition(), Quaternion.identity, Vector3.zero, hq,
-                    "BoscaliSummer:GroundProof:late:" + (lateVehicles.Count + 1), 1f, true, null);
-                if (unit is GroundVehicle vehicle) { lateVehicles.Add(vehicle); lateFactions.Add(faction); spawned++; }
-            }
-            return new Dictionary<string, object> { { "ok", spawned > 0 }, { "via", "scan" }, { "spawned", spawned } };
+                for (int attempt = 0; attempt < 24; attempt++)
+                {
+                    tried++;
+                    float angle = baseAngle + (attempt % 8) * Mathf.PI / 4f + i * 0.35f, radius = 150f + (attempt / 8) * 150f + i * 40f;
+                    var wanted = new Vector3(anchor.x + Mathf.Cos(angle) * radius, anchor.y, anchor.z + Mathf.Sin(angle) * radius);
+                    if (!GroundPlacement.TryPlace(definition, wanted, Quaternion.identity, out Vector3 position)) continue;
+                    Unit unit = spawner.SpawnVehicle(definition.unitPrefab, position.ToGlobalPosition(), Quaternion.identity, Vector3.zero, hq,
+                        "BoscaliSummer:GroundProof:late:" + (lateVehicles.Count + 1), 1f, true, null);
+                    if (!(unit is GroundVehicle vehicle)) continue;
+                    // A bare spawn does not head for objectives; a mission-scripted wave and a depot exit both do, so the clone is set up like them.
+                    NavigateObjectives?.SetValue(vehicle, true);
+                    lateVehicles.Add(vehicle); lateFactions.Add(faction); spawned++;
+                    break;
+                }
+            if (spawned == 0) return Failure("GroundProof", "Late", "no spot to place " + definition.name + " near group " + best + " after " + tried + " tries");
+            return new Dictionary<string, object> { { "ok", true }, { "via", "scan" }, { "spawned", spawned } };
         }
 
         // ---- Read ----------------------------------------------------------------------------------------------------------------------
@@ -251,10 +270,13 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 { "callsAll", GroundProbe.AdvanceGround }, { "calls", GroundProbe.AdvanceEnrolled }, { "overrides", GroundProbe.AdvanceReplaced },
                 { "unassigned", GroundProbe.AdvanceUnassigned }, { "noFront", GroundProbe.AdvanceNoFront }, { "stale", GroundProbe.AdvanceStale },
                 { "ran", GroundProbe.AdvanceRan }, { "members", membersAll },
+                { "slotFallbacks", GroundProbe.SlotFallbacks }, { "holdFrames", GroundProbe.FrameHold }, { "noFrontFrames", GroundProbe.FrameNoFront },
                 // The postfix polled every enrolled member about three times or more (vanilla asks each vehicle about every 4 s); -1 below four members.
                 { "h1", membersAll < 4 ? -1 : GroundProbe.AdvanceEnrolled >= 3 * membersAll ? 1 : 0 },
                 { "overridesSincePick", pickFirstAt >= 0f ? GroundProbe.AdvanceReplaced - pickOverridesBaseline : -1 },
-                { "answered", answered },
+                { "answered", answered }, { "answeredShare", membersAll > 0 ? answered / (float)membersAll : -1f },
+                // Polls of enrolled members that the staff answered (a staged point or a hold point) against all of them; the rest are groups with no key, left to vanilla.
+                { "overrideShare", GroundProbe.AdvanceEnrolled > 0 ? GroundProbe.AdvanceReplaced / (float)GroundProbe.AdvanceEnrolled : -1f },
                 // Of the vehicles the hook answered lately in a settled group: how many are steered by vanilla to the answered point (within max(300 m, 20 percent of the way)).
                 { "h2Fraction", steadyAnswered < 4 ? -1f : answeredLanded / (float)steadyAnswered },
                 { "h2Unlanded", steadyAnswered - answeredLanded }, { "h2UnlandedAutoNav", unlandedAuto },
@@ -336,7 +358,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             var groups = new Dictionary<int, GroundGroupReport>();
             var cx = new Dictionary<int, float>(); var cz = new Dictionary<int, float>(); var alive = new Dictionary<int, int>();
             foreach (GroundGroupReport g in groupBuffer) groups[g.Id] = g;
-            int supportEnrolled = 0, stagedMembers = 0, onSlot = 0, steered = 0, strayed = 0;
+            int supportEnrolled = 0, stagedMembers = 0, onSlot = 0, steered = 0, strayed = 0, frozen = 0;
             var answeredIn = new Dictionary<int, int>(); var landedIn = new Dictionary<int, int>();
             foreach (GroundMemberReport m in memberBuffer)
             {
@@ -350,6 +372,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 membersAll++;
                 if (v.GetComponentInChildren<MobileArtilleryAI>(true) != null || v.GetComponentInChildren<RearmVehicleAI>(true) != null ||
                     v.GetComponentInChildren<Rearmer>(true) != null || v.GetComponentInChildren<Repairer>(true) != null) supportEnrolled++;
+                if (m.Frozen) frozen++;
                 if (m.HasStaged)
                 {
                     stagedMembers++;
@@ -360,6 +383,9 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 GlobalPosition nav = v.GetDestination();
                 float away = Scalar.Distance2D(at.x, at.z, m.AnswerX, m.AnswerZ);
                 bool isLanded = Scalar.Distance2D(nav.x, nav.z, m.AnswerX, m.AnswerZ) <= Mathf.Max(300f, .2f * away);
+                answeredIn[m.GroupId] = (answeredIn.TryGetValue(m.GroupId, out int ai) ? ai : 0) + 1;
+                if (isLanded) landedIn[m.GroupId] = (landedIn.TryGetValue(m.GroupId, out int li) ? li : 0) + 1;
+                // Vanilla adopts a changed answer within about 30 s, so only members of a settled group are judged for the fraction and for straying.
                 if (m.StageAge < SteadySeconds) continue;
                 steadyAnswered++;
                 if (isLanded) answeredLanded++;
@@ -368,8 +394,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                     strayed++;
                     if (GroundFrontService.AutoNavigating(v)) unlandedAuto++;
                 }
-                answeredIn[m.GroupId] = (answeredIn.TryGetValue(m.GroupId, out int ai) ? ai : 0) + 1;
-                if (isLanded) landedIn[m.GroupId] = (landedIn.TryGetValue(m.GroupId, out int li) ? li : 0) + 1;
             }
 
             // The quota recomputed from the proof's own centroids and the staff's operation fix.
@@ -398,7 +422,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 if (g.Stage == GroundStage.Contact) contactGroups++;
                 if (g.Stage == GroundStage.Withdraw) withdrawGroups++;
                 if (!g.Usable && g.Stage != GroundStage.Withdraw) stalledGroups++;
-                if (g.FromDepot)
+                // A wave is a group bought for the pick: one that left a depot after the first pick (the vehicles that came out before it belong to nobody's operation).
+                if (g.FromDepot && pickFirstAt >= 0f && g.BornAgo < now - pickFirstAt)
                 {
                     waveGroups++;
                     if (g.OnEffort) waveOnEffort++;
@@ -412,11 +437,11 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 assigned++;
                 if (g.Alive > largest) { largest = g.Alive; leadStage = (int)g.Stage; }
                 float distance = Scalar.Distance2D(centreX, centreZ, g.TargetX, g.TargetZ);
-                bool closing = distance <= 600f;
-                if (!closing && memo.Distance.TryGetValue(g.Id, out float old) && memo.DistanceAt.TryGetValue(g.Id, out float oldAt))
-                    closing = now - oldAt >= 30f && old - distance >= 200f;
-                if (!memo.DistanceAt.TryGetValue(g.Id, out float stamped) || now - stamped >= 60f) { memo.Distance[g.Id] = distance; memo.DistanceAt[g.Id] = now; }
-                if (closing) arrivedOrClosing++;
+                // Closing is judged over the group's own episode (same key and stage), across every read the scenario makes, not between two named samples.
+                if (!memo.Episodes.TryGetValue(g.Id, out Episode episode) || episode.Key != g.Key || episode.Stage != g.Stage)
+                    memo.Episodes[g.Id] = episode = new Episode { Key = g.Key, Stage = g.Stage, Distance = distance, At = now };
+                if (distance <= 600f || (now - episode.At >= 30f && episode.Distance - distance >= 200f)) episode.Closed = true;
+                if (episode.Closed) arrivedOrClosing++;
                 if (answeredIn.TryGetValue(g.Id, out int asked) && asked > 0 && landedIn.TryGetValue(g.Id, out int landedCount) && landedCount * 2 >= asked) landedGroups++;
             }
 
@@ -429,15 +454,18 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 lateSpawned++;
                 if (lateVehicles[i] != null && enrolled.Contains(lateVehicles[i].GetInstanceID())) lateEnrolled++;
             }
+            memo.LandedPeak = Math.Max(memo.LandedPeak, landedGroups);
+            memo.ClosingPeak = Math.Max(memo.ClosingPeak, arrivedOrClosing);
+            memo.AssignedPeak = Math.Max(memo.AssignedPeak, assigned);
             // A group that is not on the effort is not judged for how it moves; the counts below are the effort's.
             int reportMoving = haveReport ? report.Moving : -1;
             return new Dictionary<string, object>
             {
                 { "reason", GroundReasonRule.Token(front.ReasonFor(hq)) },
                 { "eligible", front.EligibleCount(hq) }, { "members", memberBuffer.Count }, { "ungrouped", stats.Ungrouped }, { "groups", groupBuffer.Count },
-                { "assigned", assigned }, { "expected", expected }, { "quotaGap", Math.Max(0, expected - assigned) },
-                { "steered", steered }, { "landedGroups", landedGroups }, { "strayed", strayed }, { "arrivedOrClosing", arrivedOrClosing },
-                { "onSlot", onSlot }, { "staged", stagedMembers }, { "contactGroups", contactGroups }, { "withdrawGroups", withdrawGroups }, { "stalledGroups", stalledGroups },
+                { "assigned", assigned }, { "assignedPeak", memo.AssignedPeak }, { "expected", expected }, { "quotaGap", Math.Max(0, expected - assigned) },
+                { "steered", steered }, { "landedGroups", landedGroups }, { "landedGroupsPeak", memo.LandedPeak }, { "strayed", strayed }, { "arrivedOrClosing", arrivedOrClosing }, { "closingPeak", memo.ClosingPeak },
+                { "onSlot", onSlot }, { "staged", stagedMembers }, { "frozen", frozen }, { "contactGroups", contactGroups }, { "withdrawGroups", withdrawGroups }, { "stalledGroups", stalledGroups },
                 { "maxContactDwellS", stats.MaxContactDwell }, { "rekeysSincePick", stats.Rekeys }, { "effortSwaps", stats.EffortSwaps },
                 { "traceCount", front.TraceCount(hq) },
                 { "supportSeen", stats.SupportSeen }, { "supportNavigating", stats.SupportNavigating }, { "supportEnrolled", supportEnrolled },

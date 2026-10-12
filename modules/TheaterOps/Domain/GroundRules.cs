@@ -172,6 +172,33 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
         }
     }
 
+    /// <summary>
+    /// The second tier of the slot search. When none of the nine candidates can be placed the line itself runs through water or over a cliff, and the group, standing on our
+    /// side, is the one direction known to be land: try points on the way from the staged point toward the group, never past it.
+    /// </summary>
+    internal static class SlotPull
+    {
+        /// <summary>Number of points tried, and the distance between them, metres.</summary>
+        internal const int Steps = 6;
+        internal const float StepMeters = 500f;
+
+        /// <summary>Offset of step 0..Steps-1 from the staged point toward the group at (toGroupX, toGroupZ) relative to it; false past the last point, when the group stands on the slot, or on a value that is not a number.</summary>
+        internal static bool Offset(int step, float toGroupX, float toGroupZ, out float dx, out float dz)
+        {
+            dx = dz = 0f;
+            if (step < 0 || step >= Steps) return false;
+            float length = (float)Math.Sqrt(toGroupX * toGroupX + toGroupZ * toGroupZ);
+            if (!float.IsFinite(length) || length < 1f) return false;
+            float reach = StepMeters * (step + 1);
+            // The step before already reached the group: a further one would try the same point again.
+            if (step > 0 && StepMeters * step >= length) return false;
+            float along = Math.Min(reach, length) / length;
+            dx = toGroupX * along;
+            dz = toGroupZ * along;
+            return true;
+        }
+    }
+
     /// <summary>Which side of a front line is friendly when the control field gives no clear answer: the last good side, then the side the group stands on, else none (hold in place).</summary>
     internal static class FrontSide
     {

@@ -33,6 +33,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         private const float StaleSeconds = 6f;
         private const float StallLockSeconds = 300f;
         private const float AllFrozenStallSeconds = 120f;
+        private const float SettleSeconds = 20f;
         private const float PincerFlankMeters = 750f;
         private const float StagingReachMeters = 30000f;
         private static readonly FieldInfo NavigateObjectives =
@@ -88,7 +89,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             internal float Born, StageSince;
             internal float CenterX, CenterZ, TangentX, TangentZ, FriendlyX, FriendlyZ;
             internal float CentroidX, CentroidZ;
-            internal bool HasFront, HasSide;
+            internal bool HasSide;
             internal ContactClock Contact;
             internal float ContactEntered;
             internal Approach Approach;
@@ -250,6 +251,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             {
                 Group candidate = groups[i];
                 if (candidate.HQ != hq || candidate.Stage == GroundStage.Withdraw || candidate.Members.Count == 0) continue;
+                // A vehicle that left a depot joins only the wave it belongs to: a group that still counts as a fresh wave. Joining an old group would lose the wave.
+                if (fromDepot && !(candidate.FromDepot && now - candidate.Born < GroundTasking.WaveSeconds)) continue;
                 GroundVehicle leader = candidate.Members[0].Vehicle;
                 if (leader == null) continue;
                 GlobalPosition at = leader.GlobalPosition();
@@ -341,9 +344,11 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             }
             if (sweepCursor < all.Count) return;
             sweepCursor = 0;
+            // A sweep that ends in the first seconds of a scene may have run before the mission put its vehicles out: a zero then is not "no vehicles" yet.
+            bool settled = Time.timeSinceLevelLoad >= SettleSeconds;
             foreach (FactionState fs in factions.Values)
             {
-                fs.Eligible = fs.SweepEligible;
+                fs.Eligible = fs.SweepEligible == 0 && !settled ? -1 : fs.SweepEligible;
                 fs.Ungrouped = fs.SweepUngrouped;
                 fs.SupportSeen = fs.SweepSupportSeen;
                 fs.SupportNavigating = fs.SweepSupportNavigating;
@@ -490,6 +495,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             for (int k = 0; k < count; k++)
             {
                 Group group = mine[k];
+                bool wasOnEffort = facts[k].Held;
                 if (hasOp && chosen[k])
                 {
                     if (!group.OnEffort || group.OpId != op.Id)
@@ -498,22 +504,23 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                         group.OpId = op.Id;
                         if (group.FirstOnEffortAfter < 0f) group.FirstOnEffortAfter = now - group.Born;
                     }
-                    Assign(fs, group, op.Key, op.X, op.Z, op.Kind == TheaterOpKind.Assault, op.Kind == TheaterOpKind.Defend, now);
+                    Assign(fs, group, op.Key, op.X, op.Z, op.Kind == TheaterOpKind.Assault, op.Kind == TheaterOpKind.Defend, true, now);
                     continue;
                 }
                 if (hasOp && facts[k].Held && facts[k].Usable) fs.EffortSwaps++;
                 group.OnEffort = false;
                 int front = GroundTasking.NearestFront(group.CentroidX, group.CentroidZ, frontX, frontZ, fronts);
-                if (front >= 0) Assign(fs, group, fs.Fronts[front].Key, fs.Fronts[front].X, fs.Fronts[front].Z, false, false, now);
-                else Assign(fs, group, null, 0f, 0f, false, false, now);
+                if (front >= 0) Assign(fs, group, fs.Fronts[front].Key, fs.Fronts[front].X, fs.Fronts[front].Z, false, false, wasOnEffort, now);
+                else Assign(fs, group, null, 0f, 0f, false, false, wasOnEffort, now);
             }
         }
 
-        private static void Assign(FactionState fs, Group group, string key, float fixX, float fixZ, bool offensive, bool defending, float now)
+        /// <summary>onEffort: the group is on the effort after this assignment, or was before it. Only those key changes count toward the flapping bound: a front-holder moving to the next front is no flap.</summary>
+        private static void Assign(FactionState fs, Group group, string key, float fixX, float fixZ, bool offensive, bool defending, bool onEffort, float now)
         {
             if (key != group.Key)
             {
-                if (group.Key != null && key != null)
+                if (group.Key != null && key != null && onEffort)
                 {
                     group.RekeysThisOperation++;
                     fs.Rekeys = Math.Max(fs.Rekeys, group.RekeysThisOperation);

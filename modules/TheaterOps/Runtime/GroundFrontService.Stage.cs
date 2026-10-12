@@ -18,7 +18,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             {
                 // Not near any front and not chosen: vanilla's own orders stand.
                 ClearDestinations(group);
-                group.HasFront = false;
                 group.Approach = default;
                 group.Closing = false;
                 group.Eta = -1;
@@ -32,9 +31,9 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 if (group.ReportedRally) ReportStage(group);
             }
             Frame frame = FrameOf(group, fs);
-            group.HasFront = frame == Frame.Fronted;
             if (frame == Frame.NoFront)
             {
+                GroundProbe.FrameNoFront++;
                 // The map offers no line to stage behind: say so (the hook counts NoFront) rather than inventing a place.
                 ClearDestinations(group);
                 group.Approach = default;
@@ -44,6 +43,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             }
             if (frame == Frame.HoldInPlace)
             {
+                GroundProbe.FrameHold++;
+                Diagnose(group, "no friendly side known (hold in place)");
                 // Which side is ours is unknown: hold where we stand rather than guess and cross the line.
                 foreach (Member member in group.Members) Freeze(member, now, 0f);
                 group.Approach = default;
@@ -149,24 +150,48 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                         Freeze(member, now, 10f);
                         continue;
                 }
-                if (!TryPlace(member, group, x, z, exact)) Freeze(member, now, 10f);
+                if (TryPlace(member, group, x, z, exact)) continue;
+                if (!member.Degraded) Diagnose(group, "no usable slot for lane " + member.Lane + " at " + (int)x + "," + (int)z + ", group " +
+                    (int)Scalar.Distance2D(group.CentroidX, group.CentroidZ, x, z) + " m away");
+                Freeze(member, now, 10f);
             }
         }
 
+        /// <summary>
+        /// Candidates 0..8 are SlotSearch's (the staged point, then back and along the line); 9..14 are SlotPull's, along the way from the staged point toward the group, for a
+        /// line that runs through water. The candidate that worked last time is tried first; a pulled one is checked against the staged point itself each time, so a line that
+        /// comes back onto land pulls the group back with it.
+        /// </summary>
         private static bool TryPlace(Member member, Group group, float x, float z, bool exact)
         {
             if (exact) return Ground(x, z, member);
             int first = member.SlotIndex >= 0 ? member.SlotIndex : 0;
-            for (int k = -1; k < SlotSearch.Candidates; k++)
-            {
-                int index = k < 0 ? first : k;
-                if (k >= 0 && index == first) continue;
-                if (!SlotSearch.Offset(index, out float along, out float back)) continue;
-                if (!Ground(x + along * group.TangentX + back * group.FriendlyX, z + along * group.TangentZ + back * group.FriendlyZ, member)) continue;
-                member.SlotIndex = index;
-                return true;
-            }
+            bool pulled = first >= SlotSearch.Candidates;
+            if (pulled && TryAt(member, group, x, z, 0)) return true;
+            if (TryAt(member, group, x, z, first)) return true;
+            for (int index = 0; index < SlotSearch.Candidates + SlotPull.Steps; index++)
+                if (index != first && !(pulled && index == 0) && TryAt(member, group, x, z, index)) return true;
             return false;
+        }
+
+        private static bool TryAt(Member member, Group group, float x, float z, int index)
+        {
+            float px, pz;
+            if (index < SlotSearch.Candidates)
+            {
+                if (!SlotSearch.Offset(index, out float along, out float back)) return false;
+                px = x + along * group.TangentX + back * group.FriendlyX;
+                pz = z + along * group.TangentZ + back * group.FriendlyZ;
+            }
+            else
+            {
+                if (!SlotPull.Offset(index - SlotSearch.Candidates, group.CentroidX - x, group.CentroidZ - z, out float dx, out float dz)) return false;
+                px = x + dx;
+                pz = z + dz;
+            }
+            if (!Ground(px, pz, member)) return false;
+            member.SlotIndex = index;
+            return true;
         }
 
         /// <summary>A usable point: dry, not too steep. Writes the member's destination on success.</summary>
@@ -196,6 +221,17 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             }
             member.HasDestination = true;
             member.RetryAt = now + retryIn;
+        }
+
+        private static int diagnosed;
+
+        /// <summary>The first few slot and side failures of a scene go to the log with their coordinates, so a stuck group can be told from a bad map.</summary>
+        private static void Diagnose(Group group, string what)
+        {
+            if (diagnosed >= 12) return;
+            diagnosed++;
+            Plugin.Logger?.LogInfo("[THEATER OPS] FRONT GROUP " + group.Id + " — " + group.Stage.ToString().ToUpperInvariant() + ": " + what + " (centre " + (int)group.CenterX + "," +
+                (int)group.CenterZ + ", fix " + (int)group.FixX + "," + (int)group.FixZ + ", key " + group.Key + ")");
         }
 
         private static void ClearDestinations(Group group)
