@@ -1,7 +1,7 @@
 {
   "_note": "The TAC MAP in the cockpit, ONE run: the standing MINI hologram in the bottom-left corner (the game's own corner map hidden behind it), the CLASSIC mode (the game's corner map back, untouched), and the big HOLO MAP the map key raises. The player is seated in the cockpit view at 2500 m over the west of the island (map x -6 km, z +10 km, the place terrain-ghost.json uses), heading west (270) at 180 m/s; in the ~25 s the run lasts it flies about 4.5 km, well short of the massif (map x -18..-12 km, z +6..+14 km, peaks 1.3 to 1.6 km). A scenario cannot hold the map key (hold it to grow the MINI into the big holo, tap it for the MFD map), so HoloMapAutomation.Configure forces the big holo shown from the corner map (SimOpen: the same availability test, the same state machine; it stays up until open is false, whatever the key does) and sets the TAC MAP mode, the MINI range, the big range and the orientation IN MEMORY ONLY (the saved TacMapMode / TacMapRangeKm / HoloRangeKm / HoloNorthUp are never written; restore gives them back). Pictures: tac-default (NO key, NO call: the MINI must be up by itself, 10 km, heading up, view wedge, the nearest airbase's name, the TAC MAP shelf inside its lower-left with 10 KM at its right end, the game's grid reference dim at its lower right if the game shows one), tac-classic (CLASSIC: the game's own corner map back, no hologram anywhere), tac-back (HOLO again, the same as tac-default), tac-mini-5-north (5 km, north up), tac-mini-20 (20 km, heading up), holo-20 (the big holo, 20 km, heading up, the default), holo-10 (10 km), holo-40-north (40 km, north up), holo-closed (the big holo closed again: the MINI must be back). Each Configure result is stored: active (HoloMap.Active: the MINI or the big holo is up), stage, presentation (mini, big or none), tacMode, additiveMaterial, renderTexture, vertexCount, litVertices, marksDrawn, unitMarks, unitCap (48 on the MINI, 96 on the big one), airbaseMarks, labelsUsed, wedgeDegrees (the MINI's view wedge, 0 when it is not drawn), gridRef, mapHidden (the corner map faded out behind the hologram), nativeMapAlpha (1 when the game's corner map is untouched), grow (0 MINI .. 1 big, the 180 ms change), presence, sidePixels, rangeKm (of the picture shown), miniRangeKm, bigRangeKm, northUp, the timings (lastRenderMs / worstRenderMs / renders: one picture, the scan taken out; lastScanMs / worstScanMs / scans: the four-times-a-second unit scan; the worst values are cleared after the warm-up by resetTimings, so tac_default carries the steady cost of the always-on MINI over about 3 s), broken and failure. The checks assert those, the timings against a loose ceiling (a frame) and that the Unity log has no Exception; nothing asserts the pixels: they are read off the captures (the lines must read as projected light over the world, the rings and the stem on the sea-level plane, the corner brackets round the frame and the shelf inside it).",
   "name": "holo-map",
-  "description": "TAC MAP in one cockpit run: the standing MINI by itself, CLASSIC, HOLO again, 5 and 20 km minis, then the big holo at 20 km heading up, 10 km, 40 km north up, closed.",
+  "description": "TAC MAP in one cockpit run (a level hostile 5 km ahead and 3 km right of the aircraft, designated, first): the standing MINI by itself, CLASSIC, HOLO again, 5 and 20 km minis, then the big holo at 20 km heading up, 10 km, 40 km north up, closed.",
   "mods": [
     "boscalisummer"
   ],
@@ -38,6 +38,83 @@
     {
       "op": "wait",
       "seconds": 8
+    },
+    {
+      "op": "spawn",
+      "id": "bandit",
+      "type": "FS-20 Vortex",
+      "faction": "Primeva",
+      "at": {
+        "near": {
+          "id": "player",
+          "offset": [
+            3000,
+            500,
+            -5000
+          ]
+        }
+      },
+      "speed": 180,
+      "heading": 270
+    },
+    {
+      "op": "fly",
+      "id": "bandit",
+      "program": [
+        {
+          "level": 120
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Gun",
+      "args": {
+        "range": 20000
+      },
+      "store": "gun1"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Gun",
+      "args": {
+        "range": 20000
+      },
+      "store": "gun2"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Gun",
+      "args": {
+        "range": 20000
+      },
+      "store": "gun3"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {},
+      "store": "tac_target"
+    },
+    {
+      "op": "capture",
+      "name": "tac-target"
     },
     {
       "op": "call",
@@ -309,6 +386,16 @@
       "check": "result_equals",
       "path": "tac_first.failure",
       "value": ""
+    },
+    {
+      "check": "result_equals",
+      "path": "gun3.designated",
+      "value": 1
+    },
+    {
+      "check": "result_above",
+      "path": "tac_target.unitMarks",
+      "min": 0
     },
     {
       "check": "result_equals",
