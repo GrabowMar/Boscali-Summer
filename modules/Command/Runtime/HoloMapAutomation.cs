@@ -7,13 +7,13 @@ using static BoscaliSummer.Core.Diagnostics.AutomationArgs;
 namespace BoscaliSummer.Modules.Command.Runtime
 {
     /// <summary>
-    /// Explicit nomodkit single-player test hook (tests/ingame/holo-map.json); inert outside a sim run. Opens and closes the HOLO MAP without the map key (a scenario cannot press it) and sets
+    /// Explicit nomodkit single-player test hook (tests/ingame/holo-map.json); inert outside a sim run. Opens and closes the HOLO MAP without the map key (a scenario cannot hold it: an opened holo stays up until <c>open: false</c>) and sets
     /// its range and orientation in memory, and reports what the holo is doing.
     /// </summary>
     public static class HoloMapAutomation
     {
         /// <summary>
-        /// <c>{open: bool}</c> opens (true) or closes (false) the holo, the same way the map key does from the corner map, and draws the first picture at once; <c>{rangeKm: 10|20|40}</c> and
+        /// <c>{open: bool}</c> opens (true) or closes (false) the holo, with the same availability test the map key's hold uses, and draws the first picture at once; <c>{rangeKm: 10|20|40}</c> and
         /// <c>{northUp: bool}</c> set the range and the orientation IN MEMORY ONLY (the saved settings are never written); <c>{restore: true}</c> gives the saved settings back. Returns the holo:
         /// <c>active</c> (HoloMap.Active), <c>stage</c> (Mini, Holo or Mfd), <c>additiveMaterial</c> (the game's additive UI material was found), <c>renderTexture</c> (created),
         /// <c>vertexCount</c> of the mesh, <c>litVertices</c>, <c>marksDrawn</c> (units, airbases and the player's aircraft), <c>unitMarks</c>, <c>airbaseMarks</c>, <c>labelsUsed</c>,

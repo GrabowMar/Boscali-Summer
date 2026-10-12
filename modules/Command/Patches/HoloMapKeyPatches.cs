@@ -22,8 +22,9 @@ namespace BoscaliSummer.Modules.Command.Patches
     }
 
     /// <summary>
-    /// The map key's Maximize, MINI to HOLO: the holo takes the press and the original is skipped (its postfixes still run, which is why the Maximize postfixes check that the map is
-    /// maximised). From HOLO the press is not taken, so the original opens the maximised map. Anything that is not the key's call is not touched.
+    /// The map key's Maximize, on key down with the corner map showing: the holo swallows the call and the original is skipped (its postfixes still run, which is why the Maximize postfixes check
+    /// that the map is maximised); a tap then calls Maximize itself a few frames later, a hold shows the holo instead. With the holo off or unavailable the press is not taken, so the original
+    /// opens the maximised map at once. Minimize and anything that is not the key's call are not touched.
     /// </summary>
     [HarmonyPatch(typeof(DynamicMap), "Maximize")]
     internal static class HoloMapKeyPatch
