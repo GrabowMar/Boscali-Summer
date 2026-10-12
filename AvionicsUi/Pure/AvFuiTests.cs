@@ -150,7 +150,7 @@ namespace NOAvionics.Tests
                 assert(c >= '', icon + " is an icon-font codepoint (BMP, U+E000 and up)");
                 assert(seen.Add(c), icon + " codepoint is unique");
                 if (manifest != null)
-                    assert(manifest.Contains("\"" + AvIconTable.TablerName(icon) + "\": \"" + ((int)c).ToString("x4") + "\""),
+                    assert(manifest.Contains("\"" + AvIconTable.Name(icon) + "\": \"" + ((int)c).ToString("x4") + "\""),
                         icon + " matches the baked manifest");
             }
             assert(AvIconTable.Char(AvIcon.None) == '\0', "None has no glyph");

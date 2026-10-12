@@ -87,8 +87,42 @@ namespace NOAvionics
 
                 Available = Fonts.Count > 0 || Shaders.Count > 0;
                 log?.Invoke("avionics-ui.bundle loaded: " + Fonts.Count + " fonts, " + Shaders.Count + " shaders");
+                LoadIcons(sdf, log);
             }
             catch (Exception e) { Available = false; log?.Invoke("avionics-ui.bundle error: " + e.Message); }
+        }
+
+        public const string IconResourceName = "NOAvionics.avionics-icons.bundle";
+        private static AssetBundle iconBundle;
+
+        /// <summary>
+        /// The NOA Angular icon font, built by tools/Build-AvIcons.py and baked apart from the text fonts so a
+        /// glyph change never re-bakes them. It replaces the icon face of the main bundle under the same name;
+        /// without it the older face stays in use.
+        /// </summary>
+        private static void LoadIcons(Shader sdf, Action<string> log)
+        {
+            if (iconBundle != null) return;
+            try
+            {
+                using (Stream s = typeof(AvBundle).Assembly.GetManifestResourceStream(IconResourceName))
+                {
+                    if (s == null || s.Length <= 0 || s.Length > MaxBytes) return;
+                    var bytes = new byte[s.Length];
+                    int read = 0;
+                    while (read < bytes.Length) { int n = s.Read(bytes, read, bytes.Length - read); if (n <= 0) break; read += n; }
+                    iconBundle = AssetBundle.LoadFromMemory(bytes);
+                }
+                if (iconBundle == null) { log?.Invoke("avionics-icons.bundle failed to load; the older icon face stays in use"); return; }
+                foreach (TMP_FontAsset f in iconBundle.LoadAllAssets<TMP_FontAsset>())
+                {
+                    if (f == null) continue;
+                    if (sdf != null && f.material != null) f.material.shader = sdf;
+                    Fonts[f.name] = f;
+                }
+                log?.Invoke("avionics-icons.bundle loaded");
+            }
+            catch (Exception e) { log?.Invoke("avionics-icons.bundle error: " + e.Message); }
         }
 
         public static TMP_FontAsset Font(string assetName) =>
@@ -100,6 +134,8 @@ namespace NOAvionics
         public static void ResetForTests()
         {
             if (bundle != null) bundle.Unload(true);
+            if (iconBundle != null) iconBundle.Unload(true);
+            iconBundle = null;
             bundle = null; attempted = false; Available = false; noise = null;
             Fonts.Clear(); Shaders.Clear();
         }

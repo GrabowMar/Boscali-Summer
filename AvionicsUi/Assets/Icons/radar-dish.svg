@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="2">
+  <path d="M5 6V9L9 13H15L19 9V6" transform="rotate(-30 12 12)"/>
+  <path d="M10.5 5h3v3h-3z" fill="currentColor" stroke="none" fill-rule="evenodd" transform="rotate(-30 12 12)"/>
+  <path d="M12 14V20"/>
+  <path d="M7 20H17"/>
+</svg>
