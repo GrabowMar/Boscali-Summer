@@ -1,0 +1,623 @@
+{
+  "name": "str-2-war-tc",
+  "description": "STR engine proof in Terminal Control (no ground report needed): place names, first deck, staff pick that never overrides a pilot, redirect, lock, veto, command expiry, host age, an own-base DEFEND card in a full deck, focus, no faults. See tools/Str-Scenarios.py.",
+  "mission": "Terminal Control",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 700,
+  "environment": {
+    "config": {
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "faction": "Primeva",
+      "near": [
+        50000,
+        15000
+      ],
+      "altitude": 9000,
+      "speed": 200,
+      "heading": 0
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.CensusProof.Read",
+      "args": {},
+      "store": "c0"
+    },
+    {
+      "op": "fly",
+      "id": "player",
+      "program": [
+        {
+          "orbit": {
+            "bank": 30,
+            "seconds": 400
+          }
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 25
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Read",
+      "args": {},
+      "store": "r1"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.CensusProof.Read",
+      "args": {},
+      "store": "c1"
+    },
+    {
+      "op": "wait",
+      "seconds": 50
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Read",
+      "args": {},
+      "store": "r2"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Command",
+      "args": {
+        "faction": "Primeva",
+        "verb": "pick",
+        "card": 0
+      },
+      "store": "p1"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Read",
+      "args": {},
+      "store": "r3"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Command",
+      "args": {
+        "faction": "Primeva",
+        "verb": "pick",
+        "card": 0,
+        "actor": 777
+      },
+      "store": "lk"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Command",
+      "args": {
+        "faction": "Primeva",
+        "verb": "pick",
+        "card": 0
+      },
+      "store": "rd"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Read",
+      "args": {},
+      "store": "r4"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Command",
+      "args": {
+        "faction": "Primeva",
+        "verb": "calloff"
+      },
+      "store": "co"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Read",
+      "args": {},
+      "store": "r5"
+    },
+    {
+      "op": "wait",
+      "seconds": 7
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Read",
+      "args": {},
+      "store": "r6"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Track",
+      "args": {
+        "faction": "Primeva",
+        "seconds": 40
+      },
+      "store": "t1"
+    },
+    {
+      "op": "wait",
+      "seconds": 22
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Read",
+      "args": {},
+      "store": "r7"
+    },
+    {
+      "op": "wait",
+      "seconds": 15
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Read",
+      "args": {},
+      "store": "r8"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Freeze",
+      "args": {
+        "seconds": 20
+      },
+      "store": "fz"
+    },
+    {
+      "op": "wait",
+      "seconds": 18
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Read",
+      "args": {},
+      "store": "r9"
+    },
+    {
+      "op": "wait",
+      "seconds": 8
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Read",
+      "args": {},
+      "store": "r10"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.CensusProof.Read",
+      "args": {},
+      "store": "c2"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "r1.war.primeva.firstDeckAt",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "r1.war.primeva.firstDeckAt",
+      "max": 30
+    },
+    {
+      "check": "result_above",
+      "path": "r1.war.primeva.frontsNamed",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "r1.war.primeva.frontsIdLike",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "r1.war.primeva.deckCount",
+      "min": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "r1.war.primeva.emptyReason",
+      "value": "None"
+    },
+    {
+      "check": "result_below",
+      "path": "r1.war.primeva.assaultCardsWithoutCarriers",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "r2.war.primeva.staffPickedAt",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "r2.war.primeva.staffPickedAt",
+      "max": 90
+    },
+    {
+      "check": "result_above",
+      "path": "r2.war.primeva.staffPicks",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "r10.war.primeva.faults",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "r10.war.primeva.healthy",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "r10.war.primeva.check.trendWrites",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "r1.war.boscali.firstDeckAt",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "r1.war.boscali.firstDeckAt",
+      "max": 30
+    },
+    {
+      "check": "result_above",
+      "path": "r1.war.boscali.frontsNamed",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "r1.war.boscali.frontsIdLike",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "r1.war.boscali.deckCount",
+      "min": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "r1.war.boscali.emptyReason",
+      "value": "None"
+    },
+    {
+      "check": "result_below",
+      "path": "r1.war.boscali.assaultCardsWithoutCarriers",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "r2.war.boscali.staffPickedAt",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "r2.war.boscali.staffPickedAt",
+      "max": 90
+    },
+    {
+      "check": "result_above",
+      "path": "r2.war.boscali.staffPicks",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "r10.war.boscali.faults",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "r10.war.boscali.healthy",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "r10.war.boscali.check.trendWrites",
+      "max": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "p1.code",
+      "value": "Accepted"
+    },
+    {
+      "check": "result_above",
+      "path": "r3.war.primeva.pilotPicks",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "r3.war.primeva.staffOverrides",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "r3.war.primeva.lockSeconds",
+      "min": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "r3.war.primeva.lastCommandCode",
+      "value": "Accepted"
+    },
+    {
+      "check": "result_above",
+      "path": "r3.war.primeva.check.focusKeyMatchesOp",
+      "min": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "lk.code",
+      "value": "Locked"
+    },
+    {
+      "check": "result_above",
+      "path": "lk.lockSeconds",
+      "min": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "rd.code",
+      "value": "Accepted"
+    },
+    {
+      "check": "result_above",
+      "path": "rd.keyChanged",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "r4.war.primeva.redirects",
+      "min": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "co.code",
+      "value": "Accepted"
+    },
+    {
+      "check": "result_equals",
+      "path": "r5.war.primeva.lastCommandCode",
+      "value": "Accepted"
+    },
+    {
+      "check": "result_above",
+      "path": "r5.war.primeva.vetoes",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "r5.war.primeva.vetoedKeyInDeck",
+      "max": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "r6.war.primeva.lastCommandCode",
+      "value": "None"
+    },
+    {
+      "check": "result_above",
+      "path": "t1.planted",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "r7.war.primeva.defendCards",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "r7.war.primeva.assaultCardsWithoutCarriers",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "r8.war.primeva.ageAtRefreshMax",
+      "min": 8
+    },
+    {
+      "check": "result_below",
+      "path": "r8.war.primeva.ageAtRefreshMax",
+      "max": 15
+    },
+    {
+      "check": "result_above",
+      "path": "r8.war.primeva.canCommand",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "r9.war.primeva.age",
+      "min": 16
+    },
+    {
+      "check": "result_above",
+      "path": "r9.war.primeva.canCommand",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "r10.war.primeva.age",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "r10.war.primeva.age",
+      "max": 8
+    },
+    {
+      "check": "result_above",
+      "path": "r2.war.primeva.opLive",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "r2.war.primeva.forcesGroups",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "r2.war.primeva.awaitingSeconds",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "r2.war.primeva.awaitingSeconds",
+      "max": 120
+    },
+    {
+      "check": "result_above",
+      "path": "r2.war.primeva.check.stageTallyDelta",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "r2.war.primeva.check.stageTallyDelta",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "c1.census.known",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "c1.census.appliedAgo",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "c1.census.appliedAgo",
+      "max": 5
+    },
+    {
+      "check": "result_above",
+      "path": "c1.ticker.level",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "c1.ticker.level",
+      "max": 5
+    },
+    {
+      "check": "result_above",
+      "path": "c1.census.threat",
+      "min": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "c1.check.tickerLevelDelta",
+      "value": 0
+    },
+    {
+      "check": "result_above",
+      "path": "c1.grid.available",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "c1.check.contestedBasesDelta",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "c1.check.contestedBasesDelta",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "c1.check.sectorsDelta",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "c1.check.sectorsDelta",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "c0.ticker.level",
+      "max": 4
+    },
+    {
+      "check": "result_above",
+      "path": "c0.fresh.sortieTransit",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "c0.fresh.sortieTransit",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "c0.fresh.airParked",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "c2.ticker.level",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "c2.ticker.level",
+      "max": 5
+    },
+    {
+      "check": "result_above",
+      "path": "c2.census.appliedAgo",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "c2.census.appliedAgo",
+      "max": 5
+    },
+    {
+      "check": "log_match",
+      "pattern": "\\[TheaterOps\\].*staff fault",
+      "max": 0
+    },
+    {
+      "check": "log_match",
+      "pattern": "Exception",
+      "max": 0
+    }
+  ]
+}

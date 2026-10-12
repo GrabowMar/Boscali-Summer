@@ -29,6 +29,7 @@ $cases = @{
     'event-alert' = @('Progression/Run-PresentationUnityCheck.ps1', @{ EventAlertOnly = $true })
     'map-overlays' = @('Command/Run-MapOverlayUnityCheck.ps1', @{ NonWingOnly = $true })
     'map-chrome' = @('Command/Run-MapChromeUnityCheck.ps1', @{})
+    str = @('Command/Run-StrUnityCheck.ps1', @{})
 }
 if (-not $cases.ContainsKey($Group)) { throw "Unknown group: $Group" }
 $runner = Join-Path $repo ('tests/BoscaliSummer.Tests/Features/' + $cases[$Group][0])

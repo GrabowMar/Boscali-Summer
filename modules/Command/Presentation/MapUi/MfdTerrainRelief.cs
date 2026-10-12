@@ -604,7 +604,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             controlMaterial = new Material(shader) { color = Color.white.WithAlpha(.65f) };
             controlMaterial.renderQueue = 3100;
-            seaControlMaterial = FieldMaterial(shader, .32f, 3101);
+            // Friendly blue over the navy sea was a few percent of blue on blue, so "mine" read as the absence of red. Alpha 1 draws the
+            // raster at its own strength, as the flat map does (the plane was .32); the hue is untouched (red/blue colour-blind safety).
+            // The relief harness measured the sweep .32 / .60 / .80 / 1 and gates the contrast.
+            seaControlMaterial = FieldMaterial(shader, 1f, 3101);
             threatMaterial = new Material(shader) { color = Color.white.WithAlpha(.35f) };
             threatMaterial.renderQueue = 3110;
             gridMaterial = new Material(shader) { mainTexture = Texture2D.whiteTexture,
@@ -1727,6 +1730,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             mapX = at.x;
             mapY = at.y;
             return true;
+        }
+
+        public bool TryScale(float worldX, float worldZ, float metres, out float mapUnits)
+        {
+            mapUnits = 0f;
+            if (!(metres > 0f) || !TryProject(worldX, worldZ, out float x0, out float y0) ||
+                !TryProject(worldX + metres, worldZ, out float x1, out float y1) ||
+                !TryProject(worldX, worldZ + metres, out float x2, out float y2)) return false;
+            return BoscaliSummer.Core.Math.MapScale.Mean(Mathf.Sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0)),
+                Mathf.Sqrt((x2 - x0) * (x2 - x0) + (y2 - y0) * (y2 - y0)), out mapUnits);
         }
     }
 

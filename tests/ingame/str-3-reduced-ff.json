@@ -1,0 +1,153 @@
+{
+  "name": "str-3-reduced-ff",
+  "description": "STR engine proof in Free Flight: a deck within 30 s, the AI staff's pick 5 s later, no assault or recon card ever offered without a carrier, and no contested sector on a quiet map at 60 s (the grid reads the tested contested rule).",
+  "mission": "Free Flight",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 400,
+  "environment": {
+    "config": {
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "faction": "Boscali",
+      "near": [
+        0,
+        0
+      ],
+      "altitude": 9000,
+      "speed": 200,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "player",
+      "program": [
+        {
+          "orbit": {
+            "bank": 30,
+            "seconds": 300
+          }
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Read",
+      "args": {},
+      "store": "r1"
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Read",
+      "args": {},
+      "store": "r2"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.CensusProof.Read",
+      "args": {},
+      "store": "c1"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "r1.war.boscali.firstDeckAt",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "r1.war.boscali.firstDeckAt",
+      "max": 30
+    },
+    {
+      "check": "result_above",
+      "path": "r1.war.boscali.deckCount",
+      "min": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "r2.war.boscali.emptyReason",
+      "value": "None"
+    },
+    {
+      "check": "result_below",
+      "path": "r2.war.boscali.assaultCardsWithoutCarriers",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "r2.war.boscali.faults",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "r1.war.primeva.staffPickedAt",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "r1.war.primeva.staffPickedAt",
+      "max": 24
+    },
+    {
+      "check": "result_above",
+      "path": "c1.check.contestedWithoutContact",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "c1.check.contestedWithoutContact",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "c1.grid.contactCells",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "c1.grid.sectorsContested",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "c1.ticker.level",
+      "min": 1
+    },
+    {
+      "check": "log_match",
+      "pattern": "\\[TheaterOps\\].*staff fault",
+      "max": 0
+    },
+    {
+      "check": "log_match",
+      "pattern": "Exception",
+      "max": 0
+    }
+  ]
+}

@@ -18,7 +18,7 @@ namespace NOAvionics
         {
             "ground", "surface", "surface-raised", "surface-inert", "surface-sunken",
             "hairline", "frame", "ink", "ink-dim", "ink-muted", "key", "select",
-            "ready", "caution", "danger", "info", "inert", "friendly", "hostile",
+            "ready", "caution", "danger", "info", "inert", "friendly", "hostile", "effort",
         };
 
         public static string PaletteResource(AvThemeId id) => "NOAvionics.avionics." + Slug(id) + ".avss";

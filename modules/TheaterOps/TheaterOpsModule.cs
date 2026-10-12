@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Modules.TheaterOps.Configuration;
 using BoscaliSummer.Modules.TheaterOps.Networking;
 using BoscaliSummer.Modules.TheaterOps.Patches;
 using BoscaliSummer.Modules.TheaterOps.Runtime;
@@ -10,7 +11,7 @@ namespace BoscaliSummer.Modules.TheaterOps
     internal sealed class TheaterOpsModule : IModule
     {
         private static readonly ModuleMetadata Module =
-            new ModuleMetadata("theater-ops", "Theater priority and AI effort direction");
+            new ModuleMetadata("theater-ops", "Living Front staff and ground steering");
 
         public ModuleMetadata Metadata => Module;
 
@@ -37,15 +38,19 @@ namespace BoscaliSummer.Modules.TheaterOps
             priority.Configure(context.Settings.TheaterOps, network);
             logistics.Configure(context.Settings.TheaterOps);
             naval.Configure(context.Settings.TheaterOps);
-            living.Configure(context.Settings.TheaterOps, priority, logistics, livingNetwork, naval);
+            living.Configure(context.Settings.TheaterOps, priority, livingNetwork, naval);
             livingNetwork.Configure(living);
-            groundFront.Configure(context.Settings.TheaterOps, priority);
+            groundFront.Configure(context.Settings.TheaterOps, living);
             network.Configure(priority);
             hudLine.Configure(living);
 
             context.AddService<IEnemyIntentSource>(priority);
             context.AddService<ITheaterWarView>(living);
             context.AddService<ITheaterAirStationView>(living);
+            context.AddService<ITheaterWarHost>(living);
+            context.AddService<IOperationFocusSource>(living);
+
+            context.AddHostSettings(TheaterOpsHostSettings.Build(context.Settings.TheaterOps, groundFront.HasRtsCommander));
         }
     }
 }

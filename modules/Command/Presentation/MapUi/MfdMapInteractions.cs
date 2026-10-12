@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Services;
+using BoscaliSummer.Modules.Command.Domain;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -44,6 +45,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         internal static bool ContainsMenu(Vector2 screen) => MapUiPointer.Contains(menu, screen);
 
+        /// <summary>Another map control (an STR tag or card) took this click: stamp the frame and drop the press so the release does not clear the selection.</summary>
+        internal static void ConsumeClick()
+        {
+            iconClickFrame = Time.frameCount;
+            leftPress = false;
+            HideMenu();
+        }
+
+        internal static bool ClickedThisFrame => iconClickFrame == Time.frameCount;
+
         /// <summary>Suppress the native immediate RMB waypoint and the native Ctrl-drag pan.</summary>
         internal static bool BlockNativeControls(DynamicMap map)
         {
@@ -73,9 +84,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     Input.mousePosition)) return true;
             if (GameManager.GetLocalAircraft(out Aircraft localAircraft) && icon.unit == localAircraft)
                 return true;
-            iconClickFrame = Time.frameCount;
-            leftPress = false;
-            HideMenu();
+            ConsumeClick();
             bool add = ShiftHeld() || ControlHeld();
             if (add && map.selectedIcons.Contains(icon)) map.DeselectIcon(icon.unit);
             else
@@ -94,9 +103,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 return;
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             if (map == null) return;
-            iconClickFrame = Time.frameCount;
-            leftPress = false;
-            HideMenu();
+            ConsumeClick();
             if (ShiftHeld() || ControlHeld())
             {
                 if (!map.selectedIcons.Contains(icon)) map.SelectIcon(icon.airbase);
@@ -169,7 +176,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     ((Vector2)Input.mousePosition - leftStart).sqrMagnitude < DragSlop * DragSlop &&
                     !MapUiPointer.OverControls() && map.TryGetCursorCoordinates(out point);
                 leftPress = false;
-                if (open && iconClickFrame != Time.frameCount && !ShiftHeld())
+                if (MapClickRules.ShouldClearSelection(open, iconClickFrame, Time.frameCount, ShiftHeld()))
                 {
                     map.UnselectAll();
                     Echo("SELECTION CLEARED  /  RIGHT CLICK FOR MAP ACTIONS");

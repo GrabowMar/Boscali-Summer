@@ -1,0 +1,112 @@
+{
+  "name": "str-1-ground-off",
+  "description": "STR ground proof with FRONTLINE TACTICS off from the first frame (Terminal Control): TACTICS_OFF for both factions, nobody enrolled, nothing overridden.",
+  "mission": "Terminal Control",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 400,
+  "environment": {
+    "config": {
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
+        }
+      },
+      "boscalisummer": {
+        "TheaterOps": {
+          "FrontlineTacticsEnabled": false
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "faction": "Boscali",
+      "near": [
+        50000,
+        15000
+      ],
+      "altitude": 9000,
+      "speed": 200,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "player",
+      "program": [
+        {
+          "orbit": {
+            "bank": 30,
+            "seconds": 200
+          }
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
+      "args": {},
+      "store": "o1"
+    },
+    {
+      "op": "wait",
+      "seconds": 60
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read",
+      "args": {},
+      "store": "o2"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_equals",
+      "path": "o1.ground.boscali.reason",
+      "value": "TACTICS_OFF"
+    },
+    {
+      "check": "result_below",
+      "path": "o2.ground.boscali.members",
+      "max": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "o1.ground.primeva.reason",
+      "value": "TACTICS_OFF"
+    },
+    {
+      "check": "result_below",
+      "path": "o2.ground.primeva.members",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "o2.hook.callsAll",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "o2.hook.overrides",
+      "max": 0
+    },
+    {
+      "check": "log_match",
+      "pattern": "Exception",
+      "max": 0
+    }
+  ]
+}

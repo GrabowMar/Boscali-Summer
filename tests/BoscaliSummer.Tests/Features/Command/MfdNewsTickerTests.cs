@@ -216,6 +216,13 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(!text.Contains("% THEATER CONTROL") && !text.Contains("EFFECTIVENESS"),
                 "Percentages and unit tallies must stay off the wire");
             TestAssert.That(!text.Contains("SPREAD ACROSS"), "Sector counts must stay off the wire");
+
+            // Level 0 is "not measured" (a census that has not arrived), and -1 clashes are unknown: neither is an alert, a clash or a contested base.
+            var unmeasured = new MfdNewsFeed();
+            unmeasured.UpdateTheaterStatus(now: 100f, defcon: 0, territoryRatio: float.NaN, airSuperiorityRatio: float.NaN, activeClashes: -1, contestedAirbases: -1);
+            text = unmeasured.BuildMarqueeText();
+            TestAssert.That(!text.Contains("DEFCON ALERT"), "An unmeasured threat level is not a DEFCON alert");
+            TestAssert.That(!text.Contains("HOT ZONE") && !text.Contains("FORWARD CONTEST"), "Unknown clashes and bases are not a hot zone or a contested base");
         }
 
         private static void TestCleanTagsAndDedup()

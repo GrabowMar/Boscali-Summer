@@ -49,6 +49,7 @@ namespace BoscaliSummer.Modules.Command
             MissionMapCompatibilityEngine compat = context.AddSceneService<MissionMapCompatibilityEngine>(51);
             CommandManager manager = context.AddSceneService<CommandManager>(52);
             context.AddService<IFactionMoraleView>(manager);
+            context.AddService<ITheaterCensusSource>(manager);
             FactionMoraleNet moraleNet = context.AddComponent<FactionMoraleNet>();
             moraleNet.Configure(manager);
             ComMapOverlay overlay = context.AddSceneService<ComMapOverlay>(53);
@@ -57,20 +58,23 @@ namespace BoscaliSummer.Modules.Command
             context.AddService<IMapProjection>(new MfdMapProjection());
             ThreatMapOverlay threats = context.AddSceneService<ThreatMapOverlay>(54);
             context.AddService<ThreatMapOverlay>(threats);
+            StrViewHub strHub = context.AddSceneService<StrViewHub>(55);
+            strHub.Configure(context.Settings.Command);
             StrMfdPanel strategic = context.AddSceneService<StrMfdPanel>(56);
             context.AddSceneService<MapUiManager>(57);
             context.AddSceneService<SettingsMfdPanel>(58)
                 .Configure(context.Settings.Command, context.Logger, overlay,
                     context.HostSettings, context.ClientSettings);
             context.AddSceneService<FactionResourceRecorder>(59);
+            context.AddSceneService<StrMapOverlay>(60);
 
             TerritoryControlView territory = context.AddSceneService<TerritoryControlView>(52);
             territory.Configure(compat, context.Settings.Command.GridCellSizeMetres.Value);
             context.AddService<ITerritoryIngress>(territory);
-            manager.Configure(moraleNet);
-            overlay.Configure(context.Settings.Command, manager, compat, territory);
+            manager.Configure(moraleNet, territory);
+            overlay.Configure(context.Settings.Command, compat, territory);
             threats.Configure(context.Settings.Command);
-            strategic.Configure(context.Settings.Command, manager, overlay, context.Logger);
+            strategic.Configure(context.Settings.Command, strHub, context.Logger);
         }
     }
 }

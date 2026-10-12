@@ -69,7 +69,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         internal static bool Flying => false;
         internal static bool BlockIconClick() => false;
         internal static bool BlockContextClick() => false;
-        internal static void Focus(GlobalPosition point, bool zoom) { }
+        // The real Focus eases the rig to the point over the next frames (ReliefNavigator.FocusOn, ZoomTo); the harness lands it at once, so it
+        // proves the point-to-rig maths and CentreOffset, not the easing.
+        internal static void Focus(GlobalPosition point, bool zoom)
+        {
+            if (!MfdTerrainRelief.WorldToModel(point, out float x, out float z)) return;
+            MfdTerrainRelief.Rig.FocusX = x;
+            MfdTerrainRelief.Rig.FocusZ = z;
+            if (zoom) MfdTerrainRelief.Rig.Zoom = Mathf.Max(3f, MfdTerrainRelief.Rig.Zoom);
+        }
         internal static void ToggleFly() { }
         internal static void Turn(float degrees) { }
         internal static void Tilt(float degrees) { }
@@ -81,6 +89,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     {
         internal static bool Contains(RectTransform rect, Vector2 point) => true;
         internal static bool OverControls() => false;
+        internal static void Register(RectTransform rect) { }
+        internal static void Unregister(RectTransform rect) { }
+        internal static void ResetFloating() { }
     }
 }
 
@@ -100,6 +111,10 @@ public sealed class DynamicMap : MonoBehaviour
     public float mapDimension = 81920f;
     public float mapDisplayFactor = 900f / 81920f;
     private float zoom = 1f;
+    // The game's private pan state (decompile DynamicMap.cs:96-98); MapFocus writes positionOffset by reflection, as in game.
+    private Vector2 positionOffset, stationaryOffset;
+    /// <summary>The tail of the game's MapControls (decompile :1018-1022, without the edge clamp): rebuilds the sheet position from the offsets.</summary>
+    public void StepFlat() => mapImage.transform.localPosition = (-stationaryOffset - positionOffset) * mapImage.transform.localScale.x;
     public float GetZoomLevel() => zoom;
     public void SetZoomLevel(float value)
     {

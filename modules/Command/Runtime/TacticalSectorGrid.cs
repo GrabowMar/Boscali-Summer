@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Math;
+using BoscaliSummer.Modules.Command.Domain;
 #if !NET8_0_OR_GREATER
 using UnityEngine;
 #endif
@@ -49,7 +50,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private const int MaximumInfluenceCells = 8;
         private const int MaximumContourSegments = 4096;
         private const float MinimumCellSize = 100f;
-        private const float PresenceThreshold = 0.05f;
+        private const float PresenceThreshold = ControlFieldCore.PresenceThreshold;
         /// <summary>Ground-control weight of one vehicle or ordinary building.</summary>
         public const float VehicleWeight = 2.5f;
         /// <summary>
@@ -58,8 +59,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
         /// one six-vehicle group in its cell and yields to three.
         /// </summary>
         public const float DefensiveBuildingWeight = 5f;
-        private const float CaptureSeconds = 15f;
-        private const float RecoverySeconds = 90f;
         private bool hasEvaluated;
 
         /// <summary>Control-field inks. Shared so the map legend cannot drift from the bake.</summary>
@@ -135,7 +134,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
         // Cached strategic influence: node influence only changes when the node set does,
         // so the per-cell sqrt sweep is skipped on the 2 Hz observation refresh.
         private readonly float[] strategicField;
-        private bool hasStrategicInfluence;
         private ulong nodeSignature;
         private ulong strategicSignature;
         private bool strategicDirty = true;
@@ -576,7 +574,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     if (claim != 0 && nodeAnchors[index] == 0 &&
                         (claim == 1 ? hostile <= PresenceThreshold : friendly <= PresenceThreshold))
                         target = claim == 1 ? 1f : -1f;
-                    float response = 1f - (float)Math.Exp(-elapsed / (total > PresenceThreshold ? CaptureSeconds : RecoverySeconds));
+                    float response = ControlFieldCore.Response(elapsed, total);
                     float previousHold = holdStrength[index];
                     holdStrength[index] = hasEvaluated ? previousHold + (target - previousHold) * response : target;
 
@@ -585,14 +583,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     if (nodeAnchors[index] != 0)
                         holdStrength[index] = nodeAnchors[index] == 1 ? 1f : nodeAnchors[index] == 2 ? -1f : 0f;
                     float hold = holdStrength[index];
-                    bool balancedClash = friendly > PresenceThreshold && hostile > PresenceThreshold &&
-                        friendly / total > 0.34f && friendly / total < 0.66f;
-                    bool advancing = Math.Abs(pressure) > PresenceThreshold && pressure * hold < 0f;
                     SectorControl previousState = sectorStates[index];
-                    sectorStates[index] = nodeAnchors[index] == 3 || balancedClash || advancing
-                        ? SectorControl.Contested
-                        : hold > 0.01f ? SectorControl.Friendly : hold < -0.01f ? SectorControl.Hostile
-                        : hasStrategicInfluence || total > PresenceThreshold ? SectorControl.Contested : SectorControl.Neutral;
+                    sectorStates[index] = (SectorControl)ControlFieldCore.Classify(hold, friendly, hostile, nodeAnchors[index] == 3);
 
                     // Only a real change bumps the grid version: a repainted but identical
                     // front must not trigger a texture upload. The hold epsilon catches
@@ -660,14 +652,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
             if (!strategicDirty && strategicSignature == nodeSignature) return;
             strategicSignature = nodeSignature;
             strategicDirty = false;
-
-            hasStrategicInfluence = false;
-            for (int i = 0; i < nodes.Count; i++)
-            {
-                if (nodes[i].Faction == SectorControl.Neutral) continue;
-                hasStrategicInfluence = true;
-                break;
-            }
 
             // ponytail: at most 16384 cells x 128 strategic nodes, avoiding pathfinding
             // and terrain claims. Add terrain-aware supply only after profiling/playtests.

@@ -86,7 +86,7 @@ namespace BoscaliSummer.Core.Config
                 "Command map console",
                 "Chain of command",
                 "Threat picture (AI intel)",
-                "Theater priority",
+                "Living Front (staff and ground steering)",
                 "Dynamic contracts",
                 "World events",
                 "Map comms, polls and games",

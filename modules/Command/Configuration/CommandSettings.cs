@@ -10,6 +10,9 @@ namespace BoscaliSummer.Modules.Command.Configuration
         public ConfigEntry<bool> ExpandedMapUi { get; }
         public ConfigEntry<bool> FrontlinesOverlay { get; }
         public ConfigEntry<bool> FrontlineTrace { get; }
+        public ConfigEntry<bool> StrOverlayFronts { get; }
+        public ConfigEntry<bool> StrOverlayOperation { get; }
+        public ConfigEntry<bool> StrOverlaySorties { get; }
         public ConfigEntry<bool> ThreatHeat { get; }
         public ConfigEntry<float> OverlayOpacity { get; }
         public ConfigEntry<int> GridCellSizeMetres { get; }
@@ -105,6 +108,15 @@ namespace BoscaliSummer.Modules.Command.Configuration
 
             FrontlineTrace = config.Bind("Command", "FrontlineTrace", true,
                 "Draw the front line trace above the control tint. Only drawn while the control field is on; the MAP bezel's FRONT LINE layer switches it in game.");
+
+            StrOverlayFronts = config.Bind("Command", "StrOverlayFronts", true,
+                "STR layer on the expanded map: platform badges with lane bars and the proposal tags. The layer plate's FRONTS switch changes it in game.");
+
+            StrOverlayOperation = config.Bind("Command", "StrOverlayOperation", true,
+                "STR layer on the expanded map: the main effort's ring, axis and ground groups, and the reinforcement route once a wave desk reports a depot (none does in this build). The layer plate's OPERATION switch changes it in game.");
+
+            StrOverlaySorties = config.Bind("Command", "StrOverlaySorties", true,
+                "STR layer on the expanded map: the sorties tied to the operation, and enemy command posts (this build ties no sortie and reports no post yet). The layer plate's SORTIES switch changes it in game.");
 
             ThreatHeat = config.Bind("Command", "ThreatHeat", true,
                 "Tracked hostile sensor coverage as range contours. The local faction's tracked picture and your aircraft's detection envelope drive it. The MAP bezel's SENSOR CONTOURS layer switches it in game.");

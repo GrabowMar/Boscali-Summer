@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         private string worldEvent;
         private float worldEventStarted;
         private int operationId;
-        private string operationPhase;
+        private TheaterPhase operationPhase;
         private bool eventBaseline, operationBaseline;
         private IAirAssaultObservation assault;
 
@@ -31,9 +31,10 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             wasSpeaking = false;
             radioOff = false;
             breathUntil = 0f;
-            worldEvent = operationPhase = null;
+            worldEvent = null;
             worldEventStarted = 0f;
             operationId = 0;
+            operationPhase = TheaterPhase.Awaiting;
             eventBaseline = operationBaseline = false;
         }
 
@@ -189,14 +190,14 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 worldEventStarted = current?.StartedAtMissionTime ?? 0f;
                 eventBaseline = true;
             }
-            if (ModuleServices.TryGet<ITheaterWarView>(out var theater) && theater.Available && theater.HasSnapshot && theater.SnapshotAgeSeconds <= 5f)
+            if (ModuleServices.TryGet<ITheaterWarView>(out var theater) && theater.Available && theater.IsFresh)
             {
                 var operation = theater.ActiveOperation;
                 if (operationBaseline && operation != null && (operation.Id != operationId || operation.Phase != operationPhase))
                     Report("COMMAND", "OPERATION:" + operation.Id + ":" + operation.Phase,
-                        operation.Label + ". Operation phase: " + operation.Phase + ".", ChatterUrgency.Status);
+                        operation.Name + ". Operation phase: " + TheaterWords.Phase(operation.Phase, operation.PhaseNote) + ".", ChatterUrgency.Status);
                 operationId = operation?.Id ?? 0;
-                operationPhase = operation?.Phase;
+                operationPhase = operation?.Phase ?? TheaterPhase.Awaiting;
                 operationBaseline = true;
             }
         }

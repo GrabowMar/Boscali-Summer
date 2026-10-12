@@ -4,6 +4,7 @@ param(
     [string]$PreviewDirectory = (Join-Path $env:TEMP ('BoscaliMapOverlayCheck-' + [guid]::NewGuid().ToString('N'))),
     [string]$ModAssembly,
     [Alias('ExcludeWing')][switch]$NonWingOnly,
+    [switch]$StrOnly,
     [switch]$PrepareOnly
 )
 $ErrorActionPreference = 'Stop'
@@ -12,14 +13,15 @@ if (-not $ModAssembly) { $ModAssembly = Join-Path $repo 'bin/Release/netstandard
 New-UnityCheckProject $PreviewDirectory '{"dependencies":{"com.unity.ugui":"1.0.0","com.unity.textmeshpro":"3.0.6","com.unity.modules.audio":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.uielements":"1.0.0","com.unity.modules.physics":"1.0.0","com.unity.modules.animation":"1.0.0","com.unity.modules.ai":"1.0.0","com.unity.modules.particlesystem":"1.0.0","com.unity.modules.assetbundle":"1.0.0"}}' -Folders 'Assets/Harness', 'NOAvionics'
 Copy-GameDlls "$PreviewDirectory/Assets/" $UnityCheckFilter.ManagedWide $UnityCheckFilter.BepInEx
 Copy-Item -LiteralPath $ModAssembly -Destination "$PreviewDirectory/Assets/BoscaliSummer.dll"
-Copy-Item -LiteralPath "$PSScriptRoot/MapOverlayUnityCheck.cs", $UnityCheckHarness, "$PSScriptRoot/MapOverlayUnityCheck.asmdef" -Destination "$PreviewDirectory/Assets/Harness/"
+Copy-Item -LiteralPath "$PSScriptRoot/MapOverlayUnityCheck.cs", "$PSScriptRoot/MapOverlayUnityCheck.Str.cs", "$PSScriptRoot/StrFixtures.cs", $UnityCheckHarness, "$PSScriptRoot/MapOverlayUnityCheck.asmdef" -Destination "$PreviewDirectory/Assets/Harness/"
 Copy-AvionicsStyles $PreviewDirectory
-$widgets = @('TrenchMapOverlay', 'TrenchMapGraphic', 'ComMapOverlay', 'FrontlineGraphic', 'ThreatMapOverlay', 'CommsMapLayer', 'CommsMapTag', 'CommsInkGraphic', 'CommsPulseGraphic', 'AircraftTrailGraphic')
+$widgets = @('TrenchMapOverlay', 'TrenchMapGraphic', 'ComMapOverlay', 'FrontlineGraphic', 'ThreatMapOverlay', 'CommsMapLayer', 'CommsMapTag', 'CommsInkGraphic', 'CommsPulseGraphic', 'AircraftTrailGraphic', 'StrMapOverlay', 'StrMapTag', 'StrMapCard', 'StrMapChrome')
 if (-not $NonWingOnly) { $widgets += @('WingMarkerBadge', 'WingMapRingGraphic', 'WmcMapOverlay') }
-$executeMethod = if ($NonWingOnly) { 'MapOverlayUnityCheck.RunNonWing' } else { 'MapOverlayUnityCheck.Run' }
+$executeMethod = if ($StrOnly) { 'MapOverlayUnityCheck.RunStr' } elseif ($NonWingOnly) { 'MapOverlayUnityCheck.RunNonWing' } else { 'MapOverlayUnityCheck.Run' }
 [ordered]@{
     assembly_sha256 = (Get-FileHash -LiteralPath "$PreviewDirectory/Assets/BoscaliSummer.dll").Hash
     fixture_sha256 = (Get-FileHash -LiteralPath "$PreviewDirectory/Assets/Harness/MapOverlayUnityCheck.cs").Hash
+    str_fixture_sha256 = (Get-FileHash -LiteralPath "$PreviewDirectory/Assets/Harness/MapOverlayUnityCheck.Str.cs").Hash
     production_widgets = $widgets
     non_wing_only = [bool]$NonWingOnly
     execute_method = $executeMethod
