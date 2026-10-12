@@ -1,6 +1,5 @@
 using NOAvionics;
 using System;
-using System.Collections.Generic;
 using BoscaliSummer.Modules.Events.Domain;
 using UnityEngine;
 using UnityEngine.UI;
@@ -8,39 +7,38 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Events.Presentation
 {
     /// <summary>
-    /// A local reading room, floating over the map on kit v2's <see cref="AvWindow"/> chrome. The window is
-    /// two panes under one tab bar: a paged index on the left (about 40%) and the detail of the selected
-    /// record on the right. Four sections (aircraft / events / world / manual) share both panes; native
-    /// encyclopedia data is read only while open. The window is sized to the screen and each pane scrolls
-    /// on its own, so nothing is ever taller than the window.
+    /// The field archive: a local recognition and reference library, floating over the map on kit v2's
+    /// <see cref="AvWindow"/> chrome. Under the library's header band and its shelf tabs the window is two
+    /// panes: the open drawer's index on the left, the selected record on the right (a unit's recognition
+    /// card, an event dossier, or a volume typeset as a field-manual page). The game's encyclopedia is read
+    /// when the window opens and dropped when it closes; the model viewer exists only while a unit card is up.
+    /// The window is sized to the screen and each pane scrolls on its own, so nothing is taller than the window.
     /// </summary>
     internal sealed class EventDeskArchive : MonoBehaviour
     {
-        private const float MaxWidth = 1040f;
-        private const float MaxHeight = 960f;
+        private const float MaxWidth = 1360f;
+        private const float MaxHeight = 1000f;
         private const float ScreenMargin = 40f;
         private const int SortingOrder = 30003;
-        private static readonly string[] SectionNames = { "AIRCRAFT", "EVENTS", "WORLD", "MANUAL" };
-        private static readonly string[] SectionHelp =
-        {
-            "AIRCRAFT: every native aircraft, with a rotating model viewer and its performance figures. Click a row, or step with the arrow keys.",
-            "EVENTS: a dossier for every authored theater event: price effect, reset clock, window, tier, target and timed orders.",
-            "WORLD: short files on life behind the front line. Flavour only; nothing here changes the game.",
-            "MANUAL: how to read a dispatch and issue orders. Start here if the desk is new to you.",
-        };
 
         // AvWindow chrome the pane height is carved out of.
         private const float TitleHeight = 30f;
 
+        private readonly ArchiveLibrary library = new ArchiveLibrary();
         private AvWindow window;
-        private readonly List<AircraftDefinition> aircraft = new List<AircraftDefinition>(128);
-        private AvControl[] tabs;
+        private LibraryHeaderPart header;
+        private ShelfTabsPart tabs;
         private ArchivePanesPart panes;
-        private AvList index;
-        private int indexRows = 14;
-        private EventDetailPart detail;
+        private IndexHeadPart indexHead;
+        private AvPagedStack<ArchiveIndexRow> index;
+        private IndexFootPart indexFoot;
+        private float indexRoom;
+        private bool twoLine;
+        private UnitCardPart card;
+        private EventDossierPart dossier;
+        private VolumePart volume;
         private EventAircraftPreview preview;
-        private int section, selected;
+        private int shelf, selected;
         private bool open, keyboardTouched, keyboardWas, pauseWas;
 
         internal bool IsOpen => open;
@@ -84,7 +82,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
             return archive;
         }
 
-        internal void Show(int initialSection, int record = 0)
+        /// <summary>Opens the library at a shelf (<see cref="ArchiveShelf"/>) and a record on it.</summary>
+        internal void Show(int initialShelf, int record = 0)
         {
             if (!open)
             {
@@ -99,17 +98,25 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 }
                 open = true;
             }
-            LoadAircraft();
+            library.Load();
+            int holdings = 0;
+            for (int i = 0; i < ArchiveShelf.Count; i++)
+            {
+                int held = library.Count(i);
+                holdings += held;
+                tabs.SetCount(i, held);
+            }
+            header.SetHoldings(holdings, ArchiveShelf.Count);
             window.Show();
-            SelectSection(initialSection, record);
+            SelectShelf(initialShelf, record);
         }
 
         internal void Close()
         {
             if (!open) return;
             open = false;
-            preview?.Dispose();
-            preview = null;
+            DisposePreview();
+            library.Clear();
             GameplayUI.AllowPauseKeybind = pauseWas;
             if (keyboardTouched && Rewired.ReInput.isReady && Rewired.ReInput.controllers != null &&
                 Rewired.ReInput.controllers.Keyboard != null)
@@ -127,61 +134,65 @@ namespace BoscaliSummer.Modules.Events.Presentation
             if (Input.GetKeyDown(KeyCode.Escape)) Close();
             else if (Input.GetKeyDown(KeyCode.DownArrow)) Step(1);
             else if (Input.GetKeyDown(KeyCode.UpArrow)) Step(-1);
-        }
-
-        private void LoadAircraft()
-        {
-            aircraft.Clear();
-            if (Encyclopedia.i == null || Encyclopedia.i.aircraft == null) return;
-            foreach (AircraftDefinition definition in Encyclopedia.i.aircraft)
-                if (definition != null && definition.unitPrefab != null && definition.IsAllowed(false) &&
-                    aircraft.Count < 128) aircraft.Add(definition);
-            aircraft.Sort((a, b) => string.Compare(a.unitName, b.unitName, StringComparison.OrdinalIgnoreCase));
+            else if (Input.GetKeyDown(KeyCode.RightArrow)) StepShelf(1);
+            else if (Input.GetKeyDown(KeyCode.LeftArrow)) StepShelf(-1);
         }
 
         private void Build(Vector2 screenUnits)
         {
             float width = Mathf.Clamp(screenUnits.x - 2f * ScreenMargin, 760f, MaxWidth);
             float height = Mathf.Clamp(screenUnits.y - 2f * ScreenMargin, 480f, MaxHeight);
+            bool compact = height < 620f;
             // The host is a proper canvas, so the window builds under it instead of becoming a root canvas.
             window = AvWindow.Build(transform, "field-archive", "DIRECTORATE / FIELD ARCHIVE", width, height, SortingOrder);
             window.Closed += Close;
+            window.CloseControl.Help = "Close the field archive (Esc).";
             AvFlow p = window.Body;
 
-            string[] names = { "AIRCRAFT", "EVENTS", "WORLD", "MANUAL" };
-            AvIcon[] icons = { AvIcon.Plane, AvIcon.AlertTriangle, AvIcon.Map2, AvIcon.Bookmark };
-            var specs = new AvControl.Spec[names.Length];
-            for (int i = 0; i < names.Length; i++)
-            {
-                int target = i;
-                specs[i] = new AvControl.Spec(names[i], () => SelectSection(target), AvButtonStyle.Default, icons[i]);
-            }
-            tabs = p.Buttons(specs).Controls;
-            for (int i = 0; i < tabs.Length; i++) { tabs[i].SingleLine(); tabs[i].Help = SectionHelp[i]; }
+            header = p.Add(new LibraryHeaderPart(p.Content, compact));
+            tabs = p.Add(new ShelfTabsPart(p.Content, compact));
+            tabs.Picked = target => SelectShelf(target);
 
-            // Pane height: the body minus the tab row, the flow's top/bottom pad and the gaps.
+            // Pane height: the body minus the header band, the tab row, the flow's top/bottom pad and the gaps.
             float bodyHeight = height - TitleHeight - AvGridTokens.Footer;
-            float paneHeight = Mathf.Max(200f, bodyHeight - 2f * AvGridTokens.Pad - AvGridTokens.Tab - AvGridTokens.Gap);
+            float paneHeight = Mathf.Max(200f, bodyHeight - 2f * AvGridTokens.Pad - header.Measure(p.Inner) -
+                tabs.Measure(p.Inner) - 2f * AvGridTokens.Gap);
             panes = p.Add(new ArchivePanesPart(p.Content, window.Ticker, p.Inner, paneHeight));
 
-            // The index has no header of its own (the tab names the section, the footer counts the records), so the
-            // list takes the whole pane. Each named event already carries its explicit tier.
-            indexRows = Mathf.Clamp(Mathf.FloorToInt((paneHeight - 2f * AvGridTokens.Pad - AvGridTokens.Gap - (AvGridTokens.Row + 6f)) / 30f), 6, 40);
-            index = panes.Left.Flow.Add(new AvList(panes.Left.Content, window.Ticker, indexRows, BindIndexRow));
-            index.RowClicked = Select;
+            // The index fills its pane: heading, as many 30 px lines as fit beside the pager line, and the drawer's
+            // foot (its leaders and its label), which a compact window has no room for.
+            indexHead = panes.Left.Flow.Add(new IndexHeadPart(panes.Left.Content));
+            indexRoom = paneHeight - 2f * AvGridTokens.Pad - indexHead.Measure(0f) - 3f * AvGridTokens.Gap;
+            int lines = Mathf.Clamp(Mathf.FloorToInt((indexRoom - (AvGridTokens.Row + 6f) - (compact ? 0f : 72f)) / 32f), 4, 40);
+            index = panes.Left.Flow.Add(new AvPagedStack<ArchiveIndexRow>(panes.Left.Content, window.Ticker, lines, 2f,
+                (parent, slot) => new ArchiveIndexRow(parent, Select), BindIndexRow, "Index", 40, pagerLead: 2f,
+                startHidden: false, trailingGap: true));
+            indexFoot = panes.Left.Flow.Add(new IndexFootPart(panes.Left.Content), 1f);
+            indexFoot.Picked = Select;
+            indexFoot.SetShown(!compact);
 
-            // The dossier's poster or model view takes spare pane height.
-            detail = panes.Right.Flow.Add(new EventDetailPart(panes.Right.Content), 1f);
-            detail.Rotate = degrees => preview?.Rotate(degrees);
+            // One record part per kind of record; only the one in use is shown, and it takes the pane's spare height.
+            card = panes.Right.Flow.Add(new UnitCardPart(panes.Right.Content) { ViewHeight = paneHeight - 2f * AvGridTokens.Pad }, 1f);
+            dossier = panes.Right.Flow.Add(new EventDossierPart(panes.Right.Content), 1f);
+            volume = panes.Right.Flow.Add(new VolumePart(panes.Right.Content), 1f);
+            card.OpenRecord = Select;
+            dossier.OpenRecord = Select;
+            card.SetShown(false);
+            dossier.SetShown(false);
 
-            window.Footer.Set("LOCAL // ESC CLOSES // UP DOWN STEP");
+            window.Footer.Set("LOCAL READING ROOM  ·  ESC CLOSES");
         }
+
+        private int Count => library.Count(shelf);
 
         private void Step(int delta)
         {
             if (Count == 0) return;
             Select(((selected + delta) % Count + Count) % Count);
         }
+
+        private void StepShelf(int delta) =>
+            SelectShelf(((shelf + delta) % ArchiveShelf.Count + ArchiveShelf.Count) % ArchiveShelf.Count);
 
         private void Select(int item)
         {
@@ -190,108 +201,149 @@ namespace BoscaliSummer.Modules.Events.Presentation
             Populate();
         }
 
-        private string RowTitle(int item) => section == 0 ? aircraft[item].unitName :
-            section == 1 ? EventCatalog.All[item].Title :
-            section == 2 ? EventDocs.World[item].Title : EventDocs.Guide[item].Title;
-
-        private void BindIndexRow(int item, AvRow row)
+        private void SelectShelf(int target, int record = 0)
         {
-            bool chosen = item == selected;
-            string value = section == 0 ? aircraft[item].code ?? "" :
-                section == 1 ? EventCatalog.TierLabel(EventCatalog.All[item].Tier) :
-                AvNum.Fixed(item + 1, 0).PadLeft(2, '0');
-            AvState state = section == 1 ? EventsMfdPanel.TierState(EventCatalog.TierLabel(EventCatalog.All[item].Tier))
-                : AvState.Info;
-            row.Set(RowTitle(item).ToUpperInvariant(), "", value, state);
-            row.Armed = chosen;
-            row.Help = "Read the " + RowTitle(item).ToLowerInvariant() + " record. The up and down arrow keys step through the list.";
-        }
-
-        private int Count => section == 0 ? aircraft.Count : section == 1 ? EventCatalog.All.Length :
-            section == 2 ? EventDocs.World.Length : EventDocs.Guide.Length;
-
-        private void SelectSection(int target, int record = 0)
-        {
-            section = Mathf.Clamp(target, 0, 3);
-            for (int i = 0; i < tabs.Length; i++) tabs[i].Latched = i == section;
+            shelf = Mathf.Clamp(target, 0, ArchiveShelf.Count - 1);
+            tabs.Select(shelf);
             selected = Mathf.Clamp(record, 0, Mathf.Max(0, Count - 1));
             Populate();
         }
 
+        private EventDocEntry[] Docs => shelf == ArchiveShelf.World ? EventDocs.World : EventDocs.Guide;
+
+        private static string TierTag(EventDefinition definition) =>
+            definition.Tier == EventTier.Super ? "SUPER" : EventCatalog.TierLabel(definition.Tier);
+
+        private void BindIndexRow(int item, ArchiveIndexRow row)
+        {
+            if (shelf < ArchiveShelf.Units)
+            {
+                ArchiveRecord record = library.Card(shelf, item);
+                row.Set(item, record.Code, record.Name.ToUpperInvariant(), twoLine ? record.Brief : "",
+                    ArchiveLibrary.RoleTag(record.Role), AvState.Info, item == selected);
+            }
+            else if (shelf == ArchiveShelf.Events)
+            {
+                EventDefinition definition = EventCatalog.All[item];
+                row.Set(item, "EV-" + ArchiveUi.Two(item + 1), definition.Title.ToUpperInvariant(),
+                    twoLine ? EventCatalog.CategoryLabel(definition.Category) + "  ·  " + EventCatalog.TargetLabel(definition.Target) : "",
+                    TierTag(definition), EventsMfdPanel.TierState(EventCatalog.TierLabel(definition.Tier)), item == selected);
+            }
+            else
+                row.Set(item, (shelf == ArchiveShelf.World ? "WF-" : "FM-") + ArchiveUi.Two(item + 1),
+                    Docs[item].Title.ToUpperInvariant(), twoLine ? Docs[item].Code : "", "PAGE " + AvNum.Fixed(item + 1, 0),
+                    AvState.Info, item == selected);
+        }
+
         private void Populate()
         {
-            preview?.Dispose();
+            int count = Count;
+            string name = ArchiveShelf.Names[shelf], drawer = "DRAWER " + ArchiveUi.Two(shelf + 1);
+            bool units = shelf < ArchiveShelf.Units;
+            indexHead.Set(drawer + "  ·  " + name,
+                count > 0 ? AvNum.Fixed(count, 0) + (units ? " CARDS" : shelf == ArchiveShelf.Events ? " DOSSIERS" : " PAGES") : "—",
+                units ? "DESIG" : "FILE", units && shelf != ArchiveShelf.Aircraft ? "NAME, BY CLASS" : units ? "NAME" : "TITLE",
+                units ? "ROLE" : shelf == ArchiveShelf.Events ? "TIER" : "REF");
+            BindFoot(count);
+            index.SetCount(count);
+
+            bool showCard = units && count > 0, showDossier = shelf == ArchiveShelf.Events && count > 0;
+            card.SetShown(showCard);
+            dossier.SetShown(showDossier);
+            volume.SetShown(!showCard && !showDossier);
+            string record;
+            if (count == 0)
+            {
+                DropPreview();
+                volume.BindNotice(drawer + " / " + name, "SHELF EMPTY",
+                    "No records are held in this drawer. The library reads the game's own encyclopedia when the reading room opens, " +
+                    "and it found nothing there that it could file on this shelf.");
+                record = "NO RECORDS HELD";
+            }
+            else
+            {
+                selected = Mathf.Clamp(selected, 0, count - 1);
+                index.Reveal(selected);
+                if (showCard)
+                {
+                    // The model first: binding the card then frames it once, at the plate's new shape.
+                    ArchiveRecord unit = library.Card(shelf, selected);
+                    bool hasModel = false;
+                    try
+                    {
+                        if (preview == null) preview = new EventAircraftPreview(card.ModelView);
+                        hasModel = preview.Load(unit.Prefab);
+                    }
+                    catch (Exception) { DisposePreview(); }
+                    card.SetPreview(preview, hasModel);
+                    card.Bind(library, shelf, selected);
+                    record = unit.Name.ToUpperInvariant();
+                }
+                else if (showDossier)
+                {
+                    DropPreview();
+                    dossier.Bind(EventCatalog.All[selected], selected);
+                    record = EventCatalog.All[selected].Title.ToUpperInvariant();
+                }
+                else
+                {
+                    DropPreview();
+                    volume.Bind(name, Docs, selected);
+                    record = Docs[selected].Title.ToUpperInvariant();
+                }
+            }
+
+            // Lay the panes out now, so a volume can be scrolled to the entry that was picked.
+            panes.Relayout();
+            if (!showCard && !showDossier && count > 0) panes.Right.ScrollTo(volume.SectionTop(selected));
+            else panes.Right.ScrollToTop();
+            window.Footer.Set(drawer + " " + name + "  ·  " +
+                (count > 0 ? ArchiveUi.Two(selected + 1) + " OF " + ArchiveUi.Two(count) + "  ·  " : "") + record +
+                "\nESC CLOSES  ·  UP DOWN STEP THE INDEX  ·  LEFT RIGHT CHANGE DRAWER");
+        }
+
+        /// <summary>
+        /// The foot of the index. A unit drawer short enough to leave the room, and filed under codes that each
+        /// name one card, lists the card that leads the shelf in each figure; any drawer short enough for it
+        /// gives each index line a second line of filing detail.
+        /// </summary>
+        private void BindFoot(int count)
+        {
+            float width = panes.Left.Flow.Inner;
+            bool units = shelf < ArchiveShelf.Units && count > 0 && library.DistinctCodes(shelf);
+            for (int pass = units ? 0 : 1; pass < 2; pass++)
+            {
+                indexFoot.Begin("SHELF LEADERS  ·  LARGEST ON THIS SHELF", ArchiveShelf.Help[shelf]);
+                if (pass == 0)
+                    for (int figure = 0; figure < library.Figures(shelf); figure++)
+                    {
+                        int leader = library.Leader(shelf, figure);
+                        if (leader < 0) continue;
+                        ArchiveRecord record = library.Card(shelf, leader);
+                        ArchiveFigure f = record.Figures[figure];
+                        indexFoot.Add(f.Label, record.Code, f.Unit.Length > 0 ? f.Text + " " + f.Unit : f.Text, leader,
+                            "Open the " + record.Name.ToLowerInvariant() + " record: it leads this shelf in " + f.Label.ToLowerInvariant() + ".");
+                    }
+                indexFoot.End();
+                // The leaders stay only if the whole drawer and its foot fit the pane without scrolling.
+                if (pass == 1 || count * 32f + indexFoot.Measure(width) <= indexRoom) break;
+            }
+            twoLine = indexFoot.Shown && count * 48f + indexFoot.Measure(width) <= indexRoom;
+        }
+
+        /// <summary>Releases the model viewer and tells the card its plate is empty.</summary>
+        private void DropPreview()
+        {
+            DisposePreview();
+            card.SetPreview(null, false);
+        }
+
+        /// <summary>Releases the viewer's camera, light and render target (also on close, when the card may be gone).</summary>
+        private void DisposePreview()
+        {
+            if (preview == null) return;
+            preview.Dispose();
             preview = null;
-            window.Footer.Set(SectionNames[section] + " // " + AvNum.Fixed(Count, 0) + " RECORDS // ESC CLOSES // UP DOWN STEP");
-            index.SetCount(Count);
-            if (Count == 0)
-            {
-                detail.ShowEmpty(section == 0 ? "AIRCRAFT INDEX UNAVAILABLE" : "NO RECORDS",
-                    "ENCYCLOPEDIA NOT LOADED");
-                panes.Right.ScrollToTop();
-                return;
-            }
-            selected = Mathf.Clamp(selected, 0, Count - 1);
-            index.Reveal(selected);
-            if (section == 0) AircraftDetail(aircraft[selected]);
-            else if (section == 1) EventDetail(EventCatalog.All[selected]);
-            else DocDetail(section == 2 ? EventDocs.World[selected] : EventDocs.Guide[selected]);
-            panes.Right.ScrollToTop();
         }
-
-        private void AircraftDetail(AircraftDefinition definition)
-        {
-            var info = definition.aircraftInfo;
-            var figures = new List<DetailFigure>(3);
-            if (info != null)
-            {
-                figures.Add(new DetailFigure("MAX SPEED", AvNum.Fixed(info.maxSpeed, 0) + " M/S"));
-                figures.Add(new DetailFigure("STALL SPEED", AvNum.Fixed(info.stallSpeed, 0) + " M/S"));
-                figures.Add(new DetailFigure("EMPTY WEIGHT", AvNum.Thousands(info.emptyWeight) + " KG"));
-            }
-            RawImage output = detail.ShowAircraft("NATIVE AIRCRAFT / " + (definition.code ?? ""),
-                definition.unitName.ToUpperInvariant(), figures,
-                definition.description ?? "No briefing is recorded for this aircraft.",
-                info == null ? "Performance file unavailable." : null);
-            bool hasModel = false;
-            try { preview = new EventAircraftPreview(output); hasModel = preview.Load(definition); }
-            catch (Exception) { preview?.Dispose(); preview = null; }
-            detail.SetPreviewAvailable(hasModel);
-        }
-
-        private void EventDetail(EventDefinition definition)
-        {
-            var figures = new List<DetailFigure>(6)
-            {
-                new DetailFigure("SUPPORT PRICE", "x" + AvNum.Fixed(definition.SupportCostMultiplier, 2),
-                    definition.SupportCostMultiplier < 0.999f ? "COST DOWN" : definition.SupportCostMultiplier > 1.001f ? "COST UP" : "UNCHANGED",
-                    definition.SupportCostMultiplier < 0.999f ? AvState.Ready : definition.SupportCostMultiplier > 1.001f ? AvState.Caution : AvState.Inert),
-                new DetailFigure("RESET CLOCK", "x" + AvNum.Fixed(definition.SupportCooldownMultiplier, 2),
-                    definition.SupportCooldownMultiplier < 0.999f ? "FASTER" : definition.SupportCooldownMultiplier > 1.001f ? "SLOWER" : "UNCHANGED",
-                    definition.SupportCooldownMultiplier < 0.999f ? AvState.Ready : definition.SupportCooldownMultiplier > 1.001f ? AvState.Caution : AvState.Inert),
-                new DetailFigure("WINDOW", AvNum.Fixed(definition.DurationMinSeconds / 60, 0) + "–" +
-                    AvNum.Fixed(definition.DurationMaxSeconds / 60, 0) + " MIN"),
-                new DetailFigure("TIER", EventCatalog.TierLabel(definition.Tier),
-                    null, EventsMfdPanel.TierState(EventCatalog.TierLabel(definition.Tier))),
-                new DetailFigure("TARGET", EventCatalog.TargetLabel(definition.Target)),
-                new DetailFigure("STORY", EventCatalog.CategoryLabel(definition.Category)),
-            };
-            string orders = null;
-            if (definition.Script.Length > 0)
-            {
-                var lines = new string[definition.Script.Length];
-                for (int i = 0; i < lines.Length; i++)
-                    lines[i] = "T+" + AvNum.Clock(definition.Script[i].AtSeconds) + "  " + definition.Script[i].Label;
-                orders = string.Join("\n", lines);
-            }
-            Sprite art = EventArtCache.Get(definition.IconKey, definition.IsSuper ? "tier_super" : "tier_medium");
-            detail.ShowEvent("CATALOG / " + EventCatalog.TierLabel(definition.Tier) + " / " +
-                EventCatalog.CategoryLabel(definition.Category) + " · " + EventCatalog.TargetLabel(definition.Target),
-                definition.Title.ToUpperInvariant(), art, EventsMfdPanel.CategoryIcon(EventCatalog.CategoryLabel(definition.Category)),
-                figures, "Authored effects at standard strength; the live dispatch applies the host's effect setting.\n\n" + definition.FlavorText, orders);
-        }
-
-        private void DocDetail(EventDocEntry entry) =>
-            detail.ShowDoc(entry.Code, entry.Title.ToUpperInvariant(), entry.Body);
     }
 }

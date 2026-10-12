@@ -41,8 +41,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 "A teammate can issue a faction directive after another pilot has made a personal choice. Both effects can benefit that pilot, subject to the support-price floor. A faction order is mirrored to late joiners; personal replies go to the pilot who sent them. The archive itself never sends an order."),
             new EventDocEntry("FIELD MANUAL / 04", "THE EVENT LOG",
                 "The log is a bounded local record of completed events in this mission. It is newest first and is not backfilled for a pilot who joins late. A fresh scene clears it. The dossier library is different: it describes authored theater scenarios and can be read even while the director is quiet."),
-            new EventDocEntry("FIELD MANUAL / 05", "AIRFRAME REGISTRY",
-                "The aircraft shelf reads the game's loaded encyclopedia. Names, descriptions and performance figures come from native definitions; the rotating object is a local render-mesh copy of the selected prefab. It has no flight logic, network identity or collision. The viewer renders only when you change the selection or viewing angle."),
+            new EventDocEntry("FIELD MANUAL / 05", "RECOGNITION CARDS",
+                "The five card shelves read the game's loaded encyclopedia when the reading room opens. Names, notes and figures come from native definitions. A bar sets each figure against the largest on the same shelf, and a dash means the definition does not establish it. The plate is a local render-mesh copy of the selected prefab, drawn to scale; it has no flight logic, network identity or collision, and it is redrawn only when you change the selection or the view."),
         };
     }
 }

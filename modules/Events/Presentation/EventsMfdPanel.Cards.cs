@@ -17,7 +17,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
     ///
     /// <para><see cref="EventHeroPart"/> is the live dispatch: the poster with its tier tag, the event name, one
     /// effect line, the plain-words consequence and the scripted beats (the countdown is the LEFT metric tile).
-    /// It has a calm standby banner for a quiet theater that grows into spare page height. Every state it can show (ENDING, a scripted beat
+    /// A quiet theater shows one standby row instead, and leaves the rest of the page to the bay cover and its
+    /// standing orders. Every state it can show (ENDING, a scripted beat
     /// firing, a cancelled beat) carries a word as well as a colour (R1). <see cref="EventCaseFilePart"/>
     /// is the same poster-plus-copy shape, sized for the DESK page's current-or-last case file.</para>
     ///
@@ -136,8 +137,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
         /// The active dispatch, the page's hero. Active: a full-width, uncropped poster with
         /// a fade over its bottom fifth; below it, category, target, title, effect, consequence and
         /// (for a scripted superevent) the beat log. The countdown and its bar live in the LEFT metric tile, and
-        /// the price numbers in COST / RESET, so nothing is said twice. Calm: a designed standby banner (stripe
-        /// plate, large radar mark) that takes the page's spare height, never an empty box.
+        /// the price numbers in COST / RESET, so nothing is said twice. Calm: one standby row (stripe plate,
+        /// radar mark, what the director is doing), never an empty box.
         /// </summary>
         private sealed class EventHeroPart : AvPart
         {
@@ -179,11 +180,10 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 Restyle();
             }
 
-            /// <summary>Show the calm standby banner or the full active card. Only the calm banner grows.</summary>
+            /// <summary>Show the calm standby row or the full active card.</summary>
             private void ApplyMode(bool isCalm)
             {
                 calm = isCalm;
-                Grow = isCalm ? 1f : 0f;
                 tagBack.gameObject.SetActive(!isCalm);
                 kicker.gameObject.SetActive(!isCalm);
                 effectLine.gameObject.SetActive(!isCalm);
@@ -221,7 +221,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 title.text = "THEATER QUIET";
                 consequence.text = note ?? "";
                 AvHelpTip.Attach(frame.gameObject,
-                    "THEATER QUIET: no world event is running. The director rolls the next one from the theater's ground balance; the rings below show how close it is to escalating.");
+                    "THEATER QUIET: no dispatch is running. The director rolls the next one from the theater's ground balance; the rings below show how close it is to escalating.");
                 Restyle();
                 Changed();
             }
@@ -291,22 +291,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
                     float ch = consequence.text.Length > 0 ? AvText.Height(consequence, textW) : 0f;
                     float block = th + (ch > 0f ? 4f + ch : 0f);
                     float total = 12f + Mathf.Max(CalmPlate, block) + 12f;
-                    if (place && slotHeight > total + 40f)
-                    {
-                        // Spare height: a full-width standby banner with the words underneath it.
-                        float fth = AvText.Height(title, w);
-                        float fch = consequence.text.Length > 0 ? AvText.Height(consequence, w) : 0f;
-                        float below = fth + (fch > 0f ? 4f + fch : 0f);
-                        float plateH = Mathf.Max(CalmPlate, slotHeight - 24f - below - 10f);
-                        AvLay.Place(rail.rectTransform, 0f, 0f, 3f, slotHeight);
-                        AvLay.Place(plate.Root, x, y, w, plateH);
-                        plate.MarkScale = Mathf.Clamp(plateH / 90f, 1f, 3f);
-                        plate.Layout(w, plateH);
-                        float by = y + plateH + 10f;
-                        AvLay.Place(title.rectTransform, x, by, w, fth);
-                        AvLay.Place(consequence.rectTransform, x, by + fth + 4f, w, fch);
-                        return total;
-                    }
                     if (place)
                     {
                         AvLay.Place(rail.rectTransform, 0f, 0f, 3f, total);
@@ -389,8 +373,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
         /// <summary>
         /// The DESK page's current-or-last case file. Natural size: a small poster beside title and meta, the body
-        /// underneath. Given spare height it becomes a poster card: the poster on top grows and the words sit
-        /// under it, centred in whatever is left.
+        /// underneath. Given spare height (the page grows it only while a case is on file) it becomes a poster
+        /// card: the poster on top grows and the words sit under it, centred in whatever is left.
         /// </summary>
         private sealed class EventCaseFilePart : AvPart
         {

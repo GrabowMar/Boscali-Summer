@@ -7,34 +7,34 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Events.Presentation
 {
     /// <summary>
-    /// The DESK tile and the EVENT LOG timeline. Both are module-local kit parts: they measure from their
+    /// The DESK drawer tile and the EVENT LOG timeline. Both are module-local kit parts: they measure from their
     /// real content through one arrangement routine and call <see cref="AvPart.Changed"/> when text that
     /// can move their height changes.
     /// </summary>
     internal sealed partial class EventsMfdPanel
     {
         /// <summary>
-        /// A clickable archive door, four to a row: the section glyph, its name and its record count stacked in a
-        /// narrow tile. What is inside rides on the hover help.
+        /// A drawer of the field archive, four to a row: the shelf glyph and name over the drawer number and the
+        /// real number of records it holds (a dash while it holds none). What is inside rides on the hover help.
         /// </summary>
         private sealed class ArchiveTilePart : AvPart
         {
             private readonly AvFrame frame;
             private readonly Image rail;
-            private readonly TMP_Text glyph, title, count;
+            private readonly TMP_Text glyph, title, drawer, count;
             private bool hover;
 
-            public ArchiveTilePart(RectTransform parent, AvIcon icon, string titleText, Action onClick)
+            public ArchiveTilePart(RectTransform parent, AvIcon icon, string titleText, string drawerText, Action onClick)
             {
                 Rect = AvLay.Child(parent, "Tile " + titleText);
-                frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(6f));
+                frame = AvFrame.Add(Rect, "Frame", new AvChamfer { TL = 6f, TR = 6f });
                 AvLay.Fill(frame.rectTransform);
                 rail = AvLay.Solid(Rect, "Rail", Color.clear);
-                glyph = AvIcons.Make(Rect, icon, AvGridTokens.IconTool, Color.white);
+                glyph = AvIcons.Make(Rect, icon, AvGridTokens.IconHead, Color.white);
                 title = AvText.Make(Rect, "Title", AvTextRole.Head, titleText, TextAlignmentOptions.MidlineLeft);
                 AvText.Fit(title, false);
-                count = AvText.Make(Rect, "Count", AvTextRole.Micro, "", TextAlignmentOptions.MidlineLeft);
-                AvText.Fit(count, false);
+                drawer = AvText.Make(Rect, "Drawer", AvTextRole.Micro, drawerText, TextAlignmentOptions.MidlineLeft);
+                count = AvText.Make(Rect, "Count", AvTextRole.DataSmall, "—", TextAlignmentOptions.MidlineRight);
                 AvHit hit = AvHit.On(frame);
                 hit.Hover = h => { hover = h; Restyle(); };
                 hit.Click = e => onClick?.Invoke();
@@ -43,21 +43,22 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
             public string Help { set => AvHelpTip.Attach(frame.gameObject, value); }
 
-            public void SetCount(string text)
+            public void SetCount(int records)
             {
-                if (count.text == text) return;
-                count.text = text ?? "";
+                string text = records > 0 ? AvNum.Fixed(records, 0) : "—";
+                if (count.text != text) count.text = text;
             }
 
-            public override float Measure(float width) => 78f;
+            public override float Measure(float width) => 46f;
 
             public override void Place(AvSlot s)
             {
                 base.Place(s);
-                AvLay.Place(rail.rectTransform, 0f, 0f, 2f, s.H);
-                AvLay.Place(glyph.rectTransform, 10f, 8f, 22f, 22f);
-                AvLay.Place(title.rectTransform, 10f, 32f, s.W - 16f, 20f);
-                AvLay.Place(count.rectTransform, 10f, 52f, s.W - 16f, 16f);
+                AvLay.Place(rail.rectTransform, 6f, 0f, s.W - 12f, 2f);
+                AvLay.Place(glyph.rectTransform, 8f, 6f, 16f, 16f);
+                AvLay.Place(title.rectTransform, 28f, 4f, s.W - 34f, 20f);
+                AvLay.Place(drawer.rectTransform, 8f, 25f, 52f, 16f);
+                AvLay.Place(count.rectTransform, s.W - 8f - 44f, 25f, 44f, 16f);
             }
 
             public override void Restyle()
@@ -67,7 +68,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 rail.color = AvStyleHost.FuiColor(hover ? "select" : "info", AvTheme.RailInfo);
                 glyph.color = AvStyleHost.FuiColor("key", AvTheme.RailInfo);
                 title.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
-                count.color = AvStyleHost.FuiColor("key", AvTheme.RailInfo);
+                drawer.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
+                count.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
             }
         }
 
