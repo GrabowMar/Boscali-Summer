@@ -33,7 +33,7 @@ public static class StrUnityCheck
     private static readonly float[] Heights = { 596f, 896f, 1500f };
     private static readonly string[] PageNames = { "board", "sitrep", "log" };
 
-    private static int captures, fixturesRendered;
+    private static int captures, fixturesRendered, pressesChecked;
     private static readonly List<string> Notes = new List<string>();
 
     public static void Run() => Execute(false);
@@ -70,6 +70,7 @@ public static class StrUnityCheck
                 foreach (float height in Heights)
                     RenderFixture(fixture, height, spec);
             EmptyStatesDiffer();
+            PressesReachTheVerbs();
             EffortInk(spec);
 
             if (PanelGate.Failures.Count > 0)
@@ -81,7 +82,7 @@ public static class StrUnityCheck
 
             var report = new StringBuilder();
             report.AppendLine("PASS: the real STR Station Board rendered offline on kit v2 for " + fixturesRendered + " fixture x height builds; gate clean (" + PanelGate.CheckedTexts +
-                " texts checked: no overflow, no 11px-floor breach, no gutter entry, contrast >= 4.5, no part or text overlap, honest unknowns, every glyph in the font, every id resolves and every disabled control says why, fold at " + spec.foldLine + ", mockup spec, effort ink).");
+                " texts checked: no overflow, no 11px-floor breach, no gutter entry, contrast >= 4.5, no part or text overlap, honest unknowns, every glyph in the font, every id resolves and every disabled control says why, " + pressesChecked + " presses by id reach the verb their button stands for, fold at " + spec.foldLine + ", mockup spec, effort ink).");
             report.AppendLine(captures + " captures at 480 wide: BOARD at 596, 896 and 1500 for all " + StrFixtures.Names.Length + " fixtures, SITREP and LOG at 896.");
             report.AppendLine("Content is bound after Finish() through the harness hub (the real builder over StrFixtures feeds) and advanced with Ticker.TickNow(), as the game does.");
             report.AppendLine("Renders (path | bytes | note):");
@@ -293,6 +294,55 @@ public static class StrUnityCheck
         else seen[key] = state;
     }
 
+    /// <summary>
+    /// The click path minus the pointer, end to end: a press by id goes through the panel's registry, the real gate and runner, and reaches the verb the button
+    /// stands for (the fake records it); a refused press reaches none. The pointer half is the in-game Probe and the owner's click-through.
+    /// </summary>
+    private static void PressesReachTheVerbs()
+    {
+        Built p = Build("proposals", 896f);
+        ExpectVerb(p, "prop.2.pick", "pick ");
+        ExpectVerb(p, "posture.bold", "posture Bold");
+        Object.DestroyImmediate(p.Canvas);
+
+        Built r = Build("rich", 896f);
+        ExpectVerb(r, "sortie.2.accept", "accept ");
+        ExpectVerb(r, "sortie.1.wing", "wing ");
+        ExpectVerb(r, "front.1.redirect", "pick ");
+        ExpectVerb(r, "replan", null);               // the first press only arms
+        ExpectVerb(r, "replan", "cancel ");          // the second inside the window calls the operation off
+        Object.DestroyImmediate(r.Canvas);
+
+        Built t = Build("wing-tasked", 896f);
+        int tasked = -1;
+        for (int i = 0; i < t.Hub.Current.SortieCount; i++)
+        {
+            StrSortieRow row = t.Hub.Current.Sorties[i];
+            if (row.HasWing && (row.WingState == WingSortieState.Tasked || row.WingState == WingSortieState.OnStation)) tasked = i;
+        }
+        if (tasked < 0) PanelGate.Fail("press", "the wing-tasked fixture has no tasked sortie");
+        else ExpectVerb(t, StrControlIds.Sortie(tasked + 1, "wing"), "recall");
+        Object.DestroyImmediate(t.Canvas);
+
+        Built c = Build("client", 896f);
+        c.Hub.Sent.Clear();
+        StrControls.PressResult refused = c.Panel.Controls.Press("sortie.1.wing");
+        if (refused.Ok || c.Hub.Sent.Count != 0 || refused.Act.Why != StrWhy.HostOnly)
+            PanelGate.Fail("press", "a client's SEND WING must be refused with HostOnly and reach no verb: ok=" + refused.Ok + " why=" + refused.Act.Why + " sent=[" + string.Join(", ", c.Hub.Sent) + "]");
+        Object.DestroyImmediate(c.Canvas);
+    }
+
+    /// <summary>Presses <paramref name="id"/>; the fake must have recorded exactly one verb starting with <paramref name="verb"/>, or none when it is null.</summary>
+    private static void ExpectVerb(Built b, string id, string verb)
+    {
+        b.Hub.Sent.Clear();
+        pressesChecked++;
+        StrControls.PressResult res = b.Panel.Controls.Press(id);
+        bool right = verb == null ? b.Hub.Sent.Count == 0 : b.Hub.Sent.Count == 1 && b.Hub.Sent[0].StartsWith(verb, StringComparison.Ordinal);
+        if (!res.Ok || !right)
+            PanelGate.Fail("press " + id, "expected " + (verb == null ? "no verb (armed only)" : "one '" + verb.Trim() + "' verb") + ", got ok=" + res.Ok + " why=" + res.Act.Why + " '" + res.Act.Text + "' sent=[" + string.Join(", ", b.Hub.Sent) + "]");
+    }
+
     /// <summary>The effort amber within dE76 of the mockup's, as the sheet defines it and as the render shows it on the slab.</summary>
     private static void EffortInk(SpecFile spec)
     {
@@ -375,8 +425,13 @@ public static class StrUnityCheck
         GatePage(b, "selftest@596/board", 0);
         SpecPage(b, "rich", 0, 596f, "selftest@596/board", spec);
         Object.DestroyImmediate(b.Canvas);
+        // The wrong verb: a pick press that is expected to reach a recall must be reported.
+        Built q = Build("proposals", 596f);
+        ExpectVerb(q, "prop.2.pick", "recall");
+        Object.DestroyImmediate(q.Canvas);
         bool overflow = PanelGate.Failures.Exists(f => f.Contains("overflows width")), missing = PanelGate.Failures.Exists(f => f.Contains("missing id"));
-        File.WriteAllText("result.txt", "FAIL: self-test: the gate reported " + PanelGate.Failures.Count + " failure(s), overflow detected=" + overflow + ", missing id detected=" + missing + "\n" + string.Join("\n", PanelGate.Failures));
+        bool wrongVerb = PanelGate.Failures.Exists(f => f.StartsWith("press prop.2.pick: expected one 'recall' verb", StringComparison.Ordinal));
+        File.WriteAllText("result.txt", "FAIL: self-test: the gate reported " + PanelGate.Failures.Count + " failure(s), overflow detected=" + overflow + ", missing id detected=" + missing + ", wrong verb detected=" + wrongVerb + "\n" + string.Join("\n", PanelGate.Failures));
         EditorApplication.Exit(1);
     }
 

@@ -183,8 +183,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
             Add(p, new StrPostureRow(p.Content, Controls, hub, false));
             Add(p, new StrHeroLane(p.Content, Controls, hub));
             for (int i = 0; i < StrViewModel.MaxProposals; i++) Add(p, new StrProposalTicket(p.Content, Controls, hub, i));
-            otherSection = p.Section(AvIcon.Map2, "OTHER PLATFORMS", "NOTCH = HOSTILE SHARE NEARBY");
-            allSection = p.Section(AvIcon.Map2, "PLATFORMS", "NOTCH = HOSTILE SHARE NEARBY");
+            otherSection = p.Section(AvIcon.Map2, "OTHER PLATFORMS", StrPanelText.NotchCaption);
+            allSection = p.Section(AvIcon.Map2, "PLATFORMS", StrPanelText.NotchCaption);
             for (int i = 0; i < MaxLanes; i++) lanes[i] = Add(p, new StrFrontLane(p.Content, Controls, hub, i));
             Add(p, new StrPostureRow(p.Content, Controls, hub, true));
         }
@@ -250,6 +250,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
             bool other = shown > 0 && plan.LaneTitle == "OTHER PLATFORMS";
             otherSection.SetShown(other);
             allSection.SetShown(shown > 0 && !other);
+            string laneCaption = StrPanelText.LaneCaption(vm);
+            otherSection.SetCaption(laneCaption);
+            allSection.SetCaption(laneCaption);
             sortieSection.SetCaption(vm.SortieBoardCaption);
         }
 
@@ -268,8 +271,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private void BindSensors(StrViewModel vm)
         {
             string front = vm.FrontText ?? StrWords.Dash;
-            int dot = front.IndexOf(StrWords.Dot, StringComparison.Ordinal);
-            string frontValue = dot < 0 ? front : front.Substring(0, dot), frontRest = dot < 0 ? "" : front.Substring(dot + StrWords.Dot.Length);
+            string frontValue = StrPanelText.FrontLength(front), frontRest = front.Length > frontValue.Length ? front.Substring(frontValue.Length + StrWords.Dot.Length) : "";
             sensors[0].Set("RADARS", "FRIENDLY RADARS ONLINE", vm.RadarsText, vm.RadarsText == StrWords.Dash ? AvState.Inert : AvState.Info);
             sensors[1].Set("KNOWN AD", "ENEMY AIR DEFENCE YOUR SIDE KNOWS ABOUT. INTEL MAY BE INCOMPLETE", vm.KnownAdText, vm.KnownAdText == "NOT AVAILABLE" ? AvState.Inert : AvState.Info);
             sensors[2].Set("FRONT", frontRest.Length > 0 ? "THE FRONT LINE" + StrWords.Dot + frontRest : "THE FRONT LINE", frontValue, frontValue == StrWords.Dash ? AvState.Inert : AvState.Info);

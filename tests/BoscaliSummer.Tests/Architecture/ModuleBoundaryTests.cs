@@ -61,6 +61,27 @@ namespace BoscaliSummer.Tests.Architecture
 
             VerifyKitIsolation(sourceRoot);
             VerifyMigratedConsoles(sourceRoot, MigratedConsoleFolders);
+            VerifyStrPanelNamesNoMapType(sourceRoot);
+        }
+
+        private static readonly Regex MapTypes = new Regex(
+            @"\b(DynamicMap|MfdTerrainRelief|ReliefNavigator|MapUiPointer|MapFocus)\b", RegexOptions.CultureInvariant);
+
+        /// <summary>
+        /// The Station Board panel binds IStrHub and is compiled alone by its offline harness (annex 05 P12), which carries no map stub: nothing of the panel half
+        /// may name a map type, or the harness stops compiling. The overlay and the hub live elsewhere and may.
+        /// </summary>
+        internal static void VerifyStrPanelNamesNoMapType(string sourceRoot)
+        {
+            string presentation = Path.Combine(sourceRoot, "modules", "Command", "Presentation");
+            string[] files = Directory.GetFiles(Path.Combine(presentation, "Str"), "*.cs").Concat(new[] { Path.Combine(presentation, "StrMfdPanel.cs") }).ToArray();
+            TestAssert.That(files.Length >= 8, "the STR panel half is missing its sources");
+            foreach (string file in files)
+            {
+                string code = string.Join("\n", File.ReadAllLines(file).Where(l => !l.TrimStart().StartsWith("//")));
+                Match m = MapTypes.Match(code);
+                TestAssert.That(!m.Success, Relative(sourceRoot, file) + " is the STR panel half but names the map type '" + m.Value + "'");
+            }
         }
 
         // ------------------------------------------------------------------ kit v2 (FUI program)

@@ -43,10 +43,10 @@ Write-Output "Results and renders: $PreviewDirectory"
 Show-UnityCheckResult $PreviewDirectory -LogTail 80
 if ($SelfTest) {
     $result = if (Test-Path -LiteralPath "$PreviewDirectory/result.txt") { Get-Content -LiteralPath "$PreviewDirectory/result.txt" -Raw } else { '' }
-    if ($result -notmatch '\AFAIL: self-test' -or $result -notmatch 'overflow detected=True' -or $result -notmatch 'missing id detected=True') {
-        throw "Self-test: the gate did not fail on both injected faults, so it cannot be trusted: $PreviewDirectory"
+    if ($result -notmatch '\AFAIL: self-test' -or $result -notmatch 'overflow detected=True' -or $result -notmatch 'missing id detected=True' -or $result -notmatch 'wrong verb detected=True') {
+        throw "Self-test: the gate did not fail on all three injected faults, so it cannot be trusted: $PreviewDirectory"
     }
-    Write-Output 'SELFTEST OK: the gate failed on the oversized string and on the missing id.'
+    Write-Output 'SELFTEST OK: the gate failed on the oversized string, on the missing id and on the wrong verb.'
     return
 }
 Assert-UnityResult $PreviewDirectory $process -ExitMessage "Unity STR panel check failed: $($process.ExitCode)" -FailMessage "Unity exited without a successful result: $PreviewDirectory"

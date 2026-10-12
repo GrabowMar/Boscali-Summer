@@ -84,6 +84,24 @@ namespace BoscaliSummer.Modules.Command.Domain
             }
         }
 
+        /// <summary>What the notch of a platform lane means; the section header carries it.</summary>
+        public const string NotchCaption = "NOTCH = HOSTILE SHARE NEARBY";
+
+        /// <summary>The length of the front out of the sensors text ("14.2 KM · 5 PLATFORMS"): its first part, or a dash when the census measured none.</summary>
+        public static string FrontLength(string frontText)
+        {
+            if (string.IsNullOrEmpty(frontText)) return StrWords.Dash;
+            int dot = frontText.IndexOf(StrWords.Dot, StringComparison.Ordinal);
+            return dot < 0 ? frontText : frontText.Substring(0, dot);
+        }
+
+        /// <summary>Right caption of the platform section (spec 7 row 8): the notch key and, when the census measured one, "FRONT 14.2 KM". Nothing about a front that was not measured.</summary>
+        public static string LaneCaption(StrViewModel vm)
+        {
+            string length = FrontLength(vm?.FrontText);
+            return length == StrWords.Dash ? NotchCaption : NotchCaption + StrWords.Dot + "FRONT " + length;
+        }
+
         /// <summary>REPLAN until the first press arms it, then the platform it will call off.</summary>
         public static string ReplanLabel(StrViewModel vm)
         {

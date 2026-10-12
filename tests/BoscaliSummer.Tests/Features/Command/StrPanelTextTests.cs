@@ -22,6 +22,7 @@ namespace BoscaliSummer.Tests.Features.Command
             TheTicketReasonIsTheOneThatMatters();
             TheProposalPlateSplitsItsPrice();
             TheLogNoteNamesItsCause();
+            ThePlatformCaptionCarriesTheMeasuredFrontOnly();
             ControlIdsFollowTheGrammar();
             TheBannerInkSeparatesAPickFromAnOutage();
             ItemIdsResolveAgainstTheModel();
@@ -154,10 +155,22 @@ namespace BoscaliSummer.Tests.Features.Command
                 StrViewModel vm = StrFixtures.Model(name);
                 StrPanelText.LogNote(vm, out string title, out string detail);
                 TestAssert.That(title.Length >= 8 && detail.Length >= 12, name + " explains why there is no log");
-                TestAssert.That(detail.Contains(vm.Banner.Head.Substring(0, Math.Min(8, vm.Banner.Head.Length))) || detail.Length > 20, name + " names the cause: " + detail);
+                TestAssert.That(vm.Banner.Head.Length >= 8 && detail.Contains(vm.Banner.Head), name + " names the cause: " + detail);
             }
             StrPanelText.LogNote(StrFixtures.Model("assessing"), out string t2, out string d2);
             TestAssert.That(t2.Length >= 8 && d2.Length >= 12, "an assessing board with an empty log says the staff has not written yet");
+        }
+
+        private static void ThePlatformCaptionCarriesTheMeasuredFrontOnly()
+        {
+            StrViewModel rich = StrFixtures.Model("rich");
+            string length = StrPanelText.FrontLength(rich.FrontText), caption = StrPanelText.LaneCaption(rich);
+            TestAssert.That(length != Dash && length.EndsWith("KM"), "the rich census measured a front: " + rich.FrontText);
+            TestAssert.That(caption == StrPanelText.NotchCaption + StrWords.Dot + "FRONT " + length, "a measured front rides on the platform header (spec 7 row 8): " + caption);
+            foreach (string name in new[] { "unknown", "waiting", "hostlacks", "noanswer", "nofaction" })
+                TestAssert.That(StrPanelText.LaneCaption(StrFixtures.Model(name)) == StrPanelText.NotchCaption, name + " measured no front, so its header names none");
+            TestAssert.That(StrPanelText.FrontLength("14.2 KM" + StrWords.Dot + "5 PLATFORMS") == "14.2 KM" && StrPanelText.FrontLength("14.2 KM") == "14.2 KM", "the length is the first part of the sensors text");
+            TestAssert.That(StrPanelText.FrontLength(null) == Dash && StrPanelText.FrontLength("") == Dash && StrPanelText.LaneCaption(null) == StrPanelText.NotchCaption, "nothing to read is a dash and no caption claim");
         }
 
         private static void ControlIdsFollowTheGrammar()
