@@ -195,7 +195,9 @@ def census_checks(known_at, late, apron):
 
 
 def war_tc():
-    me, foe = "Boscali", "Primeva"
+    # The seat joins Primeva: its ground has carriers on every front the deck offers, so a pilot pick, the lock-out and the redirect always find a card the host accepts
+    # (Boscali's cards in Terminal Control lose their carriers once artillery and rearm trucks stop counting as ground that can carry an order).
+    me, foe = "Primeva", "Boscali"
     pick = lambda store, card: call(WAR + "Command", store, faction=me, verb="pick", card=card)
     ops = [
         {"op": "seat", "id": "player", "faction": me, "near": [50000, 15000], "altitude": 9000, "speed": 200, "heading": 0},
@@ -233,7 +235,7 @@ def war_tc():
         checks += within("r2" + k + ".staffPickedAt", 0, 90)                                # the staff picks for an operator who ignores it
         checks += [above("r2" + k + ".staffPicks", 1)]
         checks += [below("r10" + k + ".faults", 0), above("r10" + k + ".healthy", 1), below("r10" + k + ".check.trendWrites", 0)]
-    k = ".war.boscali"
+    k = ".war." + me.lower()
     checks += [
         equals("p1.code", "Accepted"),
         above("r3" + k + ".pilotPicks", 1), below("r3" + k + ".staffOverrides", 0),

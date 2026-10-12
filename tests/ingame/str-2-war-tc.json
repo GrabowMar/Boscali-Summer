@@ -19,7 +19,7 @@
     {
       "op": "seat",
       "id": "player",
-      "faction": "Boscali",
+      "faction": "Primeva",
       "near": [
         50000,
         15000
@@ -80,7 +80,7 @@
       "op": "call",
       "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Command",
       "args": {
-        "faction": "Boscali",
+        "faction": "Primeva",
         "verb": "pick",
         "card": 0
       },
@@ -96,7 +96,7 @@
       "op": "call",
       "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Command",
       "args": {
-        "faction": "Boscali",
+        "faction": "Primeva",
         "verb": "pick",
         "card": 0,
         "actor": 777
@@ -107,7 +107,7 @@
       "op": "call",
       "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Command",
       "args": {
-        "faction": "Boscali",
+        "faction": "Primeva",
         "verb": "pick",
         "card": 0
       },
@@ -127,7 +127,7 @@
       "op": "call",
       "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Command",
       "args": {
-        "faction": "Boscali",
+        "faction": "Primeva",
         "verb": "calloff"
       },
       "store": "co"
@@ -152,7 +152,7 @@
       "op": "call",
       "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Track",
       "args": {
-        "faction": "Boscali",
+        "faction": "Primeva",
         "seconds": 40
       },
       "store": "t1"
@@ -221,71 +221,6 @@
     },
     {
       "check": "result_above",
-      "path": "r1.war.boscali.firstDeckAt",
-      "min": 0
-    },
-    {
-      "check": "result_below",
-      "path": "r1.war.boscali.firstDeckAt",
-      "max": 30
-    },
-    {
-      "check": "result_above",
-      "path": "r1.war.boscali.frontsNamed",
-      "min": 1
-    },
-    {
-      "check": "result_below",
-      "path": "r1.war.boscali.frontsIdLike",
-      "max": 0
-    },
-    {
-      "check": "result_above",
-      "path": "r1.war.boscali.deckCount",
-      "min": 1
-    },
-    {
-      "check": "result_equals",
-      "path": "r1.war.boscali.emptyReason",
-      "value": "None"
-    },
-    {
-      "check": "result_below",
-      "path": "r1.war.boscali.assaultCardsWithoutCarriers",
-      "max": 0
-    },
-    {
-      "check": "result_above",
-      "path": "r2.war.boscali.staffPickedAt",
-      "min": 0
-    },
-    {
-      "check": "result_below",
-      "path": "r2.war.boscali.staffPickedAt",
-      "max": 90
-    },
-    {
-      "check": "result_above",
-      "path": "r2.war.boscali.staffPicks",
-      "min": 1
-    },
-    {
-      "check": "result_below",
-      "path": "r10.war.boscali.faults",
-      "max": 0
-    },
-    {
-      "check": "result_above",
-      "path": "r10.war.boscali.healthy",
-      "min": 1
-    },
-    {
-      "check": "result_below",
-      "path": "r10.war.boscali.check.trendWrites",
-      "max": 0
-    },
-    {
-      "check": "result_above",
       "path": "r1.war.primeva.firstDeckAt",
       "min": 0
     },
@@ -350,33 +285,98 @@
       "max": 0
     },
     {
+      "check": "result_above",
+      "path": "r1.war.boscali.firstDeckAt",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "r1.war.boscali.firstDeckAt",
+      "max": 30
+    },
+    {
+      "check": "result_above",
+      "path": "r1.war.boscali.frontsNamed",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "r1.war.boscali.frontsIdLike",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "r1.war.boscali.deckCount",
+      "min": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "r1.war.boscali.emptyReason",
+      "value": "None"
+    },
+    {
+      "check": "result_below",
+      "path": "r1.war.boscali.assaultCardsWithoutCarriers",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "r2.war.boscali.staffPickedAt",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "r2.war.boscali.staffPickedAt",
+      "max": 90
+    },
+    {
+      "check": "result_above",
+      "path": "r2.war.boscali.staffPicks",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "r10.war.boscali.faults",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "r10.war.boscali.healthy",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "r10.war.boscali.check.trendWrites",
+      "max": 0
+    },
+    {
       "check": "result_equals",
       "path": "p1.code",
       "value": "Accepted"
     },
     {
       "check": "result_above",
-      "path": "r3.war.boscali.pilotPicks",
+      "path": "r3.war.primeva.pilotPicks",
       "min": 1
     },
     {
       "check": "result_below",
-      "path": "r3.war.boscali.staffOverrides",
+      "path": "r3.war.primeva.staffOverrides",
       "max": 0
     },
     {
       "check": "result_above",
-      "path": "r3.war.boscali.lockSeconds",
+      "path": "r3.war.primeva.lockSeconds",
       "min": 1
     },
     {
       "check": "result_equals",
-      "path": "r3.war.boscali.lastCommandCode",
+      "path": "r3.war.primeva.lastCommandCode",
       "value": "Accepted"
     },
     {
       "check": "result_above",
-      "path": "r3.war.boscali.check.focusKeyMatchesOp",
+      "path": "r3.war.primeva.check.focusKeyMatchesOp",
       "min": 1
     },
     {
@@ -401,7 +401,7 @@
     },
     {
       "check": "result_above",
-      "path": "r4.war.boscali.redirects",
+      "path": "r4.war.primeva.redirects",
       "min": 1
     },
     {
@@ -411,22 +411,22 @@
     },
     {
       "check": "result_equals",
-      "path": "r5.war.boscali.lastCommandCode",
+      "path": "r5.war.primeva.lastCommandCode",
       "value": "Accepted"
     },
     {
       "check": "result_above",
-      "path": "r5.war.boscali.vetoes",
+      "path": "r5.war.primeva.vetoes",
       "min": 1
     },
     {
       "check": "result_below",
-      "path": "r5.war.boscali.vetoedKeyInDeck",
+      "path": "r5.war.primeva.vetoedKeyInDeck",
       "max": 0
     },
     {
       "check": "result_equals",
-      "path": "r6.war.boscali.lastCommandCode",
+      "path": "r6.war.primeva.lastCommandCode",
       "value": "None"
     },
     {
@@ -436,77 +436,77 @@
     },
     {
       "check": "result_above",
-      "path": "r7.war.boscali.defendCards",
+      "path": "r7.war.primeva.defendCards",
       "min": 1
     },
     {
       "check": "result_below",
-      "path": "r7.war.boscali.assaultCardsWithoutCarriers",
+      "path": "r7.war.primeva.assaultCardsWithoutCarriers",
       "max": 0
     },
     {
       "check": "result_above",
-      "path": "r8.war.boscali.ageAtRefreshMax",
+      "path": "r8.war.primeva.ageAtRefreshMax",
       "min": 8
     },
     {
       "check": "result_below",
-      "path": "r8.war.boscali.ageAtRefreshMax",
+      "path": "r8.war.primeva.ageAtRefreshMax",
       "max": 15
     },
     {
       "check": "result_above",
-      "path": "r8.war.boscali.canCommand",
+      "path": "r8.war.primeva.canCommand",
       "min": 1
     },
     {
       "check": "result_above",
-      "path": "r9.war.boscali.age",
+      "path": "r9.war.primeva.age",
       "min": 16
     },
     {
       "check": "result_above",
-      "path": "r9.war.boscali.canCommand",
+      "path": "r9.war.primeva.canCommand",
       "min": 1
     },
     {
       "check": "result_above",
-      "path": "r10.war.boscali.age",
+      "path": "r10.war.primeva.age",
       "min": 0
     },
     {
       "check": "result_below",
-      "path": "r10.war.boscali.age",
+      "path": "r10.war.primeva.age",
       "max": 8
     },
     {
       "check": "result_above",
-      "path": "r2.war.boscali.opLive",
+      "path": "r2.war.primeva.opLive",
       "min": 1
     },
     {
       "check": "result_above",
-      "path": "r2.war.boscali.forcesGroups",
+      "path": "r2.war.primeva.forcesGroups",
       "min": 1
     },
     {
       "check": "result_above",
-      "path": "r2.war.boscali.awaitingSeconds",
+      "path": "r2.war.primeva.awaitingSeconds",
       "min": 0
     },
     {
       "check": "result_below",
-      "path": "r2.war.boscali.awaitingSeconds",
+      "path": "r2.war.primeva.awaitingSeconds",
       "max": 120
     },
     {
       "check": "result_above",
-      "path": "r2.war.boscali.check.stageTallyDelta",
+      "path": "r2.war.primeva.check.stageTallyDelta",
       "min": 0
     },
     {
       "check": "result_below",
-      "path": "r2.war.boscali.check.stageTallyDelta",
+      "path": "r2.war.primeva.check.stageTallyDelta",
       "max": 0
     },
     {

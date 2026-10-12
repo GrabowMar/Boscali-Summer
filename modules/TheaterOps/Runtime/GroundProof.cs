@@ -234,13 +234,22 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                     Unit unit = spawner.SpawnVehicle(definition.unitPrefab, position.ToGlobalPosition(), Quaternion.identity, Vector3.zero, hq,
                         "BoscaliSummer:GroundProof:late:" + (lateVehicles.Count + 1), 1f, true, null);
                     if (!(unit is GroundVehicle vehicle)) continue;
-                    // A bare spawn does not head for objectives; a mission-scripted wave and a depot exit both do, so the clone is set up like them.
+                    // A bare spawn holds still and does not head for objectives; a mission-scripted wave and a depot exit both move out, so the clone is set up like them.
+                    vehicle.SetHoldPosition(false);
                     NavigateObjectives?.SetValue(vehicle, true);
                     lateVehicles.Add(vehicle); lateFactions.Add(faction); spawned++;
                     break;
                 }
             if (spawned == 0) return Failure("GroundProof", "Late", "no spot to place " + definition.name + " near group " + best + " after " + tried + " tries");
-            return new Dictionary<string, object> { { "ok", true }, { "via", "scan" }, { "spawned", spawned } };
+            // Why a clone would not be eligible (the first one): the five conditions of GroundFrontService.AutoNavigating, one by one.
+            GroundVehicle probe = lateVehicles[lateVehicles.Count - 1];
+            return new Dictionary<string, object>
+            {
+                { "ok", true }, { "via", "scan" }, { "spawned", spawned },
+                { "server", probe.IsServer }, { "disabled", probe.disabled }, { "hold", probe.GetHoldPosition() }, { "hasCommand", probe.UnitCommand != null },
+                { "commanded", GroundFrontService.IsCommanded(probe) }, { "autoNavigating", GroundFrontService.AutoNavigating(probe) },
+                { "sameHq", ReferenceEquals(probe.NetworkHQ, hq) }, { "slung", probe.IsSlung() },
+            };
         }
 
         // ---- Read ----------------------------------------------------------------------------------------------------------------------
