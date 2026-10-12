@@ -908,9 +908,24 @@ Shader "Boscali/FlightCloud"
             return min(5.0, l + saturate(l));
         }
 
+        // The thin-layer rank law (SlabMath.Rank): the rank of a pattern value is its place in the pattern's own distribution, a Gaussian CDF
+        // in the tanh form. The argument is clamped so tanh cannot overflow. SlabSigma is SlabMath.PatternSigma (the measured spreads).
+        float SlabRank(float pattern, float sigma)
+        {
+            float z = clamp((pattern - 0.52) / sigma, -5.0, 5.0);
+            return 0.5 + 0.5 * tanh(0.7978846 * (z + 0.044715 * z * z * z));
+        }
+
+        float SlabSigma(float3 wts)
+        {
+            float s = wts.x + wts.y + wts.z;
+            return s <= 0.0 ? 0.095 : max(0.02, (wts.x * 0.095 + wts.y * 0.19 + wts.z * 0.082) / s);
+        }
+
         // The weighted pattern value (about 0.52 on average) of a layer at one period. Streak and cell taps fade to their mean
-        // once filtered past what the pixel resolves; a morphology with no weight is not fetched.
-        float SlabPattern(float3 g, float layer, LayerRow row, float scale, float2 low, float foot, float3 wts)
+        // once filtered past what the pixel resolves; a morphology with no weight is not fetched. sizeMask (0 large cells, 1 small) is
+        // SlabMath.SizeMask of the mesoscale size field.
+        float SlabPattern(float3 g, float layer, LayerRow row, float scale, float2 low, float sizeMask, float foot, float3 wts)
         {
             if (wts.x + wts.y + wts.z <= 0.0) return 0.52;
             float2 warp = (low - 0.5) * scale * 1.6;
@@ -928,7 +943,7 @@ Shader "Boscali/FlightCloud"
                 {
                     // Curl bends the streak coordinate with low-frequency vector noise: hooked cirrus. One fixed sign.
                     float2 curlBend = tex3Dlod(_CloudNoiseTex, float4(np / (scale * 3.1) + 0.61, 0.33, 1.5)).rg - 0.5;
-                    nsw += curlBend * scale * 2.0 * row.curl;
+                    nsw += curlBend * scale * 1.0 * row.curl;
                 }
                 float along = scale * row.aspect;
                 float lod1 = SlabLod(foot, scale), lod2 = SlabLod(foot, scale * 1.73);
@@ -937,7 +952,13 @@ Shader "Boscali/FlightCloud"
                 float fine2 = saturate(4.0 - lod2);
                 float s2 = fine2 > 0.0 ? lerp(0.52, tex3Dlod(_CloudNoiseTex, float4(nw2.x / (along * 1.73) + 0.53,
                     nw2.y / (scale * 1.73) + 0.29, g.y / (scale * 1.1) + 0.61, lod2)).r, fine2) : 0.52;
-                streak = s1 * 0.6 + s2 * 0.4;
+                // Fibres: a third tap, stretched twice as hard and a quarter as wide, turned a few degrees off the others.
+                float lodF = SlabLod(foot, scale * 0.23);
+                float fineF = saturate(4.0 - lodF);
+                float2 nf = float2(nsw.x * 0.9962 + nsw.y * 0.0872, -nsw.x * 0.0872 + nsw.y * 0.9962);
+                float fibre = fineF > 0.0 ? lerp(0.52, tex3Dlod(_CloudNoiseTex, float4(nf.x / (along * 0.7) + 0.37, nf.y / (scale * 0.23) + 0.81,
+                    g.y / (scale * 0.4) + 0.29, lodF)).r, fineF) : 0.52;
+                streak = s1 * 0.45 + s2 * 0.3 + fibre * 0.25;
             }
             if (wts.x + wts.y > 0.0)
             {
@@ -945,13 +966,22 @@ Shader "Boscali/FlightCloud"
                 // (sky 20), so a vector noise at 3.3 cs bends the coordinate by up to ~1/3 cs (Task 13); it filters to nothing with distance.
                 float cs = scale * 0.45;
                 bend = tex3Dlod(_CloudNoiseTex, float4(np / (cs * 3.3) + 0.57, 0.19 + g.y / (cs * 2.9), SlabLod(foot, cs * 3.3))).rg - 0.5;
-                float2 npc = np + bend * cs * 2.2;
+                float2 npc = np + bend * cs * 2.4;
                 float lodC = SlabLod(foot, cs);
                 float c1 = tex3Dlod(_CloudNoiseTex, float4(npc / cs + 0.41, g.y / (cs * 0.8), lodC)).r;
                 float fineC = saturate(4.0 - lodC);
                 float c2 = fineC > 0.0 ? lerp(0.52, tex3Dlod(_CloudNoiseTex, float4(float2(npc.y, -npc.x) / (cs * 2.37) + 0.13,
                     g.y / (cs * 1.9) + 0.77, SlabLod(foot, cs * 2.37))).r, fineC) : 0.52;
                 cells = c1 * 0.62 + c2 * 0.38;
+                // Cell sizes: where the size field is high the cells are small (a third tap at 0.41 cs, turned 37 degrees), so the layer mixes
+                // two or three sizes instead of one tile of equal blobs.
+                if (sizeMask > 0.0)
+                {
+                    float lodS = SlabLod(foot, cs * 0.41);
+                    float c3 = lerp(0.52, tex3Dlod(_CloudNoiseTex, float4(float2(npc.x * 0.8 + npc.y * 0.6, npc.y * 0.8 - npc.x * 0.6) / (cs * 0.41) + float2(0.31, 0.67),
+                        g.y / (cs * 0.7) + 0.45, lodS)).r, saturate(4.0 - lodS));
+                    cells = lerp(cells, c3 * 0.5 + c1 * 0.5, sizeMask);
+                }
             }
             float ripples = cells;
             if (wts.y > 0.0)
@@ -961,8 +991,12 @@ Shader "Boscali/FlightCloud"
                 float wavelength = max(1.0, row.rippleWave);
                 float rippleKeep = 1.0 - smoothstep(1.0, 3.0, LodFor(foot, wavelength));
                 // The rows meander and break up with the cell bend (Task 13): perfectly straight, equal stripes read as a zebra (sky 18).
-                float rows = 0.55 + 0.45 * sin(w.y / wavelength * 6.2831853 + warp.x / scale * 2.0 + bend.x * 6.0);
-                float rowKeep = saturate(0.8 + bend.y * 3.5);
+                float rows1 = 0.55 + 0.45 * sin(w.y / wavelength * 6.2831853 + warp.x / scale * 3.0 + bend.x * 10.0);
+                // A second set of rows at 1.43 wavelengths, turned 17 degrees, takes over where the size field is high (SlabMath's twin).
+                float across2 = w.y * 0.9563 + w.x * 0.2924;
+                float rows2 = 0.55 + 0.45 * sin(across2 / (wavelength * 1.43) * 6.2831853 + warp.y / scale * 3.0 + bend.y * 9.0 + 1.7);
+                float rows = lerp(rows1, rows2, sizeMask);
+                float rowKeep = saturate(0.7 + bend.y * 3.5);
                 // rows averages 0.55: dividing by it keeps the pattern's mean at the cells' (CloudBodies.SlabPattern is the twin).
                 ripples = cells * lerp(1.0, rows / 0.55, 0.8 * rippleKeep * rowKeep);
             }
@@ -981,20 +1015,30 @@ Shader "Boscali/FlightCloud"
             float2 nlow = NoiseXZ(g.xz, layer < 0.5 ? NOISE_MID : NOISE_HIGH);
             float2 low = tex3Dlod(_CloudNoiseTex, float4(nlow / 27000.0 + 0.27, 0.71, 1.5)).rg;
             float patch = low.g;
+            // The patch field (R) and the cell-size field (G) of a second mesoscale fetch at another tile (SlabMath.PatchTile).
+            float2 mk = tex3Dlod(_CloudNoiseTex, float4(nlow / 31000.0 + float2(0.63, 0.19), 0.37, 1.5)).rg;
+            float sizeMask = smoothstep(0.15, 0.85, mk.y);
             float4 wts = SlabWeights(row);
             float2 sp = LadderSplit(row.periodRung);
             float pat0 = 0.0, pat1 = 0.0;
-            if (sp.y < 0.98) pat0 = SlabPattern(g, layer, row, PeriodMetres(sp.x), low, foot, wts.xyz);
-            if (sp.y > 0.02) pat1 = SlabPattern(g, layer, row, PeriodMetres(sp.x + 1.0), low, foot, wts.xyz);
+            if (sp.y < 0.98) pat0 = SlabPattern(g, layer, row, PeriodMetres(sp.x), low, sizeMask, foot, wts.xyz);
+            if (sp.y > 0.02) pat1 = SlabPattern(g, layer, row, PeriodMetres(sp.x + 1.0), low, sizeMask, foot, wts.xyz);
             float pattern = LadderMix(pat0, pat1, sp.y, 0.52);
-            // The cover law (SlabMath.RankGain): the rank does not depend on Detail, so a layer covers about its Cover however crisp or
-            // flat it is; Detail only scales the density inside the cover (the return below).
-            float rank = saturate(0.5 + (pattern - 0.52) * 4.5);
+            // The cover law (SlabMath.Rank): the rank is the pattern's place in its own distribution, so a layer covers about its Cover
+            // however crisp or flat it is; Detail only scales the density inside the cover (the return below).
+            float rank = SlabRank(pattern, SlabSigma(wts.xyz));
             float body = lerp(rank, 0.7 + 0.3 * rank, wts.w);
             // Ahead of the front (share 0) and behind it (share 1) the layer differs. INTERIM(slice 4): the split goes with the front.
             cover *= lerp(splitMul.x, splitMul.y, SplitShare(g.xz));
-            float c = saturate(cover * (0.55 + 0.9 * saturate(0.5 + (patch - 0.52) * 3.16)));
-            return SlabCoverMask(body, c, row.softness) * lerp(1.0, body, row.detail);
+            // The mesoscale cover: the old slow modulation, times the patch mask that clusters the cover into patches and clears the lanes between
+            // (SlabMath.PatchMask / Patchiness / PatchFactor / CoverTrim).
+            float patchiness = (1.0 - smoothstep(0.2, 0.6, cover)) * (1.0 - wts.w);
+            float c = saturate(cover * lerp(1.05 + (0.9 * wts.z + 0.45 * (1.0 - wts.z - wts.w)) * (1.0 - smoothstep(0.02, 0.3, cover)), 1.0, wts.w) * (0.55 + 0.9 * saturate(0.5 + (patch - 0.52) * 3.16)) *
+                lerp(1.0, smoothstep(0.38, 0.66, mk.x) * 2.17, patchiness));
+            // How deep a point sits inside the cover (0 at the edge, 1 at the top rank): Detail turns it into density.
+            float depth = saturate((rank - (1.0 - c)) / max(c, 0.05));
+            float interior = lerp(0.45 + 0.55 * depth, body, wts.w);
+            return SlabCoverMask(body, c, row.softness) * lerp(1.0, interior, row.detail);
         }
 
         // The layer's vertical profile saturate(5.2 h (1 - h)) and its integral (SlabMath.Profile / Integral).

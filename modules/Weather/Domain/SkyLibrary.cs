@@ -198,7 +198,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 Sky("Cirrostratus veil, milky sun", Clear).High(CsNeb, 0.45f).Roles(PreWarm),
                 Sky("Mackerel sky", Clear).High(Cc, 0.80f).Roles(PreWarm, HighPress),
                 Sky("Summer haze", Clear).High(CiFib, 0.10f).HazeScale(2f).Weight(0.1f),
-                Sky("High altocumulus patches", Clear).Mid(AcFloc, 0.15f).High(CiFib, 0.10f).Roles(Ridge),
+                Sky("High altocumulus patches", Clear).Mid(AcFloc, 0.18f).High(CiFib, 0.10f).Roles(Ridge),
                 // Fair (7)
                 Sky("Fair-weather cumulus", Fair).Low(Hum, 1500f, cumulus: 0.15f).High(CiFib, 0.12f).Roles(Ridge, PostFrontal, HighPress),
                 Sky("Cumulus and cirrus", Fair).Low(Hum, 1700f, cumulus: 0.12f).High(CiSpi, 0.30f).Roles(Ridge),

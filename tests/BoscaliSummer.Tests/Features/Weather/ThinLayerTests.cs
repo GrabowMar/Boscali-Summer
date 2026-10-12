@@ -131,7 +131,19 @@ namespace BoscaliSummer.Tests.Features.Weather
             var streaks = cells; streaks.Cells = 0f; streaks.Streaks = 1f;
             float cellsValue = bodies.Slab2D(cells, 1200f, 4400f, 700f);
             float streakValue = bodies.Slab2D(streaks, 1200f, 4400f, 700f);
-            TestAssert.That(cellsValue > 0.1f && Math.Abs(cellsValue - streakValue) < 1e-5f, "on a constant field cells and streaks agree");
+            // On a constant field every pattern has the same value, so each morphology is the closed form of the cover law at its own sigma:
+            // rank, the cover from the old modulation and the patch factor (the constant R = 200 sits above the patch band: a full patch),
+            // the depth inside the cover and the interior density Detail scales.
+            float ExpectedConstant(float sigma, float cover)
+            {
+                float rank = SlabMath.Rank(200f / 255f, sigma);
+                float c = Math.Min(1f, cover * SlabMath.Trim(cover, 0f, 0f) * (0.55f + 0.9f * Math.Max(0f, Math.Min(1f, 0.5f + (90f / 255f - 0.52f) * 3.16f))) *
+                    SlabMath.PatchFactor(SlabMath.PatchMask(200f / 255f), SlabMath.Patchiness(cover, 0f)));
+                float depth = Math.Max(0f, Math.Min(1f, (rank - (1f - c)) / Math.Max(c, 0.05f)));
+                return SlabMath.SlabCoverMask(rank, c, 0.5f) * (1f - 0.7f * (1f - (0.45f + 0.55f * depth)));
+            }
+            TestAssert.That(cellsValue > 0.1f && Math.Abs(cellsValue - ExpectedConstant(SlabMath.SigmaCells, 0.6f)) < 1e-4f, "on a constant field cells are the closed form of the cover law: " + cellsValue);
+            TestAssert.That(streakValue > 0.1f && Math.Abs(streakValue - ExpectedConstant(SlabMath.SigmaStreaks, 0.6f)) < 1e-4f, "on a constant field streaks are the closed form of the cover law: " + streakValue);
             // The rows break up with the vector noise of the bend (Task 13): this volume's G = 90 reads as a strong negative bend that nearly
             // switches the rows off, so the spread is measured on one whose G is neutral.
             var neutral = MakeBodies(Uniform(200, 128, 255), 4);
