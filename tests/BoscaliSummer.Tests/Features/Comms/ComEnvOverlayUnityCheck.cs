@@ -14,14 +14,13 @@ using UnityEngine.UI;
 using Object = UnityEngine.Object;
 using static UnityCheckHarness;
 
-// Production floating console and projected markers. The host flag is patched only in this
-// editor fixture; no mission, native input capture, weather command or transport is exercised.
+// Production projected cockpit markers (the weather console is gated by MetOfficeUnityCheck). The Harmony patches below are
+// fixture-only; no mission, native input capture or transport is exercised.
 public static class ComEnvOverlayUnityCheck
 {
     private static readonly Assembly Asm = typeof(AvConsole).Assembly;
     private static readonly List<string> Failures = new List<string>();
     private static int checks, captures;
-    private static bool isHost;
     private static MaterialPropertyBlock fixtureProperties;
     private static readonly int[,] Sizes = { { 1920, 1080 }, { 1280, 720 }, { 2560, 1080 } };
 
@@ -41,16 +40,11 @@ public static class ComEnvOverlayUnityCheck
             foreach (string effect in new[] { "TerrainRainDressing", "CanopyShaderDressing" })
                 harmony.Patch(T("Modules.Weather.Visuals." + effect).GetConstructor(All & ~BindingFlags.Static, null, Type.EmptyTypes, null),
                     transpiler: new HarmonyMethod(typeof(ComEnvOverlayUnityCheck).GetMethod("PropertiesTranspiler", All)));
-            harmony.Patch(T("Core.Game.GameAccess").GetMethod("IsServer", All),
-                prefix: new HarmonyMethod(typeof(ComEnvOverlayUnityCheck).GetMethod("HostPrefix", All)));
             foreach (AvThemeId theme in (AvThemeId[])Enum.GetValues(typeof(AvThemeId)))
             {
                 AvStyleHost.SetTheme(theme);
                 for (int size = 0; size < Sizes.GetLength(0); size++)
                 {
-                    foreach (string state in new[] { "clear-auto", "storm-all", "eye", "fog" })
-                        foreach (bool host in new[] { true, false })
-                            ConsoleCase(theme, state, host, Sizes[size, 0], Sizes[size, 1], theme == AvThemeId.Steel);
                     foreach (string state in new[] { "empty", "sparse", "long", "bright", "cluster", "cluster-top", "cluster-bottom", "edge", "behind", "filtered" })
                         MarkerCase(theme, state, Sizes[size, 0], Sizes[size, 1], theme == AvThemeId.Steel);
                 }
@@ -63,7 +57,6 @@ public static class ComEnvOverlayUnityCheck
             : "FAIL (" + Failures.Count + "):\n" + string.Join("\n", Failures), Failures.Count == 0);
     }
 
-    private static bool HostPrefix(ref bool __result) { __result = isHost; return false; }
     private static MaterialPropertyBlock FixtureProperties() => fixtureProperties;
     private static IEnumerable<CodeInstruction> PropertiesTranspiler(IEnumerable<CodeInstruction> code)
     {
@@ -97,47 +90,6 @@ public static class ComEnvOverlayUnityCheck
         // Overlay projection uses a null camera, so keep the capture canvas on z=0 as
         // the production ScreenSpaceOverlay canvas. Orthographic UI uses a 100-unit plane.
         canvas.renderMode = RenderMode.ScreenSpaceCamera; canvas.worldCamera = camera; canvas.planeDistance = 100f;
-    }
-
-    private static void ConsoleCase(AvThemeId theme, string state, bool host, int width, int height, bool pictures)
-    {
-        isHost = host;
-        string where = "console-" + theme + "-" + width + "x" + height + "-" + state + "-" + (host ? "host" : "client");
-        Camera camera = UiCamera(width, height, out RenderTexture rt);
-        var services = new GameObject("Console services");
-        var manager = (Behaviour)services.AddComponent(T("Modules.Weather.Runtime.WeatherManager")); manager.enabled = false;
-        Call(manager, "Configure", Settings("Weather"), null, null);
-        byte shown = (byte)(state == "clear-auto" || state == "fog" ? 0 : 6);
-        byte sets = (byte)(state == "storm-all" ? 63 : state == "eye" ? 8 : state == "fog" ? 32 : 0);
-        object key = Activator.CreateInstance(T("Modules.Weather.Domain.WeatherKey"), All, null,
-            // Reflection with the default binder ignores optional defaults, so all 18 constructor parameters are passed, in order.
-            new object[] { 42u, 0f, state == "clear-auto", shown, sets, (byte)0, state == "eye", 0f, 0f, (byte)255, (byte)255, 0f, float.NaN, 0f, 27f, 0f, 0f, 0f }, null);
-        Set(manager, "fieldKey", key); Set(manager, "fieldReady", true); Set(manager, "fieldSpan", new Vector2(100000f, 100000f));
-        Set(manager, "isManualOverride", state != "clear-auto");
-        Set(manager, "forcedRainIntensity", state == "storm-all" ? (object)1f : state == "fog" ? (object)0f : null);
-        Call(Get(manager, "field"), "Build", key, 1200f, 50000f, 50000f, 12f, 1f);
-        object view = T("Modules.Weather.Presentation.WeatherConsoleWindow").GetMethod("Create", All).Invoke(null, new object[] { manager, services.transform });
-        ((Behaviour)view).enabled = false;
-        var window = (AvWindow)Get(view, "window");
-        CaptureCanvas(window.Root.GetComponentInParent<Canvas>().rootCanvas, camera);
-        window.Show(); Call(view, "Refresh");
-        for (int i = 0; i < 4; i++) { window.Ticker.TickNow(); window.Body.Relayout(); Canvas.ForceUpdateCanvases(); }
-        Gate(window.Root, where, true);
-        ScrollRect scroll = window.Root.GetComponentInChildren<ScrollRect>();
-        Check(scroll.content.rect.height <= scroll.viewport.rect.height + 1.5f,
-            where + ": console requires scrolling while its Rewired mouse is disabled (" + scroll.content.rect.height + " > " + scroll.viewport.rect.height + ")");
-        foreach (AvControl control in window.Root.GetComponentsInChildren<AvControl>(true))
-        {
-            if (control == window.CloseControl) continue;
-            bool placementDefault = control == Get(view, "unplaceButton");
-            Check(control.Interactable == (host && (!placementDefault || state == "eye")), where + ": wrong authority gate for " + control.name);
-        }
-        TMP_Text footer = window.Footer.Rect.Find("Text").GetComponent<TMP_Text>();
-        Check(footer.text == (host ? "HOST // ALL PLAYERS" : "READ ONLY"), where + ": wrong authority footer " + footer.text);
-        foreach (Selectable selectable in window.Root.GetComponentsInChildren<Selectable>(true))
-            Check(selectable.navigation.mode == Navigation.Mode.None, where + ": selectable responds to flight navigation " + selectable.name);
-        if (pictures) Capture(camera, rt, where);
-        window.Hide(); Object.DestroyImmediate(services); Object.DestroyImmediate(camera.gameObject); rt.Release(); Object.DestroyImmediate(rt);
     }
 
     private static void MarkerCase(AvThemeId theme, string state, int width, int height, bool pictures)

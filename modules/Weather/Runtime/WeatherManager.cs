@@ -142,7 +142,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private bool isManualOverride;
         private bool consoleAuto;
         private bool explicitTargets;
-        private WeatherConsoleWindow console;
+        private MetOfficeWindow console;
         private float? forcedRainIntensity;
 
         /// <summary>The installed manager, for the automation hook; null outside a mod session.</summary>
@@ -1429,17 +1429,6 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             return Mathf.Max(0f, Field.Timeline.NextChangeAt - now);
         }
 
-        /// <summary>Holds a state. The sky fades into it; fog, light and wind follow the field.</summary>
-        internal void HoldState(WeatherRegimeType state)
-        {
-            if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return;
-            isManualOverride = true;
-            explicitTargets = false;
-            fieldKey = fieldKey.Rebased(now, false).WithMissionClass((byte)state); // INTERIM(slice 4): the held state is the opener
-            RekeyAndSync(now);
-            NotifyPlayer("HOLD " + RegimeSnapshot.FromType(state).Name, forcedRainIntensity);
-        }
-
         /// <summary>
         /// Pins the whole sky to one library sky (index 0-46, spec 4.4) or, with <see cref="WeatherKey.None"/>, unpins it and resumes the
         /// changing weather from the class on screen. INTERIM(slice 4): the tape console's Pin sky replaces this entry point; the sims
@@ -1551,7 +1540,11 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         {
             if (console != null && console.IsOpen) { console.Close(); return; }
             if (LevelInfo.i == null) return;
-            if (console == null) console = WeatherConsoleWindow.Create(this, transform);
+            if (console == null)
+            {
+                var adapter = new MetOfficeAdapter(this);
+                console = MetOfficeWindow.Create(transform, adapter, adapter);
+            }
             console.Show();
         }
 

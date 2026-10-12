@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using BoscaliSummer.Modules.Weather.Configuration;
 using BoscaliSummer.Modules.Weather.Domain;
+using BoscaliSummer.Modules.Weather.Presentation;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Weather.Runtime
@@ -52,5 +54,22 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             return true;
         }
 
+        /// <summary>
+        /// Sims (WeatherAutomation.Console): open, close, press one control, read the Met Office or settle, without a mouse. Returns the window readout (the input state only, while no window
+        /// exists yet), plus pressed (1 or 0) after a press and settled (1 or 0) after a settle. Settle puts the tape moving at the default pace through the same two edits as the buttons, so a
+        /// run starts from a known state and a second run on the same private-install config does not start one pace higher (Pace and TapeMoves are config entries).
+        /// </summary>
+        internal Dictionary<string, object> ConsoleAct(string action, MetControl? control)
+        {
+            bool settled = action == "settle" && SetTapeMoves(true) && SetPace(TapePace.DefaultPace);
+            if (action == "open" && (console == null || !console.IsOpen)) ToggleConsole();
+            else if (action == "close" && console != null && console.IsOpen) console.Close();
+            Dictionary<string, object> readout;
+            if (console == null) { readout = MetOfficeWindow.InputState(); readout["open"] = 0; }
+            else readout = console.Readout();
+            if (console != null && action == "press") readout["pressed"] = control.HasValue && console.IsOpen && console.Press(control.Value) ? 1 : 0;
+            if (action == "settle") readout["settled"] = settled ? 1 : 0;
+            return readout;
+        }
     }
 }
