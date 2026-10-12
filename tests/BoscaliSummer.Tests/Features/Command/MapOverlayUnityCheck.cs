@@ -87,7 +87,7 @@ public static class MapOverlayUnityCheck
             Directory.CreateDirectory("renders");
             foreach (Vector2 size in new[] { new Vector2(1280,720), new Vector2(1920,1080) })
                 foreach (float zoom in new[] { .7f, 1f, 1.8f }) {
-                    foreach (string state in new[] { "empty", "calm", "contested" }) Case(size, zoom, "control", state);
+                    foreach (string state in new[] { "empty", "calm", "contested", "salient" }) Case(size, zoom, "control", state);
                     Case(size, zoom, "trenches", "stages");
                     if (!nonWingOnly) {
                         Case(size, zoom, "wing", "roles");
@@ -146,7 +146,13 @@ public static class MapOverlayUnityCheck
     {
         object grid = New("Command.Runtime.TacticalSectorGrid",1000f,163840f,81920f,0f,0f);
         if (state != "empty") {
-            Call(grid,"AddAirbasePresence",-30000f,0f,false,80000f); Call(grid,"AddAirbasePresence",30000f,0f,true,80000f);
+            float reach = state == "salient" ? 42000f : 80000f;
+            Call(grid,"AddAirbasePresence",-30000f,0f,false,reach); Call(grid,"AddAirbasePresence",30000f,0f,true,reach);
+            // A bulge each way and open ground in the corners: diagonal borders, the rim and the hatch all show.
+            if (state == "salient") for (int i = -3; i <= 3; i++) {
+                Call(grid,"AddTroopPresence",9000f,-14000f+i*2500f,40f,false,9000f); Call(grid,"AddTroopPresence",-8000f,15000f+i*2500f,40f,true,9000f);
+                Call(grid,"AddTroopPresence",1500f,i*1500f,12f,i%2==0,3000f);
+            }
             if (state == "contested") for (int i = -8; i <= 8; i++) {
                 Call(grid,"AddTroopPresence",-1200f,i*4500f,30f,false,6000f); Call(grid,"AddTroopPresence",1200f,i*4500f,30f,true,6000f);
             }
@@ -154,8 +160,8 @@ public static class MapOverlayUnityCheck
         }
         var overlay = (Behaviour)services.AddComponent(T("Command.Presentation.ComMapOverlay")); overlay.enabled = false; Set(overlay,"sectorGrid",grid); Call(overlay,"TryInitialize");
         Check((bool)Get(overlay,"initialized"),"Real command layer initializes.");
-        Call(overlay,"EnsureTexture",512,256); Texture2D texture = (Texture2D)Get(overlay,"overlayTexture");
-        texture.SetPixels32((Color32[])Call(grid,"BakeTexture",512,256,true,.65f)); texture.Apply(false);
+        Call(overlay,"EnsureTexture",2048,1024); Texture2D texture = (Texture2D)Get(overlay,"overlayTexture");
+        texture.SetPixels32((Color32[])Call(grid,"BakeTexture",2048,1024,true,.65f)); texture.Apply(false);
         var raster = (RawImage)Get(overlay,"overlayImage"); raster.texture = texture; raster.enabled = true;
         var front = (Graphic)Get(overlay,"frontlineGraphic"); front.gameObject.SetActive(true); Call(front,"SetSource",grid);
         MeshGate(front,state == "empty" ? 0 : 1,16000);

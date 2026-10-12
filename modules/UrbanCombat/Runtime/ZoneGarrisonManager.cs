@@ -111,6 +111,15 @@ namespace BoscaliSummer.Garrisons
             if (marking != null) marking.SetShellDamage(frac);
         }
 
+        /// <summary>Test seam for StrongpointAutomation: any shell that currently holds a live nest.</summary>
+        internal static MapBuilding AnyStrongpointShell()
+        {
+            if (Instance == null) return null;
+            foreach (ShellState state in Instance.shellStates.Values)
+                if (state.Map != null && state.Defense != null && !state.Defense.disabled) return state.Map;
+            return null;
+        }
+
         /// <summary>
         /// Cheap candidacy probe so the damage patch checks siege strongpoint status before
         /// doing the armour maths: siegeless scenes and unoccupied shells never count.

@@ -92,6 +92,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public const float SectorDeg = 18f, HysteresisDeg = 5f, DeadPx = 45f, LockIn = 0.85f, LockOut = 0.6f;
         public const float RowH = 58f, BackH = 46f, HeaderH = 46f, FooterH = 30f, GroupH = 24f, GroupMargin = 3f, ListPad = 6f;
         public const int MaxCap = 8, MinCap = 4;
+        /// <summary>How far past a row or the dock the pointer may stray and still count (a group heading is this tall).</summary>
+        public const float SlopPx = 24f;
 
         public readonly int W, H, Count;
         public readonly float G, Rho, T, Lg;
@@ -331,12 +333,13 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             }
         }
 
-        /// <summary>The dock as the pointer sees it: widened toward the hub across the dead gap to the label plates, never over a plate.</summary>
+        /// <summary>The dock as the pointer sees it: widened toward the hub across the dead gap to the label plates (never over a plate),
+        /// and by <see cref="SlopPx"/> on its other three sides so an overshoot stays in the list.</summary>
         public MenuRect PointerDock(DockLayout d)
         {
             float room = d.Side > 0 ? d.Rect.L - ExtR : ExtL - d.Rect.R;
-            float m = Math.Max(0f, Math.Min(Gap - 10f * Rho, room));
-            return d.Side > 0 ? new MenuRect(d.Rect.L - m, d.Rect.T, d.Rect.R, d.Rect.B) : new MenuRect(d.Rect.L, d.Rect.T, d.Rect.R + m, d.Rect.B);
+            float m = Math.Max(0f, Math.Min(Gap - 10f * Rho, room)), s = SlopPx * Lg;
+            return d.Side > 0 ? new MenuRect(d.Rect.L - m, d.Rect.T - s, d.Rect.R + s, d.Rect.B + s) : new MenuRect(d.Rect.L - s, d.Rect.T - s, d.Rect.R + m, d.Rect.B + s);
         }
 
         /// <summary>How far the hint bar must slide sideways so it never touches an open dock (1280x720).</summary>

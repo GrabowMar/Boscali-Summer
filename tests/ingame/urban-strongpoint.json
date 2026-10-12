@@ -1,0 +1,196 @@
+{
+  "name": "urban-strongpoint",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 180,
+  "environment": {
+    "config": {
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "wait",
+      "seconds": 25
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Garrisons.StrongpointAutomation.Step",
+      "args": {
+        "action": "pick"
+      },
+      "store": "pick"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Garrisons.StrongpointAutomation.Step",
+      "args": {
+        "action": "bullet"
+      },
+      "store": "bullet"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Garrisons.StrongpointAutomation.Step",
+      "args": {
+        "action": "bomb"
+      },
+      "store": "first"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Garrisons.StrongpointAutomation.Step",
+      "args": {
+        "action": "bomb"
+      },
+      "store": "bomb2"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Garrisons.StrongpointAutomation.Step",
+      "args": {
+        "action": "bomb"
+      },
+      "store": "bomb3"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Garrisons.StrongpointAutomation.Step",
+      "args": {
+        "action": "bomb"
+      },
+      "store": "bomb4"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Garrisons.StrongpointAutomation.Step",
+      "args": {
+        "action": "bomb"
+      },
+      "store": "bomb5"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Garrisons.StrongpointAutomation.Step",
+      "args": {
+        "action": "bomb"
+      },
+      "store": "bomb6"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Garrisons.StrongpointAutomation.Step",
+      "args": {
+        "action": "bomb"
+      },
+      "store": "bomb7"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Garrisons.StrongpointAutomation.Step",
+      "args": {
+        "action": "bomb"
+      },
+      "store": "bomb8"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Garrisons.StrongpointAutomation.Step",
+      "args": {
+        "action": "bomb"
+      },
+      "store": "bomb9"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Garrisons.StrongpointAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "end"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "pick.hp",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "bullet.hp_drop",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "first.hp_drop",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "first.destroyed",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "end.destroyed",
+      "min": 1
+    },
+    {
+      "check": "log_match",
+      "pattern": "Exception",
+      "max": 0
+    }
+  ]
+}

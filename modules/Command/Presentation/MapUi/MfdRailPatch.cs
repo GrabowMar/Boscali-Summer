@@ -230,7 +230,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         [HarmonyPatch(typeof(DynamicMap), nameof(DynamicMap.Maximize))]
         public static void MaximizePostfix(DynamicMap __instance)
         {
-            if (__instance == null) return;
+            // Native Maximize returns early while AllowedToOpen is false (aircraft selection): nothing opened.
+            if (__instance == null || !DynamicMap.mapMaximized) return;
 
             if (!MfdPresentation.Expanded)
             {

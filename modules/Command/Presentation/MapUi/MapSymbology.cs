@@ -10,9 +10,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// <para>The game draws every ground vehicle with one blob, every aircraft and ship as a bare
     /// silhouette, and at map scale they all read as tiny tinted specks. This layer keeps the
     /// game's icon (its observed position, tint and heading stay authoritative)
-    /// and adds two things on top of the same pipeline: a framed translucent plate behind each contact
-    /// whose outline shape marks allegiance (see <see cref="MapSymbolAtlas"/>), and a distinct
-    /// glyph for ground platforms that the game gives no distinguishing sprite (armour, light
+    /// and adds two things on top of the same pipeline: an invisible plate behind each contact
+    /// that makes it easy to click, and a distinct frameless glyph (see <see cref="MapSymbolAtlas"/>)
+    /// for ground platforms that the game gives no distinguishing sprite (armour, light
     /// vehicles, supply trucks, artillery, anti-air guns, SAMs, radars). Aircraft and ships receive
     /// silhouettes with the same line weight; buildings use an unclassified site mark.</para>
     ///
@@ -24,8 +24,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     internal static class MapSymbology
     {
         internal const int MaximumSymbols = 2048;
-        /// <summary>Plate width over glyph width; glyphs are drawn to fit inside the hostile diamond.</summary>
-        internal const float PlateRatio = 1.4f;
+        /// <summary>Plate width over glyph width. The plate is invisible: it is the symbol's click
+        /// target, a little wider than the glyph.</summary>
+        internal const float PlateRatio = 1.15f;
         /// <summary>Plate width in reference pixels at the game's MEDIUM (80%) symbol size.</summary>
         internal const float MediumPlate = 24f;
         private const float SelectedGrowth = 1.16f;
@@ -37,8 +38,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             internal RectTransform PlateRect;
             internal Sprite Original;
             internal Sprite GlyphSprite;
+            internal MapGlyph Glyph;
             internal float Relative = 1f;
-            internal MapSide Side = (MapSide)(-1);
             internal Vector2 PlateSize;
         }
 
@@ -48,7 +49,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static RectTransform layer;
         private static float layerScale = 1f;
         private static float nextSweep;
-        private static FactionHQ spectatorBase;
 
         internal static bool Enabled => DynamicMap.mapMaximized &&
             Plugin.Settings?.Command?.MapSymbology?.Value == true;
@@ -113,7 +113,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     plate.sizeDelta = symbol.PlateSize;
                 }
             }
-            if (symbol.Plate.color != image.color) symbol.Plate.color = image.color;
+        }
+
+        /// <summary>The platform class this contact is drawn as; false when it keeps the game's icon.</summary>
+        internal static bool TryGlyph(UnitMapIcon icon, out MapGlyph glyph)
+        {
+            glyph = default;
+            if (icon == null || !symbols.TryGetValue(icon, out Symbol symbol) || symbol == NotApplicable ||
+                symbol.GlyphSprite == null) return false;
+            glyph = symbol.Glyph;
+            return true;
         }
 
         /// <summary>Puts the game's own icon back and hides the plate.</summary>
@@ -142,12 +151,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (symbol == NotApplicable) return symbol;
             Unit contact = icon.unit;
             if (contact == null || icon.iconImage == null || !EnsurePlate(symbol, icon)) return symbol;
-            MapSide side = SideOf(contact);
-            if (side != symbol.Side)
-            {
-                symbol.Side = side;
-                symbol.Plate.sprite = MapSymbolAtlas.Plate(side);
-            }
             Image image = icon.iconImage;
             if (symbol.GlyphSprite != null && image.sprite != symbol.GlyphSprite &&
                 (image.sprite == symbol.Original || image.sprite == null)) image.sprite = symbol.GlyphSprite;
@@ -159,22 +162,22 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             var symbol = new Symbol { Original = unit.definition != null ? unit.definition.mapIcon : null };
             float scale = unit.definition != null ? unit.definition.mapIconSize : 1f;
             symbol.Relative = Mathf.Clamp(scale <= 0f ? 1f : scale, .85f, 1.35f);
-            if (unit is Ship) { symbol.GlyphSprite = MapSymbolAtlas.Glyph(MapGlyph.Hull); return symbol; }
+            if (unit is Ship) { symbol.GlyphSprite = MapSymbolAtlas.Glyph(symbol.Glyph = MapGlyph.Hull); return symbol; }
             if (unit is Aircraft)
             {
                 if (symbol.Original != null && symbol.Original.name.IndexOf("helo", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                    symbol.GlyphSprite = MapSymbolAtlas.Glyph(MapGlyph.Helicopter);
-                else symbol.GlyphSprite = MapSymbolAtlas.Glyph(MapGlyph.Aircraft);
+                    symbol.GlyphSprite = MapSymbolAtlas.Glyph(symbol.Glyph = MapGlyph.Helicopter);
+                else symbol.GlyphSprite = MapSymbolAtlas.Glyph(symbol.Glyph = MapGlyph.Aircraft);
                 return symbol;
             }
             if (unit is Building)
             {
-                symbol.GlyphSprite = MapSymbolAtlas.Glyph(MapGlyph.Contact);
+                symbol.GlyphSprite = MapSymbolAtlas.Glyph(symbol.Glyph = MapGlyph.Contact);
                 return symbol;
             }
             if (!(unit is GroundVehicle)) return NotApplicable;
             var vehicle = unit.definition as VehicleDefinition;
-            symbol.GlyphSprite = MapSymbolAtlas.Glyph(GroundGlyph(vehicle != null ? vehicle.vehicleType : VehicleType.LCV));
+            symbol.GlyphSprite = MapSymbolAtlas.Glyph(symbol.Glyph = GroundGlyph(vehicle != null ? vehicle.vehicleType : VehicleType.LCV));
             return symbol;
         }
 
@@ -192,21 +195,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 case VehicleType.R_SAM: return MapGlyph.Sam;
                 case VehicleType.RDR: return MapGlyph.Radar;
                 default: return MapGlyph.Light;
-            }
-        }
-
-        private static MapSide SideOf(Unit unit)
-        {
-            switch (DynamicMap.GetFactionMode(unit.NetworkHQ, true))
-            {
-                case FactionMode.Friendly: return MapSide.Friendly;
-                case FactionMode.Enemy: return MapSide.Hostile;
-                case FactionMode.Spectator:
-                    // A spectator sees both factions in their own colours: the first one met gets the
-                    // friendly frame, every other the hostile frame, so shape still separates them.
-                    if (spectatorBase == null) spectatorBase = unit.NetworkHQ;
-                    return unit.NetworkHQ == spectatorBase ? MapSide.Friendly : MapSide.Hostile;
-                default: return MapSide.Neutral;
             }
         }
 
@@ -228,11 +216,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             go.transform.SetParent(layer, false);
             symbol.Plate = go.GetComponent<Image>();
             symbol.Plate.raycastTarget = true;
+            symbol.Plate.color = Color.clear;
             go.AddComponent<UnitHitTarget>().Icon = icon;
             symbol.Plate.enabled = false;
             symbol.PlateRect = symbol.Plate.rectTransform;
             symbol.PlateSize = Vector2.zero;
-            symbol.Side = (MapSide)(-1);
             return true;
         }
 

@@ -12,8 +12,8 @@ namespace BoscaliSummer.Modules.Progression.Runtime
     internal static class EmblemRaster
     {
         // Rim bands, measured inward from the outer edge: keyline, rim in the ink tincture, inner keyline.
-        private const float RimKey = 0.030f, RimInk = 0.088f, RimInner = 0.112f;
-        private const float Keyline = 0.022f;
+        private const float RimKey = 0.036f, RimInk = 0.102f, RimInner = 0.132f;
+        private const float Keyline = 0.030f;
         private const float Far = 1e6f;
 
         /// <summary>Where a shape carries its charge, top stars and base line.</summary>
@@ -26,14 +26,17 @@ namespace BoscaliSummer.Modules.Progression.Runtime
 
         private static readonly Layout[] Layouts =
         {
-            new Layout(0.08f, 0.50f, 0.58f, 0.40f, -0.50f),  // SHIELD
-            new Layout(0.00f, 0.54f, 0.58f, 0.32f, -0.60f),  // ROUNDEL
-            new Layout(0.24f, 0.36f, 0.52f, 0.44f, -0.30f),  // DELTA
-            new Layout(0.18f, 0.44f, 0.64f, 0.32f, -0.30f),  // BANNER
-            new Layout(0.00f, 0.52f, 0.56f, 0.34f, -0.58f),  // HEX
-            new Layout(0.00f, 0.40f, 0.46f, 0.17f, -0.50f),  // DIAMOND
-            new Layout(0.00f, 0.54f, 0.60f, 0.40f, -0.62f),  // PATCH
-            new Layout(-0.04f, 0.50f, 0.54f, 0.34f, -0.64f), // ARCH
+            new Layout(0.10f, 0.55f, 0.54f, 0.40f, -0.50f),  // SHIELD
+            new Layout(0.00f, 0.60f, 0.58f, 0.32f, -0.60f),  // ROUNDEL
+            new Layout(0.26f, 0.41f, 0.56f, 0.46f, -0.32f),  // DELTA
+            new Layout(0.18f, 0.49f, 0.64f, 0.32f, -0.30f),  // BANNER
+            new Layout(0.00f, 0.58f, 0.56f, 0.34f, -0.58f),  // HEX
+            new Layout(0.00f, 0.45f, 0.46f, 0.17f, -0.50f),  // DIAMOND
+            new Layout(0.00f, 0.60f, 0.60f, 0.40f, -0.62f),  // PATCH
+            new Layout(-0.08f, 0.54f, 0.48f, 0.26f, -0.66f), // ARCH
+            new Layout(0.06f, 0.45f, 0.40f, 0.36f, -0.40f),  // ARROWHEAD
+            new Layout(0.00f, 0.50f, 0.47f, 0.27f, -0.48f),  // SAWBLADE
+            new Layout(0.12f, 0.43f, 0.66f, 0.20f, -0.56f),  // COFFIN
         };
 
         /// <summary>
@@ -58,6 +61,18 @@ namespace BoscaliSummer.Modules.Progression.Runtime
             Rgba ink = EmblemDesign.Paint(design.Ink, finish);
             Rgba key = finish == EmblemFinish.LowVis ? new Rgba(0.22f, 0.22f, 0.22f) : new Rgba(0.05f, 0.05f, 0.06f);
 
+            // A dark mark is its own outline; keying it would fill the detail cut into it.
+            bool outlined = EmblemDesign.Luminance(EmblemDesign.Paint(design.Ink, EmblemFinish.Colour)) >= 0.25f;
+            // Traced nose art is three tones. A light ink is the skin and its shade is darker; a dark ink is the
+            // shade itself (hair, cloth, metal) and the skin is lifted out of it.
+            bool toned = EmblemMarks.Toned(design.Charge);
+            // Its own line work does the outlining, so the keyline round it is fine and the drawing a little larger.
+            float outline = toned ? Keyline * 0.4f : Keyline;
+            if (toned) scale *= 1.12f;
+            Rgba shade = outlined
+                ? new Rgba(ink.R * 0.58f + key.R * 0.42f, ink.G * 0.58f + key.G * 0.42f, ink.B * 0.58f + key.B * 0.42f)
+                : ink;
+            Rgba skin = new Rgba(ink.R * 0.45f + 0.50f, ink.G * 0.45f + 0.50f, ink.B * 0.45f + 0.50f);
             int o = 0;
             for (int row = 0; row < size; row++)
             {
@@ -78,14 +93,28 @@ namespace BoscaliSummer.Modules.Progression.Runtime
                         Mix(ref r, ref g, ref b, second, Cover(-Division(design.Division, x, y - layout.Cy), px));
 
                     // Everything in the ink tincture is one shape, so it shares one keyline.
-                    float mark = Far;
+                    float mark = Far, figure = Far, shadeEdge = Far, lineEdge = Far;
                     float qx = x / scale, qy = (y - cy) / scale;
                     if (qx > -1.2f && qx < 1.2f && qy > -1.2f && qy < 1.2f)
-                        mark = Charge(design.Charge, qx, qy) * scale;
+                    {
+                        mark = EmblemMarks.Distance(design.Charge, qx, qy) * scale;
+                        if (toned && mark < px)
+                        {
+                            figure = mark;
+                            EmblemMarks.Tones(design.Charge, qx, qy, out shadeEdge, out lineEdge);
+                            shadeEdge = Math.Max(shadeEdge * scale, mark); lineEdge = Math.Max(lineEdge * scale, mark);
+                        }
+                    }
                     mark = Math.Min(mark, Accent(design, layout, x, y, cy, scale, edge));
                     if (numbered) mark = Math.Min(mark, Digits(design.Number, x, y - baseY));
-                    Mix(ref r, ref g, ref b, key, Cover(mark - Keyline, px));
+                    if (outlined) Mix(ref r, ref g, ref b, key, Cover(mark - outline, px));
                     Mix(ref r, ref g, ref b, ink, Cover(mark, px));
+                    if (toned)
+                    {
+                        if (!outlined) Mix(ref r, ref g, ref b, skin, Cover(figure, px));
+                        Mix(ref r, ref g, ref b, shade, Cover(shadeEdge, px));
+                        Mix(ref r, ref g, ref b, key, Cover(lineEdge, px));
+                    }
 
                     Mix(ref r, ref g, ref b, key, Cover(-(edge + RimInner), px));
                     Mix(ref r, ref g, ref b, ink, Cover(-(edge + RimInk), px));
@@ -103,34 +132,47 @@ namespace BoscaliSummer.Modules.Progression.Runtime
 
         // ---- Outer shapes ----------------------------------------------------------------
 
-        private static readonly float[] DeltaPoints = { -0.84f, 0.72f, 0.84f, 0.72f, 0f, -0.84f };
-        private static readonly float[] BannerPoints = { -0.66f, 0.88f, 0.66f, 0.88f, 0.66f, -0.88f, 0f, -0.50f, -0.66f, -0.88f };
+        // Corners are cut, not rounded: a badge is stencilled on metal, not embroidered.
+        private const float Corner = 0.012f;
+        private static readonly float[] ShieldPoints = Mirror(new[]
+            { 0f, 0.92f, 0.42f, 0.80f, 0.84f, 0.92f, 0.80f, 0.06f, 0.44f, -0.58f, 0f, -0.94f });
+        private static readonly float[] DeltaPoints = { -0.93f, 0.82f, 0.93f, 0.82f, 0f, -0.93f };
+        private static readonly float[] BannerPoints = { -0.69f, 0.91f, 0.69f, 0.91f, 0.69f, -0.91f, 0f, -0.52f, -0.69f, -0.91f };
         private static readonly float[] HexPoints =
-            { 0f, 0.90f, 0.779f, 0.45f, 0.779f, -0.45f, 0f, -0.90f, -0.779f, -0.45f, -0.779f, 0.45f };
-        private static readonly float[] DiamondPoints = { 0f, 0.90f, 0.78f, 0f, 0f, -0.90f, -0.78f, 0f };
+            { 0f, 0.93f, 0.805f, 0.465f, 0.805f, -0.465f, 0f, -0.93f, -0.805f, -0.465f, -0.805f, 0.465f };
+        private static readonly float[] DiamondPoints = { 0f, 0.95f, 0.83f, 0f, 0f, -0.95f, -0.83f, 0f };
+        private static readonly float[] PatchPoints = Mirror(new[]
+            { 0f, 0.88f, 0.64f, 0.88f, 0.88f, 0.64f, 0.88f, -0.64f, 0.64f, -0.88f, 0f, -0.88f });
+        private static readonly float[] ArrowheadPoints = Mirror(new[]
+            { 0f, 0.66f, 0.86f, 0.93f, 0.70f, 0.10f, 0f, -0.95f });
+        private static readonly float[] CoffinPoints = Mirror(new[]
+            { 0f, 0.93f, 0.44f, 0.93f, 0.72f, 0.42f, 0.42f, -0.93f, 0f, -0.93f });
 
         private static float Shape(int shape, float x, float y)
         {
             switch (shape)
             {
                 case 1: return Len(x, y) - 0.93f;
-                case 2: return Poly(DeltaPoints, x, y) - 0.10f;
-                case 3: return Poly(BannerPoints, x, y) - 0.04f;
-                case 4: return Poly(HexPoints, x, y) - 0.04f;
-                case 5: return Poly(DiamondPoints, x, y) - 0.06f;
-                case 6: return RoundBox(x, y, 0.86f, 0.86f, 0.22f);
-                case 7: return Math.Max(y > 0.12f ? Len(x, y - 0.12f) - 0.82f : Math.Abs(x) - 0.82f, -0.90f - y);
-                default: return Shield(x, y);
+                case 2: return Poly(DeltaPoints, x, y) - Corner;
+                case 3: return Poly(BannerPoints, x, y) - Corner;
+                case 4: return Poly(HexPoints, x, y) - Corner;
+                case 5: return Poly(DiamondPoints, x, y) - Corner;
+                case 6: return Poly(PatchPoints, x, y) - Corner;
+                // A bullet: straight flanks into a pointed arch.
+                case 7: return Math.Max(y > -0.20f ? Len(Math.Abs(x) + 0.355f, y + 0.20f) - 1.175f : Math.Abs(x) - 0.82f, -0.90f - y);
+                case 8: return Poly(ArrowheadPoints, x, y) - Corner;
+                case 9:
+                {
+                    // Twelve raked teeth; the distance is approximate, which a one-pixel edge never shows.
+                    const float tooth = (float)(Math.PI / 6.0);
+                    float turn = ((float)Math.Atan2(y, x) + (float)Math.PI) / tooth, disc = Len(x, y) - 0.77f;
+                    // Inside the disc the rim runs round; the teeth are all keyline, standing on it.
+                    if (disc < 0f) return disc - RimKey * 0.5f;
+                    return Math.Max((disc - 0.20f * (turn - (float)Math.Floor(turn))) * 0.85f, -RimKey * 0.5f);
+                }
+                case 10: return Poly(CoffinPoints, x, y) - Corner;
+                default: return Poly(ShieldPoints, x, y) - Corner;
             }
-        }
-
-        /// <summary>Heater shield: straight flanks down to the shoulder, then two arcs meeting at the foot.</summary>
-        private static float Shield(float x, float y)
-        {
-            const float half = 0.80f, top = 0.88f, shoulder = 0.18f, arcX = 0.384f, arc = 1.184f;
-            float ax = Math.Abs(x);
-            float flank = y > shoulder ? ax - half : Len(ax + arcX, y - shoulder) - arc;
-            return Math.Max(flank, y - top);
         }
 
         // ---- Field divisions: positive where the second tincture goes -----------------------
@@ -173,111 +215,6 @@ namespace BoscaliSummer.Modules.Progression.Runtime
             return ((int)cell & 1) == 1 ? span : -span;
         }
 
-        // ---- Charges, in a -1..1 box of their own ----------------------------------------------
-
-        private static readonly float[] BoltPoints =
-            { 0.25f, 0.98f, -0.55f, -0.02f, -0.05f, -0.02f, -0.30f, -0.98f, 0.55f, 0.20f, 0.08f, 0.20f };
-        private static readonly float[] WingPoints =
-        {
-            0.28f, 0.33f, 0.98f, 0.46f, 0.94f, 0.25f, 0.78f, 0.21f, 0.78f, 0.05f,
-            0.60f, 0.03f, 0.60f, -0.13f, 0.40f, -0.15f, 0.40f, -0.30f, 0.28f, -0.34f,
-        };
-        private static readonly float[] CrossBarPoints =
-            { 0f, 1.00f, 0.17f, 0.82f, 0.17f, -0.82f, 0f, -1.00f, -0.17f, -0.82f, -0.17f, 0.82f };
-        private static readonly float[] DartPoints = Mirror(new[]
-        {
-            0f, 1.00f, 0.07f, 0.70f, 0.12f, 0.30f, 0.20f, 0.10f, 0.95f, -0.50f, 0.95f, -0.66f,
-            0.24f, -0.62f, 0.22f, -0.74f, 0.42f, -0.86f, 0.42f, -0.96f, 0.08f, -0.90f, 0f, -0.96f,
-        });
-        private static readonly float[] BladePoints = { 0f, 1.00f, 0.12f, 0.80f, 0.12f, -0.40f, -0.12f, -0.40f, -0.12f, 0.80f };
-        private static readonly float[] SpadeHeadPoints = { 0f, 0.98f, 0.70f, 0.02f, -0.70f, 0.02f };
-        private static readonly float[] SpadeStemPoints = { 0f, -0.20f, 0.30f, -0.96f, -0.30f, -0.96f };
-        private static readonly float[] SkullNosePoints = { 0f, -0.01f, 0.09f, -0.19f, -0.09f, -0.19f };
-        private static readonly float[] SunRayPoints = { 0.56f, 0.13f, 0.98f, 0f, 0.56f, -0.13f };
-        private static readonly float[] TridentTipPoints =
-            { 0f, 1.00f, 0.15f, 0.66f, 0.065f, 0.66f, 0.065f, 0.40f, -0.065f, 0.40f, -0.065f, 0.66f, -0.15f, 0.66f };
-        private static readonly float[] TridentBarbPoints = { 0.46f, 0.98f, 0.60f, 0.66f, 0.32f, 0.66f };
-        private static readonly float[] CrownPoints =
-        {
-            -0.70f, -0.50f, -0.86f, 0.46f, -0.40f, 0.02f, 0f, 0.70f, 0.40f, 0.02f, 0.86f, 0.46f, 0.70f, -0.50f,
-        };
-        private static readonly float[] ArrowHeadPoints = { 0f, 1.00f, 0.62f, 0.20f, -0.62f, 0.20f };
-        private static readonly float[] ArrowFletchPoints = { 0.04f, -0.46f, 0.40f, -0.72f, 0.40f, -0.98f, 0.04f, -0.74f };
-        private static readonly float[] AnchorFlukePoints = { 0.38f, -0.16f, 0.86f, -0.16f, 0.62f, 0.20f };
-
-        private static float Charge(int charge, float x, float y)
-        {
-            float ax = Math.Abs(x), ay = Math.Abs(y);
-            switch (charge)
-            {
-                case 0: return Star(x, y, 0.98f, 0.44f);
-                case 1: return Poly(BoltPoints, x, y);
-                case 2:
-                {
-                    float hub = Len(x, y);
-                    return Math.Min(Poly(WingPoints, ax, y), Math.Max(hub - 0.33f, 0.035f - Math.Abs(hub - 0.20f)));
-                }
-                case 3: return Math.Min(Poly(CrossBarPoints, x, y), Poly(CrossBarPoints, y, x));
-                case 4: return Math.Min(Chevron(ax, y, 0.78f), Chevron(ax, y, 0.14f));
-                case 5: return Poly(DartPoints, x, y);
-                case 6:
-                    return Math.Min(Math.Min(Poly(BladePoints, x, y), Box(x, y + 0.36f, 0.48f, 0.07f)),
-                        Math.Min(Box(x, y + 0.62f, 0.07f, 0.22f), Len(x, y + 0.88f) - 0.12f));
-                case 7:
-                    return Math.Min(Math.Min(Len(ax - 0.34f, y + 0.10f) - 0.40f, Poly(SpadeHeadPoints, x, y)),
-                        Poly(SpadeStemPoints, x, y));
-                case 8:
-                {
-                    y += 0.07f;
-                    float bone = Math.Min(Len(x, y - 0.22f) - 0.62f, RoundBox(x, y + 0.44f, 0.36f, 0.26f, 0.10f));
-                    float holes = Math.Min(Math.Min(Len(ax - 0.25f, y - 0.14f) - 0.17f, Poly(SkullNosePoints, x, y)),
-                        Math.Min(Box(x, y + 0.60f, 0.024f, 0.12f), Box(ax - 0.17f, y + 0.60f, 0.024f, 0.12f)));
-                    return Math.Max(bone, -holes);
-                }
-                case 9: return Math.Max(Len(x + 0.06f, y) - 0.88f, -(Len(x - 0.26f, y - 0.10f) - 0.72f));
-                case 10:
-                {
-                    const float sector = (float)(Math.PI / 4.0);
-                    float angle = (float)Math.Atan2(y, x) + (float)Math.PI;
-                    float local = angle - sector * (float)Math.Floor(angle / sector) - sector * 0.5f;
-                    float radius = Len(x, y);
-                    return Math.Min(radius - 0.44f,
-                        Poly(SunRayPoints, radius * (float)Math.Cos(local), radius * (float)Math.Sin(local)));
-                }
-                case 11:
-                {
-                    float fork = Math.Max(Math.Abs(Len(x, y - 0.36f) - 0.46f) - 0.065f, y - 0.42f);
-                    float tines = Math.Min(Box(ax - 0.46f, y - 0.50f, 0.065f, 0.20f), Poly(TridentBarbPoints, ax, y));
-                    return Math.Min(Math.Min(Box(x, y + 0.25f, 0.065f, 0.75f), Poly(TridentTipPoints, x, y)),
-                        Math.Min(fork, tines));
-                }
-                case 12:
-                    return Math.Min(Math.Min(Poly(CrownPoints, x, y), Box(x, y + 0.56f, 0.70f, 0.13f)),
-                        Math.Min(Len(ax - 0.86f, y - 0.54f) - 0.10f, Len(x, y - 0.80f) - 0.11f));
-                case 13:
-                    return Math.Min(Math.Min(Poly(ArrowHeadPoints, x, y), Box(x, y + 0.25f, 0.09f, 0.55f)),
-                        Poly(ArrowFletchPoints, ax, y));
-                case 14:
-                    return Math.Min(Math.Min(Math.Abs(Len(x, y) - 0.68f) - 0.06f, Len(x, y) - 0.10f),
-                        Math.Min(Box(x, ay - 0.72f, 0.055f, 0.26f), Box(ax - 0.72f, y, 0.26f, 0.055f)));
-                default:
-                {
-                    float arms = Math.Max(Math.Abs(Len(x, y + 0.18f) - 0.60f) - 0.065f, y + 0.12f);
-                    float ring = Math.Abs(Len(x, y - 0.84f) - 0.15f) - 0.035f;
-                    return Math.Min(Math.Min(Box(x, y + 0.04f, 0.065f, 0.76f), Box(x, y - 0.48f, 0.36f, 0.055f)),
-                        Math.Min(Math.Min(arms, ring), Poly(AnchorFlukePoints, ax, y)));
-                }
-            }
-        }
-
-        /// <summary>One upward chevron whose peak sits at <paramref name="apex"/>; <paramref name="ax"/> is |x|.</summary>
-        private static float Chevron(float ax, float y, float apex)
-        {
-            const float slope = 0.70f, thick = 0.34f;
-            float along = y - (apex - slope * ax);
-            return Math.Max((Math.Abs(along + thick * 0.5f) - thick * 0.5f) * 0.819f, ax - 0.88f);
-        }
-
         // ---- Accents and the squadron number ------------------------------------------------------
 
         private const int Leaves = 6;
@@ -299,7 +236,7 @@ namespace BoscaliSummer.Modules.Progression.Runtime
             switch (design.Accent)
             {
                 case EmblemDesign.AccentRing:
-                    return Math.Abs(edge + 0.175f) - 0.020f;
+                    return Math.Abs(edge + 0.195f) - 0.022f;
                 case EmblemDesign.AccentStars:
                     return Math.Min(Star(x, y - layout.StarY, 0.095f, 0.44f),
                         Star(ax - layout.StarSpread, y - layout.StarY + 0.06f, 0.095f, 0.44f));

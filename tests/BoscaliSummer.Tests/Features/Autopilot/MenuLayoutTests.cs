@@ -91,7 +91,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
                     l.FillDock(dock, c.Rows, false, 0, true, MenuLayout.DockSide(c), false);
                     MenuRect p = l.PointerDock(dock);
                     string at = " " + id + " @" + s[0] + "x" + s[1];
-                    TestAssert.That(dock.Side > 0 ? p.L < dock.Rect.L && p.R == dock.Rect.R : p.R > dock.Rect.R && p.L == dock.Rect.L, "the pointer dock reaches toward the hub" + at);
+                    TestAssert.That(dock.Side > 0 ? p.L < dock.Rect.L : p.R > dock.Rect.R, "the pointer dock reaches toward the hub" + at);
                     TestAssert.That(Math.Abs(p.W - dock.Rect.W) >= (s[1] >= 1080 ? 40f * l.Rho : 0f), "by at least the corridor" + at);
                     for (int i = 0; i < l.Count; i++) TestAssert.That(!p.Overlaps(l.Widest[i]), "and never over a label plate" + at);
                 }

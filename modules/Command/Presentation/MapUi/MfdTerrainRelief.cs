@@ -361,6 +361,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             cameraWasMoving = cameraMoved;
             if (renderNow)
             {
+                UpdateMinis();
                 if (!RenderTerrain())
                 {
                     Restore();
@@ -1012,6 +1013,65 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             else aircraftTrails.Refresh(camera, sceneRoot.transform.position, viewRevision, time);
         }
 
+        /// <summary>Miniature length as a share of the view's half height: steady on screen at any zoom.</summary>
+        private const float MiniLength = .075f;
+        private static float nextMinis;
+        private static float minisSize;
+        private static bool minisShown;
+
+        /// <summary>
+        /// Rewrites the miniature layer from the cached, faction-known fixes just before a terrain
+        /// render: on a beat, and at once when the zoom changes, since their size follows it. A
+        /// contact given a miniature has its flat glyph faded out; the glyph stays in place as the
+        /// click target and as the source of tint and selection.
+        /// </summary>
+        private static void UpdateMinis()
+        {
+            if (!MapSymbology.Enabled || Plugin.Settings?.Command?.MapMinis3D?.Value != true)
+            {
+                if (minisShown) RestoreGlyphs();
+                return;
+            }
+            float time = Time.unscaledTime, size = camera.orthographicSize;
+            if (time < nextMinis && Mathf.Approximately(size, minisSize)) return;
+            nextMinis = time + .2f;
+            minisSize = size;
+            minisShown = true;
+            MapMinis.Begin(sceneRoot.transform, TerrainLayer);
+            float toModel = VerticalScale * ModelWidth / 81920f;
+            foreach (KeyValuePair<MapIcon, IconFix> entry in iconFixes)
+            {
+                if (entry.Key == null || !(entry.Key is UnitMapIcon icon) || icon.iconImage == null) continue;
+                Image image = icon.iconImage;
+                if (!image.isActiveAndEnabled || !MapSymbology.TryGlyph(icon, out MapGlyph glyph)) continue;
+                IconFix fix = entry.Value;
+                float ground = GroundHeight(fix.X, fix.Z);
+                float lift = fix.Airborne
+                    ? Mathf.Clamp((fix.Altitude - seaLevel) * toModel - ground, 0f, MaximumAirLift) : 0f;
+                Vector2 forward = Vector2.up;
+                if (headings.TryGetValue(icon, out HeadingMark mark))
+                {
+                    float heading = mark.Native * Mathf.Deg2Rad;
+                    forward = new Vector2(-Mathf.Sin(heading), Mathf.Cos(heading));
+                }
+                float length = size * MiniLength * (owner.selectedIcons.Contains(icon) ? 1.16f : 1f);
+                var at = new Vector3(fix.X / source.MapSize.x * ModelSpanX,
+                    ground + 1f + lift + length * .05f, fix.Z / source.MapSize.y * ModelSpanZ);
+                bool drawn = MapMinis.Add(glyph, at, forward, length, image.color, lift <= .5f);
+                image.canvasRenderer.SetAlpha(drawn ? 0f : 1f);
+            }
+            MapMinis.End();
+        }
+
+        private static void RestoreGlyphs()
+        {
+            minisShown = false;
+            nextMinis = 0f;
+            MapMinis.Clear();
+            foreach (MapIcon icon in iconFixes.Keys)
+                if (icon != null && icon.iconImage != null) icon.iconImage.canvasRenderer.SetAlpha(1f);
+        }
+
         private static void PlaceProjectedIcon(MapIcon icon, IconFix fix, Rect rect)
         {
             float groundHeight = GroundHeight(fix.X, fix.Z);
@@ -1604,6 +1664,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             labelFrame = -1;
             foreach (Image image in hiddenIcons) if (image != null) image.enabled = true;
             hiddenIcons.Clear();
+            RestoreGlyphs();
             foreach (MapIcon icon in iconFixes.Keys)
                 if (icon is UnitMapIcon unit) MapSymbology.Apply(unit, false);
             selectedForClusters.Clear();

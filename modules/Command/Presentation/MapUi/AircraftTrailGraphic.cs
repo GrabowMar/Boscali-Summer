@@ -119,34 +119,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     Vector2 from = new Vector2(rect.xMin + a.x * rect.width, rect.yMin + a.y * rect.height);
                     Vector2 to = new Vector2(rect.xMin + b.x * rect.width, rect.yMin + b.y * rect.height);
                     float fade = Mathf.Clamp01(1f - age / TrailSeconds);
-                    Color32 halo = track.Ink;
-                    halo.a = (byte)(28f * fade * track.Ink.a / 255f);
                     Color32 core = track.Ink;
-                    core.a = (byte)(150f * fade * track.Ink.a / 255f);
-                    AddStroke(mesh, from, to, 5f, halo);
-                    AddStroke(mesh, from, to, 1.5f, core);
+                    core.a = (byte)(165f * fade * track.Ink.a / 255f);
+                    // One stroke: the wide feather is the halo, and it keeps the layer in budget.
+                    MapStroke.Segment(mesh, from, to, 1.4f, 2.4f, core);
                 }
             }
-        }
-
-        private static void AddStroke(VertexHelper mesh, Vector2 a, Vector2 b, float width, Color32 ink)
-        {
-            Vector2 delta = b - a;
-            if (delta.sqrMagnitude < .01f) return;
-            Vector2 side = new Vector2(-delta.y, delta.x).normalized * width * .5f;
-            AddQuad(mesh, a - side, b + side, a + side, b - side, ink);
-        }
-
-        private static void AddQuad(VertexHelper mesh, Vector2 a, Vector2 b, Vector2 c, Vector2 d,
-            Color32 ink)
-        {
-            int start = mesh.currentVertCount;
-            mesh.AddVert(a, ink, Vector2.zero);
-            mesh.AddVert(c, ink, Vector2.up);
-            mesh.AddVert(b, ink, Vector2.one);
-            mesh.AddVert(d, ink, Vector2.right);
-            mesh.AddTriangle(start, start + 1, start + 2);
-            mesh.AddTriangle(start, start + 2, start + 3);
         }
     }
 }

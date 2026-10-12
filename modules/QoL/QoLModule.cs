@@ -13,8 +13,7 @@ namespace BoscaliSummer.Modules.QoL
         public ModuleMetadata Metadata => Module;
         public Type[] PatchTypes => new[]
         {
-            typeof(Patches.NightVisionChoicePatch),
-            typeof(Patches.WeaponAimAssistPatch)
+            typeof(Patches.NightVisionChoicePatch)
         };
 
         public void Install(ModuleContext context)

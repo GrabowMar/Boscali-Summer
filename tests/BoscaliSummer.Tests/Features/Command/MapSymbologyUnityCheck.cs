@@ -10,7 +10,7 @@ using UnityEngine.UI;
 /// <summary>
 /// Offline contact-symbol sheet: renders the real atlas sprites through a real UI camera at the sizes the
 /// map draws them (and magnified), over a relief-like backdrop, next to the game's bare icons for
-/// comparison. Checks the atlas invariants (tintable outline, translucent dark fill, transparent corners, every sprite builds)
+/// comparison. Checks the atlas invariants (readable coverage, clear sprite border, every sprite builds)
 /// and writes PNGs for review. The game's aircraft and ship sprites are read from BOSCALI_VANILLA_ICONS
 /// (white-with-alpha exports of the vanilla map icons) when that folder exists.
 /// </summary>
@@ -141,32 +141,13 @@ public static class MapSymbologyUnityCheck
 
     private static void VerifyAtlas()
     {
-        foreach (MapSide side in Enum.GetValues(typeof(MapSide)))
-        {
-            Color32[] pixels = MapSymbolAtlas.RenderPlate(side);
-            int n = MapSymbolAtlas.Size;
-            if (pixels[0].a != 0 || pixels[n - 1].a != 0 || pixels[n * (n - 1)].a != 0 || pixels[n * n - 1].a != 0)
-                throw new Exception("Plate " + side + " is not clear at the corners.");
-            Color32 center = pixels[(n / 2) * n + n / 2];
-            // Current plates deliberately use 38% fill and a 94% outline so terrain remains readable.
-            if (Math.Abs(center.a - 97) > 1 || Math.Abs(center.r - 20) > 1 ||
-                center.g != center.r || center.b != center.r)
-                throw new Exception("Plate " + side + " does not have the translucent dark fill.");
-            float outlineCoverage = 0f;
-            foreach (Color32 p in pixels)
-                if (p.r > 128) outlineCoverage += p.a / 255f * p.r / 255f;
-            // Count antialiased coverage, not only fully covered texels: the diamond's sloping
-            // fine outline has fewer pure-white texels than the rounded square.
-            if (outlineCoverage < 120f) throw new Exception("Plate " + side + " has too little tintable outline: " + outlineCoverage);
-            if (MapSymbolAtlas.Plate(side) == null) throw new Exception("Plate " + side + " did not build.");
-        }
         foreach (MapGlyph glyph in Enum.GetValues(typeof(MapGlyph)))
         {
             Color32[] pixels = MapSymbolAtlas.RenderGlyph(glyph);
             int n = MapSymbolAtlas.Size, covered = 0, edge = 0;
             for (int i = 0; i < pixels.Length; i++)
             {
-                if (pixels[i].a > 128) covered++;
+                if (pixels[i].a > 128 && pixels[i].r > 128) covered++;
                 int x = i % n, y = i / n;
                 if ((x < 1 || y < 1 || x > n - 2 || y > n - 2) && pixels[i].a > 0) edge++;
             }
@@ -227,7 +208,6 @@ public static class MapSymbologyUnityCheck
 
     private static void Unit(float x, float y, MapSide side, Color tint, Sprite glyph, float plate)
     {
-        Add(x, y, MapSymbolAtlas.Plate(side), tint, plate);
         Add(x, y, glyph, tint, plate / MapSymbology.PlateRatio);
     }
 

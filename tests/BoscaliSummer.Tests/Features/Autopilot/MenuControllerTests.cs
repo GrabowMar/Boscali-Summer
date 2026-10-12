@@ -35,6 +35,54 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             OpenKeyNameAndPadLegends();
             StickUsesItsMagnitude();
             LatchedPeekUsesThePlateAsDrawn();
+            ForgivingAndPredictive();
+        }
+
+        private static void ForgivingAndPredictive()
+        {
+            var r = Rig();
+            r.HoldOpen(); r.Mouse(r.L.Cx + 170f * r.L.Rho, r.L.Cy); r.ToRow("flight/gear");
+            TestAssert.That(!r.C.Armed, "a row the pointer just reached is not armed yet");
+            r.Adv(0.06f);
+            TestAssert.That(r.C.Armed, "50 ms on a row arms it for release");
+            MenuRect gear = r.RowRect("flight/gear");
+            r.Mouse(r.C.Dock.Rect.R + 15f, (gear.T + gear.B) / 2f);
+            TestAssert.Eq(r.Focused, "flight/gear", "15 px past the dock's outer edge still holds the row");
+            r.CUp();
+            TestAssert.That(r.Ran("flight/gear"), "and release runs it");
+
+            r = Rig();
+            int comms = r.Model.IndexOf("comms");
+            r.LatchOpen(); r.PressDigit(comms == 9 ? 0 : comms + 1);
+            MenuRect sr = r.RowRect("comms/csplash-one");
+            r.Mouse(sr.L + 100f, sr.B + 20f);
+            TestAssert.That(r.Focused != "" && r.Focused != "comms/csplash-one", "a pointer arriving on a group heading takes the nearest row: " + r.Focused);
+
+            // menu aim: FLIGHT is open, its dock on the right
+            r = Rig();
+            r.LatchOpen(); r.PressDigit(3);
+            float[] view = r.DiscOf(r.Model.IndexOf("view"));
+            r.Mouse(view[0], view[1]); r.Adv(0.07f);
+            TestAssert.Eq(r.Cat, "view", "moving away from the dock onto another category switches after 60 ms");
+            r = Rig();
+            r.LatchOpen(); r.PressDigit(3);
+            float[] wing = r.DiscOf(r.Model.IndexOf("wing"));
+            r.Mouse(r.L.Cx - 300f, r.L.Cy); r.Mouse(wing[0], wing[1]); r.Adv(0.07f);
+            TestAssert.Eq(r.Cat, "flight", "a category crossed on the way to the dock still needs the 120 ms rest");
+
+            // recall: the last run row is where the keys go next
+            r = Rig();
+            r.LatchOpen(); r.PressDigit(3);
+            TestAssert.Eq(r.C.Predicted, -1, "nothing is predicted before anything ran");
+            r.ToRow("flight/assist"); r.Click(); r.Backspace();
+            TestAssert.That(r.C.Cat == -1 && MenuHint.Parts(r.C).Live.EndsWith("SPACE FOR FLIGHT"), "back at the ring the hint offers the last category: " + MenuHint.Parts(r.C).Live);
+            r.Enter();
+            TestAssert.That(r.Cat == "flight" && r.Focused == "flight/assist", "a press at the ring returns to the last run row");
+            r.Enter();
+            TestAssert.Eq(r.Log.Count, 2, "and a second press runs it again");
+            r.Backspace(); r.PressDigit(3); r.Down();
+            TestAssert.Eq(r.Focused, "flight/assist", "the first arrow lands on the predicted row");
+            TestAssert.Eq(r.C.Items[r.C.Predicted].Id, "flight/assist", "which the view marks");
         }
 
         private static MenuRig Rig() => new MenuRig(MenuWorlds.Default());
@@ -53,7 +101,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.That(MenuHint.Parts(r.C).Live.Contains("LOWER GEAR"), "the hint says what release does");
             TestAssert.Eq(MenuHint.Readout(r.C).Value.Desc, "DEPLOY LANDING GEAR", "the hub echoes the focused action");
             r.CUp();
-            TestAssert.That(!r.C.Open && !r.Ran("flight/gear"), "a release inside 80 ms of the focus landing only closes (a jerk of the hand)");
+            TestAssert.That(!r.C.Open && !r.Ran("flight/gear"), "a release inside 50 ms of the focus landing only closes (a jerk of the hand)");
 
             r = Rig();
             r.HoldOpen(); r.Mouse(r.L.Cx + 170f * r.L.Rho, r.L.Cy); r.ToRow("flight/gear"); r.Adv(0.1f); r.CUp();
@@ -122,6 +170,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.That(r.C.DenyUntil - r.C.Now > 0f && r.C.DenyUntil - r.C.Now <= MenuController.DenySec, "the pulse the painter fades runs DenySec from the refusal");
             r.Adv(MenuController.DenySec + 0.02f);
             TestAssert.That(!r.C.Denying, "the pulse clears");
+            TestAssert.That(MenuHint.Parts(r.C).Live == "NO ROW 9 IN THIS LIST" && MenuHint.Parts(r.C).Warn, "the hint keeps saying why, in the caution colour, after the pulse");
             r.PressDigit(0);
             TestAssert.That(r.C.Cat == -1 && r.C.Open, "0 inside a dock is BACK");
             r.PressDigit(5);
@@ -436,7 +485,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             var r = Rig();
             r.HoldOpen(); r.Mouse(r.L.Cx + 170f * r.L.Rho, r.L.Cy);
             MenuRect dock = r.C.Dock.Rect, ptr = r.L.PointerDock(r.C.Dock);
-            TestAssert.That(ptr.L < dock.L && dock.L - ptr.L >= 40f * r.L.Rho && ptr.R == dock.R, "the pointer dock reaches toward the hub by the gap");
+            TestAssert.That(ptr.L < dock.L && dock.L - ptr.L >= 40f * r.L.Rho && ptr.R >= dock.R, "the pointer dock reaches toward the hub by the gap");
             MenuRect gear = r.RowRect("flight/gear");
             r.Mouse(ptr.L + 4f, (gear.T + gear.B) / 2f); r.Adv(0.1f);
             TestAssert.Eq(r.Focused, "flight/gear", "a pointer in the corridor focuses the row by Y");
@@ -581,7 +630,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             r.Mouse(r.L.Cx, r.L.Cy); r.Mouse(r.L.Cx + 40f, r.L.Cy + 40f);
             TestAssert.That(r.C.Device == MenuDevice.Mouse && MenuHint.Parts(r.C).Back.StartsWith("RMB BACK"), "moving the mouse flips the legend back to RMB");
             float[] disc = r.DiscOf(0); r.Mouse(disc[0], disc[1]); r.Adv(0.13f);
-            TestAssert.That(MenuHint.Parts(r.C).Live.StartsWith("CLICK OR 1–8"), "LATCHED hint says CLICK when the last input was the pointer");
+            TestAssert.That(MenuHint.Parts(r.C).Live.StartsWith("CLICK OR 1–"), "LATCHED hint says CLICK when the last input was the pointer");
             r.ToRow("weapons/select");
             TestAssert.Eq(MenuHint.Parts(r.C).Live, "CLICK · OPEN STATIONS", "submenu rows say OPEN STATIONS");
             r.ToRow("weapons/next");

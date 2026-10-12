@@ -22,15 +22,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private const int MaximumSamples = 1200;
         private const int MaximumVertices = 16000;
         private const float StationStep = 7f;
-        private const float HalfWidth = 0.9f;
+        private const float HalfWidth = 1f;
+        private const int TickEvery = 12;
 
-        private static readonly Color32 OuterUnder = new Color32(5, 13, 18, 165);
-        private static readonly Color32 InnerGlow = new Color32(75, 180, 205, 68);
-        private static readonly Color32 HotGlow = new Color32(255, 180, 100, 82);
-        private static readonly Color32 TickInk = new Color32(135, 210, 225, 135);
+        private static readonly Color32 Casing = new Color32(4, 10, 14, 205);
+        private static readonly Color32 CoolGlow = new Color32(70, 190, 220, 80);
+        private static readonly Color32 HotGlow = new Color32(255, 168, 72, 130);
+        private static readonly Color32 TickInk = new Color32(150, 220, 235, 190);
 
         /// <summary>The front's own ink; the map legend swatch reads it from here.</summary>
-        internal static readonly Color32 Ink = new Color32(206, 227, 231, 225);
+        internal static readonly Color32 Ink = new Color32(228, 241, 245, 245);
 
         private readonly FrontlineTracePoint[] points = new FrontlineTracePoint[FrontlineTraceLimits.MaximumPoints];
         private readonly int[] lengths = new int[MaximumTraces];
@@ -206,64 +207,34 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return written;
         }
 
+        /// <summary>
+        /// Soft glow, dark casing, then the crisp core, each one continuous feathered ribbon:
+        /// the front stays legible over terrain, over the forward-band tint and over the
+        /// trench trace beneath it, with no stair-stepped edge at any zoom.
+        /// </summary>
         private void Paint(VertexHelper vh, int traceCount, int stationCount, float toLocal)
         {
             for (int t = 0; t < traceCount; t++)
             {
                 int start = bounds[t], end = Mathf.Min(bounds[t + 1], stationCount);
-                for (int i = start; i + 1 < end; i++)
+                int count = end - start;
+                if (count < 2) continue;
+                int ticks = (count - 2) / TickEvery + 1;
+                if (vh.currentVertCount + count * MapStroke.RibbonVertices * 3 +
+                    ticks * MapStroke.SegmentVertices > MaximumVertices) return;
+
+                bool hot = pressures[order[t]] >= .35f;
+                MapStroke.Ribbon(vh, stations, start, end, toLocal, .5f, hot ? 13f : 9f, hot ? HotGlow : CoolGlow);
+                MapStroke.Ribbon(vh, stations, start, end, toLocal, HalfWidth + 1.5f, 1.6f, Casing);
+                for (int i = start; i + 1 < end; i += TickEvery)
                 {
-                    if (vh.currentVertCount + 16 > MaximumVertices) return;
-                    AddStroke(vh, stations[i], stations[i + 1], toLocal,
-                        pressures[order[t]] >= .35f);
-                    if ((i - start) % 12 == 0 && vh.currentVertCount + 4 <= MaximumVertices)
-                        AddTick(vh, stations[i], stations[i + 1], toLocal);
+                    Vector2 along = (stations[i + 1] - stations[i]).normalized;
+                    Vector2 reach = new Vector2(-along.y, along.x) * 3.4f;
+                    MapStroke.Segment(vh, (stations[i] - reach) * toLocal, (stations[i] + reach) * toLocal,
+                        .5f * toLocal, toLocal, TickInk);
                 }
+                MapStroke.Ribbon(vh, stations, start, end, toLocal, HalfWidth, 1f, Ink);
             }
-        }
-
-        /// <summary>
-        /// Outer dark halo, soft tactical glow, then the crisp core: the front stays legible
-        /// over terrain, over the forward-band tint and over the trench trace beneath it.
-        /// </summary>
-        private static void AddStroke(VertexHelper vh, Vector2 a, Vector2 b, float toLocal, bool hot)
-        {
-            Vector2 delta = b - a;
-            float length = delta.magnitude;
-            if (length < 0.05f) return;
-
-            Vector2 side = new Vector2(-delta.y, delta.x) / length * HalfWidth;
-            AddQuad(vh, a, b, side * 2.5f, toLocal, OuterUnder);
-            AddQuad(vh, a, b, side * 1.5f, toLocal, hot ? HotGlow : InnerGlow);
-            AddQuad(vh, a, b, side, toLocal, Ink);
-        }
-
-        private static void AddTick(VertexHelper vh, Vector2 a, Vector2 b, float toLocal)
-        {
-            Vector2 delta = b - a;
-            float length = delta.magnitude;
-            if (length < .05f) return;
-            Vector2 normal = new Vector2(-delta.y, delta.x) / length;
-            Vector2 along = delta / length * .45f;
-            AddQuad(vh, a - normal * 2.8f, a + normal * 2.8f,
-                along, toLocal, TickInk);
-        }
-
-        private static void AddQuad(VertexHelper vh, Vector2 a, Vector2 b, Vector2 offset, float toLocal, Color32 ink)
-        {
-            var vert = UIVertex.simpleVert;
-            vert.color = ink;
-            int index = vh.currentVertCount;
-            vert.position = (a - offset) * toLocal;
-            vh.AddVert(vert);
-            vert.position = (a + offset) * toLocal;
-            vh.AddVert(vert);
-            vert.position = (b + offset) * toLocal;
-            vh.AddVert(vert);
-            vert.position = (b - offset) * toLocal;
-            vh.AddVert(vert);
-            vh.AddTriangle(index, index + 1, index + 2);
-            vh.AddTriangle(index, index + 2, index + 3);
         }
 
         private static Vector2 ToPixels(FrontlineTracePoint point, Rect rect, float worldSizeX, float worldSizeZ, float scale)

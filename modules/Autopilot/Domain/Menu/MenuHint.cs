@@ -59,8 +59,18 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             else if (row != null && row.Kind == MenuKind.Picker) act = key + " · SELECT " + row.Label.Split('·')[0].Trim();
             else if (row != null && row.Kind == MenuKind.Submenu) act = key + " · OPEN " + (row.HintNoun ?? row.Label);
             else if (row != null) act = key + " · " + RowLabel(row);
+            else if (c.Cat < 0 && c.Recalled != null) act = (hold ? "FLICK OR 1–0 · " : "CLICK OR 1–0 · ") + (c.Device == MenuDevice.Pad ? "A" : "SPACE") + " FOR " + c.Recalled.Label;
             else if (c.Cat < 0) act = hold ? "FLICK OR 1–0 · PICK A CATEGORY" : "CLICK OR 1–0 · PICK A CATEGORY";
-            else act = hold ? (c.Locked ? "AIM OR 1–8 · PULL BACK TO RE-AIM" : "AIM OR 1–8 · PICK A ROW") : "CLICK OR 1–8 · PICK A ROW";
+            else
+            {
+                // the digits that act now: one per visible row
+                int n = Math.Min(c.Items.Count, c.Cap);
+                string keys = n > 1 ? " OR 1–" + n : n == 1 ? " OR 1" : "";
+                if (!c.Category.Available) act = c.Category.Reason.Length > 0 ? c.Category.Reason : "NOTHING AVAILABLE";
+                else act = hold ? "AIM" + keys + (c.Locked ? " · PULL BACK TO RE-AIM" : " · PICK A ROW") : "CLICK" + keys + " · PICK A ROW";
+            }
+            // a refused key says why in words for as long as a toast: the amber pulse alone is 180 ms of colour
+            if (c.Refusal != null && c.Hold == null) { act = c.Refusal; warn = true; }
             return new MenuHintParts(hold ? "HOLD MODE" : "LATCHED", act, BackGlyph(c.Device) + " BACK · " + (hold ? "ESC CANCEL" : "ESC CLOSE"), warn);
         }
 

@@ -42,7 +42,7 @@ namespace BoscaliSummer.Garrisons
             return true;
         }
 
-        /// <summary>Jumper and canopy templates riding inactive inside the Airborne.nobp mount prefab.</summary>
+        /// <summary>Jumper and canopy templates riding inactive inside the bundled mount prefab.</summary>
         private static bool TryHaloTemplates(out GameObject jumper, out GameObject canopy)
         {
             jumper = canopy = null;

@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+- **Display grade (off by default)**: SET > CLIENT > PERF gains COLOUR GRADE and SHARPEN. Contrast,
+  saturation, white balance and sharpening strength are in the F1 advanced view under Effects, and
+  any `.cube` LUT dropped into `BepInEx/config/BoscaliSummer/luts` can be named there as the look.
+- **Squadron insignia, sharper and meaner**: badges are cut, not rounded (angular shield, bullet arch,
+  chamfered patch, heavier keylines), with three new shapes (ARROWHEAD, SAWBLADE, COFFIN). Every mark
+  is redrawn as patch art with cut-in detail. Fifteen new marks: EAGLE, WOLF, BULL, AXES, JOLLY ROGER, SHARK, BOMB; the jokes
+  COOL S, LOSS, SHADES, DUCK, MUSHROOM, STONKS; and two pieces of nose art, PINUP and BOMBSHELL. Enemy
+  ace wings never roll the jokes or the nose art. Existing insignia keep their layers.
+- **Tail markings sit where they should**: the multirole wears its insignia on its fins (it was on
+  the boom underneath), the fast bomber's is no longer cut by the fin's leading edge, and the ground
+  attack jet's and trainer's stay clear of the formation-light strips. Markings are painted at twice
+  the resolution.
+- **Gun pipper fixed** ([#9](https://github.com/GrabowMar/Boscali-Summer/issues/9)): with a gun
+  selected and a target designated, the lead pipper and everything the HUD drew after it went
+  missing. The tweak that switched off the game's aim-assist stick correction caused it and is
+  removed; the game's own aim assist is back.
+- **Occupied city buildings can be levelled again**: under URBAN SIEGE a garrisoned building
+  ignored every hit. Bombs now wear it down as intended (3-8 bomb units by roof size), and hits on
+  its rooftop nest count against the building.
+- **C-key menu is quicker and more forgiving**: release fires after 50 ms on a row (the corner
+  brackets close when it will), a pointer that strays between rows or just past the list keeps
+  the nearest row, and categories you cross on the way to the list no longer steal the menu. It
+  also remembers the last action per category: a chevron marks it, the arrow keys land on it
+  first, and Space at the ring jumps straight back to it.
+- Pressing Map in the aircraft selection menu no longer leaves the map's glass overlay on screen.
+- A patch that cannot start on the player's runtime now switches its module off at load, with one
+  line in the log, instead of breaking the game feature it patches.
+- Blueprinter now loads the mod's content (Vanguard weapons, HALO paratroopers, container feeder)
+  as one pack, "Boscali Summer assets", instead of three. Host and clients need the same build.
+
 ## 0.2.0 — first public alpha
 
 - **Wing Command is built in.** Remove the stand-alone Wing Command mod; AI wingmen, the WMC

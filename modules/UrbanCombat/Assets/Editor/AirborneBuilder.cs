@@ -1,7 +1,7 @@
-// Builds Airborne.nobp: the HALO paratrooper mount plus its jumper and canopy models.
-//   Unity -batchmode -quit -projectPath <bp> -executeMethod Airborne.AirborneBuilder.Run
+// Builds the HALO paratrooper mount plus its jumper and canopy models into the shared mod folder;
+// tools/BlueprinterAssets/Editor/ModAssetsBuilder.cs calls Run and packs the one bundle.
 // Env: AB_MODELS (AirborneJumper.fbx, AirborneCanopy.fbx from Source/BuildAirborne.py),
-//      AB_RIP (AssetRipper ExportedProject/Assets, for the soldier1 textures), AB_OUT (copy target).
+//      AB_RIP (AssetRipper ExportedProject/Assets, for the soldier1 textures).
 // Same recipe as VanguardBuilder: copy donor ScriptableObjects, clone the donor prefab, re-point
 // references, one OpAddWeaponToHardpoint. Vanilla components only; the drop itself lives in
 // BoscaliSummer.dll (modules/UrbanCombat/Runtime/AirAssaultController.cs) keyed on the jsonKey.
@@ -17,9 +17,8 @@ namespace Airborne
 {
     public static class AirborneBuilder
     {
-        const string R = "Assets/Blueprinter/Mods/Airborne/";
+        const string R = "Assets/Blueprinter/Mods/BoscaliSummer/Airborne/";
         const string D = "Assets/Blueprinter/_donotship/";
-        const string Version = "0.1.0";
         const string Donor = "Troopsx8_UtilityHelo1_F";
         // Keep in sync with HaloDrop.MountKey in modules/UrbanCombat/Runtime.
         const string MountKey = "AB_Paratroopers_x16";
@@ -33,8 +32,6 @@ namespace Airborne
             var info = Info();
             Mount(info);
             AssetDatabase.SaveAssets();
-            OpReferenceIndex.Refresh();
-            Build();
         }
 
         static T Load<T>(string p) where T : UnityEngine.Object =>
@@ -299,20 +296,6 @@ namespace Airborne
                 UnityEngine.Object.DestroyImmediate(op);
             }
             else AssetDatabase.CreateAsset(op, opPath);
-        }
-
-        static void Build()
-        {
-            string outDir = Environment.GetEnvironmentVariable("AB_OUT") ?? throw new Exception("AB_OUT not set");
-            string delivery = Path.GetFullPath("Delivery~");
-            Directory.CreateDirectory(delivery);
-            var started = DateTime.UtcNow;
-            ModBuilder.Build("Airborne", "Airborne", Version, delivery);
-            string built = Path.Combine(delivery, "Airborne_" + Version + ".nobp");
-            if (!File.Exists(built) || File.GetLastWriteTimeUtc(built) < started.AddSeconds(-1))
-                throw new Exception("fresh bundle was not produced");
-            File.Copy(built, Path.Combine(outDir, "Airborne.nobp"), true);
-            Debug.Log("[Airborne] BUNDLE_OK " + new FileInfo(built).Length + " bytes");
         }
     }
 }

@@ -1,3 +1,5 @@
+// Builds the container feeder (native ShipDefinition BS_ContainerFeeder) into the shared mod folder;
+// ModAssetsBuilder packs it. Env: FUTUREOPS_OUT (assets/FutureOps: cargo-sections.json in, validation text out).
 using System;
 using System.IO;
 using System.Linq;
@@ -11,7 +13,7 @@ public static class CargoShipBuilder
 {
     const string Donor="Assets/Blueprinter/_donotship/";
     static string Out => Environment.GetEnvironmentVariable("FUTUREOPS_OUT");
-    const string Root="Assets/Blueprinter/Mods/CargoShip/";
+    const string Root="Assets/Blueprinter/Mods/BoscaliSummer/CargoShip/";
     const string Key="BS_ContainerFeeder";
     [Serializable] public class SectionFile { public Section[] parts; }
     [Serializable] public class Section { public string name; public Vector3 center_unity; public bool hull,rotor; }
@@ -23,9 +25,6 @@ public static class CargoShipBuilder
     static Transform Anchor(Transform parent,string name,Vector3 pos) { var o=new GameObject(name); o.transform.SetParent(parent,false); o.transform.localPosition=pos; return o.transform; }
     public static void Run()
     {
-        try {
-            GameAssemblySync.Synchronize(); AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
-            RestoreStandIns();
             foreach(var path in Directory.GetFiles("Assets/CargoTextures","*.png")) {
                 var texture=(TextureImporter)AssetImporter.GetAtPath(path.Replace('\\','/'));
                 if(path.EndsWith("_Normal.png")) {texture.textureType=TextureImporterType.NormalMap; texture.sRGBTexture=false;}
@@ -165,8 +164,6 @@ public static class CargoShipBuilder
             definition.unitPrefab=PrefabUtility.SaveAsPrefabAsset(root,Root+Key+".prefab"); EditorUtility.SetDirty(definition); AssetDatabase.SaveAssets();
             Validate(definition,root,parts);
             UnityEngine.Object.DestroyImmediate(root);
-            BuildBundle(); EditorApplication.Exit(0);
-        } catch(Exception e) { Debug.LogException(e); File.WriteAllText(Path.Combine(Out,"cargo-failure.txt"),e.ToString()); EditorApplication.Exit(1); }
     }
     static int Depth(Transform t) { int d=0; while(t.parent) {d++;t=t.parent;} return d; }
     static List<Renderer> CreateVisuals(MeshFilter source,Transform parent,string name,Dictionary<string,Material> materials)
@@ -228,43 +225,6 @@ public static class CargoShipBuilder
         var lines=new List<string>{"PASS: native Ship/ShipAI/ShipNetworkTransform/NetworkIdentity, 18 damage parts, 8 port/starboard hull compartments, 8,000,000 kg mass, 16,000 m3 displacement.","Native WaterJob_Math equilibrium lift ratio="+(lift/(mass*9.81f)),"No weapons, custom AI, simulated resupply, or third-party mod code. Live sailing/flooding/multiplayer acceptance pending."};
         foreach(var p in parts) lines.Add(p.Key+" mass="+p.Value.mass+" displacement="+Field(p.Value,"displacement").floatValue+" colliders="+p.Value.GetComponents<Collider>().Length);
         File.WriteAllLines(Path.Combine(Out,"cargo-native-validation.txt"),lines);
-    }
-    static void BuildBundle()
-    {
-        // Only referenced vanilla stand-ins need a _donotship bundle. All files are in our scratch project.
-        var required=new HashSet<string>(AssetDatabase.GetDependencies(Directory.GetFiles(Root,"*",SearchOption.AllDirectories).Where(p=>!p.EndsWith(".meta")).Select(p=>p.Replace('\\','/')).ToArray(),true),StringComparer.OrdinalIgnoreCase);
-        var unused=BlueprinterAssets.GetGameAssetPaths().Where(p=>!required.Contains(p)).ToArray();
-        GameAssetLock.IsLocked=false;
-        AssetDatabase.StartAssetEditing();
-        try {
-            foreach(string path in unused) {
-                string destination=path.Replace(Donor,Donor+"_stale/");
-                string folder=Path.GetDirectoryName(destination).Replace('\\','/');
-                BlueprinterAssets.EnsureFolder(folder);
-                string error=AssetDatabase.MoveAsset(path,destination); if(!string.IsNullOrEmpty(error)) throw new Exception(error);
-            }
-        } finally { AssetDatabase.StopAssetEditing(); GameAssetLock.IsLocked=true; }
-        var started=DateTime.UtcNow; ModBuilder.Build("CargoShip","CargoShip","0.1.0",Out);
-        string built=Path.Combine(Out,"CargoShip_0.1.0.nobp"); if(!File.Exists(built)||File.GetLastWriteTimeUtc(built)<started.AddSeconds(-1)) throw new Exception("Fresh native bundle not produced");
-        File.Copy(built,Path.Combine(Out,"CargoShip.nobp"),true);
-        var bundle=AssetBundle.LoadFromFile(Path.Combine(Out,"CargoShip.nobp")); if(!bundle) throw new Exception("Cannot reopen native bundle");
-        var definition=bundle.LoadAsset<ShipDefinition>(Root+Key+".asset");
-        if(!definition || definition.jsonKey!=Key || !definition.unitPrefab || definition.unitPrefab.GetComponentsInChildren<ShipPart>(true).Length!=18) throw new Exception("Bundled native definition graph invalid");
-        if(definition.unitPrefab.GetComponentsInChildren<Component>(true).Any(c=>!c)) throw new Exception("Missing native script in bundle");
-        bundle.Unload(true); Debug.Log("[CargoShip] NATIVE_BUNDLE_OK");
-    }
-    static void RestoreStandIns()
-    {
-        string stale=Donor+"_stale/";
-        var paths=AssetDatabase.GetAllAssetPaths().Where(p=>p.StartsWith(stale,StringComparison.OrdinalIgnoreCase)&&!AssetDatabase.IsValidFolder(p)).ToArray();
-        GameAssetLock.IsLocked=false; AssetDatabase.StartAssetEditing();
-        try {
-            foreach(string path in paths) {
-                string destination=Donor+path.Substring(stale.Length);
-                BlueprinterAssets.EnsureFolder(Path.GetDirectoryName(destination).Replace('\\','/'));
-                string error=AssetDatabase.MoveAsset(path,destination); if(!string.IsNullOrEmpty(error)) throw new Exception(error);
-            }
-        } finally { AssetDatabase.StopAssetEditing(); GameAssetLock.IsLocked=true; }
     }
     public static void Audit()
     {

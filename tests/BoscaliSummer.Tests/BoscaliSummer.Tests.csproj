@@ -114,6 +114,7 @@
     <Compile Include="..\..\modules\Progression\Runtime\EmblemDesign.cs" Link="Features\Progression\EmblemDesign.cs" />
     <Compile Include="..\..\modules\Progression\Runtime\CrestBoard.cs" Link="Features\Progression\CrestBoard.cs" />
     <Compile Include="..\..\modules\Progression\Runtime\EmblemRaster.cs" Link="Features\Progression\EmblemRaster.cs" />
+    <Compile Include="..\..\modules\Progression\Runtime\EmblemMarks.cs" Link="Features\Progression\EmblemMarks.cs" />
     <Compile Include="..\..\modules\Progression\Runtime\LiveryCodec.cs" Link="Features\Progression\LiveryCodec.cs" />
     <Compile Include="..\..\modules\Support\Runtime\SupportModel.cs" Link="Features\Support\SupportModel.cs" />
     <Compile Include="..\..\modules\Support\Runtime\JtacResolve.cs" Link="Features\Support\JtacResolve.cs" />
@@ -197,7 +198,9 @@
   </ItemGroup>
   <ItemGroup Label="Concurrent weather and immersion tests">
     <Compile Include="..\..\modules\Immersion\Domain\*.cs" LinkBase="Features\Immersion" />
+    <Compile Include="..\..\modules\Effects\Domain\*.cs" LinkBase="Features\Effects" />
     <Compile Include="..\..\Core\Contracts\IFlightEnvironmentView.cs" Link="Core\IFlightEnvironmentView.cs" Condition="Exists('..\..\Core\Contracts\IFlightEnvironmentView.cs')" />
     <Reference Include="UnityEngine.CoreModule"><HintPath>$(ManagedDir)\UnityEngine.CoreModule.dll</HintPath><Private>true</Private></Reference>
+    <EmbeddedResource Include="../../modules/Progression/Assets/emblem-art.bin" LogicalName="BoscaliSummer.Tests.emblem-art.bin" />
   </ItemGroup>
 </Project>

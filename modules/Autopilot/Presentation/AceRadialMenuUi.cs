@@ -25,6 +25,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         private const CursorFlags ForeignCursorOwners = CursorFlags.GameMenu | CursorFlags.Dialogue | CursorFlags.Chat;
 
         private readonly AceRadialInputSource input = new AceRadialInputSource();
+        private readonly MenuRecall recall = new MenuRecall(); // this session only: the controller is rebuilt on every open
 
         private AutopilotSettings settings;
         private AvHudHost host;
@@ -146,7 +147,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             }
             model = built;
             EnsureLayout();
-            controller = new MenuController(model, layout) { OpenKeyName = key.ToString().ToUpperInvariant() };
+            controller = new MenuController(model, layout, recall) { OpenKeyName = key.ToString().ToUpperInvariant() };
             input.Prime();
             controller.Step(input.Sample(key, true, now));
             if (!controller.Open) return false;
