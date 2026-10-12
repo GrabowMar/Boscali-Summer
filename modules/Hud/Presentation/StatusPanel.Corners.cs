@@ -58,11 +58,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>
         /// Every frame (<paramref name="tick"/> false: the board's <see cref="TickNatives"/>) and at the end of every present (<paramref name="tick"/> true): lay the corners out again if a native rectangle moved, grew or
-        /// came and went, always on a tick; stand them down, and give the feed's plate back, whenever the board is off, stale or gated. Fail open: the plate comes back the very frame the board's shade is not standing in for it.
+        /// came and went, always on a tick; stand them down, and give the feed's plate back, whenever the option is off or the board is stale (its update stopped) or gated; the board's own master switch does not stand them down. Fail open: the plate comes back the very frame the board's shade is not standing in for it.
         /// </summary>
         private void CornersFrame(bool alive, bool tick)
         {
-            if (!(alive && Options.Enabled && Options.Corners && !cornersSuppressed && canvasRect != null)) { StandDownCorners(); return; }
+            if (!(alive && Options.Corners && !cornersSuppressed && canvasRect != null)) { StandDownCorners(); return; }
             if (!screenCorners.Complete && findTries < 6 && Time.unscaledTime >= findAt)
             {
                 findAt = Time.unscaledTime + 2f;

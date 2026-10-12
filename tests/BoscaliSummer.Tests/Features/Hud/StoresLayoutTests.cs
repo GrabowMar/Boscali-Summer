@@ -15,6 +15,20 @@ namespace BoscaliSummer.Tests.Features.Hud
             Dcl();
             Rail();
             Geometry();
+            Shelves();
+        }
+
+        /// <summary>The caption shelves of PWR BUS and EXPENDABLES (LAYOUT.md 3.2, 3.3, 4): 8 short of the block, STACK's PWR BUS 12, so its stub tip stays 12 clear of the EXPENDABLES shelf beside it.</summary>
+        private static void Shelves()
+        {
+            TestAssert.Near(StoresLayout.PwrShelf(false, 180f), 172f, "WIDE PWR BUS: 180 wide, its shelf line 172");
+            TestAssert.Near(StoresLayout.ExpShelf(180f), 172f, "WIDE EXPENDABLES: 172");
+            TestAssert.Near(StoresLayout.PwrShelf(true, ScopeLayout.StackHalfW), 204f, "STACK PWR BUS: 216 wide, its shelf line 204");
+            TestAssert.Near(StoresLayout.ExpShelf(ScopeLayout.StackHalfW), 208f, "STACK EXPENDABLES: 208");
+            // The node centres on the line's end and the stub's tip lands 8 units on (ScopeCanvas.Terminal): that tip is 12 short of the block beside.
+            float tip = ScopeLayout.StackX + StoresLayout.PwrShelf(true, ScopeLayout.StackHalfW) + 8f;
+            TestAssert.Near(ScopeLayout.StackHalfX - tip, 12f, "STACK: PWR BUS's stub tip is 12 clear of the EXPENDABLES block");
+            TestAssert.That(ScopeLayout.StackHalfX - (ScopeLayout.StackX + ScopeLayout.StackHalfW) == 8f, "...the two blocks 8 apart");
         }
 
         private static void Hero()

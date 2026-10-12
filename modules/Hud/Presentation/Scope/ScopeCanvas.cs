@@ -126,8 +126,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// </summary>
         private float SnapY(float v, float lw) => height - Snap(height - v, lw);
 
-        /// <summary>An edge of a rectangle on the device pixel grid.</summary>
-        private float Edge(float v) => Mathf.Round(v / pixel) * pixel;
+        /// <summary>An edge of a rectangle on the device pixel grid. Half a pixel goes UP: Mathf.Round takes it to the even pixel, so a 3 high bar centred on a whole unit came out 2 or 4 high by the parity of its row.</summary>
+        private float Edge(float v) => Mathf.Floor(v / pixel + 0.5f) * pixel;
 
         // ------------------------------------------------------------------------------------------------ lines
 
@@ -208,9 +208,23 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 }
             }
             if (lw <= 0f) return;
+            if (lw == 1f && chamTL + chamTR + chamBR + chamBL <= 0f) { Outline(x, y, w, h, tone, alpha); return; }
             float a = lw % 2f == 1f ? 0.5f : 0f;
             BoxPath(x, y, w, h, chamTL, chamTR, chamBR, chamBL, a, out int m);
             Path(m, tone, alpha, lw);
+        }
+
+        /// <summary>
+        /// A 1 unit outline of a square-cornered box as four filled strips (the top and bottom rows whole, the sides between them), so every pixel of it is covered once, corners included. A stroked path puts its
+        /// corner pixels on the knife edge of two butt-ended lines, and which of them the GPU fills varied: a 4 x 4 lamp came out with two opposite corners missing.
+        /// </summary>
+        private void Outline(float x, float y, float w, float h, ScopeTone tone, float alpha)
+        {
+            if (w <= 2f || h <= 2f) { Fill(x, y, w, h, tone, alpha); return; }
+            Fill(x, y, w, 1f, tone, alpha);
+            Fill(x, y + h - 1f, w, 1f, tone, alpha);
+            Fill(x, y + 1f, 1f, h - 2f, tone, alpha);
+            Fill(x + w - 1f, y + 1f, 1f, h - 2f, tone, alpha);
         }
 
         private void BoxPath(float x, float y, float w, float h, float tl, float tr, float br, float bl, float a, out int n)

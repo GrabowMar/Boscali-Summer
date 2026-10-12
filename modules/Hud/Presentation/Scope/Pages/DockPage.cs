@@ -149,21 +149,21 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void UpdateHeadline()
         {
             int key;
-            string text;
+            string text = null;      // built only when the key changes (this runs at 10 Hz): a steady figure builds nothing
             ScopeTone tone = Hi;
             bool flash = false;
             if (TooFast) { key = 1; text = "TOO FAST"; tone = Amber; flash = true; }
             else if (d.Phase == DockPhase.Served) { key = 2; text = "SERVED"; }
-            else if (d.Phase == DockPhase.Transfer) { int p = (int)Math.Round(d.Fuel * 100f); key = 3000 + p; text = d.ServiceZone ? d.JobName ?? "SERVICE" : "FUEL " + p + "%"; }
+            else if (d.Phase == DockPhase.Transfer) { int p = (int)Math.Round(d.Fuel * 100f); key = (d.ServiceZone ? 4000 : 3000) + p; text = d.ServiceZone ? d.JobName ?? "SERVICE" : key != headlineKey ? "FUEL " + p + "%" : null; }
             else if (d.Phase == DockPhase.Engage) { key = 4; text = d.ServiceZone ? "HOLD STEADY" : "HOLD BRAKE"; }
             else
             {
                 int v = Len(d.RangeM);
                 key = 10000 + v + (units == AvUnits.Imperial ? 5000 : 0);
-                text = v + LenUnit();
+                if (key != headlineKey) text = v + LenUnit();
                 tone = Edge || Bad ? Amber : Hi;
             }
-            if (key != headlineKey || text != headlineText) { headlineKey = key; headlineText = text; }
+            if (key != headlineKey || (text != null && text != headlineText)) { headlineKey = key; headlineText = text ?? headlineText; }
             headlineTone = tone;
             headlineFlash = flash;
         }

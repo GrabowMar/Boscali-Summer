@@ -198,6 +198,17 @@ namespace BoscaliSummer.Tests.Features.Hud
             placer.Reset();
             float y0 = placer.Place(10f, 50f, 100f), y1 = placer.Place(20f, 60f, 100f), y2 = placer.Place(200f, 240f, 100f);
             TestAssert.That(y0 == 100f && y1 == 115f && y2 == 100f, "A label that overlaps one placed steps down 15; a clear one stays");
+            // The slot digit by a diamond (LAYOUT.md 12.5) is drawn where it is and the V labels keep 15 clear of it.
+            placer.Reset();
+            placer.Reserve(100f, 108f, 113f);
+            TestAssert.That(placer.Place(90f, 130f, 113f) == 128f, "A label on the reserved digit steps 15 down");
+            placer.Reset();
+            placer.Reserve(100f, 108f, 113f);
+            TestAssert.That(placer.Place(90f, 130f, 100f) == 85f, "...one 13 above it is too close as well: it goes 15 up (the 15 down is the digit's again)");
+            placer.Reset();
+            placer.Reserve(100f, 108f, 113f);
+            TestAssert.That(placer.Place(90f, 130f, 98f) == 98f, "...one 15 above it is clear");
+            TestAssert.That(placer.Place(200f, 240f, 113f) == 113f, "...and a label off to the side is not moved");
 
             TestAssert.That(WingBoardMath.ToneOf(WingState.Damaged) == ScopeTone.Amber && WingBoardMath.ToneOf(WingState.Defend) == ScopeTone.Amber && WingBoardMath.ToneOf(WingState.Winch) == ScopeTone.Amber, "Hit, defending and out of weapons are cautions");
             TestAssert.That(WingBoardMath.ToneOf(WingState.Rtb) == ScopeTone.Dim && WingBoardMath.ToneOf(WingState.Engage) == ScopeTone.Ink, "Going home is quiet, fighting is plain");

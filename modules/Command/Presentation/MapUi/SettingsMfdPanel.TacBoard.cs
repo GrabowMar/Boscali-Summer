@@ -9,7 +9,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// <summary>
     /// The TAC BOARD's options on the COCKPIT tab, written only through <see cref="ITacBoardSettings"/> (the Hud module owns the board and its config; this console never
     /// imports it). Four groups: the board itself, its pages, its blocks and the extras. Client-local: the board takes a change on its next 10 Hz tick, so a pilot sees it
-    /// in flight and there is no preview here. Every control but RESET waits on the board's own switch, as the immersion page waits on its master.
+    /// in flight and there is no preview here. Every control but RESET and the kill feed and map restyle (which stay when the board is off) waits on the board's own switch, as the immersion page waits on its master.
     /// </summary>
     internal sealed partial class SettingsMfdPanel
     {
@@ -24,8 +24,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static readonly string[] BoardDeclutterBriefs =
         {
             "FULL: everything the switches below allow.",
-            "LEAN: no gauge row, no dark lamps, no captions.",
-            "MIN: only the lock, spike and missile lamps, and the pages that matter in a fight.",
+            "LEAN: no gauge row, dark lamps or captions; the cruise strip only while something is wrong.",
+            "MIN: only lock, spike and missile lamps and the pages of a fight; the strip only in a fire, engine out or bingo.",
         };
         private static readonly string[] BoardPagesNames = { "AUTO", "OFF" };
         private static readonly string[] BoardPagesBriefs =
@@ -61,12 +61,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 "How big the whole board is.", on, off);
             BoardRing(flow, look, page, "OPACITY", () => board.Opacity, v => board.Opacity = v, 0.25f, 1f, .05f, v => AvNum.Percent(v),
                 "How solid the board's ink reads against the sky.", on, off);
-            BoardRing(flow, look, page, "MOVE LEFT", () => board.OffsetX, v => board.OffsetX = v, 0f, 1200f, 20f, Pixels,
-                "Slides the board left from the right screen edge, 20 px a step.", on, off);
-            BoardRing(flow, look, page, "MOVE DOWN", () => board.OffsetY, v => board.OffsetY = v, 0f, 600f, 20f, Pixels,
-                "Slides the board down from the top screen edge, 20 px a step.", on, off);
+            BoardRing(flow, look, page, "MOVE LEFT", () => board.OffsetX, v => board.OffsetX = v, 0f, 1200f, 20f, Units,
+                "Slides the board left from the right screen edge, 20 units a step (a unit is a 1080p pixel).", on, off);
+            BoardRing(flow, look, page, "MOVE DOWN", () => board.OffsetY, v => board.OffsetY = v, 0f, 600f, 20f, Units,
+                "Slides the board down from the top screen edge, 20 units a step (a unit is a 1080p pixel).", on, off);
             BoardRing(flow, look, page, "SHADE", () => board.Shade, v => board.Shade = v, 0f, 1f, .05f, v => AvNum.Percent(v),
-                "The dark band behind the symbols. 0% draws none.", on, off);
+                "The dark band behind the symbols. 0% draws none (a restyled kill feed has no dark box then either).", on, off);
 
             flow.Section(AvIcon.Radar2, "TAC BOARD PAGES", "WHAT THE PAGE AREA SHOWS");
             BoardStrip(flow, page, "PAGES", BoardPagesNames, BoardPagesBriefs,
@@ -101,7 +101,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             AvCellGrid blocks = flow.Grid(2);
             ToggleCell(flow, blocks, page, "LAMPS", "The lamp row: switch states and the threat lamps.",
                 () => board.ShowLamps, v => board.ShowLamps = v, on, off);
-            ToggleCell(flow, blocks, page, "SYSTEMS STRIP", "The compact strip the page area falls back to in cruise. Needs the SYSTEMS page.",
+            ToggleCell(flow, blocks, page, "SYSTEMS STRIP", "The compact strip the page area shows in cruise. Needs the SYSTEMS page and PAGES = AUTO.",
                 () => board.ShowSystemsStrip, v => board.ShowSystemsStrip = v, on, off);
             ToggleCell(flow, blocks, page, "GAUGES", "The gauge row under the board's page area. LEAN and MIN hide it anyway.",
                 () => board.ShowGauges, v => board.ShowGauges = v, on, off);
@@ -112,8 +112,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             AvCellGrid extras = flow.Grid(2);
             ToggleCell(flow, extras, page, "VISOR SWAY", "The symbols lag a little behind head movement, as if hung just off the glass.",
                 () => board.Sway, v => board.Sway = v, on, off);
-            ToggleCell(flow, extras, page, "RESTYLE FEED AND MAP", "Draw the kill feed and the map frame in the board's look.",
-                () => board.Corners, v => board.Corners = v, on, off);
+            ToggleCell(flow, extras, page, "RESTYLE FEED AND MAP", "Draw the kill feed and the map frame in the board's look. Stays on with the board off.",
+                () => board.Corners, v => board.Corners = v);
             AvControl reset = flow.Buttons(new AvControl.Spec("RESET TO DEFAULTS", () =>
             {
                 board.ResetToDefaults();
@@ -124,7 +124,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             reset.Help = "Put every TAC BOARD option back to its default. Nothing else changes.";
         }
 
-        private static string Pixels(float v) => AvNum.Fixed(v, 0) + " px";
+        /// <summary>An offset as the option holds it: design units (a 1080p pixel; the screen's height over 1080 device pixels, never under 0.85 of one), not pixels.</summary>
+        private static string Units(float v) => AvNum.Fixed(v, 0) + " units";
 
         /// <summary>A labelled choice strip (LAYOUT, DECLUTTER, PAGES): one segment per name, the latched one read from <paramref name="get"/>.</summary>
         private AvSegmented BoardStrip(AvFlow flow, int page, string label, string[] names, string[] briefs, Func<int> get, Action<int> set,

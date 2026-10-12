@@ -132,10 +132,18 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             panel?.TickNatives();
             if (panel != null)
             {
-                // The visor's lag (the option Sway): zero in a pause, the map and a cinematic, and while the board is off.
+                // The visor's lag (the option Sway): zero in a pause, the map and a cinematic, and while the board is off (its corners then stay still too). The driver itself answers only in the cockpit view.
                 visorSway.Tick(Time.unscaledDeltaTime, options.Sway && options.Enabled && BoscaliSummer.Core.Game.CockpitOverlayGate.NotSuppressed());
                 panel.ApplySway(visorSway.X, visorSway.Y);
             }
+        }
+
+        /// <summary>The pilot's options as of this tick, handed to everything that reads them: the board, and the radar-warning watch (how long it keeps a contact after its last warning).</summary>
+        private void TakeOptions()
+        {
+            settings?.Snapshot(ref options);
+            if (panel != null) panel.Options = options;
+            threats.Hold = options.ThreatHoldSeconds;
         }
 
         private void Tick()
@@ -173,9 +181,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 return;
             }
             nextRead = clock + .1f;
-            settings?.Snapshot(ref options);
-            panel.Options = options;
-            threats.Hold = options.ThreatHoldSeconds;
+            TakeOptions();
 
             CombatHUD combat = SceneSingleton<CombatHUD>.i;
             Aircraft hudAircraft = combat != null ? combat.aircraft : null;

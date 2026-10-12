@@ -127,6 +127,20 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return true;
         }
 
+        /// <summary>
+        /// Cut a hole out of a segment: the parts of (<paramref name="x0"/>, <paramref name="y0"/>) to (<paramref name="x1"/>, <paramref name="y1"/>) outside the rectangle, written to <paramref name="pieces"/> as x0, y0, x1, y1 each (eight
+        /// floats) in the segment's order, and how many there are (0 to 2: none when it lies inside, one when the hole holds an end, two when it crosses). -1: the segment does not touch the rectangle, so there is nothing to cut.
+        /// </summary>
+        public static int ClipOut(float x0, float y0, float x1, float y1, float xMin, float yMin, float xMax, float yMax, float[] pieces)
+        {
+            float ax = x0, ay = y0, bx = x1, by = y1;
+            if (!ClipLine(ref ax, ref ay, ref bx, ref by, xMin, yMin, xMax, yMax)) return -1;
+            int n = 0;
+            if ((ax - x0) * (ax - x0) + (ay - y0) * (ay - y0) > 0.25f) { pieces[n * 4] = x0; pieces[n * 4 + 1] = y0; pieces[n * 4 + 2] = ax; pieces[n * 4 + 3] = ay; n++; }
+            if ((x1 - bx) * (x1 - bx) + (y1 - by) * (y1 - by) > 0.25f) { pieces[n * 4] = bx; pieces[n * 4 + 1] = by; pieces[n * 4 + 2] = x1; pieces[n * 4 + 3] = y1; n++; }
+            return n;
+        }
+
         private static bool ClipEdge(float p, float q, ref float t0, ref float t1)
         {
             if (p == 0f) return q >= 0f;

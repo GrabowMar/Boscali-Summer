@@ -15,7 +15,7 @@ namespace BoscaliSummer.Core.Contracts
     /// </summary>
     internal interface ITacBoardSettings
     {
-        /// <summary>Off hides the board and gives back the game's own weapon, countermeasure and power panels.</summary>
+        /// <summary>Off hides the board and gives back the game's own weapon, countermeasure and power panels. The kill feed and map restyle (<see cref="Corners"/>) is a switch of its own and stays.</summary>
         bool Enabled { get; set; }
         BoardLayout Layout { get; set; }
         /// <summary>Size multiplier, 0.6 to 1.4.</summary>

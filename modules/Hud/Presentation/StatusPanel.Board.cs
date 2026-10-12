@@ -78,10 +78,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public void Present(BoardFrame frame)
         {
             if (root == null) return;
-            // Switched off: hide the board and, through the same fail-open path as any other reason to stand down, give the native boxes back (TickNatives). Present again restores it.
+            // Switched off: hide the board and, through the same fail-open path as any other reason to stand down, give the native boxes back (TickNatives). Present again restores it. The kill feed and the map
+            // keep their own switch (LAYOUT.md 8: "corners stay"), so they are measured, kept fresh and laid out here as for a board that is up.
             if (!Options.Enabled)
             {
-                Hide();
+                HideBoard();
+                MeasurePixel();
+                allow = Options.Effective();
+                MeasureScreen();
+                hasBoard = true;
+                presentedAt = Time.unscaledTime;
+                CornersFrame(true, true);
                 return;
             }
             // The pilot's opacity is the root group's alpha (nothing else in the board animates it); the shade is outside it (StatusPanel.Shade.cs).
@@ -238,7 +245,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             BoardGeometry geo = ScopeLayout.Compute(blocks);
             if (geo.Height <= 0f)
             {
-                header.Clear();
+                ClearHeader();
                 Show(root, false);
                 BoardBox = default;
                 return;

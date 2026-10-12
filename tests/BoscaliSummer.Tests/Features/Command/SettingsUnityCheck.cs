@@ -411,8 +411,9 @@ public static class SettingsUnityCheck
             Check(!string.IsNullOrEmpty(tip.Text) && tip.Text.Length <= 120 && tip.Text.IndexOf('\n') < 0, "A control's help is one short line: '" + tip.Text + "'");
         foreach (AvControl control in content.GetComponentsInChildren<AvControl>(true))
             Check(!string.IsNullOrEmpty(control.Help), "Control '" + control.Label + "' has help");
-        Check(HasText(content, "100%") && HasText(content, "45%") && HasText(content, "0 px") && HasText(content, "6 s") && HasText(content, "3 s"),
-            "The dials read the options as they stand: size, shade, offsets and the two times");
+        Check(HasText(content, "100%") && HasText(content, "45%") && HasText(content, "0 units") && HasText(content, "6 s") && HasText(content, "3 s"),
+            "The dials read the options as they stand: size, shade, offsets (in units, not pixels) and the two times");
+        Check(!HasSubText(content, " px"), "No dial names pixels: the offsets are design units, scaled by the screen's height");
 
         // the long page, one stop at a time, each stop rendered and gated
         ScrollRect scroll = clientCon.Root.GetComponentInChildren<ScrollRect>(true);
@@ -424,6 +425,21 @@ public static class SettingsUnityCheck
             Render(camera, canvas, height, "client-cockpit-scroll-" + stop);
         }
         scroll.verticalNormalizedPosition = 1f;
+
+        // every switch flips its own option and no other (a swapped assignment would hide the wrong page), and flips it back
+        string[] cells = { "TAC BOARD", "RADAR WARNING", "SHOT", "MISSILE CAM", "APPROACH", "WING", "STRIKE", "DOCK", "OBJECTIVE", "SYSTEMS", "LAMPS", "SYSTEMS STRIP", "GAUGES", "NOTICES", "VISOR SWAY", "RESTYLE FEED AND MAP" };
+        for (int n = 1; n <= cells.Length; n++)
+        {
+            int at = n % cells.Length;      // TAC BOARD last: with the board off the others are inert
+            string before = tac.Switches();
+            Click(content.Find("Cell " + cells[at]));
+            string flipped = tac.Switches();
+            bool only = flipped.Length == before.Length;
+            for (int k = 0; only && k < before.Length; k++) only = (before[k] != flipped[k]) == (k == at);
+            Check(only, "The " + cells[at] + " switch flips its own option and no other: " + before + " -> " + flipped);
+            Click(content.Find("Cell " + cells[at]));
+            Check(tac.Switches() == before, "...and the second click puts it back");
+        }
 
         // a toggle, a strip and a dial each change only their own option
         Click(content.Find("Cell RADAR WARNING"));
@@ -443,7 +459,7 @@ public static class SettingsUnityCheck
         Click(Plus(content, "MOVE LEFT"));
         Click(Plus(content, "MOVE DOWN"));
         Click(Plus(content, "MOVE DOWN"));
-        Check(Mathf.Approximately(tac.OffsetX, 20f) && Mathf.Approximately(tac.OffsetY, 40f) && HasText(content, "40 px"), "MOVE LEFT and MOVE DOWN step by 20 px");
+        Check(Mathf.Approximately(tac.OffsetX, 20f) && Mathf.Approximately(tac.OffsetY, 40f) && HasText(content, "40 units"), "MOVE LEFT and MOVE DOWN step by 20 units");
         Click(Minus(content, "OPACITY"));
         Click(Minus(content, "SHADE"));
         Check(Mathf.Approximately(tac.Opacity, .95f) && Mathf.Approximately(tac.Shade, .4f), "OPACITY and SHADE step by 5%");
@@ -465,6 +481,9 @@ public static class SettingsUnityCheck
         Click(content.Find("Cell SHOT"));
         Click(FindControl(content, "WIDE"));
         Check(tac.Scale == held && tac.PageShot && tac.Layout == BoardLayout.Stack, "With the board off its options ignore clicks");
+        bool restyle = tac.Corners;
+        Click(content.Find("Cell RESTYLE FEED AND MAP"));
+        Check(tac.Corners != restyle, "...but the kill feed and map restyle is a switch of its own and stays live with the board off");
         Render(camera, canvas, height, "client-cockpit-boardoff");
         // RESET must be able to fail: first prove the options, the dials that read them and the locked controls are all away from their defaults ...
         Check(!tac.IsDefault() && tac.ResetCount == 0 && HasText(content, "60%") && HasText(content, "40%") && HasText(content, "2 s") && HasText(content, "15 s") &&
@@ -472,7 +491,7 @@ public static class SettingsUnityCheck
         Click(FindControl(content, "RESET TO DEFAULTS"));
         Check(tac.ResetCount == 1 && tac.IsDefault(), "RESET TO DEFAULTS puts every option back through the contract, board off or not");
         // ... and that the page shows the result at once, with no tick in between (Settle runs them below).
-        Check(HasText(content, "100%") && HasText(content, "45%") && HasText(content, "0 px") && HasText(content, "6 s") && HasText(content, "3 s") &&
+        Check(HasText(content, "100%") && HasText(content, "45%") && HasText(content, "0 units") && HasText(content, "6 s") && HasText(content, "3 s") &&
               !HasText(content, "60%") && !HasText(content, "40%") && !HasText(content, "2 s") && !HasText(content, "15 s"),
             "RESET TO DEFAULTS shows the defaults on every dial at once, before the next tick");
         Check(Plus(content, "SIZE").Interactable && FindControl(content, "FULL").Interactable, "and unlocks the controls the switched-off board had locked, at once");
@@ -772,6 +791,15 @@ public static class SettingsUnityCheck
         public bool Corners { get; set; }
 
         public void ResetToDefaults() { ResetCount++; Defaults(); }
+
+        /// <summary>The sixteen switches as 0 and 1, in the order the page lists them: the board, nine pages, four blocks, sway, corners.</summary>
+        public string Switches()
+        {
+            bool[] all = { Enabled, PageThreat, PageShot, PageMissileCam, PageApproach, PageWing, PageStrike, PageDock, PageObjective, PageSystems, ShowLamps, ShowSystemsStrip, ShowGauges, ShowTicker, Sway, Corners };
+            var text = new System.Text.StringBuilder();
+            foreach (bool b in all) text.Append(b ? '1' : '0');
+            return text.ToString();
+        }
 
         private void Defaults()
         {

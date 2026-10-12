@@ -16,6 +16,12 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>STACK's PWR BUS shelf is 12 shorter, so the stub tip is 12 clear of the EXPENDABLES shelf that starts 12 right of the block.</summary>
         public const float StackPwrShelfShort = 12f;
 
+        /// <summary>The width of PWR BUS's caption shelf line in a block <paramref name="w"/> wide: 8 short of the block, 12 short in STACK.</summary>
+        public static float PwrShelf(bool stack, float w) => w - (stack ? StackPwrShelfShort : ShelfShort);
+
+        /// <summary>The width of EXPENDABLES's caption shelf line in a block <paramref name="w"/> wide.</summary>
+        public static float ExpShelf(float w) => w - ShelfShort;
+
         // ---- HERO (LAYOUT.md 3.1)
         public const float NumeralX = 1f, NumeralY = 39f, NumeralSizeMax = 52f, NumeralSizeMin = 24f, NumeralGap = 8f;
         /// <summary>"/500" beside the numeral: 14 regular, 4 right of it, its middle 9 under the numeral's.</summary>

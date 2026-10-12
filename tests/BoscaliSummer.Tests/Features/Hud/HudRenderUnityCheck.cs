@@ -254,6 +254,7 @@ public static class HudRenderUnityCheck
             aircraft.cockpit.detached = true;
             Assert(!ExternalHudEnabler.IsOwnAircraftExternalView(out _), "Detached cockpit closes the external HUD gate.");
             Assert(!ExternalHudEnabler.CanShowExternalHud(false), "A foreign view closes the presentation gate.");
+            VisorSway();
             File.WriteAllText("result.txt", "PASS: " + assertions + " production HUD render/transition assertions using real Unity camera/canvas and synthetic native data seams; no live game/input or native weapon acceptance.");
             EditorApplication.Exit(0);
         }
@@ -262,6 +263,49 @@ public static class HudRenderUnityCheck
             File.WriteAllText("result.txt", "FAIL: " + error);
             Debug.LogException(error);
             EditorApplication.Exit(1);
+        }
+    }
+
+    /// <summary>
+    /// The visor's lag follows the PILOT'S HEAD, not the aircraft: in the cockpit view the game parents the camera to a pivot on the aircraft, so a pull-up turns the camera in the world but not against its pivot. Only
+    /// the cockpit view sways; an orbit or chase camera turning is no head.
+    /// </summary>
+    private static void VisorSway()
+    {
+        var rig = new GameObject("Sway camera", typeof(Camera), typeof(CameraStateManager));
+        var camera = rig.GetComponent<Camera>();
+        camera.enabled = false;
+        var state = rig.GetComponent<CameraStateManager>();
+        state.enabled = false;
+        state.mainCamera = camera;
+        var pivot = new GameObject("Cockpit pivot").transform;
+        rig.transform.SetParent(pivot, false);
+        CameraStateManager previous = CameraStateManager.i;
+        CameraStateManager.i = state;
+        try
+        {
+            var driver = new VisorSwayDriver();
+            state.currentState = state.cockpitState;
+            driver.Tick(0.016f, true);      // the first frame only learns where the head is
+            for (int i = 0; i < 40; i++) { pivot.Rotate(-40f * 0.016f, 0f, 0f, Space.Self); pivot.Rotate(0f, 30f * 0.016f, 0f, Space.World); driver.Tick(0.016f, true); }
+            Assert(Mathf.Abs(driver.X) < 0.001f && Mathf.Abs(driver.Y) < 0.001f, "A pull-up and a turn of the airframe, the head still, sway nothing: " + driver.X + ", " + driver.Y);
+            for (int i = 0; i < 30; i++) { rig.transform.Rotate(0f, 60f * 0.016f, 0f, Space.Self); driver.Tick(0.016f, true); }
+            Assert(driver.X < -1.5f && Mathf.Abs(driver.Y) < 0.05f, "...a head turn to the right at 60 degrees a second swings the board left: " + driver.X + ", " + driver.Y);
+            state.currentState = state.orbitState;
+            for (int i = 0; i < 5; i++) { rig.transform.Rotate(0f, 60f * 0.016f, 0f, Space.Self); driver.Tick(0.016f, true); }
+            Assert(driver.X == 0f && driver.Y == 0f, "An orbit camera turning is no head: no sway outside the cockpit view");
+            state.currentState = state.cockpitState;
+            driver.Tick(0.016f, true);
+            rig.transform.Rotate(0f, 60f * 0.016f, 0f, Space.Self);
+            driver.Tick(0.016f, true);
+            Assert(driver.X < 0f, "Back in the cockpit it follows the head again");
+            driver.Tick(0.016f, false);
+            Assert(driver.X == 0f && driver.Y == 0f, "The option off, or a pause, sways nothing");
+        }
+        finally
+        {
+            CameraStateManager.i = previous;
+            UnityEngine.Object.DestroyImmediate(pivot.gameObject);
         }
     }
 

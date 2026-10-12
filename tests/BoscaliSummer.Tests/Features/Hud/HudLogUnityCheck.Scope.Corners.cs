@@ -283,10 +283,22 @@ public static partial class HudLogUnityCheck
         Check(PlateAlpha(rig) == 0f, "live: the feed box is back and the plate is hidden again");
         CornerPlaces(rig, true, false);
         rig.MapPlate.gameObject.SetActive(true);
-        // The master switch: the board goes and so do the corners, the plate is the game's.
+        // The master switch: the board goes, the corners stay (LAYOUT.md 8: "hides the board (corners stay)"), the plate stays ours to hide; they are a switch of their own.
         Set(rig.Status, "Options", PilotOptions("Enabled", false));
         PresentCorners(rig);
-        Check(PlateAlpha(rig) == 1f && !Up("cornerShade", rig.Status) && !Up("cornerFurniture", rig.Status), "live: the master switch off takes the corners with the board and gives the plate back");
+        Check(!((RectTransform)Field(rig.Status, "root")).gameObject.activeSelf, "live: the master switch off hides the board");
+        Check(PlateAlpha(rig) == 0f && Up("cornerShade", rig.Status) && Up("cornerFurniture", rig.Status), "live: ...and the corners stay, the feed's plate still hidden");
+        CornerPlaces(rig, true, true);
+        Call(rig.Status, "CornersFrame", true, false);      // a frame between two ticks, as the board's TickNatives runs it
+        Check(PlateAlpha(rig) == 0f && Up("cornerFurniture", rig.Status), "live: ...a frame between two ticks leaves them up too");
+        Set(rig.Status, "Options", PilotOptions("Enabled", false, "Corners", false));
+        PresentCorners(rig);
+        Check(PlateAlpha(rig) == 1f && !Up("cornerShade", rig.Status) && !Up("cornerFurniture", rig.Status), "live: with the restyle off as well the plate is the game's and nothing of ours is up");
+        Set(rig.Status, "Options", PilotOptions("Enabled", false));
+        PresentCorners(rig);
+        Check(PlateAlpha(rig) == 0f && Up("cornerFurniture", rig.Status), "live: the restyle on again with the board still off");
+        Call(rig.Status, "Hide");
+        Check(PlateAlpha(rig) == 1f && !Up("cornerShade", rig.Status) && !Up("cornerFurniture", rig.Status), "live: Hide (the module going away) stands the corners down with the board and gives the plate back");
         Set(rig.Status, "Options", PilotOptions());
         PresentCorners(rig);
         Check(PlateAlpha(rig) == 0f && Up("cornerFurniture", rig.Status), "live: and back on");

@@ -1952,6 +1952,8 @@ static void ProbeTacBoardConfig(Assembly plugin)
     PropertyInfo[] options = contract.GetProperties();
     string baseline = Path.Combine(Path.GetTempPath(), "boscali-tacboard-probe-default-" + Environment.ProcessId + ".cfg");
     string path = Path.Combine(Path.GetTempPath(), "boscali-tacboard-probe-" + Environment.ProcessId + ".cfg");
+    string isolated = Path.Combine(Path.GetTempPath(), "boscali-tacboard-probe-one-" + Environment.ProcessId + ".cfg");
+    string menu = Path.Combine(Path.GetTempPath(), "boscali-tacboard-probe-menu-" + Environment.ProcessId + ".cfg");
     object[] Values(object settings) => options.Select(option => option.GetValue(settings)!).ToArray();
     try
     {
@@ -1969,6 +1971,45 @@ static void ProbeTacBoardConfig(Assembly plugin)
         object[] onDisk = Values(Activator.CreateInstance(settingsType, Activator.CreateInstance(configFile, path, true))!);
         for (int i = 0; i < options.Length; i++)
             if (!Equals(onDisk[i], changed[i])) throw new InvalidOperationException("TAC BOARD probe: the moved " + options[i].Name + " was not saved (file has " + onDisk[i] + ", set " + changed[i] + ")");
+        // HudSettings.Snapshot is what the board reads every tick: moved alone, each option must reach the BoardOptions field of its own name and no other (a swapped assignment would hide the wrong page).
+        Type boardOptions = plugin.GetType("BoscaliSummer.Modules.Hud.Domain.BoardOptions", true)!;
+        MethodInfo snapshot = settingsType.GetMethod("Snapshot")!;
+        FieldInfo[] boardFields = options.Select(option => boardOptions.GetField(option.Name) ?? throw new InvalidOperationException("BoardOptions has no field for " + option.Name)).ToArray();
+        object alone = Activator.CreateInstance(settingsType, Activator.CreateInstance(configFile, isolated, true))!;
+        for (int i = 0; i < options.Length; i++)
+        {
+            options[i].SetValue(alone, changed[i]);
+            object[] snapArgs = { Activator.CreateInstance(boardOptions)! };
+            snapshot.Invoke(alone, snapArgs);
+            for (int j = 0; j < options.Length; j++)
+            {
+                object want = j == i ? options[j].GetValue(alone)! : defaults[j];
+                if (!Equals(boardFields[j].GetValue(snapArgs[0]), want))
+                    throw new InvalidOperationException("TAC BOARD Snapshot: moving " + options[i].Name + " left BoardOptions." + boardFields[j].Name + " at " + boardFields[j].GetValue(snapArgs[0]) + ", not " + want);
+            }
+            contract.GetMethod("ResetToDefaults")!.Invoke(alone, null);
+        }
+        // The F1 window's plain view lists the master switch (ConfigMenu hints it as no advanced setting) and keeps the rest of the section behind the Advanced checkbox.
+        // The whole mod's settings bind under BepInEx's paths: point them at a scratch folder first (the Wing settings make a data folder under the config path).
+        string scratch = Path.Combine(Path.GetTempPath(), "boscali-tacboard-probe-root-" + Environment.ProcessId);
+        MethodInfo setPaths = bepInEx.GetType("BepInEx.Paths", true)!.GetMethod("SetExecutablePath", AllMembers)!;
+        setPaths.Invoke(null, setPaths.GetParameters().Select((parameter, index) => index == 0 ? Path.Combine(scratch, "probe.exe") : parameter.HasDefaultValue ? parameter.DefaultValue : null).ToArray());
+        Type modConfiguration = plugin.GetType("BoscaliSummer.Core.Config.ModConfiguration", true)!;
+        object whole = Activator.CreateInstance(modConfiguration, Activator.CreateInstance(configFile, menu, true))!;
+        object board = modConfiguration.GetProperty("TacBoard")!.GetValue(whole)!;
+        bool? Advanced(string entryName)
+        {
+            object entry = settingsType.GetProperty(entryName)!.GetValue(board)!;
+            object description = entry.GetType().GetProperty("Description")!.GetValue(entry)!;
+            foreach (object tag in (object[])description.GetType().GetProperty("Tags")!.GetValue(description)!)
+            {
+                FieldInfo advanced = tag.GetType().GetField("IsAdvanced");
+                if (advanced != null) return (bool?)advanced.GetValue(tag);
+            }
+            return null;
+        }
+        if (Advanced("Enabled") != false) throw new InvalidOperationException("The F1 window's plain view must list TacBoard.Enabled (ConfigMenu.Switches)");
+        if (Advanced("Layout") != true) throw new InvalidOperationException("TacBoard.Layout must sit behind the F1 window's Advanced checkbox");
         contract.GetMethod("ResetToDefaults")!.Invoke(settings, null);
         object[] reset = Values(settings);
         object[] saved = Values(Activator.CreateInstance(settingsType, Activator.CreateInstance(configFile, path, true))!);
@@ -1978,9 +2019,14 @@ static void ProbeTacBoardConfig(Assembly plugin)
             if (!Equals(saved[i], defaults[i])) throw new InvalidOperationException("TAC BOARD ResetToDefaults did not save " + options[i].Name);
         }
         if (!(bool)configFile.GetProperty("SaveOnConfigSet")!.GetValue(file)!) throw new InvalidOperationException("TAC BOARD ResetToDefaults left the config file's save-on-set off");
-        Console.WriteLine("  TAC BOARD config: " + options.Length + " options moved, reset to their bound defaults and saved");
+        Console.WriteLine("  TAC BOARD config: " + options.Length + " options moved, each alone through Snapshot, listed in the F1 window, reset to their bound defaults and saved");
     }
-    finally { File.Delete(baseline); File.Delete(path); }
+    finally
+    {
+        File.Delete(baseline); File.Delete(path); File.Delete(isolated); File.Delete(menu);
+        string scratch = Path.Combine(Path.GetTempPath(), "boscali-tacboard-probe-root-" + Environment.ProcessId);
+        if (Directory.Exists(scratch)) Directory.Delete(scratch, true);
+    }
 }
 
 static void ProbeFactionMoraleSerialization(Assembly plugin, Assembly mirage)

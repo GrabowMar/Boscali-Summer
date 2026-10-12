@@ -191,7 +191,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 key = 9000000;
                 text = "ARMED";
-                for (int i = 0; i < d.PerkCount; i++) if (d.Perks[i].State == PerkPhase.Armed) { key += i + 1; text = d.Perks[i].Name + " ARMED"; break; }
+                for (int i = 0; i < d.PerkCount; i++) if (d.Perks[i].State == PerkPhase.Armed) { key += i + 1; text = key == headlineKey ? null : d.Perks[i].Name + " ARMED"; break; }
             }
 
             headlineText = text ?? headlineText;

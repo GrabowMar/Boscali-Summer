@@ -19,7 +19,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     internal sealed class ThreatPage : ScopePageBase
     {
         // The plot is centred; the call box takes the top-right corner (COL..), the time bars the bottom-right; tags may reach RB.
-        private const float CX = 220f, CY = 164f, R = 130f, COL = 346f, CW = 90f, RB = 436f;
+        private const float CX = 220f, CY = 164f, R = 130f, COL = 332f, CW = 90f, RB = 436f;      // COL: LAYOUT.md 12.2 moved the call column 14 left, off the page's corner bracket
         private const float DefeatBannerS = 2.4f;
         private const int Numbers = 32;
 

@@ -33,6 +33,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             shadeBand.sprite = HudSprites.SunBand(0f);
             shadeBand.type = Image.Type.Sliced;
             shadeField = ShadeChild<RawImage>(shadeRect, "CloudField");
+            shadeField.texture = fieldTexture;      // a tree rebuilt without Destroy() (the dock was lost and found) keeps the baked field: BakeField only hands a texture to the image it makes the texture for
         }
 
         /// <summary>A top-left anchored, input-transparent child of a shade (the board's, or the feed's) whose size and place are set every paint (off until the first one: a graphic no one has placed would be a white square).</summary>

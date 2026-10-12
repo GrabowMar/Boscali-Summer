@@ -4,9 +4,11 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Hud.Runtime
 {
     /// <summary>
-    /// Reads how far the main camera turned each frame (the head: in a cockpit the camera is the pilot's eyes, with the game's look-around and any head motion another module adds already applied) and hands it to
-    /// <see cref="VisorSway"/>. The game's own camera and nothing of another module. A few float operations a frame: the turn is the rotation from the last frame's to this one's in the camera's own frame (yaw about its
-    /// up, pitch about its right; the roll is no head movement the board follows). No camera, <c>on</c> false (the option, a pause, the map) or the first frame after either: no sway, and the filter starts over.
+    /// Reads how far the pilot's head turned each frame and hands it to <see cref="VisorSway"/>. The head is the main camera's rotation RELATIVE TO ITS PARENT: in the cockpit view the game parents the camera to a
+    /// pivot on the aircraft's cockpit viewpoint, so the camera's world rotation also carries every pitch and yaw of the airframe (a pull would swing the board for the whole manoeuvre) while its local rotation is the look-around
+    /// and head tracking alone. The game's own camera and nothing of another module. A few float operations a frame: the turn is the rotation from the last frame's to this one's in the camera's own frame (yaw about its up,
+    /// pitch about its right; the roll is no head movement the board follows). Only in the cockpit view (an orbit or chase camera turning is no head). No camera, <c>on</c> false (the option, a pause, the map), another view
+    /// or the first frame after any of them: no sway, and the filter starts over.
     /// </summary>
     internal sealed class VisorSwayDriver
     {
@@ -21,9 +23,9 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         public void Tick(float dt, bool on)
         {
             CameraStateManager state = on ? SceneSingleton<CameraStateManager>.i : null;
-            Camera camera = state != null ? state.mainCamera : null;
+            Camera camera = state != null && state.currentState == state.cockpitState ? state.mainCamera : null;
             if (camera == null) { Reset(); return; }
-            Quaternion now = camera.transform.rotation;
+            Quaternion now = camera.transform.localRotation;
             if (!have) { have = true; last = now; sway.Reset(); return; }
             Quaternion turn = Quaternion.Inverse(last) * now;
             last = now;

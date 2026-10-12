@@ -92,9 +92,16 @@ namespace BoscaliSummer.Modules.Hud.Domain
         {
             int dist = NOAvionics.AvUnitTable.DistanceReading(Scratch, 100, metres, units) - 100;   // measured in the tail of the scratch, then moved up
             int room = maxChars - dist - 1, n = 0;
-            string upper = string.IsNullOrEmpty(name) || room < 3 ? "" : name.Trim().ToUpperInvariant();     // no room for a name: the distance alone
-            if (upper.Length > room) { n = Put(0, upper.Substring(0, room - 1)); Scratch[n++] = '…'; }
-            else n = Put(0, upper);
+            if (!string.IsNullOrEmpty(name) && room >= 3)      // no room for a name: the distance alone. Trimmed and upper-cased straight into the scratch: this runs every frame on a live page, so it builds no string
+            {
+                int a = 0, b = name.Length;
+                while (a < b && char.IsWhiteSpace(name[a])) a++;
+                while (b > a && char.IsWhiteSpace(name[b - 1])) b--;
+                bool cut = b - a > room;
+                n = cut ? room - 1 : b - a;
+                for (int i = 0; i < n; i++) Scratch[i] = char.ToUpperInvariant(name[a + i]);
+                if (cut) Scratch[n++] = '…';
+            }
             if (n > 0) Scratch[n++] = ' ';
             Array.Copy(Scratch, 100, Scratch, n, dist);
             for (int i = n; i < n + dist; i++) Scratch[i] = char.ToUpperInvariant(Scratch[i]);

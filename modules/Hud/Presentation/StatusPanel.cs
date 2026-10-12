@@ -231,13 +231,19 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
         }
 
-        /// <summary>Take our board out of view without destroying it, and give the native boxes back. Idempotent.</summary>
+        /// <summary>Take our board out of view without destroying it, and give the native boxes back; the kill feed and the map stand down with it (the module is going away). Idempotent.</summary>
         public void Hide()
         {
-            corner?.Release();
+            HideBoard();
             StandDownCorners();
+        }
+
+        /// <summary>The board alone off the screen and the native boxes back, the other corners as they are: what the master switch does (the corners have a switch of their own, LAYOUT.md 8).</summary>
+        private void HideBoard()
+        {
+            corner?.Release();
             BoardBox = default;
-            header.Clear();
+            ClearHeader();
             if (root != null && root.gameObject.activeSelf) root.gameObject.SetActive(false);
         }
 

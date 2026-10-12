@@ -88,6 +88,13 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(ScopeStr.Distance("k92", 22000f, AvUnits.Metric, 20).ToString() == "K92 22KM", "A distance reads in the player's units, upper case: " + ScopeStr.Distance("k92", 22000f, AvUnits.Metric, 20).ToString());
             string cut = ScopeStr.Distance("HighwayStrip2", 23000f, AvUnits.Metric, 10).ToString();
             TestAssert.That(cut.Length <= 10 && cut.EndsWith("23KM") && cut.Contains("…"), "A long name is cut so the distance always shows: " + cut);
+            TestAssert.That(ScopeStr.Distance("  Annex Cliff ", 97f, AvUnits.Metric, 20).ToString() == "ANNEX CLIFF 97M" && ScopeStr.Distance("   ", 97f, AvUnits.Metric, 20).ToString() == "97M", "A name is trimmed and upper-cased; a blank one is no name");
+            // The row runs every frame on a live page (THREAT's lock cue, STRIKE's CLOSE word): it builds no string.
+            ScopeStr.Distance("  Annex Cliff ", 97f, AvUnits.Metric, 20);
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < 200; i++) ScopeStr.Distance(i % 2 == 0 ? "  Annex Cliff " : "SA-19", 97f + i, AvUnits.Metric, i % 3 == 0 ? 8 : 20);
+            long made = GC.GetAllocatedBytesForCurrentThread() - before;
+            TestAssert.That(made == 0, "...and builds nothing per call: " + made + " bytes in 200 calls");
             TestAssert.Eq(SystemsMath.WindFromDegrees(0f), 360, "North reads 360");
             TestAssert.Eq(SystemsMath.WindFromDegrees(270f), 270, "270 reads 270");
             TestAssert.Eq(SystemsMath.WindFromDegrees(-90f), 270, "A negative bearing wraps");

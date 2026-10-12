@@ -10,7 +10,8 @@
   F1 and the `[TacBoard]` config section, with Reset to defaults. The radar-warning page now
   holds a contact for a set time (6 s by default) and any page stays up a minimum time, so it no
   longer pops on and off. Names and readouts that were cut off or overlapped now fit, and the
-  board scales down to 1280 x 720.
+  board scales down to 1280 x 720. Switching the board off keeps the kill feed and map restyle
+  (it has its own switch), and the visor sway follows the pilot's head, not the aircraft's own turns.
 
 ## 0.2.0 — first public alpha
 

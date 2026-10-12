@@ -22,6 +22,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private const float TX = 392f, TW = 10f, TapeTop = 54f, TapeBottom = 204f, TapeLeft = 338f;                     // the range tape and its block's left edge
         private const float FlashS = 0.35f;
         private static readonly string[] Chain = { "BOOST", "MID", "ACTIVE", "TERM" };
+        private const int Holes = 4;
 
         private MissileCamScope d;
         private bool live, primed, caution;
@@ -29,6 +30,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private float now, lockAt = float.NegativeInfinity;
         private CamMode lastMode;
         private readonly float[] quad = new float[8], rangeTick = new float[1];
+        /// <summary>
+        /// Where words sit on the view (x0, y0, x1, y1 each; the chain's chips, the header's words, the seeker block, the tape block): the ground picture, the gates and the static are cut round them, because the plates that used to
+        /// hide a line behind a word are gone (LAYOUT.md 9). The chips' and the words' are measured by <see cref="Header"/> every paint, the others are fixed. <see cref="cut"/> is the scratch of <see cref="Cut"/>.
+        /// </summary>
+        private readonly float[] hole = new float[Holes * 4] { 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 6f, 154f, 182f, 236f, TapeLeft, 36f, FX + FW, 236f }, cut = new float[8];
         private int ttiKey = int.MinValue, rangeKey = int.MinValue, nextKey = int.MinValue, burnKey = int.MinValue;
         private string modeWord = "", ttiText = "", ttiSub = "", rangeText = "", nextLabel = "", burnSub;
 
@@ -127,6 +133,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             now = p.Now;
             units = p.Units;
             bool had = d.HasTarget || d.HasLast, warn = MissileCamMath.Caution(d.Mode, had), gone = d.Lost && d.LostS >= FlashS;
+            Header(g);      // first: it measures the words the picture is cut round
             if (gone) Static(g);
             else View(g);
             g.Box(FX, FY, FW, FH, Dim, 0.9f);
@@ -142,7 +149,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 if (had) TargetBox(g, tx, ty, half, warn);
                 Seeker(g, had, warn);
             }
-            Header(g);
             Tape(g);
             Profile(g);
             if (d.Lost && !gone) g.Fill(FX, FY, FW, FH, Hi, 1f - d.LostS / FlashS);      // the flash of the impact
@@ -164,10 +170,33 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         /// <summary>A line of the ground picture: given about the boresight in the missile's own frame, turned by its roll and cut at the view's frame.</summary>
-        private static void Ground(ScopeCanvas g, float x0, float y0, float x1, float y1, float ca, float sa, ScopeTone tone, float alpha)
+        private void Ground(ScopeCanvas g, float x0, float y0, float x1, float y1, float ca, float sa, ScopeTone tone, float alpha)
         {
             float ax = CX + x0 * ca - y0 * sa, ay = CY + x0 * sa + y0 * ca, bx = CX + x1 * ca - y1 * sa, by = CY + x1 * sa + y1 * ca;
-            if (MissileCamMath.ClipLine(ref ax, ref ay, ref bx, ref by, FX + 1f, FY + 1f, FX + FW - 1f, FY + FH - 1f)) g.Line(ax, ay, bx, by, tone, alpha);
+            if (MissileCamMath.ClipLine(ref ax, ref ay, ref bx, ref by, FX + 1f, FY + 1f, FX + FW - 1f, FY + FH - 1f)) Cut(g, ax, ay, bx, by, tone, alpha, 1f, 0);
+        }
+
+        /// <summary>A line of the picture, cut round the words (<see cref="hole"/>, from the hole <paramref name="from"/> on): a piece that a hole splits goes on to the holes after it.</summary>
+        private void Cut(ScopeCanvas g, float x0, float y0, float x1, float y1, ScopeTone tone, float alpha, float w, int from)
+        {
+            for (int k = from; k < Holes; k++)
+            {
+                int n = MissileCamMath.ClipOut(x0, y0, x1, y1, hole[k * 4], hole[k * 4 + 1], hole[k * 4 + 2], hole[k * 4 + 3], cut);
+                if (n < 0) continue;
+                float a0 = cut[0], a1 = cut[1], a2 = cut[2], a3 = cut[3], b0 = cut[4], b1 = cut[5], b2 = cut[6], b3 = cut[7];      // the scratch is shared with the recursion
+                if (n > 0) Cut(g, a0, a1, a2, a3, tone, alpha, w, k + 1);
+                if (n > 1) Cut(g, b0, b1, b2, b3, tone, alpha, w, k + 1);
+                return;
+            }
+            g.Line(x0, y0, x1, y1, tone, alpha, w);
+        }
+
+        /// <summary>No hole touches the rectangle.</summary>
+        private bool Clear(float x, float y, float w, float h)
+        {
+            for (int k = 0; k < Holes; k++)
+                if (x < hole[k * 4 + 2] && x + w > hole[k * 4] && y < hole[k * 4 + 3] && y + h > hole[k * 4 + 1]) return false;
+            return true;
         }
 
         /// <summary>The path tunnel: eight chevron gates from under the reticle to the target, running toward it (faster in the terminal phase).</summary>
@@ -185,8 +214,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 ScopeTone tone = s < 0.35f ? Hi : Ink;
                 // an open gate (-a, .55a) - (0, -.45a) - (a, .55a), turned half way toward the path
                 float px = x + a * 0.45f * sa, py = y - a * 0.45f * ca;
-                g.Line(x - a * ca - a * 0.55f * sa, y - a * sa + a * 0.55f * ca, px, py, tone, alpha, w);
-                g.Line(px, py, x + a * ca - a * 0.55f * sa, y + a * sa + a * 0.55f * ca, tone, alpha, w);
+                Cut(g, x - a * ca - a * 0.55f * sa, y - a * sa + a * 0.55f * ca, px, py, tone, alpha, w, 0);
+                Cut(g, px, py, x + a * ca - a * 0.55f * sa, y + a * sa + a * 0.55f * ca, tone, alpha, w, 0);
             }
         }
 
@@ -262,6 +291,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             int cur = MissileCamMath.ChainIndex(d.Phase);
             if (cur >= 0 && d.Lost) cur = 4;      // the ride is over: every phase is behind it
             float x = 8f;
+            hole[0] = hole[1] = hole[2] = hole[3] = 0f;
             for (int i = 0; i < 4 && cur >= 0; i++)
             {
                 bool on = i == cur;
@@ -271,13 +301,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 g.Box(x, 36f, w, 17f, tone, on ? 1f : 0.9f, 1f, Ink, on ? 0.28f : 0f);
                 g.Text(Chain[i], x + w / 2f, 45f, tone, 12f, ScopeAlign.Center, on);
                 x += w + 3f;
+                hole[0] = 6f; hole[1] = 34f; hole[2] = x - 1f; hole[3] = 55f;
             }
             float w1 = g.Text(ScopeStr.Cat("MSL ", d.Index + 1, "/", d.Count, null), 8f, 66f, Hi, 12f, ScopeAlign.Left, true) + 16f;
             w1 += g.FitText(d.Full, 8f + w1, 66f, 322f - w1, Hi, 12f, 12f, ScopeAlign.Left, true);
             float w2 = string.IsNullOrEmpty(d.Target) ? 0f : g.Text(ScopeStr.Cat("TGT ", d.Target), 8f, 82f, Dim) + 16f;
             int hdg = ((int)Math.Round(d.HeadingDeg) % 360 + 360) % 360;
             w2 += g.Text(ScopeStr.Cat("HDG ", hdg < 10 ? "00" : hdg < 100 ? "0" : null, hdg, null), 8f + w2, 82f, Dim);
-            g.Fill(5f, 57f, Mathf.Round(Math.Max(w1, w2)) + 6f, 34f, Bg, 0.6f);      // the horizon and the static run behind these words
+            hole[4] = 4f; hole[5] = 56f; hole[6] = 5f + Mathf.Round(Math.Max(w1, w2)) + 7f; hole[7] = 92f;      // the horizon and the static do not run through these words
         }
 
         /// <summary>The range-to-go tape: the target at the top, the missile's marker rising toward it; hatched = still to fly; ACT (the seeker goes active) and TERM (the last 2.5 km) marks.</summary>
@@ -378,7 +409,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 for (float x = FX; x < FX + FW; x += 4f)
                 {
                     float v = ScopeCanvas.Hash((int)(x * 7f + y * 13f) + frame * 1013);
-                    if (v > 0.55f) g.Fill(x, y, 4f, Math.Min(4f, FY + FH - y), Ink, (v - 0.55f) * 0.6f);
+                    if (v > 0.55f && Clear(x, y, 4f, Math.Min(4f, FY + FH - y))) g.Fill(x, y, 4f, Math.Min(4f, FY + FH - y), Ink, (v - 0.55f) * 0.6f);
                 }
             float bar = FY + now * 90f % FH;
             g.Fill(FX, bar, FW, Math.Min(14f, FY + FH - bar), Ink, 0.12f);

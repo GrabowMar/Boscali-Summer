@@ -29,6 +29,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             header.Poll(now, CuePriority.Has(allow.Voiced, ScopePage.Threat) ? ((ThreatPage)pages[(int)ScopePage.Threat]).CallMask : (byte)0);
         }
 
+        /// <summary>Nothing of the header is drawn: forget what it held, and its fault with it (a fault is the last paint's, and there is no paint to be at fault while no stores block is drawn).</summary>
+        private void ClearHeader()
+        {
+            header.Clear();
+            headerFault = false;
+        }
+
         /// <summary>The header's own faults are reported once (its id sits past the pages').</summary>
         private void ReportHeaderOnce(Exception e)
         {
@@ -53,7 +60,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void PaintStores(in ScopePalette pal, in BoardGeometry geo, bool flashOn)
         {
             float bottom = Math.Max(geo.Hero.Present ? geo.Hero.Bottom : 0f, Math.Max(geo.Pwr.Present ? geo.Pwr.Bottom : 0f, geo.Exp.Present ? geo.Exp.Bottom : 0f));
-            if (bottom <= 0f) { Show(storesRect, false); header.Clear(); return; }
+            if (bottom <= 0f) { Show(storesRect, false); ClearHeader(); return; }
             Show(storesRect, true);
             float height = Whole(bottom * unit);
             PlaceOnGrid(storesRect, 0f, 0f, Whole(geo.Width * unit), height);

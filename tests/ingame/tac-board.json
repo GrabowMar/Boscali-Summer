@@ -1,26 +1,16 @@
 {
-  "_note": "The TAC BOARD in the cockpit: cruise, then a missile shot, with the pilot's [TacBoard] options set for the run only (environment.config, put back afterwards; the keys must already be in com.marci.boscalisummer.cfg, so launch the game once with this build first). One look per run, chosen by variables: the default run is WIDE at scale 1, shade 0.45, board on; --set look=stack --set layout=Stack | --set look=scale07 --set scale=0.7 | --set look=shade0 --set shade=0 | --set look=off --set enabled=false. The off run shows the game's own weapon, countermeasure and power panels; the default run is the board on again. The captures are named cruise-<look>, shot-<look>, shot-later-<look> and after-<look>; dock/fire/msl in results.json are the geometry and tracker probes. Nothing here asserts the board itself: the evidence is the screenshots (a live off-then-on within one run needs a HudAutomation config hook).",
+  "_note": "The TAC BOARD in the cockpit, ONE run for every look. Cruise first, the dock geometry probe, then ten looks, each set through HudAutomation.Configure (the SET console's own settings contract) with 2 s for the board's 10 Hz tick and a capture: cruise-wide (the defaults, every option set explicitly), look-stack, look-wide-scale07, look-wide-scale13-moved (scale 1.3, 300 left, 120 down), look-shade0, look-shade1, look-lean, look-minimal, look-board-off (the game's own weapon, countermeasure and power panels must be back; the restyled kill feed and map stay) and look-board-on. Then a bandit head-on at 8 km, the missile shot (shot, shot-later, after) and the tracker probe. Configure changes the options IN MEMORY ONLY: the config file is never written and the last op puts the pilot's own values back (cfg_restored), so a run leaves the player's saved settings alone. results.json holds the dock / fire / msl probes and what each Configure applied (cfg_*). The checks assert the options really reached the contract, that the shot happened and that the Unity log has no Exception; nothing asserts the board's pixels, that is read off the captures.",
   "name": "tac-board",
-  "description": "TAC BOARD looks in the cockpit: wide, stack, scale 0.7, shade 0, board off.",
+  "description": "TAC BOARD looks in one cockpit run: wide, stack, scale 0.7 and 1.3 moved, shade 0 and 1, lean, minimal, board off and on; then a missile shot.",
   "mods": [
     "boscalisummer"
   ],
-  "timeout_s": 240,
-  "vars": {
-    "look": "wide",
-    "layout": "Wide",
-    "scale": 1.0,
-    "shade": 0.45,
-    "enabled": true
-  },
+  "timeout_s": 300,
   "environment": {
     "config": {
-      "boscalisummer": {
-        "TacBoard": {
-          "Layout": "${layout}",
-          "Scale": "${scale}",
-          "Shade": "${shade}",
-          "Enabled": "${enabled}"
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
         }
       }
     }
@@ -33,6 +23,262 @@
       "speed": 220,
       "heading": 0,
       "view": "cockpit"
+    },
+    {
+      "op": "record",
+      "ids": [
+        "*"
+      ],
+      "hz": 5
+    },
+    {
+      "op": "wait",
+      "seconds": 6
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Dock",
+      "args": {},
+      "store": "dock"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Configure",
+      "args": {
+        "enabled": true,
+        "layout": "Wide",
+        "scale": 1.0,
+        "offsetX": 0,
+        "offsetY": 0,
+        "shade": 0.45,
+        "declutter": "Full",
+        "opacity": 1.0,
+        "scopeMode": "Auto",
+        "sway": true,
+        "corners": true,
+        "showLamps": true,
+        "showSystemsStrip": true,
+        "showGauges": true,
+        "showTicker": true,
+        "pageThreat": true,
+        "pageShot": true,
+        "pageMissileCam": true,
+        "pageApproach": true,
+        "pageWing": true,
+        "pageStrike": true,
+        "pageDock": true,
+        "pageObjective": true,
+        "pageSystems": true,
+        "threatHoldSeconds": 6.0,
+        "pageMinSeconds": 3.0
+      },
+      "store": "cfg_wide"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "cruise-wide"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Configure",
+      "args": {
+        "enabled": true,
+        "layout": "Stack",
+        "scale": 1.0,
+        "offsetX": 0,
+        "offsetY": 0,
+        "shade": 0.45,
+        "declutter": "Full"
+      },
+      "store": "cfg_stack"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "look-stack"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Configure",
+      "args": {
+        "enabled": true,
+        "layout": "Wide",
+        "scale": 0.7,
+        "offsetX": 0,
+        "offsetY": 0,
+        "shade": 0.45,
+        "declutter": "Full"
+      },
+      "store": "cfg_scale07"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "look-wide-scale07"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Configure",
+      "args": {
+        "enabled": true,
+        "layout": "Wide",
+        "scale": 1.3,
+        "offsetX": 300,
+        "offsetY": 120,
+        "shade": 0.45,
+        "declutter": "Full"
+      },
+      "store": "cfg_scale13"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "look-wide-scale13-moved"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Configure",
+      "args": {
+        "enabled": true,
+        "layout": "Wide",
+        "scale": 1.0,
+        "offsetX": 0,
+        "offsetY": 0,
+        "shade": 0.0,
+        "declutter": "Full"
+      },
+      "store": "cfg_shade0"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "look-shade0"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Configure",
+      "args": {
+        "enabled": true,
+        "layout": "Wide",
+        "scale": 1.0,
+        "offsetX": 0,
+        "offsetY": 0,
+        "shade": 1.0,
+        "declutter": "Full"
+      },
+      "store": "cfg_shade1"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "look-shade1"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Configure",
+      "args": {
+        "enabled": true,
+        "layout": "Wide",
+        "scale": 1.0,
+        "offsetX": 0,
+        "offsetY": 0,
+        "shade": 0.45,
+        "declutter": "Lean"
+      },
+      "store": "cfg_lean"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "look-lean"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Configure",
+      "args": {
+        "enabled": true,
+        "layout": "Wide",
+        "scale": 1.0,
+        "offsetX": 0,
+        "offsetY": 0,
+        "shade": 0.45,
+        "declutter": "Minimal"
+      },
+      "store": "cfg_minimal"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "look-minimal"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Configure",
+      "args": {
+        "enabled": false,
+        "layout": "Wide",
+        "scale": 1.0,
+        "offsetX": 0,
+        "offsetY": 0,
+        "shade": 0.45,
+        "declutter": "Full"
+      },
+      "store": "cfg_off"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "look-board-off"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Configure",
+      "args": {
+        "enabled": true,
+        "layout": "Wide",
+        "scale": 1.0,
+        "offsetX": 0,
+        "offsetY": 0,
+        "shade": 0.45,
+        "declutter": "Full"
+      },
+      "store": "cfg_on"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "look-board-on"
     },
     {
       "op": "spawn",
@@ -50,26 +296,8 @@
       "heading": 180
     },
     {
-      "op": "record",
-      "ids": [
-        "player",
-        "bandit"
-      ],
-      "hz": 5
-    },
-    {
       "op": "wait",
-      "seconds": 6
-    },
-    {
-      "op": "call",
-      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Dock",
-      "args": {},
-      "store": "dock"
-    },
-    {
-      "op": "capture",
-      "name": "cruise-${look}"
+      "seconds": 3
     },
     {
       "op": "call",
@@ -83,7 +311,7 @@
     },
     {
       "op": "capture",
-      "name": "shot-${look}"
+      "name": "shot"
     },
     {
       "op": "call",
@@ -97,7 +325,7 @@
     },
     {
       "op": "capture",
-      "name": "shot-later-${look}"
+      "name": "shot-later"
     },
     {
       "op": "wait",
@@ -105,7 +333,15 @@
     },
     {
       "op": "capture",
-      "name": "after-${look}"
+      "name": "after"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Configure",
+      "args": {
+        "restore": true
+      },
+      "store": "cfg_restored"
     },
     {
       "op": "end"
@@ -122,9 +358,69 @@
       ]
     },
     {
+      "check": "result_equals",
+      "path": "cfg_wide.layout",
+      "value": "Wide"
+    },
+    {
+      "check": "result_equals",
+      "path": "cfg_stack.layout",
+      "value": "Stack"
+    },
+    {
+      "check": "result_equals",
+      "path": "cfg_scale13.offsetX",
+      "value": 300
+    },
+    {
+      "check": "result_equals",
+      "path": "cfg_scale13.offsetY",
+      "value": 120
+    },
+    {
+      "check": "result_equals",
+      "path": "cfg_shade0.shade",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "cfg_shade1.shade",
+      "value": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "cfg_lean.declutter",
+      "value": "Lean"
+    },
+    {
+      "check": "result_equals",
+      "path": "cfg_minimal.declutter",
+      "value": "Minimal"
+    },
+    {
+      "check": "result_equals",
+      "path": "cfg_off.enabled",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "cfg_on.enabled",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "cfg_restored.saved",
+      "value": false
+    },
+    {
       "check": "result_above",
       "path": "msl.count",
       "min": 1
+    },
+    {
+      "check": "log_match",
+      "pattern": "Exception",
+      "max": 0
     }
   ]
 }

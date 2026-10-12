@@ -1,3 +1,4 @@
+using System;
 using BoscaliSummer.Modules.Hud.Domain;
 
 namespace BoscaliSummer.Tests.Features.Hud
@@ -10,6 +11,26 @@ namespace BoscaliSummer.Tests.Features.Hud
             Wedge();
             Leader();
             ChipNames();
+            ClipOut();
+        }
+
+        /// <summary>MISSILE CAM cuts its ground picture round the words (a hole in a line): none of a line inside, all of one that misses, the piece before and the piece after for one that crosses.</summary>
+        private static void ClipOut()
+        {
+            var p = new float[8];
+            bool Is(int at, float want) => Math.Abs(p[at] - want) < 0.01f;
+            TestAssert.Eq(MissileCamMath.ClipOut(0f, 0f, 100f, 0f, 40f, 10f, 60f, 30f, p), -1, "A line that misses the hole is left alone");
+            int n = MissileCamMath.ClipOut(0f, 20f, 100f, 20f, 40f, 10f, 60f, 30f, p);
+            TestAssert.That(n == 2 && Is(0, 0f) && Is(2, 40f) && Is(4, 60f) && Is(6, 100f) && Is(1, 20f) && Is(7, 20f), "A line through the hole is two pieces, before it and after it, in order");
+            n = MissileCamMath.ClipOut(100f, 20f, 0f, 20f, 40f, 10f, 60f, 30f, p);
+            TestAssert.That(n == 2 && Is(0, 100f) && Is(2, 60f) && Is(4, 40f) && Is(6, 0f), "...in the line's own direction");
+            n = MissileCamMath.ClipOut(0f, 20f, 50f, 20f, 40f, 10f, 60f, 30f, p);
+            TestAssert.That(n == 1 && Is(0, 0f) && Is(2, 40f), "A line that ends in the hole keeps the part before it");
+            n = MissileCamMath.ClipOut(50f, 20f, 100f, 20f, 40f, 10f, 60f, 30f, p);
+            TestAssert.That(n == 1 && Is(0, 60f) && Is(2, 100f), "...one that starts in it, the part after");
+            TestAssert.Eq(MissileCamMath.ClipOut(45f, 15f, 55f, 25f, 40f, 10f, 60f, 30f, p), 0, "A line wholly inside has nothing left");
+            n = MissileCamMath.ClipOut(0f, 0f, 100f, 100f, 40f, 40f, 60f, 60f, p);
+            TestAssert.That(n == 2 && Is(2, 40f) && Is(3, 40f) && Is(4, 60f) && Is(5, 60f), "A diagonal is cut where it enters and leaves");
         }
 
         private static void Wedge()

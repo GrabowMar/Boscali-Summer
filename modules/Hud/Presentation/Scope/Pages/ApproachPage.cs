@@ -125,7 +125,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void UpdateHeadline(AvUnits u)
         {
             int key;
-            string text;
+            string text = null;      // built only when the key changes (this runs at 10 Hz): a steady figure builds nothing
             ScopeTone tone = Hi;
             bool flash = false;
             float dv = d.SpeedMps - d.TargetMps;
@@ -134,21 +134,21 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 int v = (int)Math.Round(Math.Abs(AvUnitTable.Speed(dv, u)));
                 key = 2000 + v * 2 + (dv > 0f ? 1 : 0) + (u == AvUnits.Imperial ? 1000 : 0);
-                text = (dv > 0f ? "FAST +" : "SLOW -") + v;
+                if (key != headlineKey) text = (dv > 0f ? "FAST +" : "SLOW -") + v;
                 tone = Amber; flash = true;
             }
             else if (d.Stage == ApproachStage.Intercept && d.HasIls)
             {
                 int v = (int)Math.Round(Math.Abs(d.LocDeg) * 10f);
                 key = 20000 + v + (d.LocDeg < 0f ? 1000 : 0);
-                text = (d.LocDeg < 0f ? "LOC L " : "LOC R ") + (v / 10) + "." + (v % 10);
+                if (key != headlineKey) text = (d.LocDeg < 0f ? "LOC L " : "LOC R ") + (v / 10) + "." + (v % 10);
                 tone = CautionLoc ? Amber : Hi;
             }
             else if (d.Stage <= ApproachStage.Glide && d.HasIls)
             {
                 int v = (int)Math.Round(d.GsDeg * 10f);
                 key = 30000 + v;
-                text = "GS " + (v < 0 ? "-" : "+") + (Math.Abs(v) / 10) + "." + (Math.Abs(v) % 10);
+                if (key != headlineKey) text = "GS " + (v < 0 ? "-" : "+") + (Math.Abs(v) / 10) + "." + (Math.Abs(v) % 10);
                 tone = CautionGs ? Amber : Hi;
             }
             else if (d.Stage <= ApproachStage.Glide) { key = 4; text = d.Pad ? "PAD" : "FINAL"; }

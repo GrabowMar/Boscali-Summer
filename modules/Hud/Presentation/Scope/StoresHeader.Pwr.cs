@@ -13,7 +13,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private bool PaintPwr(ScopeCanvas g, in BoardRect r)
         {
             float x = r.X, y = r.Y, w = r.W, iw = StoresLayout.PwrInner(stack, w);
-            g.CaptionShelf(x, y, w - (stack ? StoresLayout.StackPwrShelfShort : StoresLayout.ShelfShort), "PWR BUS");
+            g.CaptionShelf(x, y, StoresLayout.PwrShelf(stack, w), "PWR BUS");
             float max = d.CapMaxKj > 0f ? d.CapMaxKj : Math.Max(1f, d.CapKj), frac = Math.Min(1f, Math.Max(0f, d.CapKj / max));
             bool low = StoresMath.CapLow(d.CapKj, max);
             float shotAge = now - shotAt;

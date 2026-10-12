@@ -17,7 +17,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private bool PaintExp(ScopeCanvas g, in BoardRect r, bool flashOn)
         {
             float x = r.X, y = r.Y + (!stack && !g.Furniture ? -ScopeLayout.ExpShelfRow : 0f), w = r.W;
-            g.CaptionShelf(r.X, r.Y, w - StoresLayout.ShelfShort, "EXPENDABLES");
+            g.CaptionShelf(r.X, r.Y, StoresLayout.ExpShelf(w), "EXPENDABLES");
             bool beat = false;
             int rows = 0, jam = -1;
             for (int i = 0; i < d.CmCount; i++)

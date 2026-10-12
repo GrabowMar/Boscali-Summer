@@ -63,6 +63,7 @@ public class FlightHud : SceneSingleton<FlightHud>
 public class CombatHUD : SceneSingleton<CombatHUD>
 {
     public Aircraft aircraft;
+    public Transform iconLayer;      // read by CockpitOverlayGate.Open; the gate's NotSuppressed half, which ExternalHudEnabler.CanShowExternalHud uses, needs none
     private readonly List<HUDUnitMarker> markers = new List<HUDUnitMarker>();
     private float jamAccumulation;
     private HUDWeaponState weaponState;

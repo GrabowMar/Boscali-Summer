@@ -45,7 +45,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             BoardOptions d = BoardOptions.Default;
 
             Enabled = config.Bind(section, "Enabled", d.Enabled,
-                "Master switch for the TAC BOARD; off hides it and gives back the game's own weapon, countermeasure and power panels." + live);
+                "Master switch for the TAC BOARD; off hides it and gives back the game's own weapon, countermeasure and power panels (the kill feed and map restyle has its own switch, Corners)." + live);
 
             Layout = config.Bind(section, "Layout", d.Layout,
                 "Wide spreads the board along the top edge of the screen; Stack is the classic narrow column." + live);
@@ -55,11 +55,11 @@ namespace BoscaliSummer.Modules.Hud.Configuration
                     new AcceptableValueRange<float>(BoardOptions.ScaleMin, BoardOptions.ScaleMax)));
 
             OffsetX = config.Bind(section, "OffsetX", d.OffsetX,
-                new ConfigDescription("How far the board is moved left from the right screen edge, in units." + live,
+                new ConfigDescription("How far the board is moved left from the right screen edge, in units (a unit is a 1080p pixel, scaled by the screen's height)." + live,
                     new AcceptableValueRange<float>(0f, BoardOptions.OffsetXMax)));
 
             OffsetY = config.Bind(section, "OffsetY", d.OffsetY,
-                new ConfigDescription("How far the board is moved down from the top screen edge, in units." + live,
+                new ConfigDescription("How far the board is moved down from the top screen edge, in units (a unit is a 1080p pixel, scaled by the screen's height)." + live,
                     new AcceptableValueRange<float>(0f, BoardOptions.OffsetYMax)));
 
             Opacity = config.Bind(section, "Opacity", d.Opacity,
@@ -67,11 +67,11 @@ namespace BoscaliSummer.Modules.Hud.Configuration
                     new AcceptableValueRange<float>(BoardOptions.OpacityMin, 1f)));
 
             Shade = config.Bind(section, "Shade", d.Shade,
-                new ConfigDescription("Strength of the dark band behind the symbology; 0 draws no band." + live,
+                new ConfigDescription("Strength of the dark band behind the symbology; 0 draws no band (and a restyled kill feed has no dark box then either)." + live,
                     new AcceptableValueRange<float>(0f, 1f)));
 
             Declutter = config.Bind(section, "Declutter", d.Declutter,
-                "How much the board shows: Full is everything the switches allow, Lean drops the gauge row, dark lamps and captions, Minimal keeps only the lock, spike and missile lamps and the pages that matter in a fight." + live);
+                "How much the board shows: Full is everything the switches allow, Lean drops the gauge row, dark lamps and captions and shows the cruise systems strip only while something is wrong, Minimal keeps only the lock, spike and missile lamps and the pages that matter in a fight (the strip only in a fire, engine out, bingo or lost structure)." + live);
 
             ScopeMode = config.Bind(section, "ScopeMode", d.ScopeMode,
                 "Auto shows an information page when it is relevant; Off shows no pages at all." + live);
@@ -106,7 +106,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             ShowLamps = config.Bind(section, "ShowLamps", d.ShowLamps,
                 "Show the lamp row: the aircraft's switch states and the threat lamps." + live);
             ShowSystemsStrip = config.Bind(section, "ShowSystemsStrip", d.ShowSystemsStrip,
-                "Show the compact systems strip the page area falls back to in cruise; it needs the SYSTEMS page." + live);
+                "Show the compact systems strip the page area falls back to in cruise; it needs the SYSTEMS page and ScopeMode Auto." + live);
             ShowGauges = config.Bind(section, "ShowGauges", d.ShowGauges,
                 "Show the gauge row under the board's page area." + live);
             ShowTicker = config.Bind(section, "ShowTicker", d.ShowTicker,
@@ -116,7 +116,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
                 "The symbology lags slightly against head movement, as if it hung in the air a little way off the glass." + live);
 
             Corners = config.Bind(section, "Corners", d.Corners,
-                "Restyle the kill feed and the map frame in the board's look." + live);
+                "Restyle the kill feed and the map frame in the board's look; it stays when the board is switched off." + live);
         }
 
         /// <summary>Fill <paramref name="into"/> from the config entries, kept inside their ranges. Reads fields only: it allocates nothing.</summary>
