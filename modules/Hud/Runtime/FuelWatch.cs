@@ -45,11 +45,12 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                     fieldName = field != null ? MfdAirbaseFormatter.Format(field).ToUpperInvariant() : null;       // "HIGHWAYSTRIP2" reads HIGHWAY STRIP 02
                 }
             }
-            float distance = float.NaN, relative = 0f;
+            float distance = float.NaN, relative = 0f, bearing = 0f;
             if (field != null && field.center != null)
             {
                 Vector3 to = field.center.position - aircraft.transform.position, nose = aircraft.transform.forward;
                 distance = to.magnitude;
+                bearing = (Mathf.Atan2(to.x, to.z) * Mathf.Rad2Deg % 360f + 360f) % 360f;
                 // Bearing minus heading on the horizontal plane (the base arrow is drawn against the compass, so a banked, pitched or inverted aircraft still sees it on the right side).
                 relative = (((Mathf.Atan2(to.x, to.z) - Mathf.Atan2(nose.x, nose.z)) * Mathf.Rad2Deg) % 360f + 360f) % 360f;
             }
@@ -72,6 +73,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 Field = fieldName,
                 FieldM = distance,
                 FieldRelDeg = relative,
+                FieldBearingDeg = bearing,
                 HasNeed = endurance.HasNeed,
                 Need = endurance.Need,
                 Tone = FuelEndurance.Tone(level, endurance.Bingo, endurance.Joker),

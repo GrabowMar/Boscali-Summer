@@ -13,7 +13,8 @@ using static UnityCheckHarness;
 // child whose Image is switched OFF, as in the game's scene, and four lines of text, 475 x 90 at 1080p, at the top-left; or one line in a box 198 x 34 as the game drew it in its first run) and the minimised map's plate (320 x 320 at the bottom-left; the backdrop already has the game's own map drawn in it, which the brackets are to sit round). The check judges where the
 // brackets and the shelves are DRAWN (the quads of the furniture surface and the words on it) against LAYOUT.md 7 and the stand-in rectangles, that the plate is hidden while the board stands in for it and given back
 // whenever it does not (the option off, the feed gone, the master switch, teardown), and that the sway moves the board and the corners together by whole pixels and puts them back. Renders corners-<case>-<W>x<H>.png.
-// Run alone with -pages corners. (The canvas of this check is in pixels, one canvas unit to a pixel: the native rectangles are authored in the native units times the screen's height over 1080, as the game's are.)
+// HUD holo pass C (2026-10-12): the TAC MAP caption now stands INSIDE the frame's lower left (an edge marker cannot sit on it), a north tick follows the map's turn (the game's mapImage z rotation is the heading), and
+// the dressing is hidden whole while HudMapState.HoloActive is set. Run alone with -pages corners. (The canvas of this check is in pixels, one canvas unit to a pixel: the native rectangles are authored in the native units times the screen's height over 1080, as the game's are.)
 public static partial class HudLogUnityCheck
 {
     private sealed class CornerRig
@@ -21,6 +22,8 @@ public static partial class HudLogUnityCheck
         public Canvas Canvas;
         public object Status, Frame;
         public RectTransform FeedBox, MapPlate;
+        /// <summary>The stand-in for DynamicMap.mapImage: the game turns it by the heading (z, counter-clockwise).</summary>
+        public Transform MapImage;
         public Image Darkener, Plate;
         public TextMeshProUGUI First;
         public Vector2 Size;
@@ -29,7 +32,7 @@ public static partial class HudLogUnityCheck
     }
 
     /// <summary>The board with a stand-in kill feed and map plate adopted as the native corners, presented once with <paramref name="options"/>.</summary>
-    private static CornerRig MakeCorners(Vector2 size, object options, int lineCount = 4)
+    private static CornerRig MakeCorners(Vector2 size, object options, int lineCount = 4, float heading = 0f)
     {
         var rig = new CornerRig { Size = size, S = size.y / 1080f, U = Mathf.Max(size.y / 1080f, 0.85f) };
         MakeBoard(size, 2f, out rig.Canvas, out rig.Status, out rig.Frame);
@@ -84,8 +87,12 @@ public static partial class HudLogUnityCheck
         rig.MapPlate.anchorMin = rig.MapPlate.anchorMax = rig.MapPlate.pivot = Vector2.zero;
         rig.MapPlate.anchoredPosition = Vector2.zero;
         rig.MapPlate.sizeDelta = new Vector2(320f, 320f) * rig.S;
+        var image = new GameObject("mapImage", typeof(RectTransform));
+        rig.MapImage = image.transform;
+        rig.MapImage.SetParent(rig.MapPlate, false);
+        rig.MapImage.localEulerAngles = new Vector3(0f, 0f, heading);
 
-        Call(rig.Status, "AdoptCorners", rig.Darkener, rig.MapPlate);
+        Call(rig.Status, "AdoptCorners", rig.Darkener, rig.MapPlate, rig.MapImage);
         Set(rig.Status, "Options", options);
         PresentCorners(rig);
         return rig;
@@ -95,7 +102,7 @@ public static partial class HudLogUnityCheck
     private static void PresentCorners(CornerRig rig)
     {
         Call(rig.Status, "Present", rig.Frame);
-        foreach (string name in new[] { "Sky", "Cockpit" })
+        foreach (string name in new[] { "Dash", "Sky", "Cockpit" })
         {
             Transform t = rig.Canvas.transform.Find(name);
             if (t != null) t.SetAsFirstSibling();
@@ -247,19 +254,105 @@ public static partial class HudLogUnityCheck
             Rect w = words["DL EVT LOG"];
             Check(Mathf.Abs(w.center.y - (feedBottom + 8f * u)) <= 4f && Mathf.Abs(w.xMin - 14f * u) <= 6f * u, "DL EVT LOG: the caption sits on the shelf's line at x 14: " + w + " " + res);
         }
-        // TAC MAP: the plate is x 0..320 by 760..1080 (native units); brackets 4 in at left and right, 6 under the top, 12 over the bottom, arm 18 (design units at 1080p: native units carried by k); the shelf's line 16 over them.
+        // TAC MAP: the plate is x 0..320 by 760..1080 (native units); brackets 4 in at left and right, 6 under the top, 12 over the bottom, arm 18 (design units at 1080p: native units carried by k); the caption shelf INSIDE the frame at its
+        // lower left: its line 14 over the bottom brackets' line, from 6 in from the left brackets (where a screen-edge marker cannot sit on it).
         float left = 4f, right = 320f * s - 4f, top = h - 320f * s + 6f, bottom = h - 12f, arm = Mathf.Round(18f / u) * u;
         Check(HasLine(quads, true, top, left, left + arm) == map && HasLine(quads, true, top, right - arm, right) == map, "TAC MAP: the top arms along y 766 (" + map + "): " + res);
         Check(HasLine(quads, true, bottom - 1f, left, left + arm) == map && HasLine(quads, true, bottom - 1f, right - arm, right) == map, "TAC MAP: the bottom arms 12 over the screen's bottom: " + res);
         Check(HasLine(quads, false, left, top, top + arm) == map && HasLine(quads, false, right - 1f, top, top + arm) == map, "TAC MAP: the vertical arms at the left and the right: " + res);
         Check(HasLine(quads, false, left, bottom - arm, bottom) == map && HasLine(quads, false, right - 1f, bottom - arm, bottom) == map, "TAC MAP: ...the bottom ones up from the bottom: " + res);
-        Check(HasLine(quads, true, top - 16f * u, left, left + 8f * u) == map, "TAC MAP: the shelf's line 16 over the brackets: " + res);
+        Check(HasLine(quads, true, bottom - 14f * u, left + 6f * u, left + 14f * u) == map, "TAC MAP: the shelf's line 14 over the bottom brackets' line, inside the frame: " + res);
+        Check(!HasLine(quads, true, top - 16f * u, left, left + 8f * u), "TAC MAP: nothing left of the old shelf over the frame's top: " + res);
         Check(words.ContainsKey("TAC MAP") == map, "TAC MAP: the caption is on the shelf (" + map + "): " + res);
         if (map)
         {
             Rect w = words["TAC MAP"];
-            Check(Mathf.Abs(w.center.y - (top - 16f * u)) <= 4f && Mathf.Abs(w.xMin - (left + 12f * u)) <= 6f * u, "TAC MAP: the caption sits on the shelf's line at x 16: " + w + " " + res);
+            Check(Mathf.Abs(w.center.y - (bottom - 14f * u)) <= 4f && Mathf.Abs(w.xMin - (left + 18f * u)) <= 6f * u, "TAC MAP: the caption sits on the shelf's line at x 18: " + w + " " + res);
+            Check(w.center.y > top + 100f * u && w.center.y < bottom && w.xMin > left && w.xMax < right, "TAC MAP: the caption is inside the frame, far under its top edge, where the game's edge markers sit: " + w + " " + res);
         }
+    }
+
+    /// <summary>
+    /// The north tick (the game rotates its map image by the heading, counter-clockwise, every frame): north at the top of the frame for a northbound aircraft, on its left for an eastbound one, at the bottom (clear of the caption shelf)
+    /// for a southbound one and on the right for a westbound one, a tick 8 long inwards from the frame's line and an N beyond its end; and no tick, no N, when the map image is not held.
+    /// </summary>
+    private static void CornerNorth(CornerRig rig)
+    {
+        string res = (int)rig.Size.x + "x" + (int)rig.Size.y;
+        float u = rig.U, s = rig.S, h = rig.Size.y, left = 4f, right = 320f * s - 4f, top = h - 320f * s + 6f, bottom = h - 12f, midX = (left + right) * 0.5f, midY = (top + bottom) * 0.5f;
+        float shelfEnd = (left + 6f * u) + 104f * u + 16f * u;      // the shelf's end and the 8 + 8 the tick keeps clear of it (design units carried to pixels)
+        foreach (int heading in new[] { 0, 90, 180, 270 })
+        {
+            rig.MapImage.localEulerAngles = new Vector3(0f, 0f, heading);
+            PresentCorners(rig);
+            List<Rect> quads = CornerQuads(rig);
+            Dictionary<string, Rect> words = CornerWords(rig);
+            Check(words.ContainsKey("N"), "North tick: the N is on the frame, heading " + heading + ": " + res);
+            if (!words.ContainsKey("N")) continue;
+            Rect n = words["N"];
+            switch (heading)
+            {
+                case 0:
+                    Check(HasLine(quads, false, midX, top, top + 8f * u), "North tick: heading 0, a tick down from the middle of the top line: " + res);
+                    Check(Mathf.Abs(n.center.x - midX) <= 3f && n.center.y > top + 8f * u, "North tick: ...and its N under the tick's end: " + n + " " + res);
+                    break;
+                case 90:
+                    Check(HasLine(quads, true, midY, left, left + 8f * u), "North tick: heading 90 (east), north on the left: a tick from the left line: " + res);
+                    Check(Mathf.Abs(n.center.y - midY) <= 4f && n.center.x > left + 8f * u, "North tick: ...and its N beside the tick's end: " + n + " " + res);
+                    break;
+                case 180:
+                {
+                    float x = Mathf.Max(midX, shelfEnd);
+                    Check(HasLine(quads, false, x, bottom - 8f * u, bottom), "North tick: heading 180, a tick up from the bottom line, clear of the caption shelf (x " + x + "): " + res);
+                    Check(n.center.x >= shelfEnd - 3f && n.center.y < bottom - 8f * u, "North tick: ...and its N over the tick's end, off the shelf: " + n + " " + res);
+                    break;
+                }
+                default:
+                    Check(HasLine(quads, true, midY, right - 8f * u, right), "North tick: heading 270 (west), north on the right: a tick from the right line: " + res);
+                    Check(Mathf.Abs(n.center.y - midY) <= 4f && n.center.x < right - 8f * u, "North tick: ...and its N beside the tick's end: " + n + " " + res);
+                    break;
+            }
+            foreach (KeyValuePair<string, Rect> other in words)
+                if (other.Key != "N" && other.Value.Overlaps(n)) Check(false, "North tick: the N does not sit on " + other.Key + " (heading " + heading + "): " + n + " " + other.Value + " " + res);
+        }
+        // The map image gone (the game's object not found): the frame is dressed without a tick. (The native pieces stay adopted: Adopt takes a new CanvasGroup for the feed's plate, which Unity refuses in the frame the old one is destroyed.)
+        rig.MapImage.localEulerAngles = new Vector3(0f, 0f, 0f);
+        object natives = Field(rig.Status, "screenCorners");
+        Set(natives, "mapImage", null);
+        PresentCorners(rig);
+        Check(!CornerWords(rig).ContainsKey("N") && CornerWords(rig).ContainsKey("TAC MAP"), "North tick: no readable rotation, no N (the caption stays): " + res);
+        Set(natives, "mapImage", rig.MapImage);
+        PresentCorners(rig);
+        CornerShot(rig, "north");
+    }
+
+    private static void SetHolo(bool on) => Type("BoscaliSummer.Core.Contracts.HudMapState").GetField("HoloActive", All).SetValue(null, on);
+
+    /// <summary>The hide rule for a map hologram that takes over the corner: while HudMapState.HoloActive is set the TAC MAP dressing (brackets, caption, north tick) is gone, noticed on the next frame, not the next tick; the kill feed's corner is not touched.</summary>
+    private static void CornerHolo(Vector2 size)
+    {
+        string res = (int)size.x + "x" + (int)size.y;
+        CornerRig rig = MakeCorners(size, PilotOptions());
+        try
+        {
+            Check(!(bool)Type("BoscaliSummer.Core.Contracts.HudMapState").GetField("HoloActive", All).GetValue(null), "HoloActive is false by default: " + res);
+            CornerPlaces(rig, true, true);
+            Check(CornerWords(rig).ContainsKey("N"), "Holo off: the map is dressed, north tick and all: " + res);
+            SetHolo(true);
+            Call(rig.Status, "CornersFrame", true, false);      // a frame between two ticks: the corner notices on its own
+            CornerPlaces(rig, true, false);
+            Check(!CornerWords(rig).ContainsKey("N") && !CornerWords(rig).ContainsKey("TAC MAP"), "Holo on: no caption, no north tick, the map dressing is hidden whole: " + res);
+            Check(CornerWords(rig).ContainsKey("DL EVT LOG") && PlateAlpha(rig) == 0f, "...and the kill feed's corner is as it was: " + res);
+            CornerShot(rig, "holo");
+            PresentCorners(rig);
+            CornerPlaces(rig, true, false);
+            SetHolo(false);
+            Call(rig.Status, "CornersFrame", true, false);
+            CornerPlaces(rig, true, true);
+            Check(CornerWords(rig).ContainsKey("N"), "Holo cleared: the dressing is back on the next frame: " + res);
+        }
+        finally { SetHolo(false); }
+        EndCorners(rig);
     }
 
     /// <summary>The box the board reports for the banner and the cluster is the box it drew.</summary>
@@ -294,7 +387,9 @@ public static partial class HudLogUnityCheck
             CornerBoardBox(rig);
             foreach (TextMeshProUGUI line in rig.FeedBox.GetComponentsInChildren<TextMeshProUGUI>()) Check(line.gameObject.activeInHierarchy && line.color.a > 0.99f && line.text.Contains("demolished"), "The game's own feed text is not touched: " + line.text);
             CornerShot(rig, "on");
+            CornerNorth(rig);
             Check(EndCorners(rig) == 1f, "Teardown gives the feed's plate back: " + res);
+            CornerHolo(size);
 
             // Corners off: nothing of ours, the plate as the game made it.
             rig = MakeCorners(size, PilotOptions("Corners", false));

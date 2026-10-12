@@ -19,6 +19,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
 
         private Image darkener, boxPlate;
         private RectTransform feedBox, mapPlate;
+        private Transform mapImage;
         private CanvasGroup plate;
 
         /// <summary>Both native objects are held (nothing left to look for).</summary>
@@ -36,6 +37,12 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         public RectTransform FeedBox => feedBox;
         public RectTransform MapPlate => mapPlate;
 
+        /// <summary>
+        /// How far the minimised map is turned, degrees counter-clockwise (NaN when the map image is not held): the game's <c>DynamicMap.CenterMinimizedMap</c> sets <c>mapImage.eulerAngles.z</c> to the aircraft's heading every frame,
+        /// so this reads the heading and north lies that far counter-clockwise of up on the screen. Reads only (a <see cref="Vector3"/> out of a transform: nothing is allocated).
+        /// </summary>
+        public float MapTurnDeg => mapImage != null ? mapImage.eulerAngles.z : float.NaN;
+
         /// <summary>Look the two objects up in the game (the plate by its name under the feed's background).</summary>
         public void Find()
         {
@@ -46,16 +53,17 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 foreach (Image image in background.GetComponentsInChildren<Image>(true))
                     if (image.name == "Darkener") { dark = image; break; }
             DynamicMap map = SceneSingleton<DynamicMap>.i;
-            Adopt(dark, map != null && map.mapBackground != null ? map.mapBackground.rectTransform : null);
+            Adopt(dark, map != null && map.mapBackground != null ? map.mapBackground.rectTransform : null, map != null && map.mapImage != null ? map.mapImage.transform : null);
         }
 
-        /// <summary>Hold these objects (what <see cref="Find"/> found; an offline render stands them in): <paramref name="darkener"/> is the feed's plate, whose parent is its box.</summary>
-        public void Adopt(Image darkener, RectTransform mapPlate)
+        /// <summary>Hold these objects (what <see cref="Find"/> found; an offline render stands them in): <paramref name="darkener"/> is the feed's plate, whose parent is its box; <paramref name="mapImage"/> the map picture the game turns by the heading.</summary>
+        public void Adopt(Image darkener, RectTransform mapPlate, Transform mapImage = null)
         {
             Dispose();
             this.darkener = darkener;
             feedBox = darkener != null ? darkener.rectTransform.parent as RectTransform : null;
             this.mapPlate = mapPlate;
+            this.mapImage = mapImage;
             if (feedBox == null) return;
             plate = darkener.gameObject.AddComponent<CanvasGroup>();      // null if Unity would not take a second group: the feed stays as the game made it
             if (plate == null) { feedBox = null; return; }
@@ -80,6 +88,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             plate = null;
             darkener = boxPlate = null;
             feedBox = mapPlate = null;
+            mapImage = null;
         }
     }
 }

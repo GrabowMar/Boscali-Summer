@@ -35,6 +35,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         public ConfigEntry<bool> ShowSystemsStrip { get; }
         public ConfigEntry<bool> ShowGauges { get; }
         public ConfigEntry<bool> ShowTicker { get; }
+        public ConfigEntry<bool> ShowNavData { get; }
         public ConfigEntry<bool> Sway { get; }
         public ConfigEntry<bool> Corners { get; }
 
@@ -111,6 +112,8 @@ namespace BoscaliSummer.Modules.Hud.Configuration
                 "Show the gauge row under the board's page area." + live);
             ShowTicker = config.Bind(section, "ShowTicker", d.ShowTicker,
                 "Show the notice line at the foot of the board." + live);
+            ShowNavData = config.Bind(section, "ShowNavData", d.ShowNavData,
+                "Show the NAV DATA block at the bottom right of the cockpit view: the way home, the selected target, fuel endurance and the mission clock. Lean drops its caption, Minimal hides it." + live);
 
             Sway = config.Bind(section, "Sway", d.Sway,
                 "The symbology lags slightly against head movement, as if it hung in the air a little way off the glass." + live);
@@ -146,6 +149,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             into.ShowSystemsStrip = ShowSystemsStrip.Value;
             into.ShowGauges = ShowGauges.Value;
             into.ShowTicker = ShowTicker.Value;
+            into.ShowNavData = ShowNavData.Value;
             into.Sway = Sway.Value;
             into.Corners = Corners.Value;
             into.Sanitize();
@@ -176,6 +180,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         bool ITacBoardSettings.ShowSystemsStrip { get => ShowSystemsStrip.Value; set => ShowSystemsStrip.Value = value; }
         bool ITacBoardSettings.ShowGauges { get => ShowGauges.Value; set => ShowGauges.Value = value; }
         bool ITacBoardSettings.ShowTicker { get => ShowTicker.Value; set => ShowTicker.Value = value; }
+        bool ITacBoardSettings.ShowNavData { get => ShowNavData.Value; set => ShowNavData.Value = value; }
         bool ITacBoardSettings.Sway { get => Sway.Value; set => Sway.Value = value; }
         bool ITacBoardSettings.Corners { get => Corners.Value; set => Corners.Value = value; }
 
@@ -186,7 +191,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             {
                 Enabled, Layout, Scale, OffsetX, OffsetY, Opacity, Shade, Declutter, ScopeMode,
                 PageThreat, PageShot, PageMissileCam, PageApproach, PageWing, PageStrike, PageDock, PageObjective, PageSystems,
-                ThreatHoldSeconds, PageMinSeconds, ShowLamps, ShowSystemsStrip, ShowGauges, ShowTicker, Sway, Corners,
+                ThreatHoldSeconds, PageMinSeconds, ShowLamps, ShowSystemsStrip, ShowGauges, ShowTicker, ShowNavData, Sway, Corners,
             };
             ConfigFile file = Enabled.ConfigFile;
             bool save = file.SaveOnConfigSet;
