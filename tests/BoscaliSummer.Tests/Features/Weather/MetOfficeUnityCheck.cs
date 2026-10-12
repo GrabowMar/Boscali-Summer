@@ -174,6 +174,10 @@ public static class MetOfficeUnityCheck
             case "storm":
                 m.Class = WeatherRegimeType.Storm; m.Cover = 0.97f; m.Metar = "BKN012 OVC095 +RA TS"; m.ForcedRain = 1f; m.HasAnchor = false; m.Pace = 1; m.SpeedMps = 18f;
                 for (int i = 0; i < 6; i++) m.Outlook[i].Class = WeatherRegimeType.Storm;
+                // The storm chart draws the real lattice cells (slice 3), not the base fixture's hand-placed ones.
+                var stormField = new WeatherField(); stormField.Build(new WeatherKey(31u, 0f, false, (byte)WeatherRegimeType.Storm), 600f, 40960f, 40960f);
+                MetOfficeCells.Fill(m, stormField);
+                if (m.CellCount == 0) throw new Exception("the storm lattice put no cells on the chart");
                 m.Sets[3] = new MetSetPiece { Forced = true, Present = true, Placed = true, X = 0f, Z = 0f, Strength = 1f };
                 break;
             case "longest":

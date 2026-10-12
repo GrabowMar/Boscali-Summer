@@ -6,7 +6,7 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Weather.Runtime
 {
     /// <summary>
-    /// The Met Office window's only contact with the world, implemented from what main has today: the legacy field's fronts (<see cref="FrontState"/>), its storm-cell sites and set-pieces, the
+    /// The Met Office window's only contact with the world, implemented from what main has today: the legacy field's fronts (<see cref="FrontState"/>), its storm-lattice cells (MetOfficeCells) and set-pieces, the
     /// theater frame, the mission wind, the camera, the anchor and the 60-minute forecast. Slices 3, 4a, 4b and 5 re-implement <see cref="Fill"/> against the tape; the window stays.
     /// Commands go through the manager's console API and are written to a four-line host log.
     /// </summary>
@@ -91,12 +91,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             m.AnchorMark = key.HasAnchor && anchorMark >= 0 && Math.Abs(key.AnchorX - anchorSetX) < 1f && Math.Abs(key.AnchorZ - anchorSetZ) < 1f ? anchorMark : -1;
             m.FrontCount = Math.Min(field.FrontCount, MetOfficeModel.MaxFronts);
             for (int i = 0; i < m.FrontCount; i++) MetFrontLine.From(field.Front(i), m.Fronts[i]);
-            m.CellCount = Math.Min(field.CellCount, MetOfficeModel.MaxCells);
-            for (int i = 0; i < m.CellCount; i++)
-            {
-                StormCell cell = field.Cell(i);
-                m.Cells[i] = new MetCell { X = cell.X * KmPerMetre, Z = cell.Z * KmPerMetre, Radius = cell.Radius * KmPerMetre, Severe = cell.Severe };
-            }
+            MetOfficeCells.Fill(m, field);
             for (int i = 0; i < MetOfficeModel.SetCount; i++) m.Sets[i].Forced = (key.Sets & MetCatalog.SetBits[i]) != 0;
             for (int i = 0; i < field.SuperstructureCount; i++)
             {
