@@ -32,7 +32,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             WeatherKey reset = WeatherScenarios.Apply(WeatherScenario.ResetAll, pinned, false, 0f, 0f, 0f, 1f);
             TestAssert.That(reset.SkyPin == WeatherKey.None, "the ResetAll scenario unpins");
             WeatherKey hurricane = WeatherScenarios.Apply(WeatherScenario.HurricaneEye, pinned, false, 0f, 0f, 0f, 1f);
-            TestAssert.That(hurricane.SkyPin == WeatherKey.None, "so does any other scenario");
+            TestAssert.That(hurricane.SkyPin == 43, "a pin scenario pins its sky (the storm eye is sky 44)");
         }
 
         private static void EveryLibrarySkyBuildsAndSamples()

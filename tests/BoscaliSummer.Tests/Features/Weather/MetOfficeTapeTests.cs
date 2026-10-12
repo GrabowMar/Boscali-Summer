@@ -10,7 +10,7 @@ namespace BoscaliSummer.Tests.Features.Weather
         {
             HoldKeepsPinAndPosition();
             ResumeKeepsPin();
-            UnpinnedHoldKeepsTheClassOnScreen();
+            UnpinnedHoldAndResume();
             PaceNeverTouchesHoldOrPin();
             PaceStepClamps();
             EveryColumnFits();
@@ -22,7 +22,7 @@ namespace BoscaliSummer.Tests.Features.Weather
         private static void HoldKeepsPinAndPosition()
         {
             WeatherKey key = Moving(26);
-            TapeSwitchPlan plan = TapeSwitch.Plan(key, false, 400f, 27f, (byte)WeatherRegimeType.Broken);
+            TapeSwitchPlan plan = TapeSwitch.Plan(key, false, 400f, 27f);
             TestAssert.That(!plan.Key.Dynamic && plan.Key.SkyPin == 26, "holding a pinned sky keeps the pin");
             TestAssert.Near((float)plan.Key.OffsetAt(9999.0), (float)key.OffsetAt(400.0), "the tape position is continuous across a hold");
             TestAssert.That(!plan.TapeMoves && !plan.ConsoleAuto && plan.ManualOverride, "a held tape is a console hold: fog, light and wind keep following the field");
@@ -32,29 +32,29 @@ namespace BoscaliSummer.Tests.Features.Weather
         private static void ResumeKeepsPin()
         {
             WeatherKey held = Moving(26).Rebased(400f, false);
-            TapeSwitchPlan plan = TapeSwitch.Plan(held, true, 500f, 34f, (byte)WeatherRegimeType.Broken);
+            TapeSwitchPlan plan = TapeSwitch.Plan(held, true, 500f, 34f);
             TestAssert.That(plan.Key.Dynamic && plan.Key.SkyPin == 26 && plan.Key.SystemSpeed == 34f, "resuming a pinned sky keeps the pin and takes the new speed");
             TestAssert.That(plan.TapeMoves && plan.ConsoleAuto && plan.ManualOverride, "a pinned sky stays a manual override even while the tape runs");
             TestAssert.Near((float)plan.Key.OffsetAt(500.0), (float)held.OffsetAt(500.0), "resume does not move the tape");
         }
 
-        private static void UnpinnedHoldKeepsTheClassOnScreen()
+        private static void UnpinnedHoldAndResume()
         {
             WeatherKey key = Moving();
-            TapeSwitchPlan hold = TapeSwitch.Plan(key, false, 300f, 27f, (byte)WeatherRegimeType.Overcast);
-            TestAssert.That(hold.Key.MissionClass == (byte)WeatherRegimeType.Overcast && hold.ManualOverride, "an unpinned hold opens on the class showing (interim)");
-            TapeSwitchPlan resume = TapeSwitch.Plan(hold.Key, true, 600f, 27f, (byte)WeatherRegimeType.Overcast);
+            TapeSwitchPlan hold = TapeSwitch.Plan(key, false, 300f, 27f);
+            TestAssert.That(hold.ManualOverride && !hold.Key.Dynamic && hold.Key.MissionClass == key.MissionClass, "an unpinned hold is a console hold and leaves the mission class alone");
+            TapeSwitchPlan resume = TapeSwitch.Plan(hold.Key, true, 600f, 27f);
             TestAssert.That(resume.Key.Dynamic && !resume.ManualOverride && resume.ConsoleAuto && resume.Key.SkyPin == WeatherKey.None, "an unpinned resume hands the sky back to the tape");
         }
 
         private static void PaceNeverTouchesHoldOrPin()
         {
             WeatherKey pinnedHeld = Moving(26).Rebased(200f, false);
-            WeatherKey faster = TapeSwitch.Pace(pinnedHeld, 300f, 40f, (byte)WeatherRegimeType.Storm);
+            WeatherKey faster = TapeSwitch.Pace(pinnedHeld, 300f, 40f);
             TestAssert.That(!faster.Dynamic && faster.SkyPin == 26 && faster.SystemSpeed == 40f && faster.MissionClass == pinnedHeld.MissionClass, "pace changes only the speed");
             WeatherKey running = Moving();
-            WeatherKey slower = TapeSwitch.Pace(running, 300f, 18f, (byte)WeatherRegimeType.Overcast);
-            TestAssert.That(slower.Dynamic && slower.MissionClass == (byte)WeatherRegimeType.Overcast, "a running tape keeps running at a new pace and keeps the class on screen (interim)");
+            WeatherKey slower = TapeSwitch.Pace(running, 300f, 18f);
+            TestAssert.That(slower.Dynamic && slower.MissionClass == running.MissionClass, "a running tape keeps running at a new pace and keeps its mission class");
             TestAssert.Near((float)slower.OffsetAt(300.0), (float)running.OffsetAt(300.0), "pace is SMOOTH: the tape does not jump");
         }
 

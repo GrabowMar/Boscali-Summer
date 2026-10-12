@@ -39,12 +39,12 @@ namespace BoscaliSummer.Tests.Features.Weather
                 }
 
             var dirty = new WeatherKey(90210u, 900f, false, 6, 63, 7, true, -12000f, 18000f);
-            byte[] states = { 6, 5, 1, 0, 4, 6 }, setsWanted = { 8, 3, 16, 32, 0, 0 };
+            byte[] pinsWanted = { 43, 255, 7, 0, 255, 255 }, storiesWanted = { 255, 1, 255, 255, 0, 255 }, setsWanted = { 8, 3, 16, 32, 0, 0 };
             foreach (WeatherScenario scenario in (WeatherScenario[])Enum.GetValues(typeof(WeatherScenario)))
             {
                 WeatherKey key = WeatherScenarios.Apply(scenario, dirty, true, 1000f, 2000f, 0f, 0.5f);
                 int i = (int)scenario;
-                TestAssert.That(key.MissionClass == states[i] && key.Sets == setsWanted[i], "scenario selects its exact state and force bits");
+                TestAssert.That(key.SkyPin == pinsWanted[i] && key.Story == storiesWanted[i] && key.Sets == setsWanted[i], "scenario selects its exact pin or story and force bits");
                 TestAssert.That(key.Seed == dirty.Seed && key.LayoutSalt == dirty.LayoutSalt && key.HeadingDeg == dirty.HeadingDeg,
                     "scenario retains the deterministic layout and the mission wind frame");
                 TestAssert.That(key.Dynamic == (scenario == WeatherScenario.ResetAll), "only reset resumes changing weather");

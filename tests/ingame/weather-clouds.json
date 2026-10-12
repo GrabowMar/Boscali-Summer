@@ -267,7 +267,7 @@
     },
     {
       "check": "result_above",
-      "path": "weather.frontCount",
+      "path": "weather.markerCount",
       "min": 1
     },
     {

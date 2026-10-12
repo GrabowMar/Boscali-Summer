@@ -28,27 +28,26 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         internal bool SetTapeMoves(bool moves)
         {
             if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return false;
-            TapeSwitchPlan plan = TapeSwitch.Plan(fieldKey, moves, now, TapePace.Speed(settings.Pace.Value, baselineWindSpeed), ShownClass());
+            TapeSwitchPlan plan = TapeSwitch.Plan(fieldKey, moves, now, TapePace.Speed(settings.Pace.Value, baselineWindSpeed));
             settings.TapeMoves.Value = plan.TapeMoves;
             consoleAuto = plan.ConsoleAuto;
             isManualOverride = plan.ManualOverride;
             explicitTargets = false;
-            fieldKey = plan.Key;
+            fieldKey = TapeSwitch.Held(fieldKey, plan.Key);
             RekeyAndSync(now);
             NotifyPlayer(moves ? "TAPE RUNNING" : "TAPE HELD", forcedRainIntensity);
             return true;
         }
 
         /// <summary>
-        /// PACE: writes the same <c>Pace</c> entry as the SET SERVER row and rebases the key to the speed it gives (spec 5.4). INTERIM(slice 4): the legacy 5-minute step ignores the speed,
-        /// and a rebase restarts that step counter, so an unpinned sky keeps the class on screen as its opener (<see cref="TapeSwitch.Pace"/>).
+        /// PACE: writes the same <c>Pace</c> entry as the SET SERVER row and rebases the key to the speed it gives (spec 5.4); the offset stays (<see cref="TapeSwitch.Held"/>).
         /// </summary>
         internal bool SetPace(int pace)
         {
             if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return false;
             pace = TapeSwitch.Step(pace, 0);
             settings.Pace.Value = pace;
-            fieldKey = TapeSwitch.Pace(fieldKey, now, TapePace.Speed(pace, baselineWindSpeed), ShownClass());
+            fieldKey = TapeSwitch.Held(fieldKey, TapeSwitch.Pace(fieldKey, now, TapePace.Speed(pace, baselineWindSpeed)));
             RekeyAndSync(now);
             NotifyPlayer("PACE " + pace, forcedRainIntensity);
             return true;

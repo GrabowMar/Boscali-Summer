@@ -85,6 +85,20 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             return Readout(manager);
         }
 
+        /// <summary>Sims: a held tape at a pinned place. Args: seed (1), story (255), pin (255), offsetKm (0), dynamic (false).</summary>
+        public static Dictionary<string, object> SetFixtureTape(Dictionary<string, object> args)
+        {
+            WeatherManager manager = Find();
+            if (manager == null) return Fail("SetFixtureTape", "no weather manager in this scene");
+            if (!BoscaliSummer.Core.Game.GameAccess.IsServer()) return Fail("SetFixtureTape", "fixture tapes are host-only");
+            bool dynamic = args != null && args.ContainsKey("dynamic") && Arg(args, "dynamic") is bool d && d;
+            if (!manager.SetFixtureTape((uint)Mathf.Clamp(Number(args, "seed", 1f), 1f, 16000000f), (byte)Mathf.Clamp(Number(args, "story", 255f), 0f, 255f),
+                    (byte)Mathf.Clamp(Number(args, "pin", 255f), 0f, 255f), Number(args, "offsetKm", 0f), dynamic))
+                return Fail("SetFixtureTape", "needs a manual override (ForceWeather first), a captured mission and a valid clock");
+            manager.LogAutomation("SetFixtureTape");
+            return Readout(manager);
+        }
+
         /// <summary>Pin the whole sky to one of the 47 library skies: <c>sky</c> is 1-47, or 0 to unpin and resume the changing
         /// weather. Host only; it goes through the same key path as the console, so clients receive the pin.</summary>
         public static Dictionary<string, object> PinSky(Dictionary<string, object> args)

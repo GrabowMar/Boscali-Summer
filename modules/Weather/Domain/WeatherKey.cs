@@ -112,6 +112,11 @@ namespace BoscaliSummer.Modules.Weather.Domain
             other != null && TapeId == other.TapeId && HeadingDeg == other.HeadingDeg;
 
         public WeatherKey WithSets(byte sets) => Copy(sets: sets);
+        /// <summary>The opening placement (TapeOpening.Solve) at capture: the same tape, the offset the opening gave. Not a cut: nothing was on screen yet.</summary>
+        public WeatherKey WithOffset(float offset) => Copy(offset: offset);
+        /// <summary>Repeats one story for the whole tape (0-4), or hands the choice back to the mission class with <see cref="None"/>. A new tape identity, so a cut.</summary>
+        public WeatherKey WithStory(byte story) => new WeatherKey(Seed, Epoch, Dynamic, MissionClass, Sets, LayoutSalt, HasAnchor, AnchorX, AnchorZ, story, SkyPin, OpeningBase,
+            HeadingDeg, Offset, SystemSpeed, SetOriginSquall, SetOriginSupercell, SetOriginCell);
         public WeatherKey WithLayoutSalt(byte salt) => Copy(salt: salt);
         public WeatherKey WithAnchor(float x, float z) => Copy(anchor: true, x: x, z: z);
         public WeatherKey WithoutAnchor() => Copy(anchor: false);
