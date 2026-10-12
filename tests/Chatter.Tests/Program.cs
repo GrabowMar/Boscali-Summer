@@ -266,6 +266,8 @@ B[*]: Night second.
         ("awacs.checkin", ChatterPriority.Status, new string[0], anybody),
         ("awacs.bandit", ChatterPriority.Tactical, new[] { "bra", "type" }, anybody), ("awacs.bogeydope", ChatterPriority.Tactical, new[] { "bra", "type" }, anybody),
         ("awacs.clean", ChatterPriority.Tactical, new string[0], anybody), ("awacs.missile", ChatterPriority.Emergency, new[] { "clock" }, anybody),
+        ("awacs.gear", ChatterPriority.Status, new string[0], anybody), ("awacs.fuel", ChatterPriority.Status, new[] { "n" }, anybody),
+        ("awacs.fuelcritical", ChatterPriority.Tactical, new[] { "n" }, anybody),
         ("awacs.missileclear", ChatterPriority.Tactical, new string[0], anybody), ("awacs.splash", ChatterPriority.Tactical, new[] { "target" }, anybody),
         ("tower.taxi", ChatterPriority.Status, new[] { "runway" }, anybody), ("tower.landing", ChatterPriority.Status, new[] { "runway" }, anybody),
         ("tower.goaround", ChatterPriority.Status, new string[0], anybody), ("tower.airborne", ChatterPriority.Status, new string[0], anybody),
@@ -330,3 +332,17 @@ B[*]: Night second.
 }
 
 Console.WriteLine($"chatter: {checks} checks passed");
+
+// `dotnet run --project tests/Chatter.Tests -- ids` lists every built-in line with its id (the name of its recorded clip).
+if (args.Contains("ids"))
+{
+    string root = AppContext.BaseDirectory;
+    while (root != null && !Directory.Exists(Path.Combine(root, "modules", "Chatter", "Assets", "Packs"))) root = Path.GetDirectoryName(root);
+    var lib = new ChatterLibrary();
+    foreach (string file in Directory.GetFiles(Path.Combine(root, "modules", "Chatter", "Assets", "Packs"), "*.chatter").OrderBy(f => f, StringComparer.Ordinal))
+        lib.Load(Path.GetFileName(file), File.ReadAllText(file));
+    foreach (ChatterEventDef e in lib.Events.Values.OrderBy(e => e.Id, StringComparer.Ordinal))
+        foreach (ChatterLineDef l in e.Lines) Console.WriteLine($"{l.Id}  {e.Id}  [{l.Who}]  {l.Text}");
+    foreach (ChatterExchangeDef x in lib.Exchanges)
+        foreach (ChatterStepDef s in x.Steps) Console.WriteLine($"{s.Id}  >{x.Id}  {(char)('A' + s.Role)}  {s.Text}");
+}

@@ -196,3 +196,29 @@
 [*] Tower to all aircraft: field is under attack. Launch now!
 [*] Incoming! Clear the runway and take cover!
 [*] We are hit! Scramble what you can!
+
+# Reminders from the controller.
+
+@awacs.gear status
+[*] Check your gear. You are flying with the wheels down.
+[*] Your landing gear is still down. Clean up when you can.
+[*] Gear, gear, gear. You are dragging the wheels.
+[*] I show you dirty at speed. Raise your gear.
+[*] Friendly reminder: the wheels go up after takeoff.
+[*] Your gear is hanging. Retract before something bends.
+
+@awacs.fuel status
+[*] Fuel check. You are down to <n> percent.
+[*] You are at <n> percent fuel. Start thinking about home.
+[*] Skywatch shows you at <n> percent. Plan your way back.
+[*] Fuel state <n> percent. Do not stretch it.
+[*] <n> percent in the tanks. Your home field is on the nav data.
+[*] You are getting light, <n> percent. Joker.
+
+@awacs.fuelcritical tactical
+[*] Bingo fuel. Go home now.
+[*] You are at <n> percent. Bingo. Break off and recover.
+[*] Bingo, bingo. <n> percent left. Take the nearest field.
+[*] Fuel critical, <n> percent. Disengage and land.
+[*] That is bingo. Turn for home and do not argue with the gauge.
+[*] <n> percent. You land in the next few minutes, one way or another.

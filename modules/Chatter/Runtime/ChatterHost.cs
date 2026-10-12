@@ -126,6 +126,9 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             }
             Set("night", night);
             Set("rain", rain);
+            // The pilot's own switches for pack lines ("profanity", "banter"): true for as long as they are listed.
+            foreach (string word in (settings.PackConditions.Value ?? "").Split(','))
+                if (word.Trim().Length > 0) director.Conditions.Add(word.Trim().ToLowerInvariant());
         }
 
         private void Set(string condition, bool on)

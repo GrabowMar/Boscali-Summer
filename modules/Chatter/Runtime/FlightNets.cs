@@ -39,6 +39,8 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         private ChatterSpeaker tower;
         private bool checkedIn, wasAirborne, grounded = true, alarm, missiles;
         private float lastEnemy = float.NegativeInfinity, lastMissile = float.NegativeInfinity, levelStart;
+        private float gearSince = float.NaN, lastGear = float.NegativeInfinity;
+        private int fuelCalled;
 
         public FlightNets(IChatter radio)
         {
@@ -55,7 +57,9 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             tower = null;
             checkedIn = wasAirborne = alarm = missiles = false;
             grounded = true;
-            lastEnemy = lastMissile = float.NegativeInfinity;
+            lastEnemy = lastMissile = lastGear = float.NegativeInfinity;
+            gearSince = float.NaN;
+            fuelCalled = 0;
             levelStart = Time.time;
         }
 
@@ -126,7 +130,25 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                 grounded = true;
                 if (wasAirborne && NearTower(me.transform.position) != null) chatter.Raise("tower.welcome", tower);
                 wasAirborne = false;
+                fuelCalled = 0;
             }
+            if (!grounded) Remind(alt);
+        }
+
+        /// <summary>The controller's reminders: the wheels still down at speed (again every two minutes), fuel at a quarter and at a tenth (once each per flight).</summary>
+        private void Remind(float alt)
+        {
+            ChatterSpeaker awacs = chatter.Station(ChatterNet.Awacs, Awacs);
+            if (me.gearDeployed && alt > 150f && me.speed > 120f)
+            {
+                if (float.IsNaN(gearSince)) gearSince = Time.time;
+                else if (Time.time - gearSince > 20f && Time.time - lastGear > 120f && chatter.Raise("awacs.gear", awacs)) lastGear = Time.time;
+            }
+            else gearSince = float.NaN;
+            float fuel = me.GetFuelLevel();
+            string percent = Mathf.Max(1, Mathf.RoundToInt(fuel * 100f)).ToString(CultureInfo.InvariantCulture);
+            if (fuel < 0.10f && fuelCalled < 2) { fuelCalled = 2; chatter.Raise("awacs.fuelcritical", awacs, null, ("n", percent)); }
+            else if (fuel < 0.25f && fuelCalled < 1) { fuelCalled = 1; chatter.Raise("awacs.fuel", awacs, null, ("n", percent)); }
         }
 
         /// <summary>

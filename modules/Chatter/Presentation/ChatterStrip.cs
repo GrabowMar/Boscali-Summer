@@ -58,13 +58,14 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             var go = new GameObject(name, typeof(RectTransform));
             go.transform.SetParent(host.Data, false);
             var text = go.AddComponent<TextMeshProUGUI>();
-            AvType.Apply(text, AvTextRole.Data);
+            AvType.Apply(text, AvTextRole.DataStrong);
+            text.characterSpacing = 0f;
             text.fontSize = size;
             text.fontStyle = FontStyles.Normal;
             text.richText = true;
             text.alignment = TextAlignmentOptions.TopLeft;
             text.enableWordWrapping = false;
-            text.outlineWidth = 0.22f;
+            text.outlineWidth = 0.26f;
             text.outlineColor = new Color32(0, 0, 0, 220);
             text.text = "";
             return text;
@@ -136,7 +137,7 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             ChatterNet live = rows[used - 1].Net;
             shelf.text = "COMMS  <color=#" + Colour(live) + ">" + Tag(live) + " " + Frequency(live) + "</color>";
             AvHudHost.Place(shelf.rectTransform, Left + 4f, y - ShelfHeight + 2f, Width, ShelfHeight);
-            AvHudHost.Place(shelfLine, Left, y - ShelfHeight, 170f, 1.5f);
+            AvHudHost.Place(shelfLine, Left, y - ShelfHeight, 190f, 2f);
 
             float cursor = y - ShelfHeight - 4f;
             float bodyTop = cursor;
@@ -148,9 +149,9 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
                 cursor -= RowGap;
                 row.Text.maxVisibleCharacters = row.Head + (int)((now - row.Shown) * CharsPerSecond);
                 float alpha = now <= row.Until ? 1f : Mathf.Clamp01(1f - (now - row.Until) / FadeSeconds);
-                row.Text.alpha = alpha * (i == used - 1 ? 1f : 0.66f);
+                row.Text.alpha = alpha * (i == used - 1 ? 1f : 0.82f);
             }
-            AvHudHost.Place(bracket, Left, cursor + RowGap, 1.5f, bodyTop - cursor - RowGap);
+            AvHudHost.Place(bracket, Left, cursor + RowGap, 2f, bodyTop - cursor - RowGap);
         }
 
         public void Clear()
@@ -207,7 +208,7 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
                 case ChatterNet.Tower: return "FFE9BF";
                 case ChatterNet.Command: return "F4F7F9";
                 case ChatterNet.Enemy: return "FFB4AC";
-                default: return "C9FFD9";
+                default: return "A8FFC4";
             }
         }
     }

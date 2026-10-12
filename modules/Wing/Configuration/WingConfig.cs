@@ -84,6 +84,7 @@ namespace BoscaliSummer.Modules.Wing.Configuration
         public ConfigEntry<RadioLevel> Radio { get; }
         public ConfigEntry<bool> ContactCalls { get; }
         public ConfigEntry<string> VoicePacks { get; }
+        public ConfigEntry<string> PackConditions { get; }
         public ConfigEntry<float> VoicePackVolume { get; }
         public ConfigEntry<bool> VerboseLogging { get; }
         public ConfigEntry<bool> DevTools { get; }
@@ -156,6 +157,9 @@ namespace BoscaliSummer.Modules.Wing.Configuration
                 "character (its pack.txt says so); each speaker keeps one pack for the mission. Folders under " +
                 "config/BoscaliSummer/voicepacks, config/WingCommand/v1/voicepacks or plugins/WSOYappinator/audio (WSO Yappinator packs " +
                 "work as they are). A line with no clip is shown and not voiced.", null, new ConfigurationManagerAttributes { Order = 77 }));
+            PackConditions = c.Bind("Radio", "PackConditions", "", new ConfigDescription(
+                "Extra condition words that are always true for chatter pack lines, comma-separated (docs/CHATTER_PACKS.md): a pack " +
+                "can keep lines behind a word of its own, such as profanity, and you switch them on here.", null, new ConfigurationManagerAttributes { Order = 75 }));
             VoicePackVolume = c.Bind("Radio", "VoicePackVolume", 0.8f, new ConfigDescription(
                 "Voice pack volume.", new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 76 }));
             ContactCalls = c.Bind("Radio", "ContactCalls", true, new ConfigDescription(
