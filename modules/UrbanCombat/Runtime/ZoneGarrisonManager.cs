@@ -111,12 +111,17 @@ namespace BoscaliSummer.Garrisons
             if (marking != null) marking.SetShellDamage(frac);
         }
 
-        /// <summary>Test seam for StrongpointAutomation: any shell that currently holds a live nest.</summary>
-        internal static MapBuilding AnyStrongpointShell()
+        /// <summary>Test seam for StrongpointAutomation: any shell that currently holds a live nest, and that nest.</summary>
+        internal static MapBuilding AnyStrongpointShell(out Building nest)
         {
+            nest = null;
             if (Instance == null) return null;
             foreach (ShellState state in Instance.shellStates.Values)
-                if (state.Map != null && state.Defense != null && !state.Defense.disabled) return state.Map;
+                if (state.Map != null && state.Defense != null && !state.Defense.disabled)
+                {
+                    nest = state.Defense;
+                    return state.Map;
+                }
             return null;
         }
 
