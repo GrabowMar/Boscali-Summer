@@ -38,7 +38,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                     WeatherPoint p = field.Sample(x, z);
                     SkyParams row = field.RowAt(x, z);
                     // A clear row's sub-percent noise cover (a few hundredths) is not a cloud the march must reach.
-                    if (p.Cover < 0.02f || (row.SheetCover < 0.02f && row.CumulusCover < 0.02f && row.Convective < 0.02f && row.HorizonCover < 0.02f)) continue;
+                    if (p.LowCover < 0.02f || (row.SheetCover < 0.02f && row.CumulusCover < 0.02f && row.Convective < 0.02f && row.HorizonCover < 0.02f)) continue;
                     TestAssert.That(p.CloudBase >= bottom - 0.5f && Math.Max(p.CloudTop, p.LowTop) <= top + 0.5f,
                         state + " " + seed + " at " + x + "," + z + ": " + p.CloudBase + ".." + p.LowTop + " outside " + bottom + ".." + top);
                 }

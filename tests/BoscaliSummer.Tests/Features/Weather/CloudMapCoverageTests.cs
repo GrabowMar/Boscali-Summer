@@ -37,21 +37,21 @@ namespace BoscaliSummer.Tests.Features.Weather
                     CloudBodies.MapWeights(x, z, nearHalf, farHalf, out float nearWeight, out float farFade);
                     TestAssert.That(nearWeight == 1f && farFade == 1f,
                         "All theater positions retain full near-map weight, including corners");
-                    TestAssert.That(float.IsFinite(p.Cover) && p.Cover >= 0f && p.Cover <= 1f &&
+                    TestAssert.That(float.IsFinite(p.LowCover) && p.LowCover >= 0f && p.LowCover <= 1f &&
                         float.IsFinite(p.RainRate) && p.RainRate >= 0f && p.RainRate <= WeatherField.MaxRainRate &&
                         float.IsFinite(p.CloudTop) && p.CloudTop >= p.CloudBase && p.LowTop >= p.CloudBase &&
                         p.CloudTop >= p.LowTop,
                         "Every sampled map column has finite physical coverage, precipitation and ordered ceilings");
-                    TestAssert.That(p.Cover == q.Cover && p.CellShape == q.CellShape && p.LowTop == q.LowTop &&
+                    TestAssert.That(p.LowCover == q.LowCover && p.CellShape == q.CellShape && p.LowTop == q.LowTop &&
                         p.RainRate == q.RainRate,
                         "A settled held state retains the same cloud geometry and rain across mission time");
-                    minimumCover = Math.Min(minimumCover, p.Cover);
-                    maximumCover = Math.Max(maximumCover, p.Cover);
-                    sumCover += p.Cover;
+                    minimumCover = Math.Min(minimumCover, p.LowCover);
+                    maximumCover = Math.Max(maximumCover, p.LowCover);
+                    sumCover += p.LowCover;
                     maximumRain = Math.Max(maximumRain, p.RainRate);
                     maximumTop = Math.Max(maximumTop, p.CloudTop);
                     minimumMapWeight = Math.Min(minimumMapWeight, nearWeight);
-                    if (p.Cover > 0.5f) cloudy++;
+                    if (p.LowCover > 0.5f) cloudy++;
                     if (p.RainRate > 1f) rainy++;
                     n++;
                 }

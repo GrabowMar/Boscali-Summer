@@ -123,7 +123,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                     row[x] = CloudBodies.SampleMap(maps.Near, maps.NearProfiles, CloudMaps.NearSize, u, v);
                     WeatherPoint truth = field.Sample((u * 2f - 1f) * 50000f, (v * 2f - 1f) * 50000f);
                     TestAssert.That(Math.Abs(row[x].CloudBase - truth.CloudBase) <= CloudMaps.BaseRange / 255f * 0.51f, "the map stores the varied base to a 16 m step");
-                    if (truth.Cover > 0.02f) minBase = Math.Min(minBase, truth.CloudBase);
+                    if (truth.LowCover > 0.02f) minBase = Math.Min(minBase, truth.CloudBase);
                     if (x > 0) maxStep = Math.Max(maxStep, Math.Abs(row[x].CloudBase - row[x - 1].CloudBase));
                 }
             }

@@ -143,7 +143,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 Name = skyName,
                 Metar = built ? WeatherMetar.Line(localPoint) : "",
                 Briefing = regime.TacticalBriefing,
-                Cover = built ? localPoint.Cover : cond,
+                Cover = built ? localPoint.LowCover : cond,
                 Deck = deck,
                 Top = cloudTop,
                 VisibilityKm = built ? localPoint.VisibilityKm : -1f,

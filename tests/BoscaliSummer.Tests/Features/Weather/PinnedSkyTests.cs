@@ -50,13 +50,13 @@ namespace BoscaliSummer.Tests.Features.Weather
                 for (int x = -35000; x <= 35000; x += 5000)
                 {
                     WeatherPoint p = field.Sample(x, z);
-                    TestAssert.That(!float.IsNaN(p.Cover) && !float.IsNaN(p.CloudBase) && !float.IsNaN(p.DeckTop) && !float.IsNaN(p.RainRate) && !float.IsNaN(p.MidTop),
+                    TestAssert.That(!float.IsNaN(p.LowCover) && !float.IsNaN(p.CloudBase) && !float.IsNaN(p.DeckTop) && !float.IsNaN(p.RainRate) && !float.IsNaN(p.MidTop),
                         "sky " + (i + 1) + ": finite sample");
                     TestAssert.That(p.LowTop >= p.CloudBase && p.CloudTop >= p.LowTop && p.DeckTop >= p.CloudBase, "sky " + (i + 1) + ": truthful heights");
                     if (p.RainRate > 0.1f) rainy++;
                 }
-                // Per-sky MeanCover (spec 10.1): the legacy Cover mean, which is what vanilla's conditions follow until slice 4b replaces it by the
-                // theater mean of SkyCover (8.1). Here it must be a usable number for every sky; its relation to the class belongs to 4b.
+                // Per-sky MeanCover (spec 10.1): the theater mean of the opacity-weighted SkyCover, which is what the server's native conditions follow (8.1).
+                // Here it must be a usable number for every sky; its relation to the class is printed below, not asserted (lattice skies make it random).
                 float mean = field.MeanCover(5);
                 int cls = (int)SkyLibrary.ClassOf(i);
                 TestAssert.That(!float.IsNaN(mean) && mean >= 0f && mean <= 1f, "sky " + (i + 1) + ": MeanCover is finite and inside 0..1, got " + mean);
@@ -66,7 +66,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                 if (SkyLibrary.ClassOf(i) <= WeatherRegimeType.Overcast && s.Convective == 0f) TestAssert.That(rainy == 0, "sky " + (i + 1) + " is dry");
                 if (s.Convective > 0.1f) TestAssert.That(StormLattice.FindNearest(field.Lattice, null, 0f, 0f, 10, 0.0001f, out _), "sky " + (i + 1) + " has storm cells");
             }
-            string spread = "MeanCover of the pinned skies by class (printed, not asserted against the class until slice 4b):";
+            string spread = "MeanCover (SkyCover) of the pinned skies by class (printed, not asserted against the class):";
             for (int c = 0; c < 7; c++) spread += "\n  " + (WeatherRegimeType)c + " " + meanLow[c].ToString("0.000") + "-" + meanHigh[c].ToString("0.000");
             Console.WriteLine(spread);
         }
@@ -88,7 +88,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             TestAssert.That(c.RowAt(0f, 0f).CloudBase != a.RowAt(0f, 0f).CloudBase || c.RowAt(0f, 0f).CumulusCover != a.RowAt(0f, 0f).CumulusCover || c.RowAt(0f, 0f).LobeRung != a.RowAt(0f, 0f).LobeRung ||
                 c.RowAt(0f, 0f).High.Cover != a.RowAt(0f, 0f).High.Cover, "Re-roll gives another instance of the same sky");
             WeatherPoint p1 = a.Sample(1234f, -5678f), p2 = b.Sample(1234f, -5678f);
-            TestAssert.That(p1.Cover == p2.Cover && p1.CloudBase == p2.CloudBase, "and the same sky at the same place");
+            TestAssert.That(p1.LowCover == p2.LowCover && p1.CloudBase == p2.CloudBase, "and the same sky at the same place");
         }
 
         private static void UnpinnedPlayIsTheLegacyTimeline()
@@ -116,7 +116,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                     for (int x = -30000; x <= 30000; x += 10000)
                     {
                         WeatherPoint p = field.Sample(x, z);
-                        TestAssert.That(p.CloudBase >= 2000f && p.Cover < 0.07f, "sky " + (sky + 1) + ": no low cloud near the ground, got base " + p.CloudBase + " cover " + p.Cover);
+                        TestAssert.That(p.CloudBase >= 2000f && p.LowCover < 0.07f, "sky " + (sky + 1) + ": no low cloud near the ground, got base " + p.CloudBase + " cover " + p.LowCover);
                     }
             }
         }

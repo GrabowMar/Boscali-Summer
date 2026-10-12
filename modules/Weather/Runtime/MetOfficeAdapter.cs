@@ -44,14 +44,14 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             int skyHere = tape != null ? tape.SkyIndexAt(sCam) : -1;
             bool moving = key.Dynamic && field.Moving;
             m.Class = SkyMath.ClassOf(field.RowAt(camX, camZ));
-            m.Cover = p.Cover;
+            m.Cover = p.LowCover;
             m.PinnedSky = key.SkyPin < SkyLibrary.Count ? key.SkyPin : -1;
             m.SkyNumber = skyHere + 1;
             m.SkyName = skyHere >= 0 ? SkyLibrary.Get(skyHere).Name : RegimeSnapshot.FromType(m.Class).Name;
             m.Metar = WeatherMetar.Line(p);
             SetLayer(m, 0, "HIGH", p.HighCover, p.HighBase);
             SetLayer(m, 1, "MID", p.MidCover, p.MidBase);
-            SetLayer(m, 2, "LOW", p.Cover, p.CloudBase);
+            SetLayer(m, 2, "LOW", p.LowCover, p.CloudBase);
 
             // Time.
             m.Running = key.Dynamic;

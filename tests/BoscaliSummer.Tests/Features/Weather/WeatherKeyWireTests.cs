@@ -148,7 +148,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                             hostField.Build(host, 900f, 40960f, 40960f);
                             clientField.Build(client, 900f, 40960f, 40960f);
                             WeatherPoint p = hostField.Sample(1500f, -800f), q = clientField.Sample(1500f, -800f);
-                            TestAssert.That(p.Cover == q.Cover && p.RainRate == q.RainRate && p.WindX == q.WindX &&
+                            TestAssert.That(p.LowCover == q.LowCover && p.RainRate == q.RainRate && p.WindX == q.WindX &&
                                 hostField.PrevailingHeading == clientField.PrevailingHeading, "both peers derive the same sky and wind direction");
                         }
                     }

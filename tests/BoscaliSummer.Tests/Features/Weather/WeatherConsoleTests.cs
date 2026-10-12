@@ -33,7 +33,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                     {
                         field.Build(key, 900f + offset * 60f, 60000f, 60000f, 13f);
                         WeatherPoint point = field.Sample(0f, 0f);
-                        var step = new ForecastStep(offset, point.Cover, point.CloudBase, 0f, SkyMath.ClassOf(field.RowAt(0f, 0f)));
+                        var step = new ForecastStep(offset, point.LowCover, point.CloudBase, 0f, SkyMath.ClassOf(field.RowAt(0f, 0f)));
                         TestAssert.That(step.Regime.Type == (WeatherRegimeType)state, "held forecast keeps selected state despite local gaps");
                     }
                 }

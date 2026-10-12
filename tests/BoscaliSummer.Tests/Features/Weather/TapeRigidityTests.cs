@@ -34,7 +34,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                 Within(now.BackgroundCover, lo.BackgroundCover, hi.BackgroundCover, later.BackgroundCover, "BackgroundCover");
                 Within(now.ClusterCover, lo.ClusterCover, hi.ClusterCover, later.ClusterCover, "ClusterCover");
                 Within(now.CellCover, lo.CellCover, hi.CellCover, later.CellCover, "CellCover");
-                Within(now.Cover, lo.Cover, hi.Cover, later.Cover, "LowCover");
+                Within(now.LowCover, lo.LowCover, hi.LowCover, later.LowCover, "LowCover");
                 Within(now.CellShape, lo.CellShape, hi.CellShape, later.CellShape, "CellShape");
                 Within(now.CloudBase, lo.CloudBase, hi.CloudBase, later.CloudBase, "CloudBase");
                 Within(now.LowTop, lo.LowTop, hi.LowTop, later.LowTop, "LowTop");
@@ -63,7 +63,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             var early = new WeatherField(); var late = new WeatherField();
             early.Build(key, 100f, 81920f, 40960f);
             late.Build(key, 5000f, 81920f, 40960f);
-            TestAssert.That(!early.Moving && early.Frame.Offset == late.Frame.Offset && early.Sample(1000f, 2000f).Cover == late.Sample(1000f, 2000f).Cover,
+            TestAssert.That(!early.Moving && early.Frame.Offset == late.Frame.Offset && early.Sample(1000f, 2000f).LowCover == late.Sample(1000f, 2000f).LowCover,
                 "slice 4a holds D at the key's offset whatever the clock says");
         }
     }

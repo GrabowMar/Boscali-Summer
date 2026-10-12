@@ -178,7 +178,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             if (!IsEnabled || built == null || level == null ||
                 float.IsNaN(globalX) || float.IsInfinity(globalX) || float.IsNaN(globalZ) || float.IsInfinity(globalZ)) return false;
             WeatherPoint point = built.Sample(globalX, globalZ);
-            sample = new WeatherViewSample(Mathf.Clamp01(point.Cover), point.CloudBase, point.CloudTop,
+            sample = new WeatherViewSample(Mathf.Clamp01(point.LowCover), point.CloudBase, point.CloudTop,
                 Mathf.Clamp01(point.RainRate / 20f), WeatherViewSample.IsNightHour(level.timeOfDay));
             return true;
         }
@@ -634,7 +634,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             }
             // Under a deck the air goes dim and grey; above it, the light is back.
             bool belowDeck = (float)cloudPosition.y < localWeather.CloudTop;
-            float shadeTarget = Field != null && belowDeck ? Mathf.Clamp01((localWeather.Cover - 0.2f) / 0.8f) : 0f;
+            float shadeTarget = Field != null && belowDeck ? Mathf.Clamp01((localWeather.LowCover - 0.2f) / 0.8f) : 0f;
             cloudShade = Mathf.MoveTowards(cloudShade, shadeTarget, Time.deltaTime * 0.1f);
             bool underwaterView = currentCam.transform.position.y < Datum.LocalSeaY;
             bool hazeEnabled = settings == null || settings.RainAtmosphereEnabled.Value;
@@ -880,7 +880,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 { "baselineCloudHeight", baselineCloudHeight },
                 { "baselineWindSpeed", baselineWindSpeed },
                 { "protocol", (int)WeatherNet.ProtocolVersion },
-                { "fieldCover", localWeather.Cover },
+                { "fieldCover", localWeather.LowCover },
                 { "tapeId", fieldKey != null ? (double)fieldKey.TapeId : -1.0 },
                 { "story", fieldKey != null && fieldKey.Story < WeatherStories.Count ? WeatherStories.Name(fieldKey.Story) : "auto" },
                 { "skyPin", fieldKey != null && fieldKey.SkyPin < SkyLibrary.Count ? fieldKey.SkyPin + 1 : 0 },
@@ -1253,7 +1253,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 "s " + state +
                 " | native cond " + (LevelInfo.i != null ? LevelInfo.i.conditions.ToString("0.00") : "-") +
                 " base " + Mathf.RoundToInt(currentCloudHeight) +
-                " | local cover " + localWeather.Cover.ToString("0.00") + " rain cover " + localWeather.RainCover.ToString("0.00") +
+                " | local cover " + localWeather.LowCover.ToString("0.00") + " rain cover " + localWeather.RainCover.ToString("0.00") +
                 " rain " + EffectiveRainIntensity().ToString("0.00") +
                 " | markers " + (live?.TapeSource?.Markers.Count ?? 0) + " cells " + (live?.ActiveCellCount(0f, 0f, 40000f) ?? 0) +
                 " | maps " + (flightClouds?.MapUpdates ?? 0) +
@@ -1315,7 +1315,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                     fieldSpan.y * 0.5f, LevelInfo.i != null ? LevelInfo.i.timeOfDay : 12f);
                 WeatherRegimeType forecastClass = SkyMath.ClassOf(forecastField.RowAt(fieldPosition.x, fieldPosition.y));
                 WeatherPoint point = forecastField.Sample(fieldPosition.x, fieldPosition.y);
-                cachedForecast[i] = new ForecastStep(offsets[i], point.Cover, point.CloudBase,
+                cachedForecast[i] = new ForecastStep(offsets[i], point.LowCover, point.CloudBase,
                     forcedRainIntensity ?? Mathf.Clamp01(point.RainRate / 20f), forecastClass);
             }
 

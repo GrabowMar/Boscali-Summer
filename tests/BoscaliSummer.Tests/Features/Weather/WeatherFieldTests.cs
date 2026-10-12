@@ -73,7 +73,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                 field.Frame.FromTape(c.X, c.Z, out float wx, out float wz);
                 WeatherPoint under = field.Sample(wx, wz);
                 TestAssert.That(under.RainRate >= 0.5f * c.PeakRain * c.Strength, "it rains under a storm core");
-                TestAssert.That(under.Cover > 0.9f, "a mature cell is overcast overhead");
+                TestAssert.That(under.LowCover > 0.9f, "a mature cell is overcast overhead");
             }
             TestAssert.That(deep && lightning && mature > 3, "storm cells are deep and electric");
 
@@ -203,7 +203,7 @@ namespace BoscaliSummer.Tests.Features.Weather
                 {
                     WeatherPoint pa = a.Sample(i * 15000f, -i * 9000f);
                     WeatherPoint pb = b.Sample(i * 15000f, -i * 9000f);
-                    TestAssert.That(pa.RainRate == pb.RainRate && pa.Cover == pb.Cover && pa.WindX == pb.WindX,
+                    TestAssert.That(pa.RainRate == pb.RainRate && pa.LowCover == pb.LowCover && pa.WindX == pb.WindX,
                         "same key and time must give the same sky");
                 }
             }

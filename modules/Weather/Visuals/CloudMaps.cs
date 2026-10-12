@@ -89,7 +89,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 mean.LowTop = Math.Max(mean.LowTop, s.LowTop);
                 mean.DeckTop = Math.Max(mean.DeckTop, s.DeckTop);
                 mean.RainRate = Math.Max(mean.RainRate, s.RainRate);
-                mean.Cover = Math.Max(mean.Cover, s.Cover);
+                mean.LowCover = Math.Max(mean.LowCover, s.LowCover);
             }
             mean.BackgroundCover = background / 9f;
             mean.CellShape = shape / 9f;
