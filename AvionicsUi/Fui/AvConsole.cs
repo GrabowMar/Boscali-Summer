@@ -196,8 +196,9 @@ namespace NOAvionics
         {
             if (CurrentPage < 0) return;
             float content = flows[CurrentPage].ContentHeight;
+            // The placed body, not the height Layout chose: a console may shrink its body to dock a bar under it (MIS).
             bay.Set(AvGridTokens.Pad, content, width - 2f * AvGridTokens.Pad - AvGridTokens.Gutter,
-                bodyHeight - content - AvGridTokens.Pad, CurrentPage, orders[CurrentPage]);
+                bodyRect.sizeDelta.y - content - AvGridTokens.Pad, CurrentPage, orders[CurrentPage]);
         }
 
         private void Layout()
@@ -230,7 +231,6 @@ namespace NOAvionics
             float footerH = Footer.Measure(width);
             Footer.Place(new AvSlot(0f, height - footerH, width, footerH));
             float bodyH = Mathf.Max(0f, height - footerH - y);
-            bodyHeight = bodyH;
             AvLay.Place(bodyRect, 0f, y, width, bodyH);
             scrollView.Place(width, bodyH);
             foreach (AvFlow f in flows) f.ViewportHeight = bodyH;
@@ -250,7 +250,7 @@ namespace NOAvionics
             scanUntil = Time.unscaledTime + 0.3f;
         }
 
-        private float scanUntil, bodyHeight;
+        private float scanUntil;
 
         private void EndScan()
         {
