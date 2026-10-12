@@ -1026,6 +1026,9 @@ foreach (string type in new[] {
     "BoscaliSummer.Modules.HighCommand.Networking.HighCommandNet",
     "BoscaliSummer.Modules.HighCommand.Domain.CommandTree",
     "BoscaliSummer.Modules.HighCommand.Domain.CommandLog",
+    // S3 wingposts: the pure command-post rules the HighCommand repair (S8) reads.
+    "BoscaliSummer.Modules.HighCommand.Domain.BountyLedger",
+    "BoscaliSummer.Modules.HighCommand.Domain.PostIntel",
     "BoscaliSummer.Core.Contracts.IHighCommandView" })
     if (pluginAssembly.GetType(type, false) == null) throw new TypeLoadException(type);
 foreach (string type in new[] {
