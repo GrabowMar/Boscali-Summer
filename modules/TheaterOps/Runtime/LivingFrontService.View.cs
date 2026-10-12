@@ -151,7 +151,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 if (war.HQ == null || war.HQ.GetInstanceID() != factionInstanceId) continue;
                 Operation op = war.Active;
                 if (op == null) return false;
-                focus = new OperationFocus(op.Id, (FocusRole)((int)op.Kind + 1), op.Key, op.Name, op.X, op.Z, LivingWarRules.RadiusOf(op.Kind));
+                focus = new OperationFocus(op.Id, LivingWarRules.RoleOf(op.Kind), op.Key, op.Name, op.X, op.Z, LivingWarRules.RadiusOf(op.Kind));
                 return true;
             }
             return false;

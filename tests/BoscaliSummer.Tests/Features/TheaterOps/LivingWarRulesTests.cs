@@ -19,6 +19,8 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
             UnobservedFrontsAreReconAndTalliesCountEveryReject();
             ChooseIsBoundedAndRanked();
             RadiiAndReachAreTheFrozenConstants();
+            UrgentDefenceIsTheBestUncardedBaseDefence();
+            FocusRolesFollowTheOperationKind();
         }
 
         private static readonly WarCapability Steering = new WarCapability(true);
@@ -152,6 +154,31 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
                     string.CompareOrdinal(offers[i - 1].Front.Key, offers[i].Front.Key) < 0, "best first, ties by key");
             LivingWarRules.Choose(null, TheaterWarPosture.Steady, Steering, null, offers, out tally);
             TestAssert.That(offers.Count == 0 && tally.Candidates == 0, "no fronts is an empty ranking");
+        }
+
+        private static void UrgentDefenceIsTheBestUncardedBaseDefence()
+        {
+            var ranked = new List<WarOffer>
+            {
+                new WarOffer(TheaterOpKind.Assault, Read("a", FrontSource.Sector, false, true, true, .3f, 3, 1, 0, 3, 0, 1, 1), 9f),
+                new WarOffer(TheaterOpKind.Defend, Read("#cardless", FrontSource.Base, true, true, true, .5f, 0, 2, 0, 0, 0, 0, 0), 8f),
+                new WarOffer(TheaterOpKind.Defend, Read("#carded", FrontSource.Base, true, true, true, .5f, 0, 2, 0, 0, 0, 0, 0), 7f),
+                new WarOffer(TheaterOpKind.Defend, Read("held", FrontSource.Sector, true, true, true, .5f, 2, 2, 0, 0, 2, 2, 0), 6f),
+            };
+            var deck = new List<DeckCard> { new DeckCard { Key = "#carded", Kind = TheaterOpKind.Defend } };
+            TestAssert.Eq(LivingWarRules.UrgentDefence(ranked, deck, null), 1, "the best base defence without a card is the urgent one");
+            TestAssert.Eq(LivingWarRules.UrgentDefence(ranked, deck, "#cardless"), -1, "not the front of the live operation, and a sector defence is never urgent");
+            deck.Add(new DeckCard { Key = "#cardless", Kind = TheaterOpKind.Defend });
+            TestAssert.Eq(LivingWarRules.UrgentDefence(ranked, deck, null), -1, "none once every base defence has a card");
+            TestAssert.Eq(LivingWarRules.UrgentDefence(null, deck, null), -1, "no ranking is none");
+            TestAssert.Eq(LivingWarRules.UrgentDefence(ranked, null, null), 1, "no deck means every base defence is cardless");
+        }
+
+        private static void FocusRolesFollowTheOperationKind()
+        {
+            TestAssert.That(LivingWarRules.RoleOf(TheaterOpKind.Assault) == FocusRole.Assault && LivingWarRules.RoleOf(TheaterOpKind.Defend) == FocusRole.Defend &&
+                LivingWarRules.RoleOf(TheaterOpKind.Recon) == FocusRole.Recon, "each operation kind asks its own role of a sortie");
+            TestAssert.That(LivingWarRules.RoleOf((TheaterOpKind)9) == FocusRole.None, "an unknown kind asks nothing");
         }
 
         private static void RadiiAndReachAreTheFrozenConstants()

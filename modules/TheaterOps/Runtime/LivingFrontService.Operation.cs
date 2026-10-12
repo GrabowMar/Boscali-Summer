@@ -42,8 +42,13 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             vetoWar = war; vetoNow = now;
             war.Vetoes.Prune(now);
             LivingWarRules.Choose(war.Reads, war.Posture, new WarCapability(SteeringAvailable), isVetoed, ranked, out war.Tally);
+            // An own base under attack cannot wait for a slot: cards keep their places, so a full deck gives up its weakest card that is not a base defence.
+            int urgent = LivingWarRules.UrgentDefence(ranked, war.Deck, war.Active?.Key);
+            string dropped = urgent >= 0 && war.Deck.Count >= DeckRules.Slots ? DeckRules.DropWeakest(war.Deck) : null;
             offers.Clear();
-            for (int i = 0; i < ranked.Count; i++) offers.Add(new DeckOffer(ranked[i].Front.Key, ranked[i].Kind, ranked[i].Score));
+            if (urgent >= 0 && war.Deck.Count < DeckRules.Slots) offers.Add(new DeckOffer(ranked[urgent].Front.Key, ranked[urgent].Kind, ranked[urgent].Score));
+            for (int i = 0; i < ranked.Count; i++)
+                if (i != urgent && ranked[i].Front.Key != dropped) offers.Add(new DeckOffer(ranked[i].Front.Key, ranked[i].Kind, ranked[i].Score));
             DeckRules.Maintain(war.Deck, offers, war.Active?.Key, ref war.NextId, ref war.Revision);
             if (war.Deck.Count > 0 && war.FirstDeckAt < 0f) war.FirstDeckAt = now;
             if (war.Active != null || war.Deck.Count == 0) war.DeadlineArmed = false;
@@ -267,6 +272,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 Funds = Mathf.Clamp(reward.Funds, 0, 100000), Morale = Mathf.Clamp(reward.Morale, -10, 10),
             };
             war.LastResultAt = now;
+            war.ResultFunds += war.LastResult.Funds;
             war.Log.Add(TheaterWords.Result(op.Kind, op.Name, outcome, why, reward.Funds, by));
             Plugin.Logger?.LogInfo("Living Front " + war.HQ.faction.factionName + " " + op.Name + " " + TheaterWords.Outcome(outcome) +
                 (why == TheaterWhy.None ? "" : " (" + TheaterWords.Why(why) + ")"));

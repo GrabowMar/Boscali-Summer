@@ -18,6 +18,7 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
             SurvivorsTakeTheCurrentScore();
             RecommendedIsTheBestScoreWithTiesToTheLowerIndex();
             BadInputIsHarmless();
+            AFullDeckGivesUpItsWeakestNonDefenceForABaseDefence();
         }
 
         private static List<DeckOffer> Offers(params (string key, TheaterOpKind kind, float score)[] list)
@@ -143,6 +144,30 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
             TestAssert.Eq(DeckRules.Recommended(deck), 0, "a lone card with no usable score is still the only choice");
             deck.Add(new DeckCard { Score = 1f });
             TestAssert.Eq(DeckRules.Recommended(deck), 1, "a real score beats a NaN one");
+        }
+
+        // Cards keep their places, so an own base under attack cannot wait for a slot: DropWeakest frees one, never from another base defence.
+        private static void AFullDeckGivesUpItsWeakestNonDefenceForABaseDefence()
+        {
+            var deck = new List<DeckCard>
+            {
+                new DeckCard { Id = 1, Key = "A", Kind = TheaterOpKind.Assault, Score = 9f },
+                new DeckCard { Id = 2, Key = "#B", Kind = TheaterOpKind.Defend, Score = 2f },
+                new DeckCard { Id = 3, Key = "C", Kind = TheaterOpKind.Recon, Score = 4f },
+            };
+            TestAssert.Eq(DeckRules.DropWeakest(deck), "C", "the weakest card that is not a base defence goes, whatever the defence scores");
+            TestAssert.Eq(deck.Count, 2, "and its slot is free");
+            deck.Add(new DeckCard { Id = 4, Key = "D", Kind = TheaterOpKind.Assault, Score = 4f });
+            deck.Add(new DeckCard { Id = 5, Key = "E", Kind = TheaterOpKind.Recon, Score = 4f });
+            TestAssert.Eq(DeckRules.DropWeakest(deck), "E", "a tie gives up the later card");
+            var defences = new List<DeckCard>
+            {
+                new DeckCard { Key = "#X", Kind = TheaterOpKind.Defend, Score = 1f }, new DeckCard { Key = "#Y", Kind = TheaterOpKind.Defend, Score = 2f },
+            };
+            TestAssert.That(DeckRules.DropWeakest(defences) == null && defences.Count == 2, "a deck of base defences keeps them all");
+            TestAssert.That(DeckRules.DropWeakest(null) == null && DeckRules.DropWeakest(new List<DeckCard>()) == null, "nothing to drop is null");
+            TestAssert.That(DeckRules.IsBaseDefence(TheaterOpKind.Defend, "#B") && !DeckRules.IsBaseDefence(TheaterOpKind.Assault, "#B") &&
+                !DeckRules.IsBaseDefence(TheaterOpKind.Defend, "@B") && !DeckRules.IsBaseDefence(TheaterOpKind.Defend, ""), "a base defence is a DEFEND on a # key");
         }
 
         private static void BadInputIsHarmless()

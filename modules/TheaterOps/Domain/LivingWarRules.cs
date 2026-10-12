@@ -56,6 +56,24 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
         /// <summary>Carriers and the force ratio count friendly ground inside ground's own reach (20 km).</summary>
         internal static float ReachRadius => GroundTasking.ReachMeters;
 
+        /// <summary>What an operation of this kind asks of a sortie.</summary>
+        internal static FocusRole RoleOf(TheaterOpKind kind) =>
+            kind == TheaterOpKind.Assault ? FocusRole.Assault : kind == TheaterOpKind.Defend ? FocusRole.Defend : kind == TheaterOpKind.Recon ? FocusRole.Recon : FocusRole.None;
+
+        /// <summary>Index in the ranking of the best own-base defence that has no card in the deck and is not the live operation's front; -1 when there is none.</summary>
+        internal static int UrgentDefence(IReadOnlyList<WarOffer> ranked, IReadOnlyList<DeckCard> deck, string excludeKey)
+        {
+            for (int i = 0; ranked != null && i < ranked.Count; i++)
+            {
+                string key = ranked[i].Front.Key;
+                if (!DeckRules.IsBaseDefence(ranked[i].Kind, key) || string.Equals(key, excludeKey, StringComparison.Ordinal)) continue;
+                bool carded = false;
+                for (int d = 0; deck != null && d < deck.Count; d++) carded |= string.Equals(deck[d].Key, key, StringComparison.Ordinal);
+                if (!carded) return i;
+            }
+            return -1;
+        }
+
         internal static float RadiusOf(TheaterOpKind kind) =>
             kind == TheaterOpKind.Defend ? DefendRadius : kind == TheaterOpKind.Recon ? ReconRadius : AssaultRadius;
 

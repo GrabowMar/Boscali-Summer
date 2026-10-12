@@ -120,6 +120,25 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
             return changed;
         }
 
+        /// <summary>A DEFEND on one of our airbases: its key is a place key with the '#' prefix.</summary>
+        internal static bool IsBaseDefence(TheaterOpKind kind, string key) =>
+            kind == TheaterOpKind.Defend && !string.IsNullOrEmpty(key) && key[0] == PlaceNames.BasePrefix;
+
+        /// <summary>
+        /// Cards keep their places, so an own base under attack cannot wait for a free slot: removes the lowest-scoring card that is not itself a base defence
+        /// (the later one on a tie) and returns its key. Null, and nothing removed, when there is no such card.
+        /// </summary>
+        internal static string DropWeakest(List<DeckCard> deck)
+        {
+            int weakest = -1;
+            for (int i = 0; deck != null && i < deck.Count; i++)
+                if (deck[i] != null && !IsBaseDefence(deck[i].Kind, deck[i].Key) && (weakest < 0 || deck[i].Score <= deck[weakest].Score)) weakest = i;
+            if (weakest < 0) return null;
+            string key = deck[weakest].Key;
+            deck.RemoveAt(weakest);
+            return key;
+        }
+
         /// <summary>Index of the best Score (a NaN score ranks last; ties keep the lower index), -1 for an empty deck. Reads only.</summary>
         internal static int Recommended(IReadOnlyList<DeckCard> deck)
         {
