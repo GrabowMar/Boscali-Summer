@@ -58,10 +58,7 @@ namespace BoscaliSummer.Modules.Command.Domain
             if (e.LockSeconds > 0 && !e.PickedByLocal && !e.PickedByStaff)
                 return new StrAct(StrWhy.Locked, "LOCKED" + (string.IsNullOrEmpty(e.PickedBy) ? "" : " BY " + e.PickedBy.ToUpperInvariant()) +
                                                  (string.IsNullOrEmpty(e.LockText) ? "" : StrWords.Dot + e.LockText));
-            if (id.Kind != StrItemKind.Proposal) return Gone();
-            for (int i = 0; i < vm.ProposalCount && i < vm.Proposals.Length; i++)
-                if (vm.Proposals[i] != null && vm.Proposals[i].Id == id) return Allowed;
-            return Gone();
+            return Proposal(vm, id) != null ? Allowed : Gone();
         }
 
         private static StrAct Replan(StrViewModel vm)
@@ -95,7 +92,17 @@ namespace BoscaliSummer.Modules.Command.Domain
             return Allowed;
         }
 
-        private static StrSortieRow Sortie(StrViewModel vm, StrItemId id)
+        /// <summary>The proposal row with this id, or null: the one lookup the gate and the runner share.</summary>
+        internal static StrProposalRow Proposal(StrViewModel vm, StrItemId id)
+        {
+            if (id.Kind != StrItemKind.Proposal) return null;
+            for (int i = 0; i < vm.ProposalCount && i < vm.Proposals.Length; i++)
+                if (vm.Proposals[i] != null && vm.Proposals[i].Id == id) return vm.Proposals[i];
+            return null;
+        }
+
+        /// <summary>The sortie row with this id, or null.</summary>
+        internal static StrSortieRow Sortie(StrViewModel vm, StrItemId id)
         {
             if (id.Kind != StrItemKind.Sortie) return null;
             for (int i = 0; i < vm.SortieCount && i < vm.Sorties.Length; i++)
@@ -118,5 +125,83 @@ namespace BoscaliSummer.Modules.Command.Domain
 
         private static string PostureName(TheaterWarPosture posture) =>
             posture == TheaterWarPosture.Cautious ? "CAUTIOUS" : posture == TheaterWarPosture.Bold ? "BOLD" : "STEADY";
+    }
+
+    /// <summary>
+    /// The runner behind every press: gate, then verb, then a local notice. Explicit presses only (R5): nothing in the staff calls this.
+    /// It never edits the model. A refused action reaches no verb. The war verbs answer through the engine's own command result, so
+    /// only the accept and the wing answers leave a notice (six seconds on the presentation clock). A first REPLAN press only arms
+    /// (Allowed, not Sent); the second one inside four seconds, by the same test the builder uses to draw "CALLS OFF", sends.
+    /// </summary>
+    internal static class StrActions
+    {
+        public const float ReplanWindowSeconds = 4f, NoticeSeconds = 6f;
+
+        public static StrAct Run(StrActionKind kind, StrItemId id, int arg, StrViewModel vm, IStrVerbs verbs, ref StrUiState ui, float nowUnscaled)
+        {
+            StrAct gate = StrGate.Check(vm, kind, id, arg);
+            if (!gate.Allowed)
+            {
+                if (kind == StrActionKind.Replan) ui.ReplanArmedUntil = 0f;   // a board that went stale or ended between the presses does not stay armed
+                return gate;
+            }
+            if (verbs == null) return Declined();
+
+            switch (kind)
+            {
+                case StrActionKind.Pick:
+                {
+                    StrProposalRow p = StrGate.Proposal(vm, id);
+                    return verbs.Pick(p.ProposalId, p.Revision) ? Sent("ORDER SENT") : Declined();
+                }
+                case StrActionKind.Replan:
+                {
+                    if (float.IsNaN(nowUnscaled) || float.IsInfinity(nowUnscaled)) return Declined();
+                    if (!(nowUnscaled < ui.ReplanArmedUntil))
+                    {
+                        ui.ReplanArmedUntil = nowUnscaled + ReplanWindowSeconds;
+                        return new StrAct(StrWhy.None, "PRESS AGAIN TO CALL OFF");
+                    }
+                    ui.ReplanArmedUntil = 0f;
+                    return verbs.Cancel(vm.Effort.OperationId, vm.Effort.Revision) ? Sent("OPERATION CALLED OFF") : Declined();
+                }
+                case StrActionKind.Posture:
+                    if (arg < 0 || arg > (int)TheaterWarPosture.Bold) return new StrAct(StrWhy.NoBoard, "NOT A POSTURE");
+                    return verbs.Posture((TheaterWarPosture)arg) ? Sent("ORDER SENT") : Declined();
+                case StrActionKind.Accept:
+                    verbs.Accept(StrGate.Sortie(vm, id).ContractId);
+                    return Noted(ref ui, StrWhy.None, "ACCEPT SENT" + StrWords.Dot + "THE HOST ANSWERS NEXT", nowUnscaled, true);
+                case StrActionKind.SendWing:
+                {
+                    bool ok = verbs.SendWing(StrGate.Sortie(vm, id).ContractId, out string said);
+                    return Wing(ref ui, ok, said, "WING ORDER SENT", nowUnscaled);
+                }
+                case StrActionKind.Recall:
+                {
+                    bool ok = verbs.Recall(out string said);
+                    return Wing(ref ui, ok, said, "WING RECALLED", nowUnscaled);
+                }
+                default:
+                    return gate;
+            }
+        }
+
+        private static StrAct Sent(string text) => new StrAct(StrWhy.None, text, true);
+
+        /// <summary>The view would not take the order (a command not allowed right now): nothing was sent.</summary>
+        private static StrAct Declined() => new StrAct(StrWhy.NoBoard, "THE STAFF DID NOT TAKE THE ORDER" + StrWords.Dot + "TRY AGAIN");
+
+        private static StrAct Wing(ref StrUiState ui, bool ok, string said, string whenSent, float now)
+        {
+            bool blank = string.IsNullOrEmpty(said);
+            return Noted(ref ui, ok ? StrWhy.None : StrWhy.WingRefused, blank ? (ok ? whenSent : "THE WING DID NOT TAKE THE ORDER") : said, now, ok);
+        }
+
+        private static StrAct Noted(ref StrUiState ui, StrWhy why, string text, float now, bool sent)
+        {
+            ui.Notice = text;
+            ui.NoticeUntil = now + NoticeSeconds;
+            return new StrAct(why, text, sent);
+        }
     }
 }
