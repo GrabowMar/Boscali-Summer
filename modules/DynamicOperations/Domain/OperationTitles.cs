@@ -27,6 +27,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
             { OperationKind.ElectronicWarfare, "HUNT THE JAMMER" },
             { OperationKind.SortieReport, "BRING BACK THE INTELLIGENCE" },
             { OperationKind.BattlefieldSurvey, "SURVEY THE AFTERMATH" },
+            { OperationKind.StrikePost, "STRIKE COMMAND POST" },
         };
 
         private static readonly Dictionary<string, OperationKind> ByTitle = Invert();
@@ -47,6 +48,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
             OperationKind.Interdict => "STRIKE",
             OperationKind.SupplyInterdict => "STRIKE",
             OperationKind.ElectronicWarfare => "STRIKE",
+            OperationKind.StrikePost => "STRIKE",
             OperationKind.Intercept => "AIR",
             OperationKind.Jam => "EW",
             OperationKind.Recon => "RECON",

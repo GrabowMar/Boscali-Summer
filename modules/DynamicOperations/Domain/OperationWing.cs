@@ -22,6 +22,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
                 case OperationKind.Intercept:
                 case OperationKind.SupplyInterdict:
                 case OperationKind.ElectronicWarfare:
+                case OperationKind.StrikePost:
                     return WingSortieIntent.Destroy;
                 case OperationKind.Capture:
                 case OperationKind.Defend:

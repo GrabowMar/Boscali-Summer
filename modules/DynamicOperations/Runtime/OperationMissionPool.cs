@@ -33,7 +33,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             return result;
         }
 
-        private static bool IsExtended(OperationKind kind) => kind >= OperationKind.Rescue;
+        private static bool IsExtended(OperationKind kind) => kind >= OperationKind.Rescue && kind != OperationKind.StrikePost;
 
         private void GatherMissionCandidates(FactionHQ hq, FactionBoard board, List<Unit> units, int count, float now)
         {
@@ -207,6 +207,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 return Finite(target.Position);
             }
             if (target.Mission.Kind == OperationKind.DamageAssessment && target.Life.Neutralized) return Finite(target.Position);
+            // A confirmed command post is a fixed building: its marker is the faction's own confirmation, not a live track.
+            if (target.Mission.Kind == OperationKind.StrikePost) return target.Unit != null && Finite(target.Position);
             if (ReferenceEquals(target.Unit, null)) return true;
             if (target.Unit == null) return false;
             if (target.Unit.NetworkHQ == hq)

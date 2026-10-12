@@ -10,7 +10,7 @@ namespace BoscaliSummer.Modules.HighCommand.Domain
     internal sealed class CommandLog
     {
         public const int Capacity = 6;
-        public const int MaximumText = 64;
+        public const int MaximumText = 96;
 
         private readonly CommandLogEntry[] entries = new CommandLogEntry[Capacity];
         private int head;
@@ -48,14 +48,6 @@ namespace BoscaliSummer.Modules.HighCommand.Domain
             head = 0;
             count = 0;
         }
-
-        /// <summary>
-        /// Whether an observer that last saw the subject post at <paramref name="lastSight"/>
-        /// may be shown an event that happened at <paramref name="eventTime"/>. The same
-        /// intel memory the roster uses, applied to the log: no sight, no story.
-        /// </summary>
-        public static bool VisibleToObserver(float lastSight, float eventTime) =>
-            lastSight > 0f && eventTime <= lastSight;
 
         public static string Bounded(string text) =>
             string.IsNullOrEmpty(text) ? ""

@@ -8,7 +8,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
     {
         Capture, Defend, Interdict, Intercept, Patrol, Jam, Rappel, Rooftop,
         Rescue, Recon, DamageAssessment, SupplyEscort, SupplyInterdict, RepairCover,
-        ElectronicWarfare, SortieReport, BattlefieldSurvey
+        ElectronicWarfare, SortieReport, BattlefieldSurvey, StrikePost
     }
     internal enum OperationReward : byte { None, Convoy, Fortification }
     internal enum OperationState : byte { Active, Completed, Expired, Cancelled, Offered }
@@ -52,7 +52,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         public OperationState State { get; private set; } = OperationState.Offered;
         public bool IsLive => State == OperationState.Offered || State == OperationState.Active;
         public bool IsStrike => Kind == OperationKind.Interdict || Kind == OperationKind.Intercept ||
-            Kind == OperationKind.SupplyInterdict || Kind == OperationKind.ElectronicWarfare;
+            Kind == OperationKind.SupplyInterdict || Kind == OperationKind.ElectronicWarfare || Kind == OperationKind.StrikePost;
         public bool AwardTaken { get; private set; }
         // Who took the contract: the name on the card, and the identity the host pays and guards by.
         public string AcceptedBy { get; private set; } = string.Empty;

@@ -20,6 +20,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             public Airbase Base;
             public Unit Unit;
             public FactionHQ OriginalOwner;
+            /// <summary>The office id of a STRIKE COMMAND POST target (the staff board row), else -1.</summary>
+            public int SubjectId = -1;
             public string Name, Outcome;
             public Vector3 Position;
             public float Radius = 1500f, LastJam = -100f;
@@ -321,6 +323,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                     Add(board, now, kind, defend, null, hq, rewards.CanOffer(OperationReward.Convoy, hq) ? OperationReward.Convoy : OperationReward.None, 1200, 100, scale, chainDepth);
                 else if (kind == OperationKind.Interdict && strike != null)
                     Add(board, now, kind, strikeBase, strike, hq, OperationReward.None, 800, 75, scale, chainDepth);
+                else if (kind == OperationKind.StrikePost) AddStrikePost(hq, board, now, scale, chainDepth);
                 else if (kind == OperationKind.Intercept || kind == OperationKind.Jam || IsExtended(kind))
                 {
                     AddMissionCandidate(hq, board, kind, now, scale, chainDepth);
@@ -392,7 +395,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             {
                 Unit unit = units[i];
                 if (unit == null || unit.disabled || unit.NetworkHQ == null || unit.NetworkHQ == hq ||
-                    !(unit is GroundVehicle || unit is Building) || unit.definition == null) continue;
+                    !(unit is GroundVehicle || unit is Building) || unit.definition == null || IsStrikePostUnit(board, unit)) continue;
                 TrackingInfo tracking = hq.GetTrackingData(unit.persistentID);
                 float age = tracking == null ? float.NaN : Time.timeSinceLevelLoad - tracking.lastSpottedTime;
                 if (tracking == null || !float.IsFinite(age) || age < 0f || age > 30f ||
@@ -832,7 +835,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         {
             Operation op = target.Mission;
             ObjectiveAsset asset = op.Returning ? ObjectiveAsset.Base : target.Asset;
-            bool fixedSite = op.Returning || ReferenceEquals(target.Unit, null) ||
+            bool fixedSite = op.Returning || ReferenceEquals(target.Unit, null) || op.Kind == OperationKind.StrikePost ||
                 op.Kind == OperationKind.DamageAssessment && target.Life.Neutralized;
             float age = -1f;
             ObjectiveContact contact = op.State != OperationState.Active ? ObjectiveContact.Unavailable :
@@ -857,7 +860,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 owner.faction != null && FactionHelper.EmptyOrNoFactionOrNeutral(owner.faction.factionName)
                     ? ObjectiveAllegiance.Neutral : ObjectiveAllegiance.Hostile;
             return OperationPresentation.Build(op, target.OnStation, target.Life.Neutralized, asset, contact, age,
-                target.Outcome, target.Base != null ? target.Base.name : string.Empty, allegiance);
+                target.Outcome, target.Base != null ? target.Base.name : string.Empty, allegiance, target.SubjectId);
         }
 
         private static string Description(OperationKind kind) => kind switch
@@ -879,6 +882,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             OperationKind.ElectronicWarfare => "Neutralize this tracked enemy that recently jammed your faction. Its native jamming ends with its destruction.",
             OperationKind.SortieReport => "Observe this tracked contact from above within 1.5 km for 30s, then land the same aircraft at the marked friendly base.",
             OperationKind.BattlefieldSurvey => "Survey this friendly wreck or damaged building from above within 1.5 km for 30s with a clear terrain sightline.",
+            OperationKind.StrikePost => "Destroy this enemy command post. Killing the commander pays a one-time bounty; the sortie pays either way.",
             _ => "Follow the marked objective."
         };
     }

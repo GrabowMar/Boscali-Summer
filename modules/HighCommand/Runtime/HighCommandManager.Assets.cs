@@ -22,6 +22,7 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
         private BuildingDefinition postDefinition;
         private VehicleDefinition convoyDefinition;
         private readonly Vector3[] intelPositions = new Vector3[MaximumFactions * CommandTier.MaximumSlots];
+        private readonly Vector3[] intelGlobal = new Vector3[MaximumFactions * CommandTier.MaximumSlots];
         private readonly float[] intelRadii = new float[MaximumFactions * CommandTier.MaximumSlots];
         private readonly byte[] intelOwners = new byte[MaximumFactions * CommandTier.MaximumSlots];
         private readonly int[] intelKeys = new int[MaximumFactions * CommandTier.MaximumSlots];
@@ -37,6 +38,10 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
                 if (factions[i].Hq == hq) return factions[i];
             return null;
         }
+
+        /// <summary>The player-facing name of a base; the scene object name when no display name was recorded.</summary>
+        private static string Label(FactionCommand owner, string key) =>
+            owner != null && key != null && owner.Labels.TryGetValue(key, out string text) ? text : key;
 
         private static int GlobalId(int factionIndex, int slotId) =>
             factionIndex * CommandTier.MaximumSlots + slotId;
@@ -85,7 +90,7 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
 
         // ---- Sites ------------------------------------------------------------------------
 
-        private void CollectSites(FactionHQ hq, List<string> sites)
+        private void CollectSites(FactionHQ hq, List<string> sites, Dictionary<string, string> labels)
         {
             sites.Clear();
             int inspected = 0;
@@ -94,7 +99,9 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
                 if (++inspected > 64 || sites.Count >= CommandTree.MaximumSites) break;
                 if (airbase == null || airbase.CurrentHQ != hq || airbase.AttachedAirbase ||
                     airbase.UnitDestroyed() || airbase.center == null) continue;
-                if (!sites.Contains(airbase.name)) sites.Add(airbase.name);
+                if (sites.Contains(airbase.name)) continue;
+                sites.Add(airbase.name);
+                labels[airbase.name] = MfdAirbaseFormatter.Format(airbase);
             }
             sites.Sort(StringComparer.Ordinal);
         }
@@ -128,7 +135,6 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
                 for (int i = 0; i < owner.Tree.Slots.Count; i++)
                 {
                     CommandSlot slot = owner.Tree.Slots[i];
-                    if (!slot.Alive) continue;
                     if (FindAsset(owner, slot, AssetKind.Post) != null) continue;
                     if (owner.RespawnScheduled[slot.Id])
                     {
@@ -153,10 +159,11 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
             // a place on the map instead of reporting the origin.
             if (!owner.HasAnchor[slot.Id])
             {
-                owner.Anchors[slot.Id] = baseTarget.center.position;
+                owner.AnchorsGlobal[slot.Id] = baseTarget.center.position.ToGlobalPosition().AsVector3();
                 owner.HasAnchor[slot.Id] = true;
             }
-            Vector3 anchor = owner.Anchors[slot.Id];
+            Vector3 stored = owner.AnchorsGlobal[slot.Id];
+            Vector3 anchor = new GlobalPosition(stored.x, stored.y, stored.z).ToLocalPosition();
 
             int angleSeed = unchecked((int)(uint)(owner.SpawnSerial * 31 + slot.Id * 7));
             if (!TryPlaceAround(definition, anchor, angleSeed, out Vector3 position, out Quaternion rotation))
@@ -181,6 +188,8 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
             assets.Add(watch);
             assetLookup[watch.InstanceId] = watch;
             watch.Watch();
+            // A rebuilt post stands somewhere nobody has seen: what was confirmed about the old one is void.
+            if (kind == AssetKind.Post) intel.Forget(GlobalId(FactionIndex(owner.Hq), slot.Id));
         }
 
         private static void Unwatch(AssetWatch watch)
@@ -228,7 +237,7 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
                 Broadcast(watch.Owner, GlobalId(FactionIndex(watch.Owner.Hq), watch.Slot.Id),
                     CommanderLogTone.Alert,
                     (watch.Kind == AssetKind.ConvoyLead ? "VIP CONVOY UNDER FIRE · " : "POST UNDER FIRE · ") +
-                    watch.Slot.SiteName, now);
+                    Label(watch.Owner, watch.Slot.SiteName), now);
             }
         }
 
@@ -238,16 +247,20 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
             int instanceId = watch.InstanceId;
             if (!assetLookup.Remove(instanceId)) return;
             assets.Remove(watch);
+            // The dealer is read before its record is dropped: the damage is recorded before the disable on the vanilla path.
+            FactionHQ attacker = AttackerOf(instanceId);
             lastDamage.Remove(instanceId);
             watch.Unwatch();
 
             FactionCommand owner = watch.Owner;
             CommandSlot slot = watch.Slot;
             float now = MissionTime;
-            CreditKill(owner, slot, instanceId);
+            int key = GlobalId(FactionIndex(owner.Hq), slot.Id);
 
             if (watch.Kind == AssetKind.ConvoyLead)
             {
+                // The commander is in that vehicle: a real death.
+                CreditKill(owner, slot, key, attacker, unit, "KILLED IN TRANSIT");
                 AbortTransfer(FindConvoy(owner, slot));
                 KillCommander(owner, slot, now, "KILLED IN TRANSIT", postDestroyed: false);
                 return;
@@ -255,22 +268,33 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
 
             if (slot.Status == CommanderStatus.InTransit)
             {
-                Broadcast(owner, GlobalId(FactionIndex(owner.Hq), slot.Id), CommanderLogTone.Alert,
+                // The post fell while its commander was away: no death, no bounty.
+                if (attacker != null && attacker != owner.Hq && HasParticipant(attacker))
+                    Announce(attacker, StaffWords.AfieldLine(slot.Person.Rank, slot.Person.Name));
+                Broadcast(owner, key, CommanderLogTone.Alert,
                     slot.Person.Name + " WAS AFIELD — SURVIVED THE STRIKE ON THEIR POST", now);
                 owner.RespawnScheduled[slot.Id] = true;
                 owner.RespawnAt[slot.Id] = now + settings.PostRespawnSeconds.Value;
             }
             else
             {
-                KillCommander(owner, slot, now, "KILLED AT " + slot.SiteName, postDestroyed: true);
+                string cause = "KILLED AT " + Label(owner, slot.SiteName);
+                CreditKill(owner, slot, key, attacker, unit, cause);      // before KillCommander replaces slot.Person
+                KillCommander(owner, slot, now, cause, postDestroyed: true);
             }
+            intel.Forget(key);                // the post fell: nobody knows where the next one stands
         }
+
+        private FactionHQ AttackerOf(int instanceId) =>
+            lastDamage.TryGetValue(instanceId, out PersistentID dealer) && UnitRegistry.TryGetPersistentUnit(dealer, out PersistentUnit source)
+                ? source.GetHQ() : null;
 
         private void KillCommander(FactionCommand owner, CommandSlot slot, float now, string cause, bool postDestroyed)
         {
             CommandPerson dead = slot.Person;
             float disruption = settings.DisruptionSeconds.Value + CommandTraits.DisruptionBonus(dead?.Traits ?? CommandTrait.None);
             int nextSeed = unchecked(owner.SeedSerial + 31 * (++owner.RespawnSerial));
+            string deadRank = dead.Rank;
             int displaced = owner.Tree.Promote(slot.Id, nextSeed);
             slot.Status = CommanderStatus.Disrupted;
             slot.StatusUntil = now + disruption;
@@ -290,33 +314,40 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
                 owner.RespawnAt[slot.Id] = now + settings.PostRespawnSeconds.Value;
             }
             Broadcast(owner, GlobalId(FactionIndex(owner.Hq), slot.Id), CommanderLogTone.Loss,
-                dead.Rank + " " + dead.Name + " " + cause + " · " +
+                deadRank + " " + dead.Name + " " + cause + " · " +
                 slot.Person.Rank + " " + slot.Person.Name + " ASSUMES POST", now);
         }
 
-        private void CreditKill(FactionCommand owner, CommandSlot slot, int instanceId)
+        /// <summary>
+        /// Pays the bounty for a real death: to a human faction that has not yet taken this office, once per office per killer
+        /// faction per mission. An AI killer, the post's own side or a flipped post pays nothing and spends no ledger entry.
+        /// </summary>
+        private void CreditKill(FactionCommand owner, CommandSlot slot, int key, FactionHQ attacker, Unit unit, string cause)
         {
-            if (!settings.EconomyEnabled.Value || slot.Person == null) return;
-            if (!lastDamage.TryGetValue(instanceId, out PersistentID dealer)) return;
-            if (!UnitRegistry.TryGetPersistentUnit(dealer, out PersistentUnit source)) return;
-            FactionHQ killer = source.GetHQ();
-            if (killer == null || killer == owner.Hq) return;
-
-            FactionCommand killerCommand = FindFaction(killer);
-            float trait = CommandTraits.BountyMultiplier(slot.Person.Traits);
-            int funds = CommandEconomy.BountyFunds(slot.Tier,
-                settings.BountyBaseFunds.Value, settings.BountyComponentFunds.Value,
-                settings.BountyTheaterFunds.Value, trait);
+            if (!settings.EconomyEnabled.Value || slot.Person == null || attacker == null || attacker == owner.Hq) return;
+            if (!HasParticipant(attacker)) return;                         // an AI faction is paid nothing and consumes no ledger entry
+            if (unit != null && unit.NetworkHQ != owner.Hq) return;        // a flipped (captured-base) post pays nobody
+            if (!bounties.TryClaim(attacker.GetInstanceID(), key))
+            { Announce(attacker, StaffWords.ClaimedLine(slot.Person.Rank, slot.Person.Name)); return; }
+            int funds = BountyFor(slot);
             if (funds <= 0) return;
+            attacker.AddFunds(funds);                                      // no AddScore: score moves escalation
+            BountyPaidTotal += funds;
+            FactionCommand killer = FindFaction(attacker);
+            if (killer != null)
+                Broadcast(killer, key, CommanderLogTone.Loss,
+                    "KILL PAID +" + funds + " · " + slot.Person.Rank + " " + slot.Person.Name + " ELIMINATED", MissionTime);
+            Announce(attacker, StaffWords.KillLine(funds, slot.Person.Rank, slot.Person.Name, cause));
+        }
 
-            killer.AddFunds(funds);
-            killer.AddScore(CommandEconomy.BountyScore(slot.Tier));
-            if (killerCommand != null)
-            {
-                Broadcast(killerCommand, GlobalId(FactionIndex(owner.Hq), slot.Id), CommanderLogTone.Loss,
-                    "KILL PAID +" + funds + " · " + slot.Person.Rank + " " +
-                    slot.Person.Name + " ELIMINATED", MissionTime);
-            }
+        /// <summary>One native HQ radio line to a faction that has a human pilot (the pattern of the orbital-strike warning).</summary>
+        private void Announce(FactionHQ hq, string text)
+        {
+            if (!settings.EconomyEnabled.Value || hq == null || !HasParticipant(hq)) return;
+            MessageManager messages = NetworkSceneSingleton<MessageManager>.i;
+            if (messages == null) return;
+            try { messages.RpcHQMessage(hq, BoscaliSummer.Core.Net.NetText.Clip(text, 96)); }
+            catch (Exception e) { Plugin.Logger?.LogWarning("[HighCommand] HQ message not delivered: " + e.Message); }
         }
 
         // ---- Transfers and convoys --------------------------------------------------------
@@ -335,7 +366,7 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
                 if (pick != null && TryStartTransfer(command, pick))
                     Broadcast(command, GlobalId(FactionIndex(command.Hq), pick.Id), CommanderLogTone.Contact,
                         pick.Person.Name + " IS TRAVELLING TO " +
-                        (FindConvoy(command, pick)?.DestinationName ?? "A FORWARD BASE"), now);
+                        (Label(command, FindConvoy(command, pick)?.DestinationName) ?? "A FORWARD BASE"), now);
             }
         }
 
@@ -346,7 +377,7 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
             for (int i = 0; i < command.Tree.Slots.Count; i++)
             {
                 CommandSlot slot = command.Tree.Slots[i];
-                if (!slot.Alive || slot.Status != CommanderStatus.Active) continue;
+                if (slot.Status != CommanderStatus.Active) continue;
                 if (FindAsset(command, slot, AssetKind.Post) == null || !HasSecondBase(command, slot)) continue;
                 seen++;
                 int roll = (int)(Deterministic.UnitFloat(Deterministic.Hash(
@@ -508,7 +539,7 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
                 convoy.Slot.Status = CommanderStatus.Active;
                 Broadcast(convoy.Owner, GlobalId(FactionIndex(convoy.Owner.Hq), convoy.Slot.Id),
                     CommanderLogTone.Staff,
-                    convoy.Slot.Person.Name + " RETURNED TO " + convoy.Slot.SiteName, MissionTime);
+                    convoy.Slot.Person.Name + " RETURNED TO " + Label(convoy.Owner, convoy.Slot.SiteName), MissionTime);
             }
             else
             {
@@ -553,13 +584,14 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
                 {
                     if (count >= intelPositions.Length) break;
                     CommandSlot slot = factions[o].Tree.Slots[s];
-                    AssetWatch asset = FindActiveAsset(factions[o], slot);
+                    // Only the post building is sensed: a convoy is never recorded, so a confirmed position can never point at a road.
+                    AssetWatch asset = FindAsset(factions[o], slot, AssetKind.Post);
                     if (asset?.Unit == null) continue;
                     intelOwners[count] = (byte)o;
                     intelKeys[count] = o * CommandTier.MaximumSlots + slot.Id;
                     intelPositions[count] = asset.Unit.transform.position;
-                    intelRadii[count] = (slot.Status == CommanderStatus.InTransit ? IntelConvoyRadius : IntelPostRadius) *
-                        CommandTraits.IntelRadiusMultiplier(slot.Person?.Traits ?? CommandTrait.None);
+                    intelGlobal[count] = asset.Unit.transform.position.ToGlobalPosition().AsVector3();
+                    intelRadii[count] = IntelPostRadius * CommandTraits.IntelRadiusMultiplier(slot.Person?.Traits ?? CommandTrait.None);
                     count++;
                 }
             }
@@ -581,9 +613,8 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
                     float radius = intelRadii[c];
                     if ((position - intelPositions[c]).sqrMagnitude > radius * radius) continue;
                     int key = intelKeys[c];
-                    bool first = sight[observer, key] <= 0f;
-                    sight[observer, key] = now <= 0f ? 0.01f : now;
-                    if (first) ConfirmContact(observer, intelOwners[c], key, now);
+                    Vector3 where = intelGlobal[c];
+                    if (intel.Confirm(observer, key, now, where.x, where.y, where.z)) ConfirmContact(observer, intelOwners[c], key, now);
                 }
             }
         }
@@ -596,7 +627,7 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
             CommandSlot slot = factions[ownerIndex].Tree.Find(LocalId(globalId));
             if (slot?.Person == null) return;
             Broadcast(factions[observer], globalId, CommanderLogTone.Contact,
-                "CONTACT · " + slot.Person.Rank + " " + slot.Person.Name + " AT " + slot.SiteName, now);
+                "CONTACT · " + slot.Person.Rank + " " + slot.Person.Name + " AT " + Label(factions[ownerIndex], slot.SiteName), now);
         }
 
         private int FactionIndex(FactionHQ hq)
@@ -606,35 +637,11 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
             return -1;
         }
 
-        private bool IsKnown(FactionCommand observer, FactionCommand owner, CommandSlot slot, float now)
-        {
-            if (observer == null || owner == null || slot == null) return false;
-            int observerIndex = factions.IndexOf(observer);
-            int ownerIndex = factions.IndexOf(owner);
-            if (observerIndex < 0 || ownerIndex < 0) return false;
-            float last = sight[observerIndex, ownerIndex * CommandTier.MaximumSlots + slot.Id];
-            return last > 0f && now - last <= IntelMemorySeconds;
-        }
-
-        private float LastSight(int observerIndex, FactionCommand owner, CommandSlot slot)
-        {
-            int ownerIndex = factions.IndexOf(owner);
-            if (observerIndex < 0 || ownerIndex < 0) return 0f;
-            return sight[observerIndex, ownerIndex * CommandTier.MaximumSlots + slot.Id];
-        }
-
         // ---- Signals ----------------------------------------------------------------------
 
-        /// <summary>
-        /// The one place a staff event is stated: the status-strip signal and the page's log
-        /// are the same sentence, remembered with its subject and its tone.
-        /// </summary>
-        private void Broadcast(FactionCommand command, int targetId, CommanderLogTone tone, string text, float now)
-        {
-            command.Signal = text.Length > 96 ? text.Substring(0, 96) : text;
-            command.SignalUntil = now + SignalSeconds;
+        /// <summary>The one place a staff event is stated: remembered in the faction's log with its subject and its tone.</summary>
+        private void Broadcast(FactionCommand command, int targetId, CommanderLogTone tone, string text, float now) =>
             command.Log.Append(targetId, tone, text, now);
-        }
 
         // ---- Placement and catalogues -----------------------------------------------------
 
