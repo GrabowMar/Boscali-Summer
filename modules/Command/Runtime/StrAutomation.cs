@@ -10,7 +10,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
     /// <summary>Hooks for the unattended in-game STR check (<c>tests/ingame/str-panels.json</c>): open a tab the way the bezel
     /// press does, read back every backend the panel paints from, and send posture / pick / replan through the same
     /// <see cref="ITheaterWarView"/> calls the buttons use. Dev tooling: nothing here runs unless called.</summary>
-    public static class StrAutomation
+    public static partial class StrAutomation
     {
         /// <summary>Maximize the map, select the STR screen and show <c>tab</c> (0 SITUATION, 1 COMMAND, 2 OPERATIONS).</summary>
         public static Dictionary<string, object> Open(Dictionary<string, object> args)
@@ -105,6 +105,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     TheaterWords.Phase(war.ActiveOperation.Phase, war.ActiveOperation.PhaseNote) : "";
                 r["opsLog"] = war.StaffLog?.Count ?? 0;
             }
+            AddHub(r);
             r["ok"] = true;   // a readout; the flags above say what is missing
             return r;
         }

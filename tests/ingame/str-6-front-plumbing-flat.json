@@ -1,0 +1,268 @@
+{
+  "name": "str-6-front-plumbing-flat",
+  "description": "STR slice U2 live proof of the plumbing (hub, reader, verbs, MapFocus) on the flat map, mission Terminal Control: the model equals the host snapshot, a select flies the map to the item, a posture and a pick go out through the hub. Absorbed by str-6-front-flat when the panel and overlay land.",
+  "mission": "Terminal Control",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 330,
+  "environment": {
+    "config": {
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
+        }
+      },
+      "boscalisummer": {
+        "Command": {
+          "MapRelief3D": false
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "faction": "Boscali",
+      "near": [
+        50000,
+        15000
+      ],
+      "altitude": 9000,
+      "speed": 200,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "player",
+      "program": [
+        {
+          "orbit": {
+            "bank": 30,
+            "seconds": 540
+          }
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Open",
+      "args": {
+        "tab": 0
+      },
+      "store": "o0"
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "args": {},
+      "store": "a0"
+    },
+    {
+      "op": "wait",
+      "seconds": 60
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "args": {},
+      "store": "a1"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Focus",
+      "args": {
+        "kind": "proposal",
+        "index": 1
+      },
+      "store": "f1"
+    },
+    {
+      "op": "wait",
+      "seconds": 6
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "args": {},
+      "store": "a2"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Act",
+      "args": {
+        "action": "posture",
+        "arg": 2
+      },
+      "store": "p1"
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "args": {},
+      "store": "a3"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Act",
+      "args": {
+        "action": "pick",
+        "index": 1
+      },
+      "store": "k1"
+    },
+    {
+      "op": "wait",
+      "seconds": 6
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "args": {},
+      "store": "a4"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Focus",
+      "args": {
+        "kind": "effort"
+      },
+      "store": "f2"
+    },
+    {
+      "op": "wait",
+      "seconds": 6
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "args": {},
+      "store": "a5"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_equals",
+      "path": "a0.hub",
+      "value": true
+    },
+    {
+      "check": "result_above",
+      "path": "a0.view.revision",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a1.view.fronts",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "a1.check.frontsDelta",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "a1.view.proposals",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "a1.check.proposalsDelta",
+      "max": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "f1.ok",
+      "value": true
+    },
+    {
+      "check": "result_above",
+      "path": "a2.link.selectedKind",
+      "min": 2
+    },
+    {
+      "check": "result_above",
+      "path": "a2.map.focusOffset",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "a2.map.focusOffset",
+      "max": 0.08
+    },
+    {
+      "check": "result_above",
+      "path": "a2.map.flat",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "p1.sent",
+      "min": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "a3.view.posture",
+      "value": 2
+    },
+    {
+      "check": "result_above",
+      "path": "k1.sent",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a4.view.effort.live",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "a4.check.effortDelta",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "a4.view.effort.idChanges",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a5.map.focusOffset",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "a5.map.focusOffset",
+      "max": 0.08
+    },
+    {
+      "check": "log_match",
+      "pattern": "Exception",
+      "max": 0
+    }
+  ]
+}
