@@ -64,7 +64,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 int r = k / OrderGrid.Columns, c = k % OrderGrid.Columns;
                 float x = c * (w + Gap), y = r * (KeyH + Gap);
                 AvLay.Place(Cells[k].Rect, x, y, w, KeyH);
-                AvLay.Place(rails[k].rectTransform, 0f, 0f, w, 2f);
+                AvLay.Place(rails[k].rectTransform, 0f, 0f, w, 3f);
                 AvLay.Place(keys[k].rectTransform, 5f, 1f, 18f, 18f);
                 AvLay.Place(marks[k].rectTransform, w - 44f, KeyH - 19f, 40f, 18f);
                 bool led = leds[k].gameObject.activeSelf;

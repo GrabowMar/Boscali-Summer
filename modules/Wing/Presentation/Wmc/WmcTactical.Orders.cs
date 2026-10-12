@@ -57,8 +57,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             memberRow.Rect.gameObject.SetActive(false);
 
             BuildAlerts(f);
-            BuildStance(f);
+            // The order keys come straight under the table and say who they go to; the stances follow (they are set less often, and
+            // above the keys they pushed every order off a short panel).
+            ordersSection = f.Section(AvIcon.Flag, "ORDERS", "");
             BuildGrid(f);
+            BuildStance(f);
             BuildPanes(f);
             BuildWholeWing(f);
         }
@@ -215,8 +218,17 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             return true;
         }
 
+        private AvSection ordersSection;
+        private string ordersNoteShown;
+
         private void RefreshOrders(WmcContext c)
         {
+            string to = "TO " + c.ScopeLabel + " · WING KEY + LETTER";
+            if (to != ordersNoteShown)
+            {
+                ordersNoteShown = to;
+                ordersSection.SetCaption(to);
+            }
             RefreshCue(c);
             RefreshMember(c);
             RefreshAlertStrip(c);
