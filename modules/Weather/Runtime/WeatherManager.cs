@@ -1457,8 +1457,6 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         internal byte ForcedSets => fieldKey?.Sets ?? 0;
         internal bool CanCommand => GameAccess.IsServer();
 
-        /// <summary>Held until Task 6 moves the strip off the weather step: there is no step to count down to.</summary>
-        internal float NextChangeIn() => -1f;
 
         /// <summary>
         /// Pins the whole sky to one library sky (index 0-46, spec 4.4) or, with <see cref="WeatherKey.None"/>, unpins it and resumes the

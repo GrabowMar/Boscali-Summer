@@ -6,8 +6,8 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Weather.Runtime
 {
     /// <summary>
-    /// The Met Office window's only contact with the world, implemented from what main has today: the legacy field's fronts (<see cref="FrontState"/>), its storm-lattice cells (MetOfficeCells) and set-pieces, the
-    /// theater frame, the mission wind, the camera, the anchor and the 60-minute forecast. Slices 3, 4a, 4b and 5 re-implement <see cref="Fill"/> against the tape; the window stays.
+    /// The Met Office window's only contact with the world, implemented against the tape: its front markers and story segments (MetOfficeTapeFill), its storm-lattice cells (MetOfficeCells) and set-pieces, the
+    /// theater frame, the mission wind, the camera, the anchor and the 60-minute forecast. Slices 4b and 5 add the controls and the moving tape; the window stays.
     /// Commands go through the manager's console API and are written to a four-line host log.
     /// </summary>
     internal sealed class MetOfficeAdapter : IWeatherChartSource, IMetOfficeCommands
@@ -37,13 +37,17 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             m.LogText = m.Host ? logText : "";
 
             // Sky now.
-            RegimeSnapshot regime = RegimeSnapshot.FromType(field.Timeline.To);
             WeatherPoint p = w.LocalWeather;
-            m.Class = regime.Type;
+            WeatherTape tape = field.TapeSource;
+            float camX = w.FieldPosition.x, camZ = w.FieldPosition.y;
+            float sCam = field.Frame.S(camX, camZ);
+            int skyHere = tape != null ? tape.SkyIndexAt(sCam) : -1;
+            bool moving = key.Dynamic && field.Moving;
+            m.Class = SkyMath.ClassOf(field.RowAt(camX, camZ));
             m.Cover = p.Cover;
             m.PinnedSky = key.SkyPin < SkyLibrary.Count ? key.SkyPin : -1;
-            m.SkyNumber = m.PinnedSky + 1;
-            m.SkyName = m.PinnedSky >= 0 ? SkyLibrary.Get(m.PinnedSky).Name : regime.Name;
+            m.SkyNumber = skyHere + 1;
+            m.SkyName = skyHere >= 0 ? SkyLibrary.Get(skyHere).Name : RegimeSnapshot.FromType(m.Class).Name;
             m.Metar = WeatherMetar.Line(p);
             SetLayer(m, 0, "HIGH", p.HighCover, p.HighBase);
             SetLayer(m, 1, "MID", p.MidCover, p.MidBase);
@@ -58,20 +62,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             m.WindFromDeg = from;
             m.WindMps = kts / 1.943844f;
 
-            // The strip today is the legacy sky step: this class until the step, the next class after it.
-            float next = w.NextChangeIn();
-            float stepMin = next / 60f;
-            m.Blocks[0] = new MetBlock { FromMin = -93f, ToMin = next >= 0f ? stepMin : 93f, Class = field.Timeline.To, Label = regime.Code };
-            m.BlockCount = 1;
-            if (next >= 0f && stepMin < 93f)
-            {
-                RegimeSnapshot after = RegimeSnapshot.FromType(field.Timeline.Next);
-                m.Blocks[1] = new MetBlock { FromMin = stepMin, ToMin = 93f, Class = field.Timeline.Next, Label = after.Code };
-                m.BlockCount = 2;
-                m.Marks[0] = new MetMark { AtMin = stepMin, Step = true, Label = "STEP" };
-                m.MarkCount = 1;
-            }
-            m.StripNote = next < 0f ? "HELD" : "NEXT " + RegimeSnapshot.FromType(field.Timeline.Next).Code + " IN " + AvNum.Clock(next);
+            // The STORY strip is the tape's own segments and markers around the camera; a held tape counts minutes at the tape speed and says HELD.
+            if (tape != null) MetOfficeTapeFill.Story(m, tape, sCam, key.SystemSpeed, moving);
 
             // Chart: theater, camera, anchor, fronts, cells, set-pieces.
             Vector2 half = w.TheaterHalfSpan;
@@ -89,8 +81,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             m.AnchorX = key.AnchorX * KmPerMetre; m.AnchorZ = key.AnchorZ * KmPerMetre;
             // HERE / 30 KM is what the host chose, valid while the anchor still stands where that choice put it (a scenario or a client's own key moves it).
             m.AnchorMark = key.HasAnchor && anchorMark >= 0 && Math.Abs(key.AnchorX - anchorSetX) < 1f && Math.Abs(key.AnchorZ - anchorSetZ) < 1f ? anchorMark : -1;
-            m.FrontCount = Math.Min(field.FrontCount, MetOfficeModel.MaxFronts);
-            for (int i = 0; i < m.FrontCount; i++) MetFrontLine.From(field.Front(i), m.Fronts[i]);
+            if (tape != null) MetOfficeTapeFill.Fronts(m, tape, field.Frame, camera != null ? m.CamX * 1000f : 0f, camera != null ? m.CamZ * 1000f : 0f, key.SystemSpeed, moving);
             MetOfficeCells.Fill(m, field);
             for (int i = 0; i < MetOfficeModel.SetCount; i++) m.Sets[i].Forced = (key.Sets & MetCatalog.SetBits[i]) != 0;
             for (int i = 0; i < field.SuperstructureCount; i++)

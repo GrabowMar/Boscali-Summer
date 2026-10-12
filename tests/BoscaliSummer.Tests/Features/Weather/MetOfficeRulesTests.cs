@@ -42,8 +42,8 @@ namespace BoscaliSummer.Tests.Features.Weather
             }
             foreach (string part in MetCatalog.AllPartHelp())
                 TestAssert.That(part.Length > 20 && part.Length <= MetCatalog.HelpLimit, "part help fits one footer line (" + part.Length + " chars): " + part);
-            TestAssert.That(MetCatalog.Info(MetControl.Hold).Help.Contains("INTERIM") && MetCatalog.Info(MetControl.PaceUp).Help.Contains("INTERIM") &&
-                MetCatalog.Info(MetControl.PinAuto).Help.Contains("resumes"), "hold, pace and AUTO say what main really does to the sky step and the tape");
+            TestAssert.That(MetCatalog.Info(MetControl.Hold).Help.Contains("until the tape moves") && MetCatalog.Info(MetControl.PaceUp).Help.Contains("until the tape moves") &&
+                MetCatalog.Info(MetControl.PinAuto).Help.Contains("resumes"), "hold, pace and AUTO say what the tape really does (the sky holds until slice 5)");
         }
 
         private static void EffectClassesMatchTheMockup()

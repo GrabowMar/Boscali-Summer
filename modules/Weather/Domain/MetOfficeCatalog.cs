@@ -65,7 +65,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>The title-bar chips: SMOOTH, FADE 20 S, CUT.</summary>
         public static readonly string[] ChipHelp =
         {
-            "SMOOTH: hold and pace rebase the tape; its position never jumps. INTERIM: until the tape lands the legacy sky step restarts.",
+            "SMOOTH: hold and pace rebase the tape; its position never jumps. The sky holds until the tape moves (slice 5).",
             "FADE 20 S: one set-piece or the anchor changes over twenty seconds; the rest of the sky stays as it is.",
             "CUT (\u25B2): one atomic hard swap of the whole sky: pin, re-roll, scenarios. The word and the glyph say it as well as the colour.",
         };
@@ -74,7 +74,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public const string DtgHelp = "DTG is the real UTC clock (cosmetic). T+ is the mission clock. SN is the first four digits of the tape id.";
         public const string RoleHostHelp = "HOST // ALL PLAYERS: your changes reach every player at once. This window is the only way to steer the weather by hand.";
         public const string RoleClientHelp = "READ ONLY: only the host steers the weather. You see the same window with every control off.";
-        public const string BarPaceHelp = "PACE: one step faster; from the fastest it wraps to the slowest. , and . step down and up. SMOOTH. INTERIM: restarts the sky step.";
+        public const string BarPaceHelp = "PACE: one step faster; from the fastest it wraps to the slowest. , and . step down and up. SMOOTH. The sky holds until the tape moves (slice 5).";
         public const string BarRainHelp = "RAIN: cycles AUTO > DRY > LIGHT (40%) > HEAVY (100%). Same as the W key. No sky cut.";
 
         /// <summary>Every sentence above, for the length test and the window's hover gate.</summary>
@@ -123,11 +123,11 @@ namespace BoscaliSummer.Modules.Weather.Domain
             void Add(MetControl id, string name, MetEffect fx, MetAvail avail, char key, string help) => t[(int)id] = new MetControlInfo(id, name, fx, avail, key, help);
             const MetAvail L = MetAvail.Live, B = MetAvail.Tape4B, F = MetAvail.Motion5;
             Add(MetControl.Hold, "HOLD TAPE", MetEffect.Smooth, L, 'h',
-                "HOLD / RESUME freezes or releases the tape. Wind, rain and light follow the camera. SMOOTH. Same switch as SET SERVER. INTERIM: restarts sky step.");
+                "HOLD / RESUME freezes or releases the tape. Wind, rain and light follow the camera. SMOOTH. The sky holds until the tape moves (slice 5).");
             Add(MetControl.PaceDown, "PACE -", MetEffect.Smooth, L, ',',
-                "PACE slower: v = clamp(speed x wind, 18, 45) m/s. SMOOTH. Shared with SET SERVER. INTERIM: restarts the sky step; sky follows pace with the tape.");
+                "PACE slower: v = clamp(speed x wind, 18, 45) m/s. SMOOTH. Shared with SET SERVER. The sky holds until the tape moves (slice 5).");
             Add(MetControl.PaceUp, "PACE +", MetEffect.Smooth, L, '.',
-                "PACE faster: v = clamp(speed x wind, 18, 45) m/s. SMOOTH. Shared with SET SERVER. INTERIM: restarts the sky step; sky follows pace with the tape.");
+                "PACE faster: v = clamp(speed x wind, 18, 45) m/s. SMOOTH. Shared with SET SERVER. The sky holds until the tape moves (slice 5).");
             Add(MetControl.StoryAuto, "STORY AUTO", MetEffect.Cut, B, '\0',
                 "STORY AUTO lets the mission class pick the story for the whole tape. CUT. Arrives with the tape console (4B).");
             Add(MetControl.StoryPrev, "STORY <", MetEffect.Cut, B, '\0',

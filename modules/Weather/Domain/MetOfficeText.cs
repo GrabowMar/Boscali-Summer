@@ -129,9 +129,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 ":" + (s % 60).ToString("00", CultureInfo.InvariantCulture) + " " + who + " " + what;
         }
 
-        // The host-log notes, one per command (INTERIM: hold and pace say that main restarts the sky step until slice 4a).
-        public static string HoldNote(bool moves) => "TAPE " + (moves ? "RESUMED" : "HELD") + " · STEP RESTARTS";
-        public static string PaceNote(int before, int after) => "PACE " + before + "→" + after + " · STEP RESTARTS";
+        // The host-log notes, one per command.
+        public static string HoldNote(bool moves) => "TAPE " + (moves ? "RESUMED" : "HELD");
+        public static string PaceNote(int before, int after) => "PACE " + before + "→" + after;
         public static string PinNote(int skyIndex) => "PIN #" + (skyIndex + 1) + " " + MetCatalog.ClassCodes[(int)SkyLibrary.ClassOf(skyIndex)] + " ▲ CUT";
         public static string AutoNote() => "AUTO SKY + RESUME ▲ CUT";
         public static string RerollNote(int salt) => "RE-ROLL " + RerollSub(salt) + " ▲ CUT";
