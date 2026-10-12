@@ -85,7 +85,10 @@ public static class StockMfdUnityCheck
         {
             console.SetPage(page);
             Check(console.CurrentPage == page, name + ": SetPage(" + page + ") must land on that page.");
-            console.SetTitle(Title(name, page));
+            if (name == "Faction" || name.StartsWith("Mission")) Call(presenter, "ShowTitle");
+            else console.SetTitle(Title(name, page));
+            if (name.StartsWith("Mission")) Call(presenter, "Render");   // as the live refresh does after a page change
+            if (name == "Mission") SeedTrend(presenter);
             console.Footer.Set("OFFLINE LAYOUT PREVIEW \u00b7 SYNTHETIC DATA", AvState.Inert);
             for (int i = 0; i < 2; i++) console.Ticker.TickNow();
             Canvas.ForceUpdateCanvases();
@@ -193,11 +196,19 @@ public static class StockMfdUnityCheck
         }
         if (name == "Faction")
         {
-            Roster(presenter, "definitionGrid");
-            Roster(presenter, "attritionRoster");
+            Roster(presenter, "definitionGrid", "FORM 7 / BUILDINGS ON STRENGTH", "8 ACTIVE TYPES / 40 LIVE");
+            Roster(presenter, "attritionRoster", "FORM 12-B / LOSSES BY TYPE", "17 LOST / TOP 8 TYPES");
+            SetField(presenter, "factionTitle", "BOSCALI GENERAL AVIATION");
             Grid(presenter, "infoGrid", new[] { "AIRBASE NORTH RIDGE", "AIRBASE SECTOR TWO", "HIGHWAY STRIP" },
                 new[] { "OPERATIONAL \u00b7 6 AIRCRAFT", "OPERATIONAL \u00b7 2 AIRCRAFT", "CONTESTED \u00b7 0 AIRCRAFT" });
-            Call(Field(presenter, "factionHeader"), "Set", "Boscali Defence Force", "FACTION ORDER OF BATTLE");
+            Call(Field(presenter, "factionHeader"), "Set", "Boscali Defence Force", "FACTION STAFF RETURN  \u00b7  SCORE 41.5");
+            Call(Field(presenter, "factionHeader"), "SetLogo", IconSprite());   // the faction roundel is mission data; stand a sprite in
+            Call(Field(presenter, "mandateStrip"), "SetSeal", IconSprite());
+            ((AvSection)Field(presenter, "historySection")).SetCaption("FORM 31-T / 03:00 ON FILE");
+            ((AvHazardBar)Field(Field(presenter, "eventStrip"), "Bar")).Set(.62f, "03:42 LEFT", AvState.Caution);
+            ((AvHazardBar)Field(presenter, "moraleBar")).Set(.42f, "42.0 / 100", AvState.Caution);
+            SetField(presenter, "bandMorale", 42f);
+            Call(Field(presenter, "bandList"), "SetCount", 4);
             var resource = (AvMetric[])Field(presenter, "resourceMetrics");
             string[] figures = { "$24,600", "4", "138", "42.0" };
             string[] captions = { "AVAILABLE", "STOCKPILE", "IN ASSETS", "CONTRACTS 0.97x" };
@@ -338,11 +349,22 @@ public static class StockMfdUnityCheck
         Call(log, "Add", "OBJECTIVE COMPLETE  \u00b7  Destroy SAM Battery Ridge", "00:38:05", AvState.Ready);
         Call(log, "Add", "CONTRACT CLOSED  \u00b7  #24 HOLD THE LINE", "00:31:40", AvState.Caution);
         Call(presenter, "Render");
+        SeedTrend(presenter);
+    }
+
+    /// <summary>The funds recorder needs a faction HQ; stand a trace in for it, as the live trend would draw it.</summary>
+    private static void SeedTrend(object presenter)
+    {
+        var trend = new float[36];
+        for (int i = 0; i < trend.Length; i++) trend[i] = 18000f + 4200f * Mathf.Sin(i * .35f) + i * 180f;
+        ((AvLineChart)Field(presenter, "trendChart")).SetSeries(trend, trend.Length, "$13,800", "$28,900", "$24,600");
+        ((AvLineChart)Field(presenter, "trendChart")).SetShown(true);
+        ((AvSection)Field(presenter, "trendSection")).SetCaption("LAST 03:00 ON FILE");
     }
 
     // ---------------------------------------------------------------- reflection helpers
 
-    private static void Roster(object presenter, string field)
+    private static void Roster(object presenter, string field, string heading, string detail)
     {
         string[] names = { "REVETMENT", "DARKREACH", "CHICANE", "CRICKET", "SENTINEL", "BULWARK", "OSPREY", "KESTREL" };
         int[] live = { 12, 9, 4, 2, 0, 1, 7, 5 }, lost = { 0, 3, 1, 6, 0, 0, 2, 5 };
@@ -350,7 +372,7 @@ public static class StockMfdUnityCheck
             (Func<int, string>)(i => names[i]), (Func<int, string>)(i => "Synthetic mission accounting for " + names[i]),
             (Func<int, Sprite>)(_ => IconSprite()), (Func<int, int>)(i => live[i]),
             (Func<int, int>)(i => lost[i]), (Func<int, int>)(i => i + 2),
-            "UNIT MANIFEST", "LIVE / LOST / MOBILE RESERVES");
+            heading, detail);
     }
 
     private static object Field(object owner, string field)
