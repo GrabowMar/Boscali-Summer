@@ -171,6 +171,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             frame.Paint(AvInk.Ground.WithAlpha(0.95f), ink.WithAlpha(0.9f));
             frame.BracketColor = ink;
             frame.Bracket = 4f;
+            frame.SetVerticesDirty();
             at = new Vector2(float.NaN, float.NaN);   // the size changed, so the clamp must run again
         }
 

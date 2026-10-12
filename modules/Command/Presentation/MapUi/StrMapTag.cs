@@ -118,6 +118,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             plate.Stroke = selected || hot ? 1.6f : 1f;
             plate.Bracket = selected ? 4f : 0f;
             plate.BracketColor = ink;
+            plate.SetVerticesDirty();   // stroke and bracket are not colours, so Paint alone would not redraw them
         }
 
         // "P1 NORTH RIDGE" -> "P1" and "NORTH RIDGE"; a first word that is not a number-like token leaves the whole text as the title.

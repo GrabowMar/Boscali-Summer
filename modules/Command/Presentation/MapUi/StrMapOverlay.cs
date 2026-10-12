@@ -157,9 +157,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Transform t = map.mapImage.transform;
                 Vector3 at = t.position, scale = t.lossyScale;
                 int h = projection != null ? projection.Revision * 31 + 1 : 0;
-                h = h * 31 + Mathf.RoundToInt(at.x * 4f);
-                h = h * 31 + Mathf.RoundToInt(at.y * 4f);
-                return h * 31 + Mathf.RoundToInt(scale.x * 1000f);
+                // A flat map that follows the aircraft slides every frame; the tags ride on the image, so only a slide of a few pixels needs a new placement.
+                h = h * 31 + Mathf.RoundToInt(at.x / 12f);
+                h = h * 31 + Mathf.RoundToInt(at.y / 12f);
+                return h * 31 + Mathf.RoundToInt(scale.x * 100f);
             }
         }
 
@@ -211,16 +212,19 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             card?.Hide();
         }
 
-        private static void Remove(GameObject go)
+        // The scene unload may have destroyed the pieces already (Unity's null check says so): then there is nothing to remove or unregister.
+        private static void Remove(Component part)
         {
-            if (Application.isPlaying) Destroy(go); else DestroyImmediate(go);
+            if (part == null) return;
+            MapUiPointer.Unregister(part as RectTransform);
+            if (Application.isPlaying) Destroy(part.gameObject); else DestroyImmediate(part.gameObject);
         }
 
         private void Teardown()
         {
-            if (root != null) Remove(root.gameObject);
-            if (chrome != null) { MapUiPointer.Unregister(chrome.Plate); MapUiPointer.Unregister(chrome.Legend); Remove(chrome.Plate.gameObject); Remove(chrome.Legend.gameObject); }
-            if (card != null) { MapUiPointer.Unregister(card.Root); Remove(card.Root.gameObject); }
+            Remove(root);
+            if (chrome != null) { Remove(chrome.Plate); Remove(chrome.Legend); }
+            if (card != null) Remove(card.Root);
             root = tagLayer = null; ink = pulse = null; chrome = null; card = null;
             tags.Clear();
             Controls.Clear();
@@ -427,6 +431,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private Camera CameraOf(DynamicMap map)
         {
             Canvas canvas = map.mapImage.GetComponentInParent<Canvas>();
+            if (canvas != null) canvas = canvas.rootCanvas;   // a nested canvas has no render mode of its own
             return canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
         }
 

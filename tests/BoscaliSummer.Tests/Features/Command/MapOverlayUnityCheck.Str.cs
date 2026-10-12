@@ -380,6 +380,7 @@ public static partial class MapOverlayUnityCheck
         int crowdedMisses = 0;
 
         Check(!o.Overflowed && !o.InkBuffer.Overflowed && !o.PulseBuffer.Overflowed, "the ink and pulse meshes did not overflow");
+        Check((fixture == "rich" || fixture == "full") == (o.PulseBuffer.Count > 0), "the marching axis exists exactly while an operation is ADVANCING (" + fixture + ": " + o.PulseBuffer.Count + " pulse quads)");
         Check(plan.EstimateInkQuads() <= StrMapOverlay.InkCapacity && plan.EstimatePulseQuads() <= StrMapOverlay.PulseCapacity, "the worst-case quads are inside the budgets");
         Check(o.InkBuffer.Count <= plan.EstimateInkQuads(), "the ink never writes more quads than the plan estimated (" + o.InkBuffer.Count + " of " + plan.EstimateInkQuads() + ")");
         Check(!o.WarnedShape, "every shape of the plan was drawn by the real drawer");

@@ -1,11 +1,11 @@
 {
-  "name": "str-6-front-plumbing-relief",
-  "description": "STR slice U2 live proof of the plumbing (hub, reader, verbs, MapFocus) on the relief map, mission Terminal Control: the model equals the host snapshot, a select flies the map to the item, a posture and a pick go out through the hub. Since U3 it presses by control id (StrAutomation.Press) and walks the three tabs; absorbed by str-6-front-relief when the overlay lands.",
+  "name": "str-6-front-relief",
+  "description": "STR slice U4 live proof on the relief map, mission Terminal Control: the Station Board panel plumbing of U2 and U3 plus the map overlay of U4: the overlay draws a tag per proposal and front (overlay.tags), a raycast at a tag and at the first friendly airbase icon hits the right thing (Probe, ProbeAt), a click on a tag selects it and opens the card, and the card's primary button picks the proposal through the hub (Press map.card.primary) and the effort goes live; the overlay's cost stays inside the budget. Sorties (pres-sortie), redirect, wing, stale and held-wave blocks wait for the sorties, wing and wave work of S7 and S10. Absorbs str-6-front-plumbing-relief. The pick lock and picker name (lockSeconds 60..121, pickedByLocal) belong to the engine slice S4 and are asserted there.",
   "mission": "Terminal Control",
   "mods": [
     "boscalisummer"
   ],
-  "timeout_s": 330,
+  "timeout_s": 390,
   "environment": {
     "config": {
       "bepinex": {
@@ -73,8 +73,17 @@
       "store": "a1"
     },
     {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.ProbeAt",
+      "args": {
+        "kind": "airbase",
+        "n": 1
+      },
+      "store": "pa"
+    },
+    {
       "op": "capture",
-      "name": "str-board-proposals",
+      "name": "str-overlay-proposals",
       "hide_ui": false
     },
     {
@@ -156,6 +165,14 @@
     },
     {
       "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Probe",
+      "args": {
+        "id": "map.tag.prop.1"
+      },
+      "store": "pr1"
+    },
+    {
+      "op": "call",
       "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Press",
       "args": {
         "id": "posture.bold"
@@ -174,9 +191,32 @@
     },
     {
       "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Select",
+      "args": {
+        "id": "map.tag.prop.1"
+      },
+      "store": "sel1"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "args": {},
+      "store": "a2s"
+    },
+    {
+      "op": "capture",
+      "name": "str-overlay-card",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
       "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Press",
       "args": {
-        "id": "prop.1.pick"
+        "id": "map.card.primary"
       },
       "store": "k1"
     },
@@ -192,7 +232,7 @@
     },
     {
       "op": "capture",
-      "name": "str-board-operation",
+      "name": "str-overlay-operation",
       "hide_ui": false
     },
     {
@@ -215,7 +255,13 @@
     },
     {
       "op": "wait",
-      "seconds": 2
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "args": {},
+      "store": "rc"
     },
     {
       "op": "end"
@@ -274,11 +320,6 @@
       "check": "result_below",
       "path": "a2.map.focusOffset",
       "max": 0.08
-    },
-    {
-      "check": "result_below",
-      "path": "a2.map.flat",
-      "max": 0
     },
     {
       "check": "result_above",
@@ -374,6 +415,101 @@
       "check": "result_above",
       "path": "k1.ok",
       "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a1.overlay.visible",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a1.overlay.tags.prop",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a1.overlay.tags.front",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "a1.overlay.overflow",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "a0.overlay.present",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "pa.found",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "pa.hit",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "pr1.found",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "pr1.hit",
+      "min": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "sel1.ok",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "a2s.link.selectedKind",
+      "value": 2
+    },
+    {
+      "check": "result_above",
+      "path": "a2s.overlay.card",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a4.overlay.tags.effort",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "rc.overlay.msPerSecond",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "rc.overlay.msPerSecond",
+      "max": 25
+    },
+    {
+      "check": "result_below",
+      "path": "rc.overlay.rebuildsPerSecond",
+      "max": 16
+    },
+    {
+      "check": "result_below",
+      "path": "rc.overlay.overflow",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "a1.overlay.relief",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "a2.map.flat",
+      "max": 0
     },
     {
       "check": "log_match",
