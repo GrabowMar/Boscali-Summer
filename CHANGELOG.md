@@ -22,6 +22,9 @@
   (up to 45 km), lands on its belly
   about 250 m short of the target and a Hexhound GMG rolls off as a live unit. It needs flat dry
   ground; anything that hits it on the way in loses both.
+- **Weather console (Ctrl+O) is the MET OFFICE**: a synoptic chart of fronts, cells and storms, sky and
+  METAR readouts, pin any of the 47 skies, hold and pace the weather, set-pieces and an anchor, rain
+  override, six one-click scenarios and a key-driven command line. Clients see it read-only.
 - **Airborne** (needs Blueprinter): HALO paratroopers, Ibis fast-rope and rappel insertions.
 - **OPS fronts**: SPACE / CYBER / SOF fronts with directives, programmes and readiness.
 - **Squadron insignia**: layered crest editor, tail-fin markings for supported aircraft, and
