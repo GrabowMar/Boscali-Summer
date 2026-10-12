@@ -5,6 +5,8 @@ Blocks, in the spec's naming (docs/superpowers/specs/2026-10-12-str-repair-desig
   str-2-war-tc                         P2 engine blocks that need no ground report (slice 4): names, deck timing, staff pick, lock, redirect, veto,
                                        command expiry, host age, an own-base DEFEND, focus, faults
   str-3-reduced-ff / str-3-reduced-dom P3 reduced missions: the Free Flight deck, the Domination own-base DEFEND
+  census (slice 5)                     the str-2-war-tc census block (threat level on the ticker with STR never opened, parked jets are not sorties, the
+                                       contested-base cross-check) and the Free Flight grid check (no contested sectors on a quiet map)
 
 Ground (slice 0): measure the UNREPAIRED ground steering in a real ground war. Question H1: does the MissionPosition advance postfix fire for enrolled
 vehicles, do groups form, do they get staged destinations, and do the vehicles move toward them. Nothing there changes behaviour; the readback is
@@ -21,6 +23,7 @@ import json, os
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GROUND = "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof.Read"
 WAR = "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof."
+CENSUS = "BoscaliSummer.Modules.Command.Runtime.CensusProof.Read"
 SAMPLES, EVERY = 14, 30                      # 14 x 30 s = 7 minutes
 UNITY_LOG = {"config": {"bepinex": {"Logging.Disk": {"WriteUnityLog": True}}}}
 
@@ -33,6 +36,7 @@ def equals(path, v): return {"check": "result_equals", "path": path, "value": v}
 def sample(n): return "s%02d" % n
 def call(method, store, **args): return {"op": "call", "method": method, "args": args, "store": store}
 def read(store): return call(WAR + "Read", store)
+def census(store): return call(CENSUS, store)
 
 
 def ground(name, mission, seat_at):
@@ -80,13 +84,31 @@ def ground(name, mission, seat_at):
     }
 
 
+def census_checks(known_at, late, apron):
+    """Slice 5, spec 8.2: with STR never opened the ticker has a threat level at 30 s; parked jets are not sorties; the contested-base count equals the
+    control field's own. A measured -1 (unknown) passes result_below, so every 'at most' is paired with 'at least 0'."""
+    t, c = known_at + ".ticker", known_at + ".census"
+    return (
+        [above(c + ".known", 1), above(c + ".appliedAgo", 0), below(c + ".appliedAgo", 5)]            # a measured census was applied within 5 s: the 1 Hz tick runs with no panel open
+        + within(t + ".level", 1, 5) + [above(c + ".threat", 1), equals(known_at + ".check.tickerLevelDelta", 0)]
+        + [above(known_at + ".grid.available", 1)]
+        + within(known_at + ".check.contestedBasesDelta", 0, 0) + within(known_at + ".check.sectorsDelta", 0, 0)
+        + [below(apron + ".ticker.level", 4)]                                                         # the first ticks must not read "5 NOMINAL" off a world that is not populated yet (this map's real level is 3)
+        + within(apron + ".fresh.sortieTransit", 0, 0) + [above(apron + ".fresh.airParked", 1)]       # at mission start the apron is full and nobody is in transit (by 30 s the AI has launched)
+        + within(late + ".ticker.level", 1, 5) + [above(late + ".census.appliedAgo", 0), below(late + ".census.appliedAgo", 5)]
+    )
+
+
 def war_tc():
     me, foe = "Boscali", "Primeva"
     pick = lambda store, card: call(WAR + "Command", store, faction=me, verb="pick", card=card)
     ops = [
         {"op": "seat", "id": "player", "faction": me, "near": [50000, 15000], "altitude": 9000, "speed": 200, "heading": 0},
+        census("c0"),                                            # mission start: jets are parked on the aprons, not on sorties (a fresh measurement; nothing has ticked yet). Before the fly op:
+                                                                 # a sim-flown seat has no human at the stick, so the tally would count it as a transit sortie
         {"op": "fly", "id": "player", "program": [{"orbit": {"bank": 30, "seconds": 400}}]},
         wait(25), read("r1"),                                    # the first deck is in; nobody has touched STR
+        wait(5), census("c1"),                                   # 30 s: the threat level is on the ticker although STR was never opened
         wait(50), read("r2"),                                    # about 75 s: the staff picked for the seat that ignored it (45 s after its deck)
         pick("p1", 0),                                           # the pilot picks (or redirects the staff's operation)
         read("r3"),
@@ -103,6 +125,7 @@ def war_tc():
         call(WAR + "Freeze", "fz", seconds=20),
         wait(18), read("r9"),                                    # the staff stalled: the age keeps growing, the command stays available
         wait(8), read("r10"),                                    # and recovers
+        census("c2"),                                            # the census kept ticking through the stall
         {"op": "end"},
     ]
     checks = [{"check": "status_ok"}]
@@ -133,6 +156,7 @@ def war_tc():
     checks += within("r8" + k + ".ageAtRefreshMax", 8, 15) + [above("r8" + k + ".canCommand", 1)]
     checks += [above("r9" + k + ".age", 16), above("r9" + k + ".canCommand", 1)]
     checks += within("r10" + k + ".age", 0, 8)
+    checks += census_checks(known_at="c1", late="c2", apron="c0")
     checks += [{"check": "log_match", "pattern": r"\[TheaterOps\].*staff fault", "max": 0}, {"check": "log_match", "pattern": "Exception", "max": 0}]
     return {
         "name": "str-2-war-tc",
@@ -166,11 +190,17 @@ def reduced_ff():
     # check is what is true. (Domination and "05. Furball" field ground vehicles too, so NoGroundWar has no built-in mission to read it in; the pure
     # EmptyReasonRules tests carry it.)
     return reduced(
-        "str-3-reduced-ff", "Free Flight", [wait(30), read("r1"), wait(30), read("r2")],
-        "STR engine proof in Free Flight: a deck within 30 s, the AI staff's pick 5 s later, and no assault or recon card ever offered without a carrier.",
+        "str-3-reduced-ff", "Free Flight", [wait(30), read("r1"), wait(30), read("r2"), census("c1")],
+        "STR engine proof in Free Flight: a deck within 30 s, the AI staff's pick 5 s later, no assault or recon card ever offered without a carrier, "
+        "and no contested sector on a quiet map at 60 s (the grid reads the tested contested rule).",
         within("r1" + k + ".firstDeckAt", 0, 30) + [above("r1" + k + ".deckCount", 1), equals("r2" + k + ".emptyReason", "None"),
          below("r2" + k + ".assaultCardsWithoutCarriers", 0), below("r2" + k + ".faults", 0)]
-        + within("r1.war.primeva.staffPickedAt", 0, 24))
+        + within("r1.war.primeva.staffPickedAt", 0, 24)
+        # The spec asked for grid.sectorsContested <= 0 here, on the premise of a quiet map. The first run read 180: Free Flight fields a live ground war (23 own and 8 tracked
+        # hostile vehicles at 60 s) and the grid's influence spreads a vehicle over a 17 km square, so cells between opposing forces are legitimately in contact. The property
+        # the check was meant to prove is that nothing is contested WITHOUT contact (the old strategic-fallback and one-sided-push branches): that is game-side, map-independent,
+        # and red on the old rule. The contested count itself is read back (>= 0 so an unavailable grid fails) but not bounded.
+        + within("c1.check.contestedWithoutContact", 0, 0) + [above("c1.grid.contactCells", 0), above("c1.grid.sectorsContested", 0), above("c1.ticker.level", 1)])
 
 
 def reduced_dom():

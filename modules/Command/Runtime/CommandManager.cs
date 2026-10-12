@@ -32,7 +32,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         /// <summary>What <see cref="ApplyCensus"/> last applied. The Station Board reads it for SITREP when the war view has no snapshot, so the panel causes no scan of its own.</summary>
         internal TheaterCensus LastCensus { get; private set; } = TheaterCensus.Unmeasured;
 
-        /// <summary>Unscaled time of the last measured census; -1 while none has been measured.</summary>
+        /// <summary>Unscaled time at which a measured census was last applied (not when it was measured: a stalled staff republishes nothing, so the snapshot census can be older); -1 while none.</summary>
         internal float LastCensusAt { get; private set; } = -1f;
 
         private void Update()
@@ -151,8 +151,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
             {
                 if (now >= nextLocalMeasure)
                 {
-                    nextLocalMeasure = now + LocalMeasureSeconds;
-                    if (!TryMeasure(hq, out localCensus)) localCensus = TheaterCensus.Unmeasured;
+                    // A world that has not populated yet is not measured: retry next tick rather than hold a calm reading for 10 s.
+                    nextLocalMeasure = TryMeasure(hq, out localCensus) ? now + LocalMeasureSeconds : 0f;
                 }
                 ApplyCensus(localCensus, now);
                 return;
@@ -181,10 +181,14 @@ namespace BoscaliSummer.Modules.Command.Runtime
             census = TheaterCensus.Unmeasured;
             if (hq == null || !GameAccess.IsServer()) return false;
 
+            List<Unit> allUnits = UnitRegistry.allUnits;
+            if (allUnits == null || allUnits.Count == 0) return false;
+
             float now = Time.timeSinceLevelLoad;
             TheaterCensus c = TheaterCensus.Unmeasured;
             bool pilots = GameAccess.AiPilotCombatAvailable;
             SortieTally sorties = default;
+            int owned = 0;
 
             IReadOnlyList<Aircraft> allAircraft = UnitRegistry.allAircraft;
             if (allAircraft != null)
@@ -206,35 +210,33 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     }
                     else if (!landed && HostileContact.TryRead(hq, ac, now, out _)) hostile++;
                 }
+                owned += airborne + parked;
                 c.AirFriendly = Count(airborne);
                 c.AirParked = Count(parked);
                 c.AirHostileTracked = Count(hostile);
             }
 
-            List<Unit> allUnits = UnitRegistry.allUnits;
-            if (allUnits != null)
+            int groundOwn = 0, groundHostile = 0, shipsOwn = 0, shipsHostile = 0;
+            for (int i = 0; i < allUnits.Count; i++)
             {
-                int groundOwn = 0, groundHostile = 0, shipsOwn = 0, shipsHostile = 0;
-                for (int i = 0; i < allUnits.Count; i++)
+                Unit u = allUnits[i];
+                if (u == null || u.disabled) continue;
+                bool ground = u is GroundVehicle;
+                if (!ground && !(u is Ship)) continue;
+                if (u.NetworkHQ == hq)
                 {
-                    Unit u = allUnits[i];
-                    if (u == null || u.disabled) continue;
-                    bool ground = u is GroundVehicle;
-                    if (!ground && !(u is Ship)) continue;
-                    if (u.NetworkHQ == hq)
-                    {
-                        if (ground) groundOwn++; else shipsOwn++;
-                    }
-                    else if (HostileContact.TryRead(hq, u, now, out _))
-                    {
-                        if (ground) groundHostile++; else shipsHostile++;
-                    }
+                    if (ground) groundOwn++; else shipsOwn++;
                 }
-                c.GroundFriendly = Count(groundOwn);
-                c.GroundHostileTracked = Count(groundHostile);
-                c.ShipsFriendly = Count(shipsOwn);
-                c.ShipsHostileTracked = Count(shipsHostile);
+                else if (HostileContact.TryRead(hq, u, now, out _))
+                {
+                    if (ground) groundHostile++; else shipsHostile++;
+                }
             }
+            owned += groundOwn + shipsOwn;
+            c.GroundFriendly = Count(groundOwn);
+            c.GroundHostileTracked = Count(groundHostile);
+            c.ShipsFriendly = Count(shipsOwn);
+            c.ShipsHostileTracked = Count(shipsHostile);
 
             // Every airbase in the theater, not only the ones this HQ already holds: the faction's own list can only ever be friendly.
             if (FactionRegistry.airbaseLookup != null)
@@ -248,10 +250,15 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     else if (airbase.CurrentHQ == hq) own++;
                     else theirs++;
                 }
+                owned += own;
                 c.BasesFriendly = Count(own);
                 c.BasesHostile = Count(theirs);
                 c.BasesNeutral = Count(neutral);
             }
+
+            // A faction that owns no aircraft, vehicle, ship or base has nothing to measure: at mission start the units are not spawned and the bases not yet assigned,
+            // and "nothing to count" must not read as a calm theater (threat 5). It stays unmeasured until the faction exists.
+            if (owned == 0) return false;
 
             // Which of our bases are being argued over is a property of the field, not of the airbase list: a friendly base with hostile presence in its cell.
             TacticalSectorGrid grid = territory != null ? territory.Read(hq) : null;
@@ -296,7 +303,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
         /// <summary>
         /// Add one airborne friendly aircraft to the sortie tally, by what its AI pilot is pointed at. A parked jet is never tallied: it is
-        /// on the apron, not on a sortie.
+        /// on the apron, not on a sortie. The local player's jet is excluded by identity as well as by pilot, so a seat flown by a script counts no sortie either.
         ///
         /// <para>Player-flown aircraft are excluded because a sortie board reports what the
         /// theater is doing on its own; and Wing Command's recruited wing is excluded
@@ -309,7 +316,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             if (pilots == null || pilots.Length == 0) return;
 
             Pilot pilot = pilots[0];
-            if (pilot == null || pilot.dead || pilot.playerControlled) return;
+            if (pilot == null || pilot.dead || pilot.playerControlled || GameManager.IsLocalAircraft(aircraft)) return;
             if (IsPublishedWingMember(aircraft)) return;
 
             var combat = pilot.currentState as AIPilotCombatModes;

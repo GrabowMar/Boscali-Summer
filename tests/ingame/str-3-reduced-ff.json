@@ -1,6 +1,6 @@
 {
   "name": "str-3-reduced-ff",
-  "description": "STR engine proof in Free Flight: a deck within 30 s, the AI staff's pick 5 s later, and no assault or recon card ever offered without a carrier.",
+  "description": "STR engine proof in Free Flight: a deck within 30 s, the AI staff's pick 5 s later, no assault or recon card ever offered without a carrier, and no contested sector on a quiet map at 60 s (the grid reads the tested contested rule).",
   "mission": "Free Flight",
   "mods": [
     "boscalisummer"
@@ -61,6 +61,12 @@
       "store": "r2"
     },
     {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.CensusProof.Read",
+      "args": {},
+      "store": "c1"
+    },
+    {
       "op": "end"
     }
   ],
@@ -107,6 +113,31 @@
       "check": "result_below",
       "path": "r1.war.primeva.staffPickedAt",
       "max": 24
+    },
+    {
+      "check": "result_above",
+      "path": "c1.check.contestedWithoutContact",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "c1.check.contestedWithoutContact",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "c1.grid.contactCells",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "c1.grid.sectorsContested",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "c1.ticker.level",
+      "min": 1
     },
     {
       "check": "log_match",

@@ -29,6 +29,12 @@
       "heading": 0
     },
     {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.CensusProof.Read",
+      "args": {},
+      "store": "c0"
+    },
+    {
       "op": "fly",
       "id": "player",
       "program": [
@@ -49,6 +55,16 @@
       "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Read",
       "args": {},
       "store": "r1"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.CensusProof.Read",
+      "args": {},
+      "store": "c1"
     },
     {
       "op": "wait",
@@ -188,6 +204,12 @@
       "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Read",
       "args": {},
       "store": "r10"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.CensusProof.Read",
+      "args": {},
+      "store": "c2"
     },
     {
       "op": "end"
@@ -456,6 +478,106 @@
       "check": "result_below",
       "path": "r10.war.boscali.age",
       "max": 8
+    },
+    {
+      "check": "result_above",
+      "path": "c1.census.known",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "c1.census.appliedAgo",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "c1.census.appliedAgo",
+      "max": 5
+    },
+    {
+      "check": "result_above",
+      "path": "c1.ticker.level",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "c1.ticker.level",
+      "max": 5
+    },
+    {
+      "check": "result_above",
+      "path": "c1.census.threat",
+      "min": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "c1.check.tickerLevelDelta",
+      "value": 0
+    },
+    {
+      "check": "result_above",
+      "path": "c1.grid.available",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "c1.check.contestedBasesDelta",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "c1.check.contestedBasesDelta",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "c1.check.sectorsDelta",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "c1.check.sectorsDelta",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "c0.ticker.level",
+      "max": 4
+    },
+    {
+      "check": "result_above",
+      "path": "c0.fresh.sortieTransit",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "c0.fresh.sortieTransit",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "c0.fresh.airParked",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "c2.ticker.level",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "c2.ticker.level",
+      "max": 5
+    },
+    {
+      "check": "result_above",
+      "path": "c2.census.appliedAgo",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "c2.census.appliedAgo",
+      "max": 5
     },
     {
       "check": "log_match",

@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Services;
+using BoscaliSummer.Modules.Command.Domain;
 using UnityEngine;
 using static BoscaliSummer.Core.Diagnostics.AutomationArgs;
 
@@ -28,10 +30,12 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
             TheaterCensus applied = command.LastCensus;
             bool measured = command.TryMeasure(hq, out TheaterCensus fresh);
-            TacticalSectorGrid grid = UnityEngine.Object.FindObjectOfType<TerritoryControlView>()?.Read(hq);
-            int gridBases = -1;
+            ModuleServices.TryGet(out ITerritoryIngress ingress);
+            TacticalSectorGrid grid = (ingress as TerritoryControlView)?.Read(hq);
+            int gridBases = -1, contactCells = -1, contestedWithoutContact = -1;
             if (grid != null)
             {
+                CountContact(grid, out contactCells, out contestedWithoutContact);
                 gridBases = 0;
                 foreach (TacticalSectorGrid.TacticalNode node in grid.GetNodes())
                     if (node.IsAirbase && node.IsContested && node.Faction == SectorControl.Friendly) gridBases++;
@@ -57,7 +61,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
                         { "available", grid != null ? 1 : 0 },
                         { "sectorsContested", grid != null ? grid.ContestedSectorCount : -1 }, { "sectorsFriendly", grid != null ? grid.FriendlySectorCount : -1 },
                         { "sectorsHostile", grid != null ? grid.HostileSectorCount : -1 }, { "sectorsNeutral", grid != null ? grid.NeutralSectorCount : -1 },
-                        { "cells", grid != null ? grid.TotalSectors : -1 }, { "contestedBases", gridBases },
+                        { "cells", grid != null ? grid.TotalSectors : -1 }, { "contestedBases", gridBases }, { "contactCells", contactCells },
                     }
                 },
                 {
@@ -66,6 +70,9 @@ namespace BoscaliSummer.Modules.Command.Runtime
                         // The census counts friendly bases with hostile presence from the same field the game-side loop reads; a stale or miswired figure shows here.
                         { "contestedBasesDelta", measured && gridBases >= 0 ? Math.Abs(fresh.BasesContested - gridBases) : -1 },
                         { "sectorsDelta", measured && grid != null ? Math.Abs(fresh.SectorsContested - grid.ContestedSectorCount) : -1 },
+                        // The rule the grid adopted: a cell is contested only where both sides have ground weight (or two airbases of opposite owners share it). Strategic influence alone,
+                        // or a one-sided push, left cells contested under the old rule; on any map, this is 0 now.
+                        { "contestedWithoutContact", contestedWithoutContact },
                         // The ticker bag is the applied census, one writer: its level can differ from the applied threat only by a tick in flight.
                         { "tickerLevelDelta", command.LastCensusAt >= 0f ? Math.Abs(state.DefconLevel - applied.Threat) : -1 },
                     }
@@ -73,9 +80,28 @@ namespace BoscaliSummer.Modules.Command.Runtime
             };
         }
 
-        private static Dictionary<string, object> Describe(in TheaterCensus c, float ageSeconds) => new Dictionary<string, object>
+        /// <summary>Cells where both sides' ground weight is above the presence threshold, and contested cells with no such contact (and no two-airbase anchor). Reads the grid's private arrays: dev tooling only.</summary>
+        private static void CountContact(TacticalSectorGrid grid, out int contact, out int contestedWithoutContact)
         {
-            { "known", c.Known ? 1 : 0 }, { "ageSeconds", ageSeconds },
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            var friendly = (float[])typeof(TacticalSectorGrid).GetField("friendlyForce", flags)?.GetValue(grid);
+            var hostile = (float[])typeof(TacticalSectorGrid).GetField("hostileForce", flags)?.GetValue(grid);
+            var anchors = (byte[])typeof(TacticalSectorGrid).GetField("nodeAnchors", flags)?.GetValue(grid);
+            var states = (SectorControl[])typeof(TacticalSectorGrid).GetField("sectorStates", flags)?.GetValue(grid);
+            contact = contestedWithoutContact = -1;
+            if (friendly == null || hostile == null || anchors == null || states == null) return;
+            contact = contestedWithoutContact = 0;
+            for (int i = 0; i < grid.TotalSectors; i++)
+            {
+                bool touching = friendly[i] > ControlFieldCore.PresenceThreshold && hostile[i] > ControlFieldCore.PresenceThreshold;
+                if (touching) contact++;
+                if (states[i] == SectorControl.Contested && !touching && anchors[i] != 3) contestedWithoutContact++;
+            }
+        }
+
+        private static Dictionary<string, object> Describe(in TheaterCensus c, float appliedAgo) => new Dictionary<string, object>
+        {
+            { "known", c.Known ? 1 : 0 }, { "appliedAgo", appliedAgo },
             { "airFriendly", c.AirFriendly }, { "airParked", c.AirParked }, { "airHostileTracked", c.AirHostileTracked },
             { "groundFriendly", c.GroundFriendly }, { "groundHostileTracked", c.GroundHostileTracked },
             { "shipsFriendly", c.ShipsFriendly }, { "shipsHostileTracked", c.ShipsHostileTracked },
