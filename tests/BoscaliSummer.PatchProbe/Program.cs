@@ -2432,6 +2432,17 @@ static void ProbeTheaterOpsSerialization(Assembly plugin, Assembly mirage)
         throw new InvalidOperationException("Living Front probe found no difference");
     }
     byte[] Patched(byte[] data, int index, byte value) { byte[] copy = (byte[])data.Clone(); copy[index] = value; return copy; }
+    // A well-formed wire with `times` copies of the one item that `with1` has and `with0` lacks (the count byte is the first difference),
+    // so only the count rule can refuse it.
+    byte[] Repeated(byte[] with1, byte[] with0, int times)
+    {
+        int at = FirstDiff(with0, with1), length = with1.Length - with0.Length;
+        var output = new System.Collections.Generic.List<byte>(with1.Take(at));
+        output.Add((byte)times);
+        for (int i = 0; i < times; i++) output.AddRange(with1.Skip(at + 1).Take(length));
+        output.AddRange(with1.Skip(at + 1 + length));
+        return output.ToArray();
+    }
     MethodInfo[] writerExt = mirage.GetTypes().Where(t => t.IsAbstract && t.IsSealed)
         .SelectMany(t => t.GetMethods(flags)).Where(m => m.IsStatic && m.GetParameters().Length == 2 && m.GetParameters()[0].ParameterType == writerType).ToArray();
     byte[] WriteString(string text)
@@ -2582,12 +2593,15 @@ static void ProbeTheaterOpsSerialization(Assembly plugin, Assembly mirage)
     // Structural violations that need hand-edited wire.
     byte[] Fronts1() => Wire(Body(fronts: 1, proposals: 0, operation: false, wave: false, result: false, outcome: false));
     byte[] Fronts0() => Wire(Body(fronts: 0, proposals: 0, operation: false, wave: false, result: false, outcome: false));
-    Refused(Patched(Fronts1(), FirstDiff(Fronts0(), Fronts1()), 9), "a 9th front");
+    if (!Accepted(Repeated(Fronts1(), Fronts0(), 8))) throw new InvalidOperationException("Living Front probe cannot repeat a front");
+    Refused(Repeated(Fronts1(), Fronts0(), 9), "a 9th front");
     byte[] Props1() => Wire(Body(fronts: 0, proposals: 1, operation: false, wave: false, result: false, outcome: false));
-    Refused(Patched(Props1(), FirstDiff(Fronts0(), Props1()), 4), "a 4th proposal");
+    if (!Accepted(Repeated(Props1(), Fronts0(), 3))) throw new InvalidOperationException("Living Front probe cannot repeat a proposal");
+    Refused(Repeated(Props1(), Fronts0(), 4), "a 4th proposal");
     byte[] Marks1() => Wire(Body(fronts: 0, proposals: 0, operation: true, wave: false, result: false, outcome: false, marks: 1));
     byte[] Marks0() => Wire(Body(fronts: 0, proposals: 0, operation: true, wave: false, result: false, outcome: false, marks: 0));
-    Refused(Patched(Marks1(), FirstDiff(Marks0(), Marks1()), 9), "a 9th mark");
+    if (!Accepted(Repeated(Marks1(), Marks0(), 8))) throw new InvalidOperationException("Living Front probe cannot repeat a mark");
+    Refused(Repeated(Marks1(), Marks0(), 9), "a 9th mark");
     int frontX = Find(full, BitConverter.GetBytes(1234.5f));
     Refused(Patched(full, frontX + 21, 0x80), "a front with flag bit 7");
     object shortName = Body();
@@ -2597,7 +2611,8 @@ static void ProbeTheaterOpsSerialization(Assembly plugin, Assembly mirage)
     byte[] withWave = Wire(Body());
     byte[] withoutWave = Wire(WithWave(Body(), null));
     Refused(Patched(withWave, FirstDiff(withoutWave, withWave), 2), "wave present 2");
-    Refused(Patched(withWave, Find(withWave, BitConverter.GetBytes(777.25f)) - 1, 2), "depot known 2");
+    byte[] zeroDepot = Wire(WithWave(Body(), Wave(depotX: 0f)));
+    Refused(Patched(zeroDepot, Find(zeroDepot, BitConverter.GetBytes(-6750f)) - 5, 2), "depot known 2");
     Refused(Patched(withWave, Find(withWave, BitConverter.GetBytes(4242.5f)) + 8, 2), "counted 2");
     Console.WriteLine("  TheaterOps protocol-3 serializers: query, active priority, clear sentinel, unknown-header rejection");
     Console.WriteLine("  Living Front protocol-3 serializers: full snapshot, every result code, unknown encodings, clamps, refusals through the object path and hand-edited wire, query, intent");
