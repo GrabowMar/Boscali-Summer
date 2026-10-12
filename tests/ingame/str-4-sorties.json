@@ -1,0 +1,535 @@
+{
+  "name": "str-4-sorties",
+  "description": "STR sortie tie and wave desk proof, mission Escalation: tied sorties are offered within the first operation and none points at another operation, three completed tied sorties credit 1, 2, 3, a pool under the price holds the wave and keeps the credits, the restored pool buys exactly one wave at the published price, nothing is spent without credits, the panel shows the tickets and the wave, and the AI-only faction buys only behind its switch. See tools/Str-Scenarios.py.",
+  "mission": "Escalation",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 700,
+  "environment": {
+    "config": {
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "faction": "Boscali",
+      "near": [
+        -5000,
+        30000
+      ],
+      "altitude": 9000,
+      "speed": 200,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "player",
+      "program": [
+        {
+          "orbit": {
+            "bank": 30,
+            "seconds": 560
+          }
+        }
+      ]
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WaveProof.SetPool",
+      "args": {
+        "value": 1
+      },
+      "store": "sp"
+    },
+    {
+      "op": "wait",
+      "seconds": 8
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WaveProof.Read",
+      "args": {},
+      "store": "w0"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.DynamicOperations.Runtime.SortieAutomation.Read",
+      "args": {},
+      "store": "s0"
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof.Command",
+      "args": {
+        "faction": "Boscali",
+        "verb": "pick",
+        "card": 0
+      },
+      "store": "pk"
+    },
+    {
+      "op": "wait",
+      "seconds": 15
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.DynamicOperations.Runtime.SortieAutomation.Read",
+      "args": {},
+      "store": "s1"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Open",
+      "args": {
+        "page": "board"
+      },
+      "store": "o"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "args": {},
+      "store": "a1"
+    },
+    {
+      "op": "capture",
+      "name": "live-sorties-board",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WaveProof.Read",
+      "args": {},
+      "store": "w1"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.DynamicOperations.Runtime.SortieAutomation.CompleteTied",
+      "args": {
+        "limit": 3
+      },
+      "store": "ci0"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.DynamicOperations.Runtime.SortieAutomation.CompleteTied",
+      "args": {
+        "limit": 3
+      },
+      "store": "ci1"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.DynamicOperations.Runtime.SortieAutomation.CompleteTied",
+      "args": {
+        "limit": 3
+      },
+      "store": "ci2"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.DynamicOperations.Runtime.SortieAutomation.CompleteTied",
+      "args": {
+        "limit": 3
+      },
+      "store": "ci3"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.DynamicOperations.Runtime.SortieAutomation.CompleteTied",
+      "args": {
+        "limit": 3
+      },
+      "store": "ci4"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.DynamicOperations.Runtime.SortieAutomation.CompleteTied",
+      "args": {
+        "limit": 3
+      },
+      "store": "ci5"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.DynamicOperations.Runtime.SortieAutomation.Read",
+      "args": {},
+      "store": "s3"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WaveProof.Read",
+      "args": {},
+      "store": "w2"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "args": {},
+      "store": "a2"
+    },
+    {
+      "op": "capture",
+      "name": "live-sorties-held",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WaveProof.SetPool",
+      "args": {
+        "value": 1500
+      },
+      "store": "sp2"
+    },
+    {
+      "op": "wait",
+      "seconds": 15
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WaveProof.Read",
+      "args": {},
+      "store": "w3"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
+      "args": {},
+      "store": "a3"
+    },
+    {
+      "op": "capture",
+      "name": "live-sorties-bought",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WaveProof.AiSwitch",
+      "args": {
+        "on": true
+      },
+      "store": "ai"
+    },
+    {
+      "op": "wait",
+      "seconds": 25
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.TheaterOps.Runtime.WaveProof.Read",
+      "args": {},
+      "store": "w4"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "sp.ok",
+      "min": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "w0.wave.credits",
+      "value": 0
+    },
+    {
+      "check": "result_below",
+      "path": "w0.wave.spentTotal",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "w0.wave.purchases",
+      "max": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "w0.wave.trail",
+      "value": ""
+    },
+    {
+      "check": "result_below",
+      "path": "w0.wave.aiWaves",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "pk.ok",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "s1.sorties.tiedOffered",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "s1.sorties.tiedMismatch",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "s3.sorties.tiedMismatch",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "s1.sorties.focusId",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "s1.sorties.snapshotAge",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "s1.sorties.snapshotAge",
+      "max": 6
+    },
+    {
+      "check": "result_equals",
+      "path": "s1.sorties.objectivesMatchBoard",
+      "value": 1
+    },
+    {
+      "check": "result_above",
+      "path": "w1.wave.cost",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "w1.wave.pool",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "w1.wave.depotKnown",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "w1.wave.spentTotal",
+      "max": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "w1.wave.block",
+      "value": 8
+    },
+    {
+      "check": "result_above",
+      "path": "a1.view.sorties",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "a1.check.sortiesDelta",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "a1.view.wave.credits",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "a1.view.wave.credits",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "a1.view.wave.cost",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "a1.overlay.tags.sortie",
+      "min": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "w2.wave.credits",
+      "value": 3
+    },
+    {
+      "check": "result_equals",
+      "path": "w2.wave.state",
+      "value": 2
+    },
+    {
+      "check": "result_equals",
+      "path": "w2.wave.block",
+      "value": 8
+    },
+    {
+      "check": "result_below",
+      "path": "w2.wave.bought",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "w2.wave.spentTotal",
+      "max": 0
+    },
+    {
+      "check": "result_below",
+      "path": "w2.wave.purchases",
+      "max": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "w2.wave.trail",
+      "value": "1,2,3,H"
+    },
+    {
+      "check": "result_equals",
+      "path": "w2.wave.lastOutcomeSeq",
+      "value": 3
+    },
+    {
+      "check": "result_above",
+      "path": "w2.wave.notice.counted",
+      "min": 3
+    },
+    {
+      "check": "result_above",
+      "path": "w2.wave.notice.sortie",
+      "min": 3
+    },
+    {
+      "check": "result_above",
+      "path": "a2.view.wave.credits",
+      "min": 3
+    },
+    {
+      "check": "result_below",
+      "path": "a2.view.wave.credits",
+      "max": 3
+    },
+    {
+      "check": "result_above",
+      "path": "a2.view.wave.held",
+      "min": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "w3.wave.bought",
+      "value": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "w3.wave.purchases",
+      "value": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "w3.wave.credits",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "w3.wave.trail",
+      "value": "1,2,3,H,B"
+    },
+    {
+      "check": "result_above",
+      "path": "w3.wave.lastBuy.exactOk",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "w3.wave.lastBuy.supplyDeltaOk",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "w3.wave.lastBuy.priceMatches",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "w3.wave.spentTotal",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "w3.wave.notice.wave",
+      "min": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "a3.view.wave.credits",
+      "value": 0
+    },
+    {
+      "check": "result_below",
+      "path": "w3.wave.aiWaves",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "w4.wave.aiWaves",
+      "min": 1
+    },
+    {
+      "check": "log_match",
+      "pattern": "\\[TheaterOps\\].*staff fault",
+      "max": 0
+    },
+    {
+      "check": "log_match",
+      "pattern": "Exception",
+      "max": 0
+    }
+  ]
+}

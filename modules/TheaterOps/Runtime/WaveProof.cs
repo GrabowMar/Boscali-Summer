@@ -42,6 +42,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 { "state", view != null ? (int)view.State : -1 }, { "block", view != null ? (int)view.Block : -1 }, { "credits", credits }, { "bought", bought },
                 { "cost", view != null ? view.Cost : -1 }, { "pool", view != null ? view.Pool : -1 }, { "group", view != null ? view.Group : "" },
                 { "depotKnown", Flag(view != null && view.DepotKnown) }, { "trail", trail }, { "lastBuy", lastBuy },
+                { "notice", new Dictionary<string, object> { { "sortie", Presentation.TheaterOpsHudLine.SortieNotices }, { "counted", Presentation.TheaterOpsHudLine.CountedNotices },
+                    { "wave", Presentation.TheaterOpsHudLine.WaveNotices }, { "last", Presentation.TheaterOpsHudLine.LastSortieNotice } } },
                 { "spentTotal", logistics.SpentTotal }, { "purchases", purchases }, { "aiWaves", AiWaves(desk) }, { "ownAiWaves", aiWaves }, { "lastOutcomeSeq", seq },
             };
             return new Dictionary<string, object> { { "ok", true }, { "wave", wave } };

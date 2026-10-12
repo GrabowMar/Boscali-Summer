@@ -49,20 +49,21 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 
         /// <summary>
         /// Accepts (through the real Act) and completes one sortie tied to the live operation, by the board's own rules: a strike target is neutralised, a base is owned or a hold is
-        /// observed to its required seconds. Pay and the Finished event then run on the next board tick. Does nothing once <paramref name="limit"/> have been completed this way.
+        /// observed to its required seconds. Pay and the Finished event then run on the next board tick. Does nothing once <paramref name="limit"/> have been completed this way, and
+        /// answers ok with done 0 when no tied sortie can be taken now (two accepted ones still open, none offered): the scenario simply asks again.
+        /// A card tied to an operation that has since ended still counts as tied; whether it earns a credit is the desk's decision (the 120 s window).
         /// </summary>
         internal Dictionary<string, object> ProofComplete(int limit)
         {
-            var reply = new Dictionary<string, object> { { "ok", false }, { "completedByHook", proofCompleted } };
-            if (proofCompleted >= limit) { reply["error"] = "limit reached"; return reply; }
-            if (!GameManager.GetLocalPlayer<Player>(out Player player) || player?.HQ == null || !boards.TryGetValue(player.HQ, out FactionBoard board)) { reply["error"] = "no board"; return reply; }
+            var reply = new Dictionary<string, object> { { "ok", true }, { "done", 0 }, { "completedByHook", proofCompleted } };
+            if (proofCompleted >= limit) { reply["why"] = "limit reached"; return reply; }
+            if (!GameManager.GetLocalPlayer<Player>(out Player player) || player?.HQ == null || !boards.TryGetValue(player.HQ, out FactionBoard board)) { reply["ok"] = false; reply["error"] = "no board"; return reply; }
             float now = NetworkSceneSingleton<MissionManager>.i.MissionTime;
             foreach (Target target in board.Targets)
             {
                 Operation op = target.Mission;
-                bool hold = op.Kind == OperationKind.Defend || op.Kind == OperationKind.Patrol || op.Kind == OperationKind.BattlefieldSurvey || op.Kind == OperationKind.Recon;
-                if (op.FocusId <= 0 || !op.IsLive || !board.HasFocus || !board.Focus.Covers(op.FocusId, op.FocusAnchor) ||
-                    !(op.IsStrike && target.Unit != null || op.Kind == OperationKind.Capture || hold)) continue;
+                bool hold = op.Kind == OperationKind.Defend || op.Kind == OperationKind.Patrol || op.Kind == OperationKind.BattlefieldSurvey || op.Kind == OperationKind.Recon || op.Kind == OperationKind.Jam;
+                if (op.FocusId <= 0 || !op.IsLive || !(op.IsStrike && target.Unit != null || op.Kind == OperationKind.Capture || hold)) continue;
                 if (op.State == OperationState.Offered) Act(player, op.Id, false);
                 if (op.State != OperationState.Active) continue;
                 if (op.IsStrike) target.Life.ObserveDisable(true, true);
@@ -71,10 +72,10 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                         op.Observe(now, 2f, true, true, false, true);
                 if (op.State == OperationState.Active && !op.IsStrike) continue;
                 proofCompleted++;
-                reply["ok"] = true; reply["id"] = op.Id; reply["kind"] = op.Kind.ToString(); reply["completedByHook"] = proofCompleted;
+                reply["done"] = 1; reply["id"] = op.Id; reply["kind"] = op.Kind.ToString(); reply["completedByHook"] = proofCompleted;
                 return reply;
             }
-            reply["error"] = "no tied sortie to complete";
+            reply["why"] = "no tied sortie to complete";
             return reply;
         }
     }

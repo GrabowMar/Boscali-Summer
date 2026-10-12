@@ -8,6 +8,9 @@ Blocks, in the spec's naming (docs/superpowers/specs/2026-10-12-str-repair-desig
   str-2-war-tc                         P2 engine blocks that need no ground report (slice 4): names, deck timing, staff pick, lock, redirect, veto,
                                        command expiry, host age, an own-base DEFEND, focus, faults
   str-3-reduced-ff / str-3-reduced-dom P3 reduced missions: the Free Flight deck, the Domination own-base DEFEND
+  str-4-sorties                        P4 sorties tied to the operation and the wave desk (slice 7): a tied sortie is offered within the first operation, none points at another operation,
+                                       three completed tied sorties credit 1, 2, 3 and buy exactly one wave at the published price, a pool under the price holds the wave and keeps the
+                                       credits, no credits and no purchase move the pool, the panel shows the tickets and the wave, AI-only factions buy only behind their switch
   str-8-merged-smoke                   the merged build (engine S4, census S5, ground S6 and the Station Board panel and map overlay) in one Escalation run: the panel opened through
                                        StrAutomation at about 150 s, place names, known census tiles, a live operation with ground groups, a pick through the panel verb with its lock and picker,
                                        the deferred features printing their honest empty states, screenshots of the panel beside the map
@@ -28,6 +31,8 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GROUND_PROOF = "BoscaliSummer.Modules.TheaterOps.Runtime.GroundProof."
 WAR = "BoscaliSummer.Modules.TheaterOps.Runtime.WarProof."
 CENSUS = "BoscaliSummer.Modules.Command.Runtime.CensusProof.Read"
+SORTIE = "BoscaliSummer.Modules.DynamicOperations.Runtime.SortieAutomation."
+WAVE_PROOF = "BoscaliSummer.Modules.TheaterOps.Runtime.WaveProof."
 SAMPLES, EVERY = 14, 30                      # 14 x 30 s = 7 minutes
 UNITY_LOG = {"config": {"bepinex": {"Logging.Disk": {"WriteUnityLog": True}}}}
 
@@ -325,8 +330,8 @@ def merged_smoke():
     """The merged build in one Escalation run. Boscali is the pilot faction (its ground closes on this map, slice 6). The seat ignores STR for 145 s, so the staff has picked
     (45 s after its deck) and an operation has run for about a minute when the panel is opened through StrAutomation. Everything the panel prints is read from the panel
     (StrAutomation.Read: tile values, place names, effort, picker and lock), everything the engine and the ground sent is read from WarProof, GroundProof and CensusProof, and
-    the two sides must agree (the check block of Read). The sorties tie, the wave desk, SEND WING and the command posts are deferred: the panel must print their empty states
-    (no tied sortie, no post, wave credits -1) and nothing may claim otherwise. A measured -1 is unknown and must not pass an 'at least'."""
+    the two sides must agree (the check block of Read). SEND WING and the command posts are deferred: the panel must print their empty state (no post) and nothing may claim
+    otherwise. The sortie tie and the wave desk are live (str-4-sorties proves them): the wave answers with a measured credit count, never -1. A measured -1 is unknown and must not pass an 'at least'."""
     sx = "BoscaliSummer.Modules.Command.Runtime.StrAutomation."
     S = lambda name, store, **a: call(sx + name, store, **a)
     shot = lambda name: {"op": "capture", "name": name, "hide_ui": False}
@@ -358,8 +363,8 @@ def merged_smoke():
     checks += [below("a0.view.nameIdLike", 0), above("a0.overlay.tags.front", 1), above("a0.overlay.tags.prop", 1)]
     checks += [above("a0.view.tiles.sectors", 1), above("a0.view.tiles.air", 1), above("a0.view.tiles.ground", 1)] + within("a0.view.alertLevel", 1, 5)
     checks += [above("c1.census.known", 1)] + within("c1.census.threat", 1, 5) + [equals("c1.check.tickerLevelDelta", 0)]
-    # Deferred features print their empty states: no sortie is tied, no command post is listed, the wave desk reports nothing (credits -1).
-    checks += [below("a0.view.sorties", 0), below("a0.view.posts", 0), equals("a0.view.wave.credits", -1), below("a0.overlay.tags.sortie", 0), below("a0.overlay.tags.post", 0)]
+    # The command posts are still deferred and print their empty state; the wave desk answers with a measured bank (0 at 150 s).
+    checks += [below("a0.view.posts", 0), above("a0.view.wave.credits", 0), below("a0.overlay.tags.post", 0)]
     checks += [above("a1s.panel.page", 1), below("a1s.panel.page", 1), above("a1l.panel.page", 2), above("t1.ok", 1), above("t2.ok", 1), above("t3.ok", 1)]
     # The pick: the verb went out, the engine took it as a pilot's, the lock and the picker are on the panel and agree with the engine, the staff did not override.
     checks += [above("pk.ok", 1), above("pk.pressed", 1), above("a2.view.effort.pickedByLocal", 1), below("a2.view.effort.pickedByStaff", 0), above("a2.view.effort.live", 1)]
@@ -382,6 +387,69 @@ def merged_smoke():
     }
 
 
+def sorties():
+    """P4 (spec 8.2 S7, annex 03 section 11): Escalation, the seat is Boscali. The pool is set under any price first, so the third finished tied sortie must HOLD the wave and keep
+    its credits; the pool is then restored and the retry must buy exactly one wave at the price the snapshot published. Sorties are completed by the hook through the real
+    chain (accept, the board's own observation, pay, Finished); the desk's trail reads 1,2,3 (credits after each counted sortie), H (held) and B (bought). Every number the purchase
+    is checked against was taken inside Buy in one frame, so a pool moved by kills cannot fake them. Primeva is AI-only: nothing is bought for it until the host switch is turned on."""
+    me = "Boscali"
+    S, W = lambda store: call(SORTIE + "Read", store), lambda store: call(WAVE_PROOF + "Read", store)
+    sx = "BoscaliSummer.Modules.Command.Runtime.StrAutomation."
+    P = lambda name, store, **a: call(sx + name, store, **a)
+    shot = lambda name: {"op": "capture", "name": name, "hide_ui": False}
+    ops = [
+        {"op": "seat", "id": "player", "faction": me, "near": [-5000, 30000], "altitude": 9000, "speed": 200, "heading": 0},
+        {"op": "fly", "id": "player", "program": [{"orbit": {"bank": 30, "seconds": 560}}]},
+        call(WAVE_PROOF + "SetPool", "sp", value=1),               # under any price
+        wait(8), W("w0"), S("s0"),                                 # nothing earned, nothing spent, no operation yet
+        wait(20), call(WAR + "Command", "pk", faction=me, verb="pick", card=0),
+        wait(15), S("s1"),                                         # a tied sortie within the first operation (45 s allowed)
+        P("Open", "o", page="board"), wait(3), P("Read", "a1"), shot("live-sorties-board"), W("w1"),   # the price is published before anything is spent
+    ]
+    # Each completion is a real accept (two may be open at once, so they are spaced), the board's own observation, pay and the Finished event on its next tick.
+    for n in range(6): ops += [call(SORTIE + "CompleteTied", "ci%d" % n, limit=3), wait(3)]
+    ops += [wait(2), S("s3"), W("w2"), P("Read", "a2"), shot("live-sorties-held"),
+            call(WAVE_PROOF + "SetPool", "sp2", value=1500), wait(15), W("w3"), P("Read", "a3"), shot("live-sorties-bought"),
+            call(WAVE_PROOF + "AiSwitch", "ai", on=True), wait(25), W("w4"),
+            {"op": "end"}]
+    checks = [{"check": "status_ok"}, above("sp.ok", 1)]
+    # Before any sortie: nothing earned and no money moved.
+    checks += [equals("w0.wave.credits", 0), below("w0.wave.spentTotal", 0), below("w0.wave.purchases", 0), equals("w0.wave.trail", ""), below("w0.wave.aiWaves", 0)]
+    # V1: a tied sortie is offered within the first operation and none points at another operation.
+    checks += [above("pk.ok", 1), above("s1.sorties.tiedOffered", 1), below("s1.sorties.tiedMismatch", 0), below("s3.sorties.tiedMismatch", 0), above("s1.sorties.focusId", 1)]
+    # V6: with no surface opened the transport kept the snapshot fresh and it matches the board.
+    checks += [above("s1.sorties.snapshotAge", 0), below("s1.sorties.snapshotAge", 6), equals("s1.sorties.objectivesMatchBoard", 1)]
+    # The price and the group are published before anything is spent.
+    checks += [above("w1.wave.cost", 1), above("w1.wave.pool", 0), above("w1.wave.depotKnown", 1), below("w1.wave.spentTotal", 0), equals("w1.wave.block", 8)]
+    # The panel shows the tickets and the wave: the ticket count agrees with the host, the wave strip holds a measured bank, the map draws the tickets.
+    checks += [above("a1.view.sorties", 1), below("a1.check.sortiesDelta", 0), above("a1.view.wave.credits", 0), below("a1.view.wave.credits", 0), above("a1.view.wave.cost", 1),
+               above("a1.overlay.tags.sortie", 1)]
+    # Three completed tied sorties credit 1, 2, 3; the pool is under the price, so the wave is HELD (state Blocked, block PoolShort), the credits are kept and no money moves.
+    checks += [equals("w2.wave.credits", 3), equals("w2.wave.state", 2), equals("w2.wave.block", 8), below("w2.wave.bought", 0), below("w2.wave.spentTotal", 0),
+               below("w2.wave.purchases", 0), equals("w2.wave.trail", "1,2,3,H"), equals("w2.wave.lastOutcomeSeq", 3)]
+    checks += [above("w2.wave.notice.counted", 3), above("w2.wave.notice.sortie", 3)]
+    checks += [above("a2.view.wave.credits", 3), below("a2.view.wave.credits", 3), above("a2.view.wave.held", 1)]
+    # The pool is restored: exactly one purchase, the credits are spent, and the pool fell by exactly the price the snapshot published.
+    checks += [equals("w3.wave.bought", 1), equals("w3.wave.purchases", 1), equals("w3.wave.credits", 0),
+               equals("w3.wave.trail", "1,2,3,H,B"), above("w3.wave.lastBuy.exactOk", 1), above("w3.wave.lastBuy.supplyDeltaOk", 1), above("w3.wave.lastBuy.priceMatches", 1),
+               above("w3.wave.spentTotal", 1), above("w3.wave.notice.wave", 1), equals("a3.view.wave.credits", 0)]
+    # V5: with the default switch nothing was bought for the AI-only faction; turned on, its pool pays at least one convoy.
+    checks += [below("w3.wave.aiWaves", 0), above("w4.wave.aiWaves", 1)]
+    checks += [{"check": "log_match", "pattern": r"\[TheaterOps\].*staff fault", "max": 0}, {"check": "log_match", "pattern": "Exception", "max": 0}]
+    return {
+        "name": "str-4-sorties",
+        "description": "STR sortie tie and wave desk proof, mission Escalation: tied sorties are offered within the first operation and none points at another operation, three completed tied "
+                       "sorties credit 1, 2, 3, a pool under the price holds the wave and keeps the credits, the restored pool buys exactly one wave at the published price, nothing is "
+                       "spent without credits, the panel shows the tickets and the wave, and the AI-only faction buys only behind its switch. See tools/Str-Scenarios.py.",
+        "mission": "Escalation",
+        "mods": ["boscalisummer"],
+        "timeout_s": 700,
+        "environment": UNITY_LOG,
+        "ops": ops,
+        "checks": checks,
+    }
+
+
 def write(doc):
     with open(os.path.join(REPO, "tests", "ingame", doc["name"] + ".json"), "w", encoding="utf-8", newline="\r\n") as f:
         f.write(json.dumps(doc, indent=2) + "\n")
@@ -399,3 +467,4 @@ if __name__ == "__main__":
     write(reduced_ff())
     write(reduced_dom())
     write(merged_smoke())
+    write(sorties())

@@ -13,6 +13,12 @@ namespace BoscaliSummer.Modules.TheaterOps.Presentation
     {
         private const float RefreshSeconds = 1f;
 
+#if !PUBLIC_RELEASE
+        // Proof only (WaveProof reads them): how many cockpit callouts this peer raised, and the text of the newest.
+        internal static int SortieNotices, CountedNotices, WaveNotices;
+        internal static string LastSortieNotice = "";
+#endif
+
         private ITheaterWarView war;
         private IHudBoard board;
         private float nextRefresh;
@@ -85,7 +91,12 @@ namespace BoscaliSummer.Modules.TheaterOps.Presentation
             int seq = outcome != null ? outcome.Seq : 0, bought = snapshot.Wave != null ? snapshot.Wave.Bought : 0;
             if (seenOutcome < 0) { seenOutcome = seq; seenBought = bought; return; }
             if (bought > seenBought && snapshot.Wave != null)
+            {
                 board.Notice("sorties", HudTone.Info, "WAVE EN ROUTE", snapshot.Wave.Pool >= 0 ? "POOL " + snapshot.Wave.Pool : "POOL -");
+#if !PUBLIC_RELEASE
+                WaveNotices++;
+#endif
+            }
             seenBought = bought;
             if (seq == seenOutcome || outcome == null) return;
             seenOutcome = seq;
@@ -93,11 +104,18 @@ namespace BoscaliSummer.Modules.TheaterOps.Presentation
             if (!outcome.Counted)
             {
                 board.Notice("sorties", HudTone.Info, "SORTIE COMPLETE · " + title, pilot);
+#if !PUBLIC_RELEASE
+                SortieNotices++; LastSortieNotice = "SORTIE COMPLETE · " + title;
+#endif
                 return;
             }
             int perWave = snapshot.Wave != null ? snapshot.Wave.CreditsPerWave : 3;
             string front = snapshot.Operation != null && !string.IsNullOrEmpty(snapshot.Operation.Name) ? snapshot.Operation.Name.ToUpperInvariant() + " " : "";
-            board.Notice("sorties", HudTone.Info, front + "SORTIE DONE · WAVE " + System.Math.Min(outcome.Credits, perWave) + "/" + perWave, title + " · " + pilot);
+            string counted = front + "SORTIE DONE · WAVE " + System.Math.Min(outcome.Credits, perWave) + "/" + perWave;
+            board.Notice("sorties", HudTone.Info, counted, title + " · " + pilot);
+#if !PUBLIC_RELEASE
+            SortieNotices++; CountedNotices++; LastSortieNotice = counted;
+#endif
         }
 
         private bool Read()
