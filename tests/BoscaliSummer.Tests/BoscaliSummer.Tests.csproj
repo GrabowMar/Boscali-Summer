@@ -165,6 +165,8 @@
     <Compile Include="..\..\modules\TheaterOps\Domain\StaffLog.cs" Link="Features\TheaterOps\StaffLog.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\PlaceNames.cs" Link="Features\TheaterOps\PlaceNames.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\ContactCounts.cs" Link="Features\TheaterOps\ContactCounts.cs" />
+    <Compile Include="..\..\modules\TheaterOps\Domain\DeckRules.cs" Link="Features\TheaterOps\DeckRules.cs" />
+    <Compile Include="..\..\modules\TheaterOps\Domain\PickLock.cs" Link="Features\TheaterOps\PickLock.cs" />
     <Compile Include="..\..\Core\Contracts\IThreatPicture.cs" Link="Framework\IThreatPicture.cs" />
     <Compile Include="..\..\modules\Intel\Domain\*.cs" LinkBase="Features\Intel\Domain" />
     <Compile Include="..\..\modules\Events\Domain\EventDefinition.cs" Link="Features\Events\EventDefinition.cs" />
