@@ -37,49 +37,41 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             "Ruler: drag for range and true bearing. Only you see it.",
         };
 
-        private const int BoardRows = 12;
+        private const int BoardRows = 16;
         private const int MinBoardRows = 2;
 
-        // Everything on the MAP page except its mark list: part heights, gaps and padding, biased a few px high
-        // so the list never overshoots into a scrollbar.
-        private const float MapFixedHeight = 407f;
-
-        // The YOUR MARKS header and ring row, gaps included.
-        private const float MapRingsHeight = 107f;
-
+        private AvSection plotSection;
         private AvControl[] toolButtons;
         private AvControl[] pingButtons;
-        private PenRow penRow;
+        private InkDeck penRow;
         private AvField labelField;
         private AvSegmented channelStrip;
         private AvControl clearAllButton;
-        private AvGauge[] markRings;
-        private AvSection marksSection;
+        private TallyPart tally;
         private AvSection boardSection;
-        private AvRow[] boardRows;
+        private NetRow[] boardRows;
         private readonly CommsItem[] boardBound = new CommsItem[BoardRows];
-        private AvHazardBar boardBar;
         private readonly int[] markCounts = new int[3];
 
         private void ResetMap()
         {
+            plotSection = null;
             toolButtons = null;
             pingButtons = null;
             penRow = null;
             labelField = null;
             channelStrip = null;
             clearAllButton = null;
-            markRings = null;
-            marksSection = null;
+            tally = null;
             boardSection = null;
             boardRows = null;
             for (int i = 0; i < boardBound.Length; i++) boardBound[i] = null;
-            boardBar = null;
         }
 
         private void BuildMapPage(AvFlow p)
         {
-            // Tools lead the page with no header of their own: the tab already says MAP and the chip says which tool is armed.
+            // Work runs top to bottom: pick a tool, pick the ink, drop a mark, then read what is on the map.
+            plotSection = p.Section(AvIcon.Pencil, "PLOT", "MAP FREE");
             var toolSpecs = new AvControl.Spec[ToolRow.Length + 2];
             for (int i = 0; i < ToolRow.Length; i++)
             {
@@ -87,7 +79,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 toolSpecs[i] = new AvControl.Spec(ToolLabel(tool), () => comms.ToggleTool(tool), AvButtonStyle.Default, ToolIcons[i]);
             }
             toolSpecs[ToolRow.Length] = new AvControl.Spec("UNDO", () => comms.Undo(), AvButtonStyle.Quiet, AvIcon.ArrowBackUp);
-            toolSpecs[ToolRow.Length + 1] = new AvControl.Spec("OFF", () =>
+            toolSpecs[ToolRow.Length + 1] = new AvControl.Spec("TOOL OFF", () =>
             {
                 comms.SetTool(CommsTool.None);
                 comms.ClearMeasure();
@@ -95,18 +87,24 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             var toolHelps = new string[toolSpecs.Length];
             Array.Copy(ToolTips, toolHelps, ToolRow.Length);
             toolHelps[ToolRow.Length] = "Undo: take back your most recent mark.";
-            toolHelps[ToolRow.Length + 1] = "Off: put the tool down and give the map back its normal clicks. ESC does the same.";
-            toolButtons = ButtonGrid(p, toolSpecs, 6, toolHelps);
+            toolHelps[ToolRow.Length + 1] = "Tool off: put the tool down and give the map back its normal clicks. ESC does the same.";
+            // Six columns: the six drawing keys fill the first line; the second line is four keys and a double-width OFF.
+            var spans = new int[toolSpecs.Length];
+            for (int i = 0; i < spans.Length; i++) spans[i] = 1;
+            spans[spans.Length - 1] = 2;
+            KeyGrid deck = p.Add(new KeyGrid(p.Content, 6, toolSpecs, spans));
+            toolButtons = deck.Controls;
+            for (int i = 0; i < toolButtons.Length; i++) toolButtons[i].Help = toolHelps[i];
 
             var inks = new Color[CommsCatalog.Pens.Length];
             for (int i = 0; i < inks.Length; i++) inks[i] = CommsMesh.Ink(i);
-            penRow = p.Add(new PenRow(p.Content, inks, ink => comms.PenInk = ink,
+            penRow = p.Add(new InkDeck(p.Content, inks, ink => comms.PenInk = ink,
                 CommsCatalog.PenWidthNames, w => comms.PenWidth = w));
             for (int i = 0; i < penRow.Swatches.Length; i++)
                 penRow.Swatches[i].Help = CommsCatalog.Pens[i].Name + " ink, for the pen and the shapes.";
             for (int i = 0; i < penRow.Widths.Length; i++) penRow.Widths[i].Help = "Stroke width for the pen and shapes. " + HoldHint();
 
-            // Tactical pings share one compact marker row.
+            // Markers, the text label and the audience of the next post sit under one header.
             p.Section(AvIcon.MapPin, "MARKERS", QuickPingNote());
             var pingSpecs = new AvControl.Spec[CommsCatalog.PalettePings];
             var pingHelps = new string[pingSpecs.Length];
@@ -123,14 +121,14 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             }
             pingButtons = ButtonGrid(p, pingSpecs, pingSpecs.Length, pingHelps);
 
-            // Label field and its PLACE key share one line; who sees a post and the clear keys share the next.
+            // Label field and its PLACE key share one line.
             labelField = new AvField(p.Content, "TEXT: FARP HERE, CAP EAST…", CommsText.MaxLabel, _ => ArmLabel());
             Tip(labelField, "Words for the map, up to " + CommsText.MaxLabel + " characters. Press PLACE, then click where they go.");
             var placeRow = new AvButtons(p.Content, new[] { new AvControl.Spec("PLACE", ArmLabel, AvButtonStyle.Primary, AvIcon.MapPin) });
             placeRow.Controls[0].Help = "Arm the text label, then click the map where it belongs.";
             p.Row(labelField, placeRow);
 
-            channelStrip = AvSegmented.Strip(p.Content, new[] { "TEAM", "ALL" },
+            channelStrip = new AvSegmented(p.Content, "NEXT POST GOES TO", new[] { "TEAM", "ALL" },
                 () => comms.Channel == CommsChannel.All ? 1 : 0,
                 index =>
                 {
@@ -138,6 +136,23 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 });
             channelStrip.Options[0].Help = "Send to TEAM: only your side sees your marks and calls.";
             channelStrip.Options[1].Help = "Send to ALL: every player sees them, including the other side. The host can switch this channel off.";
+            p.Add(channelStrip);
+
+            // The shared plot: what each of you may hold, and everything this net can see, newest first. The list takes the
+            // height the page has left; click a mark to flash it on the map.
+            boardSection = p.Section(AvIcon.Map2, "SHARED PLOT", "");
+            tally = p.Add(new TallyPart(p.Content, "MY PINGS", "MY DRAWN", "MY LABELS", "BOARD"));
+            tally.Help(0, "Pings you have up, out of " + CommsBoard.AuthorBudget(CommsItemKind.Ping) + ". A new one retires your oldest.");
+            tally.Help(1, "Pen strokes and shapes you have up, out of " + CommsBoard.AuthorBudget(CommsItemKind.Stroke) + ". A new one retires your oldest.");
+            tally.Help(2, "Text labels you have up, out of " + CommsBoard.AuthorBudget(CommsItemKind.Label) + ". A new one retires your oldest.");
+            tally.Help(3, "How full the shared board is for your audience. At the ceiling the oldest mark is retired to make room.");
+            boardRows = new NetRow[BoardRows];
+            for (int i = 0; i < BoardRows; i++)
+            {
+                int row = i;
+                boardRows[i] = p.Add(new NetRow(p.Content, AvTextRole.Head, 56f, 124f, 58f, () => FlashBoardRow(row)));
+            }
+
             var clearRow = new AvButtons(p.Content,
                 new[]
                 {
@@ -147,31 +162,16 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             clearAllButton = clearRow.Controls[1];
             clearRow.Controls[0].Help = "Remove everything you have put on the map.";
             clearAllButton.Help = "Host only: wipe every mark from the shared map.";
-            p.Row(channelStrip, clearRow);
+            p.Add(clearRow);
 
-            // How much of each personal budget is in use: the oldest mark of a kind retires when its ring is full.
-            marksSection = p.Section(AvIcon.Stack2, "YOUR MARKS", "OLDEST FADES FIRST");
-            markRings = new[]
-            {
-                new AvGauge(p.Content, "PINGS"),
-                new AvGauge(p.Content, "DRAWN"),
-                new AvGauge(p.Content, "LABELS"),
-            };
-            markRings[0].Help = "Pings you have up, out of " + CommsBoard.AuthorBudget(CommsItemKind.Ping) + ". A new one retires your oldest.";
-            markRings[1].Help = "Pen strokes and shapes you have up, out of " + CommsBoard.AuthorBudget(CommsItemKind.Stroke) + ". A new one retires your oldest.";
-            markRings[2].Help = "Text labels you have up, out of " + CommsBoard.AuthorBudget(CommsItemKind.Label) + ". A new one retires your oldest.";
-            p.Row(markRings);
-
-            // The list is what fills the page: as many marks as fit, newest first. Click one to flash it on the map.
-            boardSection = p.Section(AvIcon.Map2, "ON THE MAP", "");
-            boardRows = new AvRow[BoardRows];
-            for (int i = 0; i < BoardRows; i++)
-            {
-                int row = i;
-                boardRows[i] = p.Add(new AvRow(p.Content, () => FlashBoardRow(row)));
-            }
-            boardBar = p.Add(new AvHazardBar(p.Content, "BOARD"), 1f);
-            boardBar.Help = "How full the shared board is for your audience. At the ceiling the oldest mark is retired to make room.";
+            KeyCode hold = settings.DrawHoldKey.Value;
+            console.Orders(TabMap,
+                "Arm a tool, then click or drag on the map. ESC puts it down.",
+                "Click a mark in the shared plot to flash it on the map.",
+                "Marks fade on their own; a full budget retires your oldest first.",
+                hold != KeyCode.None
+                    ? "Hold " + KeyName(hold) + " and drag on the map to draw without opening this page."
+                    : "Pen, line, arrow, circle and box all take the ink and line weight set above.");
         }
 
         private void ArmLabel()
@@ -188,6 +188,12 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 pingButtons[i].Latched = comms.PingKind == i && comms.Tool == CommsTool.Ping;
             for (int i = 0; i < penRow.Swatches.Length; i++) penRow.Swatches[i].Selected = comms.PenInk == i;
             for (int i = 0; i < penRow.Widths.Length; i++) penRow.Widths[i].Latched = comms.PenWidth == i;
+            plotSection.SetCaption(comms.Tool == CommsTool.None ? "MAP FREE"
+                : "ARMED · " + ToolName(comms.Tool) +
+                  (comms.Tool == CommsTool.Ping && CommsCatalog.ValidPing(comms.PingKind) ? " · " + CommsCatalog.Pings[comms.PingKind].Code : ""));
+            penRow.SetKeys(
+                "INK · " + (CommsCatalog.ValidPen(comms.PenInk) ? CommsCatalog.Pens[comms.PenInk].Name : "—"),
+                "LINE · " + (CommsCatalog.ValidWidth(comms.PenWidth) ? CommsCatalog.PenWidthNames[comms.PenWidth] : "—"));
 
             channelStrip.Refresh();
             clearAllButton.Interactable = comms.IsHost;
@@ -197,41 +203,49 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             IReadOnlyList<CommsItem> items = board.Items;
             float now = Time.unscaledTime;
             ulong me = comms.LocalId;
+            int eligible = 0;
             for (int i = 0; i < markCounts.Length; i++) markCounts[i] = 0;
             for (int i = 0; i < items.Count; i++)
             {
                 CommsItem item = items[i];
+                if (item.Kind != CommsItemKind.Sticker && !comms.State.IsMuted(item.Author)) eligible++;
                 if (item.Author != me) continue;
                 if (item.Kind == CommsItemKind.Ping) { if (!item.IsCall) markCounts[0]++; }
                 else if (item.Kind == CommsItemKind.Stroke) markCounts[1]++;
                 else if (item.Kind == CommsItemKind.Label) markCounts[2]++;
             }
-            SetRing(markRings[0], markCounts[0], CommsBoard.AuthorBudget(CommsItemKind.Ping));
-            SetRing(markRings[1], markCounts[1], CommsBoard.AuthorBudget(CommsItemKind.Stroke));
-            SetRing(markRings[2], markCounts[2], CommsBoard.AuthorBudget(CommsItemKind.Label));
+            SetTally(0, markCounts[0], CommsBoard.AuthorBudget(CommsItemKind.Ping));
+            SetTally(1, markCounts[1], CommsBoard.AuthorBudget(CommsItemKind.Stroke));
+            SetTally(2, markCounts[2], CommsBoard.AuthorBudget(CommsItemKind.Label));
+            float load = board.Count / (float)CommsBoard.MaxPerAudience;
+            tally.Set(3, AvNum.Fixed(board.Count, 0) + "/" + AvNum.Fixed(CommsBoard.MaxPerAudience, 0), load,
+                load > 0.85f ? AvState.Caution : AvState.Info);
 
-            // A short console drops the budget rings (their numbers stay in the tips) so the mark list keeps its rows.
-            float viewport = console.Page(TabMap).ViewportHeight;
-            bool compact = viewport > 0f && viewport < MapFixedHeight + 4f * 33f;
-            Show(marksSection, !compact);
-            for (int i = 0; i < markRings.Length; i++) Show(markRings[i], !compact);
-            int fit = FitRows(console.Page(TabMap), MapFixedHeight - (compact ? MapRingsHeight : 0f), BoardRows, MinBoardRows);
+            // The list shows as many marks as the page can hold: a short console gets fewer rows instead of a scrollbar.
+            AvFlow page = console.Page(TabMap);
+            float width = page.Inner;
+            float room = page.ViewportHeight <= 0f ? float.MaxValue : page.ViewportHeight - FixedHeight(page, boardRows);
+            float used = 0f;
             int shown = 0;
-            for (int i = items.Count - 1; i >= 0 && shown < fit; i--)
+            for (int i = items.Count - 1; i >= 0 && shown < BoardRows; i--)
             {
                 CommsItem item = items[i];
                 if (item.Kind == CommsItemKind.Sticker || comms.State.IsMuted(item.Author)) continue;
+                NetRow row = boardRows[shown];
+                string left = CommsText.Countdown(item.Expires - now);
+                row.Set(ItemTag(item), Who(item.Author, item.AuthorName), ItemWords(item), left, ItemState(item));
+                float h = row.Measure(width) + AvGridTokens.Gap;
+                if (shown >= MinBoardRows && used + h > room) break;
+                used += h;
                 boardBound[shown] = item;
-                boardRows[shown].Set(Who(item.Author, item.AuthorName) + " · " + ItemName(item), null,
-                    CommsText.Countdown(item.Expires - now), ItemState(item));
-                boardRows[shown].Help = "Flash this mark on the map.";
-                Show(boardRows[shown], true);
+                row.Help = "Flash this mark on the map. It fades in " + left + ".";
+                Show(row, true);
                 shown++;
             }
             if (shown == 0)
             {
                 boardBound[0] = null;
-                boardRows[0].Set("NOTHING ON THE MAP YET · PICK A TOOL AND CLICK THE MAP", null, "", AvState.Inert);
+                boardRows[0].Set("", "", "PLOT CLEAR · NO MARKS HELD. ARM A TOOL, THEN CLICK THE MAP.", "", AvState.Inert);
                 boardRows[0].Help = null;
                 Show(boardRows[0], true);
                 shown = 1;
@@ -241,28 +255,43 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 boardBound[i] = null;
                 Show(boardRows[i], false);
             }
-            boardSection.SetCaption(AvNum.Fixed(board.Count, 0) + " MARKS · CLICK TO FLASH");
-            float load = board.Count / (float)CommsBoard.MaxPerAudience;
-            boardBar.Set(load, AvNum.Fixed(board.Count, 0) + " / " + AvNum.Fixed(CommsBoard.MaxPerAudience, 0),
-                load > 0.85f ? AvState.Caution : AvState.Info);
+            boardSection.SetCaption(eligible == 0 ? "NOTHING HELD"
+                : (shown < eligible ? "NEWEST " + AvNum.Fixed(shown, 0) + " OF " + AvNum.Fixed(eligible, 0)
+                                    : AvNum.Fixed(eligible, 0) + (eligible == 1 ? " MARK" : " MARKS")) + " · FADE TIMER AT RIGHT");
         }
 
-        private static void SetRing(AvGauge ring, int count, int budget)
+        private void SetTally(int cell, int count, int budget)
         {
             float fill = budget <= 0 ? 0f : Mathf.Clamp01(count / (float)budget);
-            ring.Set(fill, AvNum.Fixed(count, 0) + "/" + AvNum.Fixed(budget, 0), fill >= 1f ? AvState.Caution : AvState.Info);
+            tally.Set(cell, AvNum.Fixed(count, 0) + "/" + AvNum.Fixed(budget, 0), fill, fill >= 1f ? AvState.Caution : AvState.Info);
         }
 
-        private static string ItemName(CommsItem item)
+        /// <summary>The kind stencilled on a ledger line: the ping's own code, or what sort of mark it is.</summary>
+        private static string ItemTag(CommsItem item)
         {
             switch (item.Kind)
             {
                 case CommsItemKind.Ping:
-                    return CommsCatalog.ValidPing(item.Style) ? CommsCatalog.Pings[item.Style].Code + " PING" : "PING";
+                    return CommsCatalog.ValidPing(item.Style) ? CommsCatalog.Pings[item.Style].Code : "PING";
                 case CommsItemKind.Label:
-                    return "“" + item.Text + "”";
+                    return "TEXT";
                 default:
-                    return "DRAWING";
+                    return "DRAW";
+            }
+        }
+
+        /// <summary>What the mark says and where it is: the phrase, the label's words or the ink, then its grid.</summary>
+        private static string ItemWords(CommsItem item)
+        {
+            string at = CommsText.Grid(item.X, item.Z);
+            switch (item.Kind)
+            {
+                case CommsItemKind.Ping:
+                    return (CommsCatalog.ValidPing(item.Style) ? CommsCatalog.Pings[item.Style].Phrase : "PING") + " · " + at;
+                case CommsItemKind.Label:
+                    return "“" + item.Text + "” · " + at;
+                default:
+                    return (CommsCatalog.ValidPen(item.Style) ? CommsCatalog.Pens[item.Style].Name + " " : "") + "DRAWING · " + at;
             }
         }
 
@@ -303,96 +332,6 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 case CommsTool.Eraser: return "ERASE";
                 case CommsTool.Measure: return "RULER";
                 default: return tool.ToString().ToUpperInvariant();
-            }
-        }
-
-        /// <summary>
-        /// The pen swatches (data: a fixed ink) plus the width choices, in one hand-laid line —
-        /// the kit has no mixed-width row primitive, so this composes AvFrame + AvControl itself
-        /// (spec: "build it locally in your module from kit primitives").
-        /// </summary>
-        private sealed class PenRow : AvPart
-        {
-            private const float SwatchW = 34f, Gap = 4f, SectionGap = 8f;
-
-            public readonly PenSwatch[] Swatches;
-            public readonly AvControl[] Widths;
-
-            public PenRow(RectTransform parent, Color[] inks, Action<int> pickInk, string[] widthNames, Action<int> pickWidth)
-            {
-                Rect = AvLay.Child(parent, "Pen Row");
-                Swatches = new PenSwatch[inks.Length];
-                for (int i = 0; i < inks.Length; i++)
-                {
-                    int ink = i;
-                    Swatches[i] = new PenSwatch(Rect, inks[i]);
-                    Swatches[i].Clicked += () => pickInk(ink);
-                }
-                Widths = new AvControl[widthNames.Length];
-                for (int i = 0; i < widthNames.Length; i++)
-                {
-                    int w = i;
-                    Widths[i] = AvControl.Make(Rect, new AvControl.Spec(widthNames[i], () => pickWidth(w)));
-                }
-            }
-
-            public override float Measure(float width) => AvGridTokens.RowDense;
-
-            public override void Place(AvSlot s)
-            {
-                base.Place(s);
-                float x = 0f;
-                for (int i = 0; i < Swatches.Length; i++)
-                {
-                    Swatches[i].Place(new AvSlot(x, 0f, SwatchW, s.H));
-                    x += SwatchW + Gap;
-                }
-                x += SectionGap - Gap;
-                float remain = Mathf.Max(0f, s.W - x);
-                float ow = AvFlowMath.ColumnWidth(remain, Widths.Length, Gap);
-                for (int i = 0; i < Widths.Length; i++) AvLay.Place(Widths[i].Rect, x + i * (ow + Gap), 0f, ow, s.H);
-            }
-
-            public override void Restyle()
-            {
-                foreach (PenSwatch s in Swatches) s.Restyle();
-                foreach (AvControl w in Widths) w.Restyle();
-            }
-        }
-
-        /// <summary>One clickable ink swatch: an AvFrame filled with the pen's own colour (data), a select stroke.</summary>
-        private sealed class PenSwatch : AvPart
-        {
-            private readonly AvFrame frame;
-            private readonly Color ink;
-            private bool selected;
-
-            public event Action Clicked;
-
-            public PenSwatch(RectTransform parent, Color inkColor)
-            {
-                ink = inkColor;
-                Rect = AvLay.Child(parent, "Pen Swatch");
-                frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(3f));
-                AvLay.Fill(frame.rectTransform);
-                AvHit hit = AvHit.On(frame);
-                hit.Click = _ => Clicked?.Invoke();
-                Restyle();
-            }
-
-            public bool Selected { get => selected; set { selected = value; Restyle(); } }
-
-            /// <summary>Hover help shown in the console footer.</summary>
-            public string Help { set => AvHelpTip.Attach(frame.gameObject, value); }
-
-            public override float Measure(float width) => AvGridTokens.RowDense;
-
-            public override void Restyle()
-            {
-                Color stroke = selected
-                    ? AvStyleHost.FuiColor("select", AvTheme.Accent)
-                    : AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
-                frame.Paint(ink, stroke);
             }
         }
     }

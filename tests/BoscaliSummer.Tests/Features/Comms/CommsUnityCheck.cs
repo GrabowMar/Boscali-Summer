@@ -56,15 +56,45 @@ public static class CommsUnityCheck
         float now = Time.unscaledTime;
         Set(state, "LocalId", 1UL);
         var seen = (IDictionary)Get(state, "seen");
-        for (ulong i = 2; i < 10; i++) seen.Add(i, i == 2 ? "Long Callsign Overwatch" : "VIPER " + i);
+        string[] callsigns = { "Long Callsign Overwatch", "VIPER 3", "NIGHTJAR", "COYOTE 2-1", "VIPER 5", "REAPER", "HALO 4", "SABRE" };
+        for (int i = 0; i < callsigns.Length; i++) seen.Add((ulong)(i + 2), callsigns[i]);
+        // A mixed board: every ping kind, labels, drawings in several inks, two of them the local player's own.
         object board = Get(state, "Board");
-        for (uint i = 1; i <= 14; i++) Call(board, "Add", Record("CommsItem", "Id", i, "Author", 2UL,
-            "AuthorName", "Long Callsign Overwatch", "Style", (byte)0, "Text", "ASSEMBLY AREA NORTH", "Points", new[] { 1000, 2000 },
-            "Expires", now + 60f + i), false, null);
+        string[] words = { "FARP HERE", "CAP EAST", "TANKER TRACK" };
+        for (uint i = 1; i <= 14; i++)
+        {
+            int slot = (int)i % 4;                       // 0 ping, 1 ping, 2 label, 3 drawing
+            ulong author = i % 5 == 0 ? 1UL : (ulong)(2 + i % callsigns.Length);
+            object record = Record("CommsItem", "Id", i, "Author", author, "AuthorName", author == 1UL ? "YOU" : callsigns[(int)(author - 2)],
+                "Kind", Enum.ToObject(T("Domain.CommsItemKind"), slot == 2 ? 3 : slot == 3 ? 2 : 0),
+                "Style", (byte)(slot == 3 ? i % 6 : slot == 2 ? 0 : i % 6), "Text", slot == 2 ? words[i % 3] : "",
+                "Points", slot == 3 ? new[] { 1000, 2000, 2400, 2600, 3100, 2300 } : new[] { 1000 + (int)i * 517, 2000 - (int)i * 311 },
+                "Expires", now + 20f + i * 17f);
+            Call(board, "Add", record, false, null);
+        }
+        object caller = Record("CommsItem", "Id", 99u, "Author", 3UL, "AuthorName", "VIPER 3", "Style", (byte)7, "Size", (byte)1,
+            "Text", "SPIKE", "Points", new[] { 4200, -1800 }, "Expires", now + 45f);
+        Call(board, "Add", caller, false, null);
+        // A mixed log: calls with and without a position, system lines, one post to ALL.
+        string[] lines =
+        {
+            "SAM THREAT · 12.4 / 3.1", "ON MY WAY", "ENEMY SPOTTED · 14.2 / -2.0", "CLEARED THE MAP",
+            "SAM CONTACT NORTH · CHECK TARGET BEFORE COMMIT", "SPLASH ONE", "NEEDS SUPPORT · 6.0 / 8.8", "BINGO FUEL",
+        };
         var feed = (IList)Get(state, "feed");
-        for (int i = 0; i < 30; i++) feed.Add(Record("CommsFeedLine", "Author", 2UL, "AuthorName", "Long Callsign Overwatch",
-            "Time", now - i * 2f, "Kind", Enum.ToObject(T("Domain.CommsFeedKind"), i % 2 == 0 ? 0 : 5),
-            "Text", "SAM CONTACT NORTH · CHECK TARGET BEFORE COMMIT", "X", 1000f, "Z", 2000f));
+        for (int i = 0; i < 30; i++)
+        {
+            int k = i % lines.Length;
+            bool system = k == 3;
+            bool positioned = lines[k].Contains(" / ");
+            var line = Record("CommsFeedLine", "Author", (ulong)(2 + i % callsigns.Length), "AuthorName", callsigns[i % callsigns.Length],
+                "Time", now - 3f - (29 - i) * 11f, "Kind", Enum.ToObject(T("Domain.CommsFeedKind"), system ? 5 : 0),
+                "Tone", Enum.ToObject(T("Domain.CommsTone"), k == 0 || k == 2 ? 3 : k == 6 || k == 7 ? 2 : k == 1 || k == 5 ? 1 : 0),
+                "Channel", Enum.ToObject(T("Domain.CommsChannel"), i == 4 ? 1 : 0),
+                "Text", lines[k]);
+            if (positioned) { Set(line, "X", 1000f); Set(line, "Z", 2000f); }
+            feed.Add(line);
+        }
     }
 
     private static void Render(string state, AvThemeId theme, float height, bool pictures)
@@ -94,7 +124,7 @@ public static class CommsUnityCheck
         Call(panel, "Configure", settings, manager, null);
         if (state != "empty") Populate(Get(manager, "State"));
         if (state == "stale") Set(manager, "<HostSilent>k__BackingField", true);
-        var con = AvConsole.Build(host, "COM", "MULTIPLAYER COMMS", 2, AvTokens.PanelWidth, height);
+        var con = AvConsole.Build(host, "COM", (string)T("Presentation.CommsMfdPanel").GetField("Title", All).GetRawConstantValue(), 2, AvTokens.PanelWidth, height);
         Set(panel, "console", con);
         Set(panel, "chips", con.Chips(3));
         if (T("Presentation.CommsMfdPanel").GetMethod("BindAudienceChip", All) != null) Call(panel, "BindAudienceChip");

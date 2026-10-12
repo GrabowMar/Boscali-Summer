@@ -79,6 +79,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         private static AvKeyHeader presetHeader;
         private static readonly AvRow[] stationRows = new AvRow[PresetRows];
         private static int presetShown = PresetRows;
+        private static bool scopeGrows = true;
 
         // ----------------------------------------------------------------------- deck widgets
         private static AvRow nowRow;
@@ -91,6 +92,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         private static readonly AvRow[] trackRows = new AvRow[TrackRows];
         private static AvAlert emptyAlert;
         private static bool deckHadFolders = true;
+        private static bool deckEqGrows = true;
         private static int trackShown = TrackRows;
 
         // Per-row hover-help and badge caches, so a row only touches its widgets when its content changes.
@@ -154,6 +156,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             presetHeader = null;
             Array.Clear(stationRows, 0, stationRows.Length);
             presetShown = PresetRows;
+            scopeGrows = true;
 
             nowRow = null;
             deckEq = null;
@@ -165,6 +168,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             Array.Clear(trackRows, 0, trackRows.Length);
             emptyAlert = null;
             deckHadFolders = true;
+            deckEqGrows = true;
             trackShown = TrackRows;
 
             Array.Clear(stationTipName, 0, stationTipName.Length);
@@ -255,6 +259,12 @@ namespace BoscaliSummer.Modules.Radio.Presentation
 
             p.Ticker.Add(TabReceiver, AvTickRate.Fast, RefreshReceiver);
             p.Ticker.Add(TabReceiver, AvTickRate.Fast, scopePart.Animate);
+
+            console.Orders(TabReceiver,
+                "Click the band scope to tune it; hover to preview a channel first.",
+                "Seek jumps station to station; the step keys move one channel at a time.",
+                "Monitor plays the station's programme. Stop hands the soundtrack bus back.",
+                "Raise squelch and only a stronger station opens the audio.");
         }
 
         private static void RefreshReceiver()
@@ -274,18 +284,21 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                     ? manager.TickerText
                     : manager.CurrentProgram + " · " + manager.TickerText;
                 if (manager.IsEngaged && !manager.IsPaused) trackLine = "NOW  " + (manager.CurrentTrackTitle ?? string.Empty);
+                else if (manager.IsScanning) trackLine = string.Empty;
+                else if (manager.GetChannelTrackCount(manager.SelectedChannel) <= 0) trackLine = "NO PROGRAMME ON THIS STATION";
+                else trackLine = manager.IsPaused ? "PAUSED · KEY MONITOR TO RESUME" : "STANDING BY · KEY MONITOR TO LISTEN";
             }
             else if (hasChannels)
             {
-                name = manager.IsOffAir ? manager.CurrentChannelName : "NO SIGNAL";
+                name = manager.IsOffAir ? manager.CurrentChannelName : "NO CARRIER";
                 programme = manager.IsOffAir
                     ? "TOWER LOST · THIS STATION IS OFF AIR"
-                    : "NOTHING HERE · SEEK OR CLICK THE SCOPE";
+                    : "NOTHING ON THIS FREQUENCY · SEEK OR CLICK THE SCOPE";
             }
             else
             {
-                name = "NO STATIONS";
-                programme = "ADD MUSIC FOLDERS · PRESS RESCAN";
+                name = "NO STATIONS ON FILE";
+                programme = "THE DIAL HAS NOTHING TO TUNE";
             }
 
             string receiverState = manager.IsOffAir ? "OFF AIR"
@@ -299,6 +312,13 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 : manager.IsEngaged && !manager.IsPaused ? AvState.Ready
                 : hasChannels ? AvState.Info : AvState.Inert;
             tunePart.Set(dial.FrequencyText, dial.UnitText, modeLine, name, programme, trackLine, receiverState, receiverChipState);
+            // With nothing on file the scope has nothing to show: it folds to its minimum and the bay cover takes the room.
+            if (scopeGrows != hasChannels)
+            {
+                scopeGrows = hasChannels;
+                scopePart.Grow = hasChannels ? 1f : 0f;
+                console.Page(TabReceiver).RequestRelayout();
+            }
             FitPresetRows();
 
             UpdateMeter();
@@ -362,7 +382,8 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 int index = stationPage * presetShown + i;
                 if (index >= manager.ChannelCount)
                 {
-                    row.Set("EMPTY PRESET", string.Empty, string.Empty, AvState.Inert);
+                    row.Set(hasChannels ? "PRESET " + AvNum.Fixed(index + 1, 0).PadLeft(2, '0') + " · EMPTY"
+                        : "FREQUENCY LIST EMPTY · ADD MUSIC FOLDERS, THEN PRESS RESCAN", string.Empty, string.Empty, AvState.Inert);
                     row.Armed = false;
                     row.Interactable = false;
                     badgesChanged |= ApplyStationBadge(row, i, null);
@@ -435,8 +456,10 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             float rowHeight = ListRowHeight;
             foreach (AvRow row in stationRows)
                 if (row != null) rowHeight = Mathf.Max(rowHeight, row.Measure(width) + AvGridTokens.Gap);
-            int shown = page.ViewportHeight <= 0f ? PresetRows :
-                Mathf.Clamp(Mathf.FloorToInt((page.ViewportHeight - fixedHeight) / rowHeight), MinPresetRows, PresetRows);
+            // Nothing on file: one line says so, instead of six empty presets.
+            int most = manager.HasChannels ? PresetRows : MinPresetRows;
+            int shown = page.ViewportHeight <= 0f ? most :
+                Mathf.Clamp(Mathf.FloorToInt((page.ViewportHeight - fixedHeight) / rowHeight), MinPresetRows, most);
             if (shown == presetShown) return;
             int first = stationPage * presetShown;
             presetShown = shown;
@@ -583,6 +606,12 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             }
 
             p.Ticker.Add(TabDeck, AvTickRate.Fast, RefreshDeck);
+
+            console.Orders(TabDeck,
+                "Click a track to play it; the deck then steps through its folder in order.",
+                "Shuffle also reorders the radio programme. Repeat loops the track on the deck.",
+                "Stop all signs off the deck and the receiver and hands the soundtrack bus back.",
+                "Add OGG or WAV files to the music folder, then rescan to list them.");
         }
 
         private static void RefreshDeck()
@@ -596,7 +625,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             int track = trackCount == 0 ? 0 : manager.DeckTrackIndex + 1;
             bool playing = manager.DeckEngaged;
 
-            string trackTitle = hasFolders ? manager.DeckCurrentTitle : "NO MUSIC FOUND";
+            string trackTitle = !hasFolders ? "NO MUSIC ON FILE" : trackCount == 0 ? "DECK EMPTY" : manager.DeckCurrentTitle;
             string position = hasFolders && trackCount > 0
                 ? "TRACK " + AvNum.Fixed(track, 0) + " / " + AvNum.Fixed(trackCount, 0)
                 : string.Empty;
@@ -616,6 +645,17 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 eqLevels[i] = Mathf.Lerp(eqLevels[i], target, live ? 0.6f : 0.2f);
             }
             deckEq.Set(eqLevels, live ? "ON" : manager.DeckPaused ? "PAUSED" : "IDLE", live ? AvState.Ready : AvState.Inert);
+            // The meter and the position bar need something loaded; an idle meter stays a thin strip (the room goes to the list
+            // or to the bay cover) and only a playing one takes the leftover height.
+            bool loaded = hasFolders && trackCount > 0;
+            deckEq.SetShown(loaded);
+            deckBar.SetShown(loaded);
+            if (deckEqGrows != live)
+            {
+                deckEqGrows = live;
+                deckEq.Grow = live ? 1f : 0f;
+                console.Page(TabDeck).RequestRelayout();
+            }
 
             bool playEnabled = hasFolders && trackCount > 0;
             deckStrip[0].Interactable = playEnabled;
@@ -688,11 +728,11 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 console.Page(TabDeck).RequestRelayout();
             }
             if (!hasFolders)
-                emptyAlert.Show(AvIcon.AlertTriangle, "NO MUSIC FOUND",
+                emptyAlert.Show(AvIcon.AlertTriangle, "NO MUSIC ON FILE",
                     "Put OGG or WAV files in BepInEx/plugins/BoscaliSummer/Music, then press the rescan key. " +
                     "The folder key opens it.", AvState.Caution);
             else if (trackCount == 0)
-                emptyAlert.Show(AvIcon.Music, "EMPTY MUSIC FOLDER",
+                emptyAlert.Show(AvIcon.Music, "FOLDER EMPTY",
                     "Choose another folder with the arrow keys, or add OGG/WAV files and press RESCAN.", AvState.Info);
             else emptyAlert.Hide();
 
