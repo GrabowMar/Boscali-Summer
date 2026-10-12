@@ -169,6 +169,9 @@
     <Compile Include="..\..\modules\TheaterOps\Domain\PickLock.cs" Link="Features\TheaterOps\PickLock.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\OutcomeRules.cs" Link="Features\TheaterOps\OutcomeRules.cs" />
     <Compile Include="..\..\modules\TheaterOps\Domain\OpPhaseRules.cs" Link="Features\TheaterOps\OpPhaseRules.cs" />
+    <Compile Include="..\..\modules\TheaterOps\Domain\EmptyReasonRules.cs" Link="Features\TheaterOps\EmptyReasonRules.cs" />
+    <Compile Include="..\..\modules\TheaterOps\Domain\ViewStateRules.cs" Link="Features\TheaterOps\ViewStateRules.cs" />
+    <Compile Include="..\..\modules\TheaterOps\Domain\FaultLedger.cs" Link="Features\TheaterOps\FaultLedger.cs" />
     <Compile Include="..\..\Core\Contracts\IThreatPicture.cs" Link="Framework\IThreatPicture.cs" />
     <Compile Include="..\..\modules\Intel\Domain\*.cs" LinkBase="Features\Intel\Domain" />
     <Compile Include="..\..\modules\Events\Domain\EventDefinition.cs" Link="Features\Events\EventDefinition.cs" />
