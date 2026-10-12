@@ -20,7 +20,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
     {
         private const int SortOrder = 30004;
         private static readonly int ControlCount = Enum.GetValues(typeof(MetControl)).Length;
-        private static readonly float[] ChipX = { 276f, 352f, 442f }, ChipW = { 70f, 84f, 60f };
+        private static readonly float[] ChipX = { 330f, 406f, 496f }, ChipW = { 70f, 84f, 60f };
 
         private IWeatherChartSource source;
         private IMetOfficeCommands commands;
@@ -235,14 +235,6 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             return mask;
         }
 
-        private void PressClass(int cls)
-        {
-            source.Fill(model);
-            if (!MetOfficeRules.State(MetControl.PinClass, model).Enabled) { Press(MetControl.PinClass); return; }
-            commands.PinSky(picker.SelectClass((WeatherRegimeType)cls));
-            nextRefresh = 0f;
-        }
-
         private void CycleRain()
         {
             source.Fill(model);   // a press never steps from a stale refresh
@@ -284,13 +276,12 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
         private void Build(Transform uiRoot)
         {
-            window = AvWindow.Build(uiRoot, "MetOffice", "WEATHER // MET OFFICE", MetOfficeLayout.Width, MetOfficeLayout.Height, SortOrder);
-            // AvWindow scales itself when its root is not under a UI canvas (WeatherManager.transform is not). This console fits at 1:1 on 720p;
-            // the shared window's 1080p reference would shrink its 11 px micro text below a readable size.
+            window = AvWindow.Build(uiRoot, "MetOffice", "WEATHER CONSOLE", MetOfficeLayout.Width, MetOfficeLayout.Height, SortOrder);
+            // AvWindow scales itself when its root is not under a UI canvas (WeatherManager.transform is not). The console is laid out for 1080p and shrinks to fit a smaller screen.
             CanvasScaler scaler = window.Root.parent.GetComponent<CanvasScaler>();
             if (scaler != null && window.Root.parent.parent == uiRoot)
             {
-                scaler.referenceResolution = new Vector2(1280f, 720f);
+                scaler.referenceResolution = new Vector2(1920f, 1080f);
                 scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
             }
             window.Closed += OnWindowClosed;
@@ -302,10 +293,11 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             AvLay.Place(backing.rectTransform, 4f, MetOfficeLayout.Title + 2f, MetOfficeLayout.Width - 8f, MetOfficeLayout.Height - MetOfficeLayout.Footer - MetOfficeLayout.Title - 4f);
             backing.color = MetTitleTint.BackingColor();
             BuildTitleBar();
-            BuildChartColumn();
-            BuildInstrumentColumn();
-            BuildTimeColumn();
-            BuildCommandBar();
+            BuildHero();
+            BuildLeft();
+            BuildCentre();
+            BuildRight();
+            BuildTape();
             window.Footer.Place(new AvSlot(0f, MetOfficeLayout.Height - MetOfficeLayout.Footer, MetOfficeLayout.Width, MetOfficeLayout.Footer));
             tagLegend = new MetTagLegend(window.Root);
             tagLegend.Place(new AvSlot(MetOfficeLayout.Width - MetTagLegend.Width - 10f, MetOfficeLayout.Height - MetOfficeLayout.Footer + 8f, MetTagLegend.Width, 14f));
@@ -323,11 +315,12 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             RectTransform r = window.Root;
             var title = r.Find("Title").GetComponent<TMP_Text>();
             AvLay.Place(title, 68f, 0f, 250f, 30f);
+            float right = MetOfficeLayout.Width;
             AvFrame plate = AvFrame.Add(r, "IdPlate", AvChamfer.Diagonal(6f));
             AvLay.Place(plate.rectTransform, 8f, 5f, 52f, 20f);
             plate.Stroke = 0f;
             plate.Paint(EnvInk.Role("key"), Color.clear);
-            TMP_Text plateText = AvText.Make(r, "IdPlateText", AvTextRole.DataStrong, "MET", TextAlignmentOptions.Center);
+            TMP_Text plateText = AvText.Make(r, "IdPlateText", AvTextRole.DataStrong, "ENV", TextAlignmentOptions.Center);
             AvLay.Place(plateText, 8f, 5f, 52f, 20f);
             plateText.color = EnvInk.Role("ground");
             string[] words = { "SMOOTH", "FADE 20 S", "CUT" };
@@ -341,27 +334,16 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 Tip(chip.Rect.gameObject, MetCatalog.ChipHelp[i]);
             }
             dtg = AvText.Make(r, "Dtg", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineRight);
-            AvLay.Place(dtg, 508f, 0f, 272f, 30f);
+            AvLay.Place(dtg, right - 492f, 0f, 272f, 30f);
             dtg.color = EnvInk.Role("ink-muted");
             Tip(dtg.gameObject, MetCatalog.DtgHelp);
             roleChip = new AvChip(r);
-            roleChip.Place(new AvSlot(786f, 6f, 150f, 18f));
+            roleChip.Place(new AvSlot(right - 214f, 6f, 150f, 18f));
             window.Ticker.Register(roleChip);
             window.Ticker.Register(new MetTitleTint(plate, plateText, dtg, backing));
         }
 
         // ---- Live state ----------------------------------------------------------------------------
-
-        // The columns and the command bar fill their own part of the window (MetOfficeWindow.Chart / Instruments / Time / Bar.cs).
-        partial void BuildChartColumn();
-        partial void BuildInstrumentColumn();
-        partial void BuildTimeColumn();
-        partial void BuildCommandBar();
-        partial void RefreshChartColumn();
-        partial void RefreshInstrumentColumn();
-        partial void RefreshTimeColumn();
-        partial void RefreshCommandBar();
-        partial void Keys();
 
         private void Refresh()
         {
@@ -374,9 +356,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             roleChip.Set(model.Host ? "HOST // ALL PLAYERS" : "READ ONLY", model.Host ? AvState.Ready : AvState.Caution);
             Tip(roleChip.Rect.gameObject, model.Host ? MetCatalog.RoleHostHelp : MetCatalog.RoleClientHelp);
             AvText.Set(dtg, MetOfficeText.Dtg(DateTime.UtcNow) + " · " + MetOfficeText.MissionClock(model.MissionSeconds) + " · SN " + (model.SerialHex.Length > 0 ? model.SerialHex : "----"));
-            RefreshChartColumn();
-            RefreshInstrumentColumn();
-            RefreshTimeColumn();
+            RefreshDesk();
 
             // Controls: enabled state and the hover line (the reason while disabled), then each column's latches and labels.
             for (int i = 0; i < ControlCount; i++)
@@ -386,7 +366,6 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 control[i].Interactable = MetOfficeRules.State(id, model).Enabled;
                 control[i].Help = MetOfficeRules.Tip(id, model);
             }
-            RefreshCommandBar();
         }
 
         /// <summary>TMP re-lays a label on every assignment, so a refresh only writes the ones that changed.</summary>
