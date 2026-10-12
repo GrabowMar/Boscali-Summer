@@ -56,6 +56,7 @@
     <Compile Include="..\..\Core\Contracts\WreckNotice.cs" Link="Framework\WreckNotice.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationBoard.cs" Link="Features\DynamicOperations\OperationBoard.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\SortieFocusRules.cs" Link="Features\DynamicOperations\SortieFocusRules.cs" />
+    <Compile Include="..\..\modules\DynamicOperations\Domain\OperationWing.cs" Link="Features\DynamicOperations\OperationWing.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationTitles.cs" Link="Features\DynamicOperations\OperationTitles.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationPresentation.cs" Link="Features\DynamicOperations\OperationPresentation.cs" />
     <Compile Include="..\..\modules\DynamicOperations\Domain\OperationRequestPolicy.cs" Link="Features\DynamicOperations\OperationRequestPolicy.cs" />
@@ -74,6 +75,7 @@
     <Compile Include="..\..\Core\Contracts\ISecondaryObjectivesView.cs" Link="Framework\ISecondaryObjectivesView.cs" />
     <Compile Include="..\..\Core\Contracts\OperationFocus.cs" Link="Framework\OperationFocus.cs" />
     <Compile Include="..\..\Core\Contracts\IWingSortieOrders.cs" Link="Framework\IWingSortieOrders.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Pure\WingSortie.cs" Link="Features\Wing\WingSortie.cs" />
     <Compile Include="..\..\Core\Math\MapScale.cs" Link="Core\Math\MapScale.cs" />
     <Compile Include="..\..\Core\Contracts\ITerritoryIngress.cs" Link="Framework\ITerritoryIngress.cs" />
     <Compile Include="..\..\modules\QoL\Runtime\ObservationStore.cs" Link="Features\QoL\ObservationStore.cs" />
