@@ -2186,7 +2186,9 @@ static void ProbeTacBoardConfig(Assembly plugin)
         string scratch = Path.Combine(Path.GetTempPath(), "boscali-tacboard-probe-root-" + Environment.ProcessId);
         if (Directory.Exists(scratch)) Directory.Delete(scratch, true);
     }
-}\n\nstatic void ProbeTheaterOpsHostSettings(Assembly plugin)
+}
+
+static void ProbeTheaterOpsHostSettings(Assembly plugin)
 {
     // The one THEATER OPS table (S4): two rows with distinct ids, AI STAFF CONVOYS off by default (D3), and FRONTLINE TACTICS reads as
     // unavailable, with its reason, exactly when Ground Control RTS owns the orders.

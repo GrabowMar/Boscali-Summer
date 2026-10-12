@@ -33,7 +33,8 @@
     <!-- The offline map-overlay harness (MapOverlayUnityCheck) builds the STR overlay from a fixture model and reads its tags. -->
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
       <_Parameter1>BoscaliMapOverlayPreview</_Parameter1>
-    </AssemblyAttribute>\n    <!-- The Met Office check (BoscaliWeatherEnv asmdef) builds the weather console window and drives it with fake world and command seams. -->
+    </AssemblyAttribute>
+    <!-- The Met Office check (BoscaliWeatherEnv asmdef) builds the weather console window and drives it with fake world and command seams. -->
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
       <_Parameter1>BoscaliWeatherEnv</_Parameter1>
     </AssemblyAttribute>
