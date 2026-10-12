@@ -12,7 +12,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 {
-    internal sealed partial class OperationsManager : MonoBehaviour, ISceneService, ISecondaryObjectivesView, IOperationOutcomeSource, ISortieOutcomeSource
+    internal sealed partial class OperationsManager : MonoBehaviour, ISceneService, ISecondaryObjectivesView, IOperationOutcomeSource, ISortieOutcomeSource, ISortieWingOrderSource
     {
         private sealed class Target
         {
@@ -141,7 +141,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             jammers.Clear();
             foreach (Candidate candidate in candidates) { candidate.Unit = null; candidate.Base = null; candidate.Count = 0; }
             missionIdentity = null; previousTime = 0f; nextTick = 0f;
-            viewHq = null; focusSource = null; tie = default;
+            viewHq = null; focusSource = null; tie = default; wingOrders = null;
             hasSnapshot = false; SelectedForHud = 0;
             EndAction(string.Empty);
             network?.ResetScene();
@@ -236,6 +236,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             {
                 Target target = board.Targets[i];
                 Operation op = target.Mission;
+                if (!op.IsLive) ReleaseWing(op.Id);          // every ending (observed, expired, cancelled) is seen here within a second
                 if (!op.IsLive && now - op.EndedAt >= 60f)
                 { target.Unwatch(); board.Targets.RemoveAt(i); continue; }
                 if (IsExtended(op.Kind))
@@ -253,7 +254,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 bool neutralized = target.Life.Neutralized || target.Unit != null && target.Unit.disabled;
                 if (op.Kind == OperationKind.Rappel || op.Kind == OperationKind.Rooftop)
                     valid &= assault?.Available == true && (target.Inserted || target.ShellId == 0 || assault.IsRooftopAvailable(target.ShellId));
-                bool present = op.Kind == OperationKind.Jam ? now - target.LastJam <= 1.5f : HasPlayerOnStation(hq, target);
+                bool present = op.Kind == OperationKind.Jam ? now - target.LastJam <= 1.5f : HasPlayerOnStation(hq, target) || WingOnStation(op);
                 target.OnStation = present;
                 op.Observe(now, elapsed, valid, owned, neutralized, present, target.Inserted);
                 if (!op.IsLive) target.Unwatch();
@@ -542,7 +543,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             try
             {
                 Finished(new SortieOutcome(hq.GetInstanceID(), op.Id, OperationTitles.Title(op.Kind), op.FocusId, op.FocusAnchor,
-                    at.x, at.z, op.AcceptedBy, false));
+                    at.x, at.z, op.AcceptedBy, WingTasked(op.Id)));
             }
             catch (Exception ex) { Plugin.Logger?.LogWarning("[Operations] Finished subscriber failed: " + ex.Message); }
         }
@@ -789,7 +790,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 tiedLive |= covered && op.IsLive;
                 var link = new SortieLink(op.FocusId, tied ? target.Role : FocusRole.None, tied ? target.Place : string.Empty, covered,
                     known, known ? target.Position.x : 0f, known ? target.Position.z : 0f,
-                    known ? Mathf.Clamp(target.Radius, 0f, SortieLink.MaximumRadius) : 0f, false);
+                    known ? Mathf.Clamp(target.Radius, 0f, SortieLink.MaximumRadius) : 0f, known && WingOnStation(op));
                 snapshot.Cards[i] = new SecondaryObjectiveView(op.Id,
                     OperationTitles.Title(op.Kind), op.Returning ? "Return in the same aircraft and land within 1 km of the marked friendly base." : Description(op.Kind), target.Name,
                     active && op.Returning ? "ACTIVE / RETURN TO BASE" : active && !marker ? "ACTIVE / CONTACT LOST" : op.State.ToString().ToUpperInvariant(),
