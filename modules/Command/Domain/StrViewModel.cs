@@ -82,6 +82,8 @@ namespace BoscaliSummer.Modules.Command.Domain
         public int LockSeconds = -1;
         public string LockText = "";
         public bool PickedByLocal, PickedByStaff;
+        /// <summary>Callsign of whoever set the effort ("" when the staff did or nobody is known), for the lock refusal.</summary>
+        public string PickedBy = "";
         /// <summary>Fix and the operation's origin in global metres, ring radius in metres.</summary>
         public float X = float.NaN, Z = float.NaN, OriginX = float.NaN, OriginZ = float.NaN, Radius;
         /// <summary>Hostile share and trend of the operation's front (NaN unknown) and the lane words.</summary>
@@ -102,7 +104,7 @@ namespace BoscaliSummer.Modules.Command.Domain
     internal sealed class StrSortieRow
     {
         public StrItemId Id;
-        /// <summary>Card id for the verb calls; the post id for a STRIKE ticket (0 none).</summary>
+        /// <summary>Card id for the verb calls; the post (office) id for a STRIKE ticket, -1 for any other card.</summary>
         public int ContractId, PostId;
         /// <summary>"S2", family chip ("STRIKE"), title, "14 KM 032" or a dash, "4,200 +120 XP", "09:40" or a dash, "OFFERED", "ACCEPTED", "BY VIPER 1-1".</summary>
         public string Tag = "", ChipText = "", Title = "", DistanceText = "—", RewardText = "", TimeText = "—", StateText = "", ByText = "";
@@ -112,6 +114,8 @@ namespace BoscaliSummer.Modules.Command.Domain
         public StrAct Accept;
         /// <summary>SEND WING, COVER, SCOUT or RECALL; the wing line ("WING TASKED"); the gate.</summary>
         public string WingLabel = "SEND WING", WingText = "";
+        /// <summary>The host's cached refusal of SEND WING for this card, "" when it would be accepted (the wing gate reads it).</summary>
+        public string WingRefusal = "";
         /// <summary>The wing entry for this card exists (host only), and the state it reports.</summary>
         public bool HasWing;
         public WingSortieState WingState;
@@ -203,6 +207,8 @@ namespace BoscaliSummer.Modules.Command.Domain
         public int SortieActiveCount, SortieActiveLimit;
         /// <summary>The sortie feed is present and fresh (accept and wing buttons need it) and a sortie action is pending.</summary>
         public bool SortiesLive, SortieActionPending, WarPending;
+        /// <summary>The sortie feed exists at all (a stale feed is Available but not Live).</summary>
+        public bool SortiesAvailable;
         public ulong LocalId;
         public string FactionCode = "";
         public StrBanner Banner = new StrBanner();
@@ -231,5 +237,12 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>Selected and hovered ids resolved against the rows; SelectionVanished asks the hub to clear its copy.</summary>
         public StrItemId SelectedId, HoverId;
         public bool SelectionVanished;
+
+        // StrViewBuilder's memo of the last build: equal stamp, second, ui and clock-driven flags build nothing.
+        internal bool Built;
+        internal int BuiltStamp;
+        internal long BuiltSecond;
+        internal bool BuiltNotice, BuiltArmed;
+        internal StrUiState BuiltUi;
     }
 }

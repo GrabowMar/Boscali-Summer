@@ -147,6 +147,10 @@
     <Compile Include="..\..\modules\Command\Domain\StrContracts.cs" Link="Features\Command\StrContracts.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrViewModel.cs" Link="Features\Command\StrViewModel.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrStrokes.cs" Link="Features\Command\StrStrokes.cs" />
+    <Compile Include="..\..\modules\Command\Domain\StrOrdinals.cs" Link="Features\Command\StrOrdinals.cs" />
+    <Compile Include="..\..\modules\Command\Domain\StrTagPlacer.cs" Link="Features\Command\StrTagPlacer.cs" />
+    <Compile Include="..\..\modules\Command\Domain\StrWords.cs" Link="Features\Command\StrWords.cs" />
+    <Compile Include="..\..\modules\Command\Domain\StrGate.cs" Link="Features\Command\StrGate.cs" />
     <Compile Include="..\..\modules\Command\Domain\ControlFieldCore.cs" Link="Features\Command\ControlFieldCore.cs" />
     <Compile Include="..\..\modules\HighCommand\Domain\CommandEconomy.cs" Link="Features\HighCommand\CommandEconomy.cs" />
     <Compile Include="..\..\modules\HighCommand\Domain\CommandLog.cs" Link="Features\HighCommand\CommandLog.cs" />
