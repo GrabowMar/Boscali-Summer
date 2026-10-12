@@ -1,127 +1,178 @@
+using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Services;
+using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Modules.Command.Presentation;
+using BoscaliSummer.Modules.Command.Presentation.MapUi;
 using UnityEngine;
 using static BoscaliSummer.Core.Diagnostics.AutomationArgs;
 
 namespace BoscaliSummer.Modules.Command.Runtime
 {
-    /// <summary>Hooks for the unattended in-game STR check (<c>tests/ingame/str-panels.json</c>): open a tab the way the bezel
-    /// press does, read back every backend the panel paints from, and send posture / pick / replan through the same
-    /// <see cref="ITheaterWarView"/> calls the buttons use. Dev tooling: nothing here runs unless called.</summary>
-    public static class StrAutomation
+    /// <summary>
+    /// Hooks for the unattended in-game STR proof (annex 05 P11). Arguments and results are dictionaries of numbers and strings; results are nested, no
+    /// key contains a dot, and an unknown is -1 (never NaN: the sim writes NaN as null). <c>Press</c> goes around the EventSystem but runs the same gate
+    /// and the same hub call a click does, by control id (<c>StrControlIds</c>); the map overlay's <c>Probe</c> and <c>ProbeAt</c> belong to the overlay slice.
+    /// Dev tooling: nothing here runs unless called.
+    /// </summary>
+    public static partial class StrAutomation
     {
-        /// <summary>Maximize the map, select the STR screen and show <c>tab</c> (0 SITUATION, 1 COMMAND, 2 OPERATIONS).</summary>
+        private static readonly string[] PostureIds = { "posture.cautious", "posture.steady", "posture.bold" };
+
+        /// <summary>Maximise the map, select the STR screen and show a page: <c>{page: "board"|"sitrep"|"log"}</c> or the legacy <c>{tab: 0..2}</c>.</summary>
         public static Dictionary<string, object> Open(Dictionary<string, object> args)
         {
             StrMfdPanel panel = StrMfdPanel.Active;
             if (panel == null) return Fail("Open", "no STR panel in this scene");
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             if (map != null && !DynamicMap.mapMaximized) map.Maximize();
-            panel.OpenForAutomation(Mathf.Clamp((int)Number(args, "tab", 0f), 0, 2));
+            panel.OpenForAutomation(PageOf(args));
             return Read(null);
         }
 
-        /// <summary>Send one intent: <c>posture</c> (cycle to the next posture), <c>pick</c> (first proposal), <c>replan</c>.</summary>
+        private static int PageOf(Dictionary<string, object> args)
+        {
+            switch (Text(args, "page"))
+            {
+                case "board": return 0;
+                case "sitrep": return 1;
+                case "log": return 2;
+                default: return Mathf.Clamp((int)Number(args, "tab", 0f), 0, 2);
+            }
+        }
+
+#if !PUBLIC_RELEASE
+        /// <summary>
+        /// <c>{id}</c>: the same code path as a click, by control id. Returns ok (the gate allowed and the verb was taken), pressed (a verb went out), reasonCode
+        /// (StrWhy), reason and reasonLen. Mutates the game, so it runs in a nomodkit scenario only.
+        /// </summary>
+        public static Dictionary<string, object> Press(Dictionary<string, object> args)
+        {
+            if (!InScenario("Press", out Dictionary<string, object> refusal)) return refusal;
+            return PressId("Press", Text(args, "id"));
+        }
+
+        /// <summary><c>{id}</c> of a board item ("map.tag.prop.1", "front.2", "sortie.1", "effort", "post.1"): hover it through the hub. Client state only, guarded with Press.</summary>
+        public static Dictionary<string, object> Hover(Dictionary<string, object> args) => PointAt("Hover", args, false);
+
+        /// <summary><c>{id}</c> of a board item: select it through the hub (without flying the map); <c>link.selectedKind</c> proves it.</summary>
+        public static Dictionary<string, object> Select(Dictionary<string, object> args) => PointAt("Select", args, true);
+
+        /// <summary>
+        /// <c>{verb, index, arg}</c>: an alias of Press for the README scenario and the trailer. pick and accept and wing take the 1-based ticket, replan arms
+        /// and confirms in one call, posture takes arg 0..2 (or cycles to the next), redirect takes the index-th front lane that has an offer.
+        /// </summary>
         public static Dictionary<string, object> Verb(Dictionary<string, object> args)
         {
-            if (!ModuleServices.TryGet(out ITheaterWarView war)) return Fail("Verb", "no ITheaterWarView (TheaterOps off)");
+            if (!InScenario("Verb", out Dictionary<string, object> refusal)) return refusal;
+            StrViewHub hub = StrViewHub.Active;
+            if (hub == null) return Fail("Verb", "no STR hub in this scene");
+            hub.TickNow();
+            StrViewModel vm = hub.Current;
+            int index = (int)Number(args, "index", 1f);
             string verb = Text(args, "verb") ?? "";
-            bool sent;
+            string id;
             switch (verb)
             {
-                case "posture": sent = war.RequestPosture((TheaterWarPosture)(((int)war.Posture + 1) % 3)); break;
-                case "pick":
-                    // The staff auto-selects O1 after 60 s, so an empty deck with a live operation is a pass, not a failure.
-                    if (war.Proposals == null || war.Proposals.Count == 0)
-                    {
-                        if (war.ActiveOperation == null) return Fail("Verb", "no proposals and no operation");
-                        Dictionary<string, object> skipped = Read(null);
-                        skipped["sent"] = false; skipped["skipped"] = "staff already selected " + war.ActiveOperation.Name;
-                        return skipped;
-                    }
-                    sent = war.RequestPick(war.Proposals[0].Id, war.Proposals[0].Revision);
+                case "pick": id = StrControlIds.Prop(index, "pick"); break;
+                case "accept": id = StrControlIds.Sortie(index, "accept"); break;
+                case "wing": id = StrControlIds.Sortie(index, "wing"); break;
+                case "replan": id = StrControlIds.Replan; break;
+                case "posture":
+                    int p = args != null && args.ContainsKey("arg") ? Mathf.Clamp((int)Number(args, "arg", 0f), 0, 2) : ((int)vm.Posture + 1) % 3;
+                    id = PostureIds[p];
                     break;
-                case "replan":
-                    if (war.ActiveOperation == null) return Fail("Verb", "no active operation to replan");
-                    sent = war.RequestCancel(war.ActiveOperation.Id, war.ActiveOperation.Revision);
+                case "redirect":
+                    int lane = StrControlIds.RedirectLane(vm, index);
+                    if (lane == 0) return Fail("Verb", "no front lane number " + index + " that the staff offers");
+                    id = StrControlIds.Front(lane, "redirect");
                     break;
                 default: return Fail("Verb", "unknown verb '" + verb + "'");
             }
-            Dictionary<string, object> r = Read(null);
-            r["sent"] = sent;
+            Dictionary<string, object> r = PressId("Verb", id);
+            // The first REPLAN press only arms; a script that names the verb means the call-off, so it confirms inside the four seconds.
+            if (verb == "replan" && Convert.ToInt32(r["ok"]) == 1 && Convert.ToInt32(r["pressed"]) == 0) r = PressId("Verb", id);
+            r["id"] = id;
             return r;
         }
 
+        /// <summary><c>{on}</c>: flip Command/MapRelief3D for the flat-map run. Mutates the client config, so it runs in a scenario only.</summary>
+        public static Dictionary<string, object> Relief(Dictionary<string, object> args)
+        {
+            if (!InScenario("Relief", out Dictionary<string, object> refusal)) return refusal;
+            var entry = Plugin.Settings?.Command?.MapRelief3D;
+            if (entry == null) return Fail("Relief", "no MapRelief3D setting");
+            entry.Value = Bool(args, "on");
+            return new Dictionary<string, object> { { "ok", true }, { "relief", entry.Value ? 1 : 0 } };
+        }
+
+        private static Dictionary<string, object> PressId(string hook, string id)
+        {
+            // The overlay's own controls: the layer toggles and the card's buttons (they live on the map, not on the panel).
+            if (id != null && (id.StartsWith("layer.") || id.StartsWith("map.card.")))
+            {
+                StrMapOverlay overlay = StrMapOverlay.Active;
+                if (overlay == null) return Fail(hook, "no STR overlay in this scene");
+                StrViewHub.Active?.TickNow();
+                overlay.RefreshNow();
+                return Result(overlay.Controls.Press(id));
+            }
+            StrMfdPanel panel = StrMfdPanel.Active;
+            if (panel == null || panel.Console == null) return Fail(hook, "no STR screen is built yet (open the map first)");
+            // The ids belong to the model the panel last bound: bring both up to date before pressing, so a press never meets a stale id.
+            StrViewHub.Active?.TickNow();
+            panel.BindNow();
+            return Result(panel.Controls.Press(id));
+        }
+
+        private static Dictionary<string, object> Result(StrControls.PressResult r) => new Dictionary<string, object>
+        {
+            { "ok", r.Ok ? 1 : 0 }, { "pressed", r.Act.Sent ? 1 : 0 }, { "reasonCode", (int)r.Act.Why },
+            { "reason", r.Act.Text }, { "reasonLen", r.Act.Text.Length },
+        };
+
+        private static Dictionary<string, object> PointAt(string hook, Dictionary<string, object> args, bool select)
+        {
+            if (!InScenario(hook, out Dictionary<string, object> refusal)) return refusal;
+            StrViewHub hub = StrViewHub.Active;
+            if (hub == null) return Fail(hook, "no STR hub in this scene");
+            hub.TickNow();
+            string id = Text(args, "id");
+            if (!StrControlIds.TryItem(hub.Current, id, out StrItemId item)) return Fail(hook, "no board item named '" + id + "'");
+            if (select) hub.Select(item, false); else hub.Hover(item);
+            StrUiState ui = hub.Ui;
+            return new Dictionary<string, object>
+            {
+                { "ok", true }, { "selectedKind", (int)ui.Selected.Kind }, { "selectedKey", ui.Selected.Key }, { "hoverKind", (int)ui.Hover.Kind },
+            };
+        }
+
+        private static bool InScenario(string hook, out Dictionary<string, object> refusal)
+        {
+            refusal = null;
+            if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NOMODKIT_SIM_SCENARIO"))) return true;
+            refusal = Fail(hook, "requires a nomodkit scenario");
+            return false;
+        }
+#endif
+
+        /// <summary>The panel, the hub's view of the model, the map's pose, the link state and the model's differences from the host's own snapshot (all 0).</summary>
         public static Dictionary<string, object> Read(Dictionary<string, object> args)
         {
             StrMfdPanel panel = StrMfdPanel.Active;
-            var r = new Dictionary<string, object> { { "panel", panel != null } };
-            if (panel != null) { r["screenActive"] = panel.ScreenActiveForAutomation; r["tab"] = panel.PageForAutomation; }
-
-            CommandManager command = CommandManager.Active;
-            r["command"] = command != null;
-            if (command != null)
+            var r = new Dictionary<string, object>
             {
-                var s = command.TheaterState;
-                r["sectorsFriendly"] = s.FriendlySectorCount;
-                r["sectorsHostile"] = s.HostileSectorCount;
-                r["sectorsContested"] = s.ContestedSectorCount;
-                r["territory"] = s.TerritoryControlRatio;
-                r["frontlineMetres"] = s.FrontlineLengthMetres;
-                r["defcon"] = s.DefconLevel;
-            }
-
-            r["highCommand"] = ModuleServices.TryGet(out IHighCommandView staff);
-            if (staff != null)
-            {
-                r["staffAvailable"] = staff.Available;
-                r["staffPosts"] = staff.Commanders?.Count ?? 0;
-                r["staffActive"] = staff.FriendlyActive;
-                r["staffCohesion"] = staff.FriendlyCohesion;
-                r["staffLog"] = staff.Log?.Count ?? 0;
-            }
-
-            r["theaterWar"] = ModuleServices.TryGet(out ITheaterWarView war);
-            if (war != null)
-            {
-                r["warAvailable"] = war.Available;
-                r["warSnapshot"] = war.HasSnapshot;
-                r["warAge"] = war.SnapshotAgeSeconds;
-                r["warCanCommand"] = war.CanCommand;
-                r["warPending"] = war.CommandPending;
-                r["warStatus"] = war.LastCommand != null ? war.LastCommand.Code.ToString() : "";
-                r["posture"] = war.Posture.ToString();
-                r["proposals"] = war.Proposals?.Count ?? 0;
-                r["fronts"] = war.Fronts?.Count ?? 0;
-                var fronts = new List<string>();
-                if (war.Fronts != null)
-                    foreach (TheaterFrontView f in war.Fronts)
-                        fronts.Add(f.Name + " | " + TheaterWords.FrontStatus(f.Status) + " | " + f.Pressure.ToString("0.00") + (f.Observed ? "" : " | unobserved") +
-                                   " | nearest own ground " + NearestOwnGroundKm(f.X, f.Z).ToString("0.0") + " km");
-                r["frontList"] = string.Join(" ;; ", fronts);
-                r["activeOp"] = war.ActiveOperation != null ? TheaterWords.Kind(war.ActiveOperation.Kind) + " " + war.ActiveOperation.Name + " / " +
-                    TheaterWords.Phase(war.ActiveOperation.Phase, war.ActiveOperation.PhaseNote) : "";
-                r["opsLog"] = war.StaffLog?.Count ?? 0;
-            }
-            r["ok"] = true;   // a readout; the flags above say what is missing
+                { "panel", new Dictionary<string, object>
+                    {
+                        { "present", panel != null ? 1 : 0 },
+                        { "screenActive", panel != null && panel.ScreenActiveForAutomation ? 1 : 0 },
+                        { "page", panel != null ? panel.PageForAutomation : -1 },
+                    } },
+            };
+            AddHub(r);
+            AddOverlay(r);
+            r["ok"] = true;   // a readout; the blocks above say what is missing
             return r;
-        }
-
-        /// <summary>Distance from a front fix to the closest ground vehicle of the local faction (probe for the 3 km staff radius).</summary>
-        private static float NearestOwnGroundKm(float x, float z)
-        {
-            FactionHQ hq = SceneSingleton<DynamicMap>.i != null ? SceneSingleton<DynamicMap>.i.HQ : null;
-            float best = float.MaxValue;
-            if (hq == null || UnitRegistry.allUnits == null) return -1f;
-            foreach (Unit u in UnitRegistry.allUnits)
-            {
-                if (!(u is GroundVehicle) || u.disabled || !ReferenceEquals(u.NetworkHQ, hq)) continue;
-                GlobalPosition p = u.GlobalPosition();
-                best = Mathf.Min(best, Mathf.Sqrt((p.x - x) * (p.x - x) + (p.z - z) * (p.z - z)));
-            }
-            return best == float.MaxValue ? -1f : best / 1000f;
         }
 
         private static Dictionary<string, object> Fail(string hook, string error)

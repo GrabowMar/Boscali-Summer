@@ -221,6 +221,8 @@ public static class ReliefUnityCheck
             if (!MfdTerrainRelief.TryProject(0f, 0f, ((RectTransform)image.transform).rect,
                     out center))
                 throw new Exception("Terrain center projection unavailable after orbit reset.");
+            CheckRingScale();
+            CheckReliefFocus();
             var icon = new GameObject("Unit", typeof(UnitMapIcon)).GetComponent<UnitMapIcon>();
             icon.transform.SetParent(image.transform, false);
             icon.iconImage = new GameObject("Glyph", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
@@ -332,6 +334,7 @@ public static class ReliefUnityCheck
                 .GetField("camera", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
             var fieldRenderers = (System.Collections.Generic.List<MeshRenderer>)typeof(MfdTerrainRelief)
                 .GetField("controlRenderers", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
+            CheckFieldContrast(map, (Texture2D)control.texture, terrainCamera, mapWidth);
             foreach (MeshRenderer field in fieldRenderers) field.enabled = false;
             terrainCamera.orthographicSize = 250f;
             RenderCamera(terrainCamera);
@@ -350,6 +353,7 @@ public static class ReliefUnityCheck
                 Vector2.Distance(objective.transform.localPosition,
                     new Vector2(18000f, 12000f) * map.mapDisplayFactor) > .01f)
                 throw new Exception("Closing relief left projected coordinates in the native map.");
+            CheckFlatFocus(map);
             MfdTerrainRelief.Reset();
             string heightSidecar = Path.Combine(maps, assetName + ".bmap");
             byte[] invalid = File.ReadAllBytes(heightSidecar);
@@ -358,7 +362,7 @@ public static class ReliefUnityCheck
             MfdTerrainRelief.Tick();
             if (MfdTerrainRelief.IsDrawing || image.GetComponent<Image>().color.a < .99f)
                 throw new Exception("Invalid terrain data did not leave the native map visible.");
-            File.WriteAllText("result.txt", "PASS: " + (GraphicsSettings.currentRenderPipeline != null ? "URP" : "built-in") + "; 4 captures; throttled terrain/icon/objective/selection/click synchronization, viewport resize, released render texture recovery, render-state restoration, native zoom hierarchy and full-viewport terrain coverage through pan/zoom/orbit, altitude projection, box selection, rendered context text and selection-box chrome, context lifecycle, native restoration, and invalid-asset fallback.");
+            File.WriteAllText("result.txt", "PASS: " + (GraphicsSettings.currentRenderPipeline != null ? "URP" : "built-in") + "; 4 captures; throttled terrain/icon/objective/selection/click synchronization, viewport resize, released render texture recovery, render-state restoration, native zoom hierarchy and full-viewport terrain coverage through pan/zoom/orbit, altitude projection, box selection, rendered context text and selection-box chrome, context lifecycle, native restoration, and invalid-asset fallback; STR plumbing (" + notes + ").");
             EditorApplication.Exit(0);
         }
         catch (Exception error)
@@ -381,6 +385,193 @@ public static class ReliefUnityCheck
         typeof(MfdTerrainRelief).GetField("nextRender", BindingFlags.NonPublic | BindingFlags.Static)
             .SetValue(null, 0f);
         MfdTerrainRelief.Tick();
+    }
+
+    // ---- STR plumbing (annex 05 P6, P7): what the checks measured goes into the PASS line and plumbing.txt ---------------------------------
+
+    private static readonly System.Text.StringBuilder notes = new System.Text.StringBuilder();
+
+    private static void Note(string line)
+    {
+        if (notes.Length > 0) notes.Append("; ");
+        notes.Append(line);
+        File.AppendAllText("plumbing.txt", line + "\n");
+        Debug.Log("[plumbing] " + line);
+    }
+
+    private static string F(float value) => value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+
+    // A contract ring is a ground circle: on the relief it must grow with the zoom (the native sheet is pinned at zoom 1).
+    private static void CheckRingScale()
+    {
+        var projection = new MfdMapProjection();
+        if (!projection.IsActive) throw new Exception("The projection is not active while the relief draws.");
+        float Units(float zoom)
+        {
+            MfdTerrainRelief.Rig.ZoomAt(zoom, .5f, .5f, 0f);
+            DrawTerrain();
+            if (Mathf.Abs(MfdTerrainRelief.Rig.Zoom - zoom) > .01f) throw new Exception("The rig would not zoom to " + zoom + ".");
+            if (!projection.TryScale(4000f, 3000f, 1500f, out float units) || !(units > 0f))
+                throw new Exception("TryScale gave no ring size on the relief at zoom " + zoom + ".");
+            return units;
+        }
+        float one = Units(1f), four = Units(4f);
+        if (projection.TryScale(4000f, 3000f, 0f, out _) || projection.TryScale(float.NaN, 0f, 1500f, out _))
+            throw new Exception("TryScale scaled a ring that has no radius or no position.");
+        Note("ring " + F(one) + " units at zoom 1, " + F(four) + " at zoom 4, ratio " + F(four / one));
+        if (Mathf.Abs(four / one - 4f) > .6f)
+            throw new Exception("A contract ring does not scale with the relief zoom: ratio " + F(four / one) + ", wanted 4 within 15 percent.");
+        MfdTerrainRelief.Rig.Reset();
+        MfdTerrainRelief.ResetOrbit();
+        DrawTerrain();
+    }
+
+    // Focus on the relief: the point ends at the viewport centre. The harness stub lands the rig at once (the real one eases), so this proves
+    // the point-to-rig maths and CentreOffset; the easing is the live step.
+    private static void CheckReliefFocus()
+    {
+        foreach (var at in new[] { new Vector2(-26000f, 21000f), new Vector2(24000f, -19000f) })
+        {
+            float before = MapFocus.CentreOffset(at.x, at.y);
+            if (!(before > .15f)) throw new Exception("The relief Focus point is already central: " + F(before) + ".");
+            if (!MapFocus.To(at.x, at.y, true)) throw new Exception("MapFocus.To refused on the relief.");
+            for (int tick = 0; tick < 3; tick++) DrawTerrain();
+            float after = MapFocus.CentreOffset(at.x, at.y);
+            Note("relief focus " + at.x + "," + at.y + " centre offset " + F(before) + " -> " + F(after) + " at zoom " + F(MfdTerrainRelief.Rig.Zoom));
+            if (after < 0f || after > .08f) throw new Exception("Relief Focus left the point " + F(after) + " of the viewport height from centre.");
+            if (MfdTerrainRelief.Rig.Zoom < 2.99f) throw new Exception("Relief Focus did not raise the area zoom.");
+            MfdTerrainRelief.Rig.Reset();
+            MfdTerrainRelief.ResetOrbit();
+            DrawTerrain();
+        }
+    }
+
+    // Focus on the flat sheet: write the offsets, and the stub's MapControls tail puts the point at the viewport centre. Only the formula is
+    // proved here (the stub copies the game's tail); the real sheet is the pres-flat step in game.
+    private static void CheckFlatFocus(DynamicMap map)
+    {
+        if (MfdTerrainRelief.IsDrawing) throw new Exception("The flat Focus check needs the native sheet.");
+        typeof(DynamicMap).GetField("stationaryOffset", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(map, new Vector2(120f, -75f));
+        map.SetZoomLevel(1f);
+        if (new MfdMapProjection().TryScale(0f, 0f, 1500f, out _)) throw new Exception("The projection scaled a ring on the flat map.");
+        foreach (var at in new[] { new Vector2(30000f, -20000f), new Vector2(-24000f, 15000f) })
+        {
+            float before = MapFocus.CentreOffset(at.x, at.y);
+            if (!(before > .1f)) throw new Exception("The flat Focus point is already central: " + F(before) + ".");
+            if (!MapFocus.To(at.x, at.y, true)) throw new Exception("MapFocus.To refused on the flat sheet.");
+            map.StepFlat();
+            float after = MapFocus.CentreOffset(at.x, at.y);
+            Note("flat focus " + at.x + "," + at.y + " centre offset " + F(before) + " -> " + F(after) + " at zoom " + F(map.GetZoomLevel()));
+            if (after < 0f || after > .08f) throw new Exception("Flat Focus left the point " + F(after) + " of the viewport height from centre.");
+            if (Mathf.Abs(map.GetZoomLevel() - 3f) > .01f) throw new Exception("Flat Focus did not raise the area zoom to 3.");
+            map.SetZoomLevel(1f);
+        }
+        map.SetZoomLevel(5f);
+        if (!MapFocus.To(1000f, 1000f, false) || Mathf.Abs(map.GetZoomLevel() - 5f) > .01f)
+            throw new Exception("Focus without zoomIn changed the zoom.");
+        if (MapFocus.To(float.NaN, 0f, true) || MapFocus.To(0f, float.PositiveInfinity, true)) throw new Exception("Focus took a point that is not finite.");
+        DynamicMap.mapMaximized = false;
+        bool closed = MapFocus.To(0f, 0f, true);
+        DynamicMap.mapMaximized = true;
+        if (closed) throw new Exception("Focus moved a map that is closed.");
+        map.SetZoomLevel(1f);
+    }
+
+    // Friendly sector blue over the sea must read against bare sea and against hostile red (D10: raise the sea field alpha only).
+    // Three samples over sea and three over land: a bare band, a friendly band and a hostile band of the fixture's raster.
+    // Calibrated once under URP on the production raster (2026-10-12), then frozen. The sweep: plane alpha .32 (before) 1.73 / 15.1,
+    // .60 3.26 / 20.0, .80 4.02 / 23.2, 1 5.14 / 26.8 (sea dL* friendly vs bare / sea dE76 friendly vs hostile); over land the same
+    // tint reads 4.42 / 8.6. The spec's starting gate of 8 L* cannot be met by the plane alpha, which tops out at the raster's own
+    // strength (alpha 40 of 255 at the default overlay opacity), so the L* gate is "friendly over sea reads at least as well as over land".
+    private const float SeaFriendlyLightness = 4.5f, SeaFriendlyHostile = 25f;
+
+    private static void CheckFieldContrast(DynamicMap map, Texture2D raster, Camera terrainCamera, float mapWidth)
+    {
+        MfdTerrainRelief.Rig.Reset();
+        MfdTerrainRelief.ResetOrbit();
+        DrawTerrain();
+        MethodInfo ground = typeof(MfdTerrainRelief).GetMethod("GroundHeight", BindingFlags.NonPublic | BindingFlags.Static);
+        float water = (float)typeof(MfdTerrainRelief).GetProperty("WaterModelHeight", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
+        float Height(float x, float z) => (float)ground.Invoke(null, new object[] { x, z });
+        int Band(float x, float z)       // 0 bare, 1 friendly, 2 hostile, -1 off the raster
+        {
+            float u = x / mapWidth + .5f, v = z / 81920f + .5f;
+            if (u < 0f || u > 1f || v < 0f || v > 1f) return -1;
+            Color32 texel = raster.GetPixel(Mathf.Min(raster.width - 1, (int)(u * raster.width)), Mathf.Min(raster.height - 1, (int)(v * raster.height)));
+            return texel.a < 10 ? 0 : texel.b > texel.r ? 1 : 2;
+        }
+        int Surface(float x, float z) => Height(x, z) <= water + .0001f ? 0 : Height(x, z) > water + .05f ? 1 : -1;
+        var found = new Vector2?[3, 2];
+        float[,] nearest = new float[3, 2];
+        for (int band = 0; band < 3; band++) for (int surface = 0; surface < 2; surface++) nearest[band, surface] = float.MaxValue;
+        for (float x = -36000f; x <= 36000f; x += 2000f)
+        for (float z = -36000f; z <= 36000f; z += 2000f)
+        {
+            int band = Band(x, z), surface = Surface(x, z);
+            if (band < 0 || surface < 0) continue;
+            bool steady = true;
+            foreach (var d in new[] { new Vector2(1500f, 0f), new Vector2(-1500f, 0f), new Vector2(0f, 1500f), new Vector2(0f, -1500f) })
+                steady &= Band(x + d.x, z + d.y) == band && Surface(x + d.x, z + d.y) == surface;
+            float distance = x * x + z * z;
+            if (steady && distance < nearest[band, surface]) { nearest[band, surface] = distance; found[band, surface] = new Vector2(x, z); }
+        }
+        RenderTexture target = terrainCamera.targetTexture;
+        Rect viewport = map.mapBackground.rectTransform.rect;
+        var seaMaterial = (Material)typeof(MfdTerrainRelief).GetField("seaControlMaterial", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
+        float shipped = seaMaterial.color.a;
+        // One render at the sea alpha in force, as (sea dL* friendly vs bare, sea dE76 friendly vs hostile, land dL*, land dE76).
+        Vector4 Measure(string picture)
+        {
+            RenderCamera(terrainCamera);
+            RenderTexture.active = target;
+            var shot = new Texture2D(target.width, target.height, TextureFormat.RGB24, false);
+            shot.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
+            shot.Apply();
+            RenderTexture.active = null;
+            Vector3 Sample(int band, int surface)
+            {
+                if (!found[band, surface].HasValue) throw new Exception("The fixture has no steady " + (surface == 0 ? "sea" : "land") + " point in raster band " + band + ".");
+                Vector2 at = found[band, surface].Value, view = ProjectInViewport(map, at.x, at.y);
+                int px = (int)((view.x - viewport.xMin) / viewport.width * target.width), py = (int)((view.y - viewport.yMin) / viewport.height * target.height);
+                Color sum = Color.black;
+                for (int dy = -2; dy <= 2; dy++) for (int dx = -2; dx <= 2; dx++)
+                    sum += shot.GetPixel(Mathf.Clamp(px + dx, 0, target.width - 1), Mathf.Clamp(py + dy, 0, target.height - 1));
+                return Lab(sum / 25f);
+            }
+            Vector3 seaBare = Sample(0, 0), seaFriendly = Sample(1, 0), seaHostile = Sample(2, 0);
+            Vector3 landBare = Sample(0, 1), landFriendly = Sample(1, 1), landHostile = Sample(2, 1);
+            if (picture != null) File.WriteAllBytes(picture, shot.EncodeToPNG());
+            UnityEngine.Object.DestroyImmediate(shot);
+            return new Vector4(Mathf.Abs(seaFriendly.x - seaBare.x), Vector3.Distance(seaFriendly, seaHostile),
+                Mathf.Abs(landFriendly.x - landBare.x), Vector3.Distance(landFriendly, landHostile));
+        }
+        // The calibration table (D10 asks for the sea alpha first): the same fixture at each alpha, then the one the relief ships with.
+        foreach (float alpha in new[] { .32f, .60f, .80f, 1f })
+        {
+            seaMaterial.color = new Color(1f, 1f, 1f, alpha);
+            Vector4 row = Measure(null);
+            Note("sea field alpha " + F(alpha) + ": sea dL* " + F(row.x) + ", sea dE76 friendly-hostile " + F(row.y) + "; land dL* " + F(row.z) + ", land dE76 " + F(row.w));
+        }
+        seaMaterial.color = new Color(1f, 1f, 1f, shipped);
+        Vector4 measured = Measure("relief-contrast.png");
+        Note("shipped sea alpha " + F(shipped) + ": friendly vs bare sea dL* " + F(measured.x) + " (gate " + F(SeaFriendlyLightness) + "), friendly vs hostile sea dE76 " +
+             F(measured.y) + " (gate " + F(SeaFriendlyHostile) + ")");
+        if (measured.x < SeaFriendlyLightness)
+            throw new Exception("Friendly sector blue over sea differs from bare sea by only " + F(measured.x) + " in L*; wanted " + F(SeaFriendlyLightness) + ".");
+        if (measured.y < SeaFriendlyHostile)
+            throw new Exception("Friendly against hostile over sea differs by only " + F(measured.y) + " in dE76; wanted " + F(SeaFriendlyHostile) + ".");
+    }
+
+    // CIE L*a*b* of an sRGB colour (D65): the gate is perceptual, not a byte difference.
+    private static Vector3 Lab(Color c)
+    {
+        float Linear(float v) => v <= .04045f ? v / 12.92f : Mathf.Pow((v + .055f) / 1.055f, 2.4f);
+        float F3(float t) => t > .008856f ? Mathf.Pow(t, 1f / 3f) : 7.787f * t + 16f / 116f;
+        float r = Linear(c.r), g = Linear(c.g), b = Linear(c.b);
+        float x = (.4124564f * r + .3575761f * g + .1804375f * b) / .95047f;
+        float y = .2126729f * r + .7151522f * g + .0721750f * b;
+        float z = (.0193339f * r + .1191920f * g + .9503041f * b) / 1.08883f;
+        return new Vector3(116f * F3(y) - 16f, 500f * (F3(x) - F3(y)), 200f * (F3(y) - F3(z)));
     }
 
     private static void CheckLayoutBeforeSnapshot(DynamicMap map)
@@ -829,6 +1020,7 @@ public static class ReliefUnityCheck
         return Sprite.Create(texture, new Rect(0, 0, side, side), Vector2.one * 0.5f);
     }
 
+    // The production control raster: TacticalSectorGrid's friendly and hostile inks at the default overlay opacity (fillAlpha = 0.35 * 255 * 0.45 = 40).
     private static Texture2D MakeControl()
     {
         const int side = 128;
@@ -838,8 +1030,8 @@ public static class ReliefUnityCheck
         for (int x = 0; x < side; x++)
         {
             pixels[z * side + x] = z > 73
-                ? new Color32(20, 110, 170, 55)
-                : z < 55 ? new Color32(165, 35, 30, 65) : new Color32(0, 0, 0, 0);
+                ? new Color32(35, 130, 235, 40)
+                : z < 55 ? new Color32(230, 45, 45, 40) : new Color32(0, 0, 0, 0);
         }
         texture.SetPixels32(pixels);
         texture.Apply();

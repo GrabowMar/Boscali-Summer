@@ -137,7 +137,9 @@
     <Compile Include="..\..\Core\Modules\ModuleMetadata.cs" Link="Framework\FeatureMetadata.cs" />
     <Compile Include="..\..\Core\Modules\ModuleGraph.cs" Link="Framework\FeatureGraph.cs" />
     <Compile Include="..\..\Core\Services\ServiceRegistry.cs" Link="Framework\ServiceRegistry.cs" />
-    <Compile Include="..\..\modules\Command\Domain\CommandRosterOrder.cs" Link="Features\Command\CommandRosterOrder.cs" />
+    <Compile Include="..\..\modules\Command\Domain\StrPagePlan.cs" Link="Features\Command\StrPagePlan.cs" />
+    <Compile Include="..\..\modules\Command\Domain\StrPanelText.cs" Link="Features\Command\StrPanelText.cs" />
+    <Compile Include="..\..\modules\Command\Presentation\Str\StrControls.cs" Link="Features\Command\StrControls.cs" />
     <Compile Include="..\..\modules\Command\Domain\TacticalTheaterState.cs" Link="Features\Command\TacticalTheaterState.cs" />
     <Compile Include="..\..\modules\Command\Runtime\TacticalSectorGrid.cs" Link="Features\Command\TacticalSectorGrid.cs" />
     <Compile Include="..\..\modules\Command\Runtime\SectorClusterTree.cs" Link="Features\Command\SectorClusterTree.cs" />
@@ -151,6 +153,13 @@
     <Compile Include="..\..\modules\Command\Domain\StrTagPlacer.cs" Link="Features\Command\StrTagPlacer.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrWords.cs" Link="Features\Command\StrWords.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrGate.cs" Link="Features\Command\StrGate.cs" />
+    <Compile Include="..\..\modules\Command\Domain\StrFeedStamp.cs" Link="Features\Command\StrFeedStamp.cs" />
+    <Compile Include="..\..\modules\Command\Domain\StrAnchors.cs" Link="Features\Command\StrAnchors.cs" />
+    <Compile Include="..\..\modules\Command\Domain\RebuildGate.cs" Link="Features\Command\RebuildGate.cs" />
+    <Compile Include="..\..\modules\Command\Domain\MapClickRules.cs" Link="Features\Command\MapClickRules.cs" />
+    <Compile Include="..\..\modules\Command\Domain\FlatFocus.cs" Link="Features\Command\FlatFocus.cs" />
+    <Compile Include="..\..\modules\Command\Domain\StrOverlayPlan.cs" Link="Features\Command\StrOverlayPlan.cs" />
+    <Compile Include="..\..\modules\Command\Domain\StrCardPlan.cs" Link="Features\Command\StrCardPlan.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrViewBuilder.cs" Link="Features\Command\StrViewBuilder.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrViewBuilder.Rows.cs" Link="Features\Command\StrViewBuilder.Rows.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrViewBuilder.Sitrep.cs" Link="Features\Command\StrViewBuilder.Sitrep.cs" />

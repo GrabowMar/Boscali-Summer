@@ -80,6 +80,11 @@
       "id": "map-chrome",
       "title": "Tactical backdrop wallpaper and adopted native map footer",
       "script": "tests/UI/Render-map-chrome.ps1"
+    },
+    {
+      "id": "str",
+      "title": "STR station board",
+      "script": "tests/UI/Render-str.ps1"
     }
   ],
   "styles": {

@@ -12,9 +12,10 @@ namespace BoscaliSummer.Modules.Command.Domain
         public const string Dash = "—";
         /// <summary>Separator of the status strips and chips.</summary>
         public const string Dot = " · ";
-        // Glyphs: the kit font prints the triangle up and the cross (AvStates.Glyph); the others are checked in the first panel render
-        // (annex 05 P9 risk) and a missing one is replaced here by a plain word, never left to draw a box.
-        public const string Up = "▲ ", Down = "▼ ", Level = "▬ ", Yes = "✓", No = "✕", Arrow = "→", Degree = "°";
+        // Glyphs: the kit font asset holds the arrow, the degree sign and the dot; the cross (and the triangle up) reach the game through the kit's own
+        // AvStates.Glyph, which prints them in game. The check mark, the level bar and the triangle down are in no font the game has (the first in-game
+        // capture drew a box for the bar), so a yes is the word OK and the trend words carry a sign: never a box (annex 05 P9 risk).
+        public const string Up = "+ ", Down = "- ", Level = "= ", Yes = "OK", No = "✕", Arrow = "→", Degree = "°";
 
         /// <summary>The slab word above a banner; empty for Operation (its banner only shows when the report is stale).</summary>
         public static string Chip(StrBoardMode mode)

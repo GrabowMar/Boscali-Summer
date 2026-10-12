@@ -1,0 +1,37 @@
+{
+  "foldLine": 520,
+  "fixtures": [
+    { "name": "rich", "page": 0,
+      "strings": ["MAIN EFFORT", "ACCEPT", "SEND WING", "LOCATE ON MAP", "REINFORCEMENT WAVE", "OTHER PLATFORMS", "POSTURE", "SORTIES", "REDIRECT"],
+      "ids": ["tab.board", "tab.sitrep", "tab.log", "hero.locate", "sortie.2.accept", "sortie.1.wing", "sortie.1.locate", "sortie.3.wing", "front.1.redirect", "front.1.locate", "posture.cautious", "posture.steady", "posture.bold", "replan"],
+      "foldRects": ["Hero/Ticket 2/Control ACCEPT", "Hero/Wave"] },
+    { "name": "rich", "page": 1,
+      "strings": ["FORCE BALANCE", "SENSORS AND FRONT", "ALERT LEVEL", "AI SORTIE BOARD", "DEFCON 3", "RADARS"] },
+    { "name": "rich", "page": 2,
+      "strings": ["STAFF TELETYPE", "KESTREL CROSSING TAKEN"] },
+    { "name": "proposals", "page": 0,
+      "strings": ["STAFF PROPOSING", "PICK", "LOCATE", "POSTURE", "PLATFORMS", "AUTO-PICK", "DEFAULT"],
+      "ids": ["prop.1.pick", "prop.1.locate", "prop.2.pick", "prop.3.pick", "posture.cautious", "posture.steady", "posture.bold"],
+      "foldRects": ["Proposal 1/Control PICK"] },
+    { "name": "assessing", "page": 0, "strings": ["STAFF ASSESSING", "POSTURE"], "ids": ["posture.steady"] },
+    { "name": "noopening", "page": 0,
+      "strings": ["NO OPENING", "A FRONT TO WORK", "GROUND FORCE WITHIN REACH OF A FRONT", "HOSTILE CONTACT TO ANSWER", "POSTURE AND CALL-OFFS ALLOW AN OFFER"] },
+    { "name": "reduced", "page": 0, "strings": ["NO PLATFORMS", "NO GROUND WAR HERE", "AIR PICTURE"] },
+    { "name": "staffoff", "page": 0, "strings": ["STAFF OFF", "STAFF SWITCHED OFF IN THIS GAME", "NO PLATFORMS REPORTED"] },
+    { "name": "staffoff", "page": 1, "strings": ["DEFCON 3"] },
+    { "name": "hostlacks", "page": 0, "strings": ["STAFF OFF", "THE HOST TURNED THE STAFF OFF", "NO PLATFORMS REPORTED"] },
+    { "name": "hostlacks", "page": 1, "strings": ["NOT MEASURED"] },
+    { "name": "nofaction", "page": 0, "strings": ["NO FACTION", "YOU ARE NOT ON A SIDE"] },
+    { "name": "waiting", "page": 0, "strings": ["ASKING THE HOST", "WAITING FOR THE FIRST REPORT", "NO ANSWER IN", "PLATFORM NOT REPORTED"] },
+    { "name": "noanswer", "page": 0, "strings": ["NO ANSWER", "THE HOST DID NOT ANSWER"] },
+    { "name": "stale", "page": 0, "strings": ["STALE", "REPORT 22 S OLD"] },
+    { "name": "unknown", "page": 0, "strings": ["MAIN EFFORT"] },
+    { "name": "locked-by-other", "page": 0, "strings": ["SET BY RAPTOR 2-3"] },
+    { "name": "wave-held", "page": 0, "strings": ["HELD", "POOL SHORT"] },
+    { "name": "wing-tasked", "page": 0, "strings": ["RECALL"], "ids": ["sortie.2.wing"] },
+    { "name": "client", "page": 0, "strings": ["SEND WING"] }
+  ],
+  "ink": [
+    { "name": "effort-slab", "hex": "#F5BA56", "maxDeltaE": 14, "rect": "Hero/Slab" }
+  ]
+}
