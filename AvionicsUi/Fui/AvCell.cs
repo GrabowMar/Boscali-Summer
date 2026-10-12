@@ -61,9 +61,11 @@ namespace NOAvionics
         {
             bool now = get != null && get();
             if (now != on) { on = now; if (on) fx.Play(AvFxKind.Shine, 0.4f); }
-            stateWord.text = on ? onWord : offWord;
+            AvText.Set(stateWord, on ? onWord : offWord);
             Restyle();
         }
+
+        private int styledLook = -1, styledGen = -1;
 
         public override float Measure(float width)
         {
@@ -85,6 +87,9 @@ namespace NOAvionics
 
         public override void Restyle()
         {
+            int look = (interactable ? 0 : 1) | (on ? 2 : 0) | (hover ? 4 : 0);
+            if (look == styledLook && styledGen == AvStyleHost.FuiGeneration) return;
+            styledLook = look; styledGen = AvStyleHost.FuiGeneration;
             string st = !interactable ? "disabled" : on ? "on" : hover ? "hover" : null;
             AvStyle c = AvStyleHost.FuiStyle("cell", st);
             frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));

@@ -36,6 +36,10 @@ namespace NOAvionics
         private readonly string id;
         private int bootLine = -1;
         private bool booted;
+        // Hidden consoles keep only their current page active, so coming back on screen regenerates one page of
+        // text and graphics instead of all of them; the rest wake one per fast tick behind their disabled canvases.
+        private static readonly System.Collections.Generic.List<AvConsole> all = new System.Collections.Generic.List<AvConsole>(16);
+        private bool parked;
 
         public RectTransform Root { get; }
         public AvTicker Ticker { get; }
@@ -106,7 +110,9 @@ namespace NOAvionics
             Ticker.Add(-1, AvTickRate.Fast, BootTick);
             Ticker.Add(-1, AvTickRate.Slow, Footer.Tick);
             Ticker.Add(-1, AvTickRate.Slow, SeatBay);
+            Ticker.Add(-1, AvTickRate.Fast, Unpark);
             Ticker.Shown = Wake;
+            if (Application.isPlaying && PageCount > 1) { all.Add(this); AvFxDriver.EnsureRunning(); }
             Restyle();
             Ticker.Register(new RestyleHook(this));
         }
@@ -165,6 +171,7 @@ namespace NOAvionics
         public void SetPage(int index)
         {
             index = Mathf.Clamp(index, 0, PageCount - 1);
+            if (!pageRects[index].gameObject.activeSelf) pageRects[index].gameObject.SetActive(true);
             for (int i = 0; i < PageCount; i++)
             {
                 bool on = i == index;
@@ -237,6 +244,32 @@ namespace NOAvionics
             AvLay.Place(scanCover.rectTransform, 0f, 0f, width, bodyH);
             AvLay.Place(bootText.rectTransform, AvGridTokens.Pad + 4f, AvGridTokens.Pad, width - 2f * AvGridTokens.Pad - 8f, 96f);
             for (int i = 0; i < PageCount; i++) { pageRects[i].anchoredPosition = Vector2.zero; }
+        }
+
+        /// <summary>Parks the off-screen pages of every console that is currently hidden (the FX driver calls this each frame).</summary>
+        internal static void ParkHidden()
+        {
+            for (int i = all.Count - 1; i >= 0; i--)
+            {
+                AvConsole c = all[i];
+                if (c.Root == null) { all.RemoveAt(i); continue; }
+                if (c.parked || c.CurrentPage < 0 || c.Root.gameObject.activeInHierarchy) continue;
+                c.parked = true;
+                for (int p = 0; p < c.PageCount; p++)
+                    if (p != c.CurrentPage) c.pageRects[p].gameObject.SetActive(false);
+            }
+        }
+
+        private void Unpark()
+        {
+            if (!parked) return;
+            for (int i = 0; i < PageCount; i++)
+            {
+                if (pageRects[i].gameObject.activeSelf) continue;
+                pageRects[i].gameObject.SetActive(true);
+                return;
+            }
+            parked = false;
         }
 
         private void StartScan()

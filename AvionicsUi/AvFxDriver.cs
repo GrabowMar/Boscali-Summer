@@ -90,6 +90,7 @@ namespace NOAvionics
             private void Update()
             {
                 Shader.SetGlobalFloat(NowId, Time.unscaledTime);
+                AvConsole.ParkHidden();
                 float target = 0f;
                 if (Tier == AvFxTier.Full && GlitchSource != null)
                 {

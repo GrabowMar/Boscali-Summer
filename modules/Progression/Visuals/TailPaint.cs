@@ -153,6 +153,8 @@ namespace BoscaliSummer.Modules.Progression.Visuals
         private ManualLogSource log;
         private CrestBoard crests;
         private ProgressionNet net;
+        private string gatherText;
+        private EmblemDesign gatherDesign = EmblemDesign.Default;
         private string ownText;
         private EmblemDesign ownDesign = EmblemDesign.Default;
         private Material bake;
@@ -283,7 +285,13 @@ namespace BoscaliSummer.Modules.Progression.Visuals
         private void Gather(EmblemFinish finish)
         {
             wanted.Clear();
-            var own = new Marking(EmblemDesign.Parse(forcedEmblem ?? settings.Emblem.Value, EmblemDesign.Default), finish,
+            string emblemText = forcedEmblem ?? settings.Emblem.Value;
+            if (!string.Equals(emblemText, gatherText, StringComparison.Ordinal))
+            {
+                gatherText = emblemText;
+                gatherDesign = EmblemDesign.Parse(emblemText, EmblemDesign.Default);
+            }
+            var own = new Marking(gatherDesign, finish,
                 forcedEmblem != null ? string.Empty : settings.EmblemFile.Value);
 
             // The resolver clears its list, so the wing goes in first and the player's own aircraft after.

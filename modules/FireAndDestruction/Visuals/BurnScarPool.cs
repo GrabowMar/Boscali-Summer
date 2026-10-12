@@ -23,6 +23,7 @@ namespace BoscaliSummer.Fire
         private bool warnedUnavailable;
         private readonly Dictionary<long, GameObject> forestMarks = new Dictionary<long, GameObject>(MaximumScars);
         private readonly Dictionary<GameObject, Mesh> forestMeshes = new Dictionary<GameObject, Mesh>(MaximumScars);
+        private readonly Dictionary<GameObject, MeshRenderer> forestRenderers = new Dictionary<GameObject, MeshRenderer>(MaximumScars);
         private Material forestMaterial;
         private AssetBundle forestBundle;
         private bool forestShaderSearched;
@@ -35,8 +36,9 @@ namespace BoscaliSummer.Fire
             foreach (var mark in forestMarks.Values)
             {
                 if (mark == null) continue;
-                var renderer = mark.GetComponent<MeshRenderer>();
-                if (renderer != null) renderer.enabled = (mark.transform.position - position).sqrMagnitude < 4000f * 4000f;
+                if (!forestRenderers.TryGetValue(mark, out MeshRenderer renderer) || renderer == null) continue;
+                bool near = (mark.transform.position - position).sqrMagnitude < 4000f * 4000f;
+                if (renderer.enabled != near) renderer.enabled = near;
             }
         }
 
@@ -65,6 +67,7 @@ namespace BoscaliSummer.Fire
             if (filter == null) filter = mark.AddComponent<MeshFilter>();
             var renderer = mark.GetComponent<MeshRenderer>();
             if (renderer == null) renderer = mark.AddComponent<MeshRenderer>();
+            forestRenderers[mark] = renderer;
             // Never rebuild a shared native mesh if the prefab happens to contain one.
             if (!forestMeshes.TryGetValue(mark, out Mesh mesh))
             {
@@ -145,6 +148,7 @@ namespace BoscaliSummer.Fire
                 }
             marks.Clear();
             forestMarks.Clear();
+            forestRenderers.Clear();
             foreach (Mesh mesh in forestMeshes.Values) if (mesh != null) Object.Destroy(mesh);
             forestMeshes.Clear();
             if (forestMaterial != null) Object.Destroy(forestMaterial);

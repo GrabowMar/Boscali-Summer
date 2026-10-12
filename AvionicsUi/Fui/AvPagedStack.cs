@@ -16,7 +16,7 @@ namespace NOAvionics
         private readonly Action<int, T> bind;
         private readonly AvControl prev, next;
         private readonly TMP_Text range;
-        private int count;
+        private int count, rangeFirst = -1, rangeCount = -1;
 
         /// <param name="gap">Space between rows.</param>
         /// <param name="factory">Builds pool slot <c>i</c> under the stack's rect.</param>
@@ -69,7 +69,11 @@ namespace NOAvionics
                 rows[i].Rect.gameObject.SetActive(shown);
                 if (shown) bind?.Invoke(item, rows[i]);
             }
-            range.text = count == 0 ? "0 OF 0" : (first + 1) + "–" + Mathf.Min(count, first + rows.Length) + " OF " + count;
+            if (first != rangeFirst || count != rangeCount)
+            {
+                rangeFirst = first; rangeCount = count;
+                range.text = count == 0 ? "0 OF 0" : (first + 1) + "–" + Mathf.Min(count, first + rows.Length) + " OF " + count;
+            }
             prev.Interactable = Page > 0;
             next.Interactable = Page < Pages - 1;
             prev.gameObject.SetActive(Paged); next.gameObject.SetActive(Paged); range.gameObject.SetActive(Paged);

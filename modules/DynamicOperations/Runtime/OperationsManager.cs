@@ -66,6 +66,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 
         private readonly Dictionary<FactionHQ, FactionBoard> boards = new Dictionary<FactionHQ, FactionBoard>();
         private readonly List<Airbase> bases = new List<Airbase>(64);
+        private readonly List<Vector3> basePositions = new List<Vector3>(64);   // parallel to bases, refreshed with them at 1 Hz
         private readonly HashSet<ulong> paidPlayers = new HashSet<ulong>();
         private readonly OperationRewards rewards = new OperationRewards();
         private DynamicOperationsSettings settings;
@@ -139,7 +140,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         {
             foreach (FactionBoard board in boards.Values)
                 for (int i = 0; i < board.Targets.Count; i++) board.Targets[i].Unwatch();
-            rewards.ResetForScene(); boards.Clear(); bases.Clear(); paidPlayers.Clear();
+            rewards.ResetForScene(); boards.Clear(); bases.Clear(); basePositions.Clear(); paidPlayers.Clear();
             jammers.Clear();
             foreach (Candidate candidate in candidates) { candidate.Unit = null; candidate.Base = null; candidate.Count = 0; }
             missionIdentity = null; previousTime = 0f; nextTick = 0f;
@@ -223,11 +224,16 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         private void GatherBases()
         {
             bases.Clear();
+            basePositions.Clear();
             int inspected = 0;
             foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
             {
                 if (++inspected > 64) break;
-                if (Usable(airbase) && !bases.Contains(airbase)) bases.Add(airbase);
+                if (Usable(airbase) && !bases.Contains(airbase))
+                {
+                    bases.Add(airbase);
+                    basePositions.Add(airbase.center.GlobalPosition().AsVector3());
+                }
             }
         }
 
@@ -570,7 +576,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             {
                 Airbase airbase = bases[i];
                 if (airbase.CurrentHQ != hq) continue;
-                Vector3 delta = airbase.center.GlobalPosition().AsVector3() - position;
+                Vector3 delta = basePositions[i] - position;
                 float distance = delta.x * delta.x + delta.z * delta.z;
                 if (distance < best) { best = distance; nearest = airbase; }
             }

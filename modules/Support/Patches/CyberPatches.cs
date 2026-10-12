@@ -21,7 +21,9 @@ namespace BoscaliSummer.Modules.Support.Patches
     {
         private static bool Prefix(Unit owner)
         {
-            try { return !(GameAccess.IsServer() && CyberService.Active != null && CyberService.Active.LaunchBlocked(owner)); }
+            CyberService active = CyberService.Active;
+            if (active == null || !active.BlocksLive) return true;
+            try { return !(GameAccess.IsServer() && active.LaunchBlocked(owner)); }
             catch (Exception e) { PatchGuard.Report("Support.CyberLaunchMount", e); return true; }
         }
     }
@@ -31,7 +33,9 @@ namespace BoscaliSummer.Modules.Support.Patches
     {
         private static bool Prefix(Unit owner)
         {
-            try { return !(GameAccess.IsServer() && CyberService.Active != null && CyberService.Active.LaunchBlocked(owner)); }
+            CyberService active = CyberService.Active;
+            if (active == null || !active.BlocksLive) return true;
+            try { return !(GameAccess.IsServer() && active.LaunchBlocked(owner)); }
             catch (Exception e) { PatchGuard.Report("Support.CyberLaunchFire", e); return true; }
         }
     }
@@ -90,10 +94,12 @@ namespace BoscaliSummer.Modules.Support.Patches
     {
         private static bool Prefix()
         {
+            CyberService active = CyberService.Active;
+            if (active == null || !active.BlocksLive) return true;
             try
             {
                 Unit detecting = CyberShareContext.Detecting;
-                return detecting == null || !GameAccess.IsServer() || CyberService.Active == null || !CyberService.Active.ShareBlocked(detecting);
+                return detecting == null || !GameAccess.IsServer() || !active.ShareBlocked(detecting);
             }
             catch (Exception e) { PatchGuard.Report("Support.CyberShareBlock", e); return true; }
         }

@@ -47,6 +47,9 @@ namespace BoscaliSummer.Fire
             public float ExternalIntensity = 1f;
             public float ForestClusterScale = 1f;
             internal Vector2 footprintRadius = Vector2.one;
+            // Inputs of the constant particle-module block last written by SetPhase; Activate clears the flag.
+            internal bool constantsApplied;
+            private float appliedSize, appliedLifetime, appliedCluster, appliedBuoyancy;
 
             public void SetForestFootprint(Vector2 halfExtents)
             {
@@ -136,6 +139,8 @@ namespace BoscaliSummer.Fire
                             Mathf.Lerp(1.50f, 2.50f, clusterT),
                             Mathf.Lerp(1.70f, 2.60f, clusterT));
                 }
+                bool refresh = !constantsApplied || appliedSize != SizeScale ||
+                    appliedLifetime != LifetimeScale || appliedCluster != clusterT || appliedBuoyancy != Buoyancy;
                 for (int i = 0; i < Systems.Length && i < BaseRates.Length; i++)
                 {
                     ParticleSystem system = Systems[i];
@@ -163,8 +168,11 @@ namespace BoscaliSummer.Fire
                     // restrained world-space wind component so multiple urban columns shear
                     // together instead of forming identical vertical cylinders.
                     ParticleSystem.VelocityOverLifetimeModule velocity = system.velocityOverLifetime;
-                    velocity.enabled = true;
-                    velocity.space = ParticleSystemSimulationSpace.World;
+                    if (refresh)
+                    {
+                        velocity.enabled = true;
+                        velocity.space = ParticleSystemSimulationSpace.World;
+                    }
                     float drift = DriftScale * Mathf.Lerp(0.16f, 0.34f, windStrength / 18f);
                     ParticleSystem.MinMaxCurve vertical = velocity.y;
                     if (vertical.mode == ParticleSystemCurveMode.Constant)
@@ -185,21 +193,28 @@ namespace BoscaliSummer.Fire
                     // Profile-scaled shape and colour: forest plumes read lighter, warmer and
                     // taller than a dark fuel-tank column, and buoyancy keeps the column
                     // accelerating into a billow instead of a flat sleeve.
-                    ParticleSystem.MainModule main = system.main;
-                    main.startSizeMultiplier = SizeScale *
-                        (Profile == SmokeProfile.Forest ? Mathf.Lerp(1f, 1.15f, clusterT) : 1f);
-                    main.startLifetimeMultiplier = LifetimeScale;
-                    if (ActiveColors != null && i < ActiveColors.Length)
-                        main.startColor = ActiveColors[i];
-                    ParticleSystem.ForceOverLifetimeModule force = system.forceOverLifetime;
-                    force.enabled = true;
-                    force.space = ParticleSystemSimulationSpace.World;
-                    force.x = new ParticleSystem.MinMaxCurve(0f);
-                    force.y = new ParticleSystem.MinMaxCurve(Buoyancy *
-                        (Profile == SmokeProfile.Forest ? Mathf.Lerp(1f, 1.35f, clusterT) : 1f));
-                    force.z = new ParticleSystem.MinMaxCurve(0f);
+                    // These only change with the scales above or on (re)activation.
+                    if (refresh)
+                    {
+                        ParticleSystem.MainModule main = system.main;
+                        main.startSizeMultiplier = SizeScale *
+                            (Profile == SmokeProfile.Forest ? Mathf.Lerp(1f, 1.15f, clusterT) : 1f);
+                        main.startLifetimeMultiplier = LifetimeScale;
+                        if (ActiveColors != null && i < ActiveColors.Length)
+                            main.startColor = ActiveColors[i];
+                        ParticleSystem.ForceOverLifetimeModule force = system.forceOverLifetime;
+                        force.enabled = true;
+                        force.space = ParticleSystemSimulationSpace.World;
+                        force.x = new ParticleSystem.MinMaxCurve(0f);
+                        force.y = new ParticleSystem.MinMaxCurve(Buoyancy *
+                            (Profile == SmokeProfile.Forest ? Mathf.Lerp(1f, 1.35f, clusterT) : 1f));
+                        force.z = new ParticleSystem.MinMaxCurve(0f);
+                    }
                     if (!system.isPlaying) system.Play(true);
                 }
+                constantsApplied = true;
+                appliedSize = SizeScale; appliedLifetime = LifetimeScale;
+                appliedCluster = clusterT; appliedBuoyancy = Buoyancy;
             }
 
             private static float Smooth01(float value)
@@ -539,6 +554,7 @@ namespace BoscaliSummer.Fire
             visual.Profile = profile;
             visual.ExternalIntensity = 1f;
             visual.ForestClusterScale = 1f;
+            visual.constantsApplied = false;
             bool forest = profile == SmokeProfile.Forest;
             bool ruin = profile == SmokeProfile.Ruin;
             float a = Signature(position, 0.013f, 0.029f);

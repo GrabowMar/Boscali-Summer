@@ -36,11 +36,19 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         }
 
         /// <summary>Highest ground under the aircraft and 2, 5 and 10 s ahead on its horizontal path.</summary>
-        public static float LookAhead(Vec3 pos, Vec3 vel)
+        public static float LookAhead(Vec3 pos, Vec3 vel) => LookAhead(pos, vel, out _);
+
+        /// <summary><see cref="LookAhead(Vec3, Vec3)"/> that also hands back <see cref="Near"/>, which is its first two samples.</summary>
+        public static float LookAhead(Vec3 pos, Vec3 vel, out float near)
         {
             Vec3 h = vel.Horizontal;
             float top = 0f;
-            for (int i = 0; i < LookAheadSeconds.Length; i++) top = Math.Max(top, GroundY(pos + h * LookAheadSeconds[i]));
+            near = 0f;
+            for (int i = 0; i < LookAheadSeconds.Length; i++)
+            {
+                top = Math.Max(top, GroundY(pos + h * LookAheadSeconds[i]));
+                if (i == 1) near = top;
+            }
             return top;
         }
 

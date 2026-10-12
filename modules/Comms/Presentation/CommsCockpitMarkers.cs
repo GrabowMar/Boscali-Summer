@@ -168,7 +168,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 Vector2 at = positions[i];
                 Vector2 captionAt = PlaceCaption(at, captionCount);
                 captions[captionCount++] = CaptionBounds(captionAt);
-                markers[i].Show(at, captionAt - at, kind.Glyph, code + " · " + CommsText.Distance(range, metric) + "\n" + who,
+                markers[i].Show(at, captionAt - at, kind.Glyph, code, who, range, metric,
                     colour, pinned[i], bearings[i], minimumFontSize);
             }
         }
@@ -278,7 +278,24 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             private readonly Image leader, captionBack;
             private readonly TMP_Text label;
             private readonly float fontSize;
-            private string text;
+            private string text, textCode, textWho;
+            private bool textMetric;
+            private long textStep = long.MinValue;
+
+            // Changes exactly when CommsText.Distance would print a different string (same bands, same rounding).
+            private static long DistanceStep(float metres, bool metric)
+            {
+                if (float.IsNaN(metres) || float.IsInfinity(metres)) return -1;
+                if (metric)
+                {
+                    if (metres < 1000f) return Step(metres);
+                    return metres < 100000f ? 1000000L + Step(metres / 100f) : 2000000L + Step(metres / 1000f);
+                }
+                float nm = metres / 1852f;
+                return nm < 100f ? 3000000L + Step(nm * 10f) : 4000000L + Step(nm);
+            }
+
+            private static long Step(float v) => (long)System.Math.Round(v, System.MidpointRounding.AwayFromZero);
 
             public Marker(RectTransform parent, TMP_FontAsset font, Material fontMaterial)
             {
@@ -321,7 +338,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 go.SetActive(false);
             }
 
-            public void Show(Vector2 at, Vector2 captionOffset, string kind, string caption, Color colour, bool clamped, float bearing, float minimumFontSize)
+            public void Show(Vector2 at, Vector2 captionOffset, string kind, string code, string who, float range, bool metric, Color colour, bool clamped, float bearing, float minimumFontSize)
             {
                 if (!root.gameObject.activeSelf) root.gameObject.SetActive(true);
                 root.anchoredPosition = at;
@@ -350,10 +367,15 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                     Vector2 outward = new Vector2(Mathf.Cos(bearing * Mathf.Deg2Rad), Mathf.Sin(bearing * Mathf.Deg2Rad));
                     arrow.rectTransform.anchoredPosition = outward * 26f;
                 }
-                if (text != caption)
+                long step = DistanceStep(range, metric);
+                if (text == null || step != textStep || metric != textMetric || textCode != code || textWho != who)
                 {
-                    text = caption;
-                    label.text = caption;
+                    textStep = step;
+                    textMetric = metric;
+                    textCode = code;
+                    textWho = who;
+                    text = code + " · " + CommsText.Distance(range, metric) + "\n" + who;
+                    label.text = text;
                 }
                 label.color = colour;
                 label.fontSize = Mathf.Max(fontSize, minimumFontSize);

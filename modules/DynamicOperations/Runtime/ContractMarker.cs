@@ -43,6 +43,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         private int detailMetres = int.MinValue;
         private int detailSeconds = int.MinValue;
         private bool detailMetric;
+        private bool detailInside;
         private Color detailTone;
         private float textSize;
         private float labelScale;
@@ -171,16 +172,18 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             }
 
             // The detail line carries a live distance and clock, so it is rebuilt only when one
-            // of its inputs actually moved: a metre of range, a second of clock, a new tone or
-            // a new contract.
-            int metres = Mathf.RoundToInt(distance);
+            // of its inputs actually moved: a step of the displayed range, a second of clock, a
+            // new tone or a new contract.
+            int metres = OperationMarkerCopy.DistanceStep(distance, metric);
+            bool inside = card.Inside(distance);
             int seconds = Mathf.CeilToInt(card.Seconds);
             if (detailCache == null || detailCard != card.Id || detailMetric != metric ||
-                detailTone != tone || Mathf.Abs(metres - detailMetres) >= 1 || seconds != detailSeconds)
+                detailTone != tone || metres != detailMetres || inside != detailInside || seconds != detailSeconds)
             {
                 detailCard = card.Id;
                 detailMetric = metric;
                 detailTone = tone;
+                detailInside = inside;
                 detailMetres = metres;
                 detailSeconds = seconds;
                 detailCache = card.Detail(distance, metric);

@@ -21,6 +21,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         // aircraft), then settle to a slow sweep; FindObjectsOfTypeAll allocates and hitches.
         private static readonly float[] LadderSeconds = { 0f, 4f, 12f, 30f, 60f };
         private const float RescanSeconds = 120f;
+        private const float FoundRescanSeconds = 600f;
         private const int MaxMaterials = 16;
 
         private readonly Dictionary<Material, int> originals = new Dictionary<Material, int>();
@@ -41,7 +42,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 nextScan = now;
             }
             if (now < nextScan || originals.Count >= MaxMaterials) return;
-            nextScan = ladderStep < LadderSeconds.Length - 1
+            bool ladderDone = ladderStep >= LadderSeconds.Length - 1;
+            nextScan = !ladderDone
                 ? ladderStart + LadderSeconds[++ladderStep]
                 : now + RescanSeconds;
 
@@ -53,6 +55,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 originals[material] = material.renderQueue;
                 material.renderQueue = BeforeDeckQueue;
             }
+            // Ladder finished and haze found: only a late-spawning airframe type can add one, so sweep rarely.
+            if (ladderDone && originals.Count > 0) nextScan = now + FoundRescanSeconds;
         }
 
         public void Restore()

@@ -10,6 +10,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
     internal sealed partial class WingService
     {
         private static readonly Dictionary<WeaponInfo, bool> sarh = new Dictionary<WeaponInfo, bool>();
+        private static readonly Dictionary<WeaponInfo, StoreClass> storeClass = new Dictionary<WeaponInfo, StoreClass>();
 
         /// <summary>Every tick after the fight's supervision: each member's radar on or off as its doctrine wants (SILENT: on
         /// while engaged). The actual state is compared every tick, so a rearm or a pod that comes up on is switched off.</summary>
@@ -57,7 +58,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         {
             if (w == null || w.WeaponInfo == null) return false;
             WeaponInfo i = w.WeaponInfo;
-            StoreClass c = StoreClasses.Of(i.gun, i.jammer, i.missile, i.bomb || i.glideBomb, i.effectiveness.antiAir, i.effectiveness.antiSurface);
+            if (!storeClass.TryGetValue(i, out StoreClass c))
+                storeClass[i] = c = StoreClasses.Of(i.gun, i.jammer, i.missile, i.bomb || i.glideBomb, i.effectiveness.antiAir, i.effectiveness.antiSurface);
             return WeaponsFilter.AllowsStation(d.Weapons, c, Sarh(i), RadarDiscipline.Wanted(d.Radar, engaged));
         }
 

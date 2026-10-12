@@ -140,6 +140,8 @@ namespace BoscaliSummer.Modules.Progression.Networking
             Crests.Clear(); nextCrest.Clear(); greeted.Clear(); crestPublished = false;
         }
 
+        internal bool HasTunes => tunes.Count > 0;
+
         internal byte TuneFor(Aircraft aircraft) => aircraft != null &&
             tunes.TryGetValue(aircraft.persistentID.Id, out byte mode) ? mode : (byte)0;
 

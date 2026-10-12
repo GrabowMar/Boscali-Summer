@@ -17,6 +17,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         public int StandingShots { get; private set; }
 
         private readonly Unit[] standingOthers = new Unit[FormationCatalog.MaxSlots];
+        private readonly List<WeaponStation> standingStations = new List<WeaponStation>();
 
         /// <summary>The game fires a missile only at a position this accurate (review M5d-2 I2).</summary>
         public static float FireAccuracyMetres = 100f;
@@ -136,6 +137,16 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 if (taken != null) standingOthers[others++] = taken;
             }
 
+            // The member's usable missile stations do not change inside the tracking loop.
+            standingStations.Clear();
+            foreach (WeaponStation w in a.weaponStations)
+                if (UsableBy(m, doctrine, w) && w.WeaponInfo.missile && !w.WeaponInfo.gun && !w.WeaponInfo.bomb) standingStations.Add(w);
+            if (standingStations.Count == 0)
+            {
+                for (int i = 0; i < others; i++) standingOthers[i] = null;
+                return;
+            }
+
             GlobalPosition at = a.GlobalPosition();
             Vector3 nose = a.transform.forward;
             Unit best = null;
@@ -146,7 +157,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 TrackingInfo t = pair.Value;
                 if (t == null || !t.TryGetUnit(out Unit u) || u == null || u.disabled || u is Missile || u.NetworkHQ == null || u.NetworkHQ == hq) continue;
                 bool air = u.definition != null && u.definition.typeIdentity.air > 0.5f;
-                float fromCover = (t.GetPosition().ToVec3() - cover).Length;
+                float fromCover = mode == StandingMode.Cover ? (t.GetPosition().ToVec3() - cover).Length : 0f;
                 if (mode == StandingMode.Cover ? !(u is Aircraft) || fromCover > range : !StandingFire.Allows(allow, air)) continue;
                 if (!WeaponsFilter.AllowsTarget(doctrine.Weapons, air)) continue;
                 Vector3 to = t.GetPosition() - at;
@@ -156,9 +167,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 int committed = 0;
                 for (int i = 0; i < others; i++)
                     if (ReferenceEquals(standingOthers[i], u)) committed++;
-                foreach (WeaponStation w in a.weaponStations)
+                foreach (WeaponStation w in standingStations)
                 {
-                    if (!UsableBy(m, doctrine, w) || !w.WeaponInfo.missile || w.WeaponInfo.gun || w.WeaponInfo.bomb) continue;
                     TargetRequirements req = w.WeaponInfo.targetRequirements;
                     float maxRange = PerkRange(m, w, a, u, to);
                     if (!StandingFire.InEnvelope(distance, req.minRange, maxRange, u.radarAlt, req.minAltitude, req.maxAltitude, off, m.Perks.Boresight(req.minAlignment), a.speed, req.minOwnerSpeed)) continue;

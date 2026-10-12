@@ -302,12 +302,15 @@ namespace BoscaliSummer.Fire
             Vector3 local = impact.Position.ToLocalPosition();
             if (local.y < Datum.LocalSeaY + 0.5f) return;
 
-            FindBuildings(local, out Building networkBuilding, out MapBuilding mapBuilding);
-            bool eligible = mapBuilding != null || networkBuilding != null || forestIndex.Contains(impact.Position);
-            if (!eligible) return;
+            // Cooldown first: it is a dictionary lookup, the building query is physics. Same outcome, and
+            // impactSequence (below) still only advances for eligible, off-cooldown impacts.
             long cell = Deterministic.CellKey(impact.Position.x, impact.Position.z, 24f);
             float now = Time.timeSinceLevelLoad;
             if (cellCooldowns.TryGetValue(cell, out float retryAt) && now < retryAt) return;
+
+            FindBuildings(local, out Building networkBuilding, out MapBuilding mapBuilding);
+            bool eligible = mapBuilding != null || networkBuilding != null || forestIndex.Contains(impact.Position);
+            if (!eligible) return;
 
             float chance = impact.Explosive
                 ? Fire.ExplosiveIgnitionChance

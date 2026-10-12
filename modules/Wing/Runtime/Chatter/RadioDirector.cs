@@ -339,7 +339,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         {
             if (VoicePacks.Playing) return true;
             if (!VoiceOn()) { SilenceTts(); return false; }
-            if (voice == null || voiceBroken) return false;
+            if (voice == null || voiceBroken || !ttsActive) return false;   // COM poll only after a Speak, until it reports finished
             try
             {
                 ttsActive = voice.IsPlaying();

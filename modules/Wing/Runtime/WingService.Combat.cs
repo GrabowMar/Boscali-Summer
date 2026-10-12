@@ -883,7 +883,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     AnchorDistance = area != null ? new Vec3(at.X - area.Center.X, 0f, at.Z - area.Center.Z).Length
                         : anchor.Present ? (anchor.Pos - at).Length : 0f,
                     LeashMetres = leash,
-                    Ammo = AmmoFraction(m.Aircraft), Bingo = bingo,
+                    Ammo = m.Ammo, Bingo = bingo,
                     NoTargetSeconds = m.NoTargetClock = NativeTarget(m) != null ? 0f : m.NoTargetClock + dt,
                 };
                 if (!CombatSupervisor.TakeBack(s, out TransitionReason reason)) continue;

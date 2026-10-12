@@ -105,6 +105,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         private bool deferredVanillaCrossfade;
         private float nextVanillaSweep;
         private float nextSoundtrackProbe;
+        private int soundtrackMisses;
         private bool configured;
 
         // Hunt override
@@ -364,6 +365,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             }
             soundtrackCatalog = null;
             nextSoundtrackProbe = 0f;
+            soundtrackMisses = 0;
             if (localLibrary == null) ScanLibrary();
             else BuildStations();
         }
@@ -793,8 +795,9 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         private void ProbeSoundtrack()
         {
             if (soundtrackCatalog != null || Time.unscaledTime < nextSoundtrackProbe) return;
-            nextSoundtrackProbe = Time.unscaledTime + 1f;
-            if (!VanillaSoundtrackCatalog.TryCreate(out VanillaSoundtrackCatalog catalog)) return;
+            nextSoundtrackProbe = Time.unscaledTime + (soundtrackMisses == 0 ? 1f : 10f); // back off after the first miss
+            if (!VanillaSoundtrackCatalog.TryCreate(out VanillaSoundtrackCatalog catalog)) { soundtrackMisses++; return; }
+            soundtrackMisses = 0;
             string selectedName = CurrentChannelName;
             soundtrackCatalog = catalog;
             BuildStations();

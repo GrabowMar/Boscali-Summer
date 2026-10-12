@@ -72,6 +72,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         internal static void BiasGuidance(Missile missile, ref GlobalPosition aimPoint)
         {
+            if (aces.Count == 0 && !WingPilotRoster.AnyAssigned) return;
             if (missile == null || !missile.IsServer || !missile.LocalSim || missile.disabled ||
                 !UnitRegistry.TryGetUnit(missile.targetID, out Unit target) || !(target is Aircraft aircraft) ||
                 aircraft.disabled) return;

@@ -223,6 +223,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             loadout = null;
             wingPage = null;
             shownPage = -1;
+            statusAlert = statusPrompt = statusAmbient = null;
             fitButton = null;
             fitStep = -1;
             for (int i = 0; i < headerKeys.Length; i++) headerKeys[i] = -1;
@@ -241,8 +242,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             try
             {
-                VirtualMFD mfd = SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.GetComponentInChildren<VirtualMFD>(true)
-                    ?? UnityEngine.Object.FindObjectOfType<VirtualMFD>();
+                VirtualMFD mfd = MfdPanelInstaller.ResolveMfd();
                 if (mfd == null) return;
                 RetireStaleScreens();
                 if (!MfdBezel.TryClaim(preferLeft: true, mfd: mfd,
@@ -538,8 +538,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         /// <summary>The footer line: the armed-order prompt first, then an alert, else the page's ambient hint. Hover help replaces it
         /// while a control is hovered: kit v2 controls publish theirs to the console footer themselves (<see cref="AvHelpTip"/>).</summary>
+        private string statusAlert, statusPrompt, statusAmbient;
+
         private void WriteStatus(string alert, string prompt, string ambient)
         {
+            // Same inputs as the last refresh: skip the three concatenations the footer would compare and drop.
+            if (alert == statusAlert && prompt == statusPrompt && ambient == statusAmbient) return;
+            statusAlert = alert; statusPrompt = prompt; statusAmbient = ambient;
             if (!string.IsNullOrEmpty(prompt)) shell.Footer.Set("ACTION  ·  " + prompt, AvState.Caution);
             else if (!string.IsNullOrEmpty(alert)) shell.Footer.Set("ALERT  ·  " + alert, AvState.Danger);
             else shell.Footer.Set("STATUS  ·  " + (ambient ?? ""), AvState.Inert);

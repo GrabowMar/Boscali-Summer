@@ -86,6 +86,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         public readonly DamageWatch Damage = new DamageWatch();
         /// <summary>Out of weapons in formation, called once (a field: updated in place).</summary>
         public WinchesterLatch Winchester;
+        /// <summary>Stores left (0-1), sampled at 1 Hz with the hull (the fight's winchester check reads it).</summary>
+        public float Ammo = 1f;
         /// <summary>The RADAR doctrine's last toggle (a field: updated in place).</summary>
         public RadarGate RadarGate;
 
