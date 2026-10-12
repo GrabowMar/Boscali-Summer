@@ -100,30 +100,62 @@ Cargo-launched systems also need an aircraft with a compatible cargo bay. All of
 
 ## Screenshots
 
-<a href="media/readme/command.png"><img src="media/readme/command.png" alt="The STR console beside the relief map, showing territory, frontline and command status" width="100%"></a>
-
 <table>
 <tr>
-<td width="50%"><a href="media/readme/cockpit.png"><img src="media/readme/cockpit.png" alt="FS-20 Vortex cockpit with the Boscali Summer HUD and clouds beyond the canopy"></a></td>
-<td width="50%"><a href="media/readme/support.png"><img src="media/readme/support.png" alt="The OPS console showing SPACE, CYBER and SOF readiness beside the tactical map"></a></td>
+<td colspan="2"><a href="media/readme/formation.png"><img src="media/readme/formation.png" alt="Three FS-20 Vortex fighters in formation above mountains and broken cloud" width="100%"></a></td>
 </tr>
 <tr>
-<td align="center"><sub><b>Cockpit</b> · HUD and weather</sub></td>
-<td align="center"><sub><b>Support operations</b> · SPACE, CYBER and SOF</sub></td>
+<td colspan="2" align="center"><sub><b>Your wing</b> · three FS-20 Vortex over Boscali</sub></td>
+</tr>
+<tr>
+<td width="50%"><a href="media/readme/cockpit.png"><img src="media/readme/cockpit.png" alt="FS-20 Vortex cockpit with the HUD and two wingmen ahead over broken cloud"></a></td>
+<td width="50%"><a href="media/readme/cockpit-storm.png"><img src="media/readme/cockpit-storm.png" alt="The same cockpit under a dark storm sky with rain droplets on the canopy"></a></td>
+</tr>
+<tr>
+<td align="center"><sub><b>Cockpit</b> · HUD, TAC BOARD and the wing ahead</sub></td>
+<td align="center"><sub><b>Weather</b> · rain on the canopy under a storm sky</sub></td>
+</tr>
+<tr>
+<td width="50%"><a href="media/readme/command.png"><img src="media/readme/command.png" alt="The STR board beside the relief map with frontline, operations and sortie offers"></a></td>
+<td width="50%"><a href="media/readme/sitrep.png"><img src="media/readme/sitrep.png" alt="The STR sitrep page with force balance bars and the alert level"></a></td>
+</tr>
+<tr>
+<td align="center"><sub><b>Theater command</b> · the STR board over a live war</sub></td>
+<td align="center"><sub><b>Situation report</b> · force balance, sensors and alert level</sub></td>
+</tr>
+<tr>
+<td width="50%"><a href="media/readme/support.png"><img src="media/readme/support.png" alt="The OPS fronts page listing the SPACE, CYBER and SOF fronts beside the map"></a></td>
+<td width="50%"><a href="media/readme/support-space.png"><img src="media/readme/support-space.png" alt="The SPACE front window with satellite coverage circles and the programme queue"></a></td>
+</tr>
+<tr>
+<td align="center"><sub><b>Support operations</b> · SPACE, CYBER and SOF fronts</sub></td>
+<td align="center"><sub><b>Space front</b> · satellites, coverage and programmes</sub></td>
+</tr>
+<tr>
+<td width="50%"><a href="media/readme/support-cyber.png"><img src="media/readme/support-cyber.png" alt="The CYBER front window with the theatre node graph and terminal"></a></td>
+<td width="50%"><a href="media/readme/weather-console.png"><img src="media/readme/weather-console.png" alt="The weather console with synoptic chart, sky picker and set-pieces"></a></td>
+</tr>
+<tr>
+<td align="center"><sub><b>Cyber front</b> · network graph and intrusion trace</sub></td>
+<td align="center"><sub><b>Met Office</b> · the host's weather console</sub></td>
+</tr>
+<tr>
+<td width="50%"><a href="media/readme/vanguard.png"><img src="media/readme/vanguard.png" alt="The VANGUARD gliders, missiles and pods lined up in the air above the coast"></a></td>
+<td width="50%"><a href="media/readme/coast.png"><img src="media/readme/coast.png" alt="FS-20 Vortex above a coastal city under fair-weather cloud"></a></td>
+</tr>
+<tr>
+<td align="center"><sub><b>VANGUARD</b> · the experimental equipment line-up</sub></td>
+<td align="center"><sub><b>Free Flight</b> · an FS-20 over the coastal city</sub></td>
 </tr>
 </table>
-
-<a href="media/readme/vortex-flight.png"><img src="media/readme/vortex-flight.png" alt="FS-20 Vortex above a coastal city and cloud banks" width="100%"></a>
-
-<p align="center"><sub>Top: <b>theater command</b> on the STR page. Bottom: an FS-20 Vortex over the coast in Free Flight.</sub></p>
 
 <details>
 <summary>About these captures</summary>
 <br>
 
-All four are unedited 1920 × 1080 captures from the running game, taken with **nomodkit** in **Free Flight** on 11 October 2026. Flight, camera and console views were scripted, and development settings and other plugins were left installed. They show what the mod looks like; they are not a performance benchmark or a multiplayer test, and the support allocation shown isn't balanced gameplay. Aircraft and terrain include native Nuclear Option assets.
+All eleven are unedited 1920 × 1080 captures from the running game, taken with **nomodkit** on 12 October 2026: the flying, cockpit, weather and VANGUARD shots in **Free Flight**, the STR and OPS consoles over a running **Escalation** war. Flight, camera, weather and console views were scripted, and development settings and other plugins were left installed. They show what the mod looks like; they are not a performance benchmark or a multiplayer test, and the support allocation shown isn't balanced gameplay. Aircraft and terrain include native Nuclear Option assets.
 
-Records: [scenario](media/readme/scenario.json) · [capture report](media/readme/report.json) · [hashes and build provenance](media/readme/provenance.json)
+Records: scenarios ([flight](media/readme/scenario-flight.json), [command](media/readme/scenario-command.json)) · capture reports ([flight](media/readme/report-flight.json), [command](media/readme/report-command.json)) · [hashes and build provenance](media/readme/provenance.json)
 
 The banner at the top is generated from the mod's own terrain heightmap by [`tools/Build-ReadmeHeader.py`](tools/Build-ReadmeHeader.py). The aircraft, front line and radar on it are illustration, not a game capture. It stops animating if your system asks for reduced motion.
 

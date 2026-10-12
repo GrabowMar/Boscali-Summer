@@ -1,0 +1,261 @@
+{
+  "name": "readme-flight",
+  "mission": "Free Flight",
+  "timeout_s": 300,
+  "environment": {
+    "resolution": [
+      1920,
+      1080
+    ],
+    "fullscreen": false,
+    "framerate": 60,
+    "atmosphere": {
+      "time_of_day": 17,
+      "conditions": 0.25
+    }
+  },
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "aircraft": "FS-20 Vortex",
+      "altitude": 2500,
+      "speed": 200,
+      "heading": 40,
+      "view": "orbit",
+      "timeout": 40
+    },
+    {
+      "op": "spawn",
+      "id": "w1",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "near": {
+          "id": "player",
+          "offset": [
+            22,
+            -2,
+            -42
+          ]
+        }
+      },
+      "altitude": 2500,
+      "speed": 200,
+      "heading": 40
+    },
+    {
+      "op": "spawn",
+      "id": "w2",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "near": {
+          "id": "player",
+          "offset": [
+            -24,
+            -3,
+            -60
+          ]
+        }
+      },
+      "altitude": 2500,
+      "speed": 200,
+      "heading": 40
+    },
+    {
+      "op": "fly",
+      "id": "player",
+      "program": [
+        {
+          "level": 240
+        }
+      ]
+    },
+    {
+      "op": "fly",
+      "id": "w1",
+      "program": [
+        {
+          "level": 240
+        }
+      ]
+    },
+    {
+      "op": "fly",
+      "id": "w2",
+      "program": [
+        {
+          "level": 240
+        }
+      ]
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.PinSky",
+      "args": {
+        "sky": 8
+      },
+      "store": "pin8"
+    },
+    {
+      "op": "wait",
+      "seconds": 14
+    },
+    {
+      "op": "capture",
+      "name": "formation",
+      "hide_ui": true
+    },
+    {
+      "op": "atmosphere",
+      "time_of_day": 19.4,
+      "conditions": 0.25,
+      "cloud_height": 3000,
+      "wind_speed": 2,
+      "wind_turbulence": 0,
+      "wind_heading": 90,
+      "moon_phase": 14
+    },
+    {
+      "op": "wait",
+      "seconds": 6
+    },
+    {
+      "op": "capture",
+      "name": "dusk",
+      "hide_ui": true
+    },
+    {
+      "op": "atmosphere",
+      "time_of_day": 17,
+      "conditions": 0.25,
+      "cloud_height": 3000,
+      "wind_speed": 2,
+      "wind_turbulence": 0,
+      "wind_heading": 90,
+      "moon_phase": 14
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.PinSky",
+      "args": {
+        "sky": 44
+      },
+      "store": "pin44"
+    },
+    {
+      "op": "wait",
+      "seconds": 16
+    },
+    {
+      "op": "seat",
+      "id": "player",
+      "view": "cockpit"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Configure",
+      "args": {
+        "enabled": true,
+        "layout": "Wide",
+        "scale": 1.0,
+        "offsetX": 0,
+        "offsetY": 0,
+        "shade": 0.45,
+        "declutter": "Full",
+        "opacity": 1.0
+      },
+      "store": "hud"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "capture",
+      "name": "cockpit-storm",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.PinSky",
+      "args": {
+        "sky": 8
+      },
+      "store": "pin8b"
+    },
+    {
+      "op": "wait",
+      "seconds": 14
+    },
+    {
+      "op": "capture",
+      "name": "cockpit",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Console",
+      "args": {
+        "action": "open"
+      },
+      "store": "met"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "capture",
+      "name": "weather-console",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Console",
+      "args": {
+        "action": "close"
+      },
+      "store": "metc"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "showcase"
+      },
+      "store": "show"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "view",
+        "angle": "front"
+      },
+      "store": "view"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "vanguard",
+      "hide_ui": true
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    }
+  ]
+}
