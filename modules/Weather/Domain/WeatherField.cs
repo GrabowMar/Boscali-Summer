@@ -35,14 +35,10 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public float ClusterCover;
         public float CellCover;
         public float CellShape;
-        public float FrontCover;
-        /// <summary>Local frontal shield bounds in metres; both zero without front cover.</summary>
-        public float FrontBase;
-        public float FrontTop;
         public float CloudBase;
         /// <summary>How far the base-height field may move the base at this point (the row's BaseVariation, 150-400 m): the map widens its altitude bounds by it.</summary>
         public float BaseVariation;
-        /// <summary>Ordinary deck/tower ceiling; excludes the independent frontal shield.</summary>
+        /// <summary>Deck/tower ceiling.</summary>
         public float LowTop;
         public float CloudTop;
         public float VisibilityKm;
@@ -125,7 +121,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public bool Moving { get; private set; }
         // SHIM(task 15): the legacy surface, inert, until the last consumers move. Deleted with WeatherTimeline, SkySplit and WeatherFronts.
         public TimelineState Timeline => HeldTimeline();
-        public SkySplit Split => default;
         public SkyParams Params => RowAt(0f, 0f);
         /// <summary>Where every per-sample genus and thin-layer row is read from: one keyframe (<see cref="Params"/>) in slices 2-3, a fixture's baked tape in the density check and the bench.</summary>
         public TapeSampler Tape { get; private set; }

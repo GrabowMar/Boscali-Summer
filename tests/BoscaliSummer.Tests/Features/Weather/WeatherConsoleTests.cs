@@ -69,7 +69,7 @@ namespace BoscaliSummer.Tests.Features.Weather
 
             var eyeKey = WeatherScenarios.Apply(WeatherScenario.HurricaneEye, dirty, true, 0f, 0f, 0f, 1f);
             field.Build(eyeKey, 900f, 60000f, 60000f, 13f);
-            var bodies = new CloudBodies(CloudNoise3D.Generate(64, 47), 64, field.Params, field.PrevailingHeading, field.Split, 0f, field);
+            var bodies = new CloudBodies(CloudNoise3D.Generate(64, 47), 64, field.Params, field.PrevailingHeading, 0f, field);
             Superstructure eye = Find(field, Superstructures.StormEyeSet);
             foreach (float y in new[] { 2500f, 4100f, 7000f, 10000f })
                 TestAssert.That(bodies.Density(field.Sample(0f, 0f), 0f, y, 0f, 0f) < 0.001f, "upper eye stays clear through low and middle decks");

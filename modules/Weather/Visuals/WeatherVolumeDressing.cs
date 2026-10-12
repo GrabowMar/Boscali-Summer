@@ -93,7 +93,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private readonly Func<float, float, WeatherPoint> displayedWeather;
         private TapeSampler displayedTape;
         private TapeFrame displayedFrame;
-        private SkySplit displayedSplit;
         private float displayedHeading;
 
         /// <summary>Why the volume last stood down; read by the weather trace.</summary>
@@ -275,7 +274,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             uniforms.Apply(material, field, frame, noise);
             displayedTape = field.Tape;
             displayedFrame = field.Frame;
-            displayedSplit = field.Split;
             displayedHeading = field.PrevailingHeading;
             renderer.enabled = !wantHalfResolution || halfResolution;
             if (renderer.enabled)
@@ -341,22 +339,18 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 if (Mathf.Abs(x) > activeField.HalfX - 1000f || Mathf.Abs(z) > activeField.HalfZ - 1000f) continue;
                 WeatherPoint weather = SampleDisplayedWeather(x, z);
                 if (weather.RainRate < minRain) continue;
-                for (int body = 0; body < 2; body++)
+                float bottom = weather.CloudBase + cloudShift;
+                float top = weather.LowTop + cloudShift;
+                if (top <= bottom + 100f) continue;
+                for (int h = 1; h <= 3; h++)
                 {
-                    if (body == 1 && weather.FrontCover <= .02f) continue;
-                    float bottom = (body == 0 ? weather.CloudBase : weather.FrontBase) + cloudShift;
-                    float top = (body == 0 ? weather.LowTop : weather.FrontTop) + cloudShift;
-                    if (top <= bottom + 100f) continue;
-                    for (int h = 1; h <= 3; h++)
-                    {
-                        float y = Mathf.Lerp(bottom, top, h * .25f);
-                        float centre = DensityAt(x, y, z);
-                        if (centre <= bestInterior) continue;
-                        float interior = Mathf.Min(centre, Mathf.Min(DensityAt(x - 500f, y, z), DensityAt(x + 500f, y, z)),
-                            Mathf.Min(DensityAt(x, y, z - 500f), DensityAt(x, y, z + 500f)));
-                        if (interior <= bestInterior) continue;
-                        bestInterior = interior; density = centre; point = new Vector3(x, y, z);
-                    }
+                    float y = Mathf.Lerp(bottom, top, h * .25f);
+                    float centre = DensityAt(x, y, z);
+                    if (centre <= bestInterior) continue;
+                    float interior = Mathf.Min(centre, Mathf.Min(DensityAt(x - 500f, y, z), DensityAt(x + 500f, y, z)),
+                        Mathf.Min(DensityAt(x, y, z - 500f), DensityAt(x, y, z + 500f)));
+                    if (interior <= bestInterior) continue;
+                    bestInterior = interior; density = centre; point = new Vector3(x, y, z);
                 }
             }
             return bestInterior >= .15f;
@@ -369,7 +363,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             byte[] data = NoiseData;
             if (data == null || data.Length != NoiseTexels * 4) return 0f;
             var bodies = new CloudBodies(data, NoiseSize, displayedTape, displayedFrame, displayedHeading,
-                displayedSplit, uniforms.FogShown, activeField, uniforms.HeroStrengths, true, displayedWeather);
+                uniforms.FogShown, activeField, uniforms.HeroStrengths, true, displayedWeather);
             return Mathf.Clamp01(bodies.Density(SampleDisplayedWeather(x, z), x, y, z, cloudShift));
         }
 
@@ -384,7 +378,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             float blend = DisplayedBlend;
             if (nearWeight >= 1f) return near.Sample(x, z, mapHalf, blend);
             WeatherPoint outer = far.Sample(x, z, farHalf, blend);
-            outer.BackgroundCover *= farFade; outer.FrontCover *= farFade; outer.CellShape *= farFade;
+            outer.BackgroundCover *= farFade; outer.CellShape *= farFade;
             return nearWeight <= 0f ? outer : CloudBodies.BlendMaps(outer, near.Sample(x, z, mapHalf, blend), nearWeight);
         }
 

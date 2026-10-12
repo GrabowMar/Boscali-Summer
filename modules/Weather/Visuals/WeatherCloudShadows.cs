@@ -221,7 +221,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 {
                     var snapshot = new WeatherField();
                     snapshot.Build(requestKey, time, halfX, halfZ, hour, haze);
-                    var body = new CloudBodies(noise, WeatherVolumeDressing.NoiseSize, snapshot.Tape, snapshot.Frame, snapshot.PrevailingHeading, snapshot.Split, 0f, snapshot);
+                    var body = new CloudBodies(noise, WeatherVolumeDressing.NoiseSize, snapshot.Tape, snapshot.Frame, snapshot.PrevailingHeading, 0f, snapshot);
                     var pixels = new byte[Size * Size];
                     const int samples = 14;
                     float baseY = snapshot.Params.CloudBase + shift;

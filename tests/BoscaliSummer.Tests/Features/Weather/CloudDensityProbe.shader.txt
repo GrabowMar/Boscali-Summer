@@ -84,7 +84,7 @@ Shader "Hidden/Boscali/CloudDensityProbe"
                     float3 p = tex2Dlod(_DensityProbePositions, float4(i.uv, 0, 0)).xyz;
                     float s = TapeS(p.xz);
                     LayerRow row = TapeLayer(s, _ProbeLayer);
-                    return float4(Slab2D(p, _ProbeLayer, row, 0.0, float2(1.0, 1.0)), row.cover, row.baseY, s);
+                    return float4(Slab2D(p, _ProbeLayer, row, 0.0), row.cover, row.baseY, s);
                 }
                 if (_ProbeRayMode > 0.5)
                 {

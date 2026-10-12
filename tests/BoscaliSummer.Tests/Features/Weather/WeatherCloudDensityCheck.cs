@@ -73,15 +73,15 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
         // the signed cavity from overwhelming the independent topology probes.
         byte[] solid = new byte[4 * 4 * 4 * 4]; Array.Fill(solid, (byte)255);
         for (int i = 1; i < solid.Length; i += 4) solid[i] = 128;
-        var shallow = new byte[] { 0, 166, 204, 55 };
-        var shield = new byte[] { 104, 159, 86, 0 };   // base byte 86 is 1350 m on the 4096 m scale (22 was 1380 m on the old 16000 m one)
-        Color[] lower = Group("shallow-under-shield", field, solid, 4, shallow, shield, shallow, shield, 1, null,
-            new[] { new Vector3(0, 2100, 0), new Vector3(0, 5000, 0), new Vector3(0, 7500, 0),
+        var shallow = new byte[] { 0, 0, 204, 55 };
+        var shield = new byte[] { 0, 0, 86, 0 };   // base byte 86 is 1350 m on the 4096 m scale; the frontal shield's channels (R, G) are unused
+        Color[] lower = Group("shallow-cluster", field, solid, 4, shallow, shield, shallow, shield, 1, null,
+            new[] { new Vector3(0, 2100, 0), new Vector3(0, 5000, 0),
                 new Vector3(0, 13000, 0), new Vector3(0, 500, 0) }, 0f, Vector3.zero, true);
-        Require(lower[0].r > .2f && lower[1].r < .001f && lower[2].r > .2f,
-            "Actual GPU retains shallow body and high shield with clear air between them");
-        Require(lower[0].g > .2f && lower[0].g < .5f && lower[2].g > .1f && lower[2].g < .5f,
-            "Actual GPU heights are local to shallow body/front, not the aggregate ceiling");
+        Require(lower[0].r > .2f && lower[1].r < .001f,
+            "Actual GPU retains the shallow body with clear air above it");
+        Require(lower[0].g > .2f && lower[0].g < .5f,
+            "Actual GPU heights are local to the shallow body, not the aggregate ceiling");
         var deep = new byte[] { 0, 0, 220, 142 };
         var wet = new byte[] { 0, 0, 86, 128 };
         Color[] upper = Group("deep-scud-shifted", field, solid, 4, deep, wet, deep, wet, 1, null,
@@ -90,8 +90,8 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
             new Vector3(36000, 8000, -19000), true);
         Require(upper[0].r > .1f && upper[1].r > .1f && upper[2].r > .1f && upper[3].r == 0f,
             "Actual GPU deep column/scud and floating-origin/terrain height shift remain coherent");
-        var far = new byte[] { 0, 80, 220, 170 };
-        var farProfile = new byte[] { 140, 220, 125, 0 };
+        var far = new byte[] { 0, 0, 220, 170 };
+        var farProfile = new byte[] { 0, 0, 125, 0 };
         Group("near-far-height-blend", field, solid, 4, shallow, shield, far, farProfile, 1, null,
             new[] { new Vector3(46000, 4500, 0), new Vector3(47000, 4500, 0),
                 new Vector3(48000, 4500, 0), new Vector3(-48000, 8500, 0) }, 0f, Vector3.zero, true);
@@ -270,8 +270,6 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
             material.SetVector("_CloudAltitudeBounds", new Vector4(0f, 16000f, 0f, 0f));
             material.SetVector("_CloudHeroBounds", new Vector4(300f, 16500f, 0f, 0f));
             material.SetVector("_CloudEye", Vector4.zero);
-            material.SetVector("_SplitA", new Vector4(1f, 0f, 0f, 0f));
-            material.SetVector("_SplitB", new Vector4(0f, 0f, 80000f, 0f));
             material.SetVector("_CloudWindDir", new Vector2(1f, 0f));
             material.SetFloat("_CloudHeightShift", 0f);
             material.SetFloat("_WeatherEnvelopeOn", 0f);
@@ -596,7 +594,7 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
         {
             var material = new Material(Resources.Load<Shader>("CloudDensityProbe")); owned.Add(material);
             material.SetFloat("_ProbeSlabMode", 1f);
-            material.SetVector("_CloudEye", Vector4.zero); material.SetVector("_SplitB", Vector4.zero);
+            material.SetVector("_CloudEye", Vector4.zero);
             material.SetVector("_CloudWindDir", new Vector2(0f, 1f));
             const int count = 25;
             var positions = new Texture2D(count, 1, TextureFormat.RGBAFloat, false, true)
@@ -928,7 +926,7 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
             {
                 CloudBodies.MapWeights(x, z, 50000f, 220000f, out float weight, out float fade);
                 WeatherPoint outer = CloudBodies.SampleMap(far, farProfile, farSize, x / 440000f + .5f, z / 440000f + .5f);
-                outer.BackgroundCover *= fade; outer.FrontCover *= fade; outer.CellShape *= fade;
+                outer.BackgroundCover *= fade; outer.CellShape *= fade;
                 if (weight <= 0f) return outer;
                 WeatherPoint inner = CloudBodies.SampleMap(near, nearProfile, mapSize, x / 100000f + .5f, z / 100000f + .5f);
                 return CloudBodies.BlendMaps(outer, inner, weight);

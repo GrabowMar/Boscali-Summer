@@ -81,8 +81,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static readonly int HorizonCoverId = Shader.PropertyToID("_HorizonCover");
         private static readonly int HorizonDeckId = Shader.PropertyToID("_HorizonDeck");
         private static readonly int HorizonDepthId = Shader.PropertyToID("_HorizonDepth");
-        private static readonly int SplitAId = Shader.PropertyToID("_SplitA");
-        private static readonly int SplitBId = Shader.PropertyToID("_SplitB");
         private static readonly int PixelAngleId = Shader.PropertyToID("_CloudPixelAngle");
         private static readonly int StepsId = Shader.PropertyToID("_CloudSteps");
         private static readonly int FarStepsId = Shader.PropertyToID("_CloudFarSteps");
@@ -248,17 +246,12 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             // Horizon deck: the far ring's cover, plus a distant band of cumulus in fair skies.
             // An overcast deck continues past the march: rays that reach its base beyond 220 km
             // (just above the horizon under or inside it) otherwise showed a bright sky sliver.
-            // The shader still opens it ahead of a frontal boundary (SplitShare).
             // INTERIM(slice 4): the deck continues the far ring's cover with the sky's baked HorizonCover and HorizonDepth columns;
             // reading the tape alone, with the march hand-off, comes with the horizon-deck work of slice 4.
             material.SetFloat(HorizonCoverId, Mathf.Clamp01(Mathf.Max(frame.HorizonCover, sky.HorizonCover)));
             material.SetFloat(HorizonDeckId, sky.CloudBase + frame.CloudShift + sky.HorizonDepth * 0.4f);
             material.SetFloat(HorizonDepthId, sky.HorizonDepth);
-            // The frontal boundary: one side of the map under the deck, the other opening up.
-            SkySplit split = field.Split;
-            material.SetVector(SplitAId, new Vector4(split.NormalX, split.NormalZ, split.Offset, SkySplit.Width));
-            material.SetVector(SplitBId, new Vector4(split.Amount, split.MeanderAmplitude,
-                Mathf.Max(1000f, split.MeanderWavelength), split.MeanderPhase));
+
             material.SetFloat(PixelAngleId,
                 2f * Mathf.Tan(frame.FieldOfView * 0.5f * Mathf.Deg2Rad) / Mathf.Max(1, frame.PixelHeight));
             // 64 near steps: temporal accumulation averages the per-frame dither, which

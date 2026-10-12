@@ -214,9 +214,9 @@ namespace BoscaliSummer.Tests.Features.Weather
         {
             byte[] noise = BoscaliSummer.Modules.Weather.Visuals.CloudNoise3D.Generate(64, 47);
             var bodies = MakeBodies(noise, 64);
-            TestAssert.That(bodies.BodiesLadder(4100f, 900f, 2300f, 3f, false, 0f) == bodies.Bodies(4100f, 900f, 2300f, Ladder.LobeMetres(3f)),
+            TestAssert.That(bodies.BodiesLadder(4100f, 900f, 2300f, 3f) == bodies.Bodies(4100f, 900f, 2300f, Ladder.LobeMetres(3f)),
                 "an integer rung is one plain Bodies call");
-            TestAssert.That(bodies.BodiesLadder(4100f, 900f, 2300f, 3.3f, false, 0f) == bodies.BodiesLadder(4100f, 900f, 2300f, 3f, false, 0f),
+            TestAssert.That(bodies.BodiesLadder(4100f, 900f, 2300f, 3.3f) == bodies.BodiesLadder(4100f, 900f, 2300f, 3f),
                 "below frac 0.35 it is still the lower rung");
             float worst = 0f;
             for (int point = 0; point < 40; point++)
@@ -224,22 +224,13 @@ namespace BoscaliSummer.Tests.Features.Weather
                 float x = point * 1713f, z = point * 911f, previous = float.NaN;
                 for (float rung = 2f; rung <= 3f; rung += 0.01f)
                 {
-                    float v = bodies.BodiesLadder(x, 1500f, z, rung, false, 0f);
+                    float v = bodies.BodiesLadder(x, 1500f, z, rung);
                     if (!float.IsNaN(previous)) worst = Math.Max(worst, Math.Abs(v - previous));
                     previous = v;
                 }
             }
             TestAssert.That(worst < 0.12f, "bodies move smoothly through a rung ramp (worst step " + worst + ")");
-            int differ = 0;
-            for (int point = 0; point < 12; point++) // a single point can saturate both to 0 or 1, so ask of a dozen
-            {
-                float fx = 4100f + 5311f + point * 1713f, fz = 2300f + 5311f + point * 911f;
-                if (bodies.BodiesLadder(fx, 900f + 5311f, fz, 3f, true, 0f) != bodies.BodiesLadder(fx, 900f + 5311f, fz, 3f, false, 0f)) differ++;
-            }
-            TestAssert.That(differ >= 6, "the front body is a larger lump than the deck's (" + differ + " of 12 points differ)");
-            TestAssert.That(bodies.BodiesLadder(4100f, 900f, 2300f, 3f, true, 1f) == bodies.Bodies(4100f, 900f, 2300f, 5200f), "a sheet front is the fixed 5.2 km body");
-            TestAssert.That(bodies.BodiesLadder(4100f, 900f, 2300f, 3.5f, true, 1f) == bodies.BodiesLadder(4100f, 900f, 2300f, 3f, true, 1f),
-                "and at every rung: both rungs of a sheet front are the same 5.2 km scale, so there is no second tap and no contrast boost");
+
         }
     }
 }

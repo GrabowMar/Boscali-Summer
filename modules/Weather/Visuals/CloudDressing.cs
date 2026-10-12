@@ -43,13 +43,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         internal bool Applied => applied;
 
-        internal void Apply(LevelInfo level) => Apply(level, 0f, 0f);
+        internal void Apply(LevelInfo level) => Apply(level, 0f);
 
-        internal void Apply(LevelInfo level, float frontCover, float cellCore)
+        internal void Apply(LevelInfo level, float cellCore)
         {
             if (applied && owner == level && layer != null)
             {
-                UpdateShape(frontCover, cellCore);
+                UpdateShape(cellCore);
                 return;
             }
             Restore();
@@ -74,8 +74,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 return;
             }
 
-            // Broader fair-weather shapes; fronts and cell cores build deeper cloud masses.
-            UpdateShape(frontCover, cellCore);
+            // Broader fair-weather shapes; cell cores build deeper cloud masses.
+            UpdateShape(cellCore);
             ParticleLimitField.SetValue(layer, Mathf.Max(1, Mathf.RoundToInt(particleLimit * 0.6f)));
             owner = level;
             applied = true;
@@ -201,14 +201,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             return flyThrough != null && flyThrough.isPlaying;
         }
 
-        private void UpdateShape(float frontCover, float cellCore)
+        private void UpdateShape(float cellCore)
         {
-            float front = Mathf.Clamp01(frontCover);
             float core = Mathf.Clamp01(cellCore);
-            WriteFloat(SizeMinField, ref writtenSizeMin, sizeMin * (1.8f + 0.3f * front + 0.4f * core));
-            WriteFloat(SizeMaxField, ref writtenSizeMax, sizeMax * (1.8f + 0.5f * front + 0.7f * core));
-            WriteFloat(MapScaleField, ref writtenMapScale, mapScale * (1.65f + 0.15f * front));
-            WriteFloat(ThicknessField, ref writtenThickness, thickness * (1.35f + 0.35f * front + 0.55f * core));
+            WriteFloat(SizeMinField, ref writtenSizeMin, sizeMin * (1.8f + 0.4f * core));
+            WriteFloat(SizeMaxField, ref writtenSizeMax, sizeMax * (1.8f + 0.7f * core));
+            WriteFloat(MapScaleField, ref writtenMapScale, mapScale * 1.65f);
+            WriteFloat(ThicknessField, ref writtenThickness, thickness * (1.35f + 0.55f * core));
         }
 
         private void WriteFloat(FieldInfo field, ref float written, float value)

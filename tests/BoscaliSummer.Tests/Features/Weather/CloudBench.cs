@@ -260,7 +260,7 @@ public sealed class CloudBench : MonoBehaviour
         foreach (Scene s in scenes)
         {
             if (filters.Length > 0 && !Array.Exists(filters, filter => s.Name.Contains(filter))) continue;
-            // INTERIM(slice 4): the key has no front turn; the three front-turn views render the unturned sky.
+            // The key has no front turn: the three front-turn scenes render the unturned sky (slice 4b retires them).
             var key = new WeatherKey(s.Seed, 0f, false, (byte)s.State, s.Sets, s.Salt, s.Anchor, 0f, 25000f,
                 skyPin: s.Sky >= 0 && !skyClass ? (byte)s.Sky : WeatherKey.None);
             if (s.Preset.HasValue) key = WeatherScenarios.Apply(s.Preset.Value, key, true, 0f, 0f, 0f, 1f);
@@ -347,19 +347,15 @@ public sealed class CloudBench : MonoBehaviour
                 s.Yaw = 90f;
                 s.Pitch = 12f;
             }
-            else if (s.Place == 8 && hasCell && field.FrontCount > 0)
+            else if (s.Place == 8 && hasCell)
             {
-                FrontState front = field.Front(0);
-                s.Camera = new Vector3(cell.X + front.NormalX * 25000f, maps.Top + 1200f,
-                    cell.Z + front.NormalZ * 25000f);
+                s.Camera = new Vector3(cell.X + 25000f, maps.Top + 1200f, cell.Z);
                 s.Yaw = Mathf.Atan2(cell.X - s.Camera.x, cell.Z - s.Camera.z) * Mathf.Rad2Deg;
                 s.Pitch = -Mathf.Atan2(s.Camera.y - (cell.Top - 500f), 25000f) * Mathf.Rad2Deg;
             }
-            else if (s.Place == 9 && hasCell && field.FrontCount > 0)
+            else if (s.Place == 9 && hasCell)
             {
-                FrontState front = field.Front(0);
-                s.Camera = new Vector3(cell.X + front.NormalX * 25000f, 900f,
-                    cell.Z + front.NormalZ * 25000f);
+                s.Camera = new Vector3(cell.X + 25000f, 900f, cell.Z);
                 s.Yaw = Mathf.Atan2(cell.X - s.Camera.x, cell.Z - s.Camera.z) * Mathf.Rad2Deg;
                 s.Pitch = 8f;
             }
@@ -386,10 +382,10 @@ public sealed class CloudBench : MonoBehaviour
                 if (nearWeight >= 1f) return nearPoint;
                 WeatherPoint outer = CloudBodies.SampleMap(maps.Far, maps.FarProfiles, CloudMaps.FarSize,
                     x / 630000f + .5f, z / 630000f + .5f);
-                outer.BackgroundCover *= farFade; outer.FrontCover *= farFade; outer.CellShape *= farFade;
+                outer.BackgroundCover *= farFade; outer.CellShape *= farFade;
                 return nearWeight <= 0f ? outer : CloudBodies.BlendMaps(outer, nearPoint, nearWeight);
             }
-            var bodies = new CloudBodies(noiseBytes, n3, field.Tape, field.Frame, field.PrevailingHeading, field.Split, 0f,
+            var bodies = new CloudBodies(noiseBytes, n3, field.Tape, field.Frame, field.PrevailingHeading, 0f,
                 field, null, true, SampleDisplayed);
             camera.transform.position = s.Camera;
             camera.transform.rotation = Quaternion.Euler(-s.Pitch, yaw, 0f);
@@ -516,7 +512,7 @@ public sealed class CloudBench : MonoBehaviour
     {
         const int cookie = 256, stride = 4, samples = 14;
         const float span = 48000f;
-        var body = new CloudBodies(noise, size, field.Tape, field.Frame, field.PrevailingHeading, field.Split, 0f, field);
+        var body = new CloudBodies(noise, size, field.Tape, field.Frame, field.PrevailingHeading, 0f, field);
         Vector3 direction = new Vector3(0.35f, -0.72f, 0.6f).normalized;
         Vector3 right = Vector3.Cross(Vector3.up, direction).normalized, up = Vector3.Cross(direction, right);
         float baseY = field.Params.CloudBase;

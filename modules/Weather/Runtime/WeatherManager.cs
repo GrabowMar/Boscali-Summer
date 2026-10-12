@@ -554,7 +554,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 else
                 {
                     clouds.SetNativeHidden(null, false);
-                    clouds.Apply(LevelInfo.i, localWeather.FrontCover, localWeather.CoreDepth);
+                    clouds.Apply(LevelInfo.i, localWeather.CoreDepth);
                 }
             }
             else
