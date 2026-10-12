@@ -68,7 +68,8 @@ Shader "Boscali/FlightCloudComposite"
                         float2 texel = centre + float2(x, y);
                         float2 tuv = (texel + 0.5) * _CloudLowResSize.zw;
                         float2 offset = texel - p;
-                        float spatial = exp(-dot(offset, offset) * 1.1);
+                        // 0.45: about one texel of blur. At 1.1 the kernel was so narrow that the dither of nearby cloud came through as speckle.
+                        float spatial = exp(-dot(offset, offset) * 0.45);
                         float texelDepth = tex2Dlod(_CloudLowResDepth, float4(tuv, 0, 0)).r;
                         float4 sample = tex2Dlod(_CloudLowResColour, float4(tuv, 0, 0));
                         // Visible clouds only need both opaque surfaces behind the cloud.
