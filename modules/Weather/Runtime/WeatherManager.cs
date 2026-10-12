@@ -634,8 +634,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 airPoint.Dewpoint = 6f;
             }
             // Under a deck the air goes dim and grey; above it, the light is back.
-            bool belowDeck = (float)cloudPosition.y < localWeather.CloudTop;
-            float shadeTarget = Field != null && belowDeck ? Mathf.Clamp01((localWeather.LowCover - 0.2f) / 0.8f) : 0f;
+            float shadeTarget = Field != null ? OvercastLook.Shade(localWeather.SkyCover, (float)cloudPosition.y, localWeather.NativeDeckTop) : 0f;
             cloudShade = Mathf.MoveTowards(cloudShade, shadeTarget, Time.deltaTime * 0.1f);
             bool underwaterView = currentCam.transform.position.y < Datum.LocalSeaY;
             bool hazeEnabled = settings == null || settings.RainAtmosphereEnabled.Value;
@@ -718,7 +717,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             // Haze first: everything below reads the fog colour it produces.
             if (hazeEnabled)
                 atmosphere.Apply(RainVisualsEnabled
-                    ? rainIntensity : 0f, underwaterView, cloudShade);
+                    ? rainIntensity : 0f, underwaterView, cloudShade, LevelInfo.i != null ? LevelInfo.i.sun : null);
             else atmosphere.Restore();
             UpdateLighting(currentCam);
 
