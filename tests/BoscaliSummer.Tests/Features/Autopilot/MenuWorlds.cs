@@ -16,7 +16,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
         {
             var w = new MenuWorld
             {
-                Aircraft = "CI-22 CRICKET", Airborne = true, Fuel = 1f, Targets = 2, NearestKm = 4.2f,
+                Aircraft = "CI-22 CRICKET", Airborne = true, Targets = 2, NearestKm = 4.2f,
                 Gear = GearPhase.Up, HasAssist = true, Assist = true, HasHover = true, Hover = false, Ignition = true, CanEject = true,
                 HasNav = true, NavOn = true, HasLandingLight = true, LandingLight = 2, HasNvg = true, NvgOn = false,
                 ActiveStation = 1, HasMultipleGuns = true, HasTurrets = true, TurretAuto = false,

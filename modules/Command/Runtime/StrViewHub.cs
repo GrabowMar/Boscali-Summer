@@ -52,6 +52,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         internal int KnownAirDefence = -1, WingCount, TaskedSortieId = -1;
         internal readonly StrWingIn[] WingBuffer = new StrWingIn[StrViewModel.MaxSorties];
         internal readonly StrPostIn[] PostBuffer = new StrPostIn[StrViewModel.MaxPosts];
+        internal readonly StrOfficerIn[] OfficerBuffer = new StrOfficerIn[2 * StrViewModel.MaxOfficers];
         internal AirDefenceRing[] Rings;
 
         public StrViewHub() { verbs = new StrVerbs(this); }

@@ -627,6 +627,7 @@ string[] patchTypes =
     ,"BoscaliSummer.Modules.Trenches.Runtime.TrenchWorksDetectionPatch"
     ,"BoscaliSummer.Modules.Hud.Patches.WingviewCameraPatch"
     ,"BoscaliSummer.Modules.Hud.Patches.ShotDetonatePatch"
+    ,"BoscaliSummer.Modules.Weather.Patches.CloudSeekerPatch"
 };
 
 foreach (string patchType in patchTypes)
@@ -1122,9 +1123,7 @@ foreach (var contract in new[] {
     ("BoscaliSummer.Modules.Squad.Networking.SquadQuery", new[] { "Protocol:System.Byte", "Scene:System.UInt32", "Token:System.UInt32", "Revision:System.UInt32" }),
     ("BoscaliSummer.Modules.Squad.Networking.SquadSnapshot", new[] { "Protocol:System.Byte", "Scene:System.UInt32", "Token:System.UInt32", "Event:System.UInt32", "Pilot:BoscaliSummer.Core.Contracts.PilotView", "Hunt:System.Boolean", "Bonus:System.Int32", "Origin:System.Int32", "ActiveIndex:System.Int32", "HuntId:System.Int32", "Status:System.String", "Speaker:System.String", "Chatter:System.String", "Wings:BoscaliSummer.Core.Contracts.EnemyWingView[]", "Revision:System.UInt32", "Unchanged:System.Boolean" }),
     ("BoscaliSummer.Modules.Command.Networking.FactionMoraleChanged", new[] { "Protocol:System.Byte", "FactionHash:System.Int32", "Morale:System.Single" }),
-    ("BoscaliSummer.Modules.Events.Networking.ActiveEventChanged", new[] { "Protocol:System.Byte", "CatalogIndex:System.SByte", "TargetFactionHash:System.Int32", "StartedAtMissionTime:System.Single", "EndsAtMissionTime:System.Single", "EffectStrength:System.Single", "FactionResponseHashes:System.Int32[]", "FactionResponseKinds:System.Byte[]" }),
-    ("BoscaliSummer.Modules.Events.Networking.EventIntent", new[] { "Protocol:System.Byte", "Token:System.UInt32", "Action:System.Byte", "CatalogIndex:System.SByte" }),
-    ("BoscaliSummer.Modules.Events.Networking.EventReply", new[] { "Protocol:System.Byte", "Token:System.UInt32", "CatalogIndex:System.SByte", "Result:System.Byte", "Kind:System.Byte", "Cost:System.Int32" }),
+    ("BoscaliSummer.Modules.Events.Networking.ActiveEventChanged", new[] { "Protocol:System.Byte", "CatalogIndex:System.SByte", "TargetFactionHash:System.Int32", "StartedAtMissionTime:System.Single", "EndsAtMissionTime:System.Single", "EffectStrength:System.Single" }),
     ("BoscaliSummer.Modules.Trenches.Networking.TrenchGeometryMessage", new[] { "Protocol:System.Byte", "LineId:System.Int32", "Stage:System.Byte", "OwnerHash:System.Int32", "Curve:UnityEngine.Vector3[]", "Threat:UnityEngine.Vector3[]", "Support:UnityEngine.Vector3[]", "Redoubt:UnityEngine.Vector3[]", "Links:UnityEngine.Vector3[][]", "Spurs:UnityEngine.Vector3[][]" }),
     ("BoscaliSummer.Modules.Trenches.Networking.TrenchStateMessage", new[] { "Protocol:System.Byte", "LineId:System.Int32", "Stage:System.Byte", "Defenders:System.Byte", "Suppressed:System.Boolean", "Overrun:System.Boolean" }),
     ("BoscaliSummer.Modules.Trenches.Networking.TrenchLineRemovedMessage", new[] { "Protocol:System.Byte", "LineId:System.Int32" }),
@@ -1902,8 +1901,8 @@ static void ProbeEventsSerialization(Assembly plugin, Assembly mirage)
 {
     const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
     Type net = plugin.GetType("BoscaliSummer.Modules.Events.Networking.EventsNet", true)!;
-    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 5)
-        throw new InvalidOperationException("Events protocol differs from the response contract");
+    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 6)
+        throw new InvalidOperationException("Events protocol changed without updating its probe");
     net.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
 
     Type writerType = mirage.GetType("Mirage.Serialization.NetworkWriter", true)!;
@@ -1952,41 +1951,25 @@ static void ProbeEventsSerialization(Assembly plugin, Assembly mirage)
 
     Type changedType = plugin.GetType("BoscaliSummer.Modules.Events.Networking.ActiveEventChanged", true)!;
     object changed = Activator.CreateInstance(changedType)!;
-    Set(changed, "Protocol", (byte)5); Set(changed, "CatalogIndex", (sbyte)-1);
+    Set(changed, "Protocol", (byte)6); Set(changed, "CatalogIndex", (sbyte)-1);
     Set(changed, "TargetFactionHash", 0);
     Set(changed, "StartedAtMissionTime", 12.5f); Set(changed, "EndsAtMissionTime", 912.5f);
     Set(changed, "EffectStrength", 1.25f);
-    Set(changed, "FactionResponseHashes", Array.Empty<int>());
-    Set(changed, "FactionResponseKinds", Array.Empty<byte>());
     Roundtrip(changedType, changed, "state");
     object calm = Decode(changedType, Encode(changedType, changed));
     if ((sbyte)Get(calm, "CatalogIndex") != -1 || (int)Get(calm, "TargetFactionHash") != 0)
         throw new InvalidOperationException("Events state lost its calm sentinel");
 
     Set(changed, "CatalogIndex", (sbyte)11); Set(changed, "TargetFactionHash", -1234567);
-    Set(changed, "FactionResponseHashes", new[] { -1234567, 7654321 });
-    Set(changed, "FactionResponseKinds", new byte[] { 3, 4 });
     Roundtrip(changedType, changed, "targeted state");
     if ((int)Get(Decode(changedType, Encode(changedType, changed)), "TargetFactionHash") != -1234567)
         throw new InvalidOperationException("Events state lost its target faction hash");
 
-    Type intentType = plugin.GetType("BoscaliSummer.Modules.Events.Networking.EventIntent", true)!;
-    object intent = Activator.CreateInstance(intentType)!;
-    Set(intent, "Protocol", (byte)5); Set(intent, "Token", 77u);
-    Set(intent, "Action", (byte)4); Set(intent, "CatalogIndex", (sbyte)7);
-    Roundtrip(intentType, intent, "intent");
-
-    Type replyType = plugin.GetType("BoscaliSummer.Modules.Events.Networking.EventReply", true)!;
-    object reply = Activator.CreateInstance(replyType)!;
-    Set(reply, "Protocol", (byte)5); Set(reply, "Token", 77u); Set(reply, "CatalogIndex", (sbyte)7);
-    Set(reply, "Result", (byte)4); Set(reply, "Kind", (byte)1); Set(reply, "Cost", 700);
-    Roundtrip(replyType, reply, "reply");
-
-    if ((byte)Get(Decode(changedType, new byte[] { 4 }), "Protocol") != 4 ||
-        (sbyte)Get(Decode(changedType, new byte[] { 4 }), "CatalogIndex") != 0)
+    if ((byte)Get(Decode(changedType, new byte[] { 5 }), "Protocol") != 5 ||
+        (sbyte)Get(Decode(changedType, new byte[] { 5 }), "CatalogIndex") != 0)
         throw new InvalidOperationException("Events did not reject an old state header");
 
-    Console.WriteLine("  Events protocol-5 serializers: state (target + faction responses + host strength + timestamps), decision intent, reply roundtrip, old-header rejection");
+    Console.WriteLine("  Events protocol-6 serializers: state (target + host strength + timestamps) roundtrip, old-header rejection");
 }
 
 static void ProbeSessionSerialization(Assembly plugin, Assembly mirage)

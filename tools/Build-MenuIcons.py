@@ -1,210 +1,137 @@
 #!/usr/bin/env python3
-"""Build modules/Autopilot/Domain/Menu/MenuIcons.Generated.cs from the C-menu v7 prototype's icons.js.
+"""Build modules/Autopilot/Domain/Menu/MenuIcons.Generated.cs from the NOA Angular icon pack.
 
-icons.js holds 24x24 SVG inner markup, one string per glyph id (<g>, <path> M/L/A/Z, <circle>, <ellipse>, <rect>,
-transform rotate/translate, stroke-dasharray). The game draws glyphs as vector strokes, so every shape is flattened to polylines
-in the 0..24 box: arcs and circles are sampled, rotations are applied, dashes are cut into separate strokes, a filled rect becomes a
-filled square. Python standard library only.
+The interaction menu draws its glyphs as vector strokes (no font), so each one is flattened to polylines in the 24 x 24 box.
+A menu id is either the name of a pack glyph (tools/Build-AvIcons.py GLYPHS / NEW) or, where the pack has none, a list of parts drawn
+here to the same house style and grammar: 2 unit stroke, no curves, 45 degree chamfers, live area 2..22, M/L/H/V/Z paths, "F:" = a filled
+square, "@45 " = rotated about the centre. Python standard library only.
 
-    python tools/Build-MenuIcons.py [icons.js] [out.cs]
+    py tools/Build-MenuIcons.py
 """
+import importlib.util
 import math
 import os
-import re
-import sys
-import xml.etree.ElementTree as ET
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-DEFAULT_SRC = os.path.join(REPO, "docs", "superpowers", "specs", "2026-10-10-cmenu-v7", "prototype", "icons.js")
-DEFAULT_OUT = os.path.join(REPO, "modules", "Autopilot", "Domain", "Menu", "MenuIcons.Generated.cs")
-ARC_STEP = 0.5   # maximum chord length (glyph units) when sampling an arc or ellipse
-IDENT = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+OUT = os.path.join(REPO, "modules", "Autopilot", "Domain", "Menu", "MenuIcons.Generated.cs")
+
+spec = importlib.util.spec_from_file_location("av_icons", os.path.join(REPO, "tools", "Build-AvIcons.py"))
+av = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(av)
+O, SQ, RING, SHIELD = av.O, av.SQ, av.RING, av.SHIELD
+
+BRACKETS = "M3 8V3H8M16 3H21V8M21 16V21H16M8 21H3V16"
+ROCKET = "M12 3.5L14.5 7V16.5L16.5 18.5V20.5H7.5V18.5L9.5 16.5V7Z"
+
+# id -> pack glyph name, or parts drawn for the menu
+MENU = {
+    # ring
+    "weapons": "rocket",
+    "lights": [O(12, 9, 6, 3.5), "M9.5 18H14.5M10.5 21H13.5"],
+    "flight": "plane",
+    "wing": ["M12 3L15.5 10H8.5Z", "M6 13L9.5 20H2.5Z", "M18 13L21.5 20H14.5Z"],
+    "comms": "message-2",
+    "radio": "radio",
+    "support": "parachute",
+    "view": "eye",
+    "defence": "shield",
+    "targets": "target",
+    "aircraft": "plane",
+    # flight
+    "gear": ["M12 3V11", "M7 8H17", O(12, 16, 5, 3), SQ(11, 15, 2)],
+    "flight-assist": "gauge",
+    "auto-hover": "helicopter",
+    "autoland": ["M8 21L10 10H14L16 21Z", "M12 2V7", "M9.5 4.5L12 7L14.5 4.5"],
+    "autoland-cancel": ["M8 21L10 11H14L16 21Z", "M9 3L15 8M15 3L9 8"],
+    "engine": "flame",
+    "eject": ["M12 14V4", "M7 9L12 4L17 9", "M5 20V17H19V20"],
+    "warning": "alert-triangle",
+    # lights
+    "nav-lights": ["M12 4V19", "M5 12H19", SQ(2, 10.5, 3), SQ(19, 10.5, 3), SQ(10.5, 19, 3)],
+    "landing-light": ["M4 8H10L13 11V13L10 16H4Z", "M16 12H21", "M15.5 7.5L19.5 4.5", "M15.5 16.5L19.5 19.5"],
+    "night-vision": [O(7, 14, 4.5, 2.5), O(17, 14, 4.5, 2.5), "M5 9.5V5H19V9.5"],
+    # weapons
+    "station-next": ["M6 5L13 12L6 19", "M18 5V19"],
+    "station-prev": ["M18 5L11 12L18 19", "M6 5V19"],
+    "station-select": "list-details",
+    "hardpoint": ["M4 5H20", "M12 5V10", "M7 10H17V15L12 20L7 15Z"],
+    "link-guns": "link",
+    "turret-auto": ["M4 20H20", "M7 20V14L10 11H14L17 14V20", "M12 11V3"],
+    "gun": ["M2 9H18V13H12L10 19H6L7 13H2Z", "M18 11H22"],
+    "aam": "rocket",
+    "agm": ["@135 " + ROCKET],
+    "bomb": "bomb",
+    "turret": "tank",
+    # targets
+    "target-keep": [BRACKETS, "M8 12L11 15L16 9"],
+    "target-drop": [BRACKETS, "M8 12H16"],
+    "target-clear": [BRACKETS, "M8.5 8.5L15.5 15.5M15.5 8.5L8.5 15.5"],
+    "target-filter": "filter",
+    # defence
+    "flare": ["M12 3V8M12 16V21M3 12H8M16 12H21M5.5 5.5L9 9M15 15L18.5 18.5M18.5 5.5L15 9M9 15L5.5 18.5", SQ(10.5, 10.5, 3)],
+    "countermeasure-cycle": "refresh",
+    "radar": "radar-2",
+    "drone-strike": "drone",
+    "drone-screen": [SHIELD, SQ(8, 8, 2.5), SQ(13.5, 8, 2.5), SQ(10.75, 12, 2.5)],
+    # view
+    "cockpit-view": ["M4 18V11L8 6H16L20 11V18Z", "M4 13H20"],
+    "external-view": "camera",
+    "map": "map-2",
+    "missile-view": "crosshair",
+    "missile-next": "arrow-right",
+    "missile-prev": "arrow-left",
+    "missile-exit": "arrow-back-up",
+    # support
+    "camera-mark": "map-pin",
+    "call-at-mark": "broadcast",
+    "mark-clear": "eraser",
+    "exfil": ["M12 21V8", "M7 13L12 8L17 13", "M4 4H20"],
+    "skywell": ["M2 11H22", "M12 4V19", "M9 19H15", SQ(10.5, 6, 3)],
+    "perk": "star",
+    "front-space": "satellite",
+    "front-cyber": "terminal",
+    "front-sof": "user",
+    # radio
+    "music": "music",
+    "track-next": ["M5 5L14 12L5 19Z", "M18 5V19"],
+    "track-prev": ["M19 5L10 12L19 19Z", "M6 5V19"],
+    "receiver": "antenna",
+    "seek": "wave-sine",
+    "stop-audio": "player-stop",
+    # comms
+    "call-tactical": "swords",
+    "call-logistics": "truck",
+    "call-chatter": "message-2",
+    "ping-help": "alert-circle",
+    "ping-attack": "crosshair",
+    "ping-spike": "radar-dish",
+    "ping-rally": "flag",
+    # wing
+    "form-up": "users-group",
+    "engage": "swords",
+    "break-off": "arrow-back-up",
+    "clear-six": [RING, "M12 12V18", SQ(11, 10, 2)],
+    "bogey-dope": "hostile",
+    "escort": [SHIELD, "M12 8V15M8.5 11.5H15.5"],
+    "shape": "stack-2",
+    "rtb": ["M3 11L12 3L21 11", "M6 9V20H18V9", "M10 20V14H14V20"],
+    "back": "arrow-left",
+}
 
 
-def mul(m, n):
-    """Matrix product m * n (n applies first); matrices are (a, b, c, d, e, f) as in SVG."""
-    return (m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1],
-            m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3],
-            m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5])
-
-
-def parse_transform(text):
-    m = IDENT
-    for name, args in re.findall(r"(\w+)\(([^)]*)\)", text or ""):
-        v = [float(x) for x in args.replace(",", " ").split()]
-        if name == "translate":
-            t = (1, 0, 0, 1, v[0], v[1] if len(v) > 1 else 0.0)
-        elif name == "rotate":
-            a = math.radians(v[0])
-            c, s = math.cos(a), math.sin(a)
-            t = (c, s, -s, c, 0, 0)
-            if len(v) == 3:
-                t = mul(mul((1, 0, 0, 1, v[1], v[2]), t), (1, 0, 0, 1, -v[1], -v[2]))
-        else:
-            raise ValueError("unsupported transform " + name)
-        m = mul(m, t)
-    return m
-
-
-def apply(m, p):
-    return (m[0] * p[0] + m[2] * p[1] + m[4], m[1] * p[0] + m[3] * p[1] + m[5])
-
-
-def arc_points(p0, rx, ry, rot, large, sweep, p1):
-    """SVG endpoint arc -> sampled points after p0 up to and including p1."""
-    if rx == 0 or ry == 0:
-        return [p1]
-    phi = math.radians(rot)
-    cp, sp = math.cos(phi), math.sin(phi)
-    dx, dy = (p0[0] - p1[0]) / 2, (p0[1] - p1[1]) / 2
-    x1, y1 = cp * dx + sp * dy, -sp * dx + cp * dy
-    rx, ry = abs(rx), abs(ry)
-    lam = (x1 * x1) / (rx * rx) + (y1 * y1) / (ry * ry)
-    if lam > 1:
-        rx, ry = rx * math.sqrt(lam), ry * math.sqrt(lam)
-    num = rx * rx * ry * ry - rx * rx * y1 * y1 - ry * ry * x1 * x1
-    den = rx * rx * y1 * y1 + ry * ry * x1 * x1
-    k = math.sqrt(max(0.0, num / den)) * (-1 if large == sweep else 1)
-    cx1, cy1 = k * rx * y1 / ry, -k * ry * x1 / rx
-    cx, cy = cp * cx1 - sp * cy1 + (p0[0] + p1[0]) / 2, sp * cx1 + cp * cy1 + (p0[1] + p1[1]) / 2
-
-    def ang(ux, uy, vx, vy):
-        a = math.atan2(ux * vy - uy * vx, ux * vx + uy * vy)
-        return a
-
-    t1 = ang(1, 0, (x1 - cx1) / rx, (y1 - cy1) / ry)
-    dt = ang((x1 - cx1) / rx, (y1 - cy1) / ry, (-x1 - cx1) / rx, (-y1 - cy1) / ry)
-    if not sweep and dt > 0:
-        dt -= 2 * math.pi
-    elif sweep and dt < 0:
-        dt += 2 * math.pi
-    n = max(4, int(math.ceil(abs(dt) * max(rx, ry) / ARC_STEP)))
-    pts = []
-    for i in range(1, n + 1):
-        t = t1 + dt * i / n
-        ex, ey = rx * math.cos(t), ry * math.sin(t)
-        pts.append((cp * ex - sp * ey + cx, sp * ex + cp * ey + cy))
-    pts[-1] = p1
-    return pts
-
-
-def path_polys(d):
-    """Parses M/L/A/Z (absolute) into [(points, closed)]."""
-    tokens = re.findall(r"[MLAZ]|-?\d*\.?\d+(?:e-?\d+)?", d)
-    polys, cur, i, cmd = [], None, 0, None
-    pos = (0.0, 0.0)
-
-    def num():
-        nonlocal i
-        v = float(tokens[i])
-        i += 1
-        return v
-
-    while i < len(tokens):
-        t = tokens[i]
-        if t in "MLAZ":
-            cmd = t
-            i += 1
-            if cmd == "Z":
-                if cur:
-                    polys.append((cur, True))
-                    pos = cur[0]
-                cur = None
-                continue
-        if cmd == "M":
-            if cur and len(cur) > 1:
-                polys.append((cur, False))
-            pos = (num(), num())
-            cur = [pos]
-            cmd = "L"
-        elif cmd == "L":
-            pos = (num(), num())
-            cur.append(pos)
-        elif cmd == "A":
-            rx, ry, rot, large, sweep = num(), num(), num(), int(num()), int(num())
-            end = (num(), num())
-            cur.extend(arc_points(pos, rx, ry, rot, large, sweep, end))
-            pos = end
-        else:
-            raise ValueError("bad path " + d)
-    if cur and len(cur) > 1:
-        polys.append((cur, False))
-    return polys
-
-
-def ellipse_points(cx, cy, rx, ry, segs=None):
-    segs = segs or max(16, int(math.ceil(2 * math.pi * max(rx, ry) / ARC_STEP)))
-    return [(cx + rx * math.cos(2 * math.pi * i / segs), cy + ry * math.sin(2 * math.pi * i / segs)) for i in range(segs)]
-
-
-def dashes(points, dash, gap):
-    """Cuts a closed polyline into open dashes."""
-    pts = points + [points[0]]
-    out, cur, drawing, left = [], [pts[0]], True, dash
-    for a, b in zip(pts, pts[1:]):
-        seg = math.dist(a, b)
-        t = 0.0
-        while seg - t > 1e-9:
-            take = min(left, seg - t)
-            t += take
-            left -= take
-            q = (a[0] + (b[0] - a[0]) * t / seg, a[1] + (b[1] - a[1]) * t / seg)
-            if drawing:
-                cur.append(q)
-            if left <= 1e-9:
-                if drawing:
-                    out.append(cur)
-                    cur = []
-                else:
-                    cur = [q]
-                drawing = not drawing
-                left = dash if drawing else gap
-    if drawing and len(cur) > 1:
-        out.append(cur)
+def polys(parts):
+    """parts -> [(points, closed, filled)]"""
+    out = []
+    for part in parts:
+        fill, deg, d = av.split(part)
+        a = math.radians(deg)
+        c, s = math.cos(a), math.sin(a)
+        for pts, closed in av.parse(d):
+            if deg:
+                pts = [(12 + (x - 12) * c - (y - 12) * s, 12 + (x - 12) * s + (y - 12) * c) for x, y in pts]
+            # the painter fills a square by its bounding box, so a rotated one is drawn as its outline instead
+            out.append((pts, closed or fill, fill and not deg and len(pts) == 4))
     return out
-
-
-def shapes(node, m, out):
-    """Appends (points, closed, filled) for every shape under node."""
-    for el in node:
-        tag = el.tag.split("}")[-1]
-        mm = mul(m, parse_transform(el.get("transform")))
-        if tag == "g":
-            shapes(el, mm, out)
-        elif tag == "path":
-            for pts, closed in path_polys(el.get("d")):
-                out.append(([apply(mm, p) for p in pts], closed, False))
-        elif tag in ("circle", "ellipse"):
-            if tag == "circle":
-                r = float(el.get("r"))
-                pts = ellipse_points(float(el.get("cx")), float(el.get("cy")), r, r)
-            else:
-                pts = ellipse_points(float(el.get("cx")), float(el.get("cy")), float(el.get("rx")), float(el.get("ry")))
-            pts = [apply(mm, p) for p in pts]
-            dash = el.get("stroke-dasharray")
-            if dash:
-                d, g = [float(x) for x in dash.split()]
-                for run in dashes(pts, d, g):
-                    out.append((run, False, False))
-            else:
-                out.append((pts, True, False))
-        elif tag == "rect":
-            x, y, w, h = (float(el.get(k)) for k in ("x", "y", "width", "height"))
-            pts = [apply(mm, p) for p in ((x, y), (x + w, y), (x + w, y + h), (x, y + h))]
-            out.append((pts, True, el.get("fill") == "currentColor"))
-        else:
-            raise ValueError("unsupported element " + tag)
-
-
-def build(src):
-    text = open(src, encoding="utf-8").read()
-    icons = []
-    for m in re.finditer(r"^\s*'([a-z0-9-]+)':\s*'(.*)',?\s*$", text, re.M):
-        root = ET.fromstring("<svg>" + m.group(2) + "</svg>")
-        polys = []
-        shapes(root, IDENT, polys)
-        icons.append((m.group(1), polys))
-    return icons
 
 
 def fmt(v):
@@ -212,10 +139,11 @@ def fmt(v):
     return (s if s not in ("-0", "") else "0") + "f"
 
 
-def emit(icons, src, out):
+def main():
+    pack = {**av.GLYPHS, **av.NEW}
     lines = [
         "// <auto-generated>",
-        "// Generated by tools/Build-MenuIcons.py from the C-menu v7 prototype's icons.js. Do not edit; rerun the script.",
+        "// Generated by tools/Build-MenuIcons.py from the NOA Angular icon pack (tools/Build-AvIcons.py). Do not edit; rerun the script.",
         "// </auto-generated>",
         "using System.Collections.Generic;",
         "",
@@ -233,30 +161,32 @@ def emit(icons, src, out):
         "",
         "    internal static partial class MenuIcons",
         "    {",
-        "        public static readonly Dictionary<string, IconPoly[]> Table = new Dictionary<string, IconPoly[]>(%d)" % len(icons),
+        "        /// <summary>Stroke width of the pack, in glyph units.</summary>",
+        "        public const float Stroke = %sf;" % ("%g" % av.STROKE),
+        "",
+        "        public static readonly Dictionary<string, IconPoly[]> Table = new Dictionary<string, IconPoly[]>(%d)" % len(MENU),
         "        {",
     ]
-    bad = []
-    for name, polys in icons:
+    bad, strokes = [], 0
+    for name, src in MENU.items():
+        shapes = polys(pack[src] if isinstance(src, str) else src)
         lines.append('            ["%s"] = new[]' % name)
         lines.append("            {")
-        for pts, closed, filled in polys:
-            flat = []
-            for x, y in pts:
-                if not (-0.001 <= x <= 24.001 and -0.001 <= y <= 24.001):
-                    bad.append((name, x, y))
-                flat += [fmt(min(24.0, max(0.0, x))), fmt(min(24.0, max(0.0, y)))]
+        for pts, closed, filled in shapes:
+            if any(not (1.99 <= v <= 22.01) for p in pts for v in p):
+                bad.append(name)
+            flat = [fmt(v) for p in pts for v in p]
             lines.append("                new IconPoly(%s, %s, new[] { %s })," % (str(closed).lower(), str(filled).lower(), ", ".join(flat)))
+            strokes += 1
         lines.append("            },")
     lines += ["        };", "    }", "}", ""]
-    with open(out, "w", encoding="utf-8", newline="\n") as f:
+    if bad:
+        raise SystemExit("leaves the live area 2..22: " + ", ".join(sorted(set(bad))))
+    with open(OUT, "w", encoding="utf-8", newline="\n") as f:
         f.write("\n".join(lines))
-    print("%d glyphs, %d strokes -> %s" % (len(icons), sum(len(p) for _, p in icons), os.path.relpath(out, REPO)))
-    for b in bad:
-        print("outside the 0..24 box (clamped): %s %.3f,%.3f" % b)
+    drawn = sum(1 for v in MENU.values() if not isinstance(v, str))
+    print("%d glyphs (%d from the pack, %d drawn for the menu), %d strokes -> %s" % (len(MENU), len(MENU) - drawn, drawn, strokes, os.path.relpath(OUT, REPO)))
 
 
 if __name__ == "__main__":
-    source = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_SRC
-    target = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_OUT
-    emit(build(source), source, target)
+    main()

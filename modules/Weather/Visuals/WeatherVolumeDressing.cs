@@ -51,6 +51,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private readonly ManualLogSource logger;
         private readonly CloudVolumeUniforms uniforms = new CloudVolumeUniforms();
         private readonly WeatherCloudPass pass = new WeatherCloudPass();
+        private readonly CloudProbePass probePass = new CloudProbePass();
         private readonly Action<Camera, Matrix4x4, Matrix4x4> onRender;
         private Material material, compositeMaterial;
         private Texture3D noise;
@@ -64,6 +65,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private float rainMaximum;
         private bool halfResolution;
         private Vector3 lightDirection = Vector3.up;
+        private const int SightTaps = 96, SightTapsPerCall = 12;
+        private const float SightReach = 30000f, SightCeiling = 14000f;
+        private float sightDepth, sightOpen = 1f;
+        private int sightTap;
+        private bool sightLine;
 
         private int mapUpdates;
         private GameObject root;
@@ -246,6 +252,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             displayedFrame = field.Frame;
             displayedHeading = field.PrevailingHeading;
             renderer.enabled = !wantHalfResolution || halfResolution;
+            probePass.Bind(renderer.enabled ? material : null);
             if (renderer.enabled)
             {
                 HideReason = null;
@@ -321,24 +328,35 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             return nearWeight <= 0f ? outer : CloudBodies.BlendMaps(outer, near.Sample(x, z, mapHalf), nearWeight);
         }
 
-        /// <summary>Three bounded light-path taps; presentation estimate, not another ray march.</summary>
+        /// <summary>
+        /// Light reaching a point from the sun or moon: the whole line through the cloud layers, a dozen taps per call
+        /// (one line every eight calls), so a cloud 20 km down the line hides the sun too. Call once per frame.
+        /// </summary>
         internal float TransmissionAt(float x, float y, float z)
         {
-            if (!Active) return 1f;
-            float depth = 0f;
-            for (int i = 0; i < 3; i++)
+            if (!Active) return sightOpen = 1f;
+            // Out of the top of the cloud layers, or 30 km for a low sun: at 90 km the taps sat a kilometre apart and
+            // a scattered field always read as solid, which put the setting sun out over an open horizon.
+            float reach = Mathf.Min(SightReach, (SightCeiling - y) / Mathf.Max(lightDirection.y, 0.03f));
+            if (reach <= 0f) return sightOpen = 1f;
+            float step = reach / SightTaps;
+            for (int i = 0; i < SightTapsPerCall; i++)
             {
-                float distance = i == 0 ? 180f : i == 1 ? 850f : 2200f;
-                Vector3 p = new Vector3(x, y, z) + lightDirection * distance;
-                depth += DensityAt(p.x, p.y, p.z) * (i == 0 ? 340f : 1100f) * 0.0021f;
+                // Alternate lines sit half a step apart, so a cloud narrower than a step still dims the sun.
+                Vector3 p = new Vector3(x, y, z) + lightDirection * (step * (sightTap + (sightLine ? 0.25f : 0.75f)));
+                sightDepth += DensityAt(p.x, p.y, p.z) * step * 0.0021f;
+                if (++sightTap < SightTaps) continue;
+                sightOpen = Mathf.Clamp01(Mathf.Exp(-sightDepth));
+                sightDepth = 0f; sightTap = 0; sightLine = !sightLine;
             }
-            return Mathf.Clamp01(Mathf.Exp(-depth));
+            return sightOpen;
         }
 
         internal void Restore()
         {
             RainCurtainsEnabled = false;
             Invalidate();
+            probePass.Dispose();
             pass.Dispose();
             if (root != null) UnityEngine.Object.Destroy(root);
             if (material != null) UnityEngine.Object.Destroy(material);
@@ -367,6 +385,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             HideReason = reason;
             if (renderer != null) renderer.enabled = false;
             pass.Dispose();
+            probePass.Bind(null);
             halfResolution = false;
             shadows.Restore();
             RestoreSkyClouds();

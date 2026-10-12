@@ -95,7 +95,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             Generation = Generation == int.MaxValue ? 1 : Generation + 1;
             factions.Clear();
             nextAttempt.Clear();
-            nextTick = 0f;
+            nextTick = 0.25f;   // phase: the four 1 Hz services tick on different frames
             spawner.ResetForScene();
         }
 

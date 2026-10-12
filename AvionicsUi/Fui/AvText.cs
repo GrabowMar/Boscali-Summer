@@ -48,10 +48,28 @@ namespace NOAvionics
             return true;
         }
 
+        // The flow's 2 Hz sweep and every Place re-measure each part; TMP's preferred-size pass is the expensive bit,
+        // so the answer is kept per text object and reused while its text, box width, size, font and style match.
+        private sealed class Measured { public string Text; public float W = -1f, Size, Value; public TMP_FontAsset Font; public FontStyles Style; public bool Wrap; }
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TMP_Text, Measured> heights = new System.Runtime.CompilerServices.ConditionalWeakTable<TMP_Text, Measured>();
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<TMP_Text, Measured> widths = new System.Runtime.CompilerServices.ConditionalWeakTable<TMP_Text, Measured>();
+
+        private static float Cached(System.Runtime.CompilerServices.ConditionalWeakTable<TMP_Text, Measured> table, TMP_Text t, float box, bool wantWidth)
+        {
+            if (!table.TryGetValue(t, out Measured m)) { m = new Measured(); table.Add(t, m); }
+            string text = t.text;
+            if (m.W == box && m.Size == t.fontSize && m.Wrap == t.enableWordWrapping && m.Style == t.fontStyle &&
+                ReferenceEquals(m.Font, t.font) && (ReferenceEquals(m.Text, text) || m.Text == text)) return m.Value;
+            Vector2 pref = t.GetPreferredValues(text, box, 0f);
+            m.Text = text; m.W = box; m.Size = t.fontSize; m.Wrap = t.enableWordWrapping; m.Style = t.fontStyle; m.Font = t.font;
+            m.Value = Mathf.Ceil(wantWidth ? pref.x : pref.y);
+            return m.Value;
+        }
+
         public static float Height(TMP_Text t, float width) =>
-            t == null ? 0f : Mathf.Ceil(t.GetPreferredValues(t.text, Mathf.Max(1f, width), 0f).y);
+            t == null ? 0f : Cached(heights, t, Mathf.Max(1f, width), false);
 
         public static float Width(TMP_Text t) =>
-            t == null ? 0f : Mathf.Ceil(t.GetPreferredValues(t.text, 100000f, 0f).x);
+            t == null ? 0f : Cached(widths, t, 100000f, true);
     }
 }

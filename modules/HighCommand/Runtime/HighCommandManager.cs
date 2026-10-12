@@ -506,7 +506,7 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
                         // Every staff post is a commander. The shared identity generator
                         // keeps faces stable and selects clothing/equipment for this role.
                         WingLink.PersonnelPortrait(node.Name, "", PortraitRole.Commander, portraitFaction),
-                        node.IntelAge, node.X, node.Z, node.Bounty, (node.Flags & CommanderWire.Claimed) != 0));
+                        node.IntelAge, node.X, node.Z, node.Bounty, (node.Flags & CommanderWire.Claimed) != 0, node.ParentId));
                 }
             }
 

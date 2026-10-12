@@ -23,6 +23,10 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         private readonly float[] expiry = new float[TrackCeiling];
         private int tracked;
         private int sequence;
+        private TrenchLine salvoShooter, salvoTarget;
+        private MissileDefinition salvoShell;
+        private float salvoScatter;
+        private int salvoLeft;
 
         internal int Inflight
         {
@@ -38,6 +42,8 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             for (int i = 0; i < tracked; i++) inflight[i] = null;
             tracked = 0;
             sequence = 0;
+            salvoLeft = 0;
+            salvoShooter = salvoTarget = null;
         }
 
         /// <summary>
@@ -55,29 +61,51 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             int room = TrenchTraceMath.BarrageInflightCeiling - tracked;
             if (room <= 0) return 0;
             int rounds = Math.Min(room, TrenchTraceMath.BarrageRounds(pairDistance));
-            float scatter = TrenchTraceMath.BarrageScatter(pairDistance);
-            int fired = 0;
-            for (int r = 0; r < rounds; r++)
+            salvoShooter = shooter;
+            salvoTarget = target;
+            salvoShell = shell;
+            salvoScatter = TrenchTraceMath.BarrageScatter(pairDistance);
+            salvoLeft = rounds;
+            return Pump(now) ? rounds : 0;
+        }
+
+        /// <summary>
+        /// Releases the next round of the salvo in flight, one a frame: every vanilla
+        /// missile spawn costs about 2 ms, and three in one frame was a visible hitch.
+        /// False when nothing left the tube.
+        /// </summary>
+        internal bool Pump(float now)
+        {
+            if (salvoLeft <= 0) return false;
+            salvoLeft--;
+            TrenchLine shooter = salvoShooter, target = salvoTarget;
+            Spawner spawner = NetworkSceneSingleton<Spawner>.i;
+            Missile missile = null;
+            if (spawner != null && spawner.IsServer && shooter.OwnerHq != null)
             {
                 TrenchTraceMath.BarrageAim(shooter.Center.x, shooter.Center.z, target.Center.x, target.Center.z,
-                    UnityEngine.Random.value * 2f - 1f, UnityEngine.Random.value * 2f - 1f, scatter, out float x, out float z);
+                    UnityEngine.Random.value * 2f - 1f, UnityEngine.Random.value * 2f - 1f, salvoScatter, out float x, out float z);
                 Vector3 aim = TrenchTerrain.TryGround(x, z, out Vector3 ground) ? ground : new Vector3(x, 0f, z);
-                Missile missile = spawner.SpawnSavedMissile(shell.unitPrefab,
+                missile = spawner.SpawnSavedMissile(salvoShell.unitPrefab,
                     (aim + Vector3.up * ReleaseAltitude).ToGlobalPosition(),
                     Quaternion.LookRotation(Vector3.down), shooter.OwnerHq, string.Empty, string.Empty,
                     Vector3.down * ReleaseSpeed, Prefix + shooter.Id + ":" + sequence++);
-                if (missile == null) break;
-                missile.SetAimpoint(aim.ToGlobalPosition(), Vector3.zero);
-                missile.Arm();
-                if (tracked < TrackCeiling)
+                if (missile != null)
                 {
-                    inflight[tracked] = missile;
-                    expiry[tracked] = now + InflightExpirySeconds;
-                    tracked++;
+                    missile.SetAimpoint(aim.ToGlobalPosition(), Vector3.zero);
+                    missile.Arm();
+                    if (tracked < TrackCeiling)
+                    {
+                        inflight[tracked] = missile;
+                        expiry[tracked] = now + InflightExpirySeconds;
+                        tracked++;
+                    }
                 }
-                fired++;
             }
-            return fired;
+            // A failed round ends the salvo, as it always did.
+            if (missile == null) salvoLeft = 0;
+            if (salvoLeft == 0) salvoShooter = salvoTarget = null;
+            return missile != null;
         }
 
         private void Prune(float now)

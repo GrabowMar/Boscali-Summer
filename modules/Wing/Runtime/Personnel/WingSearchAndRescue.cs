@@ -29,6 +29,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         }
 
         private static readonly Dictionary<PersistentID, Survivor> survivors = new Dictionary<PersistentID, Survivor>();
+        private static readonly List<PersistentID> tickIds = new List<PersistentID>();
         private static float nextTick;
 
         public static void Reset() { survivors.Clear(); nextTick = 0f; }
@@ -154,7 +155,9 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             if (survivors.Count == 0 || Time.timeSinceLevelLoad < nextTick) return;
             nextTick = Time.timeSinceLevelLoad + 0.5f;
             // Native callbacks can settle records while this pass is running.
-            foreach (PersistentID id in new List<PersistentID>(survivors.Keys))
+            tickIds.Clear();
+            tickIds.AddRange(survivors.Keys);
+            foreach (PersistentID id in tickIds)
             {
                 if (!survivors.TryGetValue(id, out Survivor survivor)) continue;
                 PilotDismounted native = survivor.Native;

@@ -28,11 +28,11 @@ def SQ(x, y, w, h=None):
     return f"F:M{x} {y}h{w}v{h}h-{w}z"
 
 
-def STAR(cx, cy, ro, ri):
+def STAR(cx, cy, ro, ri, points=5):
     pts = []
-    for i in range(10):
+    for i in range(points * 2):
         r = ro if i % 2 == 0 else ri
-        t = math.radians(-90 + 36 * i)
+        t = math.radians(-90 + 180 / points * i)
         pts.append(f"{cx + r*math.cos(t):.2f} {cy + r*math.sin(t):.2f}")
     return "M" + "L".join(pts) + "Z"
 
@@ -160,6 +160,17 @@ NEW = {
     "hostile": ["M12 3.5L20.5 12L12 20.5L3.5 12Z", "M12 9V15M9 12H15"],
     "terminal": ["M3 4H21V20H3Z", "M7 9L10 12L7 15", "M12 15H17"],
     "runway": ["M8 21L10 3H14L16 21Z", "M12 6V9M12 12V15M12 18V20"],
+    # The MFD index rail: one glyph per screen instead of a borrowed stand-in.
+    "crest": [SHIELD, "F:M5 4H12V21L5 13Z"],
+    "flight-path": [O(12, 11, 3.5, 1.5), "M2 11H8.5M15.5 11H22", "M12 7.5V3.5", "M5 17V19H10M14 19H19V17"],
+    "pilot": ["M9 3H15L17 5V9L15 11H9L7 9V5Z", "F:M7 5.5H17V8.5H7Z", "M4 21V18L7 15H17L20 18V21", "M12 11V15"],
+    "call-down": ["M5 2.5L12 9.5L19 2.5", "M5 8.5L12 15.5L19 8.5", SQ(10.5, 18.5, 3), "M3 20H8M16 20H21"],
+    "territory": ["M3 4H21V20H3Z", "F:M3 4H11L14 9L9 14L13 20H3Z"],
+    "headset": ["M5 13V9L9 5H15L19 9V13", SQ(3, 13, 4, 6), SQ(17, 13, 4, 6), "M5 19V21.5H12"],
+    "designator": ["M3 8V3H8M16 3H21V8M21 16V21H16M8 21H3V16", "M12 7L17 12L12 17L7 12Z", SQ(11, 11, 2)],
+    "clipboard": ["M9 5H5V21H19V5H15", "M9 3H15V7H9Z", "M8.5 13.5L11 16L15.5 10.5"],
+    "formation": ["F:M12 2L16 10L12 8L8 10Z", "F:M6 11L10 19L6 17L2 19Z", "F:M18 11L22 19L18 17L14 19Z"],
+    "burst": [STAR(12, 12, 8.2, 4.2, 8), SQ(11, 11, 2)],
 }
 
 TOKEN = re.compile(r"[MLHVZmlhvz]|-?\d*\.?\d+")

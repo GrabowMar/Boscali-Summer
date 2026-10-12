@@ -21,7 +21,7 @@ namespace BoscaliSummer.Modules.Weather
 
         public ModuleMetadata Metadata => Module;
 
-        public Type[] PatchTypes => Array.Empty<Type>();
+        public Type[] PatchTypes => new[] { typeof(Patches.CloudSeekerPatch) };
 
         public void Install(ModuleContext context)
         {

@@ -118,7 +118,7 @@
       "op": "call",
       "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Press",
       "args": {
-        "id": "tab.log"
+        "id": "tab.info"
       },
       "store": "t2"
     },
@@ -134,7 +134,7 @@
     },
     {
       "op": "capture",
-      "name": "str-log",
+      "name": "str-info",
       "hide_ui": false
     },
     {

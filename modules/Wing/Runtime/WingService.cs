@@ -583,12 +583,28 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         /// <summary>The field the next call launches from (the player's pick; null: the nearest friendly one).</summary>
         public Airbase LaunchField { get; private set; }
 
+        private static Airbase[] fieldCache;
+        private static float fieldCacheAt;
+
+        /// <summary>Every airbase in the scene, rescanned when empty, when one died, or after 30 s (a late carrier or field).</summary>
+        internal static Airbase[] AllFields()
+        {
+            bool stale = fieldCache == null || fieldCache.Length == 0 || UnityEngine.Time.realtimeSinceStartup - fieldCacheAt > 30f;
+            if (!stale) foreach (Airbase a in fieldCache) if (a == null) { stale = true; break; }
+            if (stale)
+            {
+                fieldCache = UnityEngine.Object.FindObjectsOfType<Airbase>();
+                fieldCacheAt = UnityEngine.Time.realtimeSinceStartup;
+            }
+            return fieldCache;
+        }
+
         /// <summary>Friendly or unowned fields with a runway usable for takeoff, nearest to <paramref name="from"/> first.</summary>
         public static List<Airbase> FriendlyFields(Aircraft from)
         {
             var fields = new List<Airbase>();
             if (from == null) return fields;
-            foreach (Airbase a in UnityEngine.Object.FindObjectsOfType<Airbase>())
+            foreach (Airbase a in AllFields())
             {
                 if (a == null || a.disabled || a.runways == null) continue;
                 if (a.CurrentHQ != null && a.CurrentHQ != from.NetworkHQ) continue;
@@ -1202,8 +1218,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             {
                 WingMember m = Members[i];
                 if (!m.Alive) continue;
-                m.NearFloorY = TerrainProbe.Near(m.Last.Pos, m.Last.Vel);
-                float own = TerrainProbe.LookAhead(m.Last.Pos, m.Last.Vel);
+                float own = TerrainProbe.LookAhead(m.Last.Pos, m.Last.Vel, out float near);
+                m.NearFloorY = near;
                 m.OwnFloor.Update(own, dt);
                 raw = Math.Max(raw, own);
                 any = true;

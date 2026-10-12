@@ -1,14 +1,16 @@
-"""Trace the insignia's nose-art pictures into the three-tone distance planes EmblemMarks reads.
+"""Trace the insignia marks into the four-ink distance planes EmblemMarks reads.
 
-    python tools/Build-EmblemArt.py            (needs Pillow; nothing else)
+    python tools/Build-EmblemArt.py [source folder] [--preview out.png]     (needs Pillow; nothing else)
 
-Each picture in modules/Progression/Assets/Source/emblem-art (transparent background) becomes three planes
-of signed distance, 256 x 256 bytes, bottom row first, 128 on the edge and 16 steps to a cell:
-  ink    the whole figure               painted in the badge's ink tincture
-  shade  hair, cloth, metal, the lines  painted in a darker shade of the ink
-  line   the drawing's black line work  painted in the keyline colour
-Output: modules/Progression/Assets/emblem-art.bin = raw deflate of "EART", count, then the planes.
-ORDER below is the stored encoding of the marks that use them: append only.
+Each NN-name.png in the source folder (transparent background, drawn in black, ivory, red and gold) becomes
+four planes of signed distance, CELLS x CELLS bytes, bottom row first, 128 on the edge and 16 steps to a cell:
+  ink    the whole figure          painted in the badge's ink tincture (the drawing's ivory)
+  gold   its gold, with the lines  painted in a shade of the ink
+  red    its red, with the lines   painted in the badge's second tincture
+  line   its black line work       painted in the keyline colour
+Output: modules/Progression/Assets/emblem-art.bin = "EAR2", count, cells, then per mark an offset and a
+length, then each mark's planes as its own raw-deflate block, so a mark is unpacked only when it is drawn.
+File order is the stored encoding of EmblemDesign.ChargeNames: renumber nothing, append only.
 """
 import os
 import struct
@@ -18,15 +20,14 @@ import zlib
 from PIL import Image, ImageFilter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SOURCE = os.path.join(ROOT, "modules", "Progression", "Assets", "Source", "emblem-art")
+SOURCE = os.path.join(ROOT, "assets", "wing-pylon-symbols-128-v3", "source")
 OUTPUT = os.path.join(ROOT, "modules", "Progression", "Assets", "emblem-art.bin")
-ORDER = ["pinup", "bombshell"]
 
-WORK = 512          # traced at twice the stored size
 CELLS = 256
+WORK = 512          # traced at twice the stored size
 FILL = 0.96         # share of the mark's box the figure may fill
-LINE_BELOW = 62     # luminance under which a pixel is line work
-LIGHT_FROM = 186    # tone from which a pixel is skin or highlight rather than shade
+BLACK, IVORY, RED, GOLD = 0, 1, 2, 3
+INKS = [(0, 0, 0), (242, 220, 172), (185, 54, 50), (215, 166, 61)]
 
 
 def distance(mask, width, height):
@@ -65,20 +66,18 @@ def distance(mask, width, height):
     return d
 
 
-def plane(image):
-    """A black-and-white mask (white is inside) as a signed distance plane, bottom row first."""
-    width, height = image.size
-    inside = [v >= 128 for v in image.tobytes()]
-    to_inside = distance(inside, width, height)
-    to_outside = distance([not v for v in inside], width, height)
-    step = width // CELLS
+def plane(inside):
+    """A mask (true is inside) at WORK size as a signed distance plane at CELLS size, bottom row first."""
+    to_inside = distance(inside, WORK, WORK)
+    to_outside = distance([not v for v in inside], WORK, WORK)
+    step = WORK // CELLS
     out = bytearray(CELLS * CELLS)
     for cy in range(CELLS):
         for cx in range(CELLS):
             total = 0.0
             for sy in range(step):
                 for sx in range(step):
-                    i = (cy * step + sy) * width + cx * step + sx
+                    i = (cy * step + sy) * WORK + cx * step + sx
                     total += (to_inside[i] - 0.5) if not inside[i] else -(to_outside[i] - 0.5)
             cells = total / (step * step) / step
             out[(CELLS - 1 - cy) * CELLS + cx] = max(0, min(255, int(round(128 - cells * 16))))
@@ -88,47 +87,57 @@ def plane(image):
 def trace(path):
     picture = Image.open(path).convert("RGBA")
     picture = picture.crop(picture.getchannel("A").point(lambda v: 255 if v >= 128 else 0).getbbox())
-    reach = int(WORK * FILL)
-    scale = reach / max(picture.size)
+    scale = int(WORK * FILL) / max(picture.size)
     picture = picture.resize((max(1, round(picture.width * scale)), max(1, round(picture.height * scale))), Image.LANCZOS)
     sheet = Image.new("RGBA", (WORK, WORK), (0, 0, 0, 0))
     sheet.paste(picture, ((WORK - picture.width) // 2, (WORK - picture.height) // 2))
 
-    ink, shade, line = bytearray(WORK * WORK), bytearray(WORK * WORK), bytearray(WORK * WORK)
-    for i, (r, g, b, a) in enumerate(sheet.getdata()):
-        if a < 128:
-            continue
-        ink[i] = 255
-        if 0.299 * r + 0.587 * g + 0.114 * b < LINE_BELOW:
-            line[i] = 255
-        elif 0.4 * r + 0.3 * g + 0.3 * b < LIGHT_FROM:
-            shade[i] = 255
-    size = (WORK, WORK)
-    ink_mask = Image.frombytes("L", size, bytes(ink)).filter(ImageFilter.MedianFilter(5))
-    # Line work is fattened to survive a fin's texel density; specks of shade are swept away.
-    line_mask = Image.frombytes("L", size, bytes(line)).filter(ImageFilter.MaxFilter(3))
-    shade_mask = Image.frombytes("L", size, bytes(shade)).filter(ImageFilter.MedianFilter(5))
-    shade_mask = Image.composite(Image.new("L", size, 255), shade_mask, line_mask)
-    return plane(ink_mask) + plane(shade_mask) + plane(line_mask), (ink_mask, shade_mask, line_mask)
+    palette = Image.new("P", (1, 1))
+    palette.putpalette([c for ink in INKS for c in ink] + [0, 0, 0] * 252)
+    inks = sheet.convert("RGB").quantize(palette=palette, dither=Image.Dither.NONE).filter(ImageFilter.ModeFilter(3)).tobytes()
+    solid = sheet.getchannel("A").tobytes()
+    figure = [a >= 128 for a in solid]
+    line = [f and i == BLACK for f, i in zip(figure, inks)]
+    gold = [f and i in (BLACK, GOLD) for f, i in zip(figure, inks)]
+    red = [f and i in (BLACK, RED) for f, i in zip(figure, inks)]
+    return plane(figure) + plane(gold) + plane(red) + plane(line), (figure, inks)
 
 
 def main():
-    blob = bytearray(b"EART" + struct.pack("<BH", len(ORDER), CELLS))
-    for name in ORDER:
-        found = [f for f in os.listdir(SOURCE) if os.path.splitext(f)[0] == name]
-        if not found:
-            sys.exit("no picture for " + name + " in " + SOURCE)
-        planes, masks = trace(os.path.join(SOURCE, found[0]))
-        blob += planes
-        if "--masks" in sys.argv:
-            for mask, tag in zip(masks, ("ink", "shade", "line")):
-                mask.save(os.path.join(os.path.dirname(OUTPUT), name + "-" + tag + ".png"))
-        print(name, "traced from", found[0])
-    packer = zlib.compressobj(9, zlib.DEFLATED, -15)
-    packed = packer.compress(bytes(blob)) + packer.flush()
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    preview = None
+    if "--preview" in sys.argv:
+        preview = sys.argv[sys.argv.index("--preview") + 1]
+        args = [a for a in args if a != preview]
+    source = args[0] if args else SOURCE
+    files = sorted(f for f in os.listdir(source) if f.lower().endswith(".png") and f[:2].isdigit())
+    if not files:
+        sys.exit("no NN-name.png pictures in " + source)
+    blocks, names = [], []
+    sheet = Image.new("RGB", (8 * 256, ((len(files) + 7) // 8) * 256), (70, 76, 84)) if preview else None
+    for n, name in enumerate(files):
+        planes, (figure, inks) = trace(os.path.join(source, name))
+        packer = zlib.compressobj(9, zlib.DEFLATED, -15)
+        blocks.append(packer.compress(planes) + packer.flush())
+        names.append(os.path.splitext(name)[0][3:].replace("-", " ").upper())
+        if sheet:
+            flat = Image.new("RGB", (WORK, WORK), (70, 76, 84))
+            flat.putdata([INKS[i] if f else (70, 76, 84) for f, i in zip(figure, inks)])
+            sheet.paste(flat.resize((256, 256), Image.LANCZOS), (n % 8 * 256, n // 8 * 256))
+        print("%2d %s" % (n, names[-1]))
+        sys.stdout.flush()
+    head = b"EAR2" + struct.pack("<BH", len(blocks), CELLS)
+    at = len(head) + 8 * len(blocks)
+    table = b""
+    for block in blocks:
+        table += struct.pack("<II", at, len(block))
+        at += len(block)
     with open(OUTPUT, "wb") as f:
-        f.write(packed)
-    print(OUTPUT, len(packed), "bytes")
+        f.write(head + table + b"".join(blocks))
+    if sheet:
+        sheet.save(preview)
+    print(OUTPUT, at, "bytes,", len(blocks), "marks")
+    print(", ".join('"%s"' % n for n in names))
 
 
 main()

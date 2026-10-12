@@ -225,27 +225,26 @@ namespace BoscaliSummer.Tests.Features.Progression
                     (first.Division == 0 || EmblemDesign.IsHostileTincture(first.Second)),
                     "a hostile crest escaped the caution/danger band: " + first.Blazon());
                 TestAssert.That(first.Legible, "a hostile crest is not legible: " + first.Blazon());
-                TestAssert.That(first.Charge < EmblemDesign.NoveltyCharge, "an enemy wing flies a joke or nose art: " + first.Blazon());
+                TestAssert.That(EmblemDesign.IsHostileCharge(first.Charge), "an enemy wing flies a pin-up or a joke: " + first.Blazon());
             }
-            // The stored form is the index, so the catalogues only ever grow at the end.
-            TestAssert.That(EmblemDesign.ShapeNames[7] == "ARCH" && EmblemDesign.ChargeNames[15] == "ANCHOR" &&
-                EmblemDesign.ChargeNames[EmblemDesign.NoveltyCharge] == "COOL S", "an emblem catalogue was reordered");
-            bool novelty = false;
-            for (int seed = 0; seed < 200 && !novelty; seed++) novelty = EmblemDesign.Random(seed).Charge >= EmblemDesign.NoveltyCharge;
-            TestAssert.That(novelty, "a player's roll never comes up with a joke or nose art");
+            // The stored form is the index, so the catalogues only ever grow at the end, and every name has its art.
+            TestAssert.That(EmblemDesign.ShapeNames[7] == "ARCH" && EmblemDesign.ChargeNames[0] == "REACTOR ROSE" &&
+                EmblemDesign.ChargeNames[47] == "MISSILE MOTH", "an emblem catalogue was reordered");
+            TestAssert.That(EmblemMarks.Count == EmblemDesign.ChargeCount, "the traced art holds " + EmblemMarks.Count + " marks for " +
+                EmblemDesign.ChargeCount + " names: rebuild it with tools/Build-EmblemArt.py");
             TestAssert.That(EmblemDesign.Hostile("") == EmblemDesign.Hostile(null),
                 "an empty wing identity is not safe to hash");
         }
 
         private static void BlazonReads()
         {
-            TestAssert.That(EmblemDesign.Default.Blazon() == "AZURE, WINGS OR WITHIN AN ANNULET",
+            TestAssert.That(EmblemDesign.Default.Blazon() == "AZURE, A KESTREL ARGENT WITHIN AN ANNULET",
                 "the default blazon changed: " + EmblemDesign.Default.Blazon());
             TestAssert.That(new EmblemDesign(1, 3, 13, 2, 0, 3, 5, 7).Blazon() ==
-                "PER BEND ARGENT AND AZURE, AN ARROW SABLE, IN CHIEF THREE MULLETS · NO. 7", "a full blazon reads wrong");
-            TestAssert.That(new EmblemDesign(0, 0, 3, 0, 2, 2, 0, 0).Blazon() == "GULES, A CROSS ARGENT", "a singular charge lost its article");
-            TestAssert.That(new EmblemDesign(0, 0, 24, 0, 5, 5, 0, 0).Blazon() == "SABLE, A LOSS ARGENT" &&
-                new EmblemDesign(0, 0, 19, 0, 5, 5, 0, 0).Blazon() == "SABLE, AXES ARGENT", "the new charges read wrong");
+                "PER BEND ARGENT AND AZURE, PLAYING CARDS SABLE, IN CHIEF THREE MULLETS · NO. 7", "a full blazon reads wrong");
+            TestAssert.That(new EmblemDesign(0, 0, 3, 0, 2, 2, 0, 0).Blazon() == "GULES, A REACTOR CAT ARGENT", "a singular charge lost its article");
+            TestAssert.That(new EmblemDesign(0, 0, 28, 0, 5, 5, 0, 0).Blazon() == "SABLE, AN ORBIT OWL ARGENT" &&
+                new EmblemDesign(0, 0, 22, 0, 5, 5, 0, 0).Blazon() == "SABLE, LOADED DICE ARGENT", "a charge reads with the wrong article");
         }
 
         // ---- Drawing -----------------------------------------------------------------------
@@ -284,21 +283,22 @@ namespace BoscaliSummer.Tests.Features.Progression
                 // The patch nearly fills its square; the delta and the diamond are the leanest.
                 TestAssert.That(opaque > Size * Size * 0.30f && opaque < Size * Size * 0.80f,
                     name + " covers an implausible share of its square: " + opaque);
-                TestAssert.That(Near(pixels, EmblemDesign.Paint(3, EmblemFinish.Colour)) > Size * Size * 0.08f,
+                TestAssert.That(Near(pixels, EmblemDesign.Paint(3, EmblemFinish.Colour)) > Size * Size * 0.04f,
                     name + " shows almost no field");
             }
         }
 
         private static void EveryChargeDrawsItsOwnMark()
         {
-            Rgba ink = EmblemDesign.Paint(0, EmblemFinish.Colour);
+            Rgba field = EmblemDesign.Paint(3, EmblemFinish.Colour);
             var drawings = new List<byte[]>();
             for (int charge = 0; charge < EmblemDesign.ChargeCount; charge++)
             {
-                // White on a black roundel; the rim is ink too, so only the middle of the field is counted.
-                byte[] pixels = Draw(new EmblemDesign(1, 0, charge, 0, 5, 5, 0, 0));
-                int marked = Near(pixels, ink, 0.62f);
-                TestAssert.That(marked > 40, EmblemDesign.ChargeNames[charge] + " draws no visible mark (" + marked + " px)");
+                // On a blue roundel; only the middle of the field is looked at, well inside the rim.
+                byte[] pixels = Draw(new EmblemDesign(1, 0, charge, 0, 3, 2, 0, 0));
+                int looked = (int)(Size * 0.5f) * (int)(Size * 0.5f);
+                int marked = looked - Near(pixels, field, 0.5f);
+                TestAssert.That(marked > 120, EmblemDesign.ChargeNames[charge] + " draws no visible mark (" + marked + " px)");
                 foreach (byte[] earlier in drawings)
                     TestAssert.That(!Same(earlier, pixels), EmblemDesign.ChargeNames[charge] + " draws the same as another charge");
                 drawings.Add(pixels);

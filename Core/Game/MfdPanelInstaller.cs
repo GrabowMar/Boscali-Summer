@@ -79,13 +79,28 @@ namespace BoscaliSummer.Core.Game
             return false;
         }
 
+        // One resolved MFD for every installer, and one failed scan per second between them: nine panels used to
+        // each run the scene-wide FindObjectOfType in the same second while the cockpit had no MFD yet.
+        private static VirtualMFD sharedMfd;
+        private static float nextScan;
+
+        internal static VirtualMFD ResolveMfd()
+        {
+            if (sharedMfd != null) return sharedMfd;
+            float now = Time.unscaledTime;
+            if (now < nextScan) return null;
+            VirtualMFD mfd =
+                SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.GetComponentInChildren<VirtualMFD>(true)
+                ?? UnityEngine.Object.FindObjectOfType<VirtualMFD>();
+            if (mfd == null) { nextScan = now + 1f; return null; }
+            return sharedMfd = mfd;
+        }
+
         public void Install()
         {
             try
             {
-                VirtualMFD mfd =
-                    SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.GetComponentInChildren<VirtualMFD>(true)
-                    ?? UnityEngine.Object.FindObjectOfType<VirtualMFD>();
+                VirtualMFD mfd = ResolveMfd();
                 if (mfd == null) return;
 
                 List<Button> buttons;

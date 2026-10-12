@@ -125,8 +125,6 @@ Shader "Boscali/CanopyRain"
                 float tilt = length(nT);
                 float3 nW = normalize(baseW * sqrt(saturate(1.0 - tilt * tilt)) + exW * nT.x + eyW * nT.y);
 
-                float3 toEye = normalize(_WorldSpaceCameraPos - i.worldPos);
-                float fresnel = pow(1.0 - saturate(abs(dot(nW, toEye))), 4.0);
                 // Pane-space "up": light from the sky lands on the upper face, the lens
                 // focuses it into a bright crescent on the lower inside edge.
                 float2 upT = float2(dot(exW, float3(0, 1, 0)), dot(eyW, float3(0, 1, 0)));
@@ -138,6 +136,7 @@ Shader "Boscali/CanopyRain"
                 if (sunLen > 0.05)
                 {
                     float3 sunDir = _SunDir.xyz / sunLen;
+                    float3 toEye = normalize(_WorldSpaceCameraPos - i.worldPos);
                     float3 h = normalize(sunDir + toEye);
                     glint = pow(saturate(dot(nW, h)), 220.0) * 4.0;
                 }
@@ -145,6 +144,10 @@ Shader "Boscali/CanopyRain"
                 float catchLight = smoothstep(0.55, 0.8, lit) * smoothstep(0.95, 0.7, tilt);
                 float rimDark = smoothstep(0.45, 0.92, tilt);           // total internal reflection band
                 float caustic = smoothstep(0.15, 0.6, -lit) * (1.0 - rimDark);
+                // An inverted lens is dark along its upper edge and bright in the lower
+                // crescent. An even rim drew outline rings; a view fresnel on the pane
+                // normal whitened every whole bead on a raked windscreen.
+                float topShade = saturate(rimDark * saturate(0.6 + lit) + smoothstep(0.1, 0.7, lit) * 0.3);
 
                 float2 suv = i.screen.xy / max(i.screen.w, 0.0001);
                 float3 finalColor;
@@ -161,19 +164,22 @@ Shader "Boscali/CanopyRain"
                     float3 body = tex2Dlod(_SceneTex, float4(saturate(suv + lensUv), 0.0, film * 2.5 + bead * 0.4)).rgb;
                     // What a bead mirrors is the blurred scene above it, not a fixed sky colour.
                     float3 env = tex2Dlod(_SceneTex, float4(saturate(suv + float2(0.0, 0.12)), 0.0, 5.0)).rgb;
-                    float3 water = body * (1.0 - rimDark * 0.45 + caustic * 0.4)
-                        + env * (fresnel * 0.6 + catchLight * 0.5) + _SunColor.rgb * glint;
+                    float3 water = body * (1.0 - topShade * 0.5 + caustic * 0.4)
+                        + env * catchLight * 0.3 + _SunColor.rgb * glint;
                     finalColor = lerp(body * 0.94, water, bead);
                     alpha = saturate(bead * 0.97 + film * 0.55);
                 }
                 else
                 {
-                    float3 body = _FogColor.rgb * _LightLevel * _Tint.rgb;
+                    // No scene copy: draw only what a clear lens adds, its dark rim and its
+                    // highlights. A fog-coloured body read as a sticker on the glass.
+                    float3 fog = _FogColor.rgb * _LightLevel * _Tint.rgb;
                     float3 sky = lerp(_FogColor.rgb, float3(1, 1, 1), 0.35) * _LightLevel;
-                    finalColor = body * (1.0 - rimDark * 0.38 * bead + caustic * 0.5 * bead)
-                        + sky * (fresnel * 0.5 + catchLight * 0.75) * bead
-                        + _SunColor.rgb * glint * bead;
-                    alpha = cover * (0.15 + bead * 0.32);
+                    float shade = topShade * 0.55;
+                    float light = caustic * 0.4 + catchLight * 0.6;
+                    finalColor = lerp(fog * 0.35, sky, light / (light + shade + 0.001))
+                        + _SunColor.rgb * glint;
+                    alpha = bead * saturate(shade + light + glint) + film * 0.08;
                 }
                 // The simulation already controls how much water rain deposits. Multiplying
                 // opacity by rain again made individual light-shower beads disappear.

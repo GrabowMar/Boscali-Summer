@@ -32,8 +32,17 @@ namespace BoscaliSummer.Modules.Comms.Runtime
             string name = player != null && player.HQ != null && player.HQ.faction != null
                 ? player.HQ.faction.factionName
                 : null;
-            return string.IsNullOrEmpty(name) ? 0 : unchecked((int)Deterministic.HashString(name));
+            if (string.IsNullOrEmpty(name)) return 0;
+            if (!string.Equals(name, hashedFaction, StringComparison.Ordinal))
+            {
+                hashedFaction = name;
+                factionHash = unchecked((int)Deterministic.HashString(name));
+            }
+            return factionHash;
         }
+
+        private static string hashedFaction;
+        private static int factionHash;
 
         public static string Name(Player player)
         {

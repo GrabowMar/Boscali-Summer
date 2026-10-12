@@ -11,13 +11,13 @@ namespace BoscaliSummer.Modules.Weather.Domain
     internal static class OvercastLook
     {
         /// <summary>Cover under this casts no shade; the shade reaches 1 at cover 1.</summary>
-        public const float CoverFloor = 0.2f;
+        public const float CoverFloor = 0.1f;
         /// <summary>Half the width, in metres, of the transition at the top of the deck: full shade below the top less this, none above it plus this.</summary>
         public const float DeckBlend = 450f;
         /// <summary>The sun keeps this share of its intensity under a full shade.</summary>
-        public const float SunFloor = 0.45f;
+        public const float SunFloor = 0.15f;
         /// <summary>The fog colour is pulled this far toward its luminance and darkened this much under a full shade.</summary>
-        public const float TintGrey = 0.6f, TintDark = 0.18f;
+        public const float TintGrey = 0.8f, TintDark = 0.35f;
 
         /// <summary>0-1: how much cloud hangs overhead. Smooth in the cover and in the altitude, so crossing the top of a deck never steps.</summary>
         public static float Shade(float skyCover, float cameraY, float deckTop)

@@ -17,7 +17,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             HybridAvailability();
             DerivedStateLines();
             CommsIsOneGroupedList();
-            BadgesAndSummary();
+            Badges();
             BindAttachesRunToRunnableRows();
             FormationIsASubmenuOfFamilies();
             PerksGroupByFrontAndCool();
@@ -121,7 +121,6 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             gear = moving.Row("flight/gear");
             TestAssert.That(gear.IsBlocked && gear.State == "GEAR: EXTENDING", "a moving gear keeps its row, blocked, with the reason");
             TestAssert.Eq(moving.Category("flight").Rows[0].Id, "flight/gear", "and keeps its place at the top");
-            TestAssert.That(moving.Summary.Exists(s => s.Key == "GEAR" && s.Value == "MOVING" && s.Caution), "the hub summary says GEAR MOVING");
 
             w = MenuWorlds.Default();
             TestAssert.Eq(MenuCatalog.Build(w).Row("lights/light").Label, "SET LANDING LIGHT OFF", "AUTO steps to OFF");
@@ -143,7 +142,6 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.That(wing.Badge == "NO WING" && wing.BadgeShow, "with a reason badge");
             TestAssert.Eq(wing.EmptyTitle, "NO WINGMEN", "and an explanation");
             TestAssert.Eq(noWing.Categories[3].Id, "wing", "and keeps its slot");
-            TestAssert.That(!noWing.Summary.Exists(s => s.Key == "WING"), "the hub summary drops the WING figure");
 
             MenuModel ground = MenuCatalog.Build(MenuWorlds.Ground());
             TestAssert.That(ground.Row("flight/gear") == null && ground.Row("flight/autoland") == null && ground.Row("flight/eject") == null && ground.Row("defence/flares") == null,
@@ -224,7 +222,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.That(more.Rows[more.Rows.Count - 1].Group == "MORE", "a call the table does not know lands in MORE");
         }
 
-        private static void BadgesAndSummary()
+        private static void Badges()
         {
             MenuModel m = MenuCatalog.Build(MenuWorlds.Default());
             TestAssert.Eq(m.Category("weapons").Badge, "AAM-4 ×2", "weapons badge");
@@ -248,11 +246,6 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.Eq(m.Category("flight").Badge, "HOVER ON", "a helicopter in hover");
             TestAssert.Eq(m.Category("weapons").Badge, "GUN ×500", "door guns badge keeps the ammo");
 
-            w = MenuWorlds.Default();
-            w.Fuel = 0.72f;
-            TestAssert.Eq(MenuCatalog.Build(w).Summary[0].Value, "72%", "the centre line reads the live fuel level");
-            w.Fuel = 0.1f;
-            TestAssert.That(MenuCatalog.Build(w).Summary[0].Caution, "low fuel is a caution");
             TestAssert.Eq(MenuCatalog.Build(MenuWorlds.Default()).AircraftName, "CI-22 CRICKET", "aircraft name");
         }
 

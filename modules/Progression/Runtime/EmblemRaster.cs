@@ -15,6 +15,7 @@ namespace BoscaliSummer.Modules.Progression.Runtime
         private const float RimKey = 0.036f, RimInk = 0.102f, RimInner = 0.132f;
         private const float Keyline = 0.030f;
         private const float Far = 1e6f;
+        private const int GoldTincture = 1, RedTincture = 2;
 
         /// <summary>Where a shape carries its charge, top stars and base line.</summary>
         private readonly struct Layout
@@ -61,18 +62,19 @@ namespace BoscaliSummer.Modules.Progression.Runtime
             Rgba ink = EmblemDesign.Paint(design.Ink, finish);
             Rgba key = finish == EmblemFinish.LowVis ? new Rgba(0.22f, 0.22f, 0.22f) : new Rgba(0.05f, 0.05f, 0.06f);
 
-            // A dark mark is its own outline; keying it would fill the detail cut into it.
-            bool outlined = EmblemDesign.Luminance(EmblemDesign.Paint(design.Ink, EmblemFinish.Colour)) >= 0.25f;
-            // Traced nose art is three tones. A light ink is the skin and its shade is darker; a dark ink is the
-            // shade itself (hair, cloth, metal) and the skin is lifted out of it.
-            bool toned = EmblemMarks.Toned(design.Charge);
-            // Its own line work does the outlining, so the keyline round it is fine and the drawing a little larger.
-            float outline = toned ? Keyline * 0.4f : Keyline;
-            if (toned) scale *= 1.12f;
-            Rgba shade = outlined
-                ? new Rgba(ink.R * 0.58f + key.R * 0.42f, ink.G * 0.58f + key.G * 0.42f, ink.B * 0.58f + key.B * 0.42f)
-                : ink;
-            Rgba skin = new Rgba(ink.R * 0.45f + 0.50f, ink.G * 0.45f + 0.50f, ink.B * 0.45f + 0.50f);
+            // The mark is traced art in four inks. Its ivory takes the ink tincture (lifted when that is dark, so
+            // the drawing still reads); its gold stays gold and its red takes the second tincture, each falling
+            // back to a shade of the ink where that colour is already the field or the ink; its lines are keyline.
+            bool dark = EmblemDesign.Luminance(EmblemDesign.Paint(design.Ink, EmblemFinish.Colour)) < 0.25f;
+            float lift = finish == EmblemFinish.LowVis ? 0.40f : 0.50f;     // low-vis never goes as stark as white
+            Rgba ivory = dark ? new Rgba(ink.R * 0.45f + lift, ink.G * 0.45f + lift, ink.B * 0.45f + lift) : ink;
+            Rgba gold = design.Ink != GoldTincture && design.Field != GoldTincture ? EmblemDesign.Paint(GoldTincture, finish)
+                : new Rgba(ivory.R * 0.62f + key.R * 0.38f, ivory.G * 0.62f + key.G * 0.38f, ivory.B * 0.62f + key.B * 0.38f);
+            Rgba red = design.Second != design.Field && design.Second != design.Ink ? second
+                : design.Ink != RedTincture && design.Field != RedTincture ? EmblemDesign.Paint(RedTincture, finish)
+                : new Rgba(ivory.R * 0.40f + key.R * 0.60f, ivory.G * 0.40f + key.G * 0.60f, ivory.B * 0.40f + key.B * 0.60f);
+            // The drawing carries its own outline, so it sits a little larger with only a fine keyline round it.
+            scale *= 1.12f;
             int o = 0;
             for (int row = 0; row < size; row++)
             {
@@ -92,29 +94,24 @@ namespace BoscaliSummer.Modules.Progression.Runtime
                     if (design.Division != 0)
                         Mix(ref r, ref g, ref b, second, Cover(-Division(design.Division, x, y - layout.Cy), px));
 
-                    // Everything in the ink tincture is one shape, so it shares one keyline.
-                    float mark = Far, figure = Far, shadeEdge = Far, lineEdge = Far;
+                    float figure = Far, goldEdge = Far, redEdge = Far, lineEdge = Far;
                     float qx = x / scale, qy = (y - cy) / scale;
-                    if (qx > -1.2f && qx < 1.2f && qy > -1.2f && qy < 1.2f)
+                    if (qx > -1f && qx < 1f && qy > -1f && qy < 1f)
                     {
-                        mark = EmblemMarks.Distance(design.Charge, qx, qy) * scale;
-                        if (toned && mark < px)
-                        {
-                            figure = mark;
-                            EmblemMarks.Tones(design.Charge, qx, qy, out shadeEdge, out lineEdge);
-                            shadeEdge = Math.Max(shadeEdge * scale, mark); lineEdge = Math.Max(lineEdge * scale, mark);
-                        }
+                        EmblemMarks.Sample(design.Charge, qx, qy, out figure, out goldEdge, out redEdge, out lineEdge);
+                        figure *= scale;
+                        goldEdge = Math.Max(goldEdge * scale, figure); redEdge = Math.Max(redEdge * scale, figure);
+                        lineEdge = Math.Max(lineEdge * scale, figure);
                     }
-                    mark = Math.Min(mark, Accent(design, layout, x, y, cy, scale, edge));
-                    if (numbered) mark = Math.Min(mark, Digits(design.Number, x, y - baseY));
-                    if (outlined) Mix(ref r, ref g, ref b, key, Cover(mark - outline, px));
-                    Mix(ref r, ref g, ref b, ink, Cover(mark, px));
-                    if (toned)
-                    {
-                        if (!outlined) Mix(ref r, ref g, ref b, skin, Cover(figure, px));
-                        Mix(ref r, ref g, ref b, shade, Cover(shadeEdge, px));
-                        Mix(ref r, ref g, ref b, key, Cover(lineEdge, px));
-                    }
+                    // Trim and number are one shape in the ink tincture and share one keyline.
+                    float trim = Accent(design, layout, x, y, cy, scale, edge);
+                    if (numbered) trim = Math.Min(trim, Digits(design.Number, x, y - baseY));
+                    Mix(ref r, ref g, ref b, key, Cover(Math.Min(trim - Keyline, figure - Keyline * 0.4f), px));
+                    Mix(ref r, ref g, ref b, ink, Cover(trim, px));
+                    Mix(ref r, ref g, ref b, ivory, Cover(figure, px));
+                    Mix(ref r, ref g, ref b, gold, Cover(goldEdge, px));
+                    Mix(ref r, ref g, ref b, red, Cover(redEdge, px));
+                    Mix(ref r, ref g, ref b, key, Cover(lineEdge, px));
 
                     Mix(ref r, ref g, ref b, key, Cover(-(edge + RimInner), px));
                     Mix(ref r, ref g, ref b, ink, Cover(-(edge + RimInk), px));

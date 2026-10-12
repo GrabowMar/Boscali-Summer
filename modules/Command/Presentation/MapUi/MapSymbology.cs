@@ -38,7 +38,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             internal RectTransform PlateRect;
             internal Sprite Original;
             internal Sprite GlyphSprite;
-            internal MapGlyph Glyph;
             internal float Relative = 1f;
             internal Vector2 PlateSize;
         }
@@ -115,16 +114,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
         }
 
-        /// <summary>The platform class this contact is drawn as; false when it keeps the game's icon.</summary>
-        internal static bool TryGlyph(UnitMapIcon icon, out MapGlyph glyph)
-        {
-            glyph = default;
-            if (icon == null || !symbols.TryGetValue(icon, out Symbol symbol) || symbol == NotApplicable ||
-                symbol.GlyphSprite == null) return false;
-            glyph = symbol.Glyph;
-            return true;
-        }
-
         /// <summary>Puts the game's own icon back and hides the plate.</summary>
         internal static void Release(UnitMapIcon icon)
         {
@@ -162,22 +151,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             var symbol = new Symbol { Original = unit.definition != null ? unit.definition.mapIcon : null };
             float scale = unit.definition != null ? unit.definition.mapIconSize : 1f;
             symbol.Relative = Mathf.Clamp(scale <= 0f ? 1f : scale, .85f, 1.35f);
-            if (unit is Ship) { symbol.GlyphSprite = MapSymbolAtlas.Glyph(symbol.Glyph = MapGlyph.Hull); return symbol; }
-            if (unit is Aircraft)
-            {
-                if (symbol.Original != null && symbol.Original.name.IndexOf("helo", System.StringComparison.OrdinalIgnoreCase) >= 0)
-                    symbol.GlyphSprite = MapSymbolAtlas.Glyph(symbol.Glyph = MapGlyph.Helicopter);
-                else symbol.GlyphSprite = MapSymbolAtlas.Glyph(symbol.Glyph = MapGlyph.Aircraft);
-                return symbol;
-            }
-            if (unit is Building)
-            {
-                symbol.GlyphSprite = MapSymbolAtlas.Glyph(symbol.Glyph = MapGlyph.Contact);
-                return symbol;
-            }
+            // The game already draws aircraft, ships and sites from above, one silhouette each: keep them.
+            if (unit is Ship || unit is Aircraft || unit is Building) return symbol;
             if (!(unit is GroundVehicle)) return NotApplicable;
+            // Ground vehicles all share one capsule in the game: give each its own model's plan view,
+            // or a typical member of its class when the baked sheet does not know the model.
             var vehicle = unit.definition as VehicleDefinition;
-            symbol.GlyphSprite = MapSymbolAtlas.Glyph(symbol.Glyph = GroundGlyph(vehicle != null ? vehicle.vehicleType : VehicleType.LCV));
+            GameObject prefab = unit.definition != null ? unit.definition.unitPrefab : null;
+            symbol.GlyphSprite = MapVehicleIcons.For(prefab != null ? prefab.name : null) ??
+                MapSymbolAtlas.Glyph(GroundGlyph(vehicle != null ? vehicle.vehicleType : VehicleType.LCV));
             return symbol;
         }
 

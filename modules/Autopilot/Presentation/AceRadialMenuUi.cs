@@ -11,7 +11,8 @@ using UnityEngine.EventSystems;
 namespace BoscaliSummer.Modules.Autopilot.Presentation
 {
     /// <summary>
-    /// The C-key interaction menu (v7 "Ring + Dock") on the configured key (default C). Hold it and flick, or tap it to latch and click;
+    /// The interaction menu (v7 "Ring + Dock"). By default it takes the game's own Radial Menu binding (held past the game's press delay, like the
+    /// native wheel it replaces; a tap stays the game's) plus an optional extra key. Hold and point, release to run; release at the hub to latch and click;
     /// digits, arrows, the wheel, RMB, Backspace and Esc work too (see <see cref="MenuController"/>). This component only hosts the pieces:
     /// <see cref="AceRadialInputSource"/> samples input, the pure <see cref="MenuController"/> decides, <see cref="MenuGame"/> builds the model
     /// from the live game, <see cref="MenuPainter"/> draws it on one AvionicsUi vector surface plus a TMP label pool, and
@@ -37,11 +38,16 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         private MenuController controller;
         private int layoutW, layoutH;
         private float openedAt, lastRefresh;
-        private bool wasOpen, releasePending, overflowLogged, narrowLogged;
+        private float pressedAt, radialDownAt;
+        private bool wasOpen, releasePending, overflowLogged, narrowLogged, radialArmed;
         private KeyCode openKey = KeyCode.None;
+        private int soundMark;
 
         /// <summary>The Harmony patch on the native wheel's Update reads this: the wheel stays frozen while this menu is open.</summary>
         public static bool IsOpenNow { get; private set; }
+
+        /// <summary>The menu has taken the Radial Menu binding: the patch keeps the native wheel from opening on it.</summary>
+        public static bool OwnsRadialButton { get; private set; }
 
         public bool IsOpen => controller != null && controller.Open;
 
@@ -66,28 +72,31 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         private void OnDestroy()
         {
             CloseMenu();
+            OwnsRadialButton = false;
             host?.Destroy();
         }
 
         private void Update()
         {
             float now = Time.unscaledTime;
-            KeyCode key = settings?.AceRadialKey?.Value ?? KeyCode.C;
-            if (key != openKey) { openKey = key; if (controller != null) controller.OpenKeyName = key.ToString().ToUpperInvariant(); }
+            KeyCode key = settings?.AceRadialKey?.Value ?? KeyCode.None;
+            bool radial = settings?.ReplaceNativeWheel?.Value ?? true;
+            OwnsRadialButton = radial;
+            if (key != openKey) { openKey = key; if (controller != null) controller.OpenKeyName = KeyName(key); }
             AceRadialPauseGate.Tick(now);
-            if (releasePending && !AceRadialInputSource.AnyMenuInputHeld(key)) FinishClose();
-            if (key == KeyCode.None)
+            if (releasePending && !input.AnyMenuInputHeld(key, radial)) FinishClose();
+            if (key == KeyCode.None && !radial)
             {
-                if (IsOpen) CloseMenu(); // the key was unbound while the menu was open
+                if (IsOpen) CloseMenu(); // both ways in were switched off while the menu was open
                 return;
             }
 
             if (!IsOpen)
             {
-                bool opened = Input.GetKeyDown(key) && CanOpen() && TryOpen(key, now);
+                bool opened = WantsOpen(key, radial, now) && CanOpen() && TryOpen(key, radial, now);
                 if (!opened)
                 {
-                    if (controller != null && controller.Showing) { controller.Step(input.Sample(key, false, now)); Present(now); }
+                    if (controller != null && controller.Showing) { controller.Step(input.Sample(key, radial, false, now)); Present(now); }
                     else if (host.Canvas.enabled) host.SetVisible(false);
                     return;
                 }
@@ -97,7 +106,8 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
                 if (!StillValid()) controller.Cancel();
                 else
                 {
-                    controller.Step(input.Sample(key, true, now));
+                    if (!input.OpenHeld(key, radial) || now - pressedAt >= PlayerSettings.clickDelay) AceRadialInputGuard.TakeKeyboard();
+                    controller.Step(input.Sample(key, radial, true, now));
                     RunCommands(now);
                 }
                 if (!controller.Open) { OnClosed(now); Present(now); return; }
@@ -107,6 +117,22 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         }
 
         // ------------------------------------------------------------------ open / close
+
+        private static string KeyName(KeyCode key) => key == KeyCode.None ? "" : key.ToString().ToUpperInvariant();
+
+        /// <summary>The extra key opens on its press; the Radial Menu binding once it has been held for the game's press delay, exactly when the native wheel would.</summary>
+        private bool WantsOpen(KeyCode key, bool radial, float now)
+        {
+            if (key != KeyCode.None && Input.GetKeyDown(key)) { pressedAt = now; return true; }
+            Rewired.Player pad = radial ? GameManager.playerInput : null;
+            if (pad == null) return false;
+            if (pad.GetButtonDown(AceRadialInputSource.PadPress)) { radialDownAt = now; radialArmed = true; input.ResolveRadialBinding(); }
+            if (!radialArmed) return false;
+            if (!input.RadialHeld()) { radialArmed = false; return false; }
+            if (now - radialDownAt < PlayerSettings.pressDelay) return false;
+            radialArmed = false; pressedAt = radialDownAt;
+            return true;
+        }
 
         private bool CanOpen()
         {
@@ -136,7 +162,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             return selected != null && selected.GetComponent<TMP_InputField>() != null;
         }
 
-        private bool TryOpen(KeyCode key, float now)
+        private bool TryOpen(KeyCode key, bool radial, float now)
         {
             MenuModel built;
             try { built = MenuGame.Build(); }
@@ -147,9 +173,9 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             }
             model = built;
             EnsureLayout();
-            controller = new MenuController(model, layout, recall) { OpenKeyName = key.ToString().ToUpperInvariant() };
+            controller = new MenuController(model, layout, recall) { OpenKeyName = KeyName(key) };
             input.Prime();
-            controller.Step(input.Sample(key, true, now));
+            controller.Step(input.Sample(key, radial, true, now));
             if (!controller.Open) return false;
             try
             {
@@ -163,6 +189,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
                 return false;
             }
             wasOpen = true; IsOpenNow = true; releasePending = false;
+            soundMark = -4096 + 2 * 16; AvUiSound.Play(AvUiCue.Engage);
             openedAt = lastRefresh = now;
             return true;
         }
@@ -196,13 +223,22 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         private void RunCommands(float now)
         {
             bool ran = false;
+            AvUiCue cue = AvUiCue.Hover; // Hover is the silent cue
             foreach (MenuCommand cmd in controller.Commands)
             {
+                if (cmd.Kind == MenuCommandKind.Pulse) cue = AvUiCue.Caution;
+                else if (cmd.Kind == MenuCommandKind.Back || cmd.Kind == MenuCommandKind.Close) { if (cue == AvUiCue.Hover) cue = AvUiCue.Release; }
                 if (cmd.Kind != MenuCommandKind.Execute) continue;
+                cue = AvUiCue.Confirm;
                 try { cmd.Row.Run?.Invoke(); }
                 catch (Exception e) { Plugin.Logger?.LogWarning("Autopilot: menu action '" + cmd.Row.Id + "' failed: " + e.Message); }
                 ran = true;
             }
+            // every change of aim ticks, so a stick or hat user hears the wheel move without looking for the highlight
+            int mark = controller.Cat * 4096 + (controller.Focus + 3) * 16 + (controller.WheelAim + 1) + (controller.Sub != null ? 1 << 20 : 0);
+            if (cue == AvUiCue.Hover && mark != soundMark) cue = AvUiCue.Navigate;
+            soundMark = mark;
+            AvUiSound.Play(cue);
             if (ran && controller.Open) Refresh(now);
         }
 
@@ -239,9 +275,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             host.SetVisible(true);
             float open = controller.Open ? MenuPainter.OpenProgress(openedAt, now) : 1f;
             host.Group.alpha = open;
-            Vector3 scale = Vector3.one * (0.96f + 0.04f * open);
-            host.Static.localScale = scale; host.Data.localScale = scale;
-            if (controller.Open) AceRadialInputGuard.SetCursorVisible(controller.Mode == MenuMode.Latched);
+            if (controller.Open) AceRadialInputGuard.SetCursorVisible(controller.Device != MenuDevice.Pad);
             painter.Paint(controller, layout, now);
             surface.Commit();
             if (surface.Buffer.Overflowed && !overflowLogged)

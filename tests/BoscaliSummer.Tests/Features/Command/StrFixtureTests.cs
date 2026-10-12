@@ -71,6 +71,8 @@ namespace BoscaliSummer.Tests.Features.Command
                 ["a census count of -2"] = f => { f.War.Census.AirFriendly = -2; Check(f); },
                 ["a threat of six"] = f => { f.War.Census.Threat = 6; Check(f); },
                 ["an old post"] = f => { f.Posts[0].IntelAge = 601f; Check(f); },
+                ["seventeen officers"] = f => { f.Officers = new StrOfficerIn[17]; f.OfficerCount = 17; Check(f); },
+                ["an officer at tier three"] = f => { f.Officers[0].Tier = 3; Check(f); },
             };
             foreach (var pair in cases)
             {

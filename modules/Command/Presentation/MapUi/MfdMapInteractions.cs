@@ -21,14 +21,24 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private const float ContactRadius = 18f;
         private const int MaximumScannedIcons = 2048;
         private const int MaximumSelected = 128;
-        private const float MenuWidth = 248f;
+        private const float MenuWidth = 284f;
+        private const float HeadHeight = 26f;
+        private const float RowHeight = 17f;
+        private const float KeyWidth = 76f;
+        private const float ActionHeight = 28f;
+        private const float ActionGap = 3f;
 
         private static readonly List<Unit> candidates = new List<Unit>(MaximumSelected);
         private static readonly List<MenuAction> actions = new List<MenuAction>(8);
-        private struct MenuAction { internal string Label; internal Action Invoke; }
+        private static readonly List<MapContextRead.Row> rows = new List<MapContextRead.Row>(10);
+        /// <summary>Two neighbouring <see cref="Half"/> actions share one line.</summary>
+        private struct MenuAction { internal string Label; internal AvIcon Icon; internal Action Invoke; internal bool Half; }
 
         private static RectTransform box;
         private static RectTransform menu;
+        /// <summary>The dropped range mark: a map close keeps it, a scene reset forgets it.</summary>
+        private static GlobalPosition? mark;
+        private static RectTransform markGlyph;
         private static bool boxPress;
         private static bool boxDragged;
         private static Vector2 boxStart;
@@ -61,7 +71,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (map == null || !DynamicMap.mapMaximized || map.mapBackground == null) return false;
             if (Input.GetMouseButtonDown(1)) return true;
             if (boxPress && (Input.GetMouseButton(0) || Input.GetMouseButtonUp(0))) return true;
-            return (Input.GetMouseButton(0) || Input.GetMouseButtonDown(0)) && ControlHeld() &&
+            return (Input.GetMouseButton(0) || Input.GetMouseButtonDown(0)) && BoxHeld() &&
                 !BoxBlocked() && !MapUiPointer.OverControls() &&
                 map.TryGetCursorCoordinates(out _);
         }
@@ -85,14 +95,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (GameManager.GetLocalAircraft(out Aircraft localAircraft) && icon.unit == localAircraft)
                 return true;
             ConsumeClick();
-            bool add = ShiftHeld() || ControlHeld();
-            if (add && map.selectedIcons.Contains(icon)) map.DeselectIcon(icon.unit);
-            else
-            {
-                if (!add) map.UnselectAll();
-                map.SelectIcon(icon.unit);
-            }
-            Echo((map.selectedIcons?.Count ?? 0) + " TRACKS SELECTED");
+            // A click builds the selection: it adds the contact, or drops it if already in.
+            // Empty ground clears.
+            if (map.selectedIcons.Contains(icon)) map.DeselectIcon(icon.unit);
+            else map.SelectIcon(icon.unit);
+            Echo((map.selectedIcons?.Count ?? 0) + " TRACKS SELECTED  /  CLICK EMPTY MAP TO CLEAR");
             return true;
         }
 
@@ -120,6 +127,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Restore();
                 return;
             }
+            DrawMark(map);
             if (BoxBlocked())
             {
                 CancelBox();
@@ -160,12 +168,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 bool onMenu = ContainsMenu(Input.mousePosition);
                 if (menu != null && !onMenu) HideMenu();
-                boxPress = ControlHeld() && !BoxBlocked() && !MapUiPointer.OverControls() &&
+                boxPress = BoxHeld() && !BoxBlocked() && !MapUiPointer.OverControls() &&
                     !Typing() && map.TryGetCursorCoordinates(out _);
                 boxDragged = false;
                 if (boxPress) boxStart = Input.mousePosition;
                 leftStart = Input.mousePosition;
-                leftPress = !boxPress && !onMenu && !ControlHeld() && !BoxBlocked() &&
+                leftPress = !boxPress && !onMenu && !BoxHeld() && !BoxBlocked() &&
                     !Typing() && !MapUiPointer.OverControls() &&
                     MapUiPointer.Contains(map.mapBackground.rectTransform, leftStart);
             }
@@ -183,7 +191,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
             }
             if (!boxPress) return;
-            if (!ControlHeld() || BoxBlocked() || MapUiPointer.OverControls() ||
+            if (!BoxHeld() || BoxBlocked() || MapUiPointer.OverControls() ||
                 !map.TryGetCursorCoordinates(out _))
             {
                 CancelBox();
@@ -197,7 +205,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 {
                     SelectBox(map, new Rect(Mathf.Min(boxStart.x, current.x),
                         Mathf.Min(boxStart.y, current.y), Mathf.Abs(current.x - boxStart.x),
-                        Mathf.Abs(current.y - boxStart.y)), AddHeld());
+                        Mathf.Abs(current.y - boxStart.y)), true);
                     boxReleaseFrame = Time.frameCount;
                 }
                 CancelBox();
@@ -239,51 +247,61 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             AirbaseMapIcon airbase = contact == null ? AirbaseAt(map, Input.mousePosition) : null;
             Vector2 click = Input.mousePosition;
             int nearby = CountNearby(map, click);
+            int selected = map.selectedIcons?.Count ?? 0;
             actions.Clear();
             if (contact != null)
             {
                 Unit unit = contact.unit;
-                actions.Add(new MenuAction { Label = "FRAME THIS CONTACT", Invoke = () => Focus(ground, true) });
-                actions.Add(new MenuAction { Label = "SELECT THIS TRACK", Invoke = () => SelectTrack(map, unit, false) });
-                actions.Add(new MenuAction { Label = "ADD / REMOVE TRACK", Invoke = () => SelectTrack(map, unit, true) });
+                Add("FRAME", AvIcon.Focus2, () => Focus(ground, true), true);
+                Add("SELECT ONLY", AvIcon.Target, () => SelectTrack(map, unit, false), true);
+                // The line says what the click will do, not both things it might.
+                bool held = selected > 0 && TrySelectedUnit(map, unit);
+                Add(held ? "DROP FROM SELECTION" : "ADD TO SELECTION", held ? AvIcon.Minus : AvIcon.Plus,
+                    () => SelectTrack(map, unit, true));
                 if (nearby > 1)
-                    actions.Add(new MenuAction { Label = "SELECT STACK  /  " + nearby,
-                        Invoke = () => SelectNearby(map, click) });
-                actions.Add(new MenuAction { Label = "SELECT MATCHING TYPE", Invoke = () => SelectVisibleType(map, unit) });
+                    Add("SELECT STACK  /  " + nearby, AvIcon.Stack2, () => SelectNearby(map, click));
+                Add("SELECT ALL OF THIS TYPE", AvIcon.Filter, () => SelectVisibleType(map, unit));
             }
             else if (airbase != null)
             {
                 AirbaseMapIcon target = airbase;
-                actions.Add(new MenuAction { Label = "FRAME AIRBASE", Invoke = () => Focus(ground, true) });
-                actions.Add(new MenuAction { Label = "SELECT AIRBASE", Invoke = () =>
+                Add("FRAME", AvIcon.Focus2, () => Focus(ground, true), true);
+                Add("SELECT BASE", AvIcon.Runway, () =>
                 {
                     map.UnselectAll();
                     if (target != null && target.airbase != null) map.SelectIcon(target.airbase);
                     HideMenu();
-                }});
+                }, true);
             }
             else
             {
-                actions.Add(new MenuAction { Label = "CENTER VIEW HERE", Invoke = () => Focus(ground, false) });
-                actions.Add(new MenuAction { Label = "ZOOM TO THIS AREA", Invoke = () => Focus(ground, true) });
+                Add("CENTER", AvIcon.CurrentLocation, () => Focus(ground, false), true);
+                Add("ZOOM IN", AvIcon.Maximize, () => Focus(ground, true), true);
                 if (nearby > 1)
-                    actions.Add(new MenuAction { Label = "SELECT NEARBY  /  " + nearby,
-                        Invoke = () => SelectNearby(map, click) });
+                    Add("SELECT NEARBY  /  " + nearby, AvIcon.Stack2, () => SelectNearby(map, click));
             }
-            actions.Add(new MenuAction { Label = "COPY GROUND FIX", Invoke = () =>
+            bool marked = mark.HasValue;
+            Add(marked ? "MOVE MARK" : "DROP RANGE MARK HERE", AvIcon.Ruler2, () => SetMark(ground), marked);
+            if (marked) Add("CLEAR MARK", AvIcon.Eraser, () => SetMark(null), true);
+            Add("COPY FIX", AvIcon.Copy, () =>
             {
                 GUIUtility.systemCopyBuffer = "X " + AvNum.Fixed(ground.x, 0) + "  Z " + AvNum.Fixed(ground.z, 0);
                 HideMenu();
                 Echo("GROUND FIX COPIED");
-            }});
-            if (map.selectedIcons != null && map.selectedIcons.Count > 0)
-                actions.Add(new MenuAction { Label = "CLEAR SELECTION", Invoke = () =>
+            }, selected > 0);
+            if (selected > 0)
+                Add("CLEAR SEL  /  " + selected, AvIcon.Trash, () =>
                 {
                     map.UnselectAll();
                     HideMenu();
                     Echo("SELECTION CLEARED");
-                }});
-            float height = 45f + actions.Count * 31f;
+                }, true);
+            int lines = 0;
+            for (int i = 0; i < actions.Count; i++, lines++)
+                if (Paired(i)) i++;
+            Color tone = MapContextRead.Fill(map, ground, mark, rows);
+            float body = HeadHeight + rows.Count * RowHeight + 8f;
+            float height = body + lines * (ActionHeight + ActionGap) + 5f;
             var go = new GameObject("NOAvionics.MapContext", typeof(RectTransform));
             menu = go.GetComponent<RectTransform>();
             menu.SetParent(parent, false);
@@ -297,26 +315,99 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             MfdChromeLay.Panel(menu, "Back", new Rect(0f, 0f, MenuWidth, height),
                 AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(0.97f),
                 AvStyleHost.FuiColor("frame", AvTheme.Frame), AvChamfer.Diagonal(6f));
+            // The rail down the fix card carries the holder's colour; the GROUND row says it in words.
+            MfdChromeLay.Rule(menu, "Tone", new Rect(1f, -8f, 3f, body - 14f), tone);
             string title = contact != null ? FirstLine(contact.GetInfoText()) :
-                airbase != null ? FirstLine(airbase.GetInfoText()) : "MAP / TERRAIN";
+                airbase != null ? FirstLine(airbase.GetInfoText()) : "GROUND FIX";
             // Rects are top-anchored with y already assigned directly: rows go down with negative y.
             TMP_Text titleText = AvText.Make(menu, "Title", AvTextRole.Head, title, TextAlignmentOptions.MidlineLeft);
-            MfdChromeLay.Place(titleText.rectTransform, new Rect(9f, -4f, MenuWidth - 18f, 18f));
+            MfdChromeLay.Place(titleText.rectTransform, new Rect(12f, -5f, MenuWidth - 20f, 18f));
             titleText.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
             AvText.Fit(titleText, false);
-            TMP_Text fixText = AvText.Make(menu, "Fix",  AvTextRole.Micro,
-                "X " + AvNum.Fixed(ground.x / 1000f, 1) + "  Z " + AvNum.Fixed(ground.z / 1000f, 1) + " KM  /  " +
-                AvNum.Fixed(map.selectedIcons?.Count ?? 0, 0) + " SELECTED", TextAlignmentOptions.MidlineLeft);
-            MfdChromeLay.Place(fixText.rectTransform, new Rect(9f, -22f, MenuWidth - 18f, 18f));
-            fixText.color = AvStyleHost.FuiColor("key", AvTheme.RailInfo);
-            AvText.Fit(fixText, false);
-            for (int i = 0; i < actions.Count; i++)
+            Color key = AvStyleHost.FuiColor("key", AvTheme.RailInfo);
+            for (int i = 0; i < rows.Count; i++)
             {
-                MenuAction action = actions[i];
-                AvControl button = AvControl.Make(menu, new AvControl.Spec(action.Label, action.Invoke));
-                MfdChromeLay.Place(button.Rect, new Rect(8f, -(42f + i * 31f), MenuWidth - 16f, 28f));
+                float top = -(HeadHeight + i * RowHeight);
+                TMP_Text keyText = AvText.Make(menu, "Key " + rows[i].Key, AvTextRole.Micro, rows[i].Key,
+                    TextAlignmentOptions.MidlineLeft);
+                MfdChromeLay.Place(keyText.rectTransform, new Rect(12f, top, KeyWidth, RowHeight));
+                keyText.color = key;
+                AvText.Fit(keyText, false);
+                TMP_Text valueText = AvText.Make(menu, "Value " + rows[i].Key, AvTextRole.DataSmall, rows[i].Value,
+                    TextAlignmentOptions.MidlineLeft);
+                MfdChromeLay.Place(valueText.rectTransform,
+                    new Rect(12f + KeyWidth, top, MenuWidth - 20f - KeyWidth, RowHeight));
+                valueText.color = rows[i].Tone;
+                AvText.Fit(valueText, false);
+            }
+            MfdChromeLay.Rule(menu, "Split", new Rect(8f, -(body - 4f), MenuWidth - 16f, 1f),
+                AvStyleHost.FuiColor("hairline", AvTheme.Hairline));
+            float y = body;
+            for (int i = 0; i < actions.Count; i++, y += ActionHeight + ActionGap)
+            {
+                bool pair = Paired(i);
+                float width = pair ? (MenuWidth - 16f - ActionGap) * .5f : MenuWidth - 16f;
+                PlaceAction(actions[i], 8f, y, width);
+                if (pair) PlaceAction(actions[++i], 8f + width + ActionGap, y, width);
             }
             menu.SetAsLastSibling();
+        }
+
+        private static void Add(string label, AvIcon icon, Action invoke, bool half = false) =>
+            actions.Add(new MenuAction { Label = label, Icon = icon, Invoke = invoke, Half = half });
+
+        private static bool Paired(int index) =>
+            actions[index].Half && index + 1 < actions.Count && actions[index + 1].Half;
+
+        private static void PlaceAction(MenuAction action, float x, float y, float width)
+        {
+            AvControl button = AvControl.Make(menu,
+                new AvControl.Spec(action.Label, action.Invoke, AvButtonStyle.Default, action.Icon));
+            MfdChromeLay.Place(button.Rect, new Rect(x, -y, width, ActionHeight));
+            button.SingleLine();
+        }
+
+        /// <summary>"274° / 38.2 KM": compass bearing and flat range from one map point to another.</summary>
+        internal static string LegText(GlobalPosition from, GlobalPosition to) =>
+            AvNum.Fixed(MapFix.Bearing(from.x, from.z, to.x, to.z), 0).PadLeft(3, '0') + "° / " +
+            AvNum.Fixed(MapFix.Range(from.x, from.z, to.x, to.z) / 1000f, 1) + " KM";
+
+        /// <summary>Bearing and range from the dropped range mark, or null while none is set.</summary>
+        internal static string FromMark(GlobalPosition to) => mark.HasValue ? LegText(mark.Value, to) : null;
+
+        private static void SetMark(GlobalPosition? point)
+        {
+            mark = point;
+            HideMenu();
+            Echo(point.HasValue ? "RANGE MARK SET  /  CURSOR LINE READS FROM IT" : "RANGE MARK CLEARED");
+        }
+
+        private static void DrawMark(DynamicMap map)
+        {
+            RectTransform viewport = map.mapBackground.rectTransform;
+            RectTransform sheet = mark.HasValue ? MfdTerrainRelief.MapImageRect(map.mapImage) : null;
+            Vector3 local = default;
+            // ponytail: the mark is drawn on the relief only; the flat sheet still gets every FROM MARK
+            // readout. Project through the native sheet too if flat-map users ask for the glyph.
+            bool shown = sheet != null &&
+                MfdTerrainRelief.TryProject(mark.Value.x, mark.Value.z, sheet.rect, out Vector2 point) &&
+                viewport.rect.Contains(local = viewport.InverseTransformPoint(sheet.TransformPoint(point)));
+            if (!shown)
+            {
+                if (markGlyph != null) markGlyph.gameObject.SetActive(false);
+                return;
+            }
+            if (markGlyph == null || markGlyph.parent != viewport)
+            {
+                if (markGlyph != null) Object.Destroy(markGlyph.gameObject);
+                TMP_Text glyph = AvIcons.Make(viewport, AvIcon.Crosshair, 22f,
+                    AvStyleHost.FuiColor("select", AvTheme.Accent));
+                glyph.name = "NOAvionics.MapMark";
+                markGlyph = glyph.rectTransform;
+                markGlyph.sizeDelta = new Vector2(26f, 26f);
+            }
+            markGlyph.gameObject.SetActive(true);
+            markGlyph.localPosition = new Vector3(local.x, local.y, 0f);
         }
 
         private static void Focus(GlobalPosition ground, bool zoom)
@@ -517,6 +608,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return text.Substring(0, Mathf.Min(end, 31));
         }
 
+        /// <summary>Shift or Ctrl turns a left drag into a selection box instead of a map pan.</summary>
+        private static bool BoxHeld() => ControlHeld() || ShiftHeld();
         private static bool ControlHeld() => Input.GetKey(KeyCode.LeftControl) ||
             Input.GetKey(KeyCode.RightControl);
         private static bool AddHeld() => ShiftHeld() || Input.GetKey(KeyCode.LeftAlt) ||
@@ -550,10 +643,20 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             menu = null;
         }
 
+        /// <summary>Scene reset: everything <see cref="Restore"/> drops, and the range mark with it.</summary>
+        internal static void Reset()
+        {
+            Restore();
+            mark = null;
+        }
+
         internal static void Restore()
         {
             CancelBox();
             HideMenu();
+            if (markGlyph != null) Object.Destroy(markGlyph.gameObject);
+            markGlyph = null;
+            rows.Clear();
             rightPress = false;
             leftPress = false;
             boxReleaseFrame = -1;

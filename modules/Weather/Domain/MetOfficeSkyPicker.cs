@@ -7,6 +7,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
     internal sealed class MetSkyPicker
     {
         private bool touched;
+        private int lastPinned = -2;
 
         /// <summary>0-46.</summary>
         public int Selected { get; private set; }
@@ -42,9 +43,17 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>The model's world wins while a sky is pinned; otherwise the selection starts on the first sky of the class showing and stays wherever the host last left it.</summary>
         public void Sync(MetOfficeModel m)
         {
-            if (m.PinnedSky >= 0 && m.PinnedSky < SkyLibrary.Count) { Selected = m.PinnedSky; touched = true; }
-            else if (!touched) Selected = FirstOf(m.Class);
+            // A new pin moves the selection once; after that the host may browse other skies while one stays pinned.
+            if (m.PinnedSky != lastPinned)
+            {
+                lastPinned = m.PinnedSky;
+                if (m.PinnedSky >= 0 && m.PinnedSky < SkyLibrary.Count) { Selected = m.PinnedSky; touched = true; return; }
+            }
+            if (!touched) Selected = FirstOf(m.Class);
         }
+
+        /// <summary>Selects one sky (0-46) for the inspector, without pinning it.</summary>
+        public int Select(int sky) { touched = true; Selected = sky < 0 ? 0 : sky >= SkyLibrary.Count ? SkyLibrary.Count - 1 : sky; return Selected; }
 
         public int SelectClass(WeatherRegimeType cls) { touched = true; Selected = FirstOf(cls); return Selected; }
 

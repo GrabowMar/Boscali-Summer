@@ -100,6 +100,27 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         }
 
         /// <summary>
+        /// An integer that changes exactly when <see cref="Distance"/> would print a different
+        /// string: same unit bands, same rounding step. Lets a caller cache the text per step.
+        /// </summary>
+        public static int DistanceStep(float metres, bool metric)
+        {
+            if (!float.IsFinite(metres) || metres < 0f) return -1;
+            const int band = 100000000;
+            if (metric)
+            {
+                if (metres > 10000f) return 3 * band + Step(metres * 0.001f);
+                if (metres > 1000f) return 2 * band + Step(metres * 0.01f);
+                return band + Step(metres);
+            }
+
+            float yards = metres * 1.09361f;
+            return yards < 1000f ? 4 * band + Step(yards) : 5 * band + Step(metres * 0.00539957f);
+        }
+
+        private static int Step(float v) => (int)Math.Round(v, MidpointRounding.AwayFromZero);
+
+        /// <summary>
         /// Vanilla's area-ring fade: solid once a ring is inside a thirteenth of its radius in
         /// range (radius/distance = 1/13.3), gone past forty times, linear in between.
         /// </summary>

@@ -24,6 +24,7 @@ namespace BoscaliSummer.Tests.Features.Command
             StrPanelTests.Run();
             StrRevampTests.Run();
             GridLabelsTests.Run();
+            MapFixTests.Run();
         }
 
         private static void TestReadoutFormatting()

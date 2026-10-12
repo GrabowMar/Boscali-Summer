@@ -44,7 +44,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 return;
             }
             float now = Time.unscaledTime;
-            if (aircraft != watched || now >= nextScan) Scan(aircraft, now);
+            if (aircraft != watched || NeedsScan(now)) Scan(aircraft, now);
             for (int i = 0; i < stationCount; i++)
             {
                 frame.Cm[i] = stations[i];
@@ -66,6 +66,15 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             for (int i = 0; active != null && i < stationCount; i++)
                 frame.Cm[i].Selected = names[i] == active.displayName;
             frame.CmCount = stationCount;
+        }
+
+        /// <summary>Scan once per aircraft; rescan when a stored part was destroyed, or slowly while none were found.</summary>
+        private bool NeedsScan(float now)
+        {
+            if (parts.Length == 0) return now >= nextScan;
+            for (int i = 0; i < parts.Length; i++)
+                if (parts[i] == null) return true;
+            return false;
         }
 
         private void Scan(Aircraft aircraft, float now)

@@ -36,8 +36,18 @@ namespace NOAvionics
             return vector;
         }
 
-        /// <summary>Marks the mesh dirty so the buffer's current contents are (re)drawn.</summary>
-        public void Commit() => SetVerticesDirty();
+        private ulong committedHash;
+        private int committedCount = -1;
+
+        /// <summary>Marks the mesh dirty so the buffer's current contents are (re)drawn; a no-op when they match the last commit.</summary>
+        public void Commit()
+        {
+            AvQuadBuffer b = Buffer;
+            if (b != null && b.Count == committedCount && b.ContentHash == committedHash) return;
+            committedCount = b != null ? b.Count : -1;
+            committedHash = b != null ? b.ContentHash : 0;
+            SetVerticesDirty();
+        }
 
         protected override void OnPopulateMesh(VertexHelper vh)
         {

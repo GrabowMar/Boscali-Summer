@@ -60,20 +60,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return frame;
         }
 
-        /// <summary>
-        /// Restores a TMP field to the size <see cref="MfdRail"/> captured before it skinned a borrowed
-        /// vanilla control, so teardown puts back the exact value it found. This is the one place in
-        /// the slice that writes a captured vanilla value rather than an authored one; kit-authored
-        /// chrome sizing goes through <see cref="AvTextRole"/> / <see cref="AvText.Fit"/> instead.
-        /// The plain assignment is deliberate (a vanilla text that was not auto-sized has no other
-        /// public way back to its exact size), so this file is an exemption from the kit-v2
-        /// "no direct size assignment" rule.
-        /// </summary>
-        public static void RestoreCapturedSize(TMPro.TMP_Text text, float size)
-        {
-            if (text != null) text.fontSize = size;
-        }
-
         /// <summary>Zero-padded integer through the digit writer <see cref="AvNum"/> is built on, culture-invariant like <c>AvConsole</c>'s own page index (spec §5.2).</summary>
         public static string TwoDigits(int value)
         {

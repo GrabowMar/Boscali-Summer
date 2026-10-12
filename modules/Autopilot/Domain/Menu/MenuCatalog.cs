@@ -42,7 +42,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                     if (c.EmptyBody.Length == 0) c.EmptyBody = "NOT AVAILABLE RIGHT NOW";
                     c.Badge = c.Reason; c.BadgeShow = true; c.BadgeAlert = false;
                 }
-            model.Summary = Summary(w);
             return model;
         }
 
@@ -74,19 +73,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             c.Badge = MenuText.Upper(text, MenuModel.BadgeChars);
             c.BadgeShow = show;
             c.BadgeAlert = alert;
-        }
-
-        private static List<MenuSummary> Summary(MenuWorld w)
-        {
-            var list = new List<MenuSummary>(4);
-            int fuel = (int)Math.Round(Math.Max(0f, Math.Min(1f, w.Fuel)) * 100f);
-            list.Add(new MenuSummary("FUEL", fuel + "%", w.Fuel < 0.2f));
-            if (w.Gear != GearPhase.None)
-                list.Add(w.Gear == GearPhase.Extending || w.Gear == GearPhase.Retracting ? new MenuSummary("GEAR", "MOVING", true)
-                    : new MenuSummary("GEAR", w.Gear == GearPhase.Down ? "DN" : "UP"));
-            if (w.Targets > 0) list.Add(new MenuSummary("TGT", w.Targets.ToString()));
-            if (w.Wingmen > 0) list.Add(new MenuSummary("WING", w.Wingmen.ToString()));
-            return list;
         }
 
         // ------------------------------------------------------------------ WEAPONS

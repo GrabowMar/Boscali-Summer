@@ -74,13 +74,14 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public const string DtgHelp = "DTG is the real UTC clock (cosmetic). T+ is the mission clock. SN is the first four digits of the tape id.";
         public const string RoleHostHelp = "HOST // ALL PLAYERS: your changes reach every player at once. This window is the only way to steer the weather by hand.";
         public const string RoleClientHelp = "READ ONLY: only the host steers the weather. You see the same window with every control off.";
-        public const string BarPaceHelp = "PACE: one step faster; from the fastest it wraps to the slowest. , and . step down and up. SMOOTH. The sky holds until the tape moves (slice 5).";
-        public const string BarRainHelp = "RAIN: cycles AUTO > DRY > LIGHT (40%) > HEAVY (100%). Same as the W key. No sky cut.";
+        public const string TileHelp = "SKY TILE: click to inspect this sky (bars: high, mid and low cover). PIN in the inspector makes the whole tape this sky. Browsing changes nothing.";
+        public const string ClassHelp = "CLASS: shows the skies of this class in the gallery. Browsing changes nothing; PIN in the inspector is the cut.";
+        public const string HeroHelp = "NOW: the sky over you, the tape's speed, the story it tells and the next front ahead. Read-outs only.";
 
         /// <summary>Every sentence above, for the length test and the window's hover gate.</summary>
         public static string[] AllPartHelp()
         {
-            var all = new System.Collections.Generic.List<string>(ChipHelp) { TagHelp, IdentityHelp, LogHelp, DtgHelp, RoleHostHelp, RoleClientHelp, BarPaceHelp, BarRainHelp };
+            var all = new System.Collections.Generic.List<string>(ChipHelp) { TagHelp, IdentityHelp, LogHelp, DtgHelp, RoleHostHelp, RoleClientHelp, TileHelp, ClassHelp, HeroHelp };
             return all.ToArray();
         }
 
@@ -89,6 +90,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         /// <summary>Class codes of the pin row, in <see cref="WeatherRegimeType"/> order.</summary>
         public static readonly string[] ClassCodes = { "CLR", "FEW", "SCT", "BKN", "OVC", "RA+", "TS" };
+        public static readonly string[] ClassWords = { "CLEAR", "FAIR", "SCATTERED", "BROKEN", "OVERCAST", "RAIN", "STORM" };
 
         private static readonly MetControlInfo[] Table = BuildTable();
 
@@ -137,7 +139,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             Add(MetControl.PinAuto, "AUTO", MetEffect.Cut, L, '\0',
                 "AUTO unpins the sky and puts the tape back on the mission's story; a held tape resumes. Rain override stays. CUT.");
             Add(MetControl.PinClass, "PIN CLASS", MetEffect.Cut, L, '\0',
-                "A class pins its first sky; the arrows then walk that class in number order, one sky per press. CUT: the whole tape becomes that sky.");
+                "PIN CLASS pins the first sky of a class (keys and sims). In the window a class tab only browses; PIN in the inspector is the cut.");
             Add(MetControl.PinPrev, "SKY <", MetEffect.Cut, L, '\0', "Previous sky of the class: pins it at once. CUT.");
             Add(MetControl.PinNext, "SKY >", MetEffect.Cut, L, '\0', "Next sky of the class: pins it at once. CUT.");
             Add(MetControl.PinSelected, "PIN SKY", MetEffect.Cut, L, 'p',

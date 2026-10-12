@@ -330,6 +330,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Image image = go.GetComponent<Image>();
                 image.sprite = sprite;
                 image.color = tint;
+                // A spriteless Image draws a solid square; an icon the game has not loaded shows nothing.
+                image.enabled = sprite != null;
                 image.raycastTarget = false;
                 RectTransform rect = image.rectTransform;
                 rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);

@@ -49,6 +49,10 @@ namespace BoscaliSummer.Modules.Command.Domain
                 h = Mix(h, f.PostsAvailable ? 1 : 0);
                 h = Mix(h, f.PostCount);
                 for (int i = 0; f.Posts != null && i < f.PostCount && i < f.Posts.Length; i++) h = Mix(h, Post(in f.Posts[i]));
+                h = Mix(h, f.StaffPresent ? 1 : 0);
+                h = Mix(h, f.StaffStatus == null ? 0 : f.StaffStatus.GetHashCode());
+                h = Mix(h, f.OfficerCount);
+                for (int i = 0; f.Officers != null && i < f.OfficerCount && i < f.Officers.Length; i++) h = Mix(h, Officer(in f.Officers[i]));
                 h = Mix(h, f.WingCount);
                 for (int i = 0; f.Wing != null && i < f.WingCount && i < f.Wing.Length; i++) h = Mix(h, Wing(in f.Wing[i]));
                 h = Mix(h, f.PickerPrompt == null ? 0 : f.PickerPrompt.GetHashCode());
@@ -79,6 +83,24 @@ namespace BoscaliSummer.Modules.Command.Domain
                 h = Mix(h, p.X.GetHashCode());
                 h = Mix(h, p.Z.GetHashCode());
                 return Mix(h, p.BountyCapped ? 1 : 0);
+            }
+        }
+
+        private static int Officer(in StrOfficerIn o)
+        {
+            unchecked
+            {
+                int h = Mix(o.Id, o.Tier);
+                h = Mix(h, (o.Own ? 1 : 0) | (o.Alert ? 2 : 0) | (o.Confirmed ? 4 : 0));
+                h = Mix(h, o.Name == null ? 0 : o.Name.GetHashCode());
+                h = Mix(h, o.Rank == null ? 0 : o.Rank.GetHashCode());
+                h = Mix(h, o.Role == null ? 0 : o.Role.GetHashCode());
+                h = Mix(h, o.Site == null ? 0 : o.Site.GetHashCode());
+                h = Mix(h, o.Trait == null ? 0 : o.Trait.GetHashCode());
+                h = Mix(h, o.IntelAge.GetHashCode());
+                h = Mix(h, o.X.GetHashCode());
+                h = Mix(h, o.Z.GetHashCode());
+                return Mix(h, o.Portrait == null ? 0 : RuntimeHelpers.GetHashCode(o.Portrait));
             }
         }
 

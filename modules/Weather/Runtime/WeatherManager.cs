@@ -102,6 +102,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private int canopyAircraftId;
         private readonly TerrainRainDressing terrainRain = new TerrainRainDressing();
         private readonly RainAtmosphere atmosphere = new RainAtmosphere();
+        private readonly SunDisc sunDisc = new SunDisc();
         private readonly CloudDressing clouds = new CloudDressing();
         private WeatherVolumeDressing flightClouds;
         private readonly HeatDistortionSorting heatHaze = new HeatDistortionSorting();
@@ -181,6 +182,18 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             WeatherPoint point = built.Sample(globalX, globalZ);
             sample = SkySummary.View(point, WeatherViewSample.IsNightHour(level.timeOfDay));
             return true;
+        }
+
+        /// <summary>
+        /// Whether a global point is inside cloud: the drawn volume where it runs, else the field's deck (cover and bounds).
+        /// The host's heat-seeker rule reads it (<c>CloudSeekerPatch</c>).
+        /// </summary>
+        internal bool InCloudAt(GlobalPosition at)
+        {
+            if (flightClouds != null && flightClouds.Active)
+                return flightClouds.InCloud((float)at.x, (float)at.y, (float)at.z);
+            return ((IWeatherView)this).TrySample((float)at.x, (float)at.z, out WeatherViewSample sky) &&
+                sky.Cover >= 0.3f && at.y >= sky.CloudBase && at.y <= sky.CloudTop;
         }
 
         public void Configure(WeatherSettings weatherSettings, WeatherNet weatherNet,
@@ -526,7 +539,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 localRainIntensity = Mathf.Clamp01(localWeather.RainRate / 20f);
             }
             // Clouds, rain and terrain must read the same atmosphere for this frame.
-            if (liveWeather) UpdateRainSystems(weatherTime);
+            if (liveWeather) { UpdateRainSystems(weatherTime); sunDisc.Tick(LevelInfo.i, view, viewTransmission, Time.deltaTime); }
             else { environmentSnapshot = default; TeardownRainSystems(); atmosphere.Restore(); }
             if (!Application.isBatchMode && settings != null && settings.Enabled.Value) heatHaze.Update(Time.unscaledTime);
             else heatHaze.Restore();
@@ -682,7 +695,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             rainExposure = Mathf.MoveTowards(rainExposure, sheltered ? 0f : 1f, Time.deltaTime * 2f);
             // Cloud buffet: view-only cockpit shake (vanilla AddShake, which also drives the
             // cockpit rattle). Adding target * decay * dt settles at target against vanilla's
-            // 5/s and 4/s decay; dense cloud, airspeed and storm turbulence scale it.
+            // 5/s and 4/s decay. Airspeed and the cloud's convection scale it (sheets ride
+            // nearly smooth, cumulus and storm cores jolt); density only fades it in.
             cloudBuffet = 0f;
             // Punching through a cloud face: a short patter swell and one jolt, both ways.
             bool inCloud = wasInCloud ? viewDensity > 0.03f : viewDensity > 0.06f;
@@ -695,9 +709,13 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             cloudPunch = Mathf.MoveTowards(cloudPunch, 0f, Time.deltaTime * 1.2f);
             if (isCockpit && localAircraft != null && Time.deltaTime > 0f)
             {
-                float bump = 0.6f + 0.8f * Mathf.PerlinNoise(missionTime * 1.3f, 0.37f);
+                // Squared noise: a high wing loading rides gusts as sharp jolts, not a steady shake.
+                float jolt = Mathf.PerlinNoise(missionTime * 1.6f, 0.37f);
+                float bump = 0.4f + 1.9f * jolt * jolt;
                 float buffet = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.05f, 0.5f, viewDensity)) *
-                    Mathf.Clamp01(ias / 200f) * (0.33f + 0.45f * Mathf.Clamp01(localWeather.Turbulence)) * bump;
+                    Mathf.Clamp01(ias / 200f) * 0.8f * RainVisualMath.CloudRoughness(
+                        Mathf.Max(localWeather.ClusterCover, localWeather.CellCover), localWeather.CoreDepth,
+                        localWeather.Turbulence) * bump;
                 cloudBuffet = buffet;
                 if (buffet > 0.005f)
                     cameras.cockpitState.AddShake(buffet * 5f * Time.deltaTime, buffet * 0.8f * 4f * Time.deltaTime);
@@ -915,6 +933,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 { "viewTemperatureC", viewTemperature },
                 { "viewDewpointC", viewDewpoint },
                 { "viewLightTransmission", viewTransmission },
+                { "sunDiscRed", sunDisc.Shown.r },
+                { "sunDiscBlue", sunDisc.Shown.b },
                 { "viewWidth", SceneSingleton<CameraStateManager>.i?.mainCamera != null ? SceneSingleton<CameraStateManager>.i.mainCamera.pixelWidth : 0 },
                 { "viewHeight", SceneSingleton<CameraStateManager>.i?.mainCamera != null ? SceneSingleton<CameraStateManager>.i.mainCamera.pixelHeight : 0 },
                 { "environmentGeneration", environmentGeneration },
@@ -922,6 +942,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 { "cloudTargetWidth", flightClouds?.TargetWidth ?? 0 },
                 { "cloudTargetHeight", flightClouds?.TargetHeight ?? 0 },
                 { "cloudTargetBytes", flightClouds?.TargetBytes ?? 0L },
+                { "probeFaces", Visuals.CloudProbePass.FacesDrawn },
                 { "lightningStrikes", lightning.Strikes },
                 { "lightningFlash", lightning.FlashNow },
                 { "thunderQueued", lightning.QueuedThunder },

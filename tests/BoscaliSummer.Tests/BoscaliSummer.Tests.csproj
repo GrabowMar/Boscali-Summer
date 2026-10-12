@@ -42,6 +42,7 @@
     <Compile Include="..\..\modules\Command\Domain\ThreatEnvelope.cs" Link="Features\Command\ThreatEnvelope.cs" />
     <Compile Include="..\..\modules\Command\Domain\ReliefRig.cs" Link="Features\Command\ReliefRig.cs" />
     <Compile Include="..\..\modules\Command\Domain\ReliefHoles.cs" Link="Features\Command\ReliefHoles.cs" />
+    <Compile Include="..\..\modules\Command\Domain\ReliefClusters.cs" Link="Features\Command\ReliefClusters.cs" />
     <Compile Include="..\..\modules\Command\Domain\TerrainHeightField.cs" Link="Features\Command\TerrainHeightField.cs" />
     <Compile Include="..\..\modules\Command\Domain\TerrainGhostGrid.cs" Link="Features\Command\TerrainGhostGrid.cs" />
     <Compile Include="..\..\modules\Command\Domain\GhostCockpitMath.cs" Link="Features\Command\GhostCockpitMath.cs" />
@@ -102,6 +103,7 @@
     <Compile Include="..\..\modules\Support\Runtime\SupportMapGesture.cs" Link="Features\Support\SupportMapGesture.cs" />
     <Compile Include="..\..\Core\Math\Deterministic.cs" Link="Core\Math\Deterministic.cs" />
     <Compile Include="..\..\Core\Math\Scalar.cs" Link="Core\Math\Scalar.cs" />
+    <Compile Include="..\..\Core\Math\SunDiscMath.cs" Link="Core\Math\SunDiscMath.cs" />
     <Compile Include="..\..\Core\Math\FlightLoad.cs" Link="Core\Math\FlightLoad.cs" />
     <Compile Include="..\..\Core\Game\MissionClock.cs" Link="Framework\MissionClock.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Buildings\ImpactScorchPolicy.cs" Link="Features\FireAndDestruction\ImpactScorchPolicy.cs" />
@@ -147,6 +149,7 @@
     <Compile Include="..\..\Core\Modules\ModuleGraph.cs" Link="Framework\FeatureGraph.cs" />
     <Compile Include="..\..\Core\Services\ServiceRegistry.cs" Link="Framework\ServiceRegistry.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrPagePlan.cs" Link="Features\Command\StrPagePlan.cs" />
+    <Compile Include="..\..\modules\Command\Domain\StrOrgLayout.cs" Link="Features\Command\StrOrgLayout.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrPanelText.cs" Link="Features\Command\StrPanelText.cs" />
     <Compile Include="..\..\modules\Command\Presentation\Str\StrControls.cs" Link="Features\Command\StrControls.cs" />
     <Compile Include="..\..\modules\Command\Domain\TacticalTheaterState.cs" Link="Features\Command\TacticalTheaterState.cs" />
@@ -166,12 +169,14 @@
     <Compile Include="..\..\modules\Command\Domain\StrAnchors.cs" Link="Features\Command\StrAnchors.cs" />
     <Compile Include="..\..\modules\Command\Domain\RebuildGate.cs" Link="Features\Command\RebuildGate.cs" />
     <Compile Include="..\..\modules\Command\Domain\MapClickRules.cs" Link="Features\Command\MapClickRules.cs" />
+    <Compile Include="..\..\modules\Command\Domain\MapFix.cs" Link="Features\Command\MapFix.cs" />
     <Compile Include="..\..\modules\Command\Domain\FlatFocus.cs" Link="Features\Command\FlatFocus.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrOverlayPlan.cs" Link="Features\Command\StrOverlayPlan.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrCardPlan.cs" Link="Features\Command\StrCardPlan.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrViewBuilder.cs" Link="Features\Command\StrViewBuilder.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrViewBuilder.Rows.cs" Link="Features\Command\StrViewBuilder.Rows.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrViewBuilder.Sitrep.cs" Link="Features\Command\StrViewBuilder.Sitrep.cs" />
+    <Compile Include="..\..\modules\Command\Domain\StrViewBuilder.Staff.cs" Link="Features\Command\StrViewBuilder.Staff.cs" />
     <Compile Include="..\..\modules\Command\Domain\ControlFieldCore.cs" Link="Features\Command\ControlFieldCore.cs" />
     <Compile Include="..\..\modules\HighCommand\Domain\CommandEconomy.cs" Link="Features\HighCommand\CommandEconomy.cs" />
     <Compile Include="..\..\modules\HighCommand\Domain\CommandLog.cs" Link="Features\HighCommand\CommandLog.cs" />

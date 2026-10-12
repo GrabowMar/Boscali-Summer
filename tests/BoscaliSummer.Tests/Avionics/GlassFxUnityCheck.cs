@@ -44,12 +44,18 @@ public static class GlassFxUnityCheck
             Image glass = Solid(canvas.transform, "glass", Color.white, 0f, 0f, 1f, 1f);
             var material = new Material(shader);
             material.SetTexture("_NoiseTex", AvBundle.Noise);
-            material.SetFloat("_Reflection", .16f); material.SetFloat("_Scan", .3f); material.SetFloat("_Edge", .3f);
+            material.SetFloat("_Reflection", .16f); material.SetFloat("_Wear", .3f); material.SetFloat("_Edge", .3f);
             material.SetFloat("_Light", 1f);
             glass.material = material;
             Shader.SetGlobalFloat("_NOA_FxTier", 2f);
 
+            // The sun behind the pilot's right shoulder, wings rolled a little: the glare spot sits on the glass.
+            Shader.SetGlobalVector("_NOA_Glare", new Vector4(.72f, .66f, 1f, .2f));
+            Texture2D glare = Shot(cam, target, material, .6f, 0f, 0f, "glass-sun-glare");
+            Shader.SetGlobalVector("_NOA_Glare", new Vector4(.5f, .5f, 0f, 0f));
             Texture2D idle = Shot(cam, target, material, .6f, 0f, 0f, "glass-idle");
+            Require(Lum(glare, (int)(W * .72f), (int)(H * .66f)) > Lum(idle, (int)(W * .72f), (int)(H * .66f)) + .02f,
+                "sun glare: the spot is brighter than the same glass without the sun");
             Texture2D still = Shot(cam, target, material, 0f, .08f, 0f, "glass-still-display");
             Texture2D boot1 = Shot(cam, target, material, .6f, .08f, 0f, "glass-power-on-1");
             Shot(cam, target, material, .6f, .30f, 0f, "glass-power-on-2");

@@ -48,17 +48,11 @@ namespace BoscaliSummer.Tests.Features.Autopilot
 
         private static void Chrome(Action<bool, string> ok, MenuModel m, MenuLayout l, string at)
         {
+            foreach (MenuRect r in new[] { l.Hint, l.Action })
+                ok(r.L >= 0f && r.R <= l.W && r.T >= 0f && r.B <= l.H, "bottom console inside the screen" + at);
             for (int i = 0; i < l.Count; i++)
-            {
-                ok(!l.Readout.Overlaps(l.Disc(i), 1f), "hub readout clear of disc " + i + at);
-                ok(!l.Readout.Overlaps(l.Widest[i], 1f), "hub readout clear of plate " + i + at);
-            }
-            float air = Math.Min(l.DiscX[m.IndexOf("wing")] - l.Rd - l.Readout.R, l.Readout.L - (l.DiscX[m.IndexOf("support")] + l.Rd));
-            ok(air >= 18f * l.Rho - 1f, "readout keeps 18 px of air to the WING / SUPPORT discs" + at + " (" + air + ")");
-            foreach (MenuRect r in new[] { l.Hint, l.Title })
-                ok(r.L >= 0f && r.R <= l.W && r.T >= 0f && r.B <= l.H, "hint bar and title tab inside the screen" + at);
+                ok(!l.Action.Overlaps(l.Disc(i), 1f) && !l.Action.Overlaps(l.Widest[i], 1f), "bottom console clear of the ring " + i + at);
             ok(l.ToastTop + 40f * l.T <= l.H, "toast inside the screen" + at);
-            ok(l.Title.B < l.Widest[m.IndexOf("flight")].T, "the title tab sits above the ring" + at);
         }
 
         private static void Docks(Action<bool, string> ok, MenuModel m, MenuLayout l, IMenuMetrics metrics, string at0)
@@ -112,22 +106,10 @@ namespace BoscaliSummer.Tests.Features.Autopilot
                 texts.Add(new KeyValuePair<string, string>("BACK", "BACK TO " + c.Label));
             }
             var bad = new List<string>();
-            float room = l.Readout.H - (l.ReadoutCompact ? 0f : l.ReadoutNameH + 3f * l.T);
-            float width = l.Readout.W - 2f * ((l.ReadoutCompact ? 4f : 6f) + 1f);
+            float width = l.Action.W - 24f * l.T;
             foreach (var tx in texts)
-            {
-                ReadoutFit fit = MenuReadoutFit.Fit(l, metrics, tx.Key, tx.Value);
-                int maxLines = l.ReadoutCompact && fit.TitleLines == 1 ? 3 : 2;
-                int lines = MenuReadoutFit.Lines(tx.Value, width, metrics, MenuFont.State, l.T);
-                if (fit.TitleLines > 2 || lines > maxLines || fit.Height > room + 0.5f)
-                    bad.Add(tx.Key + " / " + tx.Value + " (" + lines + " lines, " + fit.Height + " > " + room + ")");
-            }
-            ok(bad.Count == 0, "hub readout clips" + at + ": " + string.Join(" | ", bad));
-            // the status summary (nothing focused) flows by measured width and fits the plate
-            var cells = MenuReadoutFit.Flow(m.Summary, width, metrics, l.T, out int summaryLines);
-            float gridH = summaryLines * MenuReadoutFit.SummaryLine(l.T) + Math.Max(0, summaryLines - 1) * MenuReadoutFit.SummaryGap * l.T;
-            ok(gridH + 12f * l.T <= room + 0.5f || gridH <= room - 8f * l.T, "the status summary fits the hub plate" + at + " (" + summaryLines + " lines, " + gridH + " in " + room + ")");
-            foreach (SummaryCell cell in cells) ok(cell.X >= -0.5f && cell.X + cell.KeyW <= width + 0.5f, "a summary cell stays inside the plate" + at + ": " + cell.Key);
+                if (metrics.Width(tx.Key, MenuFont.Row) * l.T > width || metrics.Width(tx.Value ?? "", MenuFont.State) * l.T > width) bad.Add(tx.Key + " / " + tx.Value);
+            ok(bad.Count == 0, "the bottom console clips an action" + at + ": " + string.Join(" | ", bad));
         }
 
         private static void Add(List<KeyValuePair<string, string>> texts, MenuRow r)
@@ -146,7 +128,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
                 if (!c.Available) continue;
                 int side = MenuLayout.DockSide(c);
                 l.FillDock(dock, c.Rows, false, 0, true, side, false);
-                int n = MenuLeader.Compute(l, ci, c, dock, l.Readout.T + 87f * l.T, pts);
+                int n = MenuLeader.Compute(l, ci, c, dock, pts);
                 string at = " " + c.Id + at0;
                 ok(n >= 4 && n <= MenuLeader.MaxPoints, "leader has 4 to 6 points" + at);
                 ok(pts[2] == l.DiscX[ci] && pts[3] == l.DiscY[ci], "the leader passes through the selected disc" + at);

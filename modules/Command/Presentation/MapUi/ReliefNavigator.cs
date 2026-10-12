@@ -10,10 +10,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// Grab-the-ground navigation for the relief map. Left drag holds the pressed terrain
-    /// under the cursor, the zoom axis eases toward the ground under the cursor, right or
-    /// middle drag orbits about the ground where the drag began, and the native map move
+    /// under the cursor, the zoom axis eases toward the ground under the cursor, middle
+    /// drag orbits about the ground where the drag began (Ctrl + wheel turns and
+    /// Shift + wheel tilts in steps, for a wheel button that will not hold), and the native map move
     /// axes pan relative to the current heading. Drags start only past the drag threshold,
-    /// so clicks, the context menu, armed pickers and quick pings still see a click.
+    /// so clicks, the context menu, armed pickers and pings still see a click.
     /// Client-local presentation: nothing here reaches game state or the network.
     /// </summary>
     internal static class ReliefNavigator
@@ -28,6 +29,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private const float KeyPanViewsPerSecond = .6f;
         private const float OrbitYawPerPixel = .25f;
         private const float OrbitPitchPerPixel = .2f;
+        private const float WheelTurnDegrees = 15f;
+        private const float WheelTiltDegrees = 5f;
 
         private enum Drag { None, PendingGrab, Grab, PendingOrbit, Orbit }
 
@@ -56,6 +59,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         internal static bool Following => follow;
         internal static bool Flying => fly;
+        /// <summary>A middle-button orbit drag is under way.</summary>
+        internal static bool Turning => drag == Drag.Orbit;
 
         /// <summary>A grab drag, or its release frame, must not also click the icon beneath it.</summary>
         internal static bool BlockIconClick() => drag == Drag.Grab || releaseFrame == Time.frameCount;
@@ -71,10 +76,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             if (drag == Drag.None && free)
             {
-                if (Input.GetMouseButtonDown(0) && !ControlHeld() && !LeftDragClaimed())
+                if (Input.GetMouseButtonDown(0) && !BoxHeld() && !LeftDragClaimed())
                     Press(rig, 0, mouse, vx, vy);
-                else if (Input.GetMouseButtonDown(1) || Input.GetMouseButtonDown(2))
-                    Press(rig, Input.GetMouseButtonDown(1) ? 1 : 2, mouse, vx, vy);
+                else if (Input.GetMouseButtonDown(2))
+                    Press(rig, 2, mouse, vx, vy);
             }
             if (drag != Drag.None) Hold(rig, mouse, vx, vy, dt);
             else if (coast.sqrMagnitude > 1e-4f)
@@ -116,7 +121,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private static void Hold(ReliefRig rig, Vector2 mouse, float vx, float vy, float dt)
         {
-            if (!Input.GetMouseButton(dragButton) || (drag == Drag.PendingGrab && ControlHeld()))
+            if (!Input.GetMouseButton(dragButton) || (drag == Drag.PendingGrab && BoxHeld()))
             {
                 if (dragButton == 0 && doubleClickPending)
                 {
@@ -161,6 +166,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (player == null && ReInput.isReady) player = ReInput.players.GetPlayer(0);
 
             float zoom = player != null ? player.GetAxis("Zoom View") : 0f;
+            // Ctrl + wheel turns and Shift + wheel tilts, a notch at a time: the orbit without holding
+            // the wheel button down, which some mice and drivers never report as a held button.
+            float wheel = Input.mouseScrollDelta.y;
+            if (wheel != 0f && free && (ControlHeld() || ShiftHeld()))
+            {
+                if (ControlHeld()) Turn(Mathf.Sign(wheel) * WheelTurnDegrees);
+                else Tilt(Mathf.Sign(wheel) * WheelTiltDegrees);
+                zoom = 0f;
+            }
             // Wheel over a panel scrolls the panel; a stick or key zoom off the map uses the centre.
             if (zoom != 0f && !MapUiPointer.OverControls())
             {
@@ -310,6 +324,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static float Slop => Mathf.Max(MinimumSlop, EventSystem.current != null
             ? EventSystem.current.pixelDragThreshold : 0f);
 
+        /// <summary>Shift or Ctrl hands a left drag to the selection box.</summary>
+        private static bool BoxHeld() => ControlHeld() || ShiftHeld();
+        private static bool ShiftHeld() =>
+            Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
         private static bool ControlHeld() =>
             Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
 

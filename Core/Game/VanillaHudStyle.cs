@@ -38,6 +38,9 @@ namespace BoscaliSummer.Core.Game
         private static bool cockpitReady;
         private static bool mapReady;
         private static float nextAttempt;
+        private static float mapNextAttempt;
+        private static float mapRetry = RetrySeconds / 2f;
+        private static bool reflectionTried;
 
         internal struct CockpitStyle
         {
@@ -142,6 +145,8 @@ namespace BoscaliSummer.Core.Game
             cockpit = default;
             map = default;
             nextAttempt = 0f;
+            mapNextAttempt = 0f;
+            mapRetry = RetrySeconds / 2f;
         }
 
         internal static bool TryCockpit(out CockpitStyle style)
@@ -167,14 +172,25 @@ namespace BoscaliSummer.Core.Game
         {
             if (cockpitReady && mapReady) return;
             EnsureReflection();
-            if (Time.unscaledTime < nextAttempt) return;
-            nextAttempt = Time.unscaledTime + RetrySeconds;
-            if (!cockpitReady) cockpitReady = TryReadCockpit(out cockpit);
-            if (!mapReady) mapReady = TryReadMap(out map);
+            float now = Time.unscaledTime;
+            if (now >= nextAttempt)
+            {
+                nextAttempt = now + RetrySeconds;
+                if (!cockpitReady) cockpitReady = TryReadCockpit(out cockpit);
+            }
+            // The map manager only exists once the map has been opened, so back the retry off (2 s doubling to 30 s).
+            if (!mapReady && now >= mapNextAttempt)
+            {
+                mapReady = TryReadMap(out map);
+                mapRetry = Mathf.Min(mapRetry * 2f, 30f);
+                mapNextAttempt = now + mapRetry;
+            }
         }
 
         private static void EnsureReflection()
         {
+            if (reflectionTried) return;
+            reflectionTried = true;
             if (overlayPrefabField != null && markerPrefabField != null && overlayPointerField != null &&
                 overlayDotField != null && overlayRingField != null && overlayInfoField != null &&
                 destroySpriteField != null && waypointSpriteField != null && captureSpriteField != null &&

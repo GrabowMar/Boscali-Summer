@@ -478,6 +478,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private static GameObject ResolveFlarePrefab()
         {
             if (cachedFlarePrefab != null) return cachedFlarePrefab;
+            if ((object)cachedFlarePrefab != null) { cachedFlarePrefab = null; hasSearchedPrefab = false; }   // destroyed with its scene: search again, once
             if (hasSearchedPrefab) return null;
             hasSearchedPrefab = true;
 

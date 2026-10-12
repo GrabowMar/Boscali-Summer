@@ -177,7 +177,7 @@ namespace BoscaliSummer.Tests.Features.Command
         {
             string[] good =
             {
-                "tab.board", "tab.sitrep", "tab.log", "posture.cautious", "posture.steady", "posture.bold", "replan", "hero.locate",
+                "tab.board", "tab.sitrep", "tab.info", "posture.cautious", "posture.steady", "posture.bold", "replan", "hero.locate",
                 "prop.1.pick", "prop.3.locate", "front.1.redirect", "front.8.locate", "sortie.1.accept", "sortie.3.wing", "sortie.2.locate",
                 "layer.fronts", "layer.operation", "layer.sorties", "map.card.primary", "map.card.secondary", "map.card.close", "map.tag.prop.1", "map.tag.effort.1", "map.tag.post.2",
             };

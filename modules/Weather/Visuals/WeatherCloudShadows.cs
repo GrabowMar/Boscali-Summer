@@ -15,8 +15,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
     internal sealed class WeatherCloudShadows
     {
         private const int Size = 256;
-        private const float Span = 48000f;
-        private const float RecentreDistance = 9000f;
+        private const float Span = 96000f;
+        private const float RecentreDistance = 18000f;
         private const float BlendSeconds = 4f;
         private const float UploadSeconds = 0.25f;
         private readonly Color32[] blended = new Color32[Size * Size];
@@ -118,12 +118,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             {
                 nextUpload = now + UploadSeconds;
                 float strength = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.06f, 0.20f, elevation));
-                WeatherPoint local = field.Sample((float)eye.x, (float)eye.z);
-                float bottom = local.CloudBase;
-                float top = Math.Max(bottom + 500f, local.CloudTop);
-                // A cookie cannot tell receiver altitude: fade it as the observer climbs
-                // through the deck so aircraft above the clouds lose the ground shadows.
-                strength *= 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(bottom, top, (float)eye.y));
+                // The shadows used to fade out as the observer climbed through the deck (a cookie cannot tell receiver altitude, so an aircraft above the
+                // clouds is shaded too). That removed every ground shadow for anyone flying at cloud level or higher, which is most of a sortie: the ground
+                // matters more than the airframe, so the shadows stay.
                 float blend = Mathf.Clamp01((now - blendStart) / BlendSeconds);
                 // The cookie is static while the tape holds: rebuild its 64k pixels only
                 // while a new map fades in or the strength has moved.
@@ -240,11 +237,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                                 float altitude = lower + (s + 0.5f) * dy;
                                 float t = (altitude - py) / direction.y;
                                 float wx = px + direction.x * t, wz = pz + direction.z * t;
-                                depth += body.Density(p, wx, altitude, wz) * rayStep * 0.0021f;
+                                depth += body.Density(p, wx, altitude, wz) * rayStep * 0.0085f;
                             }
                             // A soft border fades the shadows out toward the cookie's edge.
                             float edge = Math.Min(Math.Min(x, Size - 1 - x), Math.Min(y, Size - 1 - y)) / 24f;
-                            float shade = 0.62f * (1f - (float)Math.Exp(-depth)) * Scalar.Clamp01(edge);
+                            float shade = 0.85f * (1f - (float)Math.Exp(-depth)) * Scalar.Clamp01(edge);
                             pixels[y * Size + x] = (byte)Math.Round((1f - shade) * 255f);
                         }
                     }

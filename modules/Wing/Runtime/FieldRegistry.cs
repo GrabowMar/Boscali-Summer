@@ -22,6 +22,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             public Airbase Airbase;
             public FieldTraffic Traffic;
             public Aircraft Queued;
+            public Airbase.Runway Runway;
         }
 
         private static readonly List<Entry> fields = new List<Entry>();
@@ -66,8 +67,14 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         /// <summary>Only into an empty queue (a native aircraft at its head already marks the runway in use), so no native
         /// aircraft ever waits behind ours; ours leaves the queue with the lock.</summary>
-        private static readonly FieldInfo TakeoffQueueField = AccessTools.Field(typeof(Airbase.Runway), "takeoffQueue");
-        private static readonly FieldInfo CrossingRunwaysField = AccessTools.Field(typeof(Airbase.Runway), "crossingRunways");
+        private static readonly AccessTools.FieldRef<Airbase.Runway, Queue<Aircraft>> TakeoffQueueField = RunwayRef<Queue<Aircraft>>("takeoffQueue");
+        private static readonly AccessTools.FieldRef<Airbase.Runway, List<Airbase.Runway>> CrossingRunwaysField = RunwayRef<List<Airbase.Runway>>("crossingRunways");
+
+        private static AccessTools.FieldRef<Airbase.Runway, T> RunwayRef<T>(string name)
+        {
+            try { return AccessTools.Field(typeof(Airbase.Runway), name) == null ? null : AccessTools.FieldRefAccess<Airbase.Runway, T>(name); }
+            catch { return null; }
+        }
 
         /// <summary>Whether the native takeoff queue of <paramref name="runway"/> and its crossing runways holds nobody
         /// but <paramref name="self"/> — what the game's <c>ClearForTakeoff</c> answers, but one level deep: that call
@@ -77,7 +84,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         {
             if (TakeoffQueueField == null || CrossingRunwaysField == null) return false;
             if (!QueueClear(runway, self)) return false;
-            if (CrossingRunwaysField.GetValue(runway) is List<Airbase.Runway> crossing)
+            if (CrossingRunwaysField(runway) is List<Airbase.Runway> crossing)
                 foreach (Airbase.Runway c in crossing)
                     if (c != null && !ReferenceEquals(c, runway) && !QueueClear(c, self)) return false;
             return true;
@@ -85,7 +92,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         private static bool QueueClear(Airbase.Runway runway, Aircraft self)
         {
-            if (!(TakeoffQueueField.GetValue(runway) is Queue<Aircraft> queue) || queue.Count == 0) return true;
+            if (!(TakeoffQueueField(runway) is Queue<Aircraft> queue) || queue.Count == 0) return true;
             return queue.TryPeek(out Aircraft head) && head == self;
         }
 
@@ -116,9 +123,10 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         private static Airbase.Runway RunwayOf(Entry e)
         {
+            if (e.Runway != null) return e.Runway;
             if (e.Airbase.runways == null) return null;
             foreach (Airbase.Runway r in e.Airbase.runways)
-                if (r != null && r.index == e.Traffic.Runway.Index) return r;
+                if (r != null && r.index == e.Traffic.Runway.Index) return e.Runway = r;
             return null;
         }
 
@@ -168,6 +176,13 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 if (a == null || a.disabled || a.radarAlt > ObstacleMaxRadarAlt || (wing != null && wing.IsMember(a))) continue;
                 Vec3 p = a.GlobalPosition().ToVec3();
                 if ((p - t.Field.Center).Horizontal.Length <= radius) t.Obstacles.Add(p);
+            }
+            t.Vehicles.Clear();
+            foreach (Unit u in UnitRegistry.allUnits)
+            {
+                if (!(u is GroundVehicle) || u.disabled) continue;
+                Vec3 p = u.GlobalPosition().ToVec3();
+                if ((p - t.Field.Center).Horizontal.Length <= radius) t.Vehicles.Add(p);
             }
             bool landing = false;
             if (e.Airbase.runways != null)

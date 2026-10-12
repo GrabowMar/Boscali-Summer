@@ -20,7 +20,7 @@ using Object = UnityEngine.Object;
 using static UnityCheckHarness;
 
 /// <summary>
-/// Offline gate for the EVN console (empty, active, scripted superevent, decision board, late fill) and the
+/// Offline gate for the EVN console (empty, active, scripted superevent, late fill) and the
 /// field archive window (every shelf, from a synthetic encyclopedia). Compiles the real presentation sources
 /// against stubbed game types, renders PNGs and fails on text overflow, text entering the scroll gutter, text
 /// drawn over other text, low contrast, tabs or sections without an icon, parts overlapping their neighbour,
@@ -68,7 +68,7 @@ public static class EventsUnityCheck
         }
         catch (Exception e) { Failures.Add("exception: " + e); }
         File.WriteAllText("result.txt", Failures.Count == 0
-            ? "PASS: EVN console (empty, active, superevent + decision board, late fill, page switch) and field archive window " +
+            ? "PASS: EVN console (empty, active, superevent, late fill, page switch) and field archive window " +
               "(eight shelves, three window sizes) render without overlap or overflow; " + checkedTexts + " text checks over " +
               checkedFlows + " flows. Game adapters are stubbed; in-game acceptance remains required."
             : "FAIL (" + Failures.Count + "):\n" + string.Join("\n", Failures.GetRange(0, Math.Min(60, Failures.Count))));
@@ -153,21 +153,6 @@ public static class EventsUnityCheck
             percent == 0 ? "" : "SUPPORT RESET " + (percent > 0 ? "+" : "") + percent + "%");
     }
 
-    private static EventDecisionQuote Quote(EventsManager events, EventResponseKind kind)
-    {
-        float multiplier = events.LocalBaseMultiplier;
-        int cost = kind == EventResponseKind.Treasury ? EventSelector.TreasuryCost(multiplier)
-            : kind == EventResponseKind.Contain || kind == EventResponseKind.Leverage ? EventSelector.ResponseCost(multiplier) : 0;
-        bool shared = kind == EventResponseKind.Treasury || kind == EventResponseKind.Contract;
-        string unit = kind == EventResponseKind.Treasury ? "M FUNDS" : cost > 0 ? "ALLOC" : "NO COST";
-        string reason = "";
-        if (kind == EventResponseKind.Contract) reason = "COMPLETE A FACTION CONTRACT";
-        else if (kind == EventResponseKind.Perk) reason = "RECON QUALIFICATION REQUIRED";
-        if (events.LocalResponse != EventResponseKind.None) reason = "RESPONSE ALREADY ACTIVE";
-        return new EventDecisionQuote(EventsManager.ResponseLabel(kind), cost, unit,
-            EventSelector.ApplyResponse(multiplier, kind), reason.Length == 0, reason, shared);
-    }
-
     private static PanelFixture BuildPanel(float height)
     {
         var f = new PanelFixture { Rig = new Rig(), Height = height };
@@ -177,7 +162,6 @@ public static class EventsUnityCheck
 
         var settings = new EventsSettings(new ConfigFile(Path.GetFullPath("events-" + Guid.NewGuid().ToString("N") + ".cfg"), false));
         f.Events = new GameObject("EventsManager").AddComponent<EventsManager>();
-        f.Events.QuoteFn = kind => Quote(f.Events, kind);
         f.Panel = new GameObject("EvnPanel").AddComponent<EventsMfdPanel>();
         f.Panel.Configure(settings, f.Events, null);
 
@@ -222,10 +206,9 @@ public static class EventsUnityCheck
         {
             EventsManager ev = f.Events;
 
-            // 1. Quiet theater, nothing known: one compact hero card, no response desk, empty log note.
+            // 1. Quiet theater, nothing known: one compact hero card, empty log note.
             RefreshPanel(f);
             Snapshot(f, "empty");
-            Check(!ResponseSectionShown(f), "the response desk must be hidden while no dispatch is live");
             // The DESK drawers count what the archive would file, with the same rule the archive uses.
             for (int shelf = 0; shelf < ArchiveShelf.Count; shelf++)
             {
@@ -235,7 +218,7 @@ public static class EventsUnityCheck
                     "DESK drawer " + ArchiveShelf.Names[shelf] + " must carry the shelf's real record count");
             }
 
-            // 2. Content arrives after Finish(): a medium dispatch, ground data, history, a decision board.
+            // 2. Content arrives after Finish(): a medium dispatch, ground data, history.
             ev.Balance = new TheaterBalance(2, 6, 4, 11, 22, 0);
             ev.SupersFired = 1;
             ev.HistoryList.Add(View(Def("monsoon_season"), 120f, 240f));
@@ -243,40 +226,22 @@ public static class EventsUnityCheck
             ev.HistoryList.Add(View(Def("global_supply_chain_crisis"), 420f, 560f));
             ev.Current = View(Def("industrial_surge"), 560f, 860f);
             ev.SupportCostMultiplier = EventSelector.EffectiveSupportMultiplier(Def("industrial_surge").SupportCostMultiplier, 1f);
-            ev.LocalBaseMultiplier = ev.SupportCostMultiplier;
             ev.LocalSupportCooldownMultiplier = Def("industrial_surge").SupportCooldownMultiplier;
             ev.LocalTargeted = true;
             RefreshPanel(f);
             CheckImageExposure(f);
             Snapshot(f, "active");
-            Check(ResponseSectionShown(f), "a priced dispatch must show the response desk");
 
-            // Clicking CHOOSE asks the manager for the route; a locked card does nothing.
-            f.Console.SetPage(0);
-            AvControl[] choose = Array.FindAll(f.Console.Root.GetComponentsInChildren<AvControl>(true), c => c.Label == "CHOOSE");
-            Check(choose.Length >= 1, "an available route must offer CHOOSE");
-            Click(choose[0]);
-            Check(ev.Requests.Count == 1, "CHOOSE must request the route once (" + ev.Requests.Count + ")");
-            AvControl[] locked = Array.FindAll(f.Console.Root.GetComponentsInChildren<AvControl>(true), c => c.Label == "LOCKED");
-            Check(locked.Length >= 1, "an unavailable route must read LOCKED");
-            Click(locked[0]);
-            Check(ev.Requests.Count == 1, "a locked route must not send a request");
-
-            // 3. Penalty superevent with a script, ending soon, a route already chosen.
+            // 3. Penalty superevent with a script, ending soon.
             f.Mission.MissionTime = 1000f;
             EventDefinition super = FirstSuper();
             ev.Current = View(super, 700f, 1045f);
             float superMultiplier = EventSelector.EffectiveSupportMultiplier(super.SupportCostMultiplier, 1f);
             ev.SupportCostMultiplier = superMultiplier;
-            ev.LocalBaseMultiplier = superMultiplier;
             ev.LocalSupportCooldownMultiplier = super.SupportCooldownMultiplier;
-            ev.LocalResponse = EventSelector.ResponseKind(superMultiplier) == EventResponseKind.Leverage
-                ? EventResponseKind.Leverage : EventResponseKind.Contain;
             RefreshPanel(f);
             CheckImageExposure(f);
             Snapshot(f, "super");
-            AvControl[] inForce = Array.FindAll(f.Console.Root.GetComponentsInChildren<AvControl>(true), c => c.Label == "IN FORCE");
-            Check(inForce.Length >= 1, "the chosen route must read IN FORCE");
 
             // Only the nearest unexecuted beat is NEXT; later orders remain QUEUED.
             f.Mission.MissionTime = 702f;
@@ -293,22 +258,19 @@ public static class EventsUnityCheck
             Check(Array.Exists(scripts, t => t.text.Contains("TARGET LOST")),
                 "the live hero must rebind its cancellation notice when target resolution changes");
 
-            // 4. Aimed at the other side: the desk collapses to one note, the hero says so.
-            ev.LocalResponse = EventResponseKind.None;
+            // 4. Aimed at the other side: the hero says so.
             ev.LocalTargeted = false;
             ev.Current = View(Def("frontline_overstretch") ?? super, 900f, 1200f);
             ev.SupportCostMultiplier = 1f;
-            ev.LocalBaseMultiplier = 1f;
             ev.LocalSupportCooldownMultiplier = 1f;
             RefreshPanel(f);
             Snapshot(f, "other-side");
 
-            // 5. The dispatch ends: the desk closes and the gap closes with it.
+            // 5. The dispatch ends.
             ev.Current = null;
             f.Mission.MissionTime = 1300f;
             RefreshPanel(f);
             Snapshot(f, "ended");
-            Check(!ResponseSectionShown(f), "the response desk must close when the dispatch ends");
         }
         finally
         {
@@ -330,13 +292,6 @@ public static class EventsUnityCheck
             "the active event image must retain its entire source frame");
         Check((plate.anchoredPosition.y - fade.anchoredPosition.y) / plate.rect.height >= 0.8f - 0.001f,
             "at least four fifths of the active artwork must remain above the fade");
-    }
-
-    private static bool ResponseSectionShown(PanelFixture f)
-    {
-        FieldInfo field = typeof(EventsMfdPanel).GetField("responseSection", BindingFlags.NonPublic | BindingFlags.Instance);
-        var section = (AvSection)field.GetValue(f.Panel);
-        return section != null && section.Rect.gameObject.activeSelf;
     }
 
     /// <summary>Renders both console pages and runs the layout / text gate on each.</summary>

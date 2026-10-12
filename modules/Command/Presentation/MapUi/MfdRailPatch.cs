@@ -101,21 +101,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
         }
 
+        /// <summary>Where a bezel button sat before the rail stowed it. The button itself is never altered.</summary>
         private sealed class ButtonSnapshot
         {
             public Button Button;
-            public MFDScreen Screen;
             public Transform Parent;
             public Vector3 LocalPosition;
             public Quaternion LocalRotation;
             public Vector3 LocalScale;
-            public MfdRail.ButtonSkin Skin;
 
             public void Restore()
             {
-                Skin?.Restore();
-
-                if (Button == null) return;
+                if (Button == null || Parent == null) return;
 
                 Transform t = Button.transform;
                 t.SetParent(Parent, worldPositionStays: false);
@@ -151,15 +148,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static GameObject mapFrame;
         private const string MapFrameName = "NOAvionics.MapFrame";
 
-        /// <summary>
-        /// Bezel buttons the rail declined, hidden while it owns the layout.
-        ///
-        /// The stock bezel has six slots a side with about three filled; a spare is a live
-        /// button labelled "-" that does nothing. Leaving them behind put three dark empty
-        /// boxes across the map where the old columns used to be. Vanilla re-activates them
-        /// on every maximise, so this runs after that and hides them again.
-        /// </summary>
-        private static readonly List<GameObject> spares = new List<GameObject>();
         private static MapSnapshot map;
         private static bool applied;
         private static Vector2 appliedCanvasSize;
@@ -187,7 +175,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 VirtualMFD mfd = MapMfdLookup.Resolve(map == null ? null : map.maximizedMapCanvas);
                 MfdPanelDock.DockModScreens(mfd);
                 ReLayoutForActiveScreen(MfdSinglePanelPatch.ActiveScreen);
-                RefreshLatched();
             }
             DynamicMap display = SceneSingleton<DynamicMap>.i;
             MfdScreenFinish.Ensure(display == null ? null : display.maximizedMapCanvas);
@@ -218,7 +205,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 int activeButtons = MfdRail.Count(MapUiAccess.GetLeftButtons(mfd), MapUiAccess.GetLeftScreens(mfd)) +
                                     MfdRail.Count(MapUiAccess.GetRightButtons(mfd), MapUiAccess.GetRightScreens(mfd));
-                if (MfdRail.PrepareCapacity(columns.Rail.height, activeButtons))
+                if (MfdRail.Fits(columns.Rail.height, activeButtons))
                     BuildRail(canvas, columns);
             }
 
@@ -258,7 +245,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             List<Button> rightButtons = MapUiAccess.GetRightButtons(mfd);
             int activeButtons = MfdRail.Count(leftButtons, MapUiAccess.GetLeftScreens(mfd)) +
                                 MfdRail.Count(rightButtons, MapUiAccess.GetRightScreens(mfd));
-            if (!MfdRail.PrepareCapacity(columns.Rail.height, activeButtons))
+            if (!MfdRail.Fits(columns.Rail.height, activeButtons))
             {
                 Plugin.Logger.LogWarning(
                     "Expanded map kept the stock bezel: " + activeButtons +
@@ -423,67 +410,57 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             List<Button> left = MapUiAccess.GetLeftButtons(mfd);
             List<Button> right = MapUiAccess.GetRightButtons(mfd);
 
-            if (buttons.Count == 0)
-            {
-                Snapshot(left);
-                Snapshot(right);
-            }
-
-            // Both vanilla columns become one rail, ordered by the catalog so the faction
-            // pair leads it. The stock parents carry a VerticalLayoutGroup that would
-            // overwrite any position written to a button while it is still inside them, so
-            // reparenting out is what makes placement stick.
-            var skins = new List<MfdRail.ButtonSkin>();
-            MfdRail.Adopt(left, MapUiAccess.GetLeftScreens(mfd),
-                          right, MapUiAccess.GetRightScreens(mfd), skins);
-
-            AttachSkins(skins);
-            LinkScreens(left, MapUiAccess.GetLeftScreens(mfd));
-            LinkScreens(right, MapUiAccess.GetRightScreens(mfd));
-            RefreshLatched();
-            HideSpares(left, MapUiAccess.GetLeftScreens(mfd));
-            HideSpares(right, MapUiAccess.GetRightScreens(mfd));
+            // The whole stock bezel goes out of sight, spares included, and the rail builds
+            // a key of its own for every slot that drives a screen. The game re-activates
+            // its buttons on each map open; inside the rail's inactive stowage that shows nothing.
+            Stow(left);
+            Stow(right);
+            MfdRail.Build(left, MapUiAccess.GetLeftScreens(mfd),
+                          right, MapUiAccess.GetRightScreens(mfd));
             HideEmptiedContainers();
         }
 
-        private static void Snapshot(List<Button> source)
+        /// <summary>Move one bezel column's buttons into the rail's stowage, remembering where each belongs.</summary>
+        private static void Stow(List<Button> source)
         {
-            if (source == null) return;
+            RectTransform stowage = MfdRail.Stowage;
+            if (source == null || stowage == null) return;
+
+            // A screen hosted while the map is open clones its button next to a stowed
+            // sibling, so it is born in the stowage; it goes home to that sibling's column.
+            Transform column = null;
+            for (int i = 0; i < source.Count && column == null; i++)
+            {
+                if (source[i] == null) continue;
+                ButtonSnapshot known = SnapshotOf(source[i]);
+                if (known != null) column = known.Parent;
+                else if (source[i].transform.parent != stowage) column = source[i].transform.parent;
+            }
 
             for (int i = 0; i < source.Count; i++)
             {
                 Button button = source[i];
-                if (button == null) continue;
+                if (button == null || SnapshotOf(button) != null) continue;
 
                 Transform t = button.transform;
+                bool bornStowed = t.parent == stowage;
                 buttons.Add(new ButtonSnapshot
                 {
                     Button = button,
-                    Parent = t.parent,
+                    Parent = bornStowed ? column : t.parent,
                     LocalPosition = t.localPosition,
                     LocalRotation = t.localRotation,
                     LocalScale = t.localScale,
                 });
+                if (!bornStowed) t.SetParent(stowage, worldPositionStays: false);
             }
         }
 
-        /// <summary>Hide every bezel button that has no screen behind it.</summary>
-        private static void HideSpares(List<Button> source, List<MFDScreen> screens)
+        private static ButtonSnapshot SnapshotOf(Button button)
         {
-            if (source == null) return;
-
-            for (int i = 0; i < source.Count; i++)
-            {
-                Button button = source[i];
-                if (button == null) continue;
-
-                bool drivesAScreen = screens != null && i < screens.Count && screens[i] != null;
-                if (drivesAScreen) continue;
-                if (!button.gameObject.activeSelf) continue;
-
-                if (!spares.Contains(button.gameObject)) spares.Add(button.gameObject);
-                button.gameObject.SetActive(false);
-            }
+            for (int i = 0; i < buttons.Count; i++)
+                if (buttons[i].Button == button) return buttons[i];
+            return null;
         }
 
         /// <summary>
@@ -530,64 +507,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             for (int i = 0; i < containers.Count; i++)
                 if (containers[i].Backdrop == backdrop) return true;
             return false;
-        }
-
-        /// <summary>Pair each restyled button with the snapshot that has to undo it.</summary>
-        private static void AttachSkins(List<MfdRail.ButtonSkin> skins)
-        {
-            for (int i = 0; i < skins.Count; i++)
-            {
-                MfdRail.ButtonSkin skin = skins[i];
-                if (skin == null || skin.Background == null) continue;
-
-                for (int j = 0; j < buttons.Count; j++)
-                {
-                    if (buttons[j].Button != null &&
-                        buttons[j].Button.gameObject == skin.Background.gameObject)
-                    {
-                        buttons[j].Skin = skin;
-                        break;
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// Remember which screen each adopted button opens, so the rail can show which one
-        /// is currently on the panel — vanilla has no state for a button that stays lit.
-        /// </summary>
-        private static void LinkScreens(List<Button> source, List<MFDScreen> screens)
-        {
-            if (source == null || screens == null) return;
-
-            for (int i = 0; i < source.Count && i < screens.Count; i++)
-            {
-                Button button = source[i];
-                if (button == null || screens[i] == null) continue;
-
-                for (int j = 0; j < buttons.Count; j++)
-                {
-                    if (buttons[j].Button != button) continue;
-                    buttons[j].Screen = screens[i];
-                    break;
-                }
-            }
-        }
-
-        /// <summary>Run the rail's lit state after whatever opened or closed a screen.</summary>
-        private static void RefreshLatched()
-        {
-            for (int i = 0; i < buttons.Count; i++)
-            {
-                ButtonSnapshot snapshot = buttons[i];
-                if (snapshot == null || snapshot.Skin == null) continue;
-
-                MFDScreen screen = snapshot.Screen;
-                snapshot.Skin.SetLatched(screen != null && screen.isActive);
-                // The game rewrites every bezel label whenever a faction panel refreshes
-                // (VirtualMFD.SetupButtons); the rail owns its buttons and puts its line back.
-                snapshot.Skin.Reassert();
-            }
         }
 
         // ---------------------------------------------------------------------- panels
@@ -672,6 +591,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private static void Restore(bool onMinimize = false, DynamicMap dynamicMap = null)
         {
+            // The bezel goes home first, and whether or not the layout finished installing:
+            // its buttons wait inside the rail, so they must be back in their columns before
+            // the rail is destroyed. Backdrops lead, or a hidden frame would surround them.
+            // Each button returns with whatever active flag the game last gave it.
+            for (int i = 0; i < containers.Count; i++) containers[i].Restore();
+            containers.Clear();
+            for (int i = 0; i < buttons.Count; i++) buttons[i].Restore();
+            buttons.Clear();
+            MfdRail.Reset();
+
             if (!applied)
             {
                 // Maximise can be interrupted while the UI is still coming up. The deck is
@@ -681,24 +610,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 MfdScreenFinish.Restore();
                 return;
             }
-
-            // Backdrops first: the buttons go back into these containers next, and a hidden
-            // frame around restored buttons would be its own artifact.
-            for (int i = 0; i < containers.Count; i++) containers[i].Restore();
-            containers.Clear();
-
-            // Re-activate spare buttons ONLY on the settings-off path while still maximized.
-            // On Minimize, vanilla's VirtualMFD_onMapMinimized has already hidden all bezel
-            // buttons; unhiding spares here would leave stray '-' buttons floating in the cockpit.
-            if (!onMinimize)
-            {
-                for (int i = 0; i < spares.Count; i++)
-                    if (spares[i] != null) spares[i].SetActive(true);
-            }
-            spares.Clear();
-
-            for (int i = 0; i < buttons.Count; i++) buttons[i].Restore();
-            buttons.Clear();
 
             if (mapFrame != null) { Object.Destroy(mapFrame); mapFrame = null; }
             MfdNewsTicker.Restore();
@@ -733,7 +644,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             currentPanelWidth = AvTokens.PanelWidth;
             buttons.Clear();
             containers.Clear();
-            spares.Clear();
             if (mapFrame != null) { Object.Destroy(mapFrame); mapFrame = null; }
             MfdNewsTicker.Reset();
             MfdLogPanel.Reset();

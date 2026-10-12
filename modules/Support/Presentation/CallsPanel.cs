@@ -285,13 +285,16 @@ namespace BoscaliSummer.Modules.Support.Presentation
             metrics[2].Set(v.FrontsAhead + "/" + FrontRules.FrontCount, "AHEAD", v.FrontsAhead / (float)FrontRules.FrontCount, v.FrontsAhead > 0 ? AvState.Ready : AvState.Caution);
             metrics[3].Set(v.Alerts.ToString(), v.Alerts == 1 ? "ALERT" : "ALERTS", Mathf.Clamp01(v.Alerts / 3f), v.Alerts > 0 ? AvState.Danger : AvState.Ready);
 
-            for (int i = 0; i < cards.Length; i++) cards[i]?.Paint(v.Cards[i]);
+            // The other tab's page is off screen; OnPage forces a refresh the moment it is picked, so it repaints then.
+            if (tab != OpsTab.Perks)
+                for (int i = 0; i < cards.Length; i++) cards[i]?.Paint(v.Cards[i]);
 
             armedId = default;
+            bool paintPerks = tab != OpsTab.Fronts;
             foreach (PerkRowView p in v.Perks)
             {
                 if (p.Armed) armedId = p.Id;
-                if (perkRows.TryGetValue(p.Id, out PerkRowPart row)) row.Paint(p);
+                if (paintPerks && perkRows.TryGetValue(p.Id, out PerkRowPart row)) row.Paint(p);
             }
             order.Set(v.ArmedName, v.AimLine, v.OrderRight, v.Armed ? AvState.Caution : v.Pending ? AvState.Info : AvState.Ready);
             order.Armed = v.Armed;

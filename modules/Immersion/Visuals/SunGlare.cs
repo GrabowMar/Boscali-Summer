@@ -1,31 +1,33 @@
-using BoscaliSummer.Modules.Immersion.Domain;
+using BoscaliSummer.Core.Math;
 using UnityEngine;
 using UnityEngine.Rendering;
 
 namespace BoscaliSummer.Modules.Immersion.Visuals
 {
     /// <summary>
-    /// Procedural URP lens flare for the sun. The game ships the data-driven flare shader with
-    /// every variant (used for nuclear fireballs) but omits it for the sun.
-    /// Occlusion is calculated efficiently here:
-    /// - Checks angle to sun; skips physics raycasts completely when looking away (> 75 degrees).
-    /// - Rate-limits raycasts to 5 Hz on the StaticsMask.
-    /// - Fades behind cloud deck (LevelInfo.GetCloudOcclusion) and horizon.
+    /// Glare around the sun as an eye sees it: a soft veil and fine rays, no camera-lens streak or ghosts. It takes
+    /// the sun's colour and strength through the air (white and fierce overhead, a dim orange glow at sunset) and
+    /// goes out behind terrain, buildings and cloud. Drawn by the URP lens flare the game ships for its fireballs.
+    /// - Skips the physics raycast while looking away (more than about 78 degrees off the sun).
+    /// - One raycast at 10 Hz on the StaticsMask.
     /// Uses a proxy GameObject positioned in beginCameraRendering inside the camera far clip.
     /// </summary>
     internal sealed class SunGlare
     {
-        private const float CheckInterval = 0.2f;
+        private const float CheckInterval = 0.1f;
         private const float RayLength = 40000f;
         private const float ProxyDistance = 2.5f;
+        private const int RaySize = 256;
 
+        private static readonly Color VeilTint = new Color(1f, 0.93f, 0.82f, 1f), RayTint = new Color(1f, 0.97f, 0.92f, 1f);
         private static LensFlareDataSRP data;
+        private static Texture2D rays;
 
         private Light sun;
         private GameObject proxy;
         private LensFlareComponentSRP flare;
         private float visibility;
-        private float target;
+        private bool blocked;
         private float nextCheck;
         private Camera flightCamera;
 
@@ -33,7 +35,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         public float Gain { get; set; } = 1f;
 
         public float Intensity => flare != null ? flare.intensity : 0f;
-        /// <summary>0-1 sun visibility after elevation, terrain and cloud transmission; it also fades while the view faces away from the sun.</summary>
+        /// <summary>0-1 sun visibility after the horizon, terrain and cloud transmission; it also fades while the view faces away from the sun.</summary>
         internal float Visibility => visibility;
 
         public void Tick(LevelInfo level, Camera camera, bool on, float dt, float transmission = 1f)
@@ -58,9 +60,8 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             float viewDot = Vector3.Dot(camForward, toSun);
             if (viewDot < 0.2f)
             {
-                target = 0f;
                 visibility = Mathf.MoveTowards(visibility, 0f, 6f * dt);
-                if (flare != null && flare.enabled) flare.intensity = visibility * Gain;
+                if (flare != null && flare.enabled) flare.intensity = 0f;
                 return;
             }
 
@@ -80,16 +81,27 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             }
             if (!flare.enabled) flare.enabled = true;
 
+            float elevation = Mathf.Asin(Mathf.Clamp(toSun.y, -1f, 1f)) * Mathf.Rad2Deg;
             if (Time.unscaledTime >= nextCheck)
             {
                 nextCheck = Time.unscaledTime + CheckInterval;
-                float elevation = Mathf.Asin(Mathf.Clamp(toSun.y, -1f, 1f)) * Mathf.Rad2Deg;
-                bool blocked = Physics.Raycast(eye, toSun, RayLength, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore);
-                target = ImmersionMath.SunVisibility(elevation, 0f, blocked);
+                blocked = Physics.Raycast(eye, toSun, RayLength, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore);
             }
 
-            visibility = Mathf.MoveTowards(visibility, target * Mathf.Clamp01(transmission), 1.5f * dt);
-            flare.intensity = visibility * Gain;
+            // Rays need a clean line to the disc: thin cloud leaves a glow, not a starburst, so cloud counts cubed.
+            float through = Mathf.Clamp01(transmission);
+            float target = blocked ? 0f : SunDiscMath.AboveHorizon(elevation) * through * through * through;
+            // The eye loses the sun at once behind a ridge and takes a moment to be dazzled again.
+            visibility = Mathf.MoveTowards(visibility, target, (target < visibility ? 10f : 4f) * dt);
+
+            SunDiscMath.Transmission(elevation, camera.transform.GlobalPosition().y, out float r, out float g, out float b);
+            float peak = Mathf.Max(Mathf.Max(r, g), Mathf.Max(b, 1e-4f));
+            var air = new Color(r / peak, g / peak, b / peak, 1f);
+            LensFlareDataElementSRP[] elements = flare.lensFlareData.elements;
+            elements[0].tint = VeilTint * air;
+            elements[1].tint = RayTint * air;
+            // Glare follows how bright the disc looks, not its radiance: a square-root response keeps a low sun's glow.
+            flare.intensity = visibility * Gain * Mathf.Sqrt(0.2126f * r + 0.7152f * g + 0.0722f * b);
         }
 
         private GameObject Proxy()
@@ -105,9 +117,12 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
 
         private void PlaceForCamera(ScriptableRenderContext context, Camera camera)
         {
-            if (proxy == null || sun == null || camera == null) return;
-            if (flare != null) flare.enabled = camera == flightCamera && visibility > 0.001f;
-            if (camera != flightCamera) return;
+            if (proxy == null || sun == null || camera == null || flightCamera == null) return;
+            // The cockpit view is a camera stack: the flight camera draws the world, and post-processing (which draws
+            // the flare) runs on an overlay camera parented to it. The flare has to be on for that one.
+            bool view = camera == flightCamera || camera.transform.IsChildOf(flightCamera.transform);
+            if (flare != null) flare.enabled = view && visibility > 0.001f;
+            if (!view) return;
             int mask = camera.cullingMask;
             if (mask == 0) return;
             if ((mask & (1 << proxy.layer)) == 0)
@@ -129,19 +144,19 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             proxy = null;
             sun = null;
             flightCamera = null;
-            visibility = target = 0f;
+            visibility = 0f;
+            blocked = false;
         }
 
         internal static void ReleaseData()
         {
             if (data != null) Object.Destroy(data);
+            if (rays != null) Object.Destroy(rays);
             data = null;
+            rays = null;
         }
 
-        /// <summary>
-        /// A thin anamorphic streak, faint halo ring and polygonal ghosts.
-        /// Built once and shared across scenes.
-        /// </summary>
+        /// <summary>A wide soft veil and a burst of fine uneven rays. Built once and shared across scenes.</summary>
         private static LensFlareDataSRP Data()
         {
             if (data != null) return data;
@@ -149,58 +164,76 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             data.name = "BoscaliSummer.SunGlare";
             data.hideFlags = HideFlags.DontSave;
 
-            var streak = new LensFlareDataElementSRP
+            var veil = new LensFlareDataElementSRP
             {
                 flareType = SRPLensFlareType.Circle,
-                localIntensity = 0.5f,
-                tint = new Color(0.8f, 0.88f, 1f, 0.5f),
-                sizeXY = new Vector2(14f, 0.07f),
-                uniformScale = 1f,
+                // Tuned in game: the gradient has to span the whole radius (edgeOffset 1) or the veil is a flat plate.
+                localIntensity = 0.3f,
+                tint = VeilTint,
+                uniformScale = 8f,
+                edgeOffset = 1f,
                 fallOff = 0.25f,
                 position = 0f
             };
-            var halo = new LensFlareDataElementSRP
+            var burst = new LensFlareDataElementSRP
             {
-                flareType = SRPLensFlareType.Circle,
-                inverseSDF = true,
-                localIntensity = 0.16f,
-                tint = new Color(1f, 0.82f, 0.62f, 0.5f),
-                uniformScale = 2.4f,
-                fallOff = 0.5f,
-                edgeOffset = 0.2f,
+                flareType = SRPLensFlareType.Image,
+                lensFlareTexture = Rays(),
+                preserveAspectRatio = true,
+                localIntensity = 0.5f,
+                tint = RayTint,
+                uniformScale = 6.5f,
                 position = 0f
             };
-            var ghosts = new LensFlareDataElementSRP
-            {
-                flareType = SRPLensFlareType.Polygon,
-                sideCount = 6,
-                sdfRoundness = 0.35f,
-                localIntensity = 0.32f,
-                tint = new Color(0.6f, 0.85f, 1f, 0.5f),
-                uniformScale = 0.4f,
-                fallOff = 0.7f,
-                edgeOffset = 0.06f,
-                allowMultipleElement = true,
-                count = 4,
-                distribution = SRPLensFlareDistribution.Uniform,
-                lengthSpread = 1.5f,
-                position = 0.7f
-            };
-            var amber = new LensFlareDataElementSRP
-            {
-                flareType = SRPLensFlareType.Circle,
-                localIntensity = 0.26f,
-                tint = new Color(1f, 0.72f, 0.4f, 0.5f),
-                uniformScale = 0.6f,
-                fallOff = 0.9f,
-                allowMultipleElement = true,
-                count = 2,
-                distribution = SRPLensFlareDistribution.Uniform,
-                lengthSpread = 0.5f,
-                position = 1.55f
-            };
-            data.elements = new[] { streak, halo, ghosts, amber };
+            data.elements = new[] { veil, burst };
             return data;
+        }
+
+        /// <summary>
+        /// The eye's own starburst (light scattered by the lens fibres): many thin rays of uneven length and strength,
+        /// brightest at the centre. Fixed seed, so the pattern belongs to the pilot and never shimmers.
+        /// </summary>
+        private static Texture2D Rays()
+        {
+            if (rays != null) return rays;
+            const int Bins = 1024;
+            var strength = new float[Bins];
+            var length = new float[Bins];
+            var random = new System.Random(7);
+            for (int ray = 0; ray < 150; ray++)
+            {
+                int centre = random.Next(Bins);
+                float s = (float)random.NextDouble(), reach = 0.3f + 0.7f * (float)random.NextDouble();
+                s *= s;
+                for (int k = -2; k <= 2; k++)
+                {
+                    int bin = (centre + k + Bins) % Bins;
+                    float edge = s * (1f - Mathf.Abs(k) / 3f);
+                    if (edge <= strength[bin]) continue;
+                    strength[bin] = edge; length[bin] = reach;
+                }
+            }
+            var pixels = new Color32[RaySize * RaySize];
+            float half = (RaySize - 1) * 0.5f;
+            for (int y = 0; y < RaySize; y++)
+                for (int x = 0; x < RaySize; x++)
+                {
+                    float dx = (x - half) / half, dy = (y - half) / half;
+                    float radius = Mathf.Sqrt(dx * dx + dy * dy);
+                    int bin = (int)((Mathf.Atan2(dy, dx) / (2f * Mathf.PI) + 0.5f) * Bins) % Bins;
+                    float along = length[bin] > 0f ? Mathf.Clamp01(1f - radius / length[bin]) : 0f;
+                    byte v = (byte)(255f * strength[bin] * along * along);
+                    pixels[y * RaySize + x] = new Color32(v, v, v, 255);
+                }
+            rays = new Texture2D(RaySize, RaySize, TextureFormat.RGBA32, true, true)
+            {
+                name = "BoscaliSummer.SunGlare.Rays",
+                wrapMode = TextureWrapMode.Clamp,
+                hideFlags = HideFlags.DontSave
+            };
+            rays.SetPixels32(pixels);
+            rays.Apply(true, true);
+            return rays;
         }
     }
 }

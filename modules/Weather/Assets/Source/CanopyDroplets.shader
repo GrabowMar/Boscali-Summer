@@ -78,7 +78,10 @@ Shader "Hidden/BoscaliCanopyDroplets"
 
                 // Mobility: big beads run even parked, small ones stick until the
                 // slipstream rips them loose.
-                float mob = smoothstep(0.12, 0.55, prev.r + _SpeedN * 0.25);
+                // Judged on the taller of the water here and the water arriving: judged
+                // on this texel alone, a bead's centre drained into dry glass and was
+                // lost, leaving a hollow ring.
+                float mob = smoothstep(0.45, 0.8, max(prev.r, traced.r) + _SpeedN * 0.5);
                 float water = lerp(prev.r, traced.r, mob);
 
                 // Spawn once per cell per 6 Hz epoch. The prior gate stayed open
@@ -89,14 +92,35 @@ Shader "Hidden/BoscaliCanopyDroplets"
                 float tick = floor(clock);
                 float seed = tick * 17.0;
                 float gate = step(frac(clock), dt * 6.0)
-                    * step(hash12(cell + seed), _Rain * 0.12);
-                float2 center = float2(hash12(cell + seed + 3.1), hash12(cell + seed + 7.7)) - 0.5;
-                float d = length(frac(grid) - 0.5 - center * 0.5);
-                float sizeMul = 0.7 + 0.6 * hash12(cell + seed + 13.7);
+                    * step(hash12(cell + seed), _Rain * 0.24);
+                // Only some cells take a bead at a time (reshuffled every 10 s): a bead
+                // in every cell read as a lattice.
+                gate *= step(hash12(cell + floor(_SimTime * 0.1 + hash12(cell + 4.4)) * 5.3),
+                    0.2 + 0.35 * _Rain);
+                // Mostly fine beads (1.5 mm radius), a few fat ones (4 mm): equal-sized
+                // drops read as stickers. Fat drops are tall, so they are the ones that run.
+                float pick = hash12(cell + seed + 13.7);
+                float sizeMul = 0.35 + 0.65 * pick * pick;
+                float rad = 0.30 * sizeMul;
+                // Fast air smears an arriving drop along the flow into a short dash.
+                float smear = 1.0 + 0.6 * _SpeedN;
+                float2 dir = speed > 0.001 ? _FlowTiles.xy / speed : float2(0.0, -1.0);
+                // Jitter only as far as the whole drop stays inside its cell (no cut edges).
+                float2 center = (float2(hash12(cell + seed + 3.1), hash12(cell + seed + 7.7)) - 0.5)
+                    * (1.0 - 2.0 * rad * smear);
+                // A drop lands only on free glass: piling them up flattened every cell into
+                // one film with ring outlines.
+                gate *= step(tex2Dlod(_MainTex, float4((cell + 0.5 + center) / 24.0, 0.0, 0.0)).r, 0.06);
+                float2 off = frac(grid) - 0.5 - center;
+                off -= dir * dot(off, dir) * (1.0 - 1.0 / smear);
                 // Paraboloid profile: a flat-topped bump renders as a ring with a dead
                 // centre; a dome keeps a slope everywhere so beads read as lenses.
-                float r = saturate(d / (0.34 * sizeMul));
-                water += gate * (1.0 - r * r) * 0.8;
+                float r = saturate(length(off) / rad);
+                water += gate * (1.0 - r * r) * (0.22 + 0.58 * sizeMul);
+                // Standing beads swell under rain until they are heavy enough to run.
+                // Dithered: the 8-bit state would round a per-step swell away.
+                water += step(hash12(i.uv * 977.0 + _SimTime), _Rain * dt * 15.0) * 0.004
+                    * step(0.15, water);
 
                 // Dry air and slipstream evaporate the film.
                 water *= exp(-dt * (0.10 + 0.8 * (1.0 - _Rain) + 1.5 * _SpeedN));

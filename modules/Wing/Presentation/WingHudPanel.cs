@@ -57,6 +57,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private readonly TMP_Text[] ladder = new TMP_Text[WingCallLadder.MaxLines];
         private readonly string[] ladderLines = new string[WingCallLadder.MaxLines];
         private float nextRefresh;
+        // Size() reads preferredWidth (a text layout); it only runs when a string, the height or the ladder/strip mode changed.
+        private bool stripSized;
+        private float sizedHeight;
         private int ladderVersion = -1;
         private bool ladderShown;
         private int shownMembers;
@@ -200,6 +203,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private void Refresh(WingService wing, PlayerAutopilot ap)
         {
             SetLadder(false);
+            bool changed = !stripSized;
             int n = wing != null ? Mathf.Min(wing.Members.Count, rows.Length) : 0;
             shownMembers = n;
             int worst = 0, inSlot = 0;
@@ -210,7 +214,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 if (tracks[i].gameObject.activeSelf != on) tracks[i].gameObject.SetActive(on);
                 if (!on)
                 {
-                    rows[i].text = "";
+                    changed |= SetText(rows[i], "");
                     continue;
                 }
                 WingMember m = wing.Members[i];
@@ -222,7 +226,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 WingFrame f = wing.FrameOf(m);
                 float error = f != null && m.Brain.Slot < f.Count ? (f.Slots[m.Brain.Slot].Ref.Pos - m.Last.Pos).Length : 0f;
                 float bingo = m.Bingo.SecondsToBingo;
-                rows[i].text = WingHudText.Member(m.Seat, phase, error, binding, WingHudText.BingoTime(bingo));
+                changed |= SetText(rows[i], WingHudText.Member(m.Seat, phase, error, binding, WingHudText.BingoTime(bingo)));
                 int severity = Severity(phase, binding, bingo);
                 worst = Mathf.Max(worst, severity);
                 if (phase == "SLOT" && error < InSlotM) inSlot++;
@@ -237,12 +241,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
 
             FormationSelection sel = wing?.Selection;
-            title.text = n > 0 && sel != null
+            changed |= SetText(title, n > 0 && sel != null
                 ? $"{sel.Current.Name.ToUpperInvariant()}  {sel.Spacing.ToString().ToUpperInvariant()}  {wing.Doctrine.PatternName}  {inSlot}/{n} SLOT"
-                : "AUTOPILOT";
-            autopilot.text = ap != null
+                : "AUTOPILOT");
+            changed |= SetText(autopilot, ap != null
                 ? WingHudText.Autopilot(ap.Session.Spec, ap.Session.LateralOverride, ap.Session.VerticalOverride, ap.Nav.Index, ap.Nav.Count)
-                : "";
+                : "");
             Color lit = worst == 2 ? Danger : worst == 1 ? Caution : Ink;
             rail.color = lit;
             title.color = Ink;
@@ -267,7 +271,19 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 height += ChipHeight + 3f;
             }
             if (shown > 0) height += 3f;
-            Size(height);
+            if (changed || height != sizedHeight)
+            {
+                Size(height);
+                sizedHeight = height;
+            }
+            stripSized = true;
+        }
+
+        private static bool SetText(TMP_Text t, string s)
+        {
+            if (t.text == s) return false;
+            t.text = s;
+            return true;
         }
 
         /// <summary>The Call Ladder in the strip's place: the same box, the same anchor, taller as the choices need.</summary>
@@ -287,6 +303,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 ladder[i].color = i == 0 || !readback ? Ink : chips[0].Accepted ? Ink : Danger;
             }
             rail.color = Ink;
+            stripSized = false;
             Size(LineHeight * n + 8f);
         }
 
@@ -382,6 +399,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             chromeKey = 0;
             canvas = null;
             nextRefresh = 0f;
+            stripSized = false;
             ladderVersion = -1;
             shownMembers = 0;
         }

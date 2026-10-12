@@ -105,7 +105,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             for (int i = 0; i < penRow.Widths.Length; i++) penRow.Widths[i].Help = "Stroke width for the pen and shapes. " + HoldHint();
 
             // Markers, the text label and the audience of the next post sit under one header.
-            p.Section(AvIcon.MapPin, "MARKERS", QuickPingNote());
+            p.Section(AvIcon.MapPin, "MARKERS", "CLICK THE MAP");
             var pingSpecs = new AvControl.Spec[CommsCatalog.PalettePings];
             var pingHelps = new string[pingSpecs.Length];
             for (int i = 0; i < pingSpecs.Length; i++)
@@ -310,12 +310,6 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
         /// <summary>A hostile tone (enemy, SAM, spike) reads as the kit's danger style; the icon and code still say which.</summary>
         private static AvButtonStyle ToneStyle(CommsTone tone) => tone == CommsTone.Danger ? AvButtonStyle.Danger : AvButtonStyle.Default;
-
-        private string QuickPingNote()
-        {
-            KeyCode key = settings.QuickPingKey.Value;
-            return key == KeyCode.None ? "CLICK THE MAP" : KeyName(key) + " DROPS IT";
-        }
 
         private string HoldHint()
         {

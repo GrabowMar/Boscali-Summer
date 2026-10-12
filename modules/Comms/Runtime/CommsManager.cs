@@ -89,8 +89,6 @@ namespace BoscaliSummer.Modules.Comms.Runtime
         // ---- gesture ------------------------------------------------------------------------
         private bool pressTracked;
         private Vector2 pressScreen;
-        private bool quickTracked;
-        private Vector2 quickScreen;
         private bool gesture;
         private CommsTool gestureTool;
         private Vector2 lastPenScreen;
@@ -151,7 +149,6 @@ namespace BoscaliSummer.Modules.Comms.Runtime
             net?.ResetScene();
             EndGesture();
             pressTracked = false;
-            quickTracked = false;
             Tool = CommsTool.None;
             MapPicker.Disarm(PickerOwner);
             CommsInput.DrawToolArmed = false;
@@ -446,27 +443,6 @@ namespace BoscaliSummer.Modules.Comms.Runtime
                 CancelGesture();
                 SetTool(CommsTool.None);
                 return;
-            }
-
-            // The quick ping commits on release and only without travel, so a middle-drag
-            // that pans or rotates something never drops a ping where it started.
-            KeyCode quick = settings.QuickPingKey.Value;
-            if (quick != KeyCode.None)
-            {
-                if (Input.GetKeyDown(quick))
-                {
-                    quickTracked = !PickerHeldByOther();
-                    quickScreen = Input.mousePosition;
-                }
-                else if (quickTracked && Input.GetKeyUp(quick))
-                {
-                    quickTracked = false;
-                    Vector2 release = Input.mousePosition;
-                    // A quick ping is a tactical call: always to the team, whatever COM is set to.
-                    if ((release - quickScreen).sqrMagnitude <= ClickSlopPixels * ClickSlopPixels &&
-                        TryCursor(map, out float qx, out float qz))
-                        PlacePoint(CommsItemKind.Ping, PingKind, qx, qz, null, CommsChannel.Team);
-                }
             }
 
             if (gesture)

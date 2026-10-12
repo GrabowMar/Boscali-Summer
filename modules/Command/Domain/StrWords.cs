@@ -17,6 +17,9 @@ namespace BoscaliSummer.Modules.Command.Domain
         // capture drew a box for the bar), so a yes is the word OK and the trend words carry a sign: never a box (annex 05 P9 risk).
         public const string Up = "+ ", Down = "- ", Level = "= ", Yes = "OK", No = "✕", Arrow = "→", Degree = "°";
 
+        /// <summary>The word an empty office card carries: the post nobody holds.</summary>
+        public static string OfficeOf(int tier) => tier == 0 ? "THEATER" : tier == 1 ? "COMPONENT" : "BASE";
+
         /// <summary>The slab word above a banner; empty for Operation (its banner only shows when the report is stale).</summary>
         public static string Chip(StrBoardMode mode)
         {
@@ -80,7 +83,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                 case StrBoardMode.Assessing: return "The staff reads every front before it proposes anything.";
                 case StrBoardMode.NoOpening: return "Sorties from the MIS contract desk are still offered while the board waits.";
                 case StrBoardMode.Reduced: return "Nothing is broken. The staff has no fronts to plan here.";
-                case StrBoardMode.StaffOff: return "SITREP reads live counts only when you host the game. LOG needs the staff.";
+                case StrBoardMode.StaffOff: return "SITREP reads live counts only when you host the game. The staff log needs the staff.";
                 case StrBoardMode.HostLacksStaff: return "Nothing is wrong on your side. SITREP and LOG show dashes until the host turns the staff on.";
                 case StrBoardMode.NoFaction: return "Pick a side and the board fills in on the next report.";
                 case StrBoardMode.Waiting: return "Controls stay locked until a report is under 15 s old.";

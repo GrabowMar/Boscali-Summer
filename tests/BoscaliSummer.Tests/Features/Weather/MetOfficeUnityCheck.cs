@@ -223,7 +223,7 @@ public static class MetOfficeUnityCheck
     private static MetOfficeWindow Build(RectTransform root, FakeWorld world)
     {
         MetOfficeWindow window = MetOfficeWindow.Create(root, world, world);
-        window.Window.Root.localScale = Vector3.one * 1.5f;   // 1080p on the 1280 x 720 reference canvas
+        window.Window.Root.localScale = Vector3.one;   // the window is laid out for 1080p
         window.ShowFrame();
         for (int i = 0; i < 8; i++) { window.Window.Ticker.TickNow(); Canvas.ForceUpdateCanvases(); }
         foreach (TMP_Text text in root.GetComponentsInChildren<TMP_Text>(true)) text.ForceMeshUpdate();
@@ -253,7 +253,6 @@ public static class MetOfficeUnityCheck
         Navigation(window.Window.Root, where);
         Tips(window, where);
         Columns(window, where);
-        window.Window.Root.localScale = Vector3.one * 1.5f;
         if (picture)
         {
             Camera camera = OrthoCamera("Capture", 540f, new Color(0.02f, 0.03f, 0.03f));
@@ -370,12 +369,12 @@ public static class MetOfficeUnityCheck
     /// <summary>What each plan task adds to the window, by stage: 5 shell, 6 synoptic column, 7 instrument column, 8 time column, 9 command bar.</summary>
     private static readonly string[][] MustByStage =
     {
-        new[] { "WEATHER // MET OFFICE", "SMOOTH", "FADE 20 S", "CUT", "SYS", "MET" },
-        new[] { "SYNOPTIC CHART", "NEXT FRONTS", "IDENTITY", "RE-ROLL", "R4", "R8", "ETA S5", "THEATER", "WARM", "COLD", "OCCL.", "SQUALL", "CELL", "SET-PC", "CAM", "ANCHOR" },
-        new[] { "SKY NOW", "PIN SKY", "OUTLOOK 60 MIN", "SET-PIECES", "METAR", "COVER", "HIGH", "MID", "LOW", "CLR", "FEW", "SCT", "BKN", "OVC", "RA+", "TS", "AUTO", "SQUALL LINE", "SUPERCELL",
-            "DISTANT CB", "STORM EYE", "LENTICULARS", "SEA FOG", "RAIN", "R1", "LIVE", "NOW" },
-        new[] { "STORY", "TIME", "SCENARIOS", "LOG", "PACE", "FRONT IN", "HURRICANE EYE", "SQUALL ASSAULT", "MOUNTAIN WAVE", "FRONTAL PASSAGE", "RESET ALL", "S5", "R3", "TAPE" },
-        new[] { "MET>", "BKSP", "P  PIN SKY", "R  RE-ROLL" },
+        new[] { "WEATHER CONSOLE", "SMOOTH", "FADE 20 S", "CUT", "SYS", "ENV" },
+        new[] { "NEXT FRONTS", "IDENTITY", "RE-ROLL", "ETA S5", "ANCHOR", "NEXT FRONT", "TAPE", "STORY" },
+        new[] { "SKY NOW", "SKY OVERHEAD", "INSPECT", "OUTLOOK 60 MIN", "SET-PIECES", "COVER", "HIGH", "MID", "LOW", "CLEAR", "FAIR", "SCATTERED", "BROKEN", "OVERCAST", "STORM", "AUTO", "SQUALL LINE", "SUPERCELL",
+            "DISTANT CB", "STORM EYE", "LENTICULARS", "SEA FOG", "RAIN", "NOW", "PIN #" },
+        new[] { "STORIES", "SCENARIOS", "HOST LOG", "PACE", "FRONT IN", "HURRICANE EYE", "SQUALL ASSAULT", "MOUNTAIN WAVE", "FRONTAL PASSAGE", "RESET ALL", "S5", "WEATHER TAPE" },
+        new string[0],
     };
 
     private static Transform Find(Transform root, string name, bool prefix = false)
@@ -411,34 +410,20 @@ public static class MetOfficeUnityCheck
     private static void RequireStructure(MetOfficeWindow window, string where)
     {
         RectTransform root = window.Window.Root;
-        if (Built >= 6)
-        {
-            Need(root, where, "ChartColumn"); Need(root, where, "Section SYNOPTIC CHART"); Need(root, where, "Synoptic chart");
-            NeedCard(root, where, "NEXT FRONTS"); NeedCard(root, where, "IDENTITY"); Need(root, where, "Control RE-ROLL");
-        }
-        if (Built >= 7)
-        {
-            Need(root, where, "InstrumentColumn"); NeedCard(root, where, "SKY NOW"); NeedCard(root, where, "PIN SKY");
-            Need(root, where, "Section OUTLOOK 60 MIN"); Need(root, where, "Section SET-PIECES"); Need(root, where, "Segmented ANCHOR"); Need(root, where, "Segmented RAIN");
-            foreach (string code in MetCatalog.ClassCodes) Need(root, where, "Control " + code);                // the seven class chips
-            foreach (string set in MetCatalog.SetNames) Need(root, where, "Control " + set);                    // the six set-piece cells
-            for (int i = 0; i < MetOfficeModel.LayerCount; i++) Need(root, where, "LayerKey" + i);              // the three layer tiles
-            for (int i = 0; i < MetOfficeModel.OutlookCount; i++) Need(root, where, "Time" + i);                // the six outlook cells
-        }
-        if (Built >= 8)
-        {
-            Need(root, where, "TimeColumn"); NeedCard(root, where, "STORY"); NeedCard(root, where, "TIME"); NeedCard(root, where, "SCENARIOS"); NeedCard(root, where, "LOG · PENDING");
-            Need(root, where, "Row FRONT IN"); Need(root, where, "Control HOLD TAPE");
-            if (CountOf(root, "StepRow") != 3) Fail(where + ": expected the story, pin and pace step rows, found " + CountOf(root, "StepRow"));
-            foreach (string scenario in MetCatalog.ScenarioNames) Need(root, where, "Control " + scenario, true);
-            if (window.Probe("pips") != MetOfficeModel.SegmentCount) Fail(where + ": the story strip painted " + window.Probe("pips") + " pips");
-        }
-        if (Built >= 9)
-        {
-            Transform prompt = Find(root, "CommandPrompt");
-            if (prompt == null || prompt.GetComponent<TMP_Text>().text != "MET>") Fail(where + ": missing the MET> prompt");
-            if (window.Probe("bar") != 8) Fail(where + ": the command line has " + window.Probe("bar") + " buttons, expected 8");
-        }
+        foreach (string h in new[] { "SKY NOW", "TAPE", "STORY", "NEXT FRONT" }) Need(root, where, "Hero " + h);
+        Need(root, where, "RightColumn"); NeedCard(root, where, "NEXT FRONTS"); NeedCard(root, where, "IDENTITY"); Need(root, where, "Control RE-ROLL");
+        Need(root, where, "Section OUTLOOK 60 MIN"); Need(root, where, "Section SET-PIECES"); Need(root, where, "Segmented ANCHOR"); Need(root, where, "Segmented RAIN");
+        foreach (string set in MetCatalog.SetNames) Need(root, where, "Control " + set);                    // the six set-piece cells
+        for (int i = 0; i < MetOfficeModel.OutlookCount; i++) Need(root, where, "Time" + i);                // the six outlook cells
+        Need(root, where, "CentreColumn"); NeedCard(root, where, "INSPECT"); NeedCard(root, where, "SKY OVERHEAD"); Need(root, where, "Sky gallery"); Need(root, where, "Inspect layers");
+        foreach (string word in MetCatalog.ClassWords) Need(root, where, "Control " + word);                // the seven class tabs
+        for (int i = 0; i < MetOfficeModel.LayerCount; i++) Need(root, where, "LayerKey" + i);              // the three layer tiles of the sky overhead
+        if (window.Probe("tiles") < 6) Fail(where + ": the gallery shows " + window.Probe("tiles") + " sky tiles");
+        Need(root, where, "LeftColumn"); NeedCard(root, where, "SCENARIOS"); NeedCard(root, where, "STORIES"); NeedCard(root, where, "HOST LOG");
+        foreach (string scenario in MetCatalog.ScenarioNames) Need(root, where, "Control " + scenario, true);
+        NeedCard(root, where, "WEATHER TAPE"); Need(root, where, "Row FRONT IN"); Need(root, where, "Control HOLD TAPE");
+        if (CountOf(root, "StepRow") != 1) Fail(where + ": expected the pace step row, found " + CountOf(root, "StepRow"));
+        if (window.Probe("pips") != MetOfficeModel.SegmentCount) Fail(where + ": the story strip painted " + window.Probe("pips") + " pips");
     }
 
     /// <summary>What only some fixtures can prove: a forced fog bank draws nothing on the chart, a client never prints another seat's settings, and nothing prints NaN.</summary>
@@ -446,20 +431,7 @@ public static class MetOfficeUnityCheck
     {
         string all = AllText(root);
         if (System.Text.RegularExpressions.Regex.IsMatch(all, @"\bNAN\b|INFINITY")) Fail(where + ": a non-finite number reached the screen");
-        Transform chartColumn = root.Find("ChartColumn");
-        if (Built >= 6 && state == "fog")
-        {
-            foreach (TMP_Text t in chartColumn.GetComponentsInChildren<TMP_Text>(false))
-                if (t.isActiveAndEnabled && t.text.ToUpperInvariant().Contains("SEA FOG")) Fail(where + ": the chart labels a fog bank that is not placed: '" + t.text + "'");
-        }
         if (Built >= 7 && state == "fog" && !all.Contains("LOW LAYER")) Fail(where + ": the fog cell lost its LOW LAYER line");
-        if (Built >= 6 && state == "cluttered")
-        {
-            string chartText = AllText((RectTransform)chartColumn);
-            // each set-piece is labelled in full or, when its marker has no room, in the short form (EYE, LENT 100%, SC 100%)
-            foreach (string[] label in new[] { new[] { "STORM EYE 100%", "EYE" }, new[] { "LENTICULARS 100%", "LENT 100%" }, new[] { "SUPERCELL 100%", "SC 100%" } })
-                if (!chartText.Contains(label[0]) && !chartText.Contains(label[1])) Fail(where + ": the cluttered chart lost its label '" + label[0] + "'");
-        }
         if (Built >= 7 && state == "cluttered" && !System.Text.RegularExpressions.Regex.IsMatch(all, @"(?<!\d)0 KM"))
             Fail(where + ": the storm eye cell on the camera does not read 0 KM (set-pieces measure from the camera, not the theatre centre)");
         if (Built >= 8 && state == "client")
@@ -543,7 +515,7 @@ public static class MetOfficeUnityCheck
                 Fail(where + ": disabled control '" + c.name + "' does not say why: '" + help + "'");
         }
         int enabled = 0;
-        foreach (AvControl c in window.Window.Root.GetComponentsInChildren<AvControl>(false)) if (c.Interactable && c != window.Window.CloseControl) enabled++;
+        foreach (AvControl c in window.Window.Root.GetComponentsInChildren<AvControl>(false)) if (c.Interactable && c != window.Window.CloseControl && c.Help != MetCatalog.TileHelp && c.Help != MetCatalog.ClassHelp) enabled++;   // class tabs and sky tiles only browse: every seat may
         if (Built >= 10 && (state == "client" || state == "waiting") && enabled != 0) Fail(where + ": " + enabled + " controls are enabled for a " + state + " seat");
         if (Built >= 10 && state == "host" && enabled < 30) Fail(where + ": only " + enabled + " controls are enabled for a ready host");
     }
@@ -553,7 +525,7 @@ public static class MetOfficeUnityCheck
     {
         RectTransform root = window.Window.Root;
         float limit = root.rect.yMax - MetOfficeLayout.BodyBottom;
-        string[] columns = { "ChartColumn", "InstrumentColumn", "TimeColumn" };
+        string[] columns = { "LeftColumn", "CentreColumn", "RightColumn" };
         for (int c = 0; c < columns.Length && c + 6 <= Built; c++)
         {
             string name = columns[c];
@@ -603,6 +575,9 @@ public static class MetOfficeUnityCheck
         }
     }
 
+    private static bool NoButton(MetControl id) =>
+        id == MetControl.PinClass || id == MetControl.PinPrev || id == MetControl.PinNext || id == MetControl.StoryPrev || id == MetControl.StoryNext;
+
     private static void CheckPresses()
     {
         var canvasObject = new GameObject("MetPress", typeof(RectTransform), typeof(Canvas));
@@ -614,7 +589,7 @@ public static class MetOfficeUnityCheck
         // Every control of the catalog, in catalog order, clicked through its AvHit like the real mouse: wrong wiring (a Spec lambda, a Reg() on the wrong id, a step row's minus and plus) shows here.
         foreach (MetControl id in (MetControl[])Enum.GetValues(typeof(MetControl)))
         {
-            if (id == MetControl.PinClass) continue;            // the seven class chips, below
+            if (NoButton(id)) continue;                         // keys and sims only: the window has tabs, tiles and story rows instead
             AvControl c = w.ControlOf(id);
             if (c == null) { Fail("no control is registered as " + id); continue; }
             string label = c.name.Substring("Control ".Length).Split('\n')[0];
@@ -624,15 +599,21 @@ public static class MetOfficeUnityCheck
             Expect(world, at.ToString(), () => w.Click(at), ExpectedCall(at));
         }
 
-        // The command line, in the order of its buttons (Hold, Pace, Story, Pin sky, Front in 5, Re-roll, Rain, Reset all); the picker still stands on sky 22.
-        string[] bar = { "tape False", "pace 4", "story 0", "pin 21", null, "reroll", "rain 0.0", "scenario ResetAll" };
-        Check(w.Probe("bar") == bar.Length, "the command line has " + w.Probe("bar") + " buttons");
-        for (int i = 0; i < bar.Length; i++) { int at = i; Expect(world, "bar button " + i, () => w.ClickPart("bar", at), bar[i]); }
-        world.Source.Pace = 6;
-        Expect(world, "bar PACE at the fastest pace", () => w.ClickPart("bar", 1), "pace 1");      // the one-button pace wraps; the , and . keys step down and up
+        // The story rows: 0 is AUTO, then one row per story.
+        for (int i = 0; i <= WeatherStories.Count; i++) { int at = i; Expect(world, "story row " + i, () => w.ClickPart("story", at), "story " + (i - 1)); }
 
-        // The seven class chips pin the first sky of their class.
-        for (int i = 0; i < 7; i++) { int cls = i; Expect(world, "class chip " + cls, () => w.ClickPart("class", cls), "pin " + MetSkyPicker.FirstOf((WeatherRegimeType)cls)); }
+        // Browsing sends nothing: a class tab shows its skies and selects the first, a tile selects its sky, and only PIN is the request.
+        for (int i = 0; i < 7; i++)
+        {
+            int cls = i;
+            Expect(world, "class tab " + cls, () => w.ClickPart("class", cls), null);
+            Check(w.Probe("selected") == MetSkyPicker.FirstOf((WeatherRegimeType)cls), "class tab " + cls + " selected sky " + w.Probe("selected"));
+            Check(w.Probe("tiles") == MetSkyPicker.CountOf((WeatherRegimeType)cls), "class tab " + cls + " shows " + w.Probe("tiles") + " tiles");
+        }
+        Expect(world, "sky tile 2", () => w.ClickPart("tile", 2), null);
+        int third = MetSkyPicker.FirstOf(WeatherRegimeType.Storm) + 2;
+        Check(w.Probe("selected") == third, "the third storm tile selected sky " + w.Probe("selected"));
+        Expect(world, "PIN after browsing", () => w.Click(MetControl.PinSelected), "pin " + third);
 
         // The world moved since the last refresh: a click reads it again.
         world.Source.Pace = 5;
@@ -645,12 +626,12 @@ public static class MetOfficeUnityCheck
             world.Source.Host = seat != "client"; world.Source.Captured = seat != "waiting";
             foreach (MetControl id in (MetControl[])Enum.GetValues(typeof(MetControl)))
             {
-                if (id == MetControl.PinClass) continue;
+                if (NoButton(id)) continue;
                 MetControl at = id;
                 Expect(world, seat + " " + at, () => w.Click(at), null);
             }
-            for (int i = 0; i < 7; i++) { int cls = i; Expect(world, seat + " class chip " + cls, () => w.ClickPart("class", cls), null); }
-            for (int i = 0; i < bar.Length; i++) { int at = i; Expect(world, seat + " bar button " + at, () => w.ClickPart("bar", at), null); }
+            for (int i = 0; i < 7; i++) { int cls = i; Expect(world, seat + " class tab " + cls, () => w.ClickPart("class", cls), null); }
+            for (int i = 0; i <= WeatherStories.Count; i++) { int at = i; Expect(world, seat + " story row " + at, () => w.ClickPart("story", at), null); }
         }
         Check(w.Window.Footer != null, "the window has a footer");
         w.Close();

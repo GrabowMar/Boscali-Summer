@@ -15,12 +15,17 @@ public readonly struct GlobalPosition
     public readonly double x, y, z;
     public GlobalPosition(Vector3 value) { x = value.x; y = value.y; z = value.z; }
 }
-namespace BoscaliSummer.Core.Game
+public static class FixtureCoordinates
 {
-    public static class FixtureCoordinates
-    {
-        public static GlobalPosition GlobalPosition(this Transform value) => new GlobalPosition(value.position);
-    }
+    public static GlobalPosition GlobalPosition(this Transform value) => new GlobalPosition(value.position);
+}
+namespace BoscaliSummer.Core.Game { internal static class FixtureNamespace { } }
+
+public static class SceneSingleton<T> where T : class { public static T i; }
+public sealed class CameraStateManager
+{
+    public CockpitState cockpitState;
+    public sealed class CockpitState { public void AddShake(float shake, float rattle) { } }
 }
 
 public sealed class CloudLayer : MonoBehaviour

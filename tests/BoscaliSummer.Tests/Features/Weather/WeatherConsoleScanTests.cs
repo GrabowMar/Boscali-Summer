@@ -21,8 +21,6 @@ namespace BoscaliSummer.Tests.Features.Weather
             string manager = File.ReadAllText(Path.Combine(root, "modules", "Weather", "Runtime", "WeatherManager.cs"));
             TestAssert.That(manager.Contains("MetOfficeWindow.Create(transform, adapter, adapter)"), "Ctrl+O builds the Met Office over one adapter (read and write seams share the host log)");
             TestAssert.That(manager.Contains("private MetOfficeWindow console;"), "the manager owns the Met Office window");
-            string module = File.ReadAllText(Path.Combine(root, "modules", "Weather", "WeatherModule.cs"));
-            TestAssert.That(module.Contains("PatchTypes => Array.Empty<Type>()"), "the console adds no Harmony patch");
         }
 
         private static string FindRepoRoot()

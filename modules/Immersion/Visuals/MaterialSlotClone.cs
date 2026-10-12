@@ -21,6 +21,9 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private readonly bool display;
         private readonly List<Material> shared = new List<Material>(8);
         private Material clone;
+        private bool synced;
+        private float syncedGain, nextSync;
+        private Color syncedColour;
 
         internal bool Active => renderer != null && clone != null;
 
@@ -67,11 +70,15 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             if (colourId < 0) { Restore(); return; }
             // Copy current native brightness, textures, keywords and render settings.
             // Native TacScreen adjusts emission continuously for day/night and options.
-            if (shaderChanged) clone.shader = native.shader;
-            clone.CopyPropertiesFromMaterial(native);
             gain = float.IsNaN(gain) || float.IsInfinity(gain) ? 1f :
                 Mathf.Clamp(gain, display ? 1f : 0.88f, display ? 1.15f : 1f);
             Color colour = native.GetColor(colourId);
+            // The colour is read every frame; the full copy runs when it or the gain moved, and every 0.5 s.
+            float now = Time.unscaledTime;
+            if (!shaderChanged && synced && gain == syncedGain && colour == syncedColour && now < nextSync) return;
+            synced = true; syncedGain = gain; syncedColour = colour; nextSync = now + 0.5f;
+            if (shaderChanged) clone.shader = native.shader;
+            clone.CopyPropertiesFromMaterial(native);
             clone.SetColor(colourId, new Color(colour.r * gain, colour.g * gain, colour.b * gain, colour.a));
         }
 

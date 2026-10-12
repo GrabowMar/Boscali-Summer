@@ -444,8 +444,6 @@ namespace BoscaliSummer.Modules.Command.Domain
                 {
                     StrPostIn p = f.Posts[best[k]];
                     StrPostRow r = Get(m.Posts, k);
-                    // A row never claims to be fresher than it is: its own age plus the age of the feed that carried it.
-                    float seen = (float.IsNaN(Fin(p.IntelAge)) ? 0f : Math.Max(0f, p.IntelAge)) + (float.IsNaN(Fin(f.PostsAgeSeconds)) ? 0f : Math.Max(0f, f.PostsAgeSeconds));
                     StrItemId ticket = StrItemId.None;
                     for (int s = 0; s < m.SortieCount; s++) if (m.Sorties[s].PostId == p.Id) { ticket = m.Sorties[s].Id; break; }
 
@@ -456,8 +454,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                     Put(ref r.Site, p.Site ?? "");
                     Put(ref r.BountyText, "BOUNTY " + (p.Bounty >= 0 ? N(p.Bounty) : StrWords.Dash) + (p.BountyCapped ? StrWords.Dot + "CAPPED" : ""));
                     Put(ref r.TraitText, p.Trait ?? "");
-                    bool ageKnown = !float.IsNaN(Fin(p.IntelAge)) && p.IntelAge >= 0f;
-                    Put(ref r.SeenText, !ageKnown ? "SEEN " + StrWords.Dash : p.IntelAge >= 600f ? "SEEN 10+ MIN AGO" : "SEEN " + OldText(seen).Replace(" OLD", " AGO"));
+                    Put(ref r.SeenText, SeenWords(p.IntelAge));
                     Put(ref r.Short, "DOSSIER");
                     Put(ref r.Capped, p.BountyCapped);
                     Put(ref r.X, Fin(p.X));
@@ -465,6 +462,15 @@ namespace BoscaliSummer.Modules.Command.Domain
                     Put(ref r.Ticket, ticket);
                 }
                 Put(ref m.PostCount, kept);
+            }
+
+            // A row never claims to be fresher than it is: its own age plus the age of the feed that carried it.
+            private string SeenWords(float intelAge)
+            {
+                if (float.IsNaN(Fin(intelAge)) || intelAge < 0f) return "SEEN " + StrWords.Dash;
+                if (intelAge >= 600f) return "SEEN 10+ MIN AGO";
+                float seen = intelAge + (float.IsNaN(Fin(f.PostsAgeSeconds)) ? 0f : Math.Max(0f, f.PostsAgeSeconds));
+                return "SEEN " + OldText(seen).Replace(" OLD", " AGO");
             }
 
             // Bounty descending, then id: the richest office first, the same order on every build.
