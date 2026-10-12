@@ -129,9 +129,16 @@ namespace BoscaliSummer.Tests.Features.Weather
             var veil = cells; veil.Cells = 0f; veil.Veil = 1f;
             var ripples = cells; ripples.Cells = 0f; ripples.Ripples = 1f;
             var streaks = cells; streaks.Cells = 0f; streaks.Streaks = 1f;
-            float cellsValue = bodies.Slab2D(cells, 1200f, 4400f, 700f);
-            float streakValue = bodies.Slab2D(streaks, 1200f, 4400f, 700f);
-            TestAssert.That(cellsValue > 0.1f && Math.Abs(cellsValue - streakValue) < 1e-5f, "on a constant field cells and streaks agree");
+            // Round 5: cells and streaks are smooth value noise (no texture), so they read the volume only through the mesoscale fields (warp and patch, R and G): a volume that
+            // differs in B alone gives the same value, and the pattern is finite and a density in [0,1].
+            var otherB = MakeBodies(Uniform(200, 90, 10), 4);
+            foreach (SkyLayer layer in new[] { cells, streaks })
+                for (int i = 0; i < 24; i++)
+                {
+                    float v = bodies.Slab2D(layer, 1200f + i * 733f, 4400f, 700f + i * 419f);
+                    TestAssert.That(v >= 0f && v <= 1f && !float.IsNaN(v), "the thin-layer density is finite and in [0,1]: " + v);
+                    TestAssert.That(Math.Abs(v - otherB.Slab2D(layer, 1200f + i * 733f, 4400f, 700f + i * 419f)) < 1e-6f, "cells and streaks read no texture channel of their own (B changed, value did not)");
+                }
             // The rows break up with the vector noise of the bend (Task 13): this volume's G = 90 reads as a strong negative bend that nearly
             // switches the rows off, so the spread is measured on one whose G is neutral.
             var neutral = MakeBodies(Uniform(200, 128, 255), 4);
@@ -223,9 +230,13 @@ namespace BoscaliSummer.Tests.Features.Weather
                 }
             }
             TestAssert.That(worst < 0.12f, "bodies move smoothly through a rung ramp (worst step " + worst + ")");
-            float front = bodies.BodiesLadder(4100f + 5311f, 900f + 5311f, 2300f + 5311f, 3f, true, 0f);
-            float plain = bodies.BodiesLadder(4100f + 5311f, 900f + 5311f, 2300f + 5311f, 3f, false, 0f);
-            TestAssert.That(front != plain, "the front body is a larger lump than the deck's");
+            int differ = 0;
+            for (int point = 0; point < 12; point++) // a single point can saturate both to 0 or 1, so ask of a dozen
+            {
+                float fx = 4100f + 5311f + point * 1713f, fz = 2300f + 5311f + point * 911f;
+                if (bodies.BodiesLadder(fx, 900f + 5311f, fz, 3f, true, 0f) != bodies.BodiesLadder(fx, 900f + 5311f, fz, 3f, false, 0f)) differ++;
+            }
+            TestAssert.That(differ >= 6, "the front body is a larger lump than the deck's (" + differ + " of 12 points differ)");
             TestAssert.That(bodies.BodiesLadder(4100f, 900f, 2300f, 3f, true, 1f) == bodies.Bodies(4100f, 900f, 2300f, 5200f), "a sheet front is the fixed 5.2 km body");
             TestAssert.That(bodies.BodiesLadder(4100f, 900f, 2300f, 3.5f, true, 1f) == bodies.BodiesLadder(4100f, 900f, 2300f, 3f, true, 1f),
                 "and at every rung: both rungs of a sheet front are the same 5.2 km scale, so there is no second tap and no contrast boost");
