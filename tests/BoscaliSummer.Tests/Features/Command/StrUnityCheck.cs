@@ -81,7 +81,7 @@ public static class StrUnityCheck
 
             var report = new StringBuilder();
             report.AppendLine("PASS: the real STR Station Board rendered offline on kit v2 for " + fixturesRendered + " fixture x height builds; gate clean (" + PanelGate.CheckedTexts +
-                " texts checked: no overflow, no 11px-floor breach, no gutter entry, contrast >= 4.5, no part or text overlap, honest unknowns, every id resolves and every disabled control says why, fold at " + spec.foldLine + ", mockup spec, effort ink).");
+                " texts checked: no overflow, no 11px-floor breach, no gutter entry, contrast >= 4.5, no part or text overlap, honest unknowns, every glyph in the font, every id resolves and every disabled control says why, fold at " + spec.foldLine + ", mockup spec, effort ink).");
             report.AppendLine(captures + " captures at 480 wide: BOARD at 596, 896 and 1500 for all " + StrFixtures.Names.Length + " fixtures, SITREP and LOG at 896.");
             report.AppendLine("Content is bound after Finish() through the harness hub (the real builder over StrFixtures feeds) and advanced with Ticker.TickNow(), as the game does.");
             report.AppendLine("Renders (path | bytes | note):");
@@ -224,6 +224,7 @@ public static class StrUnityCheck
         PanelGate.TextCollisions(con.Page(page).Content, con.Root, where);
         PanelGate.SectionIcons(con.Root, where);
         PanelGate.Honesty(con.Root, where, where.StartsWith("unknown@"));
+        PanelGate.Glyphs(con.Root, where);
         Reasons(b, where);
     }
 

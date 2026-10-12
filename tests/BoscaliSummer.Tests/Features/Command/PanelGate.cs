@@ -61,6 +61,24 @@ public static class PanelGate
         }
     }
 
+    /// <summary>
+    /// Every character of every active text exists in the font asset that draws it (or its fallbacks). The editor falls back to system fonts the game does
+    /// not have, so a glyph the render shows can still be a box in the game: this is the check that catches it (the check mark and the level bar
+    /// were the first). The triangle up and the cross are the two the kit itself prints in game (AvStates.Glyph) and are allowed.
+    /// </summary>
+    public static void Glyphs(RectTransform scope, string where)
+    {
+        foreach (TMP_Text t in scope.GetComponentsInChildren<TMP_Text>(false))
+        {
+            if (!t.isActiveAndEnabled || t.text.Length == 0 || !CanvasOn(t) || t.font == null) continue;
+            foreach (char c in t.text)
+            {
+                if (c <= ' ' || c == '\u00a0') continue;
+                if (c != '\u25B2' && c != '\u2715' && !t.font.HasCharacter(c, false, false)) { Fail(where, "glyph U+" + ((int)c).ToString("X4") + " '" + c + "' is not in font " + t.font.name + " ('" + t.text + "')"); break; }
+            }
+        }
+    }
+
     /// <summary>No two active top-level parts of a page may intersect.</summary>
     public static void PartOverlap(RectTransform content, string where)
     {

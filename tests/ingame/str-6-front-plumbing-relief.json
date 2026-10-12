@@ -73,6 +73,11 @@
       "store": "a1"
     },
     {
+      "op": "capture",
+      "name": "str-board-proposals",
+      "hide_ui": false
+    },
+    {
       "op": "call",
       "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Press",
       "args": {
@@ -91,6 +96,11 @@
       "store": "a1s"
     },
     {
+      "op": "capture",
+      "name": "str-sitrep",
+      "hide_ui": false
+    },
+    {
       "op": "call",
       "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Press",
       "args": {
@@ -107,6 +117,11 @@
       "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
       "args": {},
       "store": "a1l"
+    },
+    {
+      "op": "capture",
+      "name": "str-log",
+      "hide_ui": false
     },
     {
       "op": "call",
@@ -174,6 +189,11 @@
       "method": "BoscaliSummer.Modules.Command.Runtime.StrAutomation.Read",
       "args": {},
       "store": "a4"
+    },
+    {
+      "op": "capture",
+      "name": "str-board-operation",
+      "hide_ui": false
     },
     {
       "op": "call",
