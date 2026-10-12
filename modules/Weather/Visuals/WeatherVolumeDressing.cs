@@ -81,7 +81,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private GameObject root;
         private MeshRenderer renderer;
         private WeatherField activeField;
-        private float cloudShift;
         private float mapHalf, farHalf;
         private int mapGenerating;
         private int mapRevision;
@@ -143,7 +142,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         }
 
         internal void Update(LevelInfo level, WeatherField field, Camera camera,
-            float currentCloudHeight, float missionTime, bool wantHalfResolution, bool temporalUpdate,
+            float missionTime, bool wantHalfResolution, bool temporalUpdate,
             float flash = 0f, Vector4 flashA = default, Vector4 flashB = default, bool rainVisualsEnabled = true)
         {
             if (Application.isBatchMode || level == null || field == null || !field.IsBuilt || camera == null)
@@ -154,7 +153,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             }
             if (!Prepare()) { Hide(failed ? "shader or noise unavailable" : "preparing"); return; }
             activeField = field;
-            cloudShift = currentCloudHeight - field.Regional().CloudBase;
             float half = Mathf.Max(80000f, Mathf.Max(field.HalfX, field.HalfZ) + 45000f);
             if (half != mapHalf)
             {
@@ -249,7 +247,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 CameraForward = camera.transform.forward,
                 FieldOfView = camera.fieldOfView,
                 PixelHeight = halfResolution && pass.Height > 0 ? pass.Height : camera.pixelHeight,
-                CloudShift = cloudShift,
                 Bottom = mapBlend < 1f ? Mathf.Min(volumeBottom, previousBottom) : volumeBottom,
                 Top = mapBlend < 1f ? Mathf.Max(volumeTop, previousTop) : volumeTop,
                 HorizonCover = Mathf.Lerp(previousHorizonCover, horizonCover, mapBlend),
@@ -280,7 +277,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             {
                 HideReason = null;
                 ReplaceSkyClouds(level);
-                shadows.Update(level, field, currentCloudHeight, camera);
+                shadows.Update(level, field, camera);
             }
         }
 
@@ -339,8 +336,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 if (Mathf.Abs(x) > activeField.HalfX - 1000f || Mathf.Abs(z) > activeField.HalfZ - 1000f) continue;
                 WeatherPoint weather = SampleDisplayedWeather(x, z);
                 if (weather.RainRate < minRain) continue;
-                float bottom = weather.CloudBase + cloudShift;
-                float top = weather.LowTop + cloudShift;
+                float bottom = weather.CloudBase;
+                float top = weather.LowTop;
                 if (top <= bottom + 100f) continue;
                 for (int h = 1; h <= 3; h++)
                 {
@@ -364,7 +361,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (data == null || data.Length != NoiseTexels * 4) return 0f;
             var bodies = new CloudBodies(data, NoiseSize, displayedTape, displayedFrame, displayedHeading,
                 uniforms.FogShown, activeField, uniforms.HeroStrengths, true, displayedWeather);
-            return Mathf.Clamp01(bodies.Density(SampleDisplayedWeather(x, z), x, y, z, cloudShift));
+            return Mathf.Clamp01(bodies.Density(SampleDisplayedWeather(x, z), x, y, z));
         }
 
         private float DisplayedBlend => !blendUnavailable && near.BlendReady && far.BlendReady

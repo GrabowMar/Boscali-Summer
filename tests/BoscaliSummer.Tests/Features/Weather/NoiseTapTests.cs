@@ -73,7 +73,7 @@ namespace BoscaliSummer.Tests.Features.Weather
             for (int i = 0; i < 80; i++)
             {
                 float x = i * 931f - 40000f, z = 25000f - i * 617f, y = 1500f + i * 11f;
-                TestAssert.That(plain.Density(Cloudy(), x, y, z, 0f) == keyed.Density(Cloudy(), x, y, z, 0f), "the identity noise leaves every density alone");
+                TestAssert.That(plain.Density(Cloudy(), x, y, z) == keyed.Density(Cloudy(), x, y, z), "the identity noise leaves every density alone");
             }
         }
 
@@ -88,8 +88,8 @@ namespace BoscaliSummer.Tests.Features.Weather
             for (int i = 0; i < 400; i++)
             {
                 float x = (i % 20) * 1900f - 19000f, z = (i / 20) * 1700f - 17000f, y = 1700f;
-                float da = a.Density(Cloudy(), x, y, z, 0f), db = b.Density(Cloudy(), x, y, z, 0f);
-                TestAssert.That(da == same.Density(Cloudy(), x, y, z, 0f), "the same layout seed gives the same clouds");
+                float da = a.Density(Cloudy(), x, y, z), db = b.Density(Cloudy(), x, y, z);
+                TestAssert.That(da == same.Density(Cloudy(), x, y, z), "the same layout seed gives the same clouds");
                 if (Math.Abs(da - db) > 0.05f) differs++;
                 if (da > 0.05f) cloudyA++;
                 if (db > 0.05f) cloudyB++;

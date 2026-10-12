@@ -542,7 +542,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             {
                 if (flightClouds == null) flightClouds = new WeatherVolumeDressing(logger);
                 Camera worldCamera = SceneSingleton<CameraStateManager>.i?.mainCamera;
-                flightClouds.Update(LevelInfo.i, Field, worldCamera, currentCloudHeight,
+                flightClouds.Update(LevelInfo.i, Field, worldCamera,
                     weatherTime, settings.CloudHalfResolution.Value,
                     settings.CloudTemporalUpdate.Value, lightning.FlashNow, lightning.FlashA, lightning.FlashB,
                     RainVisualsEnabled && (!forcedRainIntensity.HasValue || forcedRainIntensity.Value > .001f));
@@ -632,15 +632,12 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 airPoint.Temperature = 15f;
                 airPoint.Dewpoint = 6f;
             }
-            float cloudShift = Field != null ? currentCloudHeight - field.Regional().CloudBase : 0f;
             // Under a deck the air goes dim and grey; above it, the light is back.
-            bool belowDeck = (float)cloudPosition.y < localWeather.CloudTop + cloudShift;
+            bool belowDeck = (float)cloudPosition.y < localWeather.CloudTop;
             float shadeTarget = Field != null && belowDeck ? Mathf.Clamp01((localWeather.Cover - 0.2f) / 0.8f) : 0f;
             cloudShade = Mathf.MoveTowards(cloudShade, shadeTarget, Time.deltaTime * 0.1f);
             bool underwaterView = currentCam.transform.position.y < Datum.LocalSeaY;
             bool hazeEnabled = settings == null || settings.RainAtmosphereEnabled.Value;
-            airPoint.CloudBase += cloudShift;
-            airPoint.CloudTop += cloudShift;
             FlightWeatherAirMass airMass = FlightWeatherAirMass.Evaluate(airPoint,
                 (float)cloudPosition.y, viewDensity, forcedRainIntensity);
             viewTemperature = airPoint.Temperature - Mathf.Max(0f, (float)cloudPosition.y) * 0.0065f;

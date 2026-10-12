@@ -66,12 +66,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             WeatherMath.HeadingToVector(prevailingHeading, out windX, out windZ);
         }
 
-        /// <summary>Cloud density at a global position; <paramref name="shift"/> is the
-        /// renderer's cloud-height shift, <paramref name="p"/> the weather at that column.</summary>
-        public float Density(WeatherPoint p, float x, float y, float z, float shift)
-            => Density(p, x, y, z, shift, out _);
+        /// <summary>Cloud density at a global position; <paramref name="p"/> is the weather at that column.</summary>
+        public float Density(WeatherPoint p, float x, float y, float z)
+            => Density(p, x, y, z, out _);
 
-        public float Density(WeatherPoint p, float x, float y, float z, float shift, out float localLightingHeight)
+        public float Density(WeatherPoint p, float x, float y, float z, out float localLightingHeight)
         {
             localLightingHeight = 0f;
             // Every tap of the low volume reads the noise where this tape's rotation and offset put it (spec 6): nx, nz are noise-space.
@@ -98,10 +97,10 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             float layer = p.BackgroundCover, cell = p.CellShape;
             if (Math.Max(layer, cell) < 0.025f) return background;
             float smooth = Scalar.Clamp01(sky.DeckSmooth);
-            float baseY = p.CloudBase + shift;
+            float baseY = p.CloudBase;
             // CloudMaps stores a conservative top including the low deck's independent depth.
             float lowTop = p.LowTop > 0f ? p.LowTop : p.CloudTop;
-            float topY = Math.Max(baseY + Math.Max(280f, Math.Max(genus.PuffDepth, sky.DeckDepth) + genus.BaseWobble * 0.5f), lowTop + shift);
+            float topY = Math.Max(baseY + Math.Max(280f, Math.Max(genus.PuffDepth, sky.DeckDepth) + genus.BaseWobble * 0.5f), lowTop);
             float columnTop = WeatherMath.Lerp(Math.Min(topY, CloudShape.TowerCap(baseY, genus, sky.DeckDepth)), topY, genus.TowerBlend);
             columnTop = Math.Max(columnTop, baseY + 280f);
             float lowest = baseY;

@@ -21,7 +21,7 @@ Shader "Boscali/FlightCloud"
         float3 _CloudSunColor, _CloudAmbientColor, _CloudGroundColor, _CloudFogColor;
         float2 _CloudWindOffset, _CloudAltitudeBounds, _CloudHeroBounds;
         float _CloudSteps, _CloudFarSteps, _CloudStorm, _WeatherMapSpan, _WeatherFarSpan;
-        float _CloudBase, _CloudHeightShift;
+        float _CloudBase;
         float _CloudAirExtinction;
         // Lightning flash envelope, 0..1 (LightningDirector.FlashNow).
         float _CloudFlash;
@@ -608,7 +608,7 @@ Shader "Boscali/FlightCloud"
             if (_WeatherEnvelopeOn < 0.5 || min(uv.x, uv.y) < 0.05 || max(uv.x, uv.y) > 0.95) return false;
             float4 e = tex2Dlod(_WeatherEnvelopeTex, float4(uv, 0, 0));
             if (e.r <= 0.0) return true;
-            return g.y > e.g * 16000.0 + _CloudHeightShift + 800.0 || g.y < e.b * 16000.0 + _CloudHeightShift - 800.0;
+            return g.y > e.g * 16000.0 + 800.0 || g.y < e.b * 16000.0 - 800.0;
         }
 
         // True near a set-piece this ray passes (the envelope does not know about them).
@@ -732,8 +732,8 @@ Shader "Boscali/FlightCloud"
             float puffLod = max(coarse, LodFor(gFoot, max(1200.0, LobeMetres(lobe.x) * 4.0)));
             // The far map cannot resolve erosion detail; keep its envelope smooth.
             coarse = max(coarse, farShare);
-            float baseY = profile.b * CLOUD_BASE_RANGE + _CloudHeightShift;
-            float topY = max(baseY + 280.0, weather.a * 16000.0 + _CloudHeightShift);
+            float baseY = profile.b * CLOUD_BASE_RANGE;
+            float topY = max(baseY + 280.0, weather.a * 16000.0);
             float towerBlend = smoothstep(0.18, 0.60, row.anvil);
             float capTop = baseY + max(280.0, max(row.puffDepth, row.deckDepth)) * 1.15;
             float columnTop = max(baseY + 280.0, lerp(min(topY, capTop), topY, towerBlend));
@@ -1328,7 +1328,7 @@ Shader "Boscali/FlightCloud"
                 float4 weather, profile;
                 float farShare;
                 if (!SampleWeather(p.xz, weather, profile, farShare) || profile.a <= 0.02) continue;
-                float baseY = profile.b * CLOUD_BASE_RANGE + _CloudHeightShift;
+                float baseY = profile.b * CLOUD_BASE_RANGE;
                 if (!ClipRainCurtainHeight(ro.y, ray.y, baseY + 40.0, s0, s1)) continue;
                 t = lerp(s0, s1, clamp(jitter, 0.1, 0.9));
                 p = ro + ray * t;

@@ -77,39 +77,38 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
         var shield = new byte[] { 0, 0, 86, 0 };   // base byte 86 is 1350 m on the 4096 m scale; the frontal shield's channels (R, G) are unused
         Color[] lower = Group("shallow-cluster", field, solid, 4, shallow, shield, shallow, shield, 1, null,
             new[] { new Vector3(0, 2100, 0), new Vector3(0, 5000, 0),
-                new Vector3(0, 13000, 0), new Vector3(0, 500, 0) }, 0f, Vector3.zero, true);
+                new Vector3(0, 13000, 0), new Vector3(0, 500, 0) }, Vector3.zero, true);
         Require(lower[0].r > .2f && lower[1].r < .001f,
             "Actual GPU retains the shallow body with clear air above it");
         Require(lower[0].g > .2f && lower[0].g < .5f,
             "Actual GPU heights are local to the shallow body, not the aggregate ceiling");
         var deep = new byte[] { 0, 0, 220, 142 };
         var wet = new byte[] { 0, 0, 86, 128 };
-        Color[] upper = Group("deep-scud-shifted", field, solid, 4, deep, wet, deep, wet, 1, null,
+        Color[] upper = Group("deep-scud-offset", field, solid, 4, deep, wet, deep, wet, 1, null,
             new[] { new Vector3(1000, 2700, -2000), new Vector3(1000, 6600, -2000),
-                new Vector3(1000, 1500, -2000), new Vector3(1000, 14000, -2000) }, 600f,
+                new Vector3(1000, 1500, -2000), new Vector3(1000, 14000, -2000) },
             new Vector3(36000, 8000, -19000), true);
         Require(upper[0].r > .1f && upper[1].r > .1f && upper[2].r > .1f && upper[3].r == 0f,
-            "Actual GPU deep column/scud and floating-origin/terrain height shift remain coherent");
+            "Actual GPU deep column/scud and floating-origin/terrain offset remain coherent");
         var far = new byte[] { 0, 0, 220, 170 };
         var farProfile = new byte[] { 0, 0, 125, 0 };
         Group("near-far-height-blend", field, solid, 4, shallow, shield, far, farProfile, 1, null,
             new[] { new Vector3(46000, 4500, 0), new Vector3(47000, 4500, 0),
-                new Vector3(48000, 4500, 0), new Vector3(-48000, 8500, 0) }, 0f, Vector3.zero, true);
+                new Vector3(48000, 4500, 0), new Vector3(-48000, 8500, 0) }, Vector3.zero, true);
         Group("far-only-LOD-diagnostic", field, solid, 4, shallow, shield, far, farProfile, 1, null,
-            new[] { new Vector3(51000, 4500, 0), new Vector3(51000, 11000, 0) }, 0f, Vector3.zero,
+            new[] { new Vector3(51000, 4500, 0), new Vector3(51000, 11000, 0) }, Vector3.zero,
             false, compareCpu: false);
 
-        // Hero geometry is at absolute seeded heights. Native height shift moves
-        // the ordinary volume only; a low eye cloud must still fit the ray bounds.
+        // Hero geometry is at absolute seeded heights; a low eye cloud must still fit the ray bounds.
         field.Build(new WeatherKey(73, 0f, false, (byte)WeatherRegimeType.Clear,
             sets: Superstructures.StormEyeSet, hasAnchor: true, anchorX: 0f, anchorZ: 0f),
             600f, 40000f, 40000f);
         var empty = new byte[4];
-        Color[] hero = Group("hero-floor-height-shift", field, solid, 4, empty, empty, empty, empty, 1, null,
-            new[] { new Vector3(0f, 1100f, 0f) }, 4000f, new Vector3(8000f, 2000f, -6000f),
+        Color[] hero = Group("hero-floor", field, solid, 4, empty, empty, empty, empty, 1, null,
+            new[] { new Vector3(0f, 1100f, 0f) }, new Vector3(8000f, 2000f, -6000f),
             false, compareCpu: false, heroes: true);
         Require(hero[0].r > .3f && Math.Abs(hero[0].g - 600f / 1300f) < .02f,
-            "Actual GPU storm-eye floor remains at its absolute local height under native cloud shift");
+            "Actual GPU storm-eye floor remains at its absolute local height");
 
         byte[] noise = CloudNoise3D.Generate(64, 47);
         foreach (WeatherRegimeType state in new[] { WeatherRegimeType.Clear, WeatherRegimeType.Scattered, WeatherRegimeType.Storm })
@@ -127,7 +126,7 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
                 points.Add(new Vector3(x, Math.Max(p.CloudTop, p.LowTop) + 2000f, z));
             }
             Group("generated-" + state, field, noise, 64, maps.Near, maps.NearProfiles, maps.Far,
-                maps.FarProfiles, CloudMaps.NearSize, maps.Envelope, points.ToArray(), 0f, Vector3.zero, false);
+                maps.FarProfiles, CloudMaps.NearSize, maps.Envelope, points.ToArray(), Vector3.zero, false);
         }
 
         // One low genus per sky: three pinned library skies (a humilis, a cumulonimbus, a stratus) read their lobe, depth,
@@ -139,7 +138,7 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
             field.Build(pinned, 600f, 40000f, 40000f);
             CloudMaps pinnedMaps = CloudMaps.Build(pinned, 600f, 40000f, 40000f, 12f, 50000f, 220000f);
             Group("pinned-sky-" + (pin + 1), field, noise, 64, pinnedMaps.Near, pinnedMaps.NearProfiles, pinnedMaps.Far,
-                pinnedMaps.FarProfiles, CloudMaps.NearSize, pinnedMaps.Envelope, DeckPoints(field, 15000, 15000), 0f, Vector3.zero, false);
+                pinnedMaps.FarProfiles, CloudMaps.NearSize, pinnedMaps.Envelope, DeckPoints(field, 15000, 15000), Vector3.zero, false);
         }
         TapeFixture ramp = RampFixture();
         var rampKey = new WeatherKey(73, 0f, false, (byte)WeatherRegimeType.Scattered);
@@ -147,7 +146,7 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
         field.UseFixtureTape(ramp.Sampler, ramp.Frame);
         CloudMaps rampMaps = CloudMaps.Build(rampKey, 600f, 40000f, 40000f, 12f, 50000f, 220000f, ramp);
         Group("tape-ramp-lobes", field, noise, 64, rampMaps.Near, rampMaps.NearProfiles, rampMaps.Far,
-            rampMaps.FarProfiles, CloudMaps.NearSize, rampMaps.Envelope, DeckPoints(field, 1500, 15000), 0f, Vector3.zero, false,
+            rampMaps.FarProfiles, CloudMaps.NearSize, rampMaps.Envelope, DeckPoints(field, 1500, 15000), Vector3.zero, false,
             tolerance: .04f, medianLimit: .002f); // a rung blend multiplies the noise taps' 8-bit filter error by up to 1.41, and the remaps by 2.5; the median guard catches what the slack hides
         RainOptics();
         var geometryFailures = new List<string>();
@@ -169,7 +168,6 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
             var material = new Material(Resources.Load<Shader>("CloudDensityProbe")); owned.Add(material);
             material.SetFloat("_ProbeRainMode", 1f);
             material.SetVector("_CloudWorldOffset", Vector4.zero);
-            material.SetFloat("_CloudHeightShift", 0f);
             material.SetVector("_CloudAltitudeBounds", new Vector4(0f, 16000f, 0f, 0f));
             CloudVolumeUniforms.ApplySpans(material, 16000f, 220000f);
             material.SetFloat("_CloudAirExtinction", .00002f);
@@ -271,7 +269,6 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
             material.SetVector("_CloudHeroBounds", new Vector4(300f, 16500f, 0f, 0f));
             material.SetVector("_CloudEye", Vector4.zero);
             material.SetVector("_CloudWindDir", new Vector2(1f, 0f));
-            material.SetFloat("_CloudHeightShift", 0f);
             material.SetFloat("_WeatherEnvelopeOn", 0f);
             material.SetFloat("_CloudCheckerOn", 0f);
             material.SetFloat("_CloudSteps", 112f); material.SetFloat("_CloudFarSteps", 40f);
@@ -872,7 +869,7 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
 
     private Color[] Group(string name, WeatherField field, byte[] noiseBytes, int noiseSize,
         byte[] near, byte[] nearProfile, byte[] far, byte[] farProfile, int mapSize, byte[] envelope,
-        Vector3[] positions, float shift, Vector3 offset, bool strictHeight, bool compareCpu = true, bool heroes = false,
+        Vector3[] positions, Vector3 offset, bool strictHeight, bool compareCpu = true, bool heroes = false,
         float tolerance = .015f, float medianLimit = -1f)
     {
         if (positions.Length > 256) throw new Exception("Probe batch exceeds bounded256");
@@ -887,7 +884,7 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
             { filterMode = FilterMode.Trilinear, wrapMode = TextureWrapMode.Repeat };
             owned.Add(noise); noise.SetPixelData(noiseBytes, 0); noise.Apply(false, true);
             var uniforms = new CloudVolumeUniforms(); uniforms.Settle(field);
-            var frame = new CloudFrame { WorldOffset = offset, CloudShift = shift, Bottom = 0f, Top = 16000f,
+            var frame = new CloudFrame { WorldOffset = offset, Bottom = 0f, Top = 16000f,
                 FieldOfView = 60f, PixelHeight = 1080, SunDirection = Vector3.up };
             uniforms.Apply(material, field, frame, noise);
             CloudVolumeUniforms.ApplySpans(material, 50000f, 220000f);
@@ -939,7 +936,7 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
             for (int i = 0; i < positions.Length; i++)
             {
                 Vector3 p = positions[i];
-                float expected = cpu.Density(default, p.x, p.y, p.z, shift, out float height);
+                float expected = cpu.Density(default, p.x, p.y, p.z, out float height);
                 float delta = Mathf.Abs(expected - gpu[i].r);
                 float hd = Mathf.Abs(height - gpu[i].g);
                 maxDelta = Mathf.Max(maxDelta, delta); maxHeight = Mathf.Max(maxHeight, hd);
@@ -957,7 +954,7 @@ public sealed class WeatherCloudDensityCheck : MonoBehaviour
                     Vector4 bounds = material.GetVector("_CloudHeroBounds");
                     Vector4 ordinary = material.GetVector("_CloudAltitudeBounds");
                     Require(p.y >= Math.Min(bounds.x, ordinary.x) && p.y <= Math.Max(bounds.y, ordinary.y),
-                        "Actual positive hero density is enclosed by combined ray bounds after native height shift");
+                        "Actual positive hero density is enclosed by combined ray bounds");
                     log.AppendLine("hero-bound y=" + F(p.y) + " ordinary=" + F(ordinary.x) + ".." + F(ordinary.y) +
                         " absoluteHero=" + F(bounds.x) + ".." + F(bounds.y));
                 }

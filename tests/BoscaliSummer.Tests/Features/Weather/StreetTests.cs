@@ -50,9 +50,9 @@ namespace BoscaliSummer.Tests.Features.Weather
             for (int i = 0; i < 400; i++)
             {
                 float x = (i % 20) * 1300f - 13000f, z = (i / 20) * 1100f - 11000f, y = 1650f;
-                float v = bodies.Density(weather, x, y, z, 0f);
-                along += Math.Abs(bodies.Density(weather, x + ux * d, y, z + uz * d, 0f) - v);
-                across += Math.Abs(bodies.Density(weather, x + wx * d, y, z + wz * d, 0f) - v);
+                float v = bodies.Density(weather, x, y, z);
+                along += Math.Abs(bodies.Density(weather, x + ux * d, y, z + uz * d) - v);
+                across += Math.Abs(bodies.Density(weather, x + wx * d, y, z + wz * d) - v);
             }
             return (float)(across / Math.Max(1e-6, along));
         }

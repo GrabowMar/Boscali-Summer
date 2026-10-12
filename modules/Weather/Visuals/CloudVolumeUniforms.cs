@@ -11,8 +11,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         public Vector3 CameraPosition, CameraForward;
         public float FieldOfView;
         public int PixelHeight;
-        public float CloudShift;
-        /// <summary>Altitude range of the weather cloud (before set-pieces), shift not applied.</summary>
+        /// <summary>Altitude range of the weather cloud (before set-pieces), </summary>
         public float Bottom, Top;
         public float HorizonCover;
         public Vector3 SunDirection;
@@ -35,7 +34,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static readonly int MapSpanId = Shader.PropertyToID("_WeatherMapSpan");
         private static readonly int FarSpanId = Shader.PropertyToID("_WeatherFarSpan");
         private static readonly int BaseId = Shader.PropertyToID("_CloudBase");
-        private static readonly int ShiftId = Shader.PropertyToID("_CloudHeightShift");
         private static readonly int OffsetId = Shader.PropertyToID("_CloudWorldOffset");
         private static readonly int ForwardId = Shader.PropertyToID("_CloudCameraForward");
         private static readonly int CameraPosId = Shader.PropertyToID("_CloudCameraPos");
@@ -186,8 +184,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         {
             SkyParams sky = field.Params;
             material.SetTexture(NoiseId, noise);
-            material.SetFloat(BaseId, sky.CloudBase + frame.CloudShift);
-            material.SetFloat(ShiftId, frame.CloudShift);
+            material.SetFloat(BaseId, sky.CloudBase);
             material.SetVector(OffsetId, frame.WorldOffset);
             material.SetVector(ForwardId, frame.CameraForward);
 
@@ -207,7 +204,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 heroB[i] = new Vector4(s.Size, s.Top, heroShown[i], s.Extent);
                 if (s.Kind == SuperstructureKind.StormEye) eye = new Vector4(s.X, s.Z, s.Size, heroShown[i]);
                 // Set-pieces use absolute seeded heights in both CPU and shader bodies.
-                // Native cloud-height changes shift the ordinary weather volume only.
                 heroBottom = Mathf.Min(heroBottom, 300f);
                 heroTop = Mathf.Max(heroTop, s.Top + 1500f);
             }
@@ -219,7 +215,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             material.SetVectorArray(HeroBId, heroB);
             material.SetFloat(HeroCountId, heroes);
             material.SetVector(EyeId, eye);
-            material.SetVector(BoundsId, new Vector2(frame.Bottom + frame.CloudShift, frame.Top + frame.CloudShift));
+            material.SetVector(BoundsId, new Vector2(frame.Bottom, frame.Top));
             material.SetVector(HeroBoundsId, heroes > 0 ? new Vector2(heroBottom, heroTop) : Vector2.zero);
             // Static weather: the detail texture does not crawl either.
             material.SetVector(WindOffsetId, Vector2.zero);
@@ -249,7 +245,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             // INTERIM(slice 4): the deck continues the far ring's cover with the sky's baked HorizonCover and HorizonDepth columns;
             // reading the tape alone, with the march hand-off, comes with the horizon-deck work of slice 4.
             material.SetFloat(HorizonCoverId, Mathf.Clamp01(Mathf.Max(frame.HorizonCover, sky.HorizonCover)));
-            material.SetFloat(HorizonDeckId, sky.CloudBase + frame.CloudShift + sky.HorizonDepth * 0.4f);
+            material.SetFloat(HorizonDeckId, sky.CloudBase + sky.HorizonDepth * 0.4f);
             material.SetFloat(HorizonDepthId, sky.HorizonDepth);
 
             material.SetFloat(PixelAngleId,

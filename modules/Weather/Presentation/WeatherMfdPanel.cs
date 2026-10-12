@@ -110,9 +110,8 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             if (built) regime = RegimeSnapshot.FromType(localField.Timeline.To);
             // A pinned sky shows its own name (spec 8.4); the class code and briefing stay the regime's.
             string skyName = built && localField.Key.SkyPin < SkyLibrary.Count ? SkyLibrary.Get(localField.Key.SkyPin).Name : regime.Name;
-            float cloudShift = built ? weather.CurrentCloudHeight - localField.Regional().CloudBase : 0f;
-            float deck = built ? localPoint.CloudBase + cloudShift : weather.CurrentCloudHeight;
-            float cloudTop = built ? localPoint.CloudTop + cloudShift : deck + 1500f;
+            float deck = built ? localPoint.CloudBase : weather.CurrentCloudHeight;
+            float cloudTop = built ? localPoint.CloudTop : deck + 1500f;
             cloudTop = Mathf.Max(deck + 500f, cloudTop);
 
             Domain.WeatherForecast.FormatWind(weather.CurrentWindVelocity.x, weather.CurrentWindVelocity.z,

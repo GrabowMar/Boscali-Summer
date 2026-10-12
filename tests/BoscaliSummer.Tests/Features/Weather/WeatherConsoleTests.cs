@@ -72,9 +72,9 @@ namespace BoscaliSummer.Tests.Features.Weather
             var bodies = new CloudBodies(CloudNoise3D.Generate(64, 47), 64, field.Params, field.PrevailingHeading, 0f, field);
             Superstructure eye = Find(field, Superstructures.StormEyeSet);
             foreach (float y in new[] { 2500f, 4100f, 7000f, 10000f })
-                TestAssert.That(bodies.Density(field.Sample(0f, 0f), 0f, y, 0f, 0f) < 0.001f, "upper eye stays clear through low and middle decks");
+                TestAssert.That(bodies.Density(field.Sample(0f, 0f), 0f, y, 0f) < 0.001f, "upper eye stays clear through low and middle decks");
             float wallX = eye.Size + eye.Extent * 0.3f;
-            TestAssert.That(bodies.Density(field.Sample(wallX, 0f), wallX, 5000f, 0f, 0f) > 0.1f, "eyewall remains opaque");
+            TestAssert.That(bodies.Density(field.Sample(wallX, 0f), wallX, 5000f, 0f) > 0.1f, "eyewall remains opaque");
             WindowTablesMatchTheWorld(field);
             Console.WriteLine("Weather console: 448 state/set combinations, 6 complete scenarios, forecast, placement, reroll and eye checks passed.");
         }

@@ -25,10 +25,10 @@ namespace BoscaliSummer.Tests.Features.Weather
                 Billow = 0.75f, Anvil = 0.9f, DeckSmooth = 0.15f };
             var bodies = new CloudBodies(noise, 4, sky);
             var p = new WeatherPoint { CloudBase = 1400f, LowTop = 3500f, CloudTop = 10000f, CellShape = 0.8f };
-            float between = bodies.Density(p, 0f, 5000f, 0f, 0f);
+            float between = bodies.Density(p, 0f, 5000f, 0f);
             TestAssert.That(between < 0.001f,
                 $"A shallow ordinary cluster must not borrow the aggregate ceiling: {between}");
-            TestAssert.That(bodies.Density(p, 0f, 2100f, 0f, 0f) > 0.2f,
+            TestAssert.That(bodies.Density(p, 0f, 2100f, 0f) > 0.2f,
                 "Ceiling separation retains the shallow cluster's dense body");
         }
 
@@ -119,13 +119,13 @@ namespace BoscaliSummer.Tests.Features.Weather
                 Dome = 1.35f, Anvil = 0.9f, BaseSharp = 65f, BaseWobble = 80f };
             var bodies = new CloudBodies(noise, 4, sky);
             var p = new WeatherPoint { CloudBase = 1400f, LowTop = 3500f, CloudTop = 10000f, CellShape = 0.8f };
-            TestAssert.That(bodies.Density(p, 0f, 2100f, 0f, 0f, out float lower) > 0.2f && lower > 0.2f && lower < 0.5f,
+            TestAssert.That(bodies.Density(p, 0f, 2100f, 0f, out float lower) > 0.2f && lower > 0.2f && lower < 0.5f,
                 "A shallow cluster lights in its own height interval");
-            TestAssert.That(bodies.Density(default, 0f, 5000f, 0f, 0f, out float empty) == 0f && empty == 0f,
+            TestAssert.That(bodies.Density(default, 0f, 5000f, 0f, out float empty) == 0f && empty == 0f,
                 "An empty density sample clears the lighting height");
             var rainy = new WeatherPoint { CloudBase = 2200f, LowTop = 4200f, CloudTop = 4200f,
                 BackgroundCover = 0.7f, RainRate = 40f };
-            TestAssert.That(bodies.Density(rainy, 0f, 1700f, 0f, 0f, out float scud) > 0.2f &&
+            TestAssert.That(bodies.Density(rainy, 0f, 1700f, 0f, out float scud) > 0.2f &&
                 Math.Abs(scud - 2f / 7f) < 0.001f, "Under-base scud uses its own 700 m height band");
         }
 

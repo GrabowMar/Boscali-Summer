@@ -443,7 +443,7 @@ public sealed class CloudBench : MonoBehaviour
                     camera.transform.position = s.Camera + s.Travel * Mathf.Clamp01(index / (float)(frames - 1));
                     camera.transform.rotation = moving || staticView ? start : Quaternion.AngleAxis(index * 0.5f, Vector3.up) * start;
                     Vector3 position = camera.transform.position;
-                    float density = bodies.Density(SampleDisplayed(position.x, position.z), position.x, position.y, position.z, 0f);
+                    float density = bodies.Density(SampleDisplayed(position.x, position.z), position.x, position.y, position.z);
                     inCloud = Mathf.MoveTowards(inCloud, Mathf.Clamp01((density - 0.02f) * 5f), 1.5f / 30f);
                     uniforms.ApplyView(camera, camera.transform.position);
                     Matrix4x4 box = Matrix4x4.TRS(camera.transform.position, Quaternion.identity, Vector3.one * 1000f);
@@ -531,7 +531,7 @@ public sealed class CloudBench : MonoBehaviour
                 {
                     float altitude = lower + (s + 0.5f) * dy;
                     float t = (altitude - py) / direction.y;
-                    depth += body.Density(p, px + direction.x * t, altitude, pz + direction.z * t, 0f) * rayStep * 0.0021f;
+                    depth += body.Density(p, px + direction.x * t, altitude, pz + direction.z * t) * rayStep * 0.0021f;
                 }
                 sink += depth;
             }
