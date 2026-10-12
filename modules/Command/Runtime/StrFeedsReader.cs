@@ -163,7 +163,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     if (into.OfficerCount < hub.OfficerBuffer.Length)
                         hub.OfficerBuffer[into.OfficerCount++] = new StrOfficerIn
                         {
-                            Id = row.Id, Tier = row.Tier, Own = row.IsFriendly, Alert = row.Alert, Confirmed = true, Name = row.Name, Rank = row.Rank, Role = row.Role,
+                            Id = row.Id, ParentId = row.ParentId, Tier = row.Tier, Own = row.IsFriendly, Alert = row.Alert, Confirmed = true, Name = row.Name, Rank = row.Rank, Role = row.Role,
                             Site = row.Site, Trait = row.Bonus, IntelAge = row.IntelAge, X = row.X, Z = row.Z, Portrait = row.Portrait,
                         };
                     if (row.IsFriendly || into.PostCount >= hub.PostBuffer.Length) continue;

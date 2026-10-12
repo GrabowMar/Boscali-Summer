@@ -68,6 +68,15 @@ namespace BoscaliSummer.Modules.Command.Domain
                 return kept;
             }
 
+            // The office in one short line for a chart card: the theater, a component by its name ("AIR COMPONENT"), a base by where it stands.
+            private static string Office(int tier, string role, string site)
+            {
+                if (tier == 0) return "THEATER";
+                if (tier == 2) return site == StrWords.Dash ? "BASE" : site;
+                string name = role.Replace(" CMDR", "").Replace(" COMMANDER", "");
+                return name.Length == 0 ? "COMPONENT" : name;
+            }
+
             private static int Tier(in StrOfficerIn o) => Math.Max(0, Math.Min(2, o.Tier));
 
             private static bool OfficerBefore(in StrOfficerIn a, in StrOfficerIn b) => Tier(in a) != Tier(in b) ? Tier(in a) < Tier(in b) : a.Id < b.Id;
@@ -81,6 +90,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                 string status = hidden ? "SEALED" : o.Own ? (o.Alert ? "UNDER FIRE" : site != StrWords.Dash ? "AT POST" : StrWords.Dash) : seen;
 
                 Put(ref r.Id, o.Id);
+                Put(ref r.ParentId, o.ParentId);
                 Put(ref r.Tier, tier);
                 Put(ref r.Own, o.Own);
                 Put(ref r.Sealed, hidden);
@@ -88,6 +98,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                 Put(ref r.Name, hidden ? "SEALED POST" : string.IsNullOrWhiteSpace(o.Name) ? StrWords.Dash : o.Name);
                 Put(ref r.Role, hidden || string.IsNullOrWhiteSpace(o.Role) ? TierWords[tier] : o.Role);
                 Put(ref r.Site, site);
+                Put(ref r.Office, Office(tier, hidden || string.IsNullOrWhiteSpace(o.Role) ? "" : o.Role, hidden ? StrWords.Dash : site));
                 Put(ref r.StatusText, status);
                 Put(ref r.SeenText, seen);
                 Put(ref r.Ink, hidden ? StrInkRole.Muted : o.Own ? (o.Alert ? StrInkRole.Danger : StrInkRole.Own) : StrInkRole.Hostile);

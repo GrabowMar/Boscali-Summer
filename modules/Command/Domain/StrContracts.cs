@@ -93,7 +93,7 @@ namespace BoscaliSummer.Modules.Command.Domain
     /// </summary>
     internal struct StrOfficerIn
     {
-        public int Id, Tier;                           // CommanderView.Id; 0 theater, 1 component, 2 base
+        public int Id, ParentId, Tier;                 // CommanderView.Id and .ParentId (-1 for the theater commander); Tier 0 theater, 1 component, 2 base
         public bool Own, Alert, Confirmed;             // Alert := under fire (own only)
         public string Name, Rank, Role, Site, Trait;   // Trait := CommanderView.Bonus
         public float IntelAge, X, Z;                   // seconds since last confirmed, -1 for an own post; global metres

@@ -142,10 +142,12 @@ namespace BoscaliSummer.Modules.Command.Domain
     /// <summary>One officer of the INFO tab's chain of command, every word ready to print. A sealed post (an enemy one nobody confirmed) holds no detail of the officer.</summary>
     internal sealed class StrOfficerRow
     {
-        public int Id, Tier;
+        public int Id, ParentId, Tier;
         public bool Own, Sealed;
         /// <summary>"COL.", "IMRE DANKOV", "GROUND COMPONENT CMDR", the display base name or a dash.</summary>
         public string Rank = "", Name = "", Role = "", Site = "";
+        /// <summary>The office in one short line for the chart card: "THEATER", "AIR COMPONENT", the base's name.</summary>
+        public string Office = "";
         /// <summary>"AT POST", "UNDER FIRE", "SEEN 6 MIN AGO", "SEALED"; the dossier's intel line; the ink of the status word.</summary>
         public string StatusText = "", SeenText = "";
         public StrInkRole Ink;

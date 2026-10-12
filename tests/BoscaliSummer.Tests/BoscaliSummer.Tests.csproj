@@ -138,6 +138,7 @@
     <Compile Include="..\..\Core\Modules\ModuleGraph.cs" Link="Framework\FeatureGraph.cs" />
     <Compile Include="..\..\Core\Services\ServiceRegistry.cs" Link="Framework\ServiceRegistry.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrPagePlan.cs" Link="Features\Command\StrPagePlan.cs" />
+    <Compile Include="..\..\modules\Command\Domain\StrOrgLayout.cs" Link="Features\Command\StrOrgLayout.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrPanelText.cs" Link="Features\Command\StrPanelText.cs" />
     <Compile Include="..\..\modules\Command\Presentation\Str\StrControls.cs" Link="Features\Command\StrControls.cs" />
     <Compile Include="..\..\modules\Command\Domain\TacticalTheaterState.cs" Link="Features\Command\TacticalTheaterState.cs" />

@@ -209,10 +209,10 @@ namespace BoscaliSummer.Tests.Features.Command
             };
 
         public static StrOfficerIn Officer(int id, int tier, bool own, string rank, string name, string site, float intelAge = -1f, bool confirmed = true,
-            bool alert = false, string trait = "", float x = 0f, float z = 0f, string role = "") =>
+            bool alert = false, string trait = "", float x = 0f, float z = 0f, string role = "", int parent = -1) =>
             new StrOfficerIn
             {
-                Id = id, Tier = tier, Own = own, Alert = alert, Confirmed = confirmed || own, Rank = rank, Name = name, Role = role, Site = site, Trait = trait,
+                Id = id, ParentId = parent, Tier = tier, Own = own, Alert = alert, Confirmed = confirmed || own, Rank = rank, Name = name, Role = role, Site = site, Trait = trait,
                 IntelAge = intelAge, X = x, Z = z,
             };
 
@@ -243,15 +243,17 @@ namespace BoscaliSummer.Tests.Features.Command
             f.Officers = new[]
             {
                 Officer(0, 0, true, "GEN.", "MARA OKONKWO", "HIGH COMMAND", role: "THEATER COMMANDER", trait: "STRATEGIC MIND +10% INCOME"),
-                Officer(1, 1, true, "COL.", "ILYA BRANDT", "PORT AURELIA", role: "AIR COMPONENT CMDR", trait: "LOGISTICS MIND +15% STIPEND" + StrWords.Dot + "FAST SORTIES +5% PATROL"),
-                Officer(2, 1, true, "COL.", "TESS HARKER", "KESTREL AIRBASE", role: "GROUND COMPONENT CMDR", alert: true, trait: "NO STAFF BONUS"),
-                Officer(3, 2, true, "MAJ.", "DEV PATEL", "HARBOR AIRFIELD", role: "BASE COMMANDER", trait: "SUPPLY HAWK +5% PAY"),
-                Officer(4, 2, true, "CPT.", "NOA LINDQVIST", "RIDGE STRIP", role: "BASE COMMANDER"),
+                Officer(1, 1, true, "COL.", "ILYA BRANDT", "PORT AURELIA", role: "AIR COMPONENT CMDR", parent: 0, trait: "LOGISTICS MIND +15% STIPEND" + StrWords.Dot + "FAST SORTIES +5% PATROL"),
+                Officer(2, 1, true, "COL.", "TESS HARKER", "KESTREL AIRBASE", role: "GROUND COMPONENT CMDR", parent: 0, alert: true, trait: "NO STAFF BONUS"),
+                Officer(3, 2, true, "MAJ.", "DEV PATEL", "HARBOR AIRFIELD", role: "BASE COMMANDER", parent: 1, trait: "SUPPLY HAWK +5% PAY"),
+                Officer(4, 2, true, "CPT.", "NOA LINDQVIST", "RIDGE STRIP", role: "BASE COMMANDER", parent: 2),
+                Officer(6, 2, true, "LT.", "SANA OKORO", "MARSH LANDING", role: "BASE COMMANDER", parent: 2),
                 Officer(14, 0, false, "GEN.", "KORVIN ASH", "CAPITAL BARRACKS", intelAge: 520f, x: 900f, z: 7200f, role: "THEATER COMMANDER", trait: "IRON WILL +25% BOUNTY"),
-                Officer(12, 1, false, "COL.", "IMRE DANKOV", "PORT AURELIA", intelAge: 360f, x: 3100f, z: 5000f, role: "GROUND COMPONENT CMDR", trait: "VETERAN +20% BOUNTY"),
-                Officer(5, 2, false, "MAJ.", "VERA STOLL", "NORTH RIDGE BASE", intelAge: 45f, x: 6400f, z: 1100f, role: "BASE COMMANDER", trait: "NO STAFF BONUS"),
+                Officer(12, 1, false, "COL.", "IMRE DANKOV", "PORT AURELIA", intelAge: 360f, x: 3100f, z: 5000f, role: "GROUND COMPONENT CMDR", parent: 14, trait: "VETERAN +20% BOUNTY"),
+                Officer(5, 2, false, "MAJ.", "VERA STOLL", "NORTH RIDGE BASE", intelAge: 45f, x: 6400f, z: 1100f, role: "BASE COMMANDER", parent: 12, trait: "NO STAFF BONUS"),
+                Officer(7, 2, false, "CPT.", "LEO HARGROVE", "SALT FLATS", intelAge: 200f, x: 5200f, z: 900f, role: "BASE COMMANDER", parent: 11),   // its component is unconfirmed: the chart shows that office empty
             };
-            f.OfficerCount = 8;
+            f.OfficerCount = 10;
             return Stamped(f);
         }
 

@@ -17,6 +17,9 @@ namespace BoscaliSummer.Modules.Command.Domain
         // capture drew a box for the bar), so a yes is the word OK and the trend words carry a sign: never a box (annex 05 P9 risk).
         public const string Up = "+ ", Down = "- ", Level = "= ", Yes = "OK", No = "✕", Arrow = "→", Degree = "°";
 
+        /// <summary>The word an empty office card carries: the post nobody holds.</summary>
+        public static string OfficeOf(int tier) => tier == 0 ? "THEATER" : tier == 1 ? "COMPONENT" : "BASE";
+
         /// <summary>The slab word above a banner; empty for Operation (its banner only shows when the report is stale).</summary>
         public static string Chip(StrBoardMode mode)
         {

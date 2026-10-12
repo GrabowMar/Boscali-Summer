@@ -44,6 +44,8 @@ namespace BoscaliSummer.Core.Contracts
         public int Id { get; }
         /// <summary>0 theater, 1 component, 2 base.</summary>
         public int Tier { get; }
+        /// <summary>The post this one answers to (a CommanderView.Id), or -1 for the theater commander. It may name a post this view does not list.</summary>
+        public int ParentId { get; }
         /// <summary>An own post.</summary>
         public bool IsFriendly { get; }
         /// <summary>Under fire now (own posts only).</summary>
@@ -71,11 +73,11 @@ namespace BoscaliSummer.Core.Contracts
         public bool BountyClaimed { get; }
 
         public CommanderView(int id, int tier, bool isFriendly, bool alert, string name, string rank, string role, string site,
-            string bonus, string bio, int portraitSeed, Sprite portrait, float intelAge, float x, float z, int bounty, bool bountyClaimed)
+            string bonus, string bio, int portraitSeed, Sprite portrait, float intelAge, float x, float z, int bounty, bool bountyClaimed, int parentId = -1)
         {
             Id = id; Tier = tier; IsFriendly = isFriendly; Alert = alert; Name = name ?? ""; Rank = rank ?? ""; Role = role ?? "";
             Site = site ?? ""; Bonus = bonus ?? ""; Bio = bio ?? ""; PortraitSeed = portraitSeed; Portrait = portrait;
-            IntelAge = intelAge; X = x; Z = z; Bounty = bounty; BountyClaimed = bountyClaimed;
+            IntelAge = intelAge; X = x; Z = z; Bounty = bounty; BountyClaimed = bountyClaimed; ParentId = parentId;
         }
     }
 

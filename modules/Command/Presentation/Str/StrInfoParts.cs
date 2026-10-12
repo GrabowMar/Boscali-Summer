@@ -7,26 +7,29 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Command.Presentation
 {
     /// <summary>
-    /// The INFO tab's chain of command: an OWN / ENEMY switch, the side's officers as a compact tree (theater, components, bases), and the dossier of the
+    /// The INFO tab's chain of command: an OWN / ENEMY switch, the side's officers as a top-down org chart (theater on top, components under it, bases under their own component), and the dossier of the
     /// selected officer. Read only: the one action is LOCATE on an enemy officer whose post is on the strike list. The selection and the side are the
     /// panel's own state; every word comes from the model. When there is no staff board the part shows the one stated reason instead.
     /// </summary>
     internal sealed class StrChainPart : StrPart
     {
-        private const float Pad = 8f, RowH = 40f, RowGap = 3f, Indent = 14f, ButtonW = 74f, ButtonH = 26f, PortraitSize = 56f, TraitH = 20f, DossierPad = 10f;
+        private const float Pad = 8f, CardH = 84f, CardGap = 8f, CardVGap = 26f, CardMaxW = 180f, ButtonW = 74f, ButtonH = 26f, PortraitSize = 56f, TraitH = 20f, DossierPad = 10f;
 
-        private sealed class Row
+        private sealed class Card
         {
-            public AvFrame Frame;
-            public Image Rail, Down, Across;
-            public TMP_Text Rank, Name, Status, Detail;
+            public AvFrame Frame, PortraitFrame;
+            public Image Top, Portrait, Light;
+            public TMP_Text Icon, Rank, Name, Office, Status;
         }
 
         private readonly TMP_Text count, reasonHead, reasonWhy, reasonDo, note, locateWhy, dossierName, dossierRole, stationKey, stationValue, intelKey, intelValue, noTraits;
         private readonly AvFrame reasonFrame, dossierFrame, portraitFrame;
         private readonly Image dossierRail, portrait, dossierRule;
         private readonly TMP_Text portraitIcon;
-        private readonly Row[] rows = new Row[StrViewModel.MaxOfficers];
+        private readonly Card[] cards = new Card[StrOrgPlan.MaxCards];
+        private readonly int[] cardRow = new int[StrOrgPlan.MaxCards];
+        private readonly StrOrgPlan plan = new StrOrgPlan();
+        private readonly AvQuadGraphic lines;
         private readonly TMP_Text[] traits = new TMP_Text[3];
         private readonly StrButton own, enemy, locate;
         private bool enemySide;
@@ -43,7 +46,11 @@ namespace BoscaliSummer.Modules.Command.Presentation
             reasonHead = Text(Rect, "ReasonHead", AvTextRole.Title, TextAlignmentOptions.TopLeft, true);
             reasonWhy = Text(Rect, "ReasonWhy", AvTextRole.ProseSmall, TextAlignmentOptions.TopLeft, true);
             reasonDo = Text(Rect, "ReasonDo", AvTextRole.ProseSmall, TextAlignmentOptions.TopLeft, true);
-            for (int i = 0; i < rows.Length; i++) rows[i] = MakeRow(i);
+            var go = new GameObject("Lines", typeof(RectTransform), typeof(CanvasRenderer));
+            go.transform.SetParent(Rect, false);
+            lines = go.AddComponent<AvQuadGraphic>();
+            lines.raycastTarget = false;
+            for (int i = 0; i < cards.Length; i++) cards[i] = MakeCard(i);
             note = Text(Rect, "Note", AvTextRole.ProseSmall, TextAlignmentOptions.TopLeft, true);
 
             dossierFrame = AvFrame.Add(Rect, "Dossier", AvChamfer.Diagonal(8f));
@@ -70,23 +77,28 @@ namespace BoscaliSummer.Modules.Command.Presentation
             Restyle();
         }
 
-        private Row MakeRow(int index)
+        private Card MakeCard(int index)
         {
-            var r = new Row();
-            r.Down = AvLay.Solid(Rect, "Down " + index, Color.clear);
-            r.Across = AvLay.Solid(Rect, "Across " + index, Color.clear);
-            r.Down.raycastTarget = r.Across.raycastTarget = false;
-            r.Frame = AvFrame.Add(Rect, "Officer " + index, AvChamfer.Diagonal(5f));
-            r.Frame.raycastTarget = true;
-            AvHit.On(r.Frame).Click = e => Choose(index);
-            r.Rail = AvLay.Solid(r.Frame.rectTransform, "Rail", Color.clear);
-            r.Rail.raycastTarget = false;
-            r.Rank = Text(r.Frame.rectTransform, "Rank", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft);
-            r.Name = Text(r.Frame.rectTransform, "Name", AvTextRole.Head, TextAlignmentOptions.MidlineLeft);
-            r.Status = Text(r.Frame.rectTransform, "Status", AvTextRole.Micro, TextAlignmentOptions.MidlineRight);
-            r.Detail = Text(r.Frame.rectTransform, "Detail", AvTextRole.ProseSmall, TextAlignmentOptions.MidlineLeft);
-            r.Name.overflowMode = r.Detail.overflowMode = r.Status.overflowMode = r.Rank.overflowMode = TextOverflowModes.Ellipsis;
-            return r;
+            var c = new Card();
+            c.Frame = AvFrame.Add(Rect, "Officer " + index, AvChamfer.Diagonal(5f));
+            c.Frame.raycastTarget = true;
+            AvHit.On(c.Frame).Click = e => Choose(cardRow[index]);
+            RectTransform f = c.Frame.rectTransform;
+            c.Top = AvLay.Solid(f, "Top", Color.clear);
+            c.PortraitFrame = AvFrame.Add(f, "PortraitFrame", AvChamfer.Diagonal(3f));
+            c.Portrait = AvLay.Solid(c.PortraitFrame.rectTransform, "Portrait", Color.white);
+            c.Portrait.preserveAspect = true;
+            AvLay.Fill(c.Portrait.rectTransform, 2f);
+            c.Light = AvLay.Solid(f, "Light", Color.clear);
+            c.Top.raycastTarget = c.PortraitFrame.raycastTarget = c.Portrait.raycastTarget = c.Light.raycastTarget = false;
+            c.Icon = AvIcons.Make(f, AvIcon.User, 20f, Color.white);
+            c.Rank = Text(f, "Rank", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft);
+            c.Name = Text(f, "Name", AvTextRole.Label, TextAlignmentOptions.MidlineLeft);
+            c.Office = Text(f, "Office", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft);
+            c.Status = Text(f, "Status", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft);
+            c.Rank.overflowMode = c.Name.overflowMode = c.Office.overflowMode = c.Status.overflowMode = TextOverflowModes.Ellipsis;
+            c.Frame.gameObject.SetActive(false);
+            return c;
         }
 
         private StrAct ChooseSide(bool toEnemy)
@@ -140,19 +152,11 @@ namespace BoscaliSummer.Modules.Command.Presentation
             string noteText = !roster ? "" : enemySide ? s.EnemyNote : s.OwnNote;
             AvText.Set(note, noteText);
 
-            for (int i = 0; i < rows.Length; i++)
+            // The cards stand where the chart puts them: Lay shows the ones the side needs, so a side with no officers shows none.
+            for (int i = 0; i < cards.Length; i++) cards[i].Frame.gameObject.SetActive(false);
+            lines.gameObject.SetActive(false);
+            for (int i = 0; i < shown; i++)
             {
-                Row r = rows[i];
-                bool on = i < shown;
-                r.Frame.gameObject.SetActive(on);
-                r.Down.gameObject.SetActive(on);
-                r.Across.gameObject.SetActive(on);
-                if (!on) continue;
-                StrOfficerRow o = list[i];
-                AvText.Set(r.Rank, o.Rank);
-                AvText.Set(r.Name, o.Name);
-                AvText.Set(r.Status, o.StatusText);
-                AvText.Set(r.Detail, o.Role + StrWords.Dot + o.Site);
                 int index = i;
                 Controls.Register(StrControlIds.InfoPost(i + 1), null, () => { Choose(index); return Allowed; });
             }
@@ -232,14 +236,12 @@ namespace BoscaliSummer.Modules.Command.Presentation
             }
             if (place) reasonFrame.gameObject.SetActive(false);
 
-            for (int i = 0; i < shown; i++)
+            if (shown > 0)
             {
-                StrOfficerRow o = list[i];
-                float x = Pad + o.Tier * Indent, w = width - Pad - x;
-                if (place) PlaceRow(rows[i], o, i, x, y, w);
-                y += RowH + RowGap;
+                plan.Build(list, shown, width, CardH, CardGap, CardVGap, CardMaxW);
+                if (place) PlaceChart(y, width);
+                y += plan.Height;
             }
-            if (shown > 0) y -= RowGap;
 
             float noteW = width - 2f * Pad;
             if (note.text.Length > 0)
@@ -254,26 +256,87 @@ namespace BoscaliSummer.Modules.Command.Presentation
             return y + 2f;
         }
 
-        private void PlaceRow(Row r, StrOfficerRow o, int index, float x, float y, float w)
+        // The cards and the connector lines the plan laid out; an empty card (an office nobody holds) is a dashed outline.
+        private void PlaceChart(float top, float width)
         {
-            AvLay.Place(r.Frame.rectTransform, x, y, w, RowH);
-            AvLay.Place(r.Rail.rectTransform, 0f, 0f, 3f, RowH);
-            float inner = w - 14f, statusW = Mathf.Min(Mathf.Ceil(AvText.Width(r.Status)) + 4f, inner * 0.5f);
-            float rankW = string.IsNullOrEmpty(o.Rank) ? 0f : Mathf.Ceil(AvText.Width(r.Rank)) + 6f;
-            AvLay.Place(r.Rank.rectTransform, 12f, 3f, rankW, 20f);
-            AvLay.Place(r.Name.rectTransform, 12f + rankW, 3f, Mathf.Max(30f, inner - rankW - statusW - 6f), 20f);
-            AvLay.Place(r.Status.rectTransform, 12f + inner - statusW, 3f, statusW, 20f);
-            AvLay.Place(r.Detail.rectTransform, 12f, 22f, inner, 16f);
+            lines.gameObject.SetActive(true);
+            AvLay.Place(lines.rectTransform, 0f, top, width, plan.Height);
+            lines.Begin();
+            for (int i = 0; i < plan.SegCount; i++) lines.Add(plan.Segs[i].X, plan.Segs[i].Y, plan.Segs[i].W, plan.Segs[i].H);
+            for (int i = 0; i < cards.Length; i++)
+            {
+                Card c = cards[i];
+                bool on = i < plan.CardCount;
+                c.Frame.gameObject.SetActive(on);
+                if (!on) continue;
+                StrOrgCard g = plan.Cards[i];
+                cardRow[i] = g.Row;
+                bool vacant = g.Row < 0;
+                StrOfficerRow o = vacant ? null : list[g.Row];
+                AvLay.Place(c.Frame.rectTransform, g.X, top + g.Y, g.W, g.H);
+                float inner = g.W - 14f, text = g.W - 55f;
+                AvLay.Place(c.Top.rectTransform, 0f, 0f, g.W, 2f);
+                AvLay.Place(c.PortraitFrame.rectTransform, 7f, 8f, 36f, 36f);
+                AvLay.Place(c.Icon.rectTransform, 7f, 8f, 36f, 36f);
+                AvLay.Place(c.Rank.rectTransform, 49f, 5f, text, 16f);   // a Micro line needs 16 high or the ellipsis swallows it
+                AvLay.Place(c.Name.rectTransform, vacant ? 7f : 49f, vacant ? 22f : 21f, vacant ? inner : text, 18f);
+                AvLay.Place(c.Office.rectTransform, 7f, vacant ? 44f : 48f, inner, 16f);
+                AvLay.Place(c.Light.rectTransform, 7f, 70f, 6f, 6f);
+                AvLay.Place(c.Status.rectTransform, 17f, 65f, g.W - 24f, 16f);
+                c.PortraitFrame.gameObject.SetActive(!vacant);
+                c.Light.gameObject.SetActive(!vacant);
+                c.Icon.gameObject.SetActive(!vacant && o.Portrait == null);
+                AvText.Set(c.Rank, vacant ? "" : o.Rank);
+                AvText.Set(c.Name, vacant ? "VACANT" : o.Name);
+                AvText.Set(c.Office, vacant ? StrWords.OfficeOf(g.Tier) : o.Office);
+                AvText.Set(c.Status, vacant ? "" : o.StatusText);
+                if (!vacant)
+                {
+                    c.Portrait.sprite = o.Portrait;
+                    c.Portrait.enabled = o.Portrait != null;
+                }
+                else Dashed(g.X, g.Y, g.W, g.H);
+            }
+            lines.End();
+            PaintCards();
+        }
 
-            // The tree: a trunk down from the post above and a tick into this row; the trunk carries on while the next row is as deep or deeper.
-            bool child = o.Tier > 0;
-            r.Down.gameObject.SetActive(child);
-            r.Across.gameObject.SetActive(child);
-            if (!child) return;
-            float tx = Pad + (o.Tier - 1) * Indent + 6f;
-            bool carries = index + 1 < shown && list[index + 1].Tier >= o.Tier;
-            AvLay.Place(r.Down.rectTransform, tx, y - RowGap, 1f, RowGap + (carries ? RowH + RowGap : RowH * 0.5f));
-            AvLay.Place(r.Across.rectTransform, tx, y + RowH * 0.5f, x - tx, 1f);
+        private void Dashed(float x, float y, float w, float h)
+        {
+            for (float d = 0f; d < w; d += 9f) { float len = Mathf.Min(5f, w - d); lines.Add(x + d, y, len, 1f); lines.Add(x + d, y + h - 1f, len, 1f); }
+            for (float d = 0f; d < h; d += 9f) { float len = Mathf.Min(5f, h - d); lines.Add(x, y + d, 1f, len); lines.Add(x + w - 1f, y + d, 1f, len); }
+        }
+
+        // The cards' colours: the selected one is raised, framed and capped in the selection colour; an empty one is faint.
+        private void PaintCards()
+        {
+            lines.color = AvInk.Frame.WithAlpha(0.75f);
+            lines.SetVerticesDirty();
+            for (int i = 0; i < plan.CardCount && i < cards.Length; i++)
+            {
+                Card c = cards[i];
+                StrOrgCard g = plan.Cards[i];
+                if (g.Row < 0 || g.Row >= shown || list == null)
+                {
+                    c.Frame.Paint(Color.clear, Color.clear);
+                    c.Top.color = Color.clear;
+                    c.Name.color = AvInk.Muted;
+                    c.Office.color = AvInk.Muted;
+                    continue;
+                }
+                StrOfficerRow o = list[g.Row];
+                Color ink = StrInk.Of(o.Ink);
+                bool chosen = g.Row == selectedRow;
+                c.Frame.Paint(chosen ? AvInk.Raised : AvInk.Inert, chosen ? AvInk.Select : AvInk.Hairline);
+                c.Top.color = chosen ? AvInk.Select : ink.WithAlpha(0.9f);
+                c.PortraitFrame.Paint(AvInk.Inert, (chosen ? AvInk.Select : ink).WithAlpha(0.8f));
+                c.Icon.color = AvInk.Muted;
+                c.Light.color = ink;
+                c.Rank.color = o.Sealed ? AvInk.Muted : AvInk.Key;
+                c.Name.color = o.Sealed ? AvInk.Dim : AvInk.Ink;
+                c.Office.color = AvInk.Dim;
+                c.Status.color = o.Ink == StrInkRole.Own || o.Ink == StrInkRole.Muted ? AvInk.Dim : o.Ink == StrInkRole.Hostile ? Color.Lerp(ink, AvInk.Ink, 0.5f) : ink;
+            }
         }
 
         // The dossier card of the selected officer; returns its height.
@@ -330,20 +393,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             note.color = AvInk.Dim;
             count.color = AvInk.Dim;
             StrOfficerRow sel = SelectedRow();
-            for (int i = 0; i < shown && list != null; i++)
-            {
-                Row r = rows[i];
-                StrOfficerRow o = list[i];
-                Color ink = StrInk.Of(o.Ink);
-                bool chosen = i == selectedRow;
-                r.Frame.Paint(chosen ? AvInk.Raised : AvInk.Inert, chosen ? AvInk.Select : AvInk.Hairline);
-                r.Rail.color = chosen ? AvInk.Select : ink.WithAlpha(0.9f);
-                r.Rank.color = o.Sealed ? AvInk.Muted : AvInk.Key;
-                r.Name.color = o.Sealed ? AvInk.Dim : AvInk.Ink;
-                r.Status.color = o.Ink == StrInkRole.Own || o.Ink == StrInkRole.Muted ? AvInk.Dim : o.Ink == StrInkRole.Hostile ? Color.Lerp(ink, AvInk.Ink, 0.5f) : ink;
-                r.Detail.color = AvInk.Dim;
-                r.Down.color = r.Across.color = AvInk.Frame.WithAlpha(0.75f);
-            }
+            PaintCards();
             Color rail = sel == null ? Color.clear : StrInk.Of(sel.Ink);
             dossierFrame.Paint(AvInk.Raised, AvInk.Frame.WithAlpha(0.8f));
             dossierRail.color = rail;

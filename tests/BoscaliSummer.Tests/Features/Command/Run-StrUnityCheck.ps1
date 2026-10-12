@@ -25,7 +25,7 @@ $panel += (Get-ChildItem -LiteralPath "$repo/modules/Command/Presentation/Str" -
 # TheaterWords.Empty, Command, Wave, Ground and Posture.
 $domain = @(
     'StrContracts', 'StrViewModel', 'StrViewBuilder', 'StrViewBuilder.Rows', 'StrViewBuilder.Sitrep', 'StrViewBuilder.Staff', 'StrWords', 'StrOrdinals', 'StrGate', 'StrStrokes',
-    'StrAnchors', 'StrPagePlan', 'StrPanelText', 'TheaterReadout'
+    'StrAnchors', 'StrOrgLayout', 'StrPagePlan', 'StrPanelText', 'TheaterReadout'
 ) | ForEach-Object { "$repo/modules/Command/Domain/$_.cs" }
 $contracts = @(
     'ITheaterWarView', 'TheaterWords', 'ISecondaryObjectivesView', 'OperationFocus', 'IWingSortieOrders', 'IThreatPicture'

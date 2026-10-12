@@ -11,6 +11,7 @@ namespace BoscaliSummer.Tests.Features.Command
         public static void Run()
         {
             OfficersStandTheaterFirstThenComponentsThenBases();
+            TheRowCarriesItsParentAndAShortOffice();
             AnUnconfirmedEnemyOfficerIsSealed();
             AnUnknownReadsAsADash();
             NoStaffReadsAStatedReason();
@@ -55,6 +56,20 @@ namespace BoscaliSummer.Tests.Features.Command
             for (int i = 0; i < 12; i++) many[i] = StrFixtures.Officer(i, 2, true, "CPT.", "Own " + i, "B" + i);
             vm = Build(WithOfficers(many));
             TestAssert.That(vm.Staff.OwnCount == StrViewModel.MaxOfficers, "twelve own posts in, eight rows out (the host's ceiling)");
+        }
+
+        private static void TheRowCarriesItsParentAndAShortOffice()
+        {
+            StrViewModel vm = Build(WithOfficers(
+                StrFixtures.Officer(0, 0, true, "GEN.", "Theater Zero", "HQ", role: "THEATER COMMANDER"),
+                StrFixtures.Officer(2, 1, true, "COL.", "Comp Two", "AIRBASE 2", role: "GROUND COMPONENT CMDR", parent: 0),
+                StrFixtures.Officer(3, 2, true, "MAJ.", "Base Three", "PORT_AURELIA", role: "BASE COMMANDER", parent: 2),
+                StrFixtures.Officer(4, 2, true, "MAJ.", "Base Four", "", role: "BASE COMMANDER", parent: 2)));
+            StrStaffView s = vm.Staff;
+            TestAssert.That(s.Own[0].ParentId == -1 && s.Own[1].ParentId == 0 && s.Own[2].ParentId == 2 && s.Own[3].ParentId == 2, "the row carries the post it answers to");
+            TestAssert.That(s.Own[0].Office == "THEATER" && s.Own[1].Office == "GROUND COMPONENT" && s.Own[2].Office == "PORT AURELIA" && s.Own[3].Office == "BASE", "the office is one short line: theater, component, where the base stands");
+            StrOfficerIn hidden = StrFixtures.Officer(12, 1, false, "COL.", "IMRE DANKOV", "PORT AURELIA", confirmed: false, role: "GROUND COMPONENT CMDR");
+            TestAssert.That(Build(WithOfficers(hidden)).Staff.Enemy[0].Office == "COMPONENT", "a sealed post is told by its tier alone");
         }
 
         private static void AnUnconfirmedEnemyOfficerIsSealed()
