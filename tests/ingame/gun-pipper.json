@@ -1,0 +1,119 @@
+{
+  "name": "gun-pipper",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 180,
+  "environment": {
+    "config": {
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "altitude": 3000,
+      "speed": 220,
+      "heading": 0,
+      "view": "cockpit"
+    },
+    {
+      "op": "spawn",
+      "id": "bandit",
+      "type": "FS-20 Vortex",
+      "faction": "Primeva",
+      "at": {
+        "near": {
+          "id": "player",
+          "offset": [
+            0,
+            0,
+            -900
+          ]
+        }
+      },
+      "altitude": 3000,
+      "speed": 220,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "bandit",
+      "program": [
+        {
+          "level": 60
+        }
+      ]
+    },
+    {
+      "op": "record",
+      "ids": [
+        "player",
+        "bandit"
+      ],
+      "hz": 2
+    },
+    {
+      "op": "wait",
+      "seconds": 6
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Gun",
+      "args": {},
+      "store": "sight"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Gun",
+      "args": {},
+      "store": "arm"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Gun",
+      "args": {},
+      "store": "gun"
+    },
+    {
+      "op": "capture",
+      "name": "pipper"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "gun.designated",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "gun.pipper",
+      "min": 1
+    },
+    {
+      "check": "log_match",
+      "pattern": "Exception",
+      "max": 0
+    }
+  ]
+}

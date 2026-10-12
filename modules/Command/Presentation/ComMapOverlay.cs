@@ -12,7 +12,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
 {
     internal sealed class ComMapOverlay : MonoBehaviour, ISceneService
     {
-        private const int BaseTextureWidth = 1024;
+        private const int BaseTextureWidth = TacticalSectorGrid.MaximumTextureSize;
 
         private CommandSettings settings;
 

@@ -352,7 +352,9 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
 
         private MenuHintParts hint;
         private MenuRow hintRow;
-        private string hintLabel, hintBlocked, hintVerb, hintKey;
+        private string hintLabel, hintBlocked, hintVerb, hintKey, hintRefusal;
+        private int hintCat = -1;
+        private MenuRow hintSub;
         private MenuMode hintMode;
         private MenuDevice hintDevice;
         private bool hintValid, hintFromPointer, hintHolding, hintLocked, hintRoot, hintNeedsHold;
@@ -365,11 +367,11 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             bool holding = c.Hold != null, root = c.Cat < 0, needsHold = row != null && row.NeedsHold;
             if (!hintValid || row != hintRow || !ReferenceEquals(label, hintLabel) || !ReferenceEquals(blocked, hintBlocked) || !ReferenceEquals(row?.Verb, hintVerb) ||
                 !ReferenceEquals(c.OpenKeyName, hintKey) || c.Mode != hintMode || c.Device != hintDevice || c.FocusFromPointer != hintFromPointer || holding != hintHolding ||
-                c.Locked != hintLocked || root != hintRoot || needsHold != hintNeedsHold)
+                c.Locked != hintLocked || root != hintRoot || needsHold != hintNeedsHold || c.Cat != hintCat || c.Sub != hintSub || !ReferenceEquals(c.Refusal, hintRefusal))
             {
                 hint = MenuHint.Parts(c);
                 hintRow = row; hintLabel = label; hintBlocked = blocked; hintVerb = row?.Verb; hintKey = c.OpenKeyName; hintMode = c.Mode; hintDevice = c.Device;
-                hintFromPointer = c.FocusFromPointer; hintHolding = holding; hintLocked = c.Locked; hintRoot = root; hintNeedsHold = needsHold; hintValid = true;
+                hintFromPointer = c.FocusFromPointer; hintHolding = holding; hintLocked = c.Locked; hintRoot = root; hintNeedsHold = needsHold; hintCat = c.Cat; hintSub = c.Sub; hintRefusal = c.Refusal; hintValid = true;
             }
             return hint;
         }

@@ -85,6 +85,9 @@ public static class InteractionMenuUnityCheck
         F("jammer-idle", MenuWorlds.Jammer, r => r.HoldOpen(), One),
         // a refused press (digit 9 in a 6-row dock): the row gutters flash amber for 180 ms (checked against the settled frame below)
         F("deny-pulse", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(3); r.PressDigit(9); }, One),
+        // recall: FLIGHT ASSIST ran last, so a press at the ring came back to it; one arrow down and its margin chevron shows
+        F("recall-flight", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(3); r.ToRow("flight/assist"); r.Click(); r.Adv(0.2f); r.Backspace(); r.Enter(); r.Down(); }, One),
+        F("recall-root", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(3); r.ToRow("flight/assist"); r.Click(); r.Backspace(); }, One),
     };
 
     public static void Run()

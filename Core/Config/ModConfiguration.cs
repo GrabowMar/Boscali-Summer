@@ -54,6 +54,7 @@ namespace BoscaliSummer.Core.Config
         public WeatherSettings Weather { get; }
         public PerformanceSettings Performance { get; }
         public CinematographySettings Cinematography { get; }
+        public BoscaliSummer.Modules.Effects.Configuration.EffectsSettings Effects { get; }
 
         public ModConfiguration(ConfigFile config)
         {
@@ -84,6 +85,7 @@ namespace BoscaliSummer.Core.Config
                 Weather = new WeatherSettings(config);
                 Performance = new PerformanceSettings(config);
                 Cinematography = new CinematographySettings(config);
+                Effects = new BoscaliSummer.Modules.Effects.Configuration.EffectsSettings(config);
                 LegacyConfigMigration.RemoveEntries(config);
                 // Last, so every module's entries are present to be sorted into the
                 // F1 window's plain and advanced halves.

@@ -313,11 +313,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 : side == MapSide.Hostile ? AvTheme.RailDanger
                 : AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
 
-            /// <summary>Builds one framed contact symbol exactly as the map draws it: plate, then glyph.</summary>
+            /// <summary>Builds one contact symbol exactly as the map draws it: a frameless glyph.</summary>
             private static void MakeSymbol(RectTransform parent, MapSide side, MapGlyph glyph,
                 out Image plate, out Image mark)
             {
-                plate = NewSymbolImage(parent, "Plate", MapSymbolAtlas.Plate(side), SideTint(side));
+                // The map draws no frame; the plate only keeps the tile's layout and stays hidden.
+                plate = NewSymbolImage(parent, "Plate", null, Color.clear);
+                plate.enabled = false;
                 mark = NewSymbolImage(parent, "Glyph", MapSymbolAtlas.Glyph(glyph), SideTint(side));
             }
 

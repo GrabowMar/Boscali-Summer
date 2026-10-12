@@ -132,6 +132,54 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             return result;
         }
 
+        /// <summary>
+        /// Select the first loaded fixed gun, designate the nearest enemy aircraft and report the native
+        /// lead pipper (tests/ingame/gun-pipper.json). Call it three times about a second apart: the first
+        /// sights the target, the second designates it, the third reads the pipper.
+        /// </summary>
+        public static Dictionary<string, object> Gun(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            if (!GameManager.GetLocalAircraft(out Aircraft a) || a == null || a.disabled)
+                return Failure("HudAutomation", "Gun", "no live local aircraft");
+            WeaponStation gun = null;
+            if (a.weaponStations != null)
+                foreach (WeaponStation s in a.weaponStations)
+                {
+                    if (s == null || s.WeaponInfo == null || s.WeaponInfo.muzzleVelocity <= 0f || s.HasTurret() || s.Ammo <= 0)
+                        continue;
+                    gun = s;
+                    break;
+                }
+            if (gun == null)
+                return Failure("HudAutomation", "Gun", "no loaded fixed gun");
+            Unit target = NearestEnemy(a, Number(args, "range", 3000f));
+            if (target == null)
+                return Failure("HudAutomation", "Gun", "no enemy aircraft in range");
+            CombatHUD hud = SceneSingleton<CombatHUD>.i;
+            if (hud == null || hud.aircraft != a)
+                return Failure("HudAutomation", "Gun", "the combat HUD is not attached to the local aircraft");
+            // A sighting keeps the track "accurate" for 4 s and spawns the map icon and HUD marker SelectUnit needs.
+            a.NetworkHQ.RpcUpdateTrackingInfo(target.persistentID);
+            if (a.weaponManager.currentWeaponStation != gun) a.SetActiveStation(gun.Number);
+            if (!hud.GetTargetList().Contains(target)) hud.SelectUnit(target);
+            HUDBoresightState sight = UnityEngine.Object.FindObjectOfType<HUDBoresightState>();
+            var pipper = sight == null ? null
+                : HarmonyLib.AccessTools.Field(typeof(HUDBoresightState), "projectedPosition")?.GetValue(sight) as UnityEngine.UI.Image;
+            var result = new Dictionary<string, object>
+            {
+                { "ok", true },
+                { "gun", gun.WeaponInfo.shortName ?? gun.WeaponInfo.weaponName ?? "GUN" },
+                { "range_m", Vector3.Distance(target.transform.position, a.transform.position) },
+                { "designated", hud.GetTargetList().Contains(target) ? 1 : 0 },
+                { "state", sight == null ? "none"
+                    : HarmonyLib.AccessTools.Field(typeof(HUDBoresightState), "displayState")?.GetValue(sight)?.ToString() ?? "?" },
+                { "pipper", pipper != null && pipper.enabled ? 1 : 0 },
+            };
+            Debug.Log("[HudAutomation] Gun: " + Describe(result));
+            return result;
+        }
+
         /// <summary>Tracker snapshot: preview lines exactly as the HUD publishes them.</summary>
         public static Dictionary<string, object> Missiles(Dictionary<string, object> args)
         {

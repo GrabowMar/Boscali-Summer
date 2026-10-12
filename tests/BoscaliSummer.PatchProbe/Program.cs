@@ -421,10 +421,6 @@ MethodInfo controlOwnerLookup = nativeCockpitPart.GetMethods(AllMembers).FirstOr
 if (controlOwnerLookup.MakeGenericMethod(nativeControlOwner).ReturnType != nativeControlOwner)
     throw new InvalidOperationException("Cockpit component lookup no longer returns the native control owner");
 
-Type nativeAimAssist = gameAssembly.GetType("ControlsFilter+AimAssist", true)!;
-if (nativeAimAssist.GetField("Enabled", AllMembers)?.FieldType != typeof(bool))
-    throw new MissingFieldException("ControlsFilter+AimAssist.Enabled");
-
 // Cached render-only delegate: a private signature change must fail before shipping.
 MethodInfo hitMarkerRefresh = gameAssembly.GetType("CombatHUD", true)!
     .GetMethod("UpdateHitMarkers", AllMembers, null, Type.EmptyTypes, null)
@@ -601,7 +597,6 @@ string[] patchTypes =
 
 
     "BoscaliSummer.Modules.QoL.Patches.NightVisionChoicePatch",
-    "BoscaliSummer.Modules.QoL.Patches.WeaponAimAssistPatch",
     "BoscaliSummer.Modules.PlayerSpawnPriority.PlayerSpawnPriorityPatch",
     "BoscaliSummer.Modules.Autopilot.Patches.AutopilotLandInputPatch",
     "BoscaliSummer.Modules.Autopilot.Patches.FlightAssistReportPatch",
@@ -633,6 +628,22 @@ string[] patchTypes =
 foreach (string patchType in patchTypes)
     if (pluginAssembly.GetType(patchType, false) == null)
         throw new TypeLoadException("Plugin patch type missing: " + patchType);
+
+// A [HarmonyPatch] class that no module lists in PatchTypes is never installed, and nothing logs it.
+Type moduleContract = pluginAssembly.GetType("BoscaliSummer.Core.Modules.IModule", true)!;
+PropertyInfo modulePatchTypes = moduleContract.GetProperty("PatchTypes")!;
+var registeredPatchTypes = new HashSet<Type>();
+foreach (Type module in pluginAssembly.GetTypes())
+    if (!module.IsAbstract && moduleContract.IsAssignableFrom(module))
+        registeredPatchTypes.UnionWith((Type[])modulePatchTypes.GetValue(Activator.CreateInstance(module, true)) ?? []);
+string[] unregisteredPatchTypes = pluginAssembly.GetTypes()
+    .Where(type => !registeredPatchTypes.Contains(type) &&
+        type.GetCustomAttributesData().Any(attribute => attribute.AttributeType.Name == "HarmonyPatch"))
+    .Select(type => type.FullName!)
+    .ToArray();
+if (unregisteredPatchTypes.Length > 0)
+    throw new InvalidOperationException(
+        "Harmony patch classes no module registers: " + string.Join(", ", unregisteredPatchTypes));
 
 string[] featureTypes =
 {

@@ -23,9 +23,12 @@ namespace BoscaliSummer.Modules.Progression.Runtime
     /// </summary>
     internal readonly struct EmblemDesign : IEquatable<EmblemDesign>
     {
-        public const int ShapeCount = 8;
+        public const int ShapeCount = 11;
         public const int DivisionCount = 10;
-        public const int ChargeCount = 16;
+        public const int ChargeCount = 31;
+
+        /// <summary>Charges from here on are jokes and nose art: a player's choice, never an enemy wing's crest.</summary>
+        public const int NoveltyCharge = 23;
         public const int AccentCount = 5;
         public const int TinctureCount = 12;
         public const int NumberCount = 100;
@@ -34,14 +37,19 @@ namespace BoscaliSummer.Modules.Progression.Runtime
         public const int AccentRing = 1, AccentStars = 2, AccentBars = 3, AccentLaurel = 4;
 
         public static readonly string[] ShapeNames =
-            { "SHIELD", "ROUNDEL", "DELTA", "BANNER", "HEX", "DIAMOND", "PATCH", "ARCH" };
+            { "SHIELD", "ROUNDEL", "DELTA", "BANNER", "HEX", "DIAMOND", "PATCH", "ARCH", "ARROWHEAD", "SAWBLADE", "COFFIN" };
         public static readonly string[] DivisionNames =
             { "PLAIN", "PALE", "FESS", "BEND", "QUARTERS", "CHEVRON", "CHIEF", "BARS", "RAYS", "CHECKS" };
         public static readonly string[] ChargeNames =
         {
             "STAR", "BOLT", "WINGS", "CROSS", "CHEVRONS", "DART", "SWORD", "SPADE",
             "SKULL", "CRESCENT", "SUN", "TRIDENT", "CROWN", "ARROW", "RETICLE", "ANCHOR",
+            "EAGLE", "WOLF", "BULL", "AXES", "JOLLY ROGER", "SHARK", "BOMB",
+            "COOL S", "LOSS", "SHADES", "DUCK", "MUSHROOM", "STONKS", "PINUP", "BOMBSHELL",
         };
+
+        // Charges whose name ends in S but is one thing.
+        private static readonly int[] SingularS = { 3, 23, 24 };
         public static readonly string[] AccentNames = { "NONE", "RING", "STARS", "BARS", "LAUREL" };
         public static readonly string[] TinctureNames =
         {
@@ -198,22 +206,22 @@ namespace BoscaliSummer.Modules.Progression.Runtime
 
         /// <summary>Deterministic so a seed can be stored and reproduced across sessions. A roll
         /// always comes out legible: the charge contrasts with every tincture it can sit on.</summary>
-        public static EmblemDesign Random(int seed) => Roll(new Random(seed), AnyTincture, AnyTincture);
+        public static EmblemDesign Random(int seed) => Roll(new Random(seed), AnyTincture, AnyTincture, ChargeCount);
 
         /// <summary>Deterministic crest for an enemy squadron, derived from its wing identity.
         /// Every layer varies; the tinctures stay in the caution/danger band so a hostile crest
         /// never reads as the player's own emblem.</summary>
         public static EmblemDesign Hostile(string identity) =>
-            Roll(new Random((int)(Deterministic.HashString(identity) & 0x7FFFFFFF)), HostileField, HostileInk);
+            Roll(new Random((int)(Deterministic.HashString(identity) & 0x7FFFFFFF)), HostileField, HostileInk, NoveltyCharge);
 
         public static bool IsHostileTincture(int tincture) => Array.IndexOf(HostileField, tincture) >= 0;
 
-        private static EmblemDesign Roll(Random random, int[] fields, int[] inks)
+        private static EmblemDesign Roll(Random random, int[] fields, int[] inks, int charges)
         {
             int shape = random.Next(ShapeCount);
             // Plain fields carry a charge best, so they stay the most common roll.
             int division = random.Next(100) < 30 ? 0 : 1 + random.Next(DivisionCount - 1);
-            int charge = random.Next(ChargeCount);
+            int charge = random.Next(charges);
             int accent = random.Next(100) < 35 ? 0 : 1 + random.Next(AccentCount - 1);
             int field = fields[random.Next(fields.Length)];
             int ink = Pick(random, inks, field, LegibleContrast, field, LegibleContrast);
@@ -278,7 +286,7 @@ namespace BoscaliSummer.Modules.Progression.Runtime
                 default: text.Append(f); break;
             }
             string charge = ChargeNames[Charge];
-            bool plural = charge.EndsWith("S", StringComparison.Ordinal) && Charge != 3; // WINGS, CHEVRONS; never CROSS
+            bool plural = charge.EndsWith("S", StringComparison.Ordinal) && Array.IndexOf(SingularS, Charge) < 0;
             text.Append(plural ? ", " : "AEIOU".IndexOf(charge[0]) >= 0 ? ", AN " : ", A ").Append(charge)
                 .Append(' ').Append(TinctureBlazon[Ink]);
             switch (Accent)

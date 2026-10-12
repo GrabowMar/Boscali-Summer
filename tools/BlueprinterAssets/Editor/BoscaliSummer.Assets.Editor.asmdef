@@ -1,0 +1,8 @@
+{
+    "name": "BoscaliSummer.Assets.Editor",
+    "references": ["Blueprinter.Editor", "Vanguard.Editor", "Airborne.Editor"],
+    "includePlatforms": ["Editor"],
+    "overrideReferences": true,
+    "precompiledReferences": ["Assembly-CSharp.dll", "Assembly-CSharp-firstpass.dll", "Mirage.dll", "UniTask.dll"],
+    "autoReferenced": false
+}

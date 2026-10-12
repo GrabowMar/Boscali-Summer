@@ -2,7 +2,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
 {
     internal enum VanguardRole { None, Decoy, Jammer, Drone, Glider, Interceptor, Carrier, Torpedo, Towed, Sentinel, Gunship, Scout, Lander }
 
-    /// <summary>Unit jsonKeys baked into Vanguard.nobp by VanguardBuilder. Renaming one is a save/MP break.</summary>
+    /// <summary>Unit jsonKeys baked into the mod's Blueprinter bundle by VanguardBuilder. Renaming one is a save/MP break.</summary>
     internal static class VanguardKeys
     {
         public const string MaldX = "VG_MaldX";

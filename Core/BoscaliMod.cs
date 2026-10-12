@@ -122,6 +122,8 @@ namespace BoscaliSummer.Core
                 modules.Add(new PerformanceModule());
                 // Keep the client service available so SET can enable the master live.
                 modules.Add(new ImmersionModule());
+                // Default off; installed so SET can switch the display grade live.
+                modules.Add(new BoscaliSummer.Modules.Effects.EffectsModule());
             }
             if (settings.QoL.Enabled.Value && !Application.isBatchMode)
                 modules.Add(new QoLModule());
@@ -282,6 +284,10 @@ namespace BoscaliSummer.Core
                 Type patchType = patchTypes[i];
                 try
                 {
+                    // A patch class's static initializers otherwise run on the first call of the patched
+                    // native method, where a throw becomes a TypeInitializationException inside game code
+                    // on every call (issue #9: no gun pipper). Run them here so the module rolls back instead.
+                    System.Runtime.CompilerServices.RuntimeHelpers.RunClassConstructor(patchType.TypeHandle);
                     harmony.PatchAll(patchType);
                 }
                 catch (Exception e)

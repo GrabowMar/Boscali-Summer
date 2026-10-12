@@ -68,10 +68,9 @@ Thumbs.db
 __pycache__/
 
 # Source art (Blender, textures, previews, versioned bundle exports) stays local; only the
-# bundles the csproj embeds are published.
+# bundle the csproj embeds is published.
 /assets/**
-!/assets/FutureOps/
-!/assets/FutureOps/CargoShip.nobp
+!/assets/BoscaliSummer.nobp
 *.blend
 *.blend1
 modules/Vanguard/Assets/Models/
