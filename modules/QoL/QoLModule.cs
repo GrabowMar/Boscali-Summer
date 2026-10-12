@@ -13,7 +13,8 @@ namespace BoscaliSummer.Modules.QoL
         public ModuleMetadata Metadata => Module;
         public Type[] PatchTypes => new[]
         {
-            typeof(Patches.NightVisionChoicePatch)
+            typeof(Patches.NightVisionChoicePatch),
+            typeof(Patches.NightVisionGainPatch)
         };
 
         public void Install(ModuleContext context)
@@ -21,6 +22,7 @@ namespace BoscaliSummer.Modules.QoL
             ObservationManager observations = context.AddSceneService<ObservationManager>(54);
             observations.Configure(context.Settings.QoL);
             context.AddService<IObservationSource>(observations);
+            context.AddSceneService<Visuals.NightVisionLook>(55).Configure(context.Settings.QoL);
             context.Logger.LogInfo("CameraObservation=" + NativeCamera.Available);
         }
     }

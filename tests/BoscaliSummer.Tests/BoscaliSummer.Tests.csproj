@@ -88,6 +88,7 @@
     <Compile Include="..\..\Core\Math\MapScale.cs" Link="Core\Math\MapScale.cs" />
     <Compile Include="..\..\Core\Contracts\ITerritoryIngress.cs" Link="Framework\ITerritoryIngress.cs" />
     <Compile Include="..\..\modules\QoL\Runtime\ObservationStore.cs" Link="Features\QoL\ObservationStore.cs" />
+    <Compile Include="..\..\modules\QoL\Domain\NvgGain.cs" Link="Features\QoL\NvgGain.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdTargetPresets.cs" Link="Features\Command\MfdTargetPresets.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\TargetPresetModel.cs" Link="Features\Command\TargetPresetModel.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdChartScale.cs" Link="Features\Command\MfdChartScale.cs" />

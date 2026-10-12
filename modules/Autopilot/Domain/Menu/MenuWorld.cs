@@ -84,6 +84,9 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         /// <summary>0 OFF, 1 ON, 2 AUTO.</summary>
         public int LandingLight;
         public bool HasNvg, NvgOn;
+        /// <summary>The goggles take a gain step (the mod's night-vision look is metering): 0 AUTO, 1 LOW, 2 MED, 3 HIGH.</summary>
+        public bool HasNvgGain;
+        public int NvgGain;
 
         // WEAPONS
         public List<WorldStation> Stations = new List<WorldStation>();
