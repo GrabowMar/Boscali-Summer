@@ -5,7 +5,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
     /// <summary>
     /// The game's weapon pictures as an alpha mask (LAYOUT.md 1 "line art"), pure. A picture is light lines on an OPAQUE black ground, made for the game's additive material; drawn on the ordinary UI material it would be a black
     /// plate. So the board bakes each once into a white texture whose alpha is the brightness of the source (<see cref="Alpha"/>): the ground goes clear, the lines stay, and a tint colour does the rest, like every other ink.
-    /// <see cref="Convert"/> does that to a texture's pixels and measures the ink box the picture is cropped to on the way.
+    /// <see cref="Convert"/> does that to a texture's pixels (the ground's noise taken out, <see cref="Clean"/>) and measures the ink box the picture is cropped to on the way.
     /// </summary>
     internal static class StoreMask
     {
@@ -19,6 +19,15 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static byte Alpha(byte r, byte g, byte b, byte a) => (byte)((Math.Max(r, Math.Max(g, b)) * a + 127) / 255);
 
         /// <summary>
+        /// The game's pictures are DXT1, whose "black" ground is 1 to 4 (up to 24 beside a stroke) over nearly all of it, not 0: alpha at that level shows as a faint tinted box over the whole picture (seen in game: a step of
+        /// 5/255 at the edge of the ink box). An alpha at or under this is no ink at all.
+        /// </summary>
+        public const int Floor = 12;
+
+        /// <summary>An alpha with the ground taken out: 0 at or under <see cref="Floor"/>, the rest stretched back over the full range so a solid line stays solid.</summary>
+        public static byte Clean(byte a) => a <= Floor ? (byte)0 : (byte)((a - Floor) * 255 / (255 - Floor));
+
+        /// <summary>
         /// Rewrite RGBA32 pixels (<paramref name="width"/> x <paramref name="height"/>, four bytes each, the bottom row first as Unity keeps them) into the mask in place: white with the alpha of <see cref="Alpha"/>.
         /// <paramref name="ink"/> is the box of the pixels above <see cref="InkShare"/> as fractions of the picture (left, top, right, bottom; y down, the way <see cref="ArtBounds"/> reads); false, and the whole picture,
         /// when there are none.
@@ -30,7 +39,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 for (int x = 0; x < width; x++)
                 {
                     int i = (y * width + x) * 4;
-                    byte a = Alpha(rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]);
+                    byte a = Clean(Alpha(rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]));
                     rgba[i] = rgba[i + 1] = rgba[i + 2] = 255;
                     rgba[i + 3] = a;
                     if (a <= limit) continue;

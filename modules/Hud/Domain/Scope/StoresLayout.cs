@@ -78,10 +78,11 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         // ---- the station rail: n markers a pitch apart, marker i at 1 + i * pitch; a glyph then the tag, the selected one bracketed (px - 1, y - 8, pitch - 3, 16)
         public const float RailX = 1f, RailBracketArm = 4f, RailBracketHalf = 8f, RailGlyphHalf = 3.2f, RailGlyphLen = 14f, RailGunExtra = 1f;
-        /// <summary>The widest a marker's pitch gets (STACK's eight stations: 54): an aircraft with few stations packs them from the left instead of spreading them over the block, and the selected one's brackets stay marker sized.</summary>
-        public const float RailPitchMax = 54f;
+        /// <summary>The rail is drawn for eight stations (WIDE's 33, STACK's 54): an aircraft with fewer packs its markers from the left at that pitch instead of spreading them over the block, so the selected one's brackets (3 short of the
+        /// pitch) stay marker sized (four stations on WIDE spread to 54 in game: a bracket 51 wide round a marker 31 wide).</summary>
+        public const int RailStations = 8;
 
-        public static float RailPitch(int stations, float width) => Math.Min(RailPitchMax, (float)Math.Floor(width / Math.Max(1, stations)));
+        public static float RailPitch(int stations, float width) => (float)Math.Floor(width / Math.Max(RailStations, stations));
 
         /// <summary>The glyph's length on a rail whose markers are <paramref name="pitch"/> apart: 14 (the gun's 15), less when a crowded rail needs the room for its tags; 0 (the tag alone) under 6. The glyph starts 2 in and the tag 4 after it; the tag ends inside the selected marker's bracket.</summary>
         public static float RailGlyph(float pitch, bool twoDigitTags)
@@ -96,6 +97,13 @@ namespace BoscaliSummer.Modules.Hud.Domain
         // ---- PWR BUS (LAYOUT.md 3.2)
         public const float PwrNumeralY = 28f, PwrNumeralSize = 24f, PwrUnitY = 32f, PwrUnitGap = 4f, PwrRateY = 28f;
         public const float CellsTop = 44f, TickTop = 41f, TickBottom = 57f, JamMarkY = 59f, CostY = 66f;
+
+        /// <summary>
+        /// The jammer marker's y: +59 under a block that has room for it (one with its cost row, 72 high, or any in STACK, where nothing sits below). WIDE's block without a cost row ends at 54, and +59 stands in the gap under it against the
+        /// shelf stub of the block below (its tip 8 under the block): it touched it at a full charge in game. It rides at the cost tick's foot, +57, then.
+        /// </summary>
+        public static float JamMark(bool room) => room ? JamMarkY : TickBottom;
+
         /// <summary>STACK's PWR BUS (216 wide) keeps its cells, rate word and cost label inside 196, so the rate word ends well short of the EXPENDABLES block beside it.</summary>
         public const float StackPwrInset = 20f;
 
@@ -111,5 +119,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const float JamIcon = 14f, JamWordX = 19f, JamBarX = 52f, JamBarW = 72f, JamBarH = 3f;
         /// <summary>The dispensers a block has rows for: flares and chaff (an airframe with more shows the first two).</summary>
         public const int Rows = 2;
+
+        /// <summary>The jammer row's y: under the dispenser rows there are, not under the two the block has room for (with flares only it sat 41 under them in game).</summary>
+        public static float JamRow(int dispensers) => dispensers >= Rows ? JamY : dispensers == 1 ? ChfY : FlrY;
     }
 }

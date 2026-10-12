@@ -76,7 +76,9 @@ public static partial class HudLogUnityCheck
         Vector4 box = StoresInkBox(name);
         int x0 = Mathf.RoundToInt(box.x * w), y0 = Mathf.RoundToInt(box.y * h), x1 = Mathf.RoundToInt(box.z * w) - 1, y1 = Mathf.RoundToInt(box.w * h) - 1, mid = (y0 + y1) / 2, nose = Mathf.Max(6, (y1 - y0) / 2);
         var pixels = new Color32[w * h];
-        for (int i = 0; i < pixels.Length; i++) pixels[i] = new Color32(0, 0, 0, 255);
+        // The game's pictures are DXT1: their "black" ground is 1 to 4, not 0 (in game that showed as a faint tinted box over the whole picture), so the stand-in's is.
+        byte[] ground = { 1, 2, 4 };
+        for (int i = 0; i < pixels.Length; i++) { byte g = ground[(i % w * 7 + i / w * 13) % 3]; pixels[i] = new Color32(g, g, g, 255); }
         var white = new Color32(255, 255, 255, 255);
         void Dot(int x, int y)
         {
@@ -620,6 +622,27 @@ public static partial class HudLogUnityCheck
             Check(v.Word("/1500").Ink.xMax <= v.Hero.x + 156f, tag + ": the load ends before the arm column: " + v.Word("/1500").Ink.xMax);
             Check(v.Word("1500").Ink.height < 35f, tag + ": the numeral shrank");
         });
+        // An airframe with four stations (seen in game): the rail keeps WIDE's eight-station pitch (33), so the selected marker's bracket hugs it; spread over the block (pitch 54) it reached 51 wide round a marker 31 wide.
+        StoresBlockShot("four-stations", hd, null, x =>
+        {
+            LoadStation[] all = CricketLoad();
+            x.Load = new[] { all[0], all[1], all[2], all[3] };
+        }, (v, tag) =>
+        {
+            StoresSays(v, tag, "G", "1", "2", "3");
+            StoresSaysNot(v, tag, "4");
+            float pitch = v.Word("1").Ink.xMin - v.Word("G").Ink.xMin;
+            Check(Mathf.Abs(pitch - 33f) < 2f, tag + ": four stations are 33 apart, not spread to 54: " + pitch);
+        });
+        // Flares only, the jammer on and the capacitor full (seen in game): the jammer's row follows the flares' row instead of sitting 41 under it, and the jammer marker at the end of the cell row stays clear of the shelf stub below.
+        StoresBlockShot("one-dispenser", hd, null, x => { x.HasRdr = false; x.JamOn = true; x.Kj = 500f; }, (v, tag) =>
+        {
+            StoresSays(v, tag, "FLR", "JAM", "ON", "FULL");
+            StoresSaysNot(v, tag, "CHF");
+            float gap = v.Word("JAM").Ink.center.y - v.Word("FLR").Ink.center.y;
+            Check(Mathf.Abs(gap - 21f) < 3f, tag + ": the jammer's row is 21 under the flares', not 41: " + gap);
+            Check(Mathf.Abs(v.Word("JAM").Ink.center.y - (v.Exp.y + 46f)) < 2.5f, tag + ": JAM sits at +46: " + v.Word("JAM").Ink.center.y);
+        });
         StoreMaskCases();
         // LEAN: no captions, no shelves, DCL 1 where the arm word's row has room, and EXPENDABLES pulled up under the cells.
         StoresBlockShot("lean", hd, PilotOptions("Declutter", Declutter("Lean")), StoresCruise, (v, tag) =>
@@ -690,12 +713,12 @@ public static partial class HudLogUnityCheck
         Vector4 box = StoresInkBox("weaponIcon_AAM4");
         int top = Mathf.RoundToInt(box.y * h), bottom = Mathf.RoundToInt(box.w * h) - 1, mid = (top + bottom) / 2, left = Mathf.RoundToInt(box.x * w);
         Color32 Pixel(int x, int fromTop) => px[(h - 1 - fromTop) * w + x];
-        Check(Pixel(1, 1).a <= 4 && Pixel(w - 2, h - 2).a <= 4 && Pixel(left + 100, (top + mid) / 2).a <= 4, "mask: the black ground is clear (alpha near 0), also inside the outline");
+        Check(Pixel(1, 1).a == 0 && Pixel(w - 2, h - 2).a == 0 && Pixel(left + 100, (top + mid) / 2).a == 0, "mask: the ground (the stand-in's is the DXT's 1 to 4, not black) is clear, alpha exactly 0, also inside the outline: " + Pixel(1, 1) + " " + Pixel(left + 100, (top + mid) / 2));
         Color32 line = Pixel(left + 100, top), centre = Pixel(left + 100, mid);
         Check(line.a >= 250 && centre.a >= 250 && line.r == 255 && line.g == 255 && line.b == 255 && Pixel(1, 1).r == 255, "mask: a line is solid alpha (near 1) and every pixel white, the tint is the colour's: " + line + " " + centre);
         int clear = 0, solid = 0;
-        foreach (Color32 c in px) { if (c.a <= 4) clear++; if (c.a >= 250) solid++; }
-        Check(clear > w * h * 9 / 10 && solid > 400 && clear + solid == w * h, "mask: every texel is either clear (the ground) or solid (a line): " + clear + " clear, " + solid + " solid of " + w * h);
+        foreach (Color32 c in px) { if (c.a == 0) clear++; if (c.a >= 250) solid++; }
+        Check(clear > w * h * 9 / 10 && solid > 400 && clear + solid == w * h, "mask: every texel is either clear (the ground, exactly 0: no tinted box) or solid (a line): " + clear + " clear, " + solid + " solid of " + w * h);
         int aamId = (int)icons.GetMethod("Id", All).Invoke(null, new object[] { StandIn("weaponIcon_AAM4") });
         object[] pick = { aamId, null, 0f, 0f };
         string kind = icons.GetMethod("Pick", All).Invoke(null, pick).ToString();

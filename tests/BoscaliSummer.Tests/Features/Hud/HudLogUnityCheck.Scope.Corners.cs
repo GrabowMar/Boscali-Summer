@@ -1,6 +1,7 @@
 #if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
+using System.IO;
 using NOAvionics;
 using TMPro;
 using UnityEngine;
@@ -8,8 +9,8 @@ using UnityEngine.UI;
 using Object = UnityEngine.Object;
 using static UnityCheckHarness;
 
-// The TAC BOARD's other two corners (LAYOUT.md 7, the option Corners) and the visor's sway (LAYOUT.md 10), from stand-in native objects: the kill feed's box (a "ChatBackground" with its "Darkener" plate and four lines of text,
-// 475 x 90 at 1080p, at the top-left) and the minimised map's plate (320 x 320 at the bottom-left; the backdrop already has the game's own map drawn in it, which the brackets are to sit round). The check judges where the
+// The TAC BOARD's other two corners (LAYOUT.md 7, the option Corners) and the visor's sway (LAYOUT.md 10), from stand-in native objects: the kill feed's box (a "ChatBackground" that wears the dark plate as its OWN Image, with a "Darkener"
+// child whose Image is switched OFF, as in the game's scene, and four lines of text, 475 x 90 at 1080p, at the top-left; or one line in a box 198 x 34 as the game drew it in its first run) and the minimised map's plate (320 x 320 at the bottom-left; the backdrop already has the game's own map drawn in it, which the brackets are to sit round). The check judges where the
 // brackets and the shelves are DRAWN (the quads of the furniture surface and the words on it) against LAYOUT.md 7 and the stand-in rectangles, that the plate is hidden while the board stands in for it and given back
 // whenever it does not (the option off, the feed gone, the master switch, teardown), and that the sway moves the board and the corners together by whole pixels and puts them back. Renders corners-<case>-<W>x<H>.png.
 // Run alone with -pages corners. (The canvas of this check is in pixels, one canvas unit to a pixel: the native rectangles are authored in the native units times the screen's height over 1080, as the game's are.)
@@ -20,14 +21,15 @@ public static partial class HudLogUnityCheck
         public Canvas Canvas;
         public object Status, Frame;
         public RectTransform FeedBox, MapPlate;
-        public Image Darkener;
+        public Image Darkener, Plate;
+        public TextMeshProUGUI First;
         public Vector2 Size;
         /// <summary>Canvas units (pixels here) to a native unit (the screen's height over 1080) and to a design unit (never under 0.85).</summary>
         public float S, U;
     }
 
     /// <summary>The board with a stand-in kill feed and map plate adopted as the native corners, presented once with <paramref name="options"/>.</summary>
-    private static CornerRig MakeCorners(Vector2 size, object options)
+    private static CornerRig MakeCorners(Vector2 size, object options, int lineCount = 4)
     {
         var rig = new CornerRig { Size = size, S = size.y / 1080f, U = Mathf.Max(size.y / 1080f, 0.85f) };
         MakeBoard(size, 2f, out rig.Canvas, out rig.Status, out rig.Frame);
@@ -35,13 +37,17 @@ public static partial class HudLogUnityCheck
         FixtureSystems(2f, scene);
         StoresFixture("systems", 2f, scene);
 
-        // The feed: the game's box at the top-left (anchored top, pivot top-left), the dark plate stretched inside it (6 less each way), the four lines as the mock draws them.
-        var box = new GameObject("ChatBackground", typeof(RectTransform));
+        // The feed: the game's box at the top-left (anchored top, pivot top-left). The dark rounded plate the game draws is the Image on the box ITSELF (read from the scene's assets and seen in game: it held the texts as children, so a group
+        // on it would hide them too); the child called Darkener, stretched inside it (6 less each way), has its Image switched OFF there. The stand-in has both so. Four lines as the mock draws them, or one as the game drew its first line.
+        var box = new GameObject("ChatBackground", typeof(RectTransform), typeof(Image));
         rig.FeedBox = (RectTransform)box.transform;
         rig.FeedBox.SetParent(rig.Canvas.transform, false);
         rig.FeedBox.anchorMin = rig.FeedBox.anchorMax = rig.FeedBox.pivot = new Vector2(0f, 1f);
         rig.FeedBox.anchoredPosition = Vector2.zero;
-        rig.FeedBox.sizeDelta = new Vector2(475f, 90f) * rig.S;
+        rig.FeedBox.sizeDelta = (lineCount == 1 ? new Vector2(198f, 34f) : new Vector2(475f, 90f)) * rig.S;
+        rig.Plate = box.GetComponent<Image>();
+        rig.Plate.color = new Color(0.02f, 0.03f, 0.04f, 0.78f);
+        rig.Plate.raycastTarget = false;
         var dark = new GameObject("Darkener", typeof(RectTransform), typeof(Image));
         dark.transform.SetParent(box.transform, false);
         var darkRect = (RectTransform)dark.transform;
@@ -49,6 +55,7 @@ public static partial class HudLogUnityCheck
         rig.Darkener = dark.GetComponent<Image>();
         rig.Darkener.color = new Color(0.02f, 0.03f, 0.04f, 0.78f);
         rig.Darkener.raycastTarget = false;
+        rig.Darkener.enabled = false;
         TMP_FontAsset sans = TMP_Settings.defaultFontAsset != null ? TMP_Settings.defaultFontAsset : HudFont();
         string[][] lines =
         {
@@ -56,17 +63,19 @@ public static partial class HudLogUnityCheck
             new[] { "AT-145 Emplacement", "#ff4d4d", "12.7mm MG Emplacement", "#58a8ff" }, new[] { "23mm AAA Emplacement", "#58a8ff", "23mm AAA Emplacement", "#ff4d4d" },
         };
         float[] centres = { 21f, 39f, 58f, 76f };
-        for (int i = 0; i < lines.Length; i++)
+        for (int i = 0; i < (lineCount == 1 ? 1 : lines.Length); i++)
         {
             var label = new GameObject("Line" + i, typeof(RectTransform), typeof(TextMeshProUGUI)).GetComponent<TextMeshProUGUI>();
             label.transform.SetParent(box.transform, false);
             label.font = sans; label.fontSharedMaterial = sans.material; label.fontSize = 15f * rig.S; label.richText = true; label.raycastTarget = false;
             label.alignment = TextAlignmentOptions.MidlineLeft; label.enableWordWrapping = false; label.overflowMode = TextOverflowModes.Overflow;
-            label.text = "<color=" + lines[i][1] + ">" + lines[i][0] + "</color> <color=#f4f6f8>demolished</color> <color=" + lines[i][3] + ">" + lines[i][2] + "</color>";
+            label.text = lineCount == 1 ? "<color=#33ff44>ANumeric joined the game</color>"
+                : "<color=" + lines[i][1] + ">" + lines[i][0] + "</color> <color=#f4f6f8>demolished</color> <color=" + lines[i][3] + ">" + lines[i][2] + "</color>";
             var rect = label.rectTransform;
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0f, 1f);
             rect.sizeDelta = new Vector2(465f, 20f) * rig.S;
-            rect.anchoredPosition = new Vector2(6f * rig.S, -(centres[i] - 10f) * rig.S);
+            rect.anchoredPosition = new Vector2(6f * rig.S, -((lineCount == 1 ? 15f : centres[i]) - 10f) * rig.S);      // the game's one line: its capitals at y 9 to 21, centre 15
+            if (i == 0) rig.First = label;
         }
         // The map's plate: an invisible rectangle where the game's is (the backdrop has the map itself), anchored bottom-left.
         var plate = new GameObject("mapBackground", typeof(RectTransform));
@@ -157,7 +166,53 @@ public static partial class HudLogUnityCheck
 
     private static bool Up(string field, object status) { var r = (RectTransform)Field(status, field); return r != null && r.gameObject.activeInHierarchy; }
 
-    private static float PlateAlpha(CornerRig rig) { var g = rig.Darkener.GetComponent<CanvasGroup>(); return g != null ? g.alpha : 1f; }
+    /// <summary>How visible the feed's dark plate still is: the least of our group on the Darkener and the alpha of the box's own Image renderer (the plate the game really draws).</summary>
+    private static float PlateAlpha(CornerRig rig) { var g = rig.Darkener.GetComponent<CanvasGroup>(); return Mathf.Min(g != null ? g.alpha : 1f, rig.Plate.canvasRenderer.GetAlpha()); }
+
+    /// <summary>The pixel at (x, y) from the top-left of a PNG the check wrote.</summary>
+    private static Color32 PngPixel(string png, int x, int y)
+    {
+        var texture = new Texture2D(2, 2, TextureFormat.RGB24, false);
+        ImageConversion.LoadImage(texture, File.ReadAllBytes(png));
+        Color32 c = texture.GetPixel(x, texture.height - 1 - y);
+        Object.DestroyImmediate(texture);
+        return c;
+    }
+
+    private static int PixelGap(Color32 a, Color32 b) => Mathf.Abs(a.r - b.r) + Mathf.Abs(a.g - b.g) + Mathf.Abs(a.b - b.b);
+
+    /// <summary>
+    /// One line in a box 198 x 34, the game's first run (a capital reaches from y 9 to 21; the first capture had the brackets' arm through the "A" and the dark box still round the line): the furniture stays off the first
+    /// letter, and the plate is gone for real, measured on the render itself against the same scene with no plate at all (the box's own Image taken out), and against the plate shown, so the check can tell.
+    /// </summary>
+    private static void CornerOneLine(CornerRig rig)
+    {
+        string res = (int)rig.Size.x + "x" + (int)rig.Size.y;
+        var canvasRect = (RectTransform)rig.Canvas.transform;
+        Check(PlateAlpha(rig) == 0f && rig.Plate.canvasRenderer.GetAlpha() == 0f, "One line: the dark plate the game draws, the box's own Image, is hidden: " + res);
+        Check(!rig.Darkener.enabled, "...and the Darkener's Image stays off as the game has it (no native Image is ever switched on): " + res);
+        rig.First.ForceMeshUpdate();
+        TMP_CharacterInfo letter = rig.First.textInfo.characterInfo[0];
+        Vector3 bl = canvasRect.InverseTransformPoint(rig.First.transform.TransformPoint(letter.bottomLeft)), tr = canvasRect.InverseTransformPoint(rig.First.transform.TransformPoint(letter.topRight));
+        Rect cr = canvasRect.rect;
+        Rect ink = Rect.MinMaxRect(bl.x - cr.xMin, cr.yMax - tr.y, tr.x - cr.xMin, cr.yMax - bl.y);
+        Check(letter.character == 'A' && ink.yMin >= 6f * rig.S && ink.yMax <= 24f * rig.S, "One line: the stand-in's first letter is where the game's was (y " + ink.yMin / rig.S + " to " + ink.yMax / rig.S + "): " + res);
+        foreach (Rect q in CornerQuads(rig))
+            Check(!(q.xMin < ink.xMax - 0.5f && q.xMax > ink.xMin + 0.5f && q.yMin < ink.yMax - 0.5f && q.yMax > ink.yMin + 0.5f), "One line: the furniture stays off the first letter: " + q + " on " + ink + " " + res);
+        rig.Plate.color = new Color(0.9f, 0.1f, 0.1f, 1f);      // a plate that cannot be mistaken for any backdrop (the game's is near black over a dark sky): this case is about whether it is drawn at all
+        int px = Mathf.RoundToInt(192f * rig.S), py = Mathf.RoundToInt(30f * rig.S);      // inside the box, under the line's last letters, clear of the brackets
+        string stem = "corners-oneline-" + res;
+        Capture(rig.Canvas, stem + "-hidden.png");
+        Color32 hidden = PngPixel(stem + "-hidden.png", px, py);
+        rig.Plate.canvasRenderer.SetAlpha(1f);
+        Capture(rig.Canvas, stem + "-shown.png");
+        Color32 shown = PngPixel(stem + "-shown.png", px, py);
+        rig.Plate.enabled = false;
+        Capture(rig.Canvas, stem + "-none.png");
+        Color32 none = PngPixel(stem + "-none.png", px, py);
+        Check(PixelGap(shown, none) >= 40, "One line: the plate shown darkens the render at (" + px + ", " + py + ") enough to tell it: " + shown + " against " + none + " " + res);
+        Check(PixelGap(hidden, none) <= 3, "One line: with the plate hidden the render is the one with no plate at (" + px + ", " + py + "): " + hidden + " against " + none + " " + res);
+    }
 
     private static void CornerShot(CornerRig rig, string name)
     {
@@ -180,9 +235,9 @@ public static partial class HudLogUnityCheck
         List<Rect> quads = CornerQuads(rig);
         Dictionary<string, Rect> words = CornerWords(rig);
         float feedBottom = 90f * s;
-        // DL EVT LOG: arm-10 brackets at x 2, corners 10 under the box's top and 4 over its bottom; the shelf's line 8 under the box, from x 2.
-        Check(HasLine(quads, true, 10f * u, 2f * u, 12f * u) == feed, "DL EVT LOG: the top bracket's arm along y 10 from x 2 to 12 (" + feed + "): " + res);
-        Check(HasLine(quads, false, 2f * u, 10f * u, 20f * u) == feed, "DL EVT LOG: ...and down x 2 from y 10 to 20: " + res);
+        // DL EVT LOG: arm-10 brackets at x 2, corners 3 under the box's top and 4 over its bottom; the shelf's line 8 under the box, from x 2.
+        Check(HasLine(quads, true, 3f * u, 2f * u, 12f * u) == feed, "DL EVT LOG: the top bracket's arm along y 3 from x 2 to 12 (" + feed + "): " + res);
+        Check(HasLine(quads, false, 2f * u, 3f * u, 13f * u) == feed, "DL EVT LOG: ...and down x 2 from y 3 to 13: " + res);
         Check(HasLine(quads, true, feedBottom - 4f * u, 2f * u, 12f * u) == feed, "DL EVT LOG: the bottom bracket's arm along 4 over the box's bottom: " + res);
         Check(HasLine(quads, false, 2f * u, feedBottom - 14f * u, feedBottom - 4f * u) == feed, "DL EVT LOG: ...and up from there: " + res);
         Check(HasLine(quads, true, feedBottom + 8f * u, 2f * u, 10f * u) == feed, "DL EVT LOG: the shelf's line 8 under the box, from x 2: " + res);
@@ -246,6 +301,11 @@ public static partial class HudLogUnityCheck
             Check(PlateAlpha(rig) == 1f && !Up("cornerShade", rig.Status) && !Up("cornerFurniture", rig.Status), "Corners off: the vanilla dark plate, no shade, no furniture: " + res);
             Check(rig.Darkener.GetComponent<CanvasGroup>() == null || rig.Darkener.GetComponent<CanvasGroup>().alpha == 1f, "Corners off: the plate is shown at full alpha: " + res);
             CornerShot(rig, "off");
+            EndCorners(rig);
+
+            // One line as the game drew it, the shade off so nothing but the plate could darken the box.
+            rig = MakeCorners(size, PilotOptions("Shade", 0f), 1);
+            CornerOneLine(rig);
             EndCorners(rig);
             if (size.x < 1500f) continue;
 

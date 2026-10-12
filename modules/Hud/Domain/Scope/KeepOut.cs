@@ -97,6 +97,41 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return area;
         }
 
+        /// <summary>
+        /// For a label whose own few spots all sit on others (three long names at one bearing, in game) or on a line of <paramref name="segs"/> (x1, y1, x2, y2 each): leaves (<paramref name="x"/>, <paramref name="y"/>) alone when the
+        /// <paramref name="w"/> x <paramref name="h"/> box there sits on nothing; else moves it to the spot of a grid over the area (half a label across and down) that sits on the least: first by overlapped area with what is placed, then
+        /// by sample points on the lines, then the nearest to where it was. Registers nothing: the caller adds the label.
+        /// </summary>
+        public void Free(float w, float h, ReadOnlySpan<float> segs, float xMin, float xMax, float yMin, float yMax, ref float x, ref float y)
+        {
+            float own = OverlapCost(x, y, w, h) * Dear + Hits(x, y, w, h, segs) * OnLine;
+            if (own <= 0f) return;
+            float stepX = Math.Max(4f, w / 2f), stepY = Math.Max(4f, h / 2f), best = own, bx = x, by = y;
+            int cols = (int)Math.Ceiling(Math.Max(0f, xMax - w - xMin) / stepX) + 1, rows = (int)Math.Ceiling(Math.Max(0f, yMax - h - yMin) / stepY) + 1;
+            for (int j = 0; j < rows; j++)
+            {
+                float gy = (float)Math.Round(Clamp(yMin + j * stepY, yMin, Math.Max(yMin, yMax - h)));
+                for (int i = 0; i < cols; i++)
+                {
+                    float gx = (float)Math.Round(Clamp(xMin + i * stepX, xMin, Math.Max(xMin, xMax - w)));
+                    float cost = OverlapCost(gx, gy, w, h) * Dear + Hits(gx, gy, w, h, segs) * OnLine + Math.Abs(gx - x) + Math.Abs(gy - y);
+                    if (cost < best) { best = cost; bx = gx; by = gy; }
+                }
+            }
+            x = bx;
+            y = by;
+        }
+
+        /// <summary>One unit of overlapped area costs more than any distance on the scope; a sample point on a line costs more than a few units of it (<see cref="Free"/>).</summary>
+        private const float Dear = 1000f, OnLine = 12f;
+
+        private static int Hits(float x, float y, float w, float h, ReadOnlySpan<float> segs)
+        {
+            int hits = 0;
+            for (int s = 0; s + 3 < segs.Length; s += 4) hits += SegHits(x, y, w, h, segs[s], segs[s + 1], segs[s + 2], segs[s + 3], 6);
+            return hits;
+        }
+
         private static void Spot(bool shot, int i, float w, float h, out float dx, out float dy)
         {
             if (shot)

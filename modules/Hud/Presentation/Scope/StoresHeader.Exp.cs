@@ -26,7 +26,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 // ponytail: the block has two rows (flares, chaff); an airframe with a third dispenser shows the first two.
                 else if (rows < StoresLayout.Rows) beat |= PaintDispenser(g, i, x, y + (rows++ == 0 ? StoresLayout.FlrY : StoresLayout.ChfY), w, flashOn);
             }
-            if (jam >= 0) PaintJammer(g, d.Cm[jam], x, y + StoresLayout.JamY, w);
+            if (jam >= 0) PaintJammer(g, d.Cm[jam], x, y + StoresLayout.JamRow(rows), w);
             return beat;
         }
 

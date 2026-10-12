@@ -39,6 +39,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private ScopeRect beam;
         private bool hasBeam;
         private readonly float[] segs = new float[4 * 14], trailXY = new float[2 * 12], wedge = new float[2 * 14];
+        /// <summary>The radars' spokes (x1, y1, x2, y2 each, at most eight radars), so a tag that has to move off the others stays off the lines too.</summary>
+        private readonly float[] spokeSegs = new float[4 * 8];
+        private int spokeSegCount;
         private int cueBaseFor = -1;
 
         private string headlineText = "";
@@ -243,10 +246,19 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             keep.Add(CX - 13f, CY - 13f, 26f, 26f);
             keep.Add(COL - 4f, 30f, CW + 8f, 54f);          // the call box
             keep.Add(COL - 4f, 230f, CW + 8f, 66f);         // the time bars
+            keep.Add(3f, 34f, 76f, 30f);                    // TTI RINGS and HDG UP: the radars' tags dodge the page's own words too
+            bool sam = d.HasSam && d.SamRings > 0;
+            if (sam) keep.Add(3f, 281f, 90f, 14f);          // SAM ENV xN
             for (int i = 0; i < d.MissileCount; i++)
             {
                 At(d.Missiles[i].BearingDeg, Rr(d.Missiles[i].TtiS), out float mx, out float my);
                 keep.Add(mx - 11f, my - 11f, 22f, 22f);
+            }
+            spokeSegCount = 0;
+            for (int i = 0; i < d.EmitterCount && spokeSegCount + 4 <= spokeSegs.Length; i++, spokeSegCount += 4)
+            {
+                At(d.Emitters[i].BearingDeg, R, out spokeSegs[spokeSegCount], out spokeSegs[spokeSegCount + 1]);
+                At(d.Emitters[i].BearingDeg, R * 0.56f, out spokeSegs[spokeSegCount + 2], out spokeSegs[spokeSegCount + 3]);
             }
             Wedge(g);
             Rings(g);
@@ -260,8 +272,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (near >= 0 && d.Missiles[near].TtiS <= ThreatMath.WarnS) g.Ring(CX, CY, 15f, Red, 0.35f + 0.5f * ScopeCanvas.Pulse(t, 3f));
             g.Text("TTI RINGS", 5f, 41f, Dim);
             g.Text("HDG UP", 5f, 56f, Faint);
-            if (d.HasSam)
-                g.Text(ScopeStr.Cat("SAM ENV x", d.SamRings, null), 5f, 288f, d.SamRings > 0 ? Amber : Dim, 12f, ScopeAlign.Left, d.SamRings > 0);
+            // Only inside an envelope: "x0" said nothing and stood on the radars' tags (observed in game, where no SAM covers the sky; the prototype's mock is always inside one or two).
+            if (sam) g.Text(ScopeStr.Cat("SAM ENV x", d.SamRings, null), 5f, 288f, Amber, 12f, ScopeAlign.Left, true);
         }
 
         /// <summary>
@@ -338,18 +350,23 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (lockOn) g.Line(x0, y0, x1, y1, Red, 0.35f * a);
             g.Tri(tx, ty, b + 180f, 4f, tone, true, a);
             if (lockOn && e.AgeS < 0.7f) g.Ring(tx, ty, 3f + 22f * ScopeCanvas.EaseOut(e.AgeS / 0.7f), Hi, 1f - e.AgeS / 0.7f);
-            // a two-line tag outside the rim, inside it when there is no room: the name bold, the range under it
-            string name = Name(e);
+            // a two-line tag outside the rim, inside it when there is no room: the name bold (the whole words that fit TagChars: the game's run to 22 characters), the range under it; a tag whose spots all sit on others moves to a free one
+            Span<char> name = stackalloc char[ThreatMath.TagChars];
+            name = name.Slice(0, ThreatMath.TagName(Name(e), name));
             ReadOnlySpan<char> range = ScopeStr.Distance("", e.RangeM, units, 8);
             float w = Math.Max(ScopeCanvas.TextW(name, 12f), ScopeCanvas.TextW(range, 12f)) + 8f, h = 31f;
             Label(b, w, h, out float bx, out float by);
+            float fx = bx, fy = by;
+            keep.Free(w, h, new ReadOnlySpan<float>(spokeSegs, 0, spokeSegCount), 2f, RB, 30f, 296f, ref bx, ref by);
+            bool moved = bx != fx || by != fy;
             keep.Add(bx, by, w, h);
             g.Fill(bx, by, w, h, Bg, a);
             g.Box(bx, by, w, h, tone, a, 1f, tone, lockOn ? 0.25f : 0.14f);
-            g.FitText(name, bx + w / 2f, by + 9f, w - 4f, tone, 12f, 12f, ScopeAlign.Center, true, a);
+            g.Text(name, bx + w / 2f, by + 9f, tone, 12f, ScopeAlign.Center, true, a);
             g.Text(range, bx + w / 2f, by + 22f, tone, 12f, ScopeAlign.Center, false, a * 0.95f);
             At(b, R + 1f, out float attx, out float atty);
-            g.Line(attx, atty, Mathf.Clamp(attx, bx, bx + w), Mathf.Clamp(atty, by, by + h), tone, a * 0.7f);
+            float lx = Mathf.Clamp(attx, bx, bx + w), ly = Mathf.Clamp(atty, by, by + h);
+            if (!moved || !keep.LeaderCrosses(attx, atty, lx, ly, attx, atty)) g.Line(attx, atty, lx, ly, tone, a * 0.7f);      // a tag that had to move away from its spoke is tied to it only by a line that crosses no other label
         }
 
         /// <summary>
@@ -567,7 +584,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 case ThreatCue.Spike:
                     {
                         int e = BestEmitter();
-                        if (e >= 0) g.FitText(ScopeStr.Distance(Name(d.Emitters[e]), d.Emitters[e].RangeM, units, 12), x, y, w, tone, 12f, 12f, ScopeAlign.Center);
+                        // The characters the box holds (10 in 84 units): the name gives way to the range, never the other way (12 overran the box in game and FitText cut "HYPERI... 3..").
+                        if (e >= 0) g.FitText(ScopeStr.Distance(Name(d.Emitters[e]), d.Emitters[e].RangeM, units, (int)(w / (ScopeText.DesignAdvance * 12f))), x, y, w, tone, 12f, 12f, ScopeAlign.Center);
                         break;
                     }
                 case ThreatCue.Inbound:

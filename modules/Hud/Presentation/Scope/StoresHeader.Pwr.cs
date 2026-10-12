@@ -55,7 +55,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // The jammer's marker rides the fill's edge while it draws power.
             bool jamOn = false;
             for (int i = 0; i < d.CmCount; i++) jamOn |= d.Cm[i].Chargeable && d.Cm[i].Active;
-            if (jamOn) g.Tri(x + Math.Max(0f, lit * StoresMath.CellPitch - (StoresMath.CellPitch - StoresMath.CellW)), y + StoresLayout.JamMarkY + (int)(now * 4f) % 2, 0f, 3f, Hi);
+            if (jamOn) g.Tri(x + Math.Max(0f, lit * StoresMath.CellPitch - (StoresMath.CellPitch - StoresMath.CellW)), y + StoresLayout.JamMark(cost > 0f || stack) + (int)(now * 4f) % 2, 0f, 3f, Hi);
             return jamOn || shot;
         }
 

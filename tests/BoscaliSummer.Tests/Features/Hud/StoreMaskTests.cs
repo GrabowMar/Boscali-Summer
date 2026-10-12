@@ -9,9 +9,43 @@ namespace BoscaliSummer.Tests.Features.Hud
         public static void Run()
         {
             AlphaRule();
+            Ground();
             Convert();
             NoInk();
             Cache();
+        }
+
+        /// <summary>The game's pictures are DXT1: their "black" ground is 1 to 4 (up to 24 beside a stroke), which alpha showed as a faint tinted box over the whole picture. The ground goes to nothing, a solid line stays solid.</summary>
+        private static void Ground()
+        {
+            TestAssert.Eq(StoreMask.Clean(0), (byte)0, "Nothing stays nothing");
+            foreach (int ground in new[] { 1, 2, 4, 8, StoreMask.Floor }) TestAssert.Eq(StoreMask.Clean((byte)ground), (byte)0, "A ground of " + ground + " is clear");
+            TestAssert.That(StoreMask.Clean(StoreMask.Floor + 1) >= 1, "Just over the floor is a trace of ink");
+            TestAssert.Eq(StoreMask.Clean(255), (byte)255, "A solid line stays solid");
+            byte last = 0;
+            for (int a = 0; a <= 255; a++) { byte c = StoreMask.Clean((byte)a); TestAssert.That(c >= last, "The floor never lowers a brighter pixel below a dimmer one: " + a); last = c; }
+
+            // A picture the way the game ships it: DXT-ish ground (1, 2 and 4 in a pattern, opaque), one white line. Every ground pixel comes out with alpha 0 (the box has no tint), the line out solid.
+            const int w = 16, h = 8;
+            var px = new byte[w * h * 4];
+            byte[] ground3 = { 1, 2, 4 };
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    int i = (y * w + x) * 4;
+                    byte v = (y == 4 && x >= 2 && x <= 13) ? (byte)255 : ground3[(x * 7 + y * 13) % 3];
+                    px[i] = px[i + 1] = px[i + 2] = v;
+                    px[i + 3] = 255;
+                }
+            TestAssert.That(StoreMask.Convert(px, w, h, out ArtBounds ink), "The line is ink");
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    byte a = px[(y * w + x) * 4 + 3];
+                    bool line = y == 4 && x >= 2 && x <= 13;
+                    TestAssert.That(line ? a == 255 : a == 0, "Alpha at " + x + ", " + y + ": " + a + (line ? " (the line)" : " (the ground, which must be clear)"));
+                }
+            TestAssert.Near(ink.X0, 2f / w, "The ink box is the line's");
         }
 
         private static void AlphaRule()
@@ -39,7 +73,7 @@ namespace BoscaliSummer.Tests.Features.Hud
             }
             Put(1, 1, 255);
             Put(2, 1, 255);
-            Put(5, 3, 20);
+            Put(5, 3, 20);      // 20 is over the ground floor (12) and under the ink share (25): a faint trace
             TestAssert.That(StoreMask.Convert(px, w, h, out ArtBounds ink), "A picture with a line has ink");
             TestAssert.Near(ink.X0, 1f / 6f, "The ink starts at the line's left");
             TestAssert.Near(ink.X1, 3f / 6f, "...ends after its right pixel (the faint one is not ink)");
@@ -50,7 +84,7 @@ namespace BoscaliSummer.Tests.Features.Hud
                 {
                     int i = ((h - 1 - y) * w + x) * 4;
                     TestAssert.That(px[i] == 255 && px[i + 1] == 255 && px[i + 2] == 255, "Every pixel is white (the tint is the colour's): " + x + ", " + y);
-                    byte want = y == 1 && (x == 1 || x == 2) ? (byte)255 : x == 5 && y == 3 ? (byte)20 : (byte)0;
+                    byte want = y == 1 && (x == 1 || x == 2) ? (byte)255 : x == 5 && y == 3 ? StoreMask.Clean(20) : (byte)0;
                     TestAssert.Eq(px[i + 3], want, "Alpha at " + x + ", " + y + ": near 1 on the line, 0 on the ground");
                 }
         }

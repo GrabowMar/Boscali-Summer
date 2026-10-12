@@ -31,6 +31,8 @@ public static partial class HudLogUnityCheck
     private static readonly (string page, float t, string variant)[] ScopeVariants =
     {
         ("dock", 6f, "service-zone"), ("dock", 12f, "service-zone"), ("dock", 14f, "service-zone"),
+        // The names the game gave its radars (seen in game: six at nearly one bearing, the longest 22 characters), no SAM envelope round us, then inside two.
+        ("threat", 0.5f, "longnames"), ("threat", 1.5f, "longnames"),
         ("systems", 10f, "rotary"), ("systems", 2f, "annex"), ("systems", 2f, "longname"), ("systems", 2f, "hardg"), ("strike", 6f, "solo"), ("strike", 6f, "sat"), ("objective", 6f, "far"), ("objective", 6f, "bare"), ("missilecam", 8f, "blind"),
         // The stores header alone over the cruise strip: the default loadout, a gun and flares running low (chaff gone), an empty weapon, a gun reload with another station reloading,
         // an airframe without a capacitor, a flare call (DISPENSE) with the chaff selected, a bare helicopter (one dispenser, no jammer) and a gun-only aircraft with no countermeasures.
@@ -208,6 +210,7 @@ public static partial class HudLogUnityCheck
             foreach (var label in canvas.GetComponentsInChildren<TextMeshProUGUI>(true))
                 if (label != null && label.gameObject.activeInHierarchy)
                     Check(!(label.text ?? "").Contains("BRAKE"), "Service-zone presentation must not instruct a brake-to-dock maneuver: " + tag);
+        if (variant == "longnames") ThreatLongNamesChecks(status, tag, t);
         Capture(canvas, tag + ".png");
         Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject); ScopeReset();
         return true;

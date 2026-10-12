@@ -6,16 +6,18 @@ namespace BoscaliSummer.Modules.Hud.Runtime
 {
     /// <summary>
     /// The native objects of the two lower-priority screen corners the board restyles (LAYOUT.md 7): the kill feed's box at the top-left (<c>MessageUI.messageBackground</c> holds it; its dark plate is the child called
-    /// <c>Darkener</c>) and the minimised map's plate at the bottom-left (<c>DynamicMap.mapBackground</c>'s rectangle). Reads only. The one thing it changes is the feed's plate, and only through a <see cref="CanvasGroup"/> it
-    /// OWNS on the plate at alpha 0: never <c>SetActive</c> on the plate or on the box (the game's <c>MessageUI</c> activates and deactivates the box itself, and the feed's texts live in it), never a disabled native
-    /// script, the feed's own text and layout untouched. <see cref="HidePlate"/> is told every frame whether the board's own shade is standing in for it (fail open: the plate comes back the same frame it is not);
-    /// <see cref="Dispose"/> takes our group off and so gives the game its plate exactly as it was. A native object that cannot be found leaves its half off (the board skips that corner).
+    /// <c>Darkener</c>) and the minimised map's plate at the bottom-left (<c>DynamicMap.mapBackground</c>'s rectangle). Reads only. The one thing it changes is the feed's plate: through a <see cref="CanvasGroup"/> it
+    /// OWNS on <c>Darkener</c> at alpha 0 and through the alpha of the box's own <c>Image</c> renderer. In the game's scene (read from its assets, confirmed by a capture) <c>Darkener</c>'s Image is switched OFF and the dark rounded
+    /// plate people see is the Image on the box itself (<c>ChatBackground</c>, which also holds the texts as children, so a group on it would hide them): its <see cref="CanvasRenderer"/> alpha is the one thing that hides that plate alone.
+    /// Never <c>SetActive</c> on the plate or on the box (the game's <c>MessageUI</c> activates and deactivates the box itself, and the feed's texts live in it), never a disabled native script or Image, the feed's own text and
+    /// layout untouched. <see cref="HidePlate"/> is told every frame whether the board's own shade is standing in for it (fail open: the plate comes back the same frame it is not);
+    /// <see cref="Dispose"/> takes our group off and puts the renderer's alpha back, so the game has its plate exactly as it was. A native object that cannot be found leaves its half off (the board skips that corner).
     /// </summary>
     internal sealed class NativeScreenCorners
     {
         private static readonly AccessTools.FieldRef<MessageUI, GameObject> BackgroundRef = NativeRefs.Field<MessageUI, GameObject>("messageBackground");
 
-        private Image darkener;
+        private Image darkener, boxPlate;
         private RectTransform feedBox, mapPlate;
         private CanvasGroup plate;
 
@@ -58,6 +60,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             plate = darkener.gameObject.AddComponent<CanvasGroup>();      // null if Unity would not take a second group: the feed stays as the game made it
             if (plate == null) { feedBox = null; return; }
             plate.alpha = 1f;
+            boxPlate = feedBox.GetComponent<Image>();
         }
 
         /// <summary>Hide the feed's plate (the board's shade stands in for it) or show it. Idempotent; meant to run every frame.</summary>
@@ -66,14 +69,16 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             if (plate == null) return;
             float alpha = hide ? 0f : 1f;
             if (plate.alpha != alpha) plate.alpha = alpha;
+            if (boxPlate != null && boxPlate.canvasRenderer.GetAlpha() != alpha) boxPlate.canvasRenderer.SetAlpha(alpha);      // every frame, not once: the game switches the box off and on as lines come and go
         }
 
         /// <summary>Give the plate back and let go of everything.</summary>
         public void Dispose()
         {
             if (plate != null) { plate.alpha = 1f; Object.Destroy(plate); }
+            if (boxPlate != null) boxPlate.canvasRenderer.SetAlpha(1f);
             plate = null;
-            darkener = null;
+            darkener = boxPlate = null;
             feedBox = mapPlate = null;
         }
     }

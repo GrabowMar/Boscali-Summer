@@ -14,8 +14,41 @@ namespace BoscaliSummer.Tests.Features.Hud
             Tags();
             Dcl();
             Rail();
+            BracketHugsMarker();
+            JammerMarker();
+            JammerRow();
             Geometry();
             Shelves();
+        }
+
+        /// <summary>The jammer marker rides under the cells at +59; under WIDE's 54 high block (no cost row) that is the gap above the next block's shelf stub, so it rides 2 higher there (the stub touched it at a full charge in game).</summary>
+        private static void JammerMarker()
+        {
+            TestAssert.Near(StoresLayout.JamMark(true), 59f, "With room under the cells the marker is the spec's +59");
+            float tip = ScopeLayout.SatH - ScopeLayout.CostRow + ScopeLayout.BlockGap - 2f;      // the next shelf's stub tip: its top (54 + 10) less 2 (the shelf at +6, the stub 8 up from it)
+            float low = StoresLayout.JamMark(false) + 0.6f * 3f + 1f;                            // the triangle's base (0.6 of its size under its centre) at the blink's low beat
+            TestAssert.That(tip - low >= 2f, "Without a cost row the marker's base stays 2 clear of the stub tip (" + low + " over " + tip + ")");
+            TestAssert.That(tip - (StoresLayout.JamMarkY + 0.6f * 3f + 1f) < 2f, "(+59 under that block is what touched it: " + (StoresLayout.JamMarkY + 0.6f * 3f + 1f) + " over " + tip + ")");
+            TestAssert.That(StoresLayout.JamMark(false) >= StoresLayout.CellsTop + StoresMath.CellH, "...and it is still under the cells");
+        }
+
+        /// <summary>The jammer's row sits under the dispenser rows there are: flares only put it where the chaff row would be, no dispenser where the flares' row is (it sat 41 under the flares in game).</summary>
+        private static void JammerRow()
+        {
+            TestAssert.Near(StoresLayout.JamRow(2), 66f, "Two dispensers: the jammer at +66");
+            TestAssert.Near(StoresLayout.JamRow(3), 66f, "...the block shows two at most");
+            TestAssert.Near(StoresLayout.JamRow(1), 46f, "Flares only: the jammer takes the second row, 20 under the first");
+            TestAssert.Near(StoresLayout.JamRow(0), 25f, "No dispenser: the jammer is the first row");
+        }
+
+        /// <summary>WIDE's selected marker is bracketed no wider than its marker plus a few units, whatever the number of stations (the bracket is 3 short of the pitch).</summary>
+        private static void BracketHugsMarker()
+        {
+            for (int n = 1; n <= 8; n++)
+            {
+                float pitch = StoresLayout.RailPitch(n, 270f), glyph = StoresLayout.RailGlyph(pitch, false), content = StoresLayout.RailTagX(glyph) + 0.65f * 12f;
+                TestAssert.That(pitch - 3f - content <= 4f, n + " stations: the bracket " + (pitch - 3f) + " wide round a marker " + content + " wide");
+            }
         }
 
         /// <summary>The caption shelves of PWR BUS and EXPENDABLES (LAYOUT.md 3.2, 3.3, 4): 8 short of the block, STACK's PWR BUS 12, so its stub tip stays 12 clear of the EXPENDABLES shelf beside it.</summary>
@@ -82,9 +115,10 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.Near(StoresLayout.RailPitch(8, 270f), 33f, "Eight stations on WIDE's 270: the prototype's 33");
             TestAssert.Near(StoresLayout.RailPitch(8, 438f), 54f, "...and on STACK's 438: 54");
             TestAssert.Near(StoresLayout.RailPitch(12, 270f), 22f, "Twelve stations: 22");
-            TestAssert.Near(StoresLayout.RailPitch(0, 270f), 54f, "No stations: no division by zero");
-            TestAssert.Near(StoresLayout.RailPitch(1, 270f), 54f, "A lone gun packs at the left: the pitch never goes over STACK's 54, so its brackets stay marker sized");
-            TestAssert.Near(StoresLayout.RailPitch(5, 270f), 54f, "...nor do five stations");
+            TestAssert.Near(StoresLayout.RailPitch(0, 270f), 33f, "No stations: no division by zero");
+            TestAssert.Near(StoresLayout.RailPitch(1, 270f), 33f, "A lone gun packs at the left at the eight station pitch, so its brackets stay marker sized");
+            TestAssert.Near(StoresLayout.RailPitch(4, 270f), 33f, "...as do four stations (they spread to 54 in game, a bracket 51 wide round a marker 31 wide)");
+            TestAssert.Near(StoresLayout.RailPitch(4, 438f), 54f, "...and STACK's rail keeps its own 54");
             TestAssert.Near(StoresLayout.RailGlyph(33f, false), 14f, "At 33 the glyph is the full 14");
             TestAssert.Near(StoresLayout.RailGlyph(54f, true), 14f, "...never more");
             TestAssert.Near(StoresLayout.RailGlyph(30f, false), 13f, "A crowded rail shortens the glyph to keep the tag clear");

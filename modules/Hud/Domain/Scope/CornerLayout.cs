@@ -22,9 +22,10 @@ namespace BoscaliSummer.Modules.Hud.Domain
     /// </summary>
     internal static class CornerLayout
     {
-        /// <summary>DL EVT LOG (top-left): the game's four lines are at x 6, in a box 0..475 by 0..90; the brackets stand 2 in from its left edge, their corners 10 under its top and 4 over its bottom, arms 10; the caption shelf is
-        /// 8 under the box, from x 2, 150 wide (design units, as the mock draws them).</summary>
-        public const float FeedInset = 2f, FeedTop = 10f, FeedBottom = 4f, FeedArm = 10f, FeedShelfGap = 8f, FeedShelfW = 150f;
+        /// <summary>DL EVT LOG (top-left): the game's four lines are at x 6, in a box 0..475 by 0..90; the brackets stand 2 in from its left edge, their corners <see cref="FeedTop"/> under its top and 4 over its bottom, arms 10; the caption shelf is
+        /// 8 under the box, from x 2, 150 wide (design units, as the mock draws them). The mock drew its first line 21 down (so a top corner 10 under the top cleared the capitals); in game the first line is higher whatever the box holds
+        /// (a one line box is 34 high and its capitals reach from y 9 to 21: the arm at 10 ran through the first letter), so the corner is 3 under the top.</summary>
+        public const float FeedInset = 2f, FeedTop = 3f, FeedBottom = 4f, FeedArm = 10f, FeedShelfGap = 8f, FeedShelfW = 150f;
 
         /// <summary>TAC MAP (bottom-left): the brackets stand 4 in from the plate at its left, right and top, 12 over its bottom (the screen's bottom), arms 18 (all of it in canvas units, carried by k); the shelf is 16 over them
         /// (design units) and as wide as they are. The plate is x 0..320 by 760..1080: the brackets are (4, 766) to (316, 1068), 312 x 302.</summary>

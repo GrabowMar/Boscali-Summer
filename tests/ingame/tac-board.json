@@ -1,5 +1,5 @@
 {
-  "_note": "The TAC BOARD in the cockpit, ONE run for every look. Cruise first, the dock geometry probe, then ten looks, each set through HudAutomation.Configure (the SET console's own settings contract) with 2 s for the board's 10 Hz tick and a capture: cruise-wide (the defaults, every option set explicitly), look-stack, look-wide-scale07, look-wide-scale13-moved (scale 1.3, 300 left, 120 down), look-shade0, look-shade1, look-lean, look-minimal, look-board-off (the game's own weapon, countermeasure and power panels must be back; the restyled kill feed and map stay) and look-board-on. Then a bandit head-on at 8 km, the missile shot (shot, shot-later, after) and the tracker probe. Configure changes the options IN MEMORY ONLY: the config file is never written and the last op puts the pilot's own values back (cfg_restored), so a run leaves the player's saved settings alone. results.json holds the dock / fire / msl probes and what each Configure applied (cfg_*). The checks assert the options really reached the contract, that the shot happened and that the Unity log has no Exception; nothing asserts the board's pixels, that is read off the captures.",
+  "_note": "The TAC BOARD in the cockpit, ONE run for every look. Cruise first, the dock geometry probe, then ten looks, each set through HudAutomation.Configure (the SET console's own settings contract) with 2 s for the board's 10 Hz tick and a capture: cruise-wide (the defaults, every option set explicitly), look-stack, look-wide-scale07, look-wide-scale13-moved (scale 1.3, 300 left, 120 down), look-shade0, look-shade1, look-lean, look-minimal, look-board-off (the game's own weapon, countermeasure and power panels must be back; the restyled kill feed and map stay) and look-board-on. Then the cruise SYSTEMS strip with the THREAT page switched off (the mission's own radar emitter keeps the THREAT page up from the first second otherwise, so every look above is a THREAT look; round 1 of the in-game run never saw the strip): cruise-systems-wide and cruise-systems-stack. Then a bandit head-on at 8 km, the missile shot (shot, shot-later, after) and the tracker probe. Configure changes the options IN MEMORY ONLY: the config file is never written and the last op puts the pilot's own values back (cfg_restored), so a run leaves the player's saved settings alone. results.json holds the dock / fire / msl probes and what each Configure applied (cfg_*). The checks assert the options really reached the contract, that the shot happened and that the Unity log has no Exception; nothing asserts the board's pixels, that is read off the captures.",
   "name": "tac-board",
   "description": "TAC BOARD looks in one cockpit run: wide, stack, scale 0.7 and 1.3 moved, shade 0 and 1, lean, minimal, board off and on; then a missile shot.",
   "mods": [
@@ -281,6 +281,53 @@
       "name": "look-board-on"
     },
     {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Configure",
+      "args": {
+        "enabled": true,
+        "layout": "Wide",
+        "pageThreat": false
+      },
+      "store": "cfg_systems_wide"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "cruise-systems-wide"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Configure",
+      "args": {
+        "layout": "Stack"
+      },
+      "store": "cfg_systems_stack"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "cruise-systems-stack"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Configure",
+      "args": {
+        "layout": "Wide",
+        "pageThreat": true
+      },
+      "store": "cfg_threat_back"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
       "op": "spawn",
       "id": "bandit",
       "type": "FS-20 Vortex",
@@ -405,6 +452,16 @@
     {
       "check": "result_equals",
       "path": "cfg_on.enabled",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "cfg_systems_wide.pageThreat",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "cfg_threat_back.pageThreat",
       "value": true
     },
     {
