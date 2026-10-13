@@ -107,8 +107,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private bool CustomEnabled() => ImageEnabled();
 
         private int BackgroundIndex() =>
-            Array.IndexOf(BackgroundNames, SettingsChoices.BackgroundName(settings.DeckGrid.Value,
-                settings.CheckerboardOverlay.Value, settings.BackgroundImage.Value, settings.BackgroundImagePreset.Value));
+            Array.IndexOf(BackgroundNames, SettingsChoices.BackgroundName(
+                settings.BackgroundImage.Value, settings.BackgroundImagePreset.Value));
 
         private void BuildMapPage(AvFlow flow, int page)
         {

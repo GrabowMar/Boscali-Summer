@@ -38,8 +38,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             state["fx.lightning.voices"] = thunder.Playing;
         }
 
-        internal void Tick(float dt, WeatherField field, float missionTime, GlobalPosition observer,
-            LevelInfo level, Camera camera, bool reducedFlashes, bool audioEnabled, bool cockpit)
+        internal void Tick(WeatherField field, float missionTime, GlobalPosition observer,
+            Camera camera, bool reducedFlashes, bool audioEnabled, bool cockpit)
         {
             if (Application.isBatchMode || field == null || !field.IsBuilt || camera == null) { Reset(); return; }
             Vector3 observerGlobal = new Vector3((float)observer.x, (float)observer.y, (float)observer.z);

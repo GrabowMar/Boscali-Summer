@@ -129,7 +129,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 count > MaxWingSize || owned.Count + count > MaxAircraft)
                 return Array.Empty<Aircraft>();
 
-            AircraftDefinition definition = SelectAirframe(seed, tier);
+            AircraftDefinition definition = SelectAirframe(tier);
             Aircraft template = definition?.unitPrefab?.GetComponent<Aircraft>();
             if (template == null) return Array.Empty<Aircraft>();
             Loadout loadout = InterceptLoadout(definition);
@@ -392,7 +392,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             return tracking;
         }
 
-        private static AircraftDefinition SelectAirframe(int seed, int tier)
+        private static AircraftDefinition SelectAirframe(int tier)
         {
             var catalogue = Encyclopedia.i?.aircraft;
             string wanted = AceIngress.Airframe(tier);

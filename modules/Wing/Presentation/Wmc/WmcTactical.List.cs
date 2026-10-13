@@ -50,7 +50,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             ids.Add("tac.list.supply", OpenSupply, () => table.SeatsEmpty);
         }
 
-        private void RefreshTableIds(WmcContext c)
+        private void RefreshTableIds()
         {
         }
 

@@ -211,7 +211,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             bool ex = s.ExpandedMapUi.Value, tr = s.MapTerrainImage.Value, re = s.MapRelief3D.Value, tk = s.NewsTickerEnabled.Value;
             float to = s.MapTerrainOpacity.Value, dk = s.DeckOpacity.Value, dm = s.MapTrayOpacity.Value;
-            string bg = SettingsChoices.BackgroundName(s.DeckGrid.Value, s.CheckerboardOverlay.Value,
+            string bg = SettingsChoices.BackgroundName(
                 s.BackgroundImage.Value, s.BackgroundImagePreset.Value);
             float bs = bg == "CUSTOM" ? s.BackgroundImageOpacity.Value : 0f;
             SetNote(!ex ? "NATIVE LAYOUT" : "EXPANDED · " + (tr ? "TERRAIN " + AvNum.Percent(to) : "NO TERRAIN") +

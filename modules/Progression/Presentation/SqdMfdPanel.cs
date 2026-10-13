@@ -235,7 +235,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             }
 
             RefreshCosmetics();
-            RefreshMetrics(bypass, score, bonus);
+            RefreshMetrics(bypass, score);
 
             switch (console.CurrentPage)
             {
@@ -249,7 +249,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             UpdateFooter();
         }
 
-        private void RefreshMetrics(bool bypass, int score, int bonus)
+        private void RefreshMetrics(bool bypass, int score)
         {
             IProgressionView view = Progress;
             int ceiling = Mathf.Max(1, view.MaximumPoints);

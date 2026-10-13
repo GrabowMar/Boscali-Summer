@@ -451,7 +451,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             if (shoulderReach > 0f)
             {
                 upper.position += reach.normalized * shoulderReach;
-                origin = upper.position; elbow = lower.position; end = hand.position;
+                origin = upper.position; elbow = lower.position;
                 reach = target - origin; distance = reach.magnitude;
             }
             // Distribute any small full-throw fit across both arm segments rather than stretching only the wrist.

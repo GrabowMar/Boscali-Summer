@@ -26,14 +26,14 @@ namespace BoscaliSummer.Modules.Support.Visuals
             while (FreeTrails.Count > 0) { var t = FreeTrails.Pop(); if (t != null) Object.Destroy(t.gameObject); }
         }
 
-        public static void Track(Missile missile, Vector3 target)
+        public static void Track(Missile missile)
         {
             if (missile == null || GameManager.IsHeadless || trails.Count >= 4) return;
             if (missile.GetComponent<KineticRodDescentEffect>() != null) return;
             missile.gameObject.AddComponent<KineticRodDescentEffect>().Initialize();
         }
 
-        public static void TriggerImpact(Vector3 impactPosition, PersistentID ownerID = default)
+        public static void TriggerImpact(Vector3 impactPosition)
         {
             if (GameManager.IsHeadless || impacts.Count >= 2) return;
             RodImpactFx fx;

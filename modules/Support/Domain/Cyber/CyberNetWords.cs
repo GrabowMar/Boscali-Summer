@@ -87,7 +87,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             return trucks + " TRUCK" + (trucks == 1 ? "" : "S") + " · " + centers + " DATA CENTER" + (centers == 1 ? "" : "S") + " · " + s.Nodes.Count + " NODES · " + held + " HELD";
         }
 
-        public static string EventLine(in CyberEventRow e, float now)
+        public static string EventLine(in CyberEventRow e)
         {
             string node = e.Kind == CyberEventKind.Traced ? "" : Node(e.Node, e.NodeId);
             switch (e.Kind)

@@ -44,7 +44,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
             kind == StrikeKind.Emp || kind == StrikeKind.Decoy ? Math.Max(0f, expiryTime - impactTime) : 0f;
 
         /// <summary>Does the page keep this strike: in the air, just landed, or its effect still running.</summary>
-        public static bool Keep(StrikeKind kind, float eta, float linger)
+        public static bool Keep(float eta, float linger)
         {
             if (eta > 0f) return true;
             float since = -eta;

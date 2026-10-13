@@ -16,7 +16,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             if (___pilotNumber == 0 && !__instance.dead && !__instance.ejected)
             {
                 WingSurvivalPerks.ProtectPilotDamage(__instance.aircraft, ref pierceDamage,
-                    ref blastDamage, ref fireDamage, ref impactDamage, ref ___hitPoints);
+                    ref blastDamage, ref fireDamage, ref impactDamage);
             }
             if (___pilotNumber != 0 || __instance.dead || __instance.ejected ||
                 ___hitPoints - (pierceDamage + blastDamage + fireDamage + impactDamage) >= 0f) return;

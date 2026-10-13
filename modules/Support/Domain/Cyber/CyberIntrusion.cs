@@ -129,7 +129,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
                     if (held.Count > 0) heldTime += seg - t;
                     Trace += rate * factor * (seg - t);
                     t = seg;
-                    if (Trace >= CyberRules.TraceMax) return Finish(IntrusionEnd.Traced, 0, true, heldTime, now);
+                    if (Trace >= CyberRules.TraceMax) return Finish(IntrusionEnd.Traced, 0, true, now);
                 }
                 if (end >= HopEndsAt)
                 {
@@ -141,13 +141,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             {
                 Trace += CyberRules.HeldTraceRate * held.Count * factor * (end - t);
                 heldTime += end - t;
-                if (Trace >= CyberRules.TraceMax) return Finish(IntrusionEnd.Traced, 0, true, heldTime, now);
+                if (Trace >= CyberRules.TraceMax) return Finish(IntrusionEnd.Traced, 0, true, now);
             }
             last = now;
             return new IntrusionStep(arrived, false, TakeUpkeep(heldTime));
         }
 
-        private IntrusionStep Finish(IntrusionEnd why, int arrived, bool traced, float heldTime, float now)
+        private IntrusionStep Finish(IntrusionEnd why, int arrived, bool traced, float now)
         {
             Trace = Math.Min(Trace, CyberRules.TraceMax);
             EndReason = why; HopTarget = 0; held.Clear(); last = now;

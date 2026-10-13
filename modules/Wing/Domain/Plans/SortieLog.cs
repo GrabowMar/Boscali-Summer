@@ -50,7 +50,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
 
         /// <summary>A kill by the wingman <paramref name="shooter"/> (its callsign).</summary>
-        public void Kill(string shooter, string victimType)
+        public void Kill(string shooter)
         {
             Kills++;
             shooter = string.IsNullOrEmpty(shooter) ? "?" : shooter;

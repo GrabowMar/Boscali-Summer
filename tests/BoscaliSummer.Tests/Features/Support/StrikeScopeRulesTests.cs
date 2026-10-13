@@ -34,11 +34,11 @@ namespace BoscaliSummer.Tests.Features.Support
 
         private static void Keeping()
         {
-            TestAssert.That(StrikeScopeRules.Keep(StrikeKind.Rod, 8f, 0f), "In the air");
-            TestAssert.That(StrikeScopeRules.Keep(StrikeKind.Rod, -5.9f, 0f), "Just landed");
-            TestAssert.That(!StrikeScopeRules.Keep(StrikeKind.Rod, -6.1f, 0f), "Landed a while ago: off the page");
-            TestAssert.That(StrikeScopeRules.Keep(StrikeKind.Emp, -31f, 30f), "An EMP's effect runs on, with a margin");
-            TestAssert.That(!StrikeScopeRules.Keep(StrikeKind.Emp, -33f, 30f), "...then it is gone");
+            TestAssert.That(StrikeScopeRules.Keep(8f, 0f), "In the air");
+            TestAssert.That(StrikeScopeRules.Keep(-5.9f, 0f), "Just landed");
+            TestAssert.That(!StrikeScopeRules.Keep(-6.1f, 0f), "Landed a while ago: off the page");
+            TestAssert.That(StrikeScopeRules.Keep(-31f, 30f), "An EMP's effect runs on, with a margin");
+            TestAssert.That(!StrikeScopeRules.Keep(-33f, 30f), "...then it is gone");
 
             int[] into = new int[3];
             int[] ids = { 4, 1, 7, 3, 9 };

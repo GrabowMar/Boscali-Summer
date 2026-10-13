@@ -27,7 +27,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             listA = slide * swap; listX = dockX + side * 14f * (1f - swap);
             MenuRect R = Shift(d.Rect, dockX);
             Fill(R, A(P.Panel, dockA)); Frame(R, 1f, A(P.Ink, dockA));
-            PaintHeader(d, cat, R);
+            PaintHeader(d, R);
             if (d.Empty) PaintEmpty(d, cat);
             else
             {
@@ -45,10 +45,10 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
                     Fill(Shift(d.RailThumb, dockX), A(P.Ink, dockA));
                 }
             }
-            if (d.HasFooter) PaintFooter(d, R);
+            if (d.HasFooter) PaintFooter(d);
         }
 
-        private void PaintHeader(DockLayout d, MenuCategory cat, MenuRect R)
+        private void PaintHeader(DockLayout d, MenuRect R)
         {
             float lg = l.Lg, pad = 14f * T;
             Fill(R.L + 1f, R.T + 1f + MenuLayout.HeaderH * lg - 1f, R.W - 2f, 1f, A(P.Line, dockA));
@@ -94,7 +94,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
                 MenuTextPool.Align.Left, TC(P.Ink2, dockA), top: true);
         }
 
-        private void PaintFooter(DockLayout d, MenuRect R)
+        private void PaintFooter(DockLayout d)
         {
             MenuRect f = Shift(d.Footer, dockX);
             Fill(f.L, f.T, f.W, 1f, A(P.Line, dockA));

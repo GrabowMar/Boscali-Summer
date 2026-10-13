@@ -880,7 +880,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         {
             int discoveredLocalCount = local?.Tracks.Length ?? 0;
             int localCount = BuiltInStationRules.AcceptsLocalTracks(id) ? discoveredLocalCount : 0;
-            int vanillaCount = BuiltInStationRules.UsesVanillaTracks(id, localCount)
+            int vanillaCount = BuiltInStationRules.UsesVanillaTracks(localCount)
                 ? vanilla.Length
                 : 0;
             var tracks = new RadioStationTrack[vanillaCount + localCount];

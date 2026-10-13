@@ -58,7 +58,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             }
             if (members == 0) return true;
             hostiles = CountHostiles(any, sum / members);
-            return order ? judge.AllowEngage(hostiles, members, FallBackRatio, missionTime) : !judge.Holds(hostiles, members, FallBackRatio, missionTime);
+            return order ? judge.AllowEngage(hostiles, members, FallBackRatio, missionTime) : !judge.Holds(hostiles, members, FallBackRatio);
         }
 
         private float hostilesAt = float.NegativeInfinity;

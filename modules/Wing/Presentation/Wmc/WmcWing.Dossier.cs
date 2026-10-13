@@ -169,7 +169,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             perksSection.SetCaption(p == null ? WmcText.Unknown : PerkCards.Head(p.Perks.Count, rank, p.Lost, off));
             for (int i = 0; i < perks.Length; i++)
             {
-                PerkCard card = PerkCards.For(i, p != null ? p.Perks : (System.Collections.Generic.IReadOnlyList<PilotPerk>)NoPerks, rank);
+                PerkCard card = PerkCards.For(i, p != null ? p.Perks : (System.Collections.Generic.IReadOnlyList<PilotPerk>)NoPerks);
                 perks[i].Set(card, off);
             }
             relayout = true;

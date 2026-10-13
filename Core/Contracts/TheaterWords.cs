@@ -69,7 +69,7 @@ namespace BoscaliSummer.Core.Contracts
         }
 
         /// <summary>Staff-log line for an ended operation, at most 64 characters. The amount is printed only when it was paid.</summary>
-        internal static string Result(TheaterOpKind kind, string name, TheaterOutcome outcome, TheaterWhy why, int funds, string picker)
+        internal static string Result(TheaterOpKind kind, string name, TheaterOutcome outcome, int funds, string picker)
         {
             string n = name ?? "";
             string paid = funds > 0 ? " +" + funds.ToString(CultureInfo.InvariantCulture) : "";
@@ -92,7 +92,7 @@ namespace BoscaliSummer.Core.Contracts
         }
 
         /// <summary>Faction radio text for an ended operation; only a result worth saying on the air.</summary>
-        internal static string Announce(TheaterOpKind kind, string name, TheaterOutcome outcome, int funds)
+        internal static string Announce(string name, TheaterOutcome outcome, int funds)
         {
             switch (outcome)
             {

@@ -405,8 +405,8 @@ You need the **.NET 8 SDK** and a local Nuclear Option install with BepInEx. The
 dotnet build BoscaliSummer.sln -c Release -p:GameDir="C:\Program Files (x86)\Steam\steamapps\common\Nuclear Option" -p:PublicRelease=true
 ```
 
-- `-p:PublicRelease=true` makes a player build with developer cheats and tools locked off; leave it out for a development build.
-- The plugin targets `netstandard2.1`. Tests target `net8.0` and run with `dotnet test`, also with `GameDir` set.
+- `-p:PublicRelease=true` makes a player build with developer cheats, sim hooks and debug tools left out; leave it out for a development build.
+- The plugin targets `netstandard2.1`. Tests target `net8.0` and are console runners, not `dotnet test` projects (that command runs nothing): after the build, run `dotnet tests/BoscaliSummer.Tests/bin/Release/net8.0/BoscaliSummer.Tests.dll`.
 - To bump the version, change `<Version>` in `BoscaliSummer.csproj` **and** `PluginVersion` in `Core/Plugin.cs`. The build fails if they differ.
 - A green build doesn't mean the game is happy. Test in game, and in multiplayer if you touched anything networked.
 

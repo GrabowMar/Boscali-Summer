@@ -195,7 +195,7 @@ namespace BoscaliSummer.Modules.Comms.Runtime
             {
                 authority.Rules = ReadRules();
                 outbox.Clear();
-                authority.Tick(now, outbox);
+                authority.Tick(now);
                 Dispatch();
             }
 
@@ -447,7 +447,7 @@ namespace BoscaliSummer.Modules.Comms.Runtime
             if (gesture)
             {
                 if (Input.GetMouseButton(0)) ContinueGesture(map);
-                else FinishGesture(map, now);
+                else FinishGesture(map);
                 return;
             }
 
@@ -505,10 +505,10 @@ namespace BoscaliSummer.Modules.Comms.Runtime
             lastPenScreen = screen;
             penPoints.Add(x);
             penPoints.Add(z);
-            if (penPoints.Count >= MaxRawPenPoints * 2) FinishGesture(map, Time.unscaledTime);
+            if (penPoints.Count >= MaxRawPenPoints * 2) FinishGesture(map);
         }
 
-        private void FinishGesture(DynamicMap map, float now)
+        private void FinishGesture(DynamicMap map)
         {
             CommsTool tool = gestureTool;
             bool moved = ((Vector2)Input.mousePosition - pressScreen).sqrMagnitude >= ShapeMinimumPixels * ShapeMinimumPixels;

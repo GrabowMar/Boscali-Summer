@@ -41,7 +41,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             nextSample = 0f;
         }
 
-        public void Tick(Aircraft aircraft, bool cockpitView, LevelInfo level, bool enabled, float dt)
+        public void Tick(Aircraft aircraft, bool cockpitView, bool enabled)
         {
             if (!enabled || !cockpitView || aircraft == null) { Reset(); return; }
             if (aircraft != bound) Bind(aircraft);

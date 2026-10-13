@@ -119,7 +119,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 ActiveStrikeInfo s = list[i];
                 if (!StrikeScopeRules.TryKind(s.ActionId, out StrikeKind kind)) continue;
                 float eta = s.ImpactTime - now;
-                if (!StrikeScopeRules.Keep(kind, eta, StrikeScopeRules.Linger(kind, s.ImpactTime, s.ExpiryTime))) continue;
+                if (!StrikeScopeRules.Keep(eta, StrikeScopeRules.Linger(kind, s.ImpactTime, s.ExpiryTime))) continue;
                 ids[c] = s.RequestId;
                 flying[c] = eta > 0f;
                 source[c] = i;

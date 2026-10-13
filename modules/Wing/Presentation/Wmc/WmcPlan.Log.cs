@@ -111,7 +111,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         /// <summary>Merges the wing's events and radio lines, your order results and the steps that ran late or early into
         /// <see cref="sortieEvents"/>, newest first, as the filter says.</summary>
-        private void RebuildEvents(WmcContext c, WingPlan plan, PlanRunner r, bool live, WingService w, float now)
+        private void RebuildEvents(WmcContext c, WingPlan plan, PlanRunner r, bool live)
         {
             sortieEvents.Clear();
             WingEventRing events = c.Client ? null : c.Wing?.Events;

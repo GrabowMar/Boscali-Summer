@@ -6,7 +6,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     internal static class SettingsChoices
     {
         // Legacy procedural presets intentionally resolve to matte. Custom keeps its persisted id (3).
-        public static string BackgroundName(bool grid, bool checker, bool image, int preset) =>
+        public static string BackgroundName(bool image, int preset) =>
             image && preset == 3 ? "CUSTOM" : "MATTE";
 
         public static int CycleBackground(bool grid, bool checker, bool image, int preset, int direction) =>

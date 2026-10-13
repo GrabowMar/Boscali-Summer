@@ -83,7 +83,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             image.color = new Color(1f, 1f, 1f, 0.6f);
             Clear();
 
-            BuildLegend(parent, area);
+            BuildLegend(parent);
         }
 
         /// <summary>
@@ -91,7 +91,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         /// carried by its colours alone. It sits inside the waterfall's lower-left corner,
         /// over the oldest rows, and is built once.
         /// </summary>
-        private void BuildLegend(RectTransform parent, Rect area)
+        private void BuildLegend(RectTransform parent)
         {
             const float swatch = 7f;
             const float step = 10f;

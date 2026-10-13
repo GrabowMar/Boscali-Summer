@@ -943,11 +943,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 return false;
             }
             return TryProjectAtHeight(worldX, worldZ, GroundHeight(worldX, worldZ) + 1f,
-                rect, out point);
+                out point);
         }
 
         private static bool TryProjectAtHeight(float worldX, float worldZ, float modelY,
-            Rect rect, out Vector2 point)
+            out Vector2 point)
         {
             point = default;
             if (!IsDrawing || source == null || owner?.mapBackground == null) return false;
@@ -1000,9 +1000,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     headingMark = new HeadingMark();
                     if (headings.Count < MaximumClusteredIcons) headings.Add(unitIcon, headingMark);
                 }
-                if (Mathf.Abs(Mathf.DeltaAngle(nativeAngle, headingMark.Projected)) < .01f)
-                    nativeAngle = headingMark.Native;
-                else headingMark.Native = nativeAngle;
+                if (!(Mathf.Abs(Mathf.DeltaAngle(nativeAngle, headingMark.Projected)) < .01f))
+                    headingMark.Native = nativeAngle;
             }
             PlaceProjectedIcon(icon, fix, MapImageRect(owner.mapImage).rect);
         }
@@ -1124,11 +1123,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             else
             {
-                if (!TryProjectAtHeight(fix.X, fix.Z, groundHeight + 1f, rect, out point)) return;
+                if (!TryProjectAtHeight(fix.X, fix.Z, groundHeight + 1f, out point)) return;
                 Vector3 screenPoint = owner.mapImage.transform.TransformPoint(new Vector3(point.x, point.y, 0f));
                 groundPoint = parentPoint = symbol.parent.InverseTransformPoint(screenPoint);
                 if (lift > .5f && TryProjectAtHeight(fix.X, fix.Z,
-                        groundHeight + 1f + lift, rect, out Vector2 iconPoint))
+                        groundHeight + 1f + lift, out Vector2 iconPoint))
                 {
                     Vector3 raised = owner.mapImage.transform.TransformPoint(
                         new Vector3(iconPoint.x, iconPoint.y, 0f));

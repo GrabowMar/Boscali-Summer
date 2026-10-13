@@ -77,7 +77,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 if (logistics != null)
                 {
                     // Twice the price must be in the pool, so an AI faction never drains itself to buy.
-                    WaveQuote quote = logistics.Quote(hq, live, false, SortiesAvailable, false, 2f);
+                    WaveQuote quote = logistics.Quote(hq, live, SortiesAvailable, false, 2f);
                     if (quote.Block == WaveBlock.None && logistics.Buy(hq, quote, 0f, "AI", out _))
                     {
                         b.Extra++; b.AiWaves++; b.LastBoughtAt = now;
@@ -97,7 +97,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             if (b == null || logistics == null) return null;
             bool human = Human(hq);
             bool off = !human && !(settings != null && settings.AiStaffConvoys.Value);
-            WaveQuote q = logistics.Quote(hq, b.Live, human, SortiesAvailable, off, human ? 1f : 2f);
+            WaveQuote q = logistics.Quote(hq, b.Live, SortiesAvailable, off, human ? 1f : 2f);
             b.LastViewCost = q.Cost;
             WaveState state = q.Block == WaveBlock.SwitchedOff || q.Block == WaveBlock.NoSorties || q.Block == WaveBlock.MissionForbids ? WaveState.Off
                 : human && b.Ledger.Owed && q.Block != WaveBlock.None ? WaveState.Blocked : WaveState.Earning;
@@ -155,7 +155,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         {
             TheaterLogisticsService logistics = TheaterLogisticsService.Active;
             if (logistics == null || !b.Ledger.Owed || !Human(hq)) return false;
-            WaveQuote quote = logistics.Quote(hq, b.Live, true, SortiesAvailable, false, 1f);
+            WaveQuote quote = logistics.Quote(hq, b.Live, SortiesAvailable, false, 1f);
             if (quote.Block == WaveBlock.None && logistics.Buy(hq, quote, 0f, "WAVE", out _))
             {
                 b.Ledger.Spend();

@@ -52,7 +52,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
                 Fill(0f, 0f, l.W, l.H, P.Scrim); // the whole screen a shade greyer, edge to edge: nothing to cut off
                 DockAnimation(now);
                 bool wheel = c.Wheel, docked = c.Cat >= 0 && !wheel; // a controller reads the list off the ring itself
-                if (docked) PaintLeaderAndDock(now); else dockWasShown = false;
+                if (docked) PaintLeaderAndDock(); else dockWasShown = false;
                 PaintOrbit();
                 if (wheel) PaintWheel(); else PaintRing();
                 PaintDwell(wheel ? c.WheelAim : c.Cat);
@@ -407,7 +407,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
 
         // ---------------------------------------------------------------- leader
 
-        private void PaintLeaderAndDock(float now)
+        private void PaintLeaderAndDock()
         {
             MenuCategory cat = c.Category;
             int n = MenuLeader.Compute(l, c.Cat, cat, c.Dock, leaderPts);

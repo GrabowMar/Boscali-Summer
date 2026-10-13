@@ -134,7 +134,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Unit unit = icon.unit;
                 if (unit == null || icon.iconImage == null) return NotApplicable;
                 if (symbols.Count >= MaximumSymbols) return NotApplicable;
-                symbol = Classify(icon, unit);
+                symbol = Classify(unit);
                 symbols.Add(icon, symbol);
             }
             if (symbol == NotApplicable) return symbol;
@@ -146,7 +146,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return symbol;
         }
 
-        private static Symbol Classify(UnitMapIcon icon, Unit unit)
+        private static Symbol Classify(Unit unit)
         {
             var symbol = new Symbol { Original = unit.definition != null ? unit.definition.mapIcon : null };
             float scale = unit.definition != null ? unit.definition.mapIconSize : 1f;

@@ -50,10 +50,10 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.Eq(CyberNetWords.Sub(new CyberStateData()), "NO EW ASSETS ONLINE", "inactive sub-line");
             TestAssert.Eq(CyberNetWords.Sub(null), "NO EW ASSETS ONLINE", "null sub-line");
 
-            TestAssert.Eq(CyberNetWords.EventLine(new CyberEventRow { Kind = CyberEventKind.NodeHeld, Node = NodeKind.SamC2, NodeId = 7 }, 0f), "NODE HELD · SAM C2 #7", "held line");
-            TestAssert.Eq(CyberNetWords.EventLine(new CyberEventRow { Kind = CyberEventKind.Released, Node = NodeKind.Relay, NodeId = 3, Reason = IntrusionEnd.Burned }, 0f), "NODE RELEASED · RELAY #3 · BURNED", "burned line");
-            TestAssert.Eq(CyberNetWords.EventLine(new CyberEventRow { Kind = CyberEventKind.HopStarted, Node = NodeKind.Uplink, NodeId = 9 }, 0f), "HOP STARTED · UPLINK #9", "hop line");
-            TestAssert.That(CyberNetWords.EventLine(new CyberEventRow { Kind = CyberEventKind.Traced }, 0f).StartsWith("INTRUSION TRACED", StringComparison.Ordinal), "traced line");
+            TestAssert.Eq(CyberNetWords.EventLine(new CyberEventRow { Kind = CyberEventKind.NodeHeld, Node = NodeKind.SamC2, NodeId = 7 }), "NODE HELD · SAM C2 #7", "held line");
+            TestAssert.Eq(CyberNetWords.EventLine(new CyberEventRow { Kind = CyberEventKind.Released, Node = NodeKind.Relay, NodeId = 3, Reason = IntrusionEnd.Burned }), "NODE RELEASED · RELAY #3 · BURNED", "burned line");
+            TestAssert.Eq(CyberNetWords.EventLine(new CyberEventRow { Kind = CyberEventKind.HopStarted, Node = NodeKind.Uplink, NodeId = 9 }), "HOP STARTED · UPLINK #9", "hop line");
+            TestAssert.That(CyberNetWords.EventLine(new CyberEventRow { Kind = CyberEventKind.Traced }).StartsWith("INTRUSION TRACED", StringComparison.Ordinal), "traced line");
             for (byte b = 0; b <= (byte)IntrusionEnd.Scene; b++) TestAssert.That(CyberNetWords.ReasonWord((IntrusionEnd)b).Length > 0, "reason " + b);
 
             var hop = new CyberIntrusionRow { Id = 1, Phase = IntrusionPhase.Hopping, HopTarget = 2, HopEndsAt = 130f, HopSeconds = 30, Held = new int[0] };

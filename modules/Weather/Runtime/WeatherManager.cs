@@ -731,11 +731,11 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 atmosphere.Apply(RainVisualsEnabled
                     ? rainIntensity : 0f, underwaterView, cloudShade, LevelInfo.i != null ? LevelInfo.i.sun : null);
             else atmosphere.Restore();
-            UpdateLighting(currentCam);
+            UpdateLighting();
 
             // Storms remain visible/audible from dry air; they do not depend on a rain emitter.
             if (settings.LightningEnabled.Value || settings.RainAudioEnabled.Value)
-                lightning.Tick(Time.deltaTime, Field, missionTime, cloudPosition, LevelInfo.i, currentCam,
+                lightning.Tick(Field, missionTime, cloudPosition, currentCam,
                     settings.ReducedFlashes.Value || !settings.LightningEnabled.Value,
                     settings.RainAudioEnabled.Value, isCockpit);
             else lightning.Reset();
@@ -805,7 +805,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             if (shaderDrawn && canopyDrawnFrames < int.MaxValue) canopyDrawnFrames++;
             if (canopyDrops != null)
                 canopyDrops.UpdateDrops(hasGlass ? canopySurfaces[0] : default,
-                    isCockpit && !shaderDrawn ? canopyWetness : 0f, ias);
+                    isCockpit && !shaderDrawn ? canopyWetness : 0f);
 
 
         }
@@ -1003,7 +1003,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             return true;
         }
 
-        private void UpdateLighting(Camera camera)
+        private void UpdateLighting()
         {
             LevelInfo level = LevelInfo.i;
             // Invariant 6: the native sun must not flip while a front crosses (conditions never pass 0.6). The sims read the count.
@@ -1431,7 +1431,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             return WeatherForecast.ComputeLunarData(phase);
         }
 
-        public bool SetManualOverride(float conditions, float cloudHeight, Vector3? wind = null, float? forcedRain = null, bool snapImmediate = true)
+        public bool SetManualOverride(float conditions, float cloudHeight, float? forcedRain = null, bool snapImmediate = true)
         {
             if (!IsCaptured || !RequireClock("manual override", out float missionTime)) return false;
             isManualOverride = true;

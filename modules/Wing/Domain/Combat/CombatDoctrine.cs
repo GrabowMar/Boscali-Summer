@@ -63,7 +63,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         /// <summary>Whether the odds hold the wing back now (outnumbered, and the player has not confirmed ENGAGE): a question with
         /// no side effects, for the area guard's timer (review A1: asking AllowEngage twice read as the player's confirmation).</summary>
-        public bool Holds(int hostiles, int members, float ratio, float now) => !Overridden && Outnumbered(hostiles, members, ratio);
+        public bool Holds(int hostiles, int members, float ratio) => !Overridden && Outnumbered(hostiles, members, ratio);
 
         public bool AllowEngage(int hostiles, int members, float ratio, float now)
         {

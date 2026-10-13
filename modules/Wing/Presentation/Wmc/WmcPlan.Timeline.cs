@@ -60,16 +60,16 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 timeline.Begin();
                 timeline.ShowLanes(0, false);
                 timeline.End();
-                RebuildEvents(c, null, null, false, w, 0f);
+                RebuildEvents(c, null, null, false);
                 RefreshEventList();
                 return;
             }
-            PlanTimes(c, plan, plans, r, w, live);
+            PlanTimes(plan, plans, w, live);
             int shown = 0;
             for (int l = 0; l < WingPlan.Lanes; l++)
                 if (plan.Steps[l].Count > 0) shown++;
             lanesShown = shown;
-            RebuildEvents(c, plan, r, live, w, now);
+            RebuildEvents(c, plan, r, live);
             DrawTimeline(plan, r, w, live, now);
             RefreshPlanParts(c, plan, plans, w, running, editable, shown);
             RefreshStepRow(plan, r, live);
@@ -77,7 +77,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
 
         /// <summary>Each step's planned start and end: frozen at EXECUTE; before it, the plan as drawn from where the elements are now.</summary>
-        private void PlanTimes(WmcContext c, WingPlan plan, WingPlans plans, PlanRunner r, WingService w, bool live)
+        private void PlanTimes(WingPlan plan, WingPlans plans, WingService w, bool live)
         {
             if (live)
             {

@@ -137,8 +137,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             // The alerts first: the table's summary line, the strip and the footer read this refresh's.
             RefreshAlertList(c);
             table.FlashUntil = flashUntil;
-            table.Refresh(c, AlertWord(c, out AvState alertAs), alertAs);
-            RefreshTableIds(c);
+            table.Refresh(c, AlertWord(out AvState alertAs), alertAs);
+            RefreshTableIds();
             if (sub == SubOrders) RefreshOrders(c);
             else if (sub == SubFormation) form.Refresh(c);
             else if (sub == SubRoute) route.Refresh(c);

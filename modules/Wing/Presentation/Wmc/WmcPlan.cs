@@ -68,7 +68,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
             subPages = flow.Add(new WmcSubPages(flow, ticker, pageIndex, SubLabels.Length));
             options.Build(subPages.Flow(SubStances), ticker, pageIndex);
-            BuildSortie(subPages.Flow(SubSortie), ticker, pageIndex);
+            BuildSortie(subPages.Flow(SubSortie), ticker);
             // Last, so its list draws over the page.
             popup = new AvPopup(flow.Content, flow.Width);
             ShowSub(SubStances);

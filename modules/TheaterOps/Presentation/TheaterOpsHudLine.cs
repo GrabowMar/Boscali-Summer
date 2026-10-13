@@ -76,7 +76,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Presentation
             seenResult = id;
             if (result.Outcome == TheaterOutcome.CalledOff || result.Outcome == TheaterOutcome.Redirected) return;
             board.Notice("theater", result.Outcome == TheaterOutcome.Secured ? HudTone.Info : HudTone.Caution,
-                TheaterWords.Result(result.Kind, result.Name, result.Outcome, result.Why, result.Funds, ""), TheaterWords.Why(result.Why));
+                TheaterWords.Result(result.Kind, result.Name, result.Outcome, result.Funds, ""), TheaterWords.Why(result.Why));
         }
 
         /// <summary>

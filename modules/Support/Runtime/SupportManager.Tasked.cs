@@ -149,7 +149,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
         }
 
-        internal void TaskedFired(FactionHQ owner, TaskedLaunchJob job)
+        internal void TaskedFired(TaskedLaunchJob job)
         {
             float now = MissionNow();
             // TASKED receipts live only in the desk; the CALLS ledger gets the cooldown, never this request id. A SOF post is a service: no cooldown.
@@ -191,7 +191,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public ITaskedSlot Reserve(ulong player, in TaskedCall call, out TaskedOutcome refusal) =>
             manager.ReserveTasked(service, owner, call.Action, out refusal);
 
-        public void Fired(TaskedLaunchJob job) => manager.TaskedFired(owner, job);
+        public void Fired(TaskedLaunchJob job) => manager.TaskedFired(job);
         public bool ImpactClear(float x, float z) => !RodGuard.FriendlyNear(owner, new GlobalPosition(x, 0f, z));
         public void Warn(string message) => Plugin.Logger?.LogWarning(message);
         public void Launch(TaskedLaunchJob job) => manager.LaunchTasked(owner, job);

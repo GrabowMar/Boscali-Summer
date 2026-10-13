@@ -376,7 +376,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             foreach (CyberEventRow e in s.Events)
                 n.Terminal.Add(new FrontLogLine
                 {
-                    Stamp = "#" + e.Seq.ToString("00", System.Globalization.CultureInfo.InvariantCulture), Text = ">> " + CyberNetWords.EventLine(e, now),
+                    Stamp = "#" + e.Seq.ToString("00", System.Globalization.CultureInfo.InvariantCulture), Text = ">> " + CyberNetWords.EventLine(e),
                     Tone = e.Kind == CyberEventKind.Traced ? AvState.Danger : e.Kind == CyberEventKind.NodeHeld ? AvState.Ready : AvState.Info
                 });
         }

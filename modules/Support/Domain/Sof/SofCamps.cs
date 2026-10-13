@@ -71,7 +71,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public bool PastGrace(int index, float now) =>
             index >= 0 && index < slots.Length && slots[index].Health == AnchorHealth.Down && slots[index].DownSince >= 0f && now - slots[index].DownSince >= AnchorRules.GraceSeconds;
 
-        public void Restore(int index, float x, float z, float now)
+        public void Restore(int index, float x, float z)
         {
             if (index < 0 || index >= slots.Length) return;
             slots[index].Health = AnchorHealth.Live; slots[index].DownSince = -1f;

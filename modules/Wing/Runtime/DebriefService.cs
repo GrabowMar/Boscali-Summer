@@ -87,6 +87,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         }
 
         private void OnKill(Aircraft shooter, uint victimId, string victimType) =>
-            Sortie.Kill(WingPilotRoster.Of(shooter)?.Callsign, victimType);
+            Sortie.Kill(WingPilotRoster.Of(shooter)?.Callsign);
     }
 }

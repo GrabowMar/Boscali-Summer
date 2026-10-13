@@ -48,7 +48,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
 
         /// <summary>The worst alert as one word for the table's summary line ("ALL CLEAR", "MISSILE #3 +2").</summary>
-        private string AlertWord(WmcContext c, out AvState state)
+        private string AlertWord(out AvState state)
         {
             if (alertCount <= 0)
             {

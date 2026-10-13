@@ -187,7 +187,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             portrait = ImageBox(panel, new Rect(18, -46, 94, 110));
             portrait.rectTransform.pivot = new Vector2(0.5f, 0.5f);
             portrait.rectTransform.anchoredPosition = new Vector2(65f, -101f);
-            TMP_Text leaderLabel = Label(panel, new Rect(16, -162, 98, 16), "ACE LEADER", AvTextRole.Micro, Tone.Caution, TextAlignmentOptions.Center, bold: true);
+            Label(panel, new Rect(16, -162, 98, 16), "ACE LEADER", AvTextRole.Micro, Tone.Caution, TextAlignmentOptions.Center, bold: true);
 
             // Callsign, rank badge & wing identity
             returning = Label(panel, new Rect(130, -43, 218, 16), "", AvTextRole.Micro, Tone.Caution, bold: true);
@@ -204,7 +204,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 Brackets(slot, new Rect(0, 0, 62, 35), 5f, Tone.Caution, 0.55f);
                 Glyph(slot, new Rect(21, -2, 20, 20), (HuntMark)((int)HuntMark.Toughness + i));
                 // A Micro line is 14 px tall: every Micro row here is 16.
-                TMP_Text badgeCaption = Label(slot, new Rect(0, -20, 62, 16), names[i], AvTextRole.Micro, Tone.Caution, TextAlignmentOptions.Center, bold: true);
+                Label(slot, new Rect(0, -20, 62, 16), names[i], AvTextRole.Micro, Tone.Caution, TextAlignmentOptions.Center, bold: true);
             }
 
             // Generated squadron crest

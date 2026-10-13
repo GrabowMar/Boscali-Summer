@@ -302,7 +302,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 slot.Baseline = UplinkSpawner.Health(made);
                 slot.Bar.Reset();
                 GlobalPosition p = made.transform.position.ToGlobalPosition();
-                f.Camps.Restore(slot.Index, (float)p.x, (float)p.z, now);
+                f.Camps.Restore(slot.Index, (float)p.x, (float)p.z);
                 Plugin.Logger?.LogInfo("[Support.Sof] " + f.Owner.name + " camp " + slot.Index + " rebuilt.");
             }
         }

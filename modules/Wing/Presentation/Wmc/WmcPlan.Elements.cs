@@ -52,7 +52,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private static WingPlans Plans => WingPlans.Instance;
 
-        private void BuildSortie(AvFlow f, AvTicker t, int pageIndex)
+        private void BuildSortie(AvFlow f, AvTicker t)
         {
             sortieSection = f.Section(AvIcon.Activity, "SORTIE", "");
             timeline = f.Add(new SortieTimeline(f.Content));

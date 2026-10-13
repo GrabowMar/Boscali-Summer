@@ -279,10 +279,10 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             };
             war.LastResultAt = now;
             war.ResultFunds += war.LastResult.Funds;
-            war.Log.Add(TheaterWords.Result(op.Kind, op.Name, outcome, why, reward.Funds, by));
+            war.Log.Add(TheaterWords.Result(op.Kind, op.Name, outcome, reward.Funds, by));
             Plugin.Logger?.LogInfo("Living Front " + war.HQ.faction.factionName + " " + op.Name + " " + TheaterWords.Outcome(outcome) +
                 (why == TheaterWhy.None ? "" : " (" + TheaterWords.Why(why) + ")"));
-            if (outcome == TheaterOutcome.Secured || outcome == TheaterOutcome.Repulsed || outcome == TheaterOutcome.Stalled) Announce(war.HQ, TheaterWords.Announce(op.Kind, op.Name, outcome, reward.Funds));
+            if (outcome == TheaterOutcome.Secured || outcome == TheaterOutcome.Repulsed || outcome == TheaterOutcome.Stalled) Announce(war.HQ, TheaterWords.Announce(op.Name, outcome, reward.Funds));
 
             float vetoFor = outcome == TheaterOutcome.CalledOff ? LivingWarRules.CallOffVetoSeconds
                 : outcome == TheaterOutcome.Redirected ? 0f : LivingWarRules.EndVetoSeconds;

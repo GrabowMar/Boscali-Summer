@@ -20,7 +20,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             string.Equals(stationId, MarisId, StringComparison.Ordinal) ||
             string.Equals(stationId, BaseId, StringComparison.Ordinal);
 
-        public static bool UsesVanillaTracks(string stationId, int localTrackCount) =>
+        public static bool UsesVanillaTracks(int localTrackCount) =>
             localTrackCount == 0;
 
     }
