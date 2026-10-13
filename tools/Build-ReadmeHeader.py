@@ -172,7 +172,7 @@ def build(out):
     title1, w1 = text("BOSCALI", "InterDisplay-Black.otf", 124, 84, 300, tracking=0.02)
     title2, w2 = text("SUMMER", "InterDisplay-Light.otf", 76, 88, 384, tracking=0.34)
     kicker, _ = text("THEATER OVERHAUL  /  NUCLEAR OPTION", "DejaVuSansMono-Bold.ttf", 15, 90, 180, tracking=0.12)
-    chip, chip_w = text("0.2.0 ALPHA", "DejaVuSansMono-Bold.ttf", 14, 104, 455, tracking=0.12)
+    chip, chip_w = text("0.2.2 ALPHA", "DejaVuSansMono-Bold.ttf", 14, 104, 455, tracking=0.12)
     chip_note, _ = text("EXPERIMENTAL BUILD", "DejaVuSansMono.ttf", 14, 104 + chip_w + 46, 455, tracking=0.12)
     readout = [text(s, "DejaVuSansMono.ttf", 11.5, 1528, 512 + i * 17, tracking=0.1, anchor="end")[0]
                for i, s in enumerate(["RELIEF  TERRAIN2  81.9 KM", f"PEAK  {top:,.0f} M  /  CI {BAND_STEP:.0f} M",
@@ -200,7 +200,7 @@ def build(out):
     a('<title id="t">Boscali Summer</title>')
     a('<desc id="d">Animated banner: a contour map built from the mod\'s own terrain heightmap, with a front line, '
       'a radar sweep and a flight of aircraft crossing it. Text reads Boscali Summer, theater overhaul for '
-      'Nuclear Option, 0.2.0 alpha.</desc>')
+      'Nuclear Option, 0.2.2 alpha.</desc>')
     a('<defs>')
     a('<linearGradient id="fade" x2="1"><stop offset="0" stop-color="#061017" stop-opacity=".97"/>'
       '<stop offset=".3" stop-color="#061017" stop-opacity=".9"/><stop offset=".5" stop-color="#061017" '
