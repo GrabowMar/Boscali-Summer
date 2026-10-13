@@ -279,6 +279,10 @@ def build_font(shapes, codes, path):
     def pt(x, y):
         return (round(x * k), round(900 - y * k))
 
+    # TMP looks '_' up in the face itself (no fallbacks) on every font assignment and warns when it is missing.
+    from shapely.geometry import box
+    shapes = {**shapes, "underscore": box(2, 21, 22, 23)}
+    codes = {**codes, "underscore": 0x5F}
     names = [".notdef"] + list(shapes)
     glyphs = {".notdef": TTGlyphPen(None).glyph()}
     for name, geom in shapes.items():
