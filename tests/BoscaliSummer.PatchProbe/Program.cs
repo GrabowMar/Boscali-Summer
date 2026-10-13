@@ -137,7 +137,13 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("HUDUnitMarker", "JammingDistortion"),
     ("HUDTurretCrosshair", "Refresh"),
     // DL EVT LOG (2026-10-13): EventFeedPatch is a postfix on the one place every line of the game's message feed passes.
-    ("MessageFeed", "Enqueue")
+    ("MessageFeed", "Enqueue"),
+    // CUE stack (2026-10-13): a postfix on the call that shows each of the game's grey message boxes (the action report, the reserve notice, the funds line, the score line).
+    ("AircraftActionsReport", "ReportText"),
+    ("ReserveReport", "ReserveReport_OnReserveNotice"),
+    ("AllocationDisplay", "Show"),
+    ("KillDisplay", "DisplayKill"),
+    ("KillDisplay", "DisplayBonus")
 };
 
 foreach ((string typeName, string fieldName) in new[]
@@ -194,6 +200,10 @@ foreach ((string typeName, string methodName) in targets)
     ("GameplayUI", "spectatorPanel"),
     ("MessageUI", "messageText"),
     ("MessageUI", "killFeedText"),
+    ("AircraftActionsReport", "actionsText"),
+    ("AircraftActionsReport", "background"),
+    ("AllocationDisplay", "allocationReadout"),
+    ("KillDisplay", "killText"),
     ("VirtualMFD", "leftButtons"),
     ("VirtualMFD", "rightButtons"),
     ("VirtualMFD", "leftScreens"),
@@ -640,6 +650,11 @@ string[] patchTypes =
     ,"BoscaliSummer.Modules.Hud.Patches.WingviewCameraPatch"
     ,"BoscaliSummer.Modules.Hud.Patches.ShotDetonatePatch"
     ,"BoscaliSummer.Modules.Hud.Patches.EventFeedPatch"
+    ,"BoscaliSummer.Modules.Hud.Patches.CueReportPatch"
+    ,"BoscaliSummer.Modules.Hud.Patches.CueReservePatch"
+    ,"BoscaliSummer.Modules.Hud.Patches.CueAllocationPatch"
+    ,"BoscaliSummer.Modules.Hud.Patches.CueScorePatch"
+    ,"BoscaliSummer.Modules.Hud.Patches.CueBonusPatch"
     ,"BoscaliSummer.Modules.Weather.Patches.CloudSeekerPatch"
 };
 

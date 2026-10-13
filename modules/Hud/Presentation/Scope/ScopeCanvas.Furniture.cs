@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Modules.Hud.Domain;
 using NOAvionics;
 using static BoscaliSummer.Core.Contracts.ScopeTone;
 
@@ -13,21 +14,33 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <paramref name="caption"/> (12 regular, at x + 12) and by the <paramref name="flag"/> when there is one (right-aligned to x + w - 12); it ends in a 4 x 4 node centred on (x + w, y + 6) and a 45 degree stub up and to the right.
         /// Draws nothing when <see cref="Furniture"/> is off (the Lean and Minimal levels). The words are constants (strings: nothing is built per paint).
         /// </summary>
-        public void CaptionShelf(float x, float y, float w, string caption, string flag = null)
+        public void CaptionShelf(float x, float y, float w, string caption, string flag = null) => Shelf(x, y, w, caption, flag, Dim, 1f);
+
+        /// <summary>A <see cref="CaptionShelf"/> with no flag in <paramref name="tone"/> at <paramref name="alpha"/> (a cue of the CUE stack, a tone brighter at its first instant and fading at its end).</summary>
+        public void FadingShelf(float x, float y, float w, string caption, ScopeTone tone, float alpha) => Shelf(x, y, w, caption, null, tone, alpha);
+
+        private void Shelf(float x, float y, float w, string caption, string flag, ScopeTone tone, float alpha)
         {
             if (!Furniture) return;
             const float Inset = 12f, Clear = 4f;
             bool hasFlag = !string.IsNullOrEmpty(flag);
             float cy = y + 6f, end = x + w, captionRight = x + Inset + TextW(caption), flagLeft = hasFlag ? end - Inset - TextW(flag) : end + Clear;
-            Line(x, cy, x + Inset - Clear, cy, Dim);
-            Text(caption, x + Inset, cy, Dim);
-            if (captionRight + Clear < flagLeft - Clear) Line(captionRight + Clear, cy, flagLeft - Clear, cy, Dim);
+            Line(x, cy, x + Inset - Clear, cy, tone, alpha);
+            ShelfWord(caption, x + Inset, cy, ScopeAlign.Left, tone, alpha);
+            if (captionRight + Clear < flagLeft - Clear) Line(captionRight + Clear, cy, flagLeft - Clear, cy, tone, alpha);
             if (hasFlag)
             {
-                Text(flag, end - Inset, cy, Dim, 12f, ScopeAlign.Right);
-                Line(end - Inset + Clear, cy, end, cy, Dim);
+                ShelfWord(flag, end - Inset, cy, ScopeAlign.Right, tone, alpha);
+                Line(end - Inset + Clear, cy, end, cy, tone, alpha);
             }
-            Terminal(end, cy);
+            Terminal(end, cy, tone, alpha);
+        }
+
+        /// <summary>A shelf's caption. A DIM word keeps its alpha at its readable floor (<see cref="Text"/>), which a fade must go under: it fades as INK at DIM's own alpha, as DL EVT LOG's rows do.</summary>
+        private void ShelfWord(string s, float x, float cy, ScopeAlign align, ScopeTone tone, float alpha)
+        {
+            if (tone == Dim && alpha < 1f) Text(s, x, cy, Ink, 12f, align, false, alpha * ScopePalette.DimAlpha);
+            else Text(s, x, cy, tone, 12f, align, false, alpha);
         }
 
         /// <summary>
@@ -48,10 +61,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         /// <summary>The end of a shelf: a 4 x 4 DIM node centred on (<paramref name="x"/>, <paramref name="cy"/>) and a 6 unit 45 degree stub up and to the right, whose tip lands 8 units on.</summary>
-        private void Terminal(float x, float cy)
+        private void Terminal(float x, float cy, ScopeTone tone = Dim, float alpha = 1f)
         {
-            Fill(x - 2f, cy - 2f, 4f, 4f, Dim);
-            Line(x + 2f, cy - 2f, x + 8f, cy - 8f, Dim);
+            Fill(x - 2f, cy - 2f, 4f, 4f, tone, alpha);
+            Line(x + 2f, cy - 2f, x + 8f, cy - 8f, tone, alpha);
         }
 
         /// <summary>

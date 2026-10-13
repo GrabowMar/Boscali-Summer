@@ -5,7 +5,7 @@ namespace BoscaliSummer.Core.Contracts
 {
     /// <summary>The scope's colour tokens (HUD v8). Ink, caution and warning follow the player's HUD theme; the rest are derived from it.
     /// Amber and red are ONLY for caution and warning.</summary>
-    internal enum ScopeTone : byte { Ink, Hi, Dim, Faint, Amber, Red, Plate, Bg }
+    internal enum ScopeTone : byte { Ink, Hi, Dim, Faint, Amber, Red, Plate, Bg, White }
 
     /// <summary>How a gauge reads: ring = time (cooldown, countdown), arc = amount, bar = amount with threshold ticks, needle = bearing,
     /// mode = state word with a progress rail, bars = signal strength.</summary>
