@@ -1,3 +1,4 @@
+#if !PUBLIC_RELEASE
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Chatter;
@@ -93,3 +94,4 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         }
     }
 }
+#endif

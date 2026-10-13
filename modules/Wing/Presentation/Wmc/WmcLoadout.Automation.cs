@@ -1,3 +1,4 @@
+#if !PUBLIC_RELEASE
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -27,3 +28,4 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private static bool Same(string a, string b) => !string.IsNullOrEmpty(a) && string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
     }
 }
+#endif

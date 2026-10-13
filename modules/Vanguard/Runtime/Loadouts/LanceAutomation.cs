@@ -1,3 +1,4 @@
+#if !PUBLIC_RELEASE
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Game;
@@ -366,3 +367,4 @@ namespace BoscaliSummer.Vanguard
         }
     }
 }
+#endif

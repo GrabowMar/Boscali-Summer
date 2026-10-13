@@ -1,3 +1,4 @@
+#if !PUBLIC_RELEASE
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -118,3 +119,4 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         }
     }
 }
+#endif

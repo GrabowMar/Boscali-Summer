@@ -1,3 +1,4 @@
+#if !PUBLIC_RELEASE
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Autopilot.Domain;
@@ -119,3 +120,4 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         }
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if !PUBLIC_RELEASE
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -181,3 +182,4 @@ namespace BoscaliSummer.Modules.Command.Runtime
         }
     }
 }
+#endif
