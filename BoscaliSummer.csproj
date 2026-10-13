@@ -202,6 +202,13 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <ItemGroup Label="Night vision shader bundle">
+    <!-- Built by tools/Compile-NightVisionAssets.ps1. Optional: without it the look is a white tint on vanilla's gain. -->
+    <EmbeddedResource Include="modules\QoL\Assets\nightvision.bundle" Condition="Exists('modules\QoL\Assets\nightvision.bundle')">
+      <LogicalName>BoscaliSummer.QoL.nightvision.bundle</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
   <ItemGroup Label="Tail-fin insignia bake shader bundle">
     <!-- Built by tools/Compile-EmblemAssets.ps1. Optional: without it the STUDIO PAINT setting stays inert. -->
     <EmbeddedResource Include="modules\Progression\Assets\emblem.bundle" Condition="Exists('modules\Progression\Assets\emblem.bundle')">

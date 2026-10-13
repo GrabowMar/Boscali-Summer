@@ -311,7 +311,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (filter != null && filter.HasFlightAssist()) s.FlightAssist = a.flightAssist;
             if (filter != null && filter.HasAutoHover()) s.AutoHover = a.IsAutoHoverEnabled();
             if (a.radar != null) s.RadarEmitting = a.radar.activated;
-            if (BoscaliSummer.Core.Game.GameAccess.TryGetNightVisionState(out bool nvg, out _)) s.NightVision = nvg;
+            if (BoscaliSummer.Core.Game.GameAccess.TryGetNightVisionState(out bool nvg, out _)) { s.NightVision = nvg; s.NvgLegend = BoscaliSummer.Core.Game.NightVisionLink.Legend; }
             s.EngineRunning = a.Ignition;
             return s;
         }

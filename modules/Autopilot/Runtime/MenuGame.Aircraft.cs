@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Autopilot.Domain;
 using HarmonyLib;
 using UnityEngine;
@@ -77,6 +78,8 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             bool? nvg = CockpitStateProbe.NightVisionOn();
             w.HasNvg = NightVision.i != null && nvg.HasValue;
             w.NvgOn = nvg ?? false;
+            w.HasNvgGain = NightVisionLink.OwnsGain;
+            w.NvgGain = NightVisionLink.GainStep;
         }
 
         private static void ReadWeapons(MenuWorld w)
@@ -205,6 +208,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "flight/lights/nav": return With(a => a.ToggleNavLights());
                 case "flight/lights/light": return () => LandingLight.Instance?.Cycle();
                 case "view/nvg": return NightVision.Toggle;
+                case "view/nvg-gain": return NightVisionLink.CycleGain;
                 case "defence/dark": return With(GoDark);
                 case "flight/gear": return With(ToggleGear);
                 case "flight/assist": return With(a => a.TogglePitchLimiter());

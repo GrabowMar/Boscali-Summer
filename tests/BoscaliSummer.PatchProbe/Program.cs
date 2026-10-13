@@ -42,6 +42,7 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("ControlsFilter", "SetFlightAssist"),
     ("ControlsFilter", "GetAim"),
     ("NightVision", "NightVis_OnSwitchCam"),
+    ("NightVision", "UpdateGain"),
     ("Hangar", "TrySpawnAircraft"),
     ("Pilot", "GetAccel"),
     ("WeaponManager", "GetTargetList"),
@@ -327,6 +328,7 @@ foreach ((string typeName, string fieldName) in fields)
     ("WeaponInfo", "blastDamage", "System.Single"),
     ("WeaponInfo", "jammer", "System.Boolean"),
     ("Unit", "onDeregisterMissile", "System.Action`1<Missile>"),
+    ("Unit", "IRSources", "System.Collections.Generic.List`1<IRSource>"),
     ("MissileWarning", "knownMissiles", "System.Collections.Generic.List`1<Missile>"),
     ("Aircraft", "onRadarWarning", "System.Action`1<Aircraft+OnRadarWarning>"),
     ("FlightHud", "canvas", "UnityEngine.Canvas"),
@@ -340,6 +342,9 @@ foreach ((string typeName, string fieldName) in fields)
     ("Aircraft", "cockpitRenderers", "UnityEngine.Renderer[]"),
     ("NightVision", "nightVisSelected", "System.Boolean"),
     ("NightVision", "nightVisActive", "System.Boolean"),
+    ("NightVision", "postProcessing", "UnityEngine.Rendering.Volume"),
+    ("NightVision", "gainMin", "System.Single"),
+    ("NightVision", "gainMax", "System.Single"),
     ("NavLights", "isOn", "System.Boolean"),
     ("WeaponManager", "gunsLinked", "System.Boolean"),
 
@@ -607,6 +612,7 @@ string[] patchTypes =
 
 
     "BoscaliSummer.Modules.QoL.Patches.NightVisionChoicePatch",
+    "BoscaliSummer.Modules.QoL.Patches.NightVisionGainPatch",
     "BoscaliSummer.Modules.PlayerSpawnPriority.PlayerSpawnPriorityPatch",
     "BoscaliSummer.Modules.Autopilot.Patches.AutopilotLandInputPatch",
     "BoscaliSummer.Modules.Autopilot.Patches.FlightAssistReportPatch",

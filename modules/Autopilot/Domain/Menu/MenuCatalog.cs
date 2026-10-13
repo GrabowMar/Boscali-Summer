@@ -618,6 +618,9 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 c.Rows.Add(b.Reg(MenuRow.Toggle("view/nvg", "night-vision", w.NvgOn,
                     F("ENABLE NIGHT VISION", "NIGHT VISION: OFF", "AMPLIFY LOW-LIGHT IMAGERY", "NIGHT VISION ON"),
                     F("DISABLE NIGHT VISION", "NIGHT VISION: ON", "RETURN TO NORMAL VISION", "NIGHT VISION OFF"))));
+            if (w.HasNvg && w.NvgOn && w.HasNvgGain)
+                c.Rows.Add(b.Reg(MenuRow.Cycle("view/nvg-gain", "night-vision", "SET NVG GAIN", "NVG GAIN: ",
+                    new[] { "AUTO", "LOW", "MED", "HIGH" }, Math.Max(0, Math.Min(3, w.NvgGain)), "NVG GAIN: ")));
             if (w.TerrainAvailable)
             {
                 c.Rows.Add(b.Reg(MenuRow.Toggle("view/holo", "map", w.HoloMap,

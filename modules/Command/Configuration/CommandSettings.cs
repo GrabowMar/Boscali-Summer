@@ -4,10 +4,10 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Configuration
 {
-    internal sealed class CommandSettings : Core.Contracts.IVisorTerrainSettings
     /// <summary>What the corner map is: a small hologram that the held map key grows (HOLO), or the game's own corner map (CLASSIC; the held map key still raises the hologram).</summary>
     internal enum TacMapMode { Holo, Classic }
 
+    internal sealed class CommandSettings : Core.Contracts.IVisorTerrainSettings
     {
         public ConfigEntry<bool> Enabled { get; }
         public ConfigEntry<bool> ExpandedMapUi { get; }
