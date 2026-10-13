@@ -151,8 +151,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             var symbol = new Symbol { Original = unit.definition != null ? unit.definition.mapIcon : null };
             float scale = unit.definition != null ? unit.definition.mapIconSize : 1f;
             symbol.Relative = Mathf.Clamp(scale <= 0f ? 1f : scale, .85f, 1.35f);
-            // The game already draws aircraft, ships and sites from above, one silhouette each: keep them.
-            if (unit is Ship || unit is Aircraft || unit is Building) return symbol;
+            // The game already draws aircraft and ships from above, one silhouette each: keep them.
+            if (unit is Ship || unit is Aircraft) return symbol;
+            // A building is the game's plain block stretched to its real footprint; sized as a symbol it
+            // becomes a large solid rectangle, so it keeps the game's own drawing and scale.
             if (!(unit is GroundVehicle)) return NotApplicable;
             // Ground vehicles all share one capsule in the game: give each its own model's plan view,
             // or a typical member of its class when the baked sheet does not know the model.

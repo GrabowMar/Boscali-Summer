@@ -8,8 +8,8 @@ namespace BoscaliSummer.Core.Config
     /// and panels match what the host enforces; everything else (presentation, sound, keys,
     /// the HUD, the look of the map) stays the player's own.
     ///
-    /// <para>Named through the settings objects, like the master switches in
-    /// <see cref="ConfigMenu"/>, so a renamed key cannot quietly drop out of the list. Left out
+    /// <para>Named through the settings objects, so a renamed key cannot quietly drop out of
+    /// the list. Left out
     /// on purpose: the master switches (read once at startup, so a session value would change
     /// nothing), <c>Command.GridCellSizeMetres</c> (built once per peer, and only draws the map
     /// on a client) and the free-text keys the host alone reads.</para>

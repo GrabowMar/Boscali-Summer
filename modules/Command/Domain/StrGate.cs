@@ -1,3 +1,5 @@
+using System;
+using System.Globalization;
 using BoscaliSummer.Core.Contracts;
 
 namespace BoscaliSummer.Modules.Command.Domain
@@ -23,6 +25,8 @@ namespace BoscaliSummer.Modules.Command.Domain
                 case StrActionKind.Accept: return Accept(vm, id);
                 case StrActionKind.SendWing: return WingGate(vm.IsHost, vm.SortiesLive, Sortie(vm, id), false);
                 case StrActionKind.Recall: return WingGate(vm.IsHost, vm.SortiesLive, Sortie(vm, id), true);
+                case StrActionKind.BuyConvoy: return Buy(vm, arg);
+                case StrActionKind.Donate: return Donate(vm, arg);
                 default: return new StrAct(StrWhy.NoBoard, "NOT AN ACTION");
             }
         }
@@ -91,6 +95,41 @@ namespace BoscaliSummer.Modules.Command.Domain
                 return new StrAct(StrWhy.BoardFull, "YOUR SIDE HOLDS " + vm.SortieActiveCount + " OF " + vm.SortieActiveLimit + " SORTIES" + StrWords.Dot + "FINISH ONE FIRST");
             return Allowed;
         }
+
+        /// <summary>
+        /// BUY on the SUPPLY tab, by the rules of the game's own contribute menu: a pilot in a faction, a mission that allows it, the host's cooldown
+        /// over and the pilot's own funds covering the price. arg is the group's index in the mission's list. It needs no war report.
+        /// </summary>
+        private static StrAct Buy(StrViewModel vm, int index)
+        {
+            StrSupplyView s = vm.Supply;
+            if (!s.Known) return NoAccount();
+            if (s.Forbidden) return new StrAct(StrWhy.Forbidden, "THIS MISSION FORBIDS BUYING UNITS");
+            StrSupplyRow r = SupplyRow(vm, index);
+            if (r == null || float.IsNaN(r.Cost)) return new StrAct(StrWhy.Gone, "THAT GROUP IS NOT ON THE MISSION'S LIST");
+            if (r.Cooldown < 0) return new StrAct(StrWhy.Pending, "ASKING THE HOST WHETHER THIS GROUP IS AVAILABLE");
+            if (r.Cooldown > 0) return new StrAct(StrWhy.Cooldown, "JUST BOUGHT" + StrWords.Dot + "AVAILABLE AGAIN IN " + r.Cooldown + " S");
+            if (s.Funds < r.Cost) return new StrAct(StrWhy.NoFunds, "YOU HOLD " + s.FundsText + StrWords.Dot + "THIS GROUP COSTS " + r.CostText);
+            return Allowed;
+        }
+
+        /// <summary>GIVE on the SUPPLY tab: arg is the share of the pilot's funds in percent. The host takes one donation a minute and drops the rest silently, so the gate says so first.</summary>
+        private static StrAct Donate(StrViewModel vm, int percent)
+        {
+            StrSupplyView s = vm.Supply;
+            if (!s.Known) return NoAccount();
+            if (percent < 1 || percent > 100) return new StrAct(StrWhy.NoBoard, "NOT A SHARE");
+            if (!(s.Funds > 0f)) return new StrAct(StrWhy.NoFunds, "YOU HAVE NO FUNDS TO GIVE");
+            if (s.DonateCooldown < 0) return new StrAct(StrWhy.Pending, "ASKING THE HOST WHEN IT TAKES THE NEXT DONATION");
+            if (s.DonateCooldown > 0) return new StrAct(StrWhy.Cooldown, "ONE DONATION A MINUTE" + StrWords.Dot + "NEXT IN " + s.DonateCooldown + " S");
+            return Allowed;
+        }
+
+        /// <summary>The convoy row at this index of the mission's list, or null.</summary>
+        internal static StrSupplyRow SupplyRow(StrViewModel vm, int index) =>
+            index >= 0 && index < vm.Supply.RowCount && index < vm.Supply.Rows.Length ? vm.Supply.Rows[index] : null;
+
+        private static StrAct NoAccount() => new StrAct(StrWhy.NoBoard, "JOIN A FACTION TO SPEND YOUR FUNDS");
 
         /// <summary>The proposal row with this id, or null: the one lookup the gate and the runner share.</summary>
         internal static StrProposalRow Proposal(StrViewModel vm, StrItemId id)
@@ -180,6 +219,20 @@ namespace BoscaliSummer.Modules.Command.Domain
                 {
                     bool ok = verbs.Recall(out string said);
                     return Wing(ref ui, ok, said, "WING RECALLED", nowUnscaled);
+                }
+                case StrActionKind.BuyConvoy:
+                {
+                    string name = StrGate.SupplyRow(vm, arg).Name;
+                    return verbs.BuyConvoy(arg)
+                        ? Noted(ref ui, StrWhy.None, "BOUGHT " + name + StrWords.Dot + "A DEPOT DELIVERS IT", nowUnscaled, true)
+                        : new StrAct(StrWhy.NoBoard, "THE PURCHASE WAS NOT SENT" + StrWords.Dot + "TRY AGAIN");
+                }
+                case StrActionKind.Donate:
+                {
+                    float amount = vm.Supply.Funds * arg / 100f;
+                    return verbs.Donate(amount)
+                        ? Noted(ref ui, StrWhy.None, "GAVE " + Math.Floor(amount).ToString("N0", CultureInfo.InvariantCulture) + " TO THE FACTION POOL", nowUnscaled, true)
+                        : new StrAct(StrWhy.NoBoard, "THE DONATION WAS NOT SENT" + StrWords.Dot + "TRY AGAIN");
                 }
                 default:
                     return gate;

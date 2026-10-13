@@ -59,12 +59,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         internal static bool Following => follow;
         internal static bool Flying => fly;
-        /// <summary>A middle-button orbit drag is under way.</summary>
+        /// <summary>An orbit drag (held wheel, or Alt + left) is under way.</summary>
         internal static bool Turning => drag == Drag.Orbit;
 
         /// <summary>A grab drag, or its release frame, must not also click the icon beneath it.</summary>
-        internal static bool BlockIconClick() => drag == Drag.Grab || releaseFrame == Time.frameCount;
-        internal static bool BlockContextClick() => drag == Drag.Grab || releaseFrame == Time.frameCount ||
+        internal static bool BlockIconClick() => drag == Drag.Grab || drag == Drag.Orbit ||
+            releaseFrame == Time.frameCount;
+        internal static bool BlockContextClick() => drag == Drag.Grab || drag == Drag.Orbit ||
+            releaseFrame == Time.frameCount ||
             doubleClickFrame == Time.frameCount;
 
         internal static void Tick(ReliefRig rig)
@@ -76,10 +78,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             if (drag == Drag.None && free)
             {
-                if (Input.GetMouseButtonDown(0) && !BoxHeld() && !LeftDragClaimed())
-                    Press(rig, 0, mouse, vx, vy);
-                else if (Input.GetMouseButtonDown(2))
-                    Press(rig, 2, mouse, vx, vy);
+                // Alt + left drag orbits like the held wheel does: a mouse or driver that never
+                // reports a held wheel button still gets the drag.
+                if (Input.GetMouseButtonDown(0) && AltHeld() && !LeftDragClaimed())
+                    Press(rig, 0, true, mouse, vx, vy);
+                else if (Input.GetMouseButtonDown(0) && !BoxHeld() && !LeftDragClaimed())
+                    Press(rig, 0, false, mouse, vx, vy);
+                else if (MiddleDown())
+                    Press(rig, 2, true, mouse, vx, vy);
             }
             if (drag != Drag.None) Hold(rig, mouse, vx, vy, dt);
             else if (coast.sqrMagnitude > 1e-4f)
@@ -96,14 +102,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             lastMouse = mouse;
         }
 
-        private static void Press(ReliefRig rig, int button, Vector2 mouse, float vx, float vy)
+        private static void Press(ReliefRig rig, int button, bool orbit, Vector2 mouse, float vx, float vy)
         {
-            drag = button == 0 ? Drag.PendingGrab : Drag.PendingOrbit;
+            drag = orbit ? Drag.PendingOrbit : Drag.PendingGrab;
             dragButton = button;
             pressScreen = lastMouse = mouse;
             anchor = Ground(rig, vx, vy);
             velocity = coast = Vector2.zero;
-            if (button != 0) return;
+            if (orbit) return;
             if (Time.unscaledTime - lastClickTime < DoubleClickSeconds &&
                 (mouse - lastClickScreen).sqrMagnitude < Slop * Slop)
             {
@@ -121,8 +127,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private static void Hold(ReliefRig rig, Vector2 mouse, float vx, float vy, float dt)
         {
-            if (!Input.GetMouseButton(dragButton) || (drag == Drag.PendingGrab && BoxHeld()))
+            bool held = dragButton == 2 ? MiddleHeld() : Input.GetMouseButton(0);
+            if (!held || (drag == Drag.PendingGrab && BoxHeld()))
             {
+                // An Alt orbit ends on a left release: do not let it also click what is under it.
+                if (drag == Drag.Orbit && dragButton == 0) releaseFrame = Time.frameCount;
                 if (dragButton == 0 && doubleClickPending)
                 {
                     doubleClickFrame = Time.frameCount;
@@ -323,6 +332,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private static float Slop => Mathf.Max(MinimumSlop, EventSystem.current != null
             ? EventSystem.current.pixelDragThreshold : 0f);
+
+        // The wheel button is read on two channels: Unity's input and the game's Rewired mouse.
+        private static bool MiddleDown() => Input.GetMouseButtonDown(2) ||
+            (ReInput.isReady && ReInput.controllers.Mouse != null && ReInput.controllers.Mouse.GetButtonDown(2));
+        private static bool MiddleHeld() => Input.GetMouseButton(2) ||
+            (ReInput.isReady && ReInput.controllers.Mouse != null && ReInput.controllers.Mouse.GetButton(2));
+        private static bool AltHeld() => Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
 
         /// <summary>Shift or Ctrl hands a left drag to the selection box.</summary>
         private static bool BoxHeld() => ControlHeld() || ShiftHeld();

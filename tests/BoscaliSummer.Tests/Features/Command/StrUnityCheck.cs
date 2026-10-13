@@ -117,6 +117,8 @@ public static class StrUnityCheck
         public void Accept(int contractId) => Sent.Add("accept " + contractId);
         public bool SendWing(int contractId, out string answer) { Sent.Add("wing " + contractId); answer = "WING ORDER SENT"; return true; }
         public bool Recall(out string answer) { Sent.Add("recall"); answer = "WING RECALLED"; return true; }
+        public bool BuyConvoy(int index) { Sent.Add("buy " + index); return true; }
+        public bool Donate(float amount) { Sent.Add("donate " + amount.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)); return true; }
     }
 
     /// <summary>The panel's hub in the harness: the real builder over a fixture's feeds, the real gate and runner over a recording fake of the verbs.</summary>
@@ -216,8 +218,26 @@ public static class StrUnityCheck
                 }
             }
         }
+        if ((fixture == "rich" || fixture == "staffoff") && Mathf.Approximately(height, 896f)) SupplyPage(b, fixture, height);
         if ((fixture == "rich" || fixture == "client") && height < 1000f) EnemySide(b, fixture, height);
         Object.DestroyImmediate(b.Canvas);
+    }
+
+    /// <summary>The SUPPLY tab (the game's own contribute menu): a list to buy from (rich) and no account at all (staffoff), gated like any page; BUY goes through the control id a click uses.</summary>
+    private static void SupplyPage(Built b, string fixture, float height)
+    {
+        AvConsole con = b.Console;
+        con.SetPage(3);
+        b.Panel.BindNow();
+        Settle(con);
+        string where = fixture + "@" + height + "/supply";
+        GatePage(b, where, 3);
+        Capture(b.Canvas, height, "renders/" + fixture + "-supply-" + height + ".png");
+        if (fixture != "rich") return;
+        pressesChecked += 2;
+        StrControls.PressResult buy = b.Panel.Controls.Press("supply.buy.1"), dear = b.Panel.Controls.Press("supply.buy.2");
+        if (!buy.Ok || !b.Hub.Sent.Contains("buy 0")) PanelGate.Fail(where, "BUY on the ready group did not send the purchase: " + buy.Act.Text);
+        if (dear.Ok || dear.Act.Why != StrWhy.NoFunds) PanelGate.Fail(where, "BUY on a group the pilot cannot pay was not refused for funds: " + dear.Act.Text);
     }
 
     /// <summary>The INFO tab's ENEMY side (rich and client have a board to read), reached by the control id a click uses and gated like any page.</summary>

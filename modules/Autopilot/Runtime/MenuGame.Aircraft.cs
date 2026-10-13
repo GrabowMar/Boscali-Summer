@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Reflection;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Autopilot.Domain;
@@ -103,6 +104,9 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             w.GunsLinked = CockpitStateProbe.GunsLinked(wm) ?? false;
             w.HasTurrets = wm.StationsWithTurrets() > 0 && CombatHUD.i != null;
             w.TurretAuto = CombatHUD.i != null && CombatHUD.i.turretAutoControl;
+            BayDoor[] doors = BayTimer != null ? a.GetComponentsInChildren<BayDoor>(true) : Array.Empty<BayDoor>();
+            w.HasBayDoors = doors.Length > 0;
+            w.BayDoorsOpen = BayHeld(doors);
         }
 
         private static void ReadDefence(MenuWorld w)
@@ -130,6 +134,8 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             IDroneCommand drones = Service<IDroneCommand>();
             w.HasDrones = drones != null;
             if (drones != null) { w.DronesStriking = drones.Striking; w.DronesCanStrike = drones.CanStrike; w.Drones = drones.Ready; }
+            ChaffDispenser chaff = ChaffDispenser.Instance;
+            if (chaff != null && chaff.Fitted) { w.HasChaff = true; w.Chaff = chaff.Ammo; w.ChaffMax = chaff.MaxAmmo; w.ChaffLinked = chaff.Linked; }
         }
 
         private static string StationName(object station)
@@ -169,6 +175,13 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             CombatHUD hud = CombatHUD.i;
             w.HudReady = hud != null;
             if (hud == null) return;
+            if (TryAircraft(out Aircraft own))
+            {
+                w.Threats = NearestThreat(own, out _, out float metres);
+                w.ThreatKm = w.Threats > 0 ? metres / 1000f : -1f;
+                MissileWarning warning = own.GetMissileWarningSystem();
+                w.Inbound = warning != null && warning.knownMissiles != null ? warning.knownMissiles.Count : 0;
+            }
             var targets = hud.GetTargetList();
             w.Targets = targets?.Count ?? 0;
             if (w.Targets == 0 || !TryAircraft(out Aircraft a)) return;
@@ -189,9 +202,10 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "weapons/prev": return With(a => a.weaponManager.PreviousWeaponStation());
                 case "weapons/link": return With(a => a.weaponManager.ToggleGunsLinked());
                 case "weapons/turret": return () => CombatHUD.i?.ToggleAutoControl();
-                case "lights/nav": return With(a => a.ToggleNavLights());
-                case "lights/light": return () => LandingLight.Instance?.Cycle();
-                case "lights/nvg": return NightVision.Toggle;
+                case "flight/lights/nav": return With(a => a.ToggleNavLights());
+                case "flight/lights/light": return () => LandingLight.Instance?.Cycle();
+                case "view/nvg": return NightVision.Toggle;
+                case "defence/dark": return With(GoDark);
                 case "flight/gear": return With(ToggleGear);
                 case "flight/assist": return With(a => a.TogglePitchLimiter());
                 case "flight/hover": return With(a => a.GetControlsFilter().ToggleAutoHover());
@@ -203,12 +217,25 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "defence/flares": return With(a => a.countermeasureManager.PopFlares());
                 case "defence/cm": return With(a => a.countermeasureManager.NextCountermeasure());
                 case "defence/radar": return With(a => a.CmdToggleRadar());
+                case "defence/chaff": return () => ChaffDispenser.Instance?.Pop();
+                case "defence/chafflink": return () => { ChaffDispenser chaff = ChaffDispenser.Instance; if (chaff != null) chaff.Linked = !chaff.Linked; };
+                case "weapons/bay": return With(ToggleBayDoors);
+                case "targets/threat": return With(LockNearestThreat);
+                case "targets/inbound": return With(TargetInbound);
                 case "targets/keep": return With(KeepNearest);
                 case "targets/droplast": return () => CombatHUD.i?.DeselectLast();
                 case "targets/clear": return () => CombatHUD.i?.DeselectAll(true);
             }
             if (row.Id.StartsWith("weapons/select/st", StringComparison.Ordinal)) return With(a => SelectStation(a, index));
             return null;
+        }
+
+        /// <summary>Everything that shows the aircraft, off: the radar and the nav lights through the calls their own bindings make, and the menu's landing light.</summary>
+        private static void GoDark(Aircraft a)
+        {
+            if (a.radar != null && a.radar.activated) a.CmdToggleRadar();
+            if (CockpitStateProbe.NavLightsOn(a) == true) a.ToggleNavLights();
+            LandingLight.Instance?.SwitchOff();
         }
 
         private static bool Engaged() => AutopilotLandController.Instance?.IsEngaged == true;
@@ -254,6 +281,71 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             }
             foreach (Unit t in targets.ToArray())
                 if (t != null && t != nearest) hud.DeSelectUnit(t);
+        }
+
+        /// <summary>Hostile aircraft the player's side tracks: how many, the nearest and its distance in metres (by its known position).</summary>
+        private static int NearestThreat(Aircraft a, out Aircraft nearest, out float metres)
+        {
+            nearest = null;
+            metres = float.MaxValue;
+            FactionHQ hq = a.NetworkHQ;
+            if (hq == null) return 0;
+            int count = 0;
+            GlobalPosition here = a.GlobalPosition();
+            IReadOnlyList<Aircraft> all = UnitRegistry.allAircraft;
+            for (int i = 0; i < all.Count; i++)
+            {
+                Aircraft u = all[i];
+                if (u == null || u.disabled || u.NetworkHQ == null || u.NetworkHQ == hq || !hq.TryGetKnownPosition(u, out GlobalPosition known)) continue;
+                count++;
+                float d = FastMath.Distance(known, here);
+                if (d < metres) { metres = d; nearest = u; }
+            }
+            return count;
+        }
+
+        /// <summary>Selects the nearest tracked hostile aircraft alone. One the HUD has no marker for yet cannot be selected: the selection is then left as it is.</summary>
+        private static void LockNearestThreat(Aircraft a)
+        {
+            CombatHUD hud = CombatHUD.i;
+            var targets = hud != null ? hud.GetTargetList() : null;
+            if (targets == null || NearestThreat(a, out Aircraft threat, out _) == 0) return;
+            if (!targets.Contains(threat)) hud.SelectUnit(threat);
+            if (!targets.Contains(threat)) return;
+            foreach (Unit t in targets.ToArray())
+                if (t != threat) hud.DeSelectUnit(t);
+        }
+
+        /// <summary>Adds every missile the warning system knows is tracking the aircraft to the selection (guns, turrets, point defence).</summary>
+        private static void TargetInbound(Aircraft a)
+        {
+            CombatHUD hud = CombatHUD.i;
+            MissileWarning warning = a.GetMissileWarningSystem();
+            var targets = hud != null ? hud.GetTargetList() : null;
+            if (targets == null || warning == null || warning.knownMissiles == null) return;
+            foreach (Missile m in warning.knownMissiles.ToArray())
+                if (m != null && !m.disabled && !targets.Contains(m)) hud.SelectUnit(m);
+        }
+
+        // a door closes when its timer runs out; the game opens one for a launch with a few seconds on it
+        private static readonly FieldInfo BayTimer = AccessTools.Field(typeof(BayDoor), "openTimer");
+        private const float BayHold = 1e9f, BayHeldAbove = 1e6f;
+
+        private static bool BayHeld(BayDoor[] doors)
+        {
+            foreach (BayDoor door in doors)
+                if (door != null && (float)BayTimer.GetValue(door) > BayHeldAbove) return true;
+            return false;
+        }
+
+        /// <summary>Holds the weapon bay open, or hands it back to the game (which opens it for each launch). Local animation only, like the game's own.</summary>
+        private static void ToggleBayDoors(Aircraft a)
+        {
+            if (BayTimer == null) return;
+            BayDoor[] doors = a.GetComponentsInChildren<BayDoor>(true);
+            float timer = BayHeld(doors) ? 0f : BayHold;
+            foreach (BayDoor door in doors)
+                if (door != null) door.OpenDoor(timer);
         }
 
         private static CameraStateManager Cameras => SceneSingleton<CameraStateManager>.i;

@@ -2155,7 +2155,11 @@ static void ProbeTacBoardConfig(Assembly plugin)
         MethodInfo setPaths = bepInEx.GetType("BepInEx.Paths", true)!.GetMethod("SetExecutablePath", AllMembers)!;
         setPaths.Invoke(null, setPaths.GetParameters().Select((parameter, index) => index == 0 ? Path.Combine(scratch, "probe.exe") : parameter.HasDefaultValue ? parameter.DefaultValue : null).ToArray());
         Type modConfiguration = plugin.GetType("BoscaliSummer.Core.Config.ModConfiguration", true)!;
-        object whole = Activator.CreateInstance(modConfiguration, Activator.CreateInstance(configFile, menu, true))!;
+        object menuFile = Activator.CreateInstance(configFile, menu, true)!;
+        object whole = Activator.CreateInstance(modConfiguration, menuFile)!;
+        var strayRows = (System.Collections.IEnumerable)plugin.GetType("BoscaliSummer.Core.Config.ConfigMenu", true)!.GetMethod("Missing", AllMembers)!.Invoke(null, new[] { menuFile })!;
+        string stray = string.Join(", ", strayRows.Cast<object>());
+        if (stray.Length > 0) throw new InvalidOperationException("ConfigMenu.Menu lists settings that are not bound: " + stray);
         object board = modConfiguration.GetProperty("TacBoard")!.GetValue(whole)!;
         bool? Advanced(string entryName)
         {

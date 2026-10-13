@@ -269,15 +269,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return true;
         }
 
-        /// <summary>Right-click on a library row: first empty slot, else report failure.</summary>
-        public static bool AssignToFirstFreeSlot(string name)
-        {
-            if (!CatalogContains(name)) return false;
-            for (int slot = 0; slot < TargetPresetLibrary.SlotCount; slot++)
-                if (library.SlotName(slot).Length == 0) return AssignQuickSlot(name, slot);
-            return false;
-        }
-
         public static bool ClearQuickSlot(int slot)
         {
             if (library.SlotName(slot).Length == 0) return false;

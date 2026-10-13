@@ -2,6 +2,27 @@
 
 ## 0.2.1 — update
 
+- **Chaff**: your aircraft now carries a chaff dispenser (single player and hosting), built on the
+  game's own unused chaff classes. It dazzles radar-guided missiles, most when you fly across the
+  missile's line of sight and not at all head-on. Holding the countermeasure button dispenses it
+  while a radar missile is inbound; DEFENCE has POP CHAFF and a switch for that link, and
+  `Autopilot.ChaffKey` binds a key. The load follows the flare load (24 to 96 bundles), shows on
+  the TAC BOARD's expendables and refills with a rearm.
+- **C menu additions**: TARGETS has LOCK NEAREST THREAT (the nearest tracked hostile aircraft, alone)
+  and TARGET INBOUND MSLS (every missile tracking you joins the selection); WEAPONS has OPEN /
+  CLOSE BAY DOORS on airframes with a weapon bay.
+- **C menu regrouped**: the ring is now WEAPONS, HUD, FLIGHT, WING, COMMS, COCKPIT, SUPPORT, VIEW,
+  DEFENCE, TARGETS. HUD (key 2) holds every TAC BOARD switch: the board itself, declutter, layout,
+  each scope page, each board part, shade, size and a held reset. The exterior lights are one FLIGHT
+  row, night vision moved to VIEW next to the new holo map switch and ground ghost level, the radio
+  became COCKPIT with the cabin effects and the kneeboard card, and DEFENCE gained GO DARK (radar
+  silent and every light off in one press).
+- **C menu handling**: the view no longer pans while a controller steers the menu; a controller
+  enters a category by holding the stick on it for a second (a ring closes round the icon); letting
+  go of the open key too early keeps the menu for a click instead of closing it; rows picked with
+  the arrows or the mouse wheel run on release; switches inside a list stay up so several can be
+  flipped in one visit; a click on the hub goes back and a click in the open closes.
+
 - **MFD index rail rebuilt**: the button column on the right of the map is a new panel in the
   same style as the MFD consoles. Its keys now follow the colour scheme chosen on SET > DISPLAY the
   moment it changes; before, the rail kept the colours it was first drawn with. Keys are grouped

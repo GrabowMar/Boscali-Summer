@@ -71,7 +71,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 cursor = "X " + AvNum.Signed(point.x / 1000f, 1) + "  Z " + AvNum.Signed(point.z / 1000f, 1) +
                     " km  ·  " + (leg != null ? "MARK " + leg : "TERRAIN ~" + AvNum.Fixed(elevation, 0) + " m");
             }
-            else cursor = "CLICK ADDS  /  SHIFT BOX  /  CTRL+WHEEL TURN  /  RMB MENU";
+            else cursor = "CLICK ADDS  /  SHIFT BOX  /  ALT+DRAG TURN  /  RMB MENU";
             cursorLine.Set(cursor);
         }
 

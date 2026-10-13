@@ -27,7 +27,12 @@ ROCKET = "M12 3.5L14.5 7V16.5L16.5 18.5V20.5H7.5V18.5L9.5 16.5V7Z"
 MENU = {
     # ring
     "weapons": "rocket",
+    "hud": ["M3 6H21V14L17 18H7L3 14Z", "M6 12H10", "M14 12H18", "M12 8V10", SQ(11, 11, 2)],  # a visor with the flight path marker
+    "cockpit": ["M4 18V11L8 6H16L20 11V18Z", "M4 13H20"],
     "lights": [O(12, 9, 6, 3.5), "M9.5 18H14.5M10.5 21H13.5"],
+    "resize": ["M4 10V4H10", "M20 14V20H14", "M5 5L19 19"],
+    "dark": ["M12 3V7M12 17V21M3 12H7M17 12H21", SQ(10.5, 10.5, 3), "M5 19L19 5"],
+    "kneeboard": ["M6 3H18V21H6Z", "M9 8H15M9 12H15M9 16H13"],
     "flight": "plane",
     "wing": ["M12 3L15.5 10H8.5Z", "M6 13L9.5 20H2.5Z", "M18 13L21.5 20H14.5Z"],
     "comms": "message-2",
@@ -67,7 +72,11 @@ MENU = {
     "target-drop": [BRACKETS, "M8 12H16"],
     "target-clear": [BRACKETS, "M8.5 8.5L15.5 15.5M15.5 8.5L8.5 15.5"],
     "target-filter": "filter",
+    "threat-lock": [BRACKETS, "M12 7L17 12L12 17L7 12Z"],  # a hostile diamond in the brackets
+    "missile-lock": [BRACKETS, "M12 6.5L14 9.5V16.5H10V9.5Z"],
+    "bay-doors": ["M3 7H21", "M7 7L4 15", "M17 7L20 15", "M12 10V16", SQ(10.5, 16, 3)],  # the bay open, a store on its way out
     # defence
+    "chaff": ["M5 5L8 8M15 4L18 7M10 10L13 13M4 14L7 17M17 12L20 15M11 17L14 20", SQ(18, 18, 2.5)],  # a cloud of strips
     "flare": ["M12 3V8M12 16V21M3 12H8M16 12H21M5.5 5.5L9 9M15 15L18.5 18.5M18.5 5.5L15 9M9 15L5.5 18.5", SQ(10.5, 10.5, 3)],
     "countermeasure-cycle": "refresh",
     "radar": "radar-2",

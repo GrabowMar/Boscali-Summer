@@ -44,6 +44,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static Vector2 boxStart;
         private static int boxReleaseFrame = -1;
         private static int iconClickFrame = -1;
+        /// <summary>Frame of a bare-map release still waiting to learn whether an icon took it; -1 for none.</summary>
+        private static int clearFrame = -1;
         private static bool rightPress;
         private static Vector2 rightStart;
         private static bool leftPress;
@@ -128,6 +130,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 return;
             }
             DrawMark(map);
+            // The input module may hand the icon its click on the release frame or the one after, so a
+            // bare-map release waits out both before it is allowed to clear.
+            if (clearFrame >= 0 && Time.frameCount > clearFrame + 1)
+            {
+                if (iconClickFrame < clearFrame)
+                {
+                    map.UnselectAll();
+                    Echo("SELECTION CLEARED  /  RIGHT CLICK FOR MAP ACTIONS");
+                }
+                clearFrame = -1;
+            }
             if (BoxBlocked())
             {
                 CancelBox();
@@ -184,11 +197,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     ((Vector2)Input.mousePosition - leftStart).sqrMagnitude < DragSlop * DragSlop &&
                     !MapUiPointer.OverControls() && map.TryGetCursorCoordinates(out point);
                 leftPress = false;
-                if (MapClickRules.ShouldClearSelection(open, iconClickFrame, Time.frameCount, ShiftHeld()))
-                {
-                    map.UnselectAll();
-                    Echo("SELECTION CLEARED  /  RIGHT CLICK FOR MAP ACTIONS");
-                }
+                // Decide later: the UI may deliver this release's icon click after this tick, and
+                // clearing now would empty the selection just before that click adds to it.
+                clearFrame = open && !ShiftHeld() ? Time.frameCount : -1;
             }
             if (!boxPress) return;
             if (!BoxHeld() || BoxBlocked() || MapUiPointer.OverControls() ||
@@ -279,6 +290,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Add("ZOOM IN", AvIcon.Maximize, () => Focus(ground, true), true);
                 if (nearby > 1)
                     Add("SELECT NEARBY  /  " + nearby, AvIcon.Stack2, () => SelectNearby(map, click));
+            }
+            // The world camera is the player's only while they fly nothing (the vanilla icon-click rule).
+            if (!GameManager.GetLocalAircraft(out Aircraft flown) || flown == null || flown.disabled)
+            {
+                Unit goTo = contact != null ? contact.unit : null;
+                Add(goTo != null ? "GO TO UNIT" : "GO TO PLACE", AvIcon.Camera, () => GoTo(goTo, ground));
             }
             bool marked = mark.HasValue;
             Add(marked ? "MOVE MARK" : "DROP RANGE MARK HERE", AvIcon.Ruler2, () => SetMark(ground), marked);
@@ -415,6 +432,29 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ReliefNavigator.Focus(ground, zoom);
             HideMenu();
             Echo(zoom ? "AREA FRAMED" : "VIEW CENTERED");
+        }
+
+        /// <summary>Sends the world camera to follow the unit, or to look down on the clicked ground. An enemy
+        /// whose fix is not accurate gets the ground point: the camera must not reveal where it really is.</summary>
+        private static void GoTo(Unit unit, GlobalPosition ground)
+        {
+            HideMenu();
+            CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
+            if (cameras == null) return;
+            if (unit != null && !unit.disabled && (!GameManager.GetLocalHQ(out FactionHQ hq) ||
+                unit.NetworkHQ == null || hq == unit.NetworkHQ || hq.IsTargetPositionAccurate(unit, 100f)))
+            {
+                cameras.SetFollowingUnit(unit);
+                Echo("CAMERA ON UNIT");
+                return;
+            }
+            Vector3 point = ground.ToLocalPosition();
+            if (Physics.Raycast(new Vector3(point.x, 12000f, point.z), Vector3.down, out RaycastHit hit, 24000f))
+                point.y = hit.point.y;
+            // Keep the heading, look 30 degrees down from 400 m back.
+            Quaternion look = Quaternion.Euler(30f, cameras.transform.eulerAngles.y, 0f);
+            cameras.FocusPosition(point, look, 400f);
+            Echo("CAMERA MOVED");
         }
 
         private static void SelectTrack(DynamicMap map, Unit unit, bool add)
@@ -660,7 +700,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             rightPress = false;
             leftPress = false;
             boxReleaseFrame = -1;
-            iconClickFrame = -1;
+            iconClickFrame = clearFrame = -1;
             candidates.Clear();
             actions.Clear();
             feedback = null;

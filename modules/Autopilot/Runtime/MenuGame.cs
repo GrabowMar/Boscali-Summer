@@ -37,6 +37,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             Guarded(w, "defence", ReadDefence);
             Guarded(w, "view", ReadView);
             Guarded(w, "board", ReadBoard);
+            Guarded(w, "cabin", ReadCabin);
             Guarded(w, "targets", ReadTargets);
             Guarded(w, "support", ReadSupport);
             Guarded(w, "radio", ReadRadio);

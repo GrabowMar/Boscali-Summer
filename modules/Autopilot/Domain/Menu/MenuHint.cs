@@ -38,8 +38,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             // the extra open key is configurable: a long name (LEFTSHIFT) would push the row label out of the 396 px segment, so only short names are
             // spelled out; the Radial Menu binding has no name here at all
             string release = pad || c.OpenKeyName.Length == 0 || c.OpenKeyName.Length > 4 ? "RELEASE" : "RELEASE " + c.OpenKeyName;
-            string key = hold ? (c.FocusFromPointer || pad ? release : "ENTER") : Press(c.Device);
-            string enter = c.PadSteps ? "HAT UP" : "CENTRE STICK", turn = c.PadSteps ? "HAT LEFT / RIGHT" : "STICK";
+            string key = hold ? release : Press(c.Device);
+            string enter = c.PadSteps ? "HAT UP" : "HOLD STICK", turn = c.PadSteps ? "HAT LEFT / RIGHT" : "STICK";
             int aimed = pad && c.Wheel && c.WheelAim >= 0 ? c.WheelSlot(c.WheelAim) : MenuController.SlotEmpty;
             string act;
             bool warn = false;
@@ -75,7 +75,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             }
             // a refused key says why in words for as long as a toast: the amber pulse alone is 180 ms of colour
             if (c.Refusal != null && c.Hold == null) { act = c.Refusal; warn = true; }
-            string back = pad ? (c.Wheel ? (c.PadSteps ? "HAT DOWN · BACK" : "AIM BACK · " + enter) : hold ? "RELEASE · CLOSE" : "PRESS · CLOSE")
+            string back = pad ? (c.Wheel ? (c.PadSteps ? "HAT DOWN · BACK" : hold ? "AIM BACK · " + enter : "CENTRE + PRESS · CLOSE") : hold ? "RELEASE · CLOSE" : "PRESS · CLOSE")
                 : BackGlyph(c.Device) + " BACK · " + (hold ? "ESC CANCEL" : "ESC CLOSE");
             return new MenuHintParts(hold ? "HOLD MODE" : "LATCHED", act, back, warn);
         }

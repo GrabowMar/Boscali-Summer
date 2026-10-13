@@ -19,7 +19,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
     internal sealed partial class StrMfdPanel : MonoBehaviour, ISceneService
     {
         private const float Width = AvTokens.PanelWidth;
-        private const int PageBoard = 0, PageSitrep = 1, PageInfo = 2;
+        private const int PageBoard = 0, PageSitrep = 1, PageInfo = 2, PageSupply = 3, PageCount = 4;
         private const int MaxLanes = StrViewModel.MaxFronts;
 
         // ---- Dependencies ----------------------------------------------------------------
@@ -103,7 +103,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
         internal void OpenForAutomation(int page)
         {
             if (screen != null && !screen.isActive && installer.Bezel != null) installer.Bezel.onClick.Invoke();
-            if (console != null) console.SetPage(Mathf.Clamp(page, 0, 2));
+            if (console != null) console.SetPage(Mathf.Clamp(page, 0, PageCount - 1));
             boundRevision = -1;
         }
 
@@ -153,20 +153,23 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private RectTransform BuildScreen(RectTransform rootRect, float height)
         {
             ResetContent();
-            console = AvConsole.Build(rootRect, "STR", "THEATER", 3, Width, height);
+            console = AvConsole.Build(rootRect, "STR", "THEATER", PageCount, Width, height);
             AvTabBar tabBar = console.Tabs(
                 (AvIcon.Stack2, "BOARD"),
                 (AvIcon.Radar2, "SITREP"),
-                (AvIcon.InfoCircle, "INFO"));
+                (AvIcon.InfoCircle, "INFO"),
+                (AvIcon.Coins, "SUPPLY"));
             TabHelp.Apply(tabBar,
                 "The live operation, the staff's proposals, the platforms and the posture.",
                 "Force balance, sensors, the alert level and the AI sortie board.",
-                "Your chain of command and the enemy posts you have confirmed, the staff's log, and report ages and host switches.");
+                "Your chain of command and the enemy posts you have confirmed, the staff's log, and report ages and host switches.",
+                "Spend your own funds: buy a ground group for your side, or give to the faction pool.");
             metrics = console.Metrics("SECTORS", "AIR", "GROUND", "POOL");
 
             BuildBoard(console.Page(PageBoard));
             BuildSitrep(console.Page(PageSitrep));
             BuildInfo(console.Page(PageInfo));
+            BuildSupply(console.Page(PageSupply));
             console.Finish();
             console.SetPage(PageBoard);
             return console.Root;
@@ -217,6 +220,15 @@ namespace BoscaliSummer.Modules.Command.Presentation
             for (int i = 0; i < misc.Length; i++) misc[i] = p.Add(new AvRow(p.Content));
         }
 
+        // The game's own contribute menu on the map: the same two commands, the same gates.
+        private void BuildSupply(AvFlow p)
+        {
+            p.Section(AvIcon.Coins, "FACTION POOL", "A SHARE OF YOUR FUNDS" + StrWords.Dot + "ONE DONATION A MINUTE");
+            Add(p, new StrDonateRow(p.Content, Controls, hub));
+            p.Section(AvIcon.Shield, "GROUND UNITS", "PAID FROM YOUR FUNDS" + StrWords.Dot + "A DEPOT DELIVERS");
+            for (int i = 0; i < StrViewModel.MaxConvoys; i++) Add(p, new StrConvoyRow(p.Content, Controls, hub, i));
+        }
+
         // ---- Binding ---------------------------------------------------------------------
 
         /// <summary>Binds the hub's current model now (the harness and the automation use it).</summary>
@@ -239,7 +251,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         private void RegisterTabs()
         {
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < PageCount; i++)
             {
                 int page = i;
                 Controls.Register(StrControlIds.Tab(page), null, () => { console.SetPage(page); return new StrAct(StrWhy.None, ""); });

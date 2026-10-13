@@ -50,6 +50,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private ScopeProvider<ShotScope> shotProvider;
         private ScopeProvider<MissileCamScope> camProvider;
         private readonly MissileView missileView = new MissileView();
+        private readonly MissileFeedCamera missileFeed = new MissileFeedCamera();
         private readonly List<MissileTrack> missileTracks = new List<MissileTrack>(MissileTracks.MaxShown);
         // Lamp test clock: restarts whenever the native HUD shows a different aircraft (spawn, swap).
         private Aircraft bootAircraft;
@@ -166,7 +167,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             bool thirdPerson = canShow && viewingOwnExternally;
             bool missileCam = canShow && viewingMissile;
             flightNumberHider.Tick(thirdPerson || missileCam, thirdPerson ? ownAircraft : missileOwner);
-            if (!thirdPerson) cluster?.Hide();
+
+            // The missile feed: a camera on the last own weapon in the air, every frame (its pose must follow the weapon), wherever the HUD is up; riding a missile the screen is the feed already.
+            CombatHUD nativeHud = SceneSingleton<CombatHUD>.i;
+            bool hudUp = nativeHud != null && nativeHud.iconLayer != null && nativeHud.iconLayer.gameObject.activeInHierarchy;
+            missileFeed.Tick(missileTracker.Missiles, hudUp && !viewingMissile, Time.unscaledTime);
+            if (!thirdPerson)
+            {
+                // The feed's card stays in the cockpit; the flight boxes around it go the same frame third person ends (the read below runs now).
+                if (missileFeed.Texture == null) cluster?.Hide();
+                else if (cluster != null && cluster.FlightShown) nextRead = 0f;
+            }
 
             if (panel == null) panel = new StatusPanel { Notice = Notice };
             if (!panel.Ensure()) return;
@@ -247,6 +258,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 ReadTarget(ownAircraft, out range, out closure);
             }
 
+            // In the cockpit NAV DATA has the bottom-right corner: the card stays one slot up there.
+            cluster.SetMissileFeed(missileFeed.Texture, missileFeed.Name, missileFeed.RangeM, missileFeed.Lost, raised: !thirdPerson);
             if (thirdPerson && ownAircraft != null)
             {
                 Rigidbody rb = ownAircraft.rb;
@@ -276,7 +289,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             else
             {
-                cluster.Present(false, NOAvionics.AvUnits.Metric, default, null, null, float.NaN, float.NaN, 1f);
+                cluster.Present(false, AvUnitsOf((int)PlayerSettings.unitSystem), default, null, null, float.NaN, float.NaN, ThirdPersonHudLayout.TextScale(PlayerSettings.hudTextSize));
             }
         }
 
@@ -363,6 +376,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public void ResetForScene()
         {
             missileView.Exit();
+            missileFeed.Release();
             missileTracker.Release();
             missileTracks.Clear();
             store.Reset();
@@ -402,6 +416,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             missileTracker.Launched -= OnOwnLaunch;
             missileTracker.Release();
             missileView.Exit();
+            missileFeed.Release();
             panel?.Hide();
             cluster?.Hide();
             externalHud.Release();

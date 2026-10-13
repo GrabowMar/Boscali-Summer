@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Configuration
 {
-    internal sealed class CommandSettings
+    internal sealed class CommandSettings : Core.Contracts.IVisorTerrainSettings
     {
         public ConfigEntry<bool> Enabled { get; }
         public ConfigEntry<bool> ExpandedMapUi { get; }
@@ -44,9 +44,7 @@ namespace BoscaliSummer.Modules.Command.Configuration
         public ConfigEntry<KeyCode> TargetPresetKey1 { get; }
         public ConfigEntry<KeyCode> TargetPresetKey2 { get; }
         public ConfigEntry<KeyCode> TargetPresetKey3 { get; }
-        public ConfigEntry<bool> TargetShowMissiles { get; }
         public ConfigEntry<bool> TargetWeaponOnly { get; }
-        public ConfigEntry<bool> TargetAirOnly { get; }
         public ConfigEntry<int> TargetRangeKm { get; }
 
         public ConfigEntry<bool> DisplayEffects { get; }
@@ -68,6 +66,9 @@ namespace BoscaliSummer.Modules.Command.Configuration
         public ConfigEntry<float> AvionicsCustomKeyHue { get; }
         public ConfigEntry<float> AvionicsCustomGlassHue { get; }
         public ConfigEntry<float> AvionicsCustomGlassTint { get; }
+
+        bool Core.Contracts.IVisorTerrainSettings.HoloMap { get => HoloMap.Value; set => HoloMap.Value = value; }
+        float Core.Contracts.IVisorTerrainSettings.TerrainGhost { get => TerrainGhost.Value; set => TerrainGhost.Value = value; }
 
         public CommandSettings(ConfigFile config)
         {
@@ -229,12 +230,8 @@ namespace BoscaliSummer.Modules.Command.Configuration
             TargetPresetKey3 = config.Bind("Command", "TargetPresetKey3", KeyCode.F10,
                 "Apply TGT quick-slot 3 while flying. None disables the shortcut.");
 
-            TargetShowMissiles = config.Bind("Command", "TargetShowMissiles", false,
-                "Include missiles in the TGT acquisition browser.");
             TargetWeaponOnly = config.Bind("Command", "TargetWeaponOnly", false,
                 "Show only targets suitable for the selected weapon in the TGT acquisition browser.");
-            TargetAirOnly = config.Bind("Command", "TargetAirOnly", false,
-                "Show only aircraft in the TGT acquisition browser.");
             TargetRangeKm = config.Bind("Command", "TargetRangeKm", 0,
                 "Maximum acquisition distance in kilometres: 0 (unlimited), 10, 25, 50, or 100.");
         }

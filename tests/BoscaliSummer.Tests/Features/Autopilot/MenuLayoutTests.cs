@@ -67,7 +67,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
                 }
                 l.FillDock(dock, comms.Rows, false, 99, true, 1, false);
                 TestAssert.Eq(dock.Offset, comms.Rows.Count - cap, "an offset past the end clamps" + at);
-                l.FillDock(dock, m.Category("lights").Rows, false, 0, true, 1, false);
+                l.FillDock(dock, m.Category("targets").Rows, false, 0, true, 1, false);
                 TestAssert.That(!dock.Overflow && dock.RailTrack.H == 0f, "a short list draws no rail" + at);
             }
             MenuLayout l1080 = MenuLayout.Compute(1920, 1080, m.Categories, metrics);

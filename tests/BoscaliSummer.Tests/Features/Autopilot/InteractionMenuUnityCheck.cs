@@ -71,14 +71,17 @@ public static class InteractionMenuUnityCheck
         F("toast", MenuWorlds.Default, r => { r.HoldOpen(); FlickTo(r, 90f, 0.87f); r.ToRow("flight/gear"); r.Adv(0.1f); r.CUp(); }, One),
         F("hat-nav", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(2); r.Down(); r.Down(); }, One),
         // the controller wheel: flick to a category, centre the stick to enter it, aim a row
-        F("pad-ring", MenuWorlds.Default, r => { r.PadY(true); r.Adv(0.2f); r.Stick(1f, 0f); }, One),
-        F("pad-wheel", MenuWorlds.Default, r => { r.PadY(true); r.Adv(0.2f); r.Stick(1f, 0f); r.Stick(0f, 0f); r.Time += 0.2f; r.Stick(0.809f, -0.588f); }, Three),
-        F("pad-comms", MenuWorlds.Default, r => { r.PadY(true); r.Adv(0.2f); r.Stick(0.309f, 0.951f); r.Stick(0f, 0f); r.Time += 0.2f; r.Stick(1f, 0f); }, One),
+        F("pad-ring", MenuWorlds.Default, r => { r.PadY(true); r.Adv(0.2f); r.Stick(1f, 0f); r.Time += 0.6f; r.Stick(1f, 0f); }, One),
+        F("pad-wheel", MenuWorlds.Default, r => { r.PadY(true); r.Adv(0.2f); r.Stick(1f, 0f); r.Time += 1.05f; r.Stick(1f, 0f); r.Stick(0f, 0f); r.Time += 0.2f; r.Stick(0.809f, -0.588f); }, Three),
+        F("pad-comms", MenuWorlds.Default, r => { r.PadY(true); r.Adv(0.2f); r.Stick(0.309f, 0.951f); r.Time += 1.05f; r.Stick(0.309f, 0.951f); r.Stick(0f, 0f); r.Time += 0.2f; r.Stick(1f, 0f); }, One),
         F("support-perks", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(7); for (int i = 0; i < 4; i++) r.Down(); r.Enter(); r.Down(); }, One),
         F("view-missile", MenuWorlds.Missile, r => { r.HoldOpen(); FlickTo(r, 270f, 0.87f); r.ToRow("view/mslnext"); r.Adv(0.1f); }, One),
         // VIEW: the TAC BOARD rows under the camera rows, HUD DECLUTTER focused; then the board hidden: SHOW TAC BOARD focused, the two look rows dimmed with their reason
-        F("view-board", MenuWorlds.Default, r => { r.HoldOpen(); FlickTo(r, 270f, 0.87f); r.ToRow("view/declutter", 0.95f); r.Adv(0.1f); }, Three),
-        F("view-board-off", MenuWorlds.BoardOff, r => { r.HoldOpen(); FlickTo(r, 270f, 0.87f); r.ToRow("view/board", 0.95f); r.Adv(0.1f); }, One),
+        F("view-board", MenuWorlds.Default, r => { r.HoldOpen(); FlickTo(r, 54f, 0.87f); r.ToRow("hud/declutter", 0.95f); r.Adv(0.1f); }, Three),
+        F("view-board-off", MenuWorlds.BoardOff, r => { r.HoldOpen(); FlickTo(r, 54f, 0.87f); r.ToRow("hud/board", 0.95f); r.Adv(0.1f); }, One),
+        F("hud-pages", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(2); r.ToRow("hud/pages"); r.Click(); r.ToRow("hud/pages/dock"); r.Adv(0.1f); }, One),
+        F("cockpit", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(6); r.ToRow("cockpit/receiver"); r.Adv(0.1f); }, Three),
+        F("cockpit-feel", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(6); r.ToRow("cockpit/feel"); r.Click(); r.ToRow("cockpit/feel/visor"); r.Adv(0.1f); }, One),
         F("ground-flight", MenuWorlds.Ground, r => { r.LatchOpen(); r.PressDigit(3); r.Down(); }, One),
         // WING > FORMATION: 22 shapes in 4 families, scrolled so the CLASSIC and ESCORT groups meet, HIGH COVER focused
         F("wing-formation", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(4); r.ToRow("wing/shape"); r.Click(); for (int i = 0; i < 5; i++) r.Wheel(1); r.ToRow("wing/shape/high-cover"); r.Adv(0.1f); }, One),

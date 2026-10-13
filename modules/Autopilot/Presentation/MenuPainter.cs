@@ -16,6 +16,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
     /// </summary>
     internal sealed partial class MenuPainter
     {
+        public const float CloseSec = 0.09f;
         private const float OpenSec = 0.06f, DockSec = 0.07f, SwapSec = 0.06f;
 
         private readonly AvQuadBuffer q;
@@ -54,6 +55,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
                 if (docked) PaintLeaderAndDock(now); else dockWasShown = false;
                 PaintOrbit();
                 if (wheel) PaintWheel(); else PaintRing();
+                PaintDwell(wheel ? c.WheelAim : c.Cat);
                 PaintHub();
                 PaintAction();
                 PaintHint();
@@ -248,6 +250,16 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
                 text.Draw(label, MenuFont.Plate, 15f * T, new MenuRect(plate.L + padX, top, plate.R - padX, top + lh), align, Col(solid ? P.OnInk : blocked ? P.InkDim : amber ? P.Amber : P.Txt));
                 text.Draw(state, MenuFont.Badge, 13f * T, new MenuRect(plate.L + padX, top + lh, plate.R - padX, top + lh + bh), align, Col(solid ? P.OnInk2 : blocked ? P.InkDim : amber ? P.Amber : stateInk));
             }
+        }
+
+        /// <summary>A controller's stick held on something it can enter: a ring closes clockwise round that icon over <see cref="MenuController.DwellSec"/>.</summary>
+        private void PaintDwell(int slot)
+        {
+            float p = c.Dwell;
+            if (p <= 0f || slot < 0) return;
+            float x = l.DiscX[slot], y = l.DiscY[slot], r = l.Rd + 6f;
+            Ring(x, y, r, 4f, P.Casing);
+            AvStrokes.Arc(q, x, H - y, r, 90f - 360f * p, 90f, 48, 4f, P.InkHi);
         }
 
         // ---------------------------------------------------------------- hub + bottom console

@@ -23,6 +23,43 @@ namespace BoscaliSummer.Tests.Features.Command
             TheWingVerbsTurnTheHostsAnswerIntoTheNotice();
             AVerbThatDeclinesIsNeverReportedAsSent();
             AMissingPieceNeverThrowsAndSendsNothing();
+            SupplyBuysAndGivesByTheGamesOwnRules();
+        }
+
+        // SUPPLY, through the real builder: funds 100, group 0 costs 45 and is ready, group 1 costs 150, group 2 is on cooldown, group 3 unanswered.
+        private static void SupplyBuysAndGivesByTheGamesOwnRules()
+        {
+            StrFeeds f = default;
+            f.SupplyKnown = true; f.Allocation = 100.4f; f.DonateCooldown = 0f; f.ConvoyCount = 4;
+            f.Convoys = new[]
+            {
+                new StrConvoyIn { Name = "Tank Platoon", Composition = "4x Tank", Cost = 45f, Cooldown = 0f },
+                new StrConvoyIn { Name = "Heavy", Composition = "8x Tank", Cost = 150f, Cooldown = 0f },
+                new StrConvoyIn { Name = "Busy", Composition = "2x Truck", Cost = 10f, Cooldown = 41.2f },
+                new StrConvoyIn { Name = "Unasked", Composition = "2x Truck", Cost = 10f, Cooldown = -1f },
+            };
+            f.Stamp = StrFeedStamp.Of(in f);
+            var vm = new StrViewModel(); var ui = default(StrUiState); var v = new FakeVerbs();
+            StrViewBuilder.Build(vm, in f, in ui, new StrOrdinals("P"), new StrOrdinals("S"), 10f);
+            TestAssert.That(vm.Supply.RowCount == 4 && vm.Supply.FundsText == "100" && vm.Supply.Rows[0].StateText == "READY" && vm.Supply.Rows[1].StateText == "SHORT 50" &&
+                            vm.Supply.Rows[2].StateText == "READY IN 00:42" && vm.Supply.Rows[3].StateText == "CHECKING", "the supply rows say what the pilot can buy now");
+
+            StrAct buy = StrActions.Run(StrActionKind.BuyConvoy, StrItemId.None, 0, vm, v, ref ui, 10f);
+            TestAssert.That(buy.Allowed && buy.Sent && v.Calls.Count == 1 && v.Calls[0] == "buy 0" && ui.Notice.StartsWith("BOUGHT TANK PLATOON"), "an affordable ready group is bought once, by its list index");
+            TestAssert.That(StrGate.Check(vm, StrActionKind.BuyConvoy, StrItemId.None, 1).Why == StrWhy.NoFunds, "a group the pilot cannot pay is refused");
+            TestAssert.That(StrGate.Check(vm, StrActionKind.BuyConvoy, StrItemId.None, 2).Why == StrWhy.Cooldown, "a group on cooldown is refused");
+            TestAssert.That(StrGate.Check(vm, StrActionKind.BuyConvoy, StrItemId.None, 3).Why == StrWhy.Pending, "a cooldown the host has not answered is not a zero");
+            TestAssert.That(StrGate.Check(vm, StrActionKind.BuyConvoy, StrItemId.None, 4).Why == StrWhy.Gone, "an index off the list is refused");
+
+            StrAct give = StrActions.Run(StrActionKind.Donate, StrItemId.None, 25, vm, v, ref ui, 10f);
+            TestAssert.That(give.Sent && v.Calls.Count == 2 && v.Calls[1] == "donate 25" && ui.Notice == "GAVE 25 TO THE FACTION POOL", "a quarter of the funds goes to the pool: " + v.Calls[v.Calls.Count - 1]);
+
+            f.DonationForbidden = true; f.DonateCooldown = 30f; f.Stamp = StrFeedStamp.Of(in f);
+            StrViewBuilder.Build(vm, in f, in ui, new StrOrdinals("P"), new StrOrdinals("S"), 10f);
+            TestAssert.That(StrGate.Check(vm, StrActionKind.BuyConvoy, StrItemId.None, 0).Why == StrWhy.Forbidden, "a mission that forbids donations sells no units");
+            TestAssert.That(StrGate.Check(vm, StrActionKind.Donate, StrItemId.None, 25).Why == StrWhy.Cooldown, "the host takes one donation a minute");
+            TestAssert.That(StrActions.Run(StrActionKind.Donate, StrItemId.None, 25, vm, v, ref ui, 10f).Sent == false && v.Calls.Count == 2, "a refused press reaches no verb");
+            TestAssert.That(StrGate.Check(new StrViewModel(), StrActionKind.BuyConvoy, StrItemId.None, 0).Why == StrWhy.NoBoard, "no faction, no purchase");
         }
 
         private sealed class FakeVerbs : IStrVerbs
@@ -37,6 +74,8 @@ namespace BoscaliSummer.Tests.Features.Command
             public void Accept(int contractId) { Calls.Add("accept " + contractId); }
             public bool SendWing(int contractId, out string answer) { Calls.Add("send " + contractId); answer = Answer; return Ok; }
             public bool Recall(out string answer) { Calls.Add("recall"); answer = Answer; return Ok; }
+            public bool BuyConvoy(int index) { Calls.Add("buy " + index); return Ok; }
+            public bool Donate(float amount) { Calls.Add("donate " + amount.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)); return Ok; }
         }
 
         /// <summary>A healthy Operation board with distinct engine ids: operation 11 rev 4, proposal 7 rev 2, offered sortie with card id 3 and a wing entry.</summary>

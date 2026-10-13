@@ -62,7 +62,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             r = Rig();
             r.LatchOpen(); r.PressDigit(3);
             float[] view = r.DiscOf(r.Model.IndexOf("view"));
-            r.Mouse(view[0], view[1]); r.Adv(0.07f);
+            r.Mouse(r.L.Cx, r.L.Cy); r.Mouse(view[0], view[1]); r.Adv(0.07f); // from the hub: the step heads away from the dock
             TestAssert.Eq(r.Cat, "view", "moving away from the dock onto another category switches after 60 ms");
             r = Rig();
             r.LatchOpen(); r.PressDigit(3);
@@ -101,7 +101,10 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.That(MenuHint.Parts(r.C).Live.Contains("LOWER GEAR"), "the hint says what release does");
             TestAssert.Eq(MenuHint.Readout(r.C).Value.Desc, "DEPLOY LANDING GEAR", "the hub echoes the focused action");
             r.CUp();
-            TestAssert.That(!r.C.Open && !r.Ran("flight/gear"), "a release inside 50 ms of the focus landing only closes (a jerk of the hand)");
+            TestAssert.That(r.C.Open && r.C.Mode == MenuMode.Latched && r.Focused == "flight/gear" && !r.Ran("flight/gear"),
+                "a release inside 50 ms of the focus landing runs nothing (a jerk of the hand) and keeps the menu, row still focused, for a click");
+            r.Click();
+            TestAssert.That(r.Ran("flight/gear"), "and the click then runs it");
 
             r = Rig();
             r.HoldOpen(); r.Mouse(r.L.Cx + 170f * r.L.Rho, r.L.Cy); r.ToRow("flight/gear"); r.Adv(0.1f); r.CUp();
@@ -114,7 +117,11 @@ namespace BoscaliSummer.Tests.Features.Autopilot
 
             r = Rig();
             r.HoldOpen(); r.Mouse(r.L.Cx + 170f * r.L.Rho, r.L.Cy); r.CUp();
-            TestAssert.That(!r.C.Open && r.Log.Count == 0, "release with no focused row only closes");
+            TestAssert.That(r.C.Open && r.C.Mode == MenuMode.Latched && r.Cat == "flight" && r.Log.Count == 0, "release on a category with no row yet keeps the menu on that category");
+
+            r = Rig();
+            r.HoldOpen(); r.Mouse(r.L.Cx + 170f * r.L.Rho, r.L.Cy); r.Mouse(r.L.Cx + 10f, r.L.Cy); r.CUp();
+            TestAssert.That(!r.C.Open && r.Log.Count == 0, "release back at the hub after pointing closes: that is the cancel");
         }
 
         private static void TapLatchesAndSlowHoldDoesNot()
@@ -129,8 +136,8 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             r.CDown(); r.Adv(0.45f); r.CUp();
             TestAssert.That(r.C.Open && r.C.Mode == MenuMode.Latched, "however long it was held, letting go at the hub without having pointed anywhere keeps the menu for clicks");
             r.Esc();
-            r.Mouse(r.L.Cx, r.L.Cy); r.CDown(); r.Adv(0.3f); r.Mouse(r.L.Cx + 120f, r.L.Cy); r.CUp();
-            TestAssert.That(!r.C.Open, "a 300 ms press that travelled is a hold, not a tap");
+            r.Mouse(r.L.Cx, r.L.Cy); r.CDown(); r.Adv(0.3f); r.Mouse(r.L.Cx + 120f, r.L.Cy); r.Mouse(r.L.Cx + 5f, r.L.Cy); r.CUp();
+            TestAssert.That(!r.C.Open, "a 300 ms press that travelled and came back to the hub is a cancelled hold, not a tap");
         }
 
         private static void DigitsActOnOneLevel()
@@ -139,7 +146,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             r.LatchOpen(); r.PressDigit(1);
             TestAssert.That(r.Cat == "weapons" && r.C.Focus == -1 && !r.C.DockFocus, "number 1 peeks WEAPONS (no focus, no dock focus)");
             r.Right();
-            TestAssert.That(r.Cat == "lights" && r.C.Focus == -1 && !r.C.DockFocus, "arrow right rotates to LIGHTS and stays a peek");
+            TestAssert.That(r.Cat == "hud" && r.C.Focus == -1 && !r.C.DockFocus, "arrow right rotates to HUD and stays a peek");
             r.Down();
             TestAssert.That(r.C.Focus == 0 && r.C.DockFocus, "arrow down enters at the first visible row");
             r.Down();
@@ -165,7 +172,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
 
             r = Rig();
             r.LatchOpen(); r.PressDigit(3); r.PressDigit(2);
-            TestAssert.That(r.Cat == "flight" && r.Ran("flight/assist") && r.C.Open, "with FLIGHT peeked, 2 is ROW 2 (assist), not the LIGHTS category");
+            TestAssert.That(r.Cat == "flight" && r.Ran("flight/assist") && r.C.Open, "with FLIGHT peeked, 2 is ROW 2 (assist), not the HUD category");
             r.PressDigit(9);
             TestAssert.That(r.Cat == "flight" && r.C.Denying && r.Kinds.Contains(MenuCommandKind.Pulse), "digit 9 in a dock is refused with feedback");
             TestAssert.That(r.C.DenyUntil - r.C.Now > 0f && r.C.DenyUntil - r.C.Now <= MenuController.DenySec, "the pulse the painter fades runs DenySec from the refusal");
@@ -205,14 +212,22 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             r.HoldOpen(); r.PressDigit(4);
             TestAssert.That(r.Cat == "wing" && r.C.Focus == -1, "hold C + 4 peeks WING without focusing FORM UP");
             r.CUp();
-            TestAssert.That(!r.C.Open && !r.Ran("wing/formup"), "hold C + 4 + release sends nothing");
+            TestAssert.That(r.C.Open && !r.Ran("wing/formup"), "hold C + 4 + release sends nothing and keeps WING open");
 
             r = Rig();
             r.HoldOpen(); r.Right(); r.Right(); r.Right(); r.Down(); r.Adv(0.2f);
             TestAssert.That(!r.C.FocusFromPointer && r.Focused == "flight/gear", "hat focus in HOLD mode is key-acquired");
-            TestAssert.That(MenuHint.Parts(r.C).Live.StartsWith("ENTER · LOWER GEAR"), "the hint then says ENTER, not RELEASE C");
+            TestAssert.That(r.C.Armed && MenuHint.Parts(r.C).Live.StartsWith("RELEASE C · LOWER GEAR"), "a row stepped onto with the keys is a choice: the hint says RELEASE C");
             r.CUp();
-            TestAssert.That(!r.Ran("flight/gear"), "and releasing C does not fire it");
+            TestAssert.That(r.Ran("flight/gear") && !r.C.Open, "and releasing C runs it");
+
+            r = Rig();
+            r.HoldOpen(); r.PressDigit(1); r.Down();
+            while (r.Focused != "weapons/select") r.Down();
+            r.Enter();
+            TestAssert.That(r.C.Sub != null && r.C.FocusedRow != null && !r.C.Armed, "a list only just drilled into has a focused row that is nobody's choice yet");
+            r.CUp();
+            TestAssert.That(r.Log.Count == 0 && r.C.Open, "so releasing C there runs nothing");
         }
 
         private static void StaleFocusIsClearedByChrome()
@@ -274,23 +289,23 @@ namespace BoscaliSummer.Tests.Features.Autopilot
         {
             var r = Rig();
             r.LatchOpen(); r.PressDigit(3);
-            r.Digit(6); r.Adv(0.5f);
+            r.Digit(7); r.Adv(0.5f);
             TestAssert.That(r.C.Hold != null && r.C.Hold.Progress > 0.55f && r.C.Hold.Progress < 0.7f, "the hold bar fills while the key is held");
             MenuHintParts hint = MenuHint.Parts(r.C);
             TestAssert.That(hint.Live == "HOLDING EJECT · RELEASE TO ABORT" && hint.Warn, "the hint turns amber and says how to abort");
             r.DigitUp();
             TestAssert.That(r.C.Hold == null && !r.Ran("flight/eject") && r.C.Open, "release before 0.8 s cancels");
-            r.Digit(6); r.Adv(0.79f);
+            r.Digit(7); r.Adv(0.79f);
             TestAssert.That(!r.Ran("flight/eject") && r.C.Hold != null, "0.79 s is still not enough");
             r.Adv(0.03f);
             TestAssert.That(r.Ran("flight/eject") && !r.C.Open, "held >= 0.8 s fires EJECT");
 
             r = Rig();
-            r.LatchOpen(); r.PressDigit(3); for (int i = 0; i < 6; i++) r.Down();
+            r.LatchOpen(); r.PressDigit(3); for (int i = 0; i < 7; i++) r.Down();
             r.EnterDown(); r.Adv(0.85f); r.EnterUp();
             TestAssert.That(r.Ran("flight/eject"), "Enter held 0.85 s also fires EJECT");
             r = Rig();
-            r.LatchOpen(); r.PressDigit(3); for (int i = 0; i < 6; i++) r.Down();
+            r.LatchOpen(); r.PressDigit(3); for (int i = 0; i < 7; i++) r.Down();
             r.Enter();
             TestAssert.That(!r.Ran("flight/eject") && r.C.Open, "a plain Enter press never fires EJECT");
 
@@ -310,7 +325,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
         private static MenuRig AtEject()
         {
             var r = Rig();
-            r.LatchOpen(); r.PressDigit(3); for (int i = 0; i < 6; i++) r.Down();
+            r.LatchOpen(); r.PressDigit(3); for (int i = 0; i < 7; i++) r.Down();
             TestAssert.Eq(r.Focused, "flight/eject", "arrows reach EJECT");
             return r;
         }
@@ -370,7 +385,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             r.LatchOpen();
             var seq = new List<string>();
             for (int i = 0; i < 4; i++) { r.Right(); seq.Add(r.Cat); }
-            TestAssert.Eq(string.Join(",", seq), "weapons,lights,flight,comms", "hat rotation skips the unavailable WING");
+            TestAssert.Eq(string.Join(",", seq), "weapons,hud,flight,comms", "hat rotation skips the unavailable WING");
             r.PressDigit(0); r.PressDigit(4);
             TestAssert.That(r.Cat == "wing" && r.C.Focus == -1 && r.C.Dock.Empty, "a number key on the unavailable WING only peeks, with an empty dock");
             r.Down();
@@ -425,7 +440,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
                 int ci = probe.Model.IndexOf(c.Id);
                 var ids = new List<string> { c.Rows[0].Id };
                 if (c.Id == "weapons") ids.Add("weapons/prev");
-                if (c.Id == "radio") { ids.Add("radio/seek"); ids.Add("radio/stopall"); }
+                if (c.Id == "cockpit") { ids.Add("cockpit/seek"); ids.Add("cockpit/stopall"); }
                 if (c.Id == "targets") { ids.Add("targets/keep"); ids.Add("targets/clear"); ids.Add("targets/droplast"); }
                 foreach (string id in ids)
                 {
@@ -457,7 +472,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.Eq(bow, 0, "bowed hand arcs to WEAPONS > PREV STATION also land");
 
             int fast = 0;
-            foreach (string cn in new[] { "radio", "targets" })
+            foreach (string cn in new[] { "cockpit", "targets" })
             {
                 var probe2 = Rig();
                 int ci = probe2.Model.IndexOf(cn);
@@ -468,7 +483,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
                 r.Walk(new[] { new[] { r.L.Cx, r.L.Cy }, r.DiscOf(ci), target }, 130f); r.Adv(0.1f);
                 if (r.Cat != cn) fast++;
             }
-            TestAssert.Eq(fast, 0, "fast (130 px per frame) flicks to RADIO and TARGETS keep their category");
+            TestAssert.Eq(fast, 0, "fast (130 px per frame) flicks to COCKPIT and TARGETS keep their category");
         }
 
         private static IEnumerable<float[]> Bow(float[] p0, float[] p1, float k)
@@ -541,15 +556,15 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             r.LatchOpen();
             float[] d = r.DiscOf(r.Model.IndexOf("flight")); r.Mouse(d[0], d[1]);
             TestAssert.Eq(r.Cat, "flight", "the first peek from nothing is instant");
-            float[] d2 = r.DiscOf(r.Model.IndexOf("lights")); r.Mouse(d2[0], d2[1]);
-            TestAssert.That(r.Cat == "flight" && r.C.HoverCategory == r.Model.IndexOf("lights"), "passing over another disc does not retarget");
+            float[] d2 = r.DiscOf(r.Model.IndexOf("hud")); r.Mouse(d2[0], d2[1]);
+            TestAssert.That(r.Cat == "flight" && r.C.HoverCategory == r.Model.IndexOf("hud"), "passing over another disc does not retarget");
             r.Adv(0.13f);
-            TestAssert.Eq(r.Cat, "lights", "resting 120 ms on it does");
+            TestAssert.Eq(r.Cat, "hud", "resting 120 ms on it does");
             float[] d3 = r.DiscOf(r.Model.IndexOf("flight")); r.Mouse(d3[0], d3[1]); r.Click();
             TestAssert.Eq(r.Cat, "flight", "a click retargets instantly");
 
             var bad = new List<string>();
-            foreach (string cn in new[] { "weapons", "comms", "radio", "targets" })
+            foreach (string cn in new[] { "weapons", "comms", "cockpit", "targets" })
             {
                 var probe = Rig(); int ci = probe.Model.IndexOf(cn);
                 var a = Rig(); a.LatchOpen(); a.PressDigit(ci == 9 ? 0 : ci + 1);
@@ -583,12 +598,18 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             r.Stick((float)Math.Sin(t), -(float)Math.Cos(t));
         }
 
+        /// <summary>The stick held on a slot for the dwell, then let go: what it aimed is entered and the stick may pick again.</summary>
+        private static void Dwell(MenuRig r, int slot)
+        {
+            Aim(r, slot); r.Time += MenuController.DwellSec + 0.05f; Aim(r, slot);
+            r.Stick(0f, 0f); r.Time += 0.2f;
+        }
+
         private static MenuRig InFlightWheel()
         {
             var r = Rig();
             r.PadY(true); r.Adv(0.2f);
-            r.Stick(1f, 0f); r.Stick(0f, 0f);
-            r.Time += 0.2f;
+            Dwell(r, 2);
             return r;
         }
 
@@ -602,10 +623,18 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             r.Stick(0.3f, 1f);
             TestAssert.Eq(r.Cat, "comms", "pad: still deflected, the stick slides round the ring");
             r.Stick(1f, 0f); r.Stick(0f, 0f);
-            TestAssert.That(r.Cat == "flight" && r.C.Wheel && r.C.WheelAim == -1, "pad: back at the centre the category is entered: the ring is now its rows");
-            Aim(r, 4);
-            TestAssert.That(r.C.WheelAim == -1, "pad: the stick's spring-back right after entering aims nothing");
-            r.Time += 0.2f; Aim(r, 1);
+            TestAssert.That(r.Cat == "flight" && !r.C.Wheel && r.C.Dwell == 0f, "pad: back at the centre nothing is entered");
+            r.Stick(1f, 0f); r.Time += 0.5f; r.Stick(1f, 0f);
+            TestAssert.That(!r.C.Wheel && r.C.Dwell > 0.45f && r.C.Dwell < 0.55f, "pad: held on a category, the dwell ring is half closed after half the time");
+            r.Stick(0.3f, 1f); r.Time += 0.7f; r.Stick(0.3f, 1f);
+            TestAssert.That(r.Cat == "comms" && !r.C.Wheel, "pad: sliding to another category starts its dwell again");
+            r.Stick(1f, 0f); r.Time += MenuController.DwellSec + 0.05f; r.Stick(1f, 0f);
+            TestAssert.That(r.Cat == "flight" && r.C.Wheel && r.C.WheelAim == -1 && r.C.Dwell == 0f, "pad: held for the dwell the category is entered: the ring is now its rows");
+            r.Time += 0.5f; Aim(r, 4);
+            TestAssert.That(r.C.WheelAim == -1, "pad: the stick still held after entering aims nothing until it has been to the centre");
+            r.Stick(0f, 0f); r.Time += 0.2f; Aim(r, 1);
+            r.Time += MenuController.DwellSec + 0.05f; Aim(r, 1);
+            TestAssert.That(r.C.Dwell == 0f && r.Log.Count == 0, "pad: an action row has no dwell: only the release runs it");
             TestAssert.Eq(r.Focused, "flight/assist", "pad: the stick's direction aims a row (slot 2 = the second row)");
             r.Stick(0f, 0f);
             TestAssert.That(r.Focused == "" && r.C.Wheel, "pad: back at the centre an action row is un-aimed, so a release there runs nothing");
@@ -613,9 +642,11 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.That(r.Ran("flight/assist") && !r.C.Open, "pad: releasing the button runs the aimed row and closes");
 
             r = InFlightWheel();
-            TestAssert.That(r.C.WheelSlot(MenuController.WheelBackSlot) == MenuController.SlotBack && r.C.WheelSlot(6) == MenuController.SlotEmpty, "the wheel: six rows, empty slots, BACK on the 0 slot");
+            TestAssert.That(r.C.WheelSlot(MenuController.WheelBackSlot) == MenuController.SlotBack && r.C.WheelSlot(7) == MenuController.SlotEmpty, "the wheel: seven rows, empty slots, BACK on the 0 slot");
             Aim(r, MenuController.WheelBackSlot); r.Stick(0f, 0f);
-            TestAssert.That(r.C.Cat == -1 && r.C.Open && !r.C.Wheel, "pad: aiming BACK and centring returns to the categories");
+            TestAssert.That(r.Cat == "flight" && r.C.Wheel, "pad: aiming BACK and centring stays in the list");
+            Dwell(r, MenuController.WheelBackSlot);
+            TestAssert.That(r.C.Cat == -1 && r.C.Open && !r.C.Wheel, "pad: holding on BACK returns to the categories");
             r.PadY(false);
             TestAssert.That(!r.C.Open && r.Log.Count == 0, "pad: releasing with nothing aimed just closes, like the native wheel");
 
@@ -624,7 +655,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.That(!r.C.Open, "pad: a short press with no aim closes too (no latched menu to get stuck in)");
 
             r = InFlightWheel();
-            Aim(r, 5); r.PadY(false);
+            Aim(r, 6); r.PadY(false);
             TestAssert.That(r.C.Open && r.C.Mode == MenuMode.Latched && r.Focused == "flight/eject" && !r.Ran("flight/eject"), "pad: releasing on EJECT keeps the menu and runs nothing");
             r.Stick(0f, 0f);
             TestAssert.Eq(r.Focused, "flight/eject", "pad: latched, the centred stick keeps the row for the confirming press");
@@ -649,14 +680,32 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             Hat(r, 1, 0); Hat(r, 0, -1); Hat(r, 1, 0); r.PadY(false);
             TestAssert.That(r.Log.Count == 1 && !r.C.Open, "hat: releasing the button runs the aimed row");
 
+            // a switch list is worked through: releasing on a switch keeps it up, the stick aims the next, a press flips it, centre + press closes
+            r = Rig();
+            r.PadY(true); r.Adv(0.2f);
+            Dwell(r, 1); Dwell(r, 3);
+            TestAssert.That(r.Cat == "hud" && r.C.Sub != null && r.C.Sub.Id == "hud/pages" && r.C.Wheel, "pad: HUD, then SCOPE PAGES, each entered by a held stick");
+            Aim(r, 1); r.PadY(false);
+            TestAssert.That(r.Ran("hud/pages/threat") && r.C.Open && r.C.Mode == MenuMode.Latched && r.C.Sub != null, "pad: releasing on a switch in a list flips it and keeps the list");
+            r.Stick(0f, 0f);
+            TestAssert.That(r.C.WheelAim == -1 && MenuHint.Parts(r.C).Back == "CENTRE + PRESS · CLOSE", "pad: latched, the centred stick aims nothing and the hint says how to leave");
+            Aim(r, 2);
+            MenuInput press = MenuInput.Idle(r.Time); press.CanOpen = true; press.CHeld = true; press.FromPad = true; press.Press = true; press.PressSource = PressSource.Pad; press.PadAHeld = true; press.StickX = (float)Math.Sin(90 * Math.PI / 180.0);
+            r.CHeld = true; r.PadAHeld = true; r.Send(press);
+            TestAssert.That(r.Ran("hud/pages/shot") && r.C.Open, "pad: latched, a press on the aimed switch flips it");
+            r.PadY(false); r.Stick(0f, 0f);
+            press = MenuInput.Idle(r.Time); press.CanOpen = true; press.CHeld = true; press.FromPad = true; press.Press = true; press.PressSource = PressSource.Pad; press.PadAHeld = true;
+            r.CHeld = true; r.Send(press);
+            TestAssert.That(!r.C.Open, "pad: latched, a press with the stick centred closes the menu");
+
             // a list longer than nine pages through MORE
             r = Rig();
             r.PadY(true); r.Adv(0.2f);
-            Aim(r, 4); r.Stick(0f, 0f); r.Time += 0.2f;
+            Dwell(r, 4);
             TestAssert.That(r.Cat == "comms" && r.C.Wheel && r.C.WheelSlot(MenuController.WheelMoreSlot) == MenuController.SlotMore, "the comms wheel has MORE on slot 9");
             int first = r.C.WheelSlot(0);
-            Aim(r, MenuController.WheelMoreSlot); r.Stick(0f, 0f);
-            TestAssert.That(r.C.WheelSlot(0) == first + MenuController.WheelPageRows, "pad: aiming MORE and centring turns the page");
+            Dwell(r, MenuController.WheelMoreSlot);
+            TestAssert.That(r.C.WheelSlot(0) == first + MenuController.WheelPageRows, "pad: holding on MORE turns the page");
         }
 
         private static void EscClosesAndOpenIsGated()
@@ -673,6 +722,14 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             r.CDown();
             TestAssert.That(!r.C.Open, "C again closes a latched menu");
             r.CUp();
+            r.LatchOpen(); r.PressDigit(3);
+            r.Mouse(r.L.Cx + 3f, r.L.Cy); r.Click();
+            TestAssert.That(r.C.Open && r.C.Cat == -1, "LATCHED: a click on the hub goes back to the ring");
+            MenuRect flight = r.L.Plate(r.Model.IndexOf("flight"), null);
+            r.Mouse(flight.L - 3f, flight.T + 4f); r.Click();
+            TestAssert.That(r.C.Open, "a near miss between a disc and its plate closes nothing");
+            r.Mouse(8f, 8f); r.Click();
+            TestAssert.That(!r.C.Open, "a click out in the open closes the menu");
             r.LatchOpen();
             r.C.Cancel();
             TestAssert.That(!r.C.Open, "Cancel (focus lost, aircraft gone) closes");
@@ -806,7 +863,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             pad2.PadY(true); pad2.Adv(0.2f);
             pad2.Stick(0.6f, 0f);
             TestAssert.That(pad2.C.Device == MenuDevice.Pad, "the stick drives the pad device");
-            TestAssert.That(MenuHint.Parts(pad2.C).Back == "RELEASE · CLOSE" && MenuHint.Parts(pad2.C).Live == "CENTRE STICK · OPEN FLIGHT",
+            TestAssert.That(MenuHint.Parts(pad2.C).Back == "RELEASE · CLOSE" && MenuHint.Parts(pad2.C).Live == "HOLD STICK · OPEN FLIGHT",
                 "a pad user is told the stick and the one button, never a keyboard key or the pad's A / B");
         }
 

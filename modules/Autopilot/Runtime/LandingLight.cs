@@ -32,6 +32,8 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         /// <summary>The menu's one 3-state row: OFF, ON, AUTO, back to OFF.</summary>
         public void Cycle() => Mode = (LandingLightMode)(((int)Mode + 1) % 3);
 
+        public void SwitchOff() => Mode = LandingLightMode.Off;
+
         public void ResetForScene()
         {
             if (Mode == LandingLightMode.On) Mode = LandingLightMode.Off;

@@ -87,9 +87,9 @@ namespace BoscaliSummer.Core.Config
                 Cinematography = new CinematographySettings(config);
                 Effects = new BoscaliSummer.Modules.Effects.Configuration.EffectsSettings(config);
                 LegacyConfigMigration.RemoveEntries(config);
-                // Last, so every module's entries are present to be sorted into the
-                // F1 window's plain and advanced halves.
-                ConfigMenu.Apply(config, this);
+                // Last, so every module's entries are present to be sorted into what the
+                // F1 window lists and what stays in the config file only.
+                ConfigMenu.Apply(config);
             }
             finally
             {

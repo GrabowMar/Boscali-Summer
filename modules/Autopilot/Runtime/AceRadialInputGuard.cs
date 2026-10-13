@@ -15,7 +15,8 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
     {
         private static bool held;
         private static bool ownsCursorFlag;
-        private static bool mouseTaken, keyboardTaken;
+        private static bool mouseTaken, keyboardTaken, cursorBlank;
+        private static UnityEngine.Texture2D blank;
 
         public static bool Held => held;
 
@@ -46,16 +47,29 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             if (keyboardTaken) { Keyboard keyboard = TryKeyboard(); if (keyboard != null) keyboard.enabled = true; keyboardTaken = false; }
             if (ownsCursorFlag) CursorManager.SetFlag(CursorFlags.SelectionMenu, false);
             ownsCursorFlag = false;
+            if (cursorBlank) { UnityEngine.Cursor.SetCursor(null, UnityEngine.Vector2.zero, UnityEngine.CursorMode.Auto); cursorBlank = false; }
             UnityEngine.Cursor.visible = CursorManager.Visible;
             UnityEngine.Cursor.lockState = CursorManager.Visible ? UnityEngine.CursorLockMode.None : UnityEngine.CursorLockMode.Locked; // CursorManager's own rule
         }
 
-        /// <summary>The mouse points with the OS cursor in both modes; a controller steers a drawn reticle, so the cursor hides and stays inside the window.
-        /// Only while the guard is held.</summary>
+        /// <summary>The mouse points with the OS cursor in both modes; a controller steers a drawn reticle, so the cursor is blanked and stays inside the
+        /// window. It is never hidden: the game's cockpit, chase and orbit cameras stop looking around only while <c>Cursor.visible</c> is true, and the
+        /// view axes sit on the same stick that steers the menu (the game sets no cursor image of its own, so null restores it). Only while the guard is held.</summary>
         public static void SetCursorVisible(bool visible)
         {
             if (!held) return;
-            UnityEngine.Cursor.visible = visible;
+            if (!UnityEngine.Cursor.visible) UnityEngine.Cursor.visible = true;
+            if (cursorBlank == visible)
+            {
+                if (blank == null)
+                {
+                    blank = new UnityEngine.Texture2D(32, 32, UnityEngine.TextureFormat.RGBA32, false) { hideFlags = UnityEngine.HideFlags.HideAndDontSave };
+                    blank.SetPixels32(new UnityEngine.Color32[32 * 32]);
+                    blank.Apply();
+                }
+                UnityEngine.Cursor.SetCursor(visible ? null : blank, UnityEngine.Vector2.zero, UnityEngine.CursorMode.Auto);
+                cursorBlank = !visible;
+            }
             UnityEngine.CursorLockMode mode = visible ? UnityEngine.CursorLockMode.None : UnityEngine.CursorLockMode.Confined;
             if (UnityEngine.Cursor.lockState != mode) UnityEngine.Cursor.lockState = mode; // every frame: write only on a change
         }

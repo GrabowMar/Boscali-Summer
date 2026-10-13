@@ -58,11 +58,24 @@ namespace BoscaliSummer.Modules.Command.Domain
                 h = Mix(h, f.PickerPrompt == null ? 0 : f.PickerPrompt.GetHashCode());
                 h = Mix(h, f.KnownAirDefence);
                 h = Mix(h, Census(in f.Census));
+                h = Mix(h, (f.SupplyKnown ? 1 : 0) | (f.DonationForbidden ? 2 : 0));
+                h = Mix(h, Whole(f.Allocation));
+                h = Mix(h, Whole(f.DonateCooldown));
+                h = Mix(h, f.ConvoyCount);
+                for (int i = 0; f.Convoys != null && i < f.ConvoyCount && i < f.Convoys.Length; i++)
+                {
+                    h = Mix(h, f.Convoys[i].Name == null ? 0 : f.Convoys[i].Name.GetHashCode());
+                    h = Mix(h, Whole(f.Convoys[i].Cost));
+                    h = Mix(h, Whole(f.Convoys[i].Cooldown));
+                }
                 return h;
             }
         }
 
         private static int Mix(int h, int v) { unchecked { return (h * 31) ^ v; } }
+
+        // Funds and cooldowns as the board prints them: whole numbers, so a fraction that shows nowhere builds nothing.
+        private static int Whole(float v) => float.IsNaN(v) || float.IsInfinity(v) ? int.MinValue : (int)Math.Ceiling(Math.Max(-2e9f, Math.Min(2e9f, v)));
 
         private static int Id(object o) => o == null ? 0 : RuntimeHelpers.GetHashCode(o);
 

@@ -40,7 +40,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private const float ModelWidth = 900f;
         private const float VerticalScale = 3.6f;
         private const float MaximumAirLift = 120f;
-        private const float RenderInterval = 0.2f;
+        // A still view only redraws to pick up a re-baked tint or threat field; each redraw is a full camera render.
+        private const float RenderInterval = 1f;
         // A moving view redraws with the display (capped at 60 Hz): at 30 Hz a pan stepped under the cursor.
         // A frame already slower than SlowFrame keeps the old 30 Hz, so the map never digs the hole deeper.
         private const float MovingRenderInterval = 1f / 60f;
@@ -1706,7 +1707,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             bool controlOn = controlImage != null && controlImage.texture != null &&
                 controlImage.gameObject.activeInHierarchy && Plugin.Settings.Command.FrontlinesOverlay.Value;
             foreach (MeshRenderer renderer in controlRenderers)
-                if (renderer.enabled != controlOn) renderer.enabled = controlOn;
+                if (renderer.enabled != controlOn) { renderer.enabled = controlOn; nextRender = 0f; }
             if (controlOn && controlMaterial.mainTexture != controlImage.texture)
             {
                 controlMaterial.mainTexture = controlImage.texture;
@@ -1726,7 +1727,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             bool threatOn = threatImage != null && threatImage.texture != null &&
                 threatImage.gameObject.activeInHierarchy && Plugin.Settings.Command.ThreatHeat.Value;
             foreach (MeshRenderer renderer in threatRenderers)
-                if (renderer.enabled != threatOn) renderer.enabled = threatOn;
+                if (renderer.enabled != threatOn) { renderer.enabled = threatOn; nextRender = 0f; }
             if (threatOn && threatMaterial.mainTexture != threatImage.texture)
                 threatMaterial.mainTexture = threatImage.texture;
             if (threatImage != null && threatImage.enabled) threatImage.enabled = false;

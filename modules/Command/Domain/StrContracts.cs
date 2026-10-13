@@ -35,12 +35,12 @@ namespace BoscaliSummer.Modules.Command.Domain
         public float NoticeUntil;           // unscaled time it stops showing (6 s)
     }
 
-    internal enum StrActionKind : byte { Pick, Replan, Posture, Accept, SendWing, Recall }
+    internal enum StrActionKind : byte { Pick, Replan, Posture, Accept, SendWing, Recall, BuyConvoy, Donate }
 
     internal enum StrWhy : byte
     {
         None, NoBoard, Stale, Pending, Locked, Gone, NoOperation, SamePosture,
-        NotOffered, BoardFull, HostOnly, WingRefused, NoWing,
+        NotOffered, BoardFull, HostOnly, WingRefused, NoWing, NoFunds, Cooldown, Forbidden,
     }
 
     /// <summary>The answer of a gate or an action: allowed or the reason, plus whether a verb was sent.</summary>
@@ -62,6 +62,8 @@ namespace BoscaliSummer.Modules.Command.Domain
         void Accept(int contractId);                                // ISecondaryObjectivesView.RequestAccept (void; the answer is ActionResult)
         bool SendWing(int contractId, out string answer);           // host only: ISortieWingOrderSource.TryGetWingOrder then IWingSortieOrders.Send
         bool Recall(out string answer);
+        bool BuyConvoy(int index);                                  // the game's own Player.CmdPurchaseConvoy: the pilot's funds pay, a depot delivers
+        bool Donate(float amount);                                  // the game's own Player.CmdDonateFactionFunds: the pilot's funds into the faction pool
     }
 
     /// <summary>What the panel and the overlay need from the hub. The real hub and the harness hub implement it.</summary>
@@ -110,6 +112,13 @@ namespace BoscaliSummer.Modules.Command.Domain
         public string Words;               // WingSortieStatus.Words
     }
 
+    /// <summary>One convoy group of the mission's own purchase list, in the game's order (the index is the purchase index). Cooldown: seconds until the host allows it again, -1 until the host has answered.</summary>
+    internal struct StrConvoyIn
+    {
+        public string Name, Composition;
+        public float Cost, Cooldown;
+    }
+
     /// <summary>One tick of everything the board reads. The reader copies it from the services; the builder reads nothing else.</summary>
     internal struct StrFeeds
     {
@@ -147,5 +156,12 @@ namespace BoscaliSummer.Modules.Command.Domain
         // census: the measured counts behind the tiles, SITREP and the alert level
         public TheaterCensus Census;       // War.Census when a snapshot exists; else, on a host, the census CommandManager measured itself; else TheaterCensus.Unmeasured. default(TheaterCensus) has Known == false, so a reader that forgets to fill it prints dashes
         public float CensusAgeSeconds;     // seconds since that census was measured or received; -1 unknown
+        // supply: the game's own contribute menu (the pilot's funds, the mission's convoy list, the host's cooldowns)
+        public bool SupplyKnown;           // a local pilot in a faction
+        public bool DonationForbidden;     // FactionHQ.preventDonation: the mission forbids buying units
+        public float Allocation;           // the pilot's own funds
+        public float DonateCooldown;       // seconds until the host takes another donation; -1 until it has answered
+        public StrConvoyIn[] Convoys;
+        public int ConvoyCount;
     }
 }

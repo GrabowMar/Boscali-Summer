@@ -68,10 +68,10 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             frame.CmCount = stationCount;
         }
 
-        /// <summary>Scan once per aircraft; rescan when a stored part was destroyed, or slowly while none were found.</summary>
+        /// <summary>Scan once per aircraft; rescan when a stored part was destroyed, and slowly anyway (a pod, or the chaff dispenser, is fitted after the first look).</summary>
         private bool NeedsScan(float now)
         {
-            if (parts.Length == 0) return now >= nextScan;
+            if (now >= nextScan) return true;
             for (int i = 0; i < parts.Length; i++)
                 if (parts[i] == null) return true;
             return false;

@@ -10,6 +10,8 @@ namespace BoscaliSummer.Modules.Autopilot.Configuration
         public ConfigEntry<float> GlideslopeDegrees { get; }
         public ConfigEntry<UnityEngine.KeyCode> AceRadialKey { get; }
         public ConfigEntry<bool> ReplaceNativeWheel { get; }
+        public ConfigEntry<bool> ChaffOnCountermeasureKey { get; }
+        public ConfigEntry<UnityEngine.KeyCode> ChaffKey { get; }
 
         public AutopilotSettings(ConfigFile config)
         {
@@ -32,6 +34,12 @@ namespace BoscaliSummer.Modules.Autopilot.Configuration
             AceRadialKey = config.Bind("Autopilot", "AceRadialKey", UnityEngine.KeyCode.C,
                 "Keyboard key that opens the interaction menu at once (default C; None leaves only the Radial Menu binding). " +
                 "Tap it to keep the menu open for clicks, or hold it, point at a row and release.");
+            ChaffOnCountermeasureKey = config.Bind("Autopilot", "ChaffOnCountermeasureKey", true,
+                "Your aircraft carries a chaff dispenser (single player and hosting). On: holding the game's countermeasure button " +
+                "also dispenses chaff while a radar-guided missile is inbound. Off: chaff only from the interaction menu (DEFENCE > POP CHAFF) or ChaffKey. " +
+                "Chaff dazzles a radar seeker most when you fly across its line of sight, and does nothing head-on.");
+            ChaffKey = config.Bind("Autopilot", "ChaffKey", UnityEngine.KeyCode.None,
+                "Keyboard key that pops one chaff salvo (default None: use the countermeasure button or the interaction menu).");
         }
 
         public float Slope => IlsGuidance.ClampSlope(GlideslopeDegrees.Value);

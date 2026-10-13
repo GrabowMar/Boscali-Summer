@@ -155,6 +155,10 @@ namespace BoscaliSummer.Tests.Features.Hud
                 card.Bottom >= screen.Bottom + ThirdPersonHudLayout.SafeMargin - 0.5f,
                 "Target card respects the safe margin at aspect " + aspect);
             TestAssert.That(card.Width == ThirdPersonHudLayout.TargetCardWidth, "Target card width is capped, never the full panel width");
+
+            RectF raised = ThirdPersonHudLayout.MissileCard(width, height, raised: true), low = ThirdPersonHudLayout.MissileCard(width, height, raised: false);
+            TestAssert.That(Inside(raised, screen) && !ThirdPersonHudLayout.Overlaps(raised, card), "The missile card stacks above the target card, on screen, at aspect " + aspect);
+            TestAssert.That(low.CenterY == card.CenterY && low.Height == card.Height, "With no target card the missile card takes its place");
         }
 
         private static void KeepClearIsIdempotent()

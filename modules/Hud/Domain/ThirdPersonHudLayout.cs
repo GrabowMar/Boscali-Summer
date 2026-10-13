@@ -65,7 +65,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static float TextScale(float hudTextSize) =>
             float.IsNaN(hudTextSize) || hudTextSize <= 0f ? 1f : Math.Max(MinScale, Math.Min(MaxScale, hudTextSize / NativeTextSize));
 
-        public const float TargetCardWidth = 240f;
+        public const float TargetCardWidth = 300f;
+        /// <summary>Clear space between the target card and the missile feed card stacked on it.</summary>
+        public const float CardGap = 12f;
         public const float TargetCardAspect = 16f / 9f;
         public const float TargetCardHeaderHeight = 22f;
 
@@ -108,6 +110,13 @@ namespace BoscaliSummer.Modules.Hud.Domain
             float centerX = width * 0.5f - SafeMargin - TargetCardWidth * 0.5f;
             float centerY = -height * 0.5f + SafeMargin + cardHeight * 0.5f;
             return new RectF(centerX, centerY, TargetCardWidth, cardHeight);
+        }
+
+        /// <summary>The missile feed card: the target card's box, <paramref name="raised"/> one slot up (over the target card in third person, over NAV DATA in the cockpit).</summary>
+        public static RectF MissileCard(float width, float height, bool raised)
+        {
+            RectF card = TargetCard(width, height, true);
+            return raised ? card.WithCenter(card.CenterX, card.CenterY + card.Height + CardGap) : card;
         }
 
         public static bool Overlaps(RectF a, RectF b) =>

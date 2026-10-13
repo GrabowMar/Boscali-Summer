@@ -50,7 +50,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             public Action SizeChanged;
 
             public MfdPagingGrid(RectTransform parent, int columns, int rows, bool pager = true,
-                bool readOnly = false, float rowHeight = 0f, bool tile = false)
+                bool readOnly = false, float rowHeight = 0f, bool tile = false, bool words = true)
             {
                 this.tile = tile;
                 this.columns = Mathf.Max(1, columns);
@@ -62,7 +62,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 Rect = AvLay.Child(parent, "Grid");
                 cells = new MfdIconCell[perPage];
-                string onWord = readOnly ? "" : "ON", offWord = readOnly ? "" : "OFF";
+                string onWord = readOnly || !words ? "" : "ON", offWord = readOnly || !words ? "" : "OFF";
                 for (int i = 0; i < perPage; i++)
                 {
                     int slot = i;

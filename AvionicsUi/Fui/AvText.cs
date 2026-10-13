@@ -61,6 +61,7 @@ namespace NOAvionics
             if (m.W == box && m.Size == t.fontSize && m.Wrap == t.enableWordWrapping && m.Style == t.fontStyle &&
                 ReferenceEquals(m.Font, t.font) && (ReferenceEquals(m.Text, text) || m.Text == text)) return m.Value;
             Vector2 pref = t.GetPreferredValues(text, box, 0f);
+            if (!t.isActiveAndEnabled) return Mathf.Ceil(wantWidth ? pref.x : pref.y);
             m.Text = text; m.W = box; m.Size = t.fontSize; m.Wrap = t.enableWordWrapping; m.Style = t.fontStyle; m.Font = t.font;
             m.Value = Mathf.Ceil(wantWidth ? pref.x : pref.y);
             return m.Value;

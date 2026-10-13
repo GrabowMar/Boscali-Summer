@@ -197,7 +197,7 @@ Start a mission and look for these:
 | | |
 | --- | --- |
 | <kbd>C</kbd> | Interaction ring: wing orders, formations, support and context actions |
-| <kbd>F1</kbd> | Settings window, if ConfigurationManager is installed. Turn on **Advanced settings** to see everything. |
+| <kbd>F1</kbd> | Settings window, if ConfigurationManager is installed: on/off switches for the mod's systems, and the keys. Tuning values are in the config file only. |
 | **WMC** | Map page for your wing: pilots, formations, loadouts and orders |
 | **STR** | Map page for theater command: territory, frontline and staff |
 | **OPS** | Map page for support calls, fronts and readiness |
@@ -211,8 +211,8 @@ Settings live in `BepInEx/config/com.marci.boscalisummer.cfg`. Modules depend on
 
 The TAC BOARD (the weapons, systems and warning display at the top of the screen) has a new look: helmet-visor symbology with no panel behind it, spread wide along the top edge so it covers less of the sides. The classic narrow column is still there as the **STACK** layout. The board has its own options. They are yours alone, apply at once and can be changed in flight, from whichever of these is handiest:
 - **SET → THIS PILOT → COCKPIT** — every option, in four groups. **Board**: on/off, layout (wide or stack), declutter level, size, position, opacity and shade. **Pages**: whether the board's page area shows pages at all, one switch per page (radar warning, shot, missile cam, approach, wing, strike, dock, objective, systems), how long a radar warning is held and the minimum time a page stays. **Blocks**: the lamp row, systems strip, gauge row and notice line. **Extras**: visor sway, restyling the kill feed and map, and **Reset to defaults**.
-- **C menu → VIEW** — **Show/Hide TAC BOARD**, **Set HUD declutter** (full, lean, min) and **Set board layout** (wide, stack).
-- **F1** — the **TAC BOARD** switch; with **Advanced settings** on, the whole **TacBoard** section.
+- **C menu → HUD** (key 2, top right of the ring) — every board switch: **Show/Hide TAC BOARD**, **Set HUD declutter** (full, lean, min), **Set board layout** (wide, stack), **Scope pages** (auto pages and each page), **Board parts** (lamps, systems strip, gauges, ticker, nav data, feed + map frame, visor sway), **Set shade**, **Set board size** and a held **Reset HUD**.
+- **F1** — the **TAC BOARD** switch only.
 - **Config file** — the same options under `[TacBoard]` in `com.marci.boscalisummer.cfg`.
 What each group does:
 - **Board** — **TAC BOARD** off hides the board and gives back the game's own weapon, countermeasure and power panels. **Layout** is wide or stack. **Size** runs from 60 % to 140 %, **move left** and **move down** slide the board away from the top-right corner (in units, a unit being a 1080p pixel), **opacity** fades the ink and **shade** sets the soft dark band behind it (0 % draws none, and a restyled kill feed then has no dark box either).

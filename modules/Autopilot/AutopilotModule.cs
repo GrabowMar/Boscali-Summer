@@ -30,6 +30,7 @@ namespace BoscaliSummer.Modules.Autopilot
             new AutopilotScopeGauge().Register();      // the TAC BOARD's AUTOPILOT gauge while it flies the landing
             context.AddSceneService<Presentation.AceRadialMenuUi>(50).Configure(settings);
             context.AddSceneService<LandingLight>(51);
+            context.AddSceneService<ChaffDispenser>(51).Configure(settings);
             CockpitStateProbe.Initialise();
             RadialMenuAccess.Initialise();
             context.Logger.LogInfo("Autopilot land=local ownship native-autopilot takeover; radial=" +

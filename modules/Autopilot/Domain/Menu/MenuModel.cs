@@ -234,6 +234,17 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         }
     }
 
+    /// <summary>One entry of a switch list (a scope page, a board part, a cabin effect): its id slug and its words.</summary>
+    internal readonly struct MenuSwitch
+    {
+        public MenuSwitch(string slug, string name, string desc, bool enable = false) { Slug = slug; Name = name; Desc = desc; Enable = enable; }
+        public string Slug { get; }
+        public string Name { get; }
+        public string Desc { get; }
+        /// <summary>The row reads ENABLE / DISABLE (a behaviour) instead of SHOW / HIDE (something drawn).</summary>
+        public bool Enable { get; }
+    }
+
     /// <summary>One ring category. Its angle and key never change; an unavailable one dims in place with its reason.</summary>
     internal sealed class MenuCategory
     {
