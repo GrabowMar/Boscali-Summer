@@ -4,7 +4,6 @@ using System.IO;
 using BepInEx;
 using BepInEx.Logging;
 using BoscaliSummer.Core.Chatter;
-using BoscaliSummer.Modules.Wing.Configuration;
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -38,20 +37,22 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         private readonly List<Pack> scratch = new List<Pack>();
         private readonly List<string> exact = new List<string>(), fallback = new List<string>();
         private readonly ManualLogSource log;
+        private readonly string dataRoot;
         private AudioSource source;
         private UnityWebRequest request;
         private int loadingPack, loadingFile;
         private long decodedBytes;
 
-        public ChatterVoices(ManualLogSource logger)
+        public ChatterVoices(ManualLogSource logger, string dataRoot)
         {
             log = logger;
+            this.dataRoot = dataRoot;
         }
 
-        private static IEnumerable<string> Roots()
+        private IEnumerable<string> Roots()
         {
             yield return Path.Combine(Paths.ConfigPath, "BoscaliSummer", "voicepacks");
-            yield return Path.Combine(WingConfig.DataRoot, "voicepacks");
+            yield return Path.Combine(dataRoot, "voicepacks");
             yield return Path.Combine(Paths.PluginPath, "WSOYappinator", "audio");
             yield return Path.Combine(Paths.PluginPath, "WSO Yappinator", "audio");
         }
@@ -81,7 +82,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             decodedBytes = 0;
         }
 
-        private static string Find(string name)
+        private string Find(string name)
         {
             // A configured name is a single folder, never a path.
             if (name == "." || name == ".." || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) return null;

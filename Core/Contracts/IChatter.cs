@@ -1,4 +1,5 @@
 using BoscaliSummer.Core.Chatter;
+using UnityEngine;
 
 namespace BoscaliSummer.Core.Contracts
 {
@@ -14,6 +15,12 @@ namespace BoscaliSummer.Core.Contracts
 
         /// <summary>The one speaker of a ground or airborne station on a net ("COMMAND", "MAGIC"), the same object every call.</summary>
         ChatterSpeaker Station(ChatterNet net, string callsign);
+
+        /// <summary>The tower of the player's side nearest to <paramref name="at"/>, or null away from every field.</summary>
+        ChatterSpeaker NearTower(Vector3 at);
+
+        /// <summary>A short rising two-tone: an order went out to the whole wing.</summary>
+        void Chime();
 
         /// <summary>The channel's state, the log and the exchanges, for a publisher that paces its own talk.</summary>
         ChatterDirector Director { get; }

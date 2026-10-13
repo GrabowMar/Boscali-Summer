@@ -48,6 +48,7 @@ namespace BoscaliSummer.Modules.Command
             context.AddSceneService<TargetPresetHotkeys>(49).Configure(context.Settings.Command);
             context.AddService<IRadialMenuPage>(new TargetPresetRadialPage());
             context.AddService<IVisorTerrainSettings>(context.Settings.Command);
+            context.AddService<ITacticalLog>(new MfdRadioLog());
 
             MissionMapCompatibilityEngine compat = context.AddSceneService<MissionMapCompatibilityEngine>(51);
             CommandManager manager = context.AddSceneService<CommandManager>(52);

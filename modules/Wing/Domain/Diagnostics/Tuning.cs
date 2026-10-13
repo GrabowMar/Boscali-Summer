@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Text;
 
 using BoscaliSummer.Modules.Wing.Networking;
+using BoscaliSummer.Core.Math;
 using BoscaliSummer.Core.Util;
 namespace BoscaliSummer.Modules.Wing.Domain
 {

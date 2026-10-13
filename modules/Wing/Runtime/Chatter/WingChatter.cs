@@ -185,9 +185,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         private void TowerCall(WingMember m, string evt)
         {
-            var flight = BoscaliSummer.Modules.Chatter.Runtime.ChatterHost.Instance?.Flight;
-            if (flight == null || m.Aircraft == null) return;
-            ChatterSpeaker tower = flight.NearTower(m.Aircraft.transform.position);
+            if (chatter == null || m.Aircraft == null) return;
+            ChatterSpeaker tower = chatter.NearTower(m.Aircraft.transform.position);
             if (tower != null) chatter.Raise(evt, tower, evt + ":" + m.Id.ToString(CultureInfo.InvariantCulture), ("who", SpeakerFor(m).Callsign));
         }
 
@@ -280,7 +279,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 return false;
             }
             // Nobody of the wing is up: the controller answers.
-            ChatterSpeaker awacs = speaker == null ? chatter.Station(ChatterNet.Awacs, BoscaliSummer.Modules.Chatter.Runtime.FlightNets.Awacs) : null;
+            ChatterSpeaker awacs = speaker == null ? chatter.Station(ChatterNet.Awacs, ChatterStations.Awacs) : null;
             // Every question gets its own key: an answer is never a repeat of the one before.
             string key = "bogeydope:" + (++asks).ToString(CultureInfo.InvariantCulture);
             if (w.NearestAirThreat(w.Player, out Vec3 pos, out Vec3 vel, out string type))

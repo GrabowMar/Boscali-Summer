@@ -2,6 +2,7 @@ using System.IO;
 using BepInEx;
 using BepInEx.Configuration;
 
+using BoscaliSummer.Core.Chatter;
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
 namespace BoscaliSummer.Modules.Wing.Configuration
@@ -15,7 +16,7 @@ namespace BoscaliSummer.Modules.Wing.Configuration
     /// Data files (formations, profiles, roster) live under <see cref="DataRoot"/>.
     /// The Avionics keys are gone on purpose: Command owns that section and its
     /// bridge applies it; a second bind would share one entry and fight it.</summary>
-    internal sealed class WingConfig
+    internal sealed class WingConfig : IChatterSettings
     {
         internal const int SchemaVersion = 1;
 
@@ -89,6 +90,13 @@ namespace BoscaliSummer.Modules.Wing.Configuration
         public ConfigEntry<bool> VerboseLogging { get; }
         public ConfigEntry<bool> DevTools { get; }
         public ConfigEntry<bool> Overlay { get; }
+
+        // The Radio section is read by the Chatter module through this contract; the keys stay here.
+        ChatterLevel IChatterSettings.Radio => (ChatterLevel)System.Math.Min(2, System.Math.Max(0, (int)Radio.Value));
+        string IChatterSettings.VoicePacks => VoicePacks.Value;
+        string IChatterSettings.PackConditions => PackConditions.Value;
+        float IChatterSettings.VoicePackVolume => VoicePackVolume.Value;
+        string IChatterSettings.DataRoot => DataRoot;
 
         public WingConfig(ConfigFile c)
         {

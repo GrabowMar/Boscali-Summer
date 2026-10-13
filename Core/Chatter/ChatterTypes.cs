@@ -9,6 +9,13 @@ namespace BoscaliSummer.Core.Chatter
     /// <summary>The pilot's radio setting: Essential drops Ambient lines and exchanges.</summary>
     internal enum ChatterLevel : byte { Off, Essential, Full }
 
+    /// <summary>The callsigns of the stations every module may name when it raises an event for them (<c>IChatter.Station</c>).</summary>
+    internal static class ChatterStations
+    {
+        /// <summary>The controller who calls bandits, missiles, fuel and kills.</summary>
+        public const string Awacs = "SKYWATCH";
+    }
+
     /// <summary>
     /// One voice on the radio. <see cref="Persona"/> and <see cref="Character"/> (both lower case, either may be null) choose its lines in the packs: a line written for the
     /// character wins over one for the persona, which wins over one for anybody.

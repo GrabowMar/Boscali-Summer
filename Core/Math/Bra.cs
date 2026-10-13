@@ -1,7 +1,4 @@
-using System;
-
-using BoscaliSummer.Core.Math;
-namespace BoscaliSummer.Modules.Wing.Domain
+namespace BoscaliSummer.Core.Math
 {
     /// <summary>Spec M7 §1.5: bearing, range, altitude and aspect of a target from a listener, as a radio call says them
     /// ("BRA 045, 12, 8 thousand, hot"; metric "BRA 045, 22 kilometres, 2400 metres, hot").</summary>
@@ -12,12 +9,12 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public static string Format(Vec3 from, Vec3 target, Vec3 targetVel, bool imperial)
         {
             Vec3 to = (target - from).Horizontal;
-            int bearing = (int)Math.Round(Vec3.HeadingDeg(to)) % 360;
+            int bearing = (int)System.Math.Round(Vec3.HeadingDeg(to)) % 360;
             float metres = to.Length;
-            string range = imperial ? $"{Math.Round(metres / 1852f):0}" : $"{Math.Round(metres / 1000f):0} kilometres";
+            string range = imperial ? $"{System.Math.Round(metres / 1852f):0}" : $"{System.Math.Round(metres / 1000f):0} kilometres";
             string altitude = imperial
-                ? $"{Math.Round(target.Y * 3.28084f / 1000f):0} thousand"
-                : $"{Math.Round(target.Y / 100f) * 100f:0} metres";
+                ? $"{System.Math.Round(target.Y * 3.28084f / 1000f):0} thousand"
+                : $"{System.Math.Round(target.Y / 100f) * 100f:0} metres";
             string aspect = Aspect(from, target, targetVel);
             return $"BRA {bearing:000}, {range}, {altitude}{(aspect.Length > 0 ? ", " + aspect : "")}";
         }
@@ -31,7 +28,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             Vec3 back = (from - target).Horizontal;
             if (back.Length < 1f) return "";
             float cos = Vec3.Dot(v, back) / (v.Length * back.Length);
-            float deg = (float)(Math.Acos(Math.Max(-1f, Math.Min(1f, cos))) * 180.0 / Math.PI);
+            float deg = (float)(System.Math.Acos(System.Math.Max(-1f, System.Math.Min(1f, cos))) * 180.0 / System.Math.PI);
             return deg < HotDeg ? "hot" : deg < FlankDeg ? "flanking" : deg < BeamDeg ? "beaming" : "cold";
         }
     }

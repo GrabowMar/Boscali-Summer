@@ -9,7 +9,6 @@ using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.Chatter.Presentation;
-using BoscaliSummer.Modules.Wing.Configuration;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Chatter.Runtime
@@ -32,7 +31,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         private ChatterVoices voices;
         private readonly Func<ChatterSpeaker, bool> canTalk = s => s.CanTalk == null || s.CanTalk();
         private ChatterStrip strip;
-        private WingConfig settings;
+        private IChatterSettings settings;
         private ManualLogSource log;
         private float nextWorld;
 
@@ -43,12 +42,12 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         public FlightNets Flight => flight;
         public float Now => Time.time;
 
-        public void Configure(WingConfig wing, ManualLogSource logger)
+        public void Configure(IChatterSettings chatterSettings, ManualLogSource logger)
         {
-            settings = wing;
+            settings = chatterSettings;
             log = logger;
             flight = new FlightNets(this);
-            voices = new ChatterVoices(logger);
+            voices = new ChatterVoices(logger, chatterSettings.DataRoot);
             Instance = this;
             director.Aired += OnAired;
             LoadPacks();
@@ -71,6 +70,10 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             return speaker;
         }
 
+        public ChatterSpeaker NearTower(Vector3 at) => flight?.NearTower(at);
+
+        public void Chime() => ChatterAudio.Chime();
+
         public void ResetForScene()
         {
             director.Reset(UnityEngine.Random.Range(1, int.MaxValue));
@@ -78,7 +81,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             command.Reset();
             flight?.Reset();
             ChatterAudio.Reset();
-            if (voices != null && settings != null && !Application.isBatchMode) voices.Activate(settings.VoicePacks.Value, director.Library);
+            if (voices != null && settings != null && !Application.isBatchMode) voices.Activate(settings.VoicePacks, director.Library);
             strip?.Clear();
             nextWorld = 0f;
         }
@@ -98,7 +101,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         {
             if (settings == null) return;
             voices.Tick();
-            director.Level = (ChatterLevel)Mathf.Clamp((int)settings.Radio.Value, 0, 2);
+            director.Level = settings.Radio;
             bool flying = GameManager.GetLocalAircraft(out Aircraft me) && me != null;
             if (flying)
             {
@@ -127,7 +130,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             Set("night", night);
             Set("rain", rain);
             // The pilot's own switches for pack lines ("profanity", "banter"): true for as long as they are listed.
-            foreach (string word in (settings.PackConditions.Value ?? "").Split(','))
+            foreach (string word in (settings.PackConditions ?? "").Split(','))
                 if (word.Trim().Length > 0) director.Conditions.Add(word.Trim().ToLowerInvariant());
         }
 
@@ -139,7 +142,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         private void OnAired(ChatterAired line)
         {
             // A recorded voice holds the channel for as long as it really talks.
-            float spoken = voices.Play(line, transform, settings.VoicePackVolume.Value);
+            float spoken = voices.Play(line, transform, settings.VoicePackVolume);
             if (spoken > 0f)
             {
                 director.Hold(Time.time, spoken);
@@ -149,8 +152,8 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             if (strip == null && !Application.isBatchMode) strip = new ChatterStrip(transform);
             strip?.Show(line);
             // The MFD's tactical log keeps the radio with the game's own messages.
-            BoscaliSummer.Modules.Command.Presentation.MapUi.MfdLogPanel.Radio(
-                ChatterStrip.Tag(line.Net) + " " + (line.Speaker ?? "").ToUpperInvariant() + ": " + line.Text);
+            if (ModuleServices.TryGet<ITacticalLog>(out var tactical))
+                tactical.Radio(ChatterStrip.Tag(line.Net) + " " + (line.Speaker ?? "").ToUpperInvariant() + ": " + line.Text);
         }
 
         private void LoadPacks()

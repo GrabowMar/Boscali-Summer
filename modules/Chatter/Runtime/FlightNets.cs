@@ -6,8 +6,6 @@ using BoscaliSummer.Core.Chatter;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Math;
 using BoscaliSummer.Core.Services;
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Chatter.Runtime
@@ -20,7 +18,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
     /// </summary>
     internal sealed class FlightNets
     {
-        public const string Awacs = "SKYWATCH";
+        public const string Awacs = ChatterStations.Awacs;
         private const float BanditRange = 60000f, MateRange = 30000f, EnemyGap = 9f, MissileGap = 6f;
 
         private static readonly string[] EnemyFlights = { "VOLK", "TALON", "GRIM", "IRON", "PIKE", "WRAITH", "HOLLOW", "SABRE" };
@@ -186,7 +184,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         {
             FactionHQ hq = me.NetworkHQ;
             if (hq.trackingDatabase == null || me.radarAlt < 30f) return;
-            Vec3 from = me.GlobalPosition().ToVec3();
+            Vec3 from = Pure(me.GlobalPosition());
             Aircraft nearest = null;
             Vec3 nearestAt = default;
             float best = BanditRange * BanditRange;
@@ -195,7 +193,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                 TrackingInfo t = pair.Value;
                 if (called.Contains(pair.Key.Id) || t == null || !t.TryGetUnit(out Unit u) || !(u is Aircraft enemy) || u.disabled || u.NetworkHQ == null || u.NetworkHQ == hq) continue;
                 if (enemy.radarAlt < 20f) continue;
-                Vec3 at = t.GetPosition().ToVec3();
+                Vec3 at = Pure(t.GetPosition());
                 float d = (at - from).SqrLength;
                 if (d >= best) continue;
                 best = d;
@@ -205,7 +203,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             if (nearest == null) return;
             // Called once, whoever says it: a wingman who saw it first uses the same key, and the radio's repeat rule refuses the second call.
             called.Add(nearest.persistentID.Id);
-            Vec3 vel = nearest.rb != null ? nearest.rb.velocity.ToVec3() : Vec3.Zero;
+            Vec3 vel = nearest.rb != null ? Pure(nearest.rb.velocity) : Vec3.Zero;
             string bra = Bra.Format(from, nearestAt, vel, PlayerSettings.unitSystem == PlayerSettings.UnitSystem.Imperial);
             chatter.Raise("awacs.bandit", chatter.Station(ChatterNet.Awacs, Awacs), "wing.bandit:" + nearest.persistentID.Id.ToString(CultureInfo.InvariantCulture),
                 ("bra", bra), ("type", TypeOf(nearest)));
@@ -314,6 +312,10 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             }
             catch (Exception error) { BoscaliSummer.Core.Diagnostics.PatchGuard.Report("Chatter.Airbase", error); }
         }
+
+        private static Vec3 Pure(GlobalPosition g) => new Vec3(g.x, g.y, g.z);
+
+        private static Vec3 Pure(Vector3 v) => new Vec3(v.x, v.y, v.z);
 
         private static string TypeOf(Unit unit)
         {
