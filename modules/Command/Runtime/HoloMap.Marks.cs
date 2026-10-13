@@ -99,7 +99,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             if (mini)
             {
                 gridRef = ReadGridRef();
-                Label(LabelGrid, gridRef, frameW - 10f * u, 14f * u, Dim(.7f));
+                Label(LabelGrid, gridRef, frameW - 10f * u, 14f * u, inkColour.WithAlpha(.7f));
             }
             else
             {

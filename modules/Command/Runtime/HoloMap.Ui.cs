@@ -188,9 +188,9 @@ namespace BoscaliSummer.Modules.Command.Runtime
             inkAtFurniture = ink;
             barMetres = metres;
             barLength = length;
-            labels[LabelCaption].color = Dim(.7f);
+            labels[LabelCaption].color = inkColour.WithAlpha(.7f);
             labels[LabelFlag].color = inkColour;
-            labels[LabelScale].color = Dim(.7f);
+            labels[LabelScale].color = inkColour.WithAlpha(.7f);
 
             AvQuadBuffer f = furniture.Buffer;
             f.Clear();

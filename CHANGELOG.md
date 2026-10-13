@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.3 — update
 
 - **Chaff is a countermeasure like the others** (issue 10): `Next Countermeasure` now steps FLARES, JAMMER, CHAFF, and while chaff
   is selected the `Countermeasures` button dispenses it. The selection shows on the TAC BOARD, the game's own readout and the
