@@ -27,6 +27,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
     /// types), so the offline bench drives exactly the game's uniforms.</summary>
     internal sealed class CloudVolumeUniforms
     {
+        private BakedTape boundsTape;
+        private int boundsCell;
+        private float boundsExpiry, boundsBottomCache, boundsTopCache;
         private static readonly int NoiseId = Shader.PropertyToID("_CloudNoiseTex");
         private static readonly int MapSpanId = Shader.PropertyToID("_WeatherMapSpan");
         private static readonly int FarSpanId = Shader.PropertyToID("_WeatherFarSpan");
@@ -222,7 +225,16 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             material.SetVectorArray(HeroBId, heroB);
             material.SetFloat(HeroCountId, heroes);
             material.SetVector(EyeId, eye);
-            FarBounds(field, frame.CameraPosition + frame.WorldOffset, out float boundsBottom, out float boundsTop);
+            // The tape walk is per-frame cost for an answer that only changes when the camera crosses a tape texel (or the tape is replaced): reuse it between, refresh at least every 2 s.
+            Vector3 boundsCamera = frame.CameraPosition + frame.WorldOffset;
+            BakedTape boundsSource = field.Tape.Tape;
+            int boundsTexel = boundsSource == null ? int.MinValue : Mathf.FloorToInt(field.Frame.S(boundsCamera.x, boundsCamera.z) / boundsSource.TexelMetres);
+            if (!ReferenceEquals(boundsSource, boundsTape) || boundsTexel != boundsCell || Time.unscaledTime >= boundsExpiry)
+            {
+                FarBounds(field, boundsCamera, out boundsBottomCache, out boundsTopCache);
+                boundsTape = boundsSource; boundsCell = boundsTexel; boundsExpiry = Time.unscaledTime + 2f;
+            }
+            float boundsBottom = boundsBottomCache, boundsTop = boundsTopCache;
             material.SetVector(BoundsId, new Vector2(boundsBottom, boundsTop));
             material.SetVector(HeroBoundsId, heroes > 0 ? new Vector2(heroBottom, heroTop) : Vector2.zero);
             // Static weather: the detail texture does not crawl either.

@@ -41,33 +41,68 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>Called only by a paid, host-validated sensor task; UI entry never calls this.</summary>
         public int Open(GlobalPosition center, float radius, BirdKind source, float minimumSpeed, float maximumSpeed)
         {
+            OpenWalk walk = BeginOpen(center, radius, source, minimumSpeed, maximumSpeed);
+            if (walk == null) return -1;
+            while (walk.Step(double.PositiveInfinity)) { }
+            return walk.Admitted;
+        }
+
+        /// <summary>The cheap front half of <see cref="Open"/> (window, caps, tick); null where Open returns -1. The unit walk is <see cref="OpenWalk.Step"/>.</summary>
+        public OpenWalk BeginOpen(GlobalPosition center, float radius, BirdKind source, float minimumSpeed, float maximumSpeed)
+        {
             float now = SupportManager.MissionNow();
             if (disposed || owner == null || !GameAccess.IsServer() ||
                 !SpaceRevealWindow.TryCreate(source, center.x, center.z, radius, now, SpaceRevealWindow.ObservationSeconds,
-                    minimumSpeed, maximumSpeed, out SpaceRevealWindow window)) return -1;
+                    minimumSpeed, maximumSpeed, out SpaceRevealWindow window)) return null;
             var units = UnitRegistry.allUnits;
-            if (units == null) return -1;
-            if (units.Count > MaximumNativeUnits) { NoteCap(units.Count); return -1; }
+            if (units == null) return null;
+            if (units.Count > MaximumNativeUnits) { NoteCap(units.Count); return null; }
             // The RADAR bird stays busy for BirdBusySeconds (SupportCatalog), so one window per bird never
             // overwrites a live scan/MTI footprint.
             windows[(int)source] = window;
             Tick(now);
-            int admitted = 0;
-            for (int i = 0; i < units.Count && Contacts.Count < SpaceContacts.MaxReveals; i++)
+            return new OpenWalk(this, units, window, now);
+        }
+
+        /// <summary>The unit walk of <see cref="Open"/>, resumable: line of sight per unit in the footprint was the 10-18 ms lump.</summary>
+        internal sealed class OpenWalk
+        {
+            private readonly SpaceObservations o;
+            private readonly List<Unit> units;
+            private readonly SpaceRevealWindow window;
+            private readonly float now;
+            private int i;
+            public int Admitted { get; private set; }
+
+            public OpenWalk(SpaceObservations o, List<Unit> units, SpaceRevealWindow window, float now)
+            { this.o = o; this.units = units; this.window = window; this.now = now; }
+
+            /// <summary>Walks units in list order until the budget (ms) is spent; true while more remain.</summary>
+            public bool Step(double budgetMs)
             {
-                Unit unit = units[i];
-                if (!Ground(unit)) continue;
-                GlobalPosition point = unit.transform.position.ToGlobalPosition();
-                if (!window.Contains(point.x, point.z, unit.speed, now) || !VisibleSurface(unit)) continue;
-                // This accepted task is an actual new sensor observation, including indexed native scenery.
-                if (unit.NetworkHQ != null && unit.NetworkHQ != owner)
+                long end = double.IsPositiveInfinity(budgetMs) ? long.MaxValue
+                    : System.Diagnostics.Stopwatch.GetTimestamp() + (long)(budgetMs * System.Diagnostics.Stopwatch.Frequency / 1000.0);
+                while (i < units.Count && o.Contacts.Count < SpaceContacts.MaxReveals && !o.disposed)
                 {
-                    try { owner.RpcUpdateTrackingInfo(unit.persistentID); }
-                    catch (Exception e) { Plugin.Logger?.LogWarning("[Support.Space] Sensor observation refused: " + e.Message); continue; }
+                    Visit(units[i++]);
+                    if (System.Diagnostics.Stopwatch.GetTimestamp() >= end) break;
                 }
-                if (Observe(unit, point, now, window.Source)) admitted++;
+                return i < units.Count && o.Contacts.Count < SpaceContacts.MaxReveals && !o.disposed;
             }
-            return admitted;
+
+            private void Visit(Unit unit)
+            {
+                if (!Ground(unit)) return;
+                GlobalPosition point = unit.transform.position.ToGlobalPosition();
+                if (!window.Contains(point.x, point.z, unit.speed, now) || !VisibleSurface(unit)) return;
+                // This accepted task is an actual new sensor observation, including indexed native scenery.
+                if (unit.NetworkHQ != null && unit.NetworkHQ != o.owner)
+                {
+                    try { o.owner.RpcUpdateTrackingInfo(unit.persistentID); }
+                    catch (Exception e) { Plugin.Logger?.LogWarning("[Support.Space] Sensor observation refused: " + e.Message); return; }
+                }
+                if (o.Observe(unit, point, now, window.Source)) Admitted++;
+            }
         }
 
         /// <summary>An active SPACE reveal window of this faction covers the point: an enemy bird is looking there (the SOF Overwatch: SPACE beats SOF).</summary>

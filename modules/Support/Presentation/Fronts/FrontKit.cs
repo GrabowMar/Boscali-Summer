@@ -67,11 +67,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         }
 
         /// <summary>m:ss.</summary>
-        public static string Clock(float seconds)
-        {
-            int s = Mathf.Max(0, Mathf.CeilToInt(seconds));
-            return (s / 60) + ":" + (s % 60).ToString("00");
-        }
+        public static string Clock(float seconds) => BoscaliSummer.Modules.Support.Domain.Fronts.FrontRules.Clock(seconds);
 
         public static string Signed(int v) => v > 0 ? "+" + v : v.ToString();
 

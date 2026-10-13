@@ -65,7 +65,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private Vector3 lightDirection = Vector3.up;
         private const int SightTaps = 96, SightTapsPerCall = 12;
         private const float SightReach = 30000f, SightCeiling = 14000f;
-        private float sightDepth, sightOpen = 1f;
+        private float sightDepth, sightOpen = 1f, nextSight;
         private int sightTap;
         private bool sightLine;
 
@@ -332,6 +332,10 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             // a scattered field always read as solid, which put the setting sun out over an open horizon.
             float reach = Mathf.Min(SightReach, (SightCeiling - y) / Mathf.Max(lightDirection.y, 0.03f));
             if (reach <= 0f) return sightOpen = 1f;
+            // At most 75 measuring calls a second (every frame at 75 fps or less): above that the same line only refreshes a little less often,
+            // and the sun disc already eases the result.
+            if (Time.unscaledTime < nextSight) return sightOpen;
+            nextSight = Time.unscaledTime + 1f / 75f;
             float step = reach / SightTaps;
             for (int i = 0; i < SightTapsPerCall; i++)
             {

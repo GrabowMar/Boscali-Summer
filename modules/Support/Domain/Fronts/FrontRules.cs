@@ -85,7 +85,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         /// <summary>m:ss, rounded up, as the lock reason shows it.</summary>
         public static string Clock(float seconds)
         {
-            int s = (int)Math.Ceiling(Math.Max(0f, seconds));
+            if (float.IsNaN(seconds) || float.IsInfinity(seconds)) return "0:00";
+            int s = (int)Math.Ceiling(Math.Min(Math.Max(0f, seconds), 1e9f));
             return (s / 60) + ":" + (s % 60).ToString("00");
         }
     }

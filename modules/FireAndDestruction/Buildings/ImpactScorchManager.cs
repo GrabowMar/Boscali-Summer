@@ -48,7 +48,8 @@ namespace BoscaliSummer.Fire
         private readonly List<GameObject> marks = new List<GameObject>(64);
         private readonly List<int> owners = new List<int>(64);
         private int ringHead;
-        private bool loggedFirstMark;
+        private bool loggedFirstMark, materialWarm;
+        private float warmAt;
 
         private static FireAndDestructionSettings Fire => Plugin.Settings.FireAndDestruction;
         private static DiagnosticSettings Diagnostics => Plugin.Settings.Diagnostics;
@@ -83,7 +84,13 @@ namespace BoscaliSummer.Fire
 
         private void Update()
         {
-            if (pending.Count == 0 && placements.Count == 0) return;
+            if (pending.Count == 0 && placements.Count == 0)
+            {
+                // Warm-up: the one indivisible Resources listing is taken here, in the quiet first seconds of the scene, not mid-combat.
+                if (!materialWarm && Time.unscaledTime >= warmAt && !GameManager.IsHeadless && Fire.ImpactScorchEnabled.Value)
+                    materialWarm = ScorchDecalMaterialResolver.Step();
+                return;
+            }
             int budget = PerFrame;
             while (budget-- > 0 && pending.Count > 0 && placements.Count < MarksPerFrame)
                 ProcessExplosion(pending.Dequeue());
@@ -276,6 +283,8 @@ namespace BoscaliSummer.Fire
             placements.Clear();
             ringHead = 0;
             loggedFirstMark = false;
+            materialWarm = false;
+            warmAt = Time.unscaledTime + 2f;
             ScorchDecalMaterialResolver.ResetForScene();
         }
     }

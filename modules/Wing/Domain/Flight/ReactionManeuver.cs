@@ -58,7 +58,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return null;
         }
 
-        public void Begin(in ReactionOrder o, in AircraftState s, in RefState home)
+        public void Begin(in ReactionOrder o, in AircraftState s)
         {
             Vec3 h = s.Vel.Horizontal;
             if (h.SqrLength < 1f) h = s.Fwd.Horizontal;

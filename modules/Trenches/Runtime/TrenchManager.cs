@@ -74,7 +74,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         private float nextTraceRefresh;
         private float nextBuildAttempt;
         // One planning attempt in flight, stepped inside PlanBudgetMs per frame.
-        private const double PlanBudgetMs = 2.0;
+        private const double PlanBudgetMs = 1.0; // halved from 2.0: the plan just spans twice the frames, nothing is drawn until it lands
         private TrenchPlanner.PlanJob planJob;
         private int planMaximum;
         // One belt growth in flight, stepped the same way; never beside planJob (shared planner buffers).
@@ -646,12 +646,14 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         {
             bool anyChanged = false;
             bool advancedOne = false;
+            int worksLeft = WorksSpawnsPerTick;
             for (int i = lines.Count - 1; i >= 0; i--)
             {
                 TrenchLine line = lines[i];
                 TrenchGarrison garrison = garrisons[line.Id];
                 bool changed = garrison.Poll(now);
-                if (works.TryGetValue(line.Id, out TrenchWorks lineWorks)) lineWorks.Deploy(line.Stage, WorksSpawnsPerTick);
+                // One works budget per tick shared by every line (8 lines used to place up to 16 scenery spawns in one frame).
+                if (worksLeft > 0 && works.TryGetValue(line.Id, out TrenchWorks lineWorks)) worksLeft -= lineWorks.Deploy(line.Stage, worksLeft);
                 int previousDefenders = line.DefenderCount;
                 line.DefenderCount = garrison.Alive;
 
