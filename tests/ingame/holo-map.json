@@ -1,7 +1,7 @@
 {
-  "_note": "The HOLO MAP in the cockpit, ONE run for four pictures. The player is seated in the cockpit view at 2500 m over the west of the island (map x -6 km, z +10 km, the place terrain-ghost.json uses), heading west (270) at 180 m/s; in the ~25 s the run lasts it flies about 4.5 km, well short of the massif (map x -18..-12 km, z +6..+14 km, peaks 1.3 to 1.6 km). A scenario cannot hold the map key (hold it to project the holo, tap it for the MFD map), so HoloMapAutomation.Configure forces the holo shown from the corner map (SimOpen: the same availability test, the same state machine; it stays up until open is false, whatever the key does) and sets the range and orientation IN MEMORY ONLY (the saved HoloRangeKm / HoloNorthUp are never written; restore gives them back). Pictures: holo-20 (20 km, heading up, the default), holo-10 (10 km), holo-40-north (40 km, north up), holo-closed (the holo closed again: the corner map must be back and no hologram anywhere). Each Configure result is stored: active (HoloMap.Active), stage, additiveMaterial (the game's additive UI material was found), renderTexture (created), vertexCount, litVertices, marksDrawn (units, airbases and the player's aircraft), unitMarks, airbaseMarks, labelsUsed, lastRenderMs, mapHidden (the corner map faded out behind the hologram), grow (the 180 ms growth), rangeKm, northUp, failure. The checks assert those and that the Unity log has no Exception; nothing asserts the pixels: they are read off the four captures (the lines must read as projected light over the world, the rings and the stem on the sea-level plane, airbases named on leaders, the corner brackets and the HOLO MAP shelf with the radius and HDG UP / N UP at its right end).",
+  "_note": "The TAC MAP in the cockpit, ONE run: the standing MINI hologram in the bottom-left corner (the game's own corner map hidden behind it), the CLASSIC mode (the game's corner map back, untouched), and the big HOLO MAP the map key raises. The player is seated in the cockpit view at 2500 m over the west of the island (map x -6 km, z +10 km, the place terrain-ghost.json uses), heading west (270) at 180 m/s; in the ~25 s the run lasts it flies about 4.5 km, well short of the massif (map x -18..-12 km, z +6..+14 km, peaks 1.3 to 1.6 km). A scenario cannot hold the map key (hold it to grow the MINI into the big holo, tap it for the MFD map), so HoloMapAutomation.Configure forces the big holo shown from the corner map (SimOpen: the same availability test, the same state machine; it stays up until open is false, whatever the key does) and sets the TAC MAP mode, the MINI range, the big range and the orientation IN MEMORY ONLY (the saved TacMapMode / TacMapRangeKm / HoloRangeKm / HoloNorthUp are never written; restore gives them back). Pictures: tac-default (NO key, NO call: the MINI must be up by itself, 10 km, heading up, view wedge, the nearest airbase's name, the TAC MAP shelf inside its lower-left with 10 KM at its right end, the game's grid reference dim at its lower right if the game shows one), tac-classic (CLASSIC: the game's own corner map back, no hologram anywhere), tac-back (HOLO again, the same as tac-default), tac-mini-5-north (5 km, north up), tac-mini-20 (20 km, heading up), holo-20 (the big holo, 20 km, heading up, the default), holo-10 (10 km), holo-40-north (40 km, north up), holo-closed (the big holo closed again: the MINI must be back). Each Configure result is stored: active (HoloMap.Active: the MINI or the big holo is up), stage, presentation (mini, big or none), tacMode, additiveMaterial, renderTexture, vertexCount, litVertices, marksDrawn, unitMarks, unitCap (48 on the MINI, 96 on the big one), airbaseMarks, labelsUsed, wedgeDegrees (the MINI's view wedge, 0 when it is not drawn), gridRef, mapHidden (the corner map faded out behind the hologram), nativeMapAlpha (1 when the game's corner map is untouched), grow (0 MINI .. 1 big, the 180 ms change), presence, sidePixels, rangeKm (of the picture shown), miniRangeKm, bigRangeKm, northUp, the timings (lastRenderMs / worstRenderMs / renders: one picture, the scan taken out; lastScanMs / worstScanMs / scans: the four-times-a-second unit scan; the worst values are cleared after the warm-up by resetTimings, so tac_default carries the steady cost of the always-on MINI over about 3 s), broken and failure. The checks assert those, the timings against a loose ceiling (a frame) and that the Unity log has no Exception; nothing asserts the pixels: they are read off the captures (the lines must read as projected light over the world, the rings and the stem on the sea-level plane, the corner brackets round the frame and the shelf inside it). The game's dark map plate (DynamicMap.mapBackground) is hidden while the mini or the big hologram is up (plateAlpha 0) and back with CLASSIC and after the hologram goes (plateAlpha 1, plateFound false); a feathered shade stands behind the disc (shadeAlpha 0.5 mini, 0.4 big); the big holo's brackets and shelf hug the disc.",
   "name": "holo-map",
-  "description": "HOLO MAP in one cockpit run: 20 km heading up, 10 km, 40 km north up, then closed.",
+  "description": "TAC MAP in one cockpit run (a level hostile 5 km ahead and 3 km right of the aircraft, designated, first): the standing MINI by itself, CLASSIC, HOLO again, 5 and 20 km minis, then the big holo at 20 km heading up, 10 km, 40 km north up, closed.",
   "mods": [
     "boscalisummer"
   ],
@@ -40,6 +40,207 @@
       "seconds": 8
     },
     {
+      "op": "spawn",
+      "id": "bandit",
+      "type": "FS-20 Vortex",
+      "faction": "Primeva",
+      "at": {
+        "near": {
+          "id": "player",
+          "offset": [
+            3000,
+            500,
+            -5000
+          ]
+        }
+      },
+      "speed": 180,
+      "heading": 270
+    },
+    {
+      "op": "fly",
+      "id": "bandit",
+      "program": [
+        {
+          "level": 120
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Gun",
+      "args": {
+        "range": 20000
+      },
+      "store": "gun1"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Gun",
+      "args": {
+        "range": 20000
+      },
+      "store": "gun2"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Gun",
+      "args": {
+        "range": 20000
+      },
+      "store": "gun3"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {},
+      "store": "tac_target"
+    },
+    {
+      "op": "capture",
+      "name": "tac-target"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {
+        "restore": true
+      },
+      "store": "tac_first"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {
+        "resetTimings": true
+      },
+      "store": "tac_warm"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {},
+      "store": "tac_default"
+    },
+    {
+      "op": "capture",
+      "name": "tac-default"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {
+        "tacMode": "Classic"
+      },
+      "store": "tac_classic_set"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {},
+      "store": "tac_classic"
+    },
+    {
+      "op": "capture",
+      "name": "tac-classic"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {
+        "tacMode": "Holo"
+      },
+      "store": "tac_back_set"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {},
+      "store": "tac_back"
+    },
+    {
+      "op": "capture",
+      "name": "tac-back"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {
+        "miniRangeKm": 5,
+        "northUp": true
+      },
+      "store": "tac_5_set"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {},
+      "store": "tac_5"
+    },
+    {
+      "op": "capture",
+      "name": "tac-mini-5-north"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {
+        "miniRangeKm": 20,
+        "northUp": false
+      },
+      "store": "tac_20_set"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {},
+      "store": "tac_20"
+    },
+    {
+      "op": "capture",
+      "name": "tac-mini-20"
+    },
+    {
       "op": "call",
       "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
       "args": {
@@ -52,7 +253,7 @@
     },
     {
       "op": "wait",
-      "seconds": 1.5
+      "seconds": 1.2
     },
     {
       "op": "call",
@@ -74,7 +275,7 @@
     },
     {
       "op": "wait",
-      "seconds": 1.5
+      "seconds": 1.2
     },
     {
       "op": "call",
@@ -97,7 +298,7 @@
     },
     {
       "op": "wait",
-      "seconds": 1.5
+      "seconds": 1.2
     },
     {
       "op": "call",
@@ -134,12 +335,342 @@
       "name": "holo-closed"
     },
     {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {
+        "tacMode": "Classic",
+        "open": true,
+        "rangeKm": 20
+      },
+      "store": "classic_open"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {},
+      "store": "classic_big"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {
+        "open": false
+      },
+      "store": "classic_close_set"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.8
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {
+        "restore": true
+      },
+      "store": "classic_closed"
+    },
+    {
       "op": "end"
     }
   ],
   "checks": [
     {
       "check": "status_ok"
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_first.failure",
+      "value": ""
+    },
+    {
+      "check": "result_equals",
+      "path": "gun3.designated",
+      "value": 1
+    },
+    {
+      "check": "result_above",
+      "path": "tac_target.unitMarks",
+      "min": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_default.plateFound",
+      "value": true
+    },
+    {
+      "check": "result_below",
+      "path": "tac_default.plateAlpha",
+      "max": 0.01
+    },
+    {
+      "check": "result_above",
+      "path": "tac_default.shadeAlpha",
+      "min": 0.49
+    },
+    {
+      "check": "result_below",
+      "path": "tac_default.shadeAlpha",
+      "max": 0.51
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_classic.plateFound",
+      "value": false
+    },
+    {
+      "check": "result_above",
+      "path": "tac_classic.plateAlpha",
+      "min": 0.99
+    },
+    {
+      "check": "result_below",
+      "path": "tac_back.plateAlpha",
+      "max": 0.01
+    },
+    {
+      "check": "result_below",
+      "path": "holo_20.plateAlpha",
+      "max": 0.01
+    },
+    {
+      "check": "result_above",
+      "path": "holo_20.shadeAlpha",
+      "min": 0.39
+    },
+    {
+      "check": "result_below",
+      "path": "holo_20.shadeAlpha",
+      "max": 0.41
+    },
+    {
+      "check": "result_below",
+      "path": "holo_closed.plateAlpha",
+      "max": 0.01
+    },
+    {
+      "check": "result_above",
+      "path": "classic_closed.plateAlpha",
+      "min": 0.99
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_default.presentation",
+      "value": "mini"
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_default.tacMode",
+      "value": "Holo"
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_default.stage",
+      "value": "Mini"
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_default.active",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_default.failure",
+      "value": ""
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_default.broken",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_default.additiveMaterial",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_default.renderTexture",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_default.mapHidden",
+      "value": true
+    },
+    {
+      "check": "result_below",
+      "path": "tac_default.nativeMapAlpha",
+      "max": 0.01
+    },
+    {
+      "check": "result_above",
+      "path": "tac_default.litVertices",
+      "min": 100
+    },
+    {
+      "check": "result_above",
+      "path": "tac_default.labelsUsed",
+      "min": 2
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_default.rangeKm",
+      "value": 10
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_default.miniRangeKm",
+      "value": 10
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_default.northUp",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_default.unitCap",
+      "value": 48
+    },
+    {
+      "check": "result_below",
+      "path": "tac_default.unitMarks",
+      "max": 48.5
+    },
+    {
+      "check": "result_below",
+      "path": "tac_default.grow",
+      "max": 0.01
+    },
+    {
+      "check": "result_above",
+      "path": "tac_default.presence",
+      "min": 0.99
+    },
+    {
+      "check": "result_above",
+      "path": "tac_default.wedgeDegrees",
+      "min": 8
+    },
+    {
+      "check": "result_above",
+      "path": "tac_default.renders",
+      "min": 10
+    },
+    {
+      "check": "result_above",
+      "path": "tac_default.scans",
+      "min": 5
+    },
+    {
+      "check": "result_below",
+      "path": "tac_default.renders",
+      "max": 60
+    },
+    {
+      "check": "result_above",
+      "path": "tac_default.lastRenderMs",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "tac_default.worstRenderMs",
+      "max": 20
+    },
+    {
+      "check": "result_below",
+      "path": "tac_default.worstScanMs",
+      "max": 10
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_classic.presentation",
+      "value": "none"
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_classic.tacMode",
+      "value": "Classic"
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_classic.active",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_classic.mapHidden",
+      "value": false
+    },
+    {
+      "check": "result_above",
+      "path": "tac_classic.nativeMapAlpha",
+      "min": 0.99
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_back.presentation",
+      "value": "mini"
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_back.tacMode",
+      "value": "Holo"
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_back.active",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_back.mapHidden",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_5.presentation",
+      "value": "mini"
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_5.rangeKm",
+      "value": 5
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_5.miniRangeKm",
+      "value": 5
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_5.northUp",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_5.mapHidden",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_20.presentation",
+      "value": "mini"
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_20.rangeKm",
+      "value": 20
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_20.northUp",
+      "value": false
     },
     {
       "check": "result_equals",
@@ -153,6 +684,11 @@
     },
     {
       "check": "result_equals",
+      "path": "holo_open.presentation",
+      "value": "big"
+    },
+    {
+      "check": "result_equals",
       "path": "holo_open.failure",
       "value": ""
     },
@@ -160,6 +696,11 @@
       "check": "result_equals",
       "path": "holo_20.active",
       "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_20.presentation",
+      "value": "big"
     },
     {
       "check": "result_equals",
@@ -208,6 +749,16 @@
     },
     {
       "check": "result_equals",
+      "path": "holo_20.unitCap",
+      "value": 96
+    },
+    {
+      "check": "result_below",
+      "path": "holo_20.wedgeDegrees",
+      "max": 0.5
+    },
+    {
+      "check": "result_equals",
       "path": "holo_20.rangeKm",
       "value": 20
     },
@@ -243,13 +794,23 @@
     },
     {
       "check": "result_equals",
+      "path": "holo_close_set.presentation",
+      "value": "mini"
+    },
+    {
+      "check": "result_equals",
       "path": "holo_close_set.active",
-      "value": false
+      "value": true
     },
     {
       "check": "result_equals",
       "path": "holo_closed.active",
-      "value": false
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_closed.presentation",
+      "value": "mini"
     },
     {
       "check": "result_equals",
@@ -259,12 +820,62 @@
     {
       "check": "result_equals",
       "path": "holo_closed.mapHidden",
-      "value": false
+      "value": true
+    },
+    {
+      "check": "result_below",
+      "path": "holo_closed.grow",
+      "max": 0.01
     },
     {
       "check": "result_equals",
       "path": "holo_closed.rangeKm",
-      "value": 20
+      "value": 10
+    },
+    {
+      "check": "result_equals",
+      "path": "classic_big.presentation",
+      "value": "big"
+    },
+    {
+      "check": "result_equals",
+      "path": "classic_big.active",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "classic_big.mapHidden",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "classic_close_set.presentation",
+      "value": "none"
+    },
+    {
+      "check": "result_equals",
+      "path": "classic_closed.presentation",
+      "value": "none"
+    },
+    {
+      "check": "result_equals",
+      "path": "classic_closed.active",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "classic_closed.mapHidden",
+      "value": false
+    },
+    {
+      "check": "result_above",
+      "path": "classic_closed.nativeMapAlpha",
+      "min": 0.99
+    },
+    {
+      "check": "result_equals",
+      "path": "classic_closed.tacMode",
+      "value": "Holo"
     },
     {
       "check": "log_match",

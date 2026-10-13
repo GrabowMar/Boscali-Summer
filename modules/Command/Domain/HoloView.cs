@@ -19,6 +19,8 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>A mark's height above the sea is drawn no taller than this many radii on the table (an aircraft far up would leave the picture).</summary>
         internal const float LiftCapRadii = .45f;
         internal const int Elements = 16;
+        /// <summary>Where the north tick (and so the picture's widest reach) stands, in table radii: a little outside the ring.</summary>
+        internal const float NorthTickRadii = 1.09f;
 
         private const float Deg = MathF.PI / 180f;
 
@@ -63,6 +65,26 @@ namespace BoscaliSummer.Modules.Command.Domain
             return true;
         }
 
+        /// <summary>
+        /// The picture's box round the table's disc, from its projected outer ring and the north tick's circle (<see cref="NorthTickRadii"/>): x and y run -1..1 across the square picture (x right, y up), the same numbers
+        /// <see cref="Project"/> gives. Whatever the heading, the whole circle is the same set of points, and every length here scales with the radius, so the box is one fixed rectangle of the picture.
+        /// </summary>
+        internal static void DiscBox(out float minX, out float maxX, out float minY, out float maxY)
+        {
+            minX = minY = float.MaxValue;
+            maxX = maxY = float.MinValue;
+            const int steps = 72;
+            for (int i = 0; i < steps; i++)
+            {
+                float a = i * (2f * MathF.PI / steps);
+                if (!Project(0f, 1f, MathF.Sin(a) * NorthTickRadii, 0f, MathF.Cos(a) * NorthTickRadii, out float x, out float y)) continue;
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+            }
+        }
+
         /// <summary>The scene offset (east, north) of a spot given on the table: <paramref name="across"/> metres right and <paramref name="ahead"/> metres forward of the aircraft as the picture is turned.</summary>
         internal static void FromTable(float headingDegrees, float across, float ahead, out float east, out float north)
         {
@@ -76,6 +98,32 @@ namespace BoscaliSummer.Modules.Command.Domain
         {
             float cap = LiftCapRadii * radius / VerticalScale;
             return heightAboveSea < 0f ? 0f : heightAboveSea > cap ? cap : heightAboveSea;
+        }
+
+        /// <summary>The widest and narrowest field of view the MINI's view wedge draws, in degrees (a lens outside this is a broken reading, not a view).</summary>
+        internal const float WedgeMinDegrees = 8f, WedgeMaxDegrees = 160f;
+
+        /// <summary>A camera's horizontal field of view in degrees from its vertical one and its aspect ratio (width over height); 0 for a reading that is not a lens.</summary>
+        internal static float HorizontalFov(float verticalDegrees, float aspect)
+        {
+            if (!(verticalDegrees > 0f && verticalDegrees < 180f && aspect > 0f)) return 0f;
+            return 2f * MathF.Atan(MathF.Tan(verticalDegrees * .5f * Deg) * aspect) / Deg;
+        }
+
+        /// <summary>
+        /// The camera's view wedge on the sea-level plane, as the arc that closes it: <paramref name="segments"/> + 1 east and north offsets (metres from the aircraft) on a circle of
+        /// <paramref name="length"/> metres, from the left edge of the view (the first point) to the right (the last), the middle one on the bearing the camera looks along (degrees from north, clockwise).
+        /// The two lines of the wedge run from the aircraft to the first and the last point. The field of view is held within <see cref="WedgeMinDegrees"/>..<see cref="WedgeMaxDegrees"/>.
+        /// </summary>
+        internal static void Wedge(float bearingDegrees, float fovDegrees, float length, int segments, float[] east, float[] north)
+        {
+            float half = Math.Min(WedgeMaxDegrees, Math.Max(WedgeMinDegrees, fovDegrees)) * .5f;
+            for (int i = 0; i <= segments; i++)
+            {
+                float a = (bearingDegrees - half + i * (2f * half / segments)) * Deg;
+                east[i] = MathF.Sin(a) * length;
+                north[i] = MathF.Cos(a) * length;
+            }
         }
 
         /// <summary>Points of a circle of <paramref name="radius"/> metres round the aircraft, on the sea-level plane: east and north offsets, the first point due north, clockwise, the last equal to the first.</summary>

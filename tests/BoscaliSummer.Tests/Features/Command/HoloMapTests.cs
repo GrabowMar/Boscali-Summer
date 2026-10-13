@@ -22,9 +22,15 @@ namespace BoscaliSummer.Tests.Features.Command
             TestMatrices();
             TestProjection();
             TestRings();
+            TestDiscBox();
             TestHoloFits();
             TestOffer();
             TestWords();
+            TestPresentation();
+            TestRanges();
+            TestSizes();
+            TestWedge();
+            TestMiniMarks();
         }
 
         // ------------------------------------------------------------------ the map key: tap for the MFD map, hold for the holo
@@ -437,6 +443,32 @@ namespace BoscaliSummer.Tests.Features.Command
                 TestAssert.That(Math.Abs(Math.Sqrt(east[i] * east[i] + north[i] * north[i]) - 10000.0) < .05, "Holo ring: every point is on the circle");
         }
 
+        private static void TestDiscBox()
+        {
+            HoloView.DiscBox(out float x0, out float x1, out float y0, out float y1);
+            TestAssert.Near(x0, -x1, "Holo box: the box is as wide to the left as to the right of the aircraft");
+            TestAssert.That(x1 > .5f && x1 < 1f, "Holo box: the disc fills most of the picture's width but stays inside it (got " + x1 + ")");
+            TestAssert.That(y0 > -1f && y1 < 1f && y1 > y0, "Holo box: ... and stays inside it vertically");
+            TestAssert.That(y1 - y0 < x1 - x0, "Holo box: the tilted disc is wider than it is tall, so the frame no longer encloses an empty square");
+            // The same rectangle holds the projected ring and the north tick's circle at any heading and radius.
+            foreach (float radius in new[] { 5000f, 20000f, 40000f })
+            for (float heading = 0f; heading < 360f; heading += 30f)
+            for (int a = 0; a < 72; a++)
+            {
+                float angle = a * 5f * (float)Math.PI / 180f;
+                foreach (float reach in new[] { 1f, HoloView.NorthTickRadii })
+                {
+                    HoloView.Project(heading, radius, (float)Math.Sin(angle) * radius * reach, 0f, (float)Math.Cos(angle) * radius * reach, out float x, out float y);
+                    TestAssert.That(x >= x0 - .002f && x <= x1 + .002f && y >= y0 - .002f && y <= y1 + .002f,
+                        "Holo box: the ring and the north tick are inside the box (heading " + heading + ", radius " + radius + ")");
+                }
+            }
+            HoloView.Project(0f, 1f, 0f, 0f, HoloView.NorthTickRadii, out _, out float farTop);
+            HoloView.Project(0f, 1f, 0f, 0f, -HoloView.NorthTickRadii, out _, out float nearBottom);
+            TestAssert.Near(y1, farTop, "Holo box: its top is the north tick's far point");
+            TestAssert.Near(y0, nearBottom, "Holo box: its bottom is the near point of the same circle");
+        }
+
         private static void TestHoloFits()
         {
             // Every rim point at the sea, and a peak 4 km high at the rim, stays inside the square at every heading and range.
@@ -514,6 +546,220 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.Eq(HoloMarks.TargetLabel("Bearcat", 12400f), "BEARCAT  12 KM", "Holo words: the selected target's name and range");
             TestAssert.Eq(HoloMarks.TargetLabel(null, 850f), "850 M", "Holo words: ... or the range alone");
             TestAssert.Eq(HoloMarks.TargetLabel("A very long target name indeed", 3500f), "A VERY LONG TA  3.5 KM", "Holo words: a long name is clipped");
+        }
+
+        // ------------------------------------------------------------------ the TAC MAP: MINI, BIG, or the game's own corner map
+
+        private static void TestPresentation()
+        {
+            // The standing MINI: the corner map showing, the TAC MAP on HOLO.
+            TestAssert.Eq(HoloPresentation.Choose(HoloStage.Mini, true, true), HoloShape.Mini, "Tac map: the corner map showing on HOLO is the MINI, with no key");
+            TestAssert.Eq(HoloPresentation.Choose(HoloStage.Pending, true, true), HoloShape.Mini, "Tac map: ... and it stays while a key press waits to be told a tap from a hold");
+            TestAssert.Eq(HoloPresentation.Choose(HoloStage.Holo, true, true), HoloShape.Big, "Tac map: the held key grows the same hologram to the BIG one");
+
+            // CLASSIC: the game's own corner map, the held key still raises the hologram.
+            TestAssert.Eq(HoloPresentation.Choose(HoloStage.Mini, false, true), HoloShape.None, "Tac map: CLASSIC never draws the MINI");
+            TestAssert.Eq(HoloPresentation.Choose(HoloStage.Pending, false, true), HoloShape.None, "Tac map: ... not while a key press waits");
+            TestAssert.Eq(HoloPresentation.Choose(HoloStage.Holo, false, true), HoloShape.Big, "Tac map: ... but the held key still raises the BIG hologram");
+
+            // The maximised map: nothing of the holo draws, whatever the mode; and without the gates the game's own corner map stays.
+            foreach (bool mini in new[] { false, true })
+            {
+                TestAssert.Eq(HoloPresentation.Choose(HoloStage.Mfd, mini, true), HoloShape.None, "Tac map: while the MFD map is up nothing of the holo draws");
+                foreach (HoloStage stage in new[] { HoloStage.Mini, HoloStage.Pending, HoloStage.Holo, HoloStage.Mfd })
+                    TestAssert.Eq(HoloPresentation.Choose(stage, mini, false), HoloShape.None, "Tac map: without the gates the game's own corner map stays (" + stage + ")");
+            }
+
+            // A tap, through the machine: the MINI until the MFD map opens, then nothing, then the MINI again when the key minimises it.
+            var state = new HoloMapState();
+            TestAssert.Eq(HoloPresentation.Choose(state.Stage, true, true), HoloShape.Mini, "Tac map: a tap starts at the MINI");
+            state.KeyDown(true, 1f);
+            TestAssert.Eq(HoloPresentation.Choose(state.Stage, true, true), HoloShape.Mini, "Tac map: ... still the MINI on key down");
+            state.Tick(1.05f, false);
+            state.Maximized();
+            TestAssert.Eq(HoloPresentation.Choose(state.Stage, true, true), HoloShape.None, "Tac map: ... nothing while the MFD map is open");
+            state.Minimized();
+            TestAssert.Eq(HoloPresentation.Choose(state.Stage, true, true), HoloShape.Mini, "Tac map: ... and the MINI returns when it closes");
+
+            // A hold, through the machine: MINI, BIG while held, MINI after.
+            state = new HoloMapState();
+            state.KeyDown(true, 0f);
+            TestAssert.Eq(state.Tick(Tap, true), HoloStep.ShowHolo, "Tac map: a hold shows the holo");
+            TestAssert.Eq(HoloPresentation.Choose(state.Stage, true, true), HoloShape.Big, "Tac map: ... as the BIG one");
+            state.Tick(1f, false);
+            TestAssert.Eq(HoloPresentation.Choose(state.Stage, true, true), HoloShape.Mini, "Tac map: ... and shrinks back to the MINI on release");
+        }
+
+        private static void TestRanges()
+        {
+            TestAssert.Eq(HoloPresentation.MiniRange(5), 5, "Tac map: the MINI reaches 5 km");
+            TestAssert.Eq(HoloPresentation.MiniRange(10), 10, "Tac map: ... 10 km");
+            TestAssert.Eq(HoloPresentation.MiniRange(20), 20, "Tac map: ... or 20 km");
+            foreach (int bad in new[] { 0, 7, 15, 40, -5 })
+                TestAssert.Eq(HoloPresentation.MiniRange(bad), 10, "Tac map: any other saved range is the default, 10 km");
+            TestAssert.Eq(HoloPresentation.HoloRange(10), 10, "Tac map: the held holo reaches 10 km");
+            TestAssert.Eq(HoloPresentation.HoloRange(40), 40, "Tac map: ... or 40 km");
+            TestAssert.Eq(HoloPresentation.HoloRange(5), 20, "Tac map: ... anything else is the default, 20 km");
+
+            TestAssert.Eq(HoloPresentation.BigRange(20, 10), 20, "Tac map: the big radius is the HOLO RANGE");
+            TestAssert.Eq(HoloPresentation.BigRange(10, 5), 10, "Tac map: ... 10 over a 5 km MINI");
+            TestAssert.Eq(HoloPresentation.BigRange(10, 10), 10, "Tac map: ... equal to the MINI's is allowed");
+            TestAssert.Eq(HoloPresentation.BigRange(10, 20), 20, "Tac map: ... but never less than the MINI's, a hologram that grows does not look at less ground");
+            TestAssert.Eq(HoloPresentation.BigRange(40, 20), 40, "Tac map: ... 40 km over a 20 km MINI");
+            TestAssert.Eq(HoloPresentation.BigRange(0, 0), 20, "Tac map: unusable saved ranges give the default pair, 20 over 10");
+
+            // Every MINI range fills the holo mesh's 64 cells exactly across its diameter.
+            foreach (int km in new[] { 5, 10, 20 })
+                TestAssert.Near(HoloGrid.CellMetres(km) * TerrainGhostGrid.Cells, km * 2000f, "Tac map: the MINI's grid spans the picture's diameter exactly (" + km + " km)");
+        }
+
+        private static void TestSizes()
+        {
+            // 1080p: 300 units, 16 in from the edges; the held one 46 % of the height and 24 in.
+            TestAssert.Near(HoloPresentation.Side(0f, 1080f), 300f, "Tac map: the MINI is a square of 300 units");
+            TestAssert.Near(HoloPresentation.Margin(0f, 1080f), 16f, "Tac map: ... 16 units from the left and bottom edges");
+            TestAssert.Near(HoloPresentation.Side(1f, 1080f), 497f, "Tac map: the BIG one is 46 % of the screen height");
+            TestAssert.Near(HoloPresentation.Margin(1f, 1080f), 24f, "Tac map: ... 24 units in");
+            TestAssert.Near(HoloPresentation.Side(0f, 2160f), 600f, "Tac map: the MINI scales with the screen height (4K)");
+            TestAssert.Near(HoloPresentation.Margin(0f, 2160f), 32f, "Tac map: ... and so does its margin");
+            TestAssert.Near(HoloPresentation.Side(0f, 720f), 200f, "Tac map: ... and 720p");
+            float last = 0f;
+            for (float t = 0f; t <= 1.0001f; t += .05f)
+            {
+                float side = HoloPresentation.Side(t, 1080f);
+                TestAssert.That(side >= last && side >= 300f && side <= 497f, "Tac map: the frame grows steadily between the two sizes");
+                last = side;
+            }
+            TestAssert.Near(HoloPresentation.Side(-1f, 1080f), 300f, "Tac map: a size below 0 is the MINI");
+            TestAssert.Near(HoloPresentation.Side(3f, 1080f), 497f, "Tac map: ... and above 1 the BIG one");
+
+            // The growth: 180 ms from MINI to BIG and back, never past either end.
+            float size = 0f;
+            for (int frame = 0; frame < 5; frame++) size = HoloPresentation.Size(size, HoloShape.Big, .018f);
+            TestAssert.Near(size, .5f, "Tac map: half the growth takes 90 ms");
+            for (int frame = 0; frame < 5; frame++) size = HoloPresentation.Size(size, HoloShape.Big, .018f);
+            TestAssert.Near(size, 1f, "Tac map: the growth takes 180 ms");
+            TestAssert.Near(HoloPresentation.Size(size, HoloShape.Big, 1f), 1f, "Tac map: ... and stops at BIG");
+            for (int frame = 0; frame < 10; frame++) size = HoloPresentation.Size(size, HoloShape.Mini, .018f);
+            TestAssert.Near(size, 0f, "Tac map: releasing shrinks it back in 180 ms");
+            TestAssert.Near(HoloPresentation.Size(.4f, HoloShape.None, .018f), .3f, "Tac map: a picture that is going (nothing) shrinks toward the MINI");
+            TestAssert.Near(HoloPresentation.Size(.1f, HoloShape.Mini, 1f), 0f, "Tac map: ... and never below 0");
+
+            // The picture's rate and the part of the texture it uses.
+            TestAssert.Near(HoloPresentation.RenderInterval(HoloShape.Mini, false), .1f, "Tac map: the MINI is drawn at 10 Hz");
+            TestAssert.Near(HoloPresentation.RenderInterval(HoloShape.Big, false), .05f, "Tac map: the BIG one at 20 Hz");
+            TestAssert.Near(HoloPresentation.RenderInterval(HoloShape.Mini, true), 0f, "Tac map: ... and every frame while it changes size");
+            TestAssert.Eq(HoloPresentation.RenderPixels(300f), 450, "Tac map: a 300 pixel MINI is drawn with 450 pixels of the texture, not a shrunk big picture");
+            TestAssert.Eq(HoloPresentation.RenderPixels(497f), 746, "Tac map: ... the BIG one with 746");
+            TestAssert.Eq(HoloPresentation.RenderPixels(900f), 768, "Tac map: ... never more than the texture");
+            TestAssert.Eq(HoloPresentation.RenderPixels(40f), 256, "Tac map: ... and never fewer than 256");
+            TestAssert.Near(HoloPresentation.Ease(0f), 0f, "Tac map: the shelf is at the MINI's place at size 0");
+            TestAssert.Near(HoloPresentation.Ease(1f), 1f, "Tac map: ... and at the BIG one's at size 1");
+            TestAssert.Near(HoloPresentation.Ease(.5f), .5f, "Tac map: ... half way at half");
+        }
+
+        private static void TestWedge()
+        {
+            double sixty = Math.Tan(30.0 * Math.PI / 180.0);
+            TestAssert.Near(HoloView.HorizontalFov(60f, 16f / 9f), (float)(2.0 * Math.Atan(sixty * 16.0 / 9.0) * 180.0 / Math.PI), "Tac map: a 60 degree vertical lens at 16:9 sees about 91 degrees across");
+            TestAssert.That(HoloView.HorizontalFov(60f, 16f / 9f) > 90f && HoloView.HorizontalFov(60f, 16f / 9f) < 93f, "Tac map: ... 91 and a half");
+            TestAssert.Near(HoloView.HorizontalFov(60f, 1f), 60f, "Tac map: a square picture sees as wide as it is high");
+            TestAssert.That(HoloView.HorizontalFov(40f, 21f / 9f) > HoloView.HorizontalFov(40f, 16f / 9f), "Tac map: a wider screen sees wider");
+            TestAssert.Near(HoloView.HorizontalFov(0f, 1.78f), 0f, "Tac map: no lens, no field of view");
+            TestAssert.Near(HoloView.HorizontalFov(60f, 0f), 0f, "Tac map: ... nor a picture without width");
+            TestAssert.Near(HoloView.HorizontalFov(float.NaN, 1.78f), 0f, "Tac map: ... nor a reading that is not a number");
+
+            const int n = 12;
+            var east = new float[n + 1];
+            var north = new float[n + 1];
+            double quarter = Math.PI / 4;
+            // Looking due north through a 90 degree lens: the arc's ends are 45 degrees either side, the middle straight ahead.
+            HoloView.Wedge(0f, 90f, 5000f, n, east, north);
+            TestAssert.Near(east[0], (float)(-5000.0 * Math.Sin(quarter)), "Tac map: the wedge's left end is 45 degrees left of north");
+            TestAssert.Near(north[0], (float)(5000.0 * Math.Cos(quarter)), "Tac map: ... at the wedge's length");
+            TestAssert.Near(east[n], (float)(5000.0 * Math.Sin(quarter)), "Tac map: the right end is 45 degrees right");
+            TestAssert.Near(north[n], north[0], "Tac map: ... and as far ahead as the left");
+            TestAssert.Near(east[n / 2], 0f, "Tac map: the middle of the arc is straight ahead");
+            TestAssert.Near(north[n / 2], 5000f, "Tac map: ... at the wedge's length");
+            for (int i = 0; i <= n; i++)
+                TestAssert.That(Math.Abs(Math.Sqrt(east[i] * east[i] + north[i] * north[i]) - 5000.0) < .05, "Tac map: every point of the arc is on the circle of the wedge's length");
+
+            // Looking east, then at a bearing just west of north: the arc is centred on the bearing.
+            HoloView.Wedge(90f, 60f, 1000f, n, east, north);
+            TestAssert.That(Math.Abs(east[n / 2] - 1000f) < .01f && Math.Abs(north[n / 2]) < .01f, "Tac map: looking east the middle of the arc is due east");
+            TestAssert.That(north[0] > 0f && north[n] < 0f, "Tac map: ... the left end is to the north of it and the right end to the south");
+            HoloView.Wedge(350f, 40f, 1000f, n, east, north);
+            TestAssert.That(east[n / 2] < 0f && north[n / 2] > 0f, "Tac map: a bearing of 350 is just west of north");
+            TestAssert.That(east[0] < east[n] && Math.Abs((east[0] + east[n]) * .5f - east[n / 2]) < 20f, "Tac map: ... and the arc is centred on it");
+
+            // The lens is held within 8 and 160 degrees.
+            HoloView.Wedge(0f, 0f, 1000f, n, east, north);
+            TestAssert.Near(east[n] - east[0], (float)(2000.0 * Math.Sin(4.0 * Math.PI / 180.0)), "Tac map: a lens that reads 0 is drawn at the narrowest, 8 degrees");
+            HoloView.Wedge(0f, 300f, 1000f, n, east, north);
+            TestAssert.Near(east[n], (float)(1000.0 * Math.Sin(80.0 * Math.PI / 180.0)), "Tac map: ... and one that reads 300 at the widest, 160 degrees");
+
+            // Seen through the table: at every heading, bearing and radius the whole wedge, widest lens, stays inside the picture.
+            foreach (float radius in new[] { 5000f, 10000f, 20000f })
+            for (float heading = 0f; heading < 360f; heading += 30f)
+            for (float bearing = 0f; bearing < 360f; bearing += 30f)
+            {
+                HoloView.Wedge(bearing, 160f, radius * .55f, n, east, north);
+                for (int i = 0; i <= n; i++)
+                {
+                    bool shown = HoloView.Project(heading, radius, east[i], 0f, north[i], out float x, out float y);
+                    TestAssert.That(shown && Math.Abs(x) < 1f && Math.Abs(y) < 1f, "Tac map: the wedge stays inside the picture (radius " + radius + ", heading " + heading + ", bearing " + bearing + ")");
+                }
+            }
+        }
+
+        private static void TestMiniMarks()
+        {
+            TestAssert.Eq(HoloPresentation.UnitCap(HoloShape.Mini), 48, "Tac map: the MINI carries at most 48 units");
+            TestAssert.Eq(HoloPresentation.UnitCap(HoloShape.Big), 96, "Tac map: ... the BIG one 96");
+            TestAssert.Eq(HoloPresentation.AirbaseCap(HoloShape.Mini), 1, "Tac map: the MINI names the nearest airbase only");
+            TestAssert.Eq(HoloPresentation.AirbaseCap(HoloShape.Big), 6, "Tac map: ... the BIG one six");
+
+            // The scan's list is as long as the BIG one's; the MINI offers into it with its own limit.
+            var list = new HoloMark[HoloMarks.MaximumUnits];
+            int count = 0;
+            var random = new Random(11);
+            var all = new float[400];
+            for (int i = 0; i < all.Length; i++)
+            {
+                all[i] = random.Next(1, 100000);
+                HoloMarks.Offer(list, ref count, new HoloMark { Range = all[i], Kind = i % 3 == 0 ? HoloKind.Air : HoloKind.Surface }, HoloPresentation.UnitCap(HoloShape.Mini));
+            }
+            Array.Sort(all);
+            TestAssert.Eq(count, 48, "Tac map: 400 units in range leave 48 on the MINI");
+            for (int i = 0; i < count; i++)
+                TestAssert.Near(list[i].Range, all[i], "Tac map: the 48 are the 48 nearest, nearest first");
+            TestAssert.That(!HoloMarks.Offer(list, ref count, new HoloMark { Range = all[47] + 1f }, 48), "Tac map: a unit farther than the farthest of the 48 is refused");
+            TestAssert.That(HoloMarks.Offer(list, ref count, new HoloMark { Range = 0f, Colour = 9 }, 48) && list[0].Colour == 9 && count == 48, "Tac map: a nearer one takes its place at the head and the farthest goes out");
+            TestAssert.Near(list[47].Range, all[46], "Tac map: ... the 48th is now the old 47th");
+
+            // The same scan taken to the BIG limit (a fresh scan, count restarted) holds 96.
+            count = 0;
+            for (int i = 0; i < all.Length; i++) HoloMarks.Offer(list, ref count, new HoloMark { Range = all[i] }, HoloPresentation.UnitCap(HoloShape.Big));
+            TestAssert.Eq(count, 96, "Tac map: the same scan at the BIG limit keeps 96");
+
+            // A limit smaller than what is already listed trims the list rather than overrunning it.
+            count = 96;
+            HoloMarks.Offer(list, ref count, new HoloMark { Range = -1f }, 48);
+            TestAssert.Eq(count, 48, "Tac map: a list longer than the new limit is cut to it");
+            TestAssert.That(!HoloMarks.Offer(list, ref count, new HoloMark { Range = 1f }, 0), "Tac map: a limit of 0 keeps nothing");
+
+            // Airbases: of three in range the MINI keeps the nearest.
+            var bases = new HoloMark[HoloMarks.MaximumAirbases];
+            int baseCount = 0;
+            foreach (float range in new[] { 8000f, 3000f, 5000f })
+                HoloMarks.Offer(bases, ref baseCount, new HoloMark { Range = range, Id = (int)range }, HoloPresentation.AirbaseCap(HoloShape.Mini));
+            TestAssert.That(baseCount == 1 && bases[0].Id == 3000, "Tac map: the MINI names the nearest of the airbases in range");
+
+            TestAssert.Eq(HoloMarks.MiniCaption, "TAC MAP", "Tac map: the MINI's caption");
+            TestAssert.Eq(HoloMarks.MiniFlag(10), "10 KM", "Tac map: the radius at the shelf's right end");
+            TestAssert.Eq(HoloMarks.MiniFlag(5), "5 KM", "Tac map: ... 5 km");
+            TestAssert.Eq(HoloMarks.MiniFlag(20), "20 KM", "Tac map: ... 20 km");
+            TestAssert.Eq(HoloMarks.Range(HoloGrid.Radius(5)), "5 KM", "Tac map: the ring's range reads the same way");
         }
 
         // ------------------------------------------------------------------ fixtures

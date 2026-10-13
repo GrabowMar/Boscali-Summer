@@ -98,6 +98,29 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             return Convert.ToSingle(given, CultureInfo.InvariantCulture);
         }
 
+        /// <summary>
+        /// Pushes DL EVT LOG's test lines through the game's own feed (<c>MessageUI.KillFeed</c> and <c>GameMessage</c>, both ending in <c>MessageFeed.Enqueue</c>, the one place the log's patch listens): a kill line with colour tags, one in
+        /// which the pilot's own aircraft is the killer, a plain game message and a "Name: text" chat line. Returns how many it pushed and the pilot's names as the log reads them. Wait two seconds, then capture.
+        /// </summary>
+        public static Dictionary<string, object> Feed(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            MessageUI ui = SceneSingleton<MessageUI>.i;
+            if (ui == null) return Failure("HudAutomation", "Feed", "no MessageUI");
+            string own = BoscaliSummer.Modules.Hud.Patches.EventFeed.OwnAircraft();
+            ui.KillFeed("<color=#58A8FFFF>Left Hook</color> shot down <color=#FF4D4DFF>Bravo Two</color>");
+            ui.KillFeed("<color=#58A8FFFF>" + (own ?? "Anumeric") + "</color> shot down <color=#FF4D4DFF>T9K41 Boltstrike</color>");
+            ui.GameMessage("Enemy airbase captured");
+            ui.GameMessage("<color=#AABBCCFF>Pilot One:</color> Rolling in on the airfield now");
+            var result = new Dictionary<string, object>
+            {
+                { "ok", true }, { "pushed", 4 },
+                { "ownPlayer", BoscaliSummer.Modules.Hud.Patches.EventFeed.OwnPlayer() ?? "" }, { "ownAircraft", own ?? "" },
+            };
+            Debug.Log("[HudAutomation] Feed: " + Describe(result));
+            return result;
+        }
+
         /// <summary>Fire one own missile station at the nearest enemy aircraft (blind if none).</summary>
         public static Dictionary<string, object> Fire(Dictionary<string, object> args)
         {

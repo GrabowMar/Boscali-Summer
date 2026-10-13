@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics;
 using BoscaliSummer.Modules.Command.Domain;
 using HarmonyLib;
 using NOAvionics;
@@ -9,41 +10,49 @@ namespace BoscaliSummer.Modules.Command.Runtime
 {
     /// <summary>
     /// What is drawn over the hologram, with the vector kit the module already uses (<see cref="AvStrokes"/> into one <see cref="AvVector"/> layer) and the same view and projection
-    /// as the render (<see cref="HoloView.Project"/>): the player's aircraft on a stem from the ground to its altitude, two range rings on the sea-level plane (half and full radius, the
-    /// range written on the outer), a north tick, up to six airbases named on short leaders, up to 96 of the units the game's own map shows (nearest first; aircraft on stems at their
-    /// altitude, ground and sea units on the surface, in the colours the game gave their icons) and the selected target in brackets with its name and range. Units and airbases are
-    /// scanned four times a second into small lists of global positions; each picture only subtracts the aircraft. Buildings and dismounted pilots are left out: the game's map is full of
-    /// them and the 96 would be spent on one airbase. Labels are 11 pooled text objects, written only when their words change. Nothing here is interactive.
+    /// as the render (<see cref="HoloView.Project"/>). The BIG picture carries: the player's aircraft on a stem from the ground to its altitude, two range rings on the sea-level plane (half and full radius,
+    /// the range written on the outer), a north tick, up to six airbases named on short leaders, up to 96 of the units the game's own map shows (nearest first; aircraft on stems at their altitude, ground and
+    /// sea units on the surface, in the colours the game gave their icons) and the selected target in brackets with its name and range. The standing MINI carries less, so it stays calm at 300 units: the aircraft
+    /// with the camera's view wedge (two dim lines and an arc on the sea-level plane, the camera's horizontal field of view), one ring at the full radius with its range, the north tick, up to 48 units, the
+    /// selected target bracketed and the name of the nearest airbase; and the game's own grid reference (read from the corner map's own text, written only when it changes) dim at its lower right. Units and airbases
+    /// are scanned four times a second into small lists of global positions (timed); each picture only subtracts the aircraft. Buildings and dismounted pilots are left out: the game's map is full of them and the cap
+    /// would be spent on one airbase. Labels are 12 pooled text objects, written only when their words change. Nothing here is interactive.
     /// </summary>
     internal sealed partial class HoloMap
     {
+        private const int WedgeSegments = 12;
+        private const float WedgeShare = .55f;
+
         private static readonly AccessTools.FieldRef<MapIcon, Vector3> IconPosition =
             AccessTools.Field(typeof(MapIcon), "globalPosition") == null ? null
                 : AccessTools.FieldRefAccess<MapIcon, Vector3>("globalPosition");
+
+        // The corner map's own grid reference ("Gh98"): the game writes it into this Text every frame while it shows grid labels.
+        private static readonly AccessTools.FieldRef<GridLabels, Text> GridAircraft =
+            AccessTools.Field(typeof(GridLabels), "gridAircraft") == null ? null
+                : AccessTools.FieldRefAccess<GridLabels, Text>("gridAircraft");
 
         private readonly HoloMark[] units = new HoloMark[HoloMarks.MaximumUnits];
         private readonly HoloMark[] bases = new HoloMark[HoloMarks.MaximumAirbases];
         private readonly Airbase[] basePool = new Airbase[64];
         private readonly Dictionary<Airbase, string> baseNames = new Dictionary<Airbase, string>(64);
         private readonly float[] ringEast = new float[65], ringNorth = new float[65], ringX = new float[65], ringY = new float[65];
-        private int unitCount, baseCount, scanRange = -1;
+        private readonly float[] wedgeEast = new float[WedgeSegments + 1], wedgeNorth = new float[WedgeSegments + 1], wedgeX = new float[WedgeSegments + 1], wedgeY = new float[WedgeSegments + 1];
+        private int unitCount, baseCount, scanRange = -1, scanCap = -1;
         private int unitsDrawn, basesDrawn, labelsUsed;
-        private string flagText = "", ringText = "", targetText = "";
+        private string flagText = "", ringText = "", targetText = "", gridRef = "";
         private int flagRange, ringRange, targetTenths = -1;
-        private bool flagNorth;
+        private bool flagNorth, flagMini;
+        private float wedgeDegrees;
         private Unit targetNamed;
 
         /// <summary>One picture's marks, then the furniture and the labels that go with them.</summary>
         private void DrawMarks(int range)
         {
-            if (Time.unscaledTime >= nextScan || scanRange != range) Scan(range);
-            if (flagText.Length == 0 || flagRange != range || flagNorth != NorthUp)
-            {
-                flagRange = range;
-                flagNorth = NorthUp;
-                flagText = HoloMarks.ShelfFlag(range, flagNorth);
-            }
-            DrawFurniture(flagText);
+            bool mini = shape == HoloShape.Mini;
+            int unitCap = HoloPresentation.UnitCap(shape);
+            if (Time.unscaledTime >= nextScan || scanRange != range || scanCap != unitCap) Scan(range, unitCap, HoloPresentation.AirbaseCap(shape));
+            DrawFurniture(Flag(range, mini));
 
             AvQuadBuffer b = marks.Buffer;
             b.Clear();
@@ -52,12 +61,12 @@ namespace BoscaliSummer.Modules.Command.Runtime
             var dim = new Rgba(inkColour.r, inkColour.g, inkColour.b, .5f);
             var bright = new Rgba(Mathf.Lerp(inkColour.r, 1f, .65f), Mathf.Lerp(inkColour.g, 1f, .65f), Mathf.Lerp(inkColour.b, 1f, .65f), 1f);
 
-            // Rings on the sea-level plane: half the radius dotted, the full radius solid with its range written beside it; and north.
-            DrawRing(b, radius * .5f, true, dim);
+            // Rings on the sea-level plane: half the radius dotted (the BIG one only), the full radius solid with its range written beside it; and north.
+            if (!mini) DrawRing(b, radius * .5f, true, dim);
             DrawRing(b, radius, false, new Rgba(inkColour.r, inkColour.g, inkColour.b, .7f));
             if (At(0f, 0f, radius * .93f, out float x0, out float y0) && At(0f, 0f, radius, out float x1, out float y1))
                 AvStrokes.Line(b, x0, y0, x1, y1, w, ink);
-            if (At(0f, 0f, radius * 1.09f, out float nx, out float ny)) Label(LabelNorth, "N", nx, ny, inkColour);
+            if (At(0f, 0f, radius * HoloView.NorthTickRadii, out float nx, out float ny)) Label(LabelNorth, "N", nx, ny, inkColour);
             else Label(LabelNorth, "", 0f, 0f, inkColour);
             if (ringRange != range || ringText.Length == 0)
             {
@@ -67,6 +76,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
             HoloView.FromTable(heading, radius * .7071f, -radius * .7071f, out float re, out float rn);
             if (At(re, 0f, rn, out float rx, out float ry)) Label(LabelRing, ringText, rx + 5f * u, ry, Dim(.8f));
             else Label(LabelRing, "", 0f, 0f, inkColour);
+            if (mini) DrawWedge(b, w, dim);
+            else wedgeDegrees = 0f;
 
             // The units the game's map shows: ground and sea on the surface, aircraft on stems.
             unitsDrawn = 0;
@@ -94,13 +105,50 @@ namespace BoscaliSummer.Modules.Command.Runtime
             }
 
             DrawPlayer(b, ink, bright, w, u, sea);
-            DrawTarget(b, bright, w, u, sea);
-            DrawBases(b, ink, w, u);
+            DrawTarget(b, bright, w, u, sea, !mini);
+            DrawBases(b, ink, w, u, mini);
             marks.Commit();
+
+            // The game's own grid reference, dim at the MINI's lower right (the BIG one leaves it out).
+            if (mini)
+            {
+                gridRef = ReadGridRef();
+                Label(LabelGrid, gridRef, side - 10f * u, 14f * u, Dim(.7f));
+            }
+            else
+            {
+                gridRef = "";
+                Label(LabelGrid, "", 0f, 0f, inkColour);
+            }
 
             labelsUsed = 0;
             for (int i = 0; i < LabelCount; i++)
                 if (labels[i].text.Length > 0) labelsUsed++;
+        }
+
+        /// <summary>The shelf's right end: the MINI's radius alone, or the BIG one's radius and which way is up; rebuilt only when it changes.</summary>
+        private string Flag(int range, bool mini)
+        {
+            if (flagText.Length == 0 || flagRange != range || flagNorth != NorthUp || flagMini != mini)
+            {
+                flagRange = range;
+                flagNorth = NorthUp;
+                flagMini = mini;
+                flagText = mini ? HoloMarks.MiniFlag(range) : HoloMarks.ShelfFlag(range, flagNorth);
+            }
+            return flagText;
+        }
+
+        /// <summary>
+        /// The corner map's own grid reference, read from the Text the game writes it into (the game's <c>GridLabels.gridAircraft</c>; the game itself switches it off with the grid labels and leaves it
+        /// empty outside the map). A string the game already holds: no allocation, and the label only changes when the words do.
+        /// </summary>
+        private static string ReadGridRef()
+        {
+            DynamicMap map = SceneSingleton<DynamicMap>.i;
+            GridLabels grid = map != null ? map.gridLabels : null;
+            Text text = grid != null && GridAircraft != null ? GridAircraft(grid) : null;
+            return text != null && text.enabled ? text.text ?? "" : "";
         }
 
         private void DrawRing(AvQuadBuffer b, float ringRadius, bool dotted, Rgba colour)
@@ -117,6 +165,34 @@ namespace BoscaliSummer.Modules.Command.Runtime
             float feather = pixel * .8f;
             for (int i = 0; i + 1 < count; i += dotted ? 2 : 1)
                 AvStrokes.Line(b, ringX[i], ringY[i], ringX[i + 1], ringY[i + 1], pixel, colour, feather);
+        }
+
+        /// <summary>
+        /// The MINI's view wedge, like the white one on the game's own corner map: two dim lines from the aircraft's spot on the sea-level plane and a short arc closing them, spanning the camera's
+        /// horizontal field of view along the way the camera looks (the nose, in a forward cockpit view; the game's wedge turns with the camera the same way).
+        /// </summary>
+        private void DrawWedge(AvQuadBuffer b, float w, Rgba dim)
+        {
+            wedgeDegrees = 0f;
+            CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
+            Camera camera = cameras != null ? cameras.mainCamera : null;
+            if (camera == null) return;
+            float fov = HoloView.HorizontalFov(camera.fieldOfView, camera.aspect);
+            if (fov <= 0f) return;
+            HoloView.Wedge(camera.transform.eulerAngles.y, fov, radius * WedgeShare, WedgeSegments, wedgeEast, wedgeNorth);
+            int count = 0;
+            for (int i = 0; i <= WedgeSegments; i++)
+                if (At(wedgeEast[i], 0f, wedgeNorth[i], out float x, out float y))
+                {
+                    wedgeX[count] = x;
+                    wedgeY[count] = y;
+                    count++;
+                }
+            if (count != WedgeSegments + 1 || !At(0f, 0f, 0f, out float cx, out float cy)) return;
+            wedgeDegrees = Mathf.Min(HoloView.WedgeMaxDegrees, Mathf.Max(HoloView.WedgeMinDegrees, fov));
+            AvStrokes.Line(b, cx, cy, wedgeX[0], wedgeY[0], w, dim);
+            AvStrokes.Line(b, cx, cy, wedgeX[WedgeSegments], wedgeY[WedgeSegments], w, dim);
+            AvStrokes.Polyline(b, wedgeX, wedgeY, count, false, w, dim);
         }
 
         /// <summary>The player's aircraft: a cross where the ground is under it, the stem up to its altitude and a chevron there pointing the way it flies on the picture.</summary>
@@ -138,8 +214,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
             AvStrokes.Fill(b, tx - 1.25f * u, ty - 1.25f * u, 2.5f * u, 2.5f * u, bright);
         }
 
-        /// <summary>The first selected target, in brackets, with its name and range.</summary>
-        private void DrawTarget(AvQuadBuffer b, Rgba bright, float w, float u, float sea)
+        /// <summary>The first selected target, in brackets; the BIG picture adds its name and range.</summary>
+        private void DrawTarget(AvQuadBuffer b, Rgba bright, float w, float u, float sea, bool named)
         {
             Unit target = FirstTarget();
             if (target != null)
@@ -153,6 +229,11 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     if (At(e, top, n, out float x, out float y))
                     {
                         AvStrokes.Bracket(b, x - 8f * u, y - 8f * u, 16f * u, 16f * u, 5f * u, w * 1.4f, bright);
+                        if (!named)
+                        {
+                            Label(LabelTarget, "", 0f, 0f, inkColour);
+                            return;
+                        }
                         float dy = at.y - planeY;
                         int tenths = (int)(Mathf.Sqrt(flat * flat + dy * dy) / 100f);
                         if (!ReferenceEquals(target, targetNamed) || tenths != targetTenths)
@@ -169,7 +250,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
             Label(LabelTarget, "", 0f, 0f, inkColour);
         }
 
-        private void DrawBases(AvQuadBuffer b, Rgba ink, float w, float u)
+        /// <summary>The airbases in the scan (the BIG picture names six, the MINI the nearest one), each a diamond on a short leader with its name; the MINI keeps the name inside its frame.</summary>
+        private void DrawBases(AvQuadBuffer b, Rgba ink, float w, float u, bool mini)
         {
             basesDrawn = 0;
             float limit = radius * radius;
@@ -184,7 +266,13 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     {
                         AvStrokes.Diamond(b, x, y, 3.5f * u, w, ink);
                         AvStrokes.Line(b, x + 2.5f * u, y + 2.5f * u, x + 9f * u, y + 8f * u, w, ink);
-                        Label(LabelBase + i, NameOf(basePool[m.Id]), x + 11f * u, y + 8f * u, inkColour);
+                        int index = LabelBase + i;
+                        Label(index, NameOf(basePool[m.Id]), x + 11f * u, y + 8f * u, inkColour);
+                        if (mini)
+                        {
+                            float room = side - 4f * u - AvText.Width(labels[index]);
+                            if (x + 11f * u > room) Place(index, room, y + 8f * u);
+                        }
                         basesDrawn++;
                         shown = true;
                     }
@@ -195,11 +283,13 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
         // ------------------------------------------------------------------ the scans
 
-        /// <summary>The 96 nearest units the game's map shows and the 6 nearest airbases, as global positions; four times a second.</summary>
-        private void Scan(int range)
+        /// <summary>The nearest units the game's map shows (48 for the MINI, 96 for the BIG) and the nearest airbases (1 or 6), as global positions; four times a second, timed.</summary>
+        private void Scan(int range, int unitCap, int baseCap)
         {
+            long started = Stopwatch.GetTimestamp();
             nextScan = Time.unscaledTime + ScanInterval;
             scanRange = range;
+            scanCap = unitCap;
             unitCount = 0;
             float limit = radius * radius;
             DynamicMap map = SceneSingleton<DynamicMap>.i;
@@ -225,13 +315,17 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     {
                         East = x, North = z, Height = air ? IconPosition(icon).y / factor : 0f, Range = Mathf.Sqrt(flat),
                         Colour = (uint)(colour.r << 16 | colour.g << 8 | colour.b), Kind = air ? HoloKind.Air : HoloKind.Surface,
-                    });
+                    }, unitCap);
                 }
             }
-            ScanBases(limit);
+            ScanBases(limit, baseCap);
+            scanMs = Milliseconds(started);
+            lastScanMs = scanMs;
+            if (scanMs > worstScanMs) worstScanMs = scanMs;
+            scans++;
         }
 
-        private void ScanBases(float limit)
+        private void ScanBases(float limit, int cap)
         {
             baseCount = 0;
             if (FactionRegistry.airbaseLookup == null) return;
@@ -243,7 +337,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 float dx = at.x - planeX, dz = at.z - planeZ, flat = dx * dx + dz * dz;
                 if (flat > limit) continue;
                 basePool[pool] = airbase;
-                HoloMarks.Offer(bases, ref baseCount, new HoloMark { East = at.x, North = at.z, Range = Mathf.Sqrt(flat), Id = pool });
+                HoloMarks.Offer(bases, ref baseCount, new HoloMark { East = at.x, North = at.z, Range = Mathf.Sqrt(flat), Id = pool }, cap);
                 pool++;
             }
         }
@@ -297,13 +391,15 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private void ResetMarks()
         {
             unitCount = baseCount = unitsDrawn = basesDrawn = labelsUsed = 0;
-            scanRange = -1;
+            scanRange = scanCap = -1;
             baseNames.Clear();
             for (int i = 0; i < basePool.Length; i++) basePool[i] = null;
-            flagText = ringText = targetText = "";
+            flagText = ringText = targetText = gridRef = "";
             flagRange = ringRange = 0;
+            flagMini = false;
             targetTenths = -1;
             targetNamed = null;
+            wedgeDegrees = 0f;
         }
     }
 }

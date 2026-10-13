@@ -30,23 +30,27 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>The most airbases named at once.</summary>
         internal const int MaximumAirbases = 6;
         internal const string Caption = "HOLO MAP";
+        /// <summary>The caption of the standing MINI's shelf.</summary>
+        internal const string MiniCaption = "TAC MAP";
         internal const int NameLength = 14;
 
         /// <summary>
-        /// Offers a mark to a list kept in order of rising range and no longer than the array: a mark nearer than the farthest kept takes its place and pushes the farthest out; a
-        /// mark of equal range goes after those already listed. Returns whether the mark was kept.
+        /// Offers a mark to a list kept in order of rising range and no longer than the array or <paramref name="limit"/> (the MINI keeps fewer than the BIG): a mark nearer than the farthest kept takes
+        /// its place and pushes the farthest out; a mark of equal range goes after those already listed. Returns whether the mark was kept.
         /// </summary>
-        internal static bool Offer(HoloMark[] list, ref int count, in HoloMark mark)
+        internal static bool Offer(HoloMark[] list, ref int count, in HoloMark mark, int limit = int.MaxValue)
         {
-            if (list.Length == 0 || (count == list.Length && !(mark.Range < list[count - 1].Range))) return false;
-            int at = count < list.Length ? count : count - 1;
+            int cap = Math.Min(limit, list.Length);
+            if (count > cap) count = Math.Max(cap, 0);
+            if (cap <= 0 || (count == cap && !(mark.Range < list[count - 1].Range))) return false;
+            int at = count < cap ? count : count - 1;
             while (at > 0 && mark.Range < list[at - 1].Range)
             {
                 list[at] = list[at - 1];
                 at--;
             }
             list[at] = mark;
-            if (count < list.Length) count++;
+            if (count < cap) count++;
             return true;
         }
 
@@ -64,6 +68,9 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>The right end of the caption shelf: the picture's radius and which way is up.</summary>
         internal static string ShelfFlag(int rangeKm, bool northUp) =>
             rangeKm.ToString(CultureInfo.InvariantCulture) + " KM  " + (northUp ? "N UP" : "HDG UP");
+
+        /// <summary>The right end of the MINI's shelf: the radius alone ("10 KM"); the picture is small and the north tick says which way is up.</summary>
+        internal static string MiniFlag(int rangeKm) => rangeKm.ToString(CultureInfo.InvariantCulture) + " KM";
 
         /// <summary>An airbase's label: upper case, trimmed, no longer than <see cref="NameLength"/> characters.</summary>
         internal static string AirbaseLabel(string name) => Clip(name, NameLength);
