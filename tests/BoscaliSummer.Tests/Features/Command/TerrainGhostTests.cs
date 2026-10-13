@@ -23,6 +23,7 @@ namespace BoscaliSummer.Tests.Features.Command
             TestNearFade();
             TestSeaThinning();
             TestCautionRule();
+            TestHorizonFade();
             TestStrength();
             TestFillTime();
         }
@@ -174,7 +175,9 @@ namespace BoscaliSummer.Tests.Features.Command
 
             v = Filled(field, 0, 0, 0f, 100f, 0f, 1f);
             TestAssert.Eq(v[Centre * Side + Centre].A, (byte)0, "Terrain ghost: a line at the aircraft itself is gone");
-            TestAssert.Eq(v[Centre * Side + Centre + 1].A, (byte)(full * 2), "Terrain ghost: ... while the ground 320 m off, level with it, glows at double strength");
+            byte levelGlow = (byte)(TerrainGhostGrid.BaseAlpha * TerrainGhostGrid.HorizonFloor * TerrainGhostGrid.CautionBoost * 255f + .5f);
+            TestAssert.That(Math.Abs(v[Centre * Side + Centre + 1].A - levelGlow) <= 1,
+                "Terrain ghost: ... while the ground 320 m off, level with it, glows at double strength of the 25% horizon floor (got " + v[Centre * Side + Centre + 1].A + ")");
         }
 
         private static void TestSeaThinning()
@@ -222,14 +225,18 @@ namespace BoscaliSummer.Tests.Features.Command
                 GhostVertex a = v[j * Side + i];
                 float d = (float)Math.Sqrt(a.X * a.X + a.Z * a.Z);
                 if (d > TerrainGhostGrid.FadeStart * TerrainGhostGrid.Radius || d < TerrainGhostGrid.NearMetres + 150f) continue;
+                // Only the horizon fade is in play out here: the same alpha rule, times the factor for how far below the aircraft's horizontal the vertex lies.
+                float factor = TerrainGhostGrid.HorizonFactor(1000f - a.Y, d);
+                byte expectGlow = (byte)(Math.Min(TerrainGhostGrid.BaseAlpha * factor * TerrainGhostGrid.CautionBoost, 1f) * 255f + .5f);
+                byte expectInk = (byte)(TerrainGhostGrid.BaseAlpha * factor * 255f + .5f);
                 if (a.X < 0f)
                 {
-                    TestAssert.That(a.R == Caution.R && a.G == Caution.G && a.B == Caution.B && a.A == glow,
+                    TestAssert.That(a.R == Caution.R && a.G == Caution.G && a.B == Caution.B && Math.Abs(a.A - expectGlow) <= 1,
                         "Terrain ghost: ground higher than 150 m under the aircraft is caution at double strength");
                     seen++;
                 }
                 else
-                    TestAssert.That(a.R == Ink.R && a.G == Ink.G && a.B == Ink.B && a.A == full,
+                    TestAssert.That(a.R == Ink.R && a.G == Ink.G && a.B == Ink.B && Math.Abs(a.A - expectInk) <= 1,
                         "Terrain ghost: lower ground is the HUD ink at normal strength");
             }
             TestAssert.That(seen > 100, "Terrain ghost: the caution ground is in the grid");
@@ -242,6 +249,39 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(v[Centre * Side + Centre - 5].R == Ink.R, "Terrain ghost: ground exactly 150 m under the aircraft is not caution");
             TerrainGhostGrid.FillColours(0, 0, 0f, 1049f, 0f, 1f, Ink, Caution, 0f, v);
             TestAssert.That(v[Centre * Side + Centre - 5].R == Caution.R, "Terrain ghost: ground 151 m under it is");
+        }
+
+        private static void TestHorizonFade()
+        {
+            const float Rad = (float)Math.PI / 180f;
+            // The pure rule: straight below and from 8 degrees down is full, 1 degree and less (and ground above the aircraft) is the 25% floor, in between it is linear in the angle.
+            TestAssert.Near(TerrainGhostGrid.HorizonFactor(1000f, 0f), 1f, "Terrain ghost: ground straight below is at full strength");
+            TestAssert.Near(TerrainGhostGrid.HorizonFactor(1000f, 1000f / (float)Math.Tan(8f * Rad)), 1f, "Terrain ghost: ground 8 degrees below the horizontal is at full strength");
+            TestAssert.Near(TerrainGhostGrid.HorizonFactor(1000f, 1000f / (float)Math.Tan(20f * Rad)), 1f, "Terrain ghost: ... and steeper stays full");
+            TestAssert.Near(TerrainGhostGrid.HorizonFactor(1000f, 1000f / (float)Math.Tan(1f * Rad)), .25f, "Terrain ghost: ground 1 degree below the horizontal is at the 25% floor");
+            TestAssert.Near(TerrainGhostGrid.HorizonFactor(0f, 5000f), .25f, "Terrain ghost: ground level with the aircraft is at the floor");
+            TestAssert.Near(TerrainGhostGrid.HorizonFactor(-500f, 3000f), .25f, "Terrain ghost: ground above the aircraft is at the floor");
+            TestAssert.Near(TerrainGhostGrid.HorizonFactor(-500f, 0f), .25f, "Terrain ghost: ... even straight above");
+            float flat = 4000f;
+            TestAssert.Near(TerrainGhostGrid.HorizonFactor(flat * (float)Math.Tan(4.5f * Rad), flat), .625f, "Terrain ghost: half way down the ramp (4.5 degrees) it is 62.5%");
+            float last = 0f;
+            for (float degrees = 0f; degrees <= 12f; degrees += .25f)
+            {
+                float factor = TerrainGhostGrid.HorizonFactor(flat * (float)Math.Tan(degrees * Rad), flat);
+                TestAssert.That(factor >= last - 1e-6f, "Terrain ghost: the fade never falls as the ground gets steeper");
+                last = factor;
+            }
+
+            // Through the grid: the aircraft is 3000 m up over a plain 100 m high. The ground at 3200 m east is raised to 8 degrees below, 4160 m east to 4.5 degrees below, 1600 m west above the aircraft.
+            float eight = 3000f - 3200f * (float)Math.Tan(8f * Rad), mid = 3000f - 4160f * (float)Math.Tan(4.5f * Rad);
+            var field = Field(201, Cell, (ix, iz) => iz == 100 && ix == 110 ? eight : iz == 100 && ix == 113 ? mid : iz == 100 && ix == 95 ? 3200f : 100f, null);
+            var v = Filled(field, 0, 0, 0f, 3000f, 0f, 1f);
+            byte full = (byte)(TerrainGhostGrid.BaseAlpha * 255f + .5f);
+            GhostVertex at8 = v[Centre * Side + Centre + 10], at45 = v[Centre * Side + Centre + 13], above = v[Centre * Side + Centre - 5];
+            TestAssert.That(at8.R == Ink.R && Math.Abs(at8.A - full) <= 1, "Terrain ghost: the vertex 8 degrees below is HUD ink at full strength (got " + at8.A + ")");
+            TestAssert.That(at45.R == Ink.R && Math.Abs(at45.A - (byte)(TerrainGhostGrid.BaseAlpha * .625f * 255f + .5f)) <= 1, "Terrain ghost: the vertex 4.5 degrees below is at 62.5% (got " + at45.A + ")");
+            TestAssert.That(above.R == Caution.R && Math.Abs(above.A - (byte)(TerrainGhostGrid.BaseAlpha * TerrainGhostGrid.HorizonFloor * TerrainGhostGrid.CautionBoost * 255f + .5f)) <= 1,
+                "Terrain ghost: ground above the aircraft keeps the caution colour and its double, on the 25% floor (got " + above.A + ")");
         }
 
         private static void TestStrength()

@@ -22,6 +22,7 @@ namespace BoscaliSummer.Tests.Features.Command
             TestMatrices();
             TestProjection();
             TestRings();
+            TestDiscBox();
             TestHoloFits();
             TestOffer();
             TestWords();
@@ -440,6 +441,32 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(east[64] == east[0] && north[64] == north[0], "Holo ring: the last point closes the ring exactly");
             for (int i = 0; i <= 64; i++)
                 TestAssert.That(Math.Abs(Math.Sqrt(east[i] * east[i] + north[i] * north[i]) - 10000.0) < .05, "Holo ring: every point is on the circle");
+        }
+
+        private static void TestDiscBox()
+        {
+            HoloView.DiscBox(out float x0, out float x1, out float y0, out float y1);
+            TestAssert.Near(x0, -x1, "Holo box: the box is as wide to the left as to the right of the aircraft");
+            TestAssert.That(x1 > .5f && x1 < 1f, "Holo box: the disc fills most of the picture's width but stays inside it (got " + x1 + ")");
+            TestAssert.That(y0 > -1f && y1 < 1f && y1 > y0, "Holo box: ... and stays inside it vertically");
+            TestAssert.That(y1 - y0 < x1 - x0, "Holo box: the tilted disc is wider than it is tall, so the frame no longer encloses an empty square");
+            // The same rectangle holds the projected ring and the north tick's circle at any heading and radius.
+            foreach (float radius in new[] { 5000f, 20000f, 40000f })
+            for (float heading = 0f; heading < 360f; heading += 30f)
+            for (int a = 0; a < 72; a++)
+            {
+                float angle = a * 5f * (float)Math.PI / 180f;
+                foreach (float reach in new[] { 1f, HoloView.NorthTickRadii })
+                {
+                    HoloView.Project(heading, radius, (float)Math.Sin(angle) * radius * reach, 0f, (float)Math.Cos(angle) * radius * reach, out float x, out float y);
+                    TestAssert.That(x >= x0 - .002f && x <= x1 + .002f && y >= y0 - .002f && y <= y1 + .002f,
+                        "Holo box: the ring and the north tick are inside the box (heading " + heading + ", radius " + radius + ")");
+                }
+            }
+            HoloView.Project(0f, 1f, 0f, 0f, HoloView.NorthTickRadii, out _, out float farTop);
+            HoloView.Project(0f, 1f, 0f, 0f, -HoloView.NorthTickRadii, out _, out float nearBottom);
+            TestAssert.Near(y1, farTop, "Holo box: its top is the north tick's far point");
+            TestAssert.Near(y0, nearBottom, "Holo box: its bottom is the near point of the same circle");
         }
 
         private static void TestHoloFits()

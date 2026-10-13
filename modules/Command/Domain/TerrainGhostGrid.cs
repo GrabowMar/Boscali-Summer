@@ -30,7 +30,9 @@ namespace BoscaliSummer.Modules.Command.Domain
     /// <see cref="Radius"/>, smoothly to zero at it); a near fade (zero at the aircraft, full from <see cref="NearMetres"/>
     /// away, measured in 3D); over the sea only every <see cref="SeaLineEvery"/>th line, at <see cref="SeaStrength"/>; and
     /// <see cref="CautionBoost"/> where the ground is higher than <see cref="CautionClearance"/> below the aircraft, which also
-    /// takes the caution colour instead of the ink.</para>
+    /// takes the caution colour instead of the ink; and a horizon fade (<see cref="HorizonFactor"/>): ground seen at 8 degrees or more below the
+    /// aircraft's horizontal is at full strength, falling linearly to <see cref="HorizonFloor"/> at 1 degree and less (ground level with the aircraft
+    /// or above it included), so lines seen edge-on do not bunch into bright streaks.</para>
     /// </summary>
     internal static class TerrainGhostGrid
     {
@@ -49,6 +51,8 @@ namespace BoscaliSummer.Modules.Command.Domain
         internal const float CautionClearance = 150f;
         internal const float CautionBoost = 2f;
         internal const float SeaStrength = .3f;
+        /// <summary>The depression angle (degrees below the aircraft's horizontal) from which a vertex is at full strength, the one at and under which it is at <see cref="HorizonFloor"/>, and that share.</summary>
+        internal const float HorizonFullDegrees = 8f, HorizonFloorDegrees = 1f, HorizonFloor = .25f;
         internal const int SeaLineEvery = 4;
         private const float SeaTolerance = .01f;
 
@@ -66,6 +70,18 @@ namespace BoscaliSummer.Modules.Command.Domain
                 indices[at++] = first + 1;
             }
             return indices;
+        }
+
+        /// <summary>
+        /// The horizon fade for ground <paramref name="below"/> metres under the aircraft (negative: above it) and <paramref name="flatMetres"/> away along the ground: 1 from <see cref="HorizonFullDegrees"/> of depression,
+        /// falling linearly to <see cref="HorizonFloor"/> at <see cref="HorizonFloorDegrees"/> and under (straight below is 90 degrees, level or higher is 0 or less).
+        /// </summary>
+        internal static float HorizonFactor(float below, float flatMetres)
+        {
+            float degrees = MathF.Atan2(below, flatMetres) * (180f / MathF.PI);
+            float t = (degrees - HorizonFloorDegrees) / (HorizonFullDegrees - HorizonFloorDegrees);
+            t = t < 0f ? 0f : t > 1f ? 1f : t;
+            return HorizonFloor + (1f - HorizonFloor) * t;
         }
 
         /// <summary>The cell whose centre is nearest a global position: the grid is rebuilt only when this changes.</summary>
@@ -120,10 +136,11 @@ namespace BoscaliSummer.Modules.Command.Domain
                     bool glow = v.Y > glowAbove;
                     if (flat < radiusSquared)
                     {
-                        float dy = v.Y - planeY;
+                        float dy = v.Y - planeY, away = MathF.Sqrt(flat);
                         alpha = level *
-                            (1f - Smooth((MathF.Sqrt(flat) / Radius - FadeStart) / (1f - FadeStart))) *
+                            (1f - Smooth((away / Radius - FadeStart) / (1f - FadeStart))) *
                             Smooth(MathF.Sqrt(flat + dy * dy) / NearMetres) *
+                            HorizonFactor(-dy, away) *
                             (v.Y <= seaLevel + SeaTolerance ? seaLine : 1f) *
                             (glow ? CautionBoost : 1f);
                     }

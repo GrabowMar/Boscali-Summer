@@ -66,7 +66,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             DrawRing(b, radius, false, new Rgba(inkColour.r, inkColour.g, inkColour.b, .7f));
             if (At(0f, 0f, radius * .93f, out float x0, out float y0) && At(0f, 0f, radius, out float x1, out float y1))
                 AvStrokes.Line(b, x0, y0, x1, y1, w, ink);
-            if (At(0f, 0f, radius * 1.09f, out float nx, out float ny)) Label(LabelNorth, "N", nx, ny, inkColour);
+            if (At(0f, 0f, radius * HoloView.NorthTickRadii, out float nx, out float ny)) Label(LabelNorth, "N", nx, ny, inkColour);
             else Label(LabelNorth, "", 0f, 0f, inkColour);
             if (ringRange != range || ringText.Length == 0)
             {

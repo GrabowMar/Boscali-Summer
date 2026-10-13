@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Command.Domain;
 using NOAvionics;
 using TMPro;
@@ -11,7 +12,10 @@ namespace BoscaliSummer.Modules.Command.Runtime
     /// MINI is a square of 300 units, 16 in from the left and bottom edges, with the shelf inside its lower-left ("TAC MAP" at the left, the radius at the right end, a node and a 45 degree stub) and the game's
     /// grid reference dim at its lower right; the BIG one is 46 % of the canvas height, 24 units in, with the shelf above it ("HOLO MAP", the radius and which way is up) - the shelf glides between the two
     /// as the frame grows in <see cref="HoloPresentation.GrowSeconds"/>. While either is up the game's corner map is hidden through a CanvasGroup of ours on its root (alpha only, never SetActive on a native
-    /// object), put back exactly the moment neither is. Everything is a child of one root under the HUD canvas, sent behind the HUD's own elements.
+    /// object), put back exactly the moment neither is. The game's dark plate behind its corner map (the Image of <c>DynamicMap.hudMapAnchor</c>'s parent, the <c>mapPanel</c> sprite) is hidden the same way (its renderer's alpha, put back with the map), and a soft feathered
+    /// shade (<see cref="HudSprites.Feather"/>, the visor's rgb(2, 12, 8), 0.5 for the MINI and 0.4 for the BIG one, 30 units past the disc's box) stands in for it, so the additive picture stays readable over bright sky with no
+    /// hard edge. The frame hugs the disc (<see cref="HoloView.DiscBox"/>): the BIG one's brackets are the disc's box 8 units out and its shelf stands 10 units above them; the MINI keeps its square and its shelf inside the lower-left.
+    /// Everything is a child of one root under the HUD canvas, sent behind the HUD's own elements.
     /// </summary>
     internal sealed partial class HoloMap
     {
@@ -31,6 +35,10 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private CanvasGroup mapGroup;
         private Text nativeGrid;
         private float nativeGridAlpha = 1f;
+        private Image nativePlate, shade;
+        private float nativePlateAlpha = 1f;
+        /// <summary>The shade's alpha behind the MINI and behind the BIG picture.</summary>
+        private const float ShadeMini = .5f, ShadeBig = .4f;
 
         /// <summary>Builds the root, the picture, the two vector layers and the labels once, under the HUD canvas: the canvas of the corner map, else the canvas of the HUD's icon layer.</summary>
         private bool PrepareUi()
@@ -53,6 +61,12 @@ namespace BoscaliSummer.Modules.Command.Runtime
             rootGroup = root.GetComponent<CanvasGroup>();
             rootGroup.interactable = false;
             rootGroup.blocksRaycasts = false;
+
+            // The soft shade is the first thing in the root, so it lies behind the picture; placed and tinted with the furniture.
+            shade = HudSprites.Child(rootRect, "Shade", HudSprites.Feather, true);
+            RectTransform shadeRect = shade.rectTransform;
+            shadeRect.anchorMin = shadeRect.anchorMax = shadeRect.pivot = Vector2.zero;
+            shade.color = new Color(HudSprites.ShadeTint.r, HudSprites.ShadeTint.g, HudSprites.ShadeTint.b, 0f);
 
             var image = new GameObject("Hologram", typeof(RectTransform), typeof(CanvasRenderer), typeof(RawImage));
             var imageRect = (RectTransform)image.transform;
@@ -162,21 +176,38 @@ namespace BoscaliSummer.Modules.Command.Runtime
             f.Clear();
             Rgba dim = new Rgba(inkColour.r, inkColour.g, inkColour.b, .7f);
             float u = unit, w = pixel, glide = HoloPresentation.Ease(size);
-            AvStrokes.Bracket(f, -4f * u, -4f * u, side + 8f * u, side + 8f * u, 10f * u, w, dim);
+
+            // The disc's box on the picture (from the projected outer ring and the north tick), in canvas units from the picture's lower-left corner.
+            HoloView.DiscBox(out float bx0, out float bx1, out float by0, out float by1);
+            float left = (bx0 * .5f + .5f) * side, right = (bx1 * .5f + .5f) * side, bottom = (by0 * .5f + .5f) * side, top = (by1 * .5f + .5f) * side;
+
+            // The frame: the MINI's is the square picture, 4 units out; the BIG one's hugs the disc's box, 8 units out; it glides between the two as the picture grows.
+            float frameLeft = Mathf.Lerp(-4f * u, left - 8f * u, glide), frameBottom = Mathf.Lerp(-4f * u, bottom - 8f * u, glide);
+            float frameRight = Mathf.Lerp(side + 4f * u, right + 8f * u, glide), frameTop = Mathf.Lerp(side + 4f * u, top + 8f * u, glide);
+            AvStrokes.Bracket(f, frameLeft, frameBottom, frameRight - frameLeft, frameTop - frameBottom, 10f * u, w, dim);
 
             // The shelf: a hairline interrupted by its two captions (4 unit gaps), ending in a node and a short 45 degree stub, as every block shelf of the visor. Inside the lower-left of the
-            // MINI's frame (the game's own screen-edge markers can sit above it), above the BIG one's; it glides between the two as the frame grows.
-            float y = Mathf.Lerp(14f * u, side + 18f * u, glide), end = Mathf.Lerp(side * .62f, side - 8f * u, glide), gap = 4f * u;
-            float captionEnd = 12f * u + AvText.Width(labels[LabelCaption]) + gap;
+            // MINI's frame (the game's own screen-edge markers can sit above it); the BIG one's stands 10 units above its brackets, as wide as they are. It glides between the two as the frame grows.
+            float start = Mathf.Lerp(0f, left - 8f * u, glide), end = Mathf.Lerp(side * .62f, right + 8f * u, glide), gap = 4f * u;
+            float y = Mathf.Lerp(14f * u, top + 18f * u, glide);
+            float captionEnd = start + 12f * u + AvText.Width(labels[LabelCaption]) + gap;
             float flagStart = end - 12f * u - AvText.Width(labels[LabelFlag]) - gap;
-            AvStrokes.Line(f, 0f, y, 12f * u - gap, y, w, dim);
+            AvStrokes.Line(f, start, y, start + 12f * u - gap, y, w, dim);
             if (flagStart > captionEnd) AvStrokes.Line(f, captionEnd, y, flagStart, y, w, dim);
             AvStrokes.Line(f, end - 12f * u + gap, y, end, y, w, dim);
             AvStrokes.Fill(f, end - 2f * u, y - 2f * u, 4f * u, 4f * u, dim);
             AvStrokes.Line(f, end + 2f * u, y + 2f * u, end + 8f * u, y + 8f * u, w, dim);
-            Place(LabelCaption, 12f * u, y);
+            Place(LabelCaption, start + 12f * u, y);
             Place(LabelFlag, end - 12f * u, y);
             furniture.Commit();
+
+            // The shade: the disc's box and 30 units on every side, its soft edge 40 units (design units, at any screen height) with no hard edge anywhere; 0.5 behind the MINI, 0.4 behind the BIG one.
+            float margin = 30f * u;
+            RectTransform shadeRect = shade.rectTransform;
+            shadeRect.anchoredPosition = new Vector2(left - margin, bottom - margin);
+            shadeRect.sizeDelta = new Vector2(right - left + 2f * margin, top - bottom + 2f * margin);
+            shade.pixelsPerUnitMultiplier = 1f / Mathf.Max(.01f, u);
+            shade.color = new Color(HudSprites.ShadeTint.r, HudSprites.ShadeTint.g, HudSprites.ShadeTint.b, Mathf.Lerp(ShadeMini, ShadeBig, glide));
         }
 
         private Color Dim(float alpha) => new Color(inkColour.r, inkColour.g, inkColour.b, alpha);
@@ -208,6 +239,25 @@ namespace BoscaliSummer.Modules.Command.Runtime
             }
             if (mapGroup.alpha != alpha) mapGroup.alpha = alpha;
             FadeNativeGrid(alpha);
+            FadeNativePlate(alpha);
+        }
+
+        /// <summary>
+        /// The game's dark plate behind its corner map is the Image on the map anchor's parent (<c>HMDCenter/LowerLeftPanel</c>, sprite <c>mapPanel</c>, found in game 2026-10-13; <c>DynamicMap.mapBackground</c> is the map's own
+        /// background below it and is already hidden with the map). It is no part of the map root our group sits on, so it stayed behind the hologram. Its renderer's alpha follows the corner map's and is put back exactly as
+        /// it was found: never <c>SetActive</c> (its children are the corner map), never the plate's own colour, never a group on it.
+        /// </summary>
+        private void FadeNativePlate(float alpha)
+        {
+            if (nativePlate == null)
+            {
+                DynamicMap map = SceneSingleton<DynamicMap>.i;
+                Transform panel = map != null && map.hudMapAnchor != null ? map.hudMapAnchor.parent : null;
+                nativePlate = panel != null ? panel.GetComponent<Image>() : null;
+                if (nativePlate == null) return;
+                nativePlateAlpha = nativePlate.canvasRenderer.GetAlpha();
+            }
+            if (nativePlate.canvasRenderer.GetAlpha() != alpha * nativePlateAlpha) nativePlate.canvasRenderer.SetAlpha(alpha * nativePlateAlpha);
         }
 
         /// <summary>
@@ -232,6 +282,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
         {
             if (nativeGrid != null) nativeGrid.canvasRenderer.SetAlpha(nativeGridAlpha);
             nativeGrid = null;
+            if (nativePlate != null) nativePlate.canvasRenderer.SetAlpha(nativePlateAlpha);
+            nativePlate = null;
             if (mapGroup == null) return;
             mapGroup.alpha = 1f;
             Destroy(mapGroup);
@@ -246,6 +298,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             rootGroup = null;
             hudCanvas = null;
             picture = null;
+            shade = null;
             furniture = marks = null;
             for (int i = 0; i < labels.Length; i++) labels[i] = null;
             laidHeight = laidMargin = -1f;

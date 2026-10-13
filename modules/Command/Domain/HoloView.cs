@@ -19,6 +19,8 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>A mark's height above the sea is drawn no taller than this many radii on the table (an aircraft far up would leave the picture).</summary>
         internal const float LiftCapRadii = .45f;
         internal const int Elements = 16;
+        /// <summary>Where the north tick (and so the picture's widest reach) stands, in table radii: a little outside the ring.</summary>
+        internal const float NorthTickRadii = 1.09f;
 
         private const float Deg = MathF.PI / 180f;
 
@@ -61,6 +63,26 @@ namespace BoscaliSummer.Modules.Command.Domain
             x = f * across / depth;
             y = f * (table * cosT + ahead * sinT) / depth;
             return true;
+        }
+
+        /// <summary>
+        /// The picture's box round the table's disc, from its projected outer ring and the north tick's circle (<see cref="NorthTickRadii"/>): x and y run -1..1 across the square picture (x right, y up), the same numbers
+        /// <see cref="Project"/> gives. Whatever the heading, the whole circle is the same set of points, and every length here scales with the radius, so the box is one fixed rectangle of the picture.
+        /// </summary>
+        internal static void DiscBox(out float minX, out float maxX, out float minY, out float maxY)
+        {
+            minX = minY = float.MaxValue;
+            maxX = maxY = float.MinValue;
+            const int steps = 72;
+            for (int i = 0; i < steps; i++)
+            {
+                float a = i * (2f * MathF.PI / steps);
+                if (!Project(0f, 1f, MathF.Sin(a) * NorthTickRadii, 0f, MathF.Cos(a) * NorthTickRadii, out float x, out float y)) continue;
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+            }
         }
 
         /// <summary>The scene offset (east, north) of a spot given on the table: <paramref name="across"/> metres right and <paramref name="ahead"/> metres forward of the aircraft as the picture is turned.</summary>
