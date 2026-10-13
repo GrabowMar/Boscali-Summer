@@ -213,7 +213,6 @@ namespace BoscaliSummer.Tests.Features.Command
         {
             // West of the origin the ground is 900 m, east of it 700 m (a sample every cell, so the nodes read them exactly).
             var field = Field(201, Cell, (ix, iz) => ix < 100 ? 900f : 700f, null);
-            byte full = (byte)(TerrainGhostGrid.BaseAlpha * 255f + .5f);
             byte glow = (byte)(TerrainGhostGrid.BaseAlpha * TerrainGhostGrid.CautionBoost * 255f + .5f);
             var v = new GhostVertex[TerrainGhostGrid.VertexCount];
             TerrainGhostGrid.FillHeights(field, 0, 0, v);

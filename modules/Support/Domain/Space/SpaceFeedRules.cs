@@ -32,7 +32,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     /// <summary>The feed's own choices and its idle/restore clock. Mission time only: a pause freezes both.</summary>
     internal sealed class FeedDraft
     {
-        private float lastInput = float.NaN, closedAt = float.NaN;
+        private float closedAt = float.NaN;
 
         public int Zoom, Page, Selected;
         public BirdKind Source = BirdKind.Optical;
@@ -40,7 +40,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public void Touch(float now)
         {
             if (!SpaceRules.MissionTime(now)) return;
-            lastInput = now;
             closedAt = float.NaN;
         }
 
@@ -48,7 +47,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             if (!SpaceRules.MissionTime(now)) return;
             closedAt = now;
-            lastInput = float.NaN;
         }
 
         public bool CanRestore(float now) =>
@@ -57,7 +55,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>Faction change or scene reset: nothing of the old view survives.</summary>
         public void Clear()
         {
-            lastInput = closedAt = float.NaN;
+            closedAt = float.NaN;
             Zoom = Page = Selected = 0;
             Source = BirdKind.Optical;
         }

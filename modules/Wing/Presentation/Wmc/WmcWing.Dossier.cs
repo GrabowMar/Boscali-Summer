@@ -14,7 +14,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     {
         private AvCard fileCard;
         private WingFileTop fileTop;
-        private bool releaseOn;
         private AvControl releaseButton;
         private readonly ConfirmGate releaseGate = new ConfirmGate();
         private readonly FileFace face = new FileFace();
@@ -107,7 +106,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void SetRelease(bool on, bool asking, string why)
         {
-            releaseOn = on;
             releaseButton.Label = SquadronWords.ReleaseLabel(asking);
             releaseButton.Latched = asking;
             releaseButton.Interactable = on;

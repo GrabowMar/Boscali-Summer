@@ -154,7 +154,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
         public AvControl Auto { get; }
         public AvControl[] Tiles => tile;
-        public int Shown { get; private set; }
+        public int TilesShown { get; private set; }
 
         public MetSkyGallery(RectTransform parent, Action<int> select, AvControl.Spec autoSpec)
         {
@@ -186,7 +186,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 tile[n].Latched = i == selectedSky;
                 n++;
             }
-            Shown = n;
+            TilesShown = n;
             for (int i = 0; i < TileCount; i++)
             {
                 if (i >= n) sky[i] = -1;

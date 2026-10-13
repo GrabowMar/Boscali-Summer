@@ -9,9 +9,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     // LOADOUT for Dev/Automation.Wmc (F14: picks without an id of their own get arguments) and its report.
     internal sealed partial class WmcLoadout
     {
-        /// <summary>The store picker is kept open under the stations, so it never covers its row (the 0.9 popup's check, now always true).</summary>
-        private bool popupClear;
-
         /// <summary>"next", "prev", an index into the faction's list or a label.</summary>
         public bool Livery(string arg)
         {

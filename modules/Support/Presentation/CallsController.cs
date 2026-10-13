@@ -35,7 +35,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private SupportSettings settings;
         private IObservationSource observations;
         private GlobalPosition? mapAim;       // the pick of the current arm; cleared on every arm
-        private GlobalPosition? lastMapPick;  // survives re-arms: UNLASE falls back to it
         private bool armHasPick;              // false in the MAP BUSY case (armed without a local map pick)
         public float LastWordsAt { get; private set; }
 
@@ -87,9 +86,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             request.Clear();
             ClearTasked();
             claimRequest = claimPost = 0; // a scene change abandons any claim in flight: its receipt belongs to the old scene
-            pinCycle = 0;
             mapAim = null;
-            lastMapPick = null;
             armHasPick = false;
             LastWords = "";
             LastWordsAt = -100f;
@@ -125,7 +122,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 bool mapOk = manager.ArmLocalPick(Label(id), point =>
                 {
                     mapAim = point;
-                    lastMapPick = point;
                     armHasPick = false; // the manager consumed its pick
                     if (arm.Armed != id) return;
                     if (Check(id)) Fire(id, point, SupportManager.MissionNow()); // right-click while armed fires at once
@@ -140,8 +136,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (TryTeamAim(out GlobalPosition team)) { Fire(id, team, now); return; }
             Say(CallWords.Refusal(CallRefusal.NoAim), AvUiCue.Caution);
         }
-
-        private int pinCycle;
 
         public void Disarm()
         {

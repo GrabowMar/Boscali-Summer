@@ -42,8 +42,6 @@ namespace BoscaliSummer.Modules.Intel.Runtime
         private float observationLevel;
         private float missionStart = float.NaN;
         private float lastDemand = float.NegativeInfinity;
-        private int searchFrame = -1;
-        private int searchesThisFrame;
 
         public void Configure(IntelSettings config)
         {
@@ -62,8 +60,6 @@ namespace BoscaliSummer.Modules.Intel.Runtime
             observationCursor = 0;
             missionStart = float.NaN;
             lastDemand = float.NegativeInfinity;
-            searchFrame = -1;
-            searchesThisFrame = 0;
         }
 
         private void OnDestroy() => ResetForScene();

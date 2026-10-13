@@ -18,12 +18,12 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         public const string UserFile = "pilots.user.json", SimFile = "pilots.sim.json", ExportFile = "exported_pilots.json";
 
         private static SavedPilotStore store;
-        private static bool scratch, tallied, locked;
+        private static bool tallied, locked;
 
         /// <summary>Why the saved pilots could not be read this mission (the list's empty card says it), or null.</summary>
         public static string Problem { get; private set; }
 
-        public static string FilePath => Path.Combine(WingConfig.RecordsRoot, scratch ? SimFile : UserFile);
+        public static string FilePath => Path.Combine(WingConfig.RecordsRoot, UserFile);
 
         /// <summary>Where EXPORT writes and IMPORT reads first (FOLDER opens it).</summary>
         public static string Folder => Path.Combine(WingConfig.RecordsRoot, "Pilots");

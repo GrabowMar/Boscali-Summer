@@ -76,7 +76,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         private LayerKind? mid, high;
         private float rain, rainBase = -1f, convective, severity = -1f, weight = 1f;
         private bool patchy, embedded;
-        private JitterRow? jitter;
         private Role roles;
 
         internal SkyBuilder(string name, WeatherRegimeType cls) { this.name = name; this.cls = cls; }
@@ -115,7 +114,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
                     if (def.Genus.Genus != LowGenus.Humilis) throw new InvalidOperationException("street zones are baked for Humilis only: " + name);
                     sky.CapacityCover = SkyArchetypes.StreetCapacityHumilis;
                 }
-                def.LowJitter = jitter ?? DefaultJitter(def.Genus.Genus);
+                def.LowJitter = DefaultJitter(def.Genus.Genus);
             }
             else
             {

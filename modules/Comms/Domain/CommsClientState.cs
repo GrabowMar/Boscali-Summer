@@ -126,9 +126,6 @@ namespace BoscaliSummer.Modules.Comms.Domain
         private readonly Dictionary<uint, float> pollClosedAt = new Dictionary<uint, float>();
         private readonly Dictionary<uint, int> pendingVotes = new Dictionary<uint, int>();
         private float refusalWatchUntil = float.NegativeInfinity;
-        private bool pendingHide;
-        private float pendingHideX;
-        private float pendingHideZ;
 
         public CommsBoard Board { get; } = new CommsBoard();
         public CommsScoreboard Scores { get; } = new CommsScoreboard();
@@ -595,13 +592,6 @@ namespace BoscaliSummer.Modules.Comms.Domain
                 hunt.GuessCount = e.Values != null && e.Values.Length > 0 ? Math.Max(0, e.Values[0]) : 0;
                 Revision++;
                 if (!isNew || (e.Flags & CommsFlags.Replay) != 0) return;
-                if (e.Author == LocalId && pendingHide)
-                {
-                    pendingHide = false;
-                    hunt.HasLocalGuess = true;
-                    hunt.LocalGuessX = pendingHideX;
-                    hunt.LocalGuessZ = pendingHideZ;
-                }
                 Push(new CommsFeedLine
                 {
                     Time = now, Author = e.Author, AuthorName = name, Kind = CommsFeedKind.Hunt, Tone = CommsTone.Fun,

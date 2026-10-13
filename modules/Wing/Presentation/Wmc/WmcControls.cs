@@ -17,7 +17,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             public Transform Host;
             public Action Act;
             public Func<bool> Shown;
-            public AvHit Hit;
         }
 
         private readonly Dictionary<string, Entry> map = new Dictionary<string, Entry>(256);

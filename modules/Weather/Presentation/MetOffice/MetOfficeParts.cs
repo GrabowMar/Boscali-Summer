@@ -92,17 +92,15 @@ namespace BoscaliSummer.Modules.Weather.Presentation
     /// </summary>
     internal sealed class MetStepRow : AvPart
     {
-        private const float Btn = 28f, Gap = 4f;
+        private const float Btn = 28f;
         private readonly AvControl minus, plus;
         private readonly AvFrame box;
         private readonly TMP_Text value;
         private TMP_Text label;
-        private AvControl left, extra;
-        private float leftW, extraW;
+        private float leftW;
 
         public AvControl Minus => minus;
         public AvControl Plus => plus;
-        public AvControl Left => left;
 
         public MetStepRow(RectTransform parent, AvControl.Spec minusSpec, AvControl.Spec plusSpec)
         {
@@ -134,14 +132,12 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             base.Place(s);
             float x = 0f;
             float y = (s.H - 26f) * 0.5f;
-            if (left != null) { AvLay.Place(left.Rect, 0f, y, leftW, 26f); x = leftW + Gap; }
-            else if (label != null) { AvLay.Place(label.rectTransform, 0f, 0f, leftW, s.H); x = leftW; }
-            float right = s.W - (extra != null ? extraW + Gap : 0f);
+            if (label != null) { AvLay.Place(label.rectTransform, 0f, 0f, leftW, s.H); x = leftW; }
+            float right = s.W;
             AvLay.Place(minus.Rect, x, y, Btn, 26f);
             AvLay.Place(plus.Rect, right - Btn, y, Btn, 26f);
             AvLay.Place(box.rectTransform, x + Btn, y, Mathf.Max(1f, right - Btn - x - Btn), 26f);
             AvLay.Place(value.rectTransform, x + Btn + 4f, y, Mathf.Max(1f, right - Btn - x - Btn - 8f), 26f);
-            if (extra != null) AvLay.Place(extra.Rect, right + Gap, y, extraW, 26f);
         }
 
         public override void Restyle()
@@ -150,8 +146,6 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             value.color = EnvInk.Role("ink");
             if (label != null) label.color = EnvInk.Role("ink-dim");
             minus.Restyle(); plus.Restyle();
-            if (left != null) left.Restyle();
-            if (extra != null) extra.Restyle();
         }
     }
 

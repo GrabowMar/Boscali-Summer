@@ -11,7 +11,7 @@ namespace BoscaliSummer.Core.Ui
     /// </summary>
     internal static class HudSprites
     {
-        private static Sprite chamfer, bandPlain, bandFaded, feather;
+        private static Sprite bandPlain, bandFaded, feather;
 
         /// <summary>The visor look's shade colour, rgb(2, 12, 8): what a soft patch behind symbology is tinted (the TAC BOARD's sun band and clouds are the same colour); its alpha is the caller's.</summary>
         public static readonly Color ShadeTint = new Color(2f / 255f, 12f / 255f, 8f / 255f, 1f);

@@ -45,7 +45,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private AvChip[] chips;
         private AvChip fundsChip;
         private RectTransform[] hosts;
-        private Rect bodyRect;
         private float nextAttempt, nextRefresh;
         private bool wasVisible;
         private bool gaveUp;
@@ -273,10 +272,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             fundsChip.Set("FUNDS " + WmcHeader.None, AvState.Inert);
             WmcMotion.Attach(root);
             BuildFitButton();
-
-            // Body: what the console leaves between the tab bar and the footer (Layout: header + chips + tabs, then footer).
-            float top = AvGridTokens.Header + 4f + AvGridTokens.ChipStrip + 6f + AvGridTokens.Tab + 4f;
-            bodyRect = new Rect(0f, 0f, AvTokens.PanelWidth, Mathf.Max(40f, height - top - AvGridTokens.Footer));
 
             // Every page is a kit v2 flow page: it builds into the shell's flow for its tab.
             tactical = new WmcTactical(controls);
