@@ -16,7 +16,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private const int MaximumUnits = 4096, MaximumFresh = 512, MaximumEnemies = 1024, MaximumBases = 32, GroundTargets = 12, BuildingTargets = 8, RelayTargets = 4;
         private const float RelayRevealRadius = 5000f, BuildingBaseRadius = 4000f;
         private struct Enemy { public float X, Z; public bool Armored; }
-        private readonly List<Enemy> enemies = new List<Enemy>(256);
+        private List<Enemy> enemies = new List<Enemy>(256), building = new List<Enemy>(256);   // the last whole snapshot, and the one being taken
+        private int snapshotAt = -1;   // the unit the snapshot in flight has reached; -1 when none
+        private FactionHQ snapshotViewer;
+        private const int SnapshotUnitsPerFrame = 512;
         private readonly List<Vector2> fresh = new List<Vector2>(MaximumFresh);
         private readonly List<Vector2> ownBases = new List<Vector2>(MaximumBases);
         private readonly List<Vector2> enemyBases = new List<Vector2>(MaximumBases);
@@ -26,22 +29,44 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private readonly List<SofSeed> grounds = new List<SofSeed>(64), buildings = new List<SofSeed>(32), kept = new List<SofSeed>(8);
         private float enemiesAt = -100f;
 
-        /// <summary>Rebuilds the enemy ground list at most once a second per faction (the scene queries are cheap lookups on it).</summary>
+        /// <summary>
+        /// Starts the enemy ground list's rebuild, at most once a second per faction (the scene queries are cheap lookups on it). The pass over the
+        /// units is taken in slices (<see cref="Step"/>), and the queries read the last whole list until the new one is complete.
+        /// </summary>
         public void Snapshot(FactionHQ viewer, float now)
         {
             if (viewer == null || now - enemiesAt < 1f) return;
             enemiesAt = now;
-            enemies.Clear();
+            snapshotAt = -1;
             List<Unit> all = UnitRegistry.allUnits;
-            if (all == null || all.Count > MaximumUnits) return;
-            for (int i = 0; i < all.Count && enemies.Count < MaximumEnemies; i++)
+            if (all == null || all.Count > MaximumUnits) { enemies.Clear(); return; }
+            building.Clear();
+            snapshotAt = 0;
+            snapshotViewer = viewer;
+            Step();
+        }
+
+        /// <summary>The next slice of the snapshot in flight (the host calls it every frame); the new list replaces the old one when the pass ends.</summary>
+        public void Step()
+        {
+            if (snapshotAt < 0) return;
+            List<Unit> all = UnitRegistry.allUnits;
+            if (all == null) { snapshotAt = -1; return; }
+            int end = Math.Min(all.Count, snapshotAt + SnapshotUnitsPerFrame);
+            for (int i = snapshotAt; i < end && building.Count < MaximumEnemies; i++)
             {
                 Unit unit = all[i];
-                if (unit == null || unit.disabled || unit.NetworkHQ == null || unit.NetworkHQ == viewer || !(unit is GroundVehicle)) continue;
+                if (unit == null || unit.disabled || unit.NetworkHQ == null || unit.NetworkHQ == snapshotViewer || !(unit is GroundVehicle)) continue;
                 GlobalPosition p = unit.transform.position.ToGlobalPosition();
                 bool armored = unit.definition is VehicleDefinition d && (d.vehicleType == VehicleType.AFV || d.vehicleType == VehicleType.MBT);
-                enemies.Add(new Enemy { X = (float)p.x, Z = (float)p.z, Armored = armored });
+                building.Add(new Enemy { X = (float)p.x, Z = (float)p.z, Armored = armored });
             }
+            snapshotAt = end;
+            if (end < all.Count && building.Count < MaximumEnemies) return;
+            List<Enemy> done = building;
+            building = enemies;
+            enemies = done;
+            snapshotAt = -1;
         }
 
         /// <summary>Enemy counts around a point from the last snapshot. <paramref name="stared"/> is the caller's own knowledge of an enemy bird looking there.</summary>

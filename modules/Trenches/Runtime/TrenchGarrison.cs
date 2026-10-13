@@ -111,12 +111,27 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                 if (!committed[i]) attempts[i] = 0;
         }
 
-        internal void Reinforce()
+        private int reinforceSlot;   // where a staged Reinforce resumes
+
+        /// <summary>
+        /// Raises the missing defenders, at most <paramref name="spawnBudget"/> spawns per call (each is a vanilla spawn
+        /// plus up to ten ground rays, and a belt can ask for six at once). False while slots are left: call again next
+        /// frame. The slot order and the three tries per slot are unchanged.
+        /// </summary>
+        internal bool Reinforce(int spawnBudget = int.MaxValue)
         {
-            if (Overrun) return;
+            if (Overrun) { reinforceSlot = 0; return true; }
             int desired = Math.Min(TrenchTraceMath.DefenderBudget(line.Stage), TrenchTraceMath.MaxDefendersForPressure(line.Pressure));
-            for (int slot = 0; slot < desired && slot < defenders.Length; slot++)
-                if (!committed[slot] && attempts[slot] < 3) Spawn(slot);
+            int spawns = 0;
+            for (; reinforceSlot < desired && reinforceSlot < defenders.Length; reinforceSlot++)
+            {
+                int slot = reinforceSlot;
+                if (committed[slot] || attempts[slot] >= 3) continue;
+                if (spawns++ >= spawnBudget) return false;
+                Spawn(slot);
+            }
+            reinforceSlot = 0;
+            return true;
         }
 
         internal bool Poll(float now)

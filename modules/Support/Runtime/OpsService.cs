@@ -52,7 +52,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private SpaceService space;
         private CyberService cyber;
         private SofService sof;
-        private float nextTick, nextWarning;
+        private PhasedGate tickGate;
+        private float nextWarning;
         private int pingSeq;
 
         // Optional hooks: each is implemented by the effects file (the call is removed when it is not).
@@ -74,7 +75,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             foreach (var pair in factions) pair.Value.Desk.Reset();
             ResetEffects();
             factions.Clear();
-            nextTick = 0.75f;   // phase: the four 1 Hz services tick on different frames
+            tickGate.Reset();
         }
 
         private void OnDestroy()
@@ -113,8 +114,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             if (!GameAccess.IsServer() || (GameManager.gameState != GameState.SinglePlayer && GameManager.gameState != GameState.Multiplayer)) return;
             float now = SupportManager.MissionNow();
-            if (now < nextTick) return;
-            nextTick = now + 1f;
+            if (!tickGate.Due(now, 1f, 0.75f)) return;   // 1 Hz slot .75 (table in HighCommandManager)
             try { Tick(now); }
             catch (Exception e)
             {

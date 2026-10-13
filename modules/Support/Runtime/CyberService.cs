@@ -66,7 +66,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private readonly CyberAnchorSpawner spawner = new CyberAnchorSpawner();
         private SupportManager manager;
         private SpaceService space;
-        private float nextTick, nextCleanup, nextWarning;
+        private PhasedGate tickGate;
+        private float nextCleanup, nextWarning;
 
         // Optional hooks: each is implemented by exactly one of the other files (the call is removed when it is not).
         partial void TickNodes(FactionCyber f, float now);
@@ -95,7 +96,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             Generation = Generation == int.MaxValue ? 1 : Generation + 1;
             factions.Clear();
             nextAttempt.Clear();
-            nextTick = 0.25f;   // phase: the four 1 Hz services tick on different frames
+            tickGate.Reset();
             spawner.ResetForScene();
         }
 
@@ -149,8 +150,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             if (!GameAccess.IsServer() || (GameManager.gameState != GameState.SinglePlayer && GameManager.gameState != GameState.Multiplayer)) return;
             float now = SupportManager.MissionNow();
-            if (now < nextTick) return;
-            nextTick = now + 1f;
+            if (!tickGate.Due(now, 1f, 0.25f)) return;   // 1 Hz slot .25 (table in HighCommandManager); a slot of the mission clock, so it holds however late the service starts
             try { Tick(now); }
             catch (Exception e)
             {

@@ -26,7 +26,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             ResolveServices();
             FactionHQ hq = war.HQ;
             BuildPlaces(war);
-            ScanContacts(war, now);
+            if (scanned) scanned = false;   // the review's contacts were gathered ahead, in slices
+            else ScanContacts(war, now);
             activeObjectives = MissionPosition.TryGetActiveObjectives(hq, out List<Objective> active) ? active : null;
             int traces = territory != null
                 ? Mathf.Clamp(territory.CopyFrontlineTraces(hq.GetInstanceID(), tracePoints, traceLengths, tracePressure), 0, FrontlineTraceLimits.MaximumTraces) : 0;
@@ -66,8 +67,23 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             }
         }
 
-        /// <summary>One pass over the units into the contact list the rings count. Hostile units count only while the faction has a fresh track on them.</summary>
+        // The scan a review waits for, taken in slices of ScanUnitsPerFrame units: the faction it is for, the unit it has reached and the clock it started on.
+        // The contact lists are shared, so one scan is in flight at a time; a command's whole-list scan (ScanContacts) cancels it and the review starts over.
+        private FactionWar scanWar;
+        private int scanAt;
+        private float scanNow;
+        private bool scanned;   // the review being run has its contacts already
+        private const int ScanUnitsPerFrame = 512;
+
+        /// <summary>One pass over the units into the contact list the rings count, all at once (a command wants the picture now).</summary>
         private void ScanContacts(FactionWar war, float now)
+        {
+            BeginScan(war, now);
+            StepScan(int.MaxValue);
+            scanWar = null;
+        }
+
+        private void BeginScan(FactionWar war, float now)
         {
 #if !PUBLIC_RELEASE
             WarProof.BeforeScan(war.HQ, now);
@@ -75,12 +91,21 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             fixes.Clear(); ownGround.Clear();
             war.GroundSeen = false;
             war.HostileFixes = 0;
+            scanWar = war; scanAt = 0; scanNow = now;
+        }
+
+        /// <summary>The next slice of the scan: hostile units count only while the faction has a fresh track on them. True when the scan is over.</summary>
+        private bool StepScan(int budget)
+        {
             List<Unit> all = UnitRegistry.allUnits;
-            if (all == null) return;
+            if (all == null) return true;
+            FactionWar war = scanWar;
             FactionHQ hq = war.HQ;
+            float now = scanNow;
             GroundFrontService ground = GroundFrontService.Active;
             int cap = Math.Min(all.Count, MaximumUnitScan);
-            for (int i = 0; i < cap; i++)
+            int end = budget >= cap - scanAt ? cap : scanAt + budget;
+            for (int i = scanAt; i < end; i++)
             {
                 Unit unit = all[i];
                 if (unit == null || unit.disabled || unit.NetworkHQ == null) continue;
@@ -108,6 +133,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 if (kind == ContactKind.HostileSurface || kind == ContactKind.HostileAir) war.HostileFixes++;
                 if (kind == ContactKind.FriendlyGround || kind == ContactKind.FriendlyCarrier) ownGround.Add(new Vector2(at.x, at.z));
             }
+            scanAt = end;
+            return end >= cap;
         }
 
         /// <summary>An AI aircraft that is neither the player's, a wing member, nor reserved for another task: the staff counts it as other presence.</summary>

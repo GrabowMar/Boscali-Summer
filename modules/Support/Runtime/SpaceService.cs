@@ -43,7 +43,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private readonly SpaceWatchOfficer watch = new SpaceWatchOfficer();
         private readonly Dictionary<FactionHQ, IntentEntry> intents = new Dictionary<FactionHQ, IntentEntry>();
         private SupportManager manager;
-        private float nextTick;
+        private PhasedGate tickGate;
         private float nextCleanup;
         private float nextTaskedWarning;
         private bool coarse; // mirror gate reads use the 1 Hz world state instead of re-sampling natives per viewer
@@ -70,7 +70,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             intents.Clear();
             factions.Clear();
             nextAttempt.Clear();
-            nextTick = 0f;
+            tickGate.Reset();
             scanCapLogged = false;
             spawner.ResetForScene();
         }
@@ -454,8 +454,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     Plugin.Logger?.LogWarning("[Support.Space] Mirror poll failed: " + e.Message);
                 }
             }
-            if (now < nextTick) return;
-            nextTick = now + 1f;
+            if (!tickGate.Due(now, 1f, 0f)) return;   // 1 Hz slot 0 (table in HighCommandManager)
             spawner.RetryCleanup();
             // CYBER BIRD JAM: an enemy intrusion that holds our UPLINK node (or a fired BIRD JAM package) slows every bird task.
             // The enemy CYBER front's counter pressure (x1.5 when it leads by 40 or more) rides the same multiplier.

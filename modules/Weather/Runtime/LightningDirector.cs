@@ -18,6 +18,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private readonly StormCell[] slotCells = new StormCell[StormLattice.EnumerateCap];
         private int slotCellCount;
         private int cachedSlot = -1;
+        private WeatherKey builtKey;   // what slotField was built from
+        private float builtHalfX, builtHalfZ;
         private WeatherKey key;
         private float previousTime = -1f;
         private GameObject root;
@@ -59,7 +61,13 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                     {
                         // Peers with different render/update phases use precisely the same
                         // atmospheric strength and sites at the slot boundary.
-                        slotField.Build(field.Key, slot * StormLightning.SlotSeconds, field.HalfX, field.HalfZ, field.HourOfDay);
+                        // The slot field is a pure function of the key and the extent (the tape does not move, and the time it is built
+                        // for is never read), so it is built once per key; a boundary, every two seconds, used to rebuild it all.
+                        if (!ReferenceEquals(builtKey, field.Key) || builtHalfX != field.HalfX || builtHalfZ != field.HalfZ)
+                        {
+                            slotField.Build(field.Key, slot * StormLightning.SlotSeconds, field.HalfX, field.HalfZ, field.HourOfDay);
+                            builtKey = field.Key; builtHalfX = field.HalfX; builtHalfZ = field.HalfZ;
+                        }
                         // The slot's sources are a pure function of the key and the slot: the active storm cells within 180 km of the
                         // observer's tape position, nearest first, at most 24 (spec 6.1). A cell's event does not depend on the observer.
                         slotField.Frame.ToTape(observerGlobal.x, observerGlobal.z, out float qx, out float qz);

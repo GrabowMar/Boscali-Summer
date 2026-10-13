@@ -102,10 +102,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
             // Native late-join batches can insert without either event. Attach handlers without fabricating a sighting.
             if (owner.trackingDatabase == null) return;
             if (owner.trackingDatabase.Count > MaximumNativeUnits) { NoteCap(owner.trackingDatabase.Count); return; }
-            foreach (var pair in owner.trackingDatabase)
+            // Walk the few admitted entries and look each up in the tracking database, not the other way round: the
+            // database is every unit the faction has ever spotted (up to 4096), the same pairs come out.
+            foreach (var pair in indexed)
             {
-                if (!indexed.TryGetValue(pair.Key, out Entry entry)) continue;
-                Attach(entry, pair.Value);
+                if (!owner.trackingDatabase.TryGetValue(pair.Key, out TrackingInfo native)) continue;
+                Entry entry = pair.Value;
+                Attach(entry, native);
                 TrackingInfo track = entry.Track;
                 if (track != null && track.lastSpottedTime != entry.NativeStamp) Spotted(entry);
             }
