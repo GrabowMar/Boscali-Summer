@@ -256,6 +256,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             fieldUpdated = false;
             localRainIntensity = 0f;
             localWeather = default;
+            nextLocalSample = nextTraceLook = 0f;
             fieldPosition = Vector2.zero;
             nextFieldUpdate = 0f;
             traceState = null;
@@ -535,8 +536,15 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             {
                 GlobalPosition position = view.transform.GlobalPosition();
                 fieldPosition = new Vector2(position.x, position.z);
-                localWeather = Field.Sample(position.x, position.z);
-                localRainIntensity = Mathf.Clamp01(localWeather.RainRate / 20f);
+                // The field varies over kilometres: sampled 15 times a second the view moves some 20 m between samples at jet speed,
+                // far inside one lattice cell, and every consumer (rain, shade, audio, haze) eases its own target. The full sample is
+                // a storm-cell and cumulus-lattice walk; once per frame it was a good part of this method.
+                if (Time.unscaledTime >= nextLocalSample)
+                {
+                    nextLocalSample = Time.unscaledTime + 1f / 15f;
+                    localWeather = Field.Sample(position.x, position.z);
+                    localRainIntensity = Mathf.Clamp01(localWeather.RainRate / 20f);
+                }
             }
             // Clouds, rain and terrain must read the same atmosphere for this frame.
             if (liveWeather) { UpdateRainSystems(weatherTime); sunDisc.Tick(LevelInfo.i, view, viewTransmission, Time.deltaTime); }
@@ -1290,6 +1298,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         // Transition trace: one line whenever what the player sees changes source, plus a
         // summary each minute, so a visual glitch leaves evidence in LogOutput.log.
         private string traceState;
+        private float nextTraceLook, nextLocalSample;
         private float nextTraceSummary;
         private int traceSignature;
         private int traceLines;
@@ -1297,6 +1306,9 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private void Trace()
         {
             if (logger == null || Application.isBatchMode || traceLines > 400) return;
+            // Evidence for the log only: four looks a second find a change as surely as sixty, without the field read every frame.
+            if (Time.unscaledTime < nextTraceLook) return;
+            nextTraceLook = Time.unscaledTime + 0.25f;
             // The state line is only built when something in it changed (or once a minute):
             // building it every frame allocated about half a kilobyte per frame.
             WeatherField traced = Field;

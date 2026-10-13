@@ -81,6 +81,22 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         private TrenchPlanner.PlanJob growJob;
         private TrenchStage growBefore;
         private TrenchLine reinforceLine;
+        private bool reinforceBegun;
+        // Nests raised per frame in a reinforcement (a belt can ask for six; each is a vanilla spawn plus ground rays),
+        // and works placed per simulation tick (each a scenery spawn).
+        private const int ReinforceSpawnsPerFrame = 1;
+        private const int WorksSpawnsPerTick = 2;
+        // A new position is raised over CommitStages frames (garrison, ditch chunk, works + registration); in one frame it was the 6 ms spike.
+        private const int CommitStages = 3;
+        private sealed class CommitJob
+        {
+            public TrenchLine Line;
+            public int Maximum, Stage;
+            public TrenchGarrison Garrison;
+            public TrenchVisualChunk Chunk;
+            public TrenchWorks Works;
+        }
+        private CommitJob commitJob;
         private float nextSimulationTick;
         private float nextSeedDelay;
         private float nextGrowthWarning;
@@ -181,6 +197,14 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             planJob = null;
             growJob = null;
             reinforceLine = null;
+            reinforceBegun = false;
+            if (commitJob != null)
+            {
+                commitJob.Works?.Remove();
+                if (commitJob.Chunk != null) Destroy(commitJob.Chunk.gameObject);
+                commitJob.Garrison?.Remove();
+                commitJob = null;
+            }
             foreach (var work in works.Values) work.Remove();
             works.Clear();
             foreach (var garrison in garrisons.Values) garrison.Remove();
@@ -231,7 +255,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             if (settings == null || !GameAccess.IsServer()) return;
             if (!settings.Enabled.Value)
             {
-                if (lines.Count > 0)
+                if (lines.Count > 0 || commitJob != null)
                 {
                     for (int i = 0; i < lines.Count; i++) TrenchNet.BroadcastRemoved(lines[i].Id);
                     ResetForScene();
@@ -243,7 +267,11 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
 
             barrage.Pump(Time.time);
             if (reinforceLine != null) FinishReinforce();
-            if (planJob != null)
+            if (commitJob != null)
+            {
+                StepCommit();
+            }
+            else if (planJob != null)
             {
                 // The trace cursor stays frozen until the attempt in flight lands.
                 if (TrenchPlanner.StepPlan(planJob, PlanBudgetMs)) FinishBuild();
@@ -481,7 +509,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                 return;
             }
             planRefusals = 0;
-            Commit(line, maximum);
+            commitJob = new CommitJob { Line = line, Maximum = maximum };   // raised from the next frame, a stage per frame
             AdvanceWindow(next);
             RotateFaction();
         }
@@ -528,45 +556,66 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             return true;
         }
 
-        private bool Commit(TrenchLine line, int maximum)
+        /// <summary>One frame of the commit in flight; the position joins the theater when its last stage is done, or is rolled back.</summary>
+        private void StepCommit()
         {
-            if (lines.Count >= maximum) return false;
-            TrenchGarrison garrison = null;
-            TrenchWorks lineWorks = null;
-            TrenchVisualChunk chunk = null;
+            CommitJob job = commitJob;
             try
             {
-                garrison = new TrenchGarrison(line);
-                if (TrenchRoadIndex.EnsureBuilt())
-                    garrison.RoadDistanceAt = (x, z) => TrenchRoadIndex.TryDistance(x, z,
-                        TrenchTraceMath.RoadWatchDistance, out float watch) ? watch : float.NaN;
-                if (!garrison.Establish())
-                {
-                    if (Time.unscaledTime >= nextGarrisonWarning)
-                    {
-                        nextGarrisonWarning = Time.unscaledTime + 30f;
-                        Plugin.Logger?.LogWarning("[TRENCHES] Position rejected: " + garrison.LastFailure +
-                            ". No empty cosmetic position was created.");
-                    }
-                    return false;
-                }
-                chunk = CreateVisualChunk(line);
-                lineWorks = new TrenchWorks(line);
-                lineWorks.Deploy(line.Stage);
+                if (!BuildStage(job)) { commitJob = null; return; }
             }
             catch (Exception ex)
             {
-                lineWorks?.Remove();
-                if (chunk != null) Destroy(chunk.gameObject);
-                garrison?.Remove();
+                job.Works?.Remove();
+                if (job.Chunk != null) Destroy(job.Chunk.gameObject);
+                job.Garrison?.Remove();
+                commitJob = null;
                 Plugin.Logger?.LogWarning("[TRENCHES] Position creation rolled back: " + ex.Message);
+                return;
+            }
+            if (++job.Stage < CommitStages) return;
+            commitJob = null;
+            Commit(job);
+        }
+
+        /// <summary>One stage of a commit: the garrison's spawns, then the ditch chunk, then the works. False gives the position up.</summary>
+        private bool BuildStage(CommitJob job)
+        {
+            TrenchLine line = job.Line;
+            if (job.Stage == 0)
+            {
+                if (lines.Count >= job.Maximum) return false;
+                TrenchGarrison garrison = job.Garrison = new TrenchGarrison(line);
+                if (TrenchRoadIndex.EnsureBuilt())
+                    garrison.RoadDistanceAt = (x, z) => TrenchRoadIndex.TryDistance(x, z,
+                        TrenchTraceMath.RoadWatchDistance, out float watch) ? watch : float.NaN;
+                if (garrison.Establish()) return true;
+                if (Time.unscaledTime >= nextGarrisonWarning)
+                {
+                    nextGarrisonWarning = Time.unscaledTime + 30f;
+                    Plugin.Logger?.LogWarning("[TRENCHES] Position rejected: " + garrison.LastFailure +
+                        ". No empty cosmetic position was created.");
+                }
                 return false;
             }
+            if (job.Stage == 1)
+            {
+                job.Chunk = CreateVisualChunk(line);
+                return true;
+            }
+            job.Works = new TrenchWorks(line);
+            job.Works.Deploy(line.Stage, WorksSpawnsPerTick);
+            return true;
+        }
 
+        private void Commit(CommitJob job)
+        {
+            TrenchLine line = job.Line;
+            TrenchGarrison garrison = job.Garrison;
             lines.Add(line);
             garrisons.Add(line.Id, garrison);
-            works.Add(line.Id, lineWorks);
-            visualChunks.Add(line.Id, chunk);
+            works.Add(line.Id, job.Works);
+            visualChunks.Add(line.Id, job.Chunk);
             line.OwnerHash = TrenchWire.OwnerHashFor(line.OwnerHq != null ? line.OwnerHq.name : null);
             line.DefenderCount = garrison.Alive;
             line.DugAt = Time.time;
@@ -577,7 +626,6 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             TrenchNet.BroadcastGeometry(line);
             TrenchNet.BroadcastState(line);
             OnLinesChanged?.Invoke();
-            return true;
         }
 
         private TrenchVisualChunk CreateVisualChunk(TrenchLine line)
@@ -603,7 +651,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                 TrenchLine line = lines[i];
                 TrenchGarrison garrison = garrisons[line.Id];
                 bool changed = garrison.Poll(now);
-                if (works.TryGetValue(line.Id, out TrenchWorks lineWorks)) lineWorks.Deploy(line.Stage);
+                if (works.TryGetValue(line.Id, out TrenchWorks lineWorks)) lineWorks.Deploy(line.Stage, WorksSpawnsPerTick);
                 int previousDefenders = line.DefenderCount;
                 line.DefenderCount = garrison.Alive;
 
@@ -650,7 +698,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                 }
 
                 if (suppressed) line.NextGrowthAt = Math.Max(line.NextGrowthAt, garrison.SuppressedUntil);
-                if (!advancedOne && planJob == null && growJob == null && reinforceLine == null &&
+                if (!advancedOne && planJob == null && growJob == null && reinforceLine == null && commitJob == null &&
                     TrenchTraceMath.CanAdvance(line.Overrun, now, garrison.SuppressedUntil, line.NextGrowthAt))
                 {
                     advancedOne = true;
@@ -702,10 +750,20 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         private void FinishReinforce()
         {
             TrenchLine line = reinforceLine;
+            if (!lines.Contains(line) || !garrisons.TryGetValue(line.Id, out TrenchGarrison garrison))
+            {
+                reinforceLine = null;
+                reinforceBegun = false;
+                return;
+            }
+            if (!reinforceBegun)
+            {
+                reinforceBegun = true;
+                garrison.ResetAttempts();
+            }
+            if (!garrison.Reinforce(ReinforceSpawnsPerFrame)) return;   // the rest of the nests: next frame
             reinforceLine = null;
-            if (!lines.Contains(line) || !garrisons.TryGetValue(line.Id, out TrenchGarrison garrison)) return;
-            garrison.ResetAttempts();
-            garrison.Reinforce();
+            reinforceBegun = false;
             garrison.Poll(Time.time);
             line.DefenderCount = garrison.Alive;
             Plugin.Logger?.LogInfo($"[TRENCHES] '{line.Name}': {line.Stage}, {line.DefenderCount} defenders, {line.Curve.Length} curve stations/{line.Anchors.Length} anchors, suppressed={line.Suppressed}, overrun={line.Overrun}.");

@@ -80,7 +80,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private SupportManager manager;
         private SpaceService space;
         private CyberService cyber;
-        private float nextTick, nextCleanup, nextWarning;
+        private PhasedGate tickGate;
+        private float nextCleanup, nextWarning;
         private bool loggedNoCampKeys;
         private readonly HashSet<FactionHQ> loggedNoSite = new HashSet<FactionHQ>();
 
@@ -108,7 +109,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             ResetEffects();
             factions.Clear();
             nextAttempt.Clear();
-            nextTick = 0.5f;   // phase: the four 1 Hz services tick on different frames
+            tickGate.Reset();
             loggedNoCampKeys = false;
             loggedNoSite.Clear();
             spawner.ResetForScene();
@@ -181,8 +182,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (!GameAccess.IsServer() || !MissionManager.IsRunning ||
                 (GameManager.gameState != GameState.SinglePlayer && GameManager.gameState != GameState.Multiplayer)) return;
             float now = SupportManager.MissionNow();
-            if (now < nextTick) return;
-            nextTick = now + 1f;
+            foreach (var pair in factions) pair.Value.Obs.Step();   // the rest of the enemy snapshot the last tick began, a slice a frame
+            if (!tickGate.Due(now, 1f, 0.5f)) return;   // 1 Hz slot .5 (table in HighCommandManager)
             try { Tick(now); }
             catch (Exception e)
             {

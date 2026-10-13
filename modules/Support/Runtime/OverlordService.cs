@@ -35,7 +35,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private CyberService cyber;
         private SofService sof;
         private readonly Dictionary<FactionHQ, FactionWatch> runs = new Dictionary<FactionHQ, FactionWatch>();
-        private float nextTick, nextWarning;
+        private PhasedGate tickGate;
+        private float nextWarning;
 
         public void Configure(SupportManager support, SpaceService spaceService, CyberService cyberService, SofService sofService, OpsService opsService)
         {
@@ -46,7 +47,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             foreach (var pair in runs) pair.Value.Reset();
             runs.Clear();
-            nextTick = 0f;
+            tickGate.Reset();
         }
 
         private void OnDestroy() => ResetForScene();
@@ -82,8 +83,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             if (!GameAccess.IsServer() || (GameManager.gameState != GameState.SinglePlayer && GameManager.gameState != GameState.Multiplayer)) return;
             float now = SupportManager.MissionNow();
-            if (now < nextTick) return;
-            nextTick = now + TickSeconds;
+            if (!tickGate.Due(now, TickSeconds, 0.0625f)) return;   // 2 Hz: fires at .0625 and .5625, between the 1 Hz slots (table in HighCommandManager)
             var hqs = FactionRegistry.GetAllHQs();
             if (hqs == null) return;
             foreach (FactionHQ hq in hqs)

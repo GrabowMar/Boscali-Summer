@@ -74,7 +74,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
         private float replicatedStrength = 1f;
         private float nextRotation;
         private float nextHeartbeat;
-        private float nextTick;
+        private PhasedGate tickGate;
         private float nextBalance;
         private float lastMissionTime;
         private bool wasEnabled;
@@ -193,7 +193,8 @@ namespace BoscaliSummer.Modules.Events.Runtime
             currentStart = currentEnd = 0f;
             viewedStrength = float.NaN;
             replicatedStrength = 1f;
-            nextRotation = nextHeartbeat = nextTick = nextBalance = 0f;
+            nextRotation = nextHeartbeat = nextBalance = 0f;
+            tickGate.Reset();
             lastMissionTime = 0f;
             rotationCounter = 0;
             missionIdentity = null;
@@ -255,8 +256,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
 
             if (GameAccess.IsServer())
             {
-                if (now < nextTick) return;
-                nextTick = now + TickSeconds;
+                if (!tickGate.Due(now, TickSeconds, 0.875f)) return;   // 1 Hz slot .875 (table in HighCommandManager); the balance read above runs first in every Update, so it precedes the first roll
                 TickHost(now);
             }
             else if (current != null && now >= currentEnd)
