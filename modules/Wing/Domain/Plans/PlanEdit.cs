@@ -15,10 +15,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public static float OrbitSeconds = 180f;
         public const int MaxRoutePoints = 16;
 
-        /// <summary>An ATTACK step on one target, ending when its targets are down.</summary>
-        public static PlanStep Attack(uint target) =>
-            new PlanStep { Kind = PlanKind.Attack, Targets = new[] { target }, End = PlanEnd.TargetsDown };
-
         /// <summary>Removes a step: what waited for it starts on EXECUTE, AFTERs on the lane's later steps follow them.</summary>
         public static void Remove(WingPlan plan, int lane, int step)
         {

@@ -8,10 +8,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// line and tile foot are <see cref="ShopRules"/>' words.</summary>
     internal static class SupplyWords
     {
-        public const int ChipChars = 15, CaptionChars = 22, CodeChars = 12, NameChars = 20, FitChars = 16, DispatchChars = 79, RowChars = 70;
+        public const int CodeChars = 12, NameChars = 20, FitChars = 16;
 
-        public const string PilotTitle = "PILOT & CREW", AirframeTitle = "AIRFRAME", FitTitle = "FIT & FUEL", BaseTitle = "LAUNCH BASE",
-            InboundTitle = "INBOUND";
+        public const string PilotTitle = "PILOT & CREW", AirframeTitle = "AIRFRAME", FitTitle = "FIT & FUEL", BaseTitle = "LAUNCH BASE";
 
         /// <summary>Step 2 with nothing listed (one inert card, never a blank grid).</summary>
         public const string NotFlyingTiles = "NOT FLYING · take off to see what your faction offers.";

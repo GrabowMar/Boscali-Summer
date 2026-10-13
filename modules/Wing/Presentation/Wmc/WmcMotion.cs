@@ -9,7 +9,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// <see cref="AvReveal.Snap"/> for the punch).</summary>
     internal static class WmcMotion
     {
-        public const float PunchFrom = 0.94f, PunchSeconds = 0.12f, BlinkSeconds = 3f, BlinkHz = 2f;
+        public const float PunchFrom = 0.94f, PunchSeconds = 0.12f;
         private static AvReveal reveal;
 
         public static bool Reduced => WingSettings.Instance != null && WingSettings.Instance.ReduceMotion.Value;

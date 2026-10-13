@@ -7,10 +7,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
     internal static class BezelLayout
     {
         public const float Chrome = 176f;
-
-        // SUPPLY (spec WMC rebuild §SUPPLY; supply-ui §3 less its OVER-LIMIT row — the mode is a setting, user 2026-09-25):
-        // a scroll viewport over the steps and a DISPATCH pin on the body's floor.
-        public const float Content = 458f, VitalsRow = 20f;
         public const int BaseRows = 3;
         public const int InboundMax = 4;
         public const float PopupRowPitch = 32f, PopupPad = 8f;

@@ -27,7 +27,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         public static LandingLight Instance { get; private set; }
 
         public LandingLightMode Mode { get; private set; }
-        public bool Lit => lamp != null && lamp.enabled;
 
         /// <summary>The menu's one 3-state row: OFF, ON, AUTO, back to OFF.</summary>
         public void Cycle() => Mode = (LandingLightMode)(((int)Mode + 1) % 3);

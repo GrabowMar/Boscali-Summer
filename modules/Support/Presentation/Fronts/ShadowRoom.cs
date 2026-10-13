@@ -17,7 +17,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     /// </summary>
     internal sealed class ShadowRoom : IFrontRoom
     {
-        public const int Push = 0, Hold = 1, Exfil = 2, Lift = 3;
+        public const int Hold = 1;
         private const float TopH = 540f, Gap = 8f, ColW = 270f, CardH = 172f;
         private const int Cols = 12, Rows = 8, MaxTeams = 4, MaxTargets = 8, MaxCamps = 3, MaxHeld = 4, MaxEnemies = 4, Missions = 5;
         private static readonly string[] OrderWord = { "PUSH", "HOLD", "EXFIL", "LIFT" };

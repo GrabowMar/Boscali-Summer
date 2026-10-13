@@ -4,22 +4,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// belong in WingConfig; mode-dependent gating belongs in WingFidelity.</summary>
     internal static class WingTuning
     {
-        public const float FormationInitialBraking = 2f;
-
-        /// <summary>Maximum station-keeping heading correction, in degrees. Large corrections clamp
-        /// well below this; the ceiling only matters while recovering a blown slot.</summary>
-        public const float CommandAngle = 50f;
-
-        // Leader prediction combines immediate lever intent with measured acceleration, which also
-        // captures dives and turns.
-
-        /// <summary>Seconds of acceleration prediction, balancing thrust-response lag against amplified
-        /// throttle jitter. Selected from fixed-wing closed-loop simulation sweeps.</summary>
-        public const float SpeedLeadSeconds = 0.75f;
-
-        /// <summary>Credible acceleration bound in m/s², rejecting derivative spikes from respawns,
-        /// collisions, and missed samples.</summary>
-        public const float MaxCredibleAccel = 25f;
 
         /// <summary>Slot distance in metres defining the capture transition.</summary>
         public const float CaptureDistance = 300f;

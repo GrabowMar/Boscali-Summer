@@ -11,8 +11,6 @@ namespace BoscaliSummer.Modules.Support.Domain.C2
 
         public static string Meta(int hidden) => hidden > 0 ? "FIRST CLAIM WINS \u00B7 +" + hidden.ToString(CultureInfo.InvariantCulture) + " MORE" : "FIRST CLAIM WINS";
 
-        public const string Empty = "NO LIVE POSTS · POSTED TASKED CALLS APPEAR HERE";
-
         public static string QuietWord(bool quiet) => quiet ? "QUIET MODE · ON" : "QUIET MODE · OFF";
 
         public static string QuietHelp(bool quiet) => quiet

@@ -207,8 +207,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public WingPilotRow this[int i] => rows[i];
 
-        public bool Empty => none;
-
         /// <summary>The first <paramref name="n"/> rows show (or the empty card, with <paramref name="text"/>). True when that changed.</summary>
         public bool Show(int n, bool emptyCard, string text)
         {

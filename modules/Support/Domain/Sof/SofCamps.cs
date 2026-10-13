@@ -8,7 +8,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
     internal static class CampRules
     {
         public const int MaxCamps = 2;
-        public const float RebuildGoal = 120f, RaiseDamagedFactor = 1.5f, MinAirbaseMetres = 6000f;
+        public const float RebuildGoal = 120f, RaiseDamagedFactor = 1.5f;
 
         /// <summary>A damaged camp raises teams 1.5x slower; a down camp raises none; teams already in the field carry on.</summary>
         public static float RaiseFactor(AnchorHealth health) => health == AnchorHealth.Damaged ? RaiseDamagedFactor : 1f;

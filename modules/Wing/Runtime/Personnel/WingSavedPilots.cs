@@ -15,7 +15,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
     /// puts the store back as it was, so nothing shows SAVED that is not on disk.</summary>
     internal static class WingSavedPilots
     {
-        public const string UserFile = "pilots.user.json", SimFile = "pilots.sim.json", ExportFile = "exported_pilots.json";
+        public const string UserFile = "pilots.user.json", ExportFile = "exported_pilots.json";
 
         private static SavedPilotStore store;
         private static bool tallied, locked;

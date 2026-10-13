@@ -57,7 +57,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
     /// </summary>
     internal sealed class SofWatchBrain : WatchBrainBase
     {
-        public const float ThinkSeconds = 2f, MinSabotageOdds = 55f, HighValueScore = 10f, NearFrontMeters = 20000f, MaxEtaSeconds = 900f, SabotageCooldownSeconds = 600f,
+        public const float ThinkSeconds = 2f, HighValueScore = 10f, NearFrontMeters = 20000f, MaxEtaSeconds = 900f, SabotageCooldownSeconds = 600f,
             TargetBackoffSeconds = 600f, FailBackoffSeconds = 60f, ReconSpacingMeters = 1500f, ReconStandOffMeters = 900f, ReconRepeatSeconds = 300f, LostRestSeconds = 120f,
             UrgentFloor = 15f, ApproachMeters = 1600f, PushBelow = 20f, PushStopAbove = 35f, HoldAt = 50f, ResumeBelow = 30f, ExfilAt = 40f, PushMinMeters = 1500f, StrandedMeters = 300f, RisingEpsilon = 0.2f;
         public const float ReadyMaxExposure = 10f, CommitCeiling = 85f, CommitMargin = 15f, OnSiteHoldAt = 45f, ProjectedExfil = 95f, ProjectedFloor = 40f, RiskRadiusMeters = 1000f, ArmourRadiusMeters = 1000f;

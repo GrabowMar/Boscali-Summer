@@ -14,17 +14,6 @@ namespace BoscaliSummer.Modules.FireAndDestruction.Domain
         internal const int MaxPiles = 6;
         internal const float Gravity = 9.8f;
 
-        internal struct Shard
-        {
-            public float X;
-            public float Y;
-            public float Z;
-            public float Vx;
-            public float Vy;
-            public float Vz;
-            public float Thick;
-        }
-
         internal static void Clear(float[] pile)
         {
             if (pile == null) return;

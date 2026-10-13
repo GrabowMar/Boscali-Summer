@@ -8,12 +8,12 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// never with "…" or "†".</summary>
     internal static class SquadronWords
     {
-        public const int RowChars = 22, StampChars = 11, CaptionChars = 22, SlotChars = 90, SarChars = 14, NameChars = 17;
+        public const int SlotChars = 90;
         public const string ClientWhy = "THE HOST KEEPS THE SQUADRON ROSTER";
         public const string Empty = "NO PILOTS · RECRUIT below, or requisition on SUPPLY";
         public const string NoFocus = "NO PILOT SELECTED";
         public const string StudioTip = "Open this pilot in STUDIO: save them for every mission, edit the look and bio.";
-        public const string Title = "SQUADRON", PerksTitle = "PERKS", AssignTitle = "AIRFRAME ASSIGNMENT";
+        public const string Title = "SQUADRON", PerksTitle = "PERKS";
         public const string RowTip = "Open this pilot's dossier (SUPPLY's pilot card picks who flies next).";
         public const string RecruitTip = "Recruit a pilot into the squadron (free). A new pilot starts at 0 XP.";
         public const string AirTip = "Send the nearest helicopter able to pick this pilot up (free; the rescue pays a bounty).";

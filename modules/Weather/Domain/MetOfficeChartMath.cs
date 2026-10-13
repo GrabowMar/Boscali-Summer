@@ -2,14 +2,6 @@ using System;
 
 namespace BoscaliSummer.Modules.Weather.Domain
 {
-    /// <summary>A rectangle in chart pixels (x right, y down), for the label placer.</summary>
-    internal readonly struct MetBox
-    {
-        public readonly float X, Y, W, H;
-        public MetBox(float x, float y, float w, float h) { X = x; Y = y; W = w; H = h; }
-        public float Right => X + W;
-        public float Bottom => Y + H;
-    }
 
     /// <summary>The geometry of the synoptic chart, with no engine in it: world kilometres to chart pixels, the nearest point of a front, the wind barb and the order of the next-fronts card.</summary>
     internal static class MetChartMath

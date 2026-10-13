@@ -6,9 +6,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     /// <summary>Whether the optical bird can image a point under the current sky.</summary>
     internal enum OpticalVerdict : byte { Ok, NightUnavailable, SkyUnknown }
 
-    /// <summary>Why an open feed closes. A threat is never a reason: owner ruling 2026-10-03.</summary>
-    internal enum FeedCloseReason : byte { None, UserExit, Idle, InvalidOwnship, FocusLost, InvalidOperator }
-
     /// <summary>The loudest active cockpit warning, critical first: terrain, missile, RWR, bandit.</summary>
     internal enum FeedThreat : byte { None, Rwr, Missile, Bandit, Terrain }
 

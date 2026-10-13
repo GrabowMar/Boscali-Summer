@@ -15,7 +15,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// (<c>ShowSub(SubInspect)</c>) land on AIRCRAFT. The roster is the host's; a client sees one card.</summary>
     internal sealed partial class WmcWing : IWmcPage
     {
-        public const int SubRoster = 0, SubAircraft = 1, SubStudio = 2, SubInspect = SubAircraft;
+        public const int SubRoster = 0, SubAircraft = 1, SubStudio = 2;
         private static readonly string[] SubLabels = { "ROSTER", "AIRCRAFT", "STUDIO" };
         private static readonly AvIcon[] SubIcons = { AvIcon.UsersGroup, AvIcon.Plane, AvIcon.Pencil };
         private const int PerPage = 6;

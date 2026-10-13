@@ -29,7 +29,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public const float PinExposure = 100f, UnpinExposure = 60f, PinnedLostSeconds = 120f, CoverExtendSeconds = 60f, CoverKillRelief = 25f, LostExposure = 90f;
         public const float WoundedSeconds = 60f, LaseMaxSeconds = 300f, MaxAdvanceSeconds = 5f, ArrivalMetres = 40f;
         public const float ReconRadius = 2000f, ReconRevealSeconds = 300f, TapSeconds = 600f, ExploitDurationFactor = 1.5f, ExploitCostFactor = 0.75f;
-        public const float HeldSeconds = 600f, HeldObserveRadius = 3000f, HeldRetakeMetres = 300f, HeldRetakeSeconds = 60f, HeldRevealPulseSeconds = 20f;
+        public const float HeldSeconds = 600f, HeldObserveRadius = 3000f, HeldRetakeSeconds = 60f, HeldRevealPulseSeconds = 20f;
         public const float RingBoostMetres = 12000f;
         public const float LiftPickupMetres = 150f, LiftDropMetres = 300f, LiftDwellSeconds = 10f, LiftMinPayMetres = 2000f;
         public const int LiftPay = 40, ExtractionPay = 40, CoverPay = 25;

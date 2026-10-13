@@ -191,17 +191,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
         }
 
-        private void Arc(VertexHelper mesh, float cx, float cy, float radius, float fromDeg, float toDeg, int segments)
-        {
-            for (int i = 0; i < segments; i++)
-            {
-                float a = Mathf.Lerp(fromDeg, toDeg, i / (float)segments) * Mathf.Deg2Rad;
-                float b = Mathf.Lerp(fromDeg, toDeg, (i + 1) / (float)segments) * Mathf.Deg2Rad;
-                Line(mesh, cx + Mathf.Cos(a) * radius, cy + Mathf.Sin(a) * radius,
-                           cx + Mathf.Cos(b) * radius, cy + Mathf.Sin(b) * radius);
-            }
-        }
-
         private void Line(VertexHelper mesh, float x1, float y1, float x2, float y2)
         {
             Rect r = rectTransform.rect;

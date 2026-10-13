@@ -530,29 +530,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 ? events.SupportCooldownMultiplierFor(PlayerIdentity.Of(player))
                 : 1f;
 
-        public void Arm(SupportActionId action)
-        {
-            if (pending)
-            {
-                Status = "REQUEST PENDING — wait for host acknowledgement.";
-                return;
-            }
-
-            if (ArmedAction.HasValue && ArmedAction.Value == action)
-            {
-                CancelArmed();
-                return;
-            }
-
-            SupportActionDefinition def = catalog != null ? catalog.Find(action) : null;
-            string name = def != null ? def.Name : "SUPPORT";
-            if (!TryArmMap(name + " ARMED · RIGHT-CLICK MAP")) return;
-
-            ArmedAction = action;
-            ArmedFrame = Time.frameCount;
-            Status = "ARMED: " + name + " — Right-click on map to execute (ESC to cancel).";
-        }
-
         private bool TryArmMap(string prompt)
         {
             if (WingLink.WingMapGestureArmed)

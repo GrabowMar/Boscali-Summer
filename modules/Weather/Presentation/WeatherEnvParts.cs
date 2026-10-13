@@ -613,7 +613,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
     /// </summary>
     internal sealed class EnvWindCard : EnvPart
     {
-        private const float DialR = 34f, DialTop = 16f, DiagramH = 112f;
+        private const float DialR = 34f, DiagramH = 112f;
         private readonly TMP_Text north, speedKey, speed, bearings, turbKey, turbValue, advisory;
         private EnvWind d = new EnvWind();
 

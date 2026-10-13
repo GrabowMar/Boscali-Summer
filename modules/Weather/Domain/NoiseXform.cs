@@ -15,7 +15,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
     /// </summary>
     internal sealed class NoiseXform
     {
-        public const int Low = 0, Mid = 1, High = 2, Horizon = 3, MidAligned = 4, HighAligned = 5, Layers = 6;
+        public const int Low = 0, Mid = 1, High = 2, MidAligned = 4, HighAligned = 5, Layers = 6;
 
         /// <summary>Offsets are drawn in [0, MaxOffset) metres: far more than any noise period, small enough that float32 keeps centimetres.</summary>
         public const float MaxOffset = 100000f;

@@ -20,24 +20,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return (f & SnapshotFlags.Bingo) != 0 ? "danger" : (f & SnapshotFlags.Joker) != 0 ? "armed" : "ready";
         }
     }
-
-    /// <summary>TACTICAL v3's alert stack (spec tactical v3 §2.1): which line each row shows.</summary>
-    internal static class AlertStack
-    {
-        public const int Cue = -2, Empty = -1;
-
-        /// <summary>Fills <paramref name="into"/>[0..rows): <see cref="Cue"/> first while an order is armed, then alert indices, then
-        /// <see cref="Empty"/>.</summary>
-        public static void Lines(int alertCount, bool armed, int rows, int[] into)
-        {
-            int a = 0;
-            for (int r = 0; r < rows && r < into.Length; r++)
-            {
-                if (r == 0 && armed) into[r] = Cue;
-                else into[r] = a < alertCount ? a++ : Empty;
-            }
-        }
-    }
 }
 
 namespace BoscaliSummer.Modules.Wing.Domain

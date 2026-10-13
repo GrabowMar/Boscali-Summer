@@ -16,7 +16,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// buttons act on the inspected aircraft. <see cref="Build"/> adds its parts to that sub-page's flow. Only WING uses it.</summary>
     internal sealed class WmcInspect
     {
-        private const int MaxChips = WcSnapshot.MaxMembers, StoreRows = 4, RecentRows = 5;
+        private const int MaxChips = WcSnapshot.MaxMembers, RecentRows = 5;
 
         private readonly WmcControls ids;
         private readonly uint[] chipIds = new uint[MaxChips];

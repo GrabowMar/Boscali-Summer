@@ -140,8 +140,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public const float EnumerateRange = 180000f;
 
         private const uint SaltMix = 0xBB67AE85u;
-        private const int SlotCount = 0, SlotX = 1, SlotZ = 2, SlotRank = 3, SlotRadius = 4, SlotSevere = 5, SlotRain = 6,
-            SlotHail = 7, SlotDepth = 8, SlotLightning = 9, SlotStrike = 10;
+        private const int SlotCount = 0, SlotX = 1, SlotZ = 2, SlotRank = 3, SlotRadius = 4, SlotSevere = 5,             SlotHail = 7, SlotDepth = 8, SlotLightning = 9, SlotStrike = 10;
 
         [ThreadStatic] private static StormCell[] scratch;
 

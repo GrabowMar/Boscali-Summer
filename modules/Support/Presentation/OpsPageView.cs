@@ -46,7 +46,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public string ArmedName = "", AimLine = "", OrderRight = "", Words = "";
         public AvState WordsTone = AvState.Ready;
         public bool Armed, Pending;
-        public string Alert = "", FrontWords = "";
+        public string FrontWords = "";
         public AvState FrontWordsTone = AvState.Inert;
     }
 

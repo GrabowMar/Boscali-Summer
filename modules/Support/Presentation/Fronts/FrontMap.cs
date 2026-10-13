@@ -167,7 +167,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public float Y => View.Y;
         public float W => View.W;
         public float H => View.H;
-        public Rect Plate => new Rect(View.X, View.Y, View.W, View.H);
 
         public Vector2 P(float u, float v) => View.P(u, v);
 
