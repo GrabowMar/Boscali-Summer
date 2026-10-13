@@ -39,6 +39,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         private readonly Dictionary<FactionHQ, FactionSpace> factions = new Dictionary<FactionHQ, FactionSpace>();
         private readonly Dictionary<FactionHQ, float> nextAttempt = new Dictionary<FactionHQ, float>();
+        private System.Collections.IEnumerator establishing;
         private readonly UplinkSpawner spawner = new UplinkSpawner();
         private readonly SpaceWatchOfficer watch = new SpaceWatchOfficer();
         private readonly Dictionary<FactionHQ, IntentEntry> intents = new Dictionary<FactionHQ, IntentEntry>();
@@ -70,6 +71,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             intents.Clear();
             factions.Clear();
             nextAttempt.Clear();
+            establishing = null;
             tickGate.Reset();
             scanCapLogged = false;
             spawner.ResetForScene();
@@ -454,6 +456,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     Plugin.Logger?.LogWarning("[Support.Space] Mirror poll failed: " + e.Message);
                 }
             }
+            // Site search is the old ~10 ms lump: one airbase or one fallback origin per frame instead of all at once.
+            if (establishing != null && !establishing.MoveNext()) establishing = null;
             if (!tickGate.Due(now, 1f, 0f)) return;   // 1 Hz slot 0 (table in HighCommandManager)
             spawner.RetryCleanup();
             // CYBER BIRD JAM: an enemy intrusion that holds our UPLINK node (or a fired BIRD JAM package) slows every bird task.
@@ -466,17 +470,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
             {
                 if (hq == null) continue;
                 if (factions.TryGetValue(hq, out FactionSpace faction)) { Refresh(hq, faction, now); RebuildBirds(hq, faction, now); continue; }
+                if (establishing != null) continue;
                 if (factions.Count >= MaximumFactions || nextAttempt.Count >= MaximumFactions && !nextAttempt.ContainsKey(hq)) continue;
                 if (nextAttempt.TryGetValue(hq, out float retry) && now < retry) continue;
                 nextAttempt[hq] = now + 30f;
-                if (TryEstablish(hq, out faction))
-                {
-                    factions.Add(hq, faction);
-                    FactionHQ resolvedFor = hq;
-                    SubscribeTasked(resolvedFor, (player, request, result) => manager?.SpaceNet?.OnTaskedResolved(resolvedFor, player, request, result));
-                    Plugin.Logger?.LogInfo("[Support.Space] " + hq.name + ": " + faction.Links.Length +
-                        " native uplink(s), OPTICAL / RADAR / KINETIC ready.");
-                }
+                establishing = Establish(hq); // stepped one slice per frame by Update
                 break; // Expensive initial world sampling is limited to one faction per mission second.
             }
         }
@@ -522,21 +520,25 @@ namespace BoscaliSummer.Modules.Support.Runtime
             Plugin.Logger?.LogWarning("[Support.Space] Uplink site search saw " + count + " units; only the first " + MaximumScanUnits + " are considered.");
         }
 
-        private bool TryEstablish(FactionHQ owner, out FactionSpace faction)
+        private System.Collections.IEnumerator Establish(FactionHQ owner)
         {
-            faction = null;
+            int generation = Generation;
+            FactionSpace faction = null;
             if (UnitRegistry.allUnits != null && UnitRegistry.allUnits.Count > MaximumScanUnits) NoteScanCap(UnitRegistry.allUnits.Count);
             var legal = new List<Candidate>(UplinkPlacement.MaxCandidates);
             Vector2 span = TheaterFrame.Resolve();
             if (FactionRegistry.airbaseLookup != null)
             {
                 int inspected = 0, heldBases = 0;
-                foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
+                var snapshot = new List<Airbase>(FactionRegistry.airbaseLookup.Values); // the lookup may change between frames
+                foreach (Airbase airbase in snapshot)
                 {
                     if (++inspected > 128 || heldBases >= MaximumBases) break;
                     if (airbase == null || airbase.disabled || airbase.AttachedAirbase || airbase.CurrentHQ != owner || airbase.center == null) continue;
                     heldBases++;
                     CollectAround(owner, airbase.center.position, airbase, span.magnitude, legal, 8);
+                    yield return null;
+                    if (generation != Generation) yield break;
                 }
             }
             var links = new List<Unit>(2);
@@ -572,9 +574,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     if (!GroundPlacement.DryGround(origin, out _) || !TryAround(owner, origin, null, span.magnitude, out Candidate field)) continue;
                     Create(owner, field, links);
                     if (links.Count > 0) break;
+                    yield return null;
+                    if (generation != Generation) yield break;
                 }
             }
-            if (links.Count == 0) return false;
+            if (links.Count == 0) yield break;
             var array = links.ToArray();
             var baseline = new float[array.Length];
             for (int i = 0; i < array.Length; i++) baseline[i] = UplinkSpawner.Health(array[i]);
@@ -582,7 +586,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 View = Array.AsReadOnly(array), Observations = new SpaceObservations(owner) };
             faction.Tasked = manager?.CreateTaskedDesk(this, owner, faction.Observations);
             SeedGeo(owner, faction.State);
-            return true;
+            if (owner == null || factions.ContainsKey(owner)) yield break;
+            factions.Add(owner, faction);
+            SubscribeTasked(owner, (player, request, result) => manager?.SpaceNet?.OnTaskedResolved(owner, player, request, result));
+            Plugin.Logger?.LogInfo("[Support.Space] " + owner.name + ": " + faction.Links.Length +
+                " native uplink(s), OPTICAL / RADAR / KINETIC ready.");
         }
 
         /// <summary>Parks the faction's three birds over its side of the front: own airbase centroid shifted toward the enemy's.</summary>

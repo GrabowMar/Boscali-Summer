@@ -57,18 +57,18 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         /// <paramref name="spawnBudget"/> pieces are placed per call (each is a vanilla scenery spawn): the next call,
         /// the manager's next tick, places the rest.
         /// </summary>
-        internal void Deploy(TrenchStage stage, int spawnBudget = int.MaxValue)
+        internal int Deploy(TrenchStage stage, int spawnBudget = int.MaxValue)
         {
-            if (position == null || position.Overrun) return;
+            if (position == null || position.Overrun) return 0;
             int target = TrenchTraceMath.WorksBudget(stage);
-            if (target == 0) return;
+            if (target == 0) return 0;
 
             Spawner spawner = NetworkSceneSingleton<Spawner>.i;
-            if (spawner == null || !spawner.IsServer) return;
+            if (spawner == null || !spawner.IsServer) return 0;
 
             List<UnitDefinition> pieces = ResolveCatalog();
-            if (pieces == null) return;  // Encyclopedia not loaded yet: retry later.
-            if (pieces.Count == 0) return; // No infantry-scale pieces in this build.
+            if (pieces == null) return 0;  // Encyclopedia not loaded yet: retry later.
+            if (pieces.Count == 0) return 0; // No infantry-scale pieces in this build.
 
             spawnsLeft = spawnBudget;
             DeployStructures(spawner, pieces);
@@ -79,6 +79,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                 if (Spawn(i, spawner, pieces)) spawned[i] = true;
                 if (Count != before) spawnsLeft--;
             }
+            return spawnBudget - spawnsLeft; // pieces placed, so the caller can share one budget across lines
         }
 
         private int spawnsLeft;
