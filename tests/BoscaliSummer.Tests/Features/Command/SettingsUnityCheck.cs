@@ -547,15 +547,19 @@ public static class SettingsUnityCheck
         foreach (string segment in new[] { "10 KM", "20 KM", "40 KM" }) Check(FindControl(content, segment) != null, "The HOLO RANGE strip has its " + segment + " segment");
         Check(HasText(content, "HOLO RANGE"), "The HOLO RANGE strip is labelled");
         Check(config.HoloMap.Value && config.HoloRangeKm.Value == 20 && !config.HoloNorthUp.Value, "The holo defaults are on, 20 km and heading up");
+        // A switch is an AvCell, not an AvControl: its help hangs on the cell's frame as an AvHelpTip (the strip's segments are AvControls, checked below).
         foreach (string cell in new[] { "HOLO MAP", "NORTH UP" })
-            foreach (AvControl control in content.Find("Cell " + cell).GetComponentsInChildren<AvControl>(true))
-                Check(!string.IsNullOrEmpty(control.Help) && control.Help.Length <= 120 && control.Help.IndexOf('\n') < 0, cell + " has one short line of help: '" + control.Help + "'");
+        {
+            AvHelpTip tip = content.Find("Cell " + cell).GetComponentInChildren<AvHelpTip>(true);
+            Check(tip != null && !string.IsNullOrEmpty(tip.Text) && tip.Text.Length <= 120 && tip.Text.IndexOf('\n') < 0, cell + " has one short line of help: '" + (tip != null ? tip.Text : "<none>") + "'");
+        }
         foreach (string segment in new[] { "10 KM", "20 KM", "40 KM" })
         {
             string help = FindControl(content, segment).Help;
             Check(!string.IsNullOrEmpty(help) && help.Length <= 120 && help.StartsWith(segment), segment + " has one short line of help that names it: '" + help + "'");
         }
-        Check(content.Find("Cell HOLO MAP").GetComponentInChildren<AvControl>(true).Help.Contains("map key"), "The HOLO MAP help says what the map key does now");
+        string holoHelp = content.Find("Cell HOLO MAP").GetComponentInChildren<AvHelpTip>(true).Text;
+        Check(holoHelp.StartsWith("Hold the map key") && holoHelp.Contains("tap"), "The HOLO MAP help says hold the map key for the hologram and tap for the full map: '" + holoHelp + "'");
 
         Click(FindControl(content, "40 KM"));
         Check(config.HoloRangeKm.Value == 40 && config.HoloMap.Value && !config.HoloNorthUp.Value, "The 40 KM segment writes HoloRangeKm and nothing else");

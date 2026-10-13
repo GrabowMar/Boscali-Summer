@@ -9,8 +9,11 @@ namespace BoscaliSummer.Tests.Features.Command
 
         public static void Run()
         {
-            TestKeyCycle();
-            TestProgrammaticAndDisabled();
+            TestTapAndHold();
+            TestKeyWithMfdUp();
+            TestDisabled();
+            TestTaps();
+            TestProgrammaticAndSim();
             TestCloses();
             TestSync();
             TestCellSizes();
@@ -24,59 +27,178 @@ namespace BoscaliSummer.Tests.Features.Command
             TestWords();
         }
 
-        // ------------------------------------------------------------------ the key's three stops
+        // ------------------------------------------------------------------ the map key: tap for the MFD map, hold for the holo
 
-        private static void TestKeyCycle()
+        private const float Tap = HoloMapState.TapSeconds;
+
+        /// <summary>The key goes down at <paramref name="at"/> with the corner map showing: the game's Maximize call, as the key path reaches it, and the first frame's tick.</summary>
+        private static void Press(HoloMapState state, float at, bool available = true)
+        {
+            TestAssert.That(state.KeyDown(available, at) == available, "Holo state: the key's Maximize is swallowed exactly when the holo is available");
+            TestAssert.Eq(state.Tick(at, true), HoloStep.None, "Holo state: nothing happens on the frame the key goes down");
+        }
+
+        private static void TestTapAndHold()
         {
             var state = new HoloMapState();
             TestAssert.Eq(state.Stage, HoloStage.Mini, "Holo state: starts at the corner map");
-            TestAssert.That(state.KeyMaximize(true), "Holo state: the map key from MINI is taken by the holo (the original Maximize is skipped)");
-            TestAssert.Eq(state.Stage, HoloStage.Holo, "Holo state: ... and the holo is up");
-            TestAssert.That(state.Holo, "Holo state: the holo flag reads the stage");
+            TestAssert.That(!state.KeyDriven, "Holo state: ... with nothing waiting on the key");
 
-            TestAssert.That(!state.KeyMaximize(true), "Holo state: the map key from HOLO lets the original Maximize run");
-            TestAssert.Eq(state.Stage, HoloStage.Mfd, "Holo state: ... which is the way on to the maximised map");
+            // A tap: nothing opens on key down, the MFD opens on release.
+            Press(state, 10f);
+            TestAssert.Eq(state.Stage, HoloStage.Pending, "Holo state: key down holds the Maximize back");
+            TestAssert.That(!state.Holo && state.KeyDriven, "Holo state: ... without a holo, and the key decides what is next");
+            TestAssert.Eq(state.Tick(10.1f, true), HoloStep.None, "Holo state: still down within the tap time: nothing yet");
+            TestAssert.Eq(state.Tick(10.15f, false), HoloStep.OpenMfd, "Holo state: let go within 0.2 s is a tap: open the MFD map");
+            TestAssert.Eq(state.Stage, HoloStage.Mini, "Holo state: ... which waits at the corner map for the Maximize it calls");
             state.Maximized();
             TestAssert.Eq(state.Stage, HoloStage.Mfd, "Holo state: the Maximize postfix agrees");
-            TestAssert.That(!state.Holo, "Holo state: the holo is gone in MFD");
+            TestAssert.Eq(state.Tick(10.2f, false), HoloStep.None, "Holo state: and the tap is spent");
 
-            state.Minimized();
-            TestAssert.Eq(state.Stage, HoloStage.Mini, "Holo state: the map key from MFD (Minimize) is back at the corner map");
-            TestAssert.That(state.KeyMaximize(true) && state.Holo, "Holo state: and round again");
+            // A hold: the holo appears at 0.2 s, stays as long as the key does, and no MFD opens.
+            state = new HoloMapState();
+            Press(state, 20f);
+            TestAssert.Eq(state.Tick(20f + Tap - .01f, true), HoloStep.None, "Holo state: just short of 0.2 s the holo is not up");
+            TestAssert.Eq(state.Tick(20f + Tap, true), HoloStep.ShowHolo, "Holo state: held for 0.2 s the holo is shown");
+            TestAssert.That(state.Holo && state.Stage == HoloStage.Holo && state.KeyDriven, "Holo state: ... and it is up");
+            for (float at = 20.3f; at < 22f; at += .1f)
+                TestAssert.Eq(state.Tick(at, true), HoloStep.None, "Holo state: the holo stays while the key is held");
+            TestAssert.That(state.Holo, "Holo state: ... still up after two seconds");
+            TestAssert.Eq(state.Tick(22.1f, false), HoloStep.HideHolo, "Holo state: letting go hides the holo");
+            TestAssert.That(!state.Holo && state.Stage == HoloStage.Mini, "Holo state: ... back at the corner map");
+            for (float at = 22.2f; at < 23f; at += .1f)
+                TestAssert.Eq(state.Tick(at, false), HoloStep.None, "Holo state: ... and no MFD map opens after a hold");
+            TestAssert.That(!state.KeyDriven, "Holo state: ... and nothing waits on the key");
+
+            // A hold, then a tap: the hold left nothing behind.
+            Press(state, 30f);
+            TestAssert.Eq(state.Tick(30.05f, false), HoloStep.OpenMfd, "Holo state: hold, release, then a tap opens the MFD map");
         }
 
-        private static void TestProgrammaticAndDisabled()
+        private static void TestKeyWithMfdUp()
         {
-            // Another caller's Maximize (a menu, a panel, automation) never goes through KeyMaximize: it opens the MFD at once.
+            // With the maximised map up the game's key handler calls Minimize, which is never held back: the machine only hears the postfix.
+            var state = new HoloMapState();
+            state.Maximized();
+            TestAssert.That(!state.KeyDown(true, 5f), "Holo state: a key Maximize while the MFD is up is not taken");
+            TestAssert.Eq(state.Stage, HoloStage.Mfd, "Holo state: ... and starts nothing");
+            state.Minimized();
+            TestAssert.Eq(state.Stage, HoloStage.Mini, "Holo state: the key minimises the MFD map at once, to the corner map");
+            for (float at = 5f; at < 7f; at += .1f)
+                TestAssert.Eq(state.Tick(at, true), HoloStep.None, "Holo state: the key still held after Minimize starts no hold");
+            TestAssert.That(!state.Holo && !state.KeyDriven, "Holo state: ... no holo, nothing waiting");
+            TestAssert.Eq(state.Tick(7.1f, false), HoloStep.None, "Holo state: ... and its release opens nothing");
+        }
+
+        private static void TestDisabled()
+        {
+            // The holo off, or no material, no baked terrain, no aircraft, a map the game refuses: the original Maximize runs on key down, no waiting.
+            var state = new HoloMapState();
+            TestAssert.That(!state.KeyDown(false, 1f), "Holo state: with the holo unavailable the key is not taken");
+            TestAssert.Eq(state.Stage, HoloStage.Mini, "Holo state: ... the stage waits for the Maximize postfix");
+            TestAssert.Eq(state.Tick(1f, true), HoloStep.None, "Holo state: ... and no hold starts");
+            for (float at = 1.1f; at < 2f; at += .1f)
+                TestAssert.Eq(state.Tick(at, true), HoloStep.None, "Holo state: ... however long the key is held");
+            state.Maximized();
+            TestAssert.Eq(state.Stage, HoloStage.Mfd, "Holo state: the MFD map opens at once, as without the holo");
+            TestAssert.Eq(state.Tick(2f, false), HoloStep.None, "Holo state: ... and its release opens nothing more");
+        }
+
+        private static void TestTaps()
+        {
+            // Two quick taps: the first opens the MFD map, the second is the key's Minimize.
+            var state = new HoloMapState();
+            Press(state, 0f);
+            TestAssert.Eq(state.Tick(.08f, false), HoloStep.OpenMfd, "Holo state: the first tap opens the MFD map");
+            state.Maximized();
+            state.Minimized();
+            Press(state, .25f);
+            TestAssert.Eq(state.Tick(.33f, false), HoloStep.OpenMfd, "Holo state: after the second press minimised it, a third is a tap again");
+
+            // A Maximize the game refuses (an aircraft is being chosen): the tap is spent, the next one works.
+            state = new HoloMapState();
+            Press(state, 0f);
+            TestAssert.Eq(state.Tick(.05f, false), HoloStep.OpenMfd, "Holo state: a tap asks for the MFD map");
+            state.Sync(false);
+            TestAssert.Eq(state.Stage, HoloStage.Mini, "Holo state: ... a refused Maximize leaves the corner map");
+            Press(state, .2f);
+            TestAssert.Eq(state.Tick(.3f, false), HoloStep.OpenMfd, "Holo state: ... and the next tap asks again");
+
+            // A frame that took longer than the tap time while the key was let go: the hold was never seen and opens nothing.
+            state = new HoloMapState();
+            Press(state, 0f);
+            TestAssert.Eq(state.Tick(.5f, false), HoloStep.None, "Holo state: a release seen after the tap time is not a tap");
+            TestAssert.Eq(state.Stage, HoloStage.Mini, "Holo state: ... and nothing is left waiting");
+            // ... while a hold seen late still shows the holo.
+            Press(state, 1f);
+            TestAssert.Eq(state.Tick(1.5f, true), HoloStep.ShowHolo, "Holo state: a hold first seen after a long frame shows the holo");
+        }
+
+        private static void TestProgrammaticAndSim()
+        {
+            // Another caller's Maximize (a menu, a panel, automation) never goes through KeyDown: it opens the MFD at once.
             var state = new HoloMapState();
             state.Maximized();
             TestAssert.Eq(state.Stage, HoloStage.Mfd, "Holo state: a programmatic Maximize from MINI opens the maximised map, not the holo");
 
             state = new HoloMapState();
-            state.KeyMaximize(true);
+            Press(state, 0f);
             state.Maximized();
-            TestAssert.Eq(state.Stage, HoloStage.Mfd, "Holo state: a programmatic Maximize with the holo up closes it for the maximised map");
-            TestAssert.That(!state.Holo, "Holo state: ... and the holo is not up");
+            TestAssert.Eq(state.Stage, HoloStage.Mfd, "Holo state: a programmatic Maximize with a tap waiting takes the MFD map");
+            TestAssert.Eq(state.Tick(.05f, false), HoloStep.None, "Holo state: ... and the tap is dropped, not opened twice");
 
-            // Holo turned off, or no material, or no aircraft: the key goes straight to the original.
             state = new HoloMapState();
-            TestAssert.That(!state.KeyMaximize(false), "Holo state: with the holo unavailable the key is not taken");
-            TestAssert.Eq(state.Stage, HoloStage.Mini, "Holo state: ... the stage waits for the Maximize postfix");
+            Press(state, 0f);
+            state.Tick(Tap, true);
             state.Maximized();
-            TestAssert.Eq(state.Stage, HoloStage.Mfd, "Holo state: ... which is MFD, as without the holo");
-            TestAssert.That(!state.KeyMaximize(true) && state.Stage == HoloStage.Mfd, "Holo state: a key Maximize while MFD is nothing to the holo");
+            TestAssert.That(!state.Holo, "Holo state: a programmatic Maximize with the holo up closes it for the maximised map");
+            TestAssert.Eq(state.Tick(1f, true), HoloStep.None, "Holo state: ... and the key still held shows nothing");
+
+            // The sim hook opens the holo without the key and it stays until it is closed.
+            state = new HoloMapState();
+            TestAssert.That(state.Open(true) && state.Holo && !state.KeyDriven, "Holo state: the sim hook opens the holo from MINI, and the key does not own it");
+            TestAssert.Eq(state.Tick(5f, false), HoloStep.None, "Holo state: ... no key held does not close it");
+            TestAssert.That(state.Open(true) && state.Holo, "Holo state: ... opening again keeps it up");
+            state.Close();
+            TestAssert.That(!state.Holo, "Holo state: closing it by hand closes it");
+            state.Open(true);
+            TestAssert.That(!state.KeyDown(true, 6f) && state.Stage == HoloStage.Mfd, "Holo state: the key with the sim hook's holo up is the way on to the MFD map");
+            TestAssert.That(!state.Open(true), "Holo state: the sim hook does not open the holo over the maximised map");
+            state.Minimized();
+            TestAssert.That(!state.Open(false), "Holo state: ... or when it is unavailable");
+            Press(state, 7f);
+            TestAssert.That(!state.Open(true), "Holo state: ... or while a tap waits");
         }
 
         private static void TestCloses()
         {
+            // Esc, a pause, death, eject, a lost aircraft, the setting off: Close. A waiting tap is dropped, a holo goes.
             var state = new HoloMapState();
-            state.KeyMaximize(true);
+            Press(state, 0f);
             state.Close();
-            TestAssert.Eq(state.Stage, HoloStage.Mini, "Holo state: Esc, pause, death, eject, a lost aircraft or the setting off closes the holo back to MINI");
+            TestAssert.Eq(state.Stage, HoloStage.Mini, "Holo state: a close drops a waiting tap");
+            TestAssert.Eq(state.Tick(.1f, false), HoloStep.None, "Holo state: ... a release in the pause opens no MFD map");
+            TestAssert.Eq(state.Tick(.15f, true), HoloStep.None, "Holo state: ... and a key still held after the pause shows no holo");
 
-            state.KeyMaximize(true);
+            Press(state, 1f);
+            state.Tick(1f + Tap, true);
+            TestAssert.That(state.Holo, "Holo state: a held key shows the holo");
+            state.Close();
+            TestAssert.That(!state.Holo && state.Stage == HoloStage.Mini, "Holo state: a close takes the holo down");
+            TestAssert.Eq(state.Tick(2f, true), HoloStep.None, "Holo state: ... and the key still held does not bring it back");
+            TestAssert.Eq(state.Tick(2.1f, false), HoloStep.None, "Holo state: ... or open the MFD map on release");
+            Press(state, 3f);
+            TestAssert.Eq(state.Tick(3.05f, false), HoloStep.OpenMfd, "Holo state: the key works again after the pause");
+
+            // The game minimising its map (a pause menu does) closes the holo and drops a tap.
+            state = new HoloMapState();
+            Press(state, 0f);
             state.Minimized();
-            TestAssert.Eq(state.Stage, HoloStage.Mini, "Holo state: the game minimising its map (a pause menu does) closes the holo");
+            TestAssert.Eq(state.Tick(.1f, false), HoloStep.None, "Holo state: the game minimising its map drops a waiting tap");
+            Press(state, 1f);
+            state.Tick(1f + Tap, true);
+            state.Minimized();
+            TestAssert.That(!state.Holo, "Holo state: ... and closes the holo");
 
             state.Close();
             TestAssert.Eq(state.Stage, HoloStage.Mini, "Holo state: closing at MINI changes nothing");
@@ -84,34 +206,35 @@ namespace BoscaliSummer.Tests.Features.Command
             state.Close();
             TestAssert.Eq(state.Stage, HoloStage.Mfd, "Holo state: the maximised map is not the holo's to close");
 
+            // A scene change starts at MINI, even with a tap waiting or the holo up.
             state.Reset();
             TestAssert.Eq(state.Stage, HoloStage.Mini, "Holo state: a scene change starts at MINI");
-            state.KeyMaximize(true);
+            Press(state, 0f);
             state.Reset();
-            TestAssert.That(!state.Holo, "Holo state: ... even with the holo up");
+            TestAssert.Eq(state.Tick(.05f, false), HoloStep.None, "Holo state: ... with a tap waiting it is dropped");
+            Press(state, 1f);
+            state.Tick(1f + Tap, true);
+            state.Reset();
+            TestAssert.That(!state.Holo, "Holo state: ... and with the holo up it is gone");
         }
 
         private static void TestSync()
         {
             var state = new HoloMapState();
-            state.KeyMaximize(true);
+            Press(state, 0f);
             state.Sync(true);
-            TestAssert.Eq(state.Stage, HoloStage.Mfd, "Holo state: a map that is maximised is MFD, and the holo cannot be up with it");
+            TestAssert.Eq(state.Stage, HoloStage.Mfd, "Holo state: a map that is maximised is MFD, and no tap waits with it");
+            TestAssert.Eq(state.Tick(.05f, false), HoloStep.None, "Holo state: ... so a release opens nothing");
 
             state.Sync(false);
             TestAssert.Eq(state.Stage, HoloStage.Mini, "Holo state: MFD with the map not maximised (a Maximize the game refused) is MINI");
 
-            state.KeyMaximize(true);
+            Press(state, 1f);
+            state.Sync(false);
+            TestAssert.Eq(state.Stage, HoloStage.Pending, "Holo state: a tap waits while the map stays minimised");
+            state.Tick(1f + Tap, true);
             state.Sync(false);
             TestAssert.That(state.Holo, "Holo state: the holo stays up while the map stays minimised");
-
-            TestAssert.That(state.Open(true) && state.Holo, "Holo state: the sim hook keeps the holo up");
-            state.Close();
-            TestAssert.That(state.Open(true), "Holo state: the sim hook opens the holo from MINI");
-            state.Maximized();
-            TestAssert.That(!state.Open(true), "Holo state: ... not from the maximised map");
-            state.Minimized();
-            TestAssert.That(!state.Open(false), "Holo state: ... and not when it is unavailable");
         }
 
         // ------------------------------------------------------------------ the grid, in any cell size

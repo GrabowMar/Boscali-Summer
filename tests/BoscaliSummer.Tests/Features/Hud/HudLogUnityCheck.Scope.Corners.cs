@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using NOAvionics;
 using TMPro;
 using UnityEngine;
@@ -26,13 +27,16 @@ public static partial class HudLogUnityCheck
         public Transform MapImage;
         public Image Darkener, Plate;
         public TextMeshProUGUI First;
+        /// <summary>The stand-in for MessageUI.chat (inactive until the pilot types) and the stand-ins for its two text objects.</summary>
+        public GameObject Chat;
+        public readonly List<TextMeshProUGUI> Texts = new List<TextMeshProUGUI>();
         public Vector2 Size;
         /// <summary>Canvas units (pixels here) to a native unit (the screen's height over 1080) and to a design unit (never under 0.85).</summary>
         public float S, U;
     }
 
     /// <summary>The board with a stand-in kill feed and map plate adopted as the native corners, presented once with <paramref name="options"/>.</summary>
-    private static CornerRig MakeCorners(Vector2 size, object options, int lineCount = 4, float heading = 0f)
+    private static CornerRig MakeCorners(Vector2 size, object options, int lineCount = 4, float heading = 0f, float preGroupAlpha = -1f)
     {
         var rig = new CornerRig { Size = size, S = size.y / 1080f, U = Mathf.Max(size.y / 1080f, 0.85f) };
         MakeBoard(size, 2f, out rig.Canvas, out rig.Status, out rig.Frame);
@@ -73,13 +77,21 @@ public static partial class HudLogUnityCheck
             label.font = sans; label.fontSharedMaterial = sans.material; label.fontSize = 15f * rig.S; label.richText = true; label.raycastTarget = false;
             label.alignment = TextAlignmentOptions.MidlineLeft; label.enableWordWrapping = false; label.overflowMode = TextOverflowModes.Overflow;
             label.text = lineCount == 1 ? "<color=#33ff44>ANumeric joined the game</color>"
-                : "<color=" + lines[i][1] + ">" + lines[i][0] + "</color> <color=#f4f6f8>demolished</color> <color=" + lines[i][3] + ">" + lines[i][2] + "</color>";
+                : "<color=" + lines[i][1] + ">" + lines[i][0] + "</color> demolished <color=" + lines[i][3] + ">" + lines[i][2] + "</color>";      // the game's own: the names are tagged, the verb between them is not
             var rect = label.rectTransform;
             rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0f, 1f);
             rect.sizeDelta = new Vector2(465f, 20f) * rig.S;
             rect.anchoredPosition = new Vector2(6f * rig.S, -((lineCount == 1 ? 15f : centres[i]) - 10f) * rig.S);      // the game's one line: its capitals at y 9 to 21, centre 15
             if (i == 0) rig.First = label;
+            rig.Texts.Add(label);
         }
+        // A group a feed text already had (the teardown case): the mod reuses it and gives its alpha back.
+        if (preGroupAlpha >= 0f) rig.Texts[1].gameObject.AddComponent<CanvasGroup>().alpha = preGroupAlpha;
+        // The chat input, inactive as the game has it until the pilot opens it.
+        rig.Chat = new GameObject("ChatBox", typeof(RectTransform));
+        rig.Chat.transform.SetParent(box.transform, false);
+        rig.Chat.SetActive(false);
+        foreach (TextMeshProUGUI t in rig.Texts) t.ForceMeshUpdate();      // the game's text has been laid out: the log reads its length
         // The map's plate: an invisible rectangle where the game's is (the backdrop has the map itself), anchored bottom-left.
         var plate = new GameObject("mapBackground", typeof(RectTransform));
         rig.MapPlate = (RectTransform)plate.transform;
@@ -92,8 +104,10 @@ public static partial class HudLogUnityCheck
         rig.MapImage.SetParent(rig.MapPlate, false);
         rig.MapImage.localEulerAngles = new Vector3(0f, 0f, heading);
 
-        Call(rig.Status, "AdoptCorners", rig.Darkener, rig.MapPlate, rig.MapImage);
+        Call(rig.Status, "AdoptCorners", rig.Darkener, rig.MapPlate, rig.MapImage, rig.Texts.ToArray<TMP_Text>(), rig.Chat);
+        Set(rig.Status, "logClockOverride", LogNow);
         Set(rig.Status, "Options", options);
+        SeedLog(rig);
         PresentCorners(rig);
         return rig;
     }
@@ -207,7 +221,7 @@ public static partial class HudLogUnityCheck
         foreach (Rect q in CornerQuads(rig))
             Check(!(q.xMin < ink.xMax - 0.5f && q.xMax > ink.xMin + 0.5f && q.yMin < ink.yMax - 0.5f && q.yMax > ink.yMin + 0.5f), "One line: the furniture stays off the first letter: " + q + " on " + ink + " " + res);
         rig.Plate.color = new Color(0.9f, 0.1f, 0.1f, 1f);      // a plate that cannot be mistaken for any backdrop (the game's is near black over a dark sky): this case is about whether it is drawn at all
-        int px = Mathf.RoundToInt(192f * rig.S), py = Mathf.RoundToInt(30f * rig.S);      // inside the box, under the line's last letters, clear of the brackets
+        int px = Mathf.RoundToInt(192f * rig.S), py = Mathf.RoundToInt(3f * rig.S);      // inside the box, over the log's shelf line (which is 18 down) and clear of everything it draws
         string stem = "corners-oneline-" + res;
         Capture(rig.Canvas, stem + "-hidden.png");
         Color32 hidden = PngPixel(stem + "-hidden.png", px, py);
@@ -224,13 +238,15 @@ public static partial class HudLogUnityCheck
     private static void CornerShot(CornerRig rig, string name)
     {
         string tag = "corners-" + name + "-" + (int)rig.Size.x + "x" + (int)rig.Size.y;
-        foreach (string root in new[] { "cornerShade", "cornerFurniture" })
+        foreach (string root in new[] { "cornerShade", "cornerFurniture", "logRoot" })
         {
             var tree = (RectTransform)Field(rig.Status, root);
             if (tree != null) foreach (Graphic g in tree.GetComponentsInChildren<Graphic>(true)) Check(!g.raycastTarget, "Corners take no click: " + g.name + " " + tag);
         }
         var surface = (AvVector)Field(rig.Status, "cornerVector");
         Check(surface == null || !surface.Buffer.Overflowed, "The corner furniture buffer did not fill: " + tag);
+        var log = (AvVector)Field(rig.Status, "logVector");
+        Check(log == null || !log.Buffer.Overflowed, "The event log buffer did not fill: " + tag);
         Capture(rig.Canvas, tag + ".png");
     }
 
@@ -241,18 +257,13 @@ public static partial class HudLogUnityCheck
         float u = rig.U, s = rig.S, h = rig.Size.y;
         List<Rect> quads = CornerQuads(rig);
         Dictionary<string, Rect> words = CornerWords(rig);
-        float feedBottom = 90f * s;
-        // DL EVT LOG: arm-10 brackets at x 2, corners 3 under the box's top and 4 over its bottom; the shelf's line 8 under the box, from x 2.
-        Check(HasLine(quads, true, 3f * u, 2f * u, 12f * u) == feed, "DL EVT LOG: the top bracket's arm along y 3 from x 2 to 12 (" + feed + "): " + res);
-        Check(HasLine(quads, false, 2f * u, 3f * u, 13f * u) == feed, "DL EVT LOG: ...and down x 2 from y 3 to 13: " + res);
-        Check(HasLine(quads, true, feedBottom - 4f * u, 2f * u, 12f * u) == feed, "DL EVT LOG: the bottom bracket's arm along 4 over the box's bottom: " + res);
-        Check(HasLine(quads, false, 2f * u, feedBottom - 14f * u, feedBottom - 4f * u) == feed, "DL EVT LOG: ...and up from there: " + res);
-        Check(HasLine(quads, true, feedBottom + 8f * u, 2f * u, 10f * u) == feed, "DL EVT LOG: the shelf's line 8 under the box, from x 2: " + res);
-        Check(words.ContainsKey("DL EVT LOG") == feed, "DL EVT LOG: the caption is on the shelf (" + feed + "): " + res);
+        // DL EVT LOG (its own surface: EventLog check): the caption is on the log's shelf, 6 under the block's top, which is 12 under the box's top (y 18, the board's shelves'), 12 in from the block's left edge, which is 4 in from the box's.
+        Dictionary<string, Rect> logWords = LogWords(rig);
+        Check(logWords.ContainsKey("DL EVT LOG") == feed, "DL EVT LOG: the caption is on the shelf (" + feed + "): " + res);
         if (feed)
         {
-            Rect w = words["DL EVT LOG"];
-            Check(Mathf.Abs(w.center.y - (feedBottom + 8f * u)) <= 4f && Mathf.Abs(w.xMin - 14f * u) <= 6f * u, "DL EVT LOG: the caption sits on the shelf's line at x 14: " + w + " " + res);
+            Rect w = logWords["DL EVT LOG"];
+            Check(Mathf.Abs(w.center.y - 18f * u) <= 4f && Mathf.Abs(w.xMin - 16f * u) <= 6f * u, "DL EVT LOG: the caption sits on the shelf's line at x 16: " + w + " " + res);
         }
         // TAC MAP: the plate is x 0..320 by 760..1080 (native units); brackets 4 in at left and right, 6 under the top, 12 over the bottom, arm 18 (design units at 1080p: native units carried by k); the caption shelf INSIDE the frame at its
         // lower left: its line 14 over the bottom brackets' line, from 6 in from the left brackets (where a screen-edge marker cannot sit on it).
@@ -342,7 +353,7 @@ public static partial class HudLogUnityCheck
             Call(rig.Status, "CornersFrame", true, false);      // a frame between two ticks: the corner notices on its own
             CornerPlaces(rig, true, false);
             Check(!CornerWords(rig).ContainsKey("N") && !CornerWords(rig).ContainsKey("TAC MAP"), "Holo on: no caption, no north tick, the map dressing is hidden whole: " + res);
-            Check(CornerWords(rig).ContainsKey("DL EVT LOG") && PlateAlpha(rig) == 0f, "...and the kill feed's corner is as it was: " + res);
+            Check(LogWords(rig).ContainsKey("DL EVT LOG") && PlateAlpha(rig) == 0f, "...and the kill feed's corner is as it was: " + res);
             CornerShot(rig, "holo");
             PresentCorners(rig);
             CornerPlaces(rig, true, false);
@@ -385,10 +396,12 @@ public static partial class HudLogUnityCheck
             Check(Up("cornerShade", rig.Status) && Up("cornerFurniture", rig.Status), "Corners on: the shade and the furniture are up: " + res);
             CornerPlaces(rig, true, true);
             CornerBoardBox(rig);
-            foreach (TextMeshProUGUI line in rig.FeedBox.GetComponentsInChildren<TextMeshProUGUI>()) Check(line.gameObject.activeInHierarchy && line.color.a > 0.99f && line.text.Contains("demolished"), "The game's own feed text is not touched: " + line.text);
+            foreach (TextMeshProUGUI line in rig.Texts) Check(line.gameObject.activeInHierarchy && line.color.a > 0.99f && line.text.Contains("demolished"), "The game's own feed text is not touched, only not seen (the log draws the lines): " + line.text);
+            Check(TextAlpha(rig) == 0f, "Corners on: ...the game's feed text is hidden through our group: " + res);
             CornerShot(rig, "on");
             CornerNorth(rig);
             Check(EndCorners(rig) == 1f, "Teardown gives the feed's plate back: " + res);
+            ScopeEventLog(size);
             CornerHolo(size);
 
             // Corners off: nothing of ours, the plate as the game made it.
@@ -476,13 +489,15 @@ public static partial class HudLogUnityCheck
         Vector2 moved = root.anchoredPosition - at;
         Check(moved == new Vector2(2f, -1f), "sway: the board moved by whole pixels (2, -1): " + moved);
         Check(shade.offsetMin == new Vector2(2f, -1f) && furniture.offsetMax == new Vector2(2f, -1f), "sway: the corners moved with it: " + shade.offsetMin + " " + furniture.offsetMax);
+        var logRoot = (RectTransform)Field(rig.Status, "logRoot");
+        Check(logRoot.offsetMin == new Vector2(2f, -1f) && logRoot.offsetMax == new Vector2(2f, -1f), "sway: ...and the event log: " + logRoot.offsetMin);
         Check(Mathf.Abs(band.position.y - bandY) < 0.01f && Mathf.Abs(feedBand.position.y - feedBandY) < 0.01f, "sway: both sun bands stay hung from the top of the screen");
         Canvas.ForceUpdateCanvases();
         CornerPlaces(rig, true, true);      // the furniture surface moved as a whole: its quads are where they were in it
         CornerShot(rig, "sway");
         Call(rig.Status, "ApplySway", 0.3f / rig.U, 0.2f / rig.U);      // under half a pixel: nothing to move
         Check(root.anchoredPosition == at, "sway: under half a pixel is no pixel: the board is back where it was: " + root.anchoredPosition);
-        Check(shade.offsetMin == Vector2.zero && furniture.offsetMin == Vector2.zero, "sway: ...and the corners with it");
+        Check(shade.offsetMin == Vector2.zero && furniture.offsetMin == Vector2.zero && logRoot.offsetMin == Vector2.zero, "sway: ...and the corners with it");
         Call(rig.Status, "ApplySway", 9f, -9f);
         Check(root.anchoredPosition != at, "sway: a swing is a move");
         Call(rig.Status, "ApplySway", 0f, 0f);

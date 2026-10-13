@@ -5,7 +5,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// The visor's own layers on the COCKPIT tab, below the TAC BOARD: the terrain ghost (the Command module draws it, a saved client-local
-    /// level that applies at once, so a pilot sees it in flight and there is no preview here) and the HOLO MAP the map key now stops at (a switch, a range strip and a north-up switch,
+    /// level that applies at once, so a pilot sees it in flight and there is no preview here) and the HOLO MAP the map key projects while it is held (a switch, a range strip and a north-up switch,
     /// all saved client-local entries that apply at once).
     /// </summary>
     internal sealed partial class SettingsMfdPanel
@@ -31,7 +31,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Func<bool> holoOn = () => settings.HoloMap.Value;
             Func<string> holoOff = () => "Turn on HOLO MAP first.";
             ToggleCell(flow, flow.Grid(1), page, "HOLO MAP",
-                "The map key stops at a 3D hologram of the ground around you before the full map. OFF skips it.",
+                "Hold the map key to project a 3D hologram of the ground around you; tap it for the full map.",
                 () => settings.HoloMap.Value, v => settings.HoloMap.Value = v);
             BoardStrip(flow, page, "HOLO RANGE", HoloRangeNames, HoloRangeBriefs,
                 () => Array.IndexOf(HoloRanges, settings.HoloRangeKm.Value), i => settings.HoloRangeKm.Value = HoloRanges[i], holoOn, holoOff);

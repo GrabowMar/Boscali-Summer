@@ -12,15 +12,17 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Command.Runtime
 {
     /// <summary>
-    /// The HOLO MAP: the map key's middle stop. MINI (the game's small corner map) -> key -> HOLO -> key -> MFD (the game's maximised map) -> key -> MINI. The HOLO is a wire
+    /// The HOLO MAP: the map key HELD. With the game's small corner map showing, a tap opens the game's maximised map (MFD) as it always did, and holding the key past 0.2 s projects the
+    /// holo for as long as the key stays down; letting go closes it and opens no MFD. With the maximised map up the key minimises it at once, as in the vanilla game. The HOLO is a wire
     /// relief of the real ground around the player's aircraft, seen from a fixed tilt with the aircraft in the middle (heading up, or north up), drawn into a texture of the mod's
     /// own (<see cref="HoloGrid"/> + <see cref="HoloView"/>, no game camera involved) and shown over the bottom-left corner of the HUD as projected light, with the aircraft, range
     /// rings, airbases, the units the game's map shows and the selected target drawn over it. The pilot keeps flying: nothing here captures the cursor, blocks an input or pauses.
-    /// <para>Only the key path is diverted. The game's key handler (<c>ExtraUiInput.Update</c>) calls <c>DynamicMap.Maximize</c> on the Rewired "Map" button; two patches
-    /// (<see cref="HoloMapKeyScopePatch"/>, <see cref="HoloMapKeyPatch"/>) tell this class that call is the key's, and it may take the press instead (<see cref="KeyTakesMaximize"/>). The mod's
-    /// own callers of Maximize (menus, panels, automation) open the maximised map directly, as before, and close the holo.</para>
-    /// <para>It closes on Esc, a pause, death, eject, no living aircraft, the HUD or the corner map going away, the setting turned off, any maximised map and a scene change, and fails
-    /// open: no baked terrain, no additive UI material or no HUD canvas, and the key goes straight to the maximised map. The state machine is <see cref="HoloMapState"/>.</para>
+    /// <para>Only the key-down Maximize is diverted. The game's key handler (<c>ExtraUiInput.Update</c>) calls <c>DynamicMap.Maximize</c> the frame the Rewired "Map" button goes down; two patches
+    /// (<see cref="HoloMapKeyScopePatch"/>, <see cref="HoloMapKeyPatch"/>) tell this class that call is the key's, and it swallows it and waits (<see cref="KeyTakesMaximize"/>). Each frame it polls the
+    /// same Rewired action for "held": released within 0.2 s it calls Maximize itself, outside the key path, so every Maximize listener runs as for the game's own call; held longer it shows the
+    /// holo and hides it on release. Minimize is never touched. The mod's own callers of Maximize (menus, panels, automation) open the maximised map directly, as before, and close the holo.</para>
+    /// <para>It closes (and a waiting tap is dropped) on Esc, a pause, death, eject, no living aircraft, the HUD or the corner map going away, the setting turned off, any maximised map and a scene change, and fails
+    /// open: no baked terrain, no additive UI material or no HUD canvas, and the key goes straight to the maximised map on key down, no waiting. The state machine is <see cref="HoloMapState"/>.</para>
     /// </summary>
     // Runs after the native camera and map (order 2) have settled.
     [DefaultExecutionOrder(100)]
@@ -35,13 +37,17 @@ namespace BoscaliSummer.Modules.Command.Runtime
         internal static HoloMap Live { get; private set; }
 
         /// <summary>The hologram is up (the pilot is at HOLO): the HUD's own corner-map dressing is to be hidden meanwhile.</summary>
-        public static bool Active { get; private set; }
+        private static bool active;
+        /// <summary>The hologram is up. Also tells the HUD (Core HudMapState) so its own corner-map dressing steps aside.</summary>
+        public static bool Active { get => active; private set { active = value; BoscaliSummer.Core.Contracts.HudMapState.HoloActive = value; } }
 
         /// <summary>True while the game's own <c>ExtraUiInput.Update</c> runs: a Maximize call made then is the map key's.</summary>
         internal static bool InKeyUpdate { get; set; }
 
         private CommandSettings settings;
         private readonly HoloMapState state = new HoloMapState();
+        // The player and action the game's own key handler reads (ExtraUiInput: ReInput.players.GetPlayer(0), "Map").
+        private Rewired.Player keyPlayer;
         private TerrainHeightField field;
         private float nextField, nextRender, nextScan;
         private float grow;
@@ -75,8 +81,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
         // ------------------------------------------------------------------ the key
 
         /// <summary>
-        /// The Maximize patch asks, before the original runs: true when the holo takes this press instead (the original is then skipped). False for every Maximize that is not the map
-        /// key's, and for the key itself when the holo is off, unavailable, or already up (that press is the way on to the maximised map).
+        /// The Maximize patch asks, before the original runs: true when the key-down press is swallowed (the original is then skipped) until the next frames tell a tap from a hold. False for every
+        /// Maximize that is not the map key's, and for the key itself when the holo is off or unavailable (the map opens at once, as in the vanilla game) or the sim hook's holo is up.
         /// </summary>
         internal static bool KeyTakesMaximize()
         {
@@ -93,10 +99,24 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private bool OnKey()
         {
             bool available = state.Stage == HoloStage.Mini && CanOpen();
-            bool take = state.KeyMaximize(available);
-            if (take) Opened();
-            else if (state.Stage == HoloStage.Mfd) Hide();
+            bool take = state.KeyDown(available, Time.unscaledTime);
+            if (!take && state.Stage == HoloStage.Mfd) Hide();
             return take;
+        }
+
+        /// <summary>The map key is down now: the same Rewired player and action the game's key handler reads.</summary>
+        private bool KeyHeld()
+        {
+            if (!Rewired.ReInput.isReady) return false;
+            if (keyPlayer == null) keyPlayer = Rewired.ReInput.players.GetPlayer(0);
+            return keyPlayer != null && keyPlayer.GetButton("Map");
+        }
+
+        /// <summary>A tap: the maximised map the game would have opened on key down, called here outside the key path so the Maximize patches and every listener run as for the game's own call.</summary>
+        private static void OpenMfd()
+        {
+            DynamicMap map = SceneSingleton<DynamicMap>.i;
+            if (map != null && !DynamicMap.mapMaximized) map.Maximize();
         }
 
         private void NativeMaximized()
@@ -142,10 +162,11 @@ namespace BoscaliSummer.Modules.Command.Runtime
             Active = true;
             ShowRoot();
             Refresh();
+            nextRender = Time.unscaledTime + RenderInterval;
             ApplyGrow();
         }
 
-        /// <summary>Opens or closes the holo without the key (the sim hook); true when it is up afterwards.</summary>
+        /// <summary>Opens or closes the holo without the key (the sim hook); true when it is up afterwards. An opened holo stays up until it is closed, whatever the map key does.</summary>
         internal bool SimOpen(bool open)
         {
             if (!open)
@@ -165,7 +186,13 @@ namespace BoscaliSummer.Modules.Command.Runtime
             if (Application.isBatchMode || settings == null) return;
             state.Sync(DynamicMap.mapMaximized);
             PreloadField();
-            if (state.Holo && !Wanted()) state.Close();
+            if ((state.Holo || state.Stage == HoloStage.Pending) && !Wanted()) state.Close();
+            switch (state.Tick(Time.unscaledTime, state.KeyDriven && KeyHeld()))
+            {
+                case HoloStep.ShowHolo: Opened(); break;
+                case HoloStep.HideHolo: Hide(); break;
+                case HoloStep.OpenMfd: OpenMfd(); break;
+            }
             if (!state.Holo)
             {
                 if (Active || (root != null && root.activeSelf)) Hide();
@@ -195,7 +222,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             if (FlightReady(out _)) MfdTerrainRelief.TryGetHeightField(out field);
         }
 
-        /// <summary>The holo stays up only while all of this holds: the setting, no Esc, a living aircraft, the HUD and the corner map showing, no pause or cinematic mode.</summary>
+        /// <summary>The holo stays up (and a tap waits to be told from a hold) only while all of this holds: the setting, no Esc, a living aircraft, the HUD and the corner map showing, no pause or cinematic mode.</summary>
         private bool Wanted()
         {
             return settings.HoloMap.Value && !Input.GetKeyDown(KeyCode.Escape) && FlightReady(out plane) && SceneReady();
@@ -260,6 +287,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         {
             ReleaseAll();
             state.Reset();
+            keyPlayer = null;
             field = null;
             plane = null;
             failure = "";

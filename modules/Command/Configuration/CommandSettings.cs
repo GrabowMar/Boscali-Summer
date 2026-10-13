@@ -77,7 +77,7 @@ namespace BoscaliSummer.Modules.Command.Configuration
             TerrainGhost = config.Bind("Command", "TerrainGhost", 0.35f,
                 new ConfigDescription("Visor terrain ghost: a very faint wire relief of the real ground around and below your aircraft, drawn over the cockpit view in the HUD's colours. Ground that can hit you glows amber. 0 turns it off, 1 is clearly visible. Needs a map with baked terrain. Applies now; no restart.", new AcceptableValueRange<float>(0f, 1f)));
             HoloMap = config.Bind("Command", "HoloMap", true,
-                new ConfigDescription("Holo map: the map key stops at a 3D wire hologram of the real ground around your aircraft, drawn in the HUD's colours over the corner of the screen, before the full map (corner map, then holo, then full map, then the corner map again). Off sends the key straight to the full map. Needs a map with baked terrain. Applies now; no restart."));
+                new ConfigDescription("Holo map: hold the map key to project a 3D wire hologram of the real ground around your aircraft, drawn in the HUD's colours over the corner of the screen; it goes when you let go. A quick tap still opens the full map. Off makes the key open the full map the moment it is pressed. Needs a map with baked terrain. Applies now; no restart."));
             HoloRangeKm = config.Bind("Command", "HoloRangeKm", 20,
                 new ConfigDescription("Holo map: how far the hologram reaches from your aircraft, in kilometres: 10, 20 or 40. Applies now; no restart.", new AcceptableValueList<int>(10, 20, 40)));
             HoloNorthUp = config.Bind("Command", "HoloNorthUp", false,
