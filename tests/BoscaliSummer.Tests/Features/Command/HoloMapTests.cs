@@ -24,6 +24,7 @@ namespace BoscaliSummer.Tests.Features.Command
             TestEdgeFade();
             TestLineStrength();
             TestMatrices();
+            TestDepthOrder();
             TestProjection();
             TestAircraftPlace();
             TestFit();
@@ -470,6 +471,33 @@ namespace BoscaliSummer.Tests.Features.Command
                         "Holo view: the render's matrices and the marks' projection put a point in the same place (heading " + heading + ")");
                 }
             }
+        }
+
+        private static void TestDepthOrder()
+        {
+            // The lines are drawn a little above the surface so they pass its depth test: a lifted point must be nearer (a smaller GL depth, z over w) than the point under it, at any heading and in both frames.
+            var view = new float[HoloView.Elements];
+            var proj = new float[HoloView.Elements];
+            foreach (HoloShape shape in new[] { HoloShape.Mini, HoloShape.Big })
+            foreach (float heading in new[] { 0f, 90f, 215f })
+            {
+                HoloCamera camera = Camera(shape, false, shape == HoloShape.Mini ? 340f / 300f : 1.3f, 20, heading);
+                HoloView.View(camera, view);
+                HoloView.Projection(camera, proj);
+                float low = Depth(view, proj, 3000f, 400f, 5000f), high = Depth(view, proj, 3000f, 400f + HoloGrid.LineLift * 625f, 5000f);
+                TestAssert.That(high < low, "Holo depth: a point lifted above the ground is nearer than the ground under it (smaller depth)");
+                TestAssert.That(low > -1f && low < 1f, "Holo depth: the scene lies between the near and far planes");
+            }
+            TestAssert.Near(HoloGrid.DepthClear(false), 1f, "Holo depth: an ordinary buffer is cleared to 1, the far plane");
+            TestAssert.Near(HoloGrid.DepthClear(true), 0f, "Holo depth: a reversed buffer is cleared to 0, the far plane");
+        }
+
+        /// <summary>The GL clip depth (z over w, -1 near .. 1 far) of a scene point under the camera's view and projection matrices.</summary>
+        private static float Depth(float[] view, float[] proj, float east, float up, float north)
+        {
+            float vy = view[8] * east + view[9] * up + view[10] * north + view[11];
+            float z = proj[10] * vy + proj[11], w = proj[14] * vy;
+            return z / w;
         }
 
         private static void TestProjection()

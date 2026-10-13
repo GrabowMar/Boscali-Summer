@@ -313,6 +313,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 { "additiveMaterial", additive != null },
                 { "renderTexture", rt != null && rt.IsCreated() },
                 { "depthPath", depthPath },
+                { "reversedZ", SystemInfo.usesReversedZBuffer },
+                { "graphicsApi", SystemInfo.graphicsDeviceType.ToString() },
                 { "vertexCount", nodes },
                 { "litVertices", litVertices },
                 { "gridCellsX", halfX * 2 },

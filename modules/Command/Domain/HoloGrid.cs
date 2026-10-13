@@ -37,6 +37,12 @@ namespace BoscaliSummer.Modules.Command.Domain
         private const float SeaTolerance = .01f;
         private const float Deg = MathF.PI / 180f;
 
+        /// <summary>
+        /// What the depth buffer is cleared to, the far plane: 1 for an ordinary buffer, 0 for a reversed one (Direct3D 11: Unity's <c>SystemInfo.usesReversedZBuffer</c>, where the GPU projection matrix gives
+        /// nearer points the greater depth and a nearer point passes a <c>GreaterEqual</c> test). The render sets its depth tests and this clear by the platform, since a test set through a material property is not turned around for it.
+        /// </summary>
+        internal static float DepthClear(bool reversedZ) => reversedZ ? 0f : 1f;
+
         /// <summary>Metres between nodes for a picture of <paramref name="rangeKm"/> kilometres from the aircraft to the frame's side, with <paramref name="cells"/> cells across twice that.</summary>
         internal static float CellMetres(int rangeKm, int cells) => rangeKm * 2000f / cells;
 

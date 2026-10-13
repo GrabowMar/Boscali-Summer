@@ -66,8 +66,10 @@ namespace BoscaliSummer.Modules.Command.Runtime
             Shader shader = Shader.Find(LineShader);
             if (shader == null) return false;
             // The surface: opaque, black (the material's colour multiplies the vertex colour), depth written and tested. The lines: additive, tested but never written. The fade: multiplies what is there.
-            surfaceMaterial = Line(shader, "BoscaliHoloSurface", BlendMode.One, BlendMode.Zero, 1, CompareFunction.LessEqual, Color.black);
-            lineMaterial = Line(shader, "BoscaliHoloLines", BlendMode.One, BlendMode.One, 0, CompareFunction.LessEqual, Color.white);
+            // The depth test is set through a material property, which Unity does not turn around for a reversed depth buffer (D3D11 and the like), so it is chosen here: "in front" is a greater depth there.
+            CompareFunction nearer = SystemInfo.usesReversedZBuffer ? CompareFunction.GreaterEqual : CompareFunction.LessEqual;
+            surfaceMaterial = Line(shader, "BoscaliHoloSurface", BlendMode.One, BlendMode.Zero, 1, nearer, Color.black);
+            lineMaterial = Line(shader, "BoscaliHoloLines", BlendMode.One, BlendMode.One, 0, nearer, Color.white);
             fadeMaterial = Line(shader, "BoscaliHoloFade", BlendMode.Zero, BlendMode.SrcColor, 0, CompareFunction.Always, Color.white);
             eastWestBlock = new MaterialPropertyBlock();
             northSouthBlock = new MaterialPropertyBlock();
@@ -95,7 +97,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 ReleaseRender();
                 return false;
             }
-            lineMaterial.SetInt("_ZTest", (int)(depthPath ? CompareFunction.LessEqual : CompareFunction.Always));
+            lineMaterial.SetInt("_ZTest", (int)(depthPath ? nearer : CompareFunction.Always));
             commands = new CommandBuffer { name = "BoscaliHoloMap" };
             placed = false;
             latticeRange = 0;
@@ -295,7 +297,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             northSouthBlock.SetColor(ColourId, new Color(away, away, away, 1f));
             commands.Clear();
             commands.SetRenderTarget(rt);
-            commands.ClearRenderTarget(true, true, Color.black);
+            commands.ClearRenderTarget(true, true, Color.black, HoloGrid.DepthClear(SystemInfo.usesReversedZBuffer));
             // After the clear, which takes the whole texture: the picture fills a part of it as big as the frame shows.
             commands.SetViewport(new Rect(0f, 0f, pixelsWide, pixelsHigh));
             commands.SetViewProjectionMatrices(viewMatrix, GL.GetGPUProjectionMatrix(projectionMatrix, true));

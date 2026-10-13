@@ -327,8 +327,20 @@
       "store": "cue"
     },
     {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
+      "args": {
+        "push": false
+      },
+      "store": "cue_show_a"
+    },
+    {
+      "op": "capture",
+      "name": "cue-show-a"
+    },
+    {
       "op": "wait",
-      "seconds": 0.15
+      "seconds": 0.03
     },
     {
       "op": "call",
@@ -344,7 +356,7 @@
     },
     {
       "op": "wait",
-      "seconds": 0.85
+      "seconds": 0.6
     },
     {
       "op": "call",
@@ -360,7 +372,19 @@
     },
     {
       "op": "wait",
-      "seconds": 3.8
+      "seconds": 3.7
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
+      "args": {
+        "push": false
+      },
+      "store": "cue_fade_a"
+    },
+    {
+      "op": "capture",
+      "name": "cue-fade-a"
     },
     {
       "op": "call",
@@ -376,7 +400,7 @@
     },
     {
       "op": "wait",
-      "seconds": 1.5
+      "seconds": 3.0
     },
     {
       "op": "call",
@@ -389,6 +413,44 @@
     {
       "op": "capture",
       "name": "cue-gone"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
+      "args": {
+        "push": false,
+        "gear": true
+      },
+      "store": "gear_down"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.12
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
+      "args": {
+        "push": false
+      },
+      "store": "cue_real"
+    },
+    {
+      "op": "capture",
+      "name": "cue-real-safety"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
+      "args": {
+        "push": false,
+        "gear": false
+      },
+      "store": "gear_up"
+    },
+    {
+      "op": "wait",
+      "seconds": 8.0
     },
     {
       "op": "call",
@@ -473,6 +535,58 @@
     {
       "op": "capture",
       "name": "after"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Configure",
+      "args": {
+        "corners": false
+      },
+      "store": "cfg_corners_off"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.0
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
+      "args": {
+        "push": true
+      },
+      "store": "cue_corners_off"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.6
+    },
+    {
+      "op": "capture",
+      "name": "cue-corners-off"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
+      "args": {
+        "push": false
+      },
+      "store": "cue_corners_off_read"
+    },
+    {
+      "op": "wait",
+      "seconds": 5.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Configure",
+      "args": {
+        "corners": true
+      },
+      "store": "cfg_corners_on"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.0
     },
     {
       "op": "call",
@@ -578,6 +692,21 @@
     },
     {
       "check": "result_above",
+      "path": "msl.count",
+      "min": 1
+    },
+    {
+      "check": "log_match",
+      "pattern": "Exception",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "cue_show_a.drawn",
+      "min": 0
+    },
+    {
+      "check": "result_above",
       "path": "cue_show.drawn",
       "min": 0
     },
@@ -588,7 +717,7 @@
     },
     {
       "check": "result_above",
-      "path": "cue_fade.drawn",
+      "path": "cue_fade_a.drawn",
       "min": 0
     },
     {
@@ -597,14 +726,24 @@
       "value": 0
     },
     {
-      "check": "result_above",
-      "path": "msl.count",
-      "min": 1
+      "check": "result_equals",
+      "path": "cue_real.drawn",
+      "value": 1
     },
     {
-      "check": "log_match",
-      "pattern": "Exception",
-      "max": 0
+      "check": "result_equals",
+      "path": "cfg_corners_off.corners",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "cue_corners_off_read.drawn",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "cfg_corners_on.corners",
+      "value": true
     }
   ]
 }
