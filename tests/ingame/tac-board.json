@@ -327,8 +327,28 @@
       "store": "cue"
     },
     {
-      "op": "wait",
-      "seconds": 0.15
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
+      "args": {
+        "push": false
+      },
+      "store": "cue_show_a"
+    },
+    {
+      "op": "capture",
+      "name": "cue-show-a"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
+      "args": {
+        "push": false
+      },
+      "store": "cue_show_b"
+    },
+    {
+      "op": "capture",
+      "name": "cue-show-b"
     },
     {
       "op": "call",
@@ -344,7 +364,7 @@
     },
     {
       "op": "wait",
-      "seconds": 0.85
+      "seconds": 0.4
     },
     {
       "op": "call",
@@ -360,23 +380,7 @@
     },
     {
       "op": "wait",
-      "seconds": 3.8
-    },
-    {
-      "op": "call",
-      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
-      "args": {
-        "push": false
-      },
-      "store": "cue_fade"
-    },
-    {
-      "op": "capture",
-      "name": "cue-fade"
-    },
-    {
-      "op": "wait",
-      "seconds": 1.5
+      "seconds": 9.6
     },
     {
       "op": "call",
@@ -389,6 +393,54 @@
     {
       "op": "capture",
       "name": "cue-gone"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
+      "args": {
+        "only": "failure,action"
+      },
+      "store": "cue_two"
+    },
+    {
+      "op": "wait",
+      "seconds": 4.72
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
+      "args": {
+        "push": false
+      },
+      "store": "cue_fade_a"
+    },
+    {
+      "op": "capture",
+      "name": "cue-fade-a"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
+      "args": {
+        "push": false
+      },
+      "store": "cue_fade"
+    },
+    {
+      "op": "capture",
+      "name": "cue-fade-b"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.0
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
+      "args": {
+        "push": false
+      },
+      "store": "cue_over"
     },
     {
       "op": "call",
@@ -473,6 +525,87 @@
     {
       "op": "capture",
       "name": "after"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
+      "args": {
+        "push": false,
+        "gear": true
+      },
+      "store": "gear_down"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.12
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
+      "args": {
+        "push": false
+      },
+      "store": "cue_real"
+    },
+    {
+      "op": "capture",
+      "name": "cue-real-safety"
+    },
+    {
+      "op": "wait",
+      "seconds": 5.0
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Configure",
+      "args": {
+        "corners": false
+      },
+      "store": "cfg_corners_off"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.0
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
+      "args": {
+        "push": true
+      },
+      "store": "cue_corners_off"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.6
+    },
+    {
+      "op": "capture",
+      "name": "cue-corners-off"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
+      "args": {
+        "push": false
+      },
+      "store": "cue_corners_off_read"
+    },
+    {
+      "op": "wait",
+      "seconds": 5.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Configure",
+      "args": {
+        "corners": true
+      },
+      "store": "cfg_corners_on"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.0
     },
     {
       "op": "call",
@@ -578,6 +711,31 @@
     },
     {
       "check": "result_above",
+      "path": "msl.count",
+      "min": 1
+    },
+    {
+      "check": "log_match",
+      "pattern": "Exception",
+      "max": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "cfg_corners_off.corners",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "cfg_corners_on.corners",
+      "value": true
+    },
+    {
+      "check": "result_above",
+      "path": "cue_show_a.drawn",
+      "min": -1
+    },
+    {
+      "check": "result_above",
       "path": "cue_show.drawn",
       "min": 0
     },
@@ -587,24 +745,39 @@
       "min": 0
     },
     {
-      "check": "result_above",
-      "path": "cue_fade.drawn",
-      "min": 0
-    },
-    {
       "check": "result_equals",
       "path": "cue_gone.drawn",
       "value": 0
     },
     {
       "check": "result_above",
-      "path": "msl.count",
-      "min": 1
+      "path": "cue_fade_a.drawn",
+      "min": 0
     },
     {
-      "check": "log_match",
-      "pattern": "Exception",
-      "max": 0
+      "check": "result_above",
+      "path": "cue_fade.drawn",
+      "min": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "cue_over.drawn",
+      "value": 0
+    },
+    {
+      "check": "result_above",
+      "path": "cue_real.drawn",
+      "min": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "cue_corners_off_read.drawn",
+      "value": 0
+    },
+    {
+      "check": "result_above",
+      "path": "cue_show_b.drawn",
+      "min": 0
     }
   ]
 }

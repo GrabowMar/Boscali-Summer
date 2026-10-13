@@ -124,8 +124,8 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         /// <summary>
         /// Pushes the CUE stack's test messages through the game's own calls: <c>AircraftActionsReport.ReportText</c> for an action report ("Weapon safety lock Disabled", armed: AMBER) and for a damage failure the way
         /// <c>StatusDisplay</c> writes one (alert-coloured: RED), <c>AllocationDisplay.Show</c> for a funds line and <c>KillDisplay.DisplayBonus</c> for a score line. The texts can be given (<c>action</c>, <c>failure</c>) and so
-        /// can the amounts (<c>funds</c>, <c>score</c>); <c>push</c> false pushes nothing and only reports (a later step reads the stack again). Returns the cue ring newest first (text, class, severity, source, size, life, age),
-        /// how many cues the stack has drawn and which game boxes are in its charge. The action report is captured whether the game's own box takes it or the radio module sends it to the ticker; the funds line shows only while
+        /// can the amounts (<c>funds</c>, <c>score</c>); <c>push</c> false pushes nothing and only reports, <c>only</c> (a list of action, failure, funds, score) pushes just those (a later step reads the stack again). Returns the cue ring newest first (text, class, severity, source, size, life, age),
+        /// how many cues the stack has drawn and which game boxes are in its charge; <c>gear</c> true / false lowers or raises the seated player's gear, which the game answers with a real weapon safety report. The action report is captured whether the game's own box takes it or the radio module sends it to the ticker; the funds line shows only while
         /// the game's allocation display is visible, the score line while the game's kill display is up. Cues last the game's time (five seconds for the reports and the score line): capture 0.15 s, 1 s and 4.8 s later.
         /// </summary>
         public static Dictionary<string, object> Cue(Dictionary<string, object> args)
@@ -136,23 +136,36 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             var pushed = new List<object>();
             if (!Has(args, "push") || Bool(args, "push"))
             {
-                string armed = Text(args, "action") ?? "Weapon safety lock <b>Disabled</b>", broke = Text(args, "failure") ?? "Hydraulic failure";
-                report.ReportText(armed, 5f);
-                report.ReportText(StringHelper.AddColor(broke, NuclearOption.UIStyleSystem.ThemeManager.Active.ColorTheme.Alert), 5f);
-                pushed.Add("action");
-                pushed.Add("failure");
+                string armed = Text(args, "action") ?? "Weapon safety lock <b>Disabled</b>", broke = Text(args, "failure") ?? "Hydraulic failure", only = Text(args, "only");
+                bool Wants(string name) => string.IsNullOrEmpty(only) || only.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0;
+                if (Wants("action"))
+                {
+                    report.ReportText(armed, 5f);
+                    pushed.Add("action");
+                }
+                if (Wants("failure"))
+                {
+                    report.ReportText(StringHelper.AddColor(broke, NuclearOption.UIStyleSystem.ThemeManager.Active.ColorTheme.Alert), 5f);
+                    pushed.Add("failure");
+                }
                 AllocationDisplay allocation = SceneSingleton<AllocationDisplay>.i;
-                if (allocation != null && GameManager.GetLocalPlayer(out NuclearOption.Networking.Player player) && player != null)
+                if (Wants("funds") && allocation != null && GameManager.GetLocalPlayer(out NuclearOption.Networking.Player player) && player != null)
                 {
                     allocation.Show(player, Number(args, "funds", 803700f));
                     pushed.Add("funds");
                 }
                 KillDisplay score = SceneSingleton<KillDisplay>.i;
-                if (score != null)
+                if (Wants("score") && score != null)
                 {
                     score.DisplayBonus(Number(args, "score", 3.5f));
                     pushed.Add("score");
                 }
+            }
+            // gear: true / false puts the seated player's landing gear down or up through the game's own call: the game then raises its own weapon safety report (Enabled while the gear is out, Disabled once it is up again).
+            if (Has(args, "gear") && GameManager.GetLocalAircraft(out Aircraft own) && own != null)
+            {
+                own.SetGear(Bool(args, "gear"));
+                pushed.Add("gear");
             }
             float now = Time.timeSinceLevelLoad;
             var cues = new List<object>();
@@ -162,7 +175,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 cues.Add(new Dictionary<string, object>
                 {
                     { "text", c.Text }, { "class", CueWords.Of(c.Class) }, { "severity", c.Severity.ToString() }, { "source", c.Source.ToString() },
-                    { "size", c.Size }, { "life", c.Life }, { "age", now - c.Arrival },
+                    { "size", c.Size }, { "life", c.Life }, { "age", now - c.Start }, { "delay", c.Start - c.Arrival },
                 });
             }
             HudBoard board = HudBoard.Instance;

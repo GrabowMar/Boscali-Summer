@@ -26,6 +26,7 @@ namespace BoscaliSummer.Tests.Features.Hud
             Signature();
             Layout();
             Tones();
+            Stagger();
         }
 
         private static (CueClass, CueSeverity) Of(string rich, CueSource source = CueSource.Action, CueSeverity severity = CueSeverity.Normal)
@@ -306,6 +307,50 @@ namespace BoscaliSummer.Tests.Features.Hud
             log.Add(CueSource.Action, "Gear down", CueSeverity.Normal, 11.5f, 5f);
             TestAssert.That(Sig(12f) != one, "A new cue changes it");
             TestAssert.That(cue.Serial != 0, "Cues are numbered");
+        }
+
+        private static void Stagger()
+        {
+            const float S = CueTimeline.StaggerSeconds;
+            TestAssert.Near(S, 0.09f, "Stagger: a held-back cue starts 0.09 s after the one before");
+            TestAssert.Near(CueTimeline.GroupSeconds, 0.05f, "Stagger: cues within 0.05 s of each other are one burst");
+            TestAssert.Near(CueTimeline.StartOf(10f, float.NegativeInfinity, 0f), 10f, "Stagger: the first cue starts when it arrives");
+            TestAssert.Near(CueTimeline.StartOf(10f, 10f, 10f), 10.09f, "Stagger: a second at the same instant starts 0.09 s later");
+            TestAssert.Near(CueTimeline.StartOf(10f, 10f, 10.09f), 10.18f, "Stagger: a third, 0.09 s after the second");
+            TestAssert.Near(CueTimeline.StartOf(10.2f, 10f, 10.18f), 10.2f, "Stagger: one that arrives 0.2 s later is not held back");
+            TestAssert.Near(CueTimeline.StartOf(10.04f, 10f, 10f), 10.09f, "Stagger: one within 0.05 s of the last still joins the burst");
+            TestAssert.Near(CueTimeline.StartOf(10.06f, 10f, 10f), 10.06f, "Stagger: 0.06 s after it, it does not");
+            TestAssert.Near(CueTimeline.StartOf(10.12f, 10.1f, 10.1f), 10.19f, "Stagger: a burst goes by the cue before it, whenever that came");
+
+            CueLog log = Fresh();
+            Cue a = log.Add(CueSource.Action, "Weapon safety lock <b>Disabled</b>", CueSeverity.Normal, 20f, 5f);
+            Cue b = log.Add(CueSource.Action, "<color=#F00>Hydraulic failure</color>", CueSeverity.Alert, 20f, 5f);
+            Cue c = log.Add(CueSource.Allocation, "$803,70B", CueSeverity.Normal, 20f, 6f);
+            Cue d = log.Add(CueSource.Score, "Detected units +1,0", CueSeverity.Normal, 20.2f, 5f);
+            TestAssert.That(a.Start == 20f && Math.Abs(b.Start - 20.09f) < 1e-4f && Math.Abs(c.Start - 20.18f) < 1e-4f, "Stagger: three cues of one instant start at ages 0, 0.09 and 0.18");
+            TestAssert.That(a.Arrival == 20f && b.Arrival == 20f && c.Arrival == 20f, "Stagger: ... arrival is untouched (the slots follow it)");
+            TestAssert.Near(d.Start, 20.2f, "Stagger: a cue 0.2 s later is not delayed");
+            TestAssert.Near(b.Age(20.1f), 0.01f, "Stagger: a delayed cue's age counts from its start");
+            TestAssert.That(b.Age(20.05f) < 0f && c.Age(20.1f) < 0f, "Stagger: ... and is negative before it");
+            TestAssert.Near(CueTimeline.Alpha(b.Age(20.05f), b.Life), 0f, "Stagger: it is invisible until then");
+            TestAssert.Near(CueTimeline.Alpha(b.Age(20.1f), b.Life), 1f, "Stagger: ... and drawn from its start");
+            TestAssert.Eq(CueTimeline.Stage(-0.02f, 5f), -2, "Stagger: a cue that has not started is stage -2");
+            TestAssert.That(b.Alive(20.05f) && Math.Abs(b.Start + b.Life - 25.09f) < 1e-4f && !b.Alive(25.1f), "Stagger: a held-back cue lives from its start");
+            var shown = new Cue[CueLog.MaxShown];
+            TestAssert.Eq(log.Select(20.05f, BoardDeclutter.Full, 15, shown), 3, "Stagger: the held-back cues already hold their slots");
+            TestAssert.That(shown[0] == d, "Stagger: ... newest first");
+            // The slide follows the arrivals: by the time a held-back cue appears, nothing is still sliding through its slot.
+            var burst = new[] { c, b, a };
+            TestAssert.Near(CueLayout.Offset(burst, 1, 20.09f), 34f * CueTimeline.Slide(0.09f), "Stagger: the older cues slide while the newer ones are not yet drawn");
+            TestAssert.That(CueLayout.Offset(burst, 2, 20.09f) > 2f * 34f * 0.95f && CueLayout.Offset(burst, 1, 20.09f) > 34f * 0.95f, "Stagger: ... and are all but at rest when the second one appears");
+            TestAssert.Near(CueLayout.Offset(burst, 2, 20.18f), 68f, "Stagger: ... and at rest when the third one does");
+            int Sig(float now)
+            {
+                int n = log.Select(now, BoardDeclutter.Full, 15, shown);
+                return CueLog.Signature(now, BoardDeclutter.Full, 15, shown, n);
+            }
+            TestAssert.That(Sig(20.085f) != Sig(20.095f), "Stagger: the signature changes the moment a held-back cue starts");
+            TestAssert.That(Sig(20.14f) != Sig(20.19f), "Stagger: ... and the next");
         }
 
         private static void Layout()

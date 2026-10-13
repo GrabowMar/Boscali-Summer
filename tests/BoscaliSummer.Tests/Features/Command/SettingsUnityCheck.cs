@@ -44,7 +44,7 @@ public static class SettingsUnityCheck
                 "mode switch and remembered mode, toggles, background replacement and row reveal, disabled dependencies, +/- bounds, " +
                 "the COCKPIT tab's TAC BOARD section (four groups, every control with one line of help, a toggle, a strip and a dial writing through the options contract, " +
                 "inert options with the board off, RESET TO DEFAULTS, the long page rendered stop by stop), " +
-                "the COCKPIT tab's VISOR TERRAIN section (the TERRAIN GHOST dial in 5% steps from 0% to 100%, its help, its saved level; the TAC MAP strip (HOLO / CLASSIC) and the MINI RANGE strip (5, 10, 20 KM) in their place after it, each with one line of help, writing their saved entries, the range strip locked on CLASSIC; the HOLO MAP switch, the HOLO RANGE strip of 10, 20 and 40 KM and the NORTH UP switch, each with one line of help, writing their saved entries, the strip waiting on the switch and NORTH UP on the switch or the TAC MAP), " +
+                "the COCKPIT tab's VISOR TERRAIN section (the TERRAIN GHOST dial in 5% steps from 0% to 100%, its help, its saved level; the TAC MAP strip (HOLO / CLASSIC) and the MINI RANGE strip (10, 20, 40 KM) in their place after it, each with one line of help, writing their saved entries, the range strip locked on CLASSIC; the HOLO MAP switch, the HOLO RANGE strip of 20, 40 and 80 KM and the NORTH UP switch, each with one line of help, writing their saved entries, the strip waiting on the switch and NORTH UP on the switch or the TAC MAP; a config saved with the old round hologram's ranges doubled once, then left alone), " +
                 "host-only lock on SERVER rows and the flat page tree (no GameObject churn) are checked. Game adapters are stubbed; in-game acceptance remains required.");
             EditorApplication.Exit(0);
         }
@@ -527,6 +527,7 @@ public static class SettingsUnityCheck
             "TERRAIN GHOST stops at 0%, which is off");
         CheckTacMapControls(camera, canvas, height, clientCon, content, config);
         CheckHoloControls(clientCon, content, config);
+        CheckHoloRangeMigration();
         Settle(clientCon);
         // The section is the tail of the long page: render the page scrolled to its foot, where the section is on screen.
         ScrollRect scroll = clientCon.Root.GetComponentInChildren<ScrollRect>(true);
@@ -557,8 +558,8 @@ public static class SettingsUnityCheck
     }
 
     /// <summary>
-    /// The TAC MAP strip (HOLO / CLASSIC) and the MINI RANGE strip (5 / 10 / 20 KM): present in the section's order (TERRAIN GHOST, TAC MAP, MINI RANGE, HOLO MAP, HOLO RANGE, NORTH UP), one short line of help each,
-    /// the defaults (HOLO, 10 km), each writing only its own saved entry, the config entries described as applying now, and MINI RANGE locked while the TAC MAP is on CLASSIC. Leaves both at their defaults.
+    /// The TAC MAP strip (HOLO / CLASSIC) and the MINI RANGE strip (10 / 20 / 40 KM): present in the section's order (TERRAIN GHOST, TAC MAP, MINI RANGE, HOLO MAP, HOLO RANGE, NORTH UP), one short line of help each,
+    /// the defaults (HOLO, 20 km), each writing only its own saved entry, the config entries described as applying now, and MINI RANGE locked while the TAC MAP is on CLASSIC. Leaves both at their defaults.
     /// </summary>
     private static void CheckTacMapControls(Camera camera, Canvas canvas, int height, AvConsole clientCon, RectTransform content, CommandSettings config)
     {
@@ -572,43 +573,43 @@ public static class SettingsUnityCheck
         Check(order[0] >= 0 && order[0] < order[1] && order[1] < order[2] && order[2] < order[3] && order[3] < order[4] && order[4] < order[5],
             "The section runs TERRAIN GHOST, TAC MAP, MINI RANGE, HOLO MAP, HOLO RANGE, NORTH UP (places " + string.Join(", ", order) + ")");
 
-        Check(config.TacMap.Value == TacMapMode.Holo && config.TacMapRangeKm.Value == 10, "The TAC MAP defaults are HOLO and 10 km");
+        Check(config.TacMap.Value == TacMapMode.Holo && config.TacMapRangeKm.Value == 20, "The TAC MAP defaults are HOLO and 20 km");
         Check(config.TacMap.Description.Description.EndsWith("Applies now; no restart.") && config.TacMapRangeKm.Description.Description.EndsWith("Applies now; no restart."),
             "Both TAC MAP entries say they apply now with no restart");
-        Check(config.TacMapRangeKm.Description.AcceptableValues is AcceptableValueList<int> ranges && ranges.AcceptableValues.Length == 3 && ranges.AcceptableValues[0] == 5 &&
-              ranges.AcceptableValues[1] == 10 && ranges.AcceptableValues[2] == 20, "TacMapRangeKm accepts 5, 10 and 20 only");
+        Check(config.TacMapRangeKm.Description.AcceptableValues is AcceptableValueList<int> ranges && ranges.AcceptableValues.Length == 3 && ranges.AcceptableValues[0] == 10 &&
+              ranges.AcceptableValues[1] == 20 && ranges.AcceptableValues[2] == 40, "TacMapRangeKm accepts 10, 20 and 40 only");
         foreach (string segment in new[] { "HOLO", "CLASSIC" })
         {
             string help = StripControl(content, "TAC MAP", segment).Help;
             Check(!string.IsNullOrEmpty(help) && help.Length <= 120 && help.IndexOf('\n') < 0 && help.StartsWith(segment), "TAC MAP " + segment + " has one short line of help that names it: '" + help + "'");
         }
-        foreach (string segment in new[] { "5 KM", "10 KM", "20 KM" })
+        foreach (string segment in new[] { "10 KM", "20 KM", "40 KM" })
         {
             string help = StripControl(content, "MINI RANGE", segment).Help;
             Check(!string.IsNullOrEmpty(help) && help.Length <= 120 && help.IndexOf('\n') < 0 && help.StartsWith(segment), "MINI RANGE " + segment + " has one short line of help that names it: '" + help + "'");
         }
         Check(StripControl(content, "TAC MAP", "HOLO").Latched && !StripControl(content, "TAC MAP", "CLASSIC").Latched, "TAC MAP shows HOLO latched by default");
-        Check(StripControl(content, "MINI RANGE", "10 KM").Latched && !StripControl(content, "MINI RANGE", "5 KM").Latched, "MINI RANGE shows 10 KM latched by default");
+        Check(StripControl(content, "MINI RANGE", "20 KM").Latched && !StripControl(content, "MINI RANGE", "10 KM").Latched, "MINI RANGE shows 20 KM latched by default");
 
         // MINI RANGE writes only its own entry.
-        Click(StripControl(content, "MINI RANGE", "5 KM"));
-        Check(config.TacMapRangeKm.Value == 5 && config.TacMap.Value == TacMapMode.Holo && config.HoloRangeKm.Value == 20 && config.HoloMap.Value, "The 5 KM segment writes TacMapRangeKm and nothing else");
-        Click(StripControl(content, "MINI RANGE", "20 KM"));
-        Check(config.TacMapRangeKm.Value == 20 && config.HoloRangeKm.Value == 20, "The 20 KM segment of MINI RANGE writes 20 and leaves the HOLO RANGE alone");
         Click(StripControl(content, "MINI RANGE", "10 KM"));
-        Check(config.TacMapRangeKm.Value == 10 && config.HoloRangeKm.Value == 20, "The 10 KM segment of MINI RANGE writes 10 and leaves the HOLO RANGE alone");
+        Check(config.TacMapRangeKm.Value == 10 && config.TacMap.Value == TacMapMode.Holo && config.HoloRangeKm.Value == 40 && config.HoloMap.Value, "The 10 KM segment writes TacMapRangeKm and nothing else");
+        Click(StripControl(content, "MINI RANGE", "40 KM"));
+        Check(config.TacMapRangeKm.Value == 40 && config.HoloRangeKm.Value == 40, "The 40 KM segment of MINI RANGE writes 40 and leaves the HOLO RANGE alone");
+        Click(StripControl(content, "MINI RANGE", "20 KM"));
+        Check(config.TacMapRangeKm.Value == 20 && config.HoloRangeKm.Value == 40, "The 20 KM segment of MINI RANGE writes 20 and leaves the HOLO RANGE alone");
 
         // CLASSIC writes the mode, locks MINI RANGE and leaves the held holo's switches alone.
         Click(StripControl(content, "TAC MAP", "CLASSIC"));
-        Check(config.TacMap.Value == TacMapMode.Classic && config.TacMapRangeKm.Value == 10 && config.HoloMap.Value && config.HoloRangeKm.Value == 20, "The CLASSIC segment writes TacMapMode and nothing else");
+        Check(config.TacMap.Value == TacMapMode.Classic && config.TacMapRangeKm.Value == 20 && config.HoloMap.Value && config.HoloRangeKm.Value == 40, "The CLASSIC segment writes TacMapMode and nothing else");
         Settle(clientCon);
         Check(StripControl(content, "TAC MAP", "CLASSIC").Latched && !StripControl(content, "TAC MAP", "HOLO").Latched, "TAC MAP shows CLASSIC latched");
-        Check(!StripControl(content, "MINI RANGE", "5 KM").Interactable && !StripControl(content, "MINI RANGE", "20 KM").Interactable, "With the TAC MAP on CLASSIC the MINI RANGE strip is locked");
-        Check(StripControl(content, "MINI RANGE", "5 KM").Help.Contains("TAC MAP"), "...and its help says why: '" + StripControl(content, "MINI RANGE", "5 KM").Help + "'");
-        Click(StripControl(content, "MINI RANGE", "5 KM"));
-        Check(config.TacMapRangeKm.Value == 10, "...and it ignores clicks");
+        Check(!StripControl(content, "MINI RANGE", "10 KM").Interactable && !StripControl(content, "MINI RANGE", "40 KM").Interactable, "With the TAC MAP on CLASSIC the MINI RANGE strip is locked");
+        Check(StripControl(content, "MINI RANGE", "10 KM").Help.Contains("TAC MAP"), "...and its help says why: '" + StripControl(content, "MINI RANGE", "10 KM").Help + "'");
+        Click(StripControl(content, "MINI RANGE", "10 KM"));
+        Check(config.TacMapRangeKm.Value == 20, "...and it ignores clicks");
         var saved = new CommandSettings(new ConfigFile(config.ExpandedMapUi.ConfigFile.ConfigFilePath, false));
-        Check(saved.TacMap.Value == TacMapMode.Classic && saved.TacMapRangeKm.Value == 10, "The TAC MAP settings survive reloading the saved configuration");
+        Check(saved.TacMap.Value == TacMapMode.Classic && saved.TacMapRangeKm.Value == 20, "The TAC MAP settings survive reloading the saved configuration");
         ScrollRect scroll = clientCon.Root.GetComponentInChildren<ScrollRect>(true);
         scroll.verticalNormalizedPosition = 0f;
         Render(camera, canvas, height, "client-cockpit-tacmap-classic");
@@ -616,31 +617,31 @@ public static class SettingsUnityCheck
         // HOLO again: the strip unlocks, and a range written while it was away is kept.
         Click(StripControl(content, "TAC MAP", "HOLO"));
         Settle(clientCon);
-        Check(config.TacMap.Value == TacMapMode.Holo && StripControl(content, "MINI RANGE", "5 KM").Interactable, "The HOLO segment writes TacMapMode and unlocks MINI RANGE");
-        Click(StripControl(content, "MINI RANGE", "20 KM"));
+        Check(config.TacMap.Value == TacMapMode.Holo && StripControl(content, "MINI RANGE", "10 KM").Interactable, "The HOLO segment writes TacMapMode and unlocks MINI RANGE");
+        Click(StripControl(content, "MINI RANGE", "40 KM"));
         Settle(clientCon);
-        Check(config.TacMapRangeKm.Value == 20 && StripControl(content, "MINI RANGE", "20 KM").Latched, "MINI RANGE writes again once unlocked");
+        Check(config.TacMapRangeKm.Value == 40 && StripControl(content, "MINI RANGE", "40 KM").Latched, "MINI RANGE writes again once unlocked");
         Render(camera, canvas, height, "client-cockpit-tacmap");
         scroll.verticalNormalizedPosition = 1f;
-        Click(StripControl(content, "MINI RANGE", "10 KM"));
+        Click(StripControl(content, "MINI RANGE", "20 KM"));
         Settle(clientCon);
-        Check(config.TacMap.Value == TacMapMode.Holo && config.TacMapRangeKm.Value == 10, "The TAC MAP settings are back at their defaults");
+        Check(config.TacMap.Value == TacMapMode.Holo && config.TacMapRangeKm.Value == 20, "The TAC MAP settings are back at their defaults");
     }
 
     /// <summary>The HOLO MAP switch, the HOLO RANGE strip and the NORTH UP switch: present, one short line of help each, defaults, each writing only its own saved entry, the strip inert while the switch is off and NORTH UP inert while neither the switch nor the TAC MAP's HOLO is on.</summary>
     private static void CheckHoloControls(AvConsole clientCon, RectTransform content, CommandSettings config)
     {
         Check(content.Find("Cell HOLO MAP") != null && content.Find("Cell NORTH UP") != null, "VISOR TERRAIN carries the HOLO MAP and NORTH UP switches");
-        foreach (string segment in new[] { "10 KM", "20 KM", "40 KM" }) Check(StripControl(content, "HOLO RANGE", segment) != null, "The HOLO RANGE strip has its " + segment + " segment");
+        foreach (string segment in new[] { "20 KM", "40 KM", "80 KM" }) Check(StripControl(content, "HOLO RANGE", segment) != null, "The HOLO RANGE strip has its " + segment + " segment");
         Check(HasText(content, "HOLO RANGE"), "The HOLO RANGE strip is labelled");
-        Check(config.HoloMap.Value && config.HoloRangeKm.Value == 20 && !config.HoloNorthUp.Value, "The holo defaults are on, 20 km and heading up");
+        Check(config.HoloMap.Value && config.HoloRangeKm.Value == 40 && !config.HoloNorthUp.Value, "The holo defaults are on, 40 km and heading up");
         // A switch is an AvCell, not an AvControl: its help hangs on the cell's frame as an AvHelpTip (the strip's segments are AvControls, checked below).
         foreach (string cell in new[] { "HOLO MAP", "NORTH UP" })
         {
             AvHelpTip tip = content.Find("Cell " + cell).GetComponentInChildren<AvHelpTip>(true);
             Check(tip != null && !string.IsNullOrEmpty(tip.Text) && tip.Text.Length <= 120 && tip.Text.IndexOf('\n') < 0, cell + " has one short line of help: '" + (tip != null ? tip.Text : "<none>") + "'");
         }
-        foreach (string segment in new[] { "10 KM", "20 KM", "40 KM" })
+        foreach (string segment in new[] { "20 KM", "40 KM", "80 KM" })
         {
             string help = StripControl(content, "HOLO RANGE", segment).Help;
             Check(!string.IsNullOrEmpty(help) && help.Length <= 120 && help.StartsWith(segment), segment + " has one short line of help that names it: '" + help + "'");
@@ -648,20 +649,20 @@ public static class SettingsUnityCheck
         string holoHelp = content.Find("Cell HOLO MAP").GetComponentInChildren<AvHelpTip>(true).Text;
         Check(holoHelp.StartsWith("Hold the map key") && holoHelp.Contains("tap"), "The HOLO MAP help says hold the map key for the hologram and tap for the full map: '" + holoHelp + "'");
 
-        Click(StripControl(content, "HOLO RANGE", "40 KM"));
-        Check(config.HoloRangeKm.Value == 40 && config.HoloMap.Value && !config.HoloNorthUp.Value && config.TacMapRangeKm.Value == 10, "The 40 KM segment writes HoloRangeKm and nothing else");
-        Click(StripControl(content, "HOLO RANGE", "10 KM"));
-        Check(config.HoloRangeKm.Value == 10 && config.TacMapRangeKm.Value == 10, "The 10 KM segment writes 10 (and not the MINI's)");
+        Click(StripControl(content, "HOLO RANGE", "80 KM"));
+        Check(config.HoloRangeKm.Value == 80 && config.HoloMap.Value && !config.HoloNorthUp.Value && config.TacMapRangeKm.Value == 20, "The 80 KM segment writes HoloRangeKm and nothing else");
+        Click(StripControl(content, "HOLO RANGE", "20 KM"));
+        Check(config.HoloRangeKm.Value == 20 && config.TacMapRangeKm.Value == 20, "The 20 KM segment writes 20 (and not the MINI's)");
         Click(content.Find("Cell NORTH UP"));
-        Check(config.HoloNorthUp.Value && config.HoloRangeKm.Value == 10 && config.HoloMap.Value, "NORTH UP writes HoloNorthUp and nothing else");
+        Check(config.HoloNorthUp.Value && config.HoloRangeKm.Value == 20 && config.HoloMap.Value, "NORTH UP writes HoloNorthUp and nothing else");
 
         // switched off, the strip is inert; NORTH UP also turns the mini hologram, so it stays live while the TAC MAP is on HOLO and is inert on CLASSIC
         Click(content.Find("Cell HOLO MAP"));
         Check(!config.HoloMap.Value, "HOLO MAP writes HoloMap");
         Settle(clientCon);
-        Check(!StripControl(content, "HOLO RANGE", "40 KM").Interactable && !StripControl(content, "HOLO RANGE", "20 KM").Interactable, "With HOLO MAP off the range strip is locked");
-        Click(StripControl(content, "HOLO RANGE", "40 KM"));
-        Check(config.HoloRangeKm.Value == 10, "...and ignores clicks");
+        Check(!StripControl(content, "HOLO RANGE", "80 KM").Interactable && !StripControl(content, "HOLO RANGE", "40 KM").Interactable, "With HOLO MAP off the range strip is locked");
+        Click(StripControl(content, "HOLO RANGE", "80 KM"));
+        Check(config.HoloRangeKm.Value == 20, "...and ignores clicks");
         Click(content.Find("Cell NORTH UP"));
         Check(!config.HoloNorthUp.Value, "...while NORTH UP still works with HOLO MAP off, because the TAC MAP on HOLO turns with it");
         Click(content.Find("Cell NORTH UP"));
@@ -671,18 +672,49 @@ public static class SettingsUnityCheck
         Click(content.Find("Cell NORTH UP"));
         Check(config.HoloNorthUp.Value, "With HOLO MAP off and the TAC MAP on CLASSIC NORTH UP ignores clicks");
         var saved = new CommandSettings(new ConfigFile(config.ExpandedMapUi.ConfigFile.ConfigFilePath, false));
-        Check(!saved.HoloMap.Value && saved.HoloRangeKm.Value == 10 && saved.HoloNorthUp.Value && saved.TacMap.Value == TacMapMode.Classic, "The holo settings survive reloading the saved configuration");
+        Check(!saved.HoloMap.Value && saved.HoloRangeKm.Value == 20 && saved.HoloNorthUp.Value && saved.TacMap.Value == TacMapMode.Classic, "The holo settings survive reloading the saved configuration");
         config.TacMap.Value = TacMapMode.Holo;
         Settle(clientCon);
 
         // back to the defaults
         Click(content.Find("Cell HOLO MAP"));
         Settle(clientCon);
-        Check(config.HoloMap.Value && StripControl(content, "HOLO RANGE", "40 KM").Interactable, "HOLO MAP back on unlocks the strip");
-        Click(StripControl(content, "HOLO RANGE", "20 KM"));
+        Check(config.HoloMap.Value && StripControl(content, "HOLO RANGE", "80 KM").Interactable, "HOLO MAP back on unlocks the strip");
+        Click(StripControl(content, "HOLO RANGE", "40 KM"));
         Click(content.Find("Cell NORTH UP"));
-        Check(config.HoloMap.Value && config.HoloRangeKm.Value == 20 && !config.HoloNorthUp.Value && config.TacMap.Value == TacMapMode.Holo && config.TacMapRangeKm.Value == 10, "The holo settings are back at their defaults");
+        Check(config.HoloMap.Value && config.HoloRangeKm.Value == 40 && !config.HoloNorthUp.Value && config.TacMap.Value == TacMapMode.Holo && config.TacMapRangeKm.Value == 20, "The holo settings are back at their defaults");
         Settle(clientCon);
+    }
+
+    /// <summary>
+    /// A config file saved before the terrain tile holds the old round hologram's range options: the first load doubles them once (the MINI's 5 / 10 / 20 become 10 / 20 / 40 and the HOLO RANGE's 10 / 20 / 40 become
+    /// 20 / 40 / 80), a second load of the saved file leaves them alone (the marker), a value that is no option takes the default, and a file with no ranges takes the new defaults without a move.
+    /// </summary>
+    private static void CheckHoloRangeMigration()
+    {
+        string Fresh(string text)
+        {
+            string path = Path.GetFullPath("migrate-" + Guid.NewGuid().ToString("N") + ".cfg");
+            File.WriteAllText(path, text);
+            return path;
+        }
+        string saved = Fresh("[Command]\n\nTacMapRangeKm = 5\n\nHoloRangeKm = 20\n\n");
+        var first = new CommandSettings(new ConfigFile(saved, false));
+        Check(first.TacMapRangeKm.Value == 10 && first.HoloRangeKm.Value == 40 && first.HoloTileRanges.Value == 1, "A saved MINI 5 km and HOLO 20 km are doubled once to 10 and 40 (got " + first.TacMapRangeKm.Value + ", " + first.HoloRangeKm.Value + ")");
+        first.HoloTileRanges.ConfigFile.Save();
+        var second = new CommandSettings(new ConfigFile(saved, false));
+        Check(second.TacMapRangeKm.Value == 10 && second.HoloRangeKm.Value == 40, "...and loading the saved file again leaves them (got " + second.TacMapRangeKm.Value + ", " + second.HoloRangeKm.Value + ")");
+
+        var defaults = new CommandSettings(new ConfigFile(Fresh("[Command]\n\nTacMapRangeKm = 10\n\nHoloRangeKm = 10\n\n"), false));
+        Check(defaults.TacMapRangeKm.Value == 20 && defaults.HoloRangeKm.Value == 20, "The old defaults, MINI 10 km and the smallest HOLO 10 km, become 20 and 20 (got " + defaults.TacMapRangeKm.Value + ", " + defaults.HoloRangeKm.Value + ")");
+        var widest = new CommandSettings(new ConfigFile(Fresh("[Command]\n\nTacMapRangeKm = 20\n\nHoloRangeKm = 40\n\n"), false));
+        Check(widest.TacMapRangeKm.Value == 40 && widest.HoloRangeKm.Value == 80, "The widest old options, 20 and 40 km, become 40 and 80 (got " + widest.TacMapRangeKm.Value + ", " + widest.HoloRangeKm.Value + ")");
+        var odd = new CommandSettings(new ConfigFile(Fresh("[Command]\n\nTacMapRangeKm = 7\n\n"), false));
+        Check(odd.TacMapRangeKm.Value == 20 && odd.HoloRangeKm.Value == 40, "A saved value that was never an option takes the default (got " + odd.TacMapRangeKm.Value + ")");
+
+        var fresh = new CommandSettings(new ConfigFile(Fresh(""), false));
+        Check(fresh.TacMapRangeKm.Value == 20 && fresh.HoloRangeKm.Value == 40 && fresh.HoloTileRanges.Value == 1, "A file with no saved ranges takes the defaults, 20 and 40, and is marked as moved");
+        Check(fresh.HoloTileRanges.Description.Description.StartsWith("Internal marker"), "The marker says it is internal");
     }
 
     /// <summary>Show one console through the panel's own switch (no click), then run its ticks as the game would.</summary>
