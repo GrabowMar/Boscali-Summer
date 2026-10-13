@@ -10,7 +10,7 @@ if (-not (Test-Path -LiteralPath $Unity)) { throw "Unity Editor not found: $Unit
 $font = Join-Path $AssetsDir 'Icons/noa-icons.ttf'
 if (-not (Test-Path -LiteralPath $font)) { throw "Icon font missing: $font (run tools/Build-AvIcons.py first)" }
 $icons = (Get-Content -Raw (Join-Path $AssetsDir 'avionics-ui.manifest.json') | ConvertFrom-Json).icons
-$codes = @($icons.PSObject.Properties | ForEach-Object { $_.Value })
+$codes = @($icons.PSObject.Properties | ForEach-Object { $_.Value }) + '005f'   # '_' is not an icon: TMP wants it in every face
 $fixture = if ($EvidenceDir) { [IO.Path]::GetFullPath($EvidenceDir) } else {
     Join-Path $env:TEMP ('BoscaliIconBundle-' + [guid]::NewGuid().ToString('N'))
 }
