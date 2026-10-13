@@ -74,7 +74,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 ringText = HoloMarks.Range(radius);
             }
             HoloView.FromTable(heading, radius * .7071f, -radius * .7071f, out float re, out float rn);
-            if (At(re, 0f, rn, out float rx, out float ry)) Label(LabelRing, ringText, rx + 5f * u, ry, Dim(.8f));
+            if (At(re, 0f, rn, out float rx, out float ry)) Label(LabelRing, ringText, rx + 5f * u, ry, inkColour.WithAlpha(.8f));
             else Label(LabelRing, "", 0f, 0f, inkColour);
             if (mini) DrawWedge(b, w, dim);
             else wedgeDegrees = 0f;
@@ -113,7 +113,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             if (mini)
             {
                 gridRef = ReadGridRef();
-                Label(LabelGrid, gridRef, side - 10f * u, 14f * u, Dim(.7f));
+                Label(LabelGrid, gridRef, side - 10f * u, 14f * u, inkColour.WithAlpha(.7f));
             }
             else
             {

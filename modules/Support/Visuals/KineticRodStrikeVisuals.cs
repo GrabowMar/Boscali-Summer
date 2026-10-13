@@ -19,11 +19,8 @@ namespace BoscaliSummer.Modules.Support.Visuals
 
         public static void Reset()
         {
-            foreach (var i in impacts) if (i != null) Object.Destroy(i.gameObject);
-            foreach (var t in trails) if (t != null) Object.Destroy(t.gameObject);
-            impacts.Clear(); trails.Clear();
-            while (FreeImpacts.Count > 0) { var i = FreeImpacts.Pop(); if (i != null) Object.Destroy(i.gameObject); }
-            while (FreeTrails.Count > 0) { var t = FreeTrails.Pop(); if (t != null) Object.Destroy(t.gameObject); }
+            SupportParticles.DestroyPool(impacts, FreeImpacts);
+            SupportParticles.DestroyPool(trails, FreeTrails);
         }
 
         public static void Track(Missile missile)
@@ -45,12 +42,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
             fx.Begin(impactPosition);
         }
 
-        internal static void Release(RodImpactFx fx)
-        {
-            impacts.Remove(fx);
-            fx.gameObject.SetActive(false);
-            FreeImpacts.Push(fx);
-        }
+        internal static void Release(RodImpactFx fx) => SupportParticles.Recycle(impacts, FreeImpacts, fx);
 
         internal static RodTrailFx RentTrail()
         {
@@ -63,12 +55,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
             return t;
         }
 
-        internal static void Release(RodTrailFx t)
-        {
-            trails.Remove(t);
-            t.gameObject.SetActive(false);
-            FreeTrails.Push(t);
-        }
+        internal static void Release(RodTrailFx t) => SupportParticles.Recycle(trails, FreeTrails, t);
     }
 
     // ------------------------------------------------------------------------------------------------------------------------

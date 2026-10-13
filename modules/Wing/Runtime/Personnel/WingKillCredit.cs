@@ -1,6 +1,7 @@
 using System.Reflection;
 using HarmonyLib;
 
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Wing.Configuration;
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
@@ -27,8 +28,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
     [HarmonyPatch]
     internal static class WingKillMessagePatch
     {
-        private static MethodBase TargetMethod() => AccessTools.FirstMethod(typeof(MessageManager),
-            method => method.Name.StartsWith("UserCode_RpcKillMessage_"));
+        private static MethodBase TargetMethod() => KillMessageRpc.Target();
 
         [HarmonyPrefix]
         private static void Prefix(PersistentID killerID, PersistentID killedID) => WingKillCredit.Credit(killerID, killedID);

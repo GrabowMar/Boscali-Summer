@@ -305,7 +305,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             var viewportGo = new GameObject("Viewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D));
             var viewport = viewportGo.GetComponent<RectTransform>();
             viewport.SetParent(scrollRect, worldPositionStays: false);
-            Stretch(viewport);
+            AvLay.Fill(viewport);
             Image viewportImage = viewportGo.GetComponent<Image>();
             viewportImage.color = Color.clear;
             viewportImage.raycastTarget = true;
@@ -619,16 +619,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // scrolled-back reader to the top on every message loses their place.
             if (stickToTop && scroll != null && scroll.verticalNormalizedPosition >= 0.999f)
                 scroll.verticalNormalizedPosition = 1f;
-        }
-
-        private static void Stretch(RectTransform rt)
-        {
-            rt.anchorMin = Vector2.zero;
-            rt.anchorMax = Vector2.one;
-            rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.offsetMin = Vector2.zero;
-            rt.offsetMax = Vector2.zero;
-            rt.localScale = Vector3.one;
         }
 
         private static bool Approximately(Vector2 a, Vector2 b) =>

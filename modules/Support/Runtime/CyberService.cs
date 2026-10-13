@@ -303,7 +303,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     float angle = (step * 5 % 12) * Mathf.PI / 6f;
                     Vector3 desired = parent.center.position + new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle)) * (radius + ring * 260f);
                     GlobalPosition anchor = desired.ToGlobalPosition();
-                    float front = FrontDistanceOf(owner, desired);
+                    float front = SupportTargeting.FrontDistanceOf(owner, desired);
                     if (truckCands.Count < CyberPlacement.MaxCandidates && spawner.TryPlanTruck(anchor, parent, out GlobalPosition tp, out _))
                     {
                         truckSites.Add(new Site(parent, anchor));
@@ -315,20 +315,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
                         centerCands.Add(new SiteCandidate(centerSites.Count - 1, (float)cp[0].x, (float)cp[0].z, front, front));
                     }
                 }
-        }
-
-        /// <summary>Distance to the nearest airbase held by someone else: the front proxy (the same fallback SPACE uses without territory data).</summary>
-        private static float FrontDistanceOf(FactionHQ owner, Vector3 point)
-        {
-            float nearest = float.PositiveInfinity;
-            if (FactionRegistry.airbaseLookup != null)
-                foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
-                {
-                    if (airbase == null || airbase.disabled || airbase.center == null || airbase.CurrentHQ == null || airbase.CurrentHQ == owner) continue;
-                    Vector3 d = point - airbase.center.position; d.y = 0f;
-                    nearest = Mathf.Min(nearest, d.magnitude);
-                }
-            return float.IsInfinity(nearest) ? 1000000f : nearest;
         }
     }
 }

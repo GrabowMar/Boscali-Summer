@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Cinematography.Runtime;
 using NOAvionics;
 using System;
@@ -153,19 +154,17 @@ namespace BoscaliSummer.Modules.Cinematography.Presentation
                     { under = hits[i]; break; }
                 SetHovered(under);
                 if (under != null && Input.GetMouseButtonDown(0))
-                    ((IPointerClickHandler)under).OnPointerClick(Pointer());
+                    ((IPointerClickHandler)under).OnPointerClick(WindowPointer.Data());
             }
             if (Time.unscaledTime >= nextRefresh) { nextRefresh = Time.unscaledTime + .2f; Refresh(); }
         }
 
-        private static PointerEventData Pointer() => new PointerEventData(EventSystem.current)
-        { button = PointerEventData.InputButton.Left, position = Input.mousePosition };
         private void SetHovered(AvHit next)
         {
             if (hovered == next) return;
-            if (hovered != null) ((IPointerExitHandler)hovered).OnPointerExit(Pointer());
+            if (hovered != null) ((IPointerExitHandler)hovered).OnPointerExit(WindowPointer.Data());
             hovered = next;
-            if (hovered != null) ((IPointerEnterHandler)hovered).OnPointerEnter(Pointer());
+            if (hovered != null) ((IPointerEnterHandler)hovered).OnPointerEnter(WindowPointer.Data());
         }
 
         private void Refresh()

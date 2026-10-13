@@ -198,11 +198,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             return r;
         }
 
-        private static Dictionary<string, object> Fail(string hook, string error)
-        {
-            Debug.LogWarning("[StrAutomation] " + hook + ": " + error);
-            return new Dictionary<string, object> { { "ok", false }, { "error", error } };
-        }
+        private static Dictionary<string, object> Fail(string hook, string error) => Failure("StrAutomation", hook, error);
     }
 }
 #endif

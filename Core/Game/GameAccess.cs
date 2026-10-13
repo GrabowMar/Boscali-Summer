@@ -400,6 +400,16 @@ namespace BoscaliSummer.Core.Game
             return true;
         }
 
+        /// <summary>The faction called <paramref name="name"/> (case-insensitive); an empty name is the local player's faction. For the sim hooks' <c>faction</c> argument.</summary>
+        public static bool TryFindFaction(string name, out FactionHQ hq)
+        {
+            hq = null;
+            if (string.IsNullOrEmpty(name)) return TryGetLocalFaction(out hq) && hq != null;
+            foreach (FactionHQ candidate in FactionRegistry.GetAllHQs())
+                if (candidate?.faction != null && string.Equals(candidate.faction.factionName, name, StringComparison.OrdinalIgnoreCase)) { hq = candidate; return true; }
+            return false;
+        }
+
         private static AccessTools.FieldRef<TInstance, TField> FieldRef<TInstance, TField>(string name)
         {
             FieldInfo field = AccessTools.Field(typeof(TInstance), name) ??

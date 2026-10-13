@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using NOAvionics;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -123,7 +124,7 @@ namespace BoscaliSummer.Core.Game
 
             var labelGo = new GameObject("Text", typeof(RectTransform), typeof(TextMeshProUGUI));
             labelGo.transform.SetParent(go.transform, false);
-            Stretch(labelGo.transform as RectTransform);
+            AvLay.Fill((RectTransform)labelGo.transform);
             TextMeshProUGUI label = labelGo.GetComponent<TextMeshProUGUI>();
             TMP_Text siblingLabel = sibling != null ? sibling.GetComponentInChildren<TMP_Text>(true) : null;
             if (siblingLabel != null)
@@ -145,7 +146,7 @@ namespace BoscaliSummer.Core.Game
 
             var highlightGo = new GameObject("Highlight", typeof(RectTransform), typeof(Image));
             highlightGo.transform.SetParent(go.transform, false);
-            Stretch(highlightGo.transform as RectTransform);
+            AvLay.Fill((RectTransform)highlightGo.transform);
             Image highlight = highlightGo.GetComponent<Image>();
             highlight.color = Color.clear;
             highlight.raycastTarget = false;
@@ -155,17 +156,6 @@ namespace BoscaliSummer.Core.Game
             button.enabled = false;
             go.SetActive(false);
             return button;
-        }
-
-        private static void Stretch(RectTransform rect)
-        {
-            if (rect == null) return;
-            rect.anchorMin = Vector2.zero;
-            rect.anchorMax = Vector2.one;
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.offsetMin = Vector2.zero;
-            rect.offsetMax = Vector2.zero;
-            rect.localScale = Vector3.one;
         }
     }
 }

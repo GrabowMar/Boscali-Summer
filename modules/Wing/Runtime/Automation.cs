@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 
+using BoscaliSummer.Core.Diagnostics;
 using BoscaliSummer.Modules.Wing.Domain;
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
@@ -182,7 +183,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         private static Dictionary<string, object> Fail(string hook, string error)
         {
             WingLog.Logger.LogWarning($"[Automation] {hook}: {error}");
-            return new Dictionary<string, object> { { "ok", false }, { "error", error } };
+            return AutomationArgs.Failed(error);
         }
     }
 }

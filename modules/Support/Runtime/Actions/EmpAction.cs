@@ -22,22 +22,9 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
         {
             MissileDefinition definition =
                 context.Host.Vanilla.Artillery(context.Settings.ArtilleryDefinitionKey.Value);
-            if (definition == null || definition.unitPrefab == null)
-            {
-                context.Logger.LogWarning("[Support] EMP shock is unavailable: no missile definition resolved.");
-                return SupportResult.CapabilityUnavailable;
-            }
-            if (NetworkSceneSingleton<Spawner>.i == null) return SupportResult.CapabilityUnavailable;
-            if (!SupportTargeting.TryMapPoint(context.Target, out Vector3 ground))
-                return SupportResult.InvalidTarget;
-
-            if (SupportTargeting.TryOrigin(context.Player, out Vector3 origin))
-            {
-                if (Vector3.Distance(origin, ground) > context.Settings.MaximumRange.Value)
-                    return SupportResult.OutOfRange;
-            }
-
-            if (!context.Host.TryReserve(context.Owner, SupportPool.Strike)) return SupportResult.Busy;
+            SupportResult gate = SupportTargeting.ReserveStrike(context, definition,
+                "[Support] EMP shock is unavailable: no missile definition resolved.", out Vector3 ground);
+            if (gate != SupportResult.Accepted) return gate;
             float radius = Mathf.Min(context.Settings.EmpRadius.Value * context.Quality, SupportEffectPolicy.MaxEmpRadius);
             float duration = CyberService.ExploitDuration(context.Owner, SupportEffectPolicy.EmpDuration * context.Quality, 60f); // EXPLOIT x1.5 while a node is held
             context.Logger.LogInfo("[Support] EMP airburst using " + definition.jsonKey +

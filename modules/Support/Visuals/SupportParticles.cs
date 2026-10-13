@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -104,6 +105,22 @@ namespace BoscaliSummer.Modules.Support.Visuals
                     rotation = Random.Range(0f, 360f)
                 }, 1);
             }
+        }
+
+        /// <summary>A finished pooled effect: out of the active list, switched off, onto the free stack.</summary>
+        public static void Recycle<T>(List<T> active, Stack<T> free, T effect) where T : Component
+        {
+            active.Remove(effect);
+            effect.gameObject.SetActive(false);
+            free.Push(effect);
+        }
+
+        /// <summary>Scene teardown of a pooled effect: every active and free object destroyed, both collections emptied.</summary>
+        public static void DestroyPool<T>(List<T> active, Stack<T> free) where T : Component
+        {
+            for (int i = 0; i < active.Count; i++) if (active[i] != null) Object.Destroy(active[i].gameObject);
+            active.Clear();
+            while (free.Count > 0) { T e = free.Pop(); if (e != null) Object.Destroy(e.gameObject); }
         }
 
         public static void Reset()

@@ -95,7 +95,8 @@ namespace BoscaliSummer.Core.Game
             return null;
         }
 
-        private static bool IsFree(List<Button> buttons, List<MFDScreen> screens, int index)
+        /// <summary>True when the bezel button exists and no screen is bound to that slot (the Wing WMC bezel claims through the same test).</summary>
+        internal static bool IsFree(List<Button> buttons, List<MFDScreen> screens, int index)
         {
             if (buttons == null || index < 0 || index >= buttons.Count || buttons[index] == null)
                 return false;
