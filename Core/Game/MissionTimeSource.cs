@@ -23,7 +23,7 @@ namespace BoscaliSummer.Core.Game
         public static float Now()
         {
             int frame = Time.frameCount;
-            if (heldFrame != frame) { heldTime = Read(false, out _); heldFrame = frame; }
+            if (heldFrame != frame || !Application.isPlaying) { heldTime = Read(false, out _); heldFrame = frame; }
             return heldTime;
         }
 
@@ -32,7 +32,7 @@ namespace BoscaliSummer.Core.Game
         public static bool TryNow(out float time)
         {
             int frame = Time.frameCount;
-            if (requiredFrame != frame) { requiredTime = Read(true, out requiredOk); requiredFrame = frame; }
+            if (requiredFrame != frame || !Application.isPlaying) { requiredTime = Read(true, out requiredOk); requiredFrame = frame; }
             time = requiredTime;
             return requiredOk;
         }

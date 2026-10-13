@@ -74,7 +74,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             if (now >= nextScan) return true;
             for (int i = 0; i < parts.Length; i++)
                 if (parts[i] == null) return true;
-            return false;
+            return now >= nextScan + 25f;   // safety net: a refit can add a station without destroying an old one
         }
 
         private void Scan(Aircraft aircraft, float now)

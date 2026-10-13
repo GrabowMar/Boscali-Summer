@@ -795,7 +795,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         private void ProbeSoundtrack()
         {
             if (soundtrackCatalog != null || Time.unscaledTime < nextSoundtrackProbe) return;
-            nextSoundtrackProbe = Time.unscaledTime + (soundtrackMisses == 0 ? 1f : 10f); // back off after the first miss
+            nextSoundtrackProbe = Time.unscaledTime + (soundtrackMisses < 5 ? 1f : 10f); // back off once the mission-start window has passed
             if (!VanillaSoundtrackCatalog.TryCreate(out VanillaSoundtrackCatalog catalog)) { soundtrackMisses++; return; }
             soundtrackMisses = 0;
             string selectedName = CurrentChannelName;
