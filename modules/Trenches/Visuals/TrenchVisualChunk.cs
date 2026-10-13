@@ -48,7 +48,10 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
         private bool building;
         // Was 3 with a whole step as the unit (a long fire ditch is hundreds of terrain rays: 6 ms in one call);
         // now the budget alone bounds a frame, to this plus the dearest single piece (a mesh finish, a handful of boxes).
-        private const int RebuildMillisecondsPerFrame = 2;
+        // 1 ms shared by every chunk in a frame (measured: a mesh finish is 1.5 ms by itself, so 2 ms per chunk reached 4 ms).
+        private const int RebuildMillisecondsPerFrame = 1;
+        private static int budgetFrame = -1;
+        private static double budgetSpentMs;
 
         /// <summary>One ditch mesh in flight: the ring-by-ring ground snap of a path, then the mesh rings.</summary>
         private sealed class PathJob
@@ -134,6 +137,16 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
         internal void PumpBuildQueue(int budgetMilliseconds = RebuildMillisecondsPerFrame)
         {
             if (!building || line == null) return;
+            if (budgetMilliseconds == int.MaxValue) { PumpBuildQueueCore(budgetMilliseconds); return; }
+            if (budgetFrame != Time.frameCount) { budgetFrame = Time.frameCount; budgetSpentMs = 0.0; }
+            if (budgetSpentMs >= budgetMilliseconds) return;   // other chunks spent this frame's share; this one resumes next frame
+            long started = System.Diagnostics.Stopwatch.GetTimestamp();
+            PumpBuildQueueCore(budgetMilliseconds);
+            budgetSpentMs += (System.Diagnostics.Stopwatch.GetTimestamp() - started) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        }
+
+        private void PumpBuildQueueCore(int budgetMilliseconds)
+        {
             System.Diagnostics.Stopwatch watch = System.Diagnostics.Stopwatch.StartNew();
             while (true)
             {
@@ -377,6 +390,8 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
                 job.Mesh.LayRings(1);
                 if (!job.Mesh.Done && watch.ElapsedMilliseconds >= budgetMilliseconds) return false;
             }
+            // The finish (mesh upload) is one 1.5 ms piece: start it only on a nearly fresh budget, else next frame.
+            if (budgetMilliseconds != int.MaxValue && watch.Elapsed.TotalMilliseconds > 0.4) return false;
             Mesh mesh = job.Mesh.Finish();
             if (mesh == null) return true;
             proceduralMeshes.Add(mesh);

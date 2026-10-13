@@ -33,6 +33,7 @@ namespace BoscaliSummer.Core.Diagnostics
         {
             public long Ticks;
             public long Alloc;
+            public int Gc; // TEMP-SPIKE
         }
 
         private sealed class Slot
@@ -227,6 +228,7 @@ namespace BoscaliSummer.Core.Diagnostics
             }
             depth++;
             __state.Alloc = allocSupported ? GC.GetAllocatedBytesForCurrentThread() : 0;
+            __state.Gc = GC.CollectionCount(0); // TEMP-SPIKE
             __state.Ticks = Stopwatch.GetTimestamp();
         }
 
@@ -236,6 +238,8 @@ namespace BoscaliSummer.Core.Diagnostics
             long elapsed = Stopwatch.GetTimestamp() - __state.Ticks;
             long alloc = allocSupported ? GC.GetAllocatedBytesForCurrentThread() - __state.Alloc : 0;
             depth--;
+            if (elapsed * TicksToMs > 2.5 && __originalMethod != null) // TEMP-SPIKE
+                log?.LogInfo("SPIKE " + __originalMethod.DeclaringType.Name + "." + __originalMethod.Name + " ms=" + (elapsed * TicksToMs).ToString("0.0") + " depth=" + depth + " gc0=" + (GC.CollectionCount(0) - __state.Gc) + " dt=" + (Time.unscaledDeltaTime * 1000f).ToString("0.0") + " f=" + Time.frameCount);
             if (!Running || __originalMethod == null || !slots.TryGetValue(__originalMethod.MethodHandle.Value, out var slot)) return;
             int frame = Time.frameCount;
             if (frame != lastFrame) RollFrame(frame);

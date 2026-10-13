@@ -286,6 +286,18 @@ namespace BoscaliSummer.Fire
         private ParticleSystem flameTemplate;
         private bool templatesSearched;
 
+        /// <summary>Builds one idle visual ahead of need, so the first fires of a fight do not pay the material search and the particle build (20 ms) in their own frame. True while more are wanted.</summary>
+        public bool Warm(int idleWanted)
+        {
+            int idle = 0;
+            for (int i = 0; i < visuals.Count; i++) if (!visuals[i].Active) idle++;
+            if (idle >= idleWanted || visuals.Count >= MaximumVisuals) return false;
+            Visual visual = Create();
+            if (visual.Root != null) visual.Root.SetActive(false);
+            visuals.Add(visual);
+            return true;
+        }
+
         public Visual Acquire(GlobalPosition position, bool forest)
         {
             for (int i = 0; i < visuals.Count; i++)
