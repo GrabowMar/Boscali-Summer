@@ -29,6 +29,10 @@ namespace BoscaliSummer.Core.Game
             catch (ArgumentOutOfRangeException) { return null; }
         }
 
+        /// <summary>The aircraft's first seat (<c>pilots[0]</c>), or null when there is no aircraft or no seat.</summary>
+        public static Pilot PrimaryPilot(Aircraft aircraft) =>
+            aircraft != null && aircraft.pilots != null && aircraft.pilots.Length > 0 ? aircraft.pilots[0] : null;
+
         /// <summary>Live fuel, 0..1 (tank mass over tank capacity). Zero for no aircraft.</summary>
         public static float Fuel(Aircraft aircraft) => aircraft == null ? 0f : Mathf.Clamp01(aircraft.GetFuelLevel());
 
@@ -52,8 +56,8 @@ namespace BoscaliSummer.Core.Game
         public static float LoadFactor(Aircraft aircraft)
         {
             if (aircraft == null) return 1f;
-            Vector3 accel = aircraft.pilots != null && aircraft.pilots.Length > 0 && aircraft.pilots[0] != null
-                ? aircraft.pilots[0].GetAccel() : aircraft.accel;
+            Pilot seat = PrimaryPilot(aircraft);
+            Vector3 accel = seat != null ? seat.GetAccel() : aircraft.accel;
             Vector3 up = aircraft.transform.up;
             return FlightLoad.Factor(accel.x, accel.y, accel.z, up.x, up.y, up.z);
         }

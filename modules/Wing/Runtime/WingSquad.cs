@@ -7,6 +7,7 @@ using HarmonyLib;
 
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 #pragma warning disable IDE0051 // Harmony invokes the explicitly registered survivor hooks.
 
 namespace BoscaliSummer.Modules.Wing.Runtime
@@ -208,7 +209,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 if (owned[aircraft] != target) WakeCombat(aircraft, target);
                 owned[aircraft] = target;
                 RefreshHuntTrack(aircraft, target);
-                PrimaryPilot(aircraft)?.SetPrimaryTarget(target);
+                AircraftReadout.PrimaryPilot(aircraft)?.SetPrimaryTarget(target);
                 changed = true;
             }
             return changed;
@@ -321,7 +322,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             if (!(searcher is Aircraft aircraft) || !aircraft.IsServer || aircraft.Player != null ||
                 aircraft.disabled || !owned.TryGetValue(aircraft, out Aircraft target) || target == null)
                 return false;
-            Pilot targetPilot = PrimaryPilot(target);
+            Pilot targetPilot = AircraftReadout.PrimaryPilot(target);
             if (target.disabled || target.Player == null || targetPilot == null || targetPilot.dead ||
                 targetPilot.ejected || target.NetworkHQ == null || target.NetworkHQ == aircraft.NetworkHQ)
             {
@@ -366,7 +367,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         private static void WakeCombat(Aircraft aircraft, Aircraft target)
         {
-            Pilot pilot = PrimaryPilot(aircraft);
+            Pilot pilot = AircraftReadout.PrimaryPilot(aircraft);
             if (pilot == null || pilot.dead || pilot.ejected) return;
             if (target != null) RefreshHuntTrack(aircraft, target);
             pilot.SetPrimaryTarget(target);
@@ -446,9 +447,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             { WingSurvivalPerks.RemoveAce(aircraft); owned.Remove(aircraft); }
             stale.Clear();
         }
-
-        private static Pilot PrimaryPilot(Aircraft aircraft) =>
-            aircraft != null && aircraft.pilots != null && aircraft.pilots.Length > 0 ? aircraft.pilots[0] : null;
 
         /// <summary>Aces spawned here hunt the aircraft they were sent after (the game's own target choice otherwise).</summary>
         [HarmonyPatch(typeof(CombatAI), nameof(CombatAI.ChooseHQTarget))]

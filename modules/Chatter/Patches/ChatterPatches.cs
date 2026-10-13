@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using BoscaliSummer.Core.Diagnostics;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Chatter.Runtime;
 using HarmonyLib;
 
@@ -12,8 +13,7 @@ namespace BoscaliSummer.Modules.Chatter.Patches
     [HarmonyPatch]
     internal static class ChatterKillPatch
     {
-        private static MethodBase TargetMethod() => AccessTools.FirstMethod(typeof(MessageManager),
-            method => method.Name.StartsWith("UserCode_RpcKillMessage_"));
+        private static MethodBase TargetMethod() => KillMessageRpc.Target();
 
         [HarmonyPrefix]
         private static void Prefix(PersistentID killerID, PersistentID killedID)

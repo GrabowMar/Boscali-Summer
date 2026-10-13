@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Command.Domain
 {
@@ -91,10 +92,6 @@ namespace BoscaliSummer.Modules.Command.Domain
 
         private static float Lerp(float a, float b, float t) => a + (b - a) * t;
 
-        private static float Smooth(float t)
-        {
-            t = t < 0f ? 0f : t > 1f ? 1f : t;
-            return t * t * (3f - 2f * t);
-        }
+        private static float Smooth(float t) => Scalar.SmoothStep(0f, 1f, t);
     }
 }

@@ -169,7 +169,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             if (!furnitureDirty) return;
             furnitureDirty = false;
             inkAtFurniture = ink;
-            labels[LabelCaption].color = Dim(.7f);
+            labels[LabelCaption].color = inkColour.WithAlpha(.7f);
             labels[LabelFlag].color = inkColour;
 
             AvQuadBuffer f = furniture.Buffer;
@@ -209,8 +209,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
             shade.pixelsPerUnitMultiplier = 1f / Mathf.Max(.01f, u);
             shade.color = new Color(HudSprites.ShadeTint.r, HudSprites.ShadeTint.g, HudSprites.ShadeTint.b, Mathf.Lerp(ShadeMini, ShadeBig, glide));
         }
-
-        private Color Dim(float alpha) => new Color(inkColour.r, inkColour.g, inkColour.b, alpha);
 
         private void Place(int index, float x, float y)
         {

@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.DynamicOperations.Domain
 {
@@ -52,7 +53,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
             {
                 AirDefenceRing ring = all[i];
                 if (ring.Kind == AirDefenceKind.Sensor || !(ring.MaxRange > 0f) || float.IsNaN(ring.X) || float.IsNaN(ring.Z)) continue;
-                float d = Math.Min(Distance(ring.X, ring.Z, zoneX, zoneZ), Distance(ring.X, ring.Z, ownX, ownZ));
+                float d = Math.Min(Scalar.Distance2D(ring.X, ring.Z, zoneX, zoneZ), Scalar.Distance2D(ring.X, ring.Z, ownX, ownZ));
                 if (d - ring.MaxRange > RingReachM) continue;
                 int at = n < into.Length ? n++ : -1;
                 if (at < 0)
@@ -66,12 +67,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
                 rank[at] = d;
             }
             return n;
-        }
-
-        private static float Distance(float ax, float az, float bx, float bz)
-        {
-            float dx = ax - bx, dz = az - bz;
-            return (float)Math.Sqrt(dx * dx + dz * dz);
         }
     }
 }

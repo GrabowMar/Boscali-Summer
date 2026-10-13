@@ -3,6 +3,7 @@ using HarmonyLib;
 using NuclearOption.Networking;
 using UnityEngine;
 
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Presentation;
 using BoscaliSummer.Modules.Wing.Configuration;
@@ -79,7 +80,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 // Hold an unresolved record briefly instead of declaring that crew KIA immediately.
                 if (!UnitRegistry.TryGetUnit(id, out Unit unit) || !(unit is Aircraft aircraft) ||
                     !aircraft.IsServer) return false;
-                Pilot seated = PrimaryPilot(aircraft);
+                Pilot seated = AircraftReadout.PrimaryPilot(aircraft);
                 if (seated == null || seated.dead) return false;
                 survivors.Add(id, new Survivor {
                     Pilot = pilot, PendingAircraft = aircraft, Value = aircraft.definition != null ? aircraft.definition.value : 0f,
@@ -103,9 +104,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             if (killed) survivor.Pilot.LossCause = "Killed after ejection";
             WingPilotRoster.SettleRescue(id, survivor.Pilot, status, killed, message);
         }
-
-        private static Pilot PrimaryPilot(Aircraft aircraft) =>
-            aircraft != null && aircraft.pilots != null && aircraft.pilots.Length > 0 ? aircraft.pilots[0] : null;
 
         /// <summary>The rescue bounty: half the airframe's value captured when the pilot went down (SarRules).</summary>
         private static void AwardRescueBounty(Survivor survivor)
@@ -165,7 +163,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 {
                     if (survivor.PendingAircraft != null)
                     {
-                        Pilot seated = PrimaryPilot(survivor.PendingAircraft);
+                        Pilot seated = AircraftReadout.PrimaryPilot(survivor.PendingAircraft);
                         if (seated != null && seated.dead)
                         {
                             Settle(id, PilotRecoveryStatus.None, true, "KIA before ejection");

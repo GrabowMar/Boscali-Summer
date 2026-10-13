@@ -200,16 +200,16 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 if (radius > 1f && radius < Mathf.Max(w, h)*2f)
                 {
                     if (lastKnown) AvStrokes.DashedRing(vectors.Buffer, contact.x, contact.y, radius, 24, .45f, .8f,
-                        MissionTaskGraphics.RgbaOf(MissionTaskGraphics.Amber.WithAlpha(.5f)));
+                        MissionTaskGraphics.Amber.WithAlpha(.5f).ToRgba());
                     else AvStrokes.Ring(vectors.Buffer, contact.x, contact.y, radius, 64, .7f,
-                        MissionTaskGraphics.RgbaOf(MissionTaskGraphics.Key.WithAlpha(.38f)));
+                        MissionTaskGraphics.Key.WithAlpha(.38f).ToRgba());
                 }
                 if (selfVisible)
                 {
                     AvStrokes.Line(vectors.Buffer, self.x, self.y, contact.x, contact.y, 3.8f,
-                        MissionTaskGraphics.RgbaOf(MissionTaskGraphics.Ground));
+                        MissionTaskGraphics.Ground.ToRgba());
                     AvStrokes.DashedLine(vectors.Buffer, self.x, self.y, contact.x, contact.y, 5f, 5f, 1f,
-                        MissionTaskGraphics.RgbaOf((lastKnown ? MissionTaskGraphics.Dim : MissionTaskGraphics.Key).WithAlpha(.75f)));
+                        (lastKnown ? MissionTaskGraphics.Dim : MissionTaskGraphics.Key).WithAlpha(.75f).ToRgba());
                     HasBearing = true;
                 }
                 // Separate the two identity plates away from their common bearing.
@@ -333,7 +333,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         private void DrawGrid(float w, float h)
         {
-            Rgba color = MissionTaskGraphics.RgbaOf(MissionTaskGraphics.Key.WithAlpha(.18f));
+            Rgba color = MissionTaskGraphics.Key.WithAlpha(.18f).ToRgba();
             // World-aligned kilometre multiples, coarsened to at most eight lines per axis.
             float step = Mathf.Pow(10f, Mathf.Floor(Mathf.Log10(Mathf.Max(cropWidth, cropHeight)/5f)));
             if (Mathf.Max(cropWidth, cropHeight)/step > 8f) step *= 2f;
@@ -419,7 +419,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             if (delta.magnitude <= inset) return;
             Vector2 start = contact+delta.normalized*inset;
             AvStrokes.Line(vectors.Buffer, start.x, start.y, end.x, end.y, .7f,
-                MissionTaskGraphics.RgbaOf(color.WithAlpha(.45f)));
+                color.WithAlpha(.45f).ToRgba());
         }
 
         private static void PlacePlate(Image plate, TMP_Text label, string text, Rect box)

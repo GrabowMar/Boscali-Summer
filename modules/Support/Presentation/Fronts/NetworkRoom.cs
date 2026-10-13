@@ -318,7 +318,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     g.Frame(p.x - 8f, p.y - 8f, 16f, 16f, 1.2f, k);
                     for (int r = -1; r <= 1; r += 2) g.Line(p + new Vector2(-4f, r * 3f), p + new Vector2(4f, r * 3f), 1.4f, k);
                 }
-                if (a.Health == AnchorHealth.Down) Cross(g, p, 9f, danger);
+                if (a.Health == AnchorHealth.Down) FrontKit.Cross(g, p, 9f, danger);
                 labels.Take(new Rect(p.x - 14f, p.y - 14f, 28f, 28f));
             }
             for (int i = 0; i < count; i++)
@@ -331,10 +331,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 Glyph(g, nd.Kind, p, 9f, k, nd.State == NetNodeState.Held ? 2f : 1.5f);
                 if (nd.State == NetNodeState.Traced)
                 {
-                    Cross(g, p, 10f, danger);
+                    FrontKit.Cross(g, p, 10f, danger);
                     g.Ring(p, 17f, 1.2f, danger.WithAlpha(0.8f), 28, 1f, 1f);
                 }
-                if (nd.Id == n.SelectedId) Brackets(g, p, 18f, AvInk.Select);
+                if (nd.Id == n.SelectedId) FrontKit.Brackets(g, p, 18f, AvInk.Select);
                 labels.Take(new Rect(p.x - 14f, p.y - 14f, 28f, 28f));
             }
             for (int i = 0; i < count; i++)
@@ -455,30 +455,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 else if (i == 1) g.Dashed(p + new Vector2(-8f, 0f), p + new Vector2(8f, 0f), 2f, ink[i], 4f, 3f);
                 else if (i == 2) g.Dashed(p + new Vector2(-8f, 0f), p + new Vector2(8f, 0f), 1.2f, ink[i], 3f, 3f);
                 else if (i == 3) g.Line(p + new Vector2(-8f, 0f), p + new Vector2(8f, 0f), 1f, ink[i].WithAlpha(0.5f));
-                else if (i == 4) Cross(g, p, 5f, ink[i]);
+                else if (i == 4) FrontKit.Cross(g, p, 5f, ink[i]);
                 else { g.Ring(p, 7f, 1.2f, ink[i].WithAlpha(0.7f), 18, 1f, 1f); g.Disc(p, 2.5f, ink[i], 8); }
             }
         }
 
         private static Color Zone(float pct) =>
             pct < 25f ? AvInk.State(AvState.Ready) : pct < 60f ? AvInk.State(AvState.Caution) : pct < 85f ? AvInk.State(AvState.Danger) : AvInk.Hostile;
-
-        private static void Cross(FrontVector g, Vector2 p, float r, Color k)
-        {
-            g.Line(p + new Vector2(-r, -r), p + new Vector2(r, r), 2f, k);
-            g.Line(p + new Vector2(-r, r), p + new Vector2(r, -r), 2f, k);
-        }
-
-        private static void Brackets(FrontVector g, Vector2 p, float r, Color k)
-        {
-            for (int sx = -1; sx <= 1; sx += 2)
-                for (int sy = -1; sy <= 1; sy += 2)
-                {
-                    Vector2 q = p + new Vector2(sx * r, sy * r);
-                    g.Line(q, q + new Vector2(-sx * 6f, 0f), 1.8f, k);
-                    g.Line(q, q + new Vector2(0f, -sy * 6f), 1.8f, k);
-                }
-        }
 
         private static void Truck(FrontVector g, Vector2 p, Color k)
         {

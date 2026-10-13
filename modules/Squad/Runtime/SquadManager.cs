@@ -327,7 +327,7 @@ namespace BoscaliSummer.Modules.Squad.Runtime
             Player player = career.Player;
             if (player == null || !connected.Contains(player)) return;
             Aircraft aircraft = player.Aircraft;
-            Pilot seat = Primary(aircraft);
+            Pilot seat = AircraftReadout.PrimaryPilot(aircraft);
             if (career.Seat != null && career.Seat.dead) RecordPilotDeath(player, career.Seat);
             if (career.SeatId.IsValid && !career.SeatDeathObserved && WingLink.SurvivorStatus(career.SeatId) == 3)
             {
@@ -647,7 +647,7 @@ namespace BoscaliSummer.Modules.Squad.Runtime
                 Wings = Array.Empty<EnemyWingView>(), Status = status };
             Career career = GetCareer(player);
             if (career == null) { result.Revision = Revision(result); return result; }
-            Pilot seat = Primary(player.Aircraft);
+            Pilot seat = AircraftReadout.PrimaryPilot(player.Aircraft);
             result.Pilot = new PilotView(career.Name, career.Callsign,
                 career.Rules.ReplacementPending ? "KIA — successor on next sortie" : seat == null ? "Awaiting aircraft" :
                 seat.dead ? "KIA — respawn available" : seat.ejected ? "EJECTED" : "ACTIVE",
@@ -739,11 +739,10 @@ namespace BoscaliSummer.Modules.Squad.Runtime
         internal void ClearLocal(string reason)
         { pilot = default; HuntActive = false; ActiveEnemyWingIndex = -1; ActiveHuntId = 0; enemies = Array.Empty<EnemyWingView>(); status = reason; LastChatter = string.Empty; AppliedRevision = 0; }
 
-        private static Pilot Primary(Aircraft aircraft) => aircraft != null && aircraft.pilots != null && aircraft.pilots.Length > 0 ? aircraft.pilots[0] : null;
         private static bool Survived(PersistentID id)
         { int status = WingLink.SurvivorStatus(id); return status == 1 || status == 2; }
         private static bool Flyable(Aircraft aircraft)
-        { Pilot seat = Primary(aircraft); return aircraft != null && !aircraft.disabled && seat != null && !seat.dead && !seat.ejected; }
+        { Pilot seat = AircraftReadout.PrimaryPilot(aircraft); return aircraft != null && !aircraft.disabled && seat != null && !seat.dead && !seat.ejected; }
         private static bool Hostile(FactionHQ a, FactionHQ b) => a != null && b != null && a != b &&
             a.faction != null && b.faction != null &&
             !FactionHelper.EmptyOrNoFactionOrNeutral(a.faction.factionName) &&

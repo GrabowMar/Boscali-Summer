@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.UI;
 
 using CoreGameAccess = BoscaliSummer.Core.Game.GameAccess;
+using CoreMfdBezel = BoscaliSummer.Core.Game.MfdBezel;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>Finds a free MFD bezel slot on the live <see cref="VirtualMFD"/> and binds a companion
@@ -31,7 +32,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 BezelRegistry.Wmc, preferLeft,
                 leftButtons == null ? 0 : leftButtons.Count,
                 rightButtons == null ? 0 : rightButtons.Count,
-                (isLeft, index) => IsFree(
+                (isLeft, index) => CoreMfdBezel.IsFree(
                     isLeft ? leftButtons : rightButtons,
                     isLeft ? leftScreens : rightScreens, index),
                 out left, out slot))
@@ -39,7 +40,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
             buttons = left ? leftButtons : rightButtons;
             screens = left ? leftScreens : rightScreens;
-            if (buttons != null && screens != null && IsFree(buttons, screens, slot))
+            if (buttons != null && screens != null && CoreMfdBezel.IsFree(buttons, screens, slot))
                 return true;
 
             BezelRegistry.Release(BezelRegistry.Wmc);
@@ -102,12 +103,5 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private static bool HasNativeLayout(MFDScreen template) =>
             template != null && template.displayPanel != null && template.transform is RectTransform;
-
-        private static bool IsFree(List<Button> buttons, List<MFDScreen> screens, int index)
-        {
-            if (buttons == null || index < 0 || index >= buttons.Count || buttons[index] == null)
-                return false;
-            return screens == null || index >= screens.Count || screens[index] == null;
-        }
     }
 }

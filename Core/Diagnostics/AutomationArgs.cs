@@ -47,7 +47,11 @@ namespace BoscaliSummer.Core.Diagnostics
         public static Dictionary<string, object> Failure(string source, string hook, string error)
         {
             Debug.LogWarning("[" + source + "] " + hook + ": " + error);
-            return new Dictionary<string, object> { { "ok", false }, { "error", error } };
+            return Failed(error);
         }
+
+        /// <summary>The bare failure result <c>{"ok": false, "error": ...}</c>, for a hook that logs through its own logger.</summary>
+        public static Dictionary<string, object> Failed(string error) =>
+            new Dictionary<string, object> { { "ok", false }, { "error", error } };
     }
 }

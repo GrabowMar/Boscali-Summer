@@ -373,23 +373,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     Vector3 desired = parent.center.position + new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle)) * (CampRadius + ring * 1000f);
                     GlobalPosition anchor = desired.ToGlobalPosition();
                     if (!spawner.TryPlanCamp(anchor, parent, out GlobalPosition[] cp, out _)) continue;
-                    float front = FrontDistanceOf(owner, desired);
+                    float front = SupportTargeting.FrontDistanceOf(owner, desired);
                     sites.Add(new Site(parent, anchor));
                     cands.Add(new SiteCandidate(sites.Count - 1, (float)cp[0].x, (float)cp[0].z, front, front));
                 }
-        }
-
-        private static float FrontDistanceOf(FactionHQ owner, Vector3 point)
-        {
-            float nearest = float.PositiveInfinity;
-            if (FactionRegistry.airbaseLookup != null)
-                foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
-                {
-                    if (airbase == null || airbase.disabled || airbase.center == null || airbase.CurrentHQ == null || airbase.CurrentHQ == owner) continue;
-                    Vector3 d = point - airbase.center.position; d.y = 0f;
-                    nearest = Mathf.Min(nearest, d.magnitude);
-                }
-            return float.IsInfinity(nearest) ? 1000000f : nearest;
         }
     }
 }

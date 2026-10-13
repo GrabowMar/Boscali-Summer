@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Presentation.C2;
@@ -201,7 +202,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private void OnWindowClosed()
         {
             if (backdrop != null) backdrop.SetActive(false);
-            SetHovered(null);
+            WindowPointer.Hover(ref hovered, null);
             GiveBackInput();
             closing = false;
             Closed?.Invoke();
@@ -270,28 +271,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 if (h != null && h.isActiveAndEnabled && h.Interactable &&
                     RectTransformUtility.RectangleContainsScreenPoint((RectTransform)h.transform, mouse, null)) { under = h; break; }
             }
-            SetHovered(under);
-            if (under != null && Input.GetMouseButtonDown(0)) ((IPointerClickHandler)under).OnPointerClick(PointerData());
+            WindowPointer.Hover(ref hovered, under);
+            if (under != null && Input.GetMouseButtonDown(0)) ((IPointerClickHandler)under).OnPointerClick(WindowPointer.Data());
         }
-
-        private void SetHovered(AvHit next)
-        {
-            if (hovered == next) return;
-            if (hovered != null)
-            {
-                ((IPointerExitHandler)hovered).OnPointerExit(PointerData());
-                hovered.GetComponent<AvHelpTip>()?.OnPointerExit(PointerData());
-            }
-            hovered = next;
-            if (hovered != null)
-            {
-                ((IPointerEnterHandler)hovered).OnPointerEnter(PointerData());
-                hovered.GetComponent<AvHelpTip>()?.OnPointerEnter(PointerData());
-            }
-        }
-
-        private static PointerEventData PointerData() =>
-            new PointerEventData(EventSystem.current) { button = PointerEventData.InputButton.Left, position = Input.mousePosition };
 
         // ---- Input ownership -------------------------------------------------------------------------------------------
 

@@ -1,4 +1,5 @@
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.TheaterOps.Domain
 {
@@ -90,7 +91,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
             float bestSquare = FrontReachMeters * FrontReachMeters;
             for (int i = 0; i < count; i++)
             {
-                float square = Square(x, z, frontX[i], frontZ[i]);
+                float square = Scalar.Distance2DSquared(x, z, frontX[i], frontZ[i]);
                 if (!(square <= bestSquare)) continue;
                 if (best >= 0 && square >= bestSquare) continue;
                 best = i;
@@ -103,19 +104,16 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
         {
             if (!group.Usable) return false;
             float reach = group.Held ? HeldReachMeters : ReachMeters;
-            return Square(group.X, group.Z, fixX, fixZ) <= reach * reach;
+            return Scalar.Distance2DSquared(group.X, group.Z, fixX, fixZ) <= reach * reach;
         }
 
         private static bool Before(GroupFacts a, GroupFacts b, float fixX, float fixZ)
         {
             if (a.Held != b.Held) return a.Held;
-            float da = Square(a.X, a.Z, fixX, fixZ), db = Square(b.X, b.Z, fixX, fixZ);
+            float da = Scalar.Distance2DSquared(a.X, a.Z, fixX, fixZ), db = Scalar.Distance2DSquared(b.X, b.Z, fixX, fixZ);
             if (da != db) return da < db;
             return a.Id < b.Id;
         }
-
-        private static float Square(float ax, float az, float bx, float bz)
-        { float dx = ax - bx, dz = az - bz; return dx * dx + dz * dz; }
     }
 
     /// <summary>Which group a freshly seen vehicle joins, and which lane it takes.</summary>

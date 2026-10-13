@@ -60,19 +60,9 @@ namespace BoscaliSummer.Modules.Support.Visuals
             e.Begin(kind, radius, Mathf.Clamp(seconds, 2f, 600f), tint, pingScratch, pings);
         }
 
-        internal static void Release(AreaFxEffect e)
-        {
-            active.Remove(e);
-            e.gameObject.SetActive(false);
-            free.Push(e);
-        }
+        internal static void Release(AreaFxEffect e) => SupportParticles.Recycle(active, free, e);
 
-        public static void Reset()
-        {
-            for (int i = 0; i < active.Count; i++) if (active[i] != null) Object.Destroy(active[i].gameObject);
-            active.Clear();
-            while (free.Count > 0) { AreaFxEffect e = free.Pop(); if (e != null) Object.Destroy(e.gameObject); }
-        }
+        public static void Reset() => SupportParticles.DestroyPool(active, free);
 
         /// <summary>Hostile ground units inside the radius (offsets from the centre into <see cref="pingScratch"/>); with <paramref name="emitters"/> only those with a working radar.</summary>
         private static int CollectPings(FactionHQ owner, Vector3 centre, float radius, bool emitters, int cap)

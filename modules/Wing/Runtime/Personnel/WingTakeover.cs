@@ -233,7 +233,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 rt.SetParent(content, worldPositionStays: false);
                 WmcDraw.Place(rt, rect);
 
-                WingUi.Panel(rt, new Rect(0f, 0f, cardWidth, CardHeight), Fade(WingUi.Friendly, 0.58f));
+                WingUi.Panel(rt, new Rect(0f, 0f, cardWidth, CardHeight), WingUi.Friendly.WithAlpha(0.58f));
 
                 var card = new Card { Root = go };
 
@@ -258,7 +258,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                                          WingUi.Dim, 10f, FontStyles.Normal,
                                          TextAlignmentOptions.Left);
 
-                card.FuelTrack = WingUi.Rule(rt, new Rect(50f, -58f, cardWidth - 62f, 2f), Fade(WingUi.Grey, 0.35f));
+                card.FuelTrack = WingUi.Rule(rt, new Rect(50f, -58f, cardWidth - 62f, 2f), WingUi.Grey.WithAlpha(0.35f));
                 card.FuelFill = WingUi.Rule(rt, new Rect(50f, -58f, cardWidth - 62f, 2f),
                                             WingUi.Friendly);
 
@@ -543,8 +543,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 default: return "#" + member.Number;
             }
         }
-
-        private static Color Fade(Color c, float alpha) => new Color(c.r, c.g, c.b, alpha);
     }
 
     /// <summary>Suppress defeat only inside the native local-player death/ejection calls. Objective and
