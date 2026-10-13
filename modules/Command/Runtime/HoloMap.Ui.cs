@@ -45,6 +45,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private const float ShadeMini = .5f, ShadeBig = .55f;
         /// <summary>The MINI's shelf ends this many units in (the scale bar and the grid reference have the rest of the row), and the room kept for the grid reference at the frame's lower right.</summary>
         private const float MiniShelfEnd = 140f, GridRoom = 44f;
+        /// <summary>The BIG map's shelf is this long (design units from the frame's left): the caption and the range at its end, short enough to stay clear of the HUD's stores and board rows at the top of the screen.</summary>
+        private const float BigShelfEnd = 440f;
 
         /// <summary>Builds the root, the picture, the two vector layers and the labels once, under the HUD canvas: the canvas of the corner map, else the canvas of the HUD's icon layer.</summary>
         private bool PrepareUi()
@@ -199,8 +201,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
             AvStrokes.Bracket(f, -pad, -pad, frameW + 2f * pad, frameH + 2f * pad, 10f * u, w, dim);
 
             // The shelf: a hairline interrupted by its two captions (4 unit gaps), ending in a node and a short 45 degree stub, as every block shelf of the visor. Inside the lower-left of the MINI's frame (the game's own
-            // screen-edge markers can sit above it, the scale bar and the grid reference have the rest of its row); the BIG one's stands above its brackets, as wide as they are. It glides between the two as the frame grows.
-            float start = Mathf.Lerp(0f, -pad, glide), end = Mathf.Lerp(MiniShelfEnd * u, frameW + pad, glide), gap = 4f * u;
+            // screen-edge markers can sit above it, the scale bar and the grid reference have the rest of its row); the BIG one's stands above its brackets, <see cref="BigShelfEnd"/> long. It glides between the two as the frame grows.
+            float start = Mathf.Lerp(0f, -pad, glide), end = Mathf.Lerp(MiniShelfEnd * u, Mathf.Min(frameW + pad, BigShelfEnd * u), glide), gap = 4f * u;
             float y = Mathf.Lerp(row, frameH + 18f * u, glide);
             float captionEnd = start + 12f * u + AvText.Width(labels[LabelCaption]) + gap;
             float flagStart = end - 12f * u - AvText.Width(labels[LabelFlag]) - gap;
