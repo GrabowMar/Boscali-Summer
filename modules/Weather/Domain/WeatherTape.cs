@@ -121,6 +121,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
                     if (Cache[i].Inputs.Id == key.TapeId)
                     {
                         WeatherTape hit = Cache[i];
+                        if (i == 0) return hit;
                         Cache.RemoveAt(i);
                         Cache.Insert(0, hit);
                         return hit;
@@ -169,8 +170,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
             WeatherRegimeType cls = inputs.MissionClass < WeatherKey.ClassCount ? (WeatherRegimeType)inputs.MissionClass : NoClass(inputs.Seed);
             tape.OpeningClass = cls;
 
-            var blocks = new List<Block>();
-            var segments = new List<SegmentRow>();
+            // A tape has about 70 blocks and 55 segments (at most a few more than 120 and 80): room for them up front, not four or five doublings of each list.
+            var blocks = new List<Block>(128);
+            var segments = new List<SegmentRow>(64);
             int openingSky = -1;
 
             if (pinnedSky) blocks.Add(new Block { Sky = inputs.SkyPin, Km = 3000f });
@@ -301,9 +303,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
             int count = 0;
             while (count < n && (count == 0 || at[count] < SpanMetres) && count < MaxKeyframes) count++;
             var frames = new TapeKeyframe[count];
-            var markers = new List<TapeMarker>();
-            var fronts = new List<TapeFront>();
-            var segs = new List<TapeSegment>();
+            var markers = new List<TapeMarker>(16);
+            var fronts = new List<TapeFront>(16);
+            var segs = new List<TapeSegment>(64);
             int story = -1;
             float pendingLead = float.NaN;
             int pendingMarker = -1;

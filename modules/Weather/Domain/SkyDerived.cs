@@ -54,7 +54,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
             for (int i = 0; i < 40; i++)
             {
                 float mid = 0.5f * (lo + hi);
-                if (MeanStrength(mid) < mu) lo = mid; else hi = mid;
+                // Once mid rounds onto an end, the step changes nothing and every later step repeats it: the remaining iterations return the same lo and hi.
+                if (MeanStrength(mid) < mu) { if (mid == lo) break; lo = mid; }
+                else { if (mid == hi) break; hi = mid; }
             }
             return 0.5f * (lo + hi);
         }

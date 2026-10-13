@@ -14,7 +14,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public static float Metres(in SkyParams a, in SkyParams b, float markerPeakRain = 0f)
         {
             // Lerp at 0 and 1 gives both rows with an absent layer's geometry inherited from its neighbour: a fade-in sweeps no altitude.
-            SkyParams x = SkyParams.Lerp(a, b, 0f), y = SkyParams.Lerp(a, b, 1f);
+            SkyParams.LerpEnds(a, b, out SkyParams ea, out SkyParams eb);
+            SkyParams x = SkyParams.LerpBetween(ea, eb, 0f), y = SkyParams.LerpBetween(ea, eb, 1f);
             float dC = Max(Math.Abs(x.SheetCover - y.SheetCover), Math.Abs(x.CumulusCover - y.CumulusCover), Math.Abs(x.Mid.Cover - y.Mid.Cover),
                 Math.Abs(x.High.Cover - y.High.Cover), Math.Abs(x.Convective - y.Convective));
             float dR = Math.Abs(x.StratRain - y.StratRain), rHi = Math.Max(x.StratRain, y.StratRain);
@@ -29,10 +30,22 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         private static float ArchetypeTop(in SkyParams s) => SkyArchetypes.DeckTop(s);
 
-        private static float Max(params float[] values)
+        // Largest of the arguments by comparison, as the old params loop took it (the first wins a tie, and a NaN after the first never wins), without allocating its array.
+        private static float Max(float a, float b, float c, float d, float e)
         {
-            float m = values[0];
-            for (int i = 1; i < values.Length; i++) if (values[i] > m) m = values[i];
+            float m = a;
+            if (b > m) m = b;
+            if (c > m) m = c;
+            if (d > m) m = d;
+            if (e > m) m = e;
+            return m;
+        }
+
+        private static float Max(float a, float b, float c, float d, float e, float f, float g)
+        {
+            float m = Max(a, b, c, d, e);
+            if (f > m) m = f;
+            if (g > m) m = g;
             return m;
         }
     }

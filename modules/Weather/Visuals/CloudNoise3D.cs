@@ -113,21 +113,37 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             int xi = (int)Math.Floor(x);
             int yi = (int)Math.Floor(y);
             int zi = (int)Math.Floor(z);
+            var ax = new Axis(xi, x, period, 374761393);
+            var ay = new Axis(yi, y, period, 668265263);
+            var az = new Axis(zi, z, period, 1440662683);
+            int seedShare = unchecked(seed * 1274126177);
             float best = float.MaxValue;
 
-            for (int dz = -1; dz <= 1; dz++)
+            // The result is the smallest d over the 27 cells, whatever order they are met in. Each axis is walked floor cell, nearer neighbour, farther neighbour, and the
+            // nearest possible point of a cell (Axis.Low, summed like d) only grows with the ranks: once a cell cannot beat the best so far, neither can the rest of its
+            // row, nor of the rows after it, and nothing in it is hashed. (A cell whose point is no closer than the best could not change the minimum.)
+            for (int rz = 0; rz < 3; rz++)
             {
-                for (int dy = -1; dy <= 1; dy++)
+                float lz = az.Low(rz);
+                if (lz >= best) break;
+                int dz = az.Delta(rz);
+                for (int ry = 0; ry < 3; ry++)
                 {
-                    for (int dx = -1; dx <= 1; dx++)
+                    float ly = ay.Low(ry);
+                    if (ly + lz >= best) break;
+                    int dy = ay.Delta(ry);
+                    for (int rx = 0; rx < 3; rx++)
                     {
+                        if (ax.Low(rx) + ly + lz >= best) break;
+
+                        int dx = ax.Delta(rx);
                         // One hash per cell, sliced into three 10-bit offsets: a third of
                         // the hashing of jittering each axis separately.
-                        int h = HashInt(Wrap(xi + dx, period), Wrap(yi + dy, period), Wrap(zi + dz, period), seed);
+                        int h = HashCell(ax.Share(rx) + ay.Share(ry) + az.Share(rz) + seedShare);
 
-                        float ox = xi + dx + (h & 1023) / 1023f - x;
-                        float oy = yi + dy + ((h >> 10) & 1023) / 1023f - y;
-                        float oz = zi + dz + ((h >> 20) & 1023) / 1023f - z;
+                        float ox = xi + dx + Fraction[h & 1023] - x;
+                        float oy = yi + dy + Fraction[(h >> 10) & 1023] - y;
+                        float oz = zi + dz + Fraction[(h >> 20) & 1023] - z;
 
                         float d = ox * ox + oy * oy + oz * oz;
                         if (d < best)
@@ -138,6 +154,49 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
             float distance = (float)Math.Sqrt(best);
             return distance > 1f ? 1f : distance;
+        }
+
+        /// <summary>i / 1023f for the 10-bit slices of a cell hash (the same division, done once).</summary>
+        private static readonly float[] Fraction = MakeFraction();
+
+        private static float[] MakeFraction()
+        {
+            var table = new float[1024];
+            for (int i = 0; i < table.Length; i++) table[i] = i / 1023f;
+            return table;
+        }
+
+        /// <summary>One axis of a Worley probe, by rank: 0 the floor cell, 1 the neighbour on the nearer side, 2 the one on the farther side. For each: the cell offset, its share of
+        /// <see cref="HashInt"/>'s sum (the wrapped index times the hash multiplier; the sum wraps like the int arithmetic it came from, so any order of the terms gives one value), and the
+        /// least squared offset a feature point of that cell can have. The bounds use the float operations the real offsets use, and rounding is monotone: the point of the cell below sits
+        /// at most at the floor cell's index, the point of the cell above at least at the next index, so no offset (or square of one) in those cells can be smaller.</summary>
+        private readonly struct Axis
+        {
+            private readonly int share0, share1, share2, delta1;
+            private readonly float low1, low2;
+
+            public Axis(int cell, float v, int period, int multiplier)
+            {
+                float below = cell - v, above = cell + 1 - v;
+                float lowBelow = below * below, lowAbove = above * above;
+                bool belowIsNear = lowBelow <= lowAbove;
+                delta1 = belowIsNear ? -1 : 1;
+                low1 = belowIsNear ? lowBelow : lowAbove;
+                low2 = belowIsNear ? lowAbove : lowBelow;
+                unchecked
+                {
+                    share0 = Wrap(cell, period) * multiplier;
+                    share1 = Wrap(cell + delta1, period) * multiplier;
+                    share2 = Wrap(cell - delta1, period) * multiplier;
+                }
+            }
+
+            public int Delta(int rank) => rank == 0 ? 0 : rank == 1 ? delta1 : -delta1;
+
+            public int Share(int rank) => rank == 0 ? share0 : rank == 1 ? share1 : share2;
+
+            /// <summary>0 for the floor cell itself: a point inside it can lie anywhere.</summary>
+            public float Low(int rank) => rank == 0 ? 0f : rank == 1 ? low1 : low2;
         }
 
         private static float ValueNoise(float x, float y, float z, int period, int seed)
@@ -198,6 +257,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         private static int Wrap(int v, int period)
         {
+            // A power of two (every period in use): the mask is the same non-negative remainder, for negative v too, without the division.
+            if (period > 0 && (period & (period - 1)) == 0) return v & (period - 1);
             int r = v % period;
             return r < 0 ? r + period : r;
         }
@@ -206,7 +267,15 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         {
             unchecked
             {
-                int n = x * 374761393 + y * 668265263 + z * 1440662683 + seed * 1274126177;
+                return HashCell(x * 374761393 + y * 668265263 + z * 1440662683 + seed * 1274126177);
+            }
+        }
+
+        /// <summary>The mixing rounds of <see cref="HashInt"/>, applied to its weighted sum of the cell indices and the seed.</summary>
+        private static int HashCell(int n)
+        {
+            unchecked
+            {
                 n = (n ^ (n >> 13)) * 1274126177;
                 return (n ^ (n >> 16)) & 0x7fffffff;
             }

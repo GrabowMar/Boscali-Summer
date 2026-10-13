@@ -91,7 +91,10 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         private static float BlobCover(float x, float z, float radius)
         {
-            float q = 1f - (x * x + z * z) / (radius * radius);
+            float d2 = x * x + z * z, r2 = radius * radius;
+            // At or past the radius the quotient is at least 1 (a division is monotone), so q <= 0 and the cover is 0: the division is only for points inside the blob.
+            if (d2 >= r2) return 0f;
+            float q = 1f - d2 / r2;
             return q > 0f ? q * q : 0f;
         }
     }
@@ -130,27 +133,42 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public static bool Resolve(in LatticeSource src, int gx, int gz, int k, out CumulusGroup g)
         {
             g = default;
-            uint salt = src.Salt ^ SaltMix;
-            float uCell = LatticeHash.Unit(salt, gx, gz, 0, SlotCount);
-            if (k >= (int)(uCell * (MaxCandidates + 1))) return false;
-            float x = (gx + LatticeHash.Unit(salt, gx, gz, k, SlotX)) * Cell;
-            float z = (gz + LatticeHash.Unit(salt, gx, gz, k, SlotZ)) * Cell;
-            SkyParams row = src.RowAt(x, z, out LowGenus genus);
-            GenusRow table = SkyArchetypes.Genus(genus);
-            if (k >= (int)(uCell * (table.Candidates + 1))) return false;
+            uint prefix = LatticeHash.CellPrefix(src.Salt ^ SaltMix, gx, gz);
+            return Candidate(src, prefix, LatticeHash.UnitIn(prefix, 0, SlotCount), gx, gz, k, false, ref g);
+        }
 
-            float rank = LatticeHash.Unit(salt, gx, gz, k, SlotRank);
-            bool street = row.Streets >= StreetThreshold;
+        /// <summary>
+        /// <see cref="Resolve"/> for a caller that already holds the cell's hash prefix and candidate-count draw. With <paramref name="dropWeak"/> (ResolveCell, which discards
+        /// groups of strength 0) it returns false as soon as the strength is known, before the shape is built; the tape row is read for only the columns used,
+        /// at the values the full row has. <paramref name="g"/> is written only when the group is returned.
+        /// </summary>
+        private static bool Candidate(in LatticeSource src, uint prefix, float uCell, int gx, int gz, int k, bool dropWeak, ref CumulusGroup g)
+        {
+            if (k >= (int)(uCell * (MaxCandidates + 1))) return false;
+            float x = (gx + LatticeHash.UnitIn(prefix, k, SlotX)) * Cell;
+            float z = (gz + LatticeHash.UnitIn(prefix, k, SlotZ)) * Cell;
+            float s = src.Frame.STape(x, z);
+            LowGenus genus = src.Tape.GenusAt(s);
+            ref readonly GenusRow table = ref SkyArchetypes.GenusRef(genus);
+            if (k >= (int)(uCell * (table.Candidates + 1))) return false;
+            src.Tape.Locate(s, out int at0, out int at1, out float w);
+
+            float rank = LatticeHash.UnitIn(prefix, k, SlotRank);
+            float level = src.Tape.Level(at0, at1, w);
+            float strength = WeatherMath.Smoothstep(rank * 0.7f, rank * 0.7f + 0.35f, level);
+            if (dropWeak && !(strength > 0f)) return false;
+            bool street = src.Tape.Column(SkyColumns.StreetsAt, at0, at1, w) >= StreetThreshold;
             float aspect = street
-                ? LatticeHash.Range(salt, gx, gz, k, SlotAspect, StreetAspectMin, StreetAspectMax)
-                : LatticeHash.Range(salt, gx, gz, k, SlotAspect, 1f, Math.Max(1f, table.AspectMax));
+                ? LatticeHash.RangeIn(prefix, k, SlotAspect, StreetAspectMin, StreetAspectMax)
+                : LatticeHash.RangeIn(prefix, k, SlotAspect, 1f, Math.Max(1f, table.AspectMax));
             float rMin = table.RadiusMin * 1000f, rMax = table.RadiusMax * 1000f;
             if (street) rMax = Math.Max(rMin, Math.Min(rMax, StreetReach / aspect));
-            float radius = LatticeHash.Range(salt, gx, gz, k, SlotRadius, rMin, rMax);
+            float radius = LatticeHash.RangeIn(prefix, k, SlotRadius, rMin, rMax);
             float spread = street ? 0.14f : 0.28f;
-            float turn = LatticeHash.Range(salt, gx, gz, k, SlotAxis, -spread, spread);
+            float turn = LatticeHash.RangeIn(prefix, k, SlotAxis, -spread, spread);
             float cos = (float)Math.Cos(turn), sin = (float)Math.Sin(turn);
 
+            g = default;
             g.Gx = gx; g.Gz = gz; g.K = k;
             g.Genus = genus;
             g.X = x; g.Z = z;
@@ -158,16 +176,16 @@ namespace BoscaliSummer.Modules.Weather.Domain
             g.AxisX = src.Frame.UX * cos - src.Frame.UZ * sin;
             g.AxisZ = src.Frame.UX * sin + src.Frame.UZ * cos;
             g.Rank = rank;
-            g.Level = row.CumulusLevel;
-            g.Strength = WeatherMath.Smoothstep(rank * 0.7f, rank * 0.7f + 0.35f, g.Level);
-            g.TopDepth = LatticeHash.Range(salt, gx, gz, k, SlotTop, 0.65f, 1.10f) * Math.Max(0f, row.PuffDepth);
-            g.BlobCount = 3 + Math.Min(4, (int)(LatticeHash.Unit(salt, gx, gz, k, SlotBlobs) * 5f));
+            g.Level = level;
+            g.Strength = strength;
+            g.TopDepth = LatticeHash.RangeIn(prefix, k, SlotTop, 0.65f, 1.10f) * Math.Max(0f, src.Tape.Column(SkyColumns.PuffDepthAt, at0, at1, w));
+            g.BlobCount = 3 + Math.Min(4, (int)(LatticeHash.UnitIn(prefix, k, SlotBlobs) * 5f));
             float reach = 0f;
             for (int j = 0; j < g.BlobCount; j++)
             {
-                float angle = LatticeHash.Unit(salt, gx, gz, k, SlotBlob + 4 * j) * 2f * (float)Math.PI;
-                float dist = radius * LatticeHash.Range(salt, gx, gz, k, SlotBlob + 4 * j + 1, 0f, 0.5f);
-                float r = radius * LatticeHash.Range(salt, gx, gz, k, SlotBlob + 4 * j + 2, 0.5f, 0.75f);
+                float angle = LatticeHash.UnitIn(prefix, k, SlotBlob + 4 * j) * 2f * (float)Math.PI;
+                float dist = radius * LatticeHash.RangeIn(prefix, k, SlotBlob + 4 * j + 1, 0f, 0.5f);
+                float r = radius * LatticeHash.RangeIn(prefix, k, SlotBlob + 4 * j + 2, 0.5f, 0.75f);
                 g.SetBlob(j, dist * (float)Math.Cos(angle), dist * (float)Math.Sin(angle), r);
                 reach = Math.Max(reach, dist + r);
             }
@@ -179,11 +197,13 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public static int ResolveCell(in LatticeSource src, int gx, int gz, CumulusGroup[] into)
         {
             if (src.ConstantCumulusLevel == 0f) return 0;
-            float uCell = LatticeHash.Unit(src.Salt ^ SaltMix, gx, gz, 0, SlotCount);
+            uint prefix = LatticeHash.CellPrefix(src.Salt ^ SaltMix, gx, gz);
+            float uCell = LatticeHash.UnitIn(prefix, 0, SlotCount);
             // Resolve refuses k >= floor(u * (N + 1)) with N at most CandidateBound, so no candidate past the bound can exist.
             int candidates = Math.Min((int)(uCell * (MaxCandidates + 1)), src.CandidateBound), count = 0;
+            CumulusGroup g = default;
             for (int k = 0; k < candidates; k++)
-                if (Resolve(src, gx, gz, k, out CumulusGroup g) && g.Strength > 0f) into[count++] = g;
+                if (Candidate(src, prefix, uCell, gx, gz, k, true, ref g)) into[count++] = g;
             return count;
         }
 

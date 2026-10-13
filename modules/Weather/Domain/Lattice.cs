@@ -22,7 +22,24 @@ namespace BoscaliSummer.Modules.Weather.Domain
             ConstantConvective = tape.IsValid && tape.IsConstant ? constant.Convective : -1f;
             // A one-keyframe tape has one genus, so no candidate past its N can exist; a tape that varies may carry any genus.
             CandidateBound = tape.IsValid && tape.IsConstant ? SkyArchetypes.Genus(tape.GenusAt(0f)).Candidates : CumulusLattice.MaxCandidates;
+            TapeRevision = tape.IsValid ? tape.Tape.Revision : 0;
         }
+
+        /// <summary><see cref="BakedTape.Revision"/> of the tape when this source was made: a tape rewritten and finished since is no longer the tape the cells were resolved from.</summary>
+        public readonly int TapeRevision;
+
+        /// <summary>
+        /// True when every candidate, cell and group this source resolves is bit-for-bit what <paramref name="other"/> resolves: the same salts, the same tape contents, the same
+        /// direction and meander, the same markers. The frame's offset is left out on purpose: the lattices live in the tape frame (q = p + u * D), where D cancels, and no resolve reads it,
+        /// so a field rebuilt for a later time or a new offset keeps its cached cells.
+        /// </summary>
+        public bool ResolvesLike(in LatticeSource other) =>
+            Salt == other.Salt && LayoutSeed == other.LayoutSeed && ReferenceEquals(Markers, other.Markers) &&
+            ReferenceEquals(Tape.Tape, other.Tape.Tape) && TapeRevision == other.TapeRevision &&
+            SameBits(Frame.UX, other.Frame.UX) && SameBits(Frame.UZ, other.Frame.UZ) && SameBits(Frame.Amplitude, other.Frame.Amplitude) &&
+            SameBits(Frame.Wavelength, other.Frame.Wavelength) && SameBits(Frame.Phase, other.Frame.Phase);
+
+        private static bool SameBits(float a, float b) => BitConverter.SingleToInt32Bits(a) == BitConverter.SingleToInt32Bits(b);
 
         /// <summary><see cref="WeatherKey.TapeId"/>: every candidate is a pure function of it and (gx, gz, k).</summary>
         public readonly uint Salt;
@@ -56,13 +73,21 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// FNV rounds leave small integer grids badly clumped (on a 120 x 120 block of cells it gives about half as many distinct values as
         /// cells), and two cells with the same hash would grow the same group.
         /// </summary>
-        public static uint Hash(uint salt, int gx, int gz, int k, int slot)
+        public static uint Hash(uint salt, int gx, int gz, int k, int slot) => HashIn(CellPrefix(salt, gx, gz), k, slot);
+
+        /// <summary>The first two word rounds of <see cref="Hash"/>, which depend on (salt, gx, gz) alone: a caller drawing many values of one cell computes them once and
+        /// finishes each with <see cref="HashIn"/>, <see cref="UnitIn"/> or <see cref="RangeIn"/>.</summary>
+        public static uint CellPrefix(uint salt, int gx, int gz)
+        {
+            unchecked { return Round(Round(salt, (uint)gx), (uint)gz); }
+        }
+
+        /// <summary><see cref="Hash"/> of (salt, gx, gz, k, slot) from the <see cref="CellPrefix"/> of (salt, gx, gz).</summary>
+        public static uint HashIn(uint prefix, int k, int slot)
         {
             unchecked
             {
-                uint h = Round(salt, (uint)gx);
-                h = Round(h, (uint)gz);
-                h = Round(h, (uint)((k << 8) | slot));
+                uint h = Round(prefix, (uint)((k << 8) | slot));
                 h ^= h >> 16;
                 h *= 0x85EBCA6Bu;
                 h ^= h >> 13;
@@ -85,10 +110,15 @@ namespace BoscaliSummer.Modules.Weather.Domain
         }
 
         /// <summary>A uniform [0, 1) value of (salt, cell, candidate, slot): the only randomness a lattice has.</summary>
-        public static float Unit(uint salt, int gx, int gz, int k, int slot) => (Hash(salt, gx, gz, k, slot) >> 8) * (1f / 16777216f);
+        public static float Unit(uint salt, int gx, int gz, int k, int slot) => UnitIn(CellPrefix(salt, gx, gz), k, slot);
+
+        public static float UnitIn(uint prefix, int k, int slot) => (HashIn(prefix, k, slot) >> 8) * (1f / 16777216f);
 
         public static float Range(uint salt, int gx, int gz, int k, int slot, float min, float max) =>
             min + (max - min) * Unit(salt, gx, gz, k, slot);
+
+        public static float RangeIn(uint prefix, int k, int slot, float min, float max) =>
+            min + (max - min) * UnitIn(prefix, k, slot);
 
         /// <summary>The lattice cell a coordinate falls in: floor division, correct for negative coordinates.</summary>
         public static int CellOf(float q, float cell) => (int)Math.Floor(q / cell);
@@ -104,15 +134,27 @@ namespace BoscaliSummer.Modules.Weather.Domain
     {
         private struct Entry { public int Gx, Gz, Stamp, Count; public T[] Items; }
 
-        private readonly Entry[] entries;
-        private readonly int mask;
+        /// <summary>The slots in chunks of 64, each allocated when a cell is first stored in it: one array of 8192 would sit on the large object heap (196 KB) and be zeroed whole,
+        /// and a field that is built, sampled at a few dozen cells and thrown away (a map or cookie snapshot, a test) would pay for all of it. Slot s is chunk s >> shift, entry s &amp; chunkMask.</summary>
+        private readonly Entry[][] chunks;
+        private readonly int mask, shift, chunkMask;
         private int stamp = 1;
+        private const int ChunkSlots = 64;
 
         public CellCache(int slots = 8192)
         {
             if (slots < 2 || (slots & (slots - 1)) != 0) throw new ArgumentOutOfRangeException(nameof(slots));
-            entries = new Entry[slots];
+            int size = Math.Min(slots, ChunkSlots);
+            for (int s = size; s > 1; s >>= 1) shift++;
+            chunkMask = size - 1;
+            chunks = new Entry[slots / size][];
             mask = slots - 1;
+        }
+
+        private ref Entry Writable(int slot)
+        {
+            Entry[] chunk = chunks[slot >> shift] ?? (chunks[slot >> shift] = new Entry[chunkMask + 1]);
+            return ref chunk[slot & chunkMask];
         }
 
         /// <summary>Forgets every cell (the tape or the key changed).</summary>
@@ -120,8 +162,13 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         public bool TryGet(int gx, int gz, out T[] items, out int count)
         {
-            ref Entry e = ref entries[Slot(gx, gz)];
-            if (e.Stamp == stamp && e.Gx == gx && e.Gz == gz) { items = e.Items; count = e.Count; return true; }
+            int slot = Slot(gx, gz);
+            Entry[] chunk = chunks[slot >> shift];
+            if (chunk != null)
+            {
+                ref Entry e = ref chunk[slot & chunkMask];
+                if (e.Stamp == stamp && e.Gx == gx && e.Gz == gz) { items = e.Items; count = e.Count; return true; }
+            }
             items = null;
             count = 0;
             return false;
@@ -130,14 +177,14 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>The array to fill for this cell (at least <paramref name="capacity"/> long, reused); call <see cref="Commit"/> after.</summary>
         public T[] Reserve(int gx, int gz, int capacity)
         {
-            ref Entry e = ref entries[Slot(gx, gz)];
+            ref Entry e = ref Writable(Slot(gx, gz));
             if (e.Items == null || e.Items.Length < capacity) e.Items = new T[capacity];
             return e.Items;
         }
 
         public void Commit(int gx, int gz, int count)
         {
-            ref Entry e = ref entries[Slot(gx, gz)];
+            ref Entry e = ref Writable(Slot(gx, gz));
             e.Gx = gx;
             e.Gz = gz;
             e.Count = count;

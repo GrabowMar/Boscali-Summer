@@ -42,7 +42,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             return h;
         }
 
-        private static uint Mix(uint h, float value) => Mix(h, BitConverter.ToInt32(BitConverter.GetBytes(value), 0));
+        private static uint Mix(uint h, float value) => Mix(h, BitConverter.SingleToInt32Bits(value));
 
         private static uint Mix(uint h, int value)
         {

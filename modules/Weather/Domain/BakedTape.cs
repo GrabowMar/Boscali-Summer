@@ -93,12 +93,15 @@ namespace BoscaliSummer.Modules.Weather.Domain
             Texels = texels;
             Data = new float[texels * SkyColumns.Count];
             genus = new byte[texels];
+            texelMetres = SpanMetres / texels;
         }
+
+        private readonly float texelMetres;
 
         public int Texels { get; }
         public float[] Data { get; }
         public bool IsConstant => Texels == 1;
-        public float TexelMetres => SpanMetres / Texels;
+        public float TexelMetres => texelMetres;
 
         /// <summary>The horizon deck's plane altitude, fixed per tape (spec 7.3): the length-weighted median low base + 0.4 * the median low depth. Set by the baker.</summary>
         public float DeckAltitude { get; set; } = 1700f;
@@ -160,14 +163,16 @@ namespace BoscaliSummer.Modules.Weather.Domain
         {
             present = false; chord0 = 0f; chord1 = 0f; ratio = 0f;
             float lo = float.MaxValue, hi = float.MinValue, thin = float.MaxValue;
+            // Reads the layer's Base, Thick and Cover columns (they follow each other) straight from the array: no row is built per texel.
+            int column = layer == 0 ? SkyColumns.MidBaseAt : SkyColumns.HighBaseAt;
             for (int i = 0; i < Texels; i++)
             {
-                SkyLayer l = Texel(i).Layer(layer);
-                if (!l.Present) continue;
+                int at = i * SkyColumns.Count + column;
+                if (!(Data[at + 2] >= SkyLayer.PresentCover)) continue;
                 present = true;
-                lo = Math.Min(lo, l.Base);
-                hi = Math.Max(hi, l.Top);
-                thin = Math.Min(thin, l.Thick);
+                lo = Math.Min(lo, Data[at]);
+                hi = Math.Max(hi, Data[at] + Data[at + 1]);
+                thin = Math.Min(thin, Data[at + 1]);
             }
             if (!present) return;
             chord0 = lo; chord1 = hi;
@@ -229,22 +234,41 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>The row at position s (metres along the tape). s clamps to the tape's ends, like the shader.</summary>
         public SkyParams At(float s)
         {
-            if (float.IsNaN(s)) s = 0f; // a bad position reads the first texel; a NaN index must never reach the array
-            int n = tape.Texels;
-            if (n == 1) return tape.Texel(0);
-            float u = s / tape.TexelMetres - 0.5f;
-            float floor = (float)Math.Floor(u);
-            float f = u - floor;
-            float last = n - 1;
-            int i0 = (int)Math.Max(0f, Math.Min(last, floor));
-            int i1 = (int)Math.Max(0f, Math.Min(last, floor + 1f));
-            SkyParams a = tape.Texel(i0);
-            if (i0 == i1) return a;
-            SkyParams b = tape.Texel(i1);
-            SkyParams row = SkyParams.Blend(a, b, f);
-            row.CumulusLevel = f < 0.5f ? a.CumulusLevel : b.CumulusLevel; // baked per texel and never lerped (spec 4.1)
+            Locate(s, out int at0, out int at1, out float f);
+            float[] d = tape.Data;
+            if (at0 == at1) return SkyColumns.Read(d, at0);
+            SkyParams row = SkyColumns.ReadBlend(d, at0, at1, f);
+            row.CumulusLevel = f < 0.5f ? d[at0 + SkyColumns.CumulusLevelAt] : d[at1 + SkyColumns.CumulusLevelAt]; // baked per texel and never lerped (spec 4.1)
             return row;
         }
+
+        /// <summary>Where position s falls on the baked array, as <see cref="At"/> reads it: the array offsets of the two texels it blends and the weight of the second.
+        /// Equal offsets mean one texel (a one-texel tape, or s past an end). With <see cref="Column"/> and <see cref="Level"/> a caller that needs a few columns
+        /// gets exactly the values of the full row without building it.</summary>
+        public void Locate(float s, out int at0, out int at1, out float f)
+        {
+            if (float.IsNaN(s)) s = 0f; // a bad position reads the first texel; a NaN index must never reach the array
+            int n = tape.Texels;
+            if (n == 1) { at0 = at1 = 0; f = 0f; return; }
+            float u = s / tape.TexelMetres - 0.5f;
+            float floor = (float)Math.Floor(u);
+            f = u - floor;
+            float last = n - 1;
+            at0 = (int)Math.Max(0f, Math.Min(last, floor)) * SkyColumns.Count;
+            at1 = (int)Math.Max(0f, Math.Min(last, floor + 1f)) * SkyColumns.Count;
+        }
+
+        /// <summary>One column of the row <see cref="At"/> returns, from the offsets and weight <see cref="Locate"/> gave (the columns are in <see cref="SkyColumns"/>).</summary>
+        public float Column(int column, int at0, int at1, float f)
+        {
+            float[] d = tape.Data;
+            float a = d[at0 + column];
+            return at0 == at1 ? a : SkyColumns.L(a, d[at1 + column], f);
+        }
+
+        /// <summary>The CumulusLevel of the row <see cref="At"/> returns: the nearer texel's, never lerped (spec 4.1).</summary>
+        public float Level(int at0, int at1, float f) =>
+            tape.Data[(at0 == at1 || f < 0.5f ? at0 : at1) + SkyColumns.CumulusLevelAt];
     }
 
     /// <summary>A hand-built tape and its frame, for the fixtures (density check, bench, tests) that need the sky to vary in space.</summary>
