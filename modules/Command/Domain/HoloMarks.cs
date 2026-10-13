@@ -65,11 +65,42 @@ namespace BoscaliSummer.Modules.Command.Domain
             return km.ToString("0.0", CultureInfo.InvariantCulture) + " KM";
         }
 
-        /// <summary>The right end of the caption shelf: the picture's radius and which way is up.</summary>
+        /// <summary>The scale bar takes between these shares of the frame's width (it aims for the middle of them).</summary>
+        internal const float ScaleMinShare = .15f, ScaleMaxShare = .35f, ScaleAimShare = .25f;
+        private static readonly float[] ScaleSteps = { 1f, 2f, 3f, 5f };
+
+        /// <summary>
+        /// The length of the scale bar, in metres, for a frame <paramref name="frameWidthMetres"/> wide at the bar's row: a round number (1, 2, 3 or 5 times a power of ten) between 15 % and 35 % of the width,
+        /// the one nearest 25 %. The steps are never more than a factor of two apart, which the 15 to 35 % window (a factor of 2.3) always has one of. 0 for a width that is not a length.
+        /// </summary>
+        internal static float ScaleBar(float frameWidthMetres)
+        {
+            if (!(frameWidthMetres > 0f) || float.IsInfinity(frameWidthMetres)) return 0f;
+            float aim = frameWidthMetres * ScaleAimShare, best = 0f, bestScore = float.MaxValue;
+            int top = (int)MathF.Floor(MathF.Log10(aim));
+            for (int power = top - 1; power <= top + 1; power++)
+            {
+                float decade = MathF.Pow(10f, power);
+                foreach (float step in ScaleSteps)
+                {
+                    float length = step * decade, share = length / frameWidthMetres;
+                    if (share < ScaleMinShare || share > ScaleMaxShare) continue;
+                    float score = Math.Abs(MathF.Log(length / aim));
+                    if (score < bestScore)
+                    {
+                        bestScore = score;
+                        best = length;
+                    }
+                }
+            }
+            return best;
+        }
+
+        /// <summary>The right end of the caption shelf: the picture's range and which way is up.</summary>
         internal static string ShelfFlag(int rangeKm, bool northUp) =>
             rangeKm.ToString(CultureInfo.InvariantCulture) + " KM  " + (northUp ? "N UP" : "HDG UP");
 
-        /// <summary>The right end of the MINI's shelf: the radius alone ("10 KM"); the picture is small and the north tick says which way is up.</summary>
+        /// <summary>The right end of the MINI's shelf: the range alone ("20 KM"); the picture is small and the north tick says which way is up.</summary>
         internal static string MiniFlag(int rangeKm) => rangeKm.ToString(CultureInfo.InvariantCulture) + " KM";
 
         /// <summary>An airbase's label: upper case, trimmed, no longer than <see cref="NameLength"/> characters.</summary>

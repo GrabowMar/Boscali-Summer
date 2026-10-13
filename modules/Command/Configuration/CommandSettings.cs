@@ -1,10 +1,13 @@
+using System.Collections.Generic;
+using System.Reflection;
 using BepInEx.Configuration;
+using BoscaliSummer.Modules.Command.Domain;
 using NOAvionics;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Configuration
 {
-    /// <summary>What the corner map is: a small hologram that the held map key grows (HOLO), or the game's own corner map (CLASSIC; the held map key still raises the hologram).</summary>
+    /// <summary>What the corner map is: a small terrain map hologram that the held map key grows (HOLO), or the game's own corner map (CLASSIC; the held map key still raises the hologram).</summary>
     internal enum TacMapMode { Holo, Classic }
 
     internal sealed class CommandSettings : Core.Contracts.IVisorTerrainSettings
@@ -67,6 +70,8 @@ namespace BoscaliSummer.Modules.Command.Configuration
         public ConfigEntry<int> TacMapRangeKm { get; }
         public ConfigEntry<bool> HoloMap { get; }
         public ConfigEntry<int> HoloRangeKm { get; }
+        /// <summary>Internal marker: 1 once the saved ranges have been moved from the old disc's options to the tile's.</summary>
+        public ConfigEntry<int> HoloTileRanges { get; }
         public ConfigEntry<bool> HoloNorthUp { get; }
         public ConfigEntry<float> AvionicsCustomKeyHue { get; }
         public ConfigEntry<float> AvionicsCustomGlassHue { get; }
@@ -75,6 +80,16 @@ namespace BoscaliSummer.Modules.Command.Configuration
         bool Core.Contracts.IVisorTerrainSettings.HoloMap { get => HoloMap.Value; set => HoloMap.Value = value; }
         float Core.Contracts.IVisorTerrainSettings.TerrainGhost { get => TerrainGhost.Value; set => TerrainGhost.Value = value; }
 
+        /// <summary>
+        /// A whole number saved in the config file for an entry that has not been bound yet (0 when there is none): BepInEx keeps what it read in its (internal) orphan table until the entry is bound, so it is
+        /// read by reflection, and a BepInEx without that table simply gives 0 (no migration).
+        /// </summary>
+        private static int SavedInt(ConfigFile config, string key)
+        {
+            var orphans = typeof(ConfigFile).GetProperty("OrphanedEntries", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(config, null) as Dictionary<ConfigDefinition, string>;
+            return orphans != null && orphans.TryGetValue(new ConfigDefinition("Command", key), out string text) && int.TryParse(text, out int value) ? value : 0;
+        }
+
         public CommandSettings(ConfigFile config)
         {
             DisplayLife = config.Bind("Command", "DisplayLife", 0.6f,
@@ -82,15 +97,25 @@ namespace BoscaliSummer.Modules.Command.Configuration
             TerrainGhost = config.Bind("Command", "TerrainGhost", 0.35f,
                 new ConfigDescription("Visor terrain ghost: a very faint wire relief of the real ground around and below your aircraft, drawn over the cockpit view in the HUD's colours. Ground that can hit you glows amber. 0 turns it off, 1 is clearly visible. Needs a map with baked terrain. Applies now; no restart.", new AcceptableValueRange<float>(0f, 1f)));
             TacMap = config.Bind("Command", "TacMapMode", TacMapMode.Holo,
-                new ConfigDescription("TAC MAP, the corner map at the bottom left of the HUD. Holo (default): a small hologram of the ground around your aircraft in the HUD's colours, with your view wedge, the units the map shows and the nearest airbase; hold the map key to grow it. Classic: the game's own corner map as before (holding the map key still raises the hologram). Needs a map with baked terrain, else the game's corner map stays. Applies now; no restart."));
-            TacMapRangeKm = config.Bind("Command", "TacMapRangeKm", 10,
-                new ConfigDescription("TAC MAP: how far the small hologram reaches from your aircraft, in kilometres: 5, 10 or 20. Applies now; no restart.", new AcceptableValueList<int>(5, 10, 20)));
+                new ConfigDescription("TAC MAP, the corner map at the bottom left of the HUD. Holo (default): a small solid terrain map of the ground around your aircraft in the HUD's colours, with your view wedge, the units the map shows, the nearest airbase and a scale bar; hold the map key to blow it up to a big map. Classic: the game's own corner map as before (holding the map key still raises the hologram). Needs a map with baked terrain, else the game's corner map stays. Applies now; no restart."));
+            // A range saved before the tile (2026-10-13) is the old disc's option: read it before the binds take it from the orphan table (and clamp it to the new list).
+            int savedMini = SavedInt(config, "TacMapRangeKm"), savedHolo = SavedInt(config, "HoloRangeKm");
+            TacMapRangeKm = config.Bind("Command", "TacMapRangeKm", 20,
+                new ConfigDescription("TAC MAP: how far the small terrain map reaches from your aircraft to its side, in kilometres: 10, 20 or 40. Applies now; no restart.", new AcceptableValueList<int>(10, 20, 40)));
             HoloMap = config.Bind("Command", "HoloMap", true,
-                new ConfigDescription("Holo map: hold the map key to project a 3D wire hologram of the real ground around your aircraft, drawn in the HUD's colours over the corner of the screen; it goes when you let go. A quick tap still opens the full map. Off makes the key open the full map the moment it is pressed. Needs a map with baked terrain. Applies now; no restart."));
-            HoloRangeKm = config.Bind("Command", "HoloRangeKm", 20,
-                new ConfigDescription("Holo map: how far the hologram reaches from your aircraft, in kilometres: 10, 20 or 40. Applies now; no restart.", new AcceptableValueList<int>(10, 20, 40)));
+                new ConfigDescription("Holo map: hold the map key to project a big 3D terrain map of the real ground around your aircraft, drawn in the HUD's colours over the middle of the screen; it goes when you let go. A quick tap still opens the full map. Off makes the key open the full map the moment it is pressed. Needs a map with baked terrain. Applies now; no restart."));
+            HoloRangeKm = config.Bind("Command", "HoloRangeKm", 40,
+                new ConfigDescription("Holo map: how far the big terrain map reaches from your aircraft to its side, in kilometres: 20, 40 or 80. Applies now; no restart.", new AcceptableValueList<int>(20, 40, 80)));
             HoloNorthUp = config.Bind("Command", "HoloNorthUp", false,
                 new ConfigDescription("Holo map: keep north at the top of the hologram. Off turns it so your heading is up. Applies now; no restart."));
+            HoloTileRanges = config.Bind("Command", "HoloTileRanges", 0,
+                new ConfigDescription("Internal marker, leave as it is: 1 once the saved TacMapRangeKm and HoloRangeKm have been doubled from the old round hologram's options (5, 10, 20 and 10, 20, 40 km) to the terrain tile's (10, 20, 40 and 20, 40, 80 km).", new AcceptableValueRange<int>(0, 1)));
+            if (HoloTileRanges.Value < 1)
+            {
+                if (savedMini > 0) TacMapRangeKm.Value = HoloPresentation.MigrateMiniRange(savedMini);
+                if (savedHolo > 0) HoloRangeKm.Value = HoloPresentation.MigrateHoloRange(savedHolo);
+                HoloTileRanges.Value = 1;
+            }
             AvionicsCustomKeyHue = config.Bind("Avionics", "CustomKeyHue", 190f,
                 new ConfigDescription("Custom scheme: hue of keys and selection, in degrees.", new AcceptableValueRange<float>(0f, 360f)));
             AvionicsCustomGlassHue = config.Bind("Avionics", "CustomGlassHue", 200f,

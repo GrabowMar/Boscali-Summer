@@ -12,12 +12,14 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Command.Runtime
 {
     /// <summary>
-    /// The TAC MAP: the corner map of the HUD as a standing mini-hologram, and the HOLO MAP the map key HELD grows it into. One hologram in two sizes. While the pilot flies with the HUD up (and the TAC MAP
-    /// is on HOLO) the bottom-left corner shows a wire relief of the real ground around the aircraft in a square of 300 units (the MINI: the aircraft in the middle, the view wedge, one range ring, the units the
-    /// game's map shows, the selected target and the nearest airbase, at 10 Hz). Holding the map key past 0.2 s grows the same picture to 46 % of the screen height over 180 ms, at the held range and with the
-    /// full marks (the BIG one, at 20 Hz); letting go shrinks it back and opens no MFD. A tap opens the game's maximised map (MFD) as it always did, and while that is up nothing of the holo draws; when it closes the
+    /// The TAC MAP: the corner map of the HUD as a standing mini terrain tile, and the HOLO MAP the map key HELD grows it into. One hologram in two sizes. While the pilot flies with the HUD up (and the TAC MAP
+    /// is on HOLO) the bottom-left corner shows a solid terrain tile of the real ground around the aircraft in a frame of 340 x 300 units, seen from 68 degrees above the horizon (the aircraft in the middle across and 38 %
+    /// up when heading up, in the middle when north up, the view wedge, the units the game's map shows, the selected target, the nearest airbase in view and a scale bar, at 10 Hz). Holding the map key past 0.2 s grows the
+    /// same picture over 180 ms to a frame 82 % of the screen height tall and 1.3 times as wide, centred on the screen, seen from 55 degrees with the aircraft in the middle, at the held range, a denser grid and the full
+    /// marks (the BIG one, at 20 Hz); letting go shrinks it back and opens no MFD. A tap opens the game's maximised map (MFD) as it always did, and while that is up nothing of the holo draws; when it closes the
     /// MINI returns. On CLASSIC the MINI never draws and the game's own corner map is left alone, but the key still raises the big hologram. The picture is drawn by <see cref="HoloGrid"/> + <see cref="HoloView"/> (no game
-    /// camera involved) into a texture of the mod's own and shown as projected light with the marks laid over it (HoloMap.Marks.cs, HoloMap.Ui.cs); the pilot keeps flying: nothing here captures the cursor, blocks an input or pauses.
+    /// camera involved) into a texture of the mod's own with hidden lines removed and shown as projected light with the marks laid over it (HoloMap.Marks.cs, HoloMap.Ui.cs); the pilot keeps flying: nothing here captures the
+    /// cursor, blocks an input or pauses.
     /// <para>Only the key-down Maximize is diverted. The game's key handler (<c>ExtraUiInput.Update</c>) calls <c>DynamicMap.Maximize</c> the frame the Rewired "Map" button goes down; two patches
     /// (<see cref="HoloMapKeyScopePatch"/>, <see cref="HoloMapKeyPatch"/>) tell this class that call is the key's, and it swallows it and waits (<see cref="KeyTakesMaximize"/>). Each frame it polls the
     /// same Rewired action for "held": released within 0.2 s it calls Maximize itself, outside the key path, so every Maximize listener runs as for the game's own call; held longer it shows the
@@ -55,6 +57,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         // An exception while drawing: nothing more is drawn until the scene changes, and the game's corner map is back.
         private bool broken;
         private Aircraft plane;
+        // The aircraft's global place and heading as the picture reads them, and the picture's range in metres (from the aircraft to the frame's side at its own depth).
         private float planeX, planeY, planeZ, heading, radius;
         private string failure = "";
 
@@ -68,7 +71,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
         private int BigKm => HoloPresentation.BigRange(RangeOverride ?? settings.HoloRangeKm.Value, MiniKm);
 
-        /// <summary>The radius of the picture being drawn: the MINI's, or the held map's.</summary>
+        /// <summary>The range of the picture being drawn, in kilometres: the MINI's, or the held map's.</summary>
         private int RangeKm => shape == HoloShape.Mini ? MiniKm : BigKm;
 
         private bool NorthUp => NorthOverride ?? settings.HoloNorthUp.Value;
@@ -296,6 +299,10 @@ namespace BoscaliSummer.Modules.Command.Runtime
         /// <summary>The holo as the sim hook reports it.</summary>
         internal Dictionary<string, object> State()
         {
+            float scale = hudCanvas != null ? Mathf.Max(.01f, hudCanvas.rootCanvas.scaleFactor) : 1f;
+            float canvasWide = canvasRect != null ? canvasRect.rect.width : 0f, canvasHigh = canvasRect != null ? canvasRect.rect.height : 0f;
+            HoloPresentation.Frame(0f, canvasWide, canvasHigh, out _, out _, out float miniWide, out float miniHigh);
+            HoloPresentation.Frame(1f, canvasWide, canvasHigh, out _, out _, out float bigWide, out float bigHigh);
             return new Dictionary<string, object>
             {
                 { "ok", true },
@@ -305,8 +312,13 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 { "tacMode", settings != null ? (MiniOn ? "Holo" : "Classic") : "" },
                 { "additiveMaterial", additive != null },
                 { "renderTexture", rt != null && rt.IsCreated() },
-                { "vertexCount", mesh != null ? mesh.vertexCount : 0 },
+                { "depthPath", depthPath },
+                { "vertexCount", nodes },
                 { "litVertices", litVertices },
+                { "gridCellsX", halfX * 2 },
+                { "gridCellsZ", halfZ * 2 },
+                { "gridCellMetres", cellMetres },
+                { "reachKm", reach / 1000f },
                 { "marksDrawn", unitsDrawn + basesDrawn + (Active ? 1 : 0) },
                 { "unitMarks", unitsDrawn },
                 { "unitCap", HoloPresentation.UnitCap(shape) },
@@ -314,6 +326,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 { "labelsUsed", labelsUsed },
                 { "wedgeDegrees", wedgeDegrees },
                 { "gridRef", gridRef },
+                { "scaleKm", barMetres / 1000f },
                 { "mapHidden", mapGroup != null && mapGroup.alpha < .01f },
                 { "nativeMapAlpha", mapGroup != null ? mapGroup.alpha : 1f },
                 { "plateAlpha", nativePlate != null ? nativePlate.canvasRenderer.GetAlpha() : 1f },
@@ -321,7 +334,22 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 { "shadeAlpha", shade != null ? shade.color.a : 0f },
                 { "grow", size },
                 { "presence", appear },
-                { "sidePixels", side },
+                { "frameWidth", frameW },
+                { "frameHeight", frameH },
+                { "frameUnitsWide", unit > 0f ? frameW / unit : 0f },
+                { "frameUnitsHigh", unit > 0f ? frameH / unit : 0f },
+                { "frameAspect", frameH > 0f ? frameW / frameH : 0f },
+                { "frameHeightShare", canvasHigh > 0f ? frameH / canvasHigh : 0f },
+                { "frameCentreX", canvasWide > 0f ? (laidX + frameW * .5f) / canvasWide : 0f },
+                { "frameCentreY", canvasHigh > 0f ? (laidY + frameH * .5f) / canvasHigh : 0f },
+                { "frameWidthPixels", frameW * scale },
+                { "frameHeightPixels", frameH * scale },
+                { "miniFramePixels", miniWide * scale + "x" + miniHigh * scale },
+                { "bigFramePixels", bigWide * scale + "x" + bigHigh * scale },
+                { "renderWidth", pixelsWide },
+                { "renderHeight", pixelsHigh },
+                { "tiltDegrees", camera.Tilt },
+                { "aircraftUp", camera.Aspect > 0f ? HoloPresentation.AircraftUp(shape, NorthUp) : 0f },
                 { "rangeKm", settings != null ? RangeKm : 0 },
                 { "miniRangeKm", settings != null ? MiniKm : 0 },
                 { "bigRangeKm", settings != null ? BigKm : 0 },
@@ -329,6 +357,9 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 { "lastRenderMs", lastRenderMs },
                 { "worstRenderMs", worstRenderMs },
                 { "renders", renders },
+                { "lastFillMs", lastFillMs },
+                { "worstFillMs", worstFillMs },
+                { "fills", fills },
                 { "lastScanMs", lastScanMs },
                 { "worstScanMs", worstScanMs },
                 { "scans", scans },
@@ -340,8 +371,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
         /// <summary>Clears the worst timings and the counts (the sim hook, after the warm-up).</summary>
         internal void ResetTimings()
         {
-            lastRenderMs = worstRenderMs = lastScanMs = worstScanMs = 0f;
-            renders = scans = 0;
+            lastRenderMs = worstRenderMs = lastScanMs = worstScanMs = lastFillMs = worstFillMs = 0f;
+            renders = scans = fills = 0;
         }
 
         // ------------------------------------------------------------------ the scene

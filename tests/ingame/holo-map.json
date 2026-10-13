@@ -1,7 +1,7 @@
 {
-  "_note": "The TAC MAP in the cockpit, ONE run: the standing MINI hologram in the bottom-left corner (the game's own corner map hidden behind it), the CLASSIC mode (the game's corner map back, untouched), and the big HOLO MAP the map key raises. The player is seated in the cockpit view at 2500 m over the west of the island (map x -6 km, z +10 km, the place terrain-ghost.json uses), heading west (270) at 180 m/s; in the ~25 s the run lasts it flies about 4.5 km, well short of the massif (map x -18..-12 km, z +6..+14 km, peaks 1.3 to 1.6 km). A scenario cannot hold the map key (hold it to grow the MINI into the big holo, tap it for the MFD map), so HoloMapAutomation.Configure forces the big holo shown from the corner map (SimOpen: the same availability test, the same state machine; it stays up until open is false, whatever the key does) and sets the TAC MAP mode, the MINI range, the big range and the orientation IN MEMORY ONLY (the saved TacMapMode / TacMapRangeKm / HoloRangeKm / HoloNorthUp are never written; restore gives them back). Pictures: tac-default (NO key, NO call: the MINI must be up by itself, 10 km, heading up, view wedge, the nearest airbase's name, the TAC MAP shelf inside its lower-left with 10 KM at its right end, the game's grid reference dim at its lower right if the game shows one), tac-classic (CLASSIC: the game's own corner map back, no hologram anywhere), tac-back (HOLO again, the same as tac-default), tac-mini-5-north (5 km, north up), tac-mini-20 (20 km, heading up), holo-20 (the big holo, 20 km, heading up, the default), holo-10 (10 km), holo-40-north (40 km, north up), holo-closed (the big holo closed again: the MINI must be back). Each Configure result is stored: active (HoloMap.Active: the MINI or the big holo is up), stage, presentation (mini, big or none), tacMode, additiveMaterial, renderTexture, vertexCount, litVertices, marksDrawn, unitMarks, unitCap (48 on the MINI, 96 on the big one), airbaseMarks, labelsUsed, wedgeDegrees (the MINI's view wedge, 0 when it is not drawn), gridRef, mapHidden (the corner map faded out behind the hologram), nativeMapAlpha (1 when the game's corner map is untouched), grow (0 MINI .. 1 big, the 180 ms change), presence, sidePixels, rangeKm (of the picture shown), miniRangeKm, bigRangeKm, northUp, the timings (lastRenderMs / worstRenderMs / renders: one picture, the scan taken out; lastScanMs / worstScanMs / scans: the four-times-a-second unit scan; the worst values are cleared after the warm-up by resetTimings, so tac_default carries the steady cost of the always-on MINI over about 3 s), broken and failure. The checks assert those, the timings against a loose ceiling (a frame) and that the Unity log has no Exception; nothing asserts the pixels: they are read off the captures (the lines must read as projected light over the world, the rings and the stem on the sea-level plane, the corner brackets round the frame and the shelf inside it). The game's dark map plate (DynamicMap.mapBackground) is hidden while the mini or the big hologram is up (plateAlpha 0) and back with CLASSIC and after the hologram goes (plateAlpha 1, plateFound false); a feathered shade stands behind the disc (shadeAlpha 0.5 mini, 0.4 big); the big holo's brackets and shelf hug the disc.",
+  "_note": "The TAC MAP in the cockpit, ONE run: the standing MINI terrain tile in the bottom-left corner (340 x 300 units, 16 in from the edges, seen from 68 degrees, the aircraft in the middle across and 38 % up when heading up, the game's own corner map hidden behind it), the CLASSIC mode (the game's corner map back, untouched), and the big HOLO MAP the map key raises (a frame 82 % of the screen height tall and 1.3 times as wide, centred on the screen, seen from 55 degrees, the aircraft in the middle). The player is seated in the cockpit view at 2500 m over the west of the island (map x -6 km, z +10 km, the place terrain-ghost.json uses), heading west (270) at 180 m/s; in the ~25 s the run lasts it flies about 4.5 km, well short of the massif (map x -18..-12 km, z +6..+14 km, peaks 1.3 to 1.6 km). A scenario cannot hold the map key (hold it to grow the MINI into the big map, tap it for the MFD map), so HoloMapAutomation.Configure forces the big map shown from the corner map (SimOpen: the same availability test, the same state machine; it stays up until open is false, whatever the key does) and sets the TAC MAP mode, the MINI range, the big range and the orientation IN MEMORY ONLY (the saved TacMapMode / TacMapRangeKm / HoloRangeKm / HoloNorthUp are never written; restore gives them back). Ranges are a half-width in kilometres: the MINI 10 / 20 / 40 (default 20), the big map 20 / 40 / 80 (default 40). Pictures: tac-default (NO key, NO call: the MINI must be up by itself, 20 km, heading up, view wedge, the nearest airbase's name, the TAC MAP shelf inside its lower-left with 20 KM at its right end, the game's grid reference dim at its lower right if the game shows one and the scale bar to the left of it), tac-classic (CLASSIC: the game's own corner map back, no hologram anywhere), tac-back (HOLO again, the same as tac-default), tac-mini-10-north (10 km, north up: the aircraft in the middle), tac-mini-40 (40 km, heading up), holo-40 (the big map, 40 km, heading up, the default), holo-20 (20 km), holo-80-north (80 km, north up), holo-closed (the big map closed again: the MINI must be back). Each Configure result is stored: active (HoloMap.Active: the MINI or the big map is up), stage, presentation (mini, big or none), tacMode, additiveMaterial, renderTexture, depthPath (the texture has a depth buffer: the solid, hidden-line look; false is the see-through fallback), vertexCount (nodes of the lattice), litVertices, gridCellsX / gridCellsZ / gridCellMetres (the lattice the frame needs and its cell), reachKm, marksDrawn, unitMarks, unitCap (48 on the MINI, 96 on the big one), airbaseMarks, labelsUsed, wedgeDegrees (the MINI's view wedge, 0 when it is not drawn), gridRef (the game's grid reference as the MINI shows it), scaleKm (the scale bar's length), mapHidden (the corner map faded out behind the hologram), nativeMapAlpha (1 when the game's corner map has not been touched), grow (0 MINI .. 1 big, the 180 ms change: wait before a capture), presence, frameWidth / frameHeight (canvas units), frameUnitsWide / frameUnitsHigh (in design units: 340 x 300 for the MINI), frameAspect, frameHeightShare, frameCentreX / frameCentreY (shares of the canvas), frameWidthPixels / frameHeightPixels, miniFramePixels / bigFramePixels (both sizes in screen pixels, 'WxH'), renderWidth / renderHeight (the part of the texture drawn), tiltDegrees, aircraftUp, rangeKm (of the picture shown), miniRangeKm, bigRangeKm, northUp, the timings (lastRenderMs / worstRenderMs / renders: one picture, the scan taken out; lastFillMs / worstFillMs / fills: the lattice fill when the aircraft enters another cell; lastScanMs / worstScanMs / scans: the four-times-a-second unit scan; the worst values are cleared after the warm-up by resetTimings, so tac_default carries the steady cost of the always-on MINI over about 3 s), broken and failure. The checks assert those, the timings against a loose ceiling (a frame) and that the Unity log has no Exception; nothing asserts the pixels: they are read off the captures (a rectangular tile that fills its frame edge to edge with only a short fade at the edges, solid: lines stop behind a ridge, lines across the view brighter than lines running away, the corner brackets round the frame, the shelf, the scale bar). The game's dark map plate (HUDCanvas/HMDCenter/LowerLeftPanel) is hidden while the mini or the big map is up (plateAlpha 0) and back with CLASSIC and after the hologram goes (plateAlpha 1, plateFound false); a feathered shade stands behind the frame (shadeAlpha 0.5 mini, 0.55 big).",
   "name": "holo-map",
-  "description": "TAC MAP in one cockpit run (a level hostile 5 km ahead and 3 km right of the aircraft, designated, first): the standing MINI by itself, CLASSIC, HOLO again, 5 and 20 km minis, then the big holo at 20 km heading up, 10 km, 40 km north up, closed.",
+  "description": "TAC MAP in one cockpit run (a level hostile 5 km ahead and 3 km right of the aircraft, designated, first): the standing MINI terrain tile by itself, CLASSIC, HOLO again, 10 and 40 km minis, then the big map at 40 km heading up, 20 km, 80 km north up, closed.",
   "mods": [
     "boscalisummer"
   ],
@@ -198,10 +198,10 @@
       "op": "call",
       "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
       "args": {
-        "miniRangeKm": 5,
+        "miniRangeKm": 10,
         "northUp": true
       },
-      "store": "tac_5_set"
+      "store": "tac_10_set"
     },
     {
       "op": "wait",
@@ -211,20 +211,20 @@
       "op": "call",
       "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
       "args": {},
-      "store": "tac_5"
+      "store": "tac_10"
     },
     {
       "op": "capture",
-      "name": "tac-mini-5-north"
+      "name": "tac-mini-10-north"
     },
     {
       "op": "call",
       "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
       "args": {
-        "miniRangeKm": 20,
+        "miniRangeKm": 40,
         "northUp": false
       },
-      "store": "tac_20_set"
+      "store": "tac_40_set"
     },
     {
       "op": "wait",
@@ -234,11 +234,11 @@
       "op": "call",
       "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
       "args": {},
-      "store": "tac_20"
+      "store": "tac_40"
     },
     {
       "op": "capture",
-      "name": "tac-mini-20"
+      "name": "tac-mini-40"
     },
     {
       "op": "call",
@@ -246,10 +246,32 @@
       "args": {
         "restore": true,
         "open": true,
-        "rangeKm": 20,
+        "rangeKm": 40,
         "northUp": false
       },
       "store": "holo_open"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {},
+      "store": "holo_40"
+    },
+    {
+      "op": "capture",
+      "name": "holo-40"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
+      "args": {
+        "rangeKm": 20
+      },
+      "store": "holo_20_set"
     },
     {
       "op": "wait",
@@ -269,32 +291,10 @@
       "op": "call",
       "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
       "args": {
-        "rangeKm": 10
-      },
-      "store": "holo_10_set"
-    },
-    {
-      "op": "wait",
-      "seconds": 1.2
-    },
-    {
-      "op": "call",
-      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
-      "args": {},
-      "store": "holo_10"
-    },
-    {
-      "op": "capture",
-      "name": "holo-10"
-    },
-    {
-      "op": "call",
-      "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
-      "args": {
-        "rangeKm": 40,
+        "rangeKm": 80,
         "northUp": true
       },
-      "store": "holo_40_set"
+      "store": "holo_80_set"
     },
     {
       "op": "wait",
@@ -304,11 +304,11 @@
       "op": "call",
       "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure",
       "args": {},
-      "store": "holo_40"
+      "store": "holo_80"
     },
     {
       "op": "capture",
-      "name": "holo-40-north"
+      "name": "holo-80-north"
     },
     {
       "op": "call",
@@ -340,7 +340,7 @@
       "args": {
         "tacMode": "Classic",
         "open": true,
-        "rangeKm": 20
+        "rangeKm": 40
       },
       "store": "classic_open"
     },
@@ -434,18 +434,18 @@
     },
     {
       "check": "result_below",
-      "path": "holo_20.plateAlpha",
+      "path": "holo_40.plateAlpha",
       "max": 0.01
     },
     {
       "check": "result_above",
-      "path": "holo_20.shadeAlpha",
-      "min": 0.39
+      "path": "holo_40.shadeAlpha",
+      "min": 0.54
     },
     {
       "check": "result_below",
-      "path": "holo_20.shadeAlpha",
-      "max": 0.41
+      "path": "holo_40.shadeAlpha",
+      "max": 0.56
     },
     {
       "check": "result_below",
@@ -520,12 +520,12 @@
     {
       "check": "result_equals",
       "path": "tac_default.rangeKm",
-      "value": 10
+      "value": 20
     },
     {
       "check": "result_equals",
       "path": "tac_default.miniRangeKm",
-      "value": 10
+      "value": 20
     },
     {
       "check": "result_equals",
@@ -634,42 +634,42 @@
     },
     {
       "check": "result_equals",
-      "path": "tac_5.presentation",
+      "path": "tac_10.presentation",
       "value": "mini"
     },
     {
       "check": "result_equals",
-      "path": "tac_5.rangeKm",
-      "value": 5
+      "path": "tac_10.rangeKm",
+      "value": 10
     },
     {
       "check": "result_equals",
-      "path": "tac_5.miniRangeKm",
-      "value": 5
+      "path": "tac_10.miniRangeKm",
+      "value": 10
     },
     {
       "check": "result_equals",
-      "path": "tac_5.northUp",
+      "path": "tac_10.northUp",
       "value": true
     },
     {
       "check": "result_equals",
-      "path": "tac_5.mapHidden",
+      "path": "tac_10.mapHidden",
       "value": true
     },
     {
       "check": "result_equals",
-      "path": "tac_20.presentation",
+      "path": "tac_40.presentation",
       "value": "mini"
     },
     {
       "check": "result_equals",
-      "path": "tac_20.rangeKm",
-      "value": 20
+      "path": "tac_40.rangeKm",
+      "value": 40
     },
     {
       "check": "result_equals",
-      "path": "tac_20.northUp",
+      "path": "tac_40.northUp",
       "value": false
     },
     {
@@ -694,88 +694,68 @@
     },
     {
       "check": "result_equals",
-      "path": "holo_20.active",
+      "path": "holo_40.active",
       "value": true
     },
     {
       "check": "result_equals",
-      "path": "holo_20.presentation",
+      "path": "holo_40.presentation",
       "value": "big"
     },
     {
       "check": "result_equals",
-      "path": "holo_20.additiveMaterial",
+      "path": "holo_40.additiveMaterial",
       "value": true
     },
     {
       "check": "result_equals",
-      "path": "holo_20.renderTexture",
+      "path": "holo_40.renderTexture",
       "value": true
     },
     {
       "check": "result_above",
-      "path": "holo_20.vertexCount",
+      "path": "holo_40.vertexCount",
       "min": 1
     },
     {
       "check": "result_above",
-      "path": "holo_20.litVertices",
+      "path": "holo_40.litVertices",
       "min": 100
     },
     {
       "check": "result_above",
-      "path": "holo_20.marksDrawn",
+      "path": "holo_40.marksDrawn",
       "min": 0
     },
     {
       "check": "result_above",
-      "path": "holo_20.labelsUsed",
+      "path": "holo_40.labelsUsed",
       "min": 2
     },
     {
       "check": "result_above",
-      "path": "holo_20.lastRenderMs",
+      "path": "holo_40.lastRenderMs",
       "min": 0
     },
     {
       "check": "result_equals",
-      "path": "holo_20.mapHidden",
+      "path": "holo_40.mapHidden",
       "value": true
     },
     {
       "check": "result_above",
-      "path": "holo_20.grow",
+      "path": "holo_40.grow",
       "min": 0.9
     },
     {
       "check": "result_equals",
-      "path": "holo_20.unitCap",
+      "path": "holo_40.unitCap",
       "value": 96
     },
     {
       "check": "result_below",
-      "path": "holo_20.wedgeDegrees",
+      "path": "holo_40.wedgeDegrees",
       "max": 0.5
-    },
-    {
-      "check": "result_equals",
-      "path": "holo_20.rangeKm",
-      "value": 20
-    },
-    {
-      "check": "result_equals",
-      "path": "holo_20.northUp",
-      "value": false
-    },
-    {
-      "check": "result_equals",
-      "path": "holo_10.rangeKm",
-      "value": 10
-    },
-    {
-      "check": "result_equals",
-      "path": "holo_10.active",
-      "value": true
     },
     {
       "check": "result_equals",
@@ -785,11 +765,31 @@
     {
       "check": "result_equals",
       "path": "holo_40.northUp",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_20.rangeKm",
+      "value": 20
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_20.active",
       "value": true
     },
     {
       "check": "result_equals",
-      "path": "holo_40.active",
+      "path": "holo_80.rangeKm",
+      "value": 80
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_80.northUp",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_80.active",
       "value": true
     },
     {
@@ -830,7 +830,7 @@
     {
       "check": "result_equals",
       "path": "holo_closed.rangeKm",
-      "value": 10
+      "value": 20
     },
     {
       "check": "result_equals",
@@ -876,6 +876,336 @@
       "check": "result_equals",
       "path": "classic_closed.tacMode",
       "value": "Holo"
+    },
+    {
+      "check": "result_equals",
+      "path": "tac_default.depthPath",
+      "value": true
+    },
+    {
+      "check": "result_above",
+      "path": "tac_default.frameUnitsWide",
+      "min": 338.0
+    },
+    {
+      "check": "result_below",
+      "path": "tac_default.frameUnitsWide",
+      "max": 342.0
+    },
+    {
+      "check": "result_above",
+      "path": "tac_default.frameUnitsHigh",
+      "min": 298.0
+    },
+    {
+      "check": "result_below",
+      "path": "tac_default.frameUnitsHigh",
+      "max": 302.0
+    },
+    {
+      "check": "result_above",
+      "path": "tac_default.frameAspect",
+      "min": 1.12
+    },
+    {
+      "check": "result_below",
+      "path": "tac_default.frameAspect",
+      "max": 1.145
+    },
+    {
+      "check": "result_above",
+      "path": "tac_default.tiltDegrees",
+      "min": 67.5
+    },
+    {
+      "check": "result_below",
+      "path": "tac_default.tiltDegrees",
+      "max": 68.5
+    },
+    {
+      "check": "result_above",
+      "path": "tac_default.aircraftUp",
+      "min": 0.37
+    },
+    {
+      "check": "result_below",
+      "path": "tac_default.aircraftUp",
+      "max": 0.39
+    },
+    {
+      "check": "result_above",
+      "path": "tac_default.frameCentreX",
+      "min": 0.0
+    },
+    {
+      "check": "result_below",
+      "path": "tac_default.frameCentreX",
+      "max": 0.3
+    },
+    {
+      "check": "result_above",
+      "path": "tac_default.scaleKm",
+      "min": 4.0
+    },
+    {
+      "check": "result_below",
+      "path": "tac_default.scaleKm",
+      "max": 21.0
+    },
+    {
+      "check": "result_above",
+      "path": "tac_default.gridCellMetres",
+      "min": 620.0
+    },
+    {
+      "check": "result_below",
+      "path": "tac_default.gridCellMetres",
+      "max": 630.0
+    },
+    {
+      "check": "result_above",
+      "path": "tac_default.gridCellsX",
+      "min": 60.0
+    },
+    {
+      "check": "result_below",
+      "path": "tac_default.gridCellsX",
+      "max": 140.0
+    },
+    {
+      "check": "result_above",
+      "path": "tac_default.gridCellsZ",
+      "min": 60.0
+    },
+    {
+      "check": "result_below",
+      "path": "tac_default.gridCellsZ",
+      "max": 140.0
+    },
+    {
+      "check": "result_below",
+      "path": "tac_default.worstFillMs",
+      "max": 10.0
+    },
+    {
+      "check": "result_above",
+      "path": "tac_default.fills",
+      "min": 0.0
+    },
+    {
+      "check": "result_below",
+      "path": "tac_default.fills",
+      "max": 400.0
+    },
+    {
+      "check": "result_above",
+      "path": "tac_default.renderWidth",
+      "min": 96.0
+    },
+    {
+      "check": "result_below",
+      "path": "tac_default.renderWidth",
+      "max": 1280.0
+    },
+    {
+      "check": "result_above",
+      "path": "tac_default.renderHeight",
+      "min": 96.0
+    },
+    {
+      "check": "result_below",
+      "path": "tac_default.renderHeight",
+      "max": 960.0
+    },
+    {
+      "check": "result_above",
+      "path": "tac_default.frameWidthPixels",
+      "min": 100.0
+    },
+    {
+      "check": "result_below",
+      "path": "tac_default.frameWidthPixels",
+      "max": 5000.0
+    },
+    {
+      "check": "result_above",
+      "path": "tac_10.aircraftUp",
+      "min": 0.49
+    },
+    {
+      "check": "result_below",
+      "path": "tac_10.aircraftUp",
+      "max": 0.51
+    },
+    {
+      "check": "result_above",
+      "path": "tac_10.gridCellMetres",
+      "min": 310.0
+    },
+    {
+      "check": "result_below",
+      "path": "tac_10.gridCellMetres",
+      "max": 315.0
+    },
+    {
+      "check": "result_above",
+      "path": "tac_40.gridCellMetres",
+      "min": 1245.0
+    },
+    {
+      "check": "result_below",
+      "path": "tac_40.gridCellMetres",
+      "max": 1255.0
+    },
+    {
+      "check": "result_above",
+      "path": "holo_40.frameHeightShare",
+      "min": 0.81
+    },
+    {
+      "check": "result_below",
+      "path": "holo_40.frameHeightShare",
+      "max": 0.83
+    },
+    {
+      "check": "result_above",
+      "path": "holo_40.frameAspect",
+      "min": 1.29
+    },
+    {
+      "check": "result_below",
+      "path": "holo_40.frameAspect",
+      "max": 1.31
+    },
+    {
+      "check": "result_above",
+      "path": "holo_40.frameCentreX",
+      "min": 0.49
+    },
+    {
+      "check": "result_below",
+      "path": "holo_40.frameCentreX",
+      "max": 0.51
+    },
+    {
+      "check": "result_above",
+      "path": "holo_40.frameCentreY",
+      "min": 0.49
+    },
+    {
+      "check": "result_below",
+      "path": "holo_40.frameCentreY",
+      "max": 0.51
+    },
+    {
+      "check": "result_above",
+      "path": "holo_40.tiltDegrees",
+      "min": 54.5
+    },
+    {
+      "check": "result_below",
+      "path": "holo_40.tiltDegrees",
+      "max": 55.5
+    },
+    {
+      "check": "result_above",
+      "path": "holo_40.aircraftUp",
+      "min": 0.49
+    },
+    {
+      "check": "result_below",
+      "path": "holo_40.aircraftUp",
+      "max": 0.51
+    },
+    {
+      "check": "result_above",
+      "path": "holo_40.gridCellMetres",
+      "min": 830.0
+    },
+    {
+      "check": "result_below",
+      "path": "holo_40.gridCellMetres",
+      "max": 837.0
+    },
+    {
+      "check": "result_above",
+      "path": "holo_40.gridCellsX",
+      "min": 100.0
+    },
+    {
+      "check": "result_below",
+      "path": "holo_40.gridCellsX",
+      "max": 190.0
+    },
+    {
+      "check": "result_above",
+      "path": "holo_40.scaleKm",
+      "min": 4.0
+    },
+    {
+      "check": "result_below",
+      "path": "holo_40.scaleKm",
+      "max": 61.0
+    },
+    {
+      "check": "result_below",
+      "path": "holo_40.worstFillMs",
+      "max": 10.0
+    },
+    {
+      "check": "result_above",
+      "path": "holo_40.renderWidth",
+      "min": 96.0
+    },
+    {
+      "check": "result_below",
+      "path": "holo_40.renderWidth",
+      "max": 1280.0
+    },
+    {
+      "check": "result_above",
+      "path": "holo_40.renderHeight",
+      "min": 96.0
+    },
+    {
+      "check": "result_below",
+      "path": "holo_40.renderHeight",
+      "max": 960.0
+    },
+    {
+      "check": "result_above",
+      "path": "holo_20.gridCellMetres",
+      "min": 415.0
+    },
+    {
+      "check": "result_below",
+      "path": "holo_20.gridCellMetres",
+      "max": 418.0
+    },
+    {
+      "check": "result_above",
+      "path": "holo_80.gridCellMetres",
+      "min": 1665.0
+    },
+    {
+      "check": "result_below",
+      "path": "holo_80.gridCellMetres",
+      "max": 1668.0
+    },
+    {
+      "check": "result_equals",
+      "path": "holo_40.depthPath",
+      "value": true
+    },
+    {
+      "check": "result_above",
+      "path": "holo_40.vertexCount",
+      "min": 10000
+    },
+    {
+      "check": "result_above",
+      "path": "holo_40.litVertices",
+      "min": 1000
     },
     {
       "check": "log_match",
