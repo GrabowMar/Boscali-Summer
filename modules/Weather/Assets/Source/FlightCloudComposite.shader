@@ -53,6 +53,15 @@ Shader "Boscali/FlightCloudComposite"
             {
                 float2 uv = i.screen.xy / i.screen.w;
                 float depth = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv));
+                // A silhouette pixel (a ridge, a tree, a mast against the sky) is part sky after anti-aliasing, but its depth says ground, so the cloud behind it
+                // was rejected and the clear-sky colour baked into it stayed: a bright outline a few pixels wide around everything in front of a dark cloud.
+                // Where a neighbour 1.5 px away is far behind this pixel, composite the cloud against that neighbour's depth at part strength.
+                float2 rimStep = 1.5 / _ScreenParams.xy;
+                float behind = max(
+                    max(LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv + float2(rimStep.x, 0.0))), LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv - float2(rimStep.x, 0.0)))),
+                    max(LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv + float2(0.0, rimStep.y))), LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv - float2(0.0, rimStep.y)))));
+                bool rim = behind > depth * 1.5 + 50.0;
+                if (rim) depth = behind;
                 // The 3x3 cloud texels around this pixel: a Gaussian over distance (which also
                 // melts the march's per-texel dither) times a depth match.
                 float2 p = uv * _CloudLowResSize.xy - 0.5;
@@ -83,6 +92,7 @@ Shader "Boscali/FlightCloudComposite"
                     }
                 }
                 c /= max(1e-5, total);
+                if (rim) c *= 0.65;
                 if (c.a < 0.002) discard;
                 return c;
             }
