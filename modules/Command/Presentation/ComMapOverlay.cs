@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using BoscaliSummer.Modules.Command.Configuration;
 using BoscaliSummer.Modules.Command.Patches;
 using BoscaliSummer.Modules.Command.Presentation.MapUi;
@@ -38,6 +39,24 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private int lastBakeTexW;
         private int lastBakeTexH;
         private bool hasBakedTexture;
+
+        // The raster bake is plain array work, so it runs on a worker over this private copy of
+        // the published grid (which the main thread keeps changing). The lastBake* fields above
+        // describe the bake that was last requested, whether or not it has landed yet.
+        private sealed class BakeJob
+        {
+            internal Task Task;
+            internal Color32[] Pixels;
+            internal int Width;
+            internal int Height;
+            internal Exception Error;
+            internal bool Discard;
+        }
+
+        private TacticalSectorGrid bakeGrid;
+        private BakeJob pendingBake;
+        private bool bakeFaultLogged;
+        private bool textureClear;
 
         /// <summary>
         /// The faction control field shared with host ingress queries.
@@ -121,6 +140,13 @@ namespace BoscaliSummer.Modules.Command.Presentation
             // instead of clearing a field owned by that service.
             sectorGrid = FreshGrid();
 
+            // A bake still running keeps its own copy and pixels; nobody will read the result.
+            if (pendingBake != null) pendingBake.Discard = true;
+            pendingBake = null;
+            bakeGrid = null;
+            bakeFaultLogged = false;
+            textureClear = false;
+
             dynamicMap = null;
             initialized = false;
             isMapMaximized = false;
@@ -169,6 +195,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         private void Update()
         {
+            PollBake();
+
             if (settings == null || !settings.Enabled.Value)
             {
                 SetOverlayVisible(false);
@@ -229,14 +257,70 @@ namespace BoscaliSummer.Modules.Command.Presentation
             };
 
             // Immediately clear to transparent pixels so the overlay never shows uninitialized grey memory
-            Color32[] transparentPixels = new Color32[texW * texH];
-            overlayTexture.SetPixels32(transparentPixels);
-            overlayTexture.Apply(false);
+            textureClear = false;
+            ClearTexture(texW, texH);
 
             if (overlayImage != null)
             {
                 overlayImage.texture = overlayTexture;
             }
+        }
+
+        private void ClearTexture(int texW, int texH)
+        {
+            if (textureClear) return;
+            Color32[] transparentPixels = new Color32[texW * texH];
+            overlayTexture.SetPixels32(transparentPixels);
+            overlayTexture.Apply(false);
+            textureClear = true;
+        }
+
+        /// <summary>
+        /// Uploads a finished bake. Runs on the main thread from Update; never waits for a bake
+        /// that is still running.
+        /// </summary>
+        private void PollBake()
+        {
+            BakeJob job = pendingBake;
+            if (job == null || !job.Task.IsCompleted) return;
+            pendingBake = null;
+            // The front may have moved while the worker ran: look again at once.
+            nextGridUpdate = 0f;
+            if (job.Task.IsFaulted && job.Error == null) job.Error = job.Task.Exception?.GetBaseException();
+            if (job.Error != null)
+            {
+                if (!bakeFaultLogged)
+                {
+                    bakeFaultLogged = true;
+                    Plugin.Logger?.LogWarning("[COM] Tactical overlay bake failed: " + job.Error.Message);
+                }
+                return;
+            }
+            if (job.Discard || job.Pixels == null) return;
+            if (overlayTexture == null || overlayTexture.width != job.Width || overlayTexture.height != job.Height)
+            {
+                // The texture was replaced while the worker ran: this picture no longer fits.
+                hasBakedTexture = false;
+                return;
+            }
+            overlayTexture.SetPixels32(job.Pixels);
+            overlayTexture.Apply(false);
+            textureClear = false;
+        }
+
+        /// <summary>Snapshots the shown grid into the private bake grid and bakes it on a worker.</summary>
+        private void StartBake(int texW, int texH, float overlayAlpha)
+        {
+            if (bakeGrid == null || !bakeGrid.SharesBakeLayout(sectorGrid)) bakeGrid = sectorGrid.NewBakeTwin();
+            bakeGrid.CopyBakeStateFrom(sectorGrid);
+            TacticalSectorGrid grid = bakeGrid;
+            var job = new BakeJob { Width = texW, Height = texH };
+            job.Task = Task.Run(() =>
+            {
+                try { job.Pixels = grid.BakeTexture(texW, texH, true, overlayAlpha); }
+                catch (Exception ex) { job.Error = ex; }
+            });
+            pendingBake = job;
         }
 
         private void TryInitialize()
@@ -356,17 +440,26 @@ namespace BoscaliSummer.Modules.Command.Presentation
                     || lastBakeTexW != texW
                     || lastBakeTexH != texH;
 
-                if (bakeDirty)
+                // Nothing to draw (hidden, or fully transparent): clearing is cheap, so it stays here,
+                // and any bake still running holds a picture that must not land over it.
+                bool clearOnly = !showSectors || !float.IsFinite(overlayAlpha) || overlayAlpha <= 0f;
+                bool requested = false;
+                if (bakeDirty && clearOnly)
                 {
-                    Color32[] pixels = sectorGrid.BakeTexture(
-                        texW,
-                        texH,
-                        showSectors,
-                        overlayAlpha);
+                    if (pendingBake != null) pendingBake.Discard = true;
+                    ClearTexture(texW, texH);
+                    requested = true;
+                }
+                // One bake at a time: a request that arrives while the worker is busy simply stays
+                // dirty and is asked again once the running bake has landed (newest state wins).
+                else if (bakeDirty && pendingBake == null)
+                {
+                    StartBake(texW, texH, overlayAlpha);
+                    requested = true;
+                }
 
-                    overlayTexture.SetPixels32(pixels);
-                    overlayTexture.Apply(false);
-
+                if (requested)
+                {
                     lastBakeDisplayHash = sectorGrid.DisplayHash;
                     lastBakeShowSectors = showSectors;
                     lastBakeOverlayAlpha = overlayAlpha;
