@@ -75,17 +75,5 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             if (!ReferenceEquals(m.Pilot.currentState, m.State)) return "not in formation";
             return null;
         }
-
-        /// <summary>Maneuvers begun this session (automation).</summary>
-        public int Reacts
-        {
-            get
-            {
-                int n = 0;
-                for (int i = 0; i < Events.Count; i++)
-                    if (Events[i].Kind == WingEventKind.BehaviourChanged && Events[i].To == BehaviourId.React) n++;
-                return n;
-            }
-        }
     }
 }

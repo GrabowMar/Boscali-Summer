@@ -19,8 +19,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// I1: a card stuck on it and its RTB went to the wrong wingman). INSPECT keeps its own aircraft.</summary>
         public uint Inspected { get; private set; }
 
-        public void Inspect(uint id) => Inspected = id;
-
         public void Toggle(uint id)
         {
             element = -1;
@@ -66,7 +64,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             if (Inspected != 0u && WingRows.IndexOf(rows, count, Inspected) < 0) Inspected = 0u;
         }
 
-        public WingScope Scope(SnapshotMember[] rows, int count)
+        public WingScope Scope(int count)
         {
             if (ids.Count == 0 || ids.Count >= count) return WingScope.Wing;
             if (element >= 0) return WingScope.OfElement(element);
@@ -75,7 +73,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public string Label(SnapshotMember[] rows, int count)
         {
-            WingScope s = Scope(rows, count);
+            WingScope s = Scope(count);
             if (s.Kind == ScopeKind.Wing) return "WING";
             if (s.Kind == ScopeKind.Element) return "ELEMENT " + ElementRoster.Letter(s.Element);
             var sb = new StringBuilder();

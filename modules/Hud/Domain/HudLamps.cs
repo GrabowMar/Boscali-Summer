@@ -13,6 +13,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
     {
         public GearLamp Gear;
         public bool? FlightAssist, AutoHover, RadarEmitting, NightVision, WeaponSafe, EngineRunning;
+        /// <summary>The NVG lamp's word when the goggles report a gain state (NVG A, NVG 2, NVG GATE); null = plain NVG.</summary>
+        public string NvgLegend;
     }
 
     /// <summary>One lamp: its legend and how it is lit. Flashing is for state in transition.</summary>
@@ -45,7 +47,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             lamps[1] = Mode("FA", s.FlightAssist, LampState.On);
             lamps[2] = Mode("HOVR", s.AutoHover, LampState.On);
             lamps[3] = Mode("RDR", s.RadarEmitting, LampState.Caution);
-            lamps[4] = Mode("NVG", s.NightVision, LampState.On);
+            lamps[4] = Mode(s.NightVision == true && s.NvgLegend != null ? s.NvgLegend : "NVG", s.NightVision, LampState.On);
             lamps[5] = Mode("SAFE", s.WeaponSafe, LampState.Caution);
             lamps[6] = new Lamp
             {

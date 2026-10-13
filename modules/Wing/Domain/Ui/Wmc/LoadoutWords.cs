@@ -9,8 +9,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// capped at the source, never with "…".</summary>
     internal static class LoadoutWords
     {
-        public const int BuildChars = 60, ChipChars = 11, ValueChars = 7, CaptionChars = 22, StationChars = 40, StoreChars = 48, LiveryChars = 36;
-        public const string NoTemplate = "NO TEMPLATE", EmptyStore = "EMPTY", MassCaption = "STORES ONLY", Standard = "STANDARD (FACTION)";
+        public const int BuildChars = 60, CaptionChars = 22, StationChars = 40, StoreChars = 48, LiveryChars = 36;
+        public const string NoTemplate = "NO TEMPLATE", EmptyStore = "EMPTY", Standard = "STANDARD (FACTION)";
         public const string Unreadable = "This airframe's hardpoints cannot be read here";
 
         public static string Title(string code, string template) => code + " · " + (template ?? NoTemplate);
@@ -31,8 +31,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             state = supplyFit ? "info" : "live";
             return supplyFit ? "SUPPLY FIT" : "SAVED";
         }
-
-        public static string Picker(string template) => (template ?? NoTemplate) + " ›";
 
         public static string Chain(string code, string template, int stations) =>
             template == null ? code + " › " + NoTemplate : code + " › " + template + " › " + Count(stations, "STATION", "STATIONS");

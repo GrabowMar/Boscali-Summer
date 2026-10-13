@@ -57,7 +57,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
     /// </summary>
     internal sealed class SofWatchBrain : WatchBrainBase
     {
-        public const float ThinkSeconds = 2f, MinSabotageOdds = 55f, HighValueScore = 10f, NearFrontMeters = 20000f, MaxEtaSeconds = 900f, SabotageCooldownSeconds = 600f,
+        public const float ThinkSeconds = 2f, HighValueScore = 10f, NearFrontMeters = 20000f, MaxEtaSeconds = 900f, SabotageCooldownSeconds = 600f,
             TargetBackoffSeconds = 600f, FailBackoffSeconds = 60f, ReconSpacingMeters = 1500f, ReconStandOffMeters = 900f, ReconRepeatSeconds = 300f, LostRestSeconds = 120f,
             UrgentFloor = 15f, ApproachMeters = 1600f, PushBelow = 20f, PushStopAbove = 35f, HoldAt = 50f, ResumeBelow = 30f, ExfilAt = 40f, PushMinMeters = 1500f, StrandedMeters = 300f, RisingEpsilon = 0.2f;
         public const float ReadyMaxExposure = 10f, CommitCeiling = 85f, CommitMargin = 15f, OnSiteHoldAt = 45f, ProjectedExfil = 95f, ProjectedFloor = 40f, RiskRadiusMeters = 1000f, ArmourRadiusMeters = 1000f;
@@ -122,7 +122,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
                 case TeamState.Moving:
                 case TeamState.Returning:
                 case TeamState.OnSite:
-                    return SteerPlan(desk, team, prior, priorAt, pacer, aiFaction, now, suspended);
+                    return SteerPlan(team, prior, priorAt, pacer, aiFaction, now, suspended);
                 case TeamState.Ready:
                     return ReadyPlan(desk, world, team, now);
                 default:
@@ -255,7 +255,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
 
         // ---- Steering --------------------------------------------------------------------------
 
-        private SofWatchPlan SteerPlan(SofDesk desk, SofTeam team, float prior, float priorAt, WatchPacer pacer, bool aiFaction, float now, bool safetyOnly)
+        private SofWatchPlan SteerPlan(SofTeam team, float prior, float priorAt, WatchPacer pacer, bool aiFaction, float now, bool safetyOnly)
         {
             bool rising = prior >= 0f && team.Exposure > prior + RisingEpsilon;
             int exposure = (int)Math.Round(team.Exposure);
@@ -269,7 +269,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             pacer.SetUrgent(WatchDomain.Sof, aiFaction && moving && (approaching || (team.Exposure >= UrgentFloor && rising && team.Exposure + rate * (ThinkSeconds + 1f + WatchPacer.AiGap()) >= ProjectedExfil)));
             // A team that can still reach its target, hold there and end under the ceiling at the exposure rate it is climbing now is not withdrawn at 40 %: a lightly defended target is reachable.
             // The projected-95 % safety below still withdraws it whenever the pin is about to land inside one pacing wait.
-            bool committed = Committed(team, rate, now);
+            bool committed = Committed(team, rate);
             if (team.State != TeamState.Returning && ((team.Exposure >= ExfilAt && rising && !committed) || (team.Exposure >= ProjectedFloor && projected >= ProjectedExfil)))
                 return Exfil(team, WatchCode.SofExfil, exposure);
             if (safetyOnly) return SofWatchPlan.Idle(SofWatchWhy.Suspended);
@@ -287,7 +287,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             return SofWatchPlan.Idle(SofWatchWhy.Waiting);
         }
 
-        private static bool Committed(SofTeam team, float rate, float now)
+        private static bool Committed(SofTeam team, float rate)
         {
             if (team.Mission == MissionKind.None || (team.State != TeamState.Moving && team.State != TeamState.OnSite)) return false;
             float eta = team.State == TeamState.Moving && team.HasDest

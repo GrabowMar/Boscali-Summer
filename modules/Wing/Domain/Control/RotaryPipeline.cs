@@ -55,7 +55,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
 
         public void Track(in AircraftState s, in ControlOutput applied, AirframeProfile p) => Controller.Track(s, applied, p);
-
-        public void NoteAppliedRoll(float appliedRoll) => Controller.NoteAppliedRoll(appliedRoll);
     }
 }

@@ -178,13 +178,16 @@ namespace BoscaliSummer.Modules.Command.Domain
     internal static class StrControlIds
     {
         private static readonly Regex Grammar = new Regex(
-            @"^(tab\.(board|sitrep|info)|info\.(side\.(own|enemy)|post\.[1-8]|locate)|posture\.(cautious|steady|bold)|replan|hero\.locate|prop\.[1-3]\.(pick|locate)|front\.[1-8]\.(redirect|locate)|" +
+            @"^(tab\.(board|sitrep|info|supply)|supply\.(give\.(10|25|50|100)|buy\.[1-8])|info\.(side\.(own|enemy)|post\.[1-8]|locate)|posture\.(cautious|steady|bold)|replan|hero\.locate|prop\.[1-3]\.(pick|locate)|front\.[1-8]\.(redirect|locate)|" +
             @"sortie\.[1-3]\.(accept|wing|locate)|layer\.(fronts|operation|sorties)|map\.card\.(primary|secondary|close)|map\.tag\.(effort|prop|front|sortie|post)\.[1-9][0-9]*)$",
             RegexOptions.CultureInvariant);
 
         public static bool IsValid(string id) => !string.IsNullOrEmpty(id) && Grammar.IsMatch(id);
 
-        public static string Tab(int page) => page == 0 ? "tab.board" : page == 1 ? "tab.sitrep" : "tab.info";
+        public static string Tab(int page) => page == 0 ? "tab.board" : page == 1 ? "tab.sitrep" : page == 2 ? "tab.info" : "tab.supply";
+
+        public static string SupplyGive(int percent) => "supply.give." + percent.ToString(CultureInfo.InvariantCulture);
+        public static string SupplyBuy(int n) => "supply.buy." + n.ToString(CultureInfo.InvariantCulture);
 
         public static string Posture(TheaterWarPosture posture) =>
             posture == TheaterWarPosture.Cautious ? "posture.cautious" : posture == TheaterWarPosture.Bold ? "posture.bold" : "posture.steady";

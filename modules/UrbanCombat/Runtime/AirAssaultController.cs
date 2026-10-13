@@ -305,9 +305,13 @@ namespace BoscaliSummer.Garrisons
             if (!Physics.Raycast(origin, Vector3.down, out RaycastHit hit, FastRopePlan.RappelMaxHeight + 10f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
                 return false;
             FactionHQ owner = aircraft.NetworkHQ;
-            int troops = TroopDeploymentMath.DefaultSquadSize;
-            bool found = InfantryEncampmentBuilder.TryRelease(hit.point, ExfilRadius, owner, out Vector3 centre, out troops) ||
-                (ZoneGarrisonManager.Instance != null && ZoneGarrisonManager.Instance.TryReleaseOccupation(hit.point, ExfilRadius, owner, out centre));
+            bool found = InfantryEncampmentBuilder.TryRelease(hit.point, ExfilRadius, owner, out Vector3 centre, out int troops);
+            if (!found)
+            {
+                // An occupation keeps no head count (and TryRelease just zeroed ours): a full squad comes out.
+                troops = TroopDeploymentMath.DefaultSquadSize;
+                found = ZoneGarrisonManager.Instance != null && ZoneGarrisonManager.Instance.TryReleaseOccupation(hit.point, ExfilRadius, owner, out centre);
+            }
             if (!found)
             {
                 Plugin.Logger.LogInfo($"[Air Assault] Exfil: no friendly squad position within {ExfilRadius:0} m below {aircraft.name}.");

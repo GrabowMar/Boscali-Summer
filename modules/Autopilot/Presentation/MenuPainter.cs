@@ -16,6 +16,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
     /// </summary>
     internal sealed partial class MenuPainter
     {
+        public const float CloseSec = 0.09f;
         private const float OpenSec = 0.06f, DockSec = 0.07f, SwapSec = 0.06f;
 
         private readonly AvQuadBuffer q;
@@ -51,9 +52,10 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
                 Fill(0f, 0f, l.W, l.H, P.Scrim); // the whole screen a shade greyer, edge to edge: nothing to cut off
                 DockAnimation(now);
                 bool wheel = c.Wheel, docked = c.Cat >= 0 && !wheel; // a controller reads the list off the ring itself
-                if (docked) PaintLeaderAndDock(now); else dockWasShown = false;
+                if (docked) PaintLeaderAndDock(); else dockWasShown = false;
                 PaintOrbit();
                 if (wheel) PaintWheel(); else PaintRing();
+                PaintDwell(wheel ? c.WheelAim : c.Cat);
                 PaintHub();
                 PaintAction();
                 PaintHint();
@@ -250,6 +252,16 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             }
         }
 
+        /// <summary>A controller's stick held on something it can enter: a ring closes clockwise round that icon over <see cref="MenuController.DwellSec"/>.</summary>
+        private void PaintDwell(int slot)
+        {
+            float p = c.Dwell;
+            if (p <= 0f || slot < 0) return;
+            float x = l.DiscX[slot], y = l.DiscY[slot], r = l.Rd + 6f;
+            Ring(x, y, r, 4f, P.Casing);
+            AvStrokes.Arc(q, x, H - y, r, 90f - 360f * p, 90f, 48, 4f, P.InkHi);
+        }
+
         // ---------------------------------------------------------------- hub + bottom console
 
         /// <summary>The orbit the discs sit on, and a bold arc on the hub's rim under the open category (a thinner one under a category about to open).</summary>
@@ -395,7 +407,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
 
         // ---------------------------------------------------------------- leader
 
-        private void PaintLeaderAndDock(float now)
+        private void PaintLeaderAndDock()
         {
             MenuCategory cat = c.Category;
             int n = MenuLeader.Compute(l, c.Cat, cat, c.Dock, leaderPts);

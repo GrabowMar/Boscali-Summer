@@ -188,7 +188,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         {
             if (Phase != RecoveryPhase.Servicing) return;
             if (!Vertical) Ground.Field.Departures.Expect(owner, abreast);
-            Ground.Depart(time);
+            Ground.Depart();
             Phase = RecoveryPhase.Departing;
             Log(events, time, slot, WingEventKind.Serviced);
         }

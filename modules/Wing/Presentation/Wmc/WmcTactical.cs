@@ -1,11 +1,9 @@
 using NOAvionics;
-
-using BoscaliSummer.Modules.Wing.Networking;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>TACTICAL (spec 2026-10-04 §4.2, mockups board/orders.html, formation.html, route.html), the page the player spends most of the
     /// WMC on, as a kit v2 flow: the sub-tabs, the dense wing table that is also the scope (who orders go to), then ORDERS (stances and their
-    /// fine-tune, the command card with REACT, the queue, then THREATS, FLIGHT POOL and the whole-wing settings), FORMATION (the Station
+    /// fine-tune, the command card with REACT, the queue), FORMATION (the Station
     /// Board) and ROUTE · AP (the Flight Plan). The wing table is full on ORDERS and one summary line on the others (a tap expands it). The
     /// console body scrolls, so nothing pages or clips.</summary>
     internal sealed partial class WmcTactical : IWmcPage
@@ -16,7 +14,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private static readonly AvIcon[] SubIcons = { AvIcon.Flag, AvIcon.LayersSubtract, AvIcon.MapPin };
         private static readonly string[] SubHelp =
         {
-            "Stances, every order, the threats and what the scope carries.",
+            "Stances and every order.",
             "The Station Board: the shape each element flies and how well it holds it, spacing and stack.",
             "The Flight Plan: the scope's route as legs, and your own autopilot with NAV.",
         };
@@ -43,8 +41,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
 
         public WmcForm Form => form;
-
-        public WmcRoute Route => route;
 
         public int Sub => sub;
 
@@ -107,20 +103,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             flow.RequestRelayout();
         }
 
-        /// <summary>A control of a sub-page shows that sub-page first (automation).</summary>
-        public void ShowSubFor(string id)
-        {
-            if (id == null) return;
-            route.RevealFor(id);
-            if (id.StartsWith("form.", System.StringComparison.Ordinal)) ShowSub(SubFormation);
-            else if (id.StartsWith("plan.", System.StringComparison.Ordinal)) ShowSub(SubRoute);
-            else if (id.StartsWith("tac.orders.", System.StringComparison.Ordinal) || id.StartsWith("tac.react.", System.StringComparison.Ordinal)
-                     || id.StartsWith("tac.posture.", System.StringComparison.Ordinal) || id.StartsWith("tac.threat", System.StringComparison.Ordinal)
-                     || id.StartsWith("tac.stance.", System.StringComparison.Ordinal) || id.StartsWith("tac.queue.", System.StringComparison.Ordinal)
-                     || id.StartsWith("tac.alert", System.StringComparison.Ordinal))
-                ShowSub(SubOrders);
-        }
-
         /// <summary>A sub-page by its label (automation; ROUTE and FORM are the old names).</summary>
         public bool ShowSubNamed(string name)
         {
@@ -155,8 +137,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             // The alerts first: the table's summary line, the strip and the footer read this refresh's.
             RefreshAlertList(c);
             table.FlashUntil = flashUntil;
-            table.Refresh(c, AlertWord(c, out AvState alertAs), alertAs);
-            RefreshTableIds(c);
+            table.Refresh(c, AlertWord(out AvState alertAs), alertAs);
+            RefreshTableIds();
             if (sub == SubOrders) RefreshOrders(c);
             else if (sub == SubFormation) form.Refresh(c);
             else if (sub == SubRoute) route.Refresh(c);

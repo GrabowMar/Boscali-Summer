@@ -45,7 +45,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private AvChip[] chips;
         private AvChip fundsChip;
         private RectTransform[] hosts;
-        private Rect bodyRect;
         private float nextAttempt, nextRefresh;
         private bool wasVisible;
         private bool gaveUp;
@@ -65,27 +64,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         /// <summary>BEHAVIOUR › PLAN is showing: its map tools stay armed only here.</summary>
         public bool PlanShowing => Visible && shell != null && shell.CurrentPage == WmcTabs.Behaviour && plan != null && plan.Sub == WmcPlan.SubPlan;
         public int Page => shell != null ? shell.CurrentPage : -1;
-        public string PageName => shell != null && shell.CurrentPage >= 0 && shell.CurrentPage < WmcTabs.Labels.Length ? WmcTabs.Labels[shell.CurrentPage] : "";
-        public WmcControls Controls => controls;
         public WmcContext Context => context;
         public WmcMapOverlay Overlay => overlay;
         public WmcTactical Tactical => tactical;
         public WmcForm Form => tactical?.Form;
-        public WmcRoute Route => tactical?.Route;
         public WmcPlan Plan => plan;
-        public WmcInspect InspectPage => wingPage?.InspectPage;
-        public WmcSupply Supply => supply;
         public WmcLoadout Loadout => loadout;
         public WmcWing WingPage => wingPage;
-        /// <summary>Labels that would still spill out of their box (the automation's text-fit audit).</summary>
-        public int Overflow => OnShow() != null ? WmcKit.Overflow(OnShow()) : 0;
-
-        /// <summary>The page host on show (hidden pages keep their objects active, so audits must not look at them).</summary>
-        private RectTransform OnShow() => hosts != null && shell != null && shell.CurrentPage >= 0 && shell.CurrentPage < hosts.Length
-            ? hosts[shell.CurrentPage] : null;
-
-        /// <summary>The tallest empty band on the page on show, in px (the automation's density audit).</summary>
-        public int Gap => OnShow() != null ? WmcKit.LargestGap(OnShow(), bodyRect) : 0;
 
         public void Activate()
         {
@@ -167,40 +152,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Show(WmcTabs.Wing);
             wingPage.ShowSubNamed("INSPECT");
             Refresh();
-        }
-
-        /// <summary>Press a control by id as a click would (automation). A page's control shows its page first. False when there
-        /// is none or it is hidden; a disabled button ignores the click itself.</summary>
-        public bool Press(string id)
-        {
-            int tab = WmcTabs.Of(id);
-            if (tab >= 0 && pages != null && pages[tab] != null)
-            {
-                Show(tab);
-                if (tab == WmcTabs.Tactical) tactical.ShowSubFor(id);
-                if (tab == WmcTabs.Behaviour) plan.ShowSubFor(id);
-                if (tab == WmcTabs.Squadron) wingPage.ShowSubFor(id);
-                Refresh();
-            }
-            // Kit v2 chrome (tab bar, FIT) is not in the control registry: press it by id here.
-            if (id != null && id.StartsWith("tab.", StringComparison.Ordinal))
-            {
-                int t = WmcTabs.Index(id.Substring(4));
-                if (t < 0 || pages == null || pages[t] == null) return false;
-                Show(t);
-                Refresh();
-                return true;
-            }
-            if (id == "hdr.fit")
-            {
-                if (fitButton == null || !fitButton.gameObject.activeInHierarchy) return false;
-                PressFit();
-                nextRefresh = 0f;
-                return true;
-            }
-            if (!controls.Press(id)) return false;
-            nextRefresh = 0f;
-            return true;
         }
 
         private void Reset()
@@ -321,10 +272,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             fundsChip.Set("FUNDS " + WmcHeader.None, AvState.Inert);
             WmcMotion.Attach(root);
             BuildFitButton();
-
-            // Body: what the console leaves between the tab bar and the footer (Layout: header + chips + tabs, then footer).
-            float top = AvGridTokens.Header + 4f + AvGridTokens.ChipStrip + 6f + AvGridTokens.Tab + 4f;
-            bodyRect = new Rect(0f, 0f, AvTokens.PanelWidth, Mathf.Max(40f, height - top - AvGridTokens.Footer));
 
             // Every page is a kit v2 flow page: it builds into the shell's flow for its tab.
             tactical = new WmcTactical(controls);

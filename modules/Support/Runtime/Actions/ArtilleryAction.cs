@@ -191,7 +191,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
                 shot.Logger.LogInfo("[Support] Rod launched: " + RodGuard.Describe(shot.Definition) + "; flight estimate " +
                     RodGuard.Flight.Seconds.ToString("0.0") + " s from " + RodGuard.Flight.Count + " measured.");
                 // After the receipt, cosmetic failures cannot refund an already-live physical weapon.
-                try { Visuals.KineticRodStrikeVisuals.Track(missile, target); }
+                try { Visuals.KineticRodStrikeVisuals.Track(missile); }
                 catch (System.Exception e) { shot.Logger.LogWarning("[Support] Rod visual unavailable: " + e.Message); }
                 try { shot.Host.Run(Flight(shot, missile, spawner)); }
                 catch (System.Exception e)

@@ -73,15 +73,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             Total++;
         }
 
-        /// <summary>Behaviour transitions retained with <paramref name="reason"/>.</summary>
-        public int CountOf(TransitionReason reason)
-        {
-            int n = 0;
-            for (int i = 0; i < Count; i++)
-                if (this[i].Kind == WingEventKind.BehaviourChanged && this[i].Reason == reason) n++;
-            return n;
-        }
-
         public int CountOf(WingEventKind kind, int member = -1)
         {
             int n = 0;

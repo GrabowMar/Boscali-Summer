@@ -41,11 +41,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private bool refract;
         private Texture scene;
         private float recentLiquid, frost;
-        internal float Frost => frost;
 
         public string EffectId => "canopy";
-
-        public FxBudget Budget => new FxBudget(4 * 1024 * 1024, CanopyDropletSim.MaxPanes * 2, 0, true);
 
         public void ReleaseFx()
         {

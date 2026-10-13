@@ -154,7 +154,6 @@ namespace BoscaliSummer.Modules.Cinematography.Runtime
                 Revision++;
             }
         }
-        internal void ToggleSmooth() { if (!Playing) Plan.smooth = !Plan.smooth; }
         private void Retime()
         { for (int i = 0; i < Plan.keys.Length; i++) Plan.keys[i].time = Plan.keys.Length == 1 ? 0 : Plan.duration * i / (Plan.keys.Length - 1); }
 
@@ -353,13 +352,13 @@ namespace BoscaliSummer.Modules.Cinematography.Runtime
             }
             Revision++;
         }
-        private static Unit FindActor(string id)
+        internal static Unit FindActor(string id)
         {
             Unit found=null;int count=Math.Min(4096,UnitRegistry.allUnits.Count);
             for(int i=0;i<count;i++) { Unit unit=UnitRegistry.allUnits[i];if(unit==null || unit.NetworkUniqueName!=id) continue;if(found!=null) return null;found=unit; }
             return found;
         }
-        private static ShotPose? ActorPose(Unit unit)
+        internal static ShotPose? ActorPose(Unit unit)
         {
             if(unit==null || !unit.isActiveAndEnabled || unit.disabled) return null;
             GlobalPosition p=unit.transform.position.ToGlobalPosition();Quaternion q=unit.transform.rotation;

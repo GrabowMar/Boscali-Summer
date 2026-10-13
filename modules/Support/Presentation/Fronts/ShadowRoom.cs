@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
 using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Presentation.C2;
@@ -17,7 +16,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     /// </summary>
     internal sealed class ShadowRoom : IFrontRoom
     {
-        public const int Push = 0, Hold = 1, Exfil = 2, Lift = 3;
+        public const int Hold = 1;
         private const float TopH = 540f, Gap = 8f, ColW = 270f, CardH = 172f;
         private const int Cols = 12, Rows = 8, MaxTeams = 4, MaxTargets = 8, MaxCamps = 3, MaxHeld = 4, MaxEnemies = 4, Missions = 5;
         private static readonly string[] OrderWord = { "PUSH", "HOLD", "EXFIL", "LIFT" };
@@ -276,7 +275,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 g.Polyline(new[] { p + new Vector2(0f, -9f), p + new Vector2(10f, 4f), p + new Vector2(-10f, 4f) }, 1.6f, k, true);
                 g.Line(p + new Vector2(-10f, 4f), p + new Vector2(10f, 4f), 2f, k);
                 g.Line(p + new Vector2(0f, 4f), p + new Vector2(0f, -2f), 1.4f, k);
-                if (c.Health == AnchorHealth.Down) Cross(g, p, 9f, danger);
+                if (c.Health == AnchorHealth.Down) FrontKit.Cross(g, p, 9f, danger);
                 labels.Take(new Rect(p.x - 14f, p.y - 14f, 28f, 28f));
             }
 
@@ -298,7 +297,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 TargetGlyph(g, t.Kind, p, 8f, k);
                 if (t.Resisted) g.Line(p + new Vector2(-9f, 9f), p + new Vector2(9f, -9f), 1.6f, dim);
                 if (t.Exploit) g.Ring(p, 15f, 1.3f, amber, 24, 1f, 1f);
-                if (t.Selected) Brackets(g, p, 17f, AvInk.Select);
+                if (t.Selected) FrontKit.Brackets(g, p, 17f, AvInk.Select);
                 labels.Take(new Rect(p.x - 14f, p.y - 14f, 28f, 28f));
             }
 
@@ -367,7 +366,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 g.Line(p + new Vector2(-6f, 4f), p + new Vector2(6f, -4f), 1.6f, k);
                 if (t.Helicopter) { g.Line(p + new Vector2(-8f, -11f), p + new Vector2(8f, -11f), 1.6f, k); g.Line(p + new Vector2(0f, -11f), p + new Vector2(0f, -7f), 1.4f, k); }
                 if (t.Wounded) g.Disc(p + new Vector2(11f, -8f), 3f, danger, 8);
-                if (t.Selected) Brackets(g, p, 17f, AvInk.Select);
+                if (t.Selected) FrontKit.Brackets(g, p, 17f, AvInk.Select);
                 labels.Take(new Rect(p.x - 14f, p.y - 14f, 28f, 28f));
                 shown++;
                 Image hit = teamHits[i];
@@ -501,23 +500,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     g.Frame(p.x - r * 0.85f, p.y - r * 0.85f, r * 1.7f, r * 1.7f, 1.6f, k);
                     break;
             }
-        }
-
-        private static void Cross(FrontVector g, Vector2 p, float r, Color k)
-        {
-            g.Line(p + new Vector2(-r, -r), p + new Vector2(r, r), 2f, k);
-            g.Line(p + new Vector2(-r, r), p + new Vector2(r, -r), 2f, k);
-        }
-
-        private static void Brackets(FrontVector g, Vector2 p, float r, Color k)
-        {
-            for (int sx = -1; sx <= 1; sx += 2)
-                for (int sy = -1; sy <= 1; sy += 2)
-                {
-                    Vector2 q = p + new Vector2(sx * r, sy * r);
-                    g.Line(q, q + new Vector2(-sx * 6f, 0f), 1.8f, k);
-                    g.Line(q, q + new Vector2(0f, -sy * 6f), 1.8f, k);
-                }
         }
 
         // ---- Cards and picker --------------------------------------------------------------------------------------------

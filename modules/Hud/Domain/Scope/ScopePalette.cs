@@ -43,6 +43,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 case ScopeTone.Red: c = red; break;
                 case ScopeTone.Plate: c = PlateColor; break;
                 case ScopeTone.Bg: c = BgColor; break;
+                case ScopeTone.White: c = new Rgba(1f, 1f, 1f); break;      // not a board tone: the one-tone-brighter flash of a new CUE (CueTimeline.Raise)
                 default: c = ink; break;
             }
             return alpha >= 1f ? c : c.WithAlpha(c.A * (alpha < 0f ? 0f : alpha));

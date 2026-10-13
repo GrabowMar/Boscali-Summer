@@ -67,13 +67,28 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         }
 
         /// <summary>m:ss.</summary>
-        public static string Clock(float seconds)
-        {
-            int s = Mathf.Max(0, Mathf.CeilToInt(seconds));
-            return (s / 60) + ":" + (s % 60).ToString("00");
-        }
+        public static string Clock(float seconds) => BoscaliSummer.Modules.Support.Domain.Fronts.FrontRules.Clock(seconds);
 
         public static string Signed(int v) => v > 0 ? "+" + v : v.ToString();
+
+        /// <summary>An X of half-size <paramref name="r"/> centred on <paramref name="p"/>.</summary>
+        public static void Cross(FrontVector g, Vector2 p, float r, Color k)
+        {
+            g.Line(p + new Vector2(-r, -r), p + new Vector2(r, r), 2f, k);
+            g.Line(p + new Vector2(-r, r), p + new Vector2(r, -r), 2f, k);
+        }
+
+        /// <summary>Four corner brackets around a square of half-size <paramref name="r"/> centred on <paramref name="p"/> (the selection mark).</summary>
+        public static void Brackets(FrontVector g, Vector2 p, float r, Color k)
+        {
+            for (int sx = -1; sx <= 1; sx += 2)
+                for (int sy = -1; sy <= 1; sy += 2)
+                {
+                    Vector2 q = p + new Vector2(sx * r, sy * r);
+                    g.Line(q, q + new Vector2(-sx * 6f, 0f), 1.8f, k);
+                    g.Line(q, q + new Vector2(0f, -sy * 6f), 1.8f, k);
+                }
+        }
 
         /// <summary>The ink a state word wears (ready green, caution amber, danger red, info neutral).</summary>
         public static Color Tone(AvState s) => s == AvState.Inert ? AvInk.Muted : s == AvState.Info ? AvInk.Key : OpsInk.Word(s);

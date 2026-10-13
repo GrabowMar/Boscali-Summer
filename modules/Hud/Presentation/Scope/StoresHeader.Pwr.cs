@@ -1,5 +1,4 @@
 using System;
-using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Hud.Domain;
 using static BoscaliSummer.Core.Contracts.ScopeTone;
 

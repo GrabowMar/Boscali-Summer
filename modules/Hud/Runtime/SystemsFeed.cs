@@ -2,7 +2,6 @@ using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.Hud.Domain;
-using NOAvionics;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Hud.Runtime

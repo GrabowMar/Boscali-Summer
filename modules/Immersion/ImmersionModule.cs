@@ -3,6 +3,7 @@ using BoscaliSummer.Modules.Immersion.Patches;
 using BoscaliSummer.Modules.Immersion.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Ui;
 
 namespace BoscaliSummer.Modules.Immersion
 {
@@ -53,16 +54,16 @@ namespace BoscaliSummer.Modules.Immersion
                 context.Settings.Immersion.MachBuffetEnabled);
             context.AddClientSetting("IMMERSION", "SUN GLARE",
                 "Glare and fine rays around the sun as the eye sees them, dimmer and redder at low sun, hidden by terrain, buildings and clouds.",
-                context.Settings.Immersion.SunGlareEnabled);
+                context.Settings.Immersion.SunGlareEnabled, ClientPreset.Light);
             context.AddClientSetting("IMMERSION", "MFD NIGHT GLOW",
                 "Cockpit view: MFD glass night boost so instruments glow at dusk and night.",
-                context.Settings.Immersion.MfdGlowEnabled);
+                context.Settings.Immersion.MfdGlowEnabled, ClientPreset.Light);
             context.AddClientSetting("IMMERSION", "HELMET VISOR",
                 "Cockpit view: glass-only helmet visor - daytime sun tint, smudges lit by the sun, breath fog when breathing hard, brow shadow above 6 G.",
-                context.Settings.Immersion.HelmetVisorEnabled);
+                context.Settings.Immersion.HelmetVisorEnabled, ClientPreset.Light);
             context.AddClientSetting("IMMERSION", "SURFACE IMMERSION",
                 "Cockpit view: subtle damage shading on supported opaque cockpit materials. Weather owns glass moisture.",
-                context.Settings.Immersion.SurfaceImmersionEnabled);
+                context.Settings.Immersion.SurfaceImmersionEnabled, ClientPreset.Light);
             context.AddClientSetting("IMMERSION", "AIRFRAME CREAKS",
                 "Cockpit view: procedural airframe creaks and structural groans under violent G onsets.",
                 context.Settings.Immersion.AirframeAudioEnabled);
@@ -73,13 +74,13 @@ namespace BoscaliSummer.Modules.Immersion
                 "Cockpit view: oxygen-mask breathing, anti-G straining grunts, G-suit hiss and a faint heartbeat near blackout, paced by the game's G-LOC model.",
                 context.Settings.Immersion.PilotBreathingEnabled);
             context.AddClientSetting("IMMERSION", "PILOT BODY",
-                "First-person flight suit, arms and legs using the native pilot model.", context.Settings.Immersion.PilotBodyEnabled);
+                "First-person flight suit, arms and legs using the native pilot model.", context.Settings.Immersion.PilotBodyEnabled, ClientPreset.Light);
             context.AddClientSetting("IMMERSION", "PILOT CONTROL MOTION",
                 "Hands follow reachable stick/throttle/collective controls; rudder feet, breathing and G-load bracing. Comfort Motion applies.",
                 context.Settings.Immersion.PilotControlMotionEnabled);
             context.AddClientSetting("IMMERSION", "PILOT REFLECTION",
                 "Faint pilot and helmet reflection on the windscreen; small pilot-only capture at most ten times per second.",
-                context.Settings.Immersion.PilotReflectionEnabled);
+                context.Settings.Immersion.PilotReflectionEnabled, ClientPreset.Heavy);
         }
     }
 }

@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Game;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Trenches.Runtime
@@ -37,7 +38,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             {
                 if (definition == null || scanned++ >= CatalogScanCeiling) continue;
                 if (definition.unitPrefab == null) continue;
-                if (!IsBallisticShell(definition)) continue;
+                if (!BallisticShell.Is(definition)) continue;
                 Missile missile = definition.unitPrefab.GetComponent<Missile>();
                 float yield = missile != null ? missile.GetYield() : 0f;
                 if (yield <= 0f || yield > ConventionalYieldCeiling) continue;
@@ -62,22 +63,6 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             }
             cached = best;
             return cached;
-        }
-
-        /// <summary>
-        /// Only aimpoint ballistic seekers can fly a harassing mission: a blind release
-        /// gives the shell an aimpoint and nothing else, so lock-on seekers (IR, radar,
-        /// laser) never acquire and cruise seekers hug the deck instead of diving.
-        /// Anything outside this list fails closed to silence.
-        /// </summary>
-        internal static bool IsBallisticShell(MissileDefinition definition)
-        {
-            if (definition == null || definition.unitPrefab == null) return false;
-            GameObject prefab = definition.unitPrefab;
-            return prefab.GetComponentInChildren<BallisticMissileGuidance>(true) != null
-                || prefab.GetComponentInChildren<InertialSeekerShell>(true) != null
-                || prefab.GetComponentInChildren<OpticalSeekerShell>(true) != null
-                || prefab.GetComponentInChildren<OpticalSeekerBomb>(true) != null;
         }
     }
 }

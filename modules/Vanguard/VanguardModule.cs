@@ -77,7 +77,9 @@ namespace BoscaliSummer.Modules.Vanguard
             context.AddSceneService<Presentation.SkywellScopeFeed>(60);
             Networking.VanguardNet drones = context.AddSceneService<Networking.VanguardNet>(60);
             context.AddService<IDroneCommand>(drones);
-            new VanguardScopeGauges(drones).Register();      // the TAC BOARD's LANCE, AEGIS and REMORA gauges
+            var scopeGauges = new VanguardScopeGauges(drones);
+            scopeGauges.Register();      // the TAC BOARD's LANCE, AEGIS and REMORA gauges
+            context.OnTeardown(scopeGauges.Unregister);
             context.AddSceneService<HamilcarService>(60);
         }
     }

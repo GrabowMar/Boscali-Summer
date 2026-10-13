@@ -67,7 +67,7 @@ namespace BoscaliSummer.Modules.Command.Domain
         private int inkQuads, pulseQuads;
 
         // Joined words, remembered per item so that toggling a layer or adding an item moves nobody else's slot.
-        private const int EffortSlot = 0, FrontSlots = 1, ProposalSlots = 9, SortieSlots = 12, PostSlots = 17, EffortNote = MaxTags * 2 - 2;
+        private const int EffortSlot = 0, FrontSlots = 1, ProposalSlots = 9, PostSlots = 17, EffortNote = MaxTags * 2 - 2;
         private readonly string[] joinA = new string[MaxTags * 2], joinB = new string[MaxTags * 2], joinSep = new string[MaxTags * 2], joinOut = new string[MaxTags * 2];
 
         private static readonly string[] LegendLabels =

@@ -41,18 +41,25 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             public AvFrame Frame;
             public Image Rail;
-            public TMP_Text Hint, Name, Detail;
+            public TMP_Text Hint, Tag, Name, Detail;
             public bool On, Edited, Hover, Filled;
         }
 
-        private readonly Slot[] slots = new Slot[Count];
+        private readonly Slot[] slots;
         private readonly Action<int> pick;
+        private readonly bool book;
+        private int shown;
 
-        public WmcStanceSlots(RectTransform parent, Action<int> picked, Action<int, AvHit> bind)
+        /// <summary><paramref name="isBook"/>: BEHAVIOUR's stance book — <paramref name="count"/> plates of which the first
+        /// <see cref="SetShown"/> take room, each with its own hint and a tag under it (<see cref="SetHint"/>), no slim row.</summary>
+        public WmcStanceSlots(RectTransform parent, Action<int> picked, Action<int, AvHit> bind, int count = Count, bool isBook = false)
         {
             Rect = AvLay.Child(parent, "StanceSlots");
             pick = picked;
-            for (int i = 0; i < Count; i++)
+            book = isBook;
+            shown = count;
+            slots = new Slot[count];
+            for (int i = 0; i < count; i++)
             {
                 int k = i;
                 var s = new Slot();
@@ -64,6 +71,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 s.Rail = AvLay.Solid(Rect, "SlotRail" + i, Color.clear);
                 s.Hint = Text("Hint" + i, AvTextRole.DataSmall, TextAlignmentOptions.TopLeft);
                 s.Hint.text = "W+" + (i + 1);
+                s.Tag = Text("Tag" + i, AvTextRole.DataSmall, TextAlignmentOptions.TopLeft);
                 s.Name = Text("Name" + i, AvTextRole.Label, TextAlignmentOptions.TopLeft);
                 s.Detail = Text("Detail" + i, AvTextRole.ProseSmall, TextAlignmentOptions.TopLeft);
                 slots[i] = s;
@@ -83,15 +91,42 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
 
         // The second row is one line tall while all three of its slots are empty: the order keys below sit 18 px higher.
-        private bool SlimRow => !slots[3].Filled && !slots[4].Filled && !slots[5].Filled;
+        private bool SlimRow => !book && !slots[3].Filled && !slots[4].Filled && !slots[5].Filled;
 
-        public override float Measure(float width) => CellH + Gap + (SlimRow ? SlimH : CellH);
+        public override float Measure(float width)
+        {
+            if (!book) return CellH + Gap + (SlimRow ? SlimH : CellH);
+            int rows = (shown + 2) / 3;
+            return rows == 0 ? 0f : rows * (CellH + Gap) - Gap;
+        }
+
+        /// <summary>The first <paramref name="n"/> plates show (the book). True when that changed (the caller relayouts).</summary>
+        public bool SetShown(int n)
+        {
+            n = Mathf.Clamp(n, 0, slots.Length);
+            if (n == shown) return false;
+            shown = n;
+            for (int i = 0; i < slots.Length; i++)
+            {
+                Slot s = slots[i];
+                foreach (Component part in new Component[] { s.Frame, s.Rail, s.Hint, s.Tag, s.Name, s.Detail })
+                    if (part.gameObject.activeSelf != (i < n)) part.gameObject.SetActive(i < n);
+            }
+            return true;
+        }
+
+        /// <summary>Plate <paramref name="i"/>'s key column: the hint ("W+2", or nothing) and the tag under it (who flies it).</summary>
+        public void SetHint(int i, string hint, string tag)
+        {
+            AvText.Set(slots[i].Hint, hint);
+            AvText.Set(slots[i].Tag, tag);
+        }
 
         public override void Place(AvSlot s)
         {
             base.Place(s);
             float w = AvFlowMath.ColumnWidth(s.W, 3, Gap);
-            for (int i = 0; i < Count; i++)
+            for (int i = 0; i < slots.Length; i++)
             {
                 float x = i % 3 * (w + Gap), y = i / 3 * (CellH + Gap);
                 bool slim = i >= 3 && SlimRow;
@@ -100,7 +135,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 AvLay.Place(c.Frame.rectTransform, x, y, w, h);
                 AvLay.Place(c.Rail.rectTransform, x, y, 2f, h);
                 AvLay.Place(c.Hint.rectTransform, x + 6f, y + 2f, 34f, 18f);
-                if (c.Name.gameObject.activeSelf == slim) c.Name.gameObject.SetActive(!slim);
+                AvLay.Place(c.Tag.rectTransform, x + 6f, y + 20f, 34f, 18f);
+                if (!book && c.Name.gameObject.activeSelf == slim) c.Name.gameObject.SetActive(!slim);
                 AvLay.Place(c.Name.rectTransform, x + 42f, y + 2f, w - 46f, 18f);
                 AvLay.Place(c.Detail.rectTransform, x + 42f, y + (slim ? 2f : 20f), w - 46f, 18f);
             }
@@ -132,6 +168,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             s.Frame.Paint(back, border);
             s.Rail.color = s.On ? (s.Edited ? caution : accent) : Color.clear;
             s.Hint.color = key;
+            s.Tag.color = AvStyleHost.FuiColor("ready", AvTheme.RailReady);
             s.Name.color = s.Filled ? AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary) : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             s.Detail.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
         }

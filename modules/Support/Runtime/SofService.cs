@@ -80,7 +80,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private SupportManager manager;
         private SpaceService space;
         private CyberService cyber;
-        private float nextTick, nextCleanup, nextWarning;
+        private PhasedGate tickGate;
+        private float nextCleanup, nextWarning;
         private bool loggedNoCampKeys;
         private readonly HashSet<FactionHQ> loggedNoSite = new HashSet<FactionHQ>();
 
@@ -108,7 +109,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             ResetEffects();
             factions.Clear();
             nextAttempt.Clear();
-            nextTick = 0.5f;   // phase: the four 1 Hz services tick on different frames
+            tickGate.Reset();
             loggedNoCampKeys = false;
             loggedNoSite.Clear();
             spawner.ResetForScene();
@@ -181,8 +182,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (!GameAccess.IsServer() || !MissionManager.IsRunning ||
                 (GameManager.gameState != GameState.SinglePlayer && GameManager.gameState != GameState.Multiplayer)) return;
             float now = SupportManager.MissionNow();
-            if (now < nextTick) return;
-            nextTick = now + 1f;
+            foreach (var pair in factions) pair.Value.Obs.Step();   // the rest of the enemy snapshot the last tick began, a slice a frame
+            if (!tickGate.Due(now, 1f, 0.5f)) return;   // 1 Hz slot .5 (table in HighCommandManager)
             try { Tick(now); }
             catch (Exception e)
             {
@@ -302,7 +303,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 slot.Baseline = UplinkSpawner.Health(made);
                 slot.Bar.Reset();
                 GlobalPosition p = made.transform.position.ToGlobalPosition();
-                f.Camps.Restore(slot.Index, (float)p.x, (float)p.z, now);
+                f.Camps.Restore(slot.Index, (float)p.x, (float)p.z);
                 Plugin.Logger?.LogInfo("[Support.Sof] " + f.Owner.name + " camp " + slot.Index + " rebuilt.");
             }
         }
@@ -373,23 +374,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     Vector3 desired = parent.center.position + new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle)) * (CampRadius + ring * 1000f);
                     GlobalPosition anchor = desired.ToGlobalPosition();
                     if (!spawner.TryPlanCamp(anchor, parent, out GlobalPosition[] cp, out _)) continue;
-                    float front = FrontDistanceOf(owner, desired);
+                    float front = SupportTargeting.FrontDistanceOf(owner, desired);
                     sites.Add(new Site(parent, anchor));
                     cands.Add(new SiteCandidate(sites.Count - 1, (float)cp[0].x, (float)cp[0].z, front, front));
                 }
-        }
-
-        private static float FrontDistanceOf(FactionHQ owner, Vector3 point)
-        {
-            float nearest = float.PositiveInfinity;
-            if (FactionRegistry.airbaseLookup != null)
-                foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
-                {
-                    if (airbase == null || airbase.disabled || airbase.center == null || airbase.CurrentHQ == null || airbase.CurrentHQ == owner) continue;
-                    Vector3 d = point - airbase.center.position; d.y = 0f;
-                    nearest = Mathf.Min(nearest, d.magnitude);
-                }
-            return float.IsInfinity(nearest) ? 1000000f : nearest;
         }
     }
 }

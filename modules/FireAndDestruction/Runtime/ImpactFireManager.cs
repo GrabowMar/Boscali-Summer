@@ -96,6 +96,7 @@ namespace BoscaliSummer.Fire
         private static readonly List<Renderer> visibleRendererBuffer = new List<Renderer>(32);
         private readonly ForestIndex forestIndex = new ForestIndex();
         private readonly FireVisualPool visualPool = new FireVisualPool();
+        private float nextVisualWarm;
         private readonly FuelDepotSmokePool fuelDepotSmokePool = new FuelDepotSmokePool(32);
         private readonly BurnScarPool burnScars = new BurnScarPool();
         private Coroutine indexRoutine;
@@ -162,8 +163,6 @@ namespace BoscaliSummer.Fire
 
         bool IFoliageCover.Ready => forestIndex.Ready;
         bool IFoliageCover.Contains(float x, float z) => forestIndex.Contains(x, z);
-
-        public int ActiveFireCount => fires.Count;
 
         public int CopyWrecks(WreckNotice[] dest)
         {
@@ -241,6 +240,12 @@ namespace BoscaliSummer.Fire
 
         private void Update()
         {
+            // One idle flame visual built per second until four wait: the first fires of a fight take one from the pool instead of building it in their frame.
+            if (!GameManager.IsHeadless && Datum.origin != null && Time.unscaledTime >= nextVisualWarm)
+            {
+                nextVisualWarm = Time.unscaledTime + 1f;
+                visualPool.Warm(4);
+            }
             // Burn sites are the expensive path: each one paints the vanilla blast map,
             // queues at most one small tree-clearing blast and stamps a pooled soot decal.
             // One or two per frame bounds spikes from a spreading front. Every burn mark

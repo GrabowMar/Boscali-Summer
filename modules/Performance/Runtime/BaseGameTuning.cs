@@ -10,7 +10,7 @@ using UnityEngine.Rendering.Universal;
 namespace BoscaliSummer.Modules.Performance.Runtime
 {
     /// <summary>
-    /// Explicit opt-in Unity-level tunings: LOD floor, shadow cap, frame-rate cap, and a
+    /// Explicit opt-in Unity-level tunings: LOD floor, shadow cap, and a
     /// scene-transition cleanup. Unlike the adaptive cosmetic budget, these touch the
     /// game's own render settings — but only while the toggle is on, only in the cheaper
     /// direction, and only client-locally. Each knob captures the game's value on first
@@ -30,8 +30,6 @@ namespace BoscaliSummer.Modules.Performance.Runtime
         private UniversalRenderPipelineAsset shadowAsset;
         private float lastCleanup = -CleanupSpacingSeconds;
         private const float CleanupSpacingSeconds = 30f;
-        private bool frameApplied;
-        private int frameOriginal = -1;
 
         public void Configure(PerformanceSettings config)
         {
@@ -64,10 +62,8 @@ namespace BoscaliSummer.Modules.Performance.Runtime
             SyncLod(usable && settings.LodBiasFloor.Value);
             SyncShadow(usable && settings.ShadowDistanceCap.Value);
             HoldShadowCap();
-            SyncFrame(usable && settings.FrameRateCap.Value);
             BaseGameTuningReport.LodFloorActive = lodApplied;
             BaseGameTuningReport.ShadowCapActive = shadowApplied;
-            BaseGameTuningReport.FrameCapActive = frameApplied;
         }
 
         private void SyncLod(bool want)
@@ -148,33 +144,6 @@ namespace BoscaliSummer.Modules.Performance.Runtime
             shadowAsset.shadowDistance = ClientTuningMath.ShadowDistanceCapMeters;
         }
 
-        private void SyncFrame(bool want)
-        {
-            if (want == frameApplied) return;
-            try
-            {
-                if (want)
-                {
-                    frameOriginal = Application.targetFrameRate;
-                    Application.targetFrameRate =
-                        ClientTuningMath.PlanFrameRate(frameOriginal, true);
-                    frameApplied = true;
-                    Plugin.Logger?.LogInfo("Performance: frame rate cap on (game " +
-                        frameOriginal + " -> " + Application.targetFrameRate + ").");
-                }
-                else
-                {
-                    Application.targetFrameRate = ClientTuningMath.RestoreFrameRate(frameOriginal, Application.targetFrameRate);
-                    frameApplied = false;
-                    Plugin.Logger?.LogInfo("Performance: frame rate restored to " + Application.targetFrameRate + ".");
-                }
-            }
-            catch (Exception error)
-            {
-                Plugin.Logger?.LogWarning("Performance: frame cap tuning failed: " + error.Message);
-            }
-        }
-
         private void RunCleanup()
         {
             // A mission load fires several scene resets in a row; one cleanup covers them.
@@ -196,10 +165,8 @@ namespace BoscaliSummer.Modules.Performance.Runtime
         {
             SyncLod(false);
             SyncShadow(false);
-            SyncFrame(false);
             BaseGameTuningReport.LodFloorActive =
-                BaseGameTuningReport.ShadowCapActive =
-                BaseGameTuningReport.FrameCapActive = false;
+                BaseGameTuningReport.ShadowCapActive = false;
         }
     }
 }

@@ -15,7 +15,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// (<c>ShowSub(SubInspect)</c>) land on AIRCRAFT. The roster is the host's; a client sees one card.</summary>
     internal sealed partial class WmcWing : IWmcPage
     {
-        public const int SubRoster = 0, SubAircraft = 1, SubStudio = 2, SubInspect = SubAircraft;
+        public const int SubRoster = 0, SubAircraft = 1, SubStudio = 2;
         private static readonly string[] SubLabels = { "ROSTER", "AIRCRAFT", "STUDIO" };
         private static readonly AvIcon[] SubIcons = { AvIcon.UsersGroup, AvIcon.Plane, AvIcon.Pencil };
         private const int PerPage = 6;
@@ -40,7 +40,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private readonly List<WingPilot> roster = new List<WingPilot>();
         private PilotStatus[] status = new PilotStatus[0];
         private int[] number = new int[0];
-        private int scanVersion = int.MinValue, flying, free, sar, mia, kia, captured, lost;
+        private int scanVersion = int.MinValue, flying, sar, mia, kia, captured;
         private float[] localLeft = new float[0];
         private bool scanClient;
         private WingService scanWing;
@@ -61,10 +61,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public WmcInspect InspectPage => inspectPage;
 
         public int Sub => sub;
-
-        public string SubName => sub >= 0 && sub < SubLabels.Length ? SubLabels[sub] : "";
-
-        public WmcStudio Studio => studioPage;
 
         public string Hint => sub == SubStudio ? studioPage.Hint : hint;
 
@@ -115,16 +111,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (last != null) Refresh(last);
         }
 
-        /// <summary>A control of a sub-page shows that sub-page first (automation).</summary>
-        public void ShowSubFor(string id)
-        {
-            if (id == null) return;
-            if (id.StartsWith("sq.sub.", System.StringComparison.Ordinal)) return;
-            if (id.StartsWith("insp.", System.StringComparison.Ordinal)) ShowSub(SubAircraft);
-            else if (id.StartsWith("sq.", System.StringComparison.Ordinal)) ShowSub(SubStudio);
-            else if (id.StartsWith("wing.", System.StringComparison.Ordinal)) ShowSub(SubRoster);
-        }
-
         /// <summary>The wing and the roster's statuses, once a panel refresh; the statuses are rebuilt only when the roster's version
         /// moved (every change WING shows bumps it: R6 T2/T3).</summary>
         private void Snapshot(WmcContext c)
@@ -145,14 +131,14 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 number = new int[roster.Count + 8];
             }
             if (localLeft.Length < roster.Count) localLeft = new float[roster.Count + 8];
-            flying = free = sar = mia = kia = captured = 0;
+            flying = sar = mia = kia = captured = 0;
             for (int i = 0; i < roster.Count; i++)
             {
                 status[i] = StatusOf(roster[i], out number[i]);
                 localLeft[i] = status[i] == PilotStatus.LocalSar ? WingSearchAndRescue.LocalRecoveryRemaining(roster[i]) : -1f;
                 switch (status[i])
                 {
-                    case PilotStatus.Free: free++; break;
+                    case PilotStatus.Free: break;
                     case PilotStatus.Flying: flying++; break;
                     case PilotStatus.Inbound: break;
                     case PilotStatus.Kia: kia++; break;
@@ -161,7 +147,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     default: sar++; break;
                 }
             }
-            lost = sar + mia + kia + captured;
             upcoming = client ? null : WingPilotRoster.Upcoming;
             // The dossier follows its pilot; a pilot who left gives way to the next up, else the first.
             if (inspected == null || !roster.Contains(inspected)) inspected = upcoming ?? (roster.Count > 0 ? roster[0] : null);

@@ -39,8 +39,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
             Superstructures.StormEyeSet, Superstructures.LenticularSet, Superstructures.FogBankSet,
         };
         public static readonly string[] SetNames = { "SQUALL LINE", "SUPERCELL", "DISTANT CB", "STORM EYE", "LENTICULARS", "SEA FOG" };
-        /// <summary>The chart's short label of each set-piece, for when the full name has no free spot near its marker. A storm eye and a fog bank have no cover to print.</summary>
-        public static readonly string[] SetShort = { "SQL", "SC", "CB", "EYE", "LENT", "FOG" };
         /// <summary>The cell's second line while nothing is drawn: where the piece stands.</summary>
         public static readonly string[] SetWhere =
         {

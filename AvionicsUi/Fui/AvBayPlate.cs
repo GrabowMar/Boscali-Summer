@@ -22,8 +22,6 @@ namespace NOAvionics
         private int lastPage = -1;
         private string[] lastOrders;
 
-        public RectTransform Rect => rect;
-
         public AvBayPlate(RectTransform parent, string id)
         {
             this.id = id ?? "";

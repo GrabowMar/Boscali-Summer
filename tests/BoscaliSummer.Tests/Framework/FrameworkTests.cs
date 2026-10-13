@@ -53,6 +53,28 @@ namespace BoscaliSummer.Tests.Framework
                 new ModuleMetadata("same", "Two")
             }), "duplicate feature IDs must not hide behind a missing dependency");
 
+            // The common roster stays installed while the dedicated mission adds its own modules.
+            var missionModules = new[]
+            {
+                new ModuleMetadata("strategic-command", "Strategic Command", "command", "progression"),
+                new ModuleMetadata("progression", "Progression", "session")
+            };
+            string[] available = { "session", "command" };
+            missing = ModuleGraph.MissingDependencies(missionModules, available);
+            TestAssert.That(missing[0] == null && missing[1] == null,
+                "mission modules must resolve dependencies already installed in the common roster");
+            order = ModuleGraph.Sort(missionModules, available);
+            TestAssert.That(order.Length == 2 && order[0] == 1 && order[1] == 0,
+                "incremental module load must sort only new modules while honoring existing dependencies");
+            missing = ModuleGraph.MissingDependencies(missionModules, new[] { "command" });
+            TestAssert.That(missing[0] == "progression" && missing[1] == "session",
+                "failed common dependencies must also exclude mission modules and their dependents");
+            TestAssert.Throws<InvalidOperationException>(() => ModuleGraph.MissingDependencies(
+                new[] { new ModuleMetadata("command", "Duplicate Command") }, available),
+                "incremental load must not overwrite a module already installed in the common roster");
+            TestAssert.Throws<InvalidOperationException>(() => ModuleGraph.Sort(missionModules, new[] { "command" }),
+                "sorting a mission roster must reject unavailable common dependencies");
+
             var registry = new ServiceRegistry();
             var expected = new ExampleService();
             registry.Add<IExampleService>(expected);

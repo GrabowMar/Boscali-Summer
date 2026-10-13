@@ -37,7 +37,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             // The key: plan edits, runner states, selection, the events and acks, the filter, the second, where the elements are (to the
             // 100 m, before a run) and the confirmations.
             WingEventRing events = c.Client ? null : c.Wing?.Events;
-            RadioLog radio = RadioDirector.Instance?.Log;
+            BoscaliSummer.Core.Chatter.ChatterLog radio = WingChatter.Instance?.Log;
             long key = version * 7919L + (running ? 1 : 0) + (plans != null && plans.Completed ? 2 : 0) + selLane * 13L + selStep * 131L
                        + c.Count * 17L + c.Selection.Count * 257L + (long)(live ? now : 0f) * 3L + (debrief ? 5L : 0L)
                        + LogRows.Stamp(events, radio) * 31L + WingAcks.Feed.Count * 37L + (logElement + 2) * 7L + c.Selection.Single * 3L + (logSelected ? 1L : 0L);
@@ -60,16 +60,16 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 timeline.Begin();
                 timeline.ShowLanes(0, false);
                 timeline.End();
-                RebuildEvents(c, null, null, false, w, 0f);
+                RebuildEvents(c, null, null, false);
                 RefreshEventList();
                 return;
             }
-            PlanTimes(c, plan, plans, r, w, live);
+            PlanTimes(plan, plans, w, live);
             int shown = 0;
             for (int l = 0; l < WingPlan.Lanes; l++)
                 if (plan.Steps[l].Count > 0) shown++;
             lanesShown = shown;
-            RebuildEvents(c, plan, r, live, w, now);
+            RebuildEvents(c, plan, r, live);
             DrawTimeline(plan, r, w, live, now);
             RefreshPlanParts(c, plan, plans, w, running, editable, shown);
             RefreshStepRow(plan, r, live);
@@ -77,7 +77,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
 
         /// <summary>Each step's planned start and end: frozen at EXECUTE; before it, the plan as drawn from where the elements are now.</summary>
-        private void PlanTimes(WmcContext c, WingPlan plan, WingPlans plans, PlanRunner r, WingService w, bool live)
+        private void PlanTimes(WingPlan plan, WingPlans plans, WingService w, bool live)
         {
             if (live)
             {

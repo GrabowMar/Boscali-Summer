@@ -16,6 +16,18 @@ namespace BoscaliSummer.Tests.Features.Performance
             TestAssert.That(FxBudget.ScaleCount(64, 1.5f) == 64, "scales above full do not grow caps");
             TestAssert.That(FxBudget.ScaleCount(0, 0.5f) == 0, "a disabled budget stays disabled");
 
+            TestAssert.That(ClientTuningMath.TracerKeep(1000f * 1000f, false) == 1f &&
+                ClientTuningMath.TracerKeep(3000f * 3000f, true) == 1f &&
+                ClientTuningMath.TracerKeep(3000f * 3000f, false) == 0.5f &&
+                ClientTuningMath.TracerKeep(8000f * 8000f, true) == 0.5f &&
+                ClientTuningMath.TracerKeep(16000f * 16000f, true) == 0f,
+                "near bullets all draw, far ones thin out, tracers last longest");
+            TestAssert.That(!ClientTuningMath.ShouldSleep(14500f * 14500f, false) &&
+                ClientTuningMath.ShouldSleep(14500f * 14500f, true) &&
+                ClientTuningMath.ShouldSleep(15000f * 15000f, false) &&
+                !ClientTuningMath.ShouldSleep(13900f * 13900f, true),
+                "a far unit sleeps at 15 km and stays asleep until 14 km");
+
             TestAssert.That(ClientTuningMath.PlanLodBias(4f, true) == ClientTuningMath.LodBiasCap,
                 "the cap lowers the game's stock LOD bias");
             TestAssert.That(ClientTuningMath.PlanLodBias(1f, true) == 1f,
@@ -32,23 +44,11 @@ namespace BoscaliSummer.Tests.Features.Performance
             TestAssert.That(ClientTuningMath.PlanShadowDistance(4000f, false) == 4000f,
                 "a disabled cap leaves the game value alone");
 
-            TestAssert.That(ClientTuningMath.PlanFrameRate(-1, true) == ClientTuningMath.FrameRateCapFps,
-                "the cap applies over the platform default");
-            TestAssert.That(ClientTuningMath.PlanFrameRate(120, false) == 120,
-                "a disabled cap leaves the game value alone");
-            TestAssert.That(ClientTuningMath.PlanFrameRate(30, true) == 30,
-                "the cap never raises an existing lower frame limit");
-            TestAssert.That(ClientTuningMath.PlanFrameRate(120, true) == 60 &&
-                ClientTuningMath.PlanFrameRate(0, true) == 60,
-                "the cap trims high and platform-default frame limits");
-
             TestAssert.That(ClientTuningMath.RestoreLodBias(4f, ClientTuningMath.PlanLodBias(4f, true)) == 4f &&
-                ClientTuningMath.RestoreShadowDistance(4000f, ClientTuningMath.PlanShadowDistance(4000f, true)) == 4000f &&
-                ClientTuningMath.RestoreFrameRate(-1, ClientTuningMath.PlanFrameRate(-1, true)) == -1,
+                ClientTuningMath.RestoreShadowDistance(4000f, ClientTuningMath.PlanShadowDistance(4000f, true)) == 4000f,
                 "a reset restores the baseline before the next scene captures it");
             TestAssert.That(ClientTuningMath.RestoreLodBias(4f, 2f) == 2f &&
-                ClientTuningMath.RestoreShadowDistance(4000f, 800f) == 800f &&
-                ClientTuningMath.RestoreFrameRate(-1, 30) == 30,
+                ClientTuningMath.RestoreShadowDistance(4000f, 800f) == 800f,
                 "restoration preserves a new game graphics preset");
         }
     }

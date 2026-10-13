@@ -1,5 +1,4 @@
 using System;
-using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.FireAndDestruction.Domain
 {
@@ -13,81 +12,11 @@ namespace BoscaliSummer.Modules.FireAndDestruction.Domain
         internal const int ShardsPerPile = 6;
         internal const int MaxPiles = 6;
         internal const float Gravity = 9.8f;
-        internal const float StopSpeed = 0.22f;
-
-        private const float Spill = 0.18f;
-        private const int SlideSteps = 8;
-        private const float SlideDt = 0.05f;
-
-        internal struct Shard
-        {
-            public float X;
-            public float Y;
-            public float Z;
-            public float Vx;
-            public float Vy;
-            public float Vz;
-            public float Thick;
-        }
 
         internal static void Clear(float[] pile)
         {
             if (pile == null) return;
             for (int i = 0; i < pile.Length; i++) pile[i] = 0f;
-        }
-
-        internal static void Drop(ref Shard s, float[] pile, float originX, float originZ, float span, float groundY)
-        {
-            if (span < 0.5f) span = 0.5f;
-            if (s.Thick < 0.05f) s.Thick = 0.05f;
-            float half = span * 0.48f;
-            float minX = originX - half;
-            float maxX = originX + half;
-            float minZ = originZ - half;
-            float maxZ = originZ + half;
-            float floor = groundY + s.Thick * 0.5f;
-            float drop = s.Y - floor;
-            if (drop > 0f)
-            {
-                float disc = s.Vy * s.Vy + 2f * Gravity * drop;
-                float t = (s.Vy + (float)Math.Sqrt(disc)) / Gravity;
-                if (t < 0f) t = 0f;
-                else if (t > 4f) t = 4f;
-                s.X += s.Vx * t;
-                s.Z += s.Vz * t;
-            }
-            s.X = Scalar.Clamp(s.X, minX, maxX);
-            s.Z = Scalar.Clamp(s.Z, minZ, maxZ);
-            s.Vy = 0f;
-            bool field = pile != null && pile.Length >= Grid * Grid;
-            for (int step = 0; step < SlideSteps; step++)
-            {
-                s.X = Scalar.Clamp(s.X + s.Vx * SlideDt, minX, maxX);
-                s.Z = Scalar.Clamp(s.Z + s.Vz * SlideDt, minZ, maxZ);
-                if (s.X <= minX || s.X >= maxX) s.Vx = 0f;
-                if (s.Z <= minZ || s.Z >= maxZ) s.Vz = 0f;
-                s.Y = groundY + (field ? pile[Cell(s.X, s.Z, originX, originZ, span)] : 0f) + s.Thick * 0.5f;
-                s.Vx *= 0.42f;
-                s.Vz *= 0.42f;
-                if (s.Vx * s.Vx + s.Vz * s.Vz < StopSpeed * StopSpeed) break;
-            }
-            s.X = Scalar.Clamp(s.X, minX, maxX);
-            s.Z = Scalar.Clamp(s.Z, minZ, maxZ);
-            float piled = field ? pile[Cell(s.X, s.Z, originX, originZ, span)] : 0f;
-            s.Y = groundY + piled + s.Thick * 0.5f;
-            s.Vx = 0f;
-            s.Vy = 0f;
-            s.Vz = 0f;
-            if (!field) return;
-            int cell = Cell(s.X, s.Z, originX, originZ, span);
-            pile[cell] += s.Thick;
-            int ix = cell % Grid;
-            int iz = cell / Grid;
-            float spill = s.Thick * Spill;
-            if (ix > 0) pile[cell - 1] += spill;
-            if (ix + 1 < Grid) pile[cell + 1] += spill;
-            if (iz > 0) pile[cell - Grid] += spill;
-            if (iz + 1 < Grid) pile[cell + Grid] += spill;
         }
 
         private static int Cell(float x, float z, float originX, float originZ, float span)

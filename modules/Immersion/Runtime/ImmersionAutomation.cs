@@ -1,3 +1,4 @@
+#if !PUBLIC_RELEASE
 using System.Collections.Generic;
 using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Core.Game;
@@ -213,3 +214,4 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             texture is Texture3D ? "Texture3D" : texture is Cubemap ? "Cubemap" : "Texture";
     }
 }
+#endif

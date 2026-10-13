@@ -1,5 +1,4 @@
 using System;
-using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Modules.Effects.Runtime;
 

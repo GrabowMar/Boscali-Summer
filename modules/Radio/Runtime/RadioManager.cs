@@ -795,7 +795,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         private void ProbeSoundtrack()
         {
             if (soundtrackCatalog != null || Time.unscaledTime < nextSoundtrackProbe) return;
-            nextSoundtrackProbe = Time.unscaledTime + (soundtrackMisses == 0 ? 1f : 10f); // back off after the first miss
+            nextSoundtrackProbe = Time.unscaledTime + (soundtrackMisses < 5 ? 1f : 10f); // back off once the mission-start window has passed
             if (!VanillaSoundtrackCatalog.TryCreate(out VanillaSoundtrackCatalog catalog)) { soundtrackMisses++; return; }
             soundtrackMisses = 0;
             string selectedName = CurrentChannelName;
@@ -880,7 +880,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         {
             int discoveredLocalCount = local?.Tracks.Length ?? 0;
             int localCount = BuiltInStationRules.AcceptsLocalTracks(id) ? discoveredLocalCount : 0;
-            int vanillaCount = BuiltInStationRules.UsesVanillaTracks(id, localCount)
+            int vanillaCount = BuiltInStationRules.UsesVanillaTracks(localCount)
                 ? vanilla.Length
                 : 0;
             var tracks = new RadioStationTrack[vanillaCount + localCount];

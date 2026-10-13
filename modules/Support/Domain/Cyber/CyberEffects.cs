@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Runtime;
 
 namespace BoscaliSummer.Modules.Support.Domain.Cyber

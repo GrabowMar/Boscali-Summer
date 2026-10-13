@@ -60,8 +60,5 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             for (int i = 0; i < FarSeconds.Length; i++) top = Math.Max(top, GroundY(pos + h * FarSeconds[i]));
             return top;
         }
-
-        /// <summary>Highest ground under the aircraft and 2 s ahead (the GCAS near floor).</summary>
-        public static float Near(Vec3 pos, Vec3 vel) => Math.Max(GroundY(pos), GroundY(pos + vel.Horizontal * 2f));
     }
 }

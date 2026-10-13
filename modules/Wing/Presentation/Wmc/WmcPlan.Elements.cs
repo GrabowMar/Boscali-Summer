@@ -52,7 +52,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private static WingPlans Plans => WingPlans.Instance;
 
-        private void BuildSortie(AvFlow f, AvTicker t, int pageIndex)
+        private void BuildSortie(AvFlow f, AvTicker t)
         {
             sortieSection = f.Section(AvIcon.Activity, "SORTIE", "");
             timeline = f.Add(new SortieTimeline(f.Content));
@@ -281,9 +281,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             for (int l = 0; l < WingPlan.Lanes; l++) n += plan.Steps[l].Count;
             return n;
         }
-
-        private static string LaneName(WingService w, int e) =>
-            w != null && w.Roster.InUse(e) ? w.Roster.Name(e) : ElementRoster.Letter(e);
 
         /// <summary>Where lane <paramref name="e"/>'s element is and how fast it goes: its task lead when one flies, else its members'
         /// mean. False when it has none.</summary>

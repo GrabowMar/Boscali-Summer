@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.DynamicOperations.Domain;
 using UnityEngine;
@@ -35,6 +34,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         public ObjectiveScopeFeed(OperationsManager manager) { this.manager = manager; }
 
         public void Register() => ScopeFeeds.Register<ObjectiveScope>(Read);
+
+        public void Unregister() => ScopeFeeds.Unregister<ObjectiveScope>(Read);
 
         public bool Read(out ObjectiveScope data)
         {

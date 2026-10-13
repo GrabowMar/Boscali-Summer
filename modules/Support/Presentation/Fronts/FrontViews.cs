@@ -272,10 +272,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
         }
 
-        // Scratch for Network (rebuilt every refresh; neither list is kept past the call).
-        private static readonly List<EwSource> networkTrucks = new List<EwSource>(4);
-        private static readonly List<CyberNode> networkHeld = new List<CyberNode>(8);
-
         public static void Network(NetworkRoomView n, CyberStateData s, bool known, in MapFrame frame, int selected, float now)
         {
             n.Nodes.Clear(); n.Anchors.Clear(); n.Terminal.Clear();
@@ -380,7 +376,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             foreach (CyberEventRow e in s.Events)
                 n.Terminal.Add(new FrontLogLine
                 {
-                    Stamp = "#" + e.Seq.ToString("00", System.Globalization.CultureInfo.InvariantCulture), Text = ">> " + CyberNetWords.EventLine(e, now),
+                    Stamp = "#" + e.Seq.ToString("00", System.Globalization.CultureInfo.InvariantCulture), Text = ">> " + CyberNetWords.EventLine(e),
                     Tone = e.Kind == CyberEventKind.Traced ? AvState.Danger : e.Kind == CyberEventKind.NodeHeld ? AvState.Ready : AvState.Info
                 });
         }

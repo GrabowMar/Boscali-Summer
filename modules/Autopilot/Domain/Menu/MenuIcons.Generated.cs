@@ -20,17 +20,52 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         /// <summary>Stroke width of the pack, in glyph units.</summary>
         public const float Stroke = 2f;
 
-        public static readonly Dictionary<string, IconPoly[]> Table = new Dictionary<string, IconPoly[]>(80)
+        public static readonly Dictionary<string, IconPoly[]> Table = new Dictionary<string, IconPoly[]>(89)
         {
             ["weapons"] = new[]
             {
                 new IconPoly(true, false, new[] { 18.01f, 5.99f, 17.3f, 10.23f, 10.59f, 16.95f, 10.59f, 19.78f, 9.17f, 21.19f, 2.81f, 14.83f, 4.22f, 13.41f, 7.05f, 13.41f, 13.77f, 6.7f }),
+            },
+            ["hud"] = new[]
+            {
+                new IconPoly(true, false, new[] { 3f, 6f, 21f, 6f, 21f, 14f, 17f, 18f, 7f, 18f, 3f, 14f }),
+                new IconPoly(false, false, new[] { 6f, 12f, 10f, 12f }),
+                new IconPoly(false, false, new[] { 14f, 12f, 18f, 12f }),
+                new IconPoly(false, false, new[] { 12f, 8f, 12f, 10f }),
+                new IconPoly(true, true, new[] { 11f, 11f, 13f, 11f, 13f, 13f, 11f, 13f }),
+            },
+            ["cockpit"] = new[]
+            {
+                new IconPoly(true, false, new[] { 4f, 18f, 4f, 11f, 8f, 6f, 16f, 6f, 20f, 11f, 20f, 18f }),
+                new IconPoly(false, false, new[] { 4f, 13f, 20f, 13f }),
             },
             ["lights"] = new[]
             {
                 new IconPoly(true, false, new[] { 9.5f, 3f, 14.5f, 3f, 18f, 6.5f, 18f, 11.5f, 14.5f, 15f, 9.5f, 15f, 6f, 11.5f, 6f, 6.5f }),
                 new IconPoly(false, false, new[] { 9.5f, 18f, 14.5f, 18f }),
                 new IconPoly(false, false, new[] { 10.5f, 21f, 13.5f, 21f }),
+            },
+            ["resize"] = new[]
+            {
+                new IconPoly(false, false, new[] { 4f, 10f, 4f, 4f, 10f, 4f }),
+                new IconPoly(false, false, new[] { 20f, 14f, 20f, 20f, 14f, 20f }),
+                new IconPoly(false, false, new[] { 5f, 5f, 19f, 19f }),
+            },
+            ["dark"] = new[]
+            {
+                new IconPoly(false, false, new[] { 12f, 3f, 12f, 7f }),
+                new IconPoly(false, false, new[] { 12f, 17f, 12f, 21f }),
+                new IconPoly(false, false, new[] { 3f, 12f, 7f, 12f }),
+                new IconPoly(false, false, new[] { 17f, 12f, 21f, 12f }),
+                new IconPoly(true, true, new[] { 10.5f, 10.5f, 13.5f, 10.5f, 13.5f, 13.5f, 10.5f, 13.5f }),
+                new IconPoly(false, false, new[] { 5f, 19f, 19f, 5f }),
+            },
+            ["kneeboard"] = new[]
+            {
+                new IconPoly(true, false, new[] { 6f, 3f, 18f, 3f, 18f, 21f, 6f, 21f }),
+                new IconPoly(false, false, new[] { 9f, 8f, 15f, 8f }),
+                new IconPoly(false, false, new[] { 9f, 12f, 15f, 12f }),
+                new IconPoly(false, false, new[] { 9f, 16f, 13f, 16f }),
             },
             ["flight"] = new[]
             {
@@ -248,6 +283,40 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             ["target-filter"] = new[]
             {
                 new IconPoly(true, false, new[] { 3f, 4f, 21f, 4f, 21f, 6f, 14f, 13f, 14f, 20f, 10f, 18f, 10f, 13f, 3f, 6f }),
+            },
+            ["threat-lock"] = new[]
+            {
+                new IconPoly(false, false, new[] { 3f, 8f, 3f, 3f, 8f, 3f }),
+                new IconPoly(false, false, new[] { 16f, 3f, 21f, 3f, 21f, 8f }),
+                new IconPoly(false, false, new[] { 21f, 16f, 21f, 21f, 16f, 21f }),
+                new IconPoly(false, false, new[] { 8f, 21f, 3f, 21f, 3f, 16f }),
+                new IconPoly(true, false, new[] { 12f, 7f, 17f, 12f, 12f, 17f, 7f, 12f }),
+            },
+            ["missile-lock"] = new[]
+            {
+                new IconPoly(false, false, new[] { 3f, 8f, 3f, 3f, 8f, 3f }),
+                new IconPoly(false, false, new[] { 16f, 3f, 21f, 3f, 21f, 8f }),
+                new IconPoly(false, false, new[] { 21f, 16f, 21f, 21f, 16f, 21f }),
+                new IconPoly(false, false, new[] { 8f, 21f, 3f, 21f, 3f, 16f }),
+                new IconPoly(true, false, new[] { 12f, 6.5f, 14f, 9.5f, 14f, 16.5f, 10f, 16.5f, 10f, 9.5f }),
+            },
+            ["bay-doors"] = new[]
+            {
+                new IconPoly(false, false, new[] { 3f, 7f, 21f, 7f }),
+                new IconPoly(false, false, new[] { 7f, 7f, 4f, 15f }),
+                new IconPoly(false, false, new[] { 17f, 7f, 20f, 15f }),
+                new IconPoly(false, false, new[] { 12f, 10f, 12f, 16f }),
+                new IconPoly(true, true, new[] { 10.5f, 16f, 13.5f, 16f, 13.5f, 19f, 10.5f, 19f }),
+            },
+            ["chaff"] = new[]
+            {
+                new IconPoly(false, false, new[] { 5f, 5f, 8f, 8f }),
+                new IconPoly(false, false, new[] { 15f, 4f, 18f, 7f }),
+                new IconPoly(false, false, new[] { 10f, 10f, 13f, 13f }),
+                new IconPoly(false, false, new[] { 4f, 14f, 7f, 17f }),
+                new IconPoly(false, false, new[] { 17f, 12f, 20f, 15f }),
+                new IconPoly(false, false, new[] { 11f, 17f, 14f, 20f }),
+                new IconPoly(true, true, new[] { 18f, 18f, 20.5f, 18f, 20.5f, 20.5f, 18f, 20.5f }),
             },
             ["flare"] = new[]
             {

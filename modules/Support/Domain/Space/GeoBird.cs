@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Support.Domain.Space
 {
@@ -26,11 +27,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             FromU = fromU; FromV = fromV; ToU = toU; ToV = toV; DepartAt = departAt; Fuel = Math.Max(0f, Math.Min(100f, fuel));
         }
 
-        public static float Distance(float u0, float v0, float u1, float v1)
-        {
-            float du = u1 - u0, dv = v1 - v0;
-            return (float)Math.Sqrt(du * du + dv * dv);
-        }
+        public static float Distance(float u0, float v0, float u1, float v1) => Scalar.Distance2D(u0, v0, u1, v1);
 
         /// <summary>Fuel percent a burn over <paramref name="distance"/> costs (0 for no move).</summary>
         public static float Cost(float distance) => distance < 0.005f ? 0f : BurnBase + BurnPerUnit * distance;

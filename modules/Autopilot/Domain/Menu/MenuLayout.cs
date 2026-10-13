@@ -94,6 +94,9 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public const int MaxCap = 8, MinCap = 4;
         /// <summary>How far past a row or the dock the pointer may stray and still count (a group heading is this tall).</summary>
         public const float SlopPx = 24f;
+        /// <summary>How far outside a ring disc or the hub the cursor still counts as on it (design px, times <see cref="Rho"/>): with the 29 px disc the
+        /// zones of two neighbours just meet (their centres are 121 px apart), so the whole ring band is somebody's.</summary>
+        public const float DiscSlopPx = 30f;
 
         public readonly int W, H, Count;
         public readonly float G, Rho, T, Lg;
@@ -183,11 +186,16 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
 
         public MenuRect Disc(int i) => new MenuRect(DiscX[i] - Rd, DiscY[i] - Rd, DiscX[i] + Rd, DiscY[i] + Rd);
 
+        /// <summary>The nearest disc within <paramref name="pad"/> of its rim, or -1.</summary>
         public int DiscAt(float x, float y, float pad)
         {
+            int best = -1; double bd = Rd + pad;
             for (int i = 0; i < Count; i++)
-                if (Math.Sqrt((x - DiscX[i]) * (x - DiscX[i]) + (y - DiscY[i]) * (y - DiscY[i])) <= Rd + pad) return i;
-            return -1;
+            {
+                double d = Math.Sqrt((x - DiscX[i]) * (x - DiscX[i]) + (y - DiscY[i]) * (y - DiscY[i]));
+                if (d <= bd) { bd = d; best = i; }
+            }
+            return best;
         }
 
         public static float AngleOf(float dx, float dy) => (float)(((Math.Atan2(dx, -dy) * 180.0 / Math.PI) + 360.0) % 360.0);

@@ -1,5 +1,3 @@
-using System.Globalization;
-
 using BoscaliSummer.Modules.Wing.Networking;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
@@ -27,15 +25,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         private static bool Before(in SnapshotMember a, in SnapshotMember b) =>
             a.Element != b.Element ? a.Element < b.Element : a.Slot < b.Slot;
-
-        /// <summary>"B · COBRA · 2 · ORBIT"; an element without its own name shows its letter once.</summary>
-        public static string Header(int element, string name, int members, string task)
-        {
-            string letter = ElementRoster.Letter(element);
-            string n = members.ToString(CultureInfo.InvariantCulture);
-            return string.IsNullOrEmpty(name) || name == letter
-                ? letter + " · " + n + " · " + task
-                : letter + " · " + name + " · " + n + " · " + task;
-        }
     }
 }

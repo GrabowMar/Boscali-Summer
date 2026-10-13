@@ -478,6 +478,46 @@ namespace BoscaliSummer.Modules.Command.Domain
 
             // ---- rule 8: the reinforcement wave ------------------------------------------------------------------------------
 
+            // The game's own contribute menu, copied: the pilot's funds, each group's price and the host's cooldown. Funds round down and prices up, so
+            // a group that reads affordable is. An unknown stays unknown (a cooldown the host has not answered is not a zero).
+            private void Supply()
+            {
+                StrSupplyView v = m.Supply;
+                bool known = f.SupplyKnown && !float.IsNaN(Fin(f.Allocation));
+                float funds = known ? Math.Max(0f, f.Allocation) : 0f;
+                int count = known && f.Convoys != null ? Math.Min(Math.Min(f.ConvoyCount, f.Convoys.Length), StrViewModel.MaxConvoys) : 0;
+                Put(ref v.Known, known);
+                Put(ref v.Forbidden, known && f.DonationForbidden);
+                Put(ref v.Funds, funds);
+                Put(ref v.FundsText, known ? N(Whole(funds, false)) : StrWords.Dash);
+                Put(ref v.DonateCooldown, known ? SecUp(f.DonateCooldown) : -1);
+                for (int i = 0; i < count; i++)
+                {
+                    StrConvoyIn c = f.Convoys[i];
+                    StrSupplyRow r = Get(v.Rows, i);
+                    bool priced = !float.IsNaN(Fin(c.Cost)) && c.Cost >= 0f;
+                    int wait = SecUp(c.Cooldown);
+                    bool ready = priced && wait == 0 && c.Cost <= funds && !f.DonationForbidden;
+                    Put(ref r.Name, (c.Name ?? "").ToUpperInvariant());
+                    Put(ref r.Detail, (c.Composition ?? "").ToUpperInvariant());
+                    Put(ref r.Cost, priced ? c.Cost : float.NaN);
+                    Put(ref r.CostText, priced ? N(Whole(c.Cost, true)) : StrWords.Dash);
+                    Put(ref r.Cooldown, wait);
+                    Put(ref r.Ready, ready);
+                    Put(ref r.StateText, !priced ? "NO PRICE" : f.DonationForbidden ? "FORBIDDEN" : wait < 0 ? "CHECKING" : wait > 0 ? "READY IN " + Clock(wait) :
+                        c.Cost <= funds ? "READY" : "SHORT " + N(Whole(c.Cost - funds, true)));
+                }
+                Put(ref v.RowCount, count);
+                Put(ref v.Note, !known ? "JOIN A FACTION TO SPEND YOUR FUNDS" :
+                    f.DonationForbidden ? "THIS MISSION FORBIDS BUYING UNITS" + StrWords.Dot + "FUNDS CAN STILL GO TO THE POOL" :
+                    count == 0 ? "THIS MISSION LISTS NO UNIT GROUPS TO BUY" : "");
+            }
+
+            /// <summary>Whole seconds left, rounded up; -1 when the host has not answered.</summary>
+            private static int SecUp(float v) => float.IsNaN(v) || float.IsInfinity(v) || v < 0f ? -1 : (int)Math.Ceiling(Math.Min(v, 1e9f));
+
+            private static int Whole(float v, bool up) => (int)Math.Max(-2e9, Math.Min(2e9, up ? Math.Ceiling(v) : Math.Floor(v)));
+
             private void Wave()
             {
                 TheaterWaveView w = snap?.Wave;

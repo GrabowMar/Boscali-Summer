@@ -32,7 +32,7 @@ Copy-Item -LiteralPath "$repo/Core/Contracts/IMapProjection.cs", "$repo/Core/Mat
 Copy-Item -LiteralPath "$repo/Core/Math/Scalar.cs", "$repo/Core/Util/EmbeddedResources.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/modules/Command/Presentation/MapUi/AircraftTrailGraphic.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/modules/Command/Presentation/MapUi/MapUiManager.cs", "$repo/modules/Command/Presentation/MapUi/MapFocus.cs" -Destination "$PreviewDirectory/Assets/"
-Copy-Item -LiteralPath "$repo/modules/Command/Presentation/MapUi/MapStroke.cs", "$repo/modules/Command/Domain/ReliefClusters.cs" -Destination "$PreviewDirectory/Assets/"
+Copy-Item -LiteralPath "$repo/modules/Command/Presentation/MapUi/MapStroke.cs", "$repo/modules/Command/Presentation/MapUi/MapMinis.cs", "$repo/modules/Command/Domain/TerrainHeightField.cs", "$repo/modules/Command/Domain/ReliefClusters.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/modules/Command/Domain/ReliefLight.cs", "$repo/modules/Command/Domain/ReliefClusterPlan.cs", "$repo/modules/Command/Domain/MapClickRules.cs", "$repo/modules/Command/Domain/MapFix.cs", "$repo/modules/Command/Domain/FlatFocus.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/AvionicsUi/Assets/avionics-ui.bundle" -Destination "$PreviewDirectory/avionics-ui.bundle"
 Copy-AvionicsStyles $PreviewDirectory $AtlasStyles

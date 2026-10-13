@@ -50,6 +50,7 @@
     <Compile Include="..\..\modules\Command\Domain\HoloView.cs" Link="Features\Command\HoloView.cs" />
     <Compile Include="..\..\modules\Command\Domain\HoloGrid.cs" Link="Features\Command\HoloGrid.cs" />
     <Compile Include="..\..\modules\Command\Domain\HoloMarks.cs" Link="Features\Command\HoloMarks.cs" />
+    <Compile Include="..\..\modules\Command\Domain\HoloPresentation.cs" Link="Features\Command\HoloPresentation.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdResourceHistory.cs" Link="Features\Command\MfdResourceHistory.cs" />
     <Compile Include="..\..\modules\Support\Runtime\SupportEffectPolicy.cs" Link="Features\Support\SupportEffectPolicy.cs" />
     <Compile Include="..\..\modules\Autopilot\Runtime\AutopilotLandPolicy.cs" Link="Features\Autopilot\AutopilotLandPolicy.cs" />
@@ -57,6 +58,7 @@
     <Compile Include="..\..\modules\Autopilot\Domain\CarrierPattern.cs" Link="Features\Autopilot\CarrierPattern.cs" />
     <Compile Include="..\..\modules\Autopilot\Domain\AirframeSeverity.cs" Link="Features\Autopilot\AirframeSeverity.cs" />
     <Compile Include="..\..\modules\Autopilot\Domain\IlsGuidance.cs" Link="Features\Autopilot\IlsGuidance.cs" />
+    <Compile Include="..\..\modules\Autopilot\Domain\ChaffRules.cs" Link="Features\Autopilot\ChaffRules.cs" />
     <Compile Include="..\..\modules\Autopilot\Domain\Menu\*.cs" LinkBase="Features\Autopilot\Menu" />
     <Compile Include="..\..\modules\FireAndDestruction\Domain\CookoffPolicy.cs" Link="Features\FireAndDestruction\CookoffPolicy.cs" />
     <Compile Include="..\..\modules\FireAndDestruction\Domain\HitEscalation.cs" Link="Features\FireAndDestruction\HitEscalation.cs" />
@@ -88,6 +90,7 @@
     <Compile Include="..\..\Core\Math\MapScale.cs" Link="Core\Math\MapScale.cs" />
     <Compile Include="..\..\Core\Contracts\ITerritoryIngress.cs" Link="Framework\ITerritoryIngress.cs" />
     <Compile Include="..\..\modules\QoL\Runtime\ObservationStore.cs" Link="Features\QoL\ObservationStore.cs" />
+    <Compile Include="..\..\modules\QoL\Domain\NvgGain.cs" Link="Features\QoL\NvgGain.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdTargetPresets.cs" Link="Features\Command\MfdTargetPresets.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\TargetPresetModel.cs" Link="Features\Command\TargetPresetModel.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\MfdChartScale.cs" Link="Features\Command\MfdChartScale.cs" />
@@ -147,6 +150,8 @@
     <Compile Include="..\..\modules\Trenches\Domain\TrenchWire.cs" Link="Features\Trenches\TrenchWire.cs" />
     <Compile Include="..\..\Core\Modules\ModuleMetadata.cs" Link="Framework\FeatureMetadata.cs" />
     <Compile Include="..\..\Core\Modules\ModuleGraph.cs" Link="Framework\FeatureGraph.cs" />
+    <Compile Include="..\..\Core\Game\MissionProfile.cs" Link="Framework\MissionProfile.cs" />
+    <Compile Include="..\..\Core\Scenario\*.cs" LinkBase="Framework\Scenario" />
     <Compile Include="..\..\Core\Services\ServiceRegistry.cs" Link="Framework\ServiceRegistry.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrPagePlan.cs" Link="Features\Command\StrPagePlan.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrOrgLayout.cs" Link="Features\Command\StrOrgLayout.cs" />

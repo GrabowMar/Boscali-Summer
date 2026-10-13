@@ -148,7 +148,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private void RefreshPicker(int stations)
         {
             entries.Clear();
-            popupClear = true;
             if (current == null || layout == null || airframe == null || selStation < 0 || selStation >= stations)
             {
                 picker.SetHead("STORES", "");

@@ -13,7 +13,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// </summary>
     internal sealed class StrMapTag : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, IPointerExitHandler
     {
-        private const float RowH = 18f, Pad = 6f, LaneW = 84f, LaneH = 7f, MinW = 70f, MaxW = 300f, BoxPad = 10f, Gap = 4f, RestPad = 4f, RestLaneW = 48f;
+        private const float RowH = 18f, Pad = 6f, LaneW = 84f, LaneH = 7f, MinW = 70f, MaxW = 300f, Gap = 4f, RestPad = 4f, RestLaneW = 48f;
 
         internal StrItemId Id;
         internal StrTagKind Kind;

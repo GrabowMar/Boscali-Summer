@@ -1,4 +1,3 @@
-using System;
 using BoscaliSummer.Core.Contracts;
 using NOAvionics;
 using UnityEngine;
@@ -22,6 +21,8 @@ namespace BoscaliSummer.Modules.Squad.Runtime
         public AceScopeGauge(SquadManager manager) { this.manager = manager; }
 
         public void Register() => ScopeGauges.Register("ace", Read);
+
+        public void Unregister() => ScopeGauges.Unregister("ace", Read);
 
         public bool Read(out GaugeSpec gauge)
         {

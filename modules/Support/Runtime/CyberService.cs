@@ -66,7 +66,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private readonly CyberAnchorSpawner spawner = new CyberAnchorSpawner();
         private SupportManager manager;
         private SpaceService space;
-        private float nextTick, nextCleanup, nextWarning;
+        private PhasedGate tickGate;
+        private float nextCleanup, nextWarning;
 
         // Optional hooks: each is implemented by exactly one of the other files (the call is removed when it is not).
         partial void TickNodes(FactionCyber f, float now);
@@ -95,7 +96,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             Generation = Generation == int.MaxValue ? 1 : Generation + 1;
             factions.Clear();
             nextAttempt.Clear();
-            nextTick = 0.25f;   // phase: the four 1 Hz services tick on different frames
+            tickGate.Reset();
             spawner.ResetForScene();
         }
 
@@ -149,8 +150,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             if (!GameAccess.IsServer() || (GameManager.gameState != GameState.SinglePlayer && GameManager.gameState != GameState.Multiplayer)) return;
             float now = SupportManager.MissionNow();
-            if (now < nextTick) return;
-            nextTick = now + 1f;
+            if (!tickGate.Due(now, 1f, 0.25f)) return;   // 1 Hz slot .25 (table in HighCommandManager); a slot of the mission clock, so it holds however late the service starts
             try { Tick(now); }
             catch (Exception e)
             {
@@ -303,7 +303,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     float angle = (step * 5 % 12) * Mathf.PI / 6f;
                     Vector3 desired = parent.center.position + new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle)) * (radius + ring * 260f);
                     GlobalPosition anchor = desired.ToGlobalPosition();
-                    float front = FrontDistanceOf(owner, desired);
+                    float front = SupportTargeting.FrontDistanceOf(owner, desired);
                     if (truckCands.Count < CyberPlacement.MaxCandidates && spawner.TryPlanTruck(anchor, parent, out GlobalPosition tp, out _))
                     {
                         truckSites.Add(new Site(parent, anchor));
@@ -315,20 +315,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
                         centerCands.Add(new SiteCandidate(centerSites.Count - 1, (float)cp[0].x, (float)cp[0].z, front, front));
                     }
                 }
-        }
-
-        /// <summary>Distance to the nearest airbase held by someone else: the front proxy (the same fallback SPACE uses without territory data).</summary>
-        private static float FrontDistanceOf(FactionHQ owner, Vector3 point)
-        {
-            float nearest = float.PositiveInfinity;
-            if (FactionRegistry.airbaseLookup != null)
-                foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
-                {
-                    if (airbase == null || airbase.disabled || airbase.center == null || airbase.CurrentHQ == null || airbase.CurrentHQ == owner) continue;
-                    Vector3 d = point - airbase.center.position; d.y = 0f;
-                    nearest = Mathf.Min(nearest, d.magnitude);
-                }
-            return float.IsInfinity(nearest) ? 1000000f : nearest;
         }
     }
 }

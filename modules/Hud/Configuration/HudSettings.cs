@@ -119,7 +119,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
                 "The symbology lags slightly against head movement, as if it hung in the air a little way off the glass." + live);
 
             Corners = config.Bind(section, "Corners", d.Corners,
-                "Restyle the kill feed and the map frame in the board's look; it stays when the board is switched off." + live);
+                "Restyle the kill feed and the map frame in the board's look: the feed becomes the mod's own event log (DL EVT LOG), drawn while you are not typing in the chat; off leaves the game's own feed and map as they are. It stays when the board is switched off." + live);
         }
 
         /// <summary>Fill <paramref name="into"/> from the config entries, kept inside their ranges. Reads fields only: it allocates nothing.</summary>

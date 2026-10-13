@@ -76,12 +76,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public float Temperature;
         public float Dewpoint;
 
-        public PrecipitationKind Precipitation => WeatherField.Classify(RainRate);
-
         public float WindSpeed => (float)Math.Sqrt(WindX * WindX + WindZ * WindZ);
-
-        /// <summary>Downwind heading in degrees. Displays use <see cref="WeatherWords.WindFrom"/>.</summary>
-        public float WindHeading => WeatherMath.VectorToHeading(WindX, WindZ);
     }
 
     /// <summary>
@@ -131,9 +126,17 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public bool Moving { get; private set; }
         /// <summary>Where every per-sample genus and thin-layer row is read from: one keyframe (<see cref="RowAt"/>) in slices 2-3, a fixture's baked tape in the density check and the bench.</summary>
         public TapeSampler Tape { get; private set; }
-        public TapeFrame Frame { get; private set; }
+        public TapeFrame Frame => frame;
         /// <summary>Everything the lattices resolve from: the tape identity, the tape and its frame (spec 6). Rebuilt with every Build.</summary>
-        public LatticeSource Lattice { get; private set; }
+        public LatticeSource Lattice => latticeSource;
+        // The two behind the properties above, so a sample reads them in place instead of copying a property's value.
+        private TapeFrame frame;
+        private LatticeSource latticeSource;
+        private bool haveLattice;
+        /// <summary>The diurnal swing of the temperature at this Build's hour of day: the same for every sample, so the sine is taken once.</summary>
+        private float diurnal;
+        /// <summary>The unit vector of <see cref="PrevailingHeading"/>: what a sample away from any front's veer starts its wind from.</summary>
+        private float prevailingX, prevailingZ;
         /// <summary>Scenery storms outside the theater; see <see cref="Superstructures"/>.</summary>
         public int SuperstructureCount { get; private set; }
 
@@ -145,7 +148,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public bool IsBuilt => Key != null;
 
         /// <summary>The tape row at a world point: the local sky, with the low genus, the base, the thin layers and every CPU column.</summary>
-        public SkyParams RowAt(float x, float z) => tapeIsConstant ? constantRow : Tape.At(Frame.S(x, z));
+        public SkyParams RowAt(float x, float z) => tapeIsConstant ? constantRow : Tape.At(frame.S(x, z));
 
         public Superstructure SuperstructureAt(int index) => superstructures[index];
 
@@ -167,10 +170,12 @@ namespace BoscaliSummer.Modules.Weather.Domain
             tapeIsConstant = false;
             if (noiseXform == null || noiseXform.LayoutSeed != key.LayoutSeed) noiseXform = new NoiseXform(key.LayoutSeed);
             float d = moving ? (float)key.OffsetAt(time) : key.Offset;
-            Frame = tape.Frame(key.HeadingDeg, d, noiseXform);
+            frame = tape.Frame(key.HeadingDeg, d, noiseXform);
+            diurnal = 5f * (float)Math.Sin((HourOfDay - 9f) / 24f * 2f * Math.PI);
             tapeMarkers = tape.Markers;
             ResetLattice();
             PrevailingHeading = key.DownwindHeading; // the mission wind's heading, set once at capture
+            WeatherMath.HeadingToVector(PrevailingHeading + 0f, out prevailingX, out prevailingZ);
 
             SuperstructureCount = Superstructures.Fill(superstructures, key.LayoutSeed, RowAt(0f, 0f),
                 HalfX, HalfZ, PrevailingHeading, key.Sets, key.HasAnchor, key.AnchorX, key.AnchorZ);
@@ -180,7 +185,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public void UseFixtureTape(TapeSampler tape, TapeFrame frame)
         {
             Tape = tape;
-            Frame = frame;
+            this.frame = frame;
             tapeIsConstant = tape.IsConstant;
             tapeMarkers = MarkerSet.Empty;
             TapeSource = null;
@@ -190,12 +195,19 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         private void ResetLattice()
         {
-            Lattice = new LatticeSource(Key.TapeId, Key.LayoutSeed, Tape, Frame, tapeMarkers);
-            cumulusCache.Reset();
-            cumulusNear.Reset();
-            stormCache.Reset();
+            var next = new LatticeSource(Key.TapeId, Key.LayoutSeed, Tape, frame, tapeMarkers);
+            // The cached cells are a pure function of the source (see ResolvesLike): a rebuild for a later time or a new offset of the same tape resolves the same cells,
+            // so it keeps them (and the neighbourhoods copied from them). Anything else starts clean.
+            if (!haveLattice || !next.ResolvesLike(latticeSource))
+            {
+                cumulusCache.Reset();
+                cumulusNear.Reset();
+                stormCache.Reset();
+                stormNear.Reset();
+            }
+            latticeSource = next;
+            haveLattice = true;
             if (baseField == null || baseField.LayoutSeed != Key.LayoutSeed) baseField = new BaseHeightField(Key.LayoutSeed);
-            stormNear.Reset();
         }
 
         /// <summary>
@@ -244,39 +256,48 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public WeatherPoint Sample(float x, float z)
         {
             // The per-sample row: the low genus, the base, the thin layers and every CPU column are read from the tape at this point's position.
-            float s = Frame.S(x, z);
-            SkyParams local = tapeIsConstant ? constantRow : Tape.At(s);
-            SkyParams p = local;
+            float s = frame.S(x, z);
+            // The row is read in place (the constant row itself, or the one fetched here), not copied.
+            SkyParams fetched = default;
+            if (!tapeIsConstant) fetched = Tape.At(s);
+            ref readonly SkyParams local = ref (tapeIsConstant ? ref constantRow : ref fetched);
             var point = new WeatherPoint();
             // The lattices live in the tape frame (spec 3.1): q = p + u * D, with D 0 until the tape moves (slice 5).
-            Frame.ToTape(x, z, out float qx, out float qz);
+            frame.ToTape(x, z, out float qx, out float qz);
 
             // Area (stratiform) rain and the sheet, broken up by the static patch field so a
             // thinning deck opens in patches instead of fading uniformly.
             float patch = PatchAt(qx, qz);
-            float areaRain = p.StratRain * 2.2f * WeatherMath.Smoothstep(0.45f, 0.8f, patch);
-            float sheet = p.SheetCover;
+            float areaRain = local.StratRain * 2.2f * WeatherMath.Smoothstep(0.45f, 0.8f, patch);
+            float sheet = local.SheetCover;
             float coverBase = Scalar.Clamp01(sheet + (patch - 0.5f) * (0.10f + 0.55f * sheet));
             point.BackgroundCover = coverBase;
 
-            float windSpeed = BaseWindSpeed * p.WindFactor;
-            float turbulence = p.Turbulence;
+            float windSpeed = BaseWindSpeed * local.WindFactor;
+            float turbulence = local.Turbulence;
 
             // Front markers (spec 5.3): thin overlays on the keyframe blend. A marker adds rain, gust, veer and a QNH dip; it never adds cover. The distance
             // d is measured across the wavy line: (s - s_k) / sqrt(1 + M'(a)^2), negative before the line arrives.
             float coreRain = 0f, markerGust = 0f, veer = 0f, qnhDip = 0f;
+            float slope = 0f;
+            bool haveSlope = false;
             for (int i = 0; i < tapeMarkers.Count; i++)
             {
                 TapeMarker marker = tapeMarkers.Items[i];
                 if (Math.Abs(s - marker.S) > FrontLine.Reach * 1.5f) continue;
-                float d = tapeMarkers.Distance(i, s, Frame.MeanderSlope(Frame.Across(x, z)));
+                // The slope belongs to the point, not the marker: taken once, and only when a marker is near.
+                if (!haveSlope) { slope = frame.MeanderSlope(frame.Across(x, z)); haveSlope = true; }
+                float d = tapeMarkers.Distance(i, s, slope);
                 LineEffect effect = FrontLine.Line(marker.Kind, d);
                 coreRain += effect.Rain * marker.Strength;
                 markerGust += effect.Gust * marker.Strength;
                 veer += effect.VeerDegrees * marker.Strength;
                 qnhDip += effect.QnhDip * marker.Strength;
             }
-            WeatherMath.HeadingToVector(PrevailingHeading + veer, out float windX, out float windZ);
+            float windX, windZ;
+            // Away from every front the veer is zero and the heading is the Build's own: its sine and cosine were taken there.
+            if (veer == 0f) { windX = prevailingX; windZ = prevailingZ; }
+            else WeatherMath.HeadingToVector(PrevailingHeading + veer, out windX, out windZ);
             windX *= windSpeed;
             windZ *= windSpeed;
 
@@ -288,28 +309,32 @@ namespace BoscaliSummer.Modules.Weather.Domain
             float towerDepth = 0f;
             bool hail = false;
             // Storm cells (spec 6): the cells that can touch this point's lattice cell hold every cell that can touch the point.
-            stormNear.Refresh(Lattice, stormCache, qx, qz);
+            stormNear.Refresh(latticeSource, stormCache, qx, qz);
             // The flared anvil radius is the same for every cell of this point's row (0 when the row has none).
-            float anvilFlare = p.Anvil > 0.05f ? CloudShape.Footprint(0.82f, p.Anvil) : 0f;
+            float anvilFlare = local.Anvil > 0.05f ? CloudShape.Footprint(0.82f, local.Anvil) : 0f;
             for (int i = 0; i < stormNear.Count; i++)
             {
                 ref StormCell cell = ref stormNear.Items[i];
                 float dx = qx - cell.X, dz = qz - cell.Z;
                 if (dx * dx + dz * dz >= cell.Reach * cell.Reach) continue;
 
-                cellRain += cell.RainAt(qx, qz);
-                float cover = cell.CoverAt(qx, qz);
+                // Every reading below is a function of the distance to the cell: measured once.
+                float dist = cell.Distance(qx, qz);
+                cellRain += cell.RainAtDistance(dist);
+                float cover = cell.CoverAtDistance(dist);
                 clearCells *= 1f - cover;
-                float shape = cell.ShapeAt(qx, qz);
+                float shape = cell.ShapeAtDistance(dist);
                 if (shape > point.CellShape) point.CellShape = shape;
-                cell.WindAt(qx, qz, out float ox, out float oz, out float w, out float t);
+                cell.WindAtOffset(dx, dz, dist, out float ox, out float oz, out float w, out float t);
                 outX += ox;
                 outZ += oz;
                 vertical += w;
                 turbulence += t;
-                lightning += cell.LightningRate * cell.LightningWeight(qx, qz);
+                // A cell that is not electric (rate exactly 0, the usual case) adds exactly +0 (the weight is finite): its exponential is not taken.
+                float strikeRate = cell.LightningRate;
+                if (strikeRate != 0f) lightning += strikeRate * cell.LightningWeightAtDistance(dist);
 
-                float depth = cell.CoreAt(qx, qz);
+                float depth = cell.CoreAtDistance(dist);
                 if (depth > core) core = depth;
                 if (cell.Hail && depth > 0.5f) hail = true;
                 // The updraft is a dome. A real anvil holds that ceiling out to the flared
@@ -319,8 +344,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 float anvilReach = cell.Radius * 1.35f * anvilFlare;
                 if (anvilFlare > 0f && dx * dx + dz * dz < (anvilReach + cell.Radius * 0.55f) * (anvilReach + cell.Radius * 0.55f))
                 {
-                    float shelf = 1f - WeatherMath.Smoothstep(anvilReach, anvilReach + cell.Radius * 0.55f, cell.Distance(qx, qz));
-                    shelf *= WeatherMath.Smoothstep(0.25f, 0.45f, p.Anvil);
+                    float shelf = 1f - WeatherMath.Smoothstep(anvilReach, anvilReach + cell.Radius * 0.55f, dist);
+                    shelf *= WeatherMath.Smoothstep(0.25f, 0.45f, local.Anvil);
                     // The spreading crown is lower away from the updraft. A literal flat
                     // shelf=1 across this radius made every ordinary storm a giant saucer.
                     shelf *= 0.82f + 0.18f * Scalar.Clamp01(shape);
@@ -331,7 +356,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             }
 
             // Cumulus groups: independent covers combine as 1 - (1 - c1)(1 - c2)...; the strongest one shapes the crown.
-            CumulusLattice.Sample(Lattice, cumulusCache, cumulusNear, qx, qz, out float clearClusters, out float groupShape, out float groupCrown);
+            CumulusLattice.Sample(latticeSource, cumulusCache, cumulusNear, qx, qz, out float clearClusters, out float groupShape, out float groupCrown);
             if (groupShape > point.CellShape) point.CellShape = groupShape;
 
             // Rain = (keyframe rain + marker core) * Gate(RainCover) + cell rain, capped at 120 mm/h (spec 5.3). The gate keeps a core from raining under
@@ -374,8 +399,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
             SkySummary.RainLayer(cellRain, stratiform, point.LowCover, point.MidCover * local.OpacityMid, point.CloudBase, point.LowTop, point.MidBase, point.MidTop,
                 out point.RainBase, out point.RainTop);
 
-            float haze = Math.Max(p.Haze * HazeScale, 0.5f);
-            float extinction = 3.912f / haze + 0.25f * (float)Math.Pow(rain, 0.66);
+            float haze = Math.Max(local.Haze * HazeScale, 0.5f);
+            // A dry point (rain exactly 0) skips the call: Math.Pow(0, 0.66) is exactly 0.
+            float extinction = 3.912f / haze + 0.25f * (rain == 0f ? 0f : (float)Math.Pow(rain, 0.66));
             point.VisibilityKm = Scalar.Clamp(3.912f / extinction, 0.3f, 50f);
 
             point.WindX = windX + outX;
@@ -388,10 +414,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
             point.CoreDepth = Scalar.Clamp01(core);
             point.Hail = hail;
 
-            point.Qnh = p.Qnh - qnhDip + (patch - 0.5f) * 2f;
+            point.Qnh = local.Qnh - qnhDip + (patch - 0.5f) * 2f;
 
-            float diurnal = 5f * (float)Math.Sin((HourOfDay - 9f) / 24f * 2f * Math.PI);
-            point.Temperature = p.Temperature + diurnal - 4f * WeatherMath.Smoothstep(0f, 15f, rain);
+            point.Temperature = local.Temperature + diurnal - 4f * WeatherMath.Smoothstep(0f, 15f, rain);
             float humid = Scalar.Clamp01(point.LowCover * 0.6f + WeatherMath.Smoothstep(0f, 5f, rain) * 0.6f);
             point.Dewpoint = point.Temperature - WeatherMath.Lerp(9f, 0.5f, humid);
             return point;

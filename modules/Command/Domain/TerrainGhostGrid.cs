@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Command.Domain
 {
@@ -30,7 +31,10 @@ namespace BoscaliSummer.Modules.Command.Domain
     /// <see cref="Radius"/>, smoothly to zero at it); a near fade (zero at the aircraft, full from <see cref="NearMetres"/>
     /// away, measured in 3D); over the sea only every <see cref="SeaLineEvery"/>th line, at <see cref="SeaStrength"/>; and
     /// <see cref="CautionBoost"/> where the ground is higher than <see cref="CautionClearance"/> below the aircraft, which also
-    /// takes the caution colour instead of the ink.</para>
+    /// takes the caution colour instead of the ink. Caution ground is never dimmed or thinned (it is the warning). The other (ink) ground gets a horizon fade
+    /// (<see cref="HorizonFactor"/>): ground seen at 8 degrees or more below the aircraft's horizontal is at full strength, falling linearly (in slope) to
+    /// <see cref="HorizonFloor"/> at 1 degree and less; and thins out with distance (<see cref="LineThinning"/>): beyond 4.5 km every second grid line
+    /// is gone, beyond 7.5 km only every fourth remains, by the line's number on the ground, so the far lines do not converge into bright bundles.</para>
     /// </summary>
     internal static class TerrainGhostGrid
     {
@@ -43,12 +47,16 @@ namespace BoscaliSummer.Modules.Command.Domain
         internal const int Nodes = Side * Side;
         internal const int VertexCount = 2 * Nodes;
         internal const int IndexCount = 4 * Cells * Side;
-        internal const float BaseAlpha = .22f;
+        internal const float BaseAlpha = .16f;
         internal const float FadeStart = .6f;
         internal const float NearMetres = 300f;
         internal const float CautionClearance = 150f;
         internal const float CautionBoost = 2f;
         internal const float SeaStrength = .3f;
+        /// <summary>The depression angle (degrees below the aircraft's horizontal) from which a vertex is at full strength, the one at and under which it is at <see cref="HorizonFloor"/>, and that share.</summary>
+        internal const float HorizonFullDegrees = 8f, HorizonFloorDegrees = 1f, HorizonFloor = .25f;
+        /// <summary>Metres from the aircraft between which the odd lines fade out (half at the middle), and between which the lines that are not a multiple of four fade out.</summary>
+        internal const float ThinHalfFrom = 4000f, ThinHalfTo = 5000f, ThinQuarterFrom = 7000f, ThinQuarterTo = 8000f;
         internal const int SeaLineEvery = 4;
         private const float SeaTolerance = .01f;
 
@@ -66,6 +74,34 @@ namespace BoscaliSummer.Modules.Command.Domain
                 indices[at++] = first + 1;
             }
             return indices;
+        }
+
+        /// <summary>
+        /// The horizon fade for ground <paramref name="below"/> metres under the aircraft (negative: above it) and <paramref name="flatMetres"/> away along the ground: 1 from <see cref="HorizonFullDegrees"/> of depression,
+        /// falling linearly to <see cref="HorizonFloor"/> at <see cref="HorizonFloorDegrees"/> and under (straight below is 90 degrees, level or higher is 0 or less).
+        /// </summary>
+        internal static float HorizonFactor(float below, float flatMetres)
+        {
+            // By slope, not angle: under 8 degrees the tangent is the angle to a quarter of a percent, and this runs for every node of the grid.
+            if (!(below > HorizonFloorSlope * flatMetres)) return HorizonFloor;
+            if (below >= HorizonFullSlope * flatMetres) return 1f;
+            float t = (below / flatMetres - HorizonFloorSlope) / (HorizonFullSlope - HorizonFloorSlope);
+            return HorizonFloor + (1f - HorizonFloor) * t;
+        }
+
+        /// <summary>tan of <see cref="HorizonFloorDegrees"/> and of <see cref="HorizonFullDegrees"/>.</summary>
+        private const float HorizonFloorSlope = .0174551f, HorizonFullSlope = .1405408f;
+
+        /// <summary>
+        /// The share of a line kept <paramref name="metres"/> from the aircraft, for the line numbered <paramref name="number"/> on the ground (its absolute cell index, so the same lines stay as the aircraft moves): lines whose
+        /// number is a multiple of four are always kept; those with an odd number fade out smoothly between <see cref="ThinHalfFrom"/> and <see cref="ThinHalfTo"/>; the others (2 mod 4) between
+        /// <see cref="ThinQuarterFrom"/> and <see cref="ThinQuarterTo"/>.
+        /// </summary>
+        internal static float LineThinning(int number, float metres)
+        {
+            int mod = ((number % 4) + 4) % 4;
+            if (mod == 0) return 1f;
+            return mod == 2 ? 1f - Smooth((metres - ThinQuarterFrom) / (ThinQuarterTo - ThinQuarterFrom)) : 1f - Smooth((metres - ThinHalfFrom) / (ThinHalfTo - ThinHalfFrom));
         }
 
         /// <summary>The cell whose centre is nearest a global position: the grid is rebuilt only when this changes.</summary>
@@ -104,44 +140,51 @@ namespace BoscaliSummer.Modules.Command.Domain
         {
             float eyeX = planeX - Anchor(cellX), eyeZ = planeZ - Anchor(cellZ);
             float level = Math.Min(Math.Max(strength, 0f), 1f) * BaseAlpha;
-            float glowAbove = planeY - CautionClearance, radiusSquared = Radius * Radius;
+            float glowAbove = planeY - CautionClearance, radiusSquared = Radius * Radius, seaTop = seaLevel + SeaTolerance;
             int glowing = 0;
-            for (int family = 0; family < 2; family++)
-            for (int line = 0; line < Side; line++)
+            // A node is two vertices, one on the line along X and one on the line along Z: the fades that depend only on where the node is are
+            // worked out once for both, and a node that neither line draws (open sea between the kept lines, or beyond the radius) costs no maths.
+            for (int j = 0; j < Side; j++)
             {
                 // The line's number on the ground, so the lines kept over the sea stay put as the grid snaps along.
-                int number = (family == 0 ? cellZ : cellX) + line - Cells / 2;
-                float seaLine = ((number % SeaLineEvery) + SeaLineEvery) % SeaLineEvery == 0 ? SeaStrength : 0f;
-                int first = family * Nodes + line * Side;
-                for (int k = 0; k < Side; k++)
+                int numberZ = cellZ + j - Cells / 2;
+                float seaZ = SeaShare(numberZ);
+                for (int i = 0; i < Side; i++)
                 {
-                    ref GhostVertex v = ref vertices[first + k];
-                    float dx = v.X - eyeX, dz = v.Z - eyeZ, flat = dx * dx + dz * dz, alpha = 0f;
-                    bool glow = v.Y > glowAbove;
+                    ref GhostVertex along = ref vertices[j * Side + i];
+                    ref GhostVertex across = ref vertices[Nodes + i * Side + j];
+                    int numberX = cellX + i - Cells / 2;
+                    float dx = along.X - eyeX, dz = along.Z - eyeZ, flat = dx * dx + dz * dz, alphaZ = 0f, alphaX = 0f;
+                    bool glow = along.Y > glowAbove;
                     if (flat < radiusSquared)
                     {
-                        float dy = v.Y - planeY;
-                        alpha = level *
-                            (1f - Smooth((MathF.Sqrt(flat) / Radius - FadeStart) / (1f - FadeStart))) *
-                            Smooth(MathF.Sqrt(flat + dy * dy) / NearMetres) *
-                            (v.Y <= seaLevel + SeaTolerance ? seaLine : 1f) *
-                            (glow ? CautionBoost : 1f);
+                        bool sea = along.Y <= seaTop;
+                        float keepZ = sea ? seaZ : 1f, keepX = sea ? SeaShare(numberX) : 1f;
+                        if (keepZ > 0f || keepX > 0f)
+                        {
+                            float dy = along.Y - planeY, away = MathF.Sqrt(flat);
+                            float edge = 1f - Smooth((away / Radius - FadeStart) / (1f - FadeStart));
+                            float near = Smooth(MathF.Sqrt(flat + dy * dy) / NearMetres);
+                            float horizon = glow ? 0f : HorizonFactor(-dy, away);
+                            alphaZ = level * edge * near * keepZ * (glow ? CautionBoost : horizon * LineThinning(numberZ, away));
+                            alphaX = level * edge * near * keepX * (glow ? CautionBoost : horizon * LineThinning(numberX, away));
+                        }
                     }
                     GhostTint tint = glow ? caution : ink;
-                    v.R = tint.R;
-                    v.G = tint.G;
-                    v.B = tint.B;
-                    v.A = (byte)(Math.Min(alpha, 1f) * 255f + .5f);
-                    if (glow && v.A > 0) glowing++;
+                    along.R = across.R = tint.R;
+                    along.G = across.G = tint.G;
+                    along.B = across.B = tint.B;
+                    along.A = (byte)(Math.Min(alphaZ, 1f) * 255f + .5f);
+                    across.A = (byte)(Math.Min(alphaX, 1f) * 255f + .5f);
+                    if (glow) glowing += (along.A > 0 ? 1 : 0) + (across.A > 0 ? 1 : 0);
                 }
             }
             return glowing;
         }
 
-        private static float Smooth(float t)
-        {
-            t = t < 0f ? 0f : t > 1f ? 1f : t;
-            return t * t * (3f - 2f * t);
-        }
+        /// <summary>Over the sea only every <see cref="SeaLineEvery"/>th line is drawn, at <see cref="SeaStrength"/>.</summary>
+        private static float SeaShare(int number) => ((number % SeaLineEvery) + SeaLineEvery) % SeaLineEvery == 0 ? SeaStrength : 0f;
+
+        private static float Smooth(float t) => Scalar.SmoothStep(0f, 1f, t);
     }
 }

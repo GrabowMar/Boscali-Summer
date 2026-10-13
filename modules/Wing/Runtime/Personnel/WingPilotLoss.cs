@@ -1,4 +1,5 @@
 using System.Reflection;
+using BoscaliSummer.Core.Game;
 using HarmonyLib;
 
 namespace BoscaliSummer.Modules.Wing.Runtime
@@ -16,7 +17,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             if (___pilotNumber == 0 && !__instance.dead && !__instance.ejected)
             {
                 WingSurvivalPerks.ProtectPilotDamage(__instance.aircraft, ref pierceDamage,
-                    ref blastDamage, ref fireDamage, ref impactDamage, ref ___hitPoints);
+                    ref blastDamage, ref fireDamage, ref impactDamage);
             }
             if (___pilotNumber != 0 || __instance.dead || __instance.ejected ||
                 ___hitPoints - (pierceDamage + blastDamage + fireDamage + impactDamage) >= 0f) return;
@@ -34,8 +35,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
     internal static class WingPilotKillerPatch
     {
         // Patch the received RPC body as well as host execution, including late kill messages.
-        private static MethodBase TargetMethod() => AccessTools.FirstMethod(typeof(MessageManager),
-            method => method.Name.StartsWith("UserCode_RpcKillMessage_"));
+        private static MethodBase TargetMethod() => KillMessageRpc.Target();
 
         [HarmonyPrefix]
         private static void Prefix(PersistentID killerID, PersistentID killedID) =>

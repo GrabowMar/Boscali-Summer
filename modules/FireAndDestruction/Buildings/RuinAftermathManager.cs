@@ -73,7 +73,7 @@ namespace BoscaliSummer.Fire
 
         internal GameObject AttachFacade(
             GlobalPosition position, List<RuinDebrisPool.FacadePiece> pieces, int buildingId, bool nativeRubble = false) =>
-            debrisPool.AttachShell(position, pieces, buildingId, nativeRubble);
+            debrisPool.AttachShell(position, pieces, nativeRubble);
 
         /// <summary>
         /// A shot near a wreck. The slab eases over a third of a second. A blast that

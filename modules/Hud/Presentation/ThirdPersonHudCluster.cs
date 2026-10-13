@@ -26,7 +26,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// the "TGT" tag an open tag) -- the same symbology language as the native flight HUD, no plates. Cues light brackets and text like annunciators: SPD on
     /// over-G, ALT on low ground (radar altitude replaces its caption under 300 m; PULL UP in alert
     /// colour), the fuel scale on low fuel. HDG adds the compass point; the card shows range and closure.
-    /// Legibility (2026-10-10): a dark scrim behind every box and bar label so thin ink survives bright haze, captions at
+    /// Legibility (2026-10-10; 2026-10-13 nothing behind the boxes, by the user's ruling: bare ink): captions at
     /// 12-13 pt, the whole cluster scaled by the player's own HUD text size (the layout runs in a virtual screen of
     /// screen / scale and the root is scaled back up), AoA in the SPD caption row, the real load factor against the airframe's
     /// limit, and the fuel scale on the same 25 % / 10 % thresholds as the board's fuel row.
@@ -55,9 +55,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private Box spd, alt;
         private Box hdg;
-        private TargetCardWidgets card;
+        private TargetCardWidgets card, missile;
+        // The missile feed for the next Present (SetMissileFeed): its card shows in the cockpit too, where the flight boxes do not.
+        private Texture missileFeed;
+        private string missileName;
+        private float missileRangeM;
+        private bool missileLost, missileRaised;
 
-        private bool builtActive;
+        private bool builtActive, flightShown;
         private AvVector symbols;
         private int lastSymbols;
         private const float Bracket = 9f, Stroke = 1.5f;
@@ -70,14 +75,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private struct Box
         {
             public RectTransform Root;
-            public Image Backing;
             public TextMeshProUGUI Caption;
             /// <summary>Right end of the caption row (the SPD box's AoA).</summary>
             public TextMeshProUGUI CaptionRight;
             public TextMeshProUGUI Value;
             public TextMeshProUGUI SubLine;
             public RectTransform Track;
-            public Image TrackImage;
             public Image Bar;
             public TextMeshProUGUI BarLabel;
             public float LastValue;
@@ -105,7 +108,19 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             public float LastClosure;
         }
 
-        public bool Available => root != null;
+        /// <summary>The flight boxes are on screen (the board asks so that it can take them down the frame third person ends while the missile card stays).</summary>
+        public bool FlightShown => builtActive && flightShown;
+
+        /// <summary>The missile feed card for the next <see cref="Present"/>: null <paramref name="feed"/> is no card. <paramref name="raised"/> (the cockpit: NAV DATA has the corner)
+        /// puts it one slot up even with no target card under it.</summary>
+        public void SetMissileFeed(Texture feed, string name, float rangeM, bool lost, bool raised)
+        {
+            missileFeed = feed;
+            missileName = name;
+            missileRangeM = rangeM;
+            missileLost = lost;
+            missileRaised = raised;
+        }
 
         /// <summary>The TAC BOARD's box on the screen (centre-origin, y up, canvas units; no size: no board): the boxes of the cluster keep clear of it (<see cref="ThirdPersonHudLayout.KeepClearOf"/>). Set by the board before <see cref="Present"/>.</summary>
         public RectF Board;
@@ -150,13 +165,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             spd = BuildBox("SPD", "SPD");
             alt = BuildBox("ALT", "ALT");
             hdg = BuildBox("HDG", null, withBar: false);
-            card = BuildTargetCard();
+            card = BuildTargetCard("TargetCard", "TGT");
+            missile = BuildTargetCard("MissileCard", "MSL");
             // Root is zero-size at screen centre, so this surface's origin is screen centre: RectF space.
             symbols = AvVector.Create(root, "Symbols", 900);
             lastSymbols = 0;
 
             rootObject.SetActive(false);
             builtActive = false;
+            flightShown = true;
         }
 
         private TextMeshProUGUI Label(RectTransform parent, string name, TextAlignmentOptions alignment, float size,
@@ -172,14 +189,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private Box BuildBox(string name, string caption, bool withBar = true)
         {
-            var boxObject = new GameObject(name, typeof(RectTransform), typeof(Image));
+            var boxObject = new GameObject(name, typeof(RectTransform));
             RectTransform rect = (RectTransform)boxObject.transform;
             rect.SetParent(root, false);
             rect.pivot = new Vector2(0.5f, 0.5f);
-            Image backing = boxObject.GetComponent<Image>();
-            backing.raycastTarget = false;
-            backing.sprite = AvSprites.White;
-            backing.color = Color.clear;
+            // No plate and no shade (user ruling 2026-10-13): bare ink on the sky, like the board's own blocks.
 
             bool hasSub = caption != null;
             TextMeshProUGUI captionText = null, captionRight = null;
@@ -202,20 +216,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             sub.gameObject.SetActive(hasSub);
 
             RectTransform track = null;
-            Image trackImage = null;
             Image bar = null;
             TextMeshProUGUI barLabel = null;
             if (withBar)
             {
-                // A visible track so a low reading still reads as "a little of a bar", not a stray dot.
-                var trackObject = new GameObject(name + "Track", typeof(RectTransform), typeof(Image));
+                // The tick scale (PaintSymbols) is the track: a low reading still reads as "a little of a bar", not a stray dot.
+                var trackObject = new GameObject(name + "Track", typeof(RectTransform));
                 track = (RectTransform)trackObject.transform;
                 track.SetParent(root, false);
                 track.pivot = new Vector2(0.5f, 0.5f);
-                trackImage = trackObject.GetComponent<Image>();
-                trackImage.raycastTarget = false;
-                trackImage.sprite = AvSprites.White;
-                trackImage.color = Scrim(null);   // the scale sits on a plate, not straight on the sky
 
                 // The fill is a solid 3 px line up the middle of the tick scale drawn in PaintSymbols.
                 bar = HudSprites.Child(track, "Bar", AvSprites.White, sliced: false);
@@ -227,33 +236,23 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 bar.fillOrigin = 0;
                 bar.fillAmount = 0f;
 
-                // Live percentage under the track, wider than the bar itself, on its own scrim (it sits outside the box's).
-                var scrimObject = new GameObject("LabelScrim", typeof(RectTransform), typeof(Image));
-                var scrim = (RectTransform)scrimObject.transform;
-                scrim.SetParent(track, false);
-                scrim.anchorMin = scrim.anchorMax = new Vector2(0.5f, 0f);
-                scrim.offsetMin = new Vector2(-36f, -19f);
-                scrim.offsetMax = new Vector2(36f, -1f);
-                Image scrimImage = scrimObject.GetComponent<Image>();
-                scrimImage.raycastTarget = false;
-                scrimImage.sprite = AvSprites.White;
-                scrimImage.color = Scrim(null);
+                // Live percentage under the track, wider than the bar itself.
                 barLabel = Label(track, "BarLabel", TextAlignmentOptions.Top, 12f,
                     new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-35f, -18f), new Vector2(35f, -2f));
             }
 
             return new Box
             {
-                Root = rect, Backing = backing, Caption = captionText, CaptionRight = captionRight, Value = value, SubLine = sub,
-                Track = track, TrackImage = trackImage, Bar = bar, BarLabel = barLabel,
+                Root = rect, Caption = captionText, CaptionRight = captionRight, Value = value, SubLine = sub,
+                Track = track, Bar = bar, BarLabel = barLabel,
                 LastValue = float.NaN, LastSub = float.NaN, LastCaption = float.NaN, LastRight = float.NaN, LastBar = float.NaN
             };
         }
 
-        private TargetCardWidgets BuildTargetCard()
+        private TargetCardWidgets BuildTargetCard(string name, string tagWord)
         {
             const float header = ThirdPersonHudLayout.TargetCardHeaderHeight;
-            var cardObject = new GameObject("TargetCard", typeof(RectTransform));
+            var cardObject = new GameObject(name, typeof(RectTransform));
             RectTransform rect = (RectTransform)cardObject.transform;
             rect.SetParent(root, false);
             rect.pivot = new Vector2(0.5f, 0.5f);
@@ -306,7 +305,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             tag.color = Color.clear;
             TextMeshProUGUI tagText = Label(tagRect, "TagText", TextAlignmentOptions.Center, 11f,
                 Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-            tagText.text = "TGT";
+            tagText.text = tagWord;
 
             TextMeshProUGUI title = HudText.Make(rect, "Header", font, fontMaterial, TextAlignmentOptions.MidlineLeft, 13f,
                 TextOverflowModes.Ellipsis);
@@ -340,12 +339,24 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Texture cameraTexture, string cameraCode, float rangeM, float closureMps, float scale)
         {
             if (root == null) return;
-            if (active != builtActive)
+            // The missile card shows without the flight cluster too (the cockpit): the root is up for either, the boxes and their bars only for the cluster.
+            bool shown = active || missileFeed != null;
+            if (shown != builtActive)
             {
-                root.gameObject.SetActive(active);
-                builtActive = active;
+                root.gameObject.SetActive(shown);
+                builtActive = shown;
             }
-            if (!active) return;
+            if (!shown) return;
+            if (active != flightShown)
+            {
+                flightShown = active;
+                spd.Root.gameObject.SetActive(active);
+                alt.Root.gameObject.SetActive(active);
+                hdg.Root.gameObject.SetActive(active);
+                spd.Track.gameObject.SetActive(active);
+                alt.Track.gameObject.SetActive(active);
+            }
+            if (!active) cameraTexture = null;
 
             // Reference frame is the HUD canvas's own local rect, not raw Screen.width/height:
             // anchoredPosition under this canvas is in the canvas's own (possibly scaled) units.
@@ -367,56 +378,55 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Color caution = theme.Warning;
             Color alert = theme.Alert;
 
-            RectF spdRect = ThirdPersonHudLayout.SpeedBox(screenW, screenH, avoid);
-            RectF altRect = ThirdPersonHudLayout.AltitudeBox(screenW, screenH, avoid);
-            PositionRect(spd.Root, spdRect);
-            PositionRect(alt.Root, altRect);
-            PositionRect(hdg.Root, ThirdPersonHudLayout.HeadingBox(screenW, screenH, avoid));
-            PositionRect(spd.Track, ThirdPersonHudLayout.SideBar(spdRect, outwardIsLeft: true));
-            PositionRect(alt.Track, ThirdPersonHudLayout.SideBar(altRect, outwardIsLeft: false));
+            Color? spdLit = null, altLit = null;
+            Color fuelColor = ink;
+            bool pullUpFlash = false;
+            if (active)
+            {
+                RectF spdRect = ThirdPersonHudLayout.SpeedBox(screenW, screenH, avoid);
+                RectF altRect = ThirdPersonHudLayout.AltitudeBox(screenW, screenH, avoid);
+                PositionRect(spd.Root, spdRect);
+                PositionRect(alt.Root, altRect);
+                PositionRect(hdg.Root, ThirdPersonHudLayout.HeadingBox(screenW, screenH, avoid));
+                PositionRect(spd.Track, ThirdPersonHudLayout.SideBar(spdRect, outwardIsLeft: true));
+                PositionRect(alt.Track, ThirdPersonHudLayout.SideBar(altRect, outwardIsLeft: false));
 
-            bool overG = float.IsFinite(f.G) && Mathf.Abs(f.G) >= BoscaliSummer.Core.Math.FlightLoad.CautionAt(f.GLimit);
-            TerrainCue terrain = HudCues.Terrain(f.RadarAltM, f.ClimbMps);
-            HudTone fuelTone = FuelEndurance.Tone(f.Fuel, f.FuelBingo, f.FuelJoker);
-            Color fuelColor = fuelTone == HudTone.Warning ? alert : fuelTone == HudTone.Caution ? caution : ink;
-            Color? spdLit = overG ? caution : (Color?)null;
-            Color? altLit = terrain == TerrainCue.PullUp ? alert : terrain == TerrainCue.Low ? caution : (Color?)null;
-            Style(spd, ink, spdLit);
-            Style(alt, ink, altLit);
-            Style(hdg, ink, null);
-            Fill(ref spd, Mathf.Clamp01(f.Throttle), ink, "THR ");
-            Fill(ref alt, Mathf.Clamp01(f.Fuel), fuelColor, FuelText.Legend(f.FuelBingo, f.FuelJoker, fuelTone) + " ");
-            bool pullUpFlash = terrain == TerrainCue.PullUp && (int)(Time.unscaledTime * 4f) % 2 == 0;
+                bool overG = float.IsFinite(f.G) && Mathf.Abs(f.G) >= BoscaliSummer.Core.Math.FlightLoad.CautionAt(f.GLimit);
+                TerrainCue terrain = HudCues.Terrain(f.RadarAltM, f.ClimbMps);
+                HudTone fuelTone = FuelEndurance.Tone(f.Fuel, f.FuelBingo, f.FuelJoker);
+                fuelColor = fuelTone == HudTone.Warning ? alert : fuelTone == HudTone.Caution ? caution : ink;
+                spdLit = overG ? caution : (Color?)null;
+                altLit = terrain == TerrainCue.PullUp ? alert : terrain == TerrainCue.Low ? caution : (Color?)null;
+                Style(spd, ink, spdLit);
+                Style(alt, ink, altLit);
+                Style(hdg, ink, null);
+                Fill(ref spd, Mathf.Clamp01(f.Throttle), ink, "THR ");
+                Fill(ref alt, Mathf.Clamp01(f.Fuel), fuelColor, FuelText.Legend(f.FuelBingo, f.FuelJoker, fuelTone) + " ");
+                pullUpFlash = terrain == TerrainCue.PullUp && (int)(Time.unscaledTime * 4f) % 2 == 0;
+
+                WriteSpeedCaption(overG);
+                WriteSpeed(f.SpeedMps, units);
+                WriteAltitude(f.AltitudeM, units);
+                WriteAltCaption(f.RadarAltM, terrain, units);
+                WriteHeading(f.HeadingDeg);
+                WriteMachG(f.Mach, f.G);
+                WriteAoa(overG ? float.NaN : f.AoaDeg);   // the 106 px caption row holds OVER-G or the AoA beside SPD, not both
+                WriteClimb(f.ClimbMps, units);
+            }
+            // The missile card sits on the target card when there is one, in its place when there is not (unless told to stay up).
+            bool raised = missileRaised || cameraTexture != null;
             PaintSymbols(screenW, screenH, ink, spdLit, altLit, fuelColor, cameraTexture != null, pullUpFlash,
-                f.BankDeg, f.SlipDeg);
-
-            WriteSpeedCaption(overG);
-            WriteSpeed(f.SpeedMps, units);
-            WriteAltitude(f.AltitudeM, units);
-            WriteAltCaption(f.RadarAltM, terrain, units);
-            WriteHeading(f.HeadingDeg);
-            WriteMachG(f.Mach, f.G);
-            WriteAoa(overG ? float.NaN : f.AoaDeg);   // the 106 px caption row holds OVER-G or the AoA beside SPD, not both
-            WriteClimb(f.ClimbMps, units);
+                f.BankDeg, f.SlipDeg, active, missileFeed == null ? 0 : raised ? 2 : 1);
 
             PresentTargetCard(cameraTexture, cameraCode, rangeM, closureMps, screenW, screenH, ink, units);
+            PresentMissileCard(ThirdPersonHudLayout.MissileCard(screenW, screenH, raised), ink, units);
         }
-
-        /// <summary>The RWR panel look: near-black plate tinted toward the theme ink.</summary>
-        private static Color PlateTint(Color ink) => new Color(ink.r * 0.04f, ink.g * 0.07f, ink.b * 0.08f, 0.62f);
 
         private static Color WithAlpha(Color c, float a) => new Color(c.r, c.g, c.b, a);
 
-        /// <summary>A dark scrim so thin ink survives bright haze (a lit cue tints it toward its colour).</summary>
-        private static Color Scrim(Color? lit) => lit.HasValue
-            ? new Color(0.01f + lit.Value.r * 0.10f, 0.02f + lit.Value.g * 0.10f, 0.03f + lit.Value.b * 0.10f, 0.88f)
-            : new Color(0.01f, 0.02f, 0.03f, 0.72f);
-
-        /// <summary>Normal: ink on the scrim. Lit: value, caption and sub-line in <paramref name="lit"/>, on a scrim tinted with
-        /// it so the cue survives a bright sky (brackets light in PaintSymbols).</summary>
+        /// <summary>Normal: ink. Lit: value, caption and sub-line in <paramref name="lit"/> (brackets light in PaintSymbols).</summary>
         private static void Style(Box box, Color ink, Color? lit)
         {
-            box.Backing.color = Scrim(lit);
             box.Value.color = lit.HasValue ? lit.Value : ink;
             if (box.Caption != null) box.Caption.color = lit.HasValue ? lit.Value : WithAlpha(ink, 0.75f);
             if (box.CaptionRight != null) box.CaptionRight.color = lit.HasValue ? lit.Value : ink;
@@ -440,39 +450,44 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>Brackets round each box, tick scales for the bars, the card's outline and its tag box.
         /// Rebuilt only when the layout or a lit state changes.</summary>
         private void PaintSymbols(float screenW, float screenH, Color ink, Color? spdLit, Color? altLit, Color fuel,
-            bool cardShown, bool flash, float bankDeg, float slipDeg)
+            bool cardShown, bool flash, float bankDeg, float slipDeg, bool flight, int missileSlot)
         {
             // Bank in 2 degree steps and slip in whole degrees: finer motion is not visible and would rebuild the mesh every tick in a turn.
             int key = (int)screenW * 7919 + (int)screenH * 31 + (int)(lastScale * 100f) * 977 + Code(spdLit) * 5 + Code(altLit) * 3 + Code(fuel) + Code(ink) * 17 +
-                (cardShown ? 11 : 0) + (flash ? 13 : 0) + Mathf.RoundToInt(bankDeg / 2f) * 104729 + Mathf.RoundToInt(slipDeg) * 7 +
+                (cardShown ? 11 : 0) + (flash ? 13 : 0) + (flight ? 19 : 0) + missileSlot * 23 + Mathf.RoundToInt(bankDeg / 2f) * 104729 + Mathf.RoundToInt(slipDeg) * 7 +
                 Mathf.RoundToInt(avoid.CenterX) * 15485863 + Mathf.RoundToInt(avoid.CenterY) * 32452843 + Mathf.RoundToInt(avoid.Width) * 49979687 + Mathf.RoundToInt(avoid.Height) * 67867967;
             if (key == lastSymbols) return;
             lastSymbols = key;
 
             AvQuadBuffer b = symbols.Buffer;
             b.Clear();
-            RectF spdRect = ThirdPersonHudLayout.SpeedBox(screenW, screenH, avoid);
-            RectF altRect = ThirdPersonHudLayout.AltitudeBox(screenW, screenH, avoid);
-            Brackets(b, spdRect, (spdLit ?? ink).ToRgba());
-            Brackets(b, altRect, (flash ? Color.clear : altLit ?? ink).ToRgba());
-            Brackets(b, ThirdPersonHudLayout.HeadingBox(screenW, screenH, avoid), ink.ToRgba().WithAlpha(0.8f));
-            Scale(b, ThirdPersonHudLayout.SideBar(spdRect, outwardIsLeft: true), ink.ToRgba());
-            Scale(b, ThirdPersonHudLayout.SideBar(altRect, outwardIsLeft: false), fuel.ToRgba());
-            BankAndSlip(b, ThirdPersonHudLayout.HeadingBox(screenW, screenH, avoid), bankDeg, slipDeg, ink.ToRgba());
-            if (cardShown)
+            if (flight)
             {
-                RectF card = ThirdPersonHudLayout.TargetCard(screenW, screenH, true);
-                Rgba line = ink.ToRgba().WithAlpha(0.9f);
-                CornerBrackets(b, card.Left, card.Bottom, card.Right, card.Top, CardArm, Stroke, line);
-                // The "TGT" tag is an open tag (a tick on its left edge and a hairline under it), not a box.
-                float tagTop = card.Top - 4f, tagLeft = card.Left + 5f, tagBottom = tagTop - (ThirdPersonHudLayout.TargetCardHeaderHeight - 7f);
-                AvStrokes.Line(b, tagLeft, tagBottom, tagLeft, tagTop, 2f, line);
-                AvStrokes.Line(b, tagLeft, tagBottom, tagLeft + 34f, tagBottom, 1f, line.WithAlpha(0.55f));
-                AvStrokes.Line(b, card.Left, card.Top - ThirdPersonHudLayout.TargetCardHeaderHeight + 2f,
-                    card.Right, card.Top - ThirdPersonHudLayout.TargetCardHeaderHeight + 2f, 1f, line.WithAlpha(0.5f));
+                RectF spdRect = ThirdPersonHudLayout.SpeedBox(screenW, screenH, avoid);
+                RectF altRect = ThirdPersonHudLayout.AltitudeBox(screenW, screenH, avoid);
+                Brackets(b, spdRect, (spdLit ?? ink).ToRgba());
+                Brackets(b, altRect, (flash ? Color.clear : altLit ?? ink).ToRgba());
+                Brackets(b, ThirdPersonHudLayout.HeadingBox(screenW, screenH, avoid), ink.ToRgba().WithAlpha(0.8f));
+                Scale(b, ThirdPersonHudLayout.SideBar(spdRect, outwardIsLeft: true), ink.ToRgba());
+                Scale(b, ThirdPersonHudLayout.SideBar(altRect, outwardIsLeft: false), fuel.ToRgba());
+                BankAndSlip(b, ThirdPersonHudLayout.HeadingBox(screenW, screenH, avoid), bankDeg, slipDeg, ink.ToRgba());
             }
+            Rgba line = ink.ToRgba().WithAlpha(0.9f);
+            if (cardShown) CardFrame(b, ThirdPersonHudLayout.TargetCard(screenW, screenH, true), line);
+            if (missileSlot > 0) CardFrame(b, ThirdPersonHudLayout.MissileCard(screenW, screenH, missileSlot == 2), line);
             BufferGuard.Check(b, "third-person cluster");
             symbols.Commit();
+        }
+
+        /// <summary>A feed card's ink: corner brackets, the open tag (a tick on its left edge and a hairline under it, not a box) and the hairline under the header.</summary>
+        private static void CardFrame(AvQuadBuffer b, RectF card, Rgba line)
+        {
+            CornerBrackets(b, card.Left, card.Bottom, card.Right, card.Top, CardArm, Stroke, line);
+            float tagTop = card.Top - 4f, tagLeft = card.Left + 5f, tagBottom = tagTop - (ThirdPersonHudLayout.TargetCardHeaderHeight - 7f);
+            AvStrokes.Line(b, tagLeft, tagBottom, tagLeft, tagTop, 2f, line);
+            AvStrokes.Line(b, tagLeft, tagBottom, tagLeft + 34f, tagBottom, 1f, line.WithAlpha(0.55f));
+            AvStrokes.Line(b, card.Left, card.Top - ThirdPersonHudLayout.TargetCardHeaderHeight + 2f,
+                card.Right, card.Top - ThirdPersonHudLayout.TargetCardHeaderHeight + 2f, 1f, line.WithAlpha(0.5f));
         }
 
         private static readonly float[] BankTicks = { -45f, -30f, -20f, -10f, 0f, 10f, 20f, 30f, 45f };
@@ -486,9 +501,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             const float R = 64f, MaxBank = 45f, BallTravel = 22f, SlipFull = 10f;
             float cx = hdg.CenterX, top = hdg.Bottom - 12f, cy = top - R;
             Rgba dim = ink.WithAlpha(0.7f);
-            // A dark plate behind the arc, ticks and tube so the thin ink survives a bright haze.
-            float plateBottom = top - R * (1f - Mathf.Cos(MaxBank * Mathf.Deg2Rad)) - 24f;
-            AvStrokes.Fill(b, cx - R * 0.72f - 12f, plateBottom, R * 1.44f + 24f, top + 12f - plateBottom, new Rgba(0.01f, 0.02f, 0.03f, 0.72f));
             AvStrokes.Arc(b, cx, cy, R, 90f - MaxBank, 90f + MaxBank, 24, 1.5f, dim);
             foreach (float tick in BankTicks)
             {
@@ -672,35 +684,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void PresentTargetCard(Texture cameraTexture, string code, float rangeM, float closureMps,
             float screenW, float screenH, Color ink, AvUnits units)
         {
-            bool show = cameraTexture != null;
-            if (card.Active != show)
-            {
-                card.Root.gameObject.SetActive(show);
-                card.Active = show;
-            }
-            if (!show) return;
-
-            PositionRect(card.Root, ThirdPersonHudLayout.TargetCard(screenW, screenH, true));
-            card.TagText.color = ink;
-            for (int i = 0; i < card.Reticle.Length; i++) card.Reticle[i].color = WithAlpha(ink, 0.7f);
-            if (!ReferenceEquals(card.Feed.texture, cameraTexture)) card.Feed.texture = cameraTexture;
-
-            string header = code ?? "--";
-            if (card.LastHeader != header)
-            {
-                card.Header.text = header;
-                card.LastHeader = header;
-            }
-            card.Header.color = ink;
-
-            float rangeKey = float.IsFinite(rangeM) ? Mathf.Round(rangeM / 100f) : -1f;
-            if (card.LastRange != rangeKey)
-            {
-                int len = rangeKey < 0f ? AvNumFormat.Unknown(buf, 0) : AvUnitTable.DistanceReading(buf, 0, rangeM, units);
-                card.Range.text = new string(buf, 0, len);
-                card.LastRange = rangeKey;
-            }
-            card.Range.color = WithAlpha(ink, 0.85f);
+            if (!PresentCard(ref card, ThirdPersonHudLayout.TargetCard(screenW, screenH, true), cameraTexture, code, rangeM, ink, units)) return;
 
             // Closing reads in ink, opening dimmer; under 5 m/s either way is "steady".
             float closureKey = float.IsFinite(closureMps) ? Mathf.Round(AvUnitTable.Speed(closureMps, units) / 5f) : float.NaN;
@@ -720,12 +704,61 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             card.Closure.color = float.IsFinite(closureMps) && closureMps > 5f ? ink : WithAlpha(ink, 0.6f);
         }
 
+        /// <summary>The missile feed card: the weapon's name, the range to what it guides on, SIGNAL LOST over the held last picture.</summary>
+        private void PresentMissileCard(RectF rect, Color ink, AvUnits units)
+        {
+            if (!PresentCard(ref missile, rect, missileFeed, missileName, missileRangeM, ink, units)) return;
+            float key = missileLost ? 1f : 0f;
+            if (missile.LastClosure != key)
+            {
+                missile.Closure.text = missileLost ? "SIGNAL LOST" : "";
+                missile.LastClosure = key;
+            }
+            missile.Closure.color = ink;
+        }
+
+        /// <summary>What both feed cards share: shown while there is a picture, placed, its feed, header and range written on change. False while hidden.</summary>
+        private bool PresentCard(ref TargetCardWidgets c, RectF rect, Texture feed, string header, float rangeM, Color ink, AvUnits units)
+        {
+            bool show = feed != null;
+            if (c.Active != show)
+            {
+                c.Root.gameObject.SetActive(show);
+                c.Active = show;
+            }
+            if (!show) return false;
+
+            PositionRect(c.Root, rect);
+            c.TagText.color = ink;
+            for (int i = 0; i < c.Reticle.Length; i++) c.Reticle[i].color = WithAlpha(ink, 0.7f);
+            if (!ReferenceEquals(c.Feed.texture, feed)) c.Feed.texture = feed;
+
+            header ??= "--";
+            if (c.LastHeader != header)
+            {
+                c.Header.text = header;
+                c.LastHeader = header;
+            }
+            c.Header.color = ink;
+
+            float rangeKey = float.IsFinite(rangeM) ? Mathf.Round(rangeM / 100f) : -1f;
+            if (c.LastRange != rangeKey)
+            {
+                int len = rangeKey < 0f ? AvNumFormat.Unknown(buf, 0) : AvUnitTable.DistanceReading(buf, 0, rangeM, units);
+                c.Range.text = new string(buf, 0, len);
+                c.LastRange = rangeKey;
+            }
+            c.Range.color = WithAlpha(ink, 0.85f);
+            return true;
+        }
+
         /// <summary>Take the cluster out of view without destroying it. Idempotent.</summary>
         public void Hide()
         {
             if (root != null && root.gameObject.activeSelf) root.gameObject.SetActive(false);
             builtActive = false;
             if (card.Feed != null) card.Feed.texture = null;
+            if (missile.Feed != null) missile.Feed.texture = null;
         }
 
         /// <summary>Drop every object this cluster created. Safe when the native canvas already
@@ -739,6 +772,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             alt = default;
             hdg = default;
             card = default;
+            missile = default;
             symbols = null;
             lastSymbols = 0;
             builtActive = false;

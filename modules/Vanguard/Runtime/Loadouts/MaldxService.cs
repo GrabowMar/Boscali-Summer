@@ -12,6 +12,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
     /// live bait inside its range with line of sight for 3 s cumulative is EXPOSED to the bait's faction for 60 s:
     /// the faction's tracking database is refreshed through the game's own FactionHQ.RpcUpdateTrackingInfo (the call
     /// every radar detection makes), so map icons, AI targeting and lock data all see it. Exposures outlive the bait.
+    /// <para>MALD-X CHAFF (server, 2 Hz). Each cloud a bait seeds hangs for a minute, bait alive or not. A hostile radar
+    /// missile whose line of sight to an aircraft of the bait's side crosses a cloud is blinded and the cloud is spent.</para>
     /// </summary>
     internal sealed class MaldxService : MonoBehaviour, ISceneService
     {
@@ -19,20 +21,60 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         {
             public Missile Missile;
             public Unit Launcher;
-            public int Exposed;
+            public int Exposed, Blinded;
+        }
+
+        private struct Cloud
+        {
+            public GlobalPosition At;
+            public float Until;
+            public FactionHQ Hq;
+            public Bait Source;
         }
 
         private static readonly List<Bait> Baits = new List<Bait>();
+        private static readonly List<Cloud> Clouds = new List<Cloud>();
         private static readonly Dictionary<FactionHQ, MaldxLedger> Ledgers = new Dictionary<FactionHQ, MaldxLedger>();
         private readonly List<Radar> emitters = new List<Radar>();
         private readonly HashSet<Radar> unique = new HashSet<Radar>();
         private readonly List<uint> live = new List<uint>();
-        private float nextScan;
+        private float nextScan, nextScreen;
 
         public void ResetForScene()
         {
             Baits.Clear();
+            Clouds.Clear();
             Ledgers.Clear();
+        }
+
+        /// <summary>Server: a launched bait seeds one chaff cloud where it is.</summary>
+        public static void Seed(Missile missile, GlobalPosition at)
+        {
+            Bait bait = Baits.Find(b => b.Missile == missile);
+            if (bait == null || missile.NetworkHQ == null) return;
+            Clouds.Add(new Cloud { At = at, Until = Time.timeSinceLevelLoad + MaldxRules.ChaffSeconds, Hq = missile.NetworkHQ, Source = bait });
+            VanguardStats.Bump("maldx.clouds");
+        }
+
+        private static void Screen(float now)
+        {
+            Clouds.RemoveAll(c => c.Until <= now || c.Hq == null);
+            List<Unit> units = UnitRegistry.allUnits;
+            for (int i = 0; i < units.Count && Clouds.Count > 0; i++)
+            {
+                if (!(units[i] is Missile threat) || threat.disabled || !SeductionRule.IsRadarSeeker(threat.GetSeekerType())) continue;
+                if (!UnitRegistry.TryGetUnit(threat.targetID, out Unit target) || !(target is Aircraft) || target.disabled) continue;
+                GlobalPosition from = threat.GlobalPosition();
+                Vector3 toTarget = target.GlobalPosition() - from;
+                int hit = Clouds.FindIndex(c => c.Hq == target.NetworkHQ && c.Hq != threat.NetworkHQ && MaldxRules.Screens(c.At - from, toTarget));
+                if (hit < 0) continue;
+                Bait bait = Clouds[hit].Source;
+                if (!SeekerCapture.Blind(threat, bait.Missile)) continue;
+                Clouds.RemoveAt(hit);
+                bait.Blinded++;
+                VanguardStats.Bump("maldx.chaffed");
+                MaldxNet.Send(MaldxNet.Chaffed, bait.Missile, bait.Launcher, target.persistentID.Id, bait.Blinded);
+            }
         }
 
         /// <summary>First plan tick of a bait on the server.</summary>
@@ -58,6 +100,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private void Update()
         {
             float now = Time.timeSinceLevelLoad;
+            if (Clouds.Count > 0 && now >= nextScreen) // clouds exist only where the baits fly: on the server
+            {
+                nextScreen = now + MaldxRules.ChaffInterval;
+                Screen(now);
+            }
             if (now < nextScan || !GameAccess.IsServer()) return;
             nextScan = now + MaldxRules.ScanInterval;
             if (Baits.Count > 0) Scan(now);

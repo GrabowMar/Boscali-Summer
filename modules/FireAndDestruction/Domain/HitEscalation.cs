@@ -33,9 +33,6 @@ namespace BoscaliSummer.Modules.FireAndDestruction.Domain
         /// </summary>
         internal const float GunBreachSize = 0.8f;
 
-        /// <summary>How long a pooled dust burst stays visible after a counted hit.</summary>
-        internal const float DustSeconds = 2.5f;
-
         /// <summary>
         /// Ground scars read slightly larger than the wall that fell: the rubble footprint
         /// spreads past the intact walls.

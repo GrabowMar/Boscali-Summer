@@ -127,23 +127,34 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
 
         // ---- Posts ------------------------------------------------------------------------
 
-        private void SpawnMissingAssets()
+        // The pass over the posts a tick starts and the frames after it finish: (faction, slot) to look at next, -1 when none is in flight.
+        private int spawnFaction = -1, spawnSlot;
+
+        /// <summary>
+        /// The missing posts, at most one spawn per call (a placement search and a vanilla spawn): at mission start every post
+        /// is missing, and all of them in one tick was a multi-millisecond frame. Each slot is still tried once per pass.
+        /// </summary>
+        private void StepSpawnPass()
         {
-            for (int f = 0; f < factions.Count; f++)
+            for (; spawnFaction < factions.Count; spawnFaction++, spawnSlot = 0)
             {
-                FactionCommand owner = factions[f];
-                for (int i = 0; i < owner.Tree.Slots.Count; i++)
+                FactionCommand owner = factions[spawnFaction];
+                for (; spawnSlot < owner.Tree.Slots.Count; spawnSlot++)
                 {
-                    CommandSlot slot = owner.Tree.Slots[i];
+                    CommandSlot slot = owner.Tree.Slots[spawnSlot];
                     if (FindAsset(owner, slot, AssetKind.Post) != null) continue;
                     if (owner.RespawnScheduled[slot.Id])
                     {
                         if (MissionTime < owner.RespawnAt[slot.Id]) continue;
                         owner.RespawnScheduled[slot.Id] = false;
                     }
-                    if (assets.Count >= MaximumAssets || !SpawnPost(owner, slot)) continue;
+                    if (assets.Count >= MaximumAssets) continue;
+                    spawnSlot++;   // the next call resumes after this slot
+                    SpawnPost(owner, slot);
+                    return;
                 }
             }
+            spawnFaction = -1;
         }
 
         private bool SpawnPost(FactionCommand owner, CommandSlot slot)
@@ -575,7 +586,12 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
 
         // ---- Intel ------------------------------------------------------------------------
 
-        private void TickIntel(float now)
+        // The sensing sweep a tick starts: the posts' positions (captured at the start), the tick's time, and how far through the unit list it is (-1: none in flight).
+        private int intelCount, intelCursor = -1;
+        private float intelNow;
+        private const int IntelUnitsPerFrame = 512;
+
+        private void BeginIntel(float now)
         {
             int count = 0;
             for (int o = 0; o < factions.Count; o++)
@@ -596,12 +612,21 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
                 }
             }
 
+            intelCount = count;
+            intelNow = now;
+            intelCursor = count > 0 ? 0 : -1;
+        }
+
+        /// <summary>The next slice of the sweep: every unit (the first 4096) against every post's sensing radius, a slice a frame so the whole sweep lands inside its second.</summary>
+        private void StepIntel()
+        {
             List<Unit> units = UnitRegistry.allUnits;
-            if (units == null) return;
-            int inspected = 0;
-            for (int i = 0; i < units.Count; i++)
+            int total = units == null ? 0 : Math.Min(units.Count, 4096);
+            int end = Math.Min(total, intelCursor + IntelUnitsPerFrame);
+            int count = intelCount;
+            float now = intelNow;
+            for (int i = intelCursor; i < end; i++)
             {
-                if (++inspected > 4096) break;
                 Unit unit = units[i];
                 if (unit == null || unit.disabled || unit.NetworkHQ == null || unit.NetworkHQ.faction == null) continue;
                 int observer = FactionIndex(unit.NetworkHQ);
@@ -617,6 +642,7 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
                     if (intel.Confirm(observer, key, now, where.x, where.y, where.z)) ConfirmContact(observer, intelOwners[c], key, now);
                 }
             }
+            intelCursor = end >= total ? -1 : end;
         }
 
         /// <summary>One log beat per observer and post, the first time a patrol reports it.</summary>

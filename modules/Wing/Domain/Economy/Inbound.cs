@@ -54,15 +54,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             }
         }
 
-        /// <summary>"VT-7 · HATCH · JOINING · ETA 01:20" (no pilot yet: left out; no ETA: left out).</summary>
-        public static string Row(string type, string pilot, InboundPhase phase, float eta)
-        {
-            string s = type + (string.IsNullOrEmpty(pilot) ? "" : " · " + pilot) + " · " + Phase(phase);
-            if (float.IsNaN(eta)) return s;
-            int t = (int)eta;
-            return s + " · ETA " + (t / 60).ToString("00", CultureInfo.InvariantCulture) + ":" + (t % 60).ToString("00", CultureInfo.InvariantCulture);
-        }
-
         public static string More(int n) => "+" + n.ToString(CultureInfo.InvariantCulture) + " MORE";
     }
 }

@@ -11,7 +11,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// <summary>TACTICAL › ORDERS (spec 2026-10-04 §4.2; mockup board/orders.html #p1) on kit v2: the cue line while a map order is armed
     /// (HERE and CANCEL), the selected wingman's row (RTB, RDR, EJ, tap to INSPECT), the alert strip, the stances and their fine-tune
     /// (<see cref="WmcTactical"/> .Stance), the command card — 24 keys with the wing-key letter, a group rail, an input mark and an LED
-    /// for what each element flies — then REACT, the queue lane, THREATS, FLIGHT POOL and the whole-wing settings. A point or area order
+    /// for what each element flies — then REACT and the queue lane. A point or area order
     /// latches its key and arms the map; a shift-click (or the QUEUE toggle) adds it to the scope's element lane instead. The console
     /// body scrolls.</summary>
     internal sealed partial class WmcTactical
@@ -62,8 +62,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             ordersSection = f.Section(AvIcon.Flag, "ORDERS", "");
             BuildGrid(f);
             BuildStance(f);
-            BuildPanes(f);
-            BuildWholeWing(f);
         }
 
         private uint SelectedId => last != null ? last.Selection.Single : 0u;
@@ -257,8 +255,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
             RefreshReact(c);
             RefreshQueue(c);
-            RefreshPanes(c);
-            RefreshWholeWing(c);
         }
 
         /// <summary>A word of why a key is off, in the width of its corner. None while the whole card is off for one reason (a client):

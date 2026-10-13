@@ -38,8 +38,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
             }
         }
 
-        public int CountInClass => CountOf(Class);
-
         /// <summary>The model's world wins while a sky is pinned; otherwise the selection starts on the first sky of the class showing and stays wherever the host last left it.</summary>
         public void Sync(MetOfficeModel m)
         {

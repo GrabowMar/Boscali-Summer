@@ -124,7 +124,7 @@ namespace BoscaliSummer.Core.Diagnostics
 }
 namespace BoscaliSummer.Modules.Support.Visuals
 {
-    static class KineticRodStrikeVisuals { public static void Track(Missile m, Vector3 p) {} public static void TriggerImpact(Vector3 p, PersistentID id) {} }
+    static class KineticRodStrikeVisuals { public static void Track(Missile m) {} public static void TriggerImpact(Vector3 p) {} }
     class KineticRodDescentEffect : MonoBehaviour { public void MarkDetonated() {} }
     static class EmpVisualEffect { public static void Trigger(Vector3 p, float r) {} }
     static class CockpitEmpDisruption { public static void CheckLocalDisruption(Vector3 p, float r, FactionHQ hq) {} }

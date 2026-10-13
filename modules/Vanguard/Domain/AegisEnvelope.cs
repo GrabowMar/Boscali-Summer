@@ -5,7 +5,6 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
     internal static class AegisEnvelope
     {
         public const float DropClearSeconds = .12f;
-        public const float MotorDelay = .34f;
         public const float SlewEnd = .40f;
         public const float ArmSeconds = .42f;
         public const float SensorConfirmSeconds = .15f;

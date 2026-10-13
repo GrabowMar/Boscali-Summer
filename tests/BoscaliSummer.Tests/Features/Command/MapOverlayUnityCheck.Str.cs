@@ -39,6 +39,8 @@ public static partial class MapOverlayUnityCheck
         public void Accept(int contractId) { Sent.Add("accept " + contractId); }
         public bool SendWing(int contractId, out string answer) { Sent.Add("wing " + contractId); answer = "WING TASKED"; return true; }
         public bool Recall(out string answer) { Sent.Add("recall"); answer = "WING RECALLED"; return true; }
+        public bool BuyConvoy(int index) { Sent.Add("buy " + index); return true; }
+        public bool Donate(float amount) { Sent.Add("donate " + amount.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)); return true; }
     }
 
     private sealed class StrOverlayHub : IStrHub

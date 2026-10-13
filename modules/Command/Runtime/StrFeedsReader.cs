@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Services;
@@ -40,6 +41,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             into.FactionCode = faction;
             ReadSorties(ref into, hub, now);
             ReadPostsAndWing(ref into, hub, slow);
+            ReadSupply(ref into, hub, now, slow, local, haveFaction ? hq : null);
             into.PickerPrompt = MapPicker.Prompt ?? "";
             if (slow) hub.KnownAirDefence = KnownAirDefence(hub, haveFaction ? hq : null);
             into.KnownAirDefence = hub.KnownAirDefence;
@@ -202,6 +204,71 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 }
                 hub.WingBuffer[hub.WingCount++] = row;
             }
+        }
+
+        // The game's own contribute menu, read the way ContributeToFaction reads it: the pilot's funds, the mission's convoy list and prices locally (the
+        // list at 1 Hz, in the game's order, so a row's index is its purchase index), the cooldowns from the host through the hub. They count down here
+        // between the host's answers, and one it has not answered yet is -1.
+        private static void ReadSupply(ref StrFeeds into, StrViewHub hub, float now, bool slow, Player local, FactionHQ hq)
+        {
+            into.Convoys = hub.ConvoyBuffer;
+            if (local == null || hq == null || hq.faction == null || local.HQ != hq)
+            {
+                into.SupplyKnown = into.DonationForbidden = false;
+                into.Allocation = 0f;
+                into.DonateCooldown = -1f;
+                into.ConvoyCount = hub.ConvoyCount = 0;
+                return;
+            }
+            into.SupplyKnown = true;
+            into.DonationForbidden = hq.preventDonation;
+            into.Allocation = local.Allocation;
+            if (slow)
+            {
+                System.Collections.Generic.List<Faction.ConvoyGroup> groups = hq.faction.GetConvoyGroups();
+                int count = groups == null ? 0 : Math.Min(groups.Count, hub.ConvoyBuffer.Length);
+                for (int i = 0; i < count; i++)
+                {
+                    Faction.ConvoyGroup group = groups[i];
+                    ref StrConvoyIn row = ref hub.ConvoyBuffer[i];
+                    string name = group != null ? group.Name ?? "" : "";
+                    if (row.Composition == null || !string.Equals(row.Name, name, StringComparison.Ordinal))
+                    {
+                        row.Name = name;
+                        row.Composition = Composition(group);
+                    }
+                    row.Cost = ConvoyCost(group);
+                }
+                hub.ConvoyCount = count;
+                hub.AskSupply(local, count);
+            }
+            into.ConvoyCount = hub.ConvoyCount;
+            for (int i = 0; i < hub.ConvoyCount; i++) hub.ConvoyBuffer[i].Cooldown = Left(hub.ConvoyReadyAt[i], now);
+            into.DonateCooldown = Left(hub.DonateReadyAt, now);
+        }
+
+        private static float Left(float readyAt, float now) => float.IsNaN(readyAt) ? -1f : Math.Max(0f, readyAt - now);
+
+        // The game's own price (unit value plus its ammunition). It reads the unit prefabs, so a broken mission entry throws: that group reads as unpriced.
+        private static float ConvoyCost(Faction.ConvoyGroup group)
+        {
+            if (group == null) return float.NaN;
+            try { return group.GetCost(); }
+            catch (Exception) { return float.NaN; }
+        }
+
+        // "4x LCV25 · 2x AFV8", the line the game's menu shows on hover.
+        private static string Composition(Faction.ConvoyGroup group)
+        {
+            if (group == null || group.Constituents == null) return "";
+            var text = new StringBuilder(64);
+            foreach (Faction.ConvoyUnit unit in group.Constituents)
+            {
+                if (unit == null || unit.Type == null) continue;
+                if (text.Length > 0) text.Append(StrWords.Dot);
+                text.Append(unit.Count).Append("x ").Append(unit.Type.unitName);
+            }
+            return text.ToString();
         }
 
         // Distinct enemy air-defence sites the faction knows, or -1 until its threat picture is ready (a dash, never a zero).

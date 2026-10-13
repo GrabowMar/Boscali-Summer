@@ -1,5 +1,4 @@
 using System;
-using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Weather.Domain
 {
@@ -149,6 +148,21 @@ namespace BoscaliSummer.Modules.Weather.Domain
             for (int i = 0; i < Items.Length; i++)
             {
                 if (Math.Abs(s - Items[i].S) > 80000f) continue;
+                bias += FrontLine.Bias(Items[i].Kind, Distance(i, s, slope)) * Items[i].Strength;
+            }
+            return bias;
+        }
+
+        /// <summary><see cref="BiasAt(float, float)"/> for the world point (x, z) at tape position <paramref name="s"/>, reading the meander slope from the frame only once a marker
+        /// is near enough to use it (most cells stand far from every line, and the slope costs two cosines).</summary>
+        public float BiasAt(float s, in TapeFrame frame, float x, float z)
+        {
+            float bias = 0f, slope = 0f;
+            bool haveSlope = false;
+            for (int i = 0; i < Items.Length; i++)
+            {
+                if (Math.Abs(s - Items[i].S) > 80000f) continue;
+                if (!haveSlope) { slope = frame.MeanderSlope(frame.Across(x, z)); haveSlope = true; }
                 bias += FrontLine.Bias(Items[i].Kind, Distance(i, s, slope)) * Items[i].Strength;
             }
             return bias;

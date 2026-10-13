@@ -1,3 +1,4 @@
+#if !PUBLIC_RELEASE
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Modules.Command.Presentation.MapUi;
@@ -134,3 +135,4 @@ namespace BoscaliSummer.Modules.Command.Runtime
         }
     }
 }
+#endif

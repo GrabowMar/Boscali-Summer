@@ -6,17 +6,6 @@ using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    // Kit v2 parts SUPPLY and LOADOUT share and the toolkit has no part for (kit gaps): built from AvPart + AvFrame/AvText/AvLay.
-
-    /// <summary>Registers an <see cref="AvList"/>'s own pager (PREV / NEXT) under the 0.9 ids (<c>prefix + "prev"</c>, <c>"next"</c>).</summary>
-    internal static class WmcListPaging
-    {
-        public static void Register(WmcControls ids, string prefix, AvList list, int pageSize)
-        {
-            ids.Add(prefix + "prev", () => list.Reveal(Mathf.Max(0, list.Page - 1) * pageSize));
-            ids.Add(prefix + "next", () => list.Reveal((list.Page + 1) * pageSize));
-        }
-    }
 
     /// <summary>SUPPLY's pilot line: a small portrait, callsign · name, rank · XP · status, and ◂ ▸ for the next pilot (the card is not a
     /// click target; only the arrows act).</summary>

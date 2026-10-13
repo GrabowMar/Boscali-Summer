@@ -63,19 +63,9 @@ namespace BoscaliSummer.Modules.Support.Visuals
             }
         }
 
-        internal static void Release(StagedBlastEffect e)
-        {
-            active.Remove(e);
-            e.gameObject.SetActive(false);
-            free.Push(e);
-        }
+        internal static void Release(StagedBlastEffect e) => SupportParticles.Recycle(active, free, e);
 
-        public static void Reset()
-        {
-            for (int i = 0; i < active.Count; i++) if (active[i] != null) Object.Destroy(active[i].gameObject);
-            active.Clear();
-            while (free.Count > 0) { StagedBlastEffect e = free.Pop(); if (e != null) Object.Destroy(e.gameObject); }
-        }
+        public static void Reset() => SupportParticles.DestroyPool(active, free);
     }
 
     internal sealed class StagedBlastEffect : MonoBehaviour
@@ -205,19 +195,9 @@ namespace BoscaliSummer.Modules.Support.Visuals
             e.Begin(target, owner, Mathf.Clamp(seconds, 2f, 300f));
         }
 
-        internal static void Release(LaseEffect e)
-        {
-            active.Remove(e);
-            e.gameObject.SetActive(false);
-            free.Push(e);
-        }
+        internal static void Release(LaseEffect e) => SupportParticles.Recycle(active, free, e);
 
-        public static void Reset()
-        {
-            for (int i = 0; i < active.Count; i++) if (active[i] != null) Object.Destroy(active[i].gameObject);
-            active.Clear();
-            while (free.Count > 0) { LaseEffect e = free.Pop(); if (e != null) Object.Destroy(e.gameObject); }
-        }
+        public static void Reset() => SupportParticles.DestroyPool(active, free);
     }
 
     [DefaultExecutionOrder(200)]

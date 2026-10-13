@@ -184,7 +184,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     Units(o.Units);
                     if (units.Count == 0) return OrderResult.Refused("Splash: select a target first");
                     int fired = w.Splash(units[0], out int capable, who);
-                    if (fired > 0) WingRadioAudio.Play(WingRadioAudio.Earcon.Splash);
+                    if (fired > 0 && BoscaliSummer.Core.Services.ModuleServices.TryGet<BoscaliSummer.Core.Contracts.IChatter>(out var radio)) radio.Chime();
                     return fired > 0 ? OrderResult.Acked($"Splash: {fired} firing on {units[0].unitName}")
                         : OrderResult.Refused(capable > 0 ? "Splash: launchers not ready" : "Splash: nobody in range");
                 }

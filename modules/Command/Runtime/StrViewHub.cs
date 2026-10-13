@@ -1,9 +1,12 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Command.Configuration;
 using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Modules.Command.Presentation.MapUi;
+using Cysharp.Threading.Tasks;
+using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Runtime
@@ -54,8 +57,58 @@ namespace BoscaliSummer.Modules.Command.Runtime
         internal readonly StrPostIn[] PostBuffer = new StrPostIn[StrViewModel.MaxPosts];
         internal readonly StrOfficerIn[] OfficerBuffer = new StrOfficerIn[2 * StrViewModel.MaxOfficers];
         internal AirDefenceRing[] Rings;
+        // SUPPLY: the convoy list the reader copies, and when the host said each group and the next donation are allowed again (unscaled time, NaN
+        // until it has answered).
+        internal readonly StrConvoyIn[] ConvoyBuffer = new StrConvoyIn[StrViewModel.MaxConvoys];
+        internal readonly float[] ConvoyReadyAt = new float[StrViewModel.MaxConvoys];
+        internal int ConvoyCount;
+        internal float DonateReadyAt = float.NaN;
+        private const float DonateCooldownSeconds = 60f;   // Player.CmdDonateFactionFunds: one donation a minute
+        private int supplyCursor, supplyEpoch;
 
-        public StrViewHub() { verbs = new StrVerbs(this); }
+        public StrViewHub()
+        {
+            verbs = new StrVerbs(this);
+            ForgetSupply();
+        }
+
+        private void ForgetSupply()
+        {
+            supplyEpoch++;
+            supplyCursor = ConvoyCount = 0;
+            DonateReadyAt = float.NaN;
+            for (int i = 0; i < ConvoyReadyAt.Length; i++) { ConvoyReadyAt[i] = float.NaN; ConvoyBuffer[i] = default; }
+        }
+
+        /// <summary>
+        /// Asks the host for one cooldown per call (the reader calls at 1 Hz): the groups in turn, then the donation. These are the game's own requests
+        /// (its menu sends the whole list every five seconds); one a second stays under their rate limit of two.
+        /// </summary>
+        // ponytail: asked whenever the map is maximised, not only while the SUPPLY tab shows, and a first sweep takes one second per group.
+        internal void AskSupply(Player player, int count)
+        {
+            int slot = supplyCursor++ % (count + 1);
+            AskSupplyAsync(player, slot < count ? slot : -1, supplyEpoch).Forget();
+        }
+
+        private async UniTaskVoid AskSupplyAsync(Player player, int slot, int epoch)
+        {
+            float left;
+            try { left = slot < 0 ? await player.CmdGetDelayContribute() : await player.CmdGetDelaySpawnConvoy((byte)slot); }
+            catch (Exception) { return; }   // the pilot left or the request was dropped: the cooldown keeps its last answer, or stays unknown
+            if (this == null || epoch != supplyEpoch || float.IsNaN(left) || float.IsInfinity(left)) return;
+            float at = Time.unscaledTime + Mathf.Max(0f, left);
+            if (slot < 0) DonateReadyAt = at;
+            else ConvoyReadyAt[slot] = at;
+        }
+
+        /// <summary>A purchase was just sent: the group's own cooldown starts now, ahead of the host's next answer.</summary>
+        internal void NoteBought(int index, float coolDown)
+        {
+            if (index >= 0 && index < ConvoyReadyAt.Length) ConvoyReadyAt[index] = Time.unscaledTime + Mathf.Max(0f, coolDown);
+        }
+
+        internal void NoteDonated() => DonateReadyAt = Time.unscaledTime + DonateCooldownSeconds;
 
         internal void Configure(CommandSettings commandSettings)
         {
@@ -63,12 +116,15 @@ namespace BoscaliSummer.Modules.Command.Runtime
             LayersFromSettings();
         }
 
-        private void Awake() => Active = this;
+        private void OnEnable() => Active = this;
 
-        private void OnDestroy()
+        private void OnDisable()
         {
+            ResetForScene();
             if (Active == this) Active = null;
         }
+
+        private void OnDestroy() => OnDisable();
 
         public void ResetForScene()
         {
@@ -79,6 +135,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             LayersFromSettings();
             feeds = default;
             WaitingSince = -1f; NextSlowAt = 0f; KnownAirDefence = -1; WingCount = 0; TaskedSortieId = -1;
+            ForgetSupply();
             nextTick = 0f; lastFaction = ""; lastSortieAnswer = "";
         }
 
@@ -91,6 +148,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
         private void Update()
         {
+            if (!MissionProfile.AllowsModule("strategic-command")) return;
             if (!DynamicMap.mapMaximized || Time.unscaledTime < nextTick) return;
             nextTick = Time.unscaledTime + TickSeconds;
             TickNow();
@@ -99,6 +157,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         /// <summary>Builds now. Selection, hover and every press call it.</summary>
         internal void TickNow()
         {
+            if (settings != null && !MissionProfile.AllowsModule("strategic-command")) return;
             float now = Time.unscaledTime;
             if (FeedsSource != null) feeds = FeedsSource();
             else StrFeedsReader.Read(ref feeds, this, now);
@@ -164,6 +223,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
         /// <summary>StrActions.Run through the verbs, then TickNow.</summary>
         public StrAct Run(StrActionKind kind, StrItemId id, int arg = 0)
         {
+            if (settings != null && !MissionProfile.AllowsModule("strategic-command"))
+                return new StrAct(StrWhy.Forbidden, "STR IS SWITCHED OFF FOR THIS MISSION");
             StrAct act = StrActions.Run(kind, id, arg, Current, Verbs ?? verbs, ref ui, Time.unscaledTime);
             TickNow();
             return act;

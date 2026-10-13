@@ -160,7 +160,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         }
 
         /// <summary>Releases one held node (BURN or DROP). False when this operator does not hold it.</summary>
-        public bool ReleaseNode(ulong op, int nodeId, IntrusionEnd why, float now)
+        public bool ReleaseNode(ulong op, int nodeId, IntrusionEnd why)
         {
             CyberIntrusion intrusion = Of(op);
             if (intrusion == null || !intrusion.TryHeld(nodeId, out HeldNode node)) return false;
@@ -419,7 +419,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             float effort = Math.Max(1, Math.Min(TaskedBoard.MaxMarks, mine.Hops));
             CyberOutcome posted = ports.PostPackage(op, node, def, exploit, effort);
             if (posted != CyberOutcome.None) return new CyberResult(posted, nodeId);
-            Network.ReleaseNode(op, nodeId, IntrusionEnd.Burned, now);
+            Network.ReleaseNode(op, nodeId, IntrusionEnd.Burned);
             Pump(now);
             return new CyberResult(CyberOutcome.Burned, nodeId);
         }
@@ -437,7 +437,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             else
             {
                 if (!mine.Holds(nodeId)) return new CyberResult(CyberOutcome.NoTarget);
-                Network.ReleaseNode(op, nodeId, IntrusionEnd.Dropped, now);
+                Network.ReleaseNode(op, nodeId, IntrusionEnd.Dropped);
             }
             Pump(now);
             return new CyberResult(CyberOutcome.Dropped, nodeId);

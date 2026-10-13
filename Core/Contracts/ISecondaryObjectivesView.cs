@@ -17,7 +17,6 @@ namespace BoscaliSummer.Core.Contracts
         float SnapshotAgeSeconds { get; }
         int SelectedForHud { get; }
         bool IsActionPending { get; }
-        int PendingObjectiveId { get; }
         string ActionResult { get; }
 
         void Refresh();

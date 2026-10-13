@@ -125,7 +125,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         // ---------------------------------------------------------------- the DISPATCH card
 
         private WmcDispatchCard dispatch;
-        private string stateWord;
         private AvControl requisition;
         private int pinKey = int.MinValue;
         private bool pinSet;
@@ -167,7 +166,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             pinFit = fit;
 
             string cls = "info", word = client ? "CLIENT" : ShopRules.State(quote, selected != null, inboundCount, out cls);
-            stateWord = word;
             string blocker;
             if (selected == null)
             {

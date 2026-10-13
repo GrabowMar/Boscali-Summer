@@ -7,7 +7,6 @@ using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
-using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.TheaterOps.Runtime
@@ -71,7 +70,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         private TheaterPriorityService priority;
         private LivingFrontNet network;
         private NavalFrontService naval;
-        private float nextRoll;
+        private PhasedGate rollGate;
         private int cursor;
         private TheaterCommandResult hostCommand;
         private float hostCommandAt;
@@ -174,7 +173,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             territory = null; picture = null; excluded = null; censusSource = null;
             UnbindSorties();
             reviewWar = holdWar = vetoWar = null;
-            nextRoll = 0f; cursor = 0;
+            scanWar = null; scanned = false;
+            rollGate.Reset(); cursor = 0;
             viewHq = null; hostCommand = null;
             network?.ResetScene();
         }
@@ -186,11 +186,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             // After the end screen nothing runs: no review, no reward, no message, no directive (annex 01 E10).
             if (!Authoritative || MissionOver) return;
             float now = Time.timeSinceLevelLoad;
-            if (now >= nextRoll)
-            {
-                nextRoll = now + 1f;
-                RollCall();
-            }
+            if (rollGate.Due(now, 1f, 0.625f)) RollCall();   // 1 Hz slot .625 (table in HighCommandManager)
             // The control field advances only when somebody reads it, so a running operation reads its origin once a second.
             foreach (FactionWar running in wars.Values)
                 if (running.Active != null && now >= running.NextHold)
@@ -199,6 +195,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                     holdWar = running;
                     Guard.Run(holdFaults, now, holdBody, LogFault, "hold read");
                 }
+            // A review waits for its unit scan, which takes a few frames on a big mission (the lists are shared: one review at a time).
+            if (scanWar != null) { FinishScanStep(now); return; }
             if (hqs.Count == 0) return;
             // One faction per frame keeps the unit and front scans bounded.
             if (cursor >= hqs.Count) cursor = 0;
@@ -207,7 +205,18 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             FactionWar war = StateOf(hq.faction.factionName);
             if (war == null) return;
             war.HQ = hq;
-            if (now >= war.NextReview && now >= war.FrozenUntil) Review(war, now);
+            if (now >= war.NextReview && now >= war.FrozenUntil) { BeginScan(war, now); FinishScanStep(now); }
+        }
+
+        /// <summary>One slice of the scan in flight; the review follows in the frame the scan ends (the first slice shares the frame it began in).</summary>
+        private void FinishScanStep(float now)
+        {
+            if (!StepScan(ScanUnitsPerFrame)) return;
+            FactionWar war = scanWar;
+            scanWar = null;
+            scanned = true;
+            try { Review(war, now); }
+            finally { scanned = false; }
         }
 
         private void RollCall()

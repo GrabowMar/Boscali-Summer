@@ -1,4 +1,3 @@
-using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Vanguard.Domain;
 using HarmonyLib;
 using UnityEngine;
@@ -205,14 +204,12 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         private void Effects()
         {
-            if (role == VanguardRole.Decoy) { LureThreats(); return; }
+            if (role == VanguardRole.Decoy) { CountDrawn(); return; }
             if (role == VanguardRole.Drone)
                 SeduceThreats();
             if (role == VanguardRole.Jammer) JamNoise();
             if (role == VanguardRole.Towed) SeduceTowed();
         }
-
-        public void Scuttle() => Detonate();
 
         // Radar-guided missiles chasing the launcher may switch onto this airframe.
         private void SeduceThreats()

@@ -7,42 +7,12 @@ namespace BoscaliSummer.Modules.Wing.Domain
     internal static class BezelLayout
     {
         public const float Chrome = 176f;
-        public const float ScopeRow = 26f, ScopeGap = 4f, HeaderPitch = 18f, RowPitch = 26f, Pager = 20f, SubTabs = 24f, SubGap = 6f;
-
-        // SUPPLY (spec WMC rebuild §SUPPLY; supply-ui §3 less its OVER-LIMIT row — the mode is a setting, user 2026-09-25):
-        // a scroll viewport over the steps and a DISPATCH pin on the body's floor.
-        public const float Content = 458f, VitalsRow = 20f;
-        public const float PinGap = 6f, PinCard = 48f, PinGap2 = 4f, RequisitionH = 30f, SupplyPin = PinGap + PinCard + PinGap2 + RequisitionH;
-        public const float StepHead = 18f, HeadGap = 4f, StepGap = 9f, PilotCard = 48f;
-        public const float TileH = 56f, TileGap = 6f, TileFooter = 26f;
-        public const int TileCols = 3, TileRows = 2;
-        public const float FitRow = 26f, FitDetail = 28f, BaseMode = 24f, BaseRowH = 28f, BasePitch = 30f;
         public const int BaseRows = 3;
-        public const float InboundHead = 18f, InboundRow = 22f, AdoptBand = 26f;
         public const int InboundMax = 4;
-
-        // LOADOUT (spec WMC rebuild §LOADOUT; research loadout-ui §2): a scroll viewport over the build card, airframe tiles, the
-        // template bar and the HARDPOINTS table, and a LIVERY row pinned on the body's floor.
-        public const float LiveryRow = 30f, LiveryPin = 6f + LiveryRow, CardH = 84f, BlockGap = 10f, SectionHead = 22f, LoadoutTileH = 44f;
-        public const float LoadoutTiles = 2f * LoadoutTileH + TileGap, TemplateBar = 26f, TemplatePick = 242f, TemplateBtn = 64f, DeleteGap = 16f;
-        public const float ColumnHead = 16f, HardpointHead = SectionHead + HeadGap + ColumnHead, HpRowH = 42f, HpPitch = 44f, HpPager = 26f;
-        public const int HpRowsMin = 4, HpRowsMax = 8;
-        public const float ColStation = 8f, ColStationW = 164f, ColStore = 176f, ColStoreW = 172f, ColMass = 352f, ColMassW = 48f;
-        public const float ColVerb = 404f, ColVerbW = 54f;
         public const float PopupRowPitch = 32f, PopupPad = 8f;
         public const int PopupMaxRows = 7;
 
-        // WING (spec WMC rebuild §WING; research squadron-wing-tab §2): the roster, its footer, the dossier and PERKS in a scroll viewport,
-        // the AIRFRAME ASSIGNMENT bar pinned on the floor.
-        public const float WingPinGap = 6f, AssignBar = 56f, WingPin = WingPinGap + AssignBar, SquadHead = 18f, PilotRowH = 30f, PilotPitch = 32f;
-        public const float RosterFoot = 26f, DossierH = 120f, PerkCardH = 48f, PerkGap = 6f, PerksBlock = 18f + 4f + 48f + 6f + 48f, DossierGap = 8f;
-
         public static float Body(float panelHeight) => panelHeight - Chrome;
-
-        // TACTICAL (spec FUI §TACTICAL): scope, the alert card, the FLIGHT header and list (reserving the wing's size, at most
-        // ListShare of the body), the sub-tabs, then the sub-page (ORDERS scrolls on a short dock).
-        public const float AlertPitch = 20f, AlertPad = 2f, TacGap = 4f, FlightHead = 22f, ListShare = 0.4f;
-        public const float GridCell = 24f, GridPitch = 26f, GridGap = 6f;
 
         /// <summary>The toolkit popup's height for <paramref name="entries"/> rows (seven at most: it pages beyond).</summary>
         public static float PopupHeight(int entries) =>

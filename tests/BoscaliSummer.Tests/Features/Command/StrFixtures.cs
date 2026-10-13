@@ -238,6 +238,16 @@ namespace BoscaliSummer.Tests.Features.Command
                 new StrWingIn { SortieId = 33, Refusal = null, State = WingSortieState.None, Intent = WingSortieIntent.Observe, Words = "" },
             };
             f.WingCount = 3;
+            // SUPPLY: funds 120; one group ready, one too dear, one just bought, one the host has not answered for.
+            f.SupplyKnown = true; f.Allocation = 120.6f; f.DonateCooldown = 0f;
+            f.Convoys = new[]
+            {
+                new StrConvoyIn { Name = "BDF Tank Platoon", Composition = "4x MBT90 Hexhound · 2x AFV8 Mobile Air Defense", Cost = 45f, Cooldown = 0f },
+                new StrConvoyIn { Name = "BDF Armoured Company", Composition = "8x MBT90 Hexhound · 4x LCV45 Recon Truck · 2x Linebreaker SAM · 2x Munitions Truck", Cost = 182.3f, Cooldown = 0f },
+                new StrConvoyIn { Name = "BDF Air Defence Section", Composition = "2x Stratolance R9 Launcher · 1x Radar Truck", Cost = 64f, Cooldown = 41.5f },
+                new StrConvoyIn { Name = "BDF Supply Column", Composition = "4x Munitions Truck · 2x Fuel Tanker", Cost = 12f, Cooldown = -1f },
+            };
+            f.ConvoyCount = 4;
             f.Posts = new[] { Post(12, "COL. IMRE DANKOV", 3000, 360f, 3100f, 5000f), Post(5, "MAJ. VERA STOLL", 1800, 45f, 6400f, 1100f) };
             f.PostCount = 2;
             f.Officers = new[]

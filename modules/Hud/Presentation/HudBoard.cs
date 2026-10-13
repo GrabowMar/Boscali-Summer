@@ -7,7 +7,6 @@ using BoscaliSummer.Modules.Hud.Patches;
 using BoscaliSummer.Modules.Hud.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
-using NOAvionics;
 using UnityEngine;
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
@@ -50,6 +49,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private ScopeProvider<ShotScope> shotProvider;
         private ScopeProvider<MissileCamScope> camProvider;
         private readonly MissileView missileView = new MissileView();
+        private readonly MissileFeedCamera missileFeed = new MissileFeedCamera();
         private readonly List<MissileTrack> missileTracks = new List<MissileTrack>(MissileTracks.MaxShown);
         // Lamp test clock: restarts whenever the native HUD shows a different aircraft (spawn, swap).
         private Aircraft bootAircraft;
@@ -75,6 +75,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>Hand the board the pilot's options; the next 10 Hz tick takes the first snapshot.</summary>
         public void Configure(HudSettings hudSettings) => settings = hudSettings;
+
+        /// <summary>How many CUE stack cues are on the screen and which game boxes they stand in for (the sim probe in <c>HudAutomation</c> reads them; -1: no board).</summary>
+        internal int CueDrawn => panel != null ? panel.CueDrawn : -1;
+        internal int CueInCharge => panel != null ? panel.CueInCharge : -1;
 
         /// <summary>The live own-missile set (the sim probe in <c>HudAutomation</c> reads it).</summary>
         internal MissileTracker Tracker => missileTracker;
@@ -106,8 +110,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         public IHudLine Acquire(string owner, string channel, string key) => store.Acquire(owner, channel, key);
-        public void Notice(string channel, HudTone tone, string text, string detail = null) =>
+        public void Notice(string channel, HudTone tone, string text, string detail = null)
+        {
+            // The radio module sends the game's centre notices ("Weapon safety lock Disabled") to the ticker's "sys" channel and keeps them off the game's own box: while the CUE stack is drawing that box they are its cues instead, shown once.
+            if (channel == "sys" && CueFeed.TakeNotice(text, tone)) return;
             store.Notice(channel, tone, text, detail);
+        }
 
         public bool TryGetScreenBox(out float left, out float top, out float right, out float bottom)
         {
@@ -166,7 +174,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             bool thirdPerson = canShow && viewingOwnExternally;
             bool missileCam = canShow && viewingMissile;
             flightNumberHider.Tick(thirdPerson || missileCam, thirdPerson ? ownAircraft : missileOwner);
-            if (!thirdPerson) cluster?.Hide();
+
+            // The missile feed: a camera on the last own weapon in the air, every frame (its pose must follow the weapon), wherever the HUD is up; riding a missile the screen is the feed already.
+            CombatHUD nativeHud = SceneSingleton<CombatHUD>.i;
+            bool hudUp = nativeHud != null && nativeHud.iconLayer != null && nativeHud.iconLayer.gameObject.activeInHierarchy;
+            missileFeed.Tick(missileTracker.Missiles, hudUp && !viewingMissile, Time.unscaledTime);
+            if (!thirdPerson)
+            {
+                // The feed's card stays in the cockpit; the flight boxes around it go the same frame third person ends (the read below runs now).
+                if (missileFeed.Texture == null) cluster?.Hide();
+                else if (cluster != null && cluster.FlightShown) nextRead = 0f;
+            }
 
             if (panel == null) panel = new StatusPanel { Notice = Notice };
             if (!panel.Ensure()) return;
@@ -247,6 +265,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 ReadTarget(ownAircraft, out range, out closure);
             }
 
+            // In the cockpit NAV DATA has the bottom-right corner: the card stays one slot up there.
+            cluster.SetMissileFeed(missileFeed.Texture, missileFeed.Name, missileFeed.RangeM, missileFeed.Lost, raised: !thirdPerson);
             if (thirdPerson && ownAircraft != null)
             {
                 Rigidbody rb = ownAircraft.rb;
@@ -276,7 +296,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             else
             {
-                cluster.Present(false, NOAvionics.AvUnits.Metric, default, null, null, float.NaN, float.NaN, 1f);
+                cluster.Present(false, AvUnitsOf((int)PlayerSettings.unitSystem), default, null, null, float.NaN, float.NaN, ThirdPersonHudLayout.TextScale(PlayerSettings.hudTextSize));
             }
         }
 
@@ -298,7 +318,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (filter != null && filter.HasFlightAssist()) s.FlightAssist = a.flightAssist;
             if (filter != null && filter.HasAutoHover()) s.AutoHover = a.IsAutoHoverEnabled();
             if (a.radar != null) s.RadarEmitting = a.radar.activated;
-            if (BoscaliSummer.Core.Game.GameAccess.TryGetNightVisionState(out bool nvg, out _)) s.NightVision = nvg;
+            if (BoscaliSummer.Core.Game.GameAccess.TryGetNightVisionState(out bool nvg, out _)) { s.NightVision = nvg; s.NvgLegend = BoscaliSummer.Core.Game.NightVisionLink.Legend; }
             s.EngineRunning = a.Ignition;
             return s;
         }
@@ -318,9 +338,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             ShotFeed.Ledger.Launch(missile.GetInstanceID(), info.bomb, ShotBook.Short(info), now);
             shotBook.Launched(missile, info, now);
         }
-
-        // IMissileView: the C-menu rides the live own-missile list (MissileTracker), launch order.
-        bool IMissileView.Available => bootAircraft != null && !bootAircraft.disabled;
         bool IMissileView.Active => missileView.Active;
         int IMissileView.Count => missileTracker.Missiles.Count;
         bool IMissileView.CanEnter => missileTracker.Missiles.Count > 0 && !missileView.Active;
@@ -363,6 +380,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public void ResetForScene()
         {
             missileView.Exit();
+            missileFeed.Release();
             missileTracker.Release();
             missileTracks.Clear();
             store.Reset();
@@ -402,6 +420,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             missileTracker.Launched -= OnOwnLaunch;
             missileTracker.Release();
             missileView.Exit();
+            missileFeed.Release();
             panel?.Hide();
             cluster?.Hide();
             externalHud.Release();

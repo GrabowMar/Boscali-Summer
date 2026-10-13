@@ -1,6 +1,5 @@
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Hud.Domain;
-using static BoscaliSummer.Core.Contracts.ScopeTone;
 
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
@@ -23,7 +22,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         private static Part B(params float[] p) => new Part(Kind.Body, true, p);
-        private static Part F(params float[] p) => new Part(Kind.Body, false, p);      // a fin or a line that closes nothing
         private static Part D(params float[] p) => new Part(Kind.Detail, false, p);
         private static Part R(float u) => new Part(Kind.Rib, false, u, -0.8f, u, 0.8f);
 

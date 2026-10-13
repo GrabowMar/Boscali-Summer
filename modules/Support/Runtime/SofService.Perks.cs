@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Support.Domain.Sof;
 

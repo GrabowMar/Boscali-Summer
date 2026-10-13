@@ -81,7 +81,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// <summary>True while the system is alive; the owner may tear down once false.</summary>
         public bool IsEmitting => ps != null && ps.IsAlive();
 
-        public void UpdateDrops(CanopySurface surface, float rainIntensity, float airspeedMs)
+        public void UpdateDrops(CanopySurface surface, float rainIntensity)
         {
             if (ps == null) return;
             Renderer glass = surface.Renderer;

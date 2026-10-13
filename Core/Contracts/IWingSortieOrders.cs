@@ -1,5 +1,3 @@
-using System;
-
 namespace BoscaliSummer.Core.Contracts
 {
     /// <summary>What a sortie asks of a wing, decided by the host from the card's own state, never from its family.</summary>

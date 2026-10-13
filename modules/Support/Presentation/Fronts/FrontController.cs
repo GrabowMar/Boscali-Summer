@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Ops;
 using BoscaliSummer.Modules.Support.Domain.Sof;
@@ -49,7 +48,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public string LastWords => words;
         public float LastWordsAt => wordsAt;
         public AvState LastWordsTone => wordsTone;
-        internal FrontRoomView View => view;
 
         public void Configure(SupportManager supportManager, CallsController callsController, SpaceFeedController feedController)
         {

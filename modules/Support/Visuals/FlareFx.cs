@@ -21,23 +21,13 @@ namespace BoscaliSummer.Modules.Support.Visuals
             fx.transform.SetParent(Datum.origin, false);
             fx.gameObject.SetActive(true);
             active.Add(fx);
-            fx.Start(point);
+            fx.Launch(point);
             return fx;
         }
 
-        internal static void Release(FlareTrailFx fx)
-        {
-            active.Remove(fx);
-            fx.gameObject.SetActive(false);
-            Free.Push(fx);
-        }
+        internal static void Release(FlareTrailFx fx) => SupportParticles.Recycle(active, Free, fx);
 
-        public static void Reset()
-        {
-            foreach (var f in active) if (f != null) Object.Destroy(f.gameObject);
-            active.Clear();
-            while (Free.Count > 0) { var f = Free.Pop(); if (f != null) Object.Destroy(f.gameObject); }
-        }
+        public static void Reset() => SupportParticles.DestroyPool(active, Free);
     }
 
     [DefaultExecutionOrder(200)]
@@ -53,7 +43,8 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private Light glow;
         private float finishedAt = -1f;
 
-        public void Start(Vector3 at)
+        // Not "Start": Unity treats that name as its own message and rejects one that takes a parameter.
+        public void Launch(Vector3 at)
         {
             if (heads == null)
             {

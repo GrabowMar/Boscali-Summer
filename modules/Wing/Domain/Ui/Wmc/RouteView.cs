@@ -110,10 +110,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         private static float Eta(float km, float speed) => speed > 1f ? km * 1000f / speed : float.NaN;
 
-        private static float Distance(float x0, float z0, float x1, float z1)
-        {
-            float dx = x1 - x0, dz = z1 - z0;
-            return (float)Math.Sqrt(dx * dx + dz * dz);
-        }
+        private static float Distance(float x0, float z0, float x1, float z1) => Scalar.Distance2D(x0, z0, x1, z1);
     }
 }

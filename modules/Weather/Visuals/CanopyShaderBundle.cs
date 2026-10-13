@@ -22,6 +22,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static Shader updateShader;
         private static Shader flightCloudShader;
         private static Shader flightCloudCompositeShader;
+        private static Shader sunShaftsShader;
         private static bool attempted;
         private static bool prewarmed;
 
@@ -100,6 +101,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             return flightCloudCompositeShader;
         }
 
+        /// <summary>The sun-shafts smear (SunShaftsPass).</summary>
+        internal static Shader GetSunShaftsShader()
+        {
+            GetShader();
+            return sunShaftsShader;
+        }
+
         internal static Shader GetShader()
         {
             if (shader != null) return shader;
@@ -130,6 +138,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                             flightCloudShader = shaders[i];
                         if (shaders[i] != null && shaders[i].name == "Boscali/FlightCloudComposite" && shaders[i].isSupported)
                             flightCloudCompositeShader = shaders[i];
+                        if (shaders[i] != null && shaders[i].name == "Boscali/SunShafts" && shaders[i].isSupported)
+                            sunShaftsShader = shaders[i];
                     }
                 }
                 if (shader != null || terrainShader != null || updateShader != null ||

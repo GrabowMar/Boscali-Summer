@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Support.Domain;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
@@ -70,6 +69,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
             ScopeGauges.Register("mark", ReadMark);
         }
 
+        public void Unregister()
+        {
+            ScopeFeeds.Unregister<StrikeScope>(Read);
+            ScopeGauges.Unregister("perk", ReadPerk);
+            ScopeGauges.Unregister("mark", ReadMark);
+        }
+
         // ------------------------------------------------------------------------------------------------ the page feed
 
         public bool Read(out StrikeScope data)
@@ -120,7 +126,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 ActiveStrikeInfo s = list[i];
                 if (!StrikeScopeRules.TryKind(s.ActionId, out StrikeKind kind)) continue;
                 float eta = s.ImpactTime - now;
-                if (!StrikeScopeRules.Keep(kind, eta, StrikeScopeRules.Linger(kind, s.ImpactTime, s.ExpiryTime))) continue;
+                if (!StrikeScopeRules.Keep(eta, StrikeScopeRules.Linger(kind, s.ImpactTime, s.ExpiryTime))) continue;
                 ids[c] = s.RequestId;
                 flying[c] = eta > 0f;
                 source[c] = i;

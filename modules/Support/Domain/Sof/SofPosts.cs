@@ -15,8 +15,5 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
 
         /// <summary>The board row title, e.g. <c>COVER TEAM A-1</c>; the mark id of the post is the team slot + 1.</summary>
         public static string Title(SupportActionId action, int markId) => Label(action) + (markId >= 1 && markId <= SofRules.MaxTeams ? " " + SofRules.Callsign(markId - 1) : "");
-
-        public static string Payoff(SupportActionId action) =>
-            action == SupportActionId.SofCover ? "KILL THE ENEMY WITHIN 2 KM · +" + SofRules.CoverPay + " CR" : "AIM: TEAM ON ANY CALL · LASER HELD";
     }
 }

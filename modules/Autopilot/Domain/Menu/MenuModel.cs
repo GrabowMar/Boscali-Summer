@@ -71,8 +71,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public string Blocked;
         /// <summary>Set by Reconcile when a rebuild no longer offers the row: it stays, dimmed, until the menu closes.</summary>
         public bool Gone;
-        /// <summary>LATCHED mode keeps the menu open after this row runs (steppers, marks), as it does for every toggle, cycle and picker.</summary>
-        public bool StayOpen;
         // cycle
         public string[] Values;
         public int ValueIndex;
@@ -203,14 +201,13 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public bool IsBlocked => Blocked != null || Gone;
         public string BlockedText => Blocked ?? GoneText;
         public bool NeedsHold => HoldLabel != null;
-        public bool Stays => StayOpen || Kind == MenuKind.Toggle || Kind == MenuKind.Cycle || Kind == MenuKind.Picker;
 
         /// <summary>Copies every live field from a freshly built twin (same Id) and nothing else.</summary>
         public void CopyLiveFrom(MenuRow fresh)
         {
             Face = fresh.Face; OnFace = fresh.OnFace; IsOn = fresh.IsOn; Icon = fresh.Icon; IconOn = fresh.IconOn;
             Verb = fresh.Verb; Ping = fresh.Ping; Checkbox = fresh.Checkbox; ArmedPip = fresh.ArmedPip; HoldLabel = fresh.HoldLabel;
-            WarnIcon = fresh.WarnIcon; Blocked = fresh.Blocked; Gone = false; StayOpen = fresh.StayOpen;
+            WarnIcon = fresh.WarnIcon; Blocked = fresh.Blocked; Gone = false;
             Values = fresh.Values; ValueIndex = fresh.ValueIndex; Lead = fresh.Lead; StatePrefix = fresh.StatePrefix; ToastPrefix = fresh.ToastPrefix;
             Selected = fresh.Selected; StateSelected = fresh.StateSelected; Hatched = fresh.Hatched;
             Context = fresh.Context; HintNoun = fresh.HintNoun; Iconless = fresh.Iconless; Run = fresh.Run; Index = fresh.Index;
@@ -232,6 +229,17 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             for (int i = 0; i < rows.Count; i++) if (rows[i].Id == id) return rows[i];
             return null;
         }
+    }
+
+    /// <summary>One entry of a switch list (a scope page, a board part, a cabin effect): its id slug and its words.</summary>
+    internal readonly struct MenuSwitch
+    {
+        public MenuSwitch(string slug, string name, string desc, bool enable = false) { Slug = slug; Name = name; Desc = desc; Enable = enable; }
+        public string Slug { get; }
+        public string Name { get; }
+        public string Desc { get; }
+        /// <summary>The row reads ENABLE / DISABLE (a behaviour) instead of SHOW / HIDE (something drawn).</summary>
+        public bool Enable { get; }
     }
 
     /// <summary>One ring category. Its angle and key never change; an unavailable one dims in place with its reason.</summary>

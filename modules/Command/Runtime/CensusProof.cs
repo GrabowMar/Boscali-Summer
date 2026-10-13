@@ -26,7 +26,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             if (!InSimRun) return Failure("CensusProof", "Read", "requires a nomodkit scenario run");
             CommandManager command = CommandManager.Active;
             if (command == null) return Failure("CensusProof", "Read", "the Command module is not running");
-            if (!TryFaction(Text(args, "faction"), out FactionHQ hq)) return Failure("CensusProof", "Read", "no such faction");
+            if (!GameAccess.TryFindFaction(Text(args, "faction"), out FactionHQ hq)) return Failure("CensusProof", "Read", "no such faction");
 
             TheaterCensus applied = command.LastCensus;
             bool measured = command.TryMeasure(hq, out TheaterCensus fresh);
@@ -114,15 +114,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
         // A scenario check compares numbers and the sim writes NaN as null: an unknown ratio is -1.
         private static float Finite(float value) => float.IsNaN(value) || float.IsInfinity(value) ? -1f : value;
-
-        private static bool TryFaction(string name, out FactionHQ hq)
-        {
-            hq = null;
-            if (string.IsNullOrEmpty(name)) return GameAccess.TryGetLocalFaction(out hq) && hq != null;
-            foreach (FactionHQ candidate in FactionRegistry.GetAllHQs())
-                if (candidate?.faction != null && string.Equals(candidate.faction.factionName, name, StringComparison.OrdinalIgnoreCase)) { hq = candidate; return true; }
-            return false;
-        }
     }
 #endif
 }

@@ -20,12 +20,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
     /// </summary>
     internal static class TapeOpening
     {
-        /// <summary>The half-extent of the theater along the tape axis, Hu = HalfX*|ux| + HalfZ*|uz| (spec 5.5.3).</summary>
-        public static float Hu(float headingDeg, float halfX, float halfZ)
-        {
-            WeatherMath.HeadingToVector(headingDeg, out float ux, out float uz);
-            return halfX * Math.Abs(ux) + halfZ * Math.Abs(uz);
-        }
 
         /// <summary>T1_hi = max(15, min(35, 75 - Dpre/v)) in minutes, Dpre in metres and v in m/s (spec 5.5.3).</summary>
         public static float T1High(float dpreMetres, float speed) => Math.Max(15f, Math.Min(35f, 75f - dpreMetres / Math.Max(1f, speed) / 60f));

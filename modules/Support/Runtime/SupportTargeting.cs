@@ -25,6 +25,25 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return true;
         }
 
+        /// <summary>
+        /// The gates every delivered strike (EMP, flare barrage, PRSM) passes in this order: a resolved delivery missile (else <paramref name="unavailable"/> is logged),
+        /// a spawner, a map point, the pilot's range and a free Strike slot. Accepted means every gate passed and the slot is reserved (the caller must release it).
+        /// </summary>
+        public static SupportResult ReserveStrike(in SupportContext context, MissileDefinition definition, string unavailable, out Vector3 ground)
+        {
+            ground = default;
+            if (definition == null || definition.unitPrefab == null)
+            {
+                context.Logger.LogWarning(unavailable);
+                return SupportResult.CapabilityUnavailable;
+            }
+            if (NetworkSceneSingleton<Spawner>.i == null) return SupportResult.CapabilityUnavailable;
+            if (!TryMapPoint(context.Target, out ground)) return SupportResult.InvalidTarget;
+            if (TryOrigin(context.Player, out Vector3 origin) && Vector3.Distance(origin, ground) > context.Settings.MaximumRange.Value)
+                return SupportResult.OutOfRange;
+            return context.Host.TryReserve(context.Owner, SupportPool.Strike) ? SupportResult.Accepted : SupportResult.Busy;
+        }
+
         public static bool TryOrigin(Player player, out Vector3 origin)
         {
             if (player != null && player.Aircraft != null)
@@ -34,6 +53,20 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             origin = default;
             return false;
+        }
+
+        /// <summary>Distance to the nearest airbase held by someone else: the front proxy (the same fallback SPACE uses without territory data).</summary>
+        public static float FrontDistanceOf(FactionHQ owner, Vector3 point)
+        {
+            float nearest = float.PositiveInfinity;
+            if (FactionRegistry.airbaseLookup != null)
+                foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
+                {
+                    if (airbase == null || airbase.disabled || airbase.center == null || airbase.CurrentHQ == null || airbase.CurrentHQ == owner) continue;
+                    Vector3 d = point - airbase.center.position; d.y = 0f;
+                    nearest = Mathf.Min(nearest, d.magnitude);
+                }
+            return float.IsInfinity(nearest) ? 1000000f : nearest;
         }
 
         public static Airbase NearestOwnedAirbase(Player player, Vector3 local, out float distance)

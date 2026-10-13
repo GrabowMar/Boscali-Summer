@@ -78,6 +78,24 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             // The live aircrew ID card: it repaints as the draft is edited.
             idCard = f.Add(new WingIdCard(f.Content));
 
+            // Why SAVE cannot go; SAVE · REVERT and RECRUIT / DISCHARGE; SERVICE.
+            problemAlert = f.Add(new AvAlert(f.Content));
+            noteLines = f.Add(new WmcLines(f.Content, 1));
+            AvControl[] verbs = f.Buttons(
+                new AvControl.Spec("SAVE", Save, AvButtonStyle.Primary, AvIcon.CircleCheck),
+                new AvControl.Spec("REVERT", Revert, AvButtonStyle.Default, AvIcon.ArrowBackUp),
+                new AvControl.Spec("RECRUIT", RecruitOrDischarge, AvButtonStyle.Default, AvIcon.UsersGroup)).Controls;
+            saveButton = verbs[0];
+            revertButton = verbs[1];
+            recruitButton = verbs[2];
+            saveButton.Help = "Keep this pilot for every mission: identity, look and bio.";
+            revertButton.Help = "Drop the edits since the last save or pick.";
+            recruitButton.Help = StudioWords.RecruitTip;
+            ids.Add("sq.save", saveButton);
+            ids.Add("sq.revert", revertButton);
+            ids.Add("sq.recruit", recruitButton);
+            serviceLines = f.Add(new WmcLines(f.Content, 1));
+
             // The layer steppers (the card above shows the result) and RANDOM LOOK.
             f.Section(AvIcon.MoodSmile, "LOOK", "STEPS THE PORTRAIT");
             look = f.Add(new LookPart(f.Content, layerText, StepLook));
@@ -124,24 +142,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Track(generate);
             bioField = f.Add(new WmcNameField(f.Content, null, PilotText.BioChars, CommitBio,
                 "A few lines about the pilot, 280 characters at most. SAVE keeps it.", "BIO", multiline: true, height: BioH));
-
-            // Why SAVE cannot go; SAVE · REVERT and RECRUIT / DISCHARGE; SERVICE.
-            problemAlert = f.Add(new AvAlert(f.Content));
-            noteLines = f.Add(new WmcLines(f.Content, 1));
-            AvControl[] verbs = f.Buttons(
-                new AvControl.Spec("SAVE", Save, AvButtonStyle.Primary, AvIcon.CircleCheck),
-                new AvControl.Spec("REVERT", Revert, AvButtonStyle.Default, AvIcon.ArrowBackUp),
-                new AvControl.Spec("RECRUIT", RecruitOrDischarge, AvButtonStyle.Default, AvIcon.UsersGroup)).Controls;
-            saveButton = verbs[0];
-            revertButton = verbs[1];
-            recruitButton = verbs[2];
-            saveButton.Help = "Keep this pilot for every mission: identity, look and bio.";
-            revertButton.Help = "Drop the edits since the last save or pick.";
-            recruitButton.Help = StudioWords.RecruitTip;
-            ids.Add("sq.save", saveButton);
-            ids.Add("sq.revert", revertButton);
-            ids.Add("sq.recruit", recruitButton);
-            serviceLines = f.Add(new WmcLines(f.Content, 1));
         }
 
         private void Track(AvControl b)

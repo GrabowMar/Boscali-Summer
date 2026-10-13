@@ -31,6 +31,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private Color skyColor = Color.black;
         private float fogDensity;
         private float rippleTime;
+        private float nextSelect;
         private static readonly int WetnessId = Shader.PropertyToID("_Wetness");
         private static readonly int RainId = Shader.PropertyToID("_Rain");
         private static readonly int SunDirId = Shader.PropertyToID("_SunDir");
@@ -42,8 +43,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         internal int SurfaceCount => surfaces.Count;
 
         public string EffectId => "terrain-rain";
-
-        public FxBudget Budget => new FxBudget(0, 8, 0, true);
 
         public void ReleaseFx()
         {
@@ -91,10 +90,16 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 if (shader == null) return;
                 material = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
             }
-            GeometryUtility.CalculateFrustumPlanes(camera, planes);
             float drawRange = AtmosphericSurfaceMath.GroundDrawRange(camera.transform.position.y - Datum.LocalSeaY);
-            for (int i = 0; i < 8; i++) { nearest[i] = -1; distances[i] = float.MaxValue; }
-            for (int i = 0; i < surfaces.Count; i++)
+            // Which eight chunks are nearest and in view is a walk over every surface (bounds, visibility, frustum): redo it 30 times a second, draw them every frame.
+            bool select = Time.unscaledTime >= nextSelect;
+            if (select)
+            {
+                nextSelect = Time.unscaledTime + 1f / 30f;
+                GeometryUtility.CalculateFrustumPlanes(camera, planes);
+                for (int i = 0; i < 8; i++) { nearest[i] = -1; distances[i] = float.MaxValue; }
+            }
+            for (int i = 0; select && i < surfaces.Count; i++)
             {
                 var s = surfaces[i];
                 if (s.Renderer == null || s.Mesh == null || !s.Renderer.enabled ||
@@ -123,6 +128,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             for (int i = 0; i < 8 && nearest[i] >= 0; i++)
             {
                 var s = surfaces[nearest[i]];
+                if (s.Renderer == null || s.Mesh == null) continue;   // destroyed since the last selection
                 if (field != null && field.IsBuilt)
                 {
                     if ((!s.Initialized || missionTime >= s.NextSample || missionTime < s.LastTime) && sampleBudget-- > 0)
@@ -206,6 +212,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (material != null) Object.Destroy(material);
             material = null; map = null; wetness = 0f; inspected = 0;
             pending.Clear(); surfaces.Clear(); slots.Clear();
+            nextSelect = 0f;
         }
     }
 }

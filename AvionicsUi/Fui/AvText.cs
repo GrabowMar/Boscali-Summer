@@ -56,11 +56,18 @@ namespace NOAvionics
 
         private static float Cached(System.Runtime.CompilerServices.ConditionalWeakTable<TMP_Text, Measured> table, TMP_Text t, float box, bool wantWidth)
         {
-            if (!table.TryGetValue(t, out Measured m)) { m = new Measured(); table.Add(t, m); }
             string text = t.text;
+            // A text that is not live yet (built under a hidden screen) can measure wrong: never keep that answer.
+            if (!t.isActiveAndEnabled)
+            {
+                Vector2 cold = t.GetPreferredValues(text, box, 0f);
+                return Mathf.Ceil(wantWidth ? cold.x : cold.y);
+            }
+            if (!table.TryGetValue(t, out Measured m)) { m = new Measured(); table.Add(t, m); }
             if (m.W == box && m.Size == t.fontSize && m.Wrap == t.enableWordWrapping && m.Style == t.fontStyle &&
                 ReferenceEquals(m.Font, t.font) && (ReferenceEquals(m.Text, text) || m.Text == text)) return m.Value;
             Vector2 pref = t.GetPreferredValues(text, box, 0f);
+            if (!t.isActiveAndEnabled) return Mathf.Ceil(wantWidth ? pref.x : pref.y);
             m.Text = text; m.W = box; m.Size = t.fontSize; m.Wrap = t.enableWordWrapping; m.Style = t.fontStyle; m.Font = t.font;
             m.Value = Mathf.Ceil(wantWidth ? pref.x : pref.y);
             return m.Value;

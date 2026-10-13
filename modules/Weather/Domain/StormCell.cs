@@ -44,10 +44,13 @@ namespace BoscaliSummer.Modules.Weather.Domain
             return (float)Math.Sqrt(dx * dx + dz * dz);
         }
 
+        // Each reading below takes the point as (x, z) or, for a caller that reads several at one point, as the Distance already measured: the same value, one square root.
+
         /// <summary>mm/h: the Gaussian core P * strength * exp(-(d/R)^2) plus a faint wider halo, each cut to zero at its support.</summary>
-        public float RainAt(float x, float z)
+        public float RainAt(float x, float z) => RainAtDistance(Distance(x, z));
+
+        public float RainAtDistance(float d)
         {
-            float d = Distance(x, z);
             if (d >= HaloSupport * Radius) return 0f;
             float core = Gauss(d, Radius) * Taper(d, CoverSupport * Radius);
             float halo = 0.12f * Gauss(d, 2.5f * Radius) * Taper(d, HaloSupport * Radius);
@@ -55,30 +58,31 @@ namespace BoscaliSummer.Modules.Weather.Domain
         }
 
         /// <summary>Cloud cover: full inside R, gone by 2.2 R.</summary>
-        public float CoverAt(float x, float z)
+        public float CoverAt(float x, float z) => Strength <= 0f ? 0f : CoverAtDistance(Distance(x, z));
+
+        public float CoverAtDistance(float d)
         {
             if (Strength <= 0f) return 0f;
-            return Strength * (1f - WeatherMath.Smoothstep(Radius, 2.2f * Radius, Distance(x, z)));
+            return Strength * (1f - WeatherMath.Smoothstep(Radius, 2.2f * Radius, d));
         }
 
         /// <summary>The buoyant core that shapes the crown: continuous, with no flat centre that would make a cylindrical tower.</summary>
-        public float ShapeAt(float x, float z)
-        {
-            float d = Distance(x, z);
-            return d >= CoverSupport * Radius ? 0f : Strength * Gauss(d, 1.4f * Radius) * Taper(d, CoverSupport * Radius);
-        }
+        public float ShapeAt(float x, float z) => ShapeAtDistance(Distance(x, z));
+
+        public float ShapeAtDistance(float d) =>
+            d >= CoverSupport * Radius ? 0f : Strength * Gauss(d, 1.4f * Radius) * Taper(d, CoverSupport * Radius);
 
         /// <summary>0..1 how deep a point is in the core (rain-weighted), for HUD and hazard.</summary>
-        public float CoreAt(float x, float z)
-        {
-            float d = Distance(x, z);
-            return d >= CoverSupport * Radius ? 0f : Strength * Gauss(d, Radius) * Taper(d, CoverSupport * Radius);
-        }
+        public float CoreAt(float x, float z) => CoreAtDistance(Distance(x, z));
+
+        public float CoreAtDistance(float d) =>
+            d >= CoverSupport * Radius ? 0f : Strength * Gauss(d, Radius) * Taper(d, CoverSupport * Radius);
 
         /// <summary>exp(-d^2 / 9R^2) * (1 - smoothstep(3R, 6R, d)): how strongly a strike rate at the centre reads at a point.</summary>
-        public float LightningWeight(float x, float z)
+        public float LightningWeight(float x, float z) => LightningWeightAtDistance(Distance(x, z));
+
+        public float LightningWeightAtDistance(float d)
         {
-            float d = Distance(x, z);
             if (d >= LightningSupport * Radius) return 0f;
             return (float)Math.Exp(-(d * d) / (9f * Radius * Radius)) * (1f - WeatherMath.Smoothstep(3f * Radius, 6f * Radius, d));
         }
@@ -86,20 +90,33 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>Horizontal outflow (gust front) and vertical draft at a point; all zero beyond 4 R.</summary>
         public void WindAt(float x, float z, out float outX, out float outZ, out float vertical, out float turbulence)
         {
-            outX = outZ = vertical = turbulence = 0f;
             float dx = x - X, dz = z - Z;
-            float d = (float)Math.Sqrt(dx * dx + dz * dz);
+            WindAtOffset(dx, dz, (float)Math.Sqrt(dx * dx + dz * dz), out outX, out outZ, out vertical, out turbulence);
+        }
+
+        /// <summary><see cref="WindAt"/> for a caller that holds the point's offset from the centre (dx, dz) and its length d.</summary>
+        public void WindAtOffset(float dx, float dz, float d, out float outX, out float outZ, out float vertical, out float turbulence)
+        {
+            outX = outZ = vertical = turbulence = 0f;
             if (d >= WindSupport * Radius) return;
             float taper = Taper(d, WindSupport * Radius);
             float down = DowndraftLevel, up = UpdraftLevel;
 
-            vertical = (6f * up * Gauss(d, Radius) - 8f * down * Gauss(d, Radius * 0.8f)) * taper;
+            // A draft level of exactly 0 (a young or a spent cell; the levels are never negative) makes every term it multiplies exactly +0, as the Gaussians are finite:
+            // the exponentials of those terms are not taken.
+            float rising = up == 0f ? 0f : 6f * up * Gauss(d, Radius);
+            float sinking = down == 0f ? 0f : 8f * down * Gauss(d, Radius * 0.8f);
+            vertical = (rising - sinking) * taper;
 
             // The gust front spreads out from the core as the downdraft matures.
-            float ring = Radius * (1f + 0.75f * WeatherMath.Smoothstep(0.4f, 1f, Strength));
             // The direction of the outflow is undefined at the centre: fade the gust to nothing there, or crossing the core flips it 12 m/s.
-            float gust = (15f * down * Gauss(d - ring, Radius * 0.6f) + 6f * down * Gauss(d, Radius * 0.7f)) * taper *
-                WeatherMath.Smoothstep(0f, 0.3f * Radius, d);
+            float gust = 0f;
+            if (down != 0f)
+            {
+                float ring = Radius * (1f + 0.75f * WeatherMath.Smoothstep(0.4f, 1f, Strength));
+                gust = (15f * down * Gauss(d - ring, Radius * 0.6f) + 6f * down * Gauss(d, Radius * 0.7f)) * taper *
+                    WeatherMath.Smoothstep(0f, 0.3f * Radius, d);
+            }
             if (d > 1f)
             {
                 outX = dx / d * gust;
@@ -140,8 +157,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public const float EnumerateRange = 180000f;
 
         private const uint SaltMix = 0xBB67AE85u;
-        private const int SlotCount = 0, SlotX = 1, SlotZ = 2, SlotRank = 3, SlotRadius = 4, SlotSevere = 5, SlotRain = 6,
-            SlotHail = 7, SlotDepth = 8, SlotLightning = 9, SlotStrike = 10;
+        private const int SlotCount = 0, SlotX = 1, SlotZ = 2, SlotRank = 3, SlotRadius = 4, SlotSevere = 5,             SlotHail = 7, SlotDepth = 8, SlotLightning = 9, SlotStrike = 10;
 
         [ThreadStatic] private static StormCell[] scratch;
 
@@ -149,36 +165,47 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public static bool Resolve(in LatticeSource src, int gx, int gz, int k, out StormCell cell)
         {
             cell = default;
-            uint salt = src.Salt ^ SaltMix;
-            float uCell = LatticeHash.Unit(salt, gx, gz, 0, SlotCount);
-            if (k >= (int)(uCell * (MaxCandidates + 1))) return false;
-            float x = (gx + LatticeHash.Unit(salt, gx, gz, k, SlotX)) * Cell;
-            float z = (gz + LatticeHash.Unit(salt, gx, gz, k, SlotZ)) * Cell;
-            SkyParams row = src.RowAt(x, z, out _);
+            uint prefix = LatticeHash.CellPrefix(src.Salt ^ SaltMix, gx, gz);
+            return Candidate(src, prefix, LatticeHash.UnitIn(prefix, 0, SlotCount), gx, gz, k, false, ref cell);
+        }
 
-            float conv = Scalar.Clamp01(row.Convective);
+        /// <summary>The cumulus lattice's twin of the same name: <see cref="Resolve"/> from the cell's hash prefix and candidate-count draw; with <paramref name="dropWeak"/> a cell of strength 0
+        /// returns false before its shape is built, and the tape row is read for only the columns used. <paramref name="cell"/> is written only when the cell is returned.</summary>
+        private static bool Candidate(in LatticeSource src, uint prefix, float uCell, int gx, int gz, int k, bool dropWeak, ref StormCell cell)
+        {
+            if (k >= (int)(uCell * (MaxCandidates + 1))) return false;
+            float x = (gx + LatticeHash.UnitIn(prefix, k, SlotX)) * Cell;
+            float z = (gz + LatticeHash.UnitIn(prefix, k, SlotZ)) * Cell;
+            float s = src.Frame.STape(x, z);
+            src.Tape.Locate(s, out int at0, out int at1, out float w);
+
+            float conv = Scalar.Clamp01(src.Tape.Column(SkyColumns.ConvectiveAt, at0, at1, w));
             // Beading (spec 5.3): the line raises the activation of a cell that already stands near it. The bias is read at the cell centre, so a cell's
             // strength stays a constant of the cell in the tape frame; CapacityCell is 1.
-            float bias = src.Markers == null || src.Markers.Count == 0 ? 0f : src.Markers.BiasAt(src.Frame.STape(x, z), src.Frame.MeanderSlope(src.Frame.Across(x, z)));
+            float bias = src.Markers == null || src.Markers.Count == 0 ? 0f : src.Markers.BiasAt(s, src.Frame, x, z);
             float level = Scalar.Clamp01(conv + bias);
-            float rank = LatticeHash.Unit(salt, gx, gz, k, SlotRank);
-            float severeAt = LatticeHash.Unit(salt, gx, gz, k, SlotSevere);
-            float severeBlend = WeatherMath.Smoothstep(severeAt, severeAt + 0.15f, Scalar.Clamp01(row.Severity));
+            float rank = LatticeHash.UnitIn(prefix, k, SlotRank);
+            float strength = WeatherMath.Smoothstep(rank * 0.7f, rank * 0.7f + 0.35f, level);
+            if (dropWeak && !(strength > 0f)) return false;
+            float severity = Scalar.Clamp01(src.Tape.Column(SkyColumns.SeverityAt, at0, at1, w));
+            float severeAt = LatticeHash.UnitIn(prefix, k, SlotSevere);
+            float severeBlend = WeatherMath.Smoothstep(severeAt, severeAt + 0.15f, severity);
 
+            cell = default;
             cell.Gx = gx; cell.Gz = gz; cell.K = k;
             cell.Seed = LatticeHash.Hash(src.LayoutSeed, gx, gz, k, 0x5C);
             cell.X = x; cell.Z = z;
-            cell.Radius = LatticeHash.Range(salt, gx, gz, k, SlotRadius, RadiusMin, RadiusMax);
+            cell.Radius = LatticeHash.RangeIn(prefix, k, SlotRadius, RadiusMin, RadiusMax);
             cell.Rank = rank;
             cell.Level = level;
-            cell.Strength = WeatherMath.Smoothstep(rank * 0.7f, rank * 0.7f + 0.35f, level);
-            cell.Base = Scalar.Clamp(row.CloudBase, 400f, 2500f);
-            cell.Depth = 1200f + 4600f * conv + LatticeHash.Range(salt, gx, gz, k, SlotDepth, 0f, 800f + 1800f * conv) + 3000f * severeBlend;
-            cell.PeakRain = 30f + 90f * Scalar.Clamp01(row.Severity);
+            cell.Strength = strength;
+            cell.Base = Scalar.Clamp(src.Tape.Column(SkyColumns.CloudBaseAt, at0, at1, w), 400f, 2500f);
+            cell.Depth = 1200f + 4600f * conv + LatticeHash.RangeIn(prefix, k, SlotDepth, 0f, 800f + 1800f * conv) + 3000f * severeBlend;
+            cell.PeakRain = 30f + 90f * severity;
             cell.Severe = severeBlend > 0.5f;
-            cell.Hail = cell.Severe && cell.PeakRain >= 75f && LatticeHash.Unit(salt, gx, gz, k, SlotHail) < 0.6f;
-            float quiet = conv < 0.55f ? 0f : LatticeHash.Range(salt, gx, gz, k, SlotLightning, 0.3f, 4f) * (conv - 0.55f) / 0.45f;
-            cell.LightningPeak = WeatherMath.Lerp(quiet, LatticeHash.Range(salt, gx, gz, k, SlotStrike, 6f, 18f), severeBlend);
+            cell.Hail = cell.Severe && cell.PeakRain >= 75f && LatticeHash.UnitIn(prefix, k, SlotHail) < 0.6f;
+            float quiet = conv < 0.55f ? 0f : LatticeHash.RangeIn(prefix, k, SlotLightning, 0.3f, 4f) * (conv - 0.55f) / 0.45f;
+            cell.LightningPeak = WeatherMath.Lerp(quiet, LatticeHash.RangeIn(prefix, k, SlotStrike, 6f, 18f), severeBlend);
             return true;
         }
 
@@ -186,10 +213,12 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public static int ResolveCell(in LatticeSource src, int gx, int gz, StormCell[] into)
         {
             if (src.ConstantConvective == 0f) return 0;
-            float uCell = LatticeHash.Unit(src.Salt ^ SaltMix, gx, gz, 0, SlotCount);
+            uint prefix = LatticeHash.CellPrefix(src.Salt ^ SaltMix, gx, gz);
+            float uCell = LatticeHash.UnitIn(prefix, 0, SlotCount);
             int candidates = (int)(uCell * (MaxCandidates + 1)), count = 0;
+            StormCell c = default;
             for (int k = 0; k < candidates; k++)
-                if (Resolve(src, gx, gz, k, out StormCell c) && c.Strength > 0f) into[count++] = c;
+                if (Candidate(src, prefix, uCell, gx, gz, k, true, ref c)) into[count++] = c;
             return count;
         }
 

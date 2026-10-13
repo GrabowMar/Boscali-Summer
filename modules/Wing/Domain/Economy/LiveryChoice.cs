@@ -23,32 +23,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             }
         }
 
-        public static bool TryParse(string token, out LiveryKind kind, out int index, out string name)
-        {
-            kind = LiveryKind.Builtin;
-            index = 0;
-            name = null;
-            if (string.IsNullOrEmpty(token) || token.Length < 2) return false;
-            string rest = token.Substring(1);
-            switch (token[0])
-            {
-                case 'B':
-                    return int.TryParse(rest, NumberStyles.None, CultureInfo.InvariantCulture, out index);
-                case 'A':
-                    if (rest.IndexOf('/') >= 0 || rest.IndexOf('\\') >= 0 || rest.Contains("..")) return false;
-                    kind = LiveryKind.AppData;
-                    name = rest;
-                    return true;
-                case 'W':
-                    if (!ulong.TryParse(rest, NumberStyles.None, CultureInfo.InvariantCulture, out _)) return false;
-                    kind = LiveryKind.Workshop;
-                    name = rest;
-                    return true;
-                default:
-                    return false;
-            }
-        }
-
         /// <summary>Where <paramref name="saved"/> sits among the offered tokens (entry 0 is STANDARD, null); 0 when it is not offered.</summary>
         public static int IndexOf(IReadOnlyList<string> offered, string saved)
         {

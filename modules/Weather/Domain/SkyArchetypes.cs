@@ -110,9 +110,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public const float StreetCapacityHumilis = 0.78f;
 
         public static GenusRow Genus(LowGenus genus) => Genera[(int)genus];
+        /// <summary>The table row itself, for a caller that reads a few of its fields and would only copy all 18.</summary>
+        public static ref readonly GenusRow GenusRef(LowGenus genus) => ref Genera[(int)genus];
         public static LayerArchetype Layer(LayerKind kind) => Layers[(int)kind];
-        public static int GenusCount => Genera.Length;
-        public static int LayerCount => Layers.Length;
 
         /// <summary>The low-genus columns of a sky at the given base. Cover columns are the caller's.</summary>
         public static void ApplyGenus(ref SkyParams sky, in GenusRow g, float baseM)

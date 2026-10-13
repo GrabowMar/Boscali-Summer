@@ -10,7 +10,6 @@ using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
 using HarmonyLib;
 using UnityEngine;
-using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.TheaterOps.Runtime
 {
@@ -146,7 +145,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         private ITerritoryIngress territory;
         private int nextGroupId = 1;
         private int sweepCursor;
-        private float nextUpdate, lastPass;
+        private PhasedGate updateGate;
+        private float lastPass;
         private bool adapterOn, warnedConflict;
 
         internal void Configure(TheaterOpsSettings config, IGroundWarSource warSource)
@@ -172,7 +172,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             territory = null;
             nextGroupId = 1;
             sweepCursor = 0;
-            nextUpdate = lastPass = 0f;
+            updateGate.Reset(); lastPass = 0f; passPhase = 0;
             adapterOn = false;
             diagnosed.Clear();
             diagnosedTotal = faults = 0;
@@ -375,8 +375,9 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         private void Update()
         {
             float now = Time.timeSinceLevelLoad;
-            if (now < nextUpdate) return;
-            nextUpdate = now + UpdateSeconds;
+            if (passPhase != 0) StepPass();   // the rest of the last pass, a faction or a handful of groups a frame
+            if (!updateGate.Due(now, UpdateSeconds, 0.3125f, 1f)) return;   // every 2 s, at .3125 of the second (the first within a second): clear of the 1 Hz slots (table in HighCommandManager)
+            passPhase = 0;
             adapterOn = AdapterEnabled;
             if (!adapterOn)
             {
@@ -393,15 +394,39 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 if (group.Members.Count == 0) { groups.RemoveAt(i); continue; }
                 Locate(group);
             }
-            for (int i = 0; i < factionHqs.Count; i++)
+            // The assignments and the group refreshes follow in the frames after this one (StepPass): one faction a frame, then RefreshGroupsPerFrame groups a frame.
+            passNow = now;
+            passFaction = 0;
+            passPhase = 1;
+            StepPass();
+        }
+
+        // The pass in flight: 0 none, 1 assigning the factions' groups, 2 refreshing the groups; the clock it began on and the next faction / group.
+        private int passPhase, passFaction, passGroup;
+        private float passNow;
+        private const int RefreshGroupsPerFrame = 8;
+
+        private void StepPass()
+        {
+            float now = passNow;
+            if (passPhase == 1)
             {
-                FactionHQ hq = factionHqs[i];
-                if (!factions.TryGetValue(hq, out FactionState fs)) continue;
-                CopyTrace(fs, now);
-                CopySightings(fs, now);
-                AssignGroups(fs, now);
+                while (passFaction < factionHqs.Count)
+                {
+                    FactionHQ hq = factionHqs[passFaction++];
+                    if (!factions.TryGetValue(hq, out FactionState fs)) continue;
+                    CopyTrace(fs, now);
+                    CopySightings(fs, now);
+                    AssignGroups(fs, now);
+                    return;
+                }
+                passPhase = 2;
+                passGroup = groups.Count - 1;
             }
-            for (int i = groups.Count - 1; i >= 0; i--) RefreshGroup(groups[i], now);
+            for (int done = 0; done < RefreshGroupsPerFrame && passGroup >= 0; done++, passGroup--)
+                if (passGroup < groups.Count) RefreshGroup(groups[passGroup], now);
+            if (passGroup >= 0) return;
+            passPhase = 0;
             // Stamped when the pass has finished, not when it began: a pass that throws leaves the stamp to age, so within StaleSeconds the hook hands every vehicle back to vanilla.
             lastPass = now;
         }

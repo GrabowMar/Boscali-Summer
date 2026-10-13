@@ -19,5 +19,23 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (seeker != null) TargetUnit(seeker) = decoy;
             if (decoy.rb != null) threat.SetProxyFuse(decoy.transform, decoy.rb);
         }
+
+        /// <summary>
+        /// Chaff. An ARH seeker drops into the game's own lost-target state (ARHSeeker.Seek flies on, SlowChecks ends the
+        /// missile); any other radar seeker switches to the decoy while it lives. False when neither was possible.
+        /// </summary>
+        public static bool Blind(Missile threat, Unit decoy)
+        {
+            MissileSeeker seeker = threat.GetComponent<MissileSeeker>();
+            if (seeker is ARHSeeker)
+            {
+                threat.SetTarget(null);
+                TargetUnit(seeker) = null;
+                return true;
+            }
+            if (decoy == null || decoy.disabled) return false;
+            Retarget(threat, decoy);
+            return true;
+        }
     }
 }

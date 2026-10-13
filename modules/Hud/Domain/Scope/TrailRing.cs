@@ -25,9 +25,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         public int Count => count;
 
-        /// <summary>Time of the newest sample.</summary>
-        public float LastAt => last;
-
         /// <summary>Take a sample if <paramref name="step"/> has passed since the last one (the first is always taken).</summary>
         public bool Add(float now, float a, float b = 0f, float c = 0f)
         {

@@ -80,15 +80,26 @@ namespace BoscaliSummer.Core
             if (!Application.isBatchMode)
                 services.Add<ICanopyGlassView>(new BoscaliSummer.Modules.Weather.Visuals.CanopyGlassView());
             ModuleServices.Active = services;
+            MissionProfile.Changed += OnMissionProfileChanged;
+            MissionProfile.Preparing += ResetForMission;
         }
 
         public static BoscaliMod Start(ManualLogSource logger, ModConfiguration settings)
         {
             GameAccess.Initialise();
+            // Outside a mission the last confirmed selection applies; each mission start re-selects.
+            MissionProfile.SetDisabled(MissionProfile.Parse(settings.MissionDisabledModules.Value));
             var mod = new BoscaliMod(logger, settings);
             try
             {
-                mod.Load(Compose(settings));
+                mod.Load(mod.ModulesForProfile());
+                if (!Application.isBatchMode)
+                {
+                    var offered = new List<ModuleMetadata>();
+                    foreach (IModule module in Compose(settings))
+                        if (!MissionProfile.IsCore(module.Metadata.Id)) offered.Add(module.Metadata);
+                    mod.runtimeRoot.AddComponent<MissionPrompt>().Offered = offered.ToArray();
+                }
                 CapabilityReport.Log();
                 return mod;
             }
@@ -109,6 +120,9 @@ namespace BoscaliSummer.Core
             // each resolve it late and work without it.
             var modules = new List<IModule>
             {
+                new MissionProfileModule(),
+                // Mission scripts: the scripted missions in the picker, their dialogue and cutscenes.
+                new BoscaliSummer.Modules.Scenario.ScenarioModule(),
                 new SessionModule(),
                 new FireAndDestructionModule(),
                 new UrbanCombatModule(),
@@ -129,6 +143,8 @@ namespace BoscaliSummer.Core
                 modules.Add(new QoLModule());
             if (settings.Autopilot.Enabled.Value && !Application.isBatchMode)
                 modules.Add(new AutopilotModule());
+            // The radio installs before its publishers (Wing, Support), which resolve it late and stay silent without it.
+            modules.Add(new BoscaliSummer.Modules.Chatter.ChatterModule());
             // Wing publishes IWingSquad, which Squad and the WMC page resolve.
             modules.Add(new WingModule());
             if (settings.Progression.Enabled.Value)
@@ -136,10 +152,10 @@ namespace BoscaliSummer.Core
                 modules.Add(new SquadModule());
                 modules.Add(new ProgressionModule());
             }
-            // Support and Command declare "progression" in metadata, so the graph skips
-            // them with a warning when Progression is off instead of silently.
+            // Support needs progression; the ordinary avionics remain available without it.
             if (settings.Support.Enabled.Value) modules.Add(new SupportModule());
             if (settings.Command.Enabled.Value) modules.Add(new CommandModule());
+            if (settings.Command.Enabled.Value) modules.Add(new StrategicCommandModule());
             if (settings.DynamicOperations.Enabled.Value) modules.Add(new DynamicOperationsModule());
             if (settings.HighCommand.Enabled.Value) modules.Add(new HighCommandModule());
             // Intel publishes IThreatPicture ahead of TheaterOps, whose director reads it
@@ -154,10 +170,58 @@ namespace BoscaliSummer.Core
             if (settings.Events.Enabled.Value) modules.Add(new EventsModule());
             if (settings.Comms.Enabled.Value) modules.Add(new CommsModule());
             if (settings.Weather.Enabled.Value) modules.Add(new WeatherModule());
-            if (settings.Cinematography.Enabled.Value && !Application.isBatchMode)
-                modules.Add(new CinematographyModule());
+            // Always installed for the cutscene camera mission scripts play; its private production tools keep their own switch.
+            if (!Application.isBatchMode) modules.Add(new CinematographyModule());
             if (BoscaliSummer.Modules.Vanguard.VanguardModule.Available) modules.Add(new BoscaliSummer.Modules.Vanguard.VanguardModule());
             return modules.ToArray();
+        }
+
+        private IModule[] ModulesForProfile()
+        {
+            var modules = new List<IModule>();
+            foreach (IModule module in Compose(settings))
+                if (MissionProfile.AllowsModule(module.Metadata.Id))
+                    modules.Add(module);
+            return modules.ToArray();
+        }
+
+        private void OnMissionProfileChanged()
+        {
+            if (disposed) return;
+            // A module goes when the player switched it off, or when a module it needs went.
+            var keep = new HashSet<string>(StringComparer.Ordinal);
+            foreach (LoadedModule loaded in loadedModules)
+                if (MissionProfile.AllowsModule(loaded.Metadata.Id)) keep.Add(loaded.Metadata.Id);
+            for (bool changed = true; changed;)
+            {
+                changed = false;
+                foreach (LoadedModule loaded in loadedModules)
+                    if (keep.Contains(loaded.Metadata.Id) && !keep.IsSupersetOf(loaded.Metadata.Dependencies))
+                        changed = keep.Remove(loaded.Metadata.Id);
+            }
+            // Remove all gameplay patches before tearing down any of their services.
+            for (int i = loadedModules.Count - 1; i >= 0; i--)
+                if (!keep.Contains(loadedModules[i].Metadata.Id)) loadedModules[i].Harmony.UnpatchSelf();
+            bool removed = false;
+            for (int i = loadedModules.Count - 1; i >= 0; i--)
+            {
+                LoadedModule loaded = loadedModules[i];
+                if (keep.Contains(loaded.Metadata.Id)) continue;
+                loaded.Context.Rollback();
+                loadedModules.RemoveAt(i);
+                removed = true;
+                logger.LogInfo("Module switched off for this mission: " + loaded.Metadata.DisplayName + ".");
+            }
+            var additions = new List<IModule>();
+            foreach (IModule module in ModulesForProfile())
+                if (!keep.Contains(module.Metadata.Id)) additions.Add(module);
+            if (additions.Count > 0) Load(additions);
+            else if (removed) sceneLifecycle.ResetAll();
+        }
+
+        private void ResetForMission()
+        {
+            if (!disposed) sceneLifecycle.ResetAll();
         }
 
         private void Load(IReadOnlyList<IModule> modules)
@@ -170,7 +234,9 @@ namespace BoscaliSummer.Core
                     throw new ArgumentException("Module entries cannot be null.", nameof(modules));
 
             // A module whose dependency is switched off in settings is left out, not fatal.
-            string[] missing = ModuleGraph.MissingDependencies(requested);
+            var existing = new HashSet<string>(StringComparer.Ordinal);
+            foreach (LoadedModule loaded in loadedModules) existing.Add(loaded.Metadata.Id);
+            string[] missing = ModuleGraph.MissingDependencies(requested, existing);
             var loadable = new List<IModule>(modules.Count);
             for (int i = 0; i < modules.Count; i++)
             {
@@ -182,9 +248,12 @@ namespace BoscaliSummer.Core
             var metadata = new ModuleMetadata[modules.Count];
             for (int i = 0; i < modules.Count; i++) metadata[i] = modules[i].Metadata;
 
-            int[] order = ModuleGraph.Sort(metadata);
-            ValidatePatchOwnership(modules);
+            int[] order = ModuleGraph.Sort(metadata, existing);
+            var allModules = new List<IModule>(modules);
+            foreach (LoadedModule loaded in loadedModules) allModules.Add(loaded.Module);
+            ValidatePatchOwnership(allModules);
             var installed = new Dictionary<string, bool>(StringComparer.Ordinal);
+            foreach (string id in existing) installed[id] = true;
             var candidates = new List<LoadedModule>(modules.Count);
 
             for (int orderIndex = 0; orderIndex < order.Length; orderIndex++)
@@ -225,6 +294,7 @@ namespace BoscaliSummer.Core
 
             sceneLifecycle.ResetAll();
             var started = new Dictionary<string, bool>(StringComparer.Ordinal);
+            foreach (string id in existing) started[id] = true;
             for (int i = 0; i < candidates.Count; i++)
             {
                 LoadedModule candidate = candidates[i];
@@ -324,6 +394,8 @@ namespace BoscaliSummer.Core
         {
             if (disposed) return;
             disposed = true;
+            MissionProfile.Changed -= OnMissionProfileChanged;
+            MissionProfile.Preparing -= ResetForMission;
             for (int i = loadedModules.Count - 1; i >= 0; i--)
                 loadedModules[i].Harmony.UnpatchSelf();
             for (int i = loadedModules.Count - 1; i >= 0; i--)
@@ -335,6 +407,8 @@ namespace BoscaliSummer.Core
             services.Clear();
             if (ReferenceEquals(ModuleServices.Active, services)) ModuleServices.Active = null;
             if (runtimeRoot != null) UnityEngine.Object.Destroy(runtimeRoot);
+            BoscaliMission.Unregister();
+            MissionProfile.SetDisabled(null);
         }
     }
 }

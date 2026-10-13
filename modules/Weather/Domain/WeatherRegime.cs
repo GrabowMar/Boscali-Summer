@@ -188,8 +188,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         public static SkyParams Get(WeatherRegimeType state) => Table[Index((int)state)];
 
-        public static WeatherRegimeType Clamp(int value) => (WeatherRegimeType)Index(value);
-
         /// <summary>The state a vanilla <c>conditions</c> value reads as.</summary>
         public static WeatherRegimeType FromConditions(float conditions) => RegimeSnapshot.FromConditions(conditions).Type;
 

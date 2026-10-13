@@ -80,14 +80,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return new GroundCommand { Curvature = curvature, Speed = limit };
         }
 
-        /// <summary>Distance along the path from a point on segment <paramref name="segment"/> to its end.</summary>
-        public static float Remaining(Vec3[] path, int segment, Vec3 at)
-        {
-            float d = (path[segment + 1].Horizontal - at.Horizontal).Length;
-            for (int k = segment + 1; k < path.Length - 1; k++) d += (path[k + 1] - path[k]).Horizontal.Length;
-            return d;
-        }
-
         private static float SegmentDistance(Vec3[] path, int k, Vec3 p)
         {
             Vec3 a = path[k].Horizontal, b = path[k + 1].Horizontal;

@@ -60,14 +60,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return AuthorizeTasked(viewer.HQ, PlayerIdentity.Of(viewer), SupportActionId.Artillery, true, out _, out _, out detail);
         }
 
-        /// <summary>The host-priced STANDARD rod for this viewer; <paramref name="charge"/> is false when the host waives charging.</summary>
-        internal int TaskedBaseline(Player viewer, out bool charge)
-        {
-            charge = !BypassRequirements;
-            SupportActionDefinition definition = catalog?.Find(SupportActionId.Artillery);
-            return definition == null || viewer == null ? 0 : Math.Max(0, QuoteFor(definition, viewer).Cost);
-        }
-
         // ---- Family for prices and the sky ----------------------------------------------------
 
         /// <summary>Whether this faction has the given bird (host: its SPACE state; client: the mirror, own faction only).</summary>

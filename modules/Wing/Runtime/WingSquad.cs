@@ -6,8 +6,8 @@ using UnityEngine;
 using HarmonyLib;
 
 using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Presentation;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 #pragma warning disable IDE0051 // Harmony invokes the explicitly registered survivor hooks.
 
 namespace BoscaliSummer.Modules.Wing.Runtime
@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         internal static object[] CreatePilot(int seed)
         {
             var random = new System.Random(seed);
-            var persona = (ChatterPersona)random.Next(4);
+            var persona = (ChatterPersona)random.Next(ChatterPersonas.Count);
             return new object[]
             {
                 PilotIdentity.Name(random.Next),
@@ -130,7 +130,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 count > MaxWingSize || owned.Count + count > MaxAircraft)
                 return Array.Empty<Aircraft>();
 
-            AircraftDefinition definition = SelectAirframe(seed, tier);
+            AircraftDefinition definition = SelectAirframe(tier);
             Aircraft template = definition?.unitPrefab?.GetComponent<Aircraft>();
             if (template == null) return Array.Empty<Aircraft>();
             Loadout loadout = InterceptLoadout(definition);
@@ -209,7 +209,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 if (owned[aircraft] != target) WakeCombat(aircraft, target);
                 owned[aircraft] = target;
                 RefreshHuntTrack(aircraft, target);
-                PrimaryPilot(aircraft)?.SetPrimaryTarget(target);
+                AircraftReadout.PrimaryPilot(aircraft)?.SetPrimaryTarget(target);
                 changed = true;
             }
             return changed;
@@ -244,9 +244,9 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         internal static void Chatter(string callsign, string context, string message)
         {
-            RadioDirector.Instance?.Report("INTERCEPT / " + Limit(callsign, 24),
-                "ENEMY:" + Limit(callsign, 32) + ":" + Limit(context, 64), message,
-                BoscaliSummer.Core.Contracts.ChatterUrgency.Tactical);
+            if (!BoscaliSummer.Core.Services.ModuleServices.TryGet<BoscaliSummer.Core.Contracts.IChatter>(out var radio)) return;
+            radio.Say(radio.Station(BoscaliSummer.Core.Chatter.ChatterNet.Enemy, Limit(callsign, 24)),
+                "enemy:" + Limit(callsign, 32) + ":" + Limit(context, 64), message, BoscaliSummer.Core.Chatter.ChatterPriority.Tactical);
         }
 
         /// <summary>Enroll while still seated, then read native evidence after ejection.
@@ -322,7 +322,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             if (!(searcher is Aircraft aircraft) || !aircraft.IsServer || aircraft.Player != null ||
                 aircraft.disabled || !owned.TryGetValue(aircraft, out Aircraft target) || target == null)
                 return false;
-            Pilot targetPilot = PrimaryPilot(target);
+            Pilot targetPilot = AircraftReadout.PrimaryPilot(target);
             if (target.disabled || target.Player == null || targetPilot == null || targetPilot.dead ||
                 targetPilot.ejected || target.NetworkHQ == null || target.NetworkHQ == aircraft.NetworkHQ)
             {
@@ -367,7 +367,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         private static void WakeCombat(Aircraft aircraft, Aircraft target)
         {
-            Pilot pilot = PrimaryPilot(aircraft);
+            Pilot pilot = AircraftReadout.PrimaryPilot(aircraft);
             if (pilot == null || pilot.dead || pilot.ejected) return;
             if (target != null) RefreshHuntTrack(aircraft, target);
             pilot.SetPrimaryTarget(target);
@@ -393,7 +393,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             return tracking;
         }
 
-        private static AircraftDefinition SelectAirframe(int seed, int tier)
+        private static AircraftDefinition SelectAirframe(int tier)
         {
             var catalogue = Encyclopedia.i?.aircraft;
             string wanted = AceIngress.Airframe(tier);
@@ -447,9 +447,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             { WingSurvivalPerks.RemoveAce(aircraft); owned.Remove(aircraft); }
             stale.Clear();
         }
-
-        private static Pilot PrimaryPilot(Aircraft aircraft) =>
-            aircraft != null && aircraft.pilots != null && aircraft.pilots.Length > 0 ? aircraft.pilots[0] : null;
 
         /// <summary>Aces spawned here hunt the aircraft they were sent after (the game's own target choice otherwise).</summary>
         [HarmonyPatch(typeof(CombatAI), nameof(CombatAI.ChooseHQTarget))]

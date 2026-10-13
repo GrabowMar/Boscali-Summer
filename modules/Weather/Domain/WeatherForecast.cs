@@ -197,9 +197,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
                 // Rodrigues rotation: v*cosA + (k x v)*sinA + k*(k . v)*(1 - cosA)
                 float dot = ax * sx + ay * sy + az * sz;
-                float crossX = ay * sz - az * sy;
                 float crossY = az * sx - ax * sz;
-                float crossZ = ax * sy - ay * sx;
 
                 float rotY = sy * cosA + crossY * sinA + ay * dot * (1f - cosA);
                 float elev = (float)Math.Asin(Math.Max(-1.0, Math.Min(1.0, rotY))) * Rad2Deg;

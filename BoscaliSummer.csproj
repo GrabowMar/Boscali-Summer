@@ -3,7 +3,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>BoscaliSummer</AssemblyName>
     <RootNamespace>BoscaliSummer</RootNamespace>
-    <Version>0.2.1</Version>
+    <Version>0.2.3</Version>
     <DebugType>portable</DebugType>
     <!-- CS0436: the vendored avionics sources compile into this assembly and the test assembly. -->
     <NoWarn>$(NoWarn);CS0436;MSB3277</NoWarn>
@@ -86,6 +86,7 @@
   <ItemGroup Label="Game">
     <Reference Include="Assembly-CSharp"><HintPath>$(ManagedDir)\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Assembly-CSharp-firstpass"><HintPath>$(ManagedDir)\Assembly-CSharp-firstpass.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Newtonsoft.Json"><HintPath>$(ManagedDir)\Newtonsoft.Json.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Mirage"><HintPath>$(ManagedDir)\Mirage.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Mirage.SocketLayer"><HintPath>$(ManagedDir)\Mirage.SocketLayer.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UniTask"><HintPath>$(ManagedDir)\UniTask.dll</HintPath><Private>false</Private></Reference>
@@ -202,6 +203,13 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <ItemGroup Label="Night vision shader bundle">
+    <!-- Built by tools/Compile-NightVisionAssets.ps1. Optional: without it the look is a white tint on vanilla's gain. -->
+    <EmbeddedResource Include="modules\QoL\Assets\nightvision.bundle" Condition="Exists('modules\QoL\Assets\nightvision.bundle')">
+      <LogicalName>BoscaliSummer.QoL.nightvision.bundle</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
   <ItemGroup Label="Tail-fin insignia bake shader bundle">
     <!-- Built by tools/Compile-EmblemAssets.ps1. Optional: without it the STUDIO PAINT setting stays inert. -->
     <EmbeddedResource Include="modules\Progression\Assets\emblem.bundle" Condition="Exists('modules\Progression\Assets\emblem.bundle')">
@@ -221,6 +229,14 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Core\Fx\Sfx\*.wav">
       <LogicalName>BoscaliSummer.Sfx.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <!-- The built-in radio dialogue (docs/CHATTER_PACKS.md); ChatterHost loads every BoscaliSummer.Chatter.*.chatter. -->
+    <EmbeddedResource Include="modules\Chatter\Assets\Packs\*.chatter">
+      <LogicalName>BoscaliSummer.Chatter.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <!-- The built-in mission scripts (docs/SCENARIOS.md); ScenarioLibrary loads every BoscaliSummer.Scenario.*.scenario. -->
+    <EmbeddedResource Include="modules\Scenario\Assets\*.scenario;modules\Scenario\Assets\*.mp3;modules\Scenario\Assets\*.ogg">
+      <LogicalName>BoscaliSummer.Scenario.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
 

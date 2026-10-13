@@ -21,12 +21,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             height = h;
         }
 
-        public static Rgba C(Color c) => new Rgba(c.r, c.g, c.b, c.a);
-
         public void Line(float x0, float y0, float x1, float y1, float w, Color c) =>
-            AvStrokes.Line(buffer, x0, height - y0, x1, height - y1, w, C(c));
+            AvStrokes.Line(buffer, x0, height - y0, x1, height - y1, w, c.ToRgba());
 
-        public void Rect(float x, float y, float w, float h, Color c) => AvStrokes.Fill(buffer, x, height - y - h, w, h, C(c));
+        public void Rect(float x, float y, float w, float h, Color c) => AvStrokes.Fill(buffer, x, height - y - h, w, h, c.ToRgba());
 
         /// <summary>A polyline through (xs[i], ys[i]) (top-left space).</summary>
         public void Poly(float[] xs, float[] ys, int n, bool closed, float w, Color c)
@@ -37,10 +35,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 Xs[i] = xs[i];
                 Ys[i] = height - ys[i];
             }
-            AvStrokes.Polyline(buffer, Xs, Ys, n, closed, w, C(c));
+            AvStrokes.Polyline(buffer, Xs, Ys, n, closed, w, c.ToRgba());
         }
 
-        public void Diamond(float cx, float cy, float r, float w, Color c) => AvStrokes.Diamond(buffer, cx, height - cy, r, w, C(c));
+        public void Diamond(float cx, float cy, float r, float w, Color c) => AvStrokes.Diamond(buffer, cx, height - cy, r, w, c.ToRgba());
 
         /// <summary>Rank stripes: 1 Rookie, 2 Wingman, 3 Veteran, 3 with a bar above for Ace, 3 with a diamond above for Legend.
         /// Centred on (cx, cy), about <paramref name="size"/> wide.</summary>

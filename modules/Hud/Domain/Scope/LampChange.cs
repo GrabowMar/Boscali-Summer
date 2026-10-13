@@ -1,5 +1,3 @@
-using BoscaliSummer.Modules.Hud.Domain;
-
 namespace BoscaliSummer.Modules.Hud.Domain
 {
     /// <summary>

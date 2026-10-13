@@ -1,0 +1,273 @@
+# Wingman net: ice. Flat, minimal, clinical. Numbers and facts.
+
+@wing.copy status
+[ice] Copy.
+[ice] Wilco.
+[ice] Copy, <lead>. Executing.
+[ice] Understood. Starting.
+[ice] Roger. On it.
+
+@wing.unable status
+[ice] Unable.
+[ice] Unable, <lead>. Not possible.
+[ice] Negative. Cannot comply.
+[ice] Unable. Say again with a different task.
+[ice] Cannot do that.
+[ice rain] Unable. Weather.
+
+@wing.taskdone status
+[ice] Done.
+[ice] Task complete.
+[ice] Finished, <lead>.
+[ice] Complete. Awaiting orders.
+[ice] That is done.
+
+@wing.taxiing ambient
+[ice] Taxiing.
+[ice] Moving.
+[ice] Off the spot.
+[ice] Taxiing, <lead>.
+[ice] Leaving parking.
+
+@wing.holdingshort ambient
+[ice] Holding short.
+[ice] Short of the runway.
+[ice] Holding. Ready.
+[ice] Holding short, <lead>.
+[ice] At the line.
+
+@wing.liningup ambient
+[ice] Lining up.
+[ice] On the runway.
+[ice] Entering the runway.
+[ice] Lined up. Ready.
+[ice] Runway entered.
+[ice night] Lining up. Lights set.
+
+@wing.rolling status
+[ice] Rolling.
+[ice] Takeoff roll.
+[ice] Rolling, <lead>.
+[ice] Throttle up. Rolling.
+[ice] Starting the roll.
+
+@wing.airborne status
+[ice] Airborne.
+[ice] Wheels up. Joining.
+[ice] Airborne, <lead>. Coming to you.
+[ice] Gear up. Joining.
+[ice] Airborne. On my way.
+
+@wing.down ambient
+[ice] Down.
+[ice] Landed.
+[ice] On the ground, <lead>.
+[ice] Wheels down.
+[ice] Down and safe.
+[ice loss] Down. Short one aircraft.
+
+@wing.goaround status
+[ice] Going around.
+[ice] Going around, <lead>.
+[ice] Approach rejected. Going around.
+[ice] No landing. Going around.
+[ice] Going around. Second pass.
+
+@wing.engaging tactical
+[ice] Engaging.
+[ice] Committing, <lead>.
+[ice] Engaged.
+[ice] Going in.
+[ice] I have the fight.
+[ice loss] Engaging. One fewer of us than this morning.
+
+@wing.fox2 tactical
+[ice] Fox two. <target>.
+[ice] Fox two, <lead>.
+[ice] Fox two on the <target>.
+[ice] Fox two away.
+[ice] Fox two. Infrared. <target>.
+
+@wing.fox3 tactical
+[ice] Fox three. <target>.
+[ice] Fox three, <lead>.
+[ice] Fox three on the <target>.
+[ice] Fox three away.
+[ice] Fox three. Radar. <target>.
+
+@wing.magnum tactical
+[ice] Magnum. <target>.
+[ice] Magnum, <lead>.
+[ice] Magnum on the <target>.
+[ice] Magnum away.
+[ice] Magnum. Anti-radiation. <target>.
+
+@wing.rifle tactical
+[ice] Rifle. <target>.
+[ice] Rifle, <lead>.
+[ice] Rifle on the <target>.
+[ice] Rifle away.
+[ice] Rifle. Ground. <target>.
+
+@wing.splash tactical
+[ice] Splash. <target>.
+[ice] Splash one <target>.
+[ice] Splash, <lead>. One less.
+[ice] Splash. Confirmed.
+[ice] <target> destroyed. Splash.
+[ice aftercombat] Splash. Count updated.
+
+@wing.bandit tactical
+[ice] Bandit. <bra>.
+[ice] Bandit, <bra>, <type>.
+[ice] Bandit bearing <bra>.
+[ice] New bandit, <lead>. <bra>.
+[ice] Bandit. <bra>. Hostile.
+[ice night] Bandit. <bra>. Visible on radar only.
+
+@wing.contact status
+[ice] Contact. <bra>.
+[ice] Contact, <bra>, <type>.
+[ice] Ground contact bearing <bra>.
+[ice] New contact, <lead>. <bra>.
+[ice] Contact. <bra>. Ground.
+
+@wing.bogeydope tactical
+[ice] Nearest bandit, <bra>.
+[ice] Bogey dope. <bra>, <type>.
+[ice] Closest threat, <bra>.
+[ice] <bra>. Hostile.
+[ice] Bandit, <bra>. Only that.
+[ice night] Bandit, <bra>. Dark outside.
+
+@wing.clean tactical
+[ice] Clean.
+[ice] Clean, <lead>. Nothing.
+[ice] Naked.
+[ice] Sky is clean.
+[ice] Nothing on the scope.
+[ice aftercombat] Clean. They stopped.
+
+@wing.panic emergency
+[ice] Missile inbound.
+[ice] Defending.
+[ice] Missile on me. Defending.
+[ice] Tracked. Defending.
+
+@wing.defensiveclear tactical
+[ice] Missile defeated.
+[ice] Defeated.
+[ice] Missile gone. Resuming.
+[ice] Clear of the missile, <lead>.
+[ice] No longer tracked.
+[ice aftercombat] Missile defeated. Still intact.
+
+@wing.pullup emergency
+[ice] Pulling up.
+[ice] Ground proximity. Climbing.
+[ice] Auto recovery.
+[ice] Terrain. Pull up.
+
+@wing.breakoff emergency
+[ice] Breaking off.
+[ice] Collision risk. Break.
+[ice] Too close. Breaking.
+[ice] Break. Traffic.
+
+@wing.maneuvering tactical
+[ice] Maneuvering. <detail>.
+[ice] <detail>, <lead>.
+[ice] Starting <detail>.
+[ice] Executing the <detail>.
+[ice] Flying <detail>.
+
+@wing.maneuverdone status
+[ice] Maneuver complete.
+[ice] Maneuver done, <lead>.
+[ice] Finished flying it.
+[ice] Done. Level.
+[ice] Maneuver finished.
+
+@wing.fallingback tactical
+[ice] Falling back.
+[ice] Disengaging. Outnumbered.
+[ice] Falling back, <lead>.
+[ice] Odds are poor. Disengaging.
+[ice] Leaving the fight.
+[ice loss] Falling back. We cannot afford another.
+
+@wing.rejoining status
+[ice] Rejoining.
+[ice] Coming back to formation.
+[ice] Rejoining, <lead>.
+[ice] Returning to the wing.
+[ice] Disengaged. Rejoining.
+
+@wing.winchester status
+[ice] Winchester.
+[ice] Winchester, <lead>. Heading home.
+[ice] No weapons left. Winchester.
+[ice] Winchester. Returning to base.
+[ice] Winchester. Departing.
+[ice recovery] Winchester. Inbound to base.
+
+@wing.outofammo status
+[ice] Out of weapons. Staying.
+[ice] No ordnance, <lead>. Remaining with you.
+[ice] Empty. Still on your wing.
+[ice] Weapons expended. Staying with the wing.
+[ice] Dry. Remaining.
+
+@wing.joker status
+[ice] Joker. <n> minutes to bingo.
+[ice] Joker fuel, <lead>. <n> minutes.
+[ice] <n> minutes to bingo.
+[ice] Fuel low. <n> minutes remaining to bingo.
+[ice] Joker. <n>.
+[ice recovery] Joker. <n> minutes to bingo. Already heading in.
+
+@wing.bingo status
+[ice] Bingo.
+[ice] Bingo fuel, <lead>. Departing.
+[ice] Bingo. Going home.
+[ice] Fuel for the trip home only.
+[ice] Bingo. No margin.
+
+@wing.fallingbehind status
+[ice] Falling behind.
+[ice] Cannot keep pace, <lead>.
+[ice] Dropping back. Too slow.
+[ice] I am slower than you.
+[ice] Losing distance.
+
+@wing.damaged status
+[ice] Damaged.
+[ice] Took a hit, <lead>. Still flying.
+[ice] Damage received.
+[ice] Hit. Systems checked.
+[ice] I am damaged. Continuing.
+[ice loss] Damaged. Noted.
+
+@wing.airframelost tactical
+[ice] <n> is down.
+[ice] Number <n> is down, <lead>.
+[ice] <n> shot down.
+[ice] We lost <n>.
+[ice] <n> destroyed.
+[ice night] <n> is down. Not seen.
+
+@wing.ejected tactical
+[ice] <n> ejected.
+[ice] Number <n> is out, <lead>. Chute.
+[ice] <n> punched out.
+[ice] <n> left the aircraft.
+[ice] Chute from <n>. Marking position.
+[ice rain] <n> ejected. Visibility poor.
+
+@wing.escortlost tactical
+[ice] Escort lost.
+[ice] The escort is gone, <lead>.
+[ice] Escort destroyed.
+[ice] Mission aircraft is down.
+[ice] We lost the escort.
+[ice loss] Escort lost. Second loss.

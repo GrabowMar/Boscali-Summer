@@ -108,7 +108,7 @@ namespace BoscaliSummer.Fire
             }
         }
 
-        internal GameObject AttachShell(GlobalPosition position, List<FacadePiece> pieces, int buildingId, bool nativeRubble = false)
+        internal GameObject AttachShell(GlobalPosition position, List<FacadePiece> pieces, bool nativeRubble = false)
         {
             if (GameManager.IsHeadless) return null;
             Pile pile = Nearest(position.ToLocalPosition(), 8f);

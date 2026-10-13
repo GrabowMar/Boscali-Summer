@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Text;
+using BoscaliSummer.Core.Chatter;
 
 using BoscaliSummer.Modules.Wing.Networking;
 namespace BoscaliSummer.Modules.Wing.Domain
@@ -115,7 +116,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         /// <summary>A number that moves whenever an event or a radio line was logged: a page fills its rows (which allocates while it
         /// describes events) only when it moved.</summary>
-        public static long Stamp(WingEventRing events, RadioLog radio)
+        public static long Stamp(WingEventRing events, ChatterLog radio)
         {
             if (events == null && radio == null) return 0L;
             long k = (events?.Total ?? 0L) * 1000003L;
@@ -125,10 +126,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
 
         /// <summary>Newest first, at most <paramref name="max"/> rows; on a tie the event goes first. Returns the count.</summary>
-        public static int Fill(WingEventRing events, RadioLog radio, List<LogRow> into, int max = MaxRows) =>
+        public static int Fill(WingEventRing events, ChatterLog radio, List<LogRow> into, int max = MaxRows) =>
             Fill(events, radio, into, max, LogFilter.None);
 
-        public static int Fill(WingEventRing events, RadioLog radio, List<LogRow> into, int max, in LogFilter filter)
+        public static int Fill(WingEventRing events, ChatterLog radio, List<LogRow> into, int max, in LogFilter filter)
         {
             into.Clear();
             if (filter.Any) radio = null;

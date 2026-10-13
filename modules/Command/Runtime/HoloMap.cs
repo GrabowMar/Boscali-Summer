@@ -12,57 +12,72 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Command.Runtime
 {
     /// <summary>
-    /// The HOLO MAP: the map key's middle stop. MINI (the game's small corner map) -> key -> HOLO -> key -> MFD (the game's maximised map) -> key -> MINI. The HOLO is a wire
-    /// relief of the real ground around the player's aircraft, seen from a fixed tilt with the aircraft in the middle (heading up, or north up), drawn into a texture of the mod's
-    /// own (<see cref="HoloGrid"/> + <see cref="HoloView"/>, no game camera involved) and shown over the bottom-left corner of the HUD as projected light, with the aircraft, range
-    /// rings, airbases, the units the game's map shows and the selected target drawn over it. The pilot keeps flying: nothing here captures the cursor, blocks an input or pauses.
-    /// <para>Only the key path is diverted. The game's key handler (<c>ExtraUiInput.Update</c>) calls <c>DynamicMap.Maximize</c> on the Rewired "Map" button; two patches
-    /// (<see cref="HoloMapKeyScopePatch"/>, <see cref="HoloMapKeyPatch"/>) tell this class that call is the key's, and it may take the press instead (<see cref="KeyTakesMaximize"/>). The mod's
-    /// own callers of Maximize (menus, panels, automation) open the maximised map directly, as before, and close the holo.</para>
-    /// <para>It closes on Esc, a pause, death, eject, no living aircraft, the HUD or the corner map going away, the setting turned off, any maximised map and a scene change, and fails
-    /// open: no baked terrain, no additive UI material or no HUD canvas, and the key goes straight to the maximised map. The state machine is <see cref="HoloMapState"/>.</para>
+    /// The TAC MAP: the corner map of the HUD as a standing mini terrain tile, and the HOLO MAP the map key HELD grows it into. One hologram in two sizes. While the pilot flies with the HUD up (and the TAC MAP
+    /// is on HOLO) the bottom-left corner shows a solid terrain tile of the real ground around the aircraft in a frame of 340 x 300 units, seen from 68 degrees above the horizon (the aircraft in the middle across and 38 %
+    /// up when heading up, in the middle when north up, the view wedge, the units the game's map shows, the selected target, the nearest airbase in view and a scale bar, every frame). Holding the map key past 0.2 s grows the
+    /// same picture over 180 ms to a frame 82 % of the screen height tall and 1.3 times as wide, centred on the screen, seen from 55 degrees with the aircraft in the middle, at the held range, a denser grid and the full
+    /// marks (the BIG one); letting go shrinks it back and opens no MFD. A tap opens the game's maximised map (MFD) as it always did, and while that is up nothing of the holo draws; when it closes the
+    /// MINI returns. On CLASSIC the MINI never draws and the game's own corner map is left alone, but the key still raises the big hologram. The picture is drawn by <see cref="HoloGrid"/> + <see cref="HoloView"/> (no game
+    /// camera involved) into a texture of the mod's own with hidden lines removed and shown as projected light with the marks laid over it (HoloMap.Marks.cs, HoloMap.Ui.cs); the pilot keeps flying: nothing here captures the
+    /// cursor, blocks an input or pauses.
+    /// <para>Only the key-down Maximize is diverted. The game's key handler (<c>ExtraUiInput.Update</c>) calls <c>DynamicMap.Maximize</c> the frame the Rewired "Map" button goes down; two patches
+    /// (<see cref="HoloMapKeyScopePatch"/>, <see cref="HoloMapKeyPatch"/>) tell this class that call is the key's, and it swallows it and waits (<see cref="KeyTakesMaximize"/>). Each frame it polls the
+    /// same Rewired action for "held": released within 0.2 s it calls Maximize itself, outside the key path, so every Maximize listener runs as for the game's own call; held longer it shows the
+    /// big holo and takes it down on release. Minimize is never touched. The mod's own callers of Maximize (menus, panels, automation) open the maximised map directly, as before.</para>
+    /// <para>What is shown follows <see cref="HoloPresentation.Choose"/>; the machine for the key is <see cref="HoloMapState"/>. The game's corner map is hidden through a CanvasGroup of ours on its root while the MINI or
+    /// the BIG is up and put back exactly the moment neither is: on Esc, a pause, death, eject, no living aircraft, the HUD or the corner map going away, CLASSIC, any maximised map and a scene change. It fails open:
+    /// no baked terrain, no additive UI material, no HUD canvas or any exception while drawing leaves the game's corner map visible and untouched, and the key goes straight to the maximised map on key down.</para>
     /// </summary>
     // Runs after the native camera and map (order 2) have settled.
     [DefaultExecutionOrder(100)]
     internal sealed partial class HoloMap : MonoBehaviour, ISceneService
     {
-        private const float GrowSeconds = .18f;
-        private const float RenderInterval = .05f;
         private const float ScanInterval = .25f;
         private const float FieldRetry = 2f;
-        private const float GrownScale = 1f, StartScale = .6f;
 
         internal static HoloMap Live { get; private set; }
 
-        /// <summary>The hologram is up (the pilot is at HOLO): the HUD's own corner-map dressing is to be hidden meanwhile.</summary>
-        public static bool Active { get; private set; }
+        /// <summary>The hologram (MINI or BIG) is up: the HUD's own corner-map dressing is to be hidden meanwhile.</summary>
+        private static bool active;
+        /// <summary>The hologram is up, in either size. Also tells the HUD (Core HudMapState) so its own corner-map dressing steps aside.</summary>
+        public static bool Active { get => active; private set { active = value; BoscaliSummer.Core.Contracts.HudMapState.HoloActive = value; } }
 
         /// <summary>True while the game's own <c>ExtraUiInput.Update</c> runs: a Maximize call made then is the map key's.</summary>
         internal static bool InKeyUpdate { get; set; }
 
         private CommandSettings settings;
         private readonly HoloMapState state = new HoloMapState();
+        // The player and action the game's own key handler reads (ExtraUiInput: ReInput.players.GetPlayer(0), "Map").
+        private Rewired.Player keyPlayer;
         private TerrainHeightField field;
-        private float nextField, nextRender, nextScan;
-        private float grow;
+        private float nextField, nextPrepare, nextScan;
+        // What is up: the presentation asked for now, how far the one picture has grown (0 MINI .. 1 BIG, over 180 ms) and how far it has faded in (0..1, after it first shows).
+        private HoloShape shape;
+        private float size, appear;
+        // An exception while drawing: nothing more is drawn until the scene changes, and the game's corner map is back.
+        private bool broken;
         private Aircraft plane;
+        // The aircraft's global place and heading as the picture reads them, and the picture's range in metres (from the aircraft to the frame's side at its own depth).
         private float planeX, planeY, planeZ, heading, radius;
         private string failure = "";
 
-        /// <summary>The sim hook's range and orientation in place of the saved settings; memory only, cleared with the scene.</summary>
+        /// <summary>The sim hook's settings in place of the saved ones; memory only, cleared with the scene.</summary>
         internal int? RangeOverride { get; set; }
+        internal int? MiniRangeOverride { get; set; }
         internal bool? NorthOverride { get; set; }
+        internal TacMapMode? TacOverride { get; set; }
 
-        private int RangeKm
-        {
-            get
-            {
-                int km = RangeOverride ?? settings.HoloRangeKm.Value;
-                return km == 10 || km == 40 ? km : 20;
-            }
-        }
+        private int MiniKm => HoloPresentation.MiniRange(MiniRangeOverride ?? settings.TacMapRangeKm.Value);
+
+        private int BigKm => HoloPresentation.BigRange(RangeOverride ?? settings.HoloRangeKm.Value, MiniKm);
+
+        /// <summary>The range of the picture being drawn, in kilometres: the MINI's, or the held map's.</summary>
+        private int RangeKm => shape == HoloShape.Mini ? MiniKm : BigKm;
 
         private bool NorthUp => NorthOverride ?? settings.HoloNorthUp.Value;
+
+        /// <summary>The TAC MAP is on HOLO: the corner map is the standing MINI. CLASSIC leaves the game's own corner map alone.</summary>
+        private bool MiniOn => (TacOverride ?? settings.TacMap.Value) == TacMapMode.Holo;
 
         internal void Configure(CommandSettings value)
         {
@@ -75,8 +90,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
         // ------------------------------------------------------------------ the key
 
         /// <summary>
-        /// The Maximize patch asks, before the original runs: true when the holo takes this press instead (the original is then skipped). False for every Maximize that is not the map
-        /// key's, and for the key itself when the holo is off, unavailable, or already up (that press is the way on to the maximised map).
+        /// The Maximize patch asks, before the original runs: true when the key-down press is swallowed (the original is then skipped) until the next frames tell a tap from a hold. False for every
+        /// Maximize that is not the map key's, and for the key itself when the holo is off or unavailable (the map opens at once, as in the vanilla game) or the sim hook's holo is up.
         /// </summary>
         internal static bool KeyTakesMaximize()
         {
@@ -93,10 +108,24 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private bool OnKey()
         {
             bool available = state.Stage == HoloStage.Mini && CanOpen();
-            bool take = state.KeyMaximize(available);
-            if (take) Opened();
-            else if (state.Stage == HoloStage.Mfd) Hide();
+            bool take = state.KeyDown(available, Time.unscaledTime);
+            if (!take && state.Stage == HoloStage.Mfd) Hide();
             return take;
+        }
+
+        /// <summary>The map key is down now: the same Rewired player and action the game's key handler reads.</summary>
+        private bool KeyHeld()
+        {
+            if (!Rewired.ReInput.isReady) return false;
+            if (keyPlayer == null) keyPlayer = Rewired.ReInput.players.GetPlayer(0);
+            return keyPlayer != null && keyPlayer.GetButton("Map");
+        }
+
+        /// <summary>A tap: the maximised map the game would have opened on key down, called here outside the key path so the Maximize patches and every listener run as for the game's own call.</summary>
+        private static void OpenMfd()
+        {
+            DynamicMap map = SceneSingleton<DynamicMap>.i;
+            if (map != null && !DynamicMap.mapMaximized) map.Maximize();
         }
 
         private void NativeMaximized()
@@ -111,10 +140,10 @@ namespace BoscaliSummer.Modules.Command.Runtime
             Hide();
         }
 
-        /// <summary>Everything the holo needs, in one test: the setting, a map the game lets open, a living aircraft, the HUD up, and the pieces (terrain, textures, material, UI) built.</summary>
+        /// <summary>Everything the held holo needs, in one test: the setting, a map the game lets open, a living aircraft, the HUD up, and the pieces (terrain, textures, material, UI) built.</summary>
         private bool CanOpen()
         {
-            if (Application.isBatchMode || settings == null || !settings.HoloMap.Value || !DynamicMap.AllowedToOpen) return false;
+            if (Application.isBatchMode || broken || settings == null || !settings.HoloMap.Value || !DynamicMap.AllowedToOpen) return false;
             if (!FlightReady(out plane) || !SceneReady()) return false;
             return Prepare();
         }
@@ -135,26 +164,21 @@ namespace BoscaliSummer.Modules.Command.Runtime
             return false;
         }
 
-        private void Opened()
+        /// <summary>The pieces are all built, or one try to build them now (at most every two seconds: a map without baked terrain is asked again, not every frame).</summary>
+        private bool Ready()
         {
-            nextRender = nextScan = 0f;
-            grow = 0f;
-            Active = true;
-            ShowRoot();
-            Refresh();
-            ApplyGrow();
+            if (field != null && rt != null && root != null && additive != null) return true;
+            if (Time.unscaledTime < nextPrepare) return false;
+            nextPrepare = Time.unscaledTime + FieldRetry;
+            return Prepare();
         }
 
-        /// <summary>Opens or closes the holo without the key (the sim hook); true when it is up afterwards.</summary>
+        /// <summary>Opens or closes the big holo without the key (the sim hook); true when it is up afterwards. An opened holo stays up until it is closed, whatever the map key does.</summary>
         internal bool SimOpen(bool open)
         {
-            if (!open)
-            {
-                state.Close();
-                Hide();
-                return false;
-            }
-            if (state.Open(state.Stage == HoloStage.Mini && CanOpen())) Opened();
+            if (open) state.Open(state.Stage == HoloStage.Mini && CanOpen());
+            else state.Close();
+            Step();
             return state.Holo;
         }
 
@@ -163,42 +187,85 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private void LateUpdate()
         {
             if (Application.isBatchMode || settings == null) return;
-            state.Sync(DynamicMap.mapMaximized);
-            PreloadField();
-            if (state.Holo && !Wanted()) state.Close();
-            if (!state.Holo)
+            Step();
+        }
+
+        /// <summary>One frame, guarded: an exception takes the holo down for good (until the scene changes) and gives the game's corner map back.</summary>
+        private void Step()
+        {
+            if (broken || settings == null || Application.isBatchMode) return;
+            try { Frame(); }
+            catch (Exception error)
             {
-                if (Active || (root != null && root.activeSelf)) Hide();
-                return;
-            }
-            if (rt == null || root == null)
-            {
+                broken = true;
+                failure = "exception: " + error.GetType().Name;
+                PatchGuard.Report("Command.HoloMap.Frame", error);
                 state.Close();
                 Hide();
+            }
+        }
+
+        private void Frame()
+        {
+            state.Sync(DynamicMap.mapMaximized);
+            // Another map's heights (the last mission's, or the map image changed under us): drop them and fetch this map's.
+            if (field != null && !MfdTerrainRelief.IsCurrent(field))
+            {
+                field = null;
+                placed = false;
+                nextField = nextPrepare = 0f;
+            }
+            PreloadField();
+            // The corner map the holo stands in for is showing: a living aircraft, the HUD up, no pause or cinematic mode, no maximised map.
+            bool up = FlightReady(out plane) && SceneReady();
+            // The held holo (and a tap waiting to be told from a hold) stays only while the setting is on, there is no Esc and the corner map is showing.
+            bool keyed = up && settings.HoloMap.Value && !Input.GetKeyDown(KeyCode.Escape);
+            if ((state.Holo || state.Stage == HoloStage.Pending) && !keyed) state.Close();
+            if (state.Tick(Time.unscaledTime, state.KeyDriven && KeyHeld()) == HoloStep.OpenMfd) OpenMfd();
+
+            HoloShape want = HoloPresentation.Choose(state.Stage, MiniOn, up);
+            if (want != HoloShape.None && !Ready())
+            {
+                // The pieces are not there (no baked terrain, no material, no canvas): a hold that cannot be drawn is no hold, and the game's corner map stays.
+                if (want == HoloShape.Big) state.Close();
+                want = HoloShape.None;
+            }
+            if (want == HoloShape.None)
+            {
+                if (shape != HoloShape.None || Active || (root != null && root.activeSelf)) Hide();
                 return;
             }
-            Active = true;
-            grow = Mathf.MoveTowards(grow, 1f, Time.unscaledDeltaTime / GrowSeconds);
-            if (Time.unscaledTime >= nextRender)
-            {
-                nextRender = Time.unscaledTime + RenderInterval;
-                Refresh();
-            }
-            ApplyGrow();
+            Present(want);
         }
 
-        /// <summary>The terrain is loaded while the aircraft sits on the ramp, not as a hitch at the first key press.</summary>
+        /// <summary>
+        /// The presentation for this frame: the one picture grows or shrinks toward its size, the layout follows, the picture is drawn and the game's corner map fades behind it.
+        /// </summary>
+        private void Present(HoloShape want)
+        {
+            bool fresh = shape == HoloShape.None;
+            shape = want;
+            Active = true;
+            if (fresh)
+            {
+                appear = size = 0f;
+                nextScan = 0f;
+                ShowRoot();
+            }
+            float seconds = Time.unscaledDeltaTime;
+            appear = Mathf.MoveTowards(appear, 1f, seconds / HoloPresentation.GrowSeconds);
+            size = HoloPresentation.Size(size, want, seconds);
+            Layout();
+            Refresh();
+            ApplyPresence();
+        }
+
+        /// <summary>The terrain is loaded while the aircraft sits on the ramp, not as a hitch at the first picture.</summary>
         private void PreloadField()
         {
-            if (field != null || Time.unscaledTime < nextField || !settings.HoloMap.Value) return;
+            if (field != null || Time.unscaledTime < nextField || !(settings.HoloMap.Value || MiniOn)) return;
             nextField = Time.unscaledTime + FieldRetry;
             if (FlightReady(out _)) MfdTerrainRelief.TryGetHeightField(out field);
-        }
-
-        /// <summary>The holo stays up only while all of this holds: the setting, no Esc, a living aircraft, the HUD and the corner map showing, no pause or cinematic mode.</summary>
-        private bool Wanted()
-        {
-            return settings.HoloMap.Value && !Input.GetKeyDown(KeyCode.Escape) && FlightReady(out plane) && SceneReady();
         }
 
         /// <summary>The local aircraft is flown by a living pilot.</summary>
@@ -220,10 +287,11 @@ namespace BoscaliSummer.Modules.Command.Runtime
             return map != null && map.gameObject.activeInHierarchy && !DynamicMap.mapMaximized;
         }
 
-        /// <summary>The holo goes away: the corner map comes back exactly as the game had it, and nothing renders until the next open.</summary>
+        /// <summary>The holo goes away: the corner map comes back exactly as the game had it, and nothing renders until the next presentation.</summary>
         private void Hide()
         {
-            grow = 0f;
+            shape = HoloShape.None;
+            appear = size = 0f;
             Active = false;
             if (root != null && root.activeSelf) root.SetActive(false);
             RestoreMinimap();
@@ -232,26 +300,87 @@ namespace BoscaliSummer.Modules.Command.Runtime
         /// <summary>The holo as the sim hook reports it.</summary>
         internal Dictionary<string, object> State()
         {
+            float scale = hudCanvas != null ? Mathf.Max(.01f, hudCanvas.rootCanvas.scaleFactor) : 1f;
+            float canvasWide = canvasRect != null ? canvasRect.rect.width : 0f, canvasHigh = canvasRect != null ? canvasRect.rect.height : 0f;
+            HoloPresentation.Frame(0f, canvasWide, canvasHigh, out _, out _, out float miniWide, out float miniHigh);
+            HoloPresentation.Frame(1f, canvasWide, canvasHigh, out _, out _, out float bigWide, out float bigHigh);
             return new Dictionary<string, object>
             {
                 { "ok", true },
                 { "active", Active },
                 { "stage", state.Stage.ToString() },
+                { "presentation", shape == HoloShape.Mini ? "mini" : shape == HoloShape.Big ? "big" : "none" },
+                { "tacMode", settings != null ? (MiniOn ? "Holo" : "Classic") : "" },
                 { "additiveMaterial", additive != null },
                 { "renderTexture", rt != null && rt.IsCreated() },
-                { "vertexCount", mesh != null ? mesh.vertexCount : 0 },
+                { "depthPath", depthPath },
+                { "reversedZ", SystemInfo.usesReversedZBuffer },
+                { "graphicsApi", SystemInfo.graphicsDeviceType.ToString() },
+                { "vertexCount", nodes },
                 { "litVertices", litVertices },
+                { "landLineSegments", (landEastWestCount + landNorthSouthCount) / 2 },
+                { "waterLineSegments", waterCount / 2 },
+                { "coastSegments", coastCount / 2 },
+                { "lastFillWorkMs", lastWorkMs },
+                { "worstFillWorkMs", worstWorkMs },
+                { "gridCellsX", halfX * 2 },
+                { "gridCellsZ", halfZ * 2 },
+                { "gridCellMetres", cellMetres },
+                { "reachKm", reach / 1000f },
                 { "marksDrawn", unitsDrawn + basesDrawn + (Active ? 1 : 0) },
                 { "unitMarks", unitsDrawn },
+                { "unitCap", HoloPresentation.UnitCap(shape) },
                 { "airbaseMarks", basesDrawn },
                 { "labelsUsed", labelsUsed },
-                { "lastRenderMs", lastRenderMs },
+                { "wedgeDegrees", wedgeDegrees },
+                { "gridRef", gridRef },
+                { "scaleKm", barMetres / 1000f },
                 { "mapHidden", mapGroup != null && mapGroup.alpha < .01f },
-                { "grow", grow },
+                { "nativeMapAlpha", mapGroup != null ? mapGroup.alpha : 1f },
+                { "plateAlpha", nativePlate != null ? nativePlate.canvasRenderer.GetAlpha() : 1f },
+                { "plateFound", nativePlate != null },
+                { "shadeAlpha", shade != null ? shade.color.a : 0f },
+                { "grow", size },
+                { "presence", appear },
+                { "frameWidth", frameW },
+                { "frameHeight", frameH },
+                { "frameUnitsWide", unit > 0f ? frameW / unit : 0f },
+                { "frameUnitsHigh", unit > 0f ? frameH / unit : 0f },
+                { "frameAspect", frameH > 0f ? frameW / frameH : 0f },
+                { "frameHeightShare", canvasHigh > 0f ? frameH / canvasHigh : 0f },
+                { "frameCentreX", canvasWide > 0f ? (laidX + frameW * .5f) / canvasWide : 0f },
+                { "frameCentreY", canvasHigh > 0f ? (laidY + frameH * .5f) / canvasHigh : 0f },
+                { "frameWidthPixels", frameW * scale },
+                { "frameHeightPixels", frameH * scale },
+                { "miniFramePixels", miniWide * scale + "x" + miniHigh * scale },
+                { "bigFramePixels", bigWide * scale + "x" + bigHigh * scale },
+                { "renderWidth", pixelsWide },
+                { "renderHeight", pixelsHigh },
+                { "tiltDegrees", camera.Tilt },
+                { "aircraftUp", camera.Aspect > 0f ? HoloPresentation.AircraftUp(shape, NorthUp) : 0f },
                 { "rangeKm", settings != null ? RangeKm : 0 },
+                { "miniRangeKm", settings != null ? MiniKm : 0 },
+                { "bigRangeKm", settings != null ? BigKm : 0 },
                 { "northUp", settings != null && NorthUp },
+                { "lastRenderMs", lastRenderMs },
+                { "worstRenderMs", worstRenderMs },
+                { "renders", renders },
+                { "lastFillMs", lastFillMs },
+                { "worstFillMs", worstFillMs },
+                { "fills", fills },
+                { "lastScanMs", lastScanMs },
+                { "worstScanMs", worstScanMs },
+                { "scans", scans },
+                { "broken", broken },
                 { "failure", failure },
             };
+        }
+
+        /// <summary>Clears the worst timings and the counts (the sim hook, after the warm-up).</summary>
+        internal void ResetTimings()
+        {
+            lastRenderMs = worstRenderMs = lastScanMs = worstScanMs = lastFillMs = worstFillMs = lastWorkMs = worstWorkMs = 0f;
+            renders = scans = fills = 0;
         }
 
         // ------------------------------------------------------------------ the scene
@@ -260,13 +389,18 @@ namespace BoscaliSummer.Modules.Command.Runtime
         {
             ReleaseAll();
             state.Reset();
+            keyPlayer = null;
             field = null;
             plane = null;
             failure = "";
-            RangeOverride = null;
+            RangeOverride = MiniRangeOverride = null;
             NorthOverride = null;
-            nextField = nextRender = nextScan = grow = 0f;
+            TacOverride = null;
+            broken = false;
+            shape = HoloShape.None;
+            nextField = nextPrepare = nextScan = size = appear = 0f;
             Active = false;
+            ResetTimings();
         }
 
         private void OnDestroy()

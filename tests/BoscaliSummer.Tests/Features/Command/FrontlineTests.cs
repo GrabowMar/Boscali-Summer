@@ -73,6 +73,7 @@ namespace BoscaliSummer.Tests.Features.Command
             TestBoundsAndObservations();
             TestContestedPressure();
             TestContestedTint();
+            TestFrontGapIsTinted();
             TestContourGeometry();
             TestClusterTree();
             TestEncirclement();
@@ -282,6 +283,34 @@ namespace BoscaliSummer.Tests.Features.Command
         /// A contested square is hatched from the two faction colours only, with the stripe
         /// runs following the control percentage — never a third "contested" colour.
         /// </summary>
+        private static void TestFrontGapIsTinted()
+        {
+            // One unheld square on the line, held ground on every side of it: both colours must run through it.
+            // Left uncovered it was a hole in the tint with each side's border line bent round it - a ring on the front.
+            var grid = new TacticalSectorGrid(10000f, 100000f);
+            grid.AddTroopPresence(-5000f, 5000f, 6f, false, 0f);
+            grid.AddTroopPresence(15000f, 5000f, 6f, false, 0f);
+            grid.AddTroopPresence(5000f, 15000f, 6f, false, 0f);
+            grid.AddTroopPresence(5000f, -5000f, 6f, true, 0f);
+            grid.EvaluateSectors(30f);
+            grid.WorldToCell(5000f, 5000f, out int col, out int row);
+            TestAssert.That(grid.GetSectorControl(col, row) == SectorControl.Neutral, "the fixture leaves the middle square unheld");
+
+            Color32[] pixels = grid.BakeTexture(128, 128, true, 0.35f);
+            int clear = 0;
+            // The middle square spans texels 64..76 on both axes; stay a texel inside it.
+            for (int y = 66; y <= 74; y++)
+            for (int x = 66; x <= 74; x++)
+                if (pixels[y * 128 + x].a == 0) clear++;
+            TestAssert.That(clear == 0, "an unheld square closed in by held ground is tinted through, " + clear + " of 81 texels were left bare");
+
+            var lone = new TacticalSectorGrid(10000f, 100000f);
+            lone.AddTroopPresence(-5000f, 5000f, 6f, false, 0f);
+            lone.EvaluateSectors(30f);
+            Color32[] open = lone.BakeTexture(128, 128, true, 0.35f);
+            TestAssert.That(open[70 * 128 + 70].a == 0, "unheld ground beside a single held square stays bare");
+        }
+
         private static void TestContestedTint()
         {
             // Coarse cells on purpose: the hatch must read at this texture size.

@@ -1,6 +1,74 @@
 # Changelog
 
+## 0.2.3 — update
+
+- **Map selection reaches the target list**: while you fly, contacts picked on the expanded map (click, box,
+  right-click menu) are now real weapon targets, several at a time; before, they only looked selected.
+  A new tool row on the map corner sets what a left drag does (PAN / BOX), what a click does (ADDS / ONE),
+  which side a box takes (ALL / HOSTILE / OWN) and clears the selection. New `Command` settings:
+  `MapLeftDragBox`, `MapClickAdds`, `MapBoxSide`, `MapRightDragTurns`, `MapDoubleClickZoom`,
+  `MapTurnSensitivity`, `MapZoomStep`.
+- **Relief map**: contacts stand on the terrain as 3D miniatures again (`MapMinis3D`, on by default), now
+  one mesh and one draw call that is rewritten only when something actually changed. Holding the right
+  mouse button and dragging turns the view again, next to the held wheel, Alt + drag and Ctrl + wheel.
+  The red and blue rings that formed on the front line are gone: an unheld square closed in by held
+  ground is now tinted through instead of being left as a hole with both border lines bent round it.
+- **The C menu stays open after you pick something**: every action now leaves the menu up (the row flashes and the result shows
+  under the hub), so several things can be set in one visit. Close it with the open key, Esc, or a click away from it. The ring's
+  icons and the hub are also much easier to hit: the cursor counts as on one from about 30 px outside its rim.
+- **Chaff is a countermeasure like the others** (issue 10): `Next Countermeasure` now steps FLARES, JAMMER, CHAFF, and while chaff
+  is selected the `Countermeasures` button dispenses it. The selection shows on the TAC BOARD, the game's own readout and the
+  C menu. Single player and hosting, like the dispenser itself.
+- **The C menu no longer takes the game's radial wheel** (issue 11): the `Radial Menu` binding opens the game's own wheel again, so
+  mods that add to it work; the C menu opens on its own key (`Autopilot.AceRadialKey`, default C). Set the new
+  `Autopilot.InteractionMenuOnRadialBinding` to on to open it from a HOTAS or gamepad button as before.
+- **The game's radial wheel is stock again**: the `BOSCALI` and `Wing Command` slices are gone from it. Autopilot landing, the
+  target presets and the wing orders are in the C menu (FLIGHT, TARGETS, WING).
+- **Objective marker redrawn** (issue 13): the contract marker in the cockpit drew a black square behind its area ring. It is now
+  drawn in the visor's own line work: corner brackets on the point, a chevron at the screen edge when the target is out of view,
+  a dashed area ring, and a shelf with the title and the distance that fills as the hold progresses.
+- **Map selection** (issue 14): one left click on the big map selected two contacts, or selected one and dropped it again,
+  because the game handed the click to the icons twice. One click is one click now.
+- **Visor terrain follows the map**: the terrain ghost and the holo map could keep the relief of the map flown before (Heartland
+  hills over the Archipelago). They now check the loaded map every frame and fetch its own relief. The ghost's lines are about a
+  quarter fainter and its twice-a-second repaint costs about half.
+- **Boscali Summer, the mission:** the **Boscali Summer** entry in the mission picker is now a scripted mission on top of the game's own Escalation. A cutscene tells the build-up in a storm at sunset (the night of the coup, the fall of Agrapol, the fleet coming home), with armoured columns already rolling, place-and-date stamps and the mod's event paintings landing as photographs along a timeline, framed as a surveillance feed and set to its own music. You pick a side as a contract pilot, your handler and your side's command talk you through an opening (fly to the picket station, break the raid on your strip), and then the war opens into the full Escalation sandbox with the story following its milestones to the end. Existing user missions are preserved; no mission file is shipped.
+- **Mission scripts:** the mission above is one text file. Your own go in `BepInEx/config/BoscaliSummer/scenarios/`: objectives and spawns written into a copy of any mission, named characters with dialogue, cutscene camera shots with captions, stamps and pinned photographs, hints, and campaigns whose chapters unlock one after another. A dedicated server starts one with `-mission scenario:<id>`. See [docs/SCENARIOS.md](docs/SCENARIOS.md). New F1 switch: **Cutscenes in scripted missions**.
+- **Mission systems prompt:** every mission, vanilla and workshop included, runs the whole mod again; nothing is locked. When a mission starts, a prompt on the map screen lists the systems with **FULL EXPERIENCE** and **IMMERSION ONLY** presets (immersion only keeps the cockpit, HUD, wing, radio and comms and leaves the mission as its author made it). Start, keep the answer for that mission, or never be asked again; F1 > Mission brings the prompt back.
+
+## 0.2.2 — update
+
+- **Chaff**: your aircraft now carries a chaff dispenser (single player and hosting), built on the
+  game's own unused chaff classes. It dazzles radar-guided missiles, most when you fly across the
+  missile's line of sight and not at all head-on. Holding the countermeasure button dispenses it
+  while a radar missile is inbound; DEFENCE has POP CHAFF and a switch for that link, and
+  `Autopilot.ChaffKey` binds a key. The load follows the flare load (24 to 96 bundles), shows on
+  the TAC BOARD's expendables and refills with a rearm.
+- **C menu additions**: TARGETS has LOCK NEAREST THREAT (the nearest tracked hostile aircraft, alone)
+  and TARGET INBOUND MSLS (every missile tracking you joins the selection); WEAPONS has OPEN /
+  CLOSE BAY DOORS on airframes with a weapon bay.
+- **C menu regrouped**: the ring is now WEAPONS, HUD, FLIGHT, WING, COMMS, COCKPIT, SUPPORT, VIEW,
+  DEFENCE, TARGETS. HUD (key 2) holds every TAC BOARD switch: the board itself, declutter, layout,
+  each scope page, each board part, shade, size and a held reset. The exterior lights are one FLIGHT
+  row, night vision moved to VIEW next to the new holo map switch and ground ghost level, the radio
+  became COCKPIT with the cabin effects and the kneeboard card, and DEFENCE gained GO DARK (radar
+  silent and every light off in one press).
+- **C menu handling**: the view no longer pans while a controller steers the menu; a controller
+  enters a category by holding the stick on it for a second (a ring closes round the icon); letting
+  go of the open key too early keeps the menu for a click instead of closing it; rows picked with
+  the arrows or the mouse wheel run on release; switches inside a list stay up so several can be
+  flipped in one visit; a click on the hub goes back and a click in the open closes.
+- **Radio chatter rebuilt**: the radio is rebuilt from scratch as script packs, with AWACS, tower,
+  enemy and command nets, voice packs, a comms block in the left column and the radio in the MFD
+  log. Not yet played through in game.
+- **Fused night vision**: a white-phosphor tube with metered, gating gain and a thermal glow on hot
+  units; VIEW has SET NVG GAIN while night vision is on.
+- **Holo map and terrain ghost**: the corner map is a standing mini hologram that the held map key
+  grows into the big one (a tap still opens the MFD map), and a wire relief of the ground shows
+  through the cockpit. NAV DATA and the DL EVT LOG event log join the visor.
+
 ## 0.2.1 — update
+
 
 - **MFD index rail rebuilt**: the button column on the right of the map is a new panel in the
   same style as the MFD consoles. Its keys now follow the colour scheme chosen on SET > DISPLAY the

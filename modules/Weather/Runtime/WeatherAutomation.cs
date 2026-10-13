@@ -75,7 +75,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             float cloud = Mathf.Clamp(Number(args, "cloudHeight", 4500f), 500f, 12000f);
             float? rain = args != null && args.ContainsKey("rain")
                 ? Mathf.Clamp01(Number(args, "rain", 1f)) : (float?)null;
-            if (!manager.SetManualOverride(conditions, cloud, null, rain, snapImmediate: true))
+            if (!manager.SetManualOverride(conditions, cloud, rain, snapImmediate: true))
                 return Fail("ForceWeather", "no valid mission clock yet; the weather has not started");
             if (args != null && (args.ContainsKey("seed") || args.ContainsKey("modelAge") || fixtureRegime.HasValue))
                 manager.SetFixtureField((uint)Mathf.Clamp(Number(args, "seed", 1337f), 1f, 16000000f),

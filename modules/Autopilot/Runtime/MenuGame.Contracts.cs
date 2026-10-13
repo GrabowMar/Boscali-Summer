@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Autopilot.Domain;
 
@@ -8,7 +9,8 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
     /// Boscali integrations, each through its owner's narrow contract: the camera mark and armed support
     /// (<see cref="ICameraTargetService"/>), OPS perks (<see cref="IOpsPerks"/>), SKYWELL, squad exfil, the local radio
     /// (<see cref="IRadioRemote"/>), team brevity calls (<see cref="IQuickCalls"/>), the wing (<see cref="IWingOrders"/>), the TAC BOARD options
-    /// (<see cref="ITacBoardSettings"/>) and the contributed TGT preset page (<see cref="IRadialMenuPage"/>). A missing owner leaves its fields at their
+    /// (<see cref="ITacBoardSettings"/>), the cabin effects (<see cref="IImmersionSettings"/>), the kneeboard (<see cref="IKneeboardGallery"/>), the visor
+    /// terrain (<see cref="IVisorTerrainSettings"/>) and the contributed TGT preset page (<see cref="IRadialMenuPage"/>). A missing owner leaves its fields at their
     /// defaults, so the pure catalog hides the rows.
     /// </summary>
     internal static partial class MenuGame
@@ -58,7 +60,49 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             w.CanExfil = Service<IAirAssaultOrders>()?.CanRequestExfil == true;
         }
 
-        /// <summary>The TAC BOARD's three VIEW rows. The cycle indices are the contract enums' values, in the order of <c>MenuCatalog.BoardDeclutters</c> and <c>BoardLayouts</c>.</summary>
+        /// <summary>One on/off option of an owner, by the slug the catalog's switch tables name it with.</summary>
+        private sealed class Flag<T>
+        {
+            public Flag(Func<T, bool> get, Action<T, bool> set) { Get = get; Set = set; }
+            public Func<T, bool> Get { get; }
+            public Action<T, bool> Set { get; }
+        }
+
+        private static readonly Dictionary<string, Flag<ITacBoardSettings>> BoardFlags = new Dictionary<string, Flag<ITacBoardSettings>>
+        {
+            ["pages/threat"] = new Flag<ITacBoardSettings>(b => b.PageThreat, (b, v) => b.PageThreat = v),
+            ["pages/shot"] = new Flag<ITacBoardSettings>(b => b.PageShot, (b, v) => b.PageShot = v),
+            ["pages/missile-cam"] = new Flag<ITacBoardSettings>(b => b.PageMissileCam, (b, v) => b.PageMissileCam = v),
+            ["pages/approach"] = new Flag<ITacBoardSettings>(b => b.PageApproach, (b, v) => b.PageApproach = v),
+            ["pages/wing"] = new Flag<ITacBoardSettings>(b => b.PageWing, (b, v) => b.PageWing = v),
+            ["pages/strike"] = new Flag<ITacBoardSettings>(b => b.PageStrike, (b, v) => b.PageStrike = v),
+            ["pages/dock"] = new Flag<ITacBoardSettings>(b => b.PageDock, (b, v) => b.PageDock = v),
+            ["pages/objective"] = new Flag<ITacBoardSettings>(b => b.PageObjective, (b, v) => b.PageObjective = v),
+            ["pages/systems"] = new Flag<ITacBoardSettings>(b => b.PageSystems, (b, v) => b.PageSystems = v),
+            ["parts/lamps"] = new Flag<ITacBoardSettings>(b => b.ShowLamps, (b, v) => b.ShowLamps = v),
+            ["parts/strip"] = new Flag<ITacBoardSettings>(b => b.ShowSystemsStrip, (b, v) => b.ShowSystemsStrip = v),
+            ["parts/gauges"] = new Flag<ITacBoardSettings>(b => b.ShowGauges, (b, v) => b.ShowGauges = v),
+            ["parts/ticker"] = new Flag<ITacBoardSettings>(b => b.ShowTicker, (b, v) => b.ShowTicker = v),
+            ["parts/navdata"] = new Flag<ITacBoardSettings>(b => b.ShowNavData, (b, v) => b.ShowNavData = v),
+            ["parts/corners"] = new Flag<ITacBoardSettings>(b => b.Corners, (b, v) => b.Corners = v),
+            ["parts/sway"] = new Flag<ITacBoardSettings>(b => b.Sway, (b, v) => b.Sway = v),
+        };
+
+        private static readonly Dictionary<string, Flag<IImmersionSettings>> FeelFlags = new Dictionary<string, Flag<IImmersionSettings>>
+        {
+            ["master"] = new Flag<IImmersionSettings>(s => s.IsEnabled, (s, v) => s.IsEnabled = v),
+            ["head-motion"] = new Flag<IImmersionSettings>(s => s.HeadMotionEnabled, (s, v) => s.HeadMotionEnabled = v),
+            ["shake"] = new Flag<IImmersionSettings>(s => s.ExtraShakeEnabled, (s, v) => s.ExtraShakeEnabled = v),
+            ["glare"] = new Flag<IImmersionSettings>(s => s.SunGlareEnabled, (s, v) => s.SunGlareEnabled = v),
+            ["visor"] = new Flag<IImmersionSettings>(s => s.HelmetVisorEnabled, (s, v) => s.HelmetVisorEnabled = v),
+            ["breathing"] = new Flag<IImmersionSettings>(s => s.PilotBreathingEnabled, (s, v) => s.PilotBreathingEnabled = v),
+            ["wind"] = new Flag<IImmersionSettings>(s => s.WindAudioEnabled, (s, v) => s.WindAudioEnabled = v),
+            ["airframe"] = new Flag<IImmersionSettings>(s => s.AirframeAudioEnabled, (s, v) => s.AirframeAudioEnabled = v),
+            ["buffet"] = new Flag<IImmersionSettings>(s => s.MachBuffetEnabled, (s, v) => s.MachBuffetEnabled = v),
+            ["mfd-glow"] = new Flag<IImmersionSettings>(s => s.MfdGlowEnabled, (s, v) => s.MfdGlowEnabled = v),
+        };
+
+        /// <summary>The HUD category: the TAC BOARD's options. The cycle indices are the contract enums' values, in the order of <c>MenuCatalog.BoardDeclutters</c> and <c>BoardLayouts</c>.</summary>
         private static void ReadBoard(MenuWorld w)
         {
             ITacBoardSettings board = Service<ITacBoardSettings>();
@@ -67,6 +111,30 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             w.BoardOn = board.Enabled;
             w.BoardDeclutter = (int)board.Declutter;
             w.BoardLayout = (int)board.Layout;
+            w.BoardShade = MenuCatalog.Nearest(MenuCatalog.ShadeSteps, board.Shade);
+            w.BoardSize = MenuCatalog.Nearest(MenuCatalog.SizeSteps, board.Scale);
+            w.BoardScopeAuto = board.ScopeMode == BoardScopeMode.Auto;
+            foreach (KeyValuePair<string, Flag<ITacBoardSettings>> flag in BoardFlags) if (flag.Value.Get(board)) w.BoardSwitches.Add(flag.Key);
+        }
+
+        /// <summary>The cabin: the immersion effects, the kneeboard card, and the visor's terrain pictures (listed under VIEW).</summary>
+        private static void ReadCabin(MenuWorld w)
+        {
+            IImmersionSettings feel = Service<IImmersionSettings>();
+            if (feel != null)
+            {
+                w.FeelAvailable = true;
+                foreach (KeyValuePair<string, Flag<IImmersionSettings>> flag in FeelFlags) if (flag.Value.Get(feel)) w.Feel.Add(flag.Key);
+            }
+            IKneeboardGallery cards = Service<IKneeboardGallery>();
+            if (cards != null && cards.Count > 1) { w.KneeboardAvailable = true; w.KneeboardCard = cards.Name(cards.Selected) ?? ""; }
+            IVisorTerrainSettings terrain = Service<IVisorTerrainSettings>();
+            if (terrain != null)
+            {
+                w.TerrainAvailable = true;
+                w.HoloMap = terrain.HoloMap;
+                w.TerrainGhost = MenuCatalog.Nearest(MenuCatalog.GhostSteps, terrain.TerrainGhost);
+            }
         }
 
         private static void ReadRadio(MenuWorld w)
@@ -146,12 +214,15 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "wing/dope": return () => Service<IWingOrders>()?.BogeyDope();
                 case "wing/escort": return () => Service<IWingOrders>()?.EscortMe();
                 case "wing/rtb": return () => Service<IWingOrders>()?.ReturnToBase();
-                case "radio/music": return () => Service<IRadioRemote>()?.DeckTogglePlayback();
-                case "radio/trknext": return () => Service<IRadioRemote>()?.DeckNext();
-                case "radio/trkprev": return () => Service<IRadioRemote>()?.DeckPrevious();
-                case "radio/receiver": return () => Service<IRadioRemote>()?.ReceiverToggle();
-                case "radio/seek": return () => Service<IRadioRemote>()?.ReceiverSeek(1);
-                case "radio/stopall": return () => Service<IRadioRemote>()?.StopAll();
+                case "cockpit/music": return () => Service<IRadioRemote>()?.DeckTogglePlayback();
+                case "cockpit/trknext": return () => Service<IRadioRemote>()?.DeckNext();
+                case "cockpit/trkprev": return () => Service<IRadioRemote>()?.DeckPrevious();
+                case "cockpit/receiver": return () => Service<IRadioRemote>()?.ReceiverToggle();
+                case "cockpit/seek": return () => Service<IRadioRemote>()?.ReceiverSeek(1);
+                case "cockpit/stopall": return () => Service<IRadioRemote>()?.StopAll();
+                case "cockpit/kneeboard": return () => { IKneeboardGallery cards = Service<IKneeboardGallery>(); if (cards != null) cards.Selected = cards.Selected + 1; };
+                case "view/holo": return () => { IVisorTerrainSettings t = Service<IVisorTerrainSettings>(); if (t != null) t.HoloMap = !t.HoloMap; };
+                case "view/ghost": return () => { IVisorTerrainSettings t = Service<IVisorTerrainSettings>(); if (t != null) t.TerrainGhost = Next(MenuCatalog.GhostSteps, t.TerrainGhost); };
                 case "support/mark": return () => Service<ICameraTargetService>()?.Capture();
                 case "support/callmark": return () => Service<ICameraTargetService>()?.CallAtMark();
                 case "support/clearmark": return () => Service<ICameraTargetService>()?.Clear();
@@ -165,13 +236,22 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "view/mslnext": return () => Service<IMissileView>()?.Next();
                 case "view/mslprev": return () => Service<IMissileView>()?.Prev();
                 case "view/mslexit": return () => Service<IMissileView>()?.Exit();
-                case "view/board": return OnBoard(board => board.Enabled = !board.Enabled);
-                case "view/declutter": return OnBoard(board => board.Declutter = (BoardDeclutter)(((int)board.Declutter + 1) % MenuCatalog.BoardDeclutters.Length));
-                case "view/boardlayout": return OnBoard(board => board.Layout = (BoardLayout)(((int)board.Layout + 1) % MenuCatalog.BoardLayouts.Length));
+                case "hud/board": return OnBoard(board => board.Enabled = !board.Enabled);
+                case "hud/declutter": return OnBoard(board => board.Declutter = (BoardDeclutter)(((int)board.Declutter + 1) % MenuCatalog.BoardDeclutters.Length));
+                case "hud/layout": return OnBoard(board => board.Layout = (BoardLayout)(((int)board.Layout + 1) % MenuCatalog.BoardLayouts.Length));
+                case "hud/shade": return OnBoard(board => board.Shade = Next(MenuCatalog.ShadeSteps, board.Shade));
+                case "hud/size": return OnBoard(board => board.Scale = Next(MenuCatalog.SizeSteps, board.Scale));
+                case "hud/reset": return OnBoard(board => board.ResetToDefaults());
+                case "hud/pages/auto": return OnBoard(board => board.ScopeMode = board.ScopeMode == BoardScopeMode.Auto ? BoardScopeMode.Off : BoardScopeMode.Auto);
                 case "defence/drones": return StrikeOrScreen;
             }
             if (row.Id.StartsWith("comms/c", StringComparison.Ordinal)) return () => Service<IQuickCalls>()?.Call(index);
             if (row.Id.StartsWith("support/pit/station/", StringComparison.Ordinal)) return () => Service<ISkywellControl>()?.PrioritiseStation(index);
+            const string Pages = "hud/pages/", Parts = "hud/parts/", Feel = "cockpit/feel/";
+            if ((row.Id.StartsWith(Pages, StringComparison.Ordinal) || row.Id.StartsWith(Parts, StringComparison.Ordinal)) && BoardFlags.TryGetValue(row.Id.Substring(4), out Flag<ITacBoardSettings> part))
+                return OnBoard(board => part.Set(board, !part.Get(board)));
+            if (row.Id.StartsWith(Feel, StringComparison.Ordinal) && FeelFlags.TryGetValue(row.Id.Substring(Feel.Length), out Flag<IImmersionSettings> effect))
+                return () => { IImmersionSettings feel = Service<IImmersionSettings>(); if (feel != null) effect.Set(feel, !effect.Get(feel)); };
             const string Perks = "support/perks/", Filters = "targets/filters/", Shapes = "wing/shape/";
             if (row.Id.StartsWith(Perks, StringComparison.Ordinal)) return BySlug<IOpsPerks>(row.Id, Perks, p => p.PerkCount, (p, i) => p.PerkLabel(i), (p, i) => p.PerkPress(i));
             if (row.Id.StartsWith(Filters, StringComparison.Ordinal))
@@ -179,6 +259,9 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             if (row.Id.StartsWith(Shapes, StringComparison.Ordinal)) return BySlug<IWingOrders>(row.Id, Shapes, o => o.ShapeCount, (o, i) => o.ShapeLabel(i), (o, i) => o.SelectShape(i));
             return null;
         }
+
+        /// <summary>The value of the step after the one nearest <paramref name="value"/>, wrapping: what a press of a cycle row over a float option sets.</summary>
+        private static float Next(float[] steps, float value) => steps[(MenuCatalog.Nearest(steps, value) + 1) % steps.Length];
 
         /// <summary>Statement over the TAC BOARD options, looked up again when the row is pressed.</summary>
         private static Action OnBoard(Action<ITacBoardSettings> run) =>

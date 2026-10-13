@@ -1,0 +1,273 @@
+# Wingman net: hothead. Aggressive, loud, keeps score, wants payback.
+
+@wing.copy status
+[hothead] Copy, <lead>! Wilco, and about time.
+[hothead] Wilco! Don't have to tell me twice.
+[hothead] Copy that, on it right now.
+[hothead] Roger, <lead>. Finally something to do.
+[hothead] Copy! Watch me go.
+
+@wing.unable status
+[hothead] Unable, <lead>! Trust me, I hate saying it.
+[hothead] Negative, can't do it. Give me something else!
+[hothead] Unable. Don't ask me why, it makes me mad.
+[hothead] No can do, <lead>. Next order, make it good.
+[hothead] Unable! Blame the airplane, not me.
+[hothead rain] Unable, this weather's got me boxed in.
+
+@wing.taskdone status
+[hothead] Done, <lead>. What's next?
+[hothead] That's finished. Give me another!
+[hothead] Task complete. Too easy, honestly.
+[hothead] All done here. Point me at something.
+[hothead] Done and dusted, <lead>. Bored already.
+
+@wing.taxiing ambient
+[hothead] Rolling out of the spot. Come on, come on.
+[hothead] Taxiing. Why is this part so slow?
+[hothead] Moving. Somebody clear my way!
+[hothead] Off the spot and taxiing, <lead>.
+[hothead] Taxiing out. Let's get this show started.
+
+@wing.holdingshort ambient
+[hothead] Holding short. Come on, give me the runway!
+[hothead] Holding short, <lead>. I'm itching here.
+[hothead] Stopped at the line. Any day now.
+[hothead] Holding short. Don't make me wait long.
+[hothead] Short of the runway. Engine's begging to go.
+
+@wing.liningup ambient
+[hothead] Lining up. Here we go!
+[hothead] On the runway, <lead>. Let me off the leash.
+[hothead] Lining up. Ready to burn some fuel.
+[hothead] Entering the runway. Stand back.
+[hothead] Lined up and itching to go.
+
+@wing.rolling status
+[hothead] Rolling! Eat my dust, runway!
+[hothead] Rolling, <lead>. Throttle's all the way up.
+[hothead] Takeoff roll. Hang on to your hat!
+[hothead] Rolling now. Let's go find trouble.
+[hothead] Rolling! Come on, baby, lift.
+
+@wing.airborne status
+[hothead] Airborne! Coming to join, <lead>.
+[hothead] Wheels up, airborne. Now we're talking.
+[hothead] Airborne and on my way to you.
+[hothead] Gear's up, I'm airborne. Hold my spot!
+[hothead] Airborne, <lead>. Rejoining at full throttle.
+
+@wing.down ambient
+[hothead] Down and safe. Best part is the fuel truck.
+[hothead] On the ground, <lead>. Rearm me fast.
+[hothead] Wheels down. Good flight, hot flight.
+[hothead] Down. Somebody get me a refill.
+[hothead] Landed. I'm ready to go again.
+[hothead loss] Down. We owe them for what they did today.
+
+@wing.goaround status
+[hothead] Going around! Not my fault, not my fault.
+[hothead] Going around, <lead>. Don't laugh.
+[hothead] Not happy with that. Going around!
+[hothead] Going around. I'll nail it the next time.
+[hothead] Too hot, too ugly. Going around!
+
+@wing.engaging tactical
+[hothead] Engaging! Stay out of my way!
+[hothead] I'm committing. Time to hurt somebody!
+[hothead] Engaged, <lead>! Come and get a piece!
+[hothead] Going in hot! Engaging now!
+[hothead] Engaging! They picked the wrong day.
+[hothead loss] Engaging! This one is for our guys!
+
+@wing.fox2 tactical
+[hothead] Fox two! Catch this, <target>!
+[hothead] Fox two on the <target>! Smell that smoke?
+[hothead] Fox two, <lead>! Heat seeker's away.
+[hothead] Fox two! Run, <target>, go on, run!
+[hothead] Fox two, shot out! Come on, hit him!
+[hothead loss] Fox two! That's for our friend, <target>!
+
+@wing.fox3 tactical
+[hothead] Fox three! Say goodbye, <target>!
+[hothead] Fox three on the <target>! Count it down!
+[hothead] Fox three, <lead>! Missile's flying hot.
+[hothead] Fox three! Nowhere to hide, <target>!
+[hothead] Fox three, shot away! Keep the radar on him!
+
+@wing.magnum tactical
+[hothead] Magnum! Turn that radar off, <target>!
+[hothead] Magnum on the <target>! Lights out for him!
+[hothead] Magnum, <lead>! Radar killer's away.
+[hothead] Magnum! He lit up the wrong guy!
+[hothead] Magnum, shot out! Shut up, <target>!
+
+@wing.rifle tactical
+[hothead] Rifle! Ground pounder's away on the <target>!
+[hothead] Rifle on the <target>! Right in his lap!
+[hothead] Rifle, <lead>! Hot on the way down.
+[hothead] Rifle! Light up that <target>!
+[hothead] Rifle, shot out! Watch him burn.
+
+@wing.splash tactical
+[hothead] Splash one <target>! That's another one for me!
+[hothead] Splash! <target> down! Put it on my board!
+[hothead] Splash the <target>! Who's next?
+[hothead] Splash, <lead>! Tell me that wasn't pretty.
+[hothead] Splash one! Told you, <target>.
+[hothead loss] Splash the <target>! One back for our guys!
+[hothead aftercombat] Splash, <target>! Now we're even.
+
+@wing.bandit tactical
+[hothead] Bandit, <bra>! Let me at him!
+[hothead] Bandit bearing <bra>, <type>! Clear me in!
+[hothead] Bandit! <bra>. He's mine, <lead>!
+[hothead] I've got a bandit, <bra>. Say the word!
+[hothead] Bandit, <bra>. Come on, cut me loose!
+[hothead night] Bandit, <bra>, <type>! Hiding in the dark won't work!
+
+@wing.contact status
+[hothead] Contact, <bra>! Ground target, let's go hit it!
+[hothead] Contact at <bra>, <type>! Want me to take it?
+[hothead] Ground contact, <bra>. Say go, <lead>!
+[hothead] Contact! <bra>. Found something to blow up.
+[hothead] I've got a contact, <bra>. Waiting on you.
+
+@wing.bogeydope tactical
+[hothead] Nearest bandit, <bra>! Go get him!
+[hothead] Bogey dope: <bra>, <type>. Say the word!
+[hothead] Closest one is <bra>. I'm ready, <lead>.
+[hothead] Bandit, <bra>! He's right there for the taking!
+[hothead] Bogey dope, <bra>. Don't just talk, cut me loose!
+[hothead night] Bandit, <bra>, <type>, out in the dark. Let me in!
+
+@wing.clean tactical
+[hothead] Clean! Nothing out here. Boring.
+[hothead] Clean, <lead>. Where did they all go?
+[hothead] Naked, nobody out there. Disappointing.
+[hothead] Clean! Somebody go find me a fight.
+[hothead] Sky's clean. I wanted a target!
+[hothead aftercombat] Clean. We scared the rest off.
+
+@wing.panic emergency
+[hothead] Missile! Missile! I'm hit if I'm slow!
+[hothead] SAM, SAM! Defending!
+[hothead] Defending, he's on me!
+[hothead] Break, break! Missile inbound!
+
+@wing.defensiveclear tactical
+[hothead] Defeated it! Missed me, you jerk!
+[hothead] Clear! Missile's gone. Now I'm angry.
+[hothead] Not today! Missile defeated, <lead>.
+[hothead] Ha, flushed him. Now he owes me.
+[hothead] Missile's defeated. Back in the fight!
+[hothead aftercombat] Missile's defeated. Close, but I'm still here.
+
+@wing.pullup emergency
+[hothead] Pulling up! Ground's right there!
+[hothead] Pull up! Pull up!
+[hothead] Terrain! Climbing, climbing!
+[hothead] The ground's too close! Auto-pull!
+
+@wing.breakoff emergency
+[hothead] Breaking off! Get out of my way!
+[hothead] Collision, collision! Break!
+[hothead] Too close! Breaking off!
+[hothead] Watch it! Break, break!
+
+@wing.maneuvering tactical
+[hothead] Maneuvering, <detail>! Watch this!
+[hothead] Going <detail>, <lead>. Hang on!
+[hothead] <detail>, starting now! Keep up!
+[hothead] On it. <detail>, and I'm making it hurt.
+[hothead] Flying the <detail>. Here I come!
+
+@wing.maneuverdone status
+[hothead] Maneuver's done. Hit me with another!
+[hothead] Out of the turn, <lead>. Easy.
+[hothead] Finished flying it. What's the next trick?
+[hothead] Done. I'm still hungry, <lead>.
+[hothead] Maneuver complete. Aim me at somebody.
+
+@wing.fallingback tactical
+[hothead] Falling back! I hate this, I hate this!
+[hothead] Disengaging, we're outnumbered. Not forever!
+[hothead] Falling back, <lead>. We'll be back for them.
+[hothead] Pulling out. Too many of them, damn it.
+[hothead] Falling back! Trust me, I'm coming back.
+[hothead loss] Falling back. They took enough from us already.
+
+@wing.rejoining status
+[hothead] Rejoining. Don't wait for me, <lead>!
+[hothead] Coming back to the formation. Fine.
+[hothead] Disengaged. Rejoining you now.
+[hothead] Rejoining. Hold my spot!
+[hothead] Back in with you, <lead>. Next time.
+
+@wing.winchester status
+[hothead] Winchester! Empty, and I'm furious.
+[hothead] Winchester, <lead>. Heading home to reload.
+[hothead] I'm Winchester. Somebody save me some bandits.
+[hothead] Winchester! Not a thing left. Going home.
+[hothead] Winchester. Out of everything, damn it.
+[hothead recovery] Winchester, heading in. Rearm me quick.
+
+@wing.outofammo status
+[hothead] Out of ammo, <lead>! Staying with you anyway.
+[hothead] Dry! Not leaving though. I'll ride along.
+[hothead] No weapons. I'm staying on your wing.
+[hothead] Nothing left to shoot. I'm still with you.
+[hothead] Empty, <lead>. I can still be a pain in their ears.
+
+@wing.joker status
+[hothead] Joker, <n> minutes to bingo. Don't make me go home.
+[hothead] Joker! <n> minutes to bingo, <lead>.
+[hothead] Fuel's getting low. <n> minutes to bingo.
+[hothead] Joker fuel. I've got <n> minutes, then I'm gone.
+[hothead] Joker, <n> minutes. One more pass, please?
+[hothead recovery] Joker fuel, <n> minutes. Heading in anyway.
+
+@wing.bingo status
+[hothead] Bingo! Going home, and I'm not happy.
+[hothead] Bingo fuel, <lead>. I have to leave.
+[hothead] Bingo. Hate this part. Heading home.
+[hothead] Bingo! Just enough to get back.
+[hothead] I'm bingo. Cover my six on the way out.
+
+@wing.fallingbehind status
+[hothead] I'm falling behind, <lead>! Slow down a bit!
+[hothead] Can't keep up! Not my fault, my engine's tired.
+[hothead] Falling behind! Wait for me!
+[hothead] You're too fast, <lead>. I'm dropping back.
+[hothead] I'm lagging. Hate that, give me a second!
+
+@wing.damaged status
+[hothead] I'm hit! Damn it, I'm hit!
+[hothead] Took damage, <lead>. Still flying, still angry.
+[hothead] Hit! They'll pay for this.
+[hothead] I'm damaged. Not enough to stop me!
+[hothead] I took a hit! Who did that?
+[hothead loss] Damaged! No way I'm the next to go!
+
+@wing.airframelost tactical
+[hothead] <n> is down! They killed <n>!
+[hothead] Number <n> is down, <lead>! Payback, now!
+[hothead] <n> got shot down! I want the one who did it!
+[hothead] We lost <n>! Damn them all!
+[hothead] <n> is down! I'm going after that guy!
+[hothead night] <n> is down in the dark! They'll pay!
+
+@wing.ejected tactical
+[hothead] <n> ejected! I see a chute!
+[hothead] Number <n> punched out, <lead>! Cover him!
+[hothead] <n> is out of the aircraft! I'll sit on top of him.
+[hothead] <n> ejected! Somebody get him out of there!
+[hothead] <n> bailed out! Whoever did this, I'm coming!
+
+@wing.escortlost tactical
+[hothead] The escort's gone! Damn it, we failed!
+[hothead] We lost the one we were guarding, <lead>!
+[hothead] Escort is down! Somebody pays for this!
+[hothead] Lost the escort! I should've been closer.
+[hothead] The escort is gone. I want blood, <lead>.
+[hothead loss] The escort's gone too! Enough of this!

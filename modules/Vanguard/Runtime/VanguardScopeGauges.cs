@@ -28,6 +28,13 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             ScopeGauges.Register("remora", ReadRemora);
         }
 
+        public void Unregister()
+        {
+            ScopeGauges.Unregister("lance", ReadLance);
+            ScopeGauges.Unregister("aegis", ReadAegis);
+            ScopeGauges.Unregister("remora", ReadRemora);
+        }
+
         private static bool Local(out Aircraft me) => GameManager.GetLocalAircraft(out me) && me != null && !me.disabled;
 
         /// <summary>The pod stations of the local aircraft, found again only when the aircraft changes.</summary>

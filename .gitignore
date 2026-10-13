@@ -75,5 +75,6 @@ __pycache__/
 *.blend1
 modules/Vanguard/Assets/Models/
 modules/Events/Assets/Source/
-/docs/
+/docs/*
+!/docs/MISSION_COMPATIBILITY.md
 !/CHANGELOG.md

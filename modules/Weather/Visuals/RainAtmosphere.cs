@@ -39,8 +39,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         public string EffectId => "rain-haze";
 
-        public FxBudget Budget => new FxBudget(0, 0, 0, false);
-
         public void ReleaseFx()
         {
             Restore();

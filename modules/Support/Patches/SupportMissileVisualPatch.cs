@@ -51,7 +51,7 @@ namespace BoscaliSummer.Modules.Support.Patches
                         r.enabled = false;
                     }
 
-                    Visuals.KineticRodStrikeVisuals.TriggerImpact(world, __instance.ownerID);
+                    Visuals.KineticRodStrikeVisuals.TriggerImpact(world);
                 }
                 else if (unique.StartsWith("BoscaliSummer:Support:Emp:", StringComparison.Ordinal))
                 {
@@ -124,8 +124,7 @@ namespace BoscaliSummer.Modules.Support.Patches
         private static void Postfix(Missile __instance)
         {
             if (__instance?.UniqueName?.StartsWith("BoscaliSummer:Support:Rod:", StringComparison.Ordinal) == true)
-                Visuals.KineticRodStrikeVisuals.Track(__instance,
-                    new Vector3(__instance.transform.position.x, Datum.LocalSeaY, __instance.transform.position.z));
+                Visuals.KineticRodStrikeVisuals.Track(__instance);
         }
     }
 }

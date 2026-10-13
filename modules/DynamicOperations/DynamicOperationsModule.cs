@@ -26,7 +26,9 @@ namespace BoscaliSummer.Modules.DynamicOperations
             context.AddSceneService<ContractHud>(52).Configure(manager);
             context.AddSceneService<ContractMapHud>(53).Configure(manager);
             context.AddSceneService<OperationZoneHud>(54).Configure(manager);
-            new ObjectiveScopeFeed(manager).Register();      // the TAC BOARD's OBJECTIVE page
+            var scopeFeed = new ObjectiveScopeFeed(manager);
+            scopeFeed.Register();      // the TAC BOARD's OBJECTIVE page
+            context.OnTeardown(scopeFeed.Unregister);
             context.AddHostSettings(new HostSettingsTable("DYNAMIC OPERATIONS")
                 .Number(1, context.Settings.DynamicOperations.RewardMultiplier, "REWARD SCALE",
                     "Scale mission money and XP for accepted contracts. Money uses the normal faction tax; XP is vanilla mission score.",

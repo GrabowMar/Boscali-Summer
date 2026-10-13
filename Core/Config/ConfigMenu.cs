@@ -18,17 +18,16 @@ namespace BoscaliSummer.Core.Config
     }
 
     /// <summary>
-    /// What the F1 plugin-settings window shows before anyone reaches for its "Advanced
-    /// settings" filter: one MODULES group of master switches, and nothing else.
+    /// What the F1 plugin-settings window lists: the short table of switches below, the
+    /// keybinds in one group, and nothing else.
     ///
-    /// <para>The mod binds around a hundred and sixty entries. A window that opens on all of
-    /// them is not a settings screen, it is a haystack, so everything that is not a master
-    /// switch is marked advanced. Nothing is removed: every tuning value keeps its config
-    /// file entry, its section, its description and its bounds, and the window still lists it
-    /// behind the one checkbox that was made for exactly this. The values a host changes
-    /// while a mission runs have their own home on the SET console's SERVER page; the master
-    /// switches do not, because most of them are read once at startup and a module that was
-    /// never installed cannot be switched on from a cockpit.</para>
+    /// <para>The mod binds around five hundred entries. Nearly all of them are tuning values
+    /// that are only safe to move by someone who knows what they feed, so they are not in the
+    /// window at all, whatever its "Advanced settings" filter says. Nothing is removed: every
+    /// value keeps its config file entry, its section, its description and its bounds, and the
+    /// config file is where they are edited. Setting <c>[Meta] ExpertSettings</c> in that file
+    /// brings them back into the window's advanced view from the next launch. The values a host
+    /// changes while a mission runs have their own home on the SET console's SERVER page.</para>
     ///
     /// <para>ConfigurationManager reads its per-entry display hints from tag objects hanging
     /// off the entry's description, and the modules bind through the plain string overload,
@@ -39,112 +38,104 @@ namespace BoscaliSummer.Core.Config
     /// </summary>
     internal static class ConfigMenu
     {
-        /// <summary>The group the master switches are listed under, ahead of their own sections.</summary>
-        private const string ModuleCategory = "Modules";
+        private const string KeysCategory = "Keys";
 
         /// <summary>
-        /// Every part of the mod that can be run without, in the order the window should list
-        /// them: what a mission is built out of first, then what decorates it. The entries are
-        /// named through the settings objects rather than looked up by config section, so a
-        /// module that renames its section cannot quietly drop its own switch out of the group.
-        ///
-        /// <para>Each switch is given a display name because the key behind nearly all of them
-        /// is "Enabled", which says nothing once they are gathered into one list. Whether a
-        /// change takes effect now or at the next launch is the entry's own description to
-        /// explain, and it already does.</para>
+        /// The whole plain view: group, config section, config key, printed name, in printed
+        /// order. A group's number prefix is what sorts it in the window. To put a setting in
+        /// the window, add a row; <see cref="Missing"/> names any row that no longer matches a
+        /// bound entry, and the patch probe fails on it.
         /// </summary>
-        private static Dictionary<ConfigEntryBase, ConfigurationManagerAttributes> Switches(
-            ModConfiguration settings)
+        private static readonly string[][] Menu =
         {
-            ConfigEntryBase[] ordered =
-            {
-                settings.Progression.Enabled,
-                settings.Support.Enabled,
-                settings.Command.Enabled,
-                settings.HighCommand.Enabled,
-                settings.Intel.Enabled,
-                settings.TheaterOps.Enabled,
-                settings.DynamicOperations.Enabled,
-                settings.Events.Enabled,
-                settings.Comms.Enabled,
-                settings.Trenches.Enabled,
-                settings.UrbanCombat.GarrisonsEnabled,
-                settings.FireAndDestruction.FiresEnabled,
-                settings.Radio.Enabled,
-                settings.TacBoard.Enabled,
-                settings.Autopilot.Enabled,
-                settings.QoL.Enabled,
-                settings.Immersion.Enabled,
-                settings.Weather.Enabled,
-                settings.Performance.Enabled,
-                settings.Cinematography.Enabled,
-            };
-            string[] names =
-            {
-                "Perk board, squad and aces",
-                "Support CALLS (offboard fires)",
-                "Command map console",
-                "Chain of command",
-                "Threat picture (AI intel)",
-                "Living Front (staff and ground steering)",
-                "Dynamic contracts",
-                "World events",
-                "Map comms, polls and games",
-                "Trenches and fortifications",
-                "Zone garrisons",
-                "Fire ignition and spread",
-                "Cockpit radio",
-                "TAC BOARD",
-                "Autopilot",
-                "Quality of life",
-                "Cockpit immersion & effects",
-                "Dynamic weather and ENV screen",
-                "Adaptive cosmetic performance",
-                "Private cinematic shot tools"
-            };
+            new[] { "0 Mission", "Mission", "AskAtStart", "Ask which systems run at mission start" },
+            new[] { "0 Mission", "Scenario", "Cutscenes", "Cutscenes in scripted missions" },
+            new[] { "1 Battlefield", "Support", "Enabled", "Support calls (OPS)" },
+            new[] { "1 Battlefield", "Command", "Enabled", "Command map and STR" },
+            new[] { "1 Battlefield", "HighCommand", "Enabled", "Chain of command" },
+            new[] { "1 Battlefield", "Intel", "Enabled", "Threat picture (AI intel)" },
+            new[] { "1 Battlefield", "TheaterOps", "Enabled", "Living Front (AI ground staff)" },
+            new[] { "1 Battlefield", "DynamicOperations", "Enabled", "Contracts" },
+            new[] { "1 Battlefield", "Events", "Enabled", "World events" },
+            new[] { "1 Battlefield", "Trenches", "Enabled", "Trenches and fortifications" },
+            new[] { "1 Battlefield", "Garrisons", "Enabled", "Zone garrisons" },
+            new[] { "1 Battlefield", "Fires", "Enabled", "Fire ignition and spread" },
+            new[] { "1 Battlefield", "Weather", "Enabled", "Dynamic weather" },
 
-            var hints = new Dictionary<ConfigEntryBase, ConfigurationManagerAttributes>(ordered.Length);
-            for (int i = 0; i < ordered.Length; i++)
+            new[] { "2 Pilot and squadron", "Progression", "Enabled", "Perk board" },
+            new[] { "2 Pilot and squadron", "Squad", "EnemyAceHunts", "Enemy ace hunts" },
+            new[] { "2 Pilot and squadron", "Squadron", "SandboxFreeCalls", "Sandbox: calls cost nothing" },
+            new[] { "2 Pilot and squadron", "Comms", "Enabled", "Map comms, polls and games" },
+
+            new[] { "3 Cockpit", "TacBoard", "Enabled", "TAC BOARD" },
+            new[] { "3 Cockpit", "Wmc", "Show", "Wing panel (WMC)" },
+            new[] { "3 Cockpit", "Command", "HoloMap", "Holo map" },
+            new[] { "3 Cockpit", "Radio", "Enabled", "Cockpit radio" },
+            new[] { "3 Cockpit", "Autopilot", "Enabled", "Autopilot and interaction menu" },
+            new[] { "3 Cockpit", "QoL", "Enabled", "Quality of life" },
+            new[] { "3 Cockpit", "Immersion", "Enabled", "Cockpit immersion" },
+            new[] { "3 Cockpit", "Immersion", "HeadMotionEnabled", "Head motion" },
+            new[] { "3 Cockpit", "Immersion", "HelmetVisorEnabled", "Helmet visor" },
+            new[] { "3 Cockpit", "Immersion", "PilotBodyEnabled", "Pilot body" },
+
+            new[] { "4 Look and comfort", "Avionics", "Theme", "Panel theme" },
+            new[] { "4 Look and comfort", "Avionics", "ReducedMotion", "Panels: no animation" },
+            new[] { "4 Look and comfort", "Immersion", "ComfortMotionEnabled", "Comfort: less camera motion" },
+            new[] { "4 Look and comfort", "Weather", "ReducedFlashes", "Comfort: no lightning flashes" },
+            new[] { "4 Look and comfort", "Weather", "CinematicCloudsEnabled", "Volumetric clouds" },
+            new[] { "4 Look and comfort", "Weather", "RainVisualsEnabled", "Rain visuals" },
+            new[] { "4 Look and comfort", "Effects", "Enabled", "Display grade and sharpening" },
+            new[] { "4 Look and comfort", "Performance", "Enabled", "Adaptive effect quality" },        };
+
+        /// <summary>Menu rows that match no bound entry, as "Section.Key". Empty when the table is sound.</summary>
+        internal static List<string> Missing(ConfigFile config)
+        {
+            var missing = new List<string>();
+            foreach (string[] row in Menu)
             {
-                hints[ordered[i]] = new ConfigurationManagerAttributes
-                {
-                    IsAdvanced = false,
-                    Category = ModuleCategory,
-                    DispName = names[i],
-                    // Higher sorts higher, so the declared order is the printed order.
-                    Order = ordered.Length - i
-                };
+                if (!config.ContainsKey(new ConfigDefinition(row[1], row[2]))) missing.Add(row[1] + "." + row[2]);
             }
-            return hints;
+            return missing;
         }
 
         /// <summary>
-        /// Marks everything the window should not open on. Call once, after every module has
-        /// bound its settings.
+        /// Sorts every bound entry into listed, key or hidden. Call once, after every module
+        /// has bound its settings.
         /// </summary>
-        public static void Apply(ConfigFile config, ModConfiguration settings)
+        public static void Apply(ConfigFile config)
         {
             FieldInfo description = typeof(ConfigEntryBase)
                 .GetField("<Description>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic);
             if (description == null) return;
 
-            Dictionary<ConfigEntryBase, ConfigurationManagerAttributes> switches = Switches(settings);
+            bool expert = config.Bind("Meta", "ExpertSettings", false,
+                "List every setting in the F1 window's advanced view, not only the switches. " +
+                "The hidden values are tuning: change them only if you know what they feed. Applies at the next launch.").Value;
+
+            var listed = new Dictionary<ConfigDefinition, ConfigurationManagerAttributes>(Menu.Length);
+            for (int i = 0; i < Menu.Length; i++)
+            {
+                listed[new ConfigDefinition(Menu[i][1], Menu[i][2])] = new ConfigurationManagerAttributes
+                {
+                    IsAdvanced = false,
+                    Category = Menu[i][0],
+                    DispName = Menu[i][3],
+                    // Higher sorts higher, so the declared order is the printed order.
+                    Order = Menu.Length - i
+                };
+            }
+
             foreach (KeyValuePair<ConfigDefinition, ConfigEntryBase> bound in config)
             {
                 ConfigEntryBase entry = bound.Value;
                 if (entry == null) continue;
-
-                // Keybinds live under the window's own "Keyboard shortcuts" filter, which an
-                // advanced entry is dropped from as well. They are already a short list, so
-                // they are left alone rather than hidden behind a checkbox that does not name
-                // them.
-                if (entry.SettingType == typeof(KeyCode)) continue;
+                string section = bound.Key.Section;
 
 #if PUBLIC_RELEASE
                 // Public builds (-p:PublicRelease=true): cheats and dev tools in [Debug] are
                 // forced off and dropped from the window. The log switches stay for bug reports.
                 string key = bound.Key.Key;
-                if (bound.Key.Section == "Debug" && !key.Contains("Verbose") && key != "ExportLogs")
+                if (section == "Debug" && !key.Contains("Verbose") && key != "ExportLogs")
                 {
                     if (entry.SettingType == typeof(bool)) entry.BoxedValue = false;
                     Tag(description, entry, new ConfigurationManagerAttributes { Browsable = false });
@@ -153,9 +144,25 @@ namespace BoscaliSummer.Core.Config
 #endif
 
                 ConfigurationManagerAttributes hint;
-                if (!switches.TryGetValue(entry, out hint))
+                bool keybind = entry.SettingType == typeof(KeyCode) || entry.SettingType == typeof(KeyboardShortcut);
+                if (listed.TryGetValue(bound.Key, out hint))
+                {
+                }
+                else if (keybind && section != "Debug" && section != "Cinematography")
+                {
+                    // One group instead of a dozen sections that hold a key or two each. The
+                    // section goes into the name because the keys themselves repeat.
+                    hint = new ConfigurationManagerAttributes
+                    {
+                        IsAdvanced = false,
+                        Category = KeysCategory,
+                        DispName = section == "Keys" ? bound.Key.Key : section + ": " + bound.Key.Key
+                    };
+                }
+                else
                 {
                     hint = new ConfigurationManagerAttributes { IsAdvanced = true };
+                    if (!expert) hint.Browsable = false;
                 }
 
                 Tag(description, entry, hint);

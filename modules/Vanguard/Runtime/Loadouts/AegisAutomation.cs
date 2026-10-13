@@ -1,3 +1,4 @@
+#if !PUBLIC_RELEASE
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Vanguard.Runtime;
@@ -82,3 +83,4 @@ namespace BoscaliSummer.Vanguard
         }
     }
 }
+#endif

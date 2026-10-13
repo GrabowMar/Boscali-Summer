@@ -5,7 +5,6 @@ using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Autopilot.Configuration;
 using BoscaliSummer.Modules.Autopilot.Domain;
 using UnityEngine;
-using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Autopilot.Runtime
 {

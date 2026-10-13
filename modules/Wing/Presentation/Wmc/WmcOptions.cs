@@ -10,8 +10,9 @@ using BoscaliSummer.Modules.Wing.Networking;
 using BoscaliSummer.Modules.Wing.Configuration;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>BEHAVIOUR › STANCES (spec 2026-10-04 §4.1; was TUNING): which stance each element flies, the stance list and the full
-    /// editor for the selected one, and the player's radio. A stance is a named doctrine preset (<see cref="Stance"/>): ENGAGE (targets,
+    /// <summary>BEHAVIOUR › STANCES (spec 2026-10-04 §4.1; was TUNING), top to bottom in the order it is used: the scope, the stance
+    /// book (a plate per stance, as ORDERS' slots), the selected stance in words with APPLY under it, its settings, its key and default
+    /// orders, then who flies what (IN USE) and the player's radio. A stance is a named doctrine preset (<see cref="Stance"/>): ENGAGE (targets,
     /// range, weapons, radar), DEFEND (missile guard, response, spread, fall back), FLY · AFTER (interval, power, winchester, bingo),
     /// the slot (wing key + 1-6) it sits in and the orders it is the default for. Built-ins are read-only (SAVE AS copies one); yours
     /// save to stances.user.json at each pick. APPLY flies the stance for the scope (<see cref="WmcStanceActions.Apply"/>).
@@ -29,7 +30,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         /// <summary>One row of the picks: the kit's segmented row, what it says per segment, and the value it latches.</summary>
         private sealed class SegRow
         {
-            public AvSegmented Seg;
+            public WmcTuneRow Seg;
             public string[] Tips;
             public int Value = -2;
             public Kind Kind;
@@ -47,11 +48,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private AvSegmented modeSeg;
         private AvSection inUseSection, editSection;
         private InUseView inUse;
-        private WmcButtonGrid stanceGrid;
+        private WmcStanceSlots plates;
+        private WmcCollapsible nameGate;
         private AvControl newButton, copyButton, deleteButton, applyButton;
         private WmcNameField nameField;
         private WmcLines says;
-        private AvSegmented slotSeg;
+        private WmcTuneRow slotSeg;
         private AvControl[] defaults;
         private WmcContext last;
 
@@ -77,7 +79,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
 
         public string Hint => live ? "LIVE: these rows set what the scope flies now. TACTICAL has the quick switches."
-            : "A stance is how the wing fights and flies. Pick one, edit it (SAVE AS for a built-in), APPLY it to the scope.";
+            : "Pick a stance, read what it does, APPLY it. To change one, edit its rows (SAVE AS first for a built-in).";
 
         public string Alert => null;
 
@@ -91,22 +93,17 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             flow = pageFlow;
             scope = flow.Add(new WmcScopeBar(flow.Content, ids, "opt.scope.", "APPLY TO"));
 
-            inUseSection = flow.Section(AvIcon.Target, "IN USE", "");
-            inUse = flow.Add(new InUseView(flow.Content, ticker, MaxInUse, BindInUse));
-            // Bind every line once so each CLEAR answers its id from the start (the rows are pooled; the extra ones stay hidden).
-            inUse.Prime(MaxInUse);
-
-            modeSeg = flow.Add(new AvSegmented(flow.Content, "EDIT", new[] { "STANCE", "LIVE" }, () => modeValue, PickMode));
-            modeSeg.Options[0].Help = "Edit a stance, then APPLY it.";
-            modeSeg.Options[1].Help = "Set the scope's own doctrine and the wing's follow-ons now (what TUNING did).";
+            modeSeg = flow.Add(AvSegmented.Strip(flow.Content, new[] { "STANCE BOOK", "LIVE DOCTRINE" }, () => modeValue, PickMode));
+            modeSeg.Options[0].Help = "Pick, edit and APPLY a stance.";
+            modeSeg.Options[1].Help = "Set the scope's own doctrine and the wing's follow-ons now, row by row (what TUNING did).";
             ids.Add("opt.mode.stance", modeSeg.Options[0]);
             ids.Add("opt.mode.live", modeSeg.Options[1]);
 
             // ---- the stance list
             Gated(new AvSection(flow.Content, AvIcon.ListDetails, "STANCES", "WING KEY + 1-6"));
-            stanceGrid = new WmcButtonGrid(flow.Content, 2, StanceBook.MaxStances, i => new AvControl.Spec("", () => SelectStance(i)));
-            for (int i = 0; i < stanceGrid.Count; i++) ids.Add("opt.stance.row" + i, stanceGrid[i]);
-            Gated(stanceGrid);
+            plates = new WmcStanceSlots(flow.Content, SelectStance, null, StanceBook.MaxStances, true);
+            for (int i = 0; i < StanceBook.MaxStances; i++) ids.Add("opt.stance.row" + i, plates.Target(i));
+            Gated(plates);
             var bar = new AvButtons(flow.Content, new[]
             {
                 new AvControl.Spec("NEW", NewStance, AvButtonStyle.Default, AvIcon.Plus),
@@ -124,13 +121,18 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             ids.Add("opt.stance.delete", deleteButton);
             Gated(bar);
 
-            // ---- the editor
-            editSection = new AvSection(flow.Content, AvIcon.Pencil, "SETTINGS", "");
+            // ---- the selected stance: what it does, its name (yours only), APPLY
+            editSection = new AvSection(flow.Content, AvIcon.Pencil, "STANCE", "");
             flow.Add(editSection);
-            nameField = new WmcNameField(flow.Content, "NAME", MaxNameChars, CommitName, "The stance's name: Enter keeps it (16 characters at most).");
-            Gated(nameField);
-            says = new WmcLines(flow.Content, 1);
+            says = new WmcLines(flow.Content, 2);
             Gated(says);
+            nameField = new WmcNameField(flow.Content, "NAME", MaxNameChars, CommitName, "The stance's name: Enter keeps it (16 characters at most).");
+            nameGate = flow.Add(new WmcCollapsible(nameField));
+            var apply = new AvButtons(flow.Content, new[] { new AvControl.Spec("APPLY", Apply, AvButtonStyle.Primary, AvIcon.PlayerPlay) });
+            applyButton = apply.Controls[0];
+            applyButton.Help = "Fly this stance: the scope's doctrine, and for the whole wing its fall-back, winchester and bingo too.";
+            ids.Add("opt.apply", applyButton);
+            Gated(apply);
 
             flow.Section(AvIcon.Target, "ENGAGE", "");
             Row("TARGETS", new[] { "HOLD", "AIR", "GROUND", "BOTH", "COVER" },
@@ -195,16 +197,16 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     "At bingo fuel: land, refuel and take off again.",
                 }, "opt.bingo.", new[] { "keep", "rtb", "refit" }, Kind.Bingo, DoctrineAxis.Guard, 1);
 
-            // ---- slot, default orders, APPLY
+            // ---- key and default orders
+            Gated(new AvSection(flow.Content, AvIcon.Flag, "KEY · DEFAULT FOR", "ORDERS"));
             var slotLabels = new[] { "W+1", "W+2", "W+3", "W+4", "W+5", "W+6" };
-            slotSeg = new AvSegmented(flow.Content, "SLOT", slotLabels, () => slotValue, PickSlot);
+            slotSeg = new WmcTuneRow(flow.Content, "WING KEY", slotLabels, PickSlot);
             for (int i = 0; i < slotLabels.Length; i++)
             {
                 slotSeg.Options[i].Help = "Wing key + " + (i + 1) + " flies this stance (ORDERS' slot " + (i + 1) + ").";
                 ids.Add("opt.slot." + (i + 1), slotSeg.Options[i]);
             }
             Gated(slotSeg);
-            Gated(new AvSection(flow.Content, AvIcon.Flag, "DEFAULT FOR", "ORDERS"));
             defaults = new AvControl[OrderKeys.Length];
             for (int row = 0; row < 2; row++)
             {
@@ -223,11 +225,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 }
                 Gated(chips);
             }
-            var apply = new AvButtons(flow.Content, new[] { new AvControl.Spec("APPLY", Apply, AvButtonStyle.Primary, AvIcon.PlayerPlay) });
-            applyButton = apply.Controls[0];
-            applyButton.Help = "Fly this stance: the scope's doctrine, and for the whole wing its fall-back, winchester and bingo too.";
-            ids.Add("opt.apply", applyButton);
-            Gated(apply);
+
+            // ---- who flies what
+            inUseSection = flow.Section(AvIcon.Target, "IN USE", "");
+            inUse = flow.Add(new InUseView(flow.Content, ticker, MaxInUse, BindInUse));
+            // Bind every line once so each CLEAR answers its id from the start (the rows are pooled; the extra ones stay hidden).
+            inUse.Prime(MaxInUse);
 
             // ---- the player's radio
             flow.Section(AvIcon.Radio, "RADIO", "YOURS");
@@ -248,7 +251,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private SegRow Row(string key, string[] labels, string[] tips, string prefix, string[] keys, Kind kind, DoctrineAxis axis, int shift = 0)
         {
             var row = new SegRow { Tips = tips, Kind = kind, Axis = axis, Shift = shift };
-            row.Seg = flow.Add(new AvSegmented(flow.Content, key, labels, () => row.Value, i => Pick(row, i)));
+            row.Seg = flow.Add(new WmcTuneRow(flow.Content, key, labels, i => Pick(row, i)));
             for (int i = 0; i < labels.Length; i++)
             {
                 row.Seg.Options[i].Help = tips[i];
@@ -285,6 +288,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
             bool changed = false;
             foreach (WmcCollapsible g in stanceOnly) changed |= g.Set(!live);
+            Stance shown = Selected;
+            changed |= nameGate.Set(!live && shown != null && !shown.BuiltIn);
             RefreshInUse(c);
             RefreshEditor(c, ref changed);
             if (changed) flow.RequestRelayout();
@@ -325,13 +330,14 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     says.Set(0, text);
                     changed = true;
                 }
+                changed |= says.Set(1, sel != null && sel.BuiltIn ? "Built-in, read-only: SAVE AS makes a copy you can edit." : "");
                 Enable(newButton, Book.All.Count < StanceBook.MaxStances, "The stance book is full.");
                 copyButton.Label = sel != null && sel.BuiltIn ? "SAVE AS" : "DUPLICATE";
                 Enable(copyButton, sel != null && Book.All.Count < StanceBook.MaxStances, "The stance book is full.");
                 deleteButton.Label = gate.IsArmed("del" + selId, Time.unscaledTime) ? "DELETE?" : "DELETE";
                 Enable(deleteButton, own, "A built-in stance cannot be deleted.");
                 slotValue = SlotOf(sel);
-                slotSeg.Refresh();
+                slotSeg.Show(slotValue, -1, false);
                 for (int i = 0; i < defaults.Length; i++) defaults[i].Latched = sel != null && Book.DefaultFor(OrderKeys[i]) == sel.Id;
                 string apply = host ? "APPLY TO " + c.ScopeLabel : "APPLY";
                 if (apply != applyShown)
@@ -348,7 +354,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 if (r.Value != v)
                 {
                     r.Value = v;
-                    r.Seg.Refresh();
+                    r.Seg.Show(v, -1, false);
                 }
                 RowEnable(r, c, own, host);
             }
@@ -427,9 +433,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 case Kind.Radio:
                     if (WingSettings.Instance != null) WingSettings.Instance.Radio.Value = (RadioLevel)i;
+                    Refresh(c);
                     return;
                 case Kind.Contacts:
                     if (WingSettings.Instance != null) WingSettings.Instance.ContactCalls.Value = i == 0;
+                    Refresh(c);
                     return;
                 case Kind.Power:
                     WmcPostureActions.Power(c, i);
@@ -616,23 +624,23 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         // ---------------------------------------------------------------- the stance list
 
-        /// <summary>The stance buttons: slot, name and BUILT-IN tag; the selected one latched; who flies it in its help.</summary>
+        /// <summary>The stance plates: wing key, name, settings in a line and the elements that fly it; the selected one lit.</summary>
         private void BindStances()
         {
             int n = Book.All.Count;
-            stanceGrid.SetShownCount(n);
+            plates.SetShown(n);
             for (int i = 0; i < n; i++)
             {
                 Stance s = Book.All[i];
                 int slot = SlotOf(s);
-                AvControl b = stanceGrid[i];
-                b.Label = (slot >= 0 ? "W+" + (slot + 1) + " " : "") + s.Name + (s.BuiltIn ? " · BUILT-IN" : "");
-                b.Latched = s.Id == selId;
                 int used = usedBy[Mathf.Min(i, usedBy.Length - 1)];
                 string by = "";
                 for (int e = 0; e < ElementRoster.MaxElements && used != 0; e++)
                     if ((used & (1 << e)) != 0) by += (by.Length > 0 ? " " : "") + ElementRoster.Letter(e);
-                b.Help = StanceWords.Brief(s.Axes) + (by.Length > 0 ? " · IN USE " + by : "") + ". Press to edit it.";
+                plates.SetHint(i, slot >= 0 ? "W+" + (slot + 1) : "", by);
+                plates.Set(i, s.Name, StanceSlotWords.Summary(s.Axes), true, s.Id == selId, false);
+                plates.SetHelp(i, StanceWords.Brief(s.Axes) + (s.BuiltIn ? " · BUILT-IN" : " · YOURS") + (by.Length > 0 ? " · FLOWN BY " + by : "")
+                    + ". Press to read and edit it.");
             }
         }
 

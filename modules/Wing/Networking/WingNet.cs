@@ -119,7 +119,7 @@ namespace BoscaliSummer.Modules.Wing.Networking
             if ((snapshotClock += dt) >= SnapshotSeconds)
             {
                 snapshotClock = 0f;
-                SendSnapshots(nm.Server);
+                SendSnapshots();
             }
             if ((helloClock += dt) < HelloSeconds) return;
             helloClock = 0f;
@@ -239,7 +239,7 @@ namespace BoscaliSummer.Modules.Wing.Networking
 
         /// <summary>The host's own wing to its own local player, twice a second, unreliable (a snapshot supersedes the last).
         /// Remote players get nothing until their own wings exist (M6c-2) rather than the host's wing.</summary>
-        private static void SendSnapshots(NetworkServer server)
+        private static void SendSnapshots()
         {
             WingService wing = WingService.Instance;
             if (wing == null) return;

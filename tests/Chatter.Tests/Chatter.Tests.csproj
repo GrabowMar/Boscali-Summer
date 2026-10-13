@@ -6,10 +6,8 @@
     <Nullable>disable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../modules/Wing/Domain/Chatter/ChatterLogic.cs" Link="ChatterLogic.cs" />
-    <Compile Include="../../modules/Wing/Domain/Chatter/ChatterPacing.cs" Link="ChatterPacing.cs" />
-    <Compile Include="../../modules/Wing/Domain/Chatter/RadioQueue.cs" Link="RadioQueue.cs" />
-    <Compile Include="../../modules/Wing/Domain/Chatter/RadioLog.cs" Link="RadioLog.cs" />
-    <Compile Include="../../modules/Wing/Domain/Chatter/VoicePackIndex.cs" Link="VoicePackIndex.cs" />
+    <Compile Include="../../Core/Chatter/*.cs" LinkBase="Chatter" />
+    <Compile Include="../../modules/Wing/Domain/Chatter/WingCues.cs" Link="WingCues.cs" />
+    <Compile Include="../../modules/Wing/Domain/Personnel/ChatterPersona.cs" Link="ChatterPersona.cs" />
   </ItemGroup>
 </Project>

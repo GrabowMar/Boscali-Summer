@@ -102,25 +102,24 @@ namespace BoscaliSummer.Tests.Features.TheaterOps
             string name = new string('N', 32), picker = new string('P', 32);
             foreach (TheaterOpKind kind in Enum.GetValues(typeof(TheaterOpKind)))
                 foreach (TheaterOutcome outcome in Enum.GetValues(typeof(TheaterOutcome)))
-                    foreach (TheaterWhy why in Enum.GetValues(typeof(TheaterWhy)))
-                    {
-                        string line = TheaterWords.Result(kind, name, outcome, why, 150, picker);
-                        TestAssert.That(line.Length <= 64, "a staff-log line fits the log: " + line);
-                        TestAssert.That(outcome == TheaterOutcome.None || line.Length > 0, "an ended operation has a line");
-                    }
-            TestAssert.That(TheaterWords.Result(TheaterOpKind.Assault, "PORT AURELIA", TheaterOutcome.Secured, TheaterWhy.ObjectiveCaptured, 150, "")
+                {
+                    string line = TheaterWords.Result(kind, name, outcome, 150, picker);
+                    TestAssert.That(line.Length <= 64, "a staff-log line fits the log: " + line);
+                    TestAssert.That(outcome == TheaterOutcome.None || line.Length > 0, "an ended operation has a line");
+                }
+            TestAssert.That(TheaterWords.Result(TheaterOpKind.Assault, "PORT AURELIA", TheaterOutcome.Secured, 150, "")
                 == "PORT AURELIA TAKEN - THE LINE MOVES UP +150", "a secured assault names the amount paid");
-            TestAssert.That(TheaterWords.Result(TheaterOpKind.Defend, "PORT AURELIA", TheaterOutcome.Secured, TheaterWhy.HeldClear, 0, "")
+            TestAssert.That(TheaterWords.Result(TheaterOpKind.Defend, "PORT AURELIA", TheaterOutcome.Secured, 0, "")
                 == "PORT AURELIA HELD - ENEMY BROKEN OFF", "no amount is printed when nothing was paid");
-            TestAssert.That(TheaterWords.Result(TheaterOpKind.Assault, "PORT AURELIA", TheaterOutcome.CalledOff, TheaterWhy.None, 0, "viper 1-1")
+            TestAssert.That(TheaterWords.Result(TheaterOpKind.Assault, "PORT AURELIA", TheaterOutcome.CalledOff, 0, "viper 1-1")
                 == "PORT AURELIA CALLED OFF - VIPER 1-1", "a call-off names the picker in upper case");
-            TestAssert.That(TheaterWords.Announce(TheaterOpKind.Assault, "PORT AURELIA", TheaterOutcome.Secured, 150)
+            TestAssert.That(TheaterWords.Announce("PORT AURELIA", TheaterOutcome.Secured, 150)
                 == "OPERATION PORT AURELIA SECURED - +150 FUNDS, MORALE UP", "the radio announces a payment");
-            TestAssert.That(TheaterWords.Announce(TheaterOpKind.Assault, "PORT AURELIA", TheaterOutcome.Secured, 0)
+            TestAssert.That(TheaterWords.Announce("PORT AURELIA", TheaterOutcome.Secured, 0)
                 == "OPERATION PORT AURELIA SECURED", "inside the cooldown the radio names no funds");
-            TestAssert.That(TheaterWords.Announce(TheaterOpKind.Assault, "PORT AURELIA", TheaterOutcome.Repulsed, 0).Contains("STAFF REASSESSING"),
+            TestAssert.That(TheaterWords.Announce("PORT AURELIA", TheaterOutcome.Repulsed, 0).Contains("STAFF REASSESSING"),
                 "a lost operation says the staff is reassessing");
-            TestAssert.That(TheaterWords.Announce(TheaterOpKind.Assault, "X", TheaterOutcome.CalledOff, 0) == "", "a call-off is not announced on the radio");
+            TestAssert.That(TheaterWords.Announce("X", TheaterOutcome.CalledOff, 0) == "", "a call-off is not announced on the radio");
         }
 
         private static void PostureCaptionStatesTheRule()

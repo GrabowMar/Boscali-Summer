@@ -103,6 +103,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private readonly TerrainRainDressing terrainRain = new TerrainRainDressing();
         private readonly RainAtmosphere atmosphere = new RainAtmosphere();
         private readonly SunDisc sunDisc = new SunDisc();
+        private readonly SunShaftsPass sunShafts = new SunShaftsPass();
         private readonly CloudDressing clouds = new CloudDressing();
         private WeatherVolumeDressing flightClouds;
         private readonly HeatDistortionSorting heatHaze = new HeatDistortionSorting();
@@ -256,6 +257,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             fieldUpdated = false;
             localRainIntensity = 0f;
             localWeather = default;
+            nextLocalSample = nextTraceLook = 0f;
             fieldPosition = Vector2.zero;
             nextFieldUpdate = 0f;
             traceState = null;
@@ -282,6 +284,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             clouds.Restore();
             flightClouds?.Restore();
             heatHaze.Restore();
+            sunShafts.Dispose();
             flightClouds = null;
         }
 
@@ -535,14 +538,22 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             {
                 GlobalPosition position = view.transform.GlobalPosition();
                 fieldPosition = new Vector2(position.x, position.z);
-                localWeather = Field.Sample(position.x, position.z);
-                localRainIntensity = Mathf.Clamp01(localWeather.RainRate / 20f);
+                // The field varies over kilometres: sampled 15 times a second the view moves some 20 m between samples at jet speed,
+                // far inside one lattice cell, and every consumer (rain, shade, audio, haze) eases its own target. The full sample is
+                // a storm-cell and cumulus-lattice walk; once per frame it was a good part of this method.
+                if (Time.unscaledTime >= nextLocalSample)
+                {
+                    nextLocalSample = Time.unscaledTime + 1f / 15f;
+                    localWeather = Field.Sample(position.x, position.z);
+                    localRainIntensity = Mathf.Clamp01(localWeather.RainRate / 20f);
+                }
             }
             // Clouds, rain and terrain must read the same atmosphere for this frame.
             if (liveWeather) { UpdateRainSystems(weatherTime); sunDisc.Tick(LevelInfo.i, view, viewTransmission, Time.deltaTime); }
             else { environmentSnapshot = default; TeardownRainSystems(); atmosphere.Restore(); }
             if (!Application.isBatchMode && settings != null && settings.Enabled.Value) heatHaze.Update(Time.unscaledTime);
             else heatHaze.Restore();
+            sunShafts.Tick(LevelInfo.i, view, liveWeather && settings.SunShaftsEnabled.Value);
             bool wantClouds = liveWeather && settings.CinematicCloudsEnabled.Value;
             if (wantClouds)
             {
@@ -731,11 +742,11 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 atmosphere.Apply(RainVisualsEnabled
                     ? rainIntensity : 0f, underwaterView, cloudShade, LevelInfo.i != null ? LevelInfo.i.sun : null);
             else atmosphere.Restore();
-            UpdateLighting(currentCam);
+            UpdateLighting();
 
             // Storms remain visible/audible from dry air; they do not depend on a rain emitter.
             if (settings.LightningEnabled.Value || settings.RainAudioEnabled.Value)
-                lightning.Tick(Time.deltaTime, Field, missionTime, cloudPosition, LevelInfo.i, currentCam,
+                lightning.Tick(Field, missionTime, cloudPosition, currentCam,
                     settings.ReducedFlashes.Value || !settings.LightningEnabled.Value,
                     settings.RainAudioEnabled.Value, isCockpit);
             else lightning.Reset();
@@ -805,7 +816,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             if (shaderDrawn && canopyDrawnFrames < int.MaxValue) canopyDrawnFrames++;
             if (canopyDrops != null)
                 canopyDrops.UpdateDrops(hasGlass ? canopySurfaces[0] : default,
-                    isCockpit && !shaderDrawn ? canopyWetness : 0f, ias);
+                    isCockpit && !shaderDrawn ? canopyWetness : 0f);
 
 
         }
@@ -935,6 +946,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 { "viewLightTransmission", viewTransmission },
                 { "sunDiscRed", sunDisc.Shown.r },
                 { "sunDiscBlue", sunDisc.Shown.b },
+                { "sunShaftsAge", Time.frameCount - sunShafts.ExecutedFrame },
                 { "viewWidth", SceneSingleton<CameraStateManager>.i?.mainCamera != null ? SceneSingleton<CameraStateManager>.i.mainCamera.pixelWidth : 0 },
                 { "viewHeight", SceneSingleton<CameraStateManager>.i?.mainCamera != null ? SceneSingleton<CameraStateManager>.i.mainCamera.pixelHeight : 0 },
                 { "environmentGeneration", environmentGeneration },
@@ -1003,7 +1015,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             return true;
         }
 
-        private void UpdateLighting(Camera camera)
+        private void UpdateLighting()
         {
             LevelInfo level = LevelInfo.i;
             // Invariant 6: the native sun must not flip while a front crosses (conditions never pass 0.6). The sims read the count.
@@ -1290,6 +1302,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         // Transition trace: one line whenever what the player sees changes source, plus a
         // summary each minute, so a visual glitch leaves evidence in LogOutput.log.
         private string traceState;
+        private float nextTraceLook, nextLocalSample;
         private float nextTraceSummary;
         private int traceSignature;
         private int traceLines;
@@ -1297,6 +1310,9 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private void Trace()
         {
             if (logger == null || Application.isBatchMode || traceLines > 400) return;
+            // Evidence for the log only: four looks a second find a change as surely as sixty, without the field read every frame.
+            if (Time.unscaledTime < nextTraceLook) return;
+            nextTraceLook = Time.unscaledTime + 0.25f;
             // The state line is only built when something in it changed (or once a minute):
             // building it every frame allocated about half a kilobyte per frame.
             WeatherField traced = Field;
@@ -1431,7 +1447,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             return WeatherForecast.ComputeLunarData(phase);
         }
 
-        public bool SetManualOverride(float conditions, float cloudHeight, Vector3? wind = null, float? forcedRain = null, bool snapImmediate = true)
+        public bool SetManualOverride(float conditions, float cloudHeight, float? forcedRain = null, bool snapImmediate = true)
         {
             if (!IsCaptured || !RequireClock("manual override", out float missionTime)) return false;
             isManualOverride = true;
@@ -1491,12 +1507,6 @@ namespace BoscaliSummer.Modules.Weather.Runtime
 
             NotifyPlayer("CHANGING WEATHER RESUMED", null);
         }
-
-        // ---- Weather console (Ctrl+O) -----------------------------------------------------
-
-        /// <summary>The state on screen now.</summary>
-        internal WeatherRegimeType ShownState =>
-            Field != null ? SkyMath.ClassOf(Field.RowAt(0f, 0f)) : RegimeSnapshot.FromConditions(currentConditions).Type;
 
         /// <summary>Metres from the theater centre along the tape to the nearest marker line, or -1 without one (the nextFrontKm readout).</summary>
         private float NextMarkerKm()

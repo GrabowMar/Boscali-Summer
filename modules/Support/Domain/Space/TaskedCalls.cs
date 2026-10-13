@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Modules.Support.Domain.Calls;
-using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Runtime;
 
 namespace BoscaliSummer.Modules.Support.Domain.Space
@@ -41,7 +39,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public SpaceMark MarkAt(int index) => marks[index];
 
         public EffortShare ShareAt(int index) => shares[index];
-        public EffortShare[] CopyShares() => shares == null ? Array.Empty<EffortShare>() : (EffortShare[])shares.Clone();
 
         internal bool Valid(float now)
         {
@@ -152,8 +149,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private bool retired;
 
         public int Count { get { SyncContacts(); return calls.Count; } }
-        public int Posted { get { SyncContacts(); return posted; } }
-        public int Fired { get { SyncContacts(); return fired; } }
         public int Generation { get { SyncContacts(); return retired ? 0 : sceneGeneration; } }
 
         /// <summary>Live OVERLORD posts of one domain: SPACE, CYBER and SOF each keep their own allowance, so one domain's posts never use up another's.</summary>

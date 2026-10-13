@@ -681,8 +681,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public AvControl Next { get; }
 
-        public string Word => pickFull;
-
         public string Position => posFull;
 
         /// <summary><paramref name="swatchColor"/> (alpha 0 for none) and <paramref name="sprite"/> (null for none) lead the word.</summary>

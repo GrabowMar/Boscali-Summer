@@ -173,6 +173,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                 Posts();
                 Staff();
                 Wave();
+                Supply();
                 Tiles();
                 Sitrep();
                 Log();

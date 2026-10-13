@@ -123,26 +123,5 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Line(tx, y - 3f, tx, y + h + 3f, tone);
             if (!label.IsEmpty) Text(label, tx, up ? y - 11f : y + h + 11f, tone, 12f, align);
         }
-
-        /// <summary>
-        /// A dispenser display: <paramref name="filled"/> dots solid (row-major from the top-left), the next <paramref name="flash"/> flashing hi (just fired),
-        /// the rest hollow; <paramref name="cols"/> x <paramref name="rows"/> dots <paramref name="pitch"/> apart.
-        /// </summary>
-        public void DotGrid(float x, float y, int cols, int rows, int filled, ScopeTone tone = Ink, float pitch = 7f, float r = 2f, bool square = false, int flash = 0)
-        {
-            for (int i = 0; i < cols * rows; i++)
-            {
-                float cx = x + (i % cols) * pitch + pitch / 2f, cy = y + (i / cols) * pitch + pitch / 2f;
-                bool on = i < filled, hot = !on && i < filled + flash, lit = on || hot;
-                ScopeTone t = on ? tone : hot ? Hi : Faint;
-                float a = hot ? 0.9f : lit ? 1f : 0.8f;
-                if (square)
-                {
-                    if (lit) Fill(Mathf.Round(cx - r), Mathf.Round(cy - r), r * 2f, r * 2f, t, a);
-                    else Box(Mathf.Round(cx - r), Mathf.Round(cy - r), r * 2f, r * 2f, t, 0.8f);
-                }
-                else Ring(cx, cy, lit ? r : r - 0.5f, t, a, 1f, t, lit ? 1f : 0f);
-            }
-        }
     }
 }

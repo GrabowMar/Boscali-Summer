@@ -21,23 +21,9 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
         {
             MissileDefinition definition =
                 context.Host.Vanilla.Artillery(context.Settings.ArtilleryDefinitionKey.Value);
-            if (definition == null || definition.unitPrefab == null)
-            {
-                context.Logger.LogWarning("[Support] Flare Barrage unavailable: no missile definition resolved.");
-                return SupportResult.CapabilityUnavailable;
-            }
-
-            if (NetworkSceneSingleton<Spawner>.i == null) return SupportResult.CapabilityUnavailable;
-            if (!SupportTargeting.TryMapPoint(context.Target, out Vector3 ground))
-                return SupportResult.InvalidTarget;
-
-            if (SupportTargeting.TryOrigin(context.Player, out Vector3 origin))
-            {
-                if (Vector3.Distance(origin, ground) > context.Settings.MaximumRange.Value)
-                    return SupportResult.OutOfRange;
-            }
-
-            if (!context.Host.TryReserve(context.Owner, SupportPool.Strike)) return SupportResult.Busy;
+            SupportResult gate = SupportTargeting.ReserveStrike(context, definition,
+                "[Support] Flare Barrage unavailable: no missile definition resolved.", out Vector3 ground);
+            if (gate != SupportResult.Accepted) return gate;
 
             float radius = Mathf.Min(context.Settings.FlareBarrageRadius.Value * context.Quality, 15000f);
             int count = context.Settings.FlareBarrageCount.Value;

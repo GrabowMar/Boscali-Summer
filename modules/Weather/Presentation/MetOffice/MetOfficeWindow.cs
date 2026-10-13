@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Weather.Domain;
 using NOAvionics;
 using TMPro;
@@ -91,7 +92,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         {
             AvHit hit = c != null ? c.GetComponentInChildren<AvHit>(true) : null;
             if (hit == null) return false;
-            ((IPointerClickHandler)hit).OnPointerClick(Pointer());
+            ((IPointerClickHandler)hit).OnPointerClick(WindowPointer.Data());
             return true;
         }
 
@@ -103,8 +104,8 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
         private void OnWindowClosed()
         {
-            SetHovered(null);
-            if (tipHovered != null) { tipHovered.OnPointerExit(Pointer()); tipHovered = null; }
+            WindowPointer.Hover(ref hovered, null);
+            if (tipHovered != null) { tipHovered.OnPointerExit(WindowPointer.Data()); tipHovered = null; }
             input.Give();
         }
 
@@ -132,30 +133,13 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                     AvHit h = hitList[i];
                     if (h != null && h.isActiveAndEnabled && RectTransformUtility.RectangleContainsScreenPoint((RectTransform)h.transform, mouse, null)) { under = h; break; }
                 }
-                SetHovered(under);
+                WindowPointer.Hover(ref hovered, under);
                 SetTip(mouse);
-                if (under != null && Input.GetMouseButtonDown(0)) ((IPointerClickHandler)under).OnPointerClick(Pointer());
+                if (under != null && Input.GetMouseButtonDown(0)) ((IPointerClickHandler)under).OnPointerClick(WindowPointer.Data());
             }
             // The tag legend shares the footer with the hover sentence: it steps aside while a sentence (or a refusal) is on.
             tagLegend.Rect.gameObject.SetActive(hovered == null && tipHovered == null && refusedUntil <= 0f);
             if (Time.unscaledTime >= nextRefresh) { nextRefresh = Time.unscaledTime + 0.25f; Refresh(); }
-        }
-
-        private void SetHovered(AvHit next)
-        {
-            if (hovered == next) return;
-            if (hovered != null)
-            {
-                ((IPointerExitHandler)hovered).OnPointerExit(Pointer());
-                hovered.GetComponent<AvHelpTip>()?.OnPointerExit(Pointer());
-            }
-            hovered = next;
-            if (hovered != null)
-            {
-                ((IPointerEnterHandler)hovered).OnPointerEnter(Pointer());
-                // The Rewired mouse is off, so the event system never delivers hover: forward it to the help tip too.
-                hovered.GetComponent<AvHelpTip>()?.OnPointerEnter(Pointer());
-            }
         }
 
         // Read-only parts (cards, the chart) carry help tips but no AvHit; the disabled Rewired mouse never hovers them.
@@ -168,13 +152,10 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 if (t != null && t.isActiveAndEnabled && RectTransformUtility.RectangleContainsScreenPoint((RectTransform)t.transform, mouse, null)) { under = t; break; }
             }
             if (under == tipHovered) return;
-            if (tipHovered != null) tipHovered.OnPointerExit(Pointer());
+            if (tipHovered != null) tipHovered.OnPointerExit(WindowPointer.Data());
             tipHovered = under;
-            if (tipHovered != null) tipHovered.OnPointerEnter(Pointer());
+            if (tipHovered != null) tipHovered.OnPointerEnter(WindowPointer.Data());
         }
-
-        private static PointerEventData Pointer() =>
-            new PointerEventData(EventSystem.current) { button = PointerEventData.InputButton.Left, position = Input.mousePosition };
 
         // ---- Actions: every press, key or automation hook goes through here --------------------------
 

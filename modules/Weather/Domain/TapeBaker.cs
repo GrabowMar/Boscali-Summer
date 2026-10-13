@@ -18,25 +18,41 @@ namespace BoscaliSummer.Modules.Weather.Domain
         {
             TapeKeyframe[] k = tape.Keyframes;
             var baked = new BakedTape(BakedTape.FullTexels);
+            // s only grows, so both searches resume where the last texel left them (a keyframe passed for one s is passed for every larger s: same answers as a scan from the start).
+            int rampFrom = 1, plateauFrom = 0;
+            // The level is a pure function of the two covers, and a plateau repeats them for hundreds of texels: remember the last pair (by bits).
+            int coverBits = 0, capacityBits = 0;
+            float level = 0f;
+            bool haveLevel = false;
+            // The ends of the ramp being baked (see SkyParams.LerpEnds): the same for all its texels.
+            int endsOf = -1;
+            SkyParams endA = default, endB = default;
             for (int i = 0; i < baked.Texels; i++)
             {
                 float s = (i + 0.5f) * baked.TexelMetres;
-                int ramp = RampAt(k, s);
+                int ramp = RampAt(k, s, ref rampFrom);
                 SkyParams row;
                 LowGenus genus;
                 if (ramp > 0)
                 {
                     float t = WeatherMath.Smoothstep(k[ramp].RampStart, k[ramp].RampEnd, s);
-                    row = SkyParams.Lerp(k[ramp - 1].Sky, k[ramp].Sky, t);
+                    if (endsOf != ramp) { SkyParams.LerpEnds(k[ramp - 1].Sky, k[ramp].Sky, out endA, out endB); endsOf = ramp; }
+                    row = SkyParams.LerpBetween(endA, endB, t);
                     genus = t < 0.5f ? k[ramp - 1].Genus : k[ramp].Genus;
                 }
                 else
                 {
-                    int plateau = PlateauAt(k, s);
+                    int plateau = PlateauAt(k, s, ref plateauFrom);
                     row = k[plateau].Sky;
                     genus = k[plateau].Genus;
                 }
-                row.CumulusLevel = CumulusLevels.For(row.CumulusCover, row.CapacityCover);
+                int cb = BitConverter.SingleToInt32Bits(row.CumulusCover), kb = BitConverter.SingleToInt32Bits(row.CapacityCover);
+                if (!haveLevel || cb != coverBits || kb != capacityBits)
+                {
+                    level = CumulusLevels.For(row.CumulusCover, row.CapacityCover);
+                    coverBits = cb; capacityBits = kb; haveLevel = true;
+                }
+                row.CumulusLevel = level;
                 baked.SetTexel(i, row, genus);
             }
             baked.Finish();
@@ -47,10 +63,19 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>The keyframe whose ramp contains s, or -1 when s lies on a plateau. Ramps never overlap (the generator keeps segments at least half the sum of their ramps).</summary>
         public static int RampAt(TapeKeyframe[] k, float s)
         {
-            for (int i = 1; i < k.Length; i++)
+            int from = 1;
+            return RampAt(k, s, ref from);
+        }
+
+        /// <summary><see cref="RampAt(TapeKeyframe[], float)"/> for a caller whose s never decreases: <paramref name="from"/> is the first keyframe the scan has not yet passed (start at 1).
+        /// A keyframe passed for one s (s at or past its ramp's start and end) is passed for every larger s, so resuming there finds the same ramp.</summary>
+        public static int RampAt(TapeKeyframe[] k, float s, ref int from)
+        {
+            for (int i = from; i < k.Length; i++)
             {
                 if (s < k[i].RampStart) return -1;
                 if (s < k[i].RampEnd) return i;
+                from = i + 1;
             }
             return -1;
         }
@@ -59,6 +84,12 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public static int PlateauAt(TapeKeyframe[] k, float s)
         {
             int j = 0;
+            return PlateauAt(k, s, ref j);
+        }
+
+        /// <summary><see cref="PlateauAt(TapeKeyframe[], float)"/> for a caller whose s never decreases: <paramref name="j"/> (start at 0) is where the last call ended, and the scan resumes there.</summary>
+        public static int PlateauAt(TapeKeyframe[] k, float s, ref int j)
+        {
             while (j + 1 < k.Length && s >= k[j + 1].RampEnd) j++;
             return j;
         }

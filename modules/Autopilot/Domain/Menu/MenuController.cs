@@ -35,15 +35,18 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
     /// The v7 input state machine, grown from the prototype (app.js): HOLD pointing with dead zone, angular hysteresis
     /// and the category lock; release at the hub to latch; digits that act on ONE level; hat; wheel; RMB / Backspace back one level; Esc;
     /// hold-to-confirm danger rows; the 50 ms rest rule on release; pointer ownership after a key. The mouse is the real cursor in both modes.
-    /// A controller drives a wheel: the stick's direction is always the selection, coming back to the centre enters it (category, BACK, MORE,
-    /// submenu) and releasing the button runs the aimed row; a hat turns the wheel instead (see <see cref="Wheel"/>). Pure: one <see cref="MenuInput"/> in,
+    /// A controller drives a wheel: the stick's direction is always the selection, holding it there for <see cref="DwellSec"/> enters it (category,
+    /// BACK, MORE, submenu; the view draws <see cref="Dwell"/> as a ring closing round the icon) and releasing the button runs the aimed row; a hat
+    /// turns the wheel instead (see <see cref="Wheel"/>). Pure: one <see cref="MenuInput"/> in,
     /// state + <see cref="Commands"/> out. The view reads the public state; the host runs Execute commands.
     /// </summary>
     internal sealed class MenuController
     {
         public const float HoldSec = 0.18f, DangerSec = 0.8f, FlashSec = 0.15f, ToastSec = 1.2f, DenySec = 0.18f, ArmSec = 0.05f;
-        public const float NearPx = 14f, SwitchRestSec = 0.12f, AimRestSec = 0.03f, LockRestSec = 0.15f, EdgeRepeatSec = 0.14f;
-        public const float StickDeadzone = 0.25f, StickPick = 0.5f, StickQuietSec = 0.12f;
+        public const float NearPx = 14f, SwitchRestSec = 0.12f, AimRestSec = 0.03f, EdgeRepeatSec = 0.14f;
+        /// <summary>Design px/s at 1080p: a pointer slower than this over a category is settling on it, not crossing it.</summary>
+        public const float SlowPxPerSec = 240f;
+        public const float StickDeadzone = 0.25f, StickPick = 0.5f, StickQuietSec = 0.12f, DwellSec = 1f;
 
         private enum Owner : byte { None, Key, Pointer }
         private enum ExecSource : byte { Key, Release, Lmb, Hold }
@@ -57,17 +60,19 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         private MenuLayout layout;
 
         private bool cDown, prevC, moved, focusFromPointer, aimed;
-        private float cTime, focusTime, lastMoveTime, edgeTime, flashUntil, unaimedSince;
+        private float cTime, focusTime, lastPtrTime, slowSince, edgeTime, flashUntil, unaimedSince;
         private Owner owner;
         private float ownX, ownY, lastRealX, lastRealY;
         private int hover = -1;
         private MenuDevice dockDevice;
         private string refusal;
+        // the row a key or click just ran while the open key is still down: letting go of the key must not run it a second time
+        private string spent;
         private float refusalUntil;
         // the stick: it picks a category on the ring; back at the centre it enters it and the ring becomes the wheel of that list's rows
         private bool stickRows, stickWait;
-        private int wheelPage;
-        private float stickQuietUntil;
+        private int wheelPage, dwellKey = -1;
+        private float stickQuietUntil, dwellSince;
 
         public MenuController(MenuModel model, MenuLayout layout, MenuRecall recall = null)
         {
@@ -112,7 +117,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public string Refusal => Now < refusalUntil ? refusal : null;
         public MenuCategory Category => Cat >= 0 ? model.Categories[Cat] : null;
         private bool HoldLike => Mode == MenuMode.Hold && (cDown || Pending);
-        private bool VirtualPointer => Mode == MenuMode.Hold || Device == MenuDevice.Pad;
 
         public List<MenuRow> Items
         {
@@ -139,13 +143,15 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
 
         public int Cap => layout.Cap(Items, Sub != null);
 
-        /// <summary>HOLD: releasing the open key now runs the focused row (the pointer put the focus there and it has stayed 50 ms). The view brackets the row only then.</summary>
+        /// <summary>HOLD: releasing the open key now runs the focused row: the pointer put the focus there and it has stayed 50 ms, or the arrows or the
+        /// wheel stepped onto it (a list that has only just been drilled into is not a choice yet). The view brackets the row only then.</summary>
         public bool Armed
         {
             get
             {
                 MenuRow row = FocusedRow;
-                return row != null && row.Kind != MenuKind.Danger && !row.NeedsHold && !row.IsBlocked && focusFromPointer && Now - focusTime >= ArmSec;
+                if (row == null || row.Kind == MenuKind.Danger || row.NeedsHold || row.IsBlocked || row.Id == spent) return false;
+                return focusFromPointer ? Now - focusTime >= ArmSec : owner == Owner.Key;
             }
         }
 
@@ -218,7 +224,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         {
             Open = true; Mode = mode; Pending = false; Cat = -1; Sub = null; Focus = -1; DockFocus = false; Offset = 0;
             Hold = null; owner = Owner.None; moved = false; hover = -1; Edge = 0; DenyUntil = 0f; Locked = false;
-            stickRows = false; stickWait = false; stickQuietUntil = 0f; wheelPage = 0; WheelAim = -1; PadSteps = false;
+            stickRows = false; stickWait = false; stickQuietUntil = 0f; wheelPage = 0; WheelAim = -1; PadSteps = false; dwellKey = -1;
             Toast = default;
             Recentre();
         }
@@ -259,8 +265,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                     cDown = true; Pending = true; cTime = Now;
                     return;
                 }
-                // latched on a controller the one button is also the confirm: with a list open the press belongs to the focused row (HatPress)
-                if (!(inp.FromPad && Cat >= 0)) CloseMenu();
+                // latched on a controller the one button is also the confirm: the press belongs to the aimed row (HatPress); with nothing aimed it closes
+                if (!(inp.FromPad && Cat >= 0 && DockFocus)) CloseMenu();
                 return;
             }
             if (!cDown) return;
@@ -274,8 +280,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             else ReleaseExec();
         }
 
-        /// <summary>The controller button came up: an aimed action row runs and the menu closes; a danger row keeps the menu (latched) for its held press;
-        /// anything else (nothing aimed, BACK, a refused row) just closes, as the native wheel does.</summary>
+        /// <summary>The controller button came up: an aimed action row runs and the menu stays, latched; a danger row keeps the menu (latched) for its
+        /// held press; anything else (nothing aimed, BACK, a refused row) just closes, as the native wheel does.</summary>
         private void PadRelease()
         {
             MenuRow row = DockFocus ? FocusedRow : null;
@@ -309,7 +315,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         // ---- focus, category, scroll -------------------------------------------------------------------------------------
         private void SetFocus(int i, bool fromPointer)
         {
-            if (i != Focus) focusTime = Now;
+            if (i != Focus) { focusTime = Now; spent = null; }
             Focus = i; focusFromPointer = fromPointer;
         }
 
@@ -386,6 +392,18 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public int WheelAim { get; private set; } = -1;
         /// <summary>The last controller input was a hat step (the game's button mode), not a stick: the hint names the hat.</summary>
         public bool PadSteps { get; private set; }
+        /// <summary>0..1: how long the stick has held on something it can enter (the aimed category, or the wheel's BACK, MORE or submenu slot); 0 when it has not.</summary>
+        public float Dwell => dwellKey < 0 || dwellKey != DwellTarget() ? 0f : Math.Max(0f, Math.Min(1f, (Now - dwellSince) / DwellSec));
+
+        /// <summary>What a held stick would enter right now: the category index at the ring, 100 + the slot in the wheel, or -1 (an action row only runs on release).</summary>
+        private int DwellTarget()
+        {
+            if (!Open || Device != MenuDevice.Pad || PadSteps || stickWait) return -1;
+            if (!Wheel) return Cat >= 0 && !stickRows && Category.Available && Items.Count > 0 ? Cat : -1;
+            int w = WheelAim >= 0 ? WheelSlot(WheelAim) : SlotEmpty;
+            bool way = w == SlotBack || w == SlotMore || (w >= 0 && Items[w].Kind == MenuKind.Submenu && !Items[w].IsBlocked);
+            return way ? 100 + WheelAim : -1;
+        }
 
         /// <summary>What a ring slot holds in the wheel: a row index, <see cref="SlotBack"/> (always the 0 slot), <see cref="SlotMore"/> (slot 9 of a list longer than nine) or <see cref="SlotEmpty"/>.</summary>
         public int WheelSlot(int slot)
@@ -479,6 +497,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         {
             if (row.Children == null) return;
             Hold = null; Sub = row; DockFocus = true; Offset = 0; Edge = 0;
+            owner = Owner.None; // the focus below is the list's own guess, not the player's: a release must not run it
             int sel = row.Children.FindIndex(c => c.Selected);
             SetFocus(sel >= 0 ? sel : 0, false);
             RefreshDock(); EnsureVisible();
@@ -505,12 +524,9 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             string context = Category != null ? Category.Label : "";
             Commands.Add(new MenuCommand(MenuCommandKind.Execute, row));
             if (!row.NeedsHold && Category != null) recall.Note(Category.Id, (Sub ?? row).Id); // never predict EJECT
-            if (Mode == MenuMode.Latched && row.Stays)
-            {
-                FlashId = row.Id; flashUntil = Now + FlashSec;
-                return;
-            }
-            CloseMenu();
+            // running a row never closes the menu (user ruling 2026-10-13): the row flashes, the toast shows under the hub, and a release turns LATCHED
+            if (Mode == MenuMode.Hold && src == ExecSource.Release) LatchInPlace();
+            FlashId = row.Id; flashUntil = Now + FlashSec; spent = row.Id;
             Toast = new MenuToast { Text = text, Icon = icon, Context = context, Until = Now + ToastSec };
         }
 
@@ -527,11 +543,13 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             Commands.Add(new MenuCommand(MenuCommandKind.Pulse));
         }
 
-        /// <summary>Release C runs the focused row only if it is <see cref="Armed"/>.</summary>
+        /// <summary>Release C runs the focused row only if it is <see cref="Armed"/>. Let go too early, or on a category with no row yet, the menu stays
+        /// (LATCHED, as it stands) for a click; let go back at the hub or out in the open it closes.</summary>
         private void ReleaseExec()
         {
-            if (!Armed) { CloseMenu(); return; }
-            Exec(FocusedRow, ExecSource.Release);
+            if (Armed) Exec(FocusedRow, ExecSource.Release);
+            else if (Cat >= 0) LatchInPlace();
+            else CloseMenu();
         }
 
         // ---- keys: ring, list, digits --------------------------------------------------------------------------------------
@@ -618,14 +636,22 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             float fromX = PtrX, fromY = PtrY;
             PtrX = inp.PointerX; PtrY = inp.PointerY;
             if (!PointerOwns()) return;
-            lastMoveTime = Now; Device = MenuDevice.Mouse;
-            if (HoldLike) HoldPointerLogic();
-            else
-            {
-                LatchedHover();
-                aimed = hover >= 0 && AimedAtDock(fromX, fromY);
-                if (aimed) unaimedSince = Now;
-            }
+            Device = MenuDevice.Mouse;
+            // a hand that is still moving fast is on its way somewhere; one that has slowed down (or stopped) has arrived
+            float dt = Now - lastPtrTime, sx = PtrX - fromX, sy = PtrY - fromY;
+            lastPtrTime = Now;
+            if (dt <= 0f || Math.Sqrt(sx * sx + sy * sy) > SlowPxPerSec * layout.Rho * dt) slowSince = Now;
+            if (HoldLike) HoldPointerLogic(); else LatchedHover();
+            aimed = hover >= 0 && AimedAtDock(fromX, fromY);
+            if (aimed) unaimedSince = Now;
+        }
+
+        /// <summary>Another category's disc or plate under the pointer becomes the hover candidate; <see cref="Update"/> switches to it by intent.</summary>
+        private void HoverCandidate(int cat)
+        {
+            int was = hover;
+            hover = cat != Cat ? cat : -1;
+            if (hover >= 0 && was != hover) { unaimedSince = Now; slowSince = Now; }
         }
 
         /// <summary>Menu aim: the pointer's last step heads for the open dock, so a category it crosses on the way is not a choice.</summary>
@@ -648,19 +674,34 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             PtrX = layout.Cx + inp.StickX / mag * layout.R; PtrY = layout.Cy + inp.StickY / mag * layout.R;
             ownX = PtrX; ownY = PtrY;
             float angle = MenuLayout.AngleOf(inp.StickX, inp.StickY);
-            if (Wheel) { int slot = layout.SectorPick(angle, WheelAim); if (slot != WheelAim) AimSlot(slot); return; }
-            if (DockFocus) { DockFocus = false; SetFocus(-1, false); }
-            SetCat(layout.SectorPick(angle, Cat));
+            if (Wheel) { int slot = layout.SectorPick(angle, WheelAim); if (slot != WheelAim) AimSlot(slot); }
+            else
+            {
+                if (DockFocus) { DockFocus = false; SetFocus(-1, false); }
+                SetCat(layout.SectorPick(angle, Cat));
+            }
+            int target = DwellTarget();
+            if (target != dwellKey) { dwellKey = target; dwellSince = Now; }
         }
 
-        /// <summary>The stick is back at the centre: that enters what it pointed at (a category, BACK, MORE, a submenu). In HOLD an action row is un-aimed,
-        /// so letting go of the button at the centre never runs anything; LATCHED keeps it for the confirming press.</summary>
+        /// <summary>The stick is back at the centre: the dwell is dropped and nothing is entered. The wheel's slot is un-aimed, so letting go of the button
+        /// at the centre never runs anything and, LATCHED, a press there closes; only a row waiting for its held press (EJECT) keeps the aim.</summary>
         private void StickRest()
         {
-            stickWait = false;
-            if (Device != MenuDevice.Pad || PadSteps) return;
-            if (Wheel) { if (WheelAim >= 0 && !EnterAimed() && Mode == MenuMode.Hold) AimSlot(-1); }
-            else if (Cat >= 0 && !stickRows && Category.Available && Items.Count > 0) EnterWheel();
+            stickWait = false; dwellKey = -1;
+            if (Device != MenuDevice.Pad || PadSteps || !Wheel || WheelAim < 0) return;
+            MenuRow row = FocusedRow;
+            bool holdRow = row != null && (row.NeedsHold || row.Kind == MenuKind.Danger);
+            if (Mode == MenuMode.Hold || !holdRow) AimSlot(-1);
+        }
+
+        /// <summary>The stick has held on a category, BACK, MORE or a submenu for <see cref="DwellSec"/>: go in. The stick still points where the new page
+        /// has other slots, so it picks again only after a rest at the centre.</summary>
+        private void DwellEnter()
+        {
+            dwellKey = -1;
+            if (Wheel) EnterAimed(); else EnterWheel();
+            stickWait = true;
         }
 
         private void HoldPointerLogic()
@@ -668,7 +709,9 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             float dx = PtrX - layout.Cx, dy = PtrY - layout.Cy, r = (float)Math.Sqrt(dx * dx + dy * dy);
             bool inDock = Cat >= 0 && layout.PointerDock(dock).Contains(PtrX, PtrY);
             if (r > MenuLayout.DeadPx * layout.Rho) moved = true;
-            if (inDock) { hover = -1; FocusFromPtr(PtrX, PtrY); return; }
+            int was = hover;
+            hover = -1;
+            if (inDock) { FocusFromPtr(PtrX, PtrY); return; }
             Edge = 0;
             if (DockFocus) { DockFocus = false; SetFocus(-1, true); }
             if (r < MenuLayout.DeadPx * layout.Rho)
@@ -679,7 +722,14 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             }
             if (Locked)
             {
-                if (r > MenuLayout.LockOut * layout.R) return;
+                if (r > MenuLayout.LockOut * layout.R)
+                {
+                    // committed, but not stuck: pointing at another category from any side re-aims, by the same intent rule as LATCHED
+                    Hit h = HitAt(PtrX, PtrY);
+                    hover = was;
+                    HoverCandidate(h.Type == HitType.Category ? h.Index : -1);
+                    return;
+                }
                 Locked = false;
             }
             int i = layout.SectorPick(MenuLayout.AngleOf(dx, dy), Cat);
@@ -700,7 +750,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                     if (y >= row.Rect.T && y < row.Rect.B) return new Hit { Type = HitType.Row, Index = row.Index };
                 return new Hit { Type = HitType.Dock };
             }
-            int cat = layout.DiscAt(x, y, 5f);
+            int cat = layout.DiscAt(x, y, MenuLayout.DiscSlopPx * layout.Rho);
             // the plate as drawn (it hugs its own text), not the widest one: empty air beside a short plate is not that category
             for (int i = 0; cat < 0 && i < layout.Count; i++)
             {
@@ -752,7 +802,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             {
                 if (DockFocus) { DockFocus = false; SetFocus(-1, true); }
                 if (Cat < 0) SetCat(h.Index);
-                else if (h.Index != Cat) { hover = h.Index; if (was != hover) unaimedSince = Now; }
+                else { hover = was; HoverCandidate(h.Index); }
             }
             else if (h.Type == HitType.Row || h.Type == HitType.More || h.Type == HitType.Dock) FocusFromPtr(PtrX, PtrY);
             else if (DockFocus) { DockFocus = false; SetFocus(-1, true); }
@@ -777,6 +827,14 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             }
             else if (h.Type == HitType.Category) SetCat(h.Index);
             else if (h.Type == HitType.More) ScrollBy(h.Dir * (Cap - 1));
+            else if (h.Type == HitType.None)
+            {
+                // the hub is the way back; out in the open (clear of the ring, its plates and the dock) a click closes, as on any scrim
+                float dx = PtrX - layout.Cx, dy = PtrY - layout.Cy, slop = MenuLayout.SlopPx * layout.Lg, reach = layout.R + layout.Rd + slop;
+                float hub = layout.HubR + MenuLayout.DiscSlopPx * layout.Rho;
+                if (dx * dx + dy * dy <= hub * hub) Back(true);
+                else if (PtrX < layout.ExtL - slop || PtrX > layout.ExtR + slop || dy < -reach || dy > reach) CloseMenu();
+            }
         }
 
         // ---- time ---------------------------------------------------------------------------------------------------------------
@@ -804,20 +862,16 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 // the danger hold dies the moment focus leaves its row (arrows, hat, wheel, drag, rotate, back) or the menu closes
                 if (Hold != null && FocusedRow != Hold.Row) Hold = null;
                 if (Pending && cDown && t - cTime >= HoldSec) Pending = false;
+                if (dwellKey >= 0 && Dwell >= 1f) DwellEnter();
                 if (Hold != null)
                 {
                     float p = (t - Hold.StartedAt) / DangerSec;
                     Hold.Progress = Math.Max(0f, Math.Min(1f, p));
                     if (p >= 1f) { MenuRow row = Hold.Row; Hold = null; Exec(row, ExecSource.Hold); }
                 }
-                // HOLD: resting on another disc while committed to a category side-steps to it
-                if (Open && Mode == MenuMode.Hold && Locked && !DockFocus && t - lastMoveTime >= LockRestSec)
-                {
-                    int j = layout.DiscAt(PtrX, PtrY, 4f);
-                    if (j >= 0 && j != Cat) SetCat(j);
-                }
-                // LATCHED: another category switches after 60 ms under a pointer that is not heading for the dock, or after resting 120 ms on it
-                if (Open && hover >= 0 && (t - lastMoveTime >= SwitchRestSec || (!aimed && t - unaimedSince >= AimRestSec)))
+                // another category under the pointer (LATCHED, or HOLD once committed) switches after 30 ms when the pointer is not heading for the
+                // dock, or once it has slowed down on it for 120 ms; crossing it fast on the way to a row does nothing
+                if (Open && hover >= 0 && (t - slowSince >= SwitchRestSec || (!aimed && t - unaimedSince >= AimRestSec)))
                 {
                     int hv = hover; hover = -1;
                     if (hv != Cat) SetCat(hv);

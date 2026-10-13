@@ -68,6 +68,11 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         /// <summary>Distance to the nearest selected target in kilometres, negative = none.</summary>
         public float NearestKm = -1f;
         public bool HudReady = true;
+        /// <summary>Hostile aircraft your side tracks, and the distance to the nearest in kilometres (negative = none).</summary>
+        public int Threats;
+        public float ThreatKm = -1f;
+        /// <summary>Missiles the warning system knows are tracking you.</summary>
+        public int Inbound;
 
         // FLIGHT
         public GearPhase Gear = GearPhase.Up;
@@ -84,6 +89,9 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         /// <summary>0 OFF, 1 ON, 2 AUTO.</summary>
         public int LandingLight;
         public bool HasNvg, NvgOn;
+        /// <summary>The goggles take a gain step (the mod's night-vision look is metering): 0 AUTO, 1 LOW, 2 MED, 3 HIGH.</summary>
+        public bool HasNvgGain;
+        public int NvgGain;
 
         // WEAPONS
         public List<WorldStation> Stations = new List<WorldStation>();
@@ -92,6 +100,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public bool GunsLinked;
         public bool HasTurrets;
         public bool TurretAuto;
+        /// <summary>The airframe has weapon bay doors, and they are being held open.</summary>
+        public bool HasBayDoors, BayDoorsOpen;
 
         // DEFENCE
         public bool HasCountermeasures;
@@ -105,6 +115,11 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         /// <summary>Index of the active countermeasure in the game's own (alphabetical) list.</summary>
         public int CountermeasureIndex;
         public bool HasRadar, RadarOn;
+        /// <summary>The aircraft carries the chaff dispenser (<c>ChaffDispenser</c>): POP CHAFF and the link switch exist.</summary>
+        public bool HasChaff;
+        public int Chaff, ChaffMax;
+        /// <summary>The countermeasure button also dispenses chaff while a radar missile is inbound.</summary>
+        public bool ChaffLinked;
         public bool HasDrones, DronesStriking, DronesCanStrike;
         /// <summary>REMORA drones flying now.</summary>
         public int Drones;
@@ -120,13 +135,32 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public int Missiles;
         public string MissileStatus = "";
         public string MissileCurrent = "";
-        /// <summary>The TAC BOARD options (<c>ITacBoardSettings</c>) are installed: VIEW lists the three board rows.</summary>
+        /// <summary>The visor terrain options are installed: VIEW lists the holo map and ground ghost rows.</summary>
+        public bool TerrainAvailable;
+        public bool HoloMap;
+        /// <summary>Index into <see cref="MenuCatalog.Ghosts"/>: OFF, FAINT, CLEAR.</summary>
+        public int TerrainGhost;
+
+        // HUD
+        /// <summary>The TAC BOARD options (<c>ITacBoardSettings</c>) are installed: the HUD category has its rows.</summary>
         public bool BoardAvailable;
         public bool BoardOn;
         /// <summary>Index into <see cref="MenuCatalog.BoardDeclutters"/>: FULL, LEAN, MIN.</summary>
         public int BoardDeclutter;
         /// <summary>Index into <see cref="MenuCatalog.BoardLayouts"/>: WIDE, STACK.</summary>
         public int BoardLayout;
+        /// <summary>Indices into <see cref="MenuCatalog.BoardShades"/> and <see cref="MenuCatalog.BoardSizes"/>.</summary>
+        public int BoardShade, BoardSize = 1;
+        public bool BoardScopeAuto = true;
+        /// <summary>The board switches that are on, as "pages/slug" and "parts/slug" (<see cref="MenuCatalog.BoardPages"/>, <see cref="MenuCatalog.BoardParts"/>).</summary>
+        public HashSet<string> BoardSwitches = new HashSet<string>();
+
+        // COCKPIT (cabin)
+        public bool FeelAvailable;
+        /// <summary>The cabin effects that are on, by slug (<see cref="MenuCatalog.FeelSwitches"/>).</summary>
+        public HashSet<string> Feel = new HashSet<string>();
+        public bool KneeboardAvailable;
+        public string KneeboardCard = "";
 
         // SUPPORT
         public bool MarkAvailable;

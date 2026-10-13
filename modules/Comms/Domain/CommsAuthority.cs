@@ -88,7 +88,7 @@ namespace BoscaliSummer.Modules.Comms.Domain
         }
 
         /// <summary>Expire map items; each client also expires them on its own clock.</summary>
-        public void Tick(float now, List<CommsOutbound> output)
+        public void Tick(float now)
         {
             board.Expire(now, null);
         }

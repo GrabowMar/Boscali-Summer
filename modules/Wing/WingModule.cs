@@ -17,9 +17,6 @@ namespace BoscaliSummer.Modules.Wing
             typeof(BoscaliSummer.Modules.Wing.Presentation.WingHudTint.UpdateColorPatch),
             typeof(BoscaliSummer.Modules.Wing.Presentation.WingMapTint.MapIconColorPatch),
             typeof(BoscaliSummer.Modules.Wing.Presentation.WingMapTint.ShowAirbasePatch),
-            typeof(BoscaliSummer.Modules.Wing.Presentation.WingMenuActionPatches),
-            typeof(BoscaliSummer.Modules.Wing.Presentation.WingRadialMenuPatches),
-            typeof(BoscaliSummer.Modules.Wing.Presentation.WingRadialMenuPatches.AwakePatch),
             typeof(BoscaliSummer.Modules.Wing.Presentation.WmcMapControlsPatch),
             typeof(BoscaliSummer.Modules.Wing.Presentation.WmcMapSelection.ClickIconPatch),
             typeof(BoscaliSummer.Modules.Wing.Runtime.BounceGuard),
@@ -66,9 +63,7 @@ namespace BoscaliSummer.Modules.Wing
             runtime.Register(wing);
             runtime.Register(new WingPlans());
             runtime.Register(new DebriefService());
-            var chatter = new RadioDirector();
-            runtime.Register(chatter);
-            context.AddService<IChatterChannel>(chatter);
+            runtime.Register(new WingChatter());
             runtime.Register(new SpawnService());
             runtime.Register(new PlayerAutopilot());
             runtime.Register(new WingHotkeys());

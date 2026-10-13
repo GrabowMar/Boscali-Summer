@@ -35,7 +35,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private SupportSettings settings;
         private IObservationSource observations;
         private GlobalPosition? mapAim;       // the pick of the current arm; cleared on every arm
-        private GlobalPosition? lastMapPick;  // survives re-arms: UNLASE falls back to it
         private bool armHasPick;              // false in the MAP BUSY case (armed without a local map pick)
         public float LastWordsAt { get; private set; }
 
@@ -87,9 +86,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             request.Clear();
             ClearTasked();
             claimRequest = claimPost = 0; // a scene change abandons any claim in flight: its receipt belongs to the old scene
-            pinCycle = 0;
             mapAim = null;
-            lastMapPick = null;
             armHasPick = false;
             LastWords = "";
             LastWordsAt = -100f;
@@ -125,7 +122,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 bool mapOk = manager.ArmLocalPick(Label(id), point =>
                 {
                     mapAim = point;
-                    lastMapPick = point;
                     armHasPick = false; // the manager consumed its pick
                     if (arm.Armed != id) return;
                     if (Check(id)) Fire(id, point, SupportManager.MissionNow()); // right-click while armed fires at once
@@ -141,21 +137,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
             Say(CallWords.Refusal(CallRefusal.NoAim), AvUiCue.Caution);
         }
 
-        /// <summary>Pin a call into the first empty favourite slot, else cycle through the four.</summary>
-        public void Pin(SupportActionId id)
-        {
-            for (int i = 0; i < Favourites.Length; i++)
-            {
-                if (Favourites[i].HasValue) continue;
-                Favourites[i] = id;
-                return;
-            }
-            Favourites[pinCycle] = id;
-            pinCycle = (pinCycle + 1) % Favourites.Length;
-        }
-
-        private int pinCycle;
-
         public void Disarm()
         {
             arm.Clear();
@@ -163,19 +144,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
             manager?.Disarm();
             Say("DISARMED", AvUiCue.Release);
         }
-
-        // ---- TASKED claims (the SPACE feed's cards) ---------------------------------------------------------------------
-        // A TASKED claim is its own path. It must never go through Press/Fire: those price STANDARD, give the POD and the map
-        // pick priority and would overwrite the MARK. The host prices the claim from the post and derives the aim itself.
-
-        /// <summary>The post whose second press would claim it, 0 when none.</summary>
-        public int ArmedTasked => tasked.PostId;
-
-        /// <summary>A claim is in flight and has not reached a final receipt.</summary>
-        public bool TaskedPending => claimRequest != 0;
-
-        /// <summary>The post the in-flight claim is for, 0 when none.</summary>
-        public int ClaimingPost => claimPost;
 
         private void ClearTasked()
         {
@@ -290,17 +258,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 words = "NEGATIVE: CLAIMED BY " + reply.Claimant + " — IT REOPENS IF THEIR LAUNCH FAILS";
             if (reply.Replayed) words = "EARLIER · " + words; // a retry replays the original receipt: history, not a new event
             AnswerTasked(reply.RequestId, state, words);
-        }
-
-        /// <summary>JTAC UNLASE at the current POD / last map pick; no arm step, no floors.</summary>
-        public void Unlase()
-        {
-            if (manager == null) return;
-            if (request.Pending || manager.RequestPending) { Say(CallWords.Refusal(CallRefusal.Busy), AvUiCue.Caution); return; }
-            float now = SupportManager.MissionNow();
-            if (TryPod(out GlobalPosition pod)) { Fire(SupportActionId.JtacUnlase, pod, now); return; }
-            if (lastMapPick.HasValue) { Fire(SupportActionId.JtacUnlase, lastMapPick.Value, now); return; }
-            Say(CallWords.Refusal(CallRefusal.NoAim), AvUiCue.Caution);
         }
 
         /// <summary>Host answer: called by SupportManager.ReceiveResult with the request id and the result words.</summary>

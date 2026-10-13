@@ -1,5 +1,4 @@
 using NOAvionics;
-using System.Collections.Generic;
 
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
@@ -18,18 +17,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private int alertCount = -1, alertKey = int.MinValue, alertViewKey = int.MinValue;
         private string alertText;
         private AvRow alertStrip;
-
-        /// <summary>Alerts standing now (automation).</summary>
-        public int AlertsShown => alertCount < 0 ? 0 : alertCount;
-
-        /// <summary>The ids of the order-grid cells that cannot be pressed now (automation).</summary>
-        public List<string> DisabledOrders()
-        {
-            var off = new List<string>();
-            for (int k = 0; k < shownCells.Length; k++)
-                if (!shownEnabled[k] && shownCells[k].Id != null) off.Add(shownCells[k].Id);
-            return off;
-        }
 
         private void BuildAlerts(AvFlow f)
         {
@@ -61,7 +48,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
 
         /// <summary>The worst alert as one word for the table's summary line ("ALL CLEAR", "MISSILE #3 +2").</summary>
-        private string AlertWord(WmcContext c, out AvState state)
+        private string AlertWord(out AvState state)
         {
             if (alertCount <= 0)
             {

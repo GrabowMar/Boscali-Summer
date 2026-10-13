@@ -211,13 +211,10 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             assigned.Clear();
             losses.Clear();
             roster.Clear();
-            created = 0;
             // Start without a selected pilot; recruitment is manual or triggered by purchase.
             selectedPilot = null;
             Version++;
         }
-
-        private static int created;
 
         // Pilot assignment.
 
@@ -357,7 +354,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             if (record.HasCustomPortrait) pilot.PortraitSelection = record.Selection;
             roster.Add(pilot);
             if (selectedPilot == null) selectedPilot = pilot;
-            created++;
             Version++;
             return pilot;
         }
@@ -407,19 +403,18 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             WingPilot pilot = null;
             try
             {
-                pilot = DefaultProvider(created);
+                pilot = DefaultProvider();
             }
             catch (Exception e)
             {
                 WingLog.Logger.LogWarning("[Pilot] pilot provider failed: " + e.Message);
             }
 
-            pilot = pilot ?? DefaultProvider(created);
+            pilot = pilot ?? DefaultProvider();
             if (pilot != null)
             {
                 roster.Add(pilot);
                 GrantPerks(pilot);
-                created++;
                 Version++;
             }
             return pilot;
@@ -512,26 +507,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         public static string RankName(WingRank rank) => PilotPerks.RankName(rank);
 
-        // Roster presentation.
-
-        /// <summary>Build a fresh display roster with flying pilots and seniority first, losses last.
-        /// Panels refresh this short list as XP changes.</summary>
-        public static List<WingPilot> DisplayRoster()
-        {
-            var alive = new List<WingPilot>();
-            var dead = new List<WingPilot>();
-            for (int i = 0; i < roster.Count; i++)
-            {
-                WingPilot pilot = roster[i];
-                if (pilot.Lost) dead.Add(pilot);
-                else alive.Add(pilot);
-            }
-
-            alive.Sort(CompareByXp);
-            alive.AddRange(dead);
-            return alive;
-        }
-
         /// <summary>Selectable pilots in descending seniority.</summary>
         public static List<WingPilot> SelectablePilots()
         {
@@ -550,10 +525,10 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             return byXp != 0 ? byXp : roster.IndexOf(a).CompareTo(roster.IndexOf(b));
         }
 
-        private static WingPilot DefaultProvider(int index)
+        private static WingPilot DefaultProvider()
         {
             string callsign = PilotIdentity.Callsign(n => Random.Range(0, n), c => ContainsCallsign(c) || (SavedTaken != null && SavedTaken(c)));
-            var persona = (ChatterPersona)Random.Range(0, 4);
+            var persona = (ChatterPersona)Random.Range(0, ChatterPersonas.Count);
             return new WingPilot
             {
                 Name = PilotIdentity.Name(n => Random.Range(0, n)),

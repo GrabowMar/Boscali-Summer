@@ -566,12 +566,6 @@ namespace BoscaliSummer.Modules.Trenches.Domain
             return written;
         }
 
-        private static int Neighbour(int index, int count, bool closed)
-        {
-            if (closed) return ((index % count) + count) % count;
-            return Math.Clamp(index, 0, count - 1);
-        }
-
         /// <summary>Station normal (left-hand perpendicular) from the neighbouring stations.</summary>
         public static void Normal(float[] x, float[] z, int count, int index, out float nx, out float nz)
         {

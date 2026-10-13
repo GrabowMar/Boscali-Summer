@@ -72,7 +72,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         private DynamicOperationsSettings settings;
         private OperationsNet network;
         private object missionIdentity;
-        private float nextTick, previousTime, lastSnapshot;
+        private PhasedGate tickGate;
+        private float previousTime, lastSnapshot;
         private int nextId;
         private FactionHQ viewHq;
         private bool wasEnabled;
@@ -87,17 +88,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         public static OperationsManager Active { get; private set; }
         public event Action<int, float> MoraleAwarded;
         public event Action<SortieOutcome> Finished;
-
-        public bool HasCompletedContract(int factionInstanceId)
-        {
-            if (!GameAccess.IsServer() || settings?.Enabled.Value != true ||
-                !MissionManager.IsRunning || !ReferenceEquals(missionIdentity, MissionManager.CurrentMission) ||
-                factionInstanceId == 0) return false;
-            foreach (var entry in boards)
-                if (entry.Key != null && entry.Key.GetInstanceID() == factionInstanceId)
-                    return entry.Value.CompletedContract;
-            return false;
-        }
 
         /// <summary>True while a local pilot with a faction could be shown sorties: the transport then keeps its own snapshot fresh with no surface open.</summary>
         internal bool WantsHeartbeat => settings != null && settings.Enabled.Value && MissionManager.IsRunning &&
@@ -143,7 +133,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             rewards.ResetForScene(); boards.Clear(); bases.Clear(); basePositions.Clear(); paidPlayers.Clear();
             jammers.Clear();
             foreach (Candidate candidate in candidates) { candidate.Unit = null; candidate.Base = null; candidate.Count = 0; }
-            missionIdentity = null; previousTime = 0f; nextTick = 0f;
+            missionIdentity = null; previousTime = 0f; tickGate.Reset(); tickFactions.Clear(); tickCursor = 0;
             viewHq = null; focusSource = null; tie = default; wingOrders = null;
             hasSnapshot = false; SelectedForHud = 0;
             EndAction(string.Empty);
@@ -199,26 +189,42 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             float now = mission.MissionTime;
             if (!float.IsFinite(now)) return;
             if (now < previousTime) { ResetForScene(); missionIdentity = current; }
-            if (now < nextTick) return;
-            float elapsed = Math.Max(0f, now - previousTime);
-            previousTime = now; nextTick = now + 1f;
+            // The boards the last tick left for the frames after it: one faction a frame (a board's tick can run a generation pass over every unit).
+            if (tickCursor < tickFactions.Count) StepBoard();
+            if (!tickGate.Due(now, 1f, 0.375f)) return;   // 1 Hz slot .375: see HighCommandManager for the table
+            tickElapsed = Math.Max(0f, now - previousTime);
+            tickNow = now;
+            previousTime = now;
             sightlineQueries = 0;
             rewards.Prune();
             GatherBases();
             generatedThisTick = false;
-            int inspected = 0;
+            tickFactions.Clear();
             foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
             {
-                if (++inspected > 8) break;
-                if (hq == null) continue;
-                Player participant = FirstPlayer(hq);
-                if (!boards.TryGetValue(hq, out FactionBoard board))
-                {
-                    if (participant == null || boards.Count >= 8) continue;
-                    board = new FactionBoard(); boards.Add(hq, board);
-                }
-                TickBoard(hq, board, now, elapsed, participant);
+                if (tickFactions.Count >= 8) break;
+                tickFactions.Add(hq);
             }
+            tickCursor = 0;
+            if (tickFactions.Count > 0) StepBoard();
+        }
+
+        // The factions of the tick in flight, the next one to run, and the tick's clock and elapsed time.
+        private readonly List<FactionHQ> tickFactions = new List<FactionHQ>(8);
+        private int tickCursor;
+        private float tickNow, tickElapsed;
+
+        private void StepBoard()
+        {
+            FactionHQ hq = tickFactions[tickCursor++];
+            if (hq == null) return;
+            Player participant = FirstPlayer(hq);
+            if (!boards.TryGetValue(hq, out FactionBoard board))
+            {
+                if (participant == null || boards.Count >= 8) return;
+                board = new FactionBoard(); boards.Add(hq, board);
+            }
+            TickBoard(hq, board, tickNow, tickElapsed, participant);
         }
 
         private void GatherBases()

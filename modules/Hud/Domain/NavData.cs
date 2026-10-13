@@ -55,7 +55,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
     {
         /// <summary>The block is this wide (design units); the 12 unit mono face advances 7.8 a character, so a row holds 33.</summary>
         public const float Width = 260f;
-        public const int MaxRows = 5, MaxChars = 33;
+        public const int MaxChars = 33;
 
         public readonly NavRow[] Rows = { new NavRow(), new NavRow(), new NavRow(), new NavRow(), new NavRow() };
         private readonly char[] tail = new char[32];

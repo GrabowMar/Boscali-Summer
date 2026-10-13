@@ -77,7 +77,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         /// Host only (the native cooldown read throws on a client). The first failing gate, and the group that would be bought: the first eligible one off cooldown and
         /// affordable from the rotation point, else the first eligible one so the price can still be shown. The same numbers feed the panel before anything is spent.
         /// </summary>
-        internal WaveQuote Quote(FactionHQ hq, in OperationFocus live, bool human, bool sortiesAvailable, bool switchedOff, float poolFactor)
+        internal WaveQuote Quote(FactionHQ hq, in OperationFocus live, bool sortiesAvailable, bool switchedOff, float poolFactor)
         {
             List<Faction.ConvoyGroup> groups = hq?.faction?.GetConvoyGroups();
             int count = groups == null ? 0 : Mathf.Min(groups.Count, MaximumCombatGroups);

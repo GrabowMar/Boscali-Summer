@@ -4,7 +4,6 @@ using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Net;
 using Mirage;
 using Mirage.Serialization;
-using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Events.Networking

@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using BoscaliSummer.Modules.Support.Domain;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
 using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Space;
@@ -244,10 +243,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return all.Length > 0 ? all[0] : null;
         }
 
-        private static Dictionary<string, object> Fail(string hook, string error)
-        {
-            Debug.LogWarning("[OpsAutomation] " + hook + ": " + error);
-            return new Dictionary<string, object> { { "ok", false }, { "error", error } };
-        }
+        private static Dictionary<string, object> Fail(string hook, string error) => Failure("OpsAutomation", hook, error);
     }
 }

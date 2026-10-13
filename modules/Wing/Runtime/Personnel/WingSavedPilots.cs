@@ -15,15 +15,15 @@ namespace BoscaliSummer.Modules.Wing.Runtime
     /// puts the store back as it was, so nothing shows SAVED that is not on disk.</summary>
     internal static class WingSavedPilots
     {
-        public const string UserFile = "pilots.user.json", SimFile = "pilots.sim.json", ExportFile = "exported_pilots.json";
+        public const string UserFile = "pilots.user.json", ExportFile = "exported_pilots.json";
 
         private static SavedPilotStore store;
-        private static bool scratch, tallied, locked;
+        private static bool tallied, locked;
 
         /// <summary>Why the saved pilots could not be read this mission (the list's empty card says it), or null.</summary>
         public static string Problem { get; private set; }
 
-        public static string FilePath => Path.Combine(WingConfig.RecordsRoot, scratch ? SimFile : UserFile);
+        public static string FilePath => Path.Combine(WingConfig.RecordsRoot, UserFile);
 
         /// <summary>Where EXPORT writes and IMPORT reads first (FOLDER opens it).</summary>
         public static string Folder => Path.Combine(WingConfig.RecordsRoot, "Pilots");
@@ -157,21 +157,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             var lines = new List<MissionLine>(roster.Count);
             foreach (WingPilot p in roster) lines.Add(MissionLine.Of(p.Callsign, p.LastAircraft != null, p.Sorties, p.Kills, p.Xp));
             if (store.Tally(lines) && Write()) WingLog.Verbose("[Pilots] service records written");
-        }
-
-        /// <summary>Scenario hygiene: a fresh <c>pilots.sim.json</c>, so a scenario never touches the player's saved pilots.</summary>
-        public static void UseScratch()
-        {
-            scratch = true;
-            try
-            {
-                if (File.Exists(FilePath)) File.Delete(FilePath);
-            }
-            catch (Exception e)
-            {
-                WingLog.Logger.LogWarning("[Pilots] could not clear " + SimFile + ": " + e.Message);
-            }
-            Load();
         }
 
         /// <summary>The pilots in every readable top-level JSON file of <paramref name="dir"/> (read only); <paramref name="files"/> counts the files.</summary>

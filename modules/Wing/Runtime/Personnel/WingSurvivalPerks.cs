@@ -61,7 +61,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             Has(PilotOf(aircraft), perk);
 
         internal static void ProtectPilotDamage(Aircraft aircraft, ref float pierce, ref float blast,
-                                                ref float fire, ref float impact, ref float hitPoints)
+                                                ref float fire, ref float impact)
         {
             bool tough = Has(aircraft, PilotPerk.Toughness);
             pierce = PilotPerks.PilotDamage(pierce, tough);

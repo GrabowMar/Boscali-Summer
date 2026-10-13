@@ -75,7 +75,9 @@ namespace BoscaliSummer.Modules.Support
             panel.Configure(manager, calls, fronts);
             var perkFan = new OpsPerkFan(manager, calls);
             context.AddService<IOpsPerks>(perkFan);
-            new StrikeScopeFeed(manager, perkFan).Register();      // the TAC BOARD's STRIKE page and its PERK and MARK gauges
+            var scopeFeed = new StrikeScopeFeed(manager, perkFan);
+            scopeFeed.Register();      // the TAC BOARD's STRIKE page and its PERK and MARK gauges
+            context.OnTeardown(scopeFeed.Unregister);
             satellite.Configure(manager);
 
             context.AddHostSettings(SupportHostSettings.Build(context.Settings.Support));

@@ -22,7 +22,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
     internal sealed class MaldxNet : MonoBehaviour, ISceneService
     {
         internal const byte ProtocolVersion = 1;
-        internal const byte Airborne = 0, Exposed = 1, Down = 2;
+        internal const byte Airborne = 0, Exposed = 1, Down = 2, Chaffed = 3; // Chaffed: Site = the aircraft the missile was after
         private HandlerSlot slot;
         private HandlerSlot ClientHandlers => slot ??= HandlerSlot.Of<MaldxEvent>(Receive);
         private float nextRegistration;
@@ -76,7 +76,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
 
         private void Receive(INetworkPlayer sender, MaldxEvent e)
         {
-            if (e.Protocol != ProtocolVersion || GameAccess.IsServer() || e.Kind > Down) return;
+            if (e.Protocol != ProtocolVersion || GameAccess.IsServer() || e.Kind > Chaffed) return;
             MaldxHud.Show(e);
         }
 

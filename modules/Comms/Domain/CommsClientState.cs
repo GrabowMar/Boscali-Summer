@@ -126,9 +126,6 @@ namespace BoscaliSummer.Modules.Comms.Domain
         private readonly Dictionary<uint, float> pollClosedAt = new Dictionary<uint, float>();
         private readonly Dictionary<uint, int> pendingVotes = new Dictionary<uint, int>();
         private float refusalWatchUntil = float.NegativeInfinity;
-        private bool pendingHide;
-        private float pendingHideX;
-        private float pendingHideZ;
 
         public CommsBoard Board { get; } = new CommsBoard();
         public CommsScoreboard Scores { get; } = new CommsScoreboard();
@@ -150,7 +147,6 @@ namespace BoscaliSummer.Modules.Comms.Domain
         public IReadOnlyList<DuelView> Duels => duels;
         public IReadOnlyList<HuntView> Hunts => hunts;
         public IReadOnlyList<CommsFeedLine> Feed => feed;
-        public IReadOnlyList<RivalryView> Rivalries => rivalries;
         public int BestHuntMetres { get; private set; } = int.MaxValue;
         public int HuntWins { get; private set; }
 
@@ -291,40 +287,6 @@ namespace BoscaliSummer.Modules.Comms.Domain
 
         /// <summary>A map or cockpit request just went up: a refusal in the next few seconds belongs on the HUD.</summary>
         public void WatchRefusal(float now) => refusalWatchUntil = now + RefusalWatchSeconds;
-
-        /// <summary>
-        /// Remember this peer's choice at click time; the host's tally follows. The choice it
-        /// replaced is kept until the host has had its say, so a refused vote springs back.
-        /// </summary>
-        public void NoteLocalVote(uint pollId, int option)
-        {
-            CommsPoll poll = FindPoll(pollId);
-            if (poll == null || poll.Closed) return;
-            pendingVotes[pollId] = poll.LocalVote;
-            poll.LocalVote = option;
-            Revision++;
-        }
-
-        public void NoteLocalGuess(uint huntId, float x, float z)
-        {
-            HuntView hunt = FindHunt(huntId);
-            if (hunt == null || hunt.Revealed) return;
-            hunt.HasLocalGuess = true;
-            hunt.LocalGuessX = x;
-            hunt.LocalGuessZ = z;
-            Revision++;
-        }
-
-        /// <summary>
-        /// Remember where this peer just hid a target: the host never sends the point back
-        /// before the reveal, so the hider's own marker comes from here.
-        /// </summary>
-        public void NoteLocalHide(float x, float z)
-        {
-            pendingHide = true;
-            pendingHideX = x;
-            pendingHideZ = z;
-        }
 
         public HuntView FindHunt(uint id)
         {
@@ -630,13 +592,6 @@ namespace BoscaliSummer.Modules.Comms.Domain
                 hunt.GuessCount = e.Values != null && e.Values.Length > 0 ? Math.Max(0, e.Values[0]) : 0;
                 Revision++;
                 if (!isNew || (e.Flags & CommsFlags.Replay) != 0) return;
-                if (e.Author == LocalId && pendingHide)
-                {
-                    pendingHide = false;
-                    hunt.HasLocalGuess = true;
-                    hunt.LocalGuessX = pendingHideX;
-                    hunt.LocalGuessZ = pendingHideZ;
-                }
                 Push(new CommsFeedLine
                 {
                     Time = now, Author = e.Author, AuthorName = name, Kind = CommsFeedKind.Hunt, Tone = CommsTone.Fun,

@@ -1,0 +1,268 @@
+# Wingman exchanges: quiet-moment banter between pilots in formation.
+
+>mothers-street
+A[rookie]: I can see my mother's street from here. The whole town, actually.
+B[veteran]: Take a good look. It is why we are up here.
+A: I will. I will try not to wave.
+B: Wave. Nobody is watching but me.
+
+>fuel-six-times
+A[rookie]: I have checked my fuel six times. It keeps saying the same thing.
+B[veteran]: Then it is probably right.
+A: What if it changes while I am not looking?
+B: Then you will be the first to know. Check again in ten minutes.
+
+>score-keeping
+A[hothead]: That makes four for me this month. I am counting.
+B[veteran]: I counted once too. Then I started counting landings instead.
+A: Four is still four.
+B: Four is fine. Come home for five.
+
+>quiet-pair
+A[veteran]: Nice and quiet today.
+B[ice]: Yes.
+A: You could say more.
+B: It is nice. It is quiet.
+
+>the-same-fish
+A[joker]: Lunch was a fish that had given up long before I did.
+B[veteran]: It was the same fish as yesterday.
+A: I thought I recognized the look.
+B: Eat it anyway. Dinner is worse.
+
+>as-briefed-day
+A[book]: Altitude as briefed. Heading as briefed. Everything as briefed.
+B[veteran]: That is a rare day.
+A: I am enjoying it very much.
+B: So am I. Do not tell anyone.
+
+>why-so-sure
+A[rookie]: How do you stay so sure of yourself out here?
+B[hothead]: I decided they were scared of me. It helps.
+A: And if they are not?
+B: Then I find out fast. Stay on my wing.
+
+>afraid-up-here
+A[rookie]: Are you ever afraid up here?
+B[ice]: Yes.
+A: You never sound it.
+B: Afraid is a feeling. Flying is a task.
+
+>pay-rumour
+A[rookie]: Is it true the pay gets better after the first hundred hours?
+B[joker]: The paperwork gets better. The pay is a rumour.
+A: Oh.
+B: Cheer up. The coffee is free, and it tastes like it.
+
+>landing-by-heart
+A[book]: Landing checklist, from the top. Humor me.
+B[rookie]: Gear, flaps, hook, lights, harness. Did I miss one?
+A: No. That was perfect.
+B: Really? I have said it in my sleep for a week.
+
+>too-slow
+A[hothead]: You are too slow to start a fight. Everyone says it.
+B[ice]: I finish them.
+A: That is not the point.
+B: It is the only point.
+
+>dessert-bet
+A[joker]: A week of dessert says you cannot go an hour without your score.
+B[hothead]: Done. Easy. I have four kills.
+A: That was eleven seconds. I will collect on Friday.
+
+>hole-in-the-clouds
+A[book]: You left the formation again. That was not in the brief.
+B[hothead]: The brief did not have a hole in the clouds.
+A: The brief had a heading.
+B: Fine. Next time I will ask the hole for permission.
+
+>eight-hours
+A[joker]: How did you sleep?
+B[ice]: Eight hours.
+A: Eight. I got three and a mattress that bites.
+B: Mine did not bite.
+
+>form-for-the-form
+A[joker]: I filed the form for the form I filed last week.
+B[book]: Good. The first form requires the second.
+A: I was joking.
+B: I know. File it anyway.
+
+>greenhouse
+A[*]: Hot enough for you down there?
+B[*]: The canopy is a greenhouse. I am a tomato.
+A: A very brave tomato.
+
+>north-cape
+A[*]: We just passed the north cape.
+B[*]: That means forty minutes to the strait.
+A: And not much more to dinner.
+
+>breathe-out
+A[veteran]: Whoever is nervous, breathe out slowly. It works.
+B[*]: How did you know?
+A: Because I used to be nervous.
+
+>childhood-beach
+A[rookie]: That beach down there. I swam there every summer as a kid.
+B[*]: It is still there. It will be there after.
+A: Yes. I keep telling myself that.
+
+>new-attitude
+A[joker]: The ground crew says my airplane needs a new engine, radio and attitude.
+B[veteran]: Which one will they actually get you?
+A: The attitude. It is the cheapest.
+
+>blackout-town when=night
+A[rookie]: There are so few lights down there tonight.
+B[veteran]: Blackout. They are being careful.
+A: I miss them. The lights.
+B: So do they. Keep your eyes out, and we will see them lit again.
+
+>night-is-useful when=night
+A[joker]: Night flight. My favorite way to miss both breakfast and dinner.
+B[ice]: Dark is useful.
+A: To you, everything is useful.
+B: Yes.
+
+>anti-collision when=night
+A[book]: Anti-collision lights stay off. Please confirm.
+B[hothead]: Off. Nobody sees me anyway.
+A: That is the idea.
+B: I know. I just like being seen.
+
+>harbor-glow when=night
+A[veteran]: See that glow on the horizon? That is the harbor town.
+B[*]: Still lit?
+A: Dim. Somebody is up late with the kettle on.
+
+>better-stars when=night
+A[*]: The stars are better tonight.
+B[*]: They always are, when nobody can see the island.
+A: That is a fair trade.
+
+>sea-and-sky when=night
+A[rookie]: I cannot tell where the sea ends and the sky starts.
+B[*]: Trust the instruments. Then trust them again.
+A: I trust them. I just do not like them.
+
+>wingtip-gone when=rain
+A[rookie]: I cannot see my wingtip. Is that normal?
+B[book]: In cloud, yes. Instruments only. Stay on the numbers.
+A: Staying. Saying them out loud.
+B: Good. Quietly, please.
+
+>wasted-weather when=rain
+A[hothead]: This weather is wasted on us. Perfect cover, and nobody to hide from.
+B[ice]: They cannot see either.
+A: Then we are even.
+B: Even is fine. Stay level.
+
+>free-wash when=rain
+A[joker]: Rain on the canopy. The only wash this airplane ever gets.
+B[veteran]: Maintenance would say it gets too much.
+A: Maintenance says that about everything that breaks.
+
+>harvest-saved when=rain
+A[veteran]: Rain on the coast means the harvest is saved. That is something.
+B[*]: And the roads will be mud.
+A: Mud is a problem for tomorrow.
+
+>cloud-gap when=rain
+A[*]: Cloud tops are at twelve thousand. We can climb out.
+B[*]: Not yet. Hold altitude and wait for the gap.
+A: Holding.
+
+>shaking-hands when=aftercombat
+A[rookie]: My hands are still shaking. Is that bad?
+B[hothead]: It means you were there. Mine did that too. Still do.
+A: You? Really?
+B: Do not spread it around.
+
+>one-was-slow when=aftercombat
+A[veteran]: Good work back there.
+B[ice]: Thank you.
+A: Anything you want to say about it?
+B: One of them was slow.
+
+>lucky-accident when=aftercombat
+A[hothead]: Did you see that? Straight through the wing!
+B[joker]: I saw it. I am writing it up as a lucky accident.
+A: Write it as skill.
+B: The skill box on the form is smudged. It stays an accident.
+
+>debrief-in-the-air when=aftercombat
+A[book]: Debrief checklist. Fuel, ordnance, damage. Rookie, report.
+B[rookie]: Fuel good, two missiles left, no damage. I think.
+A: You think?
+B: No damage. I checked twice.
+
+>the-ones-that-mattered when=aftercombat
+A[ice]: They are gone.
+B[*]: All of them?
+A: The ones that mattered.
+
+>sound-off when=aftercombat
+A[veteran]: Everyone sound off. Quietly.
+B[*]: Here. All good.
+A: Good. Take a minute. Then we go home.
+
+>did-that-happen when=aftercombat
+A[*]: Did that really just happen?
+B[*]: It did. Breathe.
+A: I am breathing. Loudly.
+
+>empty-seat when=loss
+A[rookie]: His seat is empty on my left. I keep looking.
+B[veteran]: I know. Look when you need to.
+A: What do I do?
+B: Fly. Fly his side of the sky too.
+
+>should-have-been when=loss
+A[hothead]: I should have been on his wing.
+B[book]: The plan put you where it put you. It was a sound plan.
+A: It was a bad plan.
+B: Then the fault is in the plan, not in you.
+
+>owed-a-drink when=loss
+A[joker]: I owed him a drink. A whole bottle.
+B[ice]: Then keep it.
+A: Yes. I will.
+
+>say-his-name when=loss
+A[veteran]: We will say his name at the base tonight.
+B[*]: Yes. All of us.
+
+>last-to-land when=recovery
+A[joker]: First round is on whoever lands last.
+B[veteran]: Then I will land slowly.
+A: That is cheating.
+B: It is called experience.
+
+>approach-lights when=recovery
+A[book]: Approach checklist complete. Runway in sight.
+B[ice]: Lights on.
+A: Confirmed. Lights on.
+B: Home.
+
+>sleep-steak-sleep when=recovery
+A[hothead]: First thing I do is sleep. Then a steak. Then more sleep.
+B[veteran]: Steak first. Otherwise you will dream about it.
+A: Steak, sleep, steak. A good plan.
+
+>runway-lights-found when=recovery
+A[rookie]: I can see the runway lights! There! Straight ahead!
+B[joker]: They are in the usual place. We put them there.
+A: Sorry. I am just happy.
+B: So am I. Hold on to that.
+
+>island-in-sight when=recovery
+A[*]: Fuel is tight, but the island is right there.
+B[*]: Tight is fine. Keep it smooth.
+A: Smooth. Almost home.
+
+>ground-crew-waiting when=recovery
+A[book]: The ground crew will have the ramp ready. Do not make them wait.
+B[*]: They would wait all night for us.
+A: Yes. That is exactly why we do not make them.

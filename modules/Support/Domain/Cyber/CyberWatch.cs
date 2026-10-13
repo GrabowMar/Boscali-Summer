@@ -153,11 +153,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
                 // A faction with no humans has nobody to fly a package: it lets the node go at the same 70 % a BURN would, so its holds are short bursts rather than a standing blackout.
                 if (aiFaction && mine.HopTarget == 0 && mine.HeldCount > 0 && mine.Trace >= BurnTrace)
                     return new CyberWatchPlan(CyberWatchAction.Drop, CyberWatchWhy.None, 0, NodeKind.Radar, WatchCode.CyberDropTrace, 0, Pct(mine.Trace));
-                return DeeperPlan(desk, mine, factor, planned, now);
+                return DeeperPlan(desk, mine, factor, planned);
             }
             if (!quiet) return CyberWatchPlan.Idle(CyberWatchWhy.Suspended);
             if (now < restUntil) return CyberWatchPlan.Idle(CyberWatchWhy.Resting);
-            return StartPlan(desk, world, humans, factor, planned, now);
+            return StartPlan(desk, humans, factor, planned, now);
         }
 
         private CyberWatchPlan Yield(CyberDesk desk, ICyberWatchWorld world, CyberIntrusion mine, float now)
@@ -185,7 +185,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             return CyberWatchPlan.Idle(CyberWatchWhy.Holding);
         }
 
-        private CyberWatchPlan DeeperPlan(CyberDesk desk, CyberIntrusion mine, float factor, float window, float now)
+        private CyberWatchPlan DeeperPlan(CyberDesk desk, CyberIntrusion mine, float factor, float window)
         {
             if (mine.HeldCount >= Math.Min(MaxHeldByOverlord, Bias.MaxHeld) || mine.HeldCount == 0) return CyberWatchPlan.Idle(CyberWatchWhy.Holding);
             int bar = 0;
@@ -202,7 +202,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             return new CyberWatchPlan(CyberWatchAction.Hop, CyberWatchWhy.None, pick.Id, pick.Kind, WatchCode.CyberDeeper, (int)pick.Kind, Pct(mine.Trace));
         }
 
-        private CyberWatchPlan StartPlan(CyberDesk desk, ICyberWatchWorld world, int humans, float factor, float window, float now)
+        private CyberWatchPlan StartPlan(CyberDesk desk, int humans, float factor, float window, float now)
         {
             if (humans > 0 && desk.Network.Active.Count >= CyberRules.IntrusionCap(humans) - 1) return CyberWatchPlan.Idle(CyberWatchWhy.NoSlot); // one intrusion always stays free for a human
             desk.Anchors.CopyTrucks(trucks);

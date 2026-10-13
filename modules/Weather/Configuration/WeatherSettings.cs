@@ -22,6 +22,7 @@ namespace BoscaliSummer.Modules.Weather.Configuration
         public ConfigEntry<bool> RainVisualsEnabled { get; }
         public ConfigEntry<bool> RainAudioEnabled { get; }
         public ConfigEntry<bool> CinematicCloudsEnabled { get; }
+        public ConfigEntry<bool> SunShaftsEnabled { get; }
         public ConfigEntry<bool> CloudHalfResolution { get; }
         public ConfigEntry<bool> CloudTemporalUpdate { get; }
         public ConfigEntry<float> RainDensity { get; }
@@ -93,6 +94,10 @@ namespace BoscaliSummer.Modules.Weather.Configuration
             CinematicCloudsEnabled = config.Bind(section, "CinematicCloudsEnabled", true,
                 "Render fly-through volumetric clouds for the current weather state. " +
                 "Falls back to native clouds when the shader is unavailable; applies now.");
+
+            SunShaftsEnabled = config.Bind(section, "SunShaftsEnabled", true,
+                "Beams of light around the sun, cut by clouds, terrain and aircraft. " +
+                "A quarter-resolution pass, drawn only while the sun is in or near the view; applies now.");
 
             CloudHalfResolution = config.Bind(section, "CloudHalfResolution", true,
                 "March the volumetric clouds at half resolution and upsample them along scene depth " +

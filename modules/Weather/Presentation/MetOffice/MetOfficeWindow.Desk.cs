@@ -1,4 +1,3 @@
-using System;
 using BoscaliSummer.Modules.Weather.Domain;
 using NOAvionics;
 using UnityEngine;
@@ -109,7 +108,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             sky.SetHelp("SKY OVERHEAD: the class and cover over you, the sky's name, a METAR line from the layers above you and the three layers with their bases.");
             clicks["class"] = cls => ClickControl(classButtons[cls]);
             clicks["tile"] = slot => ClickControl(gallery.Tiles[slot]);
-            probes["tiles"] = () => gallery.Shown;
+            probes["tiles"] = () => gallery.TilesShown;
             probes["selected"] = () => picker.Selected;
         }
 

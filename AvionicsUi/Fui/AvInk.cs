@@ -36,9 +36,5 @@ namespace NOAvionics
                 default: return AvStyleHost.FuiColor("inert", AvTheme.RailInert).WithAlpha(1f);
             }
         }
-
-        /// <summary>Text tone for a state word: caution/danger/ready keep their colour, the rest read dim.</summary>
-        public static Color StateText(AvState s) =>
-            s == AvState.Inert ? Muted : s == AvState.Info ? Ink : State(s);
     }
 }

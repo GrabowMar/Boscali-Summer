@@ -27,6 +27,9 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 case MaldxNet.Down:
                     if (mine) board.Notice(Channel, HudTone.Info, "BAIT DOWN — " + e.Count + " EXPOSED");
                     break;
+                case MaldxNet.Chaffed:
+                    if (mine || me.persistentID.Id == e.Site) board.Notice(Channel, HudTone.Info, "CHAFF — MISSILE BLINDED", e.Count + " BLINDED");
+                    break;
                 case MaldxNet.Exposed:
                     if (!UnitRegistry.TryGetUnit(new PersistentID { Id = e.Site }, out Unit site) || site.NetworkHQ == me.NetworkHQ) return;
                     if (UnitRegistry.TryGetUnit(new PersistentID { Id = e.Bait }, out Unit bait) && bait.NetworkHQ != me.NetworkHQ) return;

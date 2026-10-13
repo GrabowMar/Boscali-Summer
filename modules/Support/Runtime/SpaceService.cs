@@ -5,6 +5,7 @@ using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.Support.Domain.Space;
+using BoscaliSummer.Modules.Support.Runtime.Actions;
 using NuclearOption.Networking;
 using UnityEngine;
 
@@ -39,11 +40,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         private readonly Dictionary<FactionHQ, FactionSpace> factions = new Dictionary<FactionHQ, FactionSpace>();
         private readonly Dictionary<FactionHQ, float> nextAttempt = new Dictionary<FactionHQ, float>();
+        private System.Collections.IEnumerator establishing;
         private readonly UplinkSpawner spawner = new UplinkSpawner();
         private readonly SpaceWatchOfficer watch = new SpaceWatchOfficer();
         private readonly Dictionary<FactionHQ, IntentEntry> intents = new Dictionary<FactionHQ, IntentEntry>();
         private SupportManager manager;
-        private float nextTick;
+        private PhasedGate tickGate;
         private float nextCleanup;
         private float nextTaskedWarning;
         private bool coarse; // mirror gate reads use the 1 Hz world state instead of re-sampling natives per viewer
@@ -70,7 +72,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             intents.Clear();
             factions.Clear();
             nextAttempt.Clear();
-            nextTick = 0f;
+            establishing = null;
+            tickGate.Reset();
             scanCapLogged = false;
             spawner.ResetForScene();
         }
@@ -242,19 +245,36 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// </summary>
         internal int OpenOptical(FactionHQ owner, GlobalPosition point, float baseRadius, out SupportResult refusal)
         {
-            refusal = SupportResult.Accepted;
+            if (!OpticalRadius(owner, point, baseRadius, out float radius, out refusal)) return -1;
+            int admitted = OpenWindow(owner, point, radius, BirdKind.Optical, 0f, float.MaxValue);
+            if (admitted < 0) refusal = SupportResult.SpawnFailed;
+            return admitted;
+        }
+
+        private static bool OpticalRadius(FactionHQ owner, GlobalPosition point, float baseRadius, out float radius, out SupportResult refusal)
+        {
+            refusal = SupportResult.Accepted; radius = 0f;
             bool known = SpaceSky.TrySample(point, out WeatherViewSample sky);
             OpticalVerdict verdict = SpaceFeedRules.Optical(known, sky);
             if (verdict != OpticalVerdict.Ok)
             {
                 refusal = verdict == OpticalVerdict.NightUnavailable ? SupportResult.OpticalNight : SupportResult.SkyUnknown;
-                return -1;
+                return false;
             }
             // CYBER BIRD JAM halves the footprint of a jammed faction's camera.
             float jam = CyberService.Active != null ? CyberService.Active.BirdOpticalFactor(owner) : 1f;
-            int admitted = OpenWindow(owner, point, SpaceFeedRules.OpticalRadius(baseRadius, sky) * jam, BirdKind.Optical, 0f, float.MaxValue);
-            if (admitted < 0) refusal = SupportResult.SpawnFailed;
-            return admitted;
+            radius = SpaceFeedRules.OpticalRadius(baseRadius, sky) * jam;
+            return true;
+        }
+
+        /// <summary>OVERLORD's resumable twin of <see cref="OpenWindow"/> / <see cref="OpenOptical"/>: null where those return -1, else the unit walk to step.</summary>
+        internal SpaceObservations.OpenWalk BeginScan(FactionHQ owner, GlobalPosition point, float radius, bool radar)
+        {
+            SpaceObservations observations = ObservationsFor(owner);
+            if (observations == null) return null;
+            if (radar) return observations.BeginOpen(point, radius, BirdKind.Radar, 0f, ReconAction.StationaryThreshold);
+            return OpticalRadius(owner, point, radius, out float optical, out _)
+                ? observations.BeginOpen(point, optical, BirdKind.Optical, 0f, float.MaxValue) : null;
         }
 
         // ---- TASKED calls (host authority; Task 6 network handlers call these) ---------------------
@@ -454,8 +474,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     Plugin.Logger?.LogWarning("[Support.Space] Mirror poll failed: " + e.Message);
                 }
             }
-            if (now < nextTick) return;
-            nextTick = now + 1f;
+            // Site search is the old ~10 ms lump: one airbase or one fallback origin per frame instead of all at once.
+            if (establishing != null && !establishing.MoveNext()) establishing = null;
+            if (!tickGate.Due(now, 1f, 0f)) return;   // 1 Hz slot 0 (table in HighCommandManager)
             spawner.RetryCleanup();
             // CYBER BIRD JAM: an enemy intrusion that holds our UPLINK node (or a fired BIRD JAM package) slows every bird task.
             // The enemy CYBER front's counter pressure (x1.5 when it leads by 40 or more) rides the same multiplier.
@@ -467,17 +488,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
             {
                 if (hq == null) continue;
                 if (factions.TryGetValue(hq, out FactionSpace faction)) { Refresh(hq, faction, now); RebuildBirds(hq, faction, now); continue; }
+                if (establishing != null) continue;
                 if (factions.Count >= MaximumFactions || nextAttempt.Count >= MaximumFactions && !nextAttempt.ContainsKey(hq)) continue;
                 if (nextAttempt.TryGetValue(hq, out float retry) && now < retry) continue;
                 nextAttempt[hq] = now + 30f;
-                if (TryEstablish(hq, out faction))
-                {
-                    factions.Add(hq, faction);
-                    FactionHQ resolvedFor = hq;
-                    SubscribeTasked(resolvedFor, (player, request, result) => manager?.SpaceNet?.OnTaskedResolved(resolvedFor, player, request, result));
-                    Plugin.Logger?.LogInfo("[Support.Space] " + hq.name + ": " + faction.Links.Length +
-                        " native uplink(s), OPTICAL / RADAR / KINETIC ready.");
-                }
+                establishing = Establish(hq); // stepped one slice per frame by Update
                 break; // Expensive initial world sampling is limited to one faction per mission second.
             }
         }
@@ -523,21 +538,25 @@ namespace BoscaliSummer.Modules.Support.Runtime
             Plugin.Logger?.LogWarning("[Support.Space] Uplink site search saw " + count + " units; only the first " + MaximumScanUnits + " are considered.");
         }
 
-        private bool TryEstablish(FactionHQ owner, out FactionSpace faction)
+        private System.Collections.IEnumerator Establish(FactionHQ owner)
         {
-            faction = null;
+            int generation = Generation;
+            FactionSpace faction = null;
             if (UnitRegistry.allUnits != null && UnitRegistry.allUnits.Count > MaximumScanUnits) NoteScanCap(UnitRegistry.allUnits.Count);
             var legal = new List<Candidate>(UplinkPlacement.MaxCandidates);
             Vector2 span = TheaterFrame.Resolve();
             if (FactionRegistry.airbaseLookup != null)
             {
                 int inspected = 0, heldBases = 0;
-                foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
+                var snapshot = new List<Airbase>(FactionRegistry.airbaseLookup.Values); // the lookup may change between frames
+                foreach (Airbase airbase in snapshot)
                 {
                     if (++inspected > 128 || heldBases >= MaximumBases) break;
                     if (airbase == null || airbase.disabled || airbase.AttachedAirbase || airbase.CurrentHQ != owner || airbase.center == null) continue;
                     heldBases++;
                     CollectAround(owner, airbase.center.position, airbase, span.magnitude, legal, 8);
+                    yield return null;
+                    if (generation != Generation) yield break;
                 }
             }
             var links = new List<Unit>(2);
@@ -573,9 +592,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     if (!GroundPlacement.DryGround(origin, out _) || !TryAround(owner, origin, null, span.magnitude, out Candidate field)) continue;
                     Create(owner, field, links);
                     if (links.Count > 0) break;
+                    yield return null;
+                    if (generation != Generation) yield break;
                 }
             }
-            if (links.Count == 0) return false;
+            if (links.Count == 0) yield break;
             var array = links.ToArray();
             var baseline = new float[array.Length];
             for (int i = 0; i < array.Length; i++) baseline[i] = UplinkSpawner.Health(array[i]);
@@ -583,7 +604,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 View = Array.AsReadOnly(array), Observations = new SpaceObservations(owner) };
             faction.Tasked = manager?.CreateTaskedDesk(this, owner, faction.Observations);
             SeedGeo(owner, faction.State);
-            return true;
+            if (owner == null || factions.ContainsKey(owner)) yield break;
+            factions.Add(owner, faction);
+            SubscribeTasked(owner, (player, request, result) => manager?.SpaceNet?.OnTaskedResolved(owner, player, request, result));
+            Plugin.Logger?.LogInfo("[Support.Space] " + owner.name + ": " + faction.Links.Length +
+                " native uplink(s), OPTICAL / RADAR / KINETIC ready.");
         }
 
         /// <summary>Parks the faction's three birds over its side of the front: own airbase centroid shifted toward the enemy's.</summary>

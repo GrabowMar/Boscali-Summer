@@ -31,6 +31,7 @@ namespace BoscaliSummer.Modules.Weather
             context.AddService<IFlightEnvironmentView>(manager);
             manager.RegisterClientEffects(context);
             context.AddService<IWeatherView>(manager);
+            context.AddService<IWeatherDirector>(manager);
             network.Configure(manager);
 
             WeatherMfdPanel panel = context.AddSceneService<WeatherMfdPanel>(65);
@@ -44,11 +45,11 @@ namespace BoscaliSummer.Modules.Weather
                 "Stop canopy droplet simulation, glass draws and fallback particles. " +
                 "Requires RAIN FX MASTER to be on. " +
                 "Applies now; no mission or game restart.",
-                context.Settings.Weather.CanopyRainEnabled);
+                context.Settings.Weather.CanopyRainEnabled, ClientPreset.Light);
             context.AddClientSetting("RAIN VISUALS", "TERRAIN WET PASS",
                 "Stop the extra nearby-terrain draw passes and surface checks. " +
                 "Applies now; no mission or game restart.",
-                context.Settings.Weather.TerrainRainEnabled);
+                context.Settings.Weather.TerrainRainEnabled, ClientPreset.Heavy);
             context.AddClientSetting("RAIN AUDIO", "RAIN SOUND",
                 "Rain, canopy impact and distance-delayed thunder through the game's effects volume. Applies now.",
                 context.Settings.Weather.RainAudioEnabled);
@@ -58,7 +59,10 @@ namespace BoscaliSummer.Modules.Weather
             context.AddClientSetting("SKY", "CINEMATIC CLOUDS",
                 "Volumetric clouds for the current weather state: fronts, cumulus and storm towers. " +
                 "Falls back to native clouds if the shader is unavailable. Client-local; applies now.",
-                context.Settings.Weather.CinematicCloudsEnabled);
+                context.Settings.Weather.CinematicCloudsEnabled, ClientPreset.Light);
+            context.AddClientSetting("SKY", "SUN SHAFTS",
+                "Beams of light around the sun, cut by clouds, terrain and aircraft. Client-local; applies now.",
+                context.Settings.Weather.SunShaftsEnabled, ClientPreset.Light);
 
             WeatherSettings weather = context.Settings.Weather;
             context.AddHostSettings(new HostSettingsTable("WEATHER", HostSettingsPage.Effects)

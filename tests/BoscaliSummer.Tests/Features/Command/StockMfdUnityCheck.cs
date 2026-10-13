@@ -123,7 +123,7 @@ public static class StockMfdUnityCheck
         switch (name)
         {
             case "Map": return new[] { "LAYERS", "READABILITY" };
-            case "Target": return new[] { "FILTERS / ACQUISITION", "ACQUIRE / CONTACTS", "PRESETS / LIBRARY", "TARGETS / TRACKED", "CAMERA / SENSOR MARK" };
+            case "Target": return new[] { "TARGET LIST", "LIST FILTER", "CAMERA MARK" };
             case "Faction": return new[] { "ECONOMY", "FORCES", "LEDGER", "POLITICS" };
             case "Hud": return new[] { "MODE", "VEHICLES", "BUILDINGS" };
             default: return new[] { "MISSION", "OBJECTIVES", "CONTRACTS" };
@@ -165,41 +165,31 @@ public static class StockMfdUnityCheck
         }
         if (name == "Target")
         {
-            Grid(presenter, "factionGrid", new[] { "FRIENDLY", "ENEMY" }, new[] { "Friendly contacts", "Hostile contacts" });
-            Grid(presenter, "unitGrid", new[] { "AIRCRAFT", "MISSILES", "GROUND", "BUILDINGS", "SHIPS" },
-                new[] { "Airborne tracks", "Missiles in flight", "Vehicles & troops", "Bases & structures", "Naval contacts" });
-            Grid(presenter, "vehicleGrid", new[] { "TRUCK", "UGV", "LCV", "AFV", "MBT", "ART", "AAA", "IR SAM", "R SAM", "RADAR" },
-                new[] { "Supply trucks", "Unmanned ground", "Light combat", "Armored vehicles", "Main battle tanks", "Field artillery",
-                    "Anti-air guns", "Heat-seeking SAM", "Radar-guided SAM", "Search radars" }, false, true);
             Grid(presenter, "selectedGrid", new[] { "DARKREACH 21", "REVETMENT EAST AIRBASE", "TANK COMPANY NORTH" },
-                new[] { "AIRCRAFT \u00b7 HOSTILE \u00b7 3.2 KM", "STRUCTURE \u00b7 HOSTILE \u00b7 18.0 KM", "VEHICLE \u00b7 HOSTILE \u00b7 12.4 KM" });
+                new[] { "AIRCRAFT \u00b7 HOSTILE \u00b7 3.2 KM", "STRUCTURE \u00b7 HOSTILE \u00b7 18.0 KM", "VEHICLE \u00b7 HOSTILE \u00b7 12.4 KM" }, false, true);
             Grid(presenter, "candidateGrid", new[] { "RAVEN 3", "AAA BATTERY SOUTH", "SAM SITE ECHO", "CHICANE 11", "PATROL BOAT" },
-                new[] { "3.2 KM \u00b7 BRG 047 \u00b7 HOSTILE", "8.9 KM \u00b7 BRG 112 \u00b7 HOSTILE", "12.4 KM \u00b7 BRG 150 \u00b7 HOSTILE", "18.0 KM \u00b7 BRG 291 \u00b7 FRIENDLY", "31.5 KM \u00b7 BRG 203 \u00b7 UNKNOWN" });
-            Call(presenter, "SetRangeBands", new[] { 2, 1, 1, 1, 0 }, 0, true);
-            ((AvRow)Field(presenter, "focusRow")).Set("RAVEN 3", "HOSTILE \u00b7 AIRCRAFT \u00b7 BRG 047", "3.2 KM", AvState.Danger);
-            Call(Field(presenter, "filterGate"), "Set", "FRIENDLY \u00b7 ENEMY", 2, 2, "AIRCRAFT \u00b7 MISSILES \u00b7 GROUND \u00b7 SHIPS", 4, 5,
-                "ALL BUT LCV \u00b7 ART \u00b7 R SAM", 7, 10, "LINKS", "HUD LINK OFF  \u00b7  LASER ONLY OFF \u2014 LASED OR NOT", "FREE", AvState.Inert);
-            Call(Field(presenter, "presetGate"), "Set", "ENEMY", 1, 2, "AIRCRAFT \u00b7 GROUND", 2, 5, "EVERY VEHICLE TYPE", 10, 10,
-                "LASER", "LASER ONLY OFF \u2014 LASED OR NOT", "ANY", AvState.Inert);
-            Section(presenter, "gateSection", "3 ON LIST");
-            Grid(presenter, "groupGrid", new[] { "GROUP 1", "GROUP 2", "GROUP 3" }, new[] { "3 STORED", "0 STORED", "1 STORED" });
-            Grid(presenter, "quickGrid", new[] { "AIR DEFENCE", "HOSTILE GROUND", "EMPTY" }, new[] { "SLOT 1 \u00b7 F5", "SLOT 2 \u00b7 F6", "SLOT 3 \u00b7 F7" });
-            Grid(presenter, "presetGrid", new[] { "ALL", "AIR DEFENCE", "HOSTILE GROUND", "NAVAL", "AIRCRAFT", "CUSTOM" },
-                new[] { "Built-in profile", "Built-in profile", "Built-in profile", "Built-in profile", "Built-in profile", "Saved preset" });
-            var filterTiles = (AvGauge[])Field(presenter, "filterMetrics");
-            filterTiles[0].Set(1f, "2/2", AvState.Ready);
-            filterTiles[1].Set(.8f, "4/5", AvState.Info);
-            filterTiles[2].Set(0f, "0/10", AvState.Caution);
-            Section(presenter, "contactsSection", "5 MATCH");
-            Section(presenter, "presetSection", "1 / 8 SAVED");
-            Section(presenter, "selectedSection", "3 TRACKED");
-            ((AvReadout)Field(presenter, "presetReadout")).Set("ALL", "ACTIVE PROFILE", "Built-in. Every known contact, friend and foe.");
-            Call(presenter, "SetCameraSlab", "RECON MARK", AvState.Ready);
-            // The mark readout (rings, age, life, grid and armed rows) in one call: position, armed name, held, range km, elevation m, age s, bearing.
-            Call(presenter, "SetCameraTelemetry", "X 12040 \u00b7 Z -8810", "", true, 6.3f, 412f, 18f, 112);
+                new[] { "3.2 KM \u00b7 BRG 047 \u00b7 HOSTILE \u00b7 AIRCRAFT", "8.9 KM \u00b7 BRG 112 \u00b7 HOSTILE \u00b7 VEHICLE", "12.4 KM \u00b7 BRG 150 \u00b7 HOSTILE \u00b7 VEHICLE",
+                    "18.0 KM \u00b7 BRG 291 \u00b7 FRIENDLY \u00b7 AIRCRAFT", "31.5 KM \u00b7 BRG 203 \u00b7 UNKNOWN \u00b7 SHIP" }, false, true);
+            Section(presenter, "selectedSection", "3 HELD \u00b7 CLICK TO DROP");
+            Section(presenter, "contactsSection", "5 \u00b7 NEAREST FIRST \u00b7 CLICK TO ADD");
+            var recall = (AvControl[])Field(presenter, "recallGroup");
+            recall[0].Label = "GROUP 1 \u00b7 3"; recall[1].Label = "GROUP 2 \u00b7 EMPTY"; recall[2].Label = "GROUP 3 \u00b7 1";
+            ((AvControl[])Field(presenter, "rangeChoice"))[2].Latched = true;
+            const string words = "LISTING: ENEMY \u00b7 AIRCRAFT, GROUND \u00b7 VEHICLES: AAA, IR SAM, R SAM, RADAR.";
+            Note(presenter, "listNote", words + "  Change it on the FILTER page.");
+            Note(presenter, "filterNote", words);
+            Grid(presenter, "presetGrid", new[] { "FOLLOW HUD", "ALL", "AIR DEFENCE  [F8]", "HOSTILE GROUND  [F9]", "NAVAL", "AIRCRAFT", "MY STRIKE" },
+                new[] { "THE HUD MODE SETS THE FILTER", "BUILT-IN", "BUILT-IN", "BUILT-IN", "BUILT-IN", "BUILT-IN", "SAVED \u00b7 CHANGED SINCE" });
+            Section(presenter, "presetSection", "1 / 12 SAVED \u00b7 CLICK TO APPLY");
+            var keys = (AvControl[])Field(presenter, "slotKeys");
+            keys[0].Label = "F8 \u00b7 AIR DEFENCE"; keys[1].Label = "F9 \u00b7 HOSTILE GROUND"; keys[2].Label = "F10 \u00b7 EMPTY"; keys[0].Latched = true;
+            Grid(presenter, "factionGrid", new[] { "FRIENDLY", "ENEMY" }, null);
+            Grid(presenter, "unitGrid", new[] { "AIRCRAFT", "MISSILES", "GROUND", "BUILDINGS", "SHIPS" }, null);
+            Grid(presenter, "vehicleGrid", new[] { "TRUCK", "UGV", "LCV", "AFV", "MBT", "ART", "AAA", "IR SAM", "R SAM", "RADAR" }, null, false, true);
             var camera = (AvRow[])Field(presenter, "cameraRows");
-            camera[2].Set("CAMERA VIEW", "Targeting camera is live. MARK records the point under its cross-hair.", "LIVE", AvState.Ready);
-            camera[3].Set("DELIVERY", "Needs an armed call-in. Arm one on OPS / SUPPORT.", "WAIT", AvState.Inert);
+            camera[0].Set("1 \u00b7 CAMERA VIEW", "The targeting camera is live. MARK records the point under its cross-hair.", "LIVE", AvState.Ready);
+            camera[1].Set("2 \u00b7 POINT MARKED", "RECON \u00b7 6.3 KM \u00b7 BRG 112 \u00b7 ELEV 412 M \u00b7 X 12040 Z -8810", "102 S LEFT", AvState.Ready);
+            camera[2].Set("3 \u00b7 OPERATION ARMED", "None armed. Arm one on OPS / SUPPORT.", "NONE", AvState.Inert);
         }
         if (name == "Faction")
         {

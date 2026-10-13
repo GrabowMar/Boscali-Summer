@@ -148,7 +148,7 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(!camps.PastGrace(0, 100f) && camps.PastGrace(0, 171f), "120 s grace");
             camps.Set(1, 0f, true, 60f);
             TestAssert.That(!camps.TryBest(out _, out _, out _, out _), "no camp standing");
-            camps.Restore(0, 120f, 0f, 200f);
+            camps.Restore(0, 120f, 0f);
             TestAssert.Eq(camps.Health(0), AnchorHealth.Live, "restored");
             Near(camps.NearestStanding(1120f, 0f, out float nx, out _), 1000f, "nearest standing camp"); TestAssert.Eq(nx, 120f, "its x");
             var ids = new SofTargetIds();

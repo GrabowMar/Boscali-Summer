@@ -1,0 +1,133 @@
+# Enemy net: intercepted invader pilots. zealot (believer), merc (paid professional), conscript (frightened).
+
+@enemy.spiked tactical
+[zealot] That lead ship has me locked. It will not turn me from my duty.
+[zealot] Missile on me from that marked tail. I am not afraid of him.
+[zealot] He fires on me and I only fly straighter. Glory to the cause.
+[zealot] Their ace thinks one shot ends me. He does not know our faith.
+[zealot] Warning tone. So that defender is as good as they say. I will not break.
+[zealot] I would sooner fall than run from that pilot. Still, I am turning.
+[zealot] His missile is coming and I scorn it. Our cause is greater than any one man.
+[zealot] That pilot fights for his land. I fight for something bigger. Evading.
+[merc] Missile inbound from that ace. Dropping chaff, this is not worth it.
+[merc] He shot first and he shot well. Defending, breaking off the engagement.
+[merc] That defender knows his business. I am notching out of this one.
+[merc] Spiked by the marked tail. Nobody pays me enough for a head-on with him.
+[merc] Tone in my ears. I respect the shot, I will not stay for the next one.
+[merc] That pilot is the real thing. Evading, and adding hazard pay to my bill.
+[merc] Missile on me, and it is a good one. Their lead ship earns his reputation.
+[merc] Not in the contract: the best defender on the island shooting at me.
+[conscript] He has a missile on me! That pilot is coming for me, somebody help!
+[conscript] Lead, I am spiked! The marked tail is shooting at me, what do I do?
+[conscript] Missile, missile! Their ace picked me, I just want to go home!
+[conscript] Please, somebody call him off! That lead ship has a lock on me!
+[conscript] The warning will not stop! I did not think the defenders could shoot like that!
+[conscript] I am defending, I am defending! Flight lead, where are you?
+[conscript] It is that pilot everyone talks about, and he chose me! Help me!
+[conscript] I am out of tricks, he has me! Mother, I should have stayed home.
+[*] Missile warning, that lead ship has fired on me. Defending.
+[*] Spiked by the marked tail. Breaking hard.
+[*] Their ace has me locked up. Going defensive.
+[*] Inbound missile, that defender means it. Notching.
+[zealot night] Night is no cover for that defender, but I will not fear it.
+[merc night] Spiked in the dark by their ace. Night work costs extra.
+[merc rain] Rain, clutter, and the marked tail. Not what I signed up for.
+[conscript night] I cannot see anything out here, and that pilot can see me!
+[conscript rain] In this rain? He found me in this rain!
+
+@enemy.fox tactical
+[zealot] Fox three at that lead ship. Let him fall for his stubborn pride.
+[zealot] Missile away at their ace. The cause will be avenged today.
+[zealot] I fire on the marked tail. He cannot be the only brave one up here.
+[zealot] Fox two at the lead defender. One shot, one legend ended.
+[zealot] Launched on that pilot. They sing songs about him; let me end the song.
+[zealot] Missile away. Their ace will learn what our faith can do.
+[zealot] I take the shot on the marked tail. Duty demands it, and so does pride.
+[zealot] Fox three at that fighter. It is an honor to be the one who ends him.
+[merc] Missile away at their ace. Good luck to him, I am billing for that one.
+[merc] Fox three on the lead ship. Do not expect much, he is hard to hit.
+[merc] Shot out on the marked tail. Two missiles for him cost more than my day rate.
+[merc] Launched at that pilot. Do the sums: a legend is worth a bonus.
+[merc] Fox two, one for the ace. If it misses, I am heading for the exit.
+[merc] Firing on the defender's lead. Pure business, nothing personal.
+[merc] Missile away, long range, safe side. Let him sweat for it.
+[merc] I fired at the marked tail. If he lives, it was not in the contract anyway.
+[conscript] I fired! I fired at the lead ship, please let it hit him!
+[conscript] Missile away at their ace! Please, someone cover me, he will fire back!
+[conscript] Fox three, I think! That pilot is turning, is it going to hit him?
+[conscript] I shot at the marked tail, I could not wait any longer. Why is he still flying?
+[conscript] Launched on him. Everyone says he cannot be killed. Please let them be wrong.
+[conscript] Missile gone at that defender! My hands are shaking so much.
+[conscript] Fox two! Flight lead, did you see? I shot at their best pilot!
+[conscript] I fired on the lead ship. Now I am scared he will come for me next.
+[*] Missile away at that lead ship.
+[*] Fox three on the marked tail.
+[*] Shot out at their ace. Watch him.
+[*] Launched on that defender, tracking.
+[zealot night] Fox three into the dark at that lead ship. Let the night judge him.
+[merc rain] Missile away through the rain. Doubt it holds, but it is billable.
+[conscript night] I fired into the dark at the ace. Please let it find him.
+
+@enemy.lastwords tactical
+[zealot] He got me. The cause will outlive...
+[zealot] Hit, I am hit! Tell them I did not...
+[zealot] Burning. That pilot is only a man. Only...
+[zealot] I am going in. Glory to...
+[zealot] Ejecting. I was not afraid. I was not...
+[zealot] Their ace. I should have listened.
+[zealot] Fire in the cockpit. Remember me, I held the...
+[zealot] The marked tail, it was him. I am falling.
+[merc] Hit hard. Well shot, whoever he is. Bailing out.
+[merc] Engine is gone. Ejecting. That ace earned his pay.
+[merc] I am out. Nobody paid me enough for this.
+[merc] Burning. Tell accounting I want my...
+[merc] Going down. He is as good as they said.
+[merc] Flameout and fire. Punching out, the contract ends here.
+[merc] That pilot clipped me clean. Ejecting.
+[merc] Hit. Cancel my bonus, I am done...
+[conscript] I am hit! I am hit! Mother, I...
+[conscript] He got me! Eject, eject, why will it not...
+[conscript] Fire! There is fire! I want to go ho...
+[conscript] It was him! The marked tail! I am go...
+[conscript] Going down, going down! Please, somebody...
+[conscript] Bailing out! I do not want to di...
+[conscript] He shot me! I never even saw hi...
+[conscript] I am sorry, lead. I am so sor...
+[*] Hit, I am going down!
+[*] Ejecting, ejecting!
+[*] He got me, I am burning...
+[*] Going in, going in...
+[conscript rain] Hit in the rain, I cannot see the sk...
+[merc night] Lights out, well shot. Ejecting...
+[zealot rain] Storm and fire, but the cause...
+
+@enemy.matedown tactical
+[zealot] <who> is down. That lead ship will pay for it, I swear.
+[zealot] <who> fell with honor. I will avenge him on the marked tail.
+[zealot] <who> is gone, but the cause is not. Where is that ace?
+[zealot] <who> died for something greater than that defender knows.
+[zealot] That pilot killed <who>. Fine, then he is mine now.
+[zealot] They killed our brother! Mark that pilot, he will not leave this sky.
+[zealot] I saw him burn. Their best pilot will answer for it.
+[zealot] No tears for the fallen. Only vengeance on that lead ship.
+[merc] <who> is down. That ace is not a defender, he is a problem.
+[merc] Lost <who> to the marked tail. That is a debt I will not collect.
+[merc] <who> is gone, and the lead ship does not even slow down.
+[merc] Tell <who>'s family it was quick. This job just got more expensive.
+[merc] <who> bought it. The odds changed, and I do not like the new ones.
+[merc] One of ours just died to that pilot. Nobody wrote that into my contract.
+[merc] I saw the kill. The ace flies like a professional, I will give him that.
+[merc] That lead ship took another one. Time to count my exits.
+[conscript] <who> is down! That pilot just killed <who>, he is right there!
+[conscript] Flight lead, <who> is gone! The marked tail shot him down!
+[conscript] I saw <who> go in. They told us the defenders were weak!
+[conscript] <who> is dead, <who> is dead! I want to go home!
+[conscript] Not <who>! The lead ship got <who>, who is next?
+[conscript] Somebody just got shot down right in front of me! It was that ace!
+[conscript] I saw him burn. Their lead ship is not human, I swear it!
+[conscript] They are killing us! Flight lead, tell me we are pulling out!
+[*] Our man is down. That lead ship is a killer.
+[*] I saw the kill. Mark the tail, he is dangerous.
+[*] Another one gone to their ace. Stay sharp.
+[*] A flight mate just fell to that pilot.
+[conscript night] <who> went down in the dark! That pilot is hunting us all!

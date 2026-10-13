@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Math;
 using BoscaliSummer.Modules.Command.Domain;
@@ -170,6 +171,9 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private Color32[] pixelBuffer;
         private int cachedTexWidth;
         private int cachedTexHeight;
+        // True while every pixel of pixelBuffer is still transparent: a repeated clear bake costs nothing.
+        private bool pixelBufferBlank = true;
+        private BakeScratch bakeScratch;
 
         // Telemetry
         public int FriendlySectorCount { get; private set; }
@@ -377,6 +381,37 @@ namespace BoscaliSummer.Modules.Command.Runtime
             HostileSectorCount = other.HostileSectorCount;
             ContestedSectorCount = other.ContestedSectorCount;
             NeutralSectorCount = other.NeutralSectorCount;
+        }
+
+        /// <summary>
+        /// A grid with the same layout and nothing in it: the map overlay copies what it
+        /// shows into one with <see cref="CopyBakeStateFrom"/> and bakes the copy on a worker,
+        /// so the published grid is never read while the main thread changes it.
+        /// </summary>
+        internal TacticalSectorGrid NewBakeTwin()
+            => new TacticalSectorGrid(CellSize, WorldSizeX, WorldSizeY, AlignmentX, AlignmentY);
+
+        internal bool SharesBakeLayout(TacticalSectorGrid other)
+            => other.ResolutionX == ResolutionX && other.ResolutionY == ResolutionY && other.CellSize == CellSize &&
+               other.OriginX == OriginX && other.OriginZ == OriginZ &&
+               other.WorldSizeX == WorldSizeX && other.WorldSizeY == WorldSizeY;
+
+        /// <summary>
+        /// Copies exactly what <see cref="BakeTexture"/> reads from another grid of the same layout:
+        /// the cell states, the hold field and the front band. The copy bakes the same pixels as
+        /// the source and can be baked on another thread while the source goes on changing.
+        /// </summary>
+        internal void CopyBakeStateFrom(TacticalSectorGrid other)
+        {
+            if (!SharesBakeLayout(other)) throw new InvalidOperationException("Territory grids differ in layout.");
+            other.EnsureDisplay();
+            int cells = TotalSectors;
+            Array.Copy(other.sectorStates, sectorStates, cells);
+            Array.Copy(other.holdStrength, holdStrength, cells);
+            Array.Copy(other.frontBand, frontBand, cells);
+            // The front band is the display state the bake needs; the cluster tree stays untouched.
+            displayHash = other.displayHash;
+            displayDirty = false;
         }
 
         public bool WorldToCell(float worldX, float worldZ, out int col, out int row)
@@ -850,6 +885,30 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 else if (r > 0 && frontBand[idx - ResolutionX] == 2) frontBand[idx] = 1;
                 else if (c > 0 && frontBand[idx - 1] == 2) frontBand[idx] = 1;
             }
+
+            // An unheld square with held ground on three or four sides is a gap in the picture, not
+            // open country: left bare, each side's border line bent round it and drew a ring on the
+            // front. It carries its strongest neighbour's band, stored one up (1..3) because 0 on
+            // unheld ground means bare. Last pass, so the ring pass above never reads these values.
+            for (int r = 0; r < ResolutionY; r++)
+            for (int c = 0; c < ResolutionX; c++)
+            {
+                int idx = r * ResolutionX + c;
+                if (sectorStates[idx] != SectorControl.Neutral) continue;
+                int held = 0, band = 0;
+                if (r + 1 < ResolutionY) GapNeighbour(idx + ResolutionX, ref held, ref band);
+                if (c + 1 < ResolutionX) GapNeighbour(idx + 1, ref held, ref band);
+                if (r > 0) GapNeighbour(idx - ResolutionX, ref held, ref band);
+                if (c > 0) GapNeighbour(idx - 1, ref held, ref band);
+                if (held >= 3) frontBand[idx] = (byte)(band + 1);
+            }
+        }
+
+        private void GapNeighbour(int index, ref int held, ref int band)
+        {
+            if (sectorStates[index] == SectorControl.Neutral) return;
+            held++;
+            if (frontBand[index] > band) band = frontBand[index];
         }
 
         private static bool Opposing(bool friendly, float neighborHold)
@@ -1103,12 +1162,20 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 pixelBuffer = new Color32[totalPixels];
                 cachedTexWidth = texWidth;
                 cachedTexHeight = texHeight;
+                pixelBufferBlank = true;
             }
 
-            Array.Fill(pixelBuffer, new Color32(0, 0, 0, 0));
-
-            if (!showSectors || globalOpacity <= 0f) return pixelBuffer;
+            Color32 clear = new Color32(0, 0, 0, 0);
+            if (!showSectors || globalOpacity <= 0f)
+            {
+                if (!pixelBufferBlank) Array.Fill(pixelBuffer, clear);
+                pixelBufferBlank = true;
+                return pixelBuffer;
+            }
             EnsureDisplay();
+            // Below, every pixel is written exactly once (fills, runs of fills, or per-pixel
+            // paint), so the buffer needs no clear first.
+            pixelBufferBlank = false;
 
             float fillAlpha = Math.Clamp(globalOpacity * 255f * 0.45f, 18f, 56f);
             float pxPerCellX = CellSize / WorldSizeX * texWidth;
@@ -1120,26 +1187,86 @@ namespace BoscaliSummer.Modules.Command.Runtime
             float edgeScale = Math.Min(pxPerCellX, pxPerCellY) / 1.5f;
             int period = Math.Clamp((int)(Math.Min(pxPerCellX, pxPerCellY) / 2f), 4, 12);
 
+            // The pixel centre's place in the field depends on its column alone, or its row
+            // alone, so those terms are worked out once per column and per row, not once per
+            // quad row and pixel. Every expression below is the original one, hoisted.
+            BakeScratch scratch = bakeScratch ?? (bakeScratch = new BakeScratch());
+            scratch.Reserve(texWidth, texHeight, ResolutionX, ResolutionY);
+            BakeColumn[] columns = scratch.Columns;
+            BakeRow[] rows = scratch.Rows;
+            int[] quadX0 = scratch.QuadX0, quadX1 = scratch.QuadX1;
+            int[] quadY0 = scratch.QuadY0, quadY1 = scratch.QuadY1;
+            for (int qc = -1; qc < ResolutionX; qc++)
+            {
+                int xMin = Math.Max(0, QuadStart(originPxX, pxPerCellX, qc, ResolutionX));
+                int xMax = Math.Min(texWidth, QuadStart(originPxX, pxPerCellX, qc + 1, ResolutionX)) - 1;
+                quadX0[qc + 1] = xMin;
+                quadX1[qc + 1] = xMax;
+                for (int x = xMin; x <= xMax; x++)
+                {
+                    float cellX = (x + 0.5f - originPxX) / pxPerCellX;
+                    float tx = Math.Clamp(cellX - 0.5f - qc, 0f, 1f);
+                    columns[x].Tx = tx;
+                    columns[x].Sx = tx * tx * (3f - 2f * tx);
+                    columns[x].Cell = Math.Clamp((int)cellX, 0, ResolutionX - 1);
+                }
+            }
             for (int qr = -1; qr < ResolutionY; qr++)
             {
-                int r0 = Math.Max(qr, 0), r1 = Math.Min(qr + 1, ResolutionY - 1);
                 int yMin = Math.Max(0, QuadStart(originPxY, pxPerCellY, qr, ResolutionY));
                 int yMax = Math.Min(texHeight, QuadStart(originPxY, pxPerCellY, qr + 1, ResolutionY)) - 1;
-                if (yMax < yMin) continue;
+                quadY0[qr + 1] = yMin;
+                quadY1[qr + 1] = yMax;
+                for (int y = yMin; y <= yMax; y++)
+                {
+                    float cellY = (y + 0.5f - originPxY) / pxPerCellY;
+                    float ty = Math.Clamp(cellY - 0.5f - qr, 0f, 1f);
+                    rows[y].Ty = ty;
+                    rows[y].Sy = ty * ty * (3f - 2f * ty);
+                    rows[y].Cell = Math.Clamp((int)cellY, 0, ResolutionY - 1);
+                }
+            }
 
+            float hostileR = HostileTint.r, hostileG = HostileTint.g, hostileB = HostileTint.b;
+            float spanR = FriendlyTint.r - HostileTint.r, spanG = FriendlyTint.g - HostileTint.g, spanB = FriendlyTint.b - HostileTint.b;
+            // A quad whose four corners are all held is owned in full: owned is exactly 1 there.
+            float insideHeld = (1f - 0.5f) * edgeScale;
+            float coverHeld = Math.Min(1f, insideHeld + 0.5f);
+            float rimHeld = Math.Max(0f, 1f - Math.Abs(insideHeld - RimInset) / RimInset);
+            // (insideHeld <= -0.5f never holds: edgeScale is positive.)
+
+            // Quads tile the texture, so each pixel belongs to one quad: plain quads and the
+            // unheld ground between them are written as runs of one colour, only the border
+            // pays per pixel.
+            int nextRow = 0;
+            for (int qr = -1; qr < ResolutionY; qr++)
+            {
+                int yMin = quadY0[qr + 1], yMax = quadY1[qr + 1];
+                if (yMax < yMin) continue;
+                if (yMin > nextRow) FillSpan(pixelBuffer, nextRow * texWidth, (yMin - nextRow) * texWidth, clear);
+                nextRow = yMax + 1;
+
+                int r0 = Math.Max(qr, 0), r1 = Math.Min(qr + 1, ResolutionY - 1);
+                int runFrom = 0, runTo = 0, nextCol = 0;
+                Color32 runColor = clear;
                 for (int qc = -1; qc < ResolutionX; qc++)
                 {
+                    int xMin = quadX0[qc + 1], xMax = quadX1[qc + 1];
+                    if (xMax < xMin) continue;
+                    if (xMin > nextCol) AddRun(pixelBuffer, texWidth, ref runFrom, ref runTo, ref runColor, yMin, yMax, nextCol, xMin, clear);
+                    nextCol = xMax + 1;
+
                     int c0 = Math.Max(qc, 0), c1 = Math.Min(qc + 1, ResolutionX - 1);
                     int i00 = r0 * ResolutionX + c0, i10 = r0 * ResolutionX + c1;
                     int i01 = r1 * ResolutionX + c0, i11 = r1 * ResolutionX + c1;
                     SectorControl s00 = sectorStates[i00], s10 = sectorStates[i10];
                     SectorControl s01 = sectorStates[i01], s11 = sectorStates[i11];
                     if (s00 == SectorControl.Neutral && s10 == SectorControl.Neutral &&
-                        s01 == SectorControl.Neutral && s11 == SectorControl.Neutral) continue;
-
-                    int xMin = Math.Max(0, QuadStart(originPxX, pxPerCellX, qc, ResolutionX));
-                    int xMax = Math.Min(texWidth, QuadStart(originPxX, pxPerCellX, qc + 1, ResolutionX)) - 1;
-                    if (xMax < xMin) continue;
+                        s01 == SectorControl.Neutral && s11 == SectorControl.Neutral)
+                    {
+                        AddRun(pixelBuffer, texWidth, ref runFrom, ref runTo, ref runColor, yMin, yMax, xMin, xMax + 1, clear);
+                        continue;
+                    }
 
                     float w00 = BandWeight(i00), w10 = BandWeight(i10), w01 = BandWeight(i01), w11 = BandWeight(i11);
                     if (s00 != SectorControl.Contested && s00 == s10 && s00 == s01 && s00 == s11 &&
@@ -1147,71 +1274,197 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     {
                         Color32 flat = s00 == SectorControl.Friendly ? FriendlyTint : HostileTint;
                         flat.a = (byte)Math.Max(1f, fillAlpha * w00);
-                        for (int y = yMin; y <= yMax; y++)
-                            Array.Fill(pixelBuffer, flat, y * texWidth + xMin, xMax - xMin + 1);
+                        AddRun(pixelBuffer, texWidth, ref runFrom, ref runTo, ref runColor, yMin, yMax, xMin, xMax + 1, flat);
                         continue;
                     }
+
+                    FlushRun(pixelBuffer, texWidth, runFrom, runTo, runColor, yMin, yMax);
+                    runFrom = runTo = 0;
 
                     float o00 = w00 > 0f ? 1f : 0f, o10 = w10 > 0f ? 1f : 0f, o01 = w01 > 0f ? 1f : 0f, o11 = w11 > 0f ? 1f : 0f;
                     float k00 = s00 == SectorControl.Contested ? 1f : 0f, k10 = s10 == SectorControl.Contested ? 1f : 0f;
                     float k01 = s01 == SectorControl.Contested ? 1f : 0f, k11 = s11 == SectorControl.Contested ? 1f : 0f;
                     bool hatched = k00 + k10 + k01 + k11 > 0f;
+                    bool held = w00 > 0f && w10 > 0f && w01 > 0f && w11 > 0f;
                     float h00 = TintHold(i00), h10 = TintHold(i10), h01 = TintHold(i01), h11 = TintHold(i11);
+
+                    // Bilinear terms of this quad, split into the part that depends on the
+                    // column and the part the row adds: value = low + delta * rowT.
+                    float hx0 = h10 - h00, hx1 = (h11 - h01) - hx0;
+                    float hy0 = h01 - h00, hy1 = (h11 - h10) - hy0;
+                    for (int x = xMin; x <= xMax; x++)
+                    {
+                        ref BakeColumn column = ref columns[x];
+                        float sx = column.Sx, tx = column.Tx;
+                        float low = w00 + (w10 - w00) * sx;
+                        column.WLow = low;
+                        column.WDelta = w01 + (w11 - w01) * sx - low;
+                        low = h00 + (h10 - h00) * tx;
+                        column.HLow = low;
+                        column.HDelta = h01 + (h11 - h01) * tx - low;
+                        float gy = (hy0 + hy1 * tx) / pxPerCellY;
+                        column.Gy2 = gy * gy;
+                        if (!held)
+                        {
+                            low = o00 + (o10 - o00) * sx;
+                            column.OLow = low;
+                            column.ODelta = o01 + (o11 - o01) * sx - low;
+                        }
+                        if (hatched)
+                        {
+                            low = k00 + (k10 - k00) * sx;
+                            column.KLow = low;
+                            column.KDelta = k01 + (k11 - k01) * sx - low;
+                        }
+                    }
 
                     for (int y = yMin; y <= yMax; y++)
                     {
-                        float cellY = (y + 0.5f - originPxY) / pxPerCellY;
-                        float ty = Math.Clamp(cellY - 0.5f - qr, 0f, 1f);
-                        float sy = ty * ty * (3f - 2f * ty);
-                        int row = Math.Clamp((int)cellY, 0, ResolutionY - 1);
+                        float ty = rows[y].Ty, sy = rows[y].Sy;
+                        float gx = (hx0 + hx1 * ty) / pxPerCellX;
+                        float gx2 = gx * gx;
+                        int cellRow = rows[y].Cell;
                         int rowOffset = y * texWidth;
-                        for (int x = xMin; x <= xMax; x++)
+                        int phase = (xMin + y) % period;
+                        int stripeCell = -1, stripeRun = 0;
+                        for (int x = xMin; x <= xMax; x++, phase = phase + 1 == period ? 0 : phase + 1)
                         {
-                            float cellX = (x + 0.5f - originPxX) / pxPerCellX;
-                            float tx = Math.Clamp(cellX - 0.5f - qc, 0f, 1f);
-                            float sx = tx * tx * (3f - 2f * tx);
-
-                            float owned = Bilerp(o00, o10, o01, o11, sx, sy);
-                            float inside = (owned - 0.5f) * edgeScale;
-                            if (inside <= -0.5f) continue;
-                            float cover = Math.Min(1f, inside + 0.5f);
-                            float weight = Bilerp(w00, w10, w01, w11, sx, sy) / owned;
-                            float rim = Math.Max(0f, 1f - Math.Abs(inside - RimInset) / RimInset);
+                            ref BakeColumn column = ref columns[x];
+                            float cover, rim, weight;
+                            if (held)
+                            {
+                                cover = coverHeld;
+                                rim = rimHeld;
+                                weight = column.WLow + column.WDelta * sy;
+                            }
+                            else
+                            {
+                                float owned = column.OLow + column.ODelta * sy;
+                                float inside = (owned - 0.5f) * edgeScale;
+                                if (inside <= -0.5f)
+                                {
+                                    pixelBuffer[rowOffset + x] = clear;
+                                    continue;
+                                }
+                                cover = Math.Min(1f, inside + 0.5f);
+                                float shape = column.WLow + column.WDelta * sy;
+                                weight = shape / owned;
+                                rim = Math.Max(0f, 1f - Math.Abs(inside - RimInset) / RimInset);
+                            }
                             float alpha = fillAlpha * (weight + rim * RimStrength);
 
                             // Which side: the hold field itself, one pixel of blend across its zero.
-                            float hold = Bilerp(h00, h10, h01, h11, tx, ty);
-                            float gx = ((h10 - h00) + ((h11 - h01) - (h10 - h00)) * ty) / pxPerCellX;
-                            float gy = ((h01 - h00) + ((h11 - h10) - (h01 - h00)) * tx) / pxPerCellY;
-                            float slope = (float)Math.Sqrt(gx * gx + gy * gy);
-                            float friendly = slope > 1e-6f ? Math.Clamp(hold / slope + 0.5f, 0f, 1f) : hold >= 0f ? 1f : 0f;
+                            float hold = column.HLow + column.HDelta * ty;
+                            float slope = (float)Math.Sqrt(gx2 + column.Gy2);
+                            float friendly = slope > 1e-6f ? ClampF(hold / slope + 0.5f, 0f, 1f) : hold >= 0f ? 1f : 0f;
 
                             if (hatched)
                             {
                                 // A contested square is hatched red/blue, never a third colour: the
                                 // stripe runs follow the cell's control value, so the wider run is
                                 // the side that holds more of the square.
-                                float hatch = Math.Clamp((Bilerp(k00, k10, k01, k11, sx, sy) - 0.5f) * edgeScale + 0.5f, 0f, 1f);
+                                float contested = column.KLow + column.KDelta * sy;
+                                float hatch = ClampF((contested - 0.5f) * edgeScale + 0.5f, 0f, 1f);
                                 if (hatch > 0f)
                                 {
-                                    int col = Math.Clamp((int)cellX, 0, ResolutionX - 1);
-                                    bool blue = (x + y) % period < StripeRun(row * ResolutionX + col, period);
+                                    int col = column.Cell;
+                                    if (col != stripeCell)
+                                    {
+                                        stripeCell = col;
+                                        stripeRun = StripeRun(cellRow * ResolutionX + col, period);
+                                    }
+                                    bool blue = phase < stripeRun;
                                     friendly += ((blue ? 1f : 0f) - friendly) * hatch;
                                     alpha += fillAlpha * HatchStrength * hatch;
                                 }
                             }
 
-                            pixelBuffer[rowOffset + x] = new Color32(
-                                (byte)(HostileTint.r + (FriendlyTint.r - HostileTint.r) * friendly),
-                                (byte)(HostileTint.g + (FriendlyTint.g - HostileTint.g) * friendly),
-                                (byte)(HostileTint.b + (FriendlyTint.b - HostileTint.b) * friendly),
-                                (byte)Math.Clamp(alpha * cover, 1f, 255f));
+                            ref Color32 pixel = ref pixelBuffer[rowOffset + x];
+                            pixel.r = (byte)(hostileR + spanR * friendly);
+                            pixel.g = (byte)(hostileG + spanG * friendly);
+                            pixel.b = (byte)(hostileB + spanB * friendly);
+                            pixel.a = (byte)ClampF(alpha * cover, 1f, 255f);
                         }
                     }
                 }
+                if (nextCol < texWidth) AddRun(pixelBuffer, texWidth, ref runFrom, ref runTo, ref runColor, yMin, yMax, nextCol, texWidth, clear);
+                FlushRun(pixelBuffer, texWidth, runFrom, runTo, runColor, yMin, yMax);
             }
+            if (nextRow < texHeight) FillSpan(pixelBuffer, nextRow * texWidth, (texHeight - nextRow) * texWidth, clear);
 
             return pixelBuffer;
+        }
+
+        /// <summary><c>Math.Clamp</c> for floats, small enough for the JIT to inline into the pixel loop.</summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static float ClampF(float value, float low, float high)
+            => value < low ? low : value > high ? high : value;
+
+        private static void FillSpan(Color32[] buffer, int start, int count, Color32 color)
+        {
+            if (count > 0) Array.Fill(buffer, color, start, count);
+        }
+
+        /// <summary>
+        /// Queues columns [<paramref name="from"/>, <paramref name="to"/>) of rows y0..y1 in one colour,
+        /// extending the pending run when it is the same colour right next door.
+        /// </summary>
+        private static void AddRun(Color32[] buffer, int texWidth, ref int runFrom, ref int runTo, ref Color32 runColor,
+            int y0, int y1, int from, int to, Color32 color)
+        {
+            if (runTo > runFrom && runTo == from &&
+                runColor.r == color.r && runColor.g == color.g && runColor.b == color.b && runColor.a == color.a)
+            {
+                runTo = to;
+                return;
+            }
+            FlushRun(buffer, texWidth, runFrom, runTo, runColor, y0, y1);
+            runFrom = from;
+            runTo = to;
+            runColor = color;
+        }
+
+        private static void FlushRun(Color32[] buffer, int texWidth, int runFrom, int runTo, Color32 color, int y0, int y1)
+        {
+            int count = runTo - runFrom;
+            if (count <= 0) return;
+            if (count == texWidth)
+            {
+                // Full-width rows are one block of memory.
+                FillSpan(buffer, y0 * texWidth, (y1 - y0 + 1) * texWidth, color);
+                return;
+            }
+            for (int y = y0; y <= y1; y++) Array.Fill(buffer, color, y * texWidth + runFrom, count);
+        }
+
+        /// <summary>Per pixel column: the quad-independent field position, then the current quad's bilinear terms.</summary>
+        private struct BakeColumn
+        {
+            public float Tx, Sx;
+            public int Cell;
+            public float OLow, ODelta, WLow, WDelta, HLow, HDelta, KLow, KDelta, Gy2;
+        }
+
+        private struct BakeRow
+        {
+            public float Ty, Sy;
+            public int Cell;
+        }
+
+        /// <summary>Per-bake working tables, kept between bakes so a re-bake allocates nothing.</summary>
+        private sealed class BakeScratch
+        {
+            public BakeColumn[] Columns = new BakeColumn[0];
+            public BakeRow[] Rows = new BakeRow[0];
+            public int[] QuadX0 = new int[0], QuadX1 = new int[0], QuadY0 = new int[0], QuadY1 = new int[0];
+
+            public void Reserve(int texWidth, int texHeight, int resolutionX, int resolutionY)
+            {
+                if (Columns.Length < texWidth) Columns = new BakeColumn[texWidth];
+                if (Rows.Length < texHeight) Rows = new BakeRow[texHeight];
+                if (QuadX0.Length < resolutionX + 1) { QuadX0 = new int[resolutionX + 1]; QuadX1 = new int[resolutionX + 1]; }
+                if (QuadY0.Length < resolutionY + 1) { QuadY0 = new int[resolutionY + 1]; QuadY1 = new int[resolutionY + 1]; }
+            }
         }
 
         /// <summary>Pixels inside the border where the rim line peaks; it is twice this wide.</summary>
@@ -1229,17 +1482,13 @@ namespace BoscaliSummer.Modules.Command.Runtime
             return (int)Math.Ceiling(originPx + cell * pxPerCell - 0.5f);
         }
 
-        private static float Bilerp(float v00, float v10, float v01, float v11, float x, float y)
-        {
-            float low = v00 + (v10 - v00) * x;
-            return low + (v01 + (v11 - v01) * x - low) * y;
-        }
-
         /// <summary>Full at the front, quiet in the rear, nothing on unheld ground.</summary>
         private float BandWeight(int index)
         {
-            if (sectorStates[index] == SectorControl.Neutral) return 0f;
             byte band = frontBand[index];
+            // Unheld ground is bare unless ComputeFrontBand marked it a closed-in gap (band + 1).
+            if (sectorStates[index] == SectorControl.Neutral)
+                return band == 3 ? 1f : band == 2 ? 0.55f : band == 1 ? 0.22f : 0f;
             return band == 2 ? 1f : band == 1 ? 0.55f : 0.22f;
         }
 
@@ -1249,9 +1498,31 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private int TintStep(int index)
         {
             float hold = holdStrength[index];
-            if (sectorStates[index] == SectorControl.Neutral || !float.IsFinite(hold) || hold == 0f) return 0;
+            if (sectorStates[index] == SectorControl.Neutral) return frontBand[index] != 0 ? GapStep(index) : 0;
+            if (!float.IsFinite(hold) || hold == 0f) return 0;
             int step = (int)Math.Round(hold * TintHoldSteps);
             return step != 0 ? step : hold > 0f ? 1 : -1;
+        }
+
+        /// <summary>
+        /// The side a closed-in gap leans to: one step toward whoever holds more of its four
+        /// neighbours, zero when they balance, so on the line the two colours meet inside it.
+        /// </summary>
+        private int GapStep(int index)
+        {
+            int r = index / ResolutionX, c = index - r * ResolutionX;
+            float sum = 0f;
+            if (r + 1 < ResolutionY) sum += GapHold(index + ResolutionX);
+            if (c + 1 < ResolutionX) sum += GapHold(index + 1);
+            if (r > 0) sum += GapHold(index - ResolutionX);
+            if (c > 0) sum += GapHold(index - 1);
+            return sum > 0.01f ? 1 : sum < -0.01f ? -1 : 0;
+        }
+
+        private float GapHold(int index)
+        {
+            float hold = holdStrength[index];
+            return sectorStates[index] == SectorControl.Neutral || !float.IsFinite(hold) ? 0f : Math.Sign(hold);
         }
 
         /// <summary>

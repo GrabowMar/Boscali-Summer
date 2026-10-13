@@ -1,6 +1,6 @@
+#if !PUBLIC_RELEASE
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Modules.Command.Presentation;
 using BoscaliSummer.Modules.Command.Presentation.MapUi;
@@ -41,7 +41,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
             }
         }
 
-#if !PUBLIC_RELEASE
         /// <summary>
         /// <c>{id}</c>: the same code path as a click, by control id. Returns ok (the gate allowed and the verb was taken), pressed (a verb went out), reasonCode
         /// (StrWhy), reason and reasonLen. Mutates the game, so it runs in a nomodkit scenario only.
@@ -179,7 +178,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
             refusal = Fail(hook, "requires a nomodkit scenario");
             return false;
         }
-#endif
 
         /// <summary>The panel, the hub's view of the model, the map's pose, the link state and the model's differences from the host's own snapshot (all 0).</summary>
         public static Dictionary<string, object> Read(Dictionary<string, object> args)
@@ -200,10 +198,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             return r;
         }
 
-        private static Dictionary<string, object> Fail(string hook, string error)
-        {
-            Debug.LogWarning("[StrAutomation] " + hook + ": " + error);
-            return new Dictionary<string, object> { { "ok", false }, { "error", error } };
-        }
+        private static Dictionary<string, object> Fail(string hook, string error) => Failure("StrAutomation", hook, error);
     }
 }
+#endif

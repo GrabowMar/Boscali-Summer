@@ -9,6 +9,7 @@ using System.Runtime.Loader;
 using System.Collections.Immutable;
 using System.Collections.Generic;
 using System.Reflection.Emit;
+using System.Text.Json.Nodes;
 
 if (args.Length != 2)
 {
@@ -39,9 +40,16 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
 
 (string Type, string Method)[] targets =
 {
+    ("NuclearOption.SavedMission.MissionGroup", "get_AllGroups"),
+    ("MissionManager", "SetMission"),
+    ("NuclearOption.SavedMission.Mission", "OnSceneLoaded"),
+    ("MissionManager", "OnSyncMissionChanged"),
+    ("MissionManager", "StopMission"),
+    ("LevelInfo", "LoadFromMission"),
     ("ControlsFilter", "SetFlightAssist"),
     ("ControlsFilter", "GetAim"),
     ("NightVision", "NightVis_OnSwitchCam"),
+    ("NightVision", "UpdateGain"),
     ("Hangar", "TrySpawnAircraft"),
     ("Pilot", "GetAccel"),
     ("WeaponManager", "GetTargetList"),
@@ -134,7 +142,19 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
     ("CombatHUD", "UpdateHitMarkers"),
     ("HUDUnitMarker", "UpdatePosition"),
     ("HUDUnitMarker", "JammingDistortion"),
-    ("HUDTurretCrosshair", "Refresh")
+    ("HUDTurretCrosshair", "Refresh"),
+    // DL EVT LOG (2026-10-13): EventFeedPatch is a postfix on the one place every line of the game's message feed passes.
+    ("MessageFeed", "Enqueue"),
+    // CUE stack (2026-10-13): a postfix on the call that shows each of the game's grey message boxes (the action report, the reserve notice, the funds line, the score line).
+    ("AircraftActionsReport", "ReportText"),
+    ("ReserveReport", "ReserveReport_OnReserveNotice"),
+    ("AllocationDisplay", "Show"),
+    ("KillDisplay", "DisplayKill"),
+    ("KillDisplay", "DisplayBonus"),
+    // Performance client savings (ported from NO_Optimisation, 2026-10-13).
+    ("Turret", "DatalinkTargetSearch"),
+    ("Turret", "FixedUpdate"),
+    ("BulletSim", "AddBullet")
 };
 
 foreach ((string typeName, string fieldName) in new[]
@@ -191,6 +211,10 @@ foreach ((string typeName, string methodName) in targets)
     ("GameplayUI", "spectatorPanel"),
     ("MessageUI", "messageText"),
     ("MessageUI", "killFeedText"),
+    ("AircraftActionsReport", "actionsText"),
+    ("AircraftActionsReport", "background"),
+    ("AllocationDisplay", "allocationReadout"),
+    ("KillDisplay", "killText"),
     ("VirtualMFD", "leftButtons"),
     ("VirtualMFD", "rightButtons"),
     ("VirtualMFD", "leftScreens"),
@@ -296,6 +320,10 @@ foreach ((string typeName, string fieldName) in fields)
     ("CombatHUD", "countermeasureBackground", "UnityEngine.GameObject"),
     // Screen corners (2026-10-12): NativeScreenCorners finds the kill feed's plate (the child called Darkener under MessageUI's background box) and the minimised map's plate (DynamicMap's background).
     ("MessageUI", "messageBackground", "UnityEngine.GameObject"),
+    // DL EVT LOG (2026-10-13): NativeScreenCorners hides the feed's two text objects behind owned CanvasGroups while the mod's log is drawn, and shows them whole while the chat input (MessageUI.chat) is open.
+    ("MessageUI", "messageText", "TMPro.TextMeshProUGUI"),
+    ("MessageUI", "killFeedText", "TMPro.TextMeshProUGUI"),
+    ("MessageUI", "chat", "ChatBox"),
     ("DynamicMap", "mapBackground", "UnityEngine.UI.Image"),
     ("Gun", "reloadTime", "System.Single"),
     ("MissileLauncher", "reloadTime", "System.Single"),
@@ -321,6 +349,7 @@ foreach ((string typeName, string fieldName) in fields)
     ("WeaponInfo", "blastDamage", "System.Single"),
     ("WeaponInfo", "jammer", "System.Boolean"),
     ("Unit", "onDeregisterMissile", "System.Action`1<Missile>"),
+    ("Unit", "IRSources", "System.Collections.Generic.List`1<IRSource>"),
     ("MissileWarning", "knownMissiles", "System.Collections.Generic.List`1<Missile>"),
     ("Aircraft", "onRadarWarning", "System.Action`1<Aircraft+OnRadarWarning>"),
     ("FlightHud", "canvas", "UnityEngine.Canvas"),
@@ -334,6 +363,9 @@ foreach ((string typeName, string fieldName) in fields)
     ("Aircraft", "cockpitRenderers", "UnityEngine.Renderer[]"),
     ("NightVision", "nightVisSelected", "System.Boolean"),
     ("NightVision", "nightVisActive", "System.Boolean"),
+    ("NightVision", "postProcessing", "UnityEngine.Rendering.Volume"),
+    ("NightVision", "gainMin", "System.Single"),
+    ("NightVision", "gainMax", "System.Single"),
     ("NavLights", "isOn", "System.Boolean"),
     ("WeaponManager", "gunsLinked", "System.Boolean"),
 
@@ -458,6 +490,9 @@ if (runwayProjection.ReturnType != typeof(void) || glideslopeProjection.ReturnTy
 // time rather than degrading. Neither probe checked these names before.
 (string Type, string Method, string[] Parameters)[] parameterNames =
 {
+    ("MissionManager", "SetMission", new[] { "mission", "checkIfSame" }),
+    ("MissionManager", "OnSyncMissionChanged", new[] { "tuple" }),
+    ("LevelInfo", "LoadFromMission", new[] { "mission" }),
     ("ControlsFilter", "SetFlightAssist", new[] { "enabled", "aircraft" }),
     ("Missile", "UserCode_RpcDetonate_897349600", new[] { "hitArmor", "useUnit", "hitTerrain" }),
     ("Hangar", "TrySpawnAircraft", new[] { "player", "definition" }),
@@ -474,6 +509,7 @@ if (runwayProjection.ReturnType != typeof(void) || glideslopeProjection.ReturnTy
     ,("MapBuilding", "TakeDamage", new[] { "pierceDamage", "blastDamage", "amountAffected", "fireDamage", "impactDamage" })
     ,("MapBuildingSet", "UserCode_CmdDestroyBuilding_1002795805", new[] { "index" })
     ,("NuclearOption.Jobs.DetectorManager", "RequestLoSCheck", new[] { "target" })
+    ,("BulletSim", "AddBullet", new[] { "muzzle", "tracer" })
 };
 foreach ((string typeName, string methodName, string[] expected) in parameterNames)
 {
@@ -486,6 +522,26 @@ foreach ((string typeName, string methodName, string[] expected) in parameterNam
                 $"{typeName}.{methodName} no longer has a parameter named '{name}' " +
                 $"(found: {string.Join(", ", actual)}). Harmony binds by name.");
 }
+
+// The profile prefix must finish before native mission units are linked or spawned.
+Type nativeMission = gameAssembly.GetType("NuclearOption.SavedMission.Mission", true)!;
+Type nativeMissionManager = gameAssembly.GetType("MissionManager", true)!;
+MethodInfo setMission = nativeMissionManager.GetMethod("SetMission", AllMembers, null,
+    new[] { nativeMission, typeof(bool) }, null) ?? throw new MissingMethodException("MissionManager.SetMission(Mission, bool)");
+MethodInfo missionSceneLoaded = nativeMission.GetMethod("OnSceneLoaded", AllMembers, null,
+    new[] { nativeMissionManager }, null) ?? throw new MissingMethodException("Mission.OnSceneLoaded(MissionManager)");
+Type missionSyncTuple = typeof(ValueTuple<,,>).MakeGenericType(
+    gameAssembly.GetType("NetworkMission+SyncMission", true)!,
+    gameAssembly.GetType("NetworkMission+State", true)!, typeof(bool));
+MethodInfo syncMission = nativeMissionManager.GetMethod("OnSyncMissionChanged", AllMembers, null,
+    new[] { missionSyncTuple }, null) ?? throw new MissingMethodException("MissionManager.OnSyncMissionChanged(mission tuple)");
+MethodInfo stopMission = nativeMissionManager.GetMethod("StopMission", AllMembers, null,
+    Type.EmptyTypes, null) ?? throw new MissingMethodException("MissionManager.StopMission()");
+MethodInfo missionEnvironment = gameAssembly.GetType("LevelInfo", true)!.GetMethod("LoadFromMission", AllMembers, null,
+    new[] { nativeMission }, null) ?? throw new MissingMethodException("LevelInfo.LoadFromMission(Mission)");
+if (setMission.ReturnType != typeof(void) || missionSceneLoaded.ReturnType != typeof(void) ||
+    syncMission.ReturnType != typeof(void) || stopMission.ReturnType != typeof(void) || missionEnvironment.ReturnType != typeof(void))
+    throw new InvalidOperationException("Native mission profile lifecycle signatures changed");
 
 // Theater priority binds MissionPosition by parameter name and by overload. The Unit
 // overload is public; the Distance overload that sorts depot/airbase delivery is internal,
@@ -549,6 +605,12 @@ if (gameAssembly.GetType("PlayerSettings", true)!.GetField("unitSystem", AllMemb
 
 string[] patchTypes =
 {
+    "BoscaliSummer.Core.Game.BoscaliMission+MissionGroupsPatch",
+    "BoscaliSummer.Core.Game.BoscaliMission+SetMissionPatch",
+    "BoscaliSummer.Core.Game.BoscaliMission+SceneLoadedPatch",
+    "BoscaliSummer.Core.Game.BoscaliMission+SyncMissionPatch",
+    "BoscaliSummer.Core.Game.BoscaliMission+StopMissionPatch",
+    "BoscaliSummer.Core.Game.BoscaliMission+MissionEnvironmentPatch",
     "BoscaliSummer.Fire.BulletImpactPatch",
     "BoscaliSummer.Fire.GroundVehicleDestructionPatch",
     "BoscaliSummer.Fire.MissileImpactPatch",
@@ -601,11 +663,14 @@ string[] patchTypes =
 
 
     "BoscaliSummer.Modules.QoL.Patches.NightVisionChoicePatch",
+    "BoscaliSummer.Modules.QoL.Patches.NightVisionGainPatch",
     "BoscaliSummer.Modules.PlayerSpawnPriority.PlayerSpawnPriorityPatch",
     "BoscaliSummer.Modules.Autopilot.Patches.AutopilotLandInputPatch",
     "BoscaliSummer.Modules.Autopilot.Patches.FlightAssistReportPatch",
     "BoscaliSummer.Modules.Autopilot.Patches.RadialMenuLifecyclePatches",
-    "BoscaliSummer.Modules.Autopilot.Patches.BoscaliMenuActionPatches"
+    "BoscaliSummer.Modules.Autopilot.Patches.ChaffNextPatch",
+    "BoscaliSummer.Modules.Autopilot.Patches.ChaffTriggerPatch",
+    "BoscaliSummer.Modules.Autopilot.Patches.ChaffActivePatch"
     ,"BoscaliSummer.Modules.Squad.Patches.SquadDamagePatch"
     ,"BoscaliSummer.Modules.Squad.Patches.SquadKillPatch"
     ,"BoscaliSummer.Modules.Squad.Patches.SquadPilotDeathPatch"
@@ -627,7 +692,16 @@ string[] patchTypes =
     ,"BoscaliSummer.Modules.Trenches.Runtime.TrenchWorksDetectionPatch"
     ,"BoscaliSummer.Modules.Hud.Patches.WingviewCameraPatch"
     ,"BoscaliSummer.Modules.Hud.Patches.ShotDetonatePatch"
+    ,"BoscaliSummer.Modules.Hud.Patches.EventFeedPatch"
+    ,"BoscaliSummer.Modules.Hud.Patches.CueReportPatch"
+    ,"BoscaliSummer.Modules.Hud.Patches.CueReservePatch"
+    ,"BoscaliSummer.Modules.Hud.Patches.CueAllocationPatch"
+    ,"BoscaliSummer.Modules.Hud.Patches.CueScorePatch"
+    ,"BoscaliSummer.Modules.Hud.Patches.CueBonusPatch"
     ,"BoscaliSummer.Modules.Weather.Patches.CloudSeekerPatch"
+    ,"BoscaliSummer.Modules.Performance.Runtime.RemoteTurretSearchPatch"
+    ,"BoscaliSummer.Modules.Performance.Runtime.SleepingTurretPatch"
+    ,"BoscaliSummer.Modules.Performance.Runtime.DistantTracerPatch"
 };
 
 foreach (string patchType in patchTypes)
@@ -638,9 +712,11 @@ foreach (string patchType in patchTypes)
 Type moduleContract = pluginAssembly.GetType("BoscaliSummer.Core.Modules.IModule", true)!;
 PropertyInfo modulePatchTypes = moduleContract.GetProperty("PatchTypes")!;
 var registeredPatchTypes = new HashSet<Type>();
-foreach (Type module in pluginAssembly.GetTypes())
-    if (!module.IsAbstract && moduleContract.IsAssignableFrom(module))
-        registeredPatchTypes.UnionWith((Type[])modulePatchTypes.GetValue(Activator.CreateInstance(module, true)) ?? []);
+Type[] moduleTypes = pluginAssembly.GetTypes()
+    .Where(module => !module.IsAbstract && moduleContract.IsAssignableFrom(module)).ToArray();
+foreach (Type module in moduleTypes)
+    registeredPatchTypes.UnionWith((Type[])modulePatchTypes.GetValue(Activator.CreateInstance(module, true)) ?? []);
+ProbeMissionProfile(pluginAssembly, moduleContract, moduleTypes);
 string[] unregisteredPatchTypes = pluginAssembly.GetTypes()
     .Where(type => !registeredPatchTypes.Contains(type) &&
         type.GetCustomAttributesData().Any(attribute => attribute.AttributeType.Name == "HarmonyPatch"))
@@ -652,6 +728,9 @@ if (unregisteredPatchTypes.Length > 0)
 
 string[] featureTypes =
 {
+    "BoscaliSummer.Core.Modules.MissionProfileModule",
+    "BoscaliSummer.Modules.Scenario.ScenarioModule",
+    "BoscaliSummer.Modules.Command.StrategicCommandModule",
     "BoscaliSummer.Modules.FireAndDestruction.FireAndDestructionModule",
     "BoscaliSummer.Modules.UrbanCombat.UrbanCombatModule",
     "BoscaliSummer.Modules.Radio.RadioModule",
@@ -1176,8 +1255,238 @@ if (pluginAssembly.GetReferencedAssemblies().Any(reference =>
     reference.Name?.IndexOf("WingCommand", StringComparison.OrdinalIgnoreCase) >= 0))
     throw new InvalidOperationException("Optional in-tree Wing integration must not require a WingCommand assembly reference");
 ProbeClientImmersionComposition(pluginAssembly);
-Console.WriteLine($"Patch target probe: game methods/fields, Harmony parameters, {patchTypes.Length} patch classes, {featureTypes.Length + 1} modules, radio assets, wire contracts, dynamic operation reward/road signatures, and Mirage seams resolved.");
+Console.WriteLine($"Patch target probe: game methods/fields, Harmony parameters, {registeredPatchTypes.Count} registered patch classes, {moduleTypes.Length} modules, mission scope, radio assets, wire contracts, dynamic operation reward/road signatures, and Mirage seams resolved.");
 return 0;
+
+static void ProbeMissionProfile(Assembly plugin, Type moduleContract, Type[] modules)
+{
+    const BindingFlags flags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+    Type profile = plugin.GetType("BoscaliSummer.Core.Game.MissionProfile", true)!;
+    MethodInfo allows = profile.GetMethod("AllowsModule", flags)!;
+    MethodInfo core = profile.GetMethod("IsCore", flags)!;
+    MethodInfo battlefield = profile.GetMethod("IsBattlefield", flags)!;
+    MethodInfo setDisabled = profile.GetMethod("SetDisabled", flags)!;
+    bool Allowed(string id) => (bool)allows.Invoke(null, new object[] { id })!;
+
+    ProbeScenarios(plugin);
+
+    var ids = new List<string>();
+    var cockpit = new HashSet<string>(StringComparer.Ordinal);
+    var dependencies = new Dictionary<string, string[]>(StringComparer.Ordinal);
+    PropertyInfo metadataProperty = moduleContract.GetProperty("Metadata")!;
+    foreach (Type module in modules)
+    {
+        object metadata = metadataProperty.GetValue(Activator.CreateInstance(module, true))!;
+        Type metadataType = metadata.GetType();
+        string id = (string)metadataType.GetProperty("Id")!.GetValue(metadata)!;
+        if (ids.Contains(id) || !Allowed(id))
+            throw new InvalidOperationException("Compiled module is duplicated or locked before the player chose anything: " + id);
+        ids.Add(id);
+        dependencies[id] = (string[])metadataType.GetProperty("Dependencies")!.GetValue(metadata)!;
+        if (!(bool)battlefield.Invoke(null, new object[] { id })!) cockpit.Add(id);
+    }
+    // The immersion-only preset must leave every module it keeps with what that module needs.
+    foreach (string id in cockpit)
+        foreach (string dependency in dependencies[id])
+            if (!cockpit.Contains(dependency))
+                throw new InvalidOperationException("Immersion-only module requires a battlefield dependency: " + id + " -> " + dependency);
+    try
+    {
+        setDisabled.Invoke(null, new object[] { ids });
+        foreach (string id in ids)
+            if (Allowed(id) != (bool)core.Invoke(null, new object[] { id })!)
+                throw new InvalidOperationException("Only core plumbing may ignore the player's switch: " + id);
+    }
+    finally { setDisabled.Invoke(null, new object[] { null! }); }
+    if (!ids.Contains("mission-profile") || !ids.Contains("strategic-command"))
+        throw new InvalidOperationException("Mission prompt registration and STR must each have a module owner");
+    Console.WriteLine("  Mission scope: nothing locked by default, player switches honoured, core plumbing fixed, immersion-only dependency closure, native JSON preservation");
+}
+
+static void ProbeScenarios(Assembly plugin)
+{
+    const BindingFlags flags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+    MethodInfo apply = plugin.GetType("BoscaliSummer.Modules.Scenario.Runtime.MissionPatcher", true)!
+        .GetMethod("Apply", flags, new[] { typeof(string), typeof(string), typeof(string), typeof(List<string>) })!;
+    string Build(string baseJson, string script, List<string> errors) =>
+        (string)apply.Invoke(null, new object[] { baseJson, "probe.scenario", script, errors })!;
+
+    const string sourceJson = """{"missionSettings":{"description":"Native briefing","futureDate":"2026-10-13T20:30:00Z","optional":null},"environment":{"timeOfDay":15.5,"weatherIntensity":0.38},"aircraft":[{"type":"COIN","faction":"Primeva","UniqueName":"COIN","globalPosition":{"x":1.5,"y":2.5,"z":3.5},"rotation":{"x":0.0,"y":0.0,"z":0.0,"w":1.0},"playerControlled":true,"skill":1.0,"startingSpeed":0.0,"future":[1,null]}],"vehicles":[],"ships":[],"airbases":[{"UniqueName":"Base One"}],"objectives":[{"Type":"None","UniqueName":"Mission Start","Faction":"","DisplayName":"","Hidden":true,"Outcomes":["Begin"]},{"Type":"WaitSeconds","UniqueName":"Native","Faction":"","DisplayName":"Native","Hidden":true,"Outcomes":["End"],"seconds":5.0}],"outcomes":[{"Type":"StartObjective","UniqueName":"Begin","objectivesToStart":["Native"]},{"Type":"EndGame","UniqueName":"End","endType":"Victory","endDelay":4.0},{"Type":"SpawnUnit","UniqueName":"Wave","UnitsToSpawn":["COIN"]}],"future":{"nested":[1,null,false,"preserved"]}}""";
+    const string header = "scenario probe\ntitle \"Probe\"\nbase \"Escalation\"\n";
+    const string marker = "\n\n[Boscali Summer scenario: probe]";
+    JsonNode source = JsonNode.Parse(sourceJson)!;
+
+    // A script that names nothing in the world changes nothing but the description.
+    var errors = new List<string>();
+    JsonNode plain = JsonNode.Parse(Build(sourceJson, header, errors))!;
+    if (errors.Count != 0 || plain["missionSettings"]!["description"]!.GetValue<string>() != "Native briefing" + marker)
+        throw new InvalidOperationException("A scripted mission must keep the base briefing and end with its script marker");
+    plain["missionSettings"]!["description"] = "Native briefing";
+    if (!JsonNode.DeepEquals(source, plain))
+        throw new InvalidOperationException("The scripted mission copy changed native or unknown source fields");
+
+    // World statements become the game's own units, objectives and outcomes.
+    const string world = header + """
+about
+| Told by the script.
+time 6
+weather 0.2
+ending 12
+hold Native
+begin patrol
+unit raider like COIN side=bdf at 100 700 -200 heading=180 speed=90 skill=0.5
+copy Wave as extra
+objective patrol bdf "Fly" reach 10 20 30 range=1500
+  then spawn raider
+  then start raid
+  then message "Contact" side-only
+objective raid bdf "Break it" destroy raider need=any
+objective hold_base pala "Hold" capture "Base One"
+on Native
+  then finish raid
+beat b when done raid
+  wait 1
+""";
+    errors.Clear();
+    JsonNode built = JsonNode.Parse(Build(sourceJson, world, errors))!;
+    if (errors.Count != 0) throw new InvalidOperationException("A sound script was refused: " + string.Join(" / ", errors));
+    JsonNode Named(string list, string name) =>
+        built[list]!.AsArray().First(item => item!["UniqueName"]!.GetValue<string>() == name)!;
+    string[] Names(JsonNode array) => array.AsArray().Select(item => item!.GetValue<string>()).ToArray();
+    JsonNode raider = Named("aircraft", "raider");
+    if (built["missionSettings"]!["description"]!.GetValue<string>() != "Told by the script." + marker ||
+        built["environment"]!["timeOfDay"]!.GetValue<double>() != 6 || Math.Abs(built["environment"]!["weatherIntensity"]!.GetValue<double>() - 0.2) > 1e-6)
+        throw new InvalidOperationException("The script's briefing, time and weather must reach the mission");
+    JsonNode extra = Named("aircraft", "extra_1"), template = Named("aircraft", "COIN");
+    extra["UniqueName"] = "COIN";
+    if (!JsonNode.DeepEquals(extra, template) || !Names(Named("outcomes", "Wave")["UnitsToSpawn"]!).SequenceEqual(new[] { "COIN" }))
+        throw new InvalidOperationException("A copied group must be the outcome's units under new names, and leave the outcome alone");
+    if (built["aircraft"]!.AsArray().Count != 3 || raider["faction"]!.GetValue<string>() != "Boscali" || raider["type"]!.GetValue<string>() != "COIN" ||
+        raider["globalPosition"]!["y"]!.GetValue<double>() != 700 || raider["startingSpeed"]!.GetValue<double>() != 90 ||
+        raider["playerControlled"]!.GetValue<bool>() || raider["skill"]!.GetValue<double>() != 0.5 || raider["future"]!.AsArray().Count != 2 ||
+        Math.Abs(raider["rotation"]!["y"]!.GetValue<double>() - 1) > 1e-6 || Math.Abs(raider["rotation"]!["w"]!.GetValue<double>()) > 1e-6)
+        throw new InvalidOperationException("A copied unit must keep its template's fields and take the script's side, place, heading, speed and numbers");
+    JsonNode patrol = Named("objectives", "patrol"), raid = Named("objectives", "raid"), capture = Named("objectives", "hold_base");
+    if (patrol["Type"]!.GetValue<string>() != "ReachWaypoints" || patrol["Faction"]!.GetValue<string>() != "Boscali" || patrol["Hidden"]!.GetValue<bool>() ||
+        patrol["DisplayName"]!.GetValue<string>() != "Fly" || !patrol["completeOnEnterRange"]!.GetValue<bool>() ||
+        patrol["waypoints"]![0]!["Range"]!.GetValue<double>() != 1500 || patrol["waypoints"]![0]!["Position"]!["z"]!.GetValue<double>() != 30)
+        throw new InvalidOperationException("A reach objective must be saved as the game's waypoint objective");
+    if (raid["Type"]!.GetValue<string>() != "DestroyUnits" || raid["completeOrder"]!.GetValue<string>() != "CompleteAny" ||
+        !Names(raid["targetUnits"]!).SequenceEqual(new[] { "raider" }) || capture["Type"]!.GetValue<string>() != "CaptureAirbase" ||
+        capture["Faction"]!.GetValue<string>() != "Primeva" || !Names(capture["targetAirbases"]!).SequenceEqual(new[] { "Base One" }))
+        throw new InvalidOperationException("Destroy and capture objectives must be saved with their targets and sides");
+    string[] patrolOutcomes = Names(patrol["Outcomes"]!);
+    if (patrolOutcomes.Length != 3 || Named("outcomes", patrolOutcomes[0])["Type"]!.GetValue<string>() != "SpawnUnit" ||
+        !Names(Named("outcomes", patrolOutcomes[0])["UnitsToSpawn"]!).SequenceEqual(new[] { "raider" }) ||
+        !Names(Named("outcomes", patrolOutcomes[1])["objectivesToStart"]!).SequenceEqual(new[] { "raid" }) ||
+        Named("outcomes", patrolOutcomes[2])["Message"]!.GetValue<string>() != "Contact" ||
+        !Named("outcomes", patrolOutcomes[2])["ObjectiveFactionOnly"]!.GetValue<bool>())
+        throw new InvalidOperationException("An objective's 'then' lines must become its outcomes, in order");
+    string[] nativeOutcomes = Names(Named("objectives", "Native")["Outcomes"]!);
+    if (nativeOutcomes.Length != 2 || nativeOutcomes[0] != "End" || Named("outcomes", nativeOutcomes[1])["options"]!.GetValue<string>() != "Complete")
+        throw new InvalidOperationException("'on' must add to a base objective's outcomes and keep the ones it has");
+    string[] startOutcomes = Names(Named("objectives", "Mission Start")["Outcomes"]!);
+    if (Names(Named("outcomes", "Begin")["objectivesToStart"]!).Length != 0 || startOutcomes.Length != 2 ||
+        !Names(Named("outcomes", startOutcomes[1])["objectivesToStart"]!).SequenceEqual(new[] { "patrol" }) ||
+        Named("outcomes", "End")["endDelay"]!.GetValue<double>() != 12)
+        throw new InvalidOperationException("hold, begin and ending must rewrite the mission start and the end delay");
+
+    // A name the mission does not have is reported and left out; the mission still builds.
+    errors.Clear();
+    JsonNode faulty = JsonNode.Parse(Build(sourceJson, header + "begin nowhere\nhold Missing\nunit u like Ghost at 1 2 3\n" +
+        "objective o destroy ghost\n  then start nothing\non Absent\ncopy Nothing as x\nbeat b when done unknown\n  wait 1\n", errors))!;
+    if (errors.Count != 8 || !faulty["missionSettings"]!["description"]!.GetValue<string>().Contains("SCRIPT PROBLEMS: 8", StringComparison.Ordinal) ||
+        Names(Named2(faulty, "objectives", "o")["targetUnits"]!).Length != 0)
+        throw new InvalidOperationException("Unknown names must be reported, counted in the briefing and dropped: " + string.Join(" / ", errors));
+
+    foreach (string invalid in new[] { "{}", "{\"missionSettings\":null}", "{\"missionSettings\":{\"description\":null}}", "{\"missionSettings\":{\"description\":42}}" })
+    {
+        bool rejected = false;
+        try { Build(invalid, header, new List<string>()); }
+        catch (TargetInvocationException error) when (error.InnerException is InvalidOperationException) { rejected = true; }
+        if (!rejected) throw new InvalidOperationException("The mission builder accepted a base with no valid description");
+    }
+    errors.Clear();
+    Build("{\"missionSettings\":{\"description\":\"Old\"},\"objectives\":{\"Objectives\":[],\"Outcomes\":[]}}", header + "begin x\n", errors);
+    if (errors.Count != 1 || !errors[0].Contains("old format", StringComparison.Ordinal))
+        throw new InvalidOperationException("A base mission in the old file format must be reported, not scripted");
+
+    // Every script that ships must read cleanly, and build cleanly against its real base mission when one is at hand.
+    Type parser = plugin.GetType("BoscaliSummer.Core.Scenario.ScenarioParser", true)!;
+    MethodInfo parse = parser.GetMethod("Parse", flags, new[] { typeof(string), typeof(string) })!;
+    string baseFolder = Environment.GetEnvironmentVariable("BOSCALI_BASE_MISSIONS");
+    int scripts = 0, builtReal = 0, shapesChecked = 0;
+    // The fields the game itself saves for each kind of objective and outcome, read from its own missions.
+    var shapes = new Dictionary<string, string>(StringComparer.Ordinal);
+    if (baseFolder != null && Directory.Exists(baseFolder))
+        foreach (string file in Directory.GetFiles(baseFolder, "*.json"))
+        {
+            JsonNode mission = JsonNode.Parse(File.ReadAllText(file))!;
+            foreach (string list in new[] { "objectives", "outcomes" })
+                if (mission[list] is JsonArray items)
+                    foreach (JsonNode item in items)
+                        if (item is JsonObject saved && saved["Type"] is JsonValue type && type.TryGetValue(out string kind))
+                            shapes.TryAdd(list + ":" + kind, Shape(saved));
+        }
+    var texts = new List<(string Name, string Text)>();
+    foreach (string embedded in plugin.GetManifestResourceNames())
+    {
+        if (!embedded.StartsWith("BoscaliSummer.Scenario.", StringComparison.Ordinal) || !embedded.EndsWith(".scenario", StringComparison.Ordinal)) continue;
+        using var reader = new StreamReader(plugin.GetManifestResourceStream(embedded)!);
+        texts.Add((embedded, reader.ReadToEnd()));
+    }
+    int builtIn = texts.Count;
+    // For a script author: BOSCALI_SCENARIO_SCRIPTS names a folder of *.scenario files to check the same way, without starting the game.
+    string own = Environment.GetEnvironmentVariable("BOSCALI_SCENARIO_SCRIPTS");
+    if (!string.IsNullOrEmpty(own) && Directory.Exists(own))
+        foreach (string file in Directory.GetFiles(own, "*.scenario")) texts.Add((Path.GetFileName(file), File.ReadAllText(file)));
+    foreach ((string resource, string text) in texts)
+    {
+        object def = parse.Invoke(null, new object[] { resource, text })!;
+        var scriptErrors = (List<string>)def.GetType().GetField("Errors")!.GetValue(def)!;
+        if (scriptErrors.Count != 0) throw new InvalidOperationException("Mission script '" + resource + "' has mistakes: " + string.Join(" / ", scriptErrors));
+        scripts++;
+        string baseName = (string)def.GetType().GetField("Base")!.GetValue(def)!;
+        string baseFile = baseFolder == null ? null : Path.Combine(baseFolder, baseName + ".json");
+        if (baseFile == null || !File.Exists(baseFile)) continue;
+        var buildErrors = new List<string>();
+        string json = (string)apply.Invoke(null, new object[] { File.ReadAllText(baseFile), resource, text, buildErrors })!;
+        if (buildErrors.Count != 0)
+            throw new InvalidOperationException("Mission script '" + resource + "' does not fit '" + baseName + "': " + string.Join(" / ", buildErrors));
+        JsonNode real = JsonNode.Parse(json)!;
+        // For a script author: BOSCALI_SCENARIO_DUMP names a folder that receives each built mission, to read or to open in the mission editor.
+        string dump = Environment.GetEnvironmentVariable("BOSCALI_SCENARIO_DUMP");
+        if (!string.IsNullOrEmpty(dump) && Directory.Exists(dump)) File.WriteAllText(Path.Combine(dump, resource + ".json"), json);
+        JsonNode baseMission = JsonNode.Parse(File.ReadAllText(baseFile))!;
+        foreach (string list in new[] { "objectives", "outcomes" })
+        {
+            var native = new HashSet<string>(baseMission[list]!.AsArray().Select(item => item!["UniqueName"]!.GetValue<string>()), StringComparer.Ordinal);
+            foreach (JsonNode item in real[list]!.AsArray())
+            {
+                if (native.Contains(item!["UniqueName"]!.GetValue<string>())) continue;
+                string kind = list + ":" + item["Type"]!.GetValue<string>();
+                if (!shapes.TryGetValue(kind, out string expected))
+                    throw new InvalidOperationException("No mission of the game shows how '" + kind + "' is saved; add one to BOSCALI_BASE_MISSIONS");
+                if (Shape((JsonObject)item) != expected)
+                    throw new InvalidOperationException("Script-made '" + kind + "' is not saved like the game's: " + Shape((JsonObject)item) + " vs " + expected);
+                shapesChecked++;
+            }
+        }
+        Console.WriteLine($"  Scripted mission '{resource}' on the installed '{baseName}': {real["objectives"]!.AsArray().Count} objectives, {real["outcomes"]!.AsArray().Count} outcomes, {real["aircraft"]!.AsArray().Count} aircraft, {json.Length} characters");
+        builtReal++;
+    }
+    if (builtIn == 0) throw new InvalidOperationException("No built-in mission script is embedded");
+    Console.WriteLine($"  Mission scripts: builder keeps native JSON, writes units/objectives/outcomes, reports unknown names; {scripts} script(s) read cleanly ({builtIn} built in), {builtReal} built against a real base mission, {shapesChecked} script-made objectives/outcomes field-for-field like the game's" +
+        (builtReal == 0 ? " (set BOSCALI_BASE_MISSIONS to a folder holding <base>.json to check)" : ""));
+
+    static JsonNode Named2(JsonNode root, string list, string name) =>
+        root[list]!.AsArray().First(item => item!["UniqueName"]!.GetValue<string>() == name)!;
+
+    // Field names with the kind of value each holds, in a fixed order.
+    static string Shape(JsonObject saved) => string.Join(",", saved
+        .Select(field => field.Key + ":" + (field.Value == null ? "null" : field.Value.GetValueKind() == System.Text.Json.JsonValueKind.False ? "True" : field.Value.GetValueKind().ToString()))
+        .OrderBy(field => field, StringComparer.Ordinal));
+}
 
 static void ProbeClientImmersionComposition(Assembly plugin)
 {
@@ -2155,7 +2464,16 @@ static void ProbeTacBoardConfig(Assembly plugin)
         MethodInfo setPaths = bepInEx.GetType("BepInEx.Paths", true)!.GetMethod("SetExecutablePath", AllMembers)!;
         setPaths.Invoke(null, setPaths.GetParameters().Select((parameter, index) => index == 0 ? Path.Combine(scratch, "probe.exe") : parameter.HasDefaultValue ? parameter.DefaultValue : null).ToArray());
         Type modConfiguration = plugin.GetType("BoscaliSummer.Core.Config.ModConfiguration", true)!;
-        object whole = Activator.CreateInstance(modConfiguration, Activator.CreateInstance(configFile, menu, true))!;
+        object menuFile = Activator.CreateInstance(configFile, menu, true)!;
+        object whole = Activator.CreateInstance(modConfiguration, menuFile)!;
+        object askAtStart = modConfiguration.GetProperty("MissionAskAtStart")!.GetValue(whole)!;
+        object disabledModules = modConfiguration.GetProperty("MissionDisabledModules")!.GetValue(whole)!;
+        if (!(bool)askAtStart.GetType().GetProperty("Value")!.GetValue(askAtStart)! ||
+            (string)disabledModules.GetType().GetProperty("Value")!.GetValue(disabledModules)! != "")
+            throw new InvalidOperationException("A fresh config must ask at mission start and switch no module off");
+        var strayRows = (System.Collections.IEnumerable)plugin.GetType("BoscaliSummer.Core.Config.ConfigMenu", true)!.GetMethod("Missing", AllMembers)!.Invoke(null, new[] { menuFile })!;
+        string stray = string.Join(", ", strayRows.Cast<object>());
+        if (stray.Length > 0) throw new InvalidOperationException("ConfigMenu.Menu lists settings that are not bound: " + stray);
         object board = modConfiguration.GetProperty("TacBoard")!.GetValue(whole)!;
         bool? Advanced(string entryName)
         {
@@ -2180,6 +2498,7 @@ static void ProbeTacBoardConfig(Assembly plugin)
         }
         if (!(bool)configFile.GetProperty("SaveOnConfigSet")!.GetValue(file)!) throw new InvalidOperationException("TAC BOARD ResetToDefaults left the config file's save-on-set off");
         Console.WriteLine("  TAC BOARD config: " + options.Length + " options moved, each alone through Snapshot, listed in the F1 window, reset to their bound defaults and saved");
+        Console.WriteLine("  Mission config: a fresh config asks at mission start and switches no module off");
     }
     finally
     {

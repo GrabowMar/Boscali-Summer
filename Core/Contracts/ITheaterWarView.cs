@@ -229,7 +229,6 @@ namespace BoscaliSummer.Core.Contracts
     internal interface ITheaterWarView
     {
         bool Available { get; }                       // the local module is installed and switched on
-        bool IsHost { get; }                          // this process owns the staff (GameAccess.IsServer())
         TheaterViewState State { get; }
         TheaterWarSnapshot Snapshot { get; }          // null until the first host report; never mutated after publication
         bool HasSnapshot { get; }
@@ -243,7 +242,6 @@ namespace BoscaliSummer.Core.Contracts
         IReadOnlyList<TheaterFrontView> Fronts { get; }
         IReadOnlyList<TheaterProposalView> Proposals { get; }
         TheaterOperationView ActiveOperation { get; }
-        IReadOnlyList<string> StaffLog { get; }
         void Refresh();
         bool RequestPick(int proposalId, int revision);      // set or redirect the main effort
         bool RequestCancel(int operationId, int revision);   // CALL OFF; vetoes the front for 180 s

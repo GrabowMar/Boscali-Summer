@@ -59,8 +59,6 @@ namespace BoscaliSummer.Garrisons
         bool IBuildingOccupancy.IsOccupied(GameObject shell) =>
             GarrisonOccupancy.IsOccupied(shell);
 
-        bool IZoneFortificationService.Available => Urban.GarrisonsEnabled.Value;
-
         internal static bool SiegeActive =>
             Urban.GarrisonsEnabled.Value && Urban.SiegeEnabled.Value;
 
@@ -376,58 +374,6 @@ namespace BoscaliSummer.Garrisons
             return placed > 0;
         }
 
-        /// <summary>SPEC OPS seizures hold at most this many buildings theatre-wide, inside the 96 ceiling.</summary>
-        private const int MaxSeized = 24;
-
-        /// <summary>
-        /// A SPEC OPS seizure: the unowned civilian shells nearest the point, each in its own record
-        /// (keyed by the shell), so a hostile zone's garrison never blocks it and a capture never
-        /// clears it. The ordinary lifecycle check releases a seized building like any other.
-        /// </summary>
-        int IZoneFortificationService.TrySeize(float x, float z, float radius, FactionHQ owner, int shells)
-        {
-            if (!GameAccess.IsServer() || owner == null || float.IsNaN(x) || float.IsNaN(z) ||
-                !Urban.GarrisonsEnabled.Value || NetworkSceneSingleton<Spawner>.i == null) return 0;
-            if (shellCatalogue.Count == 0) RefreshCatalogue();
-            float limit = Mathf.Clamp(radius, 100f, 3000f);
-            seizeCandidates.Clear();
-            for (int i = 0; i < Math.Min(shellCatalogue.Count, 4096); i++)
-            {
-                GameObject shell = shellCatalogue[i];
-                if (shell == null || !shell.activeInHierarchy || GarrisonOccupancy.IsOccupied(shell) ||
-                    IsCriticalName(shell.name)) continue;
-                Building building = shell.GetComponentInParent<Building>();
-                if (building != null && (building.disabled || building.NetworkHQ != null)) continue;
-                Bounds bounds = GetShellBounds(shell);
-                if (bounds.size.x < RooftopPlacement.MinRoofSpan || bounds.size.z < RooftopPlacement.MinRoofSpan ||
-                    bounds.size.y < 3f) continue;
-                Vector3 global = bounds.center.ToGlobalPosition().AsVector3();
-                float distance = (global.x - x) * (global.x - x) + (global.z - z) * (global.z - z);
-                if (distance <= limit * limit) seizeCandidates.Add(new KeyValuePair<float, GameObject>(distance, shell));
-            }
-            seizeCandidates.Sort((a, b) => a.Key.CompareTo(b.Key));
-            int wanted = Mathf.Clamp(shells, 1, 4);
-            int placed = 0;
-            for (int i = 0; i < Math.Min(seizeCandidates.Count, 64) && placed < wanted && CountSeized() < MaxSeized; i++)
-            {
-                GameObject shell = seizeCandidates[i].Value;
-                int key = shell.GetInstanceID();
-                if (Occupy(shell, owner, null, key, "Seize:")) { seizedKeys.Add(key); placed++; }
-            }
-            seizeCandidates.Clear();
-            if (placed > 0)
-                Plugin.Logger.LogInfo($"[Urban Combat] SPEC OPS seized {placed} building(s) near {x:0} / {z:0} for {owner}.");
-            return placed;
-        }
-
-        private int CountSeized()
-        {
-            int count = 0;
-            foreach (int key in seizedKeys)
-                if (records.TryGetValue(key, out GarrisonRecord record)) count += record.Defenses.Count;
-            return count;
-        }
-
         /// <summary>
         /// An air-assault occupation: its own record keyed by the shell, like a seizure, and no
         /// airbase membership, so vanilla never re-owns the nest and no zone floor counts it.
@@ -523,7 +469,6 @@ namespace BoscaliSummer.Garrisons
         private const int MaxCaptureJobs = 16;
         private const int RoofTriesPerFrame = 6;
         private const int JobStepsPerFrame = 32;
-        private readonly List<KeyValuePair<float, GameObject>> seizeCandidates = new List<KeyValuePair<float, GameObject>>(64);
         private readonly HashSet<int> seizedKeys = new HashSet<int>();
         private readonly HashSet<int> barrenZones = new HashSet<int>();
         private readonly Dictionary<int, GarrisonRecord> records = new Dictionary<int, GarrisonRecord>();

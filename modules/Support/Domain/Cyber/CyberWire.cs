@@ -216,13 +216,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         }
 
         private static CyberStateData Bad() => new CyberStateData();
-
-        public static int StateSize(CyberStateData s)
-        {
-            var c = new ByteCounter();
-            WriteState(c, s);
-            return c.Bytes;
-        }
     }
 
     /// <summary>The client's copy of its own faction's CYBER state (see <see cref="FactionMirror{T}"/>).</summary>

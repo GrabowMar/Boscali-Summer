@@ -1,5 +1,3 @@
-using BoscaliSummer.Core.Contracts;
-
 namespace BoscaliSummer.Modules.Hud.Domain
 {
     /// <summary>A global position in metres (X east, Y up above sea level, Z north): what a trail stores, because local positions go stale at every floating-origin shift.</summary>

@@ -53,9 +53,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private string feedWords = "";
         private AvState feedTone = AvState.Inert;
         private float feedWordsAt = -100f;
-
-        public bool Visible => visible;
-        public FeedDraft Draft => draft;
         /// <summary>The view the ORBIT room paints; rebuilt while <see cref="SetVisible"/> says the room is on screen.</summary>
         internal SpaceFeedView View => view;
 

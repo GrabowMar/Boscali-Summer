@@ -52,27 +52,37 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             position = trenchLine;
         }
 
-        /// <summary>Adds the works unlocked by <paramref name="stage"/>; safe to call repeatedly.</summary>
-        internal void Deploy(TrenchStage stage)
+        /// <summary>
+        /// Adds the works unlocked by <paramref name="stage"/>; safe to call repeatedly. At most
+        /// <paramref name="spawnBudget"/> pieces are placed per call (each is a vanilla scenery spawn): the next call,
+        /// the manager's next tick, places the rest.
+        /// </summary>
+        internal int Deploy(TrenchStage stage, int spawnBudget = int.MaxValue)
         {
-            if (position == null || position.Overrun) return;
+            if (position == null || position.Overrun) return 0;
             int target = TrenchTraceMath.WorksBudget(stage);
-            if (target == 0) return;
+            if (target == 0) return 0;
 
             Spawner spawner = NetworkSceneSingleton<Spawner>.i;
-            if (spawner == null || !spawner.IsServer) return;
+            if (spawner == null || !spawner.IsServer) return 0;
 
             List<UnitDefinition> pieces = ResolveCatalog();
-            if (pieces == null) return;  // Encyclopedia not loaded yet: retry later.
-            if (pieces.Count == 0) return; // No infantry-scale pieces in this build.
+            if (pieces == null) return 0;  // Encyclopedia not loaded yet: retry later.
+            if (pieces.Count == 0) return 0; // No infantry-scale pieces in this build.
 
+            spawnsLeft = spawnBudget;
             DeployStructures(spawner, pieces);
-            for (int i = 0; i < target && i < MaximumWorks; i++)
+            for (int i = 0; i < target && i < MaximumWorks && spawnsLeft > 0; i++)
             {
                 if (spawned[i]) continue;
+                int before = Count;
                 if (Spawn(i, spawner, pieces)) spawned[i] = true;
+                if (Count != before) spawnsLeft--;
             }
+            return spawnBudget - spawnsLeft; // pieces placed, so the caller can share one budget across lines
         }
+
+        private int spawnsLeft;
 
         private bool Spawn(int index, Spawner spawner, List<UnitDefinition> pieces)
         {
@@ -128,7 +138,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         private void DeployStructures(Spawner spawner, List<UnitDefinition> pieces)
         {
             if (!structuresScanned && !ScanStructures()) return;
-            for (int i = 0; i < MaximumStructures; i++)
+            for (int i = 0; i < MaximumStructures && spawnsLeft > 0; i++)
             {
                 if (!structureFound[i] || structures[i] != null) continue;
                 Vector3 anchor = structurePoints[i];
@@ -138,7 +148,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                 UnitDefinition piece = pieces[i % pieces.Count];
                 Scenery scenery = spawner.SpawnScenery(piece.unitPrefab, new GlobalPosition(ground),
                     Quaternion.LookRotation(forward), Prefix + position.Id + ":B" + i);
-                if (scenery != null) structures[i] = scenery;
+                if (scenery != null) { structures[i] = scenery; spawnsLeft--; }
             }
         }
 

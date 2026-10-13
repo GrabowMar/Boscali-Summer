@@ -21,7 +21,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
     /// </summary>
     internal sealed class AceRadialMenuUi : MonoBehaviour, ISceneService
     {
-        private const float RefreshSec = 0.25f;
+        private const float RefreshSec = 1f; // state lines once a second (and at once after an action): a rebuild reads the whole aircraft
         private const int QuadCapacity = 7000;
         private const CursorFlags ForeignCursorOwners = CursorFlags.GameMenu | CursorFlags.Dialogue | CursorFlags.Chat;
 
@@ -37,7 +37,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         private MenuLayout layout;
         private MenuController controller;
         private int layoutW, layoutH;
-        private float openedAt, lastRefresh;
+        private float openedAt, lastRefresh, closedAt;
         private float pressedAt, radialDownAt;
         private bool wasOpen, releasePending, overflowLogged, narrowLogged, radialArmed;
         private KeyCode openKey = KeyCode.None;
@@ -80,7 +80,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         {
             float now = Time.unscaledTime;
             KeyCode key = settings?.AceRadialKey?.Value ?? KeyCode.None;
-            bool radial = settings?.ReplaceNativeWheel?.Value ?? true;
+            bool radial = settings?.OnRadialBinding?.Value ?? false;
             OwnsRadialButton = radial;
             if (key != openKey) { openKey = key; if (controller != null) controller.OpenKeyName = KeyName(key); }
             AceRadialPauseGate.Tick(now);
@@ -96,8 +96,8 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
                 bool opened = WantsOpen(key, radial, now) && CanOpen() && TryOpen(key, radial, now);
                 if (!opened)
                 {
-                    if (controller != null && controller.Showing) { controller.Step(input.Sample(key, radial, false, now)); Present(now); }
-                    else if (host.Canvas.enabled) host.SetVisible(false);
+                    if (controller != null && controller.Showing) controller.Step(input.Sample(key, radial, false, now));
+                    Present(now);
                     return;
                 }
             }
@@ -198,7 +198,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         {
             if (!wasOpen) return;
             wasOpen = false; IsOpenNow = false;
-            releasePending = true;
+            releasePending = true; closedAt = now;
             AceRadialPauseGate.Release(now);
         }
 
@@ -270,7 +270,14 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         private void Present(float now)
         {
             bool show = controller != null && (controller.Open || controller.Showing);
-            if (!show) { if (host.Canvas.enabled) host.SetVisible(false); return; }
+            if (!show)
+            {
+                // closed with nothing to say: the last painted frame fades out instead of cutting to the cockpit
+                float left = 1f - (now - closedAt) / MenuPainter.CloseSec;
+                if (left <= 0f || controller == null) { if (host.Canvas.enabled) host.SetVisible(false); }
+                else host.Group.alpha = Mathf.Min(host.Group.alpha, left);
+                return;
+            }
             EnsureLayout();
             host.SetVisible(true);
             float open = controller.Open ? MenuPainter.OpenProgress(openedAt, now) : 1f;

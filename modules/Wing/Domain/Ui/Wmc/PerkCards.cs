@@ -42,7 +42,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return stop > max / 3 ? line.Substring(0, stop).TrimEnd() : WmcText.Cut(line, max);
         }
 
-        public static PerkCard For(int slot, IReadOnlyList<PilotPerk> owned, WingRank rank)
+        public static PerkCard For(int slot, IReadOnlyList<PilotPerk> owned)
         {
             int count = owned != null ? owned.Count : 0;
             if (count > Slots && slot == Slots - 1)

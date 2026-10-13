@@ -44,6 +44,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static Vector2 boxStart;
         private static int boxReleaseFrame = -1;
         private static int iconClickFrame = -1;
+        /// <summary>Frame of a bare-map release still waiting to learn whether an icon took it; -1 for none.</summary>
+        private static int clearFrame = -1;
         private static bool rightPress;
         private static Vector2 rightStart;
         private static bool leftPress;
@@ -71,7 +73,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (map == null || !DynamicMap.mapMaximized || map.mapBackground == null) return false;
             if (Input.GetMouseButtonDown(1)) return true;
             if (boxPress && (Input.GetMouseButton(0) || Input.GetMouseButtonUp(0))) return true;
-            return (Input.GetMouseButton(0) || Input.GetMouseButtonDown(0)) && BoxHeld() &&
+            return (Input.GetMouseButton(0) || Input.GetMouseButtonDown(0)) && BoxDrag() &&
                 !BoxBlocked() && !MapUiPointer.OverControls() &&
                 map.TryGetCursorCoordinates(out _);
         }
@@ -95,10 +97,20 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (GameManager.GetLocalAircraft(out Aircraft localAircraft) && icon.unit == localAircraft)
                 return true;
             ConsumeClick();
-            // A click builds the selection: it adds the contact, or drops it if already in.
-            // Empty ground clears.
-            if (map.selectedIcons.Contains(icon)) map.DeselectIcon(icon.unit);
-            else map.SelectIcon(icon.unit);
+            // CLICK ADDS builds the selection: a click adds the contact, or drops it if already in.
+            // CLICK ONE replaces it; Shift or Ctrl still adds. Empty ground clears.
+            bool selected = map.selectedIcons.Contains(icon);
+            if (Plugin.Settings?.Command?.MapClickAdds?.Value != false || ShiftHeld() || ControlHeld())
+            {
+                if (selected) Deselect(map, icon.unit);
+                else Select(map, icon.unit);
+            }
+            else
+            {
+                bool only = selected && map.selectedIcons.Count == 1;
+                ClearSelection(map);
+                if (!only) Select(map, icon.unit);
+            }
             Echo((map.selectedIcons?.Count ?? 0) + " TRACKS SELECTED  /  CLICK EMPTY MAP TO CLEAR");
             return true;
         }
@@ -128,6 +140,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 return;
             }
             DrawMark(map);
+            // The input module may hand the icon its click on the release frame or the one after, so a
+            // bare-map release waits out both before it is allowed to clear.
+            if (clearFrame >= 0 && Time.frameCount > clearFrame + 1)
+            {
+                if (iconClickFrame < clearFrame)
+                {
+                    ClearSelection(map);
+                    Echo("SELECTION CLEARED  /  RIGHT CLICK FOR MAP ACTIONS");
+                }
+                clearFrame = -1;
+            }
             if (BoxBlocked())
             {
                 CancelBox();
@@ -157,7 +180,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (Input.GetMouseButtonUp(1))
             {
                 GlobalPosition point = default;
-                bool open = rightPress && !MapPicker.IsBusy &&
+                bool open = rightPress && !MapPicker.IsBusy && !ReliefNavigator.BlockContextClick() &&
                     ((Vector2)Input.mousePosition - rightStart).sqrMagnitude < DragSlop * DragSlop &&
                     !MapUiPointer.OverControls() && map.TryGetCursorCoordinates(out point);
                 rightPress = false;
@@ -168,12 +191,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 bool onMenu = ContainsMenu(Input.mousePosition);
                 if (menu != null && !onMenu) HideMenu();
-                boxPress = BoxHeld() && !BoxBlocked() && !MapUiPointer.OverControls() &&
+                boxPress = BoxDrag() && !BoxBlocked() && !MapUiPointer.OverControls() &&
                     !Typing() && map.TryGetCursorCoordinates(out _);
                 boxDragged = false;
                 if (boxPress) boxStart = Input.mousePosition;
                 leftStart = Input.mousePosition;
-                leftPress = !boxPress && !onMenu && !BoxHeld() && !BoxBlocked() &&
+                leftPress = !boxPress && !onMenu && !BoxDrag() && !BoxBlocked() &&
                     !Typing() && !MapUiPointer.OverControls() &&
                     MapUiPointer.Contains(map.mapBackground.rectTransform, leftStart);
             }
@@ -184,14 +207,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     ((Vector2)Input.mousePosition - leftStart).sqrMagnitude < DragSlop * DragSlop &&
                     !MapUiPointer.OverControls() && map.TryGetCursorCoordinates(out point);
                 leftPress = false;
-                if (MapClickRules.ShouldClearSelection(open, iconClickFrame, Time.frameCount, ShiftHeld()))
-                {
-                    map.UnselectAll();
-                    Echo("SELECTION CLEARED  /  RIGHT CLICK FOR MAP ACTIONS");
-                }
+                // Decide later: the UI may deliver this release's icon click after this tick, and
+                // clearing now would empty the selection just before that click adds to it.
+                clearFrame = open && !ShiftHeld() ? Time.frameCount : -1;
             }
             if (!boxPress) return;
-            if (!BoxHeld() || BoxBlocked() || MapUiPointer.OverControls() ||
+            if (!BoxDrag() || BoxBlocked() || MapUiPointer.OverControls() ||
                 !map.TryGetCursorCoordinates(out _))
             {
                 CancelBox();
@@ -227,13 +248,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     !icon.iconImage.gameObject.activeInHierarchy ||
                     (!icon.iconImage.enabled && !MfdTerrainRelief.ClusterHidden(icon.iconImage)) ||
                     Excluded(icon.unit)) continue;
+                if (!MapClickRules.BoxTakes(Plugin.Settings?.Command?.MapBoxSide?.Value ?? MapBoxSide.All, icon.unit.NetworkHQ != null, icon.unit.NetworkHQ == map.HQ)) continue;
                 Vector2 screen = IconScreen(icon);
                 if (!region.Contains(screen) ||
                     !MapUiPointer.Contains(map.mapBackground.rectTransform, screen)) continue;
                 if (candidates.Count < MaximumSelected) candidates.Add(icon.unit);
             }
-            if (!add) map.UnselectAll();
-            for (int i = 0; i < candidates.Count; i++) map.SelectIcon(candidates[i]);
+            if (!add) ClearSelection(map);
+            for (int i = 0; i < candidates.Count; i++) Select(map, candidates[i]);
             Echo(candidates.Count > 0 ? $"{candidates.Count} TRACKS SELECTED" : "SELECTION CLEARED");
         }
 
@@ -268,7 +290,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Add("FRAME", AvIcon.Focus2, () => Focus(ground, true), true);
                 Add("SELECT BASE", AvIcon.Runway, () =>
                 {
-                    map.UnselectAll();
+                    ClearSelection(map);
                     if (target != null && target.airbase != null) map.SelectIcon(target.airbase);
                     HideMenu();
                 }, true);
@@ -279,6 +301,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Add("ZOOM IN", AvIcon.Maximize, () => Focus(ground, true), true);
                 if (nearby > 1)
                     Add("SELECT NEARBY  /  " + nearby, AvIcon.Stack2, () => SelectNearby(map, click));
+            }
+            // The world camera is the player's only while they fly nothing (the vanilla icon-click rule).
+            if (!GameManager.GetLocalAircraft(out Aircraft flown) || flown == null || flown.disabled)
+            {
+                Unit goTo = contact != null ? contact.unit : null;
+                Add(goTo != null ? "GO TO UNIT" : "GO TO PLACE", AvIcon.Camera, () => GoTo(goTo, ground));
             }
             bool marked = mark.HasValue;
             Add(marked ? "MOVE MARK" : "DROP RANGE MARK HERE", AvIcon.Ruler2, () => SetMark(ground), marked);
@@ -292,7 +320,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (selected > 0)
                 Add("CLEAR SEL  /  " + selected, AvIcon.Trash, () =>
                 {
-                    map.UnselectAll();
+                    ClearSelection(map);
                     HideMenu();
                     Echo("SELECTION CLEARED");
                 }, true);
@@ -417,16 +445,39 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Echo(zoom ? "AREA FRAMED" : "VIEW CENTERED");
         }
 
+        /// <summary>Sends the world camera to follow the unit, or to look down on the clicked ground. An enemy
+        /// whose fix is not accurate gets the ground point: the camera must not reveal where it really is.</summary>
+        private static void GoTo(Unit unit, GlobalPosition ground)
+        {
+            HideMenu();
+            CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
+            if (cameras == null) return;
+            if (unit != null && !unit.disabled && (!GameManager.GetLocalHQ(out FactionHQ hq) ||
+                unit.NetworkHQ == null || hq == unit.NetworkHQ || hq.IsTargetPositionAccurate(unit, 100f)))
+            {
+                cameras.SetFollowingUnit(unit);
+                Echo("CAMERA ON UNIT");
+                return;
+            }
+            Vector3 point = ground.ToLocalPosition();
+            if (Physics.Raycast(new Vector3(point.x, 12000f, point.z), Vector3.down, out RaycastHit hit, 24000f))
+                point.y = hit.point.y;
+            // Keep the heading, look 30 degrees down from 400 m back.
+            Quaternion look = Quaternion.Euler(30f, cameras.transform.eulerAngles.y, 0f);
+            cameras.FocusPosition(point, look, 400f);
+            Echo("CAMERA MOVED");
+        }
+
         private static void SelectTrack(DynamicMap map, Unit unit, bool add)
         {
             HideMenu();
             if (map == null || unit == null || unit.disabled || Excluded(unit)) return;
             if (GameManager.GetLocalAircraft(out Aircraft localAircraft) && unit == localAircraft) return;
-            if (add && TrySelectedUnit(map, unit)) map.DeselectIcon(unit);
+            if (add && TrySelectedUnit(map, unit)) Deselect(map, unit);
             else
             {
-                if (!add) map.UnselectAll();
-                map.SelectIcon(unit);
+                if (!add) ClearSelection(map);
+                Select(map, unit);
             }
             Echo($"{map.selectedIcons?.Count ?? 0} TRACKS SELECTED");
         }
@@ -457,8 +508,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (!MapUiPointer.Contains(map.mapBackground.rectTransform, IconScreen(icon))) continue;
                 if (candidates.Count < MaximumSelected) candidates.Add(icon.unit);
             }
-            map.UnselectAll();
-            for (int i = 0; i < candidates.Count; i++) map.SelectIcon(candidates[i]);
+            ClearSelection(map);
+            for (int i = 0; i < candidates.Count; i++) Select(map, candidates[i]);
             Echo($"{candidates.Count} TRACKS SELECTED");
         }
 
@@ -499,8 +550,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                         candidates.Add(icon.unit);
                 }
             }
-            map.UnselectAll();
-            for (int i = 0; i < candidates.Count; i++) map.SelectIcon(candidates[i]);
+            ClearSelection(map);
+            for (int i = 0; i < candidates.Count; i++) Select(map, candidates[i]);
             HideMenu();
             Echo(candidates.Count + " NEARBY TRACKS SELECTED");
         }
@@ -608,12 +659,65 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return text.Substring(0, Mathf.Min(end, 31));
         }
 
-        /// <summary>Shift or Ctrl turns a left drag into a selection box instead of a map pan.</summary>
-        private static bool BoxHeld() => ControlHeld() || ShiftHeld();
+        /// <summary>
+        /// A left drag draws a selection box instead of panning. Shift or Ctrl asks for it; with the
+        /// DRAG tool set to BOX it is the other way round, and the modifier pans.
+        /// </summary>
+        internal static bool BoxDrag() => (ControlHeld() || ShiftHeld()) !=
+            (Plugin.Settings?.Command?.MapLeftDragBox?.Value == true);
+
+        // ---- selection: the one door every map gesture goes through ----
+
+        private static bool Flying(out CombatHUD hud)
+        {
+            hud = SceneSingleton<CombatHUD>.i;
+            return hud != null && hud.aircraft != null && !hud.aircraft.disabled;
+        }
+
+        private static bool IsSelected(DynamicMap map, Unit unit)
+        {
+            for (int i = 0; i < map.selectedIcons.Count; i++)
+                if (map.selectedIcons[i] is UnitMapIcon icon && icon.unit == unit) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Selects a contact the way the game does. While the player flies, a selected contact IS a
+        /// weapon target: it has to go through the HUD, which adds it to the aircraft's target list and
+        /// lights the icon. Writing the icon alone made contacts look selected that were never targets.
+        /// </summary>
+        private static void Select(DynamicMap map, Unit unit)
+        {
+            if (unit == null || Excluded(unit) || IsSelected(map, unit)) return;
+            if (Flying(out CombatHUD hud)) hud.SelectUnit(unit);
+            else map.SelectIcon(unit);
+        }
+
+        private static void Deselect(DynamicMap map, Unit unit)
+        {
+            if (unit == null) return;
+            if (Flying(out CombatHUD hud) && hud.GetTargetList().Contains(unit)) hud.DeSelectUnit(unit);
+            else map.DeselectIcon(unit);
+        }
+
+        /// <summary>Empties the selection, and with it the target list while flying.</summary>
+        internal static void ClearSelection(DynamicMap map)
+        {
+            if (map == null) return;
+            if (Flying(out CombatHUD hud)) hud.DeselectAll(false);
+            map.UnselectAll();
+        }
+
+        /// <summary>The CLEAR tool on the map corner.</summary>
+        internal static void ClearSelectionTool()
+        {
+            DynamicMap map = SceneSingleton<DynamicMap>.i;
+            if (map == null) return;
+            ClearSelection(map);
+            Echo("SELECTION CLEARED");
+        }
         private static bool ControlHeld() => Input.GetKey(KeyCode.LeftControl) ||
             Input.GetKey(KeyCode.RightControl);
-        private static bool AddHeld() => ShiftHeld() || Input.GetKey(KeyCode.LeftAlt) ||
-            Input.GetKey(KeyCode.RightAlt);
         private static bool ShiftHeld() => Input.GetKey(KeyCode.LeftShift) ||
             Input.GetKey(KeyCode.RightShift);
         private static bool BoxBlocked() => MapPicker.IsBusy ||
@@ -660,7 +764,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             rightPress = false;
             leftPress = false;
             boxReleaseFrame = -1;
-            iconClickFrame = -1;
+            iconClickFrame = clearFrame = -1;
             candidates.Clear();
             actions.Clear();
             feedback = null;

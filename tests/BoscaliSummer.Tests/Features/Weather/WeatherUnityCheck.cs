@@ -125,7 +125,7 @@ public sealed class WeatherUnityCheck : MonoBehaviour
         drops.Initialize();
         Check(!drops.GetComponent<ParticleSystemRenderer>().sharedMaterial.IsKeywordEnabled("_FADING_ON"),
             "Glass fallback droplets remain visible near the camera");
-        drops.UpdateDrops(surfaces[0], 1f, 0f);
+        drops.UpdateDrops(surfaces[0], 1f);
         Check(!drops.IsEmitting, "Unreadable mesh fallback must fail closed");
 
         for (int i = 0; i < 16; i++)

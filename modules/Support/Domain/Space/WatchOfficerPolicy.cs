@@ -86,7 +86,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             RodWindowSeconds = 90f, ClusterMeters = 1500f, MinRevealLeft = 4f, MarkWindowSeconds = 60f,
             PostedSeconds = TaskedBoard.CallSeconds, SkipSeconds = 60f, FailureBackoffSeconds = 10f, ScanFailureBackoffSeconds = 30f,
             NearnessMeters = 30000f;
-        public const int MaxOverlordPosts = 2, ReserveBoardSlots = 2, ReserveHumanMarks = 4, MarksPerMinute = SpaceContacts.AttemptsPerMinute,
+        public const int ReserveBoardSlots = 2, ReserveHumanMarks = 4, MarksPerMinute = SpaceContacts.AttemptsPerMinute,
             MaxTargets = 3, MaxRemembered = 32, MaxSites = 16;
 
         private readonly float[] markTimes = new float[MarksPerMinute];

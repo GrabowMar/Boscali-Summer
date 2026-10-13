@@ -143,9 +143,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             foreach (MountInfo info in profile.Options[set]) into.Add(Project(info));
         }
 
-        /// <summary>The airframe's raw hardpoint sets (the dev dump), or null.</summary>
-        public static HardpointSet[] SetsOf(AircraftDefinition definition) => ProfileOf(definition)?.Sets;
-
         /// <summary>The airframe's stations, or null when its hardpoints cannot be read.</summary>
         public static StationLayout Layout(AircraftDefinition definition) => ProfileOf(definition)?.Layout;
 

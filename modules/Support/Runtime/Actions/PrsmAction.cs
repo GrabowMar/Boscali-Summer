@@ -19,22 +19,10 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
         {
             MissileDefinition definition =
                 context.Host.Vanilla.Prsm(context.Settings.PrsmDefinitionKey.Value);
-            if (definition == null || definition.unitPrefab == null)
-            {
-                context.Logger.LogWarning(
-                    "[Support] PRSM is unavailable: no non-nuclear ballistic missile definition resolved.");
-                return SupportResult.CapabilityUnavailable;
-            }
+            SupportResult gate = SupportTargeting.ReserveStrike(context, definition,
+                "[Support] PRSM is unavailable: no non-nuclear ballistic missile definition resolved.", out Vector3 ground);
+            if (gate != SupportResult.Accepted) return gate;
             Spawner spawner = NetworkSceneSingleton<Spawner>.i;
-            if (spawner == null) return SupportResult.CapabilityUnavailable;
-            if (!SupportTargeting.TryMapPoint(context.Target, out Vector3 ground))
-                return SupportResult.InvalidTarget;
-            if (SupportTargeting.TryOrigin(context.Player, out Vector3 origin))
-            {
-                if (Vector3.Distance(origin, ground) > context.Settings.MaximumRange.Value)
-                    return SupportResult.OutOfRange;
-            }
-            if (!context.Host.TryReserve(context.Owner, SupportPool.Strike)) return SupportResult.Busy;
 
             string unique = SupportNaming.Unique("Prsm", context);
             string guide = context.Player != null && context.Player.Aircraft != null

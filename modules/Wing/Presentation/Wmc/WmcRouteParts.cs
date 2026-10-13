@@ -95,7 +95,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             float w = width, h = CardH;
             Color hair = AvStyleHost.FuiColor("hairline", AvTheme.Hairline), key = AvStyleHost.FuiColor("info", AvTheme.RailInfo);
             Color ink = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary), dim = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
-            Color caution = AvStyleHost.FuiColor("caution", AvTheme.RailCaution), select = AvStyleHost.FuiColor("select", AvTheme.Accent);
+            Color select = AvStyleHost.FuiColor("select", AvTheme.Accent);
             foreach (TMP_Text t in numbers)
                 if (t.gameObject.activeSelf) t.gameObject.SetActive(false);
             if (d == null || d.Count == 0)

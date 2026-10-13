@@ -205,7 +205,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         /// <summary>From its stand, out again: parked, then the departure as from a spawn (the engine expects it at the
         /// field's departures).</summary>
-        public void Depart(float time)
+        public void Depart()
         {
             if (Phase != GroundPhase.Stand) return;
             traffic.LeaveStand(Owner);
@@ -721,7 +721,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             {
                 if (float.IsNaN(lineUpStuckSince)) { lineUpStuckSince = time; lineUpStuckToSlot = toSlot; }
                 else if (lineUpStuckToSlot - toSlot > LineupProgressMetres) { lineUpStuckSince = time; lineUpStuckToSlot = toSlot; }
-                else if (time - lineUpStuckSince > LineUpStuckSeconds && PutOnSlot(s, p, dir, time, events, slot))
+                else if (time - lineUpStuckSince > LineUpStuckSeconds && PutOnSlot(p, dir, time, events, slot))
                     return new ControlOutput { Brake = 1f };
             }
             else lineUpStuckSince = float.NaN;
@@ -743,14 +743,14 @@ namespace BoscaliSummer.Modules.Wing.Domain
             // Stopped on the slot but off the runway heading past the settle: put it on exactly (the roll cannot steer
             // out tens of degrees — wing-taxi sim 2026-10-06: a 40° roll entry ground-looped 86 m off the runway).
             if (stoppedOnSlot && time - settleStart >= AlignSettleSeconds && !lineUpMoved &&
-                PutOnSlot(s, p, dir, time, events, slot)) return new ControlOutput { Brake = 1f };
+                PutOnSlot(p, dir, time, events, slot)) return new ControlOutput { Brake = 1f };
             GroundCommand c = GroundGuidance.Pursue(path, ref progress, s, toSlot);
             return controller.Step(c, s, p, dt);
         }
 
         /// <summary>Once per line-up: the engine moves the aircraft onto its slot facing down the runway (the group's runway is
         /// locked for it), unless someone is within its span of the slot.</summary>
-        private bool PutOnSlot(in AircraftState s, AirframeProfile p, Vec3 dir, float time, WingEventRing events, int slot)
+        private bool PutOnSlot(AirframeProfile p, Vec3 dir, float time, WingEventRing events, int slot)
         {
             Vec3 lane = path[lineupSlotIndex];
             if (traffic.Occupied(lane, Math.Max(RelocateClearRadius, p.SpanM + RelocateSpanMargin), Owner)) return false;
@@ -871,7 +871,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 traffic.Departures.Airborne(Owner);
                 Log(events, time, slot, WingEventKind.Airborne);
             }
-            if (s.RadarAlt >= ClimbOutHeight || time - liftoffTime > ClimbOutSeconds) Finish(time, events, slot);
+            if (s.RadarAlt >= ClimbOutHeight || time - liftoffTime > ClimbOutSeconds) Finish(time);
             return o;
         }
 
@@ -926,7 +926,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             if (handOver || (outside && s.RadarAlt >= LiftOffHeight - 3f))
             {
                 Log(events, time, slot, WingEventKind.Airborne);
-                Finish(time, events, slot);
+                Finish(time);
             }
             return o;
         }
@@ -941,7 +941,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return new ControlOutput { Brake = 1f };
         }
 
-        private void Finish(float time, WingEventRing events, int slot)
+        private void Finish(float time)
         {
             if (!airborneReported && !Vertical) traffic.Departures.Airborne(Owner);
             airborneReported = true;

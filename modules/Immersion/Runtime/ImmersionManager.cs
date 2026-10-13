@@ -66,7 +66,6 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         }
 
         public string EffectId => "immersion";
-        public FxBudget Budget => new FxBudget(0, 1, 6, true);
 
         public void ReleaseFx()
         {
@@ -344,7 +343,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             visor.Tick(Cues, physiology, glare.Visibility * facing * facing, ambient,
                 environmentValid ? environment.TemperatureC : 15f, environmentValid, settings.HelmetVisorEnabled.Value, dt);
             mfdGlow.Tick(aircraft, true, ambient, settings.MfdGlowEnabled.Value);
-            surface.Tick(aircraft, true, level, settings.SurfaceImmersionEnabled.Value, dt);
+            surface.Tick(aircraft, true, settings.SurfaceImmersionEnabled.Value);
             EnsureAudioComponents();
             if (airframeAudio != null)
             {

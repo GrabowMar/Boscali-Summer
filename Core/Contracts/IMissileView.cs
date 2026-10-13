@@ -7,8 +7,6 @@ namespace BoscaliSummer.Core.Contracts
     /// </summary>
     internal interface IMissileView
     {
-        /// <summary>Tracker is live (own aircraft known, registry readable).</summary>
-        bool Available { get; }
 
         /// <summary>Camera is currently following one of our missiles.</summary>
         bool Active { get; }

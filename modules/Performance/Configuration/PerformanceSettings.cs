@@ -7,8 +7,10 @@ namespace BoscaliSummer.Modules.Performance.Configuration
         public ConfigEntry<bool> Enabled { get; }
         public ConfigEntry<bool> LodBiasFloor { get; }
         public ConfigEntry<bool> ShadowDistanceCap { get; }
-        public ConfigEntry<bool> FrameRateCap { get; }
         public ConfigEntry<bool> CleanupOnSceneChange { get; }
+        public ConfigEntry<bool> SkipRemoteTurretSearch { get; }
+        public ConfigEntry<bool> ThinDistantTracers { get; }
+        public ConfigEntry<bool> SleepDistantUnits { get; }
 
         public PerformanceSettings(ConfigFile config)
         {
@@ -24,14 +26,19 @@ namespace BoscaliSummer.Modules.Performance.Configuration
                 "Client-local Unity tuning: cap shadow distance at 1000 m (game default 2000 m), dropping far " +
                 "shadow-cascade work. Restored exactly when switched off. " +
                 "Applies immediately; no restart required.");
-            FrameRateCap = config.Bind("Performance", "FrameRateCap", false,
-                "Client-local Unity tuning: cap the frame rate at 60 fps for steadier " +
-                "frametimes and lower thermals. Restored exactly when switched off. " +
-                "Applies immediately; no restart required.");
             CleanupOnSceneChange = config.Bind("Performance", "CleanupOnSceneChange", false,
                 "Client-local Unity tuning: unload unused assets and collect garbage on " +
                 "scene transitions (menu/mission loads), never during flight. " +
                 "Applies on the next scene change; no restart required.");
+            SkipRemoteTurretSearch = config.Bind("Performance", "SkipRemoteTurretSearch", false,
+                "When joined to someone else's game, skip the turret datalink target search the client " +
+                "runs for every unit and never uses. No effect while hosting or in single player.");
+            ThinDistantTracers = config.Bind("Performance", "ThinDistantTracers", false,
+                "When joined to someone else's game, draw fewer of other units' bullets past 2.5 km " +
+                "and none past 15 km. Visual only; hits are unchanged.");
+            SleepDistantUnits = config.Bind("Performance", "SleepDistantUnits", false,
+                "Stop drawing aircraft, vehicles and ships more than 15 km away (models, particles, lights). " +
+                "The unit you fly, follow or have targeted always draws. A zoomed camera can show the gap.");
         }
     }
 }

@@ -14,7 +14,6 @@ namespace BoscaliSummer.Modules.Weather.Runtime
     {
         internal WeatherKey LiveKey => fieldKey;
         internal WeatherSettings Settings => settings;
-        internal float BaselineWind => baselineWindSpeed;
 
         /// <summary>Half of the theater, metres (x east, z north).</summary>
         internal Vector2 TheaterHalfSpan => fieldSpan * 0.5f;

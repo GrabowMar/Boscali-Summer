@@ -1,5 +1,3 @@
-using BoscaliSummer.Core.Contracts;
-
 namespace BoscaliSummer.Modules.Hud.Domain
 {
     /// <summary>What a missile's seeker answers to: radar seekers (SARH, ARH, anti-radiation) fall to a beam and chaff, IR seekers to flares; the rest (laser, optical, inertial) to nothing the board can advise.</summary>

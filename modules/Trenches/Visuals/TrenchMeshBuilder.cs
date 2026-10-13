@@ -46,164 +46,206 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
             Func<Vector3, Vector3> ground = null, float[] ringExtra = null)
         {
             if (path == null || path.Length < 2) return null;
+            var job = new EdgeJob(path, width, parapetHeight, skirtDepth, threatDir, ground, ringExtra);
+            job.LayRings(int.MaxValue);
+            return job.Finish();
+        }
 
-            var mesh = new Mesh { name = "Trench_Edge_Mesh" };
+        /// <summary>
+        /// <see cref="BuildEdgeMesh"/> in pieces: rings are laid a few at a time (a ground-conformed ring costs two
+        /// terrain rays, so a long ditch in one call was a multi-millisecond frame), then <see cref="Finish"/> builds
+        /// the mesh. The path needs two points at least.
+        /// </summary>
+        internal sealed class EdgeJob
+        {
+            private readonly Vector3[] path;
+            private readonly float width, parapetHeight, skirtDepth;
+            private readonly Func<Vector3, Vector3> ground;
+            private readonly float[] ringExtra;
+            private readonly int ringCount, capHubStart;
+            private readonly Vector3[] vertices;   // two end-cap hubs after the rings
+            private readonly Vector2[] uvs;
+            private readonly bool flipProfile;
+            private int ring;
+            private float accumulatedLength;
+            private Vector3 prevRight = Vector3.zero;
 
-            int ringSize = ProfilePointCount;
-            int ringCount = path.Length;
-            int capHubStart = ringCount * ringSize;
-            var vertices = new Vector3[capHubStart + 2];   // two end-cap hubs
-            var uvs = new Vector2[capHubStart + 2];
-            var triangles = new List<int>((ringCount - 1) * (ringSize - 1) * 6 + (ringSize - 1) * 6);
-
-            float accumulatedLength = 0f;
-            Vector3 prevRight = Vector3.zero;
-            bool flipProfile = Vector3.Dot(Vector3.Cross(Vector3.up, path[1] - path[0]), threatDir) < 0f;
-
-            for (int r = 0; r < ringCount; r++)
+            public EdgeJob(Vector3[] path, float width, float parapetHeight, float skirtDepth, Vector3 threatDir,
+                Func<Vector3, Vector3> ground, float[] ringExtra)
             {
-                Vector3 pt = path[r];
-                if (r > 0) accumulatedLength += Vector3.Distance(pt, path[r - 1]);
+                this.path = path;
+                this.width = width;
+                this.parapetHeight = parapetHeight;
+                this.skirtDepth = skirtDepth;
+                this.ground = ground;
+                this.ringExtra = ringExtra;
+                ringCount = path.Length;
+                capHubStart = ringCount * ProfilePointCount;
+                vertices = new Vector3[capHubStart + 2];
+                uvs = new Vector2[capHubStart + 2];
+                flipProfile = Vector3.Dot(Vector3.Cross(Vector3.up, path[1] - path[0]), threatDir) < 0f;
+            }
 
-                // A man-scale earthwork: about a 1.6m cut with a dry floor and firing step under
-                // a waist-high parapet over a narrow spoil berm, conformed to cross-slopes and
-                // still never touching TerrainData. The whole profile is derived per ring, so a
-                // bay flares into all ten points instead of widening one strip of the wall.
-                float w = width + (ringExtra != null && ringExtra.Length > 0
-                    ? ringExtra[Mathf.Min(r, ringExtra.Length - 1)] : 0f);
-                float halfW = w * 0.5f;
-                float scale = Mathf.Clamp(w / 1.6f, 0.6f, 1f);
-                float bermW = 0.9f * scale;
-                float skirtW = 0.7f * scale;
-                float bermH = parapetHeight * 0.5f * scale;
-                float floorW = Mathf.Clamp(w * 0.5f, 0.8f, 1.1f);
-                float stepW = Mathf.Clamp(2f * halfW - floorW, 0.3f, halfW * 0.9f);
-                float stepH = Mathf.Min(0.45f * scale, parapetHeight * 0.35f);
-                float paradosH = parapetHeight * 0.55f;
+            public bool Done => ring >= ringCount;
 
-                // Cross-section frame. At a traverse corner the two wall planes of one side
-                // meet on their bisector; extending the profile to that intersection keeps
-                // consecutive rings in contact instead of folding over one another.
-                Vector3 right;
-                float miter = 1f;
-                if (r == 0)
+            /// <summary>Lays at most <paramref name="count"/> more rings.</summary>
+            public void LayRings(int count)
+            {
+                int ringSize = ProfilePointCount;
+                for (; ring < ringCount && count-- > 0; ring++)
                 {
-                    right = Lateral(path[1] - path[0], Vector3.right);
-                    if (flipProfile) right = -right;
-                }
-                else if (r == ringCount - 1)
-                {
-                    right = Lateral(pt - path[r - 1], prevRight);
-                    if (Vector3.Dot(right, prevRight) < 0f) right = -right;
-                }
-                else
-                {
-                    Vector3 inRight = Lateral(pt - path[r - 1], prevRight);
-                    Vector3 outRight = Lateral(path[r + 1] - pt, prevRight);
-                    if (Vector3.Dot(inRight, prevRight) < 0f) inRight = -inRight;
-                    if (Vector3.Dot(outRight, prevRight) < 0f) outRight = -outRight;
-                    Vector3 sum = inRight + outRight;
-                    if (sum.sqrMagnitude > 0.0001f)
+                    int r = ring;
+                    Vector3 pt = path[r];
+                    if (r > 0) accumulatedLength += Vector3.Distance(pt, path[r - 1]);
+
+                    // A man-scale earthwork: about a 1.6m cut with a dry floor and firing step under
+                    // a waist-high parapet over a narrow spoil berm, conformed to cross-slopes and
+                    // still never touching TerrainData. The whole profile is derived per ring, so a
+                    // bay flares into all ten points instead of widening one strip of the wall.
+                    float w = width + (ringExtra != null && ringExtra.Length > 0
+                        ? ringExtra[Mathf.Min(r, ringExtra.Length - 1)] : 0f);
+                    float halfW = w * 0.5f;
+                    float scale = Mathf.Clamp(w / 1.6f, 0.6f, 1f);
+                    float bermW = 0.9f * scale;
+                    float skirtW = 0.7f * scale;
+                    float bermH = parapetHeight * 0.5f * scale;
+                    float floorW = Mathf.Clamp(w * 0.5f, 0.8f, 1.1f);
+                    float stepW = Mathf.Clamp(2f * halfW - floorW, 0.3f, halfW * 0.9f);
+                    float stepH = Mathf.Min(0.45f * scale, parapetHeight * 0.35f);
+                    float paradosH = parapetHeight * 0.55f;
+
+                    // Cross-section frame. At a traverse corner the two wall planes of one side
+                    // meet on their bisector; extending the profile to that intersection keeps
+                    // consecutive rings in contact instead of folding over one another.
+                    Vector3 right;
+                    float miter = 1f;
+                    if (r == 0)
                     {
-                        right = sum.normalized;
-                        miter = Mathf.Clamp(1f / Mathf.Max(0.35f, Vector3.Dot(right, inRight)), 1f, 2.5f);
+                        right = Lateral(path[1] - path[0], Vector3.right);
+                        if (flipProfile) right = -right;
+                    }
+                    else if (r == ringCount - 1)
+                    {
+                        right = Lateral(pt - path[r - 1], prevRight);
+                        if (Vector3.Dot(right, prevRight) < 0f) right = -right;
                     }
                     else
                     {
-                        right = inRight;
+                        Vector3 inRight = Lateral(pt - path[r - 1], prevRight);
+                        Vector3 outRight = Lateral(path[r + 1] - pt, prevRight);
+                        if (Vector3.Dot(inRight, prevRight) < 0f) inRight = -inRight;
+                        if (Vector3.Dot(outRight, prevRight) < 0f) outRight = -outRight;
+                        Vector3 sum = inRight + outRight;
+                        if (sum.sqrMagnitude > 0.0001f)
+                        {
+                            right = sum.normalized;
+                            miter = Mathf.Clamp(1f / Mathf.Max(0.35f, Vector3.Dot(right, inRight)), 1f, 2.5f);
+                        }
+                        else
+                        {
+                            right = inRight;
+                        }
+                    }
+                    prevRight = right;
+                    Vector3 left = -right;
+
+                    // Hand-dug irregularity: spoil heaps and a slightly wavy crest, plus a slow
+                    // width drift so the earthwork never reads as one uniform extrusion.
+                    float spoilJitter = Noise(accumulatedLength * 0.16f, 5.3f);
+                    float crestJitter = (Noise(accumulatedLength * 0.22f, 11.7f) - 0.5f) * 0.34f +
+                        (Noise(accumulatedLength * 0.05f, 71.3f) - 0.5f) * 0.30f;
+                    float bermJitter = (Noise(accumulatedLength * 0.13f, 29.1f) - 0.5f) * 0.55f;
+                    miter *= 1f + (Noise(accumulatedLength * 0.025f, 43.9f) - 0.5f) * 0.16f;
+
+                    // Conform the outer sides to the terrain: a cross-slope must meet the
+                    // berms, not run under or above them.
+                    float outer = (halfW + bermW + skirtW) * miter;
+                    float leftGround = pt.y, rightGround = pt.y;
+                    if (ground != null)
+                    {
+                        leftGround = ground(pt - right * outer).y;
+                        rightGround = ground(pt + right * outer).y;
+                    }
+
+                    int baseIdx = r * ringSize;
+                    vertices[baseIdx + 0] = new Vector3(
+                        (pt + left * outer).x, leftGround - skirtDepth, (pt + left * outer).z);
+                    vertices[baseIdx + 1] = new Vector3(
+                        (pt + left * ((halfW + bermW) * miter + bermJitter * 0.4f)).x, leftGround + bermH + bermJitter * 0.3f,
+                        (pt + left * ((halfW + bermW) * miter + bermJitter * 0.4f)).z);
+                    vertices[baseIdx + 2] = pt + left * ((halfW + 0.5f) * miter + bermJitter * 0.2f) +
+                        Vector3.up * (Mathf.Max(pt.y, leftGround) - pt.y + paradosH + crestJitter * 0.5f);
+                    vertices[baseIdx + 3] = pt + left * (halfW * miter) + Vector3.up * 0.14f;
+                    vertices[baseIdx + 4] = pt + right * ((halfW - stepW) * miter) + Vector3.up * 0.14f;
+                    vertices[baseIdx + 5] = pt + right * ((halfW - stepW) * miter) + Vector3.up * (0.14f + stepH);
+                    vertices[baseIdx + 6] = pt + right * ((halfW + 0.42f) * miter) + Vector3.up * (parapetHeight + crestJitter);
+                    vertices[baseIdx + 7] = pt + right * ((halfW + 0.7f) * miter + spoilJitter * 0.4f) +
+                        Vector3.up * (parapetHeight - 0.3f + crestJitter * 0.6f);
+                    vertices[baseIdx + 8] = new Vector3(
+                        (pt + right * ((halfW + bermW) * miter)).x, rightGround + bermH + bermJitter * 0.3f,
+                        (pt + right * ((halfW + bermW) * miter)).z);
+                    vertices[baseIdx + 9] = new Vector3(
+                        (pt + right * outer).x, rightGround - skirtDepth, (pt + right * outer).z);
+
+                    float u = accumulatedLength * 0.34f;
+                    for (int p = 0; p < ringSize; p++) uvs[baseIdx + p] = new Vector2(ProfileU[p], u);
+                }
+            }
+
+            /// <summary>The triangles, the end caps and the mesh, once every ring is laid.</summary>
+            public Mesh Finish()
+            {
+                var mesh = new Mesh { name = "Trench_Edge_Mesh" };
+                int ringSize = ProfilePointCount;
+                var triangles = new List<int>((ringCount - 1) * (ringSize - 1) * 6 + (ringSize - 1) * 6);
+
+                for (int r = 0; r < ringCount - 1; r++)
+                {
+                    int r0 = r * ringSize;
+                    int r1 = (r + 1) * ringSize;
+                    // Facing the threat can mirror the cross-section. Mirror triangle
+                    // winding too, otherwise the entire berm is back-face culled from above.
+                    bool mirrored = Vector3.Cross(path[r + 1] - path[r], vertices[r0 + 6] - vertices[r0]).y < 0f;
+
+                    for (int s = 0; s < ringSize - 1; s++)
+                    {
+                        int a = r0 + s;
+                        int b = r1 + s;
+                        int c = r1 + s + 1;
+                        int d = r0 + s + 1;
+
+                        triangles.Add(a);
+                        triangles.Add(mirrored ? c : b);
+                        triangles.Add(mirrored ? b : c);
+
+                        triangles.Add(a);
+                        triangles.Add(mirrored ? d : c);
+                        triangles.Add(mirrored ? c : d);
                     }
                 }
-                prevRight = right;
-                Vector3 left = -right;
 
-                // Hand-dug irregularity: spoil heaps and a slightly wavy crest, plus a slow
-                // width drift so the earthwork never reads as one uniform extrusion.
-                float spoilJitter = Noise(accumulatedLength * 0.16f, 5.3f);
-                float crestJitter = (Noise(accumulatedLength * 0.22f, 11.7f) - 0.5f) * 0.34f +
-                    (Noise(accumulatedLength * 0.05f, 71.3f) - 0.5f) * 0.30f;
-                float bermJitter = (Noise(accumulatedLength * 0.13f, 29.1f) - 0.5f) * 0.55f;
-                miter *= 1f + (Noise(accumulatedLength * 0.025f, 43.9f) - 0.5f) * 0.16f;
-
-                // Conform the outer sides to the terrain: a cross-slope must meet the
-                // berms, not run under or above them.
-                float outer = (halfW + bermW + skirtW) * miter;
-                float leftGround = pt.y, rightGround = pt.y;
-                if (ground != null)
+                // Close both ends over the cross-section, so a trench end reads as a head-cover
+                // bank instead of an open pipe mouth.
+                for (int end = 0; end < 2; end++)
                 {
-                    leftGround = ground(pt - right * outer).y;
-                    rightGround = ground(pt + right * outer).y;
+                    int baseIdx = (end == 0 ? 0 : ringCount - 1) * ringSize;
+                    Vector3 hub = Vector3.zero;
+                    for (int p = 0; p < ringSize; p++) hub += vertices[baseIdx + p];
+                    vertices[capHubStart + end] = hub / ringSize;
+                    uvs[capHubStart + end] = new Vector2(0.5f, 0.5f);
                 }
+                AddCap(triangles, capHubStart, 0, ringSize, path[0] - path[1], vertices);
+                AddCap(triangles, capHubStart + 1, (ringCount - 1) * ringSize, ringSize,
+                    path[ringCount - 1] - path[ringCount - 2], vertices);
 
-                int baseIdx = r * ringSize;
-                vertices[baseIdx + 0] = new Vector3(
-                    (pt + left * outer).x, leftGround - skirtDepth, (pt + left * outer).z);
-                vertices[baseIdx + 1] = new Vector3(
-                    (pt + left * ((halfW + bermW) * miter + bermJitter * 0.4f)).x, leftGround + bermH + bermJitter * 0.3f,
-                    (pt + left * ((halfW + bermW) * miter + bermJitter * 0.4f)).z);
-                vertices[baseIdx + 2] = pt + left * ((halfW + 0.5f) * miter + bermJitter * 0.2f) +
-                    Vector3.up * (Mathf.Max(pt.y, leftGround) - pt.y + paradosH + crestJitter * 0.5f);
-                vertices[baseIdx + 3] = pt + left * (halfW * miter) + Vector3.up * 0.14f;
-                vertices[baseIdx + 4] = pt + right * ((halfW - stepW) * miter) + Vector3.up * 0.14f;
-                vertices[baseIdx + 5] = pt + right * ((halfW - stepW) * miter) + Vector3.up * (0.14f + stepH);
-                vertices[baseIdx + 6] = pt + right * ((halfW + 0.42f) * miter) + Vector3.up * (parapetHeight + crestJitter);
-                vertices[baseIdx + 7] = pt + right * ((halfW + 0.7f) * miter + spoilJitter * 0.4f) +
-                    Vector3.up * (parapetHeight - 0.3f + crestJitter * 0.6f);
-                vertices[baseIdx + 8] = new Vector3(
-                    (pt + right * ((halfW + bermW) * miter)).x, rightGround + bermH + bermJitter * 0.3f,
-                    (pt + right * ((halfW + bermW) * miter)).z);
-                vertices[baseIdx + 9] = new Vector3(
-                    (pt + right * outer).x, rightGround - skirtDepth, (pt + right * outer).z);
-
-                float u = accumulatedLength * 0.34f;
-                for (int p = 0; p < ringSize; p++) uvs[baseIdx + p] = new Vector2(ProfileU[p], u);
+                mesh.vertices = vertices;
+                mesh.uv = uvs;
+                mesh.triangles = triangles.ToArray();
+                mesh.RecalculateNormals();
+                mesh.RecalculateTangents();
+                mesh.RecalculateBounds();
+                return mesh;
             }
-
-            for (int r = 0; r < ringCount - 1; r++)
-            {
-                int r0 = r * ringSize;
-                int r1 = (r + 1) * ringSize;
-                // Facing the threat can mirror the cross-section. Mirror triangle
-                // winding too, otherwise the entire berm is back-face culled from above.
-                bool mirrored = Vector3.Cross(path[r + 1] - path[r], vertices[r0 + 6] - vertices[r0]).y < 0f;
-
-                for (int s = 0; s < ringSize - 1; s++)
-                {
-                    int a = r0 + s;
-                    int b = r1 + s;
-                    int c = r1 + s + 1;
-                    int d = r0 + s + 1;
-
-                    triangles.Add(a);
-                    triangles.Add(mirrored ? c : b);
-                    triangles.Add(mirrored ? b : c);
-
-                    triangles.Add(a);
-                    triangles.Add(mirrored ? d : c);
-                    triangles.Add(mirrored ? c : d);
-                }
-            }
-
-            // Close both ends over the cross-section, so a trench end reads as a head-cover
-            // bank instead of an open pipe mouth.
-            for (int end = 0; end < 2; end++)
-            {
-                int baseIdx = (end == 0 ? 0 : ringCount - 1) * ringSize;
-                Vector3 hub = Vector3.zero;
-                for (int p = 0; p < ringSize; p++) hub += vertices[baseIdx + p];
-                vertices[capHubStart + end] = hub / ringSize;
-                uvs[capHubStart + end] = new Vector2(0.5f, 0.5f);
-            }
-            AddCap(triangles, capHubStart, 0, ringSize, path[0] - path[1], vertices);
-            AddCap(triangles, capHubStart + 1, (ringCount - 1) * ringSize, ringSize,
-                path[ringCount - 1] - path[ringCount - 2], vertices);
-
-            mesh.vertices = vertices;
-            mesh.uv = uvs;
-            mesh.triangles = triangles.ToArray();
-            mesh.RecalculateNormals();
-            mesh.RecalculateTangents();
-            mesh.RecalculateBounds();
-            return mesh;
         }
 
         /// <summary>

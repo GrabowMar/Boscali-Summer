@@ -27,6 +27,9 @@ namespace BoscaliSummer.Core.Game
         private static AccessTools.FieldRef<Aircraft, Renderer[]> cockpitRenderersRef;
         private static AccessTools.FieldRef<NightVision, bool> nvSelectedRef;
         private static AccessTools.FieldRef<NightVision, bool> nvActiveRef;
+        private static AccessTools.FieldRef<NightVision, UnityEngine.Rendering.Volume> nvVolumeRef;
+        private static AccessTools.FieldRef<NightVision, float> nvGainMinRef, nvGainMaxRef;
+        private static AccessTools.FieldRef<Unit, List<IRSource>> irSourcesRef;
         private static AccessTools.FieldRef<RadialMenuMain, RadialMenuAction[]> radialActionsRef;
         private static AccessTools.FieldRef<RadialMenuMain, Aircraft> radialAircraftRef;
         private static Action<RadialMenuMain> radialSetupMain;
@@ -173,6 +176,19 @@ namespace BoscaliSummer.Core.Game
             {
                 NightVisionAvailable = false;
                 Plugin.Logger?.LogWarning("Night vision state access unavailable: " + e.Message);
+            }
+
+            try
+            {
+                nvVolumeRef = FieldRef<NightVision, UnityEngine.Rendering.Volume>("postProcessing");
+                nvGainMinRef = FieldRef<NightVision, float>("gainMin");
+                nvGainMaxRef = FieldRef<NightVision, float>("gainMax");
+                irSourcesRef = FieldRef<Unit, List<IRSource>>("IRSources");
+            }
+            catch (Exception e)
+            {
+                nvVolumeRef = null;
+                Plugin.Logger?.LogWarning("Night vision volume access unavailable: " + e.Message);
             }
 
             // The native radial wheel both radial entries (Autopilot's and Wing's) drive:
@@ -328,6 +344,31 @@ namespace BoscaliSummer.Core.Game
             return true;
         }
 
+        /// <summary>Automation: put the goggles on or off as the N key would, without its cursor checks.</summary>
+        public static bool SetNightVisionSelected(bool on)
+        {
+            NightVision nv = NightVision.i;
+            if (nv == null || nvSelectedRef == null) return false;
+            nvSelectedRef(nv) = on;
+            return true;
+        }
+
+        /// <summary>Vanilla's night-vision volume and its gain range in exposure stops. False when the seam is unavailable.</summary>
+        public static bool TryGetNightVisionRig(out UnityEngine.Rendering.Volume volume, out float gainMin, out float gainMax)
+        {
+            volume = null;
+            gainMin = gainMax = 0f;
+            NightVision nv = NightVision.i;
+            if (nv == null || nvVolumeRef == null || nvGainMinRef == null || nvGainMaxRef == null) return false;
+            volume = nvVolumeRef(nv);
+            gainMin = nvGainMinRef(nv);
+            gainMax = nvGainMaxRef(nv);
+            return volume != null;
+        }
+
+        /// <summary>The unit's infrared sources as the game's seekers see them, or null.</summary>
+        public static List<IRSource> GetIrSources(Unit unit) => irSourcesRef == null || unit == null ? null : irSourcesRef(unit);
+
         private static int serverFrame = -1;
         private static bool serverActive;
 
@@ -357,6 +398,16 @@ namespace BoscaliSummer.Core.Game
                 return false;
             hq = local;
             return true;
+        }
+
+        /// <summary>The faction called <paramref name="name"/> (case-insensitive); an empty name is the local player's faction. For the sim hooks' <c>faction</c> argument.</summary>
+        public static bool TryFindFaction(string name, out FactionHQ hq)
+        {
+            hq = null;
+            if (string.IsNullOrEmpty(name)) return TryGetLocalFaction(out hq) && hq != null;
+            foreach (FactionHQ candidate in FactionRegistry.GetAllHQs())
+                if (candidate?.faction != null && string.Equals(candidate.faction.factionName, name, StringComparison.OrdinalIgnoreCase)) { hq = candidate; return true; }
+            return false;
         }
 
         private static AccessTools.FieldRef<TInstance, TField> FieldRef<TInstance, TField>(string name)

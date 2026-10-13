@@ -4,7 +4,6 @@ using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Command.Configuration;
 using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Modules.Command.Presentation.MapUi;
-using NOAvionics;
 using NuclearOption.UIStyleSystem;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -73,6 +72,13 @@ namespace BoscaliSummer.Modules.Command.Runtime
             {
                 fade = 0f;
                 return;
+            }
+            // Another map's heights (the last mission's, or the map image changed under us): drop them and fetch this map's.
+            if (field != null && !MfdTerrainRelief.IsCurrent(field))
+            {
+                field = null;
+                placed = false;
+                nextField = 0f;
             }
             bool flying = LocalAircraft(out Aircraft plane);
             if (plane != null)

@@ -1,3 +1,4 @@
+#if !PUBLIC_RELEASE
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Game;
@@ -53,7 +54,6 @@ namespace BoscaliSummer.Vanguard
                 case "lure":
                     Modules.Vanguard.Domain.SeductionRule.TowedRearChance = Number(args, "chance", 0.35f);
                     Modules.Vanguard.Domain.SeductionRule.TowedFrontChance = Number(args, "chance", 0.12f);
-                    Modules.Vanguard.Domain.SeductionRule.LureChance = Number(args, "bait", 0.25f);
                     return Status(lead);
                 case "pk": return Failure("VanguardAutomation","pk","AEGIS now requires physical contact; kill rolls are retired");
                 case "cut": return AlexCut(lead);
@@ -90,7 +90,7 @@ namespace BoscaliSummer.Vanguard
 
         // ---- showcase: inert copies of every Vanguard prefab, lit by the game, for model review captures
 
-        private static readonly string[] ShowcaseMounts = { "VG_Remora_AGM_heavy_single", "VG_Aegis_Pod", "VG_Lance_Pod" };
+        private static readonly string[] ShowcaseMounts = { "VG_Remora_ARM1_single", "VG_Aegis_Pod", "VG_Lance_Pod" };
         private const float Spacing = 7f;
         private static GameObject showcase;
         private static GlobalPosition showcaseAnchor;
@@ -487,3 +487,4 @@ namespace BoscaliSummer.Vanguard
         }
     }
 }
+#endif

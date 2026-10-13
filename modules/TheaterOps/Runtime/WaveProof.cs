@@ -23,7 +23,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             LivingFrontService living = LivingFrontService.Active;
             TheaterLogisticsService logistics = TheaterLogisticsService.Active;
             if (living == null || logistics == null) return Failure("WaveProof", "Read", "the Living Front service is not running");
-            if (!TryFaction(Text(args, "faction"), out FactionHQ hq)) return Failure("WaveProof", "Read", "unknown faction");
+            if (!GameAccess.TryFindFaction(Text(args, "faction"), out FactionHQ hq)) return Failure("WaveProof", "Read", "unknown faction");
             ReinforcementDesk desk = living.Desk;
             desk.TryRead(hq, out int credits, out int bought, out int seq, out int aiWaves, out string trail, out int priceMatches);
             TheaterWaveView view = desk.View(hq, Time.timeSinceLevelLoad);
@@ -53,7 +53,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         public static Dictionary<string, object> SetPool(Dictionary<string, object> args)
         {
             if (!InSimRun) return Failure("WaveProof", "SetPool", "requires a nomodkit scenario run");
-            if (!TryFaction(Text(args, "faction"), out FactionHQ hq)) return Failure("WaveProof", "SetPool", "unknown faction");
+            if (!GameAccess.TryFindFaction(Text(args, "faction"), out FactionHQ hq)) return Failure("WaveProof", "SetPool", "unknown faction");
             float before = hq.factionFunds;
             hq.AddFunds(Number(args, "value", before) - before);
             return new Dictionary<string, object> { { "ok", true }, { "before", before }, { "after", hq.factionFunds } };
@@ -78,15 +78,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
                 if (hq != null && (hq.factionPlayers == null || hq.factionPlayers.Count == 0) && desk.TryRead(hq, out _, out _, out _, out int ai, out _, out _)) total += ai;
             return total;
-        }
-
-        private static bool TryFaction(string name, out FactionHQ hq)
-        {
-            hq = null;
-            if (string.IsNullOrEmpty(name)) return GameAccess.TryGetLocalFaction(out hq) && hq != null;
-            foreach (FactionHQ candidate in FactionRegistry.GetAllHQs())
-                if (candidate?.faction != null && string.Equals(candidate.faction.factionName, name, StringComparison.OrdinalIgnoreCase)) { hq = candidate; return true; }
-            return false;
         }
 
         private static int Flag(bool value) => value ? 1 : 0;

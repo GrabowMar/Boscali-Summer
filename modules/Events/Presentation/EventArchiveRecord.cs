@@ -163,7 +163,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
             if (painted) Paint();
         }
 
-        public float Measure(float w, int cols)
+        public float Measure(int cols)
         {
             if (count == 0) return 0f;
             int rows = (count + cols - 1) / cols;
@@ -173,7 +173,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
         public void Place(float y, float w, int cols)
         {
             if (count == 0) return;
-            float cw = (w - (cols - 1) * ColGap) / cols, h = Measure(w, cols);
+            float cw = (w - (cols - 1) * ColGap) / cols, h = Measure(cols);
             float captionW = AvText.Width(caption) + 2f, hintW = AvText.Width(hint) + 2f;
             AvLay.Place(caption.rectTransform, 0f, y, captionW, 16f);
             hint.gameObject.SetActive(hint.text.Length > 0 && captionW + 20f + hintW <= w);
@@ -540,7 +540,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
         {
             float y = head.Arrange(0f, w, place) + 10f;
             int cols = w >= 840f ? 4 : w >= 560f ? 3 : 2;
-            float figH = figures.Measure(w, cols), roleH = roles.Measure(w, cols);
+            float figH = figures.Measure(cols), roleH = roles.Measure(cols);
             float notesH = 21f + AvText.Height(notes, w - 14f);
             int allRows = refs.RowsFor(w);
             float fileH = 8f + AvText.Height(fileLine, w);

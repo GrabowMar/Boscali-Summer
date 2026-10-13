@@ -14,7 +14,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     {
         private AvCard fileCard;
         private WingFileTop fileTop;
-        private bool releaseOn;
         private AvControl releaseButton;
         private readonly ConfirmGate releaseGate = new ConfirmGate();
         private readonly FileFace face = new FileFace();
@@ -107,7 +106,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void SetRelease(bool on, bool asking, string why)
         {
-            releaseOn = on;
             releaseButton.Label = SquadronWords.ReleaseLabel(asking);
             releaseButton.Latched = asking;
             releaseButton.Interactable = on;
@@ -171,7 +169,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             perksSection.SetCaption(p == null ? WmcText.Unknown : PerkCards.Head(p.Perks.Count, rank, p.Lost, off));
             for (int i = 0; i < perks.Length; i++)
             {
-                PerkCard card = PerkCards.For(i, p != null ? p.Perks : (System.Collections.Generic.IReadOnlyList<PilotPerk>)NoPerks, rank);
+                PerkCard card = PerkCards.For(i, p != null ? p.Perks : (System.Collections.Generic.IReadOnlyList<PilotPerk>)NoPerks);
                 perks[i].Set(card, off);
             }
             relayout = true;

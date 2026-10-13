@@ -42,7 +42,30 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
         private readonly Queue<TrenchBuildStep> pendingBuild = new Queue<TrenchBuildStep>();
         private readonly TrenchBuildStep[] buildPlan = new TrenchBuildStep[TrenchTraceMath.MaximumBuildSteps];
         private Vector3[] stagedFirePath;
-        private const int RebuildMillisecondsPerFrame = 3;
+        // A path step (ring snapping, then mesh rings) and the collider step run over several frames and resume from these.
+        private readonly Queue<PathJob> pathJobs = new Queue<PathJob>();
+        private int colliderAt = -1;   // >= 0 while the collider step has boxes left to place
+        private bool building;
+        // Was 3 with a whole step as the unit (a long fire ditch is hundreds of terrain rays: 6 ms in one call);
+        // now the budget alone bounds a frame, to this plus the dearest single piece (a mesh finish, a handful of boxes).
+        // 1 ms shared by every chunk in a frame (measured: a mesh finish is 1.5 ms by itself, so 2 ms per chunk reached 4 ms).
+        private const int RebuildMillisecondsPerFrame = 1;
+        private static int budgetFrame = -1;
+        private static double budgetSpentMs;
+
+        /// <summary>One ditch mesh in flight: the ring-by-ring ground snap of a path, then the mesh rings.</summary>
+        private sealed class PathJob
+        {
+            public Transform Parent;
+            public string Name;
+            public Vector3[] Curve;
+            public float Step, Width, Parapet, Skirt;
+            public Material Material;
+            public bool Conform, Fire;
+            public Vector3[] Path;
+            public int Count, Snapped;
+            public TrenchMeshBuilder.EdgeJob Mesh;
+        }
 
         public float Lod0Distance = 250f;
         public float Lod1Distance = 1200f;
@@ -106,31 +129,56 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
                 line.Links != null ? line.Links.Length : 0, line.Spurs != null ? line.Spurs.Length : 0,
                 buildPlan);
             for (int i = 0; i < planned; i++) pendingBuild.Enqueue(buildPlan[i]);
+            building = true;
             PumpBuildQueue();
         }
 
-        /// <summary>Drains staged build steps until the frame's rebuild budget is spent.</summary>
-        internal void PumpBuildQueue()
+        /// <summary>Works through the staged build until the frame's rebuild budget is spent; what is left resumes next frame.</summary>
+        internal void PumpBuildQueue(int budgetMilliseconds = RebuildMillisecondsPerFrame)
         {
-            if (pendingBuild.Count == 0 || line == null) return;
+            if (!building || line == null) return;
+            if (budgetMilliseconds == int.MaxValue) { PumpBuildQueueCore(budgetMilliseconds); return; }
+            if (budgetFrame != Time.frameCount) { budgetFrame = Time.frameCount; budgetSpentMs = 0.0; }
+            if (budgetSpentMs >= budgetMilliseconds) return;   // other chunks spent this frame's share; this one resumes next frame
+            long started = System.Diagnostics.Stopwatch.GetTimestamp();
+            PumpBuildQueueCore(budgetMilliseconds);
+            budgetSpentMs += (System.Diagnostics.Stopwatch.GetTimestamp() - started) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        }
+
+        private void PumpBuildQueueCore(int budgetMilliseconds)
+        {
             System.Diagnostics.Stopwatch watch = System.Diagnostics.Stopwatch.StartNew();
-            do
+            while (true)
             {
-                RunBuildStep(pendingBuild.Dequeue());
-                if (pendingBuild.Count == 0)
+                if (pathJobs.Count > 0)
                 {
+                    if (!StepPathJob(pathJobs.Peek(), watch, budgetMilliseconds)) return;
+                    pathJobs.Dequeue();
+                }
+                else if (colliderAt >= 0)
+                {
+                    if (!StepColliders(watch, budgetMilliseconds)) return;
+                }
+                else if (pendingBuild.Count > 0)
+                {
+                    RunBuildStep(pendingBuild.Dequeue());
+                }
+                else
+                {
+                    building = false;
                     stagedFirePath = null;
                     currentLod = -1;
                     UpdateLod(true);
                     return;
                 }
-            } while (watch.ElapsedMilliseconds < RebuildMillisecondsPerFrame);
+                if (watch.ElapsedMilliseconds >= budgetMilliseconds) return;
+            }
         }
 
         /// <summary>Finishes a staged rebuild at once: tests and scene teardown, never the frame loop.</summary>
         internal void CompleteBuild()
         {
-            while (pendingBuild.Count > 0) RunBuildStep(pendingBuild.Dequeue());
+            PumpBuildQueue(int.MaxValue);
             stagedFirePath = null;
             currentLod = -1;
             UpdateLod(true);
@@ -148,14 +196,15 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
                 case TrenchBuildStep.Fire:
                     // Bays flare the LOD0 fire ditch only: a 1.4m widening is sub-pixel at the mid
                     // and far LOD ranges, and the constant silhouettes already read from there.
-                    stagedFirePath = BuildDitchPath(line.Curve, TraceStep);
-                    if (stagedFirePath != null)
-                        AddMesh(lod0Root.transform, "Fire_LOD0", stagedFirePath, width, parapet, 1.1f, earthMat, true,
-                            BuildBaySchedule(stagedFirePath));
+                    // The job sets stagedFirePath once its path is snapped; the colliders and the belts come after it.
+                    pathJobs.Enqueue(new PathJob
+                    {
+                        Parent = lod0Root.transform, Name = "Fire_LOD0", Curve = line.Curve, Step = TraceStep,
+                        Width = width, Parapet = parapet, Skirt = 1.1f, Material = earthMat, Conform = true, Fire = true
+                    });
                     break;
                 case TrenchBuildStep.Colliders:
-                    if (stagedFirePath != null)
-                        AddFrontColliders(stagedFirePath, width, parapet, "Fire");
+                    if (stagedFirePath != null) colliderAt = 0;
                     break;
                 case TrenchBuildStep.Wire:
                 case TrenchBuildStep.WireOuter:
@@ -265,31 +314,92 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
         /// </summary>
         private Vector3[] BuildDitchPath(Vector3[] curve, float step)
         {
-            if (curve == null || curve.Length < 2) return null;
-            int count = TrenchTraceMath.DensifyTraversed(
+            int count = DensifyDitch(curve, step);
+            if (count < 2) return null;
+            var path = new Vector3[count];
+            for (int i = 0; i < count; i++) path[i] = SnapRing(curve, i, count);
+            return path;
+        }
+
+        /// <summary>The curve's traversed ditch rings in pathX/pathZ (no terrain rays yet); the ring count, 0 for no curve.</summary>
+        private int DensifyDitch(Vector3[] curve, float step)
+        {
+            if (curve == null || curve.Length < 2) return 0;
+            return TrenchTraceMath.DensifyTraversed(
                 ToX(curve), ToZ(curve), curve.Length, step,
                 TrenchTraceMath.TraverseSpacing, TrenchTraceMath.TraverseAmplitude,
                 curve[0].x * 0.5f + curve[0].z * 0.5f, pathX, pathZ);
-            if (count < 2) return null;
-            var path = new Vector3[count];
-            for (int i = 0; i < count; i++)
-            {
-                // A missed or refused ground probe keeps the curve's own height (planned from
-                // successful probes): falling back to y=0 buries the ring under the terrain
-                // and spikes the mesh wherever the ray hits water, a tree or a building first.
-                int curveIndex = Mathf.RoundToInt((float)i / (count - 1) * (curve.Length - 1));
-                path[i] = TrenchTerrain.SnapToGround(new Vector3(pathX[i], curve[curveIndex].y, pathZ[i]));
-            }
-            return path;
+        }
+
+        /// <summary>Ring <paramref name="i"/> of <paramref name="count"/> laid on the ground: one terrain ray.</summary>
+        private Vector3 SnapRing(Vector3[] curve, int i, int count)
+        {
+            // A missed or refused ground probe keeps the curve's own height (planned from
+            // successful probes): falling back to y=0 buries the ring under the terrain
+            // and spikes the mesh wherever the ray hits water, a tree or a building first.
+            int curveIndex = Mathf.RoundToInt((float)i / (count - 1) * (curve.Length - 1));
+            return TrenchTerrain.SnapToGround(new Vector3(pathX[i], curve[curveIndex].y, pathZ[i]));
         }
 
         private void AddPath(Transform parent, string name, Vector3[] curve, float step, float width,
             float parapet, float skirt, Material material, bool conform)
         {
             if (parent == null || curve == null || curve.Length < 2) return;
-            Vector3[] path = BuildDitchPath(curve, step);
-            if (path == null) return;
-            AddMesh(parent, name, path, width, parapet, skirt, material, conform);
+            pathJobs.Enqueue(new PathJob
+            {
+                Parent = parent, Name = name, Curve = curve, Step = step,
+                Width = width, Parapet = parapet, Skirt = skirt, Material = material, Conform = conform
+            });
+        }
+
+        /// <summary>
+        /// Advances one path job until the frame's budget is spent; true when its mesh is on the scene. Its rings are
+        /// snapped to the ground, then the mesh rings are laid, one terrain ray or two per ring, so a long ditch spreads
+        /// over frames instead of being one call. The scratch rings (pathX/pathZ) belong to this job until it finishes:
+        /// the pump starts no other step meanwhile.
+        /// </summary>
+        private bool StepPathJob(PathJob job, System.Diagnostics.Stopwatch watch, int budgetMilliseconds)
+        {
+            if (job.Parent == null || job.Material == null || line == null) return true;
+            if (job.Path == null)
+            {
+                int count = DensifyDitch(job.Curve, job.Step);
+                if (count < 2) return true;
+                job.Count = count;
+                job.Path = new Vector3[count];
+            }
+            while (job.Snapped < job.Count)
+            {
+                job.Path[job.Snapped] = SnapRing(job.Curve, job.Snapped, job.Count);
+                job.Snapped++;
+                if (watch.ElapsedMilliseconds >= budgetMilliseconds) return false;
+            }
+            if (job.Mesh == null)
+            {
+                float[] bays = null;
+                if (job.Fire)
+                {
+                    stagedFirePath = job.Path;
+                    bays = BuildBaySchedule(job.Path);
+                }
+                job.Mesh = new TrenchMeshBuilder.EdgeJob(job.Path, job.Width, job.Parapet, job.Skirt, line.Threat[0],
+                    job.Conform ? TrenchTerrain.SnapToGround : (Func<Vector3, Vector3>)null, bays);
+            }
+            while (!job.Mesh.Done)
+            {
+                job.Mesh.LayRings(1);
+                if (!job.Mesh.Done && watch.ElapsedMilliseconds >= budgetMilliseconds) return false;
+            }
+            // The finish (mesh upload) is one 1.5 ms piece: start it only on a nearly fresh budget, else next frame.
+            if (budgetMilliseconds != int.MaxValue && watch.Elapsed.TotalMilliseconds > 0.4) return false;
+            Mesh mesh = job.Mesh.Finish();
+            if (mesh == null) return true;
+            proceduralMeshes.Add(mesh);
+            var go = new GameObject(job.Name);
+            go.transform.SetParent(job.Parent, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            go.AddComponent<MeshRenderer>().sharedMaterial = job.Material;
+            return true;
         }
 
         private float[] ToX(Vector3[] curve)
@@ -333,33 +443,26 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
             return bayExtra;
         }
 
-        private void AddMesh(Transform parent, string name, Vector3[] path, float width, float height, float skirt,
-            Material material, bool conformToGround, float[] ringExtra = null)
-        {
-            if (parent == null || material == null) return;
-            Mesh mesh = TrenchMeshBuilder.BuildEdgeMesh(path, width, height, skirt, line.Threat[0],
-                conformToGround ? TrenchTerrain.SnapToGround : (Func<Vector3, Vector3>)null, ringExtra);
-            if (mesh == null) return;
-            proceduralMeshes.Add(mesh);
-            var go = new GameObject(name);
-            go.transform.SetParent(parent, false);
-            go.AddComponent<MeshFilter>().sharedMesh = mesh;
-            go.AddComponent<MeshRenderer>().sharedMaterial = material;
-        }
-
         /// <summary>
         /// Low obstacle boxes strung along the whole fire trench (never only its first
         /// stretch): the front line stops vehicles without paying for a collider per segment.
+        /// A few boxes per call (each is a GameObject and a physics body); false while some are left.
         /// </summary>
-        private void AddFrontColliders(Vector3[] path, float width, float parapetHeight, string tag)
+        private bool StepColliders(System.Diagnostics.Stopwatch watch, int budgetMilliseconds)
         {
+            Vector3[] path = stagedFirePath;
+            if (path == null || colliderRoot == null) { colliderAt = -1; return true; }
+            float width = WidthFor(line.Stage);
+            string tag = "Fire";
             // The band is the forward parapet wall, not the whole cut: the interior stays
             // clear so the ditch floor reads as a walkable trench, and the berm wall in front
             // of it is what stops ground units crossing the line.
-            float wallHeight = parapetHeight + 0.6f;
+            float wallHeight = ParapetFor(line.Stage) + 0.6f;
             int stride = Mathf.Max(3, path.Length / MaximumColliders);
-            for (int i = 0; i < path.Length - 1 && colliders.Count < MaximumColliders; i += stride)
+            for (; colliderAt < path.Length - 1 && colliders.Count < MaximumColliders; colliderAt += stride)
             {
+                if (watch.ElapsedMilliseconds >= budgetMilliseconds) return false;   // resumes at this box
+                int i = colliderAt;
                 Vector3 p0 = path[i];
                 Vector3 p1 = path[Mathf.Min(i + stride, path.Length - 1)];
                 float len = Vector3.Distance(p0, p1);
@@ -385,6 +488,8 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
                 box.size = new Vector3(0.9f, wallHeight, len + 0.5f);
                 colliders.Add(box);
             }
+            colliderAt = -1;
+            return true;
         }
 
         private static float WidthFor(TrenchStage stage)
@@ -423,7 +528,7 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
 
         private void Tick(float now)
         {
-            if (pendingBuild.Count > 0) PumpBuildQueue();
+            if (building) PumpBuildQueue();
             if (now < nextLodCheckTime) return;
             nextLodCheckTime = now + 0.25f;
 
@@ -512,6 +617,9 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
             }
             proceduralMeshes.Clear();
             pendingBuild.Clear();
+            pathJobs.Clear();
+            colliderAt = -1;
+            building = false;
             stagedFirePath = null;
         }
 

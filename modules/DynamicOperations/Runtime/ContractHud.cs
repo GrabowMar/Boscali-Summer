@@ -9,10 +9,9 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 {
     /// <summary>
-    /// The cockpit half of the contract HUD, drawn entirely by the mod in vanilla's own
-    /// likeness: one marker per accepted contract, projected through the game camera, with
-    /// the vanilla pointer/dot/ring sprites, font, colours and motion read read-only from the
-    /// game. A target in front of the aircraft gets a marker on its position and a label
+    /// The cockpit half of the contract HUD, drawn entirely by the mod in the visor's look:
+    /// one marker per accepted contract, projected through the game camera, in vector strokes
+    /// of the live HUD theme with the game's objective font and label motion. A target in front of the aircraft gets a marker on its position and a label
     /// beside it; a target off screen is clamped to the frame edge and keeps its bearing, so a
     /// contract is never invisible just because the nose is pointed elsewhere. Labels glide
     /// and nudge apart, so three contracts in the same direction stay readable. Nothing is fed
@@ -127,10 +126,10 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 Vector3 toTarget = target.AsVector3() - self;
                 marker.SetVisible(true);
                 marker.Place(x, y);
-                marker.SetIcons(camera.transform.forward, toTarget, bearing);
-                marker.SetRing(card.Radius, toTarget.magnitude, canvasHeight, camera, clamped);
+                marker.SetPointer(bearing, clamped);
+                marker.SetRing(card.Radius, toTarget.magnitude, canvasHeight, camera, clamped, colours.AllClear);
                 float distance = ContractMarkerMath.Distance(self.x, self.z, card.X, card.Z);
-                marker.SetLabel(card, distance, metric, x, halfWidth, clamped, ToneColour(colours, card.Tone));
+                marker.SetLabel(card, distance, metric, x, halfWidth, clamped, colours.AllClear, ToneColour(colours, card.Tone));
                 visible++;
             }
 

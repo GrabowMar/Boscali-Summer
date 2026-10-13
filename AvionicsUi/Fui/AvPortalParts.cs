@@ -84,44 +84,4 @@ namespace NOAvionics
         public void Set(float[] values, string text, AvState st = AvState.Ready) { Graphic.SetValues(values); SetText(text, st); }
         protected override void Paint() { Graphic.FillColor = Fill(); Graphic.BaseColor = Track(); }
     }
-
-    /// <summary>Solid tag ("slab") for a title or alert word; sized to its text, left aligned.</summary>
-    public sealed class AvSlab : AvPart
-    {
-        private readonly AvFrame back;
-        private readonly TMP_Text text;
-        private AvState state = AvState.Ready;
-
-        public AvSlab(RectTransform parent, string label, AvState st = AvState.Ready)
-        {
-            Rect = AvLay.Child(parent, "Slab " + label);
-            back = AvFrame.Add(Rect, "Back", default(AvChamfer)); back.Stroke = 0f;
-            text = AvText.Make(Rect, "Text", AvTextRole.Micro, label, TextAlignmentOptions.Center);
-            AvText.Fit(text, false);
-            state = st;
-            Restyle();
-        }
-
-        public void Set(string label, AvState st)
-        {
-            if (text.text != label) { text.text = label ?? ""; Changed(); }
-            if (st != state) { state = st; Restyle(); }
-        }
-
-        public override float Measure(float width) => 18f;
-
-        public override void Place(AvSlot s)
-        {
-            base.Place(s);
-            float w = Mathf.Min(s.W, AvText.Width(text) + 14f);
-            AvLay.Place(back.rectTransform, 0f, 0f, w, s.H);
-            AvLay.Place(text.rectTransform, 0f, 0f, w, s.H);
-        }
-
-        public override void Restyle()
-        {
-            back.Paint(AvStyleHost.FuiFill("slab " + AvStates.Class(state), AvTheme.Accent), Color.clear);
-            text.color = AvStyleHost.FuiInk("slab", Color.black);
-        }
-    }
 }

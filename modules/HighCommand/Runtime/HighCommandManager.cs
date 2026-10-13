@@ -113,7 +113,7 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
         private HighCommandNet network;
         private object missionIdentity;
         private int missionGeneration;
-        private float nextTick;
+        private PhasedGate tickGate;
         private float lastRefreshRequest = -100f;
         private string status = "Waiting for a running mission.";
         private float appliedAt = float.NegativeInfinity;
@@ -167,7 +167,9 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
             viewCommanders.Clear();
             viewLog.Clear();
             missionIdentity = null;
-            nextTick = 0f;
+            tickGate.Reset();
+            spawnFaction = -1;
+            intelCursor = -1;
             viewHq = null;
             appliedAt = float.NegativeInfinity;
             status = StaffWords.WaitingMission;
@@ -211,8 +213,10 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
 
             float now = mission.MissionTime;
             if (!float.IsFinite(now)) return;
-            if (now < nextTick) return;
-            nextTick = now + 1f;
+            // What the last tick left for the frames after it: one post spawn a frame, a slice of the units' sensing sweep a frame.
+            if (spawnFaction >= 0) StepSpawnPass();
+            if (intelCursor >= 0) StepIntel();
+            if (!tickGate.Due(now, 1f, 0.125f)) return;   // 1 Hz slots (s): Space 0, HighCommand .125, Cyber .25, Operations .375, Sof .5, LivingFront .625, Ops .75, Events .875
             Tick(now);
         }
 
@@ -223,9 +227,9 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
             TickDisruption(now);
             TickStipends(now);
             TickTransfers(now);
-            SpawnMissingAssets();
+            spawnFaction = spawnSlot = 0;   // BeginSpawnPass: the missing posts, one a frame from the next frame on
             TickConvoys(now);
-            TickIntel(now);
+            BeginIntel(now);
         }
 
         private void TickDisruption(float now)

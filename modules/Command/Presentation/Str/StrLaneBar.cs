@@ -24,8 +24,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
             vector = AvVector.Create(rect, "Lane", StrStrokes.LaneQuads);
         }
 
-        internal RectTransform Rect => rect;
-
         /// <summary>Hostile share 0..1 and its change over the last review; NaN for either is "unknown".</summary>
         internal void Set(float share, float change)
         {

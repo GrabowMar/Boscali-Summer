@@ -195,6 +195,29 @@ namespace BoscaliSummer.Modules.Command.Domain
         public float DepotX, DepotZ;
     }
 
+    /// <summary>One convoy group of the SUPPLY tab: the mission's own name, what is in it, its price, and "READY", "READY IN 00:42" or "SHORT 12".</summary>
+    internal sealed class StrSupplyRow
+    {
+        public string Name = "", Detail = "", CostText = "—", StateText = "";
+        /// <summary>What the gate reads: the price, and whole seconds until the host allows the group again (-1 = the host has not answered).</summary>
+        public float Cost;
+        public int Cooldown = -1;
+        public bool Ready;
+    }
+
+    /// <summary>The SUPPLY tab, the game's own contribute menu: the pilot's funds buy a convoy group or go into the faction pool.</summary>
+    internal sealed class StrSupplyView
+    {
+        /// <summary>A local pilot in a faction; the mission forbids buying units (donating funds is still allowed, as in the game's menu).</summary>
+        public bool Known, Forbidden;
+        public float Funds;
+        /// <summary>Whole seconds until the host takes another donation, -1 = not answered.</summary>
+        public int DonateCooldown = -1;
+        public string FundsText = "—", Note = "";
+        public StrSupplyRow[] Rows = new StrSupplyRow[StrViewModel.MaxConvoys];
+        public int RowCount;
+    }
+
     /// <summary>One header tile: key, value, caption, bar, state, the one-sentence help of what it verified.</summary>
     internal struct StrTile
     {
@@ -234,7 +257,7 @@ namespace BoscaliSummer.Modules.Command.Domain
     /// <summary>Everything the panel and the overlay display, filled in place by StrViewBuilder.</summary>
     internal sealed class StrViewModel
     {
-        public const int MaxProposals = 3, MaxFronts = 8, MaxSorties = 5, MaxPosts = 6, MaxMarks = 8, MaxLog = 8, MaxChecks = 6, MaxOfficers = 8, MiscCount = 7;
+        public const int MaxProposals = 3, MaxFronts = 8, MaxSorties = 5, MaxPosts = 6, MaxMarks = 8, MaxLog = 8, MaxChecks = 6, MaxOfficers = 8, MiscCount = 7, MaxConvoys = 8;
 
         /// <summary>Bumps only when a displayed value changed.</summary>
         public int Revision;
@@ -266,6 +289,7 @@ namespace BoscaliSummer.Modules.Command.Domain
         public StrStaffView Staff = new StrStaffView();
         public StrMiscLine[] Misc = new StrMiscLine[MiscCount];
         public StrWaveView Wave = new StrWaveView();
+        public StrSupplyView Supply = new StrSupplyView();
         public StrTile[] Tiles = new StrTile[4];
         public StrBalance Sectors, Air, Ground, Airbases;
         public string RadarsText = "—", KnownAdText = "—", FrontText = "—", ContestedBasesText = "—";

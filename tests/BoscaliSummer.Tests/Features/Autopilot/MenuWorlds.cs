@@ -22,9 +22,11 @@ namespace BoscaliSummer.Tests.Features.Autopilot
                 ActiveStation = 1, HasMultipleGuns = true, HasTurrets = true, TurretAuto = false,
                 HasCountermeasures = true, HasFlares = true, Flares = 48, FlaresMax = 48, Countermeasure = "IR FLARES", NextCountermeasure = "RADAR JAMMER", HasRadar = true, RadarOn = true,
                 HasDrones = true, DronesStriking = false, DronesCanStrike = true, Drones = 2,
+                HasChaff = true, Chaff = 40, ChaffMax = 48, ChaffLinked = true, Threats = 3, ThreatKm = 18.4f, Inbound = 0, HasBayDoors = true,
                 CameraFollowing = true, Camera = ViewKind.Cockpit, HasCockpitPoint = true, MapAvailable = true,
                 MissileViewAvailable = true, CanEnterMissileView = true, Missiles = 2, MissileStatus = "2 MSL · CLOSEST 1.1 KM",
-                BoardAvailable = true, BoardOn = true, BoardDeclutter = 0, BoardLayout = 0,
+                BoardAvailable = true, BoardOn = true, BoardDeclutter = 0, BoardLayout = 0, BoardShade = 2, BoardSize = 1, BoardScopeAuto = true,
+                TerrainAvailable = true, HoloMap = true, TerrainGhost = 1, FeelAvailable = true, KneeboardAvailable = true, KneeboardCard = "Mission card",
                 MarkAvailable = true, HasMark = true, MarkAgeSeconds = 42f, CanCapture = true, CanCallAtMark = true, Armed = "SAT CAMERA",
                 PerksAvailable = true, SkywellCarried = true, SkywellStock = "FUEL 5.9T · AMMO 1.20T", CanExfil = false,
                 DeckAvailable = true, DeckPlaying = false, DeckTitle = "Salt Flats at Dawn", ReceiverAvailable = true, ReceiverOn = true,
@@ -56,6 +58,10 @@ namespace BoscaliSummer.Tests.Features.Autopilot
                 new WorldFilter { Name = "Air threats", Active = true, Slot = 1 }, new WorldFilter { Name = "SAM sites", Slot = 2 }, new WorldFilter { Name = "SEAD package", Slot = 3 },
             });
             AddShapes(w);
+            // every board switch on but the DOCK page, every cabin effect on but the breathing
+            foreach (MenuSwitch s in MenuCatalog.BoardPages) if (s.Slug != "dock") w.BoardSwitches.Add("pages/" + s.Slug);
+            foreach (MenuSwitch s in MenuCatalog.BoardParts) w.BoardSwitches.Add("parts/" + s.Slug);
+            foreach (MenuSwitch s in MenuCatalog.FeelSwitches) if (s.Slug != "breathing") w.Feel.Add(s.Slug);
             return w;
         }
 

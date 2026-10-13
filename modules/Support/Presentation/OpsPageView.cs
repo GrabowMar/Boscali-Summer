@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Fronts;
-using BoscaliSummer.Modules.Support.Presentation.Fronts;
 using BoscaliSummer.Modules.Support.Runtime;
 using NOAvionics;
 
@@ -46,7 +45,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public string ArmedName = "", AimLine = "", OrderRight = "", Words = "";
         public AvState WordsTone = AvState.Ready;
         public bool Armed, Pending;
-        public string Alert = "", FrontWords = "";
+        public string FrontWords = "";
         public AvState FrontWordsTone = AvState.Inert;
     }
 

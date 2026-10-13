@@ -116,9 +116,9 @@ public static class ReliefUnityCheck
                 Vector2.Distance(openingTrack.iconImage.transform.localPosition, openingPoint) > .1f)
                 throw new Exception("Opening relief left an existing native glyph flat until its next update batch.");
             Transform orbit = map.mapBackground.transform.Find("NOAvionics.MapOrbit");
-            if (orbit == null || orbit.GetComponentsInChildren<AvControl>(true).Length != 8 ||
+            if (orbit == null || orbit.GetComponentsInChildren<AvControl>(true).Length != 12 ||
                 orbit.Find("Footer") == null || orbit.GetComponent<AvHelpScope>() == null)
-                throw new Exception("Orbit controls (8 kit buttons and the cursor line) did not mount on the map viewport.");
+                throw new Exception("Map controls (8 view buttons, 4 selection tools and the cursor line) did not mount on the map viewport.");
             AssertViewportTerrain(map, "initial open");
             float fittedZoom = map.GetZoomLevel();
             map.SetZoomLevel(1f);

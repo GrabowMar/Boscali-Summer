@@ -30,7 +30,10 @@ namespace Vanguard
             HideRenderers(g);
             var first = g.GetComponentsInChildren<MountedMissile>(true).Single();
             Vector3 home = first.transform.localPosition;
-            Visual(first.transform.parent, "AleXPod", materials).transform.localPosition = home;
+            var pod = Visual(first.transform.parent, "AleXPod", materials);
+            pod.transform.localPosition = home;
+            home += PodLift(g, pod); // VanguardBuilder.fit.cs
+            pod.transform.localPosition = home;
             for (int i = 0; i < AleXCells.Length; i++)
             {
                 var cell = i == 0 ? first : UnityEngine.Object.Instantiate(first, first.transform.parent);

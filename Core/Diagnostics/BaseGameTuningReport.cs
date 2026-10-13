@@ -5,6 +5,5 @@ namespace BoscaliSummer.Core.Diagnostics
     {
         public static bool LodFloorActive;
         public static bool ShadowCapActive;
-        public static bool FrameCapActive;
     }
 }

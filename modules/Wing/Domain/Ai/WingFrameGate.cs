@@ -9,8 +9,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         private static int recoverLeft;
 
-        public static bool Recovering => recoverLeft > 0;
-
         public static void Reset() => recoverLeft = 0;
 
         public static void NoteFrame(float unscaledDeltaSeconds)

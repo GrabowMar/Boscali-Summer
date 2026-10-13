@@ -111,11 +111,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         /// <summary>Merges the wing's events and radio lines, your order results and the steps that ran late or early into
         /// <see cref="sortieEvents"/>, newest first, as the filter says.</summary>
-        private void RebuildEvents(WmcContext c, WingPlan plan, PlanRunner r, bool live, WingService w, float now)
+        private void RebuildEvents(WmcContext c, WingPlan plan, PlanRunner r, bool live)
         {
             sortieEvents.Clear();
             WingEventRing events = c.Client ? null : c.Wing?.Events;
-            RadioLog radio = RadioDirector.Instance?.Log;
+            BoscaliSummer.Core.Chatter.ChatterLog radio = WingChatter.Instance?.Log;
             var filter = new LogFilter { Element = logElement, ById = logSelected, Id = c.Selection.Single, Rows = c.Rows, Count = c.Count };
             int n = LogRows.Fill(events, radio, logRows, LogRows.MaxRows, filter);
             for (int i = 0; i < n; i++)

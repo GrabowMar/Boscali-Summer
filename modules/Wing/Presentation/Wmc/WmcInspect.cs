@@ -16,7 +16,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// buttons act on the inspected aircraft. <see cref="Build"/> adds its parts to that sub-page's flow. Only WING uses it.</summary>
     internal sealed class WmcInspect
     {
-        private const int MaxChips = WcSnapshot.MaxMembers, StoreRows = 4, RecentRows = 5;
+        private const int MaxChips = WcSnapshot.MaxMembers, RecentRows = 5;
 
         private readonly WmcControls ids;
         private readonly uint[] chipIds = new uint[MaxChips];
@@ -43,9 +43,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private WmcContext last;
 
         public WmcInspect(WmcControls controls) => ids = controls;
-
-        /// <summary>The page's top (the member chips; null before <see cref="Build"/>).</summary>
-        public RectTransform Anchor => chips?.Rect;
 
         /// <summary>Show this aircraft (INSPECT › on TACTICAL, a chip, automation).</summary>
         public void Focus(uint id)
@@ -325,16 +322,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             int i = last != null ? WingRows.IndexOf(last.Rows, last.Count, inspected) : -1;
             return i >= 0 ? last.Rows[i].Slot : 0;
-        }
-
-        /// <summary>Automation: the page's state.</summary>
-        public void Report(Dictionary<string, object> into)
-        {
-            into["inspect_member"] = inspected != 0u && last != null && WingRows.IndexOf(last.Rows, last.Count, inspected) >= 0
-                ? last.Rows[WingRows.IndexOf(last.Rows, last.Count, inspected)].Slot + 2 : 0;
-            into["inspect_stores"] = storesList != null ? storesList.Shown : 0;
-            into["inspect_parts"] = detail.PartCount;
-            into["inspect_parts_lost"] = detail.PartsLost;
         }
 
         /// <summary>A tape's level word (ok, warn, bad, none) as the state class the rail colours read.</summary>

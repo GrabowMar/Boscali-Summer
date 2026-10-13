@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using BoscaliSummer.Core.Math;
-using BoscaliSummer.Modules.FireAndDestruction.Domain;
 using UnityEngine;
 
 namespace BoscaliSummer.Fire

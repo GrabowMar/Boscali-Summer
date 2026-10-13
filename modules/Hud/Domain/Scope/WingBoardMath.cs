@@ -11,7 +11,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>A wingman further than this many pixels from the centre sits on the rim (a little inside it) with a range tag.</summary>
         public const float ClampR = PlotR - 8f;
         /// <summary>Slot error beyond which a formation member reads as out of its slot, and below which a tether is not drawn.</summary>
-        public const float OutM = 60f, TetherM = 30f, TetherFarM = 120f;
+        public const float TetherM = 30f, TetherFarM = 120f;
         /// <summary>The roster's block: first row's top, a full row's height and the step between full rows, and the room the rows may use.</summary>
         public const float RowsTop = 34f, FullRowH = 62f, FullStep = 66f, RowsRoom = 260f, RowGap = 3f, CompactMinH = 34f, FullTaskMinH = 56f;
         public const int MaxRows = 7;

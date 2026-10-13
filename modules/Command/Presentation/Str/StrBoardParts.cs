@@ -92,8 +92,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         internal AvControl Control => control;
 
-        internal bool Interactable => control.Interactable;
-
         private void OnClick() => press?.Invoke();
 
         /// <summary>Shows the gate now and registers <paramref name="id"/>. <paramref name="whenAllowed"/> is the hover help of an enabled button.</summary>

@@ -27,7 +27,6 @@ namespace BoscaliSummer.Modules.Intel.Runtime
         private const float RebuildStaggerSeconds = 0.25f;
         private const int MaximumObservationUnits = 4096;
         private const int ObservationUnitsPerFrame = 512;
-        private const int ProfileSearchesPerFrame = 8;
 
         private readonly FactionPicture[] pictures = new FactionPicture[MaximumFactions];
         private readonly UnitProfiles profiles = new UnitProfiles();
@@ -43,8 +42,6 @@ namespace BoscaliSummer.Modules.Intel.Runtime
         private float observationLevel;
         private float missionStart = float.NaN;
         private float lastDemand = float.NegativeInfinity;
-        private int searchFrame = -1;
-        private int searchesThisFrame;
 
         public void Configure(IntelSettings config)
         {
@@ -63,8 +60,6 @@ namespace BoscaliSummer.Modules.Intel.Runtime
             observationCursor = 0;
             missionStart = float.NaN;
             lastDemand = float.NegativeInfinity;
-            searchFrame = -1;
-            searchesThisFrame = 0;
         }
 
         private void OnDestroy() => ResetForScene();
@@ -136,38 +131,6 @@ namespace BoscaliSummer.Modules.Intel.Runtime
             RingGeometry.Coverage(picture.Rings, picture.RingCount, x, z, agl, ThreatPictureLimits.AllRingsMask,
                 out depthMetres, out rings, out _);
             return true;
-        }
-
-        public bool TryGetSegmentExposure(int observer, float ax, float az, float bx, float bz, float agl,
-            byte kindMask, out float exposedMetres)
-        {
-            exposedMetres = float.NaN;
-            FactionPicture picture = Find(observer);
-            if (picture == null || !picture.Ready || !float.IsFinite(ax) || !float.IsFinite(az) || !float.IsFinite(bx) || !float.IsFinite(bz) ||
-                !float.IsFinite(agl))
-                return false;
-            exposedMetres = RingGeometry.SegmentExposure(picture.Rings, picture.RingCount, ax, az, bx, bz, agl,
-                kindMask, out _);
-            return true;
-        }
-
-        public bool TryFindAttackProfile(int observer, float fromX, float fromZ, float targetX, float targetZ,
-            float releaseRange, float transitAgl, float releaseAgl, out AttackProfile profile)
-        {
-            profile = default;
-            FactionPicture picture = Find(observer);
-            if (picture == null || !picture.Ready) return false;
-            int frame = Time.frameCount;
-            if (frame != searchFrame)
-            {
-                searchFrame = frame;
-                searchesThisFrame = 0;
-            }
-            // Eight searches a frame across every caller; the ninth asks again next frame.
-            if (searchesThisFrame >= ProfileSearchesPerFrame) return false;
-            searchesThisFrame++;
-            return AttackProfileSearch.TryFind(picture.Rings, picture.RingCount, fromX, fromZ, targetX, targetZ,
-                releaseRange, transitAgl, releaseAgl, out profile);
         }
 
         public bool TryGetAreaIntel(int observer, float x, float z, float radius, out AreaIntel intel)

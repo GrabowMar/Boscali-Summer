@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -106,36 +107,20 @@ namespace BoscaliSummer.Modules.Support.Visuals
             }
         }
 
-        private static void Plume(ParticleSystem ps, int count, float spread, float rise)
+        /// <summary>A finished pooled effect: out of the active list, switched off, onto the free stack.</summary>
+        public static void Recycle<T>(List<T> active, Stack<T> free, T effect) where T : Component
         {
-            for (int i = 0; i < count; i++)
-                ps.Emit(new ParticleSystem.EmitParams {
-                    position = Random.insideUnitSphere * spread * 0.1f + Vector3.up * 4f,
-                    velocity = Random.insideUnitSphere * spread + Vector3.up * rise,
-                    rotation = Random.Range(0f, 360f)
-                }, 1);
+            active.Remove(effect);
+            effect.gameObject.SetActive(false);
+            free.Push(effect);
         }
 
-        /// <summary>
-        /// The kinetic-strike blast, cinematic scale: a blinding flash, a rolling fireball, a wide dust and debris skirt running out along the ground, a condensation front,
-        /// ballistic embers, and a column of dark smoke that keeps feeding for several seconds and then spreads into a cap high above, hanging for ~25 s. ~950 particles in seven layers.
-        /// </summary>
-        public static void Impact(Transform parent)
+        /// <summary>Scene teardown of a pooled effect: every active and free object destroyed, both collections emptied.</summary>
+        public static void DestroyPool<T>(List<T> active, Stack<T> free) where T : Component
         {
-            var flash = Layer(parent, "White-hot impact", true, 24, 0.8f, 260f, new Color(4f, 2.6f, 1.3f));
-            flash.Emit(14);
-            var fire = Layer(parent, "Rolling fireball", true, 120, 3.2f, 110f, new Color(1.5f, 0.5f, 0.08f));
-            Plume(fire, 120, 90f, 55f);
-            var embers = Layer(parent, "Ballistic incandescent debris", true, 140, 4.5f, 4f, new Color(3f, 1.1f, 0.2f), 1.6f);
-            Plume(embers, 140, 150f, 160f);
-            var dust = Layer(parent, "Ground pressure dust", false, 192, 9f, 55f, new Color(0.42f, 0.34f, 0.25f, 0.6f));
-            Ring(dust, 192, 25f, 95f, 5f);
-            var vapor = Layer(parent, "Condensation front", false, 128, 1.4f, 70f, new Color(0.92f, 0.95f, 1f, 0.35f));
-            Ring(vapor, 128, 20f, 420f, 12f);
-            var stem = Layer(parent, "Soil and smoke stem", false, 220, 24f, 60f, new Color(0.14f, 0.12f, 0.1f, 0.85f), -0.01f);
-            var cap = Layer(parent, "Smoke cap", false, 120, 22f, 110f, new Color(0.3f, 0.27f, 0.24f, 0.7f), -0.01f);
-            Plume(stem, 60, 40f, 110f);
-            parent.gameObject.AddComponent<ImpactPlume>().Begin(stem, cap);
+            for (int i = 0; i < active.Count; i++) if (active[i] != null) Object.Destroy(active[i].gameObject);
+            active.Clear();
+            while (free.Count > 0) { T e = free.Pop(); if (e != null) Object.Destroy(e.gameObject); }
         }
 
         public static void Reset()

@@ -31,6 +31,9 @@ namespace BoscaliSummer.Core.Config
     /// </summary>
     internal sealed class ModConfiguration
     {
+        public ConfigEntry<bool> MissionAskAtStart { get; }
+        public ConfigEntry<string> MissionDisabledModules { get; }
+        public ConfigEntry<string> MissionRemembered { get; }
         public FireAndDestructionSettings FireAndDestruction { get; }
         public UrbanCombatSettings UrbanCombat { get; }
         public RadioSettings Radio { get; }
@@ -54,6 +57,7 @@ namespace BoscaliSummer.Core.Config
         public WeatherSettings Weather { get; }
         public PerformanceSettings Performance { get; }
         public CinematographySettings Cinematography { get; }
+        public BoscaliSummer.Modules.Scenario.Configuration.ScenarioSettings Scenario { get; }
         public BoscaliSummer.Modules.Effects.Configuration.EffectsSettings Effects { get; }
 
         public ModConfiguration(ConfigFile config)
@@ -62,6 +66,14 @@ namespace BoscaliSummer.Core.Config
             config.SaveOnConfigSet = false;
             try
             {
+                MissionAskAtStart = config.Bind("Mission", "AskAtStart", true,
+                    "Ask at the start of each mission which Boscali Summer systems run in it. " +
+                    "The prompt switches this off when you choose never to be asked.");
+                MissionDisabledModules = config.Bind("Mission", "DisabledModules", "",
+                    "Module ids switched off by the last mission-start answer, comma separated. Empty runs everything.");
+                MissionRemembered = config.Bind("Mission", "RememberedMissions", "{}",
+                    "Answers remembered per mission name (JSON: mission name to switched-off module ids). " +
+                    "Set to {} to be asked on those missions again.");
                 FireAndDestruction = new FireAndDestructionSettings(config);
                 UrbanCombat = new UrbanCombatSettings(config);
                 Radio = new RadioSettings(config);
@@ -85,11 +97,12 @@ namespace BoscaliSummer.Core.Config
                 Weather = new WeatherSettings(config);
                 Performance = new PerformanceSettings(config);
                 Cinematography = new CinematographySettings(config);
+                Scenario = new BoscaliSummer.Modules.Scenario.Configuration.ScenarioSettings(config);
                 Effects = new BoscaliSummer.Modules.Effects.Configuration.EffectsSettings(config);
                 LegacyConfigMigration.RemoveEntries(config);
-                // Last, so every module's entries are present to be sorted into the
-                // F1 window's plain and advanced halves.
-                ConfigMenu.Apply(config, this);
+                // Last, so every module's entries are present to be sorted into what the
+                // F1 window lists and what stays in the config file only.
+                ConfigMenu.Apply(config);
             }
             finally
             {

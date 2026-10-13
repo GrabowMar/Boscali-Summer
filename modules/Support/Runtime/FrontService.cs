@@ -33,7 +33,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
     {
         private const int MaximumFactions = 8;
         private const float WorldSeconds = 5f, SnapshotSeconds = 1f;
-        private const int AiTeams = 2;
 
         private sealed class FactionFront
         {
@@ -54,7 +53,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private CyberService cyber;
         private SofService sof;
         private OpsService ops;
-        private float nextShare = -1f, nextWorld, nextWarning;
+        private PhasedGate worldGate;
+        private float nextShare = -1f, nextWarning;
 
         internal static FrontService Active { get; private set; }
 
@@ -76,7 +76,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             order.Clear();
             Running = false;
             nextShare = -1f;
-            nextWorld = 0f;
+            worldGate.Reset();
         }
 
         private void OnDestroy()
@@ -170,8 +170,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             if (!GameAccess.IsServer() || (GameManager.gameState != GameState.SinglePlayer && GameManager.gameState != GameState.Multiplayer)) { Running = false; return; }
             float now = SupportManager.MissionNow();
-            if (!SpaceRules.MissionTime(now) || now < nextWorld) return;
-            nextWorld = now + WorldSeconds;
+            if (!SpaceRules.MissionTime(now) || !worldGate.Due(now, WorldSeconds, 0.1875f, 1f)) return;   // every 5 s, at .1875 of the second (the first within a second): clear of the 1 Hz slots (table in HighCommandManager)
             try
             {
                 Tick(now);

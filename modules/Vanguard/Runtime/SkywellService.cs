@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Vanguard.Domain;
-using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Vanguard.Runtime
@@ -112,9 +111,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         public static int Rounds(Aircraft tanker) =>
             instance != null && tanker != null && instance.kits.TryGetValue(tanker, out Kit k) ? k.Rounds : -1;
-
-        public static TenderState StateOf(Aircraft tanker) =>
-            instance != null && tanker != null && instance.kits.TryGetValue(tanker, out Kit k) ? k.State : TenderState.Stowed;
 
         /// <summary>
         /// Host: the slots the steered AI receivers fly to right now, whichever kit serves them or called them in: a receiver being

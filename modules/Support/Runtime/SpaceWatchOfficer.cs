@@ -47,6 +47,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             {
                 FactionRun run = RunFor(factions[i]);
                 if (run == null) continue;
+                run.Host.Pump(missionNow, run.Brain.Policy, 1.5); // 1.5 ms of an OVERLORD scan per frame
                 RepositionBirds(factions[i], run, missionNow);
                 if (!run.Brain.Policy.Due(missionNow)) continue;
                 if (run.Host.Humans == 0)
@@ -267,7 +268,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
             public bool Scan(WatchScan kind, in WatchSite site)
             {
-                if (!service.TryWatchParts(owner, out SpaceState state, out _, out _)) return false;
+                if (pending.Walk != null || !service.TryWatchParts(owner, out SpaceState state, out _, out _)) return false;
                 bool radar = kind == WatchScan.Radar;
                 SupportActionId action = radar ? SupportActionId.Recon : SupportActionId.SatCamera;
                 if (!manager.ActionEnabled(action)) return false;
@@ -276,23 +277,41 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 var transaction = new SpaceActionTransaction(service, owner, state, receipt, manager.TaskSecondsOf(action));
                 // No free reveal: if the task could not be committed after the window opens, it must not open at all.
                 if (!transaction.CanLaunch) { transaction.Cancel(); return false; }
-                int contacts;
                 var point = new GlobalPosition(site.X, 0f, site.Z);
-                try
-                {
-                    contacts = radar
-                        ? service.OpenWindow(owner, point, manager.Settings.SarSceneRadius.Value, BirdKind.Radar, 0f, ReconAction.StationaryThreshold)
-                        : service.OpenOptical(owner, point, manager.Settings.OpticalSceneRadius.Value, out _);
-                }
+                SpaceObservations.OpenWalk walk;
+                try { walk = service.BeginScan(owner, point, radar ? manager.Settings.SarSceneRadius.Value : manager.Settings.OpticalSceneRadius.Value, radar); }
                 catch (Exception e)
                 {
                     transaction.Cancel();
                     Plugin.Logger?.LogWarning("[Support.Overlord] " + Name + " scan failed: " + e.Message);
                     return false;
                 }
-                if (contacts < 0 || !transaction.Commit()) { transaction.Cancel(); return false; }
-                Plugin.Logger?.LogInfo("[Support.Overlord] " + Name + " " + (radar ? "RADAR SCAN" : "SAT CAMERA") + " of a public objective -> " + contacts + " contact(s).");
+                if (walk == null) { transaction.Cancel(); return false; }
+                // The unit walk (line of sight per unit) was an 18 ms lump: it runs in 1.5 ms slices from Pump; commit and log land when it ends.
+                pending = new PendingScan { Walk = walk, Transaction = transaction, Radar = radar, SiteKey = site.Key };
                 return true;
+            }
+
+            private struct PendingScan { public SpaceObservations.OpenWalk Walk; public SpaceActionTransaction Transaction; public bool Radar; public int SiteKey; }
+            private PendingScan pending;
+
+            /// <summary>Advances the scan in flight one slice (or to its end when <paramref name="budgetMs"/> is infinite).</summary>
+            public void Pump(float now, WatchOfficerPolicy policy, double budgetMs)
+            {
+                PendingScan p = pending;
+                if (p.Walk == null) return;
+                bool more;
+                try { more = p.Walk.Step(budgetMs); }
+                catch (Exception e)
+                {
+                    pending = default; p.Transaction.Cancel(); policy.NoteScanFailed(now, p.SiteKey);
+                    Plugin.Logger?.LogWarning("[Support.Overlord] " + Name + " scan failed: " + e.Message);
+                    return;
+                }
+                if (more) return;
+                pending = default;
+                if (!p.Transaction.Commit()) { p.Transaction.Cancel(); policy.NoteScanFailed(now, p.SiteKey); return; }
+                Plugin.Logger?.LogInfo("[Support.Overlord] " + Name + " " + (p.Radar ? "RADAR SCAN" : "SAT CAMERA") + " of a public objective -> " + p.Walk.Admitted + " contact(s).");
             }
         }
     }

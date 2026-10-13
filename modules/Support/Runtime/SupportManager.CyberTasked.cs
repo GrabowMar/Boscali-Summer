@@ -1,6 +1,5 @@
 using System;
 using BoscaliSummer.Core.Game;
-using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using NuclearOption.Networking;
 using UnityEngine;
@@ -19,7 +18,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             baselinePrice = 0; charge = !BypassRequirements; detail = 0;
             if (!GameAccess.IsServer() || cyber == null || settings == null || !settings.CyberEnabled.Value || !cyber.HasCyber(owner) ||
-                (playerId == SpaceContacts.WatchOfficerId && claiming) || !TaskedKinds.TryGet(action, out TaskedKind kind)) return TaskedOutcome.Unavailable;
+                (playerId == SpaceContacts.WatchOfficerId && claiming) || !TaskedKinds.TryGet(action, out _)) return TaskedOutcome.Unavailable;
             Player player = playerId == SpaceContacts.WatchOfficerId ? null : FindPlayer(owner, playerId);
             if (playerId != SpaceContacts.WatchOfficerId && (player == null || player.HQ != owner)) return TaskedOutcome.Unavailable;
             if (!claiming) return TaskedOutcome.None;

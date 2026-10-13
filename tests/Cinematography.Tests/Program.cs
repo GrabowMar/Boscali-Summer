@@ -61,6 +61,7 @@ static class Program
         ApiTests.Run(Check);
         InboxTests.Run(Check);
         DemoTests.Run(Check);
+        StageTests.Run(Check);
         Console.WriteLine($"PASS: {checks} cinematography assertions");
     }
 }

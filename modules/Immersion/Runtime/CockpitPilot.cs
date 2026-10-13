@@ -7,7 +7,6 @@ using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.Immersion.Configuration;
-using BoscaliSummer.Modules.Immersion.Domain;
 using BoscaliSummer.Modules.Immersion.Visuals;
 using HarmonyLib;
 using UnityEngine;
@@ -51,7 +50,6 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         private int reportedControls = -1;
 
         public string EffectId => "cockpit-pilot";
-        public FxBudget Budget => new FxBudget(393216, 10, 0, true);
 
         internal void Configure(ImmersionSettings value, ManualLogSource log) { settings = value; logger = log; Live = this; }
 

@@ -83,10 +83,10 @@ namespace BoscaliSummer.Tests.Features.Radio
                 "Maris station rejected local replacement tracks");
             TestAssert.That(BuiltInStationRules.AcceptsLocalTracks(BuiltInStationRules.BaseId),
                 "Base station rejected local tracks");
-            TestAssert.That(BuiltInStationRules.UsesVanillaTracks(BuiltInStationRules.AgrapolId, 0) &&
-                !BuiltInStationRules.UsesVanillaTracks(BuiltInStationRules.AgrapolId, 1),
+            TestAssert.That(BuiltInStationRules.UsesVanillaTracks(0) &&
+                !BuiltInStationRules.UsesVanillaTracks(1),
                 "Agrapol fallback was not replaced by local tracks");
-            TestAssert.That(!BuiltInStationRules.UsesVanillaTracks(BuiltInStationRules.BaseId, 1),
+            TestAssert.That(!BuiltInStationRules.UsesVanillaTracks(1),
                 "Base local tracks did not replace the original soundtrack");
         }
 

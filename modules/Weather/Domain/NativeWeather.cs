@@ -26,8 +26,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
     internal struct NativeValues
     {
         public float Conditions, CloudHeight, WindX, WindY, WindZ, Turbulence;
-
-        public float WindSpeed => (float)Math.Sqrt(WindX * WindX + WindZ * WindZ);
     }
 
     /// <summary>

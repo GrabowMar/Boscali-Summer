@@ -9,7 +9,7 @@ namespace BoscaliSummer.Tests.Features.Command
             // Procedural patterns were retired. The saved custom id (3) remains valid.
             for (int preset = 0; preset < 3; preset++)
             {
-                TestAssert.That(SettingsChoices.BackgroundName(true, true, true, preset) == "MATTE",
+                TestAssert.That(SettingsChoices.BackgroundName(true, preset) == "MATTE",
                     "Retired layered backgrounds resolve to matte");
             }
             foreach (int direction in new[] { -1, 1 })
@@ -19,8 +19,8 @@ namespace BoscaliSummer.Tests.Features.Command
                 TestAssert.That(SettingsChoices.CycleBackground(false, false, true, 3, direction) == 0,
                     "Both directions from custom reach matte");
             }
-            TestAssert.That(SettingsChoices.BackgroundName(true, true, true, 3) == "CUSTOM" &&
-                SettingsChoices.BackgroundName(false, false, false, 3) == "MATTE",
+            TestAssert.That(SettingsChoices.BackgroundName(true, 3) == "CUSTOM" &&
+                SettingsChoices.BackgroundName(false, 3) == "MATTE",
                 "Only an enabled custom image uses the persisted custom id");
             byte[] png = { 137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82,
                 0, 0, 16, 0, 0, 0, 8, 0 };

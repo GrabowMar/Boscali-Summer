@@ -23,16 +23,33 @@ namespace BoscaliSummer.Fire
             public float BlastYield;
         }
 
+        /// <summary>A mark whose wall has been found and that waits for its turn to be stamped. The point is global: a local one goes stale at a floating-origin shift.</summary>
+        private struct PendingMark
+        {
+            public GlobalPosition Point;
+            public Vector3 Normal;
+            public float BlastYield;
+            public int Owner;
+        }
+
         public static ImpactScorchManager Instance { get; private set; }
 
         private static readonly int SeedSalt = 0x5c04c1;
 
+        /// <summary>
+        /// Marks stamped per frame: one full cluster (three). Stamping is the costly step while the pool grows
+        /// (Instantiate plus the decal system registering the projector), so a salvo no longer stamps six in one frame.
+        /// </summary>
+        private const int MarksPerFrame = 3;
+
         private readonly Queue<PendingExplosion> pending = new Queue<PendingExplosion>(32);
+        private readonly List<PendingMark> placements = new List<PendingMark>(8);
         private readonly Collider[] overlapBuffer = new Collider[32];
         private readonly List<GameObject> marks = new List<GameObject>(64);
         private readonly List<int> owners = new List<int>(64);
         private int ringHead;
-        private bool loggedFirstMark;
+        private bool loggedFirstMark, materialWarm;
+        private float warmAt;
 
         private static FireAndDestructionSettings Fire => Plugin.Settings.FireAndDestruction;
         private static DiagnosticSettings Diagnostics => Plugin.Settings.Diagnostics;
@@ -67,11 +84,28 @@ namespace BoscaliSummer.Fire
 
         private void Update()
         {
+            if (pending.Count == 0 && placements.Count == 0)
+            {
+                // Warm-up: the one indivisible Resources listing is taken here, in the quiet first seconds of the scene, not mid-combat.
+                if (!materialWarm && Time.unscaledTime >= warmAt && !GameManager.IsHeadless && Fire.ImpactScorchEnabled.Value)
+                    materialWarm = ScorchDecalMaterialResolver.Step();
+                return;
+            }
             int budget = PerFrame;
-            while (budget-- > 0 && pending.Count > 0)
+            while (budget-- > 0 && pending.Count > 0 && placements.Count < MarksPerFrame)
                 ProcessExplosion(pending.Dequeue());
+            // The first mark of a scene resolves the vanilla soot material; that scan used to be one call of 20+ ms
+            // inside PlaceMark and is now sliced over a few frames, the marks waiting in the queue meanwhile.
+            if (placements.Count > 0 && !ScorchDecalMaterialResolver.Step()) return;
+            for (int stamped = 0; stamped < MarksPerFrame && placements.Count > 0; stamped++)
+            {
+                PendingMark next = placements[0];
+                placements.RemoveAt(0);
+                PlaceMark(next.Point.ToLocalPosition(), next.Normal, next.BlastYield, next.Owner);
+            }
         }
 
+        /// <summary>Finds the wall an explosion hit and queues its marks; nothing is created here.</summary>
         private void ProcessExplosion(PendingExplosion explosion)
         {
             if (GameAssets.i == null || GameAssets.i.scorchMarkDecal == null) return;
@@ -89,10 +123,12 @@ namespace BoscaliSummer.Fire
             {
                 Collider collider = overlapBuffer[i];
                 if (collider == null) continue;
-                int candidate = OwnerOf(collider);
-                if (candidate == 0) continue;
                 float distance = (collider.bounds.center - local).sqrMagnitude;
                 if (distance >= nearestSq) continue;
+                // Two parent-chain searches per collider: only for one that would beat the best owner so far
+                // (the pick is the same, but a 32-collider overlap no longer pays 64 searches).
+                int candidate = OwnerOf(collider);
+                if (candidate == 0) continue;
                 nearestSq = distance;
                 nearest = collider;
                 owner = candidate;
@@ -124,18 +160,21 @@ namespace BoscaliSummer.Fire
             }
 
             int markCount = ImpactScorchPolicy.DecalCount(explosion.BlastYield);
-            PlaceMark(point, normal, explosion.BlastYield, owner);
+            EnqueueMark(point, normal, explosion.BlastYield, owner);
             if (markCount > 1)
             {
                 Vector3 tangent = Vector3.Cross(normal, Vector3.up).normalized;
                 if (tangent.sqrMagnitude < 0.01f) tangent = Vector3.right;
                 Vector3 bitangent = Vector3.Cross(normal, tangent).normalized;
                 float spread = ImpactScorchPolicy.DecalSize(explosion.BlastYield) * 0.32f;
-                PlaceMark(point + tangent * spread + bitangent * spread * 0.3f, normal, explosion.BlastYield * 0.45f, owner);
+                EnqueueMark(point + tangent * spread + bitangent * spread * 0.3f, normal, explosion.BlastYield * 0.45f, owner);
                 if (markCount > 2)
-                    PlaceMark(point - tangent * spread * 0.75f - bitangent * spread * 0.45f, normal, explosion.BlastYield * 0.32f, owner);
+                    EnqueueMark(point - tangent * spread * 0.75f - bitangent * spread * 0.45f, normal, explosion.BlastYield * 0.32f, owner);
             }
         }
+
+        private void EnqueueMark(Vector3 localPoint, Vector3 normal, float blastYield, int owner) =>
+            placements.Add(new PendingMark { Point = localPoint.ToGlobalPosition(), Normal = normal, BlastYield = blastYield, Owner = owner });
 
         /// <summary>
         /// Hides every mark owned by a destroyed building so scorch never floats where
@@ -144,6 +183,8 @@ namespace BoscaliSummer.Fire
         internal void ReleaseForBuilding(int buildingId)
         {
             if (buildingId == 0) return;
+            for (int i = placements.Count - 1; i >= 0; i--)
+                if (placements[i].Owner == buildingId) placements.RemoveAt(i);   // not stamped yet: never stamp it
             for (int i = 0; i < marks.Count; i++)
             {
                 if (i < owners.Count && owners[i] == buildingId)
@@ -239,8 +280,11 @@ namespace BoscaliSummer.Fire
             marks.Clear();
             owners.Clear();
             pending.Clear();
+            placements.Clear();
             ringHead = 0;
             loggedFirstMark = false;
+            materialWarm = false;
+            warmAt = Time.unscaledTime + 2f;
             ScorchDecalMaterialResolver.ResetForScene();
         }
     }

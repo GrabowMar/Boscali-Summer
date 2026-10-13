@@ -1,0 +1,167 @@
+# Boscali Summer, chapter 1: Summer Wing.
+# The prologue, flown before anybody has picked a side: a shipping contract out in the Ignus archipelago, far from Heartland.
+# The pilot leads Summer flight for Tradewind Air Services and keeps a freighter out of pirate hands. Finishing it opens chapter 2.
+# The format is documented in docs/SCENARIOS.md.
+
+scenario summer-wing
+title "Summer Wing"
+base "Free Flight - Ignus Archipelago"
+group "Boscali Summer"
+campaign boscali-summer 1
+
+about
+| June 2034, eleven days before the war reaches you. Tradewind Air Services has one contract in the Ignus archipelago: Halcyon Lines
+| pays by the hour for somebody to fly top cover over its freighters. It has been a quiet posting.
+|
+| Tonight the MV Halcyon Dawn is four hours out of Island Five with a hold full of aircraft parts that two armies would both like to own.
+| Somebody has told the wrong people. You lead Summer flight. Bring the ship in.
+|
+| The freighter must survive. Sink the boats that come for her and break the aircraft covering them.
+
+# ------------------------------------------------------------------------------------------------ the world
+time 16
+weather 0.3
+ending 14
+# Nobody flies for the other side here: the people coming for the ship are nobody's air force.
+lock pala
+begin find_ship ship_lost stage_plaza stage_fall stage_rear
+
+# The freighter, and the people who want her. Boats first, then a second pair with two light aircraft over them.
+unit halcyon_dawn  new ship LandingCraft1 side=bdf  at 30000 2 -9000  heading=57  to=40500,-2500
+unit pirate_boat_1 new ship PatrolBoat1   side=pala at 24500 2 -12500 heading=50  to=33000,-7000 skill=0.45
+unit pirate_boat_2 new ship PatrolBoat1   side=pala at 24800 2 -13100 heading=50  to=33000,-7000 skill=0.45
+unit pirate_boat_3 new ship PatrolBoat1   side=pala at 36000 2 -15000 heading=5   to=37000,-5000 skill=0.45
+unit pirate_boat_4 new ship PatrolBoat1   side=pala at 36600 2 -15400 heading=5   to=37000,-5000 skill=0.45
+unit pirate_air_1  new aircraft COIN side=pala at 27000 500 -17000 heading=40 speed=95 skill=0.6 loadout=12.7mm_internal+turret_20mm_rotary+RocketPod1_single+AAM3_single+AGM1_single+AGM1_single
+unit pirate_air_2  new aircraft COIN side=pala at 27300 540 -17400 heading=40 speed=95 skill=0.6 loadout=12.7mm_internal+turret_20mm_rotary+RocketPod1_single+AAM3_single+AGM1_single+AGM1_single
+
+# Day 1: a PALA column crosses the city airport. In the world from the start; it is the first thing the camera rides with.
+unit coup_1       new vehicle MBT1             side=pala at 2600 8.6 4700 heading=241 skill=0.3 to=1551,4117
+unit coup_2       new vehicle Linebreaker_IFV  side=pala at 2626 8.6 4715 heading=241 skill=0.3 to=1551,4117
+unit coup_3       new vehicle Linebreaker_APC  side=pala at 2652 8.6 4729 heading=241 skill=0.3 to=1551,4117
+unit coup_4       new vehicle Linebreaker_APC  side=pala at 2679 8.6 4744 heading=241 skill=0.3 to=1551,4117
+unit coup_5       new vehicle Truck2-MRAP      side=pala at 2705 8.6 4758 heading=241 skill=0.3 to=1551,4117
+# Day 4: the plaza under the towers. Both lines arrive together, a breath before the camera does.
+unit hold_1       new vehicle MBT              side=bdf  at 1700 10.6 3250 heading=270 skill=0.3
+unit hold_2       new vehicle MBT              side=bdf  at 1700 10.6 3205 heading=270 skill=0.3
+unit hold_3       new vehicle AFV8_IFV         side=bdf  at 1664 10.6 3286 heading=270 skill=0.3
+unit hold_4       new vehicle AFV8_IFV         side=bdf  at 1664 10.6 3178 heading=270 skill=0.3
+unit hold_5       new vehicle SPAAG2           side=bdf  at 1730 10.6 3230 heading=270 skill=0.3
+unit push_1       new vehicle MBT1             side=pala at 1130 8.6 3200 heading=90 skill=0.3
+unit push_2       new vehicle MBT1             side=pala at 1130 8.6 3245 heading=90 skill=0.3
+unit push_3       new vehicle MBT1             side=pala at 1130 8.6 3286 heading=90 skill=0.3
+unit push_4       new vehicle Linebreaker_IFV  side=pala at 1100 8.6 3180 heading=90 skill=0.3
+unit push_5       new vehicle Linebreaker_IFV  side=pala at 1100 8.6 3266 heading=90 skill=0.3
+# Day 9: the second echelon, and the helicopters that end it.
+unit push_6       new vehicle MBT1             side=pala at 1090 8.6 3222 heading=90 skill=0.3 to=1500,3235
+unit push_7       new vehicle MBT1             side=pala at 1076 7.6 3290 heading=90 skill=0.3 to=1500,3235
+unit gunship_1    new aircraft AttackHelo1 side=pala at 1300 110 3950 heading=180 speed=45 skill=0.6 loadout=turret_30mmHE_750+AGM1_quad_internal+AGM_heavyx2+AAM1_single+IRMS1_double
+unit gunship_2    new aircraft AttackHelo1 side=pala at 1520 130 4050 heading=180 speed=45 skill=0.6 loadout=turret_30mmHE_750+AGM1_quad_internal+AGM_heavyx2+AAM1_single+IRMS1_double
+# The road out: what is left of the garrison leaves across the airfield.
+unit rear_1       new vehicle AFV8_APC         side=bdf  at 2960 8.6 4450 heading=90 skill=0.5 to=3900,4450
+unit rear_2       new vehicle HLT-T            side=bdf  at 2928 8.6 4450 heading=90 skill=0.5 to=3900,4450
+unit rear_3       new vehicle HLT-M            side=bdf  at 2896 8.6 4450 heading=90 skill=0.5 to=3900,4450
+unit rear_4       new vehicle HLT-M            side=bdf  at 2864 8.6 4450 heading=90 skill=0.5 to=3900,4450
+unit rear_5       new vehicle AFV8_APC         side=bdf  at 2832 8.6 4450 heading=90 skill=0.5 to=3900,4450
+# The Home Fleet, north of the city and closing. In the world from the start: ships need the time to get under way.
+unit fleet_1      new ship Destroyer1    side=bdf  at 9000 7.2 12000 heading=225 to=4800,7800
+unit fleet_2      new ship SmallCarrier1 side=bdf  at 9420 6.2 12420 heading=225 to=5220,8220
+unit fleet_3      new ship Frigate1      side=bdf  at 8780 6.3 12640 heading=225 to=4580,8440
+unit fleet_4      new ship Corvette1     side=bdf  at 9640 8.4 11780 heading=225 to=5440,7580
+unit fleet_5      new ship Corvette1     side=bdf  at 9900 8.4 12900 heading=225 to=5700,8700
+unit fleet_6      new ship Corvette1     side=bdf  at 9200 8.4 13100 heading=225 to=5000,8900
+
+objective stage_plaza wait 16
+  then spawn hold_1 hold_2 hold_3 hold_4 hold_5 push_1 push_2 push_3 push_4 push_5
+objective stage_fall wait 29
+  then spawn push_6 push_7 gunship_1 gunship_2
+objective stage_rear wait 38
+  then spawn rear_1 rear_2 rear_3 rear_4 rear_5
+
+objective find_ship bdf "Find the Halcyon Dawn" reach 31500 400 -8000 range=4500
+  then spawn pirate_boat_1 pirate_boat_2
+  then start first_boats first_clock
+objective first_boats bdf "Sink the boarding boats" destroy pirate_boat_1 pirate_boat_2
+  then stop first_clock
+  then spawn pirate_boat_3 pirate_boat_4 pirate_air_1 pirate_air_2
+  then start second_wave second_clock
+objective first_clock wait 600
+  then finish first_boats
+objective second_wave bdf "Break the second wave" destroy pirate_boat_3 pirate_boat_4 pirate_air_1 pirate_air_2
+  then stop second_clock
+  then start home_safe
+objective second_clock wait 720
+  then finish second_wave
+objective home_safe bdf wait 12
+  then victory 14
+# If the freighter goes down, the other side has won the evening.
+objective ship_lost pala destroy halcyon_dawn
+  then victory 10
+
+# ------------------------------------------------------------------------------------------------ the story
+cast broker  command "BROKER"        "Tradewind Air Services"
+cast halcyon tower   "HALCYON DAWN"  "MV Halcyon Dawn, master"
+cast summer  wing    "SUMMER TWO"    "Your wing"
+
+picture coup    poster press_censorship
+picture capital poster emergency_withdrawal
+picture front   poster frontline_overstretch
+picture hired   poster veteran_contractor_influx
+picture docks   poster merchant_fleet_charter
+
+shot city    orbit airbase "City Airport" radius=2400 height=420 from=20 to=58 seconds=7
+shot column  chase unit coup_3 back=24 up=4 right=-18 seconds=9 fov=42
+shot plaza   orbit at 1500 9 3235 radius=260 height=32 from=35 to=105 seconds=9 fov=42
+shot line    orbit at 1650 9 3235 radius=95 height=7 from=40 to=110 seconds=8 fov=50
+shot fall    orbit airbase "City Airport" radius=3200 height=900 from=300 to=338 seconds=8
+shot rear    chase unit rear_3 back=30 up=4 right=8 seconds=8 fov=42
+shot fleet   orbit unit fleet_1 radius=330 height=40 from=20 to=80 seconds=9 fov=40
+shot wake    orbit unit fleet_2 radius=620 height=120 from=60 to=15 seconds=8
+shot strip   orbit airbase "Island5 Airstrip" radius=1500 height=380 from=250 to=310 seconds=8
+shot ship    orbit unit halcyon_dawn  radius=260  height=60  from=200 to=290 seconds=8 fov=38
+
+# The war, told once, where a player first meets it: the coup, the capital, the retreat, the fleet, and then the people who are paid
+# to fly through all of it. Ten shots, cut to the length of the track; the world statements above put the armies under the camera on time.
+beat intro when start
+  music "synthetic-warfront.mp3"
+  clock 16.0
+  sky storm
+  cut city   "The Boscali Republic" "June 2034. Fifty-two million people. One archipelago. One summer left."
+  cut column "02:10. Every relay tower in the islands goes dark in the same second. When the screens come back, the armour is already inside the cities. Nobody fires a shot. Nobody has been told who to shoot." photo=coup stamp="AGRAPOL - 02 JUN 2034 / REPUBLIC HOLDS 100% / DAY 1"
+  cut plaza  "It takes the garrison two days to learn that the orders on the net are not from its own generals. Then it fights. Street by street, under its own towers." photo=front stamp="AGRAPOL, GOVERNMENT QUARTER - 05 JUN 2034 / REPUBLIC HOLDS 61% / DAY 4"
+  cut line   "Every block costs PALA a day it did not plan for. Every block costs the Republic men it cannot replace."
+  cut fall   "On the ninth day the capital goes quiet. PALA holds the ports, the grid, the airwaves, and the story." photo=capital stamp="AGRAPOL - 10 JUN 2034 / REPUBLIC HOLDS 23% / DAY 9"
+  cut rear   "What is left of the army goes north across Heartland with whatever still has fuel. One island. Forty kilometres of it. Nothing behind them but the sea." stamp="HEARTLAND, NORTH ROAD - 12 JUN 2034 / REPUBLIC HOLDS 9% / DAY 11"
+  cut fleet  "And out of that sea, transponders dark, comes the one thing the coup forgot to buy: the Home Fleet." stamp="HOME FLEET - EMCON ALPHA / COURSE 225 / SPEED 28 KN"
+  cut wake   "Every hull the Republic has left, steering for Heartland. If it gets there, this war is not over. It is just starting."
+  cut strip  "Wars like this one run out of pilots before they run out of money. So they hire." photo=hired stamp="IGNUS CHAIN, ISLAND FIVE - 13 JUN 2034 / DAY 12"
+  cut ship   "Summer Wing" "Tradewind Air Services, contract 0417. No flag. No side. Not yet." photo=docks
+  dip
+  enlist bdf
+  seat "VT-7 Vagrant" at 40000 650 -1500 heading=235 speed=110
+
+beat brief when join
+  say broker "Summer Lead, Broker. Easy money tonight: one freighter, Island Five by dark. The weather is filthy and the Vagrant is all the company could spare. Go and find her."
+  say broker "You have the flight. Hold C for the ring: your wing does what the ring says. Mostly."
+  hint "You are airborne in a VT-7 Vagrant out of Island Five. The freighter is marked on the map and in your objectives."
+
+beat found when done find_ship
+  say halcyon "Summer flight, Halcyon Dawn. Glad of the company. Radar has two fast boats closing from the south-west and they are not answering."
+  say broker "That is not a fishing fleet. Somebody sold the manifest. Sink them before they get alongside. The client pays for the ship, not the paint."
+
+beat boats-down when done first_boats
+  say halcyon "Both boats are burning. Thank you, Summer. Wait. More contacts, south-east, and something in the air above them."
+  say summer "Lead, Two. Those are attack aircraft. Since when do pirates have an air force?"
+  say broker "Since somebody with a war to plan started paying them. Break it up."
+
+beat safe when done second_wave
+  say halcyon "Scope is clear. Island Five has us in sight. Halcyon Dawn owes you a drink, Summer flight."
+  say broker "Ship is in. Invoice is out. And I have a new client on the other line: two of them, on Heartland, and they both want pilots by Monday."
+  remember saved-halcyon
+  finish
+  card "Chapter complete" "Next in the mission list: Boscali Summer."
+
+beat lost when done ship_lost
+  say halcyon "Mayday, mayday. Halcyon Dawn is taking water. We are abandoning."
+  say broker "That is the ship gone, and the contract with her. Get home, Summer. There is other work coming, on Heartland."
+  finish

@@ -241,7 +241,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             if (from == BehaviourId.React && Reaction.Elapsed < ReactionManeuver.MinDwell) return "still maneuvering";
             string why = ReactionManeuver.Refusal(o.Kind, s, agl, p, o.HasThreat);
             if (why != null) return why;
-            Reaction.Begin(o, s, LastRejoin.Ref);
+            Reaction.Begin(o, s);
             Mind.Force(BehaviourId.React);
             events?.Push(new WingEvent
             {

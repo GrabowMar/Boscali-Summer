@@ -18,6 +18,22 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const float ExposeSeconds = 60f;
         public const int MaxExposed = 8;          // per launcher faction, at once
 
+        // CHAFF: the bait seeds one cloud every ChaffSpacing metres flown; each hangs ChaffSeconds and blinds one missile.
+        public const float ChaffSpacing = 300f;
+        public const float ChaffSeconds = 60f;
+        public const float ChaffRadius = 600f;
+        public const float ChaffInterval = 0.5f;
+
+        /// <summary>
+        /// A radar seeker is blinded when its line of sight to the target passes within ChaffRadius of a cloud (both
+        /// given relative to the seeker). A seeker or a target inside the cloud counts; a cloud behind either does not.
+        /// </summary>
+        public static bool Screens(Vector3 toCloud, Vector3 toTarget)
+        {
+            float along = toTarget.sqrMagnitude > 1e-3f ? Mathf.Clamp01(Vector3.Dot(toCloud, toTarget) / toTarget.sqrMagnitude) : 0f;
+            return (toTarget * along - toCloud).sqrMagnitude <= ChaffRadius * ChaffRadius;
+        }
+
         public static float CruiseAltitude(float launchY, float groundY) =>
             Mathf.Max(Mathf.Max(launchY, MinCruiseAltitude), groundY + MinClearance);
 

@@ -552,7 +552,7 @@ namespace BoscaliSummer.Tests.Features.Comms
             host.Snapshot(Wing, 2001f, output);
             TestAssert.That(output.Count == 1 && output[0].Envelope.Event == CommsEvent.Reset,
                 "removed actions leave no replay state");
-            host.Tick(3000f, output);
+            host.Tick(3000f);
             TestAssert.That(output.Count == 1, "removed actions produce no delayed results");
 
             var client = new CommsClientState { LocalId = Third.Id, LocalFaction = Blue };

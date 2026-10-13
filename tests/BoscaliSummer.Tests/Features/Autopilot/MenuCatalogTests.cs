@@ -26,6 +26,46 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TacBoardRowsFollowTheOptions();
             TacBoardOffKeepsItsRows();
             PitKeepsStationIdentityWhileTheListShrinks();
+            HudSwitchesAndCabin();
+        }
+
+        private static void HudSwitchesAndCabin()
+        {
+            MenuModel m = MenuCatalog.Build(MenuWorlds.Default());
+            MenuRow pages = m.Row("hud/pages");
+            TestAssert.That(pages.Kind == MenuKind.Submenu && pages.Children.Count == MenuCatalog.BoardPages.Length + 1 && pages.Children[0].Id == "hud/pages/auto", "SCOPE PAGES lists the auto switch, then one row per page");
+            TestAssert.Eq(pages.State, "8 OF 9 ON", "and counts the pages that are on");
+            MenuRow dock = m.Row("hud/pages/dock"), threat = m.Row("hud/pages/threat");
+            TestAssert.That(!dock.IsOn && dock.Label == "SHOW DOCK PAGE" && dock.State == "DOCK PAGE: OFF", "a page that is off offers SHOW");
+            TestAssert.That(threat.IsOn && threat.Label == "HIDE THREAT PAGE" && threat.State == "THREAT PAGE: ON" && threat.Checkbox, "a page that is on offers HIDE, with a checkbox");
+            TestAssert.That(m.Row("hud/parts/sway").Label == "DISABLE VISOR SWAY" && m.Row("hud/parts").State == "7 OF 7 ON", "a behaviour reads ENABLE / DISABLE");
+            TestAssert.That(m.Row("hud/shade").State == "SHADE: MED" && m.Row("hud/shade").Label == "SET SHADE HIGH" && m.Row("hud/size").State == "BOARD SIZE: NORMAL", "the shade and size cycles show where they stand");
+            TestAssert.That(m.Row("hud/reset").NeedsHold, "resetting the visor needs the hold");
+            MenuWorld auto = MenuWorlds.Default(); auto.BoardScopeAuto = false;
+            TestAssert.That(MenuCatalog.Build(auto).Row("hud/pages").State == "AUTO PAGES: OFF" && MenuCatalog.Build(auto).Row("hud/pages/auto").Label == "ENABLE AUTO PAGES", "auto pages off is said on the row that leads there");
+            MenuModel off = MenuCatalog.Build(MenuWorlds.BoardOff());
+            TestAssert.That(off.Row("hud/shade").Blocked == "TAC BOARD: OFF" && off.Row("hud/size").Blocked == "TAC BOARD: OFF" && !off.Row("hud/parts/corners").IsBlocked, "a hidden board dims its look rows; the corner restyle is its own switch");
+            TestAssert.That(MenuCatalog.Nearest(MenuCatalog.ShadeSteps, 0.6f) == 2 && MenuCatalog.Nearest(MenuCatalog.SizeSteps, 1.4f) == 2 && MenuCatalog.Nearest(MenuCatalog.GhostSteps, 0f) == 0, "a free value lands on its nearest step");
+
+            MenuCategory cockpit = m.Category("cockpit");
+            var groups = new List<string>();
+            foreach (MenuRow r in cockpit.Rows) if (groups.Count == 0 || groups[groups.Count - 1] != r.Group) groups.Add(r.Group);
+            TestAssert.Eq(string.Join(",", groups), "MUSIC DECK,RECEIVER,CABIN", "COCKPIT groups the deck, the receiver and the cabin");
+            TestAssert.That(m.Row("cockpit/feel").State == "8 OF 9 ON" && !m.Row("cockpit/feel/breathing").IsOn && m.Row("cockpit/feel/visor").Label == "DISABLE HELMET VISOR", "CABIN FEEL counts the effects that are on");
+            TestAssert.Eq(m.Row("cockpit/kneeboard").State, "CARD: MISSION CARD", "the kneeboard row names the card on your knee");
+            MenuWorld quiet = MenuWorlds.Default(); quiet.Feel.Remove("master");
+            MenuModel q = MenuCatalog.Build(quiet);
+            TestAssert.That(q.Row("cockpit/feel").State == "IMMERSION: OFF" && q.Row("cockpit/feel/visor").Blocked == "IMMERSION: OFF" && !q.Row("cockpit/feel/master").IsBlocked, "the master switch off dims every effect but itself");
+
+            MenuRow lights = m.Row("flight/lights");
+            TestAssert.That(lights.Kind == MenuKind.Submenu && lights.State == "NAV ON · LANDING AUTO" && lights.Children.Count == 2, "the exterior lights are one FLIGHT row that says where both stand");
+            var flight = m.Category("flight").Rows;
+            TestAssert.That(flight[flight.Count - 2].Id == "flight/lights" && flight.Count == 7, "it sits just above EJECT, and the list still fits without scrolling");
+            TestAssert.That(m.Row("view/holo").IsOn && m.Row("view/ghost").State == "GROUND GHOST: FAINT" && m.Row("view/ghost").Label == "SET GROUND GHOST CLEAR", "VIEW holds the terrain visor");
+            MenuRow dark = m.Row("defence/dark");
+            TestAssert.That(dark.State == "SHOWING: RADAR + NAV + LDG" && !dark.IsBlocked, "GO DARK names what still shows you");
+            MenuWorld hidden = MenuWorlds.Default(); hidden.RadarOn = false; hidden.NavOn = false; hidden.LandingLight = 0;
+            TestAssert.That(MenuCatalog.Build(hidden).Row("defence/dark").Blocked == "ALREADY DARK", "and is refused once nothing does");
         }
 
         internal static IEnumerable<MenuRow> AllRows(MenuModel model)
@@ -40,7 +80,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
 
         private static void RingIsFixed()
         {
-            string[] ids = { "weapons", "lights", "flight", "wing", "comms", "radio", "support", "view", "defence", "targets" };
+            string[] ids = { "weapons", "hud", "flight", "wing", "comms", "cockpit", "support", "view", "defence", "targets" };
             float[] angles = { 18, 54, 90, 126, 162, 198, 234, 270, 306, 342 };
             string[] keys = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0" };
             foreach (var scenario in MenuWorlds.All())
@@ -123,12 +163,12 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.Eq(moving.Category("flight").Rows[0].Id, "flight/gear", "and keeps its place at the top");
 
             w = MenuWorlds.Default();
-            TestAssert.Eq(MenuCatalog.Build(w).Row("lights/light").Label, "SET LANDING LIGHT OFF", "AUTO steps to OFF");
+            TestAssert.Eq(MenuCatalog.Build(w).Row("flight/lights/light").Label, "SET LANDING LIGHT OFF", "AUTO steps to OFF");
             w.LandingLight = 0;
-            MenuRow light = MenuCatalog.Build(w).Row("lights/light");
+            MenuRow light = MenuCatalog.Build(w).Row("flight/lights/light");
             TestAssert.Eq(light.Label, "SET LANDING LIGHT ON", "OFF steps to ON");
             TestAssert.Eq(light.State, "LANDING LIGHT: OFF", "state names the current value");
-            TestAssert.Eq(MenuCatalog.Build(MenuWorlds.Default()).Row("lights/nav").Label, "TURN NAV LIGHTS OFF", "nav lights cannot read as their own state");
+            TestAssert.Eq(MenuCatalog.Build(MenuWorlds.Default()).Row("flight/lights/nav").Label, "TURN NAV LIGHTS OFF", "nav lights cannot read as their own state");
             TestAssert.Eq(MenuCatalog.Build(MenuWorlds.Default()).Row("defence/radar").Label, "GO SILENT", "radar emitting offers GO SILENT");
             TestAssert.That(!MenuCatalog.Build(MenuWorlds.Default()).Row("defence/radar").Checkbox, "GO SILENT / RADIATE is a distinct-verb pair: no checkbox");
             TestAssert.That(MenuCatalog.Build(MenuWorlds.Default()).Row("flight/assist").Checkbox, "ENABLE / DISABLE is an on/off flip: checkbox");
@@ -149,9 +189,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             MenuRow engine = ground.Row("flight/engine");
             TestAssert.That(engine.Label == "START ENGINE" && !engine.NeedsHold, "a shut-down engine on the ground starts with a plain press");
             TestAssert.Eq(ground.Category("flight").Badge, "GROUND", "ground badge");
-            string[] expect = { "flight/assist", "flight/hover", "flight/engine" };
-            var ids = ground.Category("flight").Rows.ConvertAll(r => r.Id);
-            TestAssert.That(ids.Count == 3 && ids[0] == expect[0] && ids[1] == expect[1] && ids[2] == expect[2], "the order of what remains is kept");
+            TestAssert.Eq(string.Join(" ", ground.Category("flight").Rows.ConvertAll(r => r.Id)), "flight/assist flight/hover flight/engine flight/lights", "the order of what remains is kept");
 
             MenuModel air = MenuCatalog.Build(MenuWorlds.Default());
             TestAssert.That(air.Row("flight/engine").NeedsHold && air.Row("flight/engine").HoldLabel == "HOLD TO STOP", "stopping the engine in flight needs the hold");
@@ -226,7 +264,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
         {
             MenuModel m = MenuCatalog.Build(MenuWorlds.Default());
             TestAssert.Eq(m.Category("weapons").Badge, "AAM-4 ×2", "weapons badge");
-            TestAssert.Eq(m.Category("lights").Badge, "NAV ON", "lights badge at rest");
+            TestAssert.That(m.Category("hud").Badge == "FULL" && !m.Category("hud").BadgeShow, "the HUD badge is the declutter level, quiet while it is FULL");
             TestAssert.Eq(m.Category("flight").Badge, "ASSIST", "flight badge");
             TestAssert.Eq(m.Category("comms").Badge, "NET OPEN", "comms badge");
             TestAssert.Eq(m.Category("view").Badge, "2 MSL", "VIEW shows missiles in flight");
@@ -234,13 +272,15 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.Eq(m.Category("targets").Badge, "2 SEL", "targets badge");
             TestAssert.Eq(m.Category("support").Badge, "1 ARMED", "support badge when a perk is armed");
             TestAssert.That(m.Category("support").BadgeShow && m.Category("support").BadgeAlert, "armed support is worth the second line, in amber");
-            TestAssert.Eq(m.Category("radio").Badge, "BOSCALI", "radio badge is the station");
+            TestAssert.Eq(m.Category("cockpit").Badge, "BOSCALI", "the cockpit badge is the tuned station");
 
             MenuWorld w = MenuWorlds.Default();
             w.Assist = false; w.NavOn = false;
             m = MenuCatalog.Build(w);
             TestAssert.That(m.Category("flight").Badge == "FA OFF" && m.Category("flight").BadgeAlert, "assist off is an amber FA OFF");
-            TestAssert.That(m.Category("lights").Badge == "NAV OFF" && m.Category("lights").BadgeShow, "nav off shows at rest");
+            TestAssert.That(MenuCatalog.Build(MenuWorlds.BoardOff()).Category("hud").Badge == "OFF", "a hidden board says so on the ring");
+            w = MenuWorlds.Default(); w.NvgOn = true; w.Missiles = 0;
+            TestAssert.Eq(MenuCatalog.Build(w).Category("view").Badge, "NVG ON", "night vision shows on VIEW, where it now lives");
 
             m = MenuCatalog.Build(MenuWorlds.Ibis());
             TestAssert.Eq(m.Category("flight").Badge, "HOVER ON", "a helicopter in hover");
@@ -346,18 +386,19 @@ namespace BoscaliSummer.Tests.Features.Autopilot
         private static void TacBoardRowsFollowTheOptions()
         {
             MenuModel m = MenuCatalog.Build(MenuWorlds.Default());
-            string[] ids = m.Category("view").Rows.ConvertAll(r => r.Id).ToArray();
-            TestAssert.Eq(string.Join(" ", ids), "view/cam view/map view/mslview view/board view/declutter view/boardlayout", "the board rows follow the camera rows and keep their order");
+            TestAssert.Eq(string.Join(" ", m.Category("hud").Rows.ConvertAll(r => r.Id)), "hud/board hud/declutter hud/layout hud/pages hud/parts hud/shade hud/size hud/reset",
+                "the HUD category holds every visor switch, the master toggle first");
+            TestAssert.Eq(string.Join(" ", m.Category("view").Rows.ConvertAll(r => r.Id)), "view/cam view/map view/mslview view/nvg view/holo view/ghost", "VIEW is what you look through: no board rows");
 
-            MenuRow board = m.Row("view/board");
+            MenuRow board = m.Row("hud/board");
             TestAssert.That(board.Kind == MenuKind.Toggle && board.IsOn && !board.Checkbox, "TAC BOARD is a toggle with distinct verbs, not a checkbox");
             TestAssert.Eq(board.Label, "HIDE TAC BOARD", "a shown board offers HIDE");
             TestAssert.Eq(board.State, "CURRENT: ON", "the toggle's state line says what is current");
-            TestAssert.Eq(m.Row("view/declutter").Label, "SET HUD DECLUTTER LEAN", "FULL steps to LEAN");
-            TestAssert.Eq(m.Row("view/declutter").State, "HUD DECLUTTER: FULL", "the declutter state line names the level");
-            TestAssert.Eq(m.Row("view/declutter").ToastText(), "HUD DECLUTTER: LEAN", "and the toast names where the press led");
-            TestAssert.Eq(m.Row("view/boardlayout").Label, "SET BOARD LAYOUT STACK", "WIDE steps to STACK");
-            TestAssert.Eq(m.Row("view/boardlayout").State, "BOARD LAYOUT: WIDE", "the layout state line names the layout");
+            TestAssert.Eq(m.Row("hud/declutter").Label, "SET HUD DECLUTTER LEAN", "FULL steps to LEAN");
+            TestAssert.Eq(m.Row("hud/declutter").State, "HUD DECLUTTER: FULL", "the declutter state line names the level");
+            TestAssert.Eq(m.Row("hud/declutter").ToastText(), "HUD DECLUTTER: LEAN", "and the toast names where the press led");
+            TestAssert.Eq(m.Row("hud/layout").Label, "SET BOARD LAYOUT STACK", "WIDE steps to STACK");
+            TestAssert.Eq(m.Row("hud/layout").State, "BOARD LAYOUT: WIDE", "the layout state line names the layout");
 
             // every declutter level and layout is reachable and the cycle wraps
             string[] levels = { "FULL", "LEAN", "MIN" };
@@ -365,17 +406,17 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             {
                 MenuWorld w = MenuWorlds.Default();
                 w.BoardDeclutter = i;
-                MenuRow row = MenuCatalog.Build(w).Row("view/declutter");
+                MenuRow row = MenuCatalog.Build(w).Row("hud/declutter");
                 TestAssert.Eq(row.State, "HUD DECLUTTER: " + levels[i], "declutter shows " + levels[i]);
                 TestAssert.Eq(row.NextValue, levels[(i + 1) % levels.Length], "declutter " + levels[i] + " steps to " + levels[(i + 1) % levels.Length]);
             }
             MenuWorld stack = MenuWorlds.Default();
             stack.BoardLayout = 1;
-            MenuRow layout = MenuCatalog.Build(stack).Row("view/boardlayout");
+            MenuRow layout = MenuCatalog.Build(stack).Row("hud/layout");
             TestAssert.That(layout.State == "BOARD LAYOUT: STACK" && layout.NextValue == "WIDE", "STACK steps back to WIDE");
             stack.BoardLayout = 9; stack.BoardDeclutter = -3;
             MenuModel clamped = MenuCatalog.Build(stack);
-            TestAssert.That(clamped.Row("view/boardlayout").State == "BOARD LAYOUT: STACK" && clamped.Row("view/declutter").State == "HUD DECLUTTER: FULL",
+            TestAssert.That(clamped.Row("hud/layout").State == "BOARD LAYOUT: STACK" && clamped.Row("hud/declutter").State == "HUD DECLUTTER: FULL",
                 "an index outside the lists is held inside them");
 
             // the cycle order is the contract enums' order: the binding steps the enum by index
@@ -391,33 +432,34 @@ namespace BoscaliSummer.Tests.Features.Autopilot
         private static void TacBoardOffKeepsItsRows()
         {
             MenuModel m = MenuCatalog.Build(MenuWorlds.BoardOff());
-            MenuRow board = m.Row("view/board");
+            MenuRow board = m.Row("hud/board");
             TestAssert.That(!board.IsOn && board.Label == "SHOW TAC BOARD" && board.State == "CURRENT: OFF", "a hidden board offers SHOW, state CURRENT: OFF");
-            foreach (string id in new[] { "view/declutter", "view/boardlayout" })
+            foreach (string id in new[] { "hud/declutter", "hud/layout" })
             {
                 MenuRow row = m.Row(id);
                 TestAssert.That(row != null && row.IsBlocked && row.Blocked == "TAC BOARD: OFF" && row.State == "TAC BOARD: OFF", id + " stays, dimmed, with its reason");
             }
-            TestAssert.That(m.Row("view/declutter").Value == "MIN" && m.Row("view/boardlayout").Value == "STACK", "a hidden board keeps the look the pilot left it on");
+            TestAssert.That(m.Row("hud/declutter").Value == "MIN" && m.Row("hud/layout").Value == "STACK", "a hidden board keeps the look the pilot left it on");
 
             // opened with the board off, turned on while the menu is open: the look rows come alive in place
             MenuModel live = MenuCatalog.Build(MenuWorlds.BoardOff());
             MenuWorld on = MenuWorlds.BoardOff();
             on.BoardOn = true;
             live.Reconcile(MenuCatalog.Build(on));
-            TestAssert.That(live.Row("view/board").IsOn && !live.Row("view/declutter").IsBlocked && !live.Row("view/boardlayout").IsBlocked, "switching the board on frees the look rows");
+            TestAssert.That(live.Row("hud/board").IsOn && !live.Row("hud/declutter").IsBlocked && !live.Row("hud/layout").IsBlocked, "switching the board on frees the look rows");
             // and the other way: turned off while open, the rows stay in their place, dimmed
             live = MenuCatalog.Build(MenuWorlds.Default());
             live.Reconcile(MenuCatalog.Build(MenuWorlds.BoardOff()));
-            TestAssert.That(!live.Row("view/board").IsOn && live.Row("view/declutter").Blocked == "TAC BOARD: OFF" && !live.Row("view/declutter").Gone, "switching the board off dims the look rows, never drops them");
+            TestAssert.That(!live.Row("hud/board").IsOn && live.Row("hud/declutter").Blocked == "TAC BOARD: OFF" && !live.Row("hud/declutter").Gone, "switching the board off dims the look rows, never drops them");
 
             // no options contract: no board rows; while a missile is followed VIEW lists only the missile steppers
             MenuWorld none = MenuWorlds.Default();
             none.BoardAvailable = false;
             MenuModel without = MenuCatalog.Build(none);
-            TestAssert.That(without.Row("view/board") == null && without.Row("view/declutter") == null && without.Row("view/boardlayout") == null, "no TAC BOARD options installed: no board rows");
+            TestAssert.That(without.Row("hud/board") == null && without.Row("hud/declutter") == null && without.Row("hud/layout") == null, "no TAC BOARD options installed: no board rows");
+            TestAssert.That(!without.Category("hud").Available && without.Category("hud").Badge == "NO VISOR", "and the HUD category dims in place with its reason");
             TestAssert.That(without.Row("view/cam") != null && without.Row("view/map") != null, "the camera rows are unaffected");
-            TestAssert.That(MenuCatalog.Build(MenuWorlds.Missile()).Row("view/board") == null, "the missile view lists no board rows");
+            TestAssert.That(MenuCatalog.Build(MenuWorlds.Missile()).Row("hud/board") != null, "the HUD rows do not depend on the camera");
         }
 
         private static void PitKeepsStationIdentityWhileTheListShrinks()

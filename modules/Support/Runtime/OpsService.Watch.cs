@@ -1,7 +1,3 @@
-using BoscaliSummer.Core.Game;
-using BoscaliSummer.Modules.Support.Domain.Ops;
-using BoscaliSummer.Modules.Support.Domain.Space;
-
 namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>
@@ -10,19 +6,5 @@ namespace BoscaliSummer.Modules.Support.Runtime
     /// </summary>
     internal sealed partial class OpsService
     {
-        internal OpResult WatchPlan(FactionHQ owner, OpKind kind, int target)
-        {
-            if (!GameAccess.IsServer() || !Enabled || owner == null || !factions.TryGetValue(owner, out FactionOps f)) return new OpResult(OpOutcome.Offline);
-            if (!OpsRules.Valid(kind)) return new OpResult(OpOutcome.NoOperation);
-            if (!DomainOnline(f, OpsRules.DomainOf(kind))) return new OpResult(OpOutcome.Offline, kind);
-            if (!TryTarget(f, kind, target, out OpTarget resolved)) return new OpResult(OpOutcome.NoTarget, kind);
-            return f.Desk.Plan(SpaceContacts.WatchOfficerId, kind, resolved);
-        }
-
-        internal OpResult WatchFund(FactionHQ owner, OpDomain domain, bool large)
-        {
-            if (!GameAccess.IsServer() || !Enabled || owner == null || !factions.TryGetValue(owner, out FactionOps f)) return new OpResult(OpOutcome.Offline);
-            return f.Desk.Fund(SpaceContacts.WatchOfficerId, domain, large ? OpsRules.FundLarge : OpsRules.FundSmall);
-        }
     }
 }

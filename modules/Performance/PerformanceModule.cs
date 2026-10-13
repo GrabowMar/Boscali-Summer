@@ -1,6 +1,7 @@
 using System;
 using BoscaliSummer.Modules.Performance.Runtime;
 using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Ui;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Performance
@@ -11,7 +12,10 @@ namespace BoscaliSummer.Modules.Performance
             new ModuleMetadata("performance", "Adaptive cosmetic performance");
 
         public ModuleMetadata Metadata => Module;
-        public Type[] PatchTypes => Type.EmptyTypes;
+        public Type[] PatchTypes => new[]
+        {
+            typeof(RemoteTurretSearchPatch), typeof(SleepingTurretPatch), typeof(DistantTracerPatch)
+        };
 
         public void Install(ModuleContext context)
         {
@@ -23,24 +27,35 @@ namespace BoscaliSummer.Modules.Performance
             context.AddClientSetting("FRAME BUDGET", "ADAPTIVE FX",
                 "After sustained slow flight frames, halve scalable Boscali cosmetic budgets. " +
                 "Takes effect after sampling; no mission or game restart.",
-                context.Settings.Performance.Enabled);
+                context.Settings.Performance.Enabled, ClientPreset.Saver);
             context.AddClientSetting("BASE GAME", "LOD CAP",
                 "Lower the LOD bias to at most 1.5 (game default 4) so distant models simplify sooner. " +
+                "Helps a GPU-limited machine only; expect more model pop-in. " +
                 "Client-local; the game's own value is restored when switched off.",
-                context.Settings.Performance.LodBiasFloor);
+                context.Settings.Performance.LodBiasFloor, ClientPreset.LastResort);
             context.AddClientSetting("BASE GAME", "SHADOW CAP",
                 "Cap shadow distance at 1000 m (game default 2000 m) to drop far shadow-cascade work. " +
+                "Helps a GPU-limited machine only. " +
                 "Client-local; the game's own value is restored when switched off.",
-                context.Settings.Performance.ShadowDistanceCap);
-            context.AddClientSetting("BASE GAME", "FPS CAP 60",
-                "Cap the frame rate at 60 fps for steadier frametimes and lower thermals. " +
-                "Client-local; the game's own value is restored when switched off.",
-                context.Settings.Performance.FrameRateCap);
+                context.Settings.Performance.ShadowDistanceCap, ClientPreset.LastResort);
             context.AddClientSetting("BASE GAME", "SCENE CLEANUP",
                 "Unload unused assets and collect garbage on scene transitions " +
-                "(menu/mission loads), never during flight. Client-local.",
+                "(menu/mission loads), never during flight. Frees memory; loads take slightly longer. Client-local.",
                 context.Settings.Performance.CleanupOnSceneChange);
-            context.Logger.LogInfo("Performance=client-local Boscali cosmetic budget; game simulation unchanged");
+            context.AddSceneService<ClientSavings>(92)
+                .Configure(context.Settings.Performance);
+            context.AddClientSetting("FAR UNITS", "SKIP IDLE SEARCH",
+                "Joined to another host: skip the turret target search your machine runs for every unit " +
+                "and never uses. Nothing to see; no effect while you host or fly single player.",
+                context.Settings.Performance.SkipRemoteTurretSearch, ClientPreset.Saver);
+            context.AddClientSetting("FAR UNITS", "THIN FAR TRACERS",
+                "Joined to another host: draw fewer of other units' bullets past 2.5 km and none past 15 km. " +
+                "Visual only; hits are unchanged.",
+                context.Settings.Performance.ThinDistantTracers, ClientPreset.Saver);
+            context.AddClientSetting("FAR UNITS", "SLEEP FAR UNITS",
+                "Stop drawing aircraft, vehicles and ships more than 15 km away. What you fly, follow or " +
+                "have targeted always draws; a zoomed camera on an untargeted far unit shows nothing.",
+                context.Settings.Performance.SleepDistantUnits, ClientPreset.LastResort);            context.Logger.LogInfo("Performance=client-local Boscali cosmetic budget; game simulation unchanged");
         }
     }
 }

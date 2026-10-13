@@ -66,28 +66,23 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             legsSection = flow.Section(AvIcon.MapPin, "ROUTE", EmptyLegs);
             map = flow.Add(new WmcRouteMap(flow.Content));
 
+            // In the order a route is made: draw it, set its points, fly it, keep it.
             AvControl[] tools = flow.Buttons(
                 new AvControl.Spec("DRAW", ToggleDraw, AvButtonStyle.Default, AvIcon.MapPin),
                 new AvControl.Spec("UNDO", () => EditDraft(d => d.Undo())),
-                new AvControl.Spec("CLEAR", () => EditDraft(d => d.Clear())),
-                new AvControl.Spec("SAVE", SaveRoute),
-                new AvControl.Spec("SAVED ›", OpenSaved)).Controls;
+                new AvControl.Spec("CLEAR", () => EditDraft(d => d.Clear()))).Controls;
             draw = tools[0];
             undo = tools[1];
             clear = tools[2];
-            save = tools[3];
-            savedPicker = tools[4];
             draw.Help = "Right-click the map to add route points while DRAW is lit.";
-            savedPicker.Help = "Load a saved route into the draft; SEND flies it.";
             ids.Add("plan.route.draw", draw);
             ids.Add("plan.route.undo", undo);
             ids.Add("plan.route.clear", clear);
-            ids.Add("plan.route.save", save);
-            ids.Add("plan.route.saved", savedPicker);
 
             legs = flow.Add(new WmcLegTable(flow.Content, PickPoint));
             for (int i = 0; i < RouteData.Max; i++) ids.Add("plan.route.row" + i, legs.RowTarget(i));
 
+            flow.Section(AvIcon.Pencil, "POINT", "THE SELECTED ONE, OR NEW POINTS");
             altStepper = flow.Add(new AvStepper(flow.Content, "ALTITUDE", () => altText, () => EditDraft(d => d.StepAltitude(-1)),
                 () => EditDraft(d => d.StepAltitude(+1))));
             spdStepper = flow.Add(new AvStepper(flow.Content, "SPEED", () => spdText, () => EditDraft(d => d.StepSpeed(-1)),
@@ -98,23 +93,16 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             ids.Add("plan.route.alt+", altStepper.Plus);
             ids.Add("plan.route.spd-", spdStepper.Minus);
             ids.Add("plan.route.spd+", spdStepper.Plus);
-
             AvControl[] edit = flow.Buttons(
                 new AvControl.Spec("ACTION", () => EditDraft(d => d.CycleAction())),
-                new AvControl.Spec("DEL PT", () => EditDraft(d => d.RemoveSelected())),
-                new AvControl.Spec("SKIP LEG", () => WmcUi.Order(last, () => WingOrders.Run(WingOrder.Of(OrderKind.SkipLeg, last.Scope)))),
-                new AvControl.Spec("DEL SAVED", DeleteSaved, AvButtonStyle.Danger)).Controls;
+                new AvControl.Spec("DEL PT", () => EditDraft(d => d.RemoveSelected()), AvButtonStyle.Default, AvIcon.X)).Controls;
             action = edit[0];
             del = edit[1];
-            skip = edit[2];
-            savedDelete = edit[3];
-            savedDelete.Help = "Delete the loaded saved route (press twice).";
             ids.Add("plan.route.action", action);
             ids.Add("plan.route.del", del);
-            ids.Add("plan.route.skip", skip);
-            ids.Add("plan.route.saved.del", savedDelete);
 
-            loopRow = new AvSegmented(flow.Content, "", new[] { "ONCE", "LOOP", "PING-PONG" }, () => loopValue, SetLoop);
+            flow.Section(AvIcon.PlayerPlay, "FLY", "THE WING FLIES THE DRAFT");
+            loopRow = flow.Add(AvSegmented.Strip(flow.Content, new[] { "ONCE", "LOOP", "PING-PONG" }, () => loopValue, SetLoop));
             string[] loopTips = { "Fly the route once.", "Fly the route round and round.", "Fly the route back and forth." };
             string[] loopKeys = { "once", "round", "pingpong" };
             for (int i = 0; i < loopTips.Length; i++)
@@ -122,12 +110,29 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 loopRow.Options[i].Help = loopTips[i];
                 ids.Add("plan.route." + loopKeys[i], loopRow.Options[i]);
             }
-            var sendButtons = new AvButtons(flow.Content, new[] { new AvControl.Spec("SEND TO WING", Send, AvButtonStyle.Primary, AvIcon.CircleCheck) });
-            send = sendButtons.Controls[0];
-            flow.Row(loopRow, sendButtons);
+            AvControl[] fly = flow.Buttons(
+                new AvControl.Spec("SEND TO WING", Send, AvButtonStyle.Primary, AvIcon.CircleCheck),
+                new AvControl.Spec("SKIP LEG", () => WmcUi.Order(last, () => WingOrders.Run(WingOrder.Of(OrderKind.SkipLeg, last.Scope))))).Controls;
+            send = fly[0];
+            skip = fly[1];
             // The 0.9 loop button cycled ONCE · LOOP · PING-PONG: its id still does.
             ids.Add("plan.route.loop", () => EditDraft(d => d.CycleLoop()));
             ids.Add("plan.route.send", send);
+            ids.Add("plan.route.skip", skip);
+
+            flow.Section(AvIcon.Bookmark, "SAVED ROUTES", "");
+            AvControl[] kept = flow.Buttons(
+                new AvControl.Spec("SAVE", SaveRoute, AvButtonStyle.Default, AvIcon.Bookmark),
+                new AvControl.Spec("SAVED ›", OpenSaved),
+                new AvControl.Spec("DEL SAVED", DeleteSaved, AvButtonStyle.Danger, AvIcon.X)).Controls;
+            save = kept[0];
+            savedPicker = kept[1];
+            savedDelete = kept[2];
+            savedPicker.Help = "Load a saved route into the draft; SEND flies it.";
+            savedDelete.Help = "Delete the loaded saved route (press twice).";
+            ids.Add("plan.route.save", save);
+            ids.Add("plan.route.saved", savedPicker);
+            ids.Add("plan.route.saved.del", savedDelete);
 
             flow.Section(AvIcon.Plane, "MY AUTOPILOT", "NAV · COUPLED TO ROUTE");
             apRow = flow.Add(new AvRow(flow.Content));
@@ -191,15 +196,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             foreach (AvPart part in apDetail) part.SetShown(apOpen);
             if (apMore != null) apMore.Latched = apOpen;
             flow.RequestRelayout();
-        }
-
-        /// <summary>A control id of the autopilot's modes or held values opens them first (automation).</summary>
-        public void RevealFor(string id)
-        {
-            if (id == null || !id.StartsWith("plan.ap.", System.StringComparison.Ordinal) || id == "plan.ap.nav" || id == "plan.ap.off" || id == "plan.ap.more") return;
-            if (apOpen) return;
-            apOpen = true;
-            ShowApDetail();
         }
 
         public void Shown(WmcContext c)

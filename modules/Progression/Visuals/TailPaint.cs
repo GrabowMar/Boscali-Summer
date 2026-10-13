@@ -752,6 +752,7 @@ namespace BoscaliSummer.Modules.Progression.Visuals
         }
     }
 
+#if !PUBLIC_RELEASE
     /// <summary>Explicit client-local hooks for nomodkit acceptance scenarios (tests/ingame/tail-paint.json).</summary>
     public static class TailPaintAutomation
     {
@@ -782,4 +783,5 @@ namespace BoscaliSummer.Modules.Progression.Visuals
                 Number("side", 1f), Mathf.Clamp(Number("distance", 7f), 2f, 60f));
         }
     }
+#endif
 }

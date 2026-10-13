@@ -78,7 +78,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private void StepRadio(int dir)
         {
             if (draft == null) return;
-            draft.Persona = (ChatterPersona)((((int)draft.Persona + dir) % 4 + 4) % 4);
+            draft.Persona = (ChatterPersona)((((int)draft.Persona + dir) % ChatterPersonas.Count + ChatterPersonas.Count) % ChatterPersonas.Count);
             Edited();
         }
 

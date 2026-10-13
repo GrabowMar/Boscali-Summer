@@ -35,7 +35,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         /// the click chose.</summary>
         public void Rescope()
         {
-            Scope = Selection.Scope(Rows, Count);
+            Scope = Selection.Scope(Count);
             ScopeLabel = Selection.Label(Rows, Count);
             ScopeElement = 0;
             if (Scope.Kind == ScopeKind.Element) ScopeElement = Scope.Element;
