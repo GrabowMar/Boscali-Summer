@@ -1,5 +1,5 @@
 {
-  "_note": "The TAC MAP in the cockpit, ONE run: the standing MINI terrain tile in the bottom-left corner (340 x 300 units, 16 in from the edges, seen from 68 degrees, the aircraft in the middle across and 38 % up when heading up, the game's own corner map hidden behind it), the CLASSIC mode (the game's corner map back, untouched), and the big HOLO MAP the map key raises (a frame 82 % of the screen height tall and 1.3 times as wide, centred on the screen, seen from 55 degrees, the aircraft in the middle). The player is seated in the cockpit view at 2500 m over the west of the island (map x -6 km, z +10 km, the place terrain-ghost.json uses), heading west (270) at 180 m/s; in the ~25 s the run lasts it flies about 4.5 km, well short of the massif (map x -18..-12 km, z +6..+14 km, peaks 1.3 to 1.6 km). A scenario cannot hold the map key (hold it to grow the MINI into the big map, tap it for the MFD map), so HoloMapAutomation.Configure forces the big map shown from the corner map (SimOpen: the same availability test, the same state machine; it stays up until open is false, whatever the key does) and sets the TAC MAP mode, the MINI range, the big range and the orientation IN MEMORY ONLY (the saved TacMapMode / TacMapRangeKm / HoloRangeKm / HoloNorthUp are never written; restore gives them back). Ranges are a half-width in kilometres: the MINI 10 / 20 / 40 (default 20), the big map 20 / 40 / 80 (default 40). Pictures: tac-default (NO key, NO call: the MINI must be up by itself, 20 km, heading up, view wedge, the nearest airbase's name, the TAC MAP shelf inside its lower-left with 20 KM at its right end, the game's grid reference dim at its lower right if the game shows one and the scale bar to the left of it), tac-classic (CLASSIC: the game's own corner map back, no hologram anywhere), tac-back (HOLO again, the same as tac-default), tac-mini-10-north (10 km, north up: the aircraft in the middle), tac-mini-40 (40 km, heading up), holo-40 (the big map, 40 km, heading up, the default), holo-20 (20 km), holo-80-north (80 km, north up), holo-closed (the big map closed again: the MINI must be back). Each Configure result is stored: active (HoloMap.Active: the MINI or the big map is up), stage, presentation (mini, big or none), tacMode, additiveMaterial, renderTexture, depthPath (the texture has a depth buffer: the solid, hidden-line look; false is the see-through fallback), vertexCount (nodes of the lattice), litVertices, gridCellsX / gridCellsZ / gridCellMetres (the lattice the frame needs and its cell), reachKm, marksDrawn, unitMarks, unitCap (48 on the MINI, 96 on the big one), airbaseMarks, labelsUsed, wedgeDegrees (the MINI's view wedge, 0 when it is not drawn), gridRef (the game's grid reference as the MINI shows it), scaleKm (the scale bar's length), mapHidden (the corner map faded out behind the hologram), nativeMapAlpha (1 when the game's corner map has not been touched), grow (0 MINI .. 1 big, the 180 ms change: wait before a capture), presence, frameWidth / frameHeight (canvas units), frameUnitsWide / frameUnitsHigh (in design units: 340 x 300 for the MINI), frameAspect, frameHeightShare, frameCentreX / frameCentreY (shares of the canvas), frameWidthPixels / frameHeightPixels, miniFramePixels / bigFramePixels (both sizes in screen pixels, 'WxH'), renderWidth / renderHeight (the part of the texture drawn), tiltDegrees, aircraftUp, rangeKm (of the picture shown), miniRangeKm, bigRangeKm, northUp, the timings (lastRenderMs / worstRenderMs / renders: one picture, the scan taken out; lastFillMs / worstFillMs / fills: the lattice fill when the aircraft enters another cell; lastScanMs / worstScanMs / scans: the four-times-a-second unit scan; the worst values are cleared after the warm-up by resetTimings, so tac_default carries the steady cost of the always-on MINI over about 3 s), broken and failure. The checks assert those, the timings against a loose ceiling (a frame) and that the Unity log has no Exception; nothing asserts the pixels: they are read off the captures (a rectangular tile that fills its frame edge to edge with only a short fade at the edges, solid: lines stop behind a ridge, lines across the view brighter than lines running away, the corner brackets round the frame, the shelf, the scale bar). The game's dark map plate (HUDCanvas/HMDCenter/LowerLeftPanel) is hidden while the mini or the big map is up (plateAlpha 0) and back with CLASSIC and after the hologram goes (plateAlpha 1, plateFound false); a feathered shade stands behind the frame (shadeAlpha 0.65 mini, 0.6 big).",
+  "_note": "The TAC MAP in the cockpit, ONE run: the standing MINI terrain tile in the bottom-left corner (340 x 300 units, 16 in from the edges, seen from 68 degrees, the aircraft in the middle across and 38 % up when heading up, the game's own corner map hidden behind it), the CLASSIC mode (the game's corner map back, untouched), and the big HOLO MAP the map key raises (a frame 82 % of the screen height tall and 1.3 times as wide, centred on the screen, seen from 55 degrees, the aircraft in the middle). The player is seated in the cockpit view at 2500 m over the west of the island (map x -6 km, z +10 km, the place terrain-ghost.json uses), heading west (270) at 180 m/s; in the ~25 s the run lasts it flies about 4.5 km, well short of the massif (map x -18..-12 km, z +6..+14 km, peaks 1.3 to 1.6 km). A scenario cannot hold the map key (hold it to grow the MINI into the big map, tap it for the MFD map), so HoloMapAutomation.Configure forces the big map shown from the corner map (SimOpen: the same availability test, the same state machine; it stays up until open is false, whatever the key does) and sets the TAC MAP mode, the MINI range, the big range and the orientation IN MEMORY ONLY (the saved TacMapMode / TacMapRangeKm / HoloRangeKm / HoloNorthUp are never written; restore gives them back). Ranges are a half-width in kilometres: the MINI 10 / 20 / 40 (default 20), the big map 20 / 40 / 80 (default 40). Pictures: tac-default (NO key, NO call: the MINI must be up by itself, 20 km, heading up, view wedge, the nearest airbase's name, the TAC MAP shelf inside its lower-left with 20 KM at its right end, the game's grid reference dim at its lower right if the game shows one and the scale bar to the left of it), tac-classic (CLASSIC: the game's own corner map back, no hologram anywhere), tac-back (HOLO again, the same as tac-default), tac-mini-10-north (10 km, north up: the aircraft in the middle), tac-mini-40 (40 km, heading up), holo-40 (the big map, 40 km, heading up, the default), holo-20 (20 km), holo-80-north (80 km, north up), holo-closed (the big map closed again: the MINI must be back). Each Configure result is stored: active (HoloMap.Active: the MINI or the big map is up), stage, presentation (mini, big or none), tacMode, additiveMaterial, renderTexture, depthPath (the texture has a depth buffer: the solid, hidden-line look; false is the see-through fallback), vertexCount (nodes of the lattice), litVertices, gridCellsX / gridCellsZ / gridCellMetres (the lattice the frame needs and its cell), reachKm, marksDrawn, unitMarks, unitCap (48 on the MINI, 96 on the big one), airbaseMarks, labelsUsed, wedgeDegrees (the MINI's view wedge, 0 when it is not drawn), gridRef (the game's grid reference as the MINI shows it), scaleKm (the scale bar's length), mapHidden (the corner map faded out behind the hologram), nativeMapAlpha (1 when the game's corner map has not been touched), grow (0 MINI .. 1 big, the 180 ms change: wait before a capture), presence, frameWidth / frameHeight (canvas units), frameUnitsWide / frameUnitsHigh (in design units: 340 x 300 for the MINI), frameAspect, frameHeightShare, frameCentreX / frameCentreY (shares of the canvas), frameWidthPixels / frameHeightPixels, miniFramePixels / bigFramePixels (both sizes in screen pixels, 'WxH'), renderWidth / renderHeight (the part of the texture drawn), tiltDegrees, aircraftUp, rangeKm (of the picture shown), miniRangeKm, bigRangeKm, northUp, the timings (lastRenderMs / worstRenderMs / renders: one picture, the scan taken out; lastFillMs / worstFillMs / fills: the lattice fill when the aircraft enters another cell; lastScanMs / worstScanMs / scans: the four-times-a-second unit scan; the worst values are cleared after the warm-up by resetTimings, so tac_default carries the steady cost of the always-on MINI over about 3 s, a picture every frame; lastFillMs is the frame's share of a fill, lastFillWorkMs the pool thread's), broken and failure. The checks assert those, the timings against a loose ceiling (a frame) and that the Unity log has no Exception; nothing asserts the pixels: they are read off the captures (a rectangular tile that fills its frame edge to edge with only a short fade at the edges, solid: lines stop behind a ridge, lines across the view brighter than lines running away, the corner brackets round the frame, the shelf, the scale bar). The game's dark map plate (HUDCanvas/HMDCenter/LowerLeftPanel) is hidden while the mini or the big map is up (plateAlpha 0) and back with CLASSIC and after the hologram goes (plateAlpha 1, plateFound false); a feathered shade stands behind the frame (shadeAlpha 0.65 mini, 0.6 big).",
   "name": "holo-map",
   "description": "TAC MAP in one cockpit run (a level hostile 5 km ahead and 3 km right of the aircraft, designated, first): the standing MINI terrain tile by itself, CLASSIC, HOLO again, 10 and 40 km minis, then the big map at 40 km heading up, 20 km, 80 km north up, closed.",
   "mods": [
@@ -560,7 +560,7 @@
     {
       "check": "result_above",
       "path": "tac_default.renders",
-      "min": 10
+      "min": 60
     },
     {
       "check": "result_above",
@@ -570,7 +570,7 @@
     {
       "check": "result_below",
       "path": "tac_default.renders",
-      "max": 60
+      "max": 3000
     },
     {
       "check": "result_above",
@@ -955,12 +955,12 @@
     {
       "check": "result_above",
       "path": "tac_default.gridCellMetres",
-      "min": 620.0
+      "min": 828.0
     },
     {
       "check": "result_below",
       "path": "tac_default.gridCellMetres",
-      "max": 630.0
+      "max": 838.0
     },
     {
       "check": "result_above",
@@ -1040,22 +1040,22 @@
     {
       "check": "result_above",
       "path": "tac_10.gridCellMetres",
-      "min": 310.0
+      "min": 414.0
     },
     {
       "check": "result_below",
       "path": "tac_10.gridCellMetres",
-      "max": 315.0
+      "max": 419.0
     },
     {
       "check": "result_above",
       "path": "tac_40.gridCellMetres",
-      "min": 1245.0
+      "min": 1660.0
     },
     {
       "check": "result_below",
       "path": "tac_40.gridCellMetres",
-      "max": 1255.0
+      "max": 1672.0
     },
     {
       "check": "result_above",

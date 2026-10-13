@@ -73,6 +73,13 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 fade = 0f;
                 return;
             }
+            // Another map's heights (the last mission's, or the map image changed under us): drop them and fetch this map's.
+            if (field != null && !MfdTerrainRelief.IsCurrent(field))
+            {
+                field = null;
+                placed = false;
+                nextField = 0f;
+            }
             bool flying = LocalAircraft(out Aircraft plane);
             if (plane != null)
             {

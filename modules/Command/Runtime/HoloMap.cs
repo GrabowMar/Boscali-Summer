@@ -14,9 +14,9 @@ namespace BoscaliSummer.Modules.Command.Runtime
     /// <summary>
     /// The TAC MAP: the corner map of the HUD as a standing mini terrain tile, and the HOLO MAP the map key HELD grows it into. One hologram in two sizes. While the pilot flies with the HUD up (and the TAC MAP
     /// is on HOLO) the bottom-left corner shows a solid terrain tile of the real ground around the aircraft in a frame of 340 x 300 units, seen from 68 degrees above the horizon (the aircraft in the middle across and 38 %
-    /// up when heading up, in the middle when north up, the view wedge, the units the game's map shows, the selected target, the nearest airbase in view and a scale bar, at 10 Hz). Holding the map key past 0.2 s grows the
+    /// up when heading up, in the middle when north up, the view wedge, the units the game's map shows, the selected target, the nearest airbase in view and a scale bar, every frame). Holding the map key past 0.2 s grows the
     /// same picture over 180 ms to a frame 82 % of the screen height tall and 1.3 times as wide, centred on the screen, seen from 55 degrees with the aircraft in the middle, at the held range, a denser grid and the full
-    /// marks (the BIG one, at 20 Hz); letting go shrinks it back and opens no MFD. A tap opens the game's maximised map (MFD) as it always did, and while that is up nothing of the holo draws; when it closes the
+    /// marks (the BIG one); letting go shrinks it back and opens no MFD. A tap opens the game's maximised map (MFD) as it always did, and while that is up nothing of the holo draws; when it closes the
     /// MINI returns. On CLASSIC the MINI never draws and the game's own corner map is left alone, but the key still raises the big hologram. The picture is drawn by <see cref="HoloGrid"/> + <see cref="HoloView"/> (no game
     /// camera involved) into a texture of the mod's own with hidden lines removed and shown as projected light with the marks laid over it (HoloMap.Marks.cs, HoloMap.Ui.cs); the pilot keeps flying: nothing here captures the
     /// cursor, blocks an input or pauses.
@@ -50,7 +50,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         // The player and action the game's own key handler reads (ExtraUiInput: ReInput.players.GetPlayer(0), "Map").
         private Rewired.Player keyPlayer;
         private TerrainHeightField field;
-        private float nextField, nextPrepare, nextRender, nextScan;
+        private float nextField, nextPrepare, nextScan;
         // What is up: the presentation asked for now, how far the one picture has grown (0 MINI .. 1 BIG, over 180 ms) and how far it has faded in (0..1, after it first shows).
         private HoloShape shape;
         private float size, appear;
@@ -208,6 +208,13 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private void Frame()
         {
             state.Sync(DynamicMap.mapMaximized);
+            // Another map's heights (the last mission's, or the map image changed under us): drop them and fetch this map's.
+            if (field != null && !MfdTerrainRelief.IsCurrent(field))
+            {
+                field = null;
+                placed = false;
+                nextField = nextPrepare = 0f;
+            }
             PreloadField();
             // The corner map the holo stands in for is showing: a living aircraft, the HUD up, no pause or cinematic mode, no maximised map.
             bool up = FlightReady(out plane) && SceneReady();
@@ -232,12 +239,11 @@ namespace BoscaliSummer.Modules.Command.Runtime
         }
 
         /// <summary>
-        /// The presentation for this frame: the one picture grows or shrinks toward its size, the layout follows, a picture is drawn when one is due (every frame while it changes size, then at the
-        /// presentation's rate) and the game's corner map fades behind it.
+        /// The presentation for this frame: the one picture grows or shrinks toward its size, the layout follows, the picture is drawn and the game's corner map fades behind it.
         /// </summary>
         private void Present(HoloShape want)
         {
-            bool fresh = shape == HoloShape.None, shifted = want != shape;
+            bool fresh = shape == HoloShape.None;
             shape = want;
             Active = true;
             if (fresh)
@@ -246,16 +252,11 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 nextScan = 0f;
                 ShowRoot();
             }
-            float seconds = Time.unscaledDeltaTime, before = size;
+            float seconds = Time.unscaledDeltaTime;
             appear = Mathf.MoveTowards(appear, 1f, seconds / HoloPresentation.GrowSeconds);
             size = HoloPresentation.Size(size, want, seconds);
-            bool laid = Layout();
-            float now = Time.unscaledTime;
-            if (fresh || shifted || laid || size != before || now >= nextRender)
-            {
-                nextRender = now + HoloPresentation.RenderInterval(want, false);
-                Refresh();
-            }
+            Layout();
+            Refresh();
             ApplyPresence();
         }
 
@@ -319,6 +320,9 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 { "litVertices", litVertices },
                 { "landLineSegments", (landEastWestCount + landNorthSouthCount) / 2 },
                 { "waterLineSegments", waterCount / 2 },
+                { "coastSegments", coastCount / 2 },
+                { "lastFillWorkMs", lastWorkMs },
+                { "worstFillWorkMs", worstWorkMs },
                 { "gridCellsX", halfX * 2 },
                 { "gridCellsZ", halfZ * 2 },
                 { "gridCellMetres", cellMetres },
@@ -375,7 +379,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         /// <summary>Clears the worst timings and the counts (the sim hook, after the warm-up).</summary>
         internal void ResetTimings()
         {
-            lastRenderMs = worstRenderMs = lastScanMs = worstScanMs = lastFillMs = worstFillMs = 0f;
+            lastRenderMs = worstRenderMs = lastScanMs = worstScanMs = lastFillMs = worstFillMs = lastWorkMs = worstWorkMs = 0f;
             renders = scans = fills = 0;
         }
 
@@ -394,7 +398,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             TacOverride = null;
             broken = false;
             shape = HoloShape.None;
-            nextField = nextPrepare = nextRender = nextScan = size = appear = 0f;
+            nextField = nextPrepare = nextScan = size = appear = 0f;
             Active = false;
             ResetTimings();
         }

@@ -35,6 +35,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private enum Drag { None, PendingGrab, Grab, PendingOrbit, Orbit }
 
         private static Drag drag;
+        private static bool middleClaimed;
         private static int dragButton;
         private static Vector2 pressScreen;
         private static Vector2 lastMouse;
@@ -76,6 +77,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             bool inside = MfdTerrainRelief.ViewportPoint(mouse, out float vx, out float vy);
             bool free = inside && !MapUiPointer.OverControls() && !Typing();
 
+            // The wheel button is read as a held state, not as its one-frame press: on a live session
+            // Windows, Unity and Rewired all showed the button held over the map while the press frame
+            // never reached this code, so the orbit never began. One hold starts one drag.
+            bool middle = MiddleHeld();
+            if (!middle) middleClaimed = false;
+
             if (drag == Drag.None && free)
             {
                 // Alt + left drag orbits like the held wheel does: a mouse or driver that never
@@ -84,8 +91,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     Press(rig, 0, true, mouse, vx, vy);
                 else if (Input.GetMouseButtonDown(0) && !BoxHeld() && !LeftDragClaimed())
                     Press(rig, 0, false, mouse, vx, vy);
-                else if (MiddleDown())
+                else if (middle && !middleClaimed)
+                {
+                    middleClaimed = true;
                     Press(rig, 2, true, mouse, vx, vy);
+                }
+                // The right button orbits again, as it did before: it is the one held-button drag every
+                // mouse reports. A right click without travel still opens the map menu, and an armed
+                // call-in keeps the button to itself.
+                else if (Input.GetMouseButtonDown(1) && !NOAvionics.MapPicker.IsBusy &&
+                    Plugin.Settings?.Command?.MapRightDragTurns?.Value != false)
+                    Press(rig, 1, true, mouse, vx, vy);
             }
             if (drag != Drag.None) Hold(rig, mouse, vx, vy, dt);
             else if (coast.sqrMagnitude > 1e-4f)
@@ -110,7 +126,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             anchor = Ground(rig, vx, vy);
             velocity = coast = Vector2.zero;
             if (orbit) return;
-            if (Time.unscaledTime - lastClickTime < DoubleClickSeconds &&
+            if (Plugin.Settings?.Command?.MapDoubleClickZoom?.Value != false &&
+                Time.unscaledTime - lastClickTime < DoubleClickSeconds &&
                 (mouse - lastClickScreen).sqrMagnitude < Slop * Slop)
             {
                 lastClickTime = -1f;
@@ -127,11 +144,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private static void Hold(ReliefRig rig, Vector2 mouse, float vx, float vy, float dt)
         {
-            bool held = dragButton == 2 ? MiddleHeld() : Input.GetMouseButton(0);
+            bool held = dragButton == 2 ? MiddleHeld() : Input.GetMouseButton(dragButton);
             if (!held || (drag == Drag.PendingGrab && BoxHeld()))
             {
-                // An Alt orbit ends on a left release: do not let it also click what is under it.
-                if (drag == Drag.Orbit && dragButton == 0) releaseFrame = Time.frameCount;
+                // An orbit that ends on a left or right release must not also click or open the menu under it.
+                if (drag == Drag.Orbit && dragButton != 2) releaseFrame = Time.frameCount;
                 if (dragButton == 0 && doubleClickPending)
                 {
                     doubleClickFrame = Time.frameCount;
@@ -165,8 +182,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             Vector2 delta = mouse - lastMouse;
             if (delta.sqrMagnitude > 0f)
-                rig.OrbitAbout(delta.x * OrbitYawPerPixel, -delta.y * OrbitPitchPerPixel,
+            {
+                float speed = Mathf.Clamp(Plugin.Settings?.Command?.MapTurnSensitivity?.Value ?? 1f, .25f, 4f);
+                rig.OrbitAbout(delta.x * OrbitYawPerPixel * speed, -delta.y * OrbitPitchPerPixel * speed,
                     anchor.x, anchor.y, anchor.z);
+            }
         }
 
         private static void ReadAxes(ReliefRig rig, bool free, float vx, float vy, float dt)
@@ -189,7 +209,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 Vector3 at = free ? Ground(rig, vx, vy) : Vector3.zero;
                 float from = zoomEasing ? targetZoom : rig.Zoom;
-                ZoomTo(rig, from * Mathf.Exp(zoom * ZoomPerUnit),
+                ZoomTo(rig, from * Mathf.Exp(zoom * ZoomPerUnit *
+                        Mathf.Clamp(Plugin.Settings?.Command?.MapZoomStep?.Value ?? 1f, .25f, 3f)),
                     free ? vx : .5f, free ? vy : .5f, at.y);
             }
 
@@ -334,14 +355,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ? EventSystem.current.pixelDragThreshold : 0f);
 
         // The wheel button is read on two channels: Unity's input and the game's Rewired mouse.
-        private static bool MiddleDown() => Input.GetMouseButtonDown(2) ||
-            (ReInput.isReady && ReInput.controllers.Mouse != null && ReInput.controllers.Mouse.GetButtonDown(2));
         private static bool MiddleHeld() => Input.GetMouseButton(2) ||
             (ReInput.isReady && ReInput.controllers.Mouse != null && ReInput.controllers.Mouse.GetButton(2));
         private static bool AltHeld() => Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
 
         /// <summary>Shift or Ctrl hands a left drag to the selection box.</summary>
-        private static bool BoxHeld() => ControlHeld() || ShiftHeld();
+        private static bool BoxHeld() => MfdMapInteractions.BoxDrag();
         private static bool ShiftHeld() =>
             Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
         private static bool ControlHeld() =>
@@ -361,6 +380,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             fly = false;
             drag = Drag.None;
+            middleClaimed = false;
             releaseFrame = -1;
             doubleClickFrame = -1;
             doubleClickPending = false;

@@ -81,10 +81,11 @@ Shader "Boscali/FlightCloudComposite"
                         float spatial = exp(-dot(offset, offset) * 0.45);
                         float texelDepth = tex2Dlod(_CloudLowResDepth, float4(tuv, 0, 0)).r;
                         float4 sample = tex2Dlod(_CloudLowResColour, float4(tuv, 0, 0));
-                        // Visible clouds only need both opaque surfaces behind the cloud.
+                        // Only a cloud that hides what is behind it may ignore that depth. A thin sample cut short by terrain is not the sky beside it:
+                        // accepted there, it thinned the cloud over the sky along every ridge and the clear sky glowed through as a blue outline.
                         // Empty foreground samples retain their scene depth and must still
                         // be rejected completely, or they dilute the sky into a pale outline.
-                        float pixelDepth = sample.a > 0.002 ? min(depth, texelDepth) : depth;
+                        float pixelDepth = sample.a > 0.97 ? min(depth, texelDepth) : depth;
                         float difference = abs(texelDepth - pixelDepth) / max(1.0, min(texelDepth, pixelDepth));
                         float w = difference < 0.1 ? spatial / (0.02 + difference) : 0.0;
                         c += sample * w;
@@ -187,8 +188,8 @@ Shader "Boscali/FlightCloudComposite"
                 ResolveOut o;
                 o.colour = colour;
                 // Same RFloat budget: the nearest relevant depth, raw scene depth for
-                // empty rays and visible cloud depth for rays with cloud in front.
-                o.depth = float4(colour.a > 0.002 ? min(sceneDepth, cloudEye) : sceneDepth, 0, 0, 0);
+                // empty or thin rays and cloud depth for rays the cloud closes.
+                o.depth = float4(colour.a > 0.97 ? min(sceneDepth, cloudEye) : sceneDepth, 0, 0, 0);
                 return o;
             }
 
@@ -220,7 +221,7 @@ Shader "Boscali/FlightCloudComposite"
                         float2 data = tex2Dlod(_CloudQuarterData, float4(sampleUv, 0, 0)).rg;
                         float4 n = tex2Dlod(_CloudQuarterColour, float4(sampleUv, 0, 0));
                         float2 marchUv = (sampleBlock * 2.0 + _CloudChecker.xy + 0.5) * _CloudLowResSize.zw;
-                        float cloudEye = n.a > 0.002 ? data.g / length(ViewRay(marchUv)) : 1e20;
+                        float cloudEye = n.a > 0.97 ? data.g / length(ViewRay(marchUv)) : 1e20;
                         float sampleDepth = min(data.r, cloudEye), pixelDepth = min(sceneDepth, cloudEye);
                         float difference = abs(sampleDepth - pixelDepth) / max(1.0, min(sampleDepth, pixelDepth));
                         if (difference >= 0.1) continue;

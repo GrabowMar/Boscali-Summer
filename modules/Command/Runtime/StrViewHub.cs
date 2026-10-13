@@ -148,7 +148,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
         private void Update()
         {
-            if (!MissionProfile.FullExperience) return;
+            if (!MissionProfile.AllowsModule("strategic-command")) return;
             if (!DynamicMap.mapMaximized || Time.unscaledTime < nextTick) return;
             nextTick = Time.unscaledTime + TickSeconds;
             TickNow();
@@ -157,7 +157,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         /// <summary>Builds now. Selection, hover and every press call it.</summary>
         internal void TickNow()
         {
-            if (settings != null && !MissionProfile.FullExperience) return;
+            if (settings != null && !MissionProfile.AllowsModule("strategic-command")) return;
             float now = Time.unscaledTime;
             if (FeedsSource != null) feeds = FeedsSource();
             else StrFeedsReader.Read(ref feeds, this, now);
@@ -223,8 +223,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
         /// <summary>StrActions.Run through the verbs, then TickNow.</summary>
         public StrAct Run(StrActionKind kind, StrItemId id, int arg = 0)
         {
-            if (settings != null && !MissionProfile.FullExperience)
-                return new StrAct(StrWhy.Forbidden, "STR IS AVAILABLE IN THE BOSCALI SUMMER MISSION");
+            if (settings != null && !MissionProfile.AllowsModule("strategic-command"))
+                return new StrAct(StrWhy.Forbidden, "STR IS SWITCHED OFF FOR THIS MISSION");
             StrAct act = StrActions.Run(kind, id, arg, Current, Verbs ?? verbs, ref ui, Time.unscaledTime);
             TickNow();
             return act;

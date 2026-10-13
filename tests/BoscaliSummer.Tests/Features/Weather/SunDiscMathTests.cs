@@ -27,6 +27,10 @@ namespace BoscaliSummer.Tests.Features.Weather
                 Math.Abs(SunDiscMath.AboveHorizon(0f) - .5f) < .001f && SunDiscMath.AboveHorizon(float.NaN) == 0f,
                 "The disc is whole above the horizon, half at it and gone below.");
             TestAssert.That(SunDiscMath.AirMass(float.NaN, 0f) == 1f, "Invalid input reads as clear air.");
+            TestAssert.That(SunDiscMath.ScreenFade(.5f, .5f) == 1f && SunDiscMath.ScreenFade(1f, 0f) == 1f &&
+                SunDiscMath.ScreenFade(1.5f, .5f) == 0f && SunDiscMath.ScreenFade(.5f, -.6f) == 0f &&
+                Math.Abs(SunDiscMath.ScreenFade(1.25f, .5f) - .5f) < .001f && SunDiscMath.ScreenFade(float.NaN, .5f) == 0f,
+                "A screen-space sun effect is whole on screen and gone half a screen past the edge.");
         }
     }
 }

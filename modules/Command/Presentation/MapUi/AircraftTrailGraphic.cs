@@ -12,6 +12,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private const int Samples = 12;
         private const float SampleInterval = .45f;
         private const float TrailSeconds = 5.4f;
+        // Model units per second; the relief is 900 units per 81.92 km, so this is about 3.6 km/s.
+        private const float MaximumModelSpeed = 40f;
 
         private sealed class Track
         {
@@ -57,7 +59,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             track.Ink = ink;
             if (track.Count > 0 && now - track.LastSample < SampleInterval) return;
             int previous = (track.Next + Samples - 1) % Samples;
-            if (track.Count > 0 && (modelPoint - track.Points[previous]).sqrMagnitude < .04f)
+            // A spawn or respawn moves the icon across the map in one step: that is not a flown path.
+            if (track.Count > 0 && (modelPoint - track.Points[previous]).magnitude >
+                MaximumModelSpeed * (now - track.LastSample)) track.Count = 0;
+            if (track.Count > 0 &&(modelPoint - track.Points[previous]).sqrMagnitude < .04f)
             {
                 track.Times[previous] = now;
                 track.LastSample = now;

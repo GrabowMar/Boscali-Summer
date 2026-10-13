@@ -6,10 +6,11 @@ namespace BoscaliSummer.Core.Modules
     internal sealed class MissionProfileModule : IModule
     {
         public ModuleMetadata Metadata { get; } =
-            new ModuleMetadata("mission-profile", "Dedicated Boscali Summer mission");
+            new ModuleMetadata("mission-profile", "Mission start prompt");
 
         public Type[] PatchTypes => BoscaliMission.PatchTypes;
 
-        public void Install(ModuleContext context) => BoscaliMission.EnsureRegistered(context.Logger);
+        public void Install(ModuleContext context) =>
+            BoscaliMission.EnsureRegistered(context.Settings);
     }
 }

@@ -885,6 +885,30 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 else if (r > 0 && frontBand[idx - ResolutionX] == 2) frontBand[idx] = 1;
                 else if (c > 0 && frontBand[idx - 1] == 2) frontBand[idx] = 1;
             }
+
+            // An unheld square with held ground on three or four sides is a gap in the picture, not
+            // open country: left bare, each side's border line bent round it and drew a ring on the
+            // front. It carries its strongest neighbour's band, stored one up (1..3) because 0 on
+            // unheld ground means bare. Last pass, so the ring pass above never reads these values.
+            for (int r = 0; r < ResolutionY; r++)
+            for (int c = 0; c < ResolutionX; c++)
+            {
+                int idx = r * ResolutionX + c;
+                if (sectorStates[idx] != SectorControl.Neutral) continue;
+                int held = 0, band = 0;
+                if (r + 1 < ResolutionY) GapNeighbour(idx + ResolutionX, ref held, ref band);
+                if (c + 1 < ResolutionX) GapNeighbour(idx + 1, ref held, ref band);
+                if (r > 0) GapNeighbour(idx - ResolutionX, ref held, ref band);
+                if (c > 0) GapNeighbour(idx - 1, ref held, ref band);
+                if (held >= 3) frontBand[idx] = (byte)(band + 1);
+            }
+        }
+
+        private void GapNeighbour(int index, ref int held, ref int band)
+        {
+            if (sectorStates[index] == SectorControl.Neutral) return;
+            held++;
+            if (frontBand[index] > band) band = frontBand[index];
         }
 
         private static bool Opposing(bool friendly, float neighborHold)
@@ -1461,8 +1485,10 @@ namespace BoscaliSummer.Modules.Command.Runtime
         /// <summary>Full at the front, quiet in the rear, nothing on unheld ground.</summary>
         private float BandWeight(int index)
         {
-            if (sectorStates[index] == SectorControl.Neutral) return 0f;
             byte band = frontBand[index];
+            // Unheld ground is bare unless ComputeFrontBand marked it a closed-in gap (band + 1).
+            if (sectorStates[index] == SectorControl.Neutral)
+                return band == 3 ? 1f : band == 2 ? 0.55f : band == 1 ? 0.22f : 0f;
             return band == 2 ? 1f : band == 1 ? 0.55f : 0.22f;
         }
 
@@ -1472,9 +1498,31 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private int TintStep(int index)
         {
             float hold = holdStrength[index];
-            if (sectorStates[index] == SectorControl.Neutral || !float.IsFinite(hold) || hold == 0f) return 0;
+            if (sectorStates[index] == SectorControl.Neutral) return frontBand[index] != 0 ? GapStep(index) : 0;
+            if (!float.IsFinite(hold) || hold == 0f) return 0;
             int step = (int)Math.Round(hold * TintHoldSteps);
             return step != 0 ? step : hold > 0f ? 1 : -1;
+        }
+
+        /// <summary>
+        /// The side a closed-in gap leans to: one step toward whoever holds more of its four
+        /// neighbours, zero when they balance, so on the line the two colours meet inside it.
+        /// </summary>
+        private int GapStep(int index)
+        {
+            int r = index / ResolutionX, c = index - r * ResolutionX;
+            float sum = 0f;
+            if (r + 1 < ResolutionY) sum += GapHold(index + ResolutionX);
+            if (c + 1 < ResolutionX) sum += GapHold(index + 1);
+            if (r > 0) sum += GapHold(index - ResolutionX);
+            if (c > 0) sum += GapHold(index - 1);
+            return sum > 0.01f ? 1 : sum < -0.01f ? -1 : 0;
+        }
+
+        private float GapHold(int index)
+        {
+            float hold = holdStrength[index];
+            return sectorStates[index] == SectorControl.Neutral || !float.IsFinite(hold) ? 0f : Math.Sign(hold);
         }
 
         /// <summary>

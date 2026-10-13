@@ -44,6 +44,16 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>The longest index sets: the lines of one direction and the triangles.</summary>
         internal const int MaxLineIndices = MaxSide * (MaxSide - 1) * 2;
         internal const int MaxTriangleIndices = (MaxSide - 1) * (MaxSide - 1) * 6;
+        /// <summary>The most vertices the tile's mesh holds: the lattice's nodes and, after them, the ones added where the shore cuts a segment (16-bit indices).</summary>
+        internal const int MaxVertices = 65535;
+        /// <summary>The shoreline's strength, as a share of the ink: well over the land floor, so the coast is the strongest line of the low ground.</summary>
+        internal const float CoastStrength = .85f;
+        /// <summary>The land is filled with this share of its lines' light (the sea stays black), so an island reads as a body and not only as a net.</summary>
+        internal const float SurfaceFill = .22f;
+        /// <summary>The relief's light: a slope facing the north-west is up to <see cref="ShadeCeiling"/> times as bright as level ground, one facing away down to <see cref="ShadeFloor"/> of it.</summary>
+        internal const float ShadeFloor = .5f, ShadeCeiling = 1.5f;
+        /// <summary>How many times the shore's place on a segment is halved: 4 is a sixteenth of a cell.</summary>
+        private const int CoastSteps = 4;
         private const float SeaTolerance = .01f;
         private const float Deg = MathF.PI / 180f;
 
@@ -152,61 +162,99 @@ namespace BoscaliSummer.Modules.Command.Domain
         internal static bool WaterLineKept(int absoluteLine) => ((absoluteLine % WaterEvery) + WaterEvery) % WaterEvery == 0;
 
         /// <summary>
-        /// Sorts the lattice's line segments after its heights are filled: the LAND lines (any segment that touches a cell with a node above the sea: all of them, whatever the strength of the node they end in) and
-        /// the WATER lines (a segment whose neighbouring cells, one or two, are all water: a cell is water when all four corners are sea), of which only every <see cref="WaterEvery"/>th line of each family is kept
-        /// (<see cref="WaterLineKept"/>, by absolute cell index: <paramref name="cellX"/> / <paramref name="cellZ"/> are the lattice centre's). Segments are index pairs as <see cref="BuildIndices"/> makes them: the
-        /// east-west and north-south land lines into their own arrays, both families of water lines into <paramref name="water"/>. <paramref name="waterCells"/> is scratch, (2 * halfX) * (2 * halfZ) long at least.
+        /// Sorts the lattice's line segments after its heights are filled, and draws the coast. A segment between two land nodes is a LAND line; one between two sea nodes is a WATER line, of which only every
+        /// <see cref="WaterEvery"/>th line of each family is kept (<see cref="WaterLineKept"/>, by absolute cell index: <paramref name="cellX"/> / <paramref name="cellZ"/> are the lattice centre's); one between a land
+        /// node and a sea node is cut where the shore crosses it (found on <paramref name="field"/>'s land mask by halving, to a sixteenth of a cell; the middle without a field): a vertex is added there, on the surface, and the land
+        /// line ends in it, so the grid stops at the shore and not at the next node. The COAST joins those vertices cell by cell into the shoreline. Land segments are index pairs into their own arrays, both families
+        /// of water lines go into <paramref name="water"/>, the shoreline into <paramref name="coast"/>. The added vertices follow the lattice's nodes in <paramref name="vertices"/> (<paramref name="vertexCount"/> is
+        /// nodes plus those; a shore longer than the array has room for is left uncut). <paramref name="crossings"/> is scratch, <see cref="MaxLineIndices"/> long.
         /// </summary>
-        internal static void BuildLines(int halfX, int halfZ, int cellX, int cellZ, float seaLevel, GhostVertex[] vertices, bool[] waterCells,
-            int[] landEastWest, int[] landNorthSouth, int[] water, out int landEastWestCount, out int landNorthSouthCount, out int waterCount)
+        internal static void BuildLines(TerrainHeightField field, float cellMetres, int halfX, int halfZ, int cellX, int cellZ, float seaLevel, GhostVertex[] vertices, int[] crossings,
+            int[] landEastWest, int[] landNorthSouth, int[] water, int[] coast,
+            out int landEastWestCount, out int landNorthSouthCount, out int waterCount, out int coastCount, out int vertexCount)
         {
-            int sx = 2 * halfX + 1, sz = 2 * halfZ + 1, cx = sx - 1, cz = sz - 1;
-            for (int j = 0; j < cz; j++)
-            for (int i = 0; i < cx; i++)
-            {
-                int a = j * sx + i, c = a + sx;
-                waterCells[j * cx + i] = IsSea(vertices[a].Y, seaLevel) && IsSea(vertices[a + 1].Y, seaLevel) && IsSea(vertices[c].Y, seaLevel) && IsSea(vertices[c + 1].Y, seaLevel);
-            }
-            int land = 0, other = 0, wet = 0;
+            int sx = 2 * halfX + 1, sz = 2 * halfZ + 1, cx = sx - 1, cz = sz - 1, rows = cx * sz;
+            float anchorX = Anchor(cellX, cellMetres), anchorZ = Anchor(cellZ, cellMetres);
+            int land = 0, other = 0, wet = 0, next = sx * sz;
             for (int j = 0; j < sz; j++)
             {
                 bool kept = WaterLineKept(cellZ + j - halfZ);
                 for (int i = 0; i < cx; i++)
                 {
-                    bool sea = (j >= cz || waterCells[j * cx + i]) && (j == 0 || waterCells[(j - 1) * cx + i]);
-                    if (!sea)
-                    {
-                        landEastWest[land++] = j * sx + i;
-                        landEastWest[land++] = j * sx + i + 1;
-                    }
-                    else if (kept)
-                    {
-                        water[wet++] = j * sx + i;
-                        water[wet++] = j * sx + i + 1;
-                    }
+                    int a = j * sx + i;
+                    crossings[j * cx + i] = Segment(field, anchorX, anchorZ, seaLevel, vertices, a, a + 1, kept, landEastWest, ref land, water, ref wet, ref next);
                 }
             }
+            for (int j = 0; j < cz; j++)
             for (int i = 0; i < sx; i++)
             {
-                bool kept = WaterLineKept(cellX + i - halfX);
-                for (int j = 0; j < cz; j++)
-                {
-                    bool sea = (i >= cx || waterCells[j * cx + i]) && (i == 0 || waterCells[j * cx + i - 1]);
-                    if (!sea)
-                    {
-                        landNorthSouth[other++] = j * sx + i;
-                        landNorthSouth[other++] = (j + 1) * sx + i;
-                    }
-                    else if (kept)
-                    {
-                        water[wet++] = j * sx + i;
-                        water[wet++] = (j + 1) * sx + i;
-                    }
-                }
+                int a = j * sx + i;
+                crossings[rows + a] = Segment(field, anchorX, anchorZ, seaLevel, vertices, a, a + sx, WaterLineKept(cellX + i - halfX), landNorthSouth, ref other, water, ref wet, ref next);
+            }
+            // The shoreline: in each cell the shore enters and leaves through its cut sides (two of them, or all four on a saddle: then two corners are cut off).
+            int shore = 0;
+            for (int j = 0; j < cz; j++)
+            for (int i = 0; i < cx; i++)
+            {
+                int south = crossings[j * cx + i], north = crossings[(j + 1) * cx + i], west = crossings[rows + j * sx + i], east = crossings[rows + j * sx + i + 1];
+                int p = -1, q = -1, cuts = 0;
+                if (south >= 0) { p = south; cuts++; }
+                if (west >= 0) { if (p < 0) p = west; else q = west; cuts++; }
+                if (north >= 0) { if (p < 0) p = north; else if (q < 0) q = north; cuts++; }
+                if (east >= 0) { if (q < 0) q = east; cuts++; }
+                if (cuts < 2 || shore + 4 > coast.Length) continue;
+                coast[shore++] = p;
+                coast[shore++] = q;
+                if (cuts < 4) continue;
+                coast[shore++] = north;
+                coast[shore++] = east;
             }
             landEastWestCount = land;
             landNorthSouthCount = other;
             waterCount = wet;
+            coastCount = shore;
+            vertexCount = next;
+        }
+
+        /// <summary>One segment of the lattice into the list it belongs to; returns the vertex added where the shore cuts it, or -1 when it does not (or there was no room for one).</summary>
+        private static int Segment(TerrainHeightField field, float anchorX, float anchorZ, float seaLevel, GhostVertex[] vertices, int a, int b, bool kept,
+            int[] land, ref int landCount, int[] water, ref int waterCount, ref int next)
+        {
+            bool seaA = IsSea(vertices[a].Y, seaLevel), seaB = IsSea(vertices[b].Y, seaLevel);
+            if (seaA == seaB)
+            {
+                if (!seaA)
+                {
+                    land[landCount++] = a;
+                    land[landCount++] = b;
+                }
+                else if (kept)
+                {
+                    water[waterCount++] = a;
+                    water[waterCount++] = b;
+                }
+                return -1;
+            }
+            if (next >= vertices.Length || next >= MaxVertices) return -1;
+            int dryNode = seaA ? b : a;
+            GhostVertex dry = vertices[dryNode], sea = vertices[seaA ? a : b];
+            // The share of the way from the dry node to the sea one where the land ends.
+            float low = 0f, high = 1f;
+            if (field != null)
+                for (int step = 0; step < CoastSteps; step++)
+                {
+                    float mid = (low + high) * .5f;
+                    if (field.IsLand(anchorX + dry.X + (sea.X - dry.X) * mid, anchorZ + dry.Z + (sea.Z - dry.Z) * mid)) low = mid;
+                    else high = mid;
+                }
+            float t = (low + high) * .5f;
+            ref GhostVertex v = ref vertices[next];
+            v.X = dry.X + (sea.X - dry.X) * t;
+            v.Y = dry.Y + (sea.Y - dry.Y) * t;
+            v.Z = dry.Z + (sea.Z - dry.Z) * t;
+            land[landCount++] = dryNode;
+            land[landCount++] = next;
+            return next++;
         }
 
         /// <summary>
@@ -268,6 +316,47 @@ namespace BoscaliSummer.Modules.Command.Domain
                 if (v.R + v.G + v.B > 0) lit++;
             }
             return lit;
+        }
+
+        /// <summary>
+        /// The last touch after <see cref="FillColours"/>, over all <paramref name="vertexCount"/> vertices <see cref="BuildLines"/> left: the relief's light on every land node (its colour times how much its slope, heights
+        /// stretched as the picture stretches them, faces a sun in the north-west 45 degrees up; level ground is unchanged, within <see cref="ShadeFloor"/>..<see cref="ShadeCeiling"/>), alpha 0 on every sea node (the
+        /// surface is drawn with its alpha, so the sea stays black while its faint lines keep their colour) and the shoreline's vertices in the ink at <see cref="CoastStrength"/>.
+        /// </summary>
+        internal static void Shade(int halfX, int halfZ, float cellMetres, float seaLevel, GhostTint ink, int vertexCount, GhostVertex[] vertices)
+        {
+            int sx = 2 * halfX + 1, sz = 2 * halfZ + 1, nodes = sx * sz;
+            const float level = .70710678f;
+            float slope = HoloView.VerticalScale / cellMetres;
+            for (int j = 0; j < sz; j++)
+            for (int i = 0; i < sx; i++)
+            {
+                int at = j * sx + i;
+                ref GhostVertex v = ref vertices[at];
+                if (IsSea(v.Y, seaLevel))
+                {
+                    v.A = 0;
+                    continue;
+                }
+                int west = i > 0 ? 1 : 0, east = i < sx - 1 ? 1 : 0, south = j > 0 ? 1 : 0, north = j < sz - 1 ? 1 : 0;
+                float gx = (vertices[at + east].Y - vertices[at - west].Y) * slope / Math.Max(1, east + west);
+                float gz = (vertices[at + north * sx].Y - vertices[at - south * sx].Y) * slope / Math.Max(1, north + south);
+                float light = (.5f * gx + level - .5f * gz) / (level * MathF.Sqrt(gx * gx + 1f + gz * gz));
+                light = light < ShadeFloor ? ShadeFloor : light > ShadeCeiling ? ShadeCeiling : light;
+                v.R = (byte)(Math.Min(v.R * light, 255f) + .5f);
+                v.G = (byte)(Math.Min(v.G * light, 255f) + .5f);
+                v.B = (byte)(Math.Min(v.B * light, 255f) + .5f);
+                v.A = 255;
+            }
+            byte r = (byte)(ink.R * CoastStrength + .5f), g = (byte)(ink.G * CoastStrength + .5f), b = (byte)(ink.B * CoastStrength + .5f);
+            for (int n = nodes; n < vertexCount; n++)
+            {
+                ref GhostVertex v = ref vertices[n];
+                v.R = r;
+                v.G = g;
+                v.B = b;
+                v.A = 255;
+            }
         }
 
         private static float Smooth(float t) => Scalar.SmoothStep(0f, 1f, t);

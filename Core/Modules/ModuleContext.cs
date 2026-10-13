@@ -81,10 +81,10 @@ namespace BoscaliSummer.Core.Modules
 
         /// <summary>Publish an immediately applied client-local toggle to SET.</summary>
         public void AddClientSetting(string section, string label, string help,
-            BepInEx.Configuration.ConfigEntry<bool> entry)
+            BepInEx.Configuration.ConfigEntry<bool> entry, bool[] presets = null)
         {
             if (entry == null) return;
-            registeredClientSettings.Add(ClientSettings.Add(section, label, help, entry));
+            registeredClientSettings.Add(ClientSettings.Add(section, label, help, entry, presets));
         }
 
         /// <summary>

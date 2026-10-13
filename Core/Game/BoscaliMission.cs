@@ -1,28 +1,32 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Threading;
-using BepInEx.Logging;
+using BoscaliSummer.Core.Config;
 using BoscaliSummer.Core.Diagnostics;
-using Cysharp.Threading.Tasks;
 using HarmonyLib;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using NuclearOption.SavedMission;
-using UnityEngine;
 
 namespace BoscaliSummer.Core.Game
 {
-    /// <summary>A separate native picker entry backed by the installed game's Escalation data.</summary>
+    /// <summary>
+    /// The seams into the game's missions: which modules run in the mission being loaded, and the picker groups that modules add to the game's mission list.
+    /// </summary>
     internal static class BoscaliMission
     {
-        internal const string MissionName = "Boscali Summer";
-        internal const string DescriptionMarker = MissionProfile.DescriptionMarker;
-        private const string SourceName = "Escalation";
+        private static ModConfiguration settings;
+        private static string answered;
 
-        private static CopyGroup group;
-        private static ManualLogSource log;
-        private static bool warned;
+        /// <summary>The mission whose start prompt is still unanswered; null when there is nothing to ask.</summary>
+        internal static string PendingMission { get; private set; }
+
+        /// <summary>Picker groups to add to the game's mission list (the scripted missions). Asked whenever the game reads its list.</summary>
+        internal static Func<IReadOnlyList<MissionGroup>> ExtraGroups;
+
+        /// <summary>
+        /// For a scripted mission, the modules its script switches off; null for every other mission. A scripted mission is never prompted for: its script has
+        /// already said what runs.
+        /// </summary>
+        internal static Func<Mission, string[]> ScriptedModulesOff;
 
         internal static readonly Type[] PatchTypes =
         [
@@ -31,150 +35,132 @@ namespace BoscaliSummer.Core.Game
             .. MissionContentPatches.PatchTypes
         ];
 
-        internal static bool HasMarker(Mission mission) =>
-            MissionProfile.IsFullMission(mission?.missionSettings?.description);
-
-        internal static string CreateCopyJson(string sourceJson)
-        {
-            using var reader = new JsonTextReader(new StringReader(sourceJson)) { DateParseHandling = DateParseHandling.None };
-            var copy = JObject.Load(reader);
-            if (copy["missionSettings"] is not JObject settings || settings["description"]?.Type != JTokenType.String)
-                throw new InvalidOperationException("Escalation has no valid mission description.");
-            settings["description"] = "The complete Boscali Summer experience, based on Escalation.\n\n" +
-                settings["description"].Value<string>() + "\n\n" + DescriptionMarker;
-            // Keep all source fields verbatim as JSON values, including unknown fields from future
-            // game versions. Loading into Mission here would normalize nulls and default values.
-            return copy.ToString(Formatting.None);
-        }
-
-        internal static void EnsureRegistered(ManualLogSource logger)
-        {
-            log = logger;
-            group ??= new CopyGroup();
-        }
+        internal static void EnsureRegistered(ModConfiguration configuration) => settings = configuration;
 
         internal static void Unregister()
         {
-            group = null;
-            warned = false;
-            log = null;
+            settings = null;
+            PendingMission = answered = null;
         }
 
-        private static void SetProfile(Mission mission)
+        private static Dictionary<string, string> Remembered()
         {
-            try { MissionProfile.SetDescription(mission?.missionSettings?.description); }
+            try
+            {
+                return JsonConvert.DeserializeObject<Dictionary<string, string>>(settings.MissionRemembered.Value) ??
+                    new Dictionary<string, string>();
+            }
+            catch (JsonException) { return new Dictionary<string, string>(); }
+        }
+
+        /// <summary>
+        /// Applies the player's module selection for a mission before it spawns anything: the
+        /// choice remembered for that mission, else the last one confirmed anywhere.
+        /// </summary>
+        private static void SelectFor(Mission mission)
+        {
+            try
+            {
+                if (mission == null || settings == null) return;
+                string[] scripted = ScriptedModulesOff?.Invoke(mission);
+                if (scripted != null)
+                {
+                    MissionProfile.SetDisabled(scripted);
+                    PendingMission = null;
+                    return;
+                }
+                string name = mission.Name ?? "";
+                bool remembered = Remembered().TryGetValue(name, out string list);
+                MissionProfile.SetDisabled(MissionProfile.Parse(remembered ? list : settings.MissionDisabledModules.Value));
+                PendingMission = !remembered && settings.MissionAskAtStart.Value && name != answered ? name : null;
+            }
             catch (Exception e) { PatchGuard.Report("MissionProfile", e); }
+        }
+
+        /// <summary>The start prompt's answer. A plain start also becomes the selection the next prompt opens with.</summary>
+        internal static void Confirm(string mission, IEnumerable<string> disabled, bool rememberMission, bool neverAsk)
+        {
+            string list = MissionProfile.Format(disabled);
+            if (rememberMission)
+            {
+                Dictionary<string, string> map = Remembered();
+                map[mission] = list;
+                settings.MissionRemembered.Value = JsonConvert.SerializeObject(map);
+            }
+            else settings.MissionDisabledModules.Value = list;
+            if (neverAsk) settings.MissionAskAtStart.Value = false;
+            settings.MissionAskAtStart.ConfigFile.Save();
+            answered = mission;
+            PendingMission = null;
+            MissionProfile.SetDisabled(MissionProfile.Parse(list));
         }
 
         [HarmonyPatch(typeof(MissionGroup), nameof(MissionGroup.AllGroups), MethodType.Getter)]
         private static class MissionGroupsPatch
         {
             [HarmonyPostfix]
-            private static void Postfix(ref MissionGroup[] __result) => AddGroup(ref __result);
+            private static void Postfix(ref MissionGroup[] __result) => AddGroups(ref __result);
         }
 
         [HarmonyPatch(typeof(MissionManager), nameof(MissionManager.SetMission))]
         private static class SetMissionPatch
         {
             [HarmonyPrefix]
-            private static void Prefix(Mission mission) => SetProfile(mission);
+            private static void Prefix(Mission mission) => SelectFor(mission);
         }
 
         [HarmonyPatch(typeof(Mission), nameof(Mission.OnSceneLoaded))]
         private static class SceneLoadedPatch
         {
             [HarmonyPrefix]
-            private static void Prefix(Mission __instance) => SetProfile(__instance);
+            private static void Prefix(Mission __instance) => SelectFor(__instance);
         }
 
         [HarmonyPatch(typeof(MissionManager), "OnSyncMissionChanged")]
         private static class SyncMissionPatch
         {
             [HarmonyPrefix]
-            private static void Prefix((NetworkMission.SyncMission syncMission, NetworkMission.State state, bool stateChangeOnly) tuple) =>
-                SetProfile(tuple.state == NetworkMission.State.Unloaded ? null : tuple.syncMission.Mission);
+            private static void Prefix((NetworkMission.SyncMission syncMission, NetworkMission.State state, bool stateChangeOnly) tuple)
+            {
+                if (tuple.state == NetworkMission.State.Unloaded) PendingMission = answered = null;
+                else if (!tuple.stateChangeOnly) SelectFor(tuple.syncMission.Mission);
+            }
         }
 
         [HarmonyPatch(typeof(MissionManager), "StopMission")]
         private static class StopMissionPatch
         {
             [HarmonyPostfix]
-            private static void Postfix() => SetProfile(null);
+            private static void Postfix() => PendingMission = answered = null;
         }
 
         [HarmonyPatch(typeof(LevelInfo), nameof(LevelInfo.LoadFromMission))]
         private static class MissionEnvironmentPatch
         {
             [HarmonyPrefix]
-            private static void Prefix(Mission mission)
+            private static void Prefix()
             {
                 // Native map reuse can skip Unity's sceneLoaded event. Reset mission services
                 // here, before LoadEnvironment applies the new sky, weather and native baseline.
-                try { MissionProfile.PrepareMission(mission?.missionSettings?.description); }
+                try { MissionProfile.PrepareMission(); }
                 catch (Exception e) { PatchGuard.Report("MissionEnvironment", e); }
             }
         }
 
-        private static void AddGroup(ref MissionGroup[] __result)
+        private static void AddGroups(ref MissionGroup[] __result)
         {
-            // The game initializes its ResourceGroups before reading AllGroups. Defer copying until
-            // that point so plugin startup does not force native resource initialization early.
-            if (__result == null || group == null || !group.EnsureCopy()) return;
-            for (int i = 0; i < __result.Length; i++)
-                if (ReferenceEquals(__result[i], group)) return;
-            var expanded = new MissionGroup[__result.Length + 1];
-            Array.Copy(__result, expanded, __result.Length);
-            expanded[__result.Length] = group;
-            __result = expanded;
-        }
-
-        private sealed class CopyGroup : MissionGroup
-        {
-            private string json;
-            private readonly MissionKey[] missions;
-
-            internal CopyGroup() : base(MissionName)
+            // Asked here and not at startup: the game builds its own groups before it reads this list.
+            if (__result == null || ExtraGroups == null) return;
+            try
             {
-                missions = new[] { new MissionKey(MissionName, this) };
+                IReadOnlyList<MissionGroup> extra = ExtraGroups();
+                if (extra == null || extra.Count == 0) return;
+                var expanded = new List<MissionGroup>(__result);
+                foreach (MissionGroup group in extra)
+                    if (group != null && !expanded.Contains(group)) expanded.Add(group);
+                if (expanded.Count != __result.Length) __result = expanded.ToArray();
             }
-
-            internal bool EnsureCopy()
-            {
-                if (json != null) return true;
-                try
-                {
-                    var sourceKey = new MissionKey(SourceName, BuiltIn);
-                    if (!BuiltIn.TryGetJson(sourceKey, out string sourceJson))
-                        throw new InvalidOperationException("The installed Escalation mission could not be loaded.");
-                    // Native mission loading happens only after the player selects this copy. Its
-                    // description marker also reaches clients whose AfterLoad(name) clears LoadKey.
-                    json = CreateCopyJson(sourceJson);
-                    return true;
-                }
-                catch (Exception e)
-                {
-                    if (!warned)
-                    {
-                        warned = true;
-                        log?.LogWarning("Boscali Summer mission unavailable: " + e.Message);
-                    }
-                    return false;
-                }
-            }
-
-            public override IEnumerable<MissionKey> GetMissions() =>
-                EnsureCopy() ? missions : Array.Empty<MissionKey>();
-
-            public override bool TryGetJson(MissionKey key, out string contents)
-            {
-                contents = null;
-                if (!ReferenceEquals(key.Group, this) || key.Key != MissionName || !EnsureCopy()) return false;
-                contents = json;
-                return true;
-            }
-
-            public override UniTask<Sprite> GetPreview(string key, CancellationToken token) =>
-                BuiltIn.GetPreview(SourceName, token);
+            catch (Exception e) { PatchGuard.Report("MissionGroups", e); }
         }
     }
 }

@@ -15,7 +15,6 @@ namespace BoscaliSummer.Modules.Autopilot
             typeof(AutopilotLandInputPatch),
             typeof(FlightAssistReportPatch),
             typeof(RadialMenuLifecyclePatches),
-            typeof(BoscaliMenuActionPatches),
             typeof(ChaffNextPatch),
             typeof(ChaffTriggerPatch),
             typeof(ChaffActivePatch)
@@ -35,10 +34,7 @@ namespace BoscaliSummer.Modules.Autopilot
             context.AddSceneService<LandingLight>(51);
             context.AddSceneService<ChaffDispenser>(51).Configure(settings);
             CockpitStateProbe.Initialise();
-            RadialMenuAccess.Initialise();
-            context.Logger.LogInfo("Autopilot land=local ownship native-autopilot takeover; radial=" +
-                (RadialMenuAccess.Available ? "native wheel entry" : "native wheel unavailable") +
-                "; interaction menu on " + (settings.OnRadialBinding.Value ? "the Radial Menu binding" : "its own key only") + ", extra key=" + settings.AceRadialKey.Value);
+            context.Logger.LogInfo("Autopilot land=local ownship native-autopilot takeover; interaction menu on " + (settings.OnRadialBinding.Value ? "the Radial Menu binding" : "its own key only") + ", extra key=" + settings.AceRadialKey.Value);
         }
     }
 }

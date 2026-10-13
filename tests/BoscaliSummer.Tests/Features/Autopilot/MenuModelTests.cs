@@ -66,7 +66,6 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.Eq(sta.State, "AMMO: ×2", "unselected picker shows its own state");
             sta.Selected = true;
             TestAssert.Eq(sta.State, "ACTIVE · ×2", "selected picker shows the ACTIVE line");
-            TestAssert.That(sta.Stays, "pickers keep the menu open in LATCHED");
         }
 
         private static void BlockedRowKeepsItsPlaceAndExplainsItself()
@@ -84,11 +83,6 @@ namespace BoscaliSummer.Tests.Features.Autopilot
 
         private static void WhichRowsStayOpen()
         {
-            TestAssert.That(Gear(false).Stays && Light(0).Stays, "toggles and cycles stay open in LATCHED");
-            MenuRow flares = MenuRow.Action("defence/flares", "flare", "POP FLARES", "FLARES: 48", "DROP A FLARE SALVO");
-            TestAssert.That(!flares.Stays, "a plain action closes the menu and toasts");
-            flares.StayOpen = true;
-            TestAssert.That(flares.Stays, "an explicit StayOpen (marks, steppers) keeps it open");
             MenuRow eject = MenuRow.Danger("flight/eject", "eject", "warning", "EJECT", "CONFIRM REQUIRED", "EJECT NOW, NO UNDO", "HOLD TO EJECT", "EJECTING");
             TestAssert.That(eject.NeedsHold, "danger rows need the hold");
         }

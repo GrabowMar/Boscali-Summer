@@ -2,19 +2,39 @@
 
 ## 0.2.3 — update
 
+- **Map selection reaches the target list**: while you fly, contacts picked on the expanded map (click, box,
+  right-click menu) are now real weapon targets, several at a time; before, they only looked selected.
+  A new tool row on the map corner sets what a left drag does (PAN / BOX), what a click does (ADDS / ONE),
+  which side a box takes (ALL / HOSTILE / OWN) and clears the selection. New `Command` settings:
+  `MapLeftDragBox`, `MapClickAdds`, `MapBoxSide`, `MapRightDragTurns`, `MapDoubleClickZoom`,
+  `MapTurnSensitivity`, `MapZoomStep`.
+- **Relief map**: contacts stand on the terrain as 3D miniatures again (`MapMinis3D`, on by default), now
+  one mesh and one draw call that is rewritten only when something actually changed. Holding the right
+  mouse button and dragging turns the view again, next to the held wheel, Alt + drag and Ctrl + wheel.
+  The red and blue rings that formed on the front line are gone: an unheld square closed in by held
+  ground is now tinted through instead of being left as a hole with both border lines bent round it.
+- **The C menu stays open after you pick something**: every action now leaves the menu up (the row flashes and the result shows
+  under the hub), so several things can be set in one visit. Close it with the open key, Esc, or a click away from it. The ring's
+  icons and the hub are also much easier to hit: the cursor counts as on one from about 30 px outside its rim.
 - **Chaff is a countermeasure like the others** (issue 10): `Next Countermeasure` now steps FLARES, JAMMER, CHAFF, and while chaff
   is selected the `Countermeasures` button dispenses it. The selection shows on the TAC BOARD, the game's own readout and the
   C menu. Single player and hosting, like the dispenser itself.
 - **The C menu no longer takes the game's radial wheel** (issue 11): the `Radial Menu` binding opens the game's own wheel again, so
   mods that add to it work; the C menu opens on its own key (`Autopilot.AceRadialKey`, default C). Set the new
   `Autopilot.InteractionMenuOnRadialBinding` to on to open it from a HOTAS or gamepad button as before.
+- **The game's radial wheel is stock again**: the `BOSCALI` and `Wing Command` slices are gone from it. Autopilot landing, the
+  target presets and the wing orders are in the C menu (FLIGHT, TARGETS, WING).
 - **Objective marker redrawn** (issue 13): the contract marker in the cockpit drew a black square behind its area ring. It is now
   drawn in the visor's own line work: corner brackets on the point, a chevron at the screen edge when the target is out of view,
   a dashed area ring, and a shelf with the title and the distance that fills as the hold progresses.
 - **Map selection** (issue 14): one left click on the big map selected two contacts, or selected one and dropped it again,
   because the game handed the click to the icons twice. One click is one click now.
-- **Dedicated mission:** a separate **Boscali Summer** mission-picker group contains a copy of the installed game's Escalation. Existing user missions are preserved.
-- **Mission compatibility:** vanilla and workshop missions retain cockpit/HUD, avionics, radio, comms and player-controlled wing tools. STR, AI war direction, support, extra objectives, progression/aces, garrisons, trenches, events, dynamic weather, fire/destruction and VANGUARD systems run only in the dedicated mission. Mission changes remove their runtime services and patches; the serialized mission marker also reaches multiplayer clients.
+- **Visor terrain follows the map**: the terrain ghost and the holo map could keep the relief of the map flown before (Heartland
+  hills over the Archipelago). They now check the loaded map every frame and fetch its own relief. The ghost's lines are about a
+  quarter fainter and its twice-a-second repaint costs about half.
+- **Boscali Summer, the mission:** the **Boscali Summer** entry in the mission picker is now a scripted mission on top of the game's own Escalation. A cutscene tells the build-up in a storm at sunset (the night of the coup, the fall of Agrapol, the fleet coming home), with armoured columns already rolling, place-and-date stamps and the mod's event paintings landing as photographs along a timeline, framed as a surveillance feed and set to its own music. You pick a side as a contract pilot, your handler and your side's command talk you through an opening (fly to the picket station, break the raid on your strip), and then the war opens into the full Escalation sandbox with the story following its milestones to the end. Existing user missions are preserved; no mission file is shipped.
+- **Mission scripts:** the mission above is one text file. Your own go in `BepInEx/config/BoscaliSummer/scenarios/`: objectives and spawns written into a copy of any mission, named characters with dialogue, cutscene camera shots with captions, stamps and pinned photographs, hints, and campaigns whose chapters unlock one after another. A dedicated server starts one with `-mission scenario:<id>`. See [docs/SCENARIOS.md](docs/SCENARIOS.md). New F1 switch: **Cutscenes in scripted missions**.
+- **Mission systems prompt:** every mission, vanilla and workshop included, runs the whole mod again; nothing is locked. When a mission starts, a prompt on the map screen lists the systems with **FULL EXPERIENCE** and **IMMERSION ONLY** presets (immersion only keeps the cockpit, HUD, wing, radio and comms and leaves the mission as its author made it). Start, keep the answer for that mission, or never be asked again; F1 > Mission brings the prompt back.
 
 ## 0.2.2 — update
 

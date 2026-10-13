@@ -5,7 +5,7 @@ Shader "Boscali/PilotCanopyReflection"
         _PilotTex ("Pilot capture", 2D) = "black" {}
         _CaptureRect ("Pilot plane min XY and size", Vector) = (-.6,-.8,1.2,1.6)
         _EyeWorld ("Final cockpit eye", Vector) = (0,0,0,1)
-        _ReflectionStrength ("Coated glass reflection", Range(0,.12)) = .085
+        _ReflectionStrength ("Coated glass reflection", Range(0,2)) = .5
     }
     SubShader
     {
@@ -14,7 +14,7 @@ Shader "Boscali/PilotCanopyReflection"
         ZWrite Off
         ZTest LEqual
         Offset -1,-1
-        Blend One OneMinusSrcAlpha
+        Blend One One
         Pass
         {
             Tags { "LightMode"="SRPDefaultUnlit" }
@@ -55,9 +55,12 @@ Shader "Boscali/PilotCanopyReflection"
                 float4 pilot = tex2D(_PilotTex, uv);
                 float edge = saturate(min(min(uv.x,1-uv.x), min(uv.y,1-uv.y)) * 24);
                 float grazing = 1 - saturate(abs(dot(normal, -incoming)));
-                float opacity = min(.12, _ReflectionStrength) * (.35 + .65 * grazing * grazing) * edge;
-                // Filtering an opaque pilot over a transparent clear already premultiplies RGB by coverage.
-                return float4(pilot.rgb * opacity, pilot.a * opacity);
+                // One front-view plane only stands in for the pilot where the glass mirrors the pilot head-on;
+                // seen edge-on it smears into streaks, so side panes fade out.
+                float facing = saturate((abs(direction.z) - .3) * 2.5);
+                float opacity = _ReflectionStrength * (.35 + .65 * grazing * grazing) * edge * facing;
+                // A reflection only adds light. Filtering over a transparent clear already premultiplies RGB by coverage.
+                return float4(pilot.rgb * opacity, 0);
             }
             ENDHLSL
         }

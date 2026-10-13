@@ -6,8 +6,8 @@ using BoscaliSummer.Modules.Wing.Runtime;
 using BoscaliSummer.Modules.Wing.Configuration;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>Keyboard shortcuts for every radial command (all unbound by default), joystick buttons for the commands
-    /// used in flight (spec M7 §4, through the game's Rewired joysticks), and the radial restore timer.</summary>
+    /// <summary>Keyboard shortcuts for every wing command (all unbound by default) and joystick buttons for the commands
+    /// used in flight (spec M7 §4, through the game's Rewired joysticks).</summary>
     internal sealed class WingHotkeys : IWingService
     {
         public string Name => "Hotkeys";
@@ -23,7 +23,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public void Deactivate()
         {
-            WingRadialMenu.Reset();
             WingCallLadder.Close();
             WingChordInput.Release();
         }
@@ -34,7 +33,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public void Tick(float dt)
         {
-            WingRadialMenu.Tick();
             WingConfig s = WingSettings.Instance;
             WingChordInput.Tick(s, WmcNameField.Typing);
             // R5: keys typed into a WMC text field are text, never commands (HOTAS buttons still act).

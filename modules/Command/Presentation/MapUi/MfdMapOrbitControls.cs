@@ -16,6 +16,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static AvFooter cursorLine;
         private static AvControl followButton;
         private static AvControl flyButton;
+        private static AvControl dragButton, clickButton, sideButton, clearButton;
         private static int lastRevision = -1;
         private static bool lastFollowing;
         private static bool lastFlying;
@@ -56,6 +57,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             if (cursorLine == null || Time.unscaledTime < nextCursorRead) return;
             nextCursorRead = Time.unscaledTime + .1f;
+            RefreshTools(map);
             string cursor;
             if (MfdMapInteractions.Feedback != null)
                 cursor = MfdMapInteractions.Feedback;
@@ -71,7 +73,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 cursor = "X " + AvNum.Signed(point.x / 1000f, 1) + "  Z " + AvNum.Signed(point.z / 1000f, 1) +
                     " km  ·  " + (leg != null ? "MARK " + leg : "TERRAIN ~" + AvNum.Fixed(elevation, 0) + " m");
             }
-            else cursor = "CLICK ADDS  /  SHIFT BOX  /  ALT+DRAG TURN  /  RMB MENU";
+            else cursor = "DRAG MOVES  /  WHEEL ZOOMS  /  RMB DRAG TURNS  /  RMB CLICK MENU";
             cursorLine.Set(cursor);
         }
 
@@ -91,22 +93,22 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             root.anchorMin = root.anchorMax = new Vector2(1f, 1f);
             root.pivot = new Vector2(1f, 1f);
             root.anchoredPosition = new Vector2(-12f, -8f);
-            root.sizeDelta = new Vector2(RootWidth, 78f);
-            MfdChromeLay.Panel(root, "Back", new Rect(0f, 0f, RootWidth, 78f),
+            root.sizeDelta = new Vector2(RootWidth, 107f);
+            MfdChromeLay.Panel(root, "Back", new Rect(0f, 0f, RootWidth, 107f),
                 AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(.92f),
                 AvStyleHost.FuiColor("frame", AvTheme.Frame), AvChamfer.Diagonal(5f));
             cursorLine = new AvFooter(root);
             root.gameObject.AddComponent<AvHelpScope>().Footer = cursorLine;
-            cursorLine.Place(new AvSlot(5f, 61f, RootWidth - 10f, 15f));
+            cursorLine.Place(new AvSlot(5f, 90f, RootWidth - 10f, 15f));
             readout = AvText.Make(root, "Readout", AvTextRole.DataStrong, "", TextAlignmentOptions.MidlineLeft);
             MfdChromeLay.Place(readout.rectTransform, new Rect(8f, -3f, 130f, 27f));
             readout.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
             AvText.Fit(readout, false);
             float x = 139f;
             Button("-15°", 57f, -3f, () => ReliefNavigator.Turn(-15f),
-                "Turn the view 15 degrees left. Ctrl + wheel does the same; a middle drag orbits freely.", ref x);
+                "Turn the view 15 degrees left. Ctrl + wheel does the same; hold the wheel or the right button and drag to orbit freely.", ref x);
             Button("+15°", 57f, -3f, () => ReliefNavigator.Turn(15f),
-                "Turn the view 15 degrees right. Ctrl + wheel does the same; a middle drag orbits freely.", ref x);
+                "Turn the view 15 degrees right. Ctrl + wheel does the same; hold the wheel or the right button and drag to orbit freely.", ref x);
             Button("NORTH", 65f, -3f, ReliefNavigator.North,
                 "North up at the default terrain tilt.", ref x);
             Button("FIT", 60f, -3f, ReliefNavigator.Fit,
@@ -120,8 +122,60 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 "Follow your aircraft, or drag the map to move freely.", ref x);
             flyButton = Button("WASD OFF", 103f, -32f, ReliefNavigator.ToggleFly,
                 "Toggle keyboard camera flight. W/A/S/D moves relative to view heading while the map is open.", ref x);
+            // Selection tools: the modifiers as buttons, so nothing about the map has to be remembered.
+            // Each one writes its setting, so the choice is kept between sessions.
+            x = 6f;
+            dragButton = Button("DRAG PAN", 92f, -61f, FlipDrag,
+                "What a left drag does: PAN moves the map and Shift or Ctrl + drag draws a selection box; BOX swaps the two.", ref x);
+            clickButton = Button("CLICK ADDS", 96f, -61f, FlipClick,
+                "What a click on a contact does: ADDS builds up the selection (a second click drops it); ONE replaces it, and Shift + click still adds. While you fly, the selection is your target list.", ref x);
+            sideButton = Button("BOX ALL", 98f, -61f, CycleSide,
+                "Which contacts a selection box picks up: ALL, HOSTILE only, or your OWN side only.", ref x);
+            clearButton = Button("CLEAR", 82f, -61f, MfdMapInteractions.ClearSelectionTool,
+                "Empty the selection. A click on bare map does the same.", ref x);
             lastRevision = -1;
             nextCursorRead = 0f;
+        }
+
+        private static void FlipDrag()
+        {
+            var entry = Plugin.Settings?.Command?.MapLeftDragBox;
+            if (entry != null) entry.Value = !entry.Value;
+            nextCursorRead = 0f;
+        }
+
+        private static void FlipClick()
+        {
+            var entry = Plugin.Settings?.Command?.MapClickAdds;
+            if (entry != null) entry.Value = !entry.Value;
+            nextCursorRead = 0f;
+        }
+
+        private static void CycleSide()
+        {
+            var entry = Plugin.Settings?.Command?.MapBoxSide;
+            if (entry != null) entry.Value = (Domain.MapBoxSide)(((int)entry.Value + 1) % 3);
+            nextCursorRead = 0f;
+        }
+
+        private static void Tool(AvControl control, string label, bool latched)
+        {
+            if (control == null) return;
+            if (control.Label != label) control.Label = label;
+            if (control.Latched != latched) control.Latched = latched;
+        }
+
+        private static void RefreshTools(DynamicMap map)
+        {
+            var settings = Plugin.Settings?.Command;
+            bool box = settings?.MapLeftDragBox?.Value == true, adds = settings?.MapClickAdds?.Value != false;
+            Domain.MapBoxSide side = settings?.MapBoxSide?.Value ?? Domain.MapBoxSide.All;
+            Tool(dragButton, box ? "DRAG BOX" : "DRAG PAN", box);
+            Tool(clickButton, adds ? "CLICK ADDS" : "CLICK ONE", !adds);
+            Tool(sideButton, side == Domain.MapBoxSide.Hostile ? "BOX HOSTILE" : side == Domain.MapBoxSide.Friendly ? "BOX OWN" : "BOX ALL",
+                side != Domain.MapBoxSide.All);
+            int selected = map.selectedIcons != null ? map.selectedIcons.Count : 0;
+            Tool(clearButton, selected > 0 ? "CLEAR " + AvNum.Fixed(selected, 0) : "CLEAR", false);
         }
 
         private static AvControl Button(string label, float width, float y,
@@ -140,6 +194,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             cursorLine = null;
             followButton = null;
             flyButton = null;
+            dragButton = clickButton = sideButton = clearButton = null;
             lastRevision = -1;
             if (root != null) Object.Destroy(root.gameObject);
             root = null;

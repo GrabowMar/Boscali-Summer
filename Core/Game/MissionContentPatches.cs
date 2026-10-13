@@ -12,8 +12,7 @@ namespace BoscaliSummer.Core.Game
             typeof(LoadHardpointPatch), typeof(SpawnMountsPatch)
         };
 
-        private static bool Blocked(string jsonKey) =>
-            !MissionProfile.FullExperience && MissionProfile.IsBoscaliContent(jsonKey);
+        private static bool Blocked(string jsonKey) => MissionProfile.BlocksContent(jsonKey);
 
         [HarmonyPatch(typeof(UnitDefinition), nameof(UnitDefinition.IsAllowed))]
         private static class UnitAllowedPatch

@@ -103,7 +103,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         }
 
         private void Awake() => Instance = this;
-        private void Update() => BoscaliRadialMenu.Tick();
         private void OnDestroy() { if (Instance == this) Instance = null; }
 
         public void Configure(AutopilotSettings config) => settings = config;
@@ -679,11 +678,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             return false;
         }
 
-        public void ResetForScene()
-        {
-            ResetState();
-            BoscaliRadialMenu.Reset();
-        }
+        public void ResetForScene() => ResetState();
 
         private void ResetState()
         {

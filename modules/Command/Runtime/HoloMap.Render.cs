@@ -10,12 +10,12 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Command.Runtime
 {
     /// <summary>
-    /// The hologram's picture: a solid terrain tile. The ground is one lattice mesh (<see cref="HoloGrid"/>: a vertex per node, four index sets: the land's east-west lines, its north-south lines, the few lines over open water (<see cref="HoloGrid.BuildLines"/>) and the filled surface),
-    /// refilled only when the aircraft enters another cell or the range, the orientation, the presentation or the HUD ink changes; turning the picture (heading up) is the view matrix, never a rebuild. At 10 Hz as the
-    /// MINI and 20 Hz as the BIG one (every frame while it changes size) it is drawn into a render texture of the mod's own by a command buffer executed on the spot: clear colour and depth to opaque black, a viewport as many
-    /// pixels as the frame shows (times up to one and a half), the camera of <see cref="HoloView.Fit"/>, then THREE passes with the built-in line shader, so no game camera is touched. 1 the surface as filled triangles in pure black with
-    /// depth written (black adds nothing on the additive display, it only hides the lines behind a ridge); 2 the grid lines, additive, depth tested LessEqual and lifted <see cref="HoloGrid.LineLift"/> cells above the surface so they do not
-    /// fight it, the lines running across the view at full strength and the ones running away at <see cref="HoloGrid.AwayStrength"/> (the material's colour is the strength, the vertex colour is the height shade); 3 the edge fade: a ring
+    /// The hologram's picture: a solid terrain tile. The ground is one lattice mesh (<see cref="HoloGrid"/>: a vertex per node and one wherever the shore cuts a segment, five index sets: the land's east-west lines, its north-south lines, the few lines over open water, the shoreline (<see cref="HoloGrid.BuildLines"/>) and the filled surface),
+    /// refilled only when the aircraft enters another cell or the range, the orientation, the presentation or the HUD ink changes; turning the picture (heading up) is the view matrix, never a rebuild. Every frame (a
+    /// picture is a tenth of a millisecond; at 10 Hz the turning map stuttered) it is drawn into a render texture of the mod's own by a command buffer executed on the spot: clear colour and depth to opaque black, a viewport as many
+    /// pixels as the frame shows (times up to one and a half), the camera of <see cref="HoloView.Fit"/>, then THREE passes with the built-in line shader, so no game camera is touched. 1 the surface as filled triangles with
+    /// depth written, the land at <see cref="HoloGrid.SurfaceFill"/> of its lines' light and the sea black (it hides the lines behind a ridge either way); 2 the grid lines and the shoreline, additive, depth tested LessEqual and lifted <see cref="HoloGrid.LineLift"/> cells above the surface so they do not
+    /// fight it, the lines running across the view at full strength and the ones running away at <see cref="HoloGrid.AwayStrength"/> (the material's colour is the strength, the vertex colour is the height shade and the relief's light); 3 the edge fade: a ring
     /// of black-to-white quads in clip space multiplied over the last <see cref="HoloGrid.FadeShare"/> of the frame, so the grid simply ends there. A RawImage under the HUD canvas shows that part of the texture through the game's
     /// additive UI material, where black adds nothing. Without a depth buffer (the texture could not be created with one) the surface pass is skipped and the lines are drawn with no depth test: the see-through look.
     /// Every picture is timed (last and worst milliseconds, the scan's share taken out; the mesh fill timed apart) for the sim hook.
@@ -26,36 +26,38 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private const string LineShader = "Hidden/Internal-Colored";
         private const string AdditiveShader = "Unlit/AdditiveTextShader";
         // The mesh's sub-meshes.
-        private const int EastWestSub = 0, NorthSouthSub = 1, SurfaceSub = 2, WaterSub = 3;
+        private const int EastWestSub = 0, NorthSouthSub = 1, SurfaceSub = 2, WaterSub = 3, CoastSub = 4;
         private static readonly GhostTint FallbackInk = new GhostTint(127, 223, 154);
         private static readonly FieldInfo WeaponStatusField = AccessTools.Field(typeof(CombatHUD), "weaponStatus");
         private static readonly FieldInfo WeaponImageField = AccessTools.Field(typeof(WeaponStatus), "weaponImage");
         private static readonly int ColourId = Shader.PropertyToID("_Color");
 
         private Mesh mesh, fadeMesh;
-        private Material surfaceMaterial, lineMaterial, fadeMaterial;
+        private Material surfaceMaterial, lineMaterial, fadeMaterial, opaqueMaterial;
         private Material additive;
         private bool additiveOwned;
-        private MaterialPropertyBlock eastWestBlock, northSouthBlock, waterBlock;
+        private MaterialPropertyBlock eastWestBlock, northSouthBlock, waterBlock, coastBlock;
         private RenderTexture rt;
         private CommandBuffer commands;
-        private GhostVertex[] vertices;
-        private int[] eastWestIndices, northSouthIndices, triangleIndices, waterIndices;
-        private bool[] waterCells;
-        private int landEastWestCount, landNorthSouthCount, waterCount;
+        private LatticeJob job;
+        private int landEastWestCount, landNorthSouthCount, waterCount, coastCount;
         private readonly float[] viewValues = new float[HoloView.Elements];
         private readonly float[] projectionValues = new float[HoloView.Elements];
         private Matrix4x4 viewMatrix, projectionMatrix;
         private HoloCamera camera;
-        // The lattice: its cell, its snapped centre, how far it reaches (cells from the centre to a side, and metres of the ground the frame can see) and what it was made for.
-        private float cellMetres, reach;
-        private int cellX, cellZ, halfX, halfZ, nodes;
+        // The lattice in the mesh: its cell, its snapped centre and how far it reaches (cells from the centre to a side); and the triangles the mesh holds, which only change with the lattice's size.
+        private float cellMetres;
+        private int cellX, cellZ, halfX, halfZ, nodes, surfaceHalfX, surfaceHalfZ;
+        private bool placed;
+        // The lattice the picture wants: its cell and size, the metres of ground the frame can see, and what those were worked out for.
+        private float wantCell, reach;
+        private int wantHalfX, wantHalfZ;
         private HoloShape latticeShape;
-        private bool latticeNorth, placed;
+        private bool latticeNorth;
         private int latticeRange;
         private int inkR = -1, inkG, inkB;
         private Color inkColour = new Color(.5f, .87f, .6f, 1f);
-        private float highest, lastRenderMs, worstRenderMs, lastScanMs, worstScanMs, scanMs, lastFillMs, worstFillMs;
+        private float lastRenderMs, worstRenderMs, lastScanMs, worstScanMs, scanMs, lastFillMs, worstFillMs, lastWorkMs, worstWorkMs;
         private int litVertices, renders, scans, fills;
         // The part of the texture a picture is drawn into, in pixels (from its bottom-left corner), and whether the texture has a depth buffer (the solid look) or not (the see-through one).
         private int pixelsWide = TextureWidth, pixelsHigh = TextureHeight;
@@ -63,33 +65,32 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
         private bool PrepareRender()
         {
-            if (mesh != null && lineMaterial != null && surfaceMaterial != null && fadeMaterial != null && fadeMesh != null && rt != null && commands != null) return true;
+            if (mesh != null && lineMaterial != null && surfaceMaterial != null && fadeMaterial != null && opaqueMaterial != null && fadeMesh != null && rt != null && commands != null) return true;
             ReleaseRender();
             Shader shader = Shader.Find(LineShader);
             if (shader == null) return false;
             // The surface: opaque, black (the material's colour multiplies the vertex colour), depth written and tested. The lines: additive, tested but never written. The fade: multiplies what is there.
             // The depth test is set through a material property, which Unity does not turn around for a reversed depth buffer (D3D11 and the like), so it is chosen here: "in front" is a greater depth there.
             CompareFunction nearer = SystemInfo.usesReversedZBuffer ? CompareFunction.GreaterEqual : CompareFunction.LessEqual;
-            surfaceMaterial = Line(shader, "BoscaliHoloSurface", BlendMode.One, BlendMode.Zero, 1, nearer, Color.black);
+            // The surface is drawn with its vertex alpha (land 1, sea 0): the land a dim fill of its own light, the sea black; either way it hides the lines behind it.
+            surfaceMaterial = Line(shader, "BoscaliHoloSurface", BlendMode.SrcAlpha, BlendMode.Zero, 1, nearer, new Color(HoloGrid.SurfaceFill, HoloGrid.SurfaceFill, HoloGrid.SurfaceFill, 1f));
             lineMaterial = Line(shader, "BoscaliHoloLines", BlendMode.One, BlendMode.One, 0, nearer, Color.white);
             fadeMaterial = Line(shader, "BoscaliHoloFade", BlendMode.Zero, BlendMode.SrcColor, 0, CompareFunction.Always, Color.white);
+            // The surface leaves the sea at alpha 0 and the HUD's additive material shows a texel by its alpha, so a last pass adds alpha alone over the whole picture.
+            opaqueMaterial = Line(shader, "BoscaliHoloOpaque", BlendMode.One, BlendMode.One, 0, CompareFunction.Always, new Color(0f, 0f, 0f, 1f));
             eastWestBlock = new MaterialPropertyBlock();
             northSouthBlock = new MaterialPropertyBlock();
             waterBlock = new MaterialPropertyBlock();
+            coastBlock = new MaterialPropertyBlock();
 
-            vertices = new GhostVertex[HoloGrid.MaxNodes];
-            eastWestIndices = new int[HoloGrid.MaxLineIndices];
-            northSouthIndices = new int[HoloGrid.MaxLineIndices];
-            triangleIndices = new int[HoloGrid.MaxTriangleIndices];
-            waterIndices = new int[HoloGrid.MaxLineIndices];
-            waterCells = new bool[(HoloGrid.MaxSide - 1) * (HoloGrid.MaxSide - 1)];
+            job = new LatticeJob();
             mesh = new Mesh { name = "BoscaliHoloMap", hideFlags = HideFlags.HideAndDontSave };
             mesh.MarkDynamic();
-            mesh.SetVertexBufferParams(vertices.Length,
+            mesh.SetVertexBufferParams(job.Vertices.Length,
                 new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3),
                 new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.UNorm8, 4));
-            mesh.SetVertexBufferData(vertices, 0, 0, vertices.Length);
-            mesh.subMeshCount = 4;
+            mesh.SetVertexBufferData(job.Vertices, 0, 0, job.Vertices.Length);
+            mesh.subMeshCount = 5;
             mesh.bounds = new Bounds(Vector3.zero, new Vector3(400000f, 60000f, 400000f));
             fadeMesh = BuildFadeMesh();
 
@@ -106,8 +107,59 @@ namespace BoscaliSummer.Modules.Command.Runtime
             commands = new CommandBuffer { name = "BoscaliHoloMap" };
             placed = false;
             latticeRange = 0;
-            halfX = halfZ = nodes = 0;
+            halfX = halfZ = nodes = surfaceHalfX = surfaceHalfZ = 0;
             return true;
+        }
+
+        /// <summary>
+        /// One fill of the lattice, made away from the frame: the heights, the line sort with the shoreline, the colours and the relief's light are plain arithmetic on the baked elevation (<see cref="HoloGrid"/>, no Unity
+        /// types), so they run on a pool thread into these arrays while the picture goes on drawing the lattice the mesh already holds; the frame then only hands the finished arrays to the mesh. One fill at a
+        /// time: the arrays are the worker's from <see cref="Running"/> being set until it is complete.
+        /// </summary>
+        private sealed class LatticeJob
+        {
+            internal readonly GhostVertex[] Vertices = new GhostVertex[HoloGrid.MaxVertices];
+            internal readonly int[] EastWest = new int[HoloGrid.MaxLineIndices], NorthSouth = new int[HoloGrid.MaxLineIndices], Water = new int[HoloGrid.MaxLineIndices];
+            internal readonly int[] Coast = new int[HoloGrid.MaxLineIndices], Crossings = new int[HoloGrid.MaxLineIndices], Triangles = new int[HoloGrid.MaxTriangleIndices];
+            internal readonly System.Action Run;
+            // Asked for.
+            internal TerrainHeightField Field;
+            internal float Cell, Reach;
+            internal int HalfX, HalfZ, CellX, CellZ;
+            internal GhostTint Ink;
+            // Made.
+            internal int TriangleCount, EastWestCount, NorthSouthCount, WaterCount, CoastCount, VertexCount, Lit;
+            internal float Ms;
+            internal System.Exception Error;
+            internal System.Threading.Tasks.Task Running;
+            private int trianglesHalfX = -1, trianglesHalfZ = -1;
+
+            internal LatticeJob() { Run = Work; }
+
+            internal void Work()
+            {
+                long started = Stopwatch.GetTimestamp();
+                Error = null;
+                try
+                {
+                    if (HalfX != trianglesHalfX || HalfZ != trianglesHalfZ)
+                    {
+                        HoloGrid.BuildIndices(HalfX, HalfZ, EastWest, NorthSouth, Triangles, out _, out _, out TriangleCount);
+                        trianglesHalfX = HalfX;
+                        trianglesHalfZ = HalfZ;
+                    }
+                    float highest = HoloGrid.FillHeights(Field, Cell, CellX, CellZ, HalfX, HalfZ, Reach, Vertices);
+                    HoloGrid.BuildLines(Field, Cell, HalfX, HalfZ, CellX, CellZ, Field.SeaLevel, Vertices, Crossings, EastWest, NorthSouth, Water, Coast,
+                        out EastWestCount, out NorthSouthCount, out WaterCount, out CoastCount, out VertexCount);
+                    Lit = HoloGrid.FillColours(Field.SeaLevel, highest, Ink, HoloGrid.Nodes(HalfX, HalfZ), Vertices);
+                    HoloGrid.Shade(HalfX, HalfZ, Cell, Field.SeaLevel, Ink, VertexCount, Vertices);
+                }
+                catch (System.Exception error)
+                {
+                    Error = error;
+                }
+                Ms = Milliseconds(started);
+            }
         }
 
         private static Material Line(Shader shader, string name, BlendMode source, BlendMode destination, int zWrite, CompareFunction zTest, Color colour)
@@ -179,6 +231,9 @@ namespace BoscaliSummer.Modules.Command.Runtime
             fade.SetVertices(points);
             fade.SetColors(colours);
             fade.SetTriangles(triangles, 0);
+            // The outermost ring's corners are the viewport's: the same four vertices cover the whole picture for the alpha pass.
+            fade.subMeshCount = 2;
+            fade.SetTriangles(new[] { 0, 1, 2, 0, 2, 3 }, 1);
             fade.bounds = new Bounds(Vector3.zero, new Vector3(4f, 4f, 4f));
             return fade;
         }
@@ -235,58 +290,86 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
         /// <summary>
         /// The lattice for this picture: its cell (<see cref="HoloGrid.CellMetres"/>), the size the frame needs (<see cref="HoloGrid.Extent"/>, from the camera of the smallest frame so every frame the picture grows or shrinks through is
-        /// covered), its index sets when its size changed, and its nodes when the aircraft entered another cell or the picture's own settings or the ink changed. Timed apart (the fill is the one cost that grows with the grid).
+        /// covered) and its centre. When the aircraft entered another cell, or the picture's own settings or the ink changed, a fill is asked for (<see cref="LatticeJob"/>, on a pool thread) and taken into the mesh on the
+        /// first frame that finds it done; it used to be made on the frame, a stall of 2 to 4 ms every few seconds of flight. Timed apart: the frame's share and the worker's.
         /// </summary>
         private void Fill(int range)
         {
             bool northUp = NorthUp;
-            float cell = HoloGrid.CellMetres(range, HoloPresentation.GridCells(shape));
-            bool remade = !placed || latticeShape != shape || latticeNorth != northUp || latticeRange != range;
-            if (remade)
+            if (latticeShape != shape || latticeNorth != northUp || latticeRange != range)
             {
+                wantCell = HoloGrid.CellMetres(range, HoloPresentation.GridCells(shape));
                 HoloCamera smallest = HoloView.Fit(HoloPresentation.Tilt(shape), HoloPresentation.ReferenceAspect, HoloPresentation.AircraftUp(shape, northUp), radius);
-                HoloGrid.Extent(smallest, cell, northUp, out int hx, out int hz, out reach);
-                if (hx != halfX || hz != halfZ)
-                {
-                    halfX = hx;
-                    halfZ = hz;
-                    nodes = HoloGrid.Nodes(hx, hz);
-                    HoloGrid.BuildIndices(hx, hz, eastWestIndices, northSouthIndices, triangleIndices, out int eastWestCount, out int northSouthCount, out int triangleCount);
-                    mesh.SetIndices(triangleIndices, 0, triangleCount, MeshTopology.Triangles, SurfaceSub, false);
-                }
+                HoloGrid.Extent(smallest, wantCell, northUp, out wantHalfX, out wantHalfZ, out reach);
                 latticeShape = shape;
                 latticeNorth = northUp;
                 latticeRange = range;
-                cellMetres = cell;
             }
-            HoloGrid.Snap(planeX, planeZ, cell, out int cx, out int cz);
+            HoloGrid.Snap(planeX, planeZ, wantCell, out int cx, out int cz);
             ColorTheme theme = ThemeManager.Active != null ? ThemeManager.Active.ColorTheme : null;
             GhostTint ink = theme != null ? Tint(theme.AllClear) : FallbackInk;
-            bool moved = remade || cx != cellX || cz != cellZ;
-            bool inked = ink.R != inkR || ink.G != inkG || ink.B != inkB;
-            if (!moved && !inked) return;
-            long started = Stopwatch.GetTimestamp();
-            if (moved)
-            {
-                highest = HoloGrid.FillHeights(field, cell, cx, cz, halfX, halfZ, reach, vertices);
-                cellX = cx;
-                cellZ = cz;
-                placed = true;
-                // Which segments are land lines and which are the few water ones depends on the heights just read.
-                HoloGrid.BuildLines(halfX, halfZ, cx, cz, field.SeaLevel, vertices, waterCells, eastWestIndices, northSouthIndices, waterIndices,
-                    out landEastWestCount, out landNorthSouthCount, out waterCount);
-                mesh.SetIndices(eastWestIndices, 0, landEastWestCount, MeshTopology.Lines, EastWestSub, false);
-                mesh.SetIndices(northSouthIndices, 0, landNorthSouthCount, MeshTopology.Lines, NorthSouthSub, false);
-                mesh.SetIndices(waterIndices, 0, waterCount, MeshTopology.Lines, WaterSub, false);
-            }
-            litVertices = HoloGrid.FillColours(field.SeaLevel, highest, ink, nodes, vertices);
-            inkR = ink.R;
-            inkG = ink.G;
-            inkB = ink.B;
             inkColour = new Color(ink.R / 255f, ink.G / 255f, ink.B / 255f, 1f);
-            mesh.SetVertexBufferData(vertices, 0, 0, nodes, 0,
+            if (job.Running != null)
+            {
+                // The lattice the mesh holds is drawn meanwhile: a cell or a size behind for a frame or two.
+                if (!job.Running.IsCompleted) return;
+                job.Running = null;
+                Take(false);
+            }
+            if (placed && halfX == wantHalfX && halfZ == wantHalfZ && cellMetres == wantCell && cellX == cx && cellZ == cz && ink.R == inkR && ink.G == inkG && ink.B == inkB) return;
+            job.Field = field;
+            job.Cell = wantCell;
+            job.Reach = reach;
+            job.HalfX = wantHalfX;
+            job.HalfZ = wantHalfZ;
+            job.CellX = cx;
+            job.CellZ = cz;
+            job.Ink = ink;
+            if (placed) job.Running = System.Threading.Tasks.Task.Run(job.Run);
+            else
+            {
+                // Nothing to draw meanwhile (the first picture of a mission, or of another map): made here and now.
+                job.Work();
+                Take(true);
+            }
+        }
+
+        /// <summary>The finished fill goes into the mesh: the frame's whole share of a fill, timed (with the fill itself when that was made on the frame too). A fill of another map's heights is dropped.</summary>
+        private void Take(bool inline)
+        {
+            if (job.Error != null) throw new System.InvalidOperationException("The holo lattice fill failed.", job.Error);
+            if (job.Field != field) return;
+            long started = Stopwatch.GetTimestamp();
+            if (job.HalfX != surfaceHalfX || job.HalfZ != surfaceHalfZ)
+            {
+                mesh.SetIndices(job.Triangles, 0, job.TriangleCount, MeshTopology.Triangles, SurfaceSub, false);
+                surfaceHalfX = job.HalfX;
+                surfaceHalfZ = job.HalfZ;
+            }
+            mesh.SetIndices(job.EastWest, 0, job.EastWestCount, MeshTopology.Lines, EastWestSub, false);
+            mesh.SetIndices(job.NorthSouth, 0, job.NorthSouthCount, MeshTopology.Lines, NorthSouthSub, false);
+            mesh.SetIndices(job.Water, 0, job.WaterCount, MeshTopology.Lines, WaterSub, false);
+            mesh.SetIndices(job.Coast, 0, job.CoastCount, MeshTopology.Lines, CoastSub, false);
+            mesh.SetVertexBufferData(job.Vertices, 0, 0, job.VertexCount, 0,
                 MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontNotifyMeshUsers);
-            lastFillMs = Milliseconds(started);
+            halfX = job.HalfX;
+            halfZ = job.HalfZ;
+            nodes = HoloGrid.Nodes(halfX, halfZ);
+            cellX = job.CellX;
+            cellZ = job.CellZ;
+            cellMetres = job.Cell;
+            landEastWestCount = job.EastWestCount;
+            landNorthSouthCount = job.NorthSouthCount;
+            waterCount = job.WaterCount;
+            coastCount = job.CoastCount;
+            litVertices = job.Lit;
+            inkR = job.Ink.R;
+            inkG = job.Ink.G;
+            inkB = job.Ink.B;
+            placed = true;
+            lastWorkMs = job.Ms;
+            if (lastWorkMs > worstWorkMs) worstWorkMs = lastWorkMs;
+            lastFillMs = Milliseconds(started) + (inline ? job.Ms : 0f);
             if (lastFillMs > worstFillMs) worstFillMs = lastFillMs;
             fills++;
         }
@@ -307,6 +390,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             eastWestBlock.SetColor(ColourId, new Color(across, across, across, 1f));
             northSouthBlock.SetColor(ColourId, new Color(away, away, away, 1f));
             waterBlock.SetColor(ColourId, new Color(wet, wet, wet, 1f));
+            coastBlock.SetColor(ColourId, new Color(gain, gain, gain, 1f));
             commands.Clear();
             commands.SetRenderTarget(rt);
             commands.ClearRenderTarget(true, true, Color.black, HoloGrid.DepthClear(SystemInfo.usesReversedZBuffer));
@@ -317,8 +401,10 @@ namespace BoscaliSummer.Modules.Command.Runtime
             if (landEastWestCount > 0) commands.DrawMesh(mesh, lineModel, lineMaterial, EastWestSub, 0, eastWestBlock);
             if (landNorthSouthCount > 0) commands.DrawMesh(mesh, lineModel, lineMaterial, NorthSouthSub, 0, northSouthBlock);
             if (waterCount > 0) commands.DrawMesh(mesh, lineModel, lineMaterial, WaterSub, 0, waterBlock);
+            if (coastCount > 0) commands.DrawMesh(mesh, lineModel, lineMaterial, CoastSub, 0, coastBlock);
             commands.SetViewProjectionMatrices(Matrix4x4.identity, Matrix4x4.identity);
             commands.DrawMesh(fadeMesh, Matrix4x4.identity, fadeMaterial, 0, 0);
+            commands.DrawMesh(fadeMesh, Matrix4x4.identity, opaqueMaterial, 1, 0);
             Graphics.ExecuteCommandBuffer(commands);
         }
 
@@ -353,17 +439,19 @@ namespace BoscaliSummer.Modules.Command.Runtime
             lineMaterial = null;
             if (fadeMaterial != null) Destroy(fadeMaterial);
             fadeMaterial = null;
+            if (opaqueMaterial != null) Destroy(opaqueMaterial);
+            opaqueMaterial = null;
             if (additive != null && additiveOwned) Destroy(additive);
             additive = null;
             additiveOwned = false;
-            eastWestBlock = northSouthBlock = waterBlock = null;
-            vertices = null;
-            eastWestIndices = northSouthIndices = triangleIndices = waterIndices = null;
-            waterCells = null;
-            landEastWestCount = landNorthSouthCount = waterCount = 0;
+            eastWestBlock = northSouthBlock = waterBlock = coastBlock = null;
+            // A fill still being made finishes into arrays nobody reads any more.
+            job = null;
+            landEastWestCount = landNorthSouthCount = waterCount = coastCount = 0;
             placed = false;
             depthPath = false;
-            halfX = halfZ = nodes = 0;
+            halfX = halfZ = nodes = surfaceHalfX = surfaceHalfZ = 0;
+            latticeRange = 0;
             inkR = -1;
         }
 

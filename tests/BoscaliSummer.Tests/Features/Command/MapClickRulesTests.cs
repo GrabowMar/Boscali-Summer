@@ -26,6 +26,12 @@ namespace BoscaliSummer.Tests.Features.Command
         private static void AControlThatTookTheClickKeepsTheSelection()
         {
             TestAssert.That(MapClickRules.ShouldClearSelection(true, -1, 0, false), "no control ever took a click (frame -1): bare map clears the selection");
+            TestAssert.That(MapClickRules.BoxTakes(MapBoxSide.All, true, true) && MapClickRules.BoxTakes(MapBoxSide.All, true, false) && MapClickRules.BoxTakes(MapBoxSide.All, false, false),
+                "a box set to ALL takes both sides and the factionless");
+            TestAssert.That(MapClickRules.BoxTakes(MapBoxSide.Hostile, true, false) && !MapClickRules.BoxTakes(MapBoxSide.Hostile, true, true) && !MapClickRules.BoxTakes(MapBoxSide.Hostile, false, false),
+                "a box set to HOSTILE takes the other side only");
+            TestAssert.That(MapClickRules.BoxTakes(MapBoxSide.Friendly, true, true) && !MapClickRules.BoxTakes(MapBoxSide.Friendly, true, false) && !MapClickRules.BoxTakes(MapBoxSide.Friendly, false, false),
+                "a box set to OWN takes the player's side only");
             TestAssert.That(MapClickRules.ShouldClearSelection(true, 0, 1, false), "a click taken on the previous frame does not shield this one");
             TestAssert.That(!MapClickRules.ShouldClearSelection(true, 1, 1, false), "a click taken this frame does");
             TestAssert.That(!MapClickRules.ShouldClearSelection(false, 0, 1, false), "a closed map clears nothing");

@@ -1,75 +1,69 @@
 using System;
+using System.Collections.Generic;
 
 namespace BoscaliSummer.Core.Game
 {
-    /// <summary>Only the dedicated Escalation copy opts into the mission overhaul.</summary>
+    /// <summary>
+    /// Which optional modules the player switched off for the mission being played. Nothing is
+    /// off unless the player said so, at the mission-start prompt or in a remembered choice.
+    /// </summary>
     internal static class MissionProfile
     {
-        public const string DescriptionMarker = "Full Boscali Summer experience enabled for this dedicated Escalation scenario.";
-        public static bool FullExperience { get; private set; }
-        public static event Action<bool> Changed;
+        /// <summary>Modules that change the mission itself; the "immersion only" preset switches these off.</summary>
+        public static readonly string[] BattlefieldModules =
+        {
+            "fire-and-destruction", "urban-combat", "player-spawn-priority", "squad", "progression", "support",
+            "dynamic-operations", "high-command", "intel", "theater-ops", "air-survival", "trenches", "events",
+            "weather", "vanguard", "strategic-command"
+        };
+
+        private static HashSet<string> disabled = new HashSet<string>(StringComparer.Ordinal);
+
+        /// <summary>The selection changed; the module host loads and unloads to match.</summary>
+        public static event Action Changed;
         public static event Action Preparing;
 
-        public static bool IsFullMission(string description) =>
-            description != null && description.EndsWith("\n\n" + DescriptionMarker, StringComparison.Ordinal);
+        /// <summary>The plumbing every other module leans on; never offered as a switch.</summary>
+        public static bool IsCore(string id) =>
+            id == "mission-profile" || id == "scenario" || id == "session" || id == "hud" || id == "performance";
 
-        public static bool IsBoscaliContent(string key) =>
-            key != null && (key.StartsWith("VG_", StringComparison.Ordinal) ||
-                key == "AB_Paratroopers_x16" || key == "BS_ContainerFeeder");
+        public static bool IsBattlefield(string id) => Array.IndexOf(BattlefieldModules, id) >= 0;
 
-        public static void SetDescription(string description)
+        public static bool AllowsModule(string id) => id != null && (IsCore(id) || !disabled.Contains(id));
+
+        /// <summary>The module whose switch governs an embedded Boscali asset, or null for native and workshop content.</summary>
+        public static string ContentOwner(string key)
         {
-            bool full = IsFullMission(description);
-            if (full == FullExperience) return;
-            FullExperience = full;
-            Changed?.Invoke(full);
+            if (key == null) return null;
+            if (key == "AB_Paratroopers_x16") return "urban-combat";
+            return key.StartsWith("VG_", StringComparison.Ordinal) || key == "BS_ContainerFeeder" ? "vanguard" : null;
         }
 
-        public static void PrepareMission(string description)
+        public static bool BlocksContent(string key)
         {
-            SetDescription(description);
-            Preparing?.Invoke();
+            string owner = ContentOwner(key);
+            return owner != null && !AllowsModule(owner);
         }
 
-        public static bool AllowsModule(string id, bool fullExperience)
+        public static string[] Parse(string list) =>
+            (list ?? "").Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+
+        public static string Format(IEnumerable<string> ids)
         {
-            switch (id)
-            {
-                case "mission-profile":
-                case "session":
-                case "hud":
-                case "radio":
-                case "performance":
-                case "immersion":
-                case "effects":
-                case "qol":
-                case "autopilot":
-                case "chatter":
-                case "wing":
-                case "command":
-                case "comms":
-                case "cinematography":
-                    return true;
-                case "fire-and-destruction":
-                case "urban-combat":
-                case "player-spawn-priority":
-                case "squad":
-                case "progression":
-                case "support":
-                case "dynamic-operations":
-                case "high-command":
-                case "intel":
-                case "theater-ops":
-                case "air-survival":
-                case "trenches":
-                case "events":
-                case "weather":
-                case "vanguard":
-                case "strategic-command":
-                    return fullExperience;
-                default:
-                    return false;
-            }
+            var sorted = new List<string>(ids);
+            sorted.Sort(StringComparer.Ordinal);
+            return string.Join(",", sorted);
         }
+
+        public static void SetDisabled(IEnumerable<string> ids)
+        {
+            var next = new HashSet<string>(ids ?? Array.Empty<string>(), StringComparer.Ordinal);
+            next.RemoveWhere(IsCore);
+            if (next.SetEquals(disabled)) return;
+            disabled = next;
+            Changed?.Invoke();
+        }
+
+        public static void PrepareMission() => Preparing?.Invoke();
     }
 }

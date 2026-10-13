@@ -48,6 +48,8 @@ namespace BoscaliSummer.Core.Config
         /// </summary>
         private static readonly string[][] Menu =
         {
+            new[] { "0 Mission", "Mission", "AskAtStart", "Ask which systems run at mission start" },
+            new[] { "0 Mission", "Scenario", "Cutscenes", "Cutscenes in scripted missions" },
             new[] { "1 Battlefield", "Support", "Enabled", "Support calls (OPS)" },
             new[] { "1 Battlefield", "Command", "Enabled", "Command map and STR" },
             new[] { "1 Battlefield", "HighCommand", "Enabled", "Chain of command" },
@@ -83,9 +85,7 @@ namespace BoscaliSummer.Core.Config
             new[] { "4 Look and comfort", "Weather", "CinematicCloudsEnabled", "Volumetric clouds" },
             new[] { "4 Look and comfort", "Weather", "RainVisualsEnabled", "Rain visuals" },
             new[] { "4 Look and comfort", "Effects", "Enabled", "Display grade and sharpening" },
-            new[] { "4 Look and comfort", "Performance", "Enabled", "Adaptive effect quality" },
-            new[] { "4 Look and comfort", "Performance", "FrameRateCap", "60 fps cap" },
-        };
+            new[] { "4 Look and comfort", "Performance", "Enabled", "Adaptive effect quality" },        };
 
         /// <summary>Menu rows that match no bound entry, as "Section.Key". Empty when the table is sound.</summary>
         internal static List<string> Missing(ConfigFile config)

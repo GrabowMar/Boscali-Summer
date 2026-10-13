@@ -170,9 +170,9 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             if (n > 1)
             {
                 int next = (active + 1) % n, prev = (active + n - 1) % n;
-                c.Rows.Add(b.Reg(Stepper("weapons/next", "station-next", "NEXT STATION", "NEXT: STA " + (next + 1) + D + StationName(w.Stations[next]) + " " + StationAmmo(w.Stations[next]),
+                c.Rows.Add(b.Reg(MenuRow.Action("weapons/next", "station-next", "NEXT STATION", "NEXT: STA " + (next + 1) + D + StationName(w.Stations[next]) + " " + StationAmmo(w.Stations[next]),
                     "STEP FORWARD THROUGH THE LOADOUT", "STA " + (next + 1) + D + StationName(w.Stations[next]))));
-                c.Rows.Add(b.Reg(Stepper("weapons/prev", "station-prev", "PREV STATION", "PREV: STA " + (prev + 1) + D + StationName(w.Stations[prev]) + " " + StationAmmo(w.Stations[prev]),
+                c.Rows.Add(b.Reg(MenuRow.Action("weapons/prev", "station-prev", "PREV STATION", "PREV: STA " + (prev + 1) + D + StationName(w.Stations[prev]) + " " + StationAmmo(w.Stations[prev]),
                     "STEP BACK THROUGH THE LOADOUT", "STA " + (prev + 1) + D + StationName(w.Stations[prev]))));
             }
             var picks = new List<MenuRow>(n);
@@ -205,13 +205,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             string tail = X + MenuText.Ammo(now.Ammo);
             Badge(c, StationTag(now, MenuModel.BadgeChars - 1 - tail.Length) + " " + tail, show: now.Ammo <= 0, alert: now.Ammo <= 0);
             return c;
-        }
-
-        private static MenuRow Stepper(string id, string icon, string label, string state, string desc, string toast)
-        {
-            MenuRow row = MenuRow.Action(id, icon, label, state, desc, toast);
-            row.StayOpen = true;
-            return row;
         }
 
         // ------------------------------------------------------------------ HUD (the AR visor: the TAC BOARD in the top right)
@@ -466,15 +459,15 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 c.Rows.Add(b.Reg(In("MUSIC DECK", MenuRow.Toggle("cockpit/music", "music", w.DeckPlaying,
                     F("PLAY MUSIC", title.Length > 0 ? "PAUSED: " + title : "MUSIC: PAUSED", "RESUME THE MUSIC DECK", "MUSIC PLAYING"),
                     F("PAUSE MUSIC", title.Length > 0 ? "CURRENT: " + title : "MUSIC: PLAYING", "PAUSE THE MUSIC DECK", "MUSIC PAUSED", MenuTone.Active), checkbox: false))));
-                c.Rows.Add(b.Reg(In("MUSIC DECK", Stepper("cockpit/trknext", "track-next", "PLAY NEXT TRACK", title.Length > 0 ? "CURRENT: " + title : "MUSIC DECK", "SKIP TO THE NEXT TRACK", "NEXT TRACK"))));
-                c.Rows.Add(b.Reg(In("MUSIC DECK", Stepper("cockpit/trkprev", "track-prev", "PLAY PREV TRACK", title.Length > 0 ? "CURRENT: " + title : "MUSIC DECK", "BACK TO THE LAST TRACK", "PREVIOUS TRACK"))));
+                c.Rows.Add(b.Reg(In("MUSIC DECK", MenuRow.Action("cockpit/trknext", "track-next", "PLAY NEXT TRACK", title.Length > 0 ? "CURRENT: " + title : "MUSIC DECK", "SKIP TO THE NEXT TRACK", "NEXT TRACK"))));
+                c.Rows.Add(b.Reg(In("MUSIC DECK", MenuRow.Action("cockpit/trkprev", "track-prev", "PLAY PREV TRACK", title.Length > 0 ? "CURRENT: " + title : "MUSIC DECK", "BACK TO THE LAST TRACK", "PREVIOUS TRACK"))));
             }
             if (w.ReceiverAvailable)
             {
                 c.Rows.Add(b.Reg(In("RECEIVER", MenuRow.Toggle("cockpit/receiver", "receiver", w.ReceiverOn,
                     F("TURN RECEIVER ON", "RECEIVER: OFF", "LISTEN TO THE LAST STATION", "RECEIVER ON"),
                     F("TURN RECEIVER OFF", w.ReceiverOn && station.Length > 0 ? "TUNED: " + station : "RECEIVER: ON", "SILENCE THE BROADCAST RECEIVER", "RECEIVER OFF", MenuTone.Active)))));
-                c.Rows.Add(b.Reg(In("RECEIVER", Stepper("cockpit/seek", "seek", "SEEK NEXT STATION", w.ReceiverOn && station.Length > 0 ? "TUNED: " + station : "RECEIVER: OFF",
+                c.Rows.Add(b.Reg(In("RECEIVER", MenuRow.Action("cockpit/seek", "seek", "SEEK NEXT STATION", w.ReceiverOn && station.Length > 0 ? "TUNED: " + station : "RECEIVER: OFF",
                     "SCAN UP THE DIAL TO THE NEXT STATION", "STATION CHANGED"))));
             }
             if (w.DeckAvailable || w.ReceiverAvailable)
@@ -493,7 +486,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                     master ? (on - 1) + " OF " + (FeelSwitches.Length - 1) + " ON" : "IMMERSION: OFF", "SWITCH THE COCKPIT IMMERSION EFFECTS", "CABIN", "EFFECTS", kids, iconless: true))));
             }
             if (w.KneeboardAvailable)
-                c.Rows.Add(b.Reg(In("CABIN", Stepper("cockpit/kneeboard", "kneeboard", "NEXT KNEEBOARD CARD", "CARD: " + Cut(w.KneeboardCard, MaxState - 6),
+                c.Rows.Add(b.Reg(In("CABIN", MenuRow.Action("cockpit/kneeboard", "kneeboard", "NEXT KNEEBOARD CARD", "CARD: " + Cut(w.KneeboardCard, MaxState - 6),
                     "FLIP TO THE NEXT CARD ON YOUR KNEE", "KNEEBOARD CARD CHANGED"))));
             if (w.DeckPlaying) Badge(c, "MUSIC", show: true);
             else if (w.ReceiverAvailable && !w.ReceiverOn) Badge(c, "RX OFF", show: true);
@@ -510,7 +503,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             if (w.MarkAvailable)
             {
                 MenuRow mark = MenuRow.Action("support/mark", "camera-mark", "MARK CAMERA POINT", markState, "MARK WHERE THE CAMERA IS LOOKING", "MARK SET");
-                mark.StayOpen = true;
                 if (!w.CanCapture) mark.Blocked = "NO SURFACE IN VIEW";
                 c.Rows.Add(b.Reg(mark));
                 MenuRow call = MenuRow.Action("support/callmark", "call-at-mark", "CALL AT MARK",
@@ -519,7 +511,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 if (!w.CanCallAtMark) call.Blocked = !w.HasMark ? "MARK: NONE" : w.Armed.Length == 0 ? "NOTHING ARMED" : "NOT AVAILABLE";
                 c.Rows.Add(b.Reg(call));
                 MenuRow clear = MenuRow.Action("support/clearmark", "mark-clear", "CLEAR MARK", markState, "FORGET THE MARKED POINT", "MARK CLEARED");
-                clear.StayOpen = true;
                 if (!w.HasMark) clear.Blocked = "MARK: NONE";
                 c.Rows.Add(b.Reg(clear));
             }
@@ -589,8 +580,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                     next = "NEXT: MSL " + (k % n + 1) + "/" + n;
                     prev = "PREV: MSL " + ((k + n - 2) % n + 1) + "/" + n;
                 }
-                c.Rows.Add(b.Reg(Stepper("view/mslnext", "missile-next", "FOLLOW NEXT MISSILE", next, "SWITCH CAMERA TO THE NEXT MISSILE", "MISSILE CHANGED")));
-                c.Rows.Add(b.Reg(Stepper("view/mslprev", "missile-prev", "FOLLOW PREV MISSILE", prev, "SWITCH CAMERA TO THE PREVIOUS ONE", "MISSILE CHANGED")));
+                c.Rows.Add(b.Reg(MenuRow.Action("view/mslnext", "missile-next", "FOLLOW NEXT MISSILE", next, "SWITCH CAMERA TO THE NEXT MISSILE", "MISSILE CHANGED")));
+                c.Rows.Add(b.Reg(MenuRow.Action("view/mslprev", "missile-prev", "FOLLOW PREV MISSILE", prev, "SWITCH CAMERA TO THE PREVIOUS ONE", "MISSILE CHANGED")));
                 c.Rows.Add(b.Reg(MenuRow.Action("view/mslexit", "missile-exit", "EXIT MISSILE VIEW", cam, "LEAVE MISSILE VIEW, RESUME CAMERA", "MISSILE VIEW OFF")));
                 if (w.MapAvailable) c.Rows.Add(b.Reg(MenuRow.Action("view/map", "map", "OPEN MAP", "MAP: CLOSED", "FULL-SCREEN TACTICAL MAP", "MAP OPEN")));
                 string[] words = w.MissileCurrent.Split(' ');

@@ -103,6 +103,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private readonly TerrainRainDressing terrainRain = new TerrainRainDressing();
         private readonly RainAtmosphere atmosphere = new RainAtmosphere();
         private readonly SunDisc sunDisc = new SunDisc();
+        private readonly SunShaftsPass sunShafts = new SunShaftsPass();
         private readonly CloudDressing clouds = new CloudDressing();
         private WeatherVolumeDressing flightClouds;
         private readonly HeatDistortionSorting heatHaze = new HeatDistortionSorting();
@@ -283,6 +284,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             clouds.Restore();
             flightClouds?.Restore();
             heatHaze.Restore();
+            sunShafts.Dispose();
             flightClouds = null;
         }
 
@@ -551,6 +553,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             else { environmentSnapshot = default; TeardownRainSystems(); atmosphere.Restore(); }
             if (!Application.isBatchMode && settings != null && settings.Enabled.Value) heatHaze.Update(Time.unscaledTime);
             else heatHaze.Restore();
+            sunShafts.Tick(LevelInfo.i, view, liveWeather && settings.SunShaftsEnabled.Value);
             bool wantClouds = liveWeather && settings.CinematicCloudsEnabled.Value;
             if (wantClouds)
             {
@@ -943,6 +946,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 { "viewLightTransmission", viewTransmission },
                 { "sunDiscRed", sunDisc.Shown.r },
                 { "sunDiscBlue", sunDisc.Shown.b },
+                { "sunShaftsAge", Time.frameCount - sunShafts.ExecutedFrame },
                 { "viewWidth", SceneSingleton<CameraStateManager>.i?.mainCamera != null ? SceneSingleton<CameraStateManager>.i.mainCamera.pixelWidth : 0 },
                 { "viewHeight", SceneSingleton<CameraStateManager>.i?.mainCamera != null ? SceneSingleton<CameraStateManager>.i.mainCamera.pixelHeight : 0 },
                 { "environmentGeneration", environmentGeneration },

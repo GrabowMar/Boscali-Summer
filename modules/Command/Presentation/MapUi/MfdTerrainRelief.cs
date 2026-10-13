@@ -240,12 +240,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         internal static bool TryGetHeightField(out TerrainHeightField field)
         {
             field = null;
+            DynamicMap map = SceneSingleton<DynamicMap>.i;
+            Image image = map != null && map.mapImage != null ? MapImageComponent(map.mapImage) : null;
+            if (image == null || image.sprite == null) return false;
+            DropIfMapChanged(map, image.sprite);
             if (!ready && !unavailable)
             {
-                DynamicMap map = SceneSingleton<DynamicMap>.i;
-                Image image = map != null && map.mapImage != null ? MapImageComponent(map.mapImage) : null;
-                if (image == null || image.sprite == null) return false;
-                if (owner != null && (owner != map || sprite != image.sprite)) Reset();
                 owner = map;
                 sprite = image.sprite;
                 if (!LoadHeightfield()) return false;
@@ -255,6 +255,29 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 heightField = new TerrainHeightField(heights, dryLand, Samples, source.MapSize.x / (Samples - 1), 0f);
             field = heightField;
             return true;
+        }
+
+        /// <summary>
+        /// True while a field handed out by <see cref="TryGetHeightField"/> is still the loaded map's. The visor ghost and the holo
+        /// keep their field between frames; they ask this every frame and fetch again on false, so another map's relief is never drawn.
+        /// </summary>
+        internal static bool IsCurrent(TerrainHeightField field)
+        {
+            if (field == null) return false;
+            DynamicMap map = SceneSingleton<DynamicMap>.i;
+            Image image = map != null && map.mapImage != null ? MapImageComponent(map.mapImage) : null;
+            // Between scenes there is no map to compare with: keep what is held, the next map decides.
+            if (image != null && image.sprite != null) DropIfMapChanged(map, image.sprite);
+            return ReferenceEquals(field, heightField);
+        }
+
+        /// <summary>
+        /// Everything loaded belongs to one map object showing one map sprite. By reference: the map object of a scene that is gone
+        /// compares equal to null in Unity, which used to let the last mission's heights pass as this one's.
+        /// </summary>
+        private static void DropIfMapChanged(DynamicMap map, Sprite shown)
+        {
+            if ((ready || unavailable) && (!ReferenceEquals(owner, map) || !ReferenceEquals(sprite, shown))) Reset();
         }
 
         /// <summary>Instant turn and tilt about the view centre; buttons ease through the navigator.</summary>
@@ -354,7 +377,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Restore();
                 return;
             }
-            if (owner != null && (owner != map || sprite != image.sprite)) Reset();
+            DropIfMapChanged(map, image.sprite);
             owner = map;
             sprite = image.sprite;
             if (unavailable) return;
@@ -401,6 +424,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (map.selectedIcons[i] != null) selectedForClusters.Add(map.selectedIcons[i]);
             bool selectionChanged = map.selectedIcons.Count != selectedSeen;
             selectedSeen = map.selectedIcons.Count;
+            if (selectionChanged) RedrawMinis();
 
             bool cameraMoved = UpdateViewportCamera(map);
             HideNativeGrid();
@@ -411,6 +435,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             cameraWasMoving = cameraMoved;
             if (renderNow)
             {
+                UpdateMinis();
                 if (!RenderTerrain())
                 {
                     Restore();
@@ -972,13 +997,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 owner == null || owner.mapImage == null) return;
             Transform symbol = icon.iconImage.transform;
             Vector3 native = symbol.localPosition;
+            float fixX = native.x / mapDisplayFactor, fixZ = native.y / mapDisplayFactor;
             if (!iconFixes.TryGetValue(icon, out IconFix fix))
             {
                 fix = new IconFix();
                 if (iconFixes.Count < MaximumClusteredIcons) iconFixes.Add(icon, fix);
+                minisMoved = true;
             }
-            fix.X = native.x / mapDisplayFactor;
-            fix.Z = native.y / mapDisplayFactor;
+            // Most of the roster is buildings that never move: only a real move asks for new miniatures.
+            else if (Mathf.Abs(fixX - fix.X) > MiniMoveMetres || Mathf.Abs(fixZ - fix.Z) > MiniMoveMetres)
+                minisMoved = true;
+            fix.X = fixX;
+            fix.Z = fixZ;
             fix.Depth = native.z;
             fix.NativeScale = symbol.localScale;
             fix.Airborne = false;
@@ -1026,7 +1056,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             foreach (MapIcon icon in staleIconFixes)
             {
                 iconFixes.Remove(icon);
-                if (icon is UnitMapIcon unitIcon) headings.Remove(unitIcon);
+                minisMoved = true;
+                if (icon is UnitMapIcon unitIcon)
+                {
+                    headings.Remove(unitIcon);
+                    miniKinds.Remove(unitIcon);
+                }
                 if (stems.TryGetValue(icon, out StemMark stem))
                 {
                     if (stem.Line != null) Object.Destroy(stem.Line.gameObject);
@@ -1068,6 +1103,115 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             fastParent = parent;
             modelToParent = parent.worldToLocalMatrix * modelToUi;
             return modelToParent;
+        }
+
+        /// <summary>Miniature length as a share of the view's half height: steady on screen at any zoom.</summary>
+        private const float MiniLength = .03f;
+        /// <summary>A contact must move this far before the miniatures are rewritten for it.</summary>
+        private const float MiniMoveMetres = 3f;
+        /// <summary>Moving contacts are redrawn at most this often; a sweep catches what no event reports.</summary>
+        private const float MiniBeat = .2f, MiniSweep = 1f;
+        private static float nextMinis, lastMinis, minisSize;
+        private static bool minisShown, minisMoved, minisForce;
+        private static readonly Dictionary<UnitMapIcon, int> miniKinds = new Dictionary<UnitMapIcon, int>();
+        // Flat glyphs faded out because a miniature stands in for them; swapped per rewrite like the stacks.
+        private static HashSet<Image> ghosted = new HashSet<Image>();
+        private static HashSet<Image> nextGhosted = new HashSet<Image>();
+
+        /// <summary>Something the miniatures show changed outside a contact's own movement: rewrite on the next frame.</summary>
+        private static void RedrawMinis()
+        {
+            minisForce = true;
+            nextRender = 0f;
+        }
+
+        /// <summary>
+        /// Rewrites the miniature layer from the cached, faction-known fixes just before a terrain
+        /// render, and only when it would look different: a contact moved (at most five times a
+        /// second), the zoom changed (their size follows it), the selection or the stacks changed, or
+        /// the one-second sweep came round. A still map with a parked roster rewrites nothing. A
+        /// contact given a miniature has its flat glyph faded out; the glyph stays in place as the
+        /// click target and as the source of tint and selection.
+        /// </summary>
+        private static void UpdateMinis()
+        {
+            if (!MapSymbology.Enabled || Plugin.Settings?.Command?.MapMinis3D?.Value != true)
+            {
+                if (minisShown) RestoreGlyphs();
+                return;
+            }
+            float time = Time.unscaledTime, size = camera.orthographicSize;
+            bool sweep = time >= lastMinis + MiniSweep;
+            if (!minisForce && !sweep && Mathf.Approximately(size, minisSize) &&
+                !(minisMoved && time >= nextMinis)) return;
+            nextMinis = time + MiniBeat;
+            lastMinis = time;
+            minisSize = size;
+            minisShown = true;
+            minisMoved = minisForce = false;
+            MapMinis.Begin(sceneRoot.transform, TerrainLayer);
+            float toModel = VerticalScale * ModelWidth / 81920f;
+            nextGhosted.Clear();
+            foreach (KeyValuePair<MapIcon, IconFix> entry in iconFixes)
+            {
+                if (entry.Key == null || !(entry.Key is UnitMapIcon icon) || icon.iconImage == null) continue;
+                Image image = icon.iconImage;
+                if (!image.isActiveAndEnabled || !MiniKind(icon, out MapGlyph glyph)) continue;
+                IconFix fix = entry.Value;
+                float ground = GroundHeight(fix.X, fix.Z);
+                float lift = fix.Airborne
+                    ? Mathf.Clamp((fix.Altitude - seaLevel) * toModel - ground, 0f, MaximumAirLift) : 0f;
+                Vector2 forward = Vector2.up;
+                if (headings.TryGetValue(icon, out HeadingMark mark))
+                {
+                    float heading = mark.Native * Mathf.Deg2Rad;
+                    forward = new Vector2(-Mathf.Sin(heading), Mathf.Cos(heading));
+                }
+                float length = size * MiniLength * (selectedForClusters.Contains(icon) ? 1.16f : 1f);
+                var at = new Vector3(fix.X / source.MapSize.x * ModelSpanX,
+                    ground + 1f + lift + length * .05f, fix.Z / source.MapSize.y * ModelSpanZ);
+                if (!MapMinis.Add(glyph, at, forward, length, image.color, lift <= .5f)) continue;
+                nextGhosted.Add(image);
+                // The sweep re-asserts the fade in case anything put the glyph's alpha back.
+                if (sweep || !ghosted.Contains(image)) image.canvasRenderer.SetAlpha(0f);
+            }
+            MapMinis.End();
+            foreach (Image image in ghosted)
+                if (image != null && !nextGhosted.Contains(image)) image.canvasRenderer.SetAlpha(1f);
+            HashSet<Image> spare = ghosted;
+            ghosted = nextGhosted;
+            nextGhosted = spare;
+        }
+
+        /// <summary>The shape a contact stands as; false keeps its flat glyph (missiles, pilots on foot).</summary>
+        private static bool MiniKind(UnitMapIcon icon, out MapGlyph glyph)
+        {
+            if (!miniKinds.TryGetValue(icon, out int kind))
+            {
+                Unit unit = icon.unit;
+                glyph = default;
+                if (unit == null) return false;
+                Sprite own = unit.definition != null ? unit.definition.mapIcon : null;
+                kind = unit is Ship ? (int)MapGlyph.Hull
+                    : unit is Aircraft ? (int)(own != null && own.name.IndexOf("helo", StringComparison.OrdinalIgnoreCase) >= 0
+                        ? MapGlyph.Helicopter : MapGlyph.Aircraft)
+                    : unit is GroundVehicle ? (int)MapSymbology.GroundGlyph(unit.definition is VehicleDefinition vehicle
+                        ? vehicle.vehicleType : VehicleType.LCV)
+                    : unit is Building ? (int)MapGlyph.Contact : -1;
+                if (miniKinds.Count < MaximumClusteredIcons) miniKinds.Add(icon, kind);
+            }
+            glyph = (MapGlyph)Mathf.Max(kind, 0);
+            return kind >= 0;
+        }
+
+        private static void RestoreGlyphs()
+        {
+            minisShown = false;
+            minisForce = true;
+            MapMinis.Clear();
+            foreach (Image image in ghosted) if (image != null) image.canvasRenderer.SetAlpha(1f);
+            ghosted.Clear();
+            nextGhosted.Clear();
         }
 
         private static void UpdateAircraftTrails()
@@ -1599,8 +1743,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             HashSet<Image> spare = hiddenIcons;
             hiddenIcons = nextHidden;
             nextHidden = spare;
-            // A contact that just unfolded needs its size and heading.
-            if (changed) nextIconRefresh = 0f;
+            // A contact that just unfolded needs its size and heading, and the miniatures their new roster.
+            if (changed)
+            {
+                nextIconRefresh = 0f;
+                RedrawMinis();
+            }
             clusterIcons = icons;
             clusterSelected = owner.selectedIcons.Count;
             clusterView = viewRevision;
@@ -1650,6 +1798,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                         else hiddenIcons.Add(image);
                     }
                     nextIconRefresh = 0f;
+                    RedrawMinis();
                 }
                 PlaceBadge(mark, viewport, uiCamera, screen, inView);
             }
@@ -1768,6 +1917,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             labelFrame = -1;
             foreach (Image image in hiddenIcons) if (image != null) image.enabled = true;
             hiddenIcons.Clear();
+            RestoreGlyphs();
+            miniKinds.Clear();
             foreach (MapIcon icon in iconFixes.Keys)
                 if (icon is UnitMapIcon unit) MapSymbology.Apply(unit, false);
             selectedForClusters.Clear();

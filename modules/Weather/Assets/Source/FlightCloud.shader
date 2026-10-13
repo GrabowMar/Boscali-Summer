@@ -1216,7 +1216,9 @@ Shader "Boscali/FlightCloud"
             float sinE = max(abs(ray.y), 0.02);
             float aniso = 1.0 + 4.0 * (1.0 - smoothstep(0.06, 0.22, sinE));
             float slantGain = layer < 1.5 ? pow(sinE, 0.15) : 1.0;
-            float patternFoot = single ? 0.0 : stepLength * 0.5 * slant;
+            // The step blur comes in over chords of 6 to 24 km. Switched on whole at the second sample it drew a ring at one elevation
+            // (20 degrees through a 2 km layer): cells inside it, a flat veil outside, and the ring followed the camera.
+            float patternFoot = single ? 0.0 : stepLength * 0.5 * slant * saturate((span - 6000.0) / 18000.0);
 
             [loop]
             for (int n = 0; n < 24; n++)
@@ -1933,7 +1935,7 @@ Shader "Boscali/FlightCloud"
                 o.colour = MarchSky(_CloudCameraPos, ray, sceneDistance, texel, cloudDistance);
                 // Quarter data retains scene depth for resolve. The direct half-size
                 // output needs only the nearest relevant depth for the final upsample.
-                float upsampleDepth = _CloudCheckerOn < 0.5 && o.colour.a > 0.002 ?
+                float upsampleDepth = _CloudCheckerOn < 0.5 && o.colour.a > 0.97 ?
                     min(eyeDepth, cloudDistance / viewLength) : eyeDepth;
                 o.depth = float4(upsampleDepth, cloudDistance, 0.0, 0.0);
                 return o;

@@ -87,11 +87,19 @@ namespace BoscaliSummer.Core
         public static BoscaliMod Start(ManualLogSource logger, ModConfiguration settings)
         {
             GameAccess.Initialise();
-            MissionProfile.SetDescription(null);
+            // Outside a mission the last confirmed selection applies; each mission start re-selects.
+            MissionProfile.SetDisabled(MissionProfile.Parse(settings.MissionDisabledModules.Value));
             var mod = new BoscaliMod(logger, settings);
             try
             {
                 mod.Load(mod.ModulesForProfile());
+                if (!Application.isBatchMode)
+                {
+                    var offered = new List<ModuleMetadata>();
+                    foreach (IModule module in Compose(settings))
+                        if (!MissionProfile.IsCore(module.Metadata.Id)) offered.Add(module.Metadata);
+                    mod.runtimeRoot.AddComponent<MissionPrompt>().Offered = offered.ToArray();
+                }
                 CapabilityReport.Log();
                 return mod;
             }
@@ -113,6 +121,8 @@ namespace BoscaliSummer.Core
             var modules = new List<IModule>
             {
                 new MissionProfileModule(),
+                // Mission scripts: the scripted missions in the picker, their dialogue and cutscenes.
+                new BoscaliSummer.Modules.Scenario.ScenarioModule(),
                 new SessionModule(),
                 new FireAndDestructionModule(),
                 new UrbanCombatModule(),
@@ -160,8 +170,8 @@ namespace BoscaliSummer.Core
             if (settings.Events.Enabled.Value) modules.Add(new EventsModule());
             if (settings.Comms.Enabled.Value) modules.Add(new CommsModule());
             if (settings.Weather.Enabled.Value) modules.Add(new WeatherModule());
-            if (settings.Cinematography.Enabled.Value && !Application.isBatchMode)
-                modules.Add(new CinematographyModule());
+            // Always installed for the cutscene camera mission scripts play; its private production tools keep their own switch.
+            if (!Application.isBatchMode) modules.Add(new CinematographyModule());
             if (BoscaliSummer.Modules.Vanguard.VanguardModule.Available) modules.Add(new BoscaliSummer.Modules.Vanguard.VanguardModule());
             return modules.ToArray();
         }
@@ -170,41 +180,43 @@ namespace BoscaliSummer.Core
         {
             var modules = new List<IModule>();
             foreach (IModule module in Compose(settings))
-                if (MissionProfile.AllowsModule(module.Metadata.Id, MissionProfile.FullExperience))
+                if (MissionProfile.AllowsModule(module.Metadata.Id))
                     modules.Add(module);
             return modules.ToArray();
         }
 
-        private void OnMissionProfileChanged(bool fullExperience)
+        private void OnMissionProfileChanged()
         {
             if (disposed) return;
-            if (fullExperience)
+            // A module goes when the player switched it off, or when a module it needs went.
+            var keep = new HashSet<string>(StringComparer.Ordinal);
+            foreach (LoadedModule loaded in loadedModules)
+                if (MissionProfile.AllowsModule(loaded.Metadata.Id)) keep.Add(loaded.Metadata.Id);
+            for (bool changed = true; changed;)
             {
-                var existing = new HashSet<string>(StringComparer.Ordinal);
-                foreach (LoadedModule loaded in loadedModules) existing.Add(loaded.Metadata.Id);
-                var additions = new List<IModule>();
-                foreach (IModule module in ModulesForProfile())
-                    if (!existing.Contains(module.Metadata.Id)) additions.Add(module);
-                Load(additions);
+                changed = false;
+                foreach (LoadedModule loaded in loadedModules)
+                    if (keep.Contains(loaded.Metadata.Id) && !keep.IsSupersetOf(loaded.Metadata.Dependencies))
+                        changed = keep.Remove(loaded.Metadata.Id);
             }
-            else
+            // Remove all gameplay patches before tearing down any of their services.
+            for (int i = loadedModules.Count - 1; i >= 0; i--)
+                if (!keep.Contains(loadedModules[i].Metadata.Id)) loadedModules[i].Harmony.UnpatchSelf();
+            bool removed = false;
+            for (int i = loadedModules.Count - 1; i >= 0; i--)
             {
-                // Remove all gameplay patches before tearing down any of their services.
-                for (int i = loadedModules.Count - 1; i >= 0; i--)
-                    if (!MissionProfile.AllowsModule(loadedModules[i].Metadata.Id, false))
-                        loadedModules[i].Harmony.UnpatchSelf();
-                for (int i = loadedModules.Count - 1; i >= 0; i--)
-                {
-                    LoadedModule loaded = loadedModules[i];
-                    if (MissionProfile.AllowsModule(loaded.Metadata.Id, false)) continue;
-                    loaded.Context.Rollback();
-                    loadedModules.RemoveAt(i);
-                }
-                sceneLifecycle.ResetAll();
+                LoadedModule loaded = loadedModules[i];
+                if (keep.Contains(loaded.Metadata.Id)) continue;
+                loaded.Context.Rollback();
+                loadedModules.RemoveAt(i);
+                removed = true;
+                logger.LogInfo("Module switched off for this mission: " + loaded.Metadata.DisplayName + ".");
             }
-            logger.LogInfo(fullExperience
-                ? "Mission profile: full Boscali Summer experience."
-                : "Mission profile: vanilla/workshop compatibility; mission overhaul disabled.");
+            var additions = new List<IModule>();
+            foreach (IModule module in ModulesForProfile())
+                if (!keep.Contains(module.Metadata.Id)) additions.Add(module);
+            if (additions.Count > 0) Load(additions);
+            else if (removed) sceneLifecycle.ResetAll();
         }
 
         private void ResetForMission()
@@ -396,7 +408,7 @@ namespace BoscaliSummer.Core
             if (ReferenceEquals(ModuleServices.Active, services)) ModuleServices.Active = null;
             if (runtimeRoot != null) UnityEngine.Object.Destroy(runtimeRoot);
             BoscaliMission.Unregister();
-            MissionProfile.SetDescription(null);
+            MissionProfile.SetDisabled(null);
         }
     }
 }

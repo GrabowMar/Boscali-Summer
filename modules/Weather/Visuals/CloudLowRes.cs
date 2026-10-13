@@ -21,6 +21,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private const int MarchPass = 1;
         private const int ResolvePass = 1;
         private static readonly int ColourId = Shader.PropertyToID("_CloudLowResColour");
+        /// <summary>The colour target as a global: its alpha is the cloud cover over the sky (SunShaftsPass).</summary>
+        internal static readonly int CoverId = Shader.PropertyToID("_BoscaliCloudCover");
         private static readonly int DepthId = Shader.PropertyToID("_CloudLowResDepth");
         private static readonly int SizeId = Shader.PropertyToID("_CloudLowResSize");
         private static readonly int QuarterSizeId = Shader.PropertyToID("_CloudQuarterSize");
@@ -95,6 +97,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             march.SetFloat(CheckerOnId, temporal ? 1f : 0f);
             composite.SetTexture(ColourId, colour);
             composite.SetTexture(DepthId, depth);
+            // The sun shafts read the cloud cover (alpha) from here; a destroyed target reads as "no clouds".
+            cmd.SetGlobalTexture(CoverId, colour);
             targets[0] = colour;
             targets[1] = depth;
             if (temporal)

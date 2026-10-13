@@ -122,7 +122,8 @@ Shader "Boscali/PilotBody"
             // ponytail: one native main light + ambient; no additional-light loops or reflection probes.
             half3 direct = LightingPhysicallyBased(brdf, mainLight, normal,
                 GetWorldSpaceNormalizeViewDir(i.world), _SpecularHighlights < .5h);
-            return half4((diffuseAmbient + direct) * max(.06h, _LightLevel), 1);
+            // The sun and the ambient probe already carry the time of day; _LightLevel is for the unlit capture only.
+            return half4(diffuseAmbient + direct, 1);
         }
         half4 PilotCaptureColour(Output i)
         {

@@ -8,6 +8,8 @@ namespace BoscaliSummer.Core.Config
         {
             // Bind-then-remove consumes old values from BepInEx's orphan table as well as
             // active entries, so the next save leaves a clean compact config file.
+            // The 60 fps cap only ever lowered the frame rate; removed 2026-10-13.
+            BindAndRemove(config, "Performance", "FrameRateCap", false);
             BindAndRemove(config, "Smoke", "Enabled", true);
             BindAndRemove(config, "Smoke", "Strength", 1f);
             BindAndRemove(config, "Smoke", "Ammo", 8);

@@ -234,6 +234,10 @@
     <EmbeddedResource Include="modules\Chatter\Assets\Packs\*.chatter">
       <LogicalName>BoscaliSummer.Chatter.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
+    <!-- The built-in mission scripts (docs/SCENARIOS.md); ScenarioLibrary loads every BoscaliSummer.Scenario.*.scenario. -->
+    <EmbeddedResource Include="modules\Scenario\Assets\*.scenario;modules\Scenario\Assets\*.mp3;modules\Scenario\Assets\*.ogg">
+      <LogicalName>BoscaliSummer.Scenario.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup Label="Superevent posters">

@@ -100,7 +100,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// <summary>One frame of the overlay. Cheap when nothing changed: it compares the model's revision, the layers and the map's pose and builds only on a difference.</summary>
         internal void Tick(float now)
         {
-            if (HubOverride == null && !MissionProfile.FullExperience) { Hide(); return; }
+            if (HubOverride == null && !MissionProfile.AllowsModule("strategic-command")) { Hide(); return; }
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             IStrHub hub = Hub;
             if (hub == null || map == null || map.mapImage == null || map.mapBackground == null || !DynamicMap.mapMaximized) { Hide(); return; }

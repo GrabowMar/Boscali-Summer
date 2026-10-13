@@ -27,9 +27,10 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.That(grid.ContestedSectorCount > 0 && grid.NeutralSectorCount > 0 && grid.FriendlySectorCount > 0 && grid.HostileSectorCount > 0,
                 "the pinned front has every kind of ground");
             ulong wide = Fnv(grid.BakeTexture(320, 200, true, 0.5f));
-            TestAssert.That(wide == 0x51EFC079DA9338C5UL, "the 320x200 bake keeps its pixels, got 0x" + wide.ToString("X"));
+            // Re-pinned 2026-10-13: an unheld square closed in by held ground is now tinted through (it drew a ring on the front).
+            TestAssert.That(wide == 0xD26BC7A0D0F305F5UL, "the 320x200 bake keeps its pixels, got 0x" + wide.ToString("X"));
             ulong tall = Fnv(grid.BakeTexture(200, 320, true, 0.5f));
-            TestAssert.That(tall == 0x9F5577C0AA54C834UL, "the 200x320 bake keeps its pixels, got 0x" + tall.ToString("X"));
+            TestAssert.That(tall == 0xBF29FFDBC12DEF54UL, "the 200x320 bake keeps its pixels, got 0x" + tall.ToString("X"));
 
             // The pixel buffer is reused: a bake after a cleared bake must paint the same picture.
             TestAssert.That(Fnv(grid.BakeTexture(320, 200, false, 0.5f)) == Fnv(new Color32[320 * 200]), "a hidden overlay bakes transparent");

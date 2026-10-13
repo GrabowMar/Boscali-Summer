@@ -30,7 +30,9 @@
 
 Nuclear Option hands you a jet and a war. **Boscali Summer builds everything around the canopy glass**: a wing that flies on your orders, a front line that grinds through towns and leaves them burning, satellites, hackers and special forces on call, storm fronts rolling in off the coast, and a radio full of people having a worse day than you.
 
-Choose **Boscali Summer** in the mission picker's **Boscali Summer** group for the full experience. It is a separate copy of the installed game's Escalation mission. Vanilla and workshop missions keep the cockpit/HUD, avionics, radio, comms and player-controlled wing tools; STR, support operations and the systems that rewrite the battlefield run only in the dedicated mission. Your existing mission files are preserved. See [mission compatibility](docs/MISSION_COMPATIBILITY.md) for the feature scope.
+Start with **Boscali Summer** in the mission picker's **Boscali Summer** group: a scripted mission on the game's own Escalation. A cutscene, a side to choose, an opening flown under orders, then the whole war. It is one text file, and you can write your own: see [mission scripts](docs/SCENARIOS.md).
+
+Every mission runs the whole mod. When a mission starts, a prompt on the map screen asks which systems run in it: **FULL EXPERIENCE**, **IMMERSION ONLY** (cockpit, HUD, wing, radio and comms; the mission stays as its author made it), or your own pick. It can remember the answer for that mission or stop asking. See [mission systems](docs/MISSION_COMPATIBILITY.md).
 
 <table align="center">
 <tr>
@@ -255,7 +257,7 @@ No dates. This is a hobby alpha, and the route gets re-planned whenever Nuclear 
 
 **Beyond**
 
-- [ ] **Campaign chain:** a sequence of sessions and maps with carry-over
+- [ ] **Campaign chain:** a sequence of sessions and maps with carry-over (the script side exists: chapters that unlock and flags that carry over; the war itself does not carry over yet)
 
 Not on the route: new maps, VR, missile physics, mid-mission saves or another weapon pack. The game's developers and other mods have those covered.
 
@@ -295,7 +297,7 @@ Not on the route: new maps, VR, missile physics, mid-mission saves or another we
 
 ## First flight
 
-Start **Boscali Summer** from its own mission-picker group for every system below. Other vanilla and workshop missions use the compatibility feature set automatically:
+Start any mission and leave everything on at the mission systems prompt for every system below:
 
 | | |
 | --- | --- |
@@ -304,8 +306,8 @@ Start **Boscali Summer** from its own mission-picker group for every system belo
 | <kbd>F1</kbd> | Settings window, if ConfigurationManager is installed: on/off switches for the mod's systems, and the keys. Tuning values are in the config file only. |
 | <kbd>Ctrl</kbd> + <kbd>O</kbd> | MET OFFICE weather console. The host controls it, clients read along. |
 | **WMC** | Map page for your wing: pilots, formations, loadouts and orders |
-| **STR** | Dedicated mission only: theater command, territory, front line and staff |
-| **OPS** | Dedicated mission only: support calls, fronts and readiness |
+| **STR** | Theater command, territory, front line and staff |
+| **OPS** | Support calls, fronts and readiness |
 | **SET** | Map page for module settings, plus host controls for shared rules |
 
 Settings live in `BepInEx/config/com.marci.boscalisummer.cfg`. Modules depend on each other in places, so turning one off can hide features in another.

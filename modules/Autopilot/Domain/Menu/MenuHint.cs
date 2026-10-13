@@ -71,7 +71,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 string keys = n > 1 ? " OR 1–" + n : n == 1 ? " OR 1" : "";
                 if (!c.Category.Available) act = c.Category.Reason.Length > 0 ? c.Category.Reason : "NOTHING AVAILABLE";
                 else if (pad) act = c.Wheel ? turn + " · AIM A ROW" : enter + " · OPEN " + c.Category.Label;
-                else act = hold ? "AIM" + keys + (c.Locked ? " · PULL BACK TO RE-AIM" : " · PICK A ROW") : "CLICK" + keys + " · PICK A ROW";
+                else act = hold ? "AIM" + keys + (c.Locked ? " · POINT AT ANOTHER TO RE-AIM" : " · PICK A ROW") : "CLICK" + keys + " · PICK A ROW";
             }
             // a refused key says why in words for as long as a toast: the amber pulse alone is 180 ms of colour
             if (c.Refusal != null && c.Hold == null) { act = c.Refusal; warn = true; }

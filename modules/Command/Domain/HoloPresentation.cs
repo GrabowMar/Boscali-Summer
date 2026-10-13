@@ -20,8 +20,6 @@ namespace BoscaliSummer.Modules.Command.Domain
         internal const float BigHeightShare = .82f, BigAspect = 1.3f, BigWidthShare = .92f;
         /// <summary>The time the picture takes to change between its two sizes, and to fade in when it first appears.</summary>
         internal const float GrowSeconds = .18f;
-        /// <summary>Seconds between pictures: the MINI is drawn at 10 Hz, the BIG at 20 Hz.</summary>
-        internal const float MiniInterval = .1f, BigInterval = .05f;
         /// <summary>The most units each presentation carries, and the most airbases it names.</summary>
         internal const int MiniUnits = 48, MiniAirbases = 1;
         /// <summary>The texture the picture is drawn into (a part of it, as many pixels as the frame shows times <see cref="Oversample"/> at most) and the smallest part used.</summary>
@@ -32,7 +30,7 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>Where the aircraft stands in the frame: across the middle always, and up from the bottom edge as a share of the frame's height. Heading up the MINI puts it low, so more of what is ahead shows.</summary>
         internal const float AircraftAcross = .5f, MiniAircraftUp = .38f;
         /// <summary>Grid cells across the picture's reach (twice the range, at the aircraft's depth): a denser grid for the bigger picture.</summary>
-        internal const int MiniCells = 64, BigCells = 96;
+        internal const int MiniCells = 48, BigCells = 96;
 
         /// <summary>
         /// The presentation for where the pilot is. Nothing while the corner map cannot stand in (<paramref name="up"/> false: no living aircraft, no HUD, a pause, a piece that failed to build) and at the game's
@@ -83,7 +81,7 @@ namespace BoscaliSummer.Modules.Command.Domain
             up = AircraftUp(shape, northUp);
         }
 
-        /// <summary>Grid cells across the picture's reach for a presentation: 64 on the MINI, 96 on the BIG one.</summary>
+        /// <summary>Grid cells across the picture's reach for a presentation: 48 on the MINI (7 pixels apart at 1080p; 64 was a 5 pixel hatch that read as noise), 96 on the BIG one.</summary>
         internal static int GridCells(HoloShape shape) => shape == HoloShape.Mini ? MiniCells : BigCells;
 
         /// <summary>The frame's width over its height at the smallest the picture is ever drawn with (the MINI's, which the growing BIG one starts from): the grid is made to cover a frame this narrow, which sees the most ground up and down.</summary>
@@ -96,11 +94,6 @@ namespace BoscaliSummer.Modules.Command.Domain
 
         /// <summary>The most airbases a presentation names, nearest first.</summary>
         internal static int AirbaseCap(HoloShape shape) => shape == HoloShape.Mini ? MiniAirbases : HoloMarks.MaximumAirbases;
-
-        /// <summary>
-        /// Seconds until the next picture: every frame while the picture is changing size (its marks follow the frame), otherwise the presentation's own rate.
-        /// </summary>
-        internal static float RenderInterval(HoloShape shape, bool changing) => changing ? 0f : shape == HoloShape.Big ? BigInterval : MiniInterval;
 
         // ------------------------------------------------------------------ the frame
 

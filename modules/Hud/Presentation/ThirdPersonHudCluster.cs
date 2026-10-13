@@ -26,7 +26,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// the "TGT" tag an open tag) -- the same symbology language as the native flight HUD, no plates. Cues light brackets and text like annunciators: SPD on
     /// over-G, ALT on low ground (radar altitude replaces its caption under 300 m; PULL UP in alert
     /// colour), the fuel scale on low fuel. HDG adds the compass point; the card shows range and closure.
-    /// Legibility (2026-10-10): a dark scrim behind every box and bar label so thin ink survives bright haze, captions at
+    /// Legibility (2026-10-10; 2026-10-13 nothing behind the boxes, by the user's ruling: bare ink): captions at
     /// 12-13 pt, the whole cluster scaled by the player's own HUD text size (the layout runs in a virtual screen of
     /// screen / scale and the root is scaled back up), AoA in the SPD caption row, the real load factor against the airframe's
     /// limit, and the fuel scale on the same 25 % / 10 % thresholds as the board's fuel row.
@@ -75,14 +75,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private struct Box
         {
             public RectTransform Root;
-            public Image Backing;
             public TextMeshProUGUI Caption;
             /// <summary>Right end of the caption row (the SPD box's AoA).</summary>
             public TextMeshProUGUI CaptionRight;
             public TextMeshProUGUI Value;
             public TextMeshProUGUI SubLine;
             public RectTransform Track;
-            public Image TrackImage;
             public Image Bar;
             public TextMeshProUGUI BarLabel;
             public float LastValue;
@@ -191,14 +189,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private Box BuildBox(string name, string caption, bool withBar = true)
         {
-            var boxObject = new GameObject(name, typeof(RectTransform), typeof(Image));
+            var boxObject = new GameObject(name, typeof(RectTransform));
             RectTransform rect = (RectTransform)boxObject.transform;
             rect.SetParent(root, false);
             rect.pivot = new Vector2(0.5f, 0.5f);
-            Image backing = boxObject.GetComponent<Image>();
-            backing.raycastTarget = false;
-            backing.sprite = AvSprites.White;
-            backing.color = Color.clear;
+            // No plate and no shade (user ruling 2026-10-13): bare ink on the sky, like the board's own blocks.
 
             bool hasSub = caption != null;
             TextMeshProUGUI captionText = null, captionRight = null;
@@ -221,20 +216,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             sub.gameObject.SetActive(hasSub);
 
             RectTransform track = null;
-            Image trackImage = null;
             Image bar = null;
             TextMeshProUGUI barLabel = null;
             if (withBar)
             {
-                // A visible track so a low reading still reads as "a little of a bar", not a stray dot.
-                var trackObject = new GameObject(name + "Track", typeof(RectTransform), typeof(Image));
+                // The tick scale (PaintSymbols) is the track: a low reading still reads as "a little of a bar", not a stray dot.
+                var trackObject = new GameObject(name + "Track", typeof(RectTransform));
                 track = (RectTransform)trackObject.transform;
                 track.SetParent(root, false);
                 track.pivot = new Vector2(0.5f, 0.5f);
-                trackImage = trackObject.GetComponent<Image>();
-                trackImage.raycastTarget = false;
-                trackImage.sprite = AvSprites.White;
-                trackImage.color = Scrim(null);   // the scale sits on a plate, not straight on the sky
 
                 // The fill is a solid 3 px line up the middle of the tick scale drawn in PaintSymbols.
                 bar = HudSprites.Child(track, "Bar", AvSprites.White, sliced: false);
@@ -246,25 +236,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 bar.fillOrigin = 0;
                 bar.fillAmount = 0f;
 
-                // Live percentage under the track, wider than the bar itself, on its own scrim (it sits outside the box's).
-                var scrimObject = new GameObject("LabelScrim", typeof(RectTransform), typeof(Image));
-                var scrim = (RectTransform)scrimObject.transform;
-                scrim.SetParent(track, false);
-                scrim.anchorMin = scrim.anchorMax = new Vector2(0.5f, 0f);
-                scrim.offsetMin = new Vector2(-36f, -19f);
-                scrim.offsetMax = new Vector2(36f, -1f);
-                Image scrimImage = scrimObject.GetComponent<Image>();
-                scrimImage.raycastTarget = false;
-                scrimImage.sprite = AvSprites.White;
-                scrimImage.color = Scrim(null);
+                // Live percentage under the track, wider than the bar itself.
                 barLabel = Label(track, "BarLabel", TextAlignmentOptions.Top, 12f,
                     new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-35f, -18f), new Vector2(35f, -2f));
             }
 
             return new Box
             {
-                Root = rect, Backing = backing, Caption = captionText, CaptionRight = captionRight, Value = value, SubLine = sub,
-                Track = track, TrackImage = trackImage, Bar = bar, BarLabel = barLabel,
+                Root = rect, Caption = captionText, CaptionRight = captionRight, Value = value, SubLine = sub,
+                Track = track, Bar = bar, BarLabel = barLabel,
                 LastValue = float.NaN, LastSub = float.NaN, LastCaption = float.NaN, LastRight = float.NaN, LastBar = float.NaN
             };
         }
@@ -444,16 +424,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private static Color WithAlpha(Color c, float a) => new Color(c.r, c.g, c.b, a);
 
-        /// <summary>A dark scrim so thin ink survives bright haze (a lit cue tints it toward its colour).</summary>
-        private static Color Scrim(Color? lit) => lit.HasValue
-            ? new Color(0.01f + lit.Value.r * 0.10f, 0.02f + lit.Value.g * 0.10f, 0.03f + lit.Value.b * 0.10f, 0.88f)
-            : new Color(0.01f, 0.02f, 0.03f, 0.72f);
-
-        /// <summary>Normal: ink on the scrim. Lit: value, caption and sub-line in <paramref name="lit"/>, on a scrim tinted with
-        /// it so the cue survives a bright sky (brackets light in PaintSymbols).</summary>
+        /// <summary>Normal: ink. Lit: value, caption and sub-line in <paramref name="lit"/> (brackets light in PaintSymbols).</summary>
         private static void Style(Box box, Color ink, Color? lit)
         {
-            box.Backing.color = Scrim(lit);
             box.Value.color = lit.HasValue ? lit.Value : ink;
             if (box.Caption != null) box.Caption.color = lit.HasValue ? lit.Value : WithAlpha(ink, 0.75f);
             if (box.CaptionRight != null) box.CaptionRight.color = lit.HasValue ? lit.Value : ink;
@@ -528,9 +501,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             const float R = 64f, MaxBank = 45f, BallTravel = 22f, SlipFull = 10f;
             float cx = hdg.CenterX, top = hdg.Bottom - 12f, cy = top - R;
             Rgba dim = ink.WithAlpha(0.7f);
-            // A dark plate behind the arc, ticks and tube so the thin ink survives a bright haze.
-            float plateBottom = top - R * (1f - Mathf.Cos(MaxBank * Mathf.Deg2Rad)) - 24f;
-            AvStrokes.Fill(b, cx - R * 0.72f - 12f, plateBottom, R * 1.44f + 24f, top + 12f - plateBottom, new Rgba(0.01f, 0.02f, 0.03f, 0.72f));
             AvStrokes.Arc(b, cx, cy, R, 90f - MaxBank, 90f + MaxBank, 24, 1.5f, dim);
             foreach (float tick in BankTicks)
             {

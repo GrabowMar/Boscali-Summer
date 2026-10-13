@@ -257,12 +257,16 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 {
                     HoloMark m = bases[i];
                     float e = m.East - planeX, n = m.North - planeZ;
-                    if (e * e + n * n <= limit && At(e, Ground(m.East, m.North), n, out float x, out float y) && Inside(x, y, 6f * u))
+                    // One field can be several airbases of one name (its runways and pads): the nearest carries the name.
+                    string name = NameOf(basePool[m.Id]);
+                    bool named = false;
+                    for (int k = 0; k < i && !named; k++) named = labels[LabelBase + k].text == name;
+                    if (!named && e * e + n * n <= limit && At(e, Ground(m.East, m.North), n, out float x, out float y) && Inside(x, y, 6f * u))
                     {
                         AvStrokes.Diamond(b, x, y, 3.5f * u, w, ink);
                         AvStrokes.Line(b, x + 2.5f * u, y + 2.5f * u, x + 9f * u, y + 8f * u, w, ink);
                         int index = LabelBase + i;
-                        Label(index, NameOf(basePool[m.Id]), x + 11f * u, y + 8f * u, inkColour);
+                        Label(index, name, x + 11f * u, y + 8f * u, inkColour);
                         KeepInside(index, x + 11f * u, y + 8f * u, u);
                         basesDrawn++;
                         shown = true;

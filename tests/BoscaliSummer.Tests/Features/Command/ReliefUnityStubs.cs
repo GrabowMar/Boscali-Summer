@@ -121,6 +121,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 public sealed class DynamicMap : MonoBehaviour
 {
     public static bool mapMaximized = true;
+    public FactionHQ HQ;
     public GameObject mapImage;
     public GameObject iconLayer;
     public GameObject viewIndicator;
@@ -172,7 +173,11 @@ public sealed class DynamicMap : MonoBehaviour
 }
 
 public sealed class GridLabels : MonoBehaviour { }
-public sealed class CameraStateManager : MonoBehaviour { }
+public sealed class CameraStateManager : MonoBehaviour
+{
+    public void SetFollowingUnit(Unit unit) { }
+    public void FocusPosition(Vector3 point, Quaternion? look, float distance) { }
+}
 
 public sealed class MapSettings : MonoBehaviour { public Vector2 MapSize = new Vector2(81920f, 81920f); }
 public class MapIcon : MonoBehaviour
@@ -183,7 +188,16 @@ public class MapIcon : MonoBehaviour
 }
 public enum FactionMode { NoFaction = 0, Spectator = 1, Friendly = 2, Enemy = 4 }
 public sealed class MapOptions : MonoBehaviour { public float iconSize = .8f; }
-public sealed class FactionHQ { public bool Friendly; }
+public sealed class FactionHQ { public bool Friendly; public bool IsTargetPositionAccurate(Unit unit, float metres) => true; }
+public sealed class CombatHUD
+{
+    public Aircraft aircraft;
+    private readonly System.Collections.Generic.List<Unit> targets = new System.Collections.Generic.List<Unit>();
+    public System.Collections.Generic.List<Unit> GetTargetList() => targets;
+    public void SelectUnit(Unit unit) { }
+    public void DeSelectUnit(Unit unit) { }
+    public void DeselectAll(bool withAudio = false) { }
+}
 public sealed class TargetListSelector { public bool CheckExclusions(Unit unit) => false; }
 public class Unit
 {
@@ -201,6 +215,7 @@ public sealed class Missile : Unit { }
 public static class GameManager
 {
     public static Aircraft LocalAircraft;
+    public static bool GetLocalHQ(out FactionHQ hq) { hq = null; return false; }
     public static bool GetLocalAircraft(out Aircraft aircraft)
     {
         aircraft = LocalAircraft;
@@ -214,7 +229,7 @@ public sealed class UnitMapIcon : MapIcon
     public string GetInfoText() => "TEST TRACK";
 }
 public sealed class TestUnit : Unit { }
-public class UnitDefinition { public bool mapOrient; public float mapIconSize = 1f; public Sprite mapIcon; }
+public class UnitDefinition { public bool mapOrient; public float mapIconSize = 1f; public Sprite mapIcon; public GameObject unitPrefab; }
 public sealed class TestDefinition : UnitDefinition { }
 public sealed class AirbaseMapIcon : MapIcon
 {
@@ -246,6 +261,11 @@ public sealed class TestCommandSettings
 {
     public TestEntry<bool> MapRelief3D = new TestEntry<bool>(true);
     public TestEntry<bool> MapSymbology = new TestEntry<bool>(true);
+    public TestEntry<bool> MapMinis3D = new TestEntry<bool>(true);
+    public TestEntry<bool> MapLeftDragBox = new TestEntry<bool>(false);
+    public TestEntry<bool> MapClickAdds = new TestEntry<bool>(true);
+    internal TestEntry<BoscaliSummer.Modules.Command.Domain.MapBoxSide> MapBoxSide =
+        new TestEntry<BoscaliSummer.Modules.Command.Domain.MapBoxSide>(BoscaliSummer.Modules.Command.Domain.MapBoxSide.All);
     public TestEntry<bool> MapTerrainImage = new TestEntry<bool>(true);
     public TestEntry<bool> FrontlinesOverlay = new TestEntry<bool>(true);
     public TestEntry<bool> ThreatHeat = new TestEntry<bool>(true);

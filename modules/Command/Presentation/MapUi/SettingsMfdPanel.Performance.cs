@@ -1,4 +1,5 @@
 using NOAvionics;
+using BoscaliSummer.Core.Ui;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
@@ -23,6 +24,32 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             else
             {
+                // One click sets every switch a feature tagged with a preset, plus the panel effects below.
+                // Sound, comfort, master switches and the frame limit are never touched.
+                int[] fxTier = { (int)AvFxTier.Full, (int)AvFxTier.Lite, (int)AvFxTier.Off };
+                flow.Section(AvIcon.Gauge, "PRESET", "ONE CLICK");
+                var preset = flow.Add(AvSegmented.Strip(flow.Content, ClientPreset.Names,
+                    () =>
+                    {
+                        for (int i = 0; i < fxTier.Length; i++)
+                            if ((int)settings.AvionicsFxTier.Value == fxTier[i] &&
+                                settings.AvionicsBlurBehind.Value == (i == 0) &&
+                                clientSettings.MatchesPreset(i)) return i;
+                        return -1;
+                    },
+                    i =>
+                    {
+                        clientSettings.ApplyPreset(i);
+                        settings.AvionicsFxTier.Value = (AvFxTier)fxTier[i];
+                        settings.AvionicsBlurBehind.Value = i == 0;
+                        Echo("PRESET — " + ClientPreset.Names[i]);
+                        Changed();
+                    }));
+                preset.Options[0].Help = "QUALITY: every Boscali visual on, full panel effects, no savings applied.";
+                preset.Options[1].Help = "BALANCED: drops the costliest extras (pilot reflection, terrain wet pass, panel blur) and turns ADAPTIVE FX and the invisible far-unit savings on.";
+                preset.Options[2].Help = "FAST: all optional visuals off, panel effects off, LOD and shadow caps on, units past 15 km not drawn. Sound and motion are left alone.";
+                flow.Ticker.Add(page, AvTickRate.Slow, preset.Refresh);
+
                 string previous = null;
                 AvCellGrid grid = null;
                 for (int i = 0; i < count; i++)

@@ -109,11 +109,15 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             r = Rig();
             r.HoldOpen(); r.Mouse(r.L.Cx + 170f * r.L.Rho, r.L.Cy); r.ToRow("flight/gear"); r.Adv(0.1f); r.CUp();
             TestAssert.That(r.Ran("flight/gear"), "release C executes the rested-on row");
-            TestAssert.That(!r.C.Open, "HOLD execution closes the menu");
+            TestAssert.That(r.C.Open && r.C.Mode == MenuMode.Latched, "running a row keeps the menu up, latched");
             TestAssert.Eq(r.C.Toast.Text, "GEAR EXTENDING", "the toast shows the outcome");
             r.Adv(1.3f);
             TestAssert.That(!r.C.Showing, "the toast expires after 1.2 s");
-            TestAssert.That(r.Kinds.Contains(MenuCommandKind.Close), "the host is told the menu closed");
+            TestAssert.That(!r.Kinds.Contains(MenuCommandKind.Close), "the host is not told the menu closed");
+
+            r = Rig();
+            r.HoldOpen(); r.PressDigit(3); r.PressDigit(2); r.CUp();
+            TestAssert.That(r.Log.Count == 1 && r.C.Open, "a row run by a digit while the open key is down does not run again when the key comes up");
 
             r = Rig();
             r.HoldOpen(); r.Mouse(r.L.Cx + 170f * r.L.Rho, r.L.Cy); r.CUp();
@@ -219,7 +223,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.That(!r.C.FocusFromPointer && r.Focused == "flight/gear", "hat focus in HOLD mode is key-acquired");
             TestAssert.That(r.C.Armed && MenuHint.Parts(r.C).Live.StartsWith("RELEASE C · LOWER GEAR"), "a row stepped onto with the keys is a choice: the hint says RELEASE C");
             r.CUp();
-            TestAssert.That(r.Ran("flight/gear") && !r.C.Open, "and releasing C runs it");
+            TestAssert.That(r.Ran("flight/gear") && r.C.Open, "and releasing C runs it");
 
             r = Rig();
             r.HoldOpen(); r.PressDigit(1); r.Down();
@@ -298,7 +302,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             r.Digit(7); r.Adv(0.79f);
             TestAssert.That(!r.Ran("flight/eject") && r.C.Hold != null, "0.79 s is still not enough");
             r.Adv(0.03f);
-            TestAssert.That(r.Ran("flight/eject") && !r.C.Open, "held >= 0.8 s fires EJECT");
+            TestAssert.That(r.Ran("flight/eject"), "held >= 0.8 s fires EJECT");
 
             r = Rig();
             r.LatchOpen(); r.PressDigit(3); for (int i = 0; i < 7; i++) r.Down();
@@ -376,7 +380,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
 
             r = Rig();
             r.HoldOpen(); r.Mouse(r.L.Cx + 170f * r.L.Rho, r.L.Cy); r.ToRow("flight/assist"); r.Adv(0.1f); r.CUp();
-            TestAssert.That(r.Ran("flight/assist") && !r.C.Open && r.C.Toast.Text == "FLIGHT ASSIST OFF", "in HOLD mode a toggle closes the menu and toasts the outcome");
+            TestAssert.That(r.Ran("flight/assist") && r.C.Open && r.C.Toast.Text == "FLIGHT ASSIST OFF", "in HOLD mode a toggle keeps the menu and toasts the outcome");
         }
 
         private static void UnavailableCategoryIsSkippedByTheHat()
@@ -410,7 +414,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             r.HoldOpen();
             p = r.Polar(90f, 0.9f * r.L.R); r.Mouse(p[0], p[1]);
             TestAssert.That(r.Cat == "flight" && r.C.Locked, "past 0.85 R the choice locks");
-            TestAssert.That(MenuHint.Parts(r.C).Live.Contains("PULL BACK TO RE-AIM"), "the hint offers the way out while locked");
+            TestAssert.That(MenuHint.Parts(r.C).Live.Contains("POINT AT ANOTHER TO RE-AIM"), "the hint offers the way out while locked");
             p = r.Polar(180f, 0.9f * r.L.R); r.Mouse(p[0], p[1]);
             TestAssert.Eq(r.Cat, "flight", "locked: swinging the angle at 0.9 R does not retarget");
             p = r.Polar(126f, 0.7f * r.L.R); r.Mouse(p[0], p[1]);
@@ -428,6 +432,22 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             r.HoldOpen(); p = r.Polar(90f, 0.9f * r.L.R); r.Mouse(p[0], p[1]);
             float[] disc = r.DiscOf(r.Model.IndexOf("wing")); r.Mouse(disc[0], disc[1]); r.Adv(0.2f);
             TestAssert.Eq(r.Cat, "wing", "resting on another disc while committed side-steps to it");
+
+            // committed to FLIGHT, the pointer never goes back to the hub: it comes down onto VIEW's disc from above, outside the ring
+            r = Rig();
+            r.HoldOpen(); p = r.Polar(90f, 0.9f * r.L.R); r.Mouse(p[0], p[1]);
+            disc = r.DiscOf(r.Model.IndexOf("view"));
+            r.Walk(new[] { new[] { disc[0], disc[1] - 120f }, disc }, 20f);
+            r.Adv(0.02f);
+            TestAssert.Eq(r.Cat, "view", "committed: pointing at another disc from outside the ring re-aims without a trip to the hub");
+
+            // a slow hand still drifting over the disc counts as arrived: no dead stop needed
+            r = Rig();
+            r.HoldOpen(); p = r.Polar(90f, 0.9f * r.L.R); r.Mouse(p[0], p[1]);
+            disc = r.DiscOf(r.Model.IndexOf("wing"));
+            r.Mouse(disc[0] - 8f, disc[1]); r.Adv(0.016f);
+            r.Walk(new[] { new[] { disc[0] - 8f, disc[1] }, new[] { disc[0] + 8f, disc[1] } }, 2f);
+            TestAssert.Eq(r.Cat, "wing", "committed: slowing down on another disc is enough, the pointer need not stop");
         }
 
         private static void HandPathsLandOnTheRightCategoryAndRow()
@@ -639,7 +659,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             r.Stick(0f, 0f);
             TestAssert.That(r.Focused == "" && r.C.Wheel, "pad: back at the centre an action row is un-aimed, so a release there runs nothing");
             Aim(r, 1); r.PadY(false);
-            TestAssert.That(r.Ran("flight/assist") && !r.C.Open, "pad: releasing the button runs the aimed row and closes");
+            TestAssert.That(r.Ran("flight/assist") && r.C.Open && r.C.Mode == MenuMode.Latched, "pad: releasing the button runs the aimed row and keeps the menu");
 
             r = InFlightWheel();
             TestAssert.That(r.C.WheelSlot(MenuController.WheelBackSlot) == MenuController.SlotBack && r.C.WheelSlot(7) == MenuController.SlotEmpty, "the wheel: seven rows, empty slots, BACK on the 0 slot");
@@ -678,7 +698,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             Hat(r, 0, 1);
             TestAssert.That(r.C.Cat == -1 && r.C.Open, "hat: down comes back out");
             Hat(r, 1, 0); Hat(r, 0, -1); Hat(r, 1, 0); r.PadY(false);
-            TestAssert.That(r.Log.Count == 1 && !r.C.Open, "hat: releasing the button runs the aimed row");
+            TestAssert.That(r.Log.Count == 1 && r.C.Open, "hat: releasing the button runs the aimed row");
 
             // a switch list is worked through: releasing on a switch keeps it up, the stick aims the next, a press flips it, centre + press closes
             r = Rig();
@@ -888,6 +908,15 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.That(r.C.Cat == -1, "empty air at the end of the widest plate is not WING: the plate hugs its text");
             r.Mouse(r.L.Widest[wing].L + 3f, r.L.DiscY[wing]);
             TestAssert.Eq(r.Cat, "wing", "the drawn plate still picks its category");
+
+            r = Rig();
+            r.LatchOpen();
+            int flight = r.Model.IndexOf("flight");
+            r.Mouse(r.L.DiscX[flight] - r.L.Rd - 25f * r.L.Rho, r.L.DiscY[flight]);
+            TestAssert.Eq(r.Cat, "flight", "25 px short of a disc's rim is still that disc");
+            r.Esc(); r.LatchOpen(); r.PressDigit(3);
+            r.Mouse(r.L.Cx + r.L.HubR + 20f * r.L.Rho, r.L.Cy); r.Click();
+            TestAssert.That(r.C.Open && r.C.Cat == -1, "a click 20 px outside the hub is still the hub: back to the ring");
         }
 
         private static void HintSegmentsFitAtEveryScreenSize()

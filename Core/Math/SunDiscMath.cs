@@ -41,5 +41,16 @@ namespace BoscaliSummer.Core.Math
         // ponytail: the whole disc fades together instead of sinking limb first; a disc shader could clip it per pixel.
         public static float AboveHorizon(float elevationDeg) =>
             Scalar.IsFinite(elevationDeg) ? Scalar.SmoothStep(-AngularRadiusDeg, AngularRadiusDeg, elevationDeg) : 0f;
+
+        /// <summary>
+        /// How much a screen-space sun effect shows for a sun at this viewport position (0-1 is on screen):
+        /// 1 on screen, fading to 0 half a screen past any edge.
+        /// </summary>
+        public static float ScreenFade(float u, float v)
+        {
+            if (!Scalar.IsFinite(u) || !Scalar.IsFinite(v)) return 0f;
+            float outside = System.Math.Max(System.Math.Abs(u - 0.5f), System.Math.Abs(v - 0.5f)) - 0.5f;
+            return 1f - Scalar.SmoothStep(0f, 0.5f, outside);
+        }
     }
 }

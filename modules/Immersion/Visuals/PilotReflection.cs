@@ -54,7 +54,8 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             int size = FxBus.EffectiveQuality == FxQuality.Low ? 128 : 256;
             if (target != null && target.width != size) DropTarget();
             if (!EnsureTarget(size)) return;
-            float strength = .085f + (1f - Mathf.Clamp01(ambient)) * .025f;
+            // Additive ghost of the ambient-lit capture: a touch stronger in the dark, where a canopy mirrors best.
+            float strength = .5f + (1f - Mathf.Clamp01(ambient)) * .25f;
             if (strength != glassStrength) { glass.SetFloat(StrengthId, strength); glassStrength = strength; }
             Vector3 center = rig.Frame.TransformPoint(localCenter);
             Matrix4x4 planeToWorld = Matrix4x4.TRS(center, rig.Frame.rotation, Vector3.one);

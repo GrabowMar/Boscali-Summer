@@ -132,8 +132,13 @@ namespace NOAvionics
             Closed?.Invoke();
         }
 
+        /// <summary>A solid window: no blur or frost, nothing behind it shows through. For windows that open over other screens' text.</summary>
+        public bool Opaque { get => opaque; set { opaque = value; UpdateBlur(); Restyle(); } }
+        private bool opaque;
+
         private void UpdateBlur()
         {
+            if (opaque) { blur.enabled = frost.enabled = glassy = false; return; }
             RenderTexture rt = AvBlurSource.Enabled ? AvBlurSource.Texture : null;
             blur.enabled = rt != null;
             frost.enabled = rt == null && frost.material != null && AvFxDriver.Tier != AvFxTier.Off;
@@ -150,7 +155,7 @@ namespace NOAvionics
         private void Restyle()
         {
             AvStyle w = AvStyleHost.FuiStyle("window");
-            frame.Paint(AvStyleHost.Resolve(w.Background, AvTheme.Ground).WithAlpha(glassy ? 0.82f : 0.97f), AvStyleHost.Resolve(w.Border, AvTheme.Frame));
+            frame.Paint(AvStyleHost.Resolve(w.Background, AvTheme.Ground).WithAlpha(opaque ? 1f : glassy ? 0.82f : 0.97f), AvStyleHost.Resolve(w.Border, AvTheme.Frame));
             scrollView?.Restyle();
             frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
             AvStyle t = AvStyleHost.FuiStyle("window-title");

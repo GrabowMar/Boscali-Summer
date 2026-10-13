@@ -161,7 +161,8 @@ namespace BoscaliSummer.Tests.Features.Command
             byte mid = v[row + Centre + 25].A;
             TestAssert.That(mid > 0 && mid < full / 2 + 8 && mid > full / 2 - 8,
                 "Terrain ghost: 78% of the way out it is about half strength (got " + mid + ")");
-            TestAssert.That(v[row + Centre + 20].A < full && v[row + Centre + 20].A > mid, "Terrain ghost: the fall starts after 60% of the radius");
+            // One node past the start of the fall: at 62.5% the first percent of fade is lost in the byte now that the lines are fainter.
+            TestAssert.That(v[row + Centre + 19].A == full && v[row + Centre + 21].A < full && v[row + Centre + 21].A > mid, "Terrain ghost: the fall starts after 60% of the radius");
         }
 
         private static void TestNearFade()

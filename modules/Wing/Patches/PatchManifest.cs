@@ -14,13 +14,6 @@ namespace BoscaliSummer.Modules.Wing.Patches
         /// <summary>"DeclaringType.Method" names that must be patched once <c>WingModule.Patches</c> is applied.</summary>
         internal static readonly string[] Expected =
         {
-            "RadialMenuAction.AllowedOnAircraft",
-            "RadialMenuAction.TriggerAction",
-            "RadialMenuAction.Flash",
-            "RadialMenuMain.SetupMain",
-            "RadialMenuMain.OpenMenu",
-            "RadialMenuMain.OnDestroy",
-            "SceneSingleton`1.Awake",
             "PilotPlayerState.PlayerAxisControls",
             "PilotPlayerState.PlayerThrottleAxis1Controls",
             "Runway.IsAvailableForTakeoff",

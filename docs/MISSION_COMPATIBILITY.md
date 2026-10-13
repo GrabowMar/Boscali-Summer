@@ -1,45 +1,45 @@
-# Dedicated Boscali Summer mission
+# Mission systems
 
-The native mission picker receives a **Boscali Summer** group with one mission named **Boscali Summer**. The mod copies the installed game's built-in **Escalation** on demand, changes its description, and reuses its preview. Native objectives, outcomes, units, factions and settings come from that source. No loose mission payload is shipped, and no user or workshop mission file is overwritten. An older user mission with the same display name remains independent; use the new group.
+Every mission runs the whole mod: vanilla, workshop and the **Boscali Summer** picker entry alike. Nothing is locked by mission type. The player decides per mission what runs.
 
-The copy carries a fixed identifying sentence at the end of its serialized description: "Full Boscali Summer experience enabled for this dedicated Escalation scenario." Mission names do not enable the overhaul. An unmarked mission, including vanilla Escalation and a workshop mission named Boscali Summer, uses compatibility mode. The identifier survives the native network mission serialization, where a joining client does not retain the host's local mission key.
+The one exception is a scripted mission, such as the built-in **Boscali Summer**: its script says what runs (everything, unless the script switches a module off), so it is never prompted for. See [mission scripts](SCENARIOS.md).
 
-## Feature scope
+## The prompt
 
-Existing configuration switches still apply in the dedicated mission. Compatibility cannot be bypassed by enabling a module in the config.
+When a mission starts, a window opens on the map screen listing every optional module in two groups:
 
-| Systems | Vanilla / workshop | Dedicated mission |
+| Group | Modules | Effect on the mission |
 | --- | --- | --- |
-| Session handshake, HUD, general avionics/MFD and map presentation, radio, chatter, comms | Available | Available |
-| Player-controlled Wing, local autopilot and interaction menu, QoL | Available | Available |
-| Immersion, display effects, performance monitor, cinematography | Available | Available |
-| STR workspace and strategic map overlays | Disabled | Available |
-| Living Front staff, ground/naval AI direction, mission AI air stations | Disabled | Available |
-| Support / OPS, orbital/cyber/SOF operations and their effects | Disabled | Available |
-| Dynamic objectives/contracts, high command, intel seeding, progression, enemy ace hunts | Disabled | Available |
-| Garrison spawning, modified capture, airborne troops, trenches | Disabled | Available |
-| Fire spread, destruction changes, persistent wrecks, dynamic weather / cloud seeker effects | Disabled | Available |
-| Player hangar spawn priority and automatic AI eviction | Disabled | Available |
-| VANGUARD runtime and Boscali custom content | Disabled | Available with Blueprinter |
+| Cockpit and immersion | radio, chatter, comms, wing, autopilot and interaction menu, QoL, immersion, effects, avionics and tactical map, cinematography | None. The mission plays as its author made it. |
+| Battlefield | STR, support / OPS, progression and squad, contracts, high command, intel, Living Front and AI air stations, garrisons and urban combat, trenches, events, weather, fire and destruction, spawn priority, VANGUARD | Changes units, objectives, economy or the world. |
 
-## Lifecycle and ownership
+- **FULL EXPERIENCE** switches everything on. **IMMERSION ONLY** switches the battlefield group off.
+- Switching a module off also switches off the modules that need it; switching one on brings what it needs.
+- **START** applies the selection, which is also what the next prompt opens with.
+- **START / KEEP FOR THIS MISSION** remembers the selection for that mission name and stops asking there.
+- **START / NEVER ASK AGAIN** keeps the selection for every mission and switches the prompt off.
 
-The core starts in compatibility mode. Native mission selection and multiplayer mission synchronization resolve the profile before mission spawning. A scene-load hook also handles native mission restarts. Stopping/leaving a mission revokes the full profile.
+Session handshake, HUD, the performance monitor and the prompt itself are always on. Modules switched off in F1 are not offered.
 
-General Command remains installed without Progression. A separate strategic-command module owns STR, its view hub, resource recorder and overlay. Full mission modules use the existing dependency graph, with already-installed general modules satisfying dependencies. Every native mission preparation resets the scene services before the new environment is applied, including restarts or full-to-full transitions on the same map that do not emit Unity's scene-loaded event.
+## Settings
 
-When the profile changes back to compatibility, the host removes full-module Harmony patches, withdraws their services/settings/HUD feeds, disables their runtime components, stops their coroutines, resets scene state and destroys those components synchronously. General scene services reset so cached references and settings panels cannot carry old strategic state into another mission. Native spawning, simulation and multiplayer authority remain with the game and the existing host-side feature code.
+```ini
+[Mission]
+AskAtStart = true
+DisabledModules =
+RememberedMissions = {}
+```
+
+`AskAtStart` is in the F1 window ("Ask which systems run at mission start"); turn it on to be asked again. Set `RememberedMissions` to `{}` to forget the per-mission answers.
+
+## How it applies
+
+A remembered or last-used selection is applied when the mission is selected, before anything spawns, so a mission remembered as immersion only never sees a battlefield module. A change made in the prompt applies at once: switched-off modules lose their Harmony patches, services and components; switched-on modules load into the running mission. A battlefield module switched on in the prompt therefore joins a mission already under way; restart the mission if it needs a clean start.
+
+Embedded Boscali equipment (`VG_*`, the container feeder, the paratrooper mount) is filtered from stores and saved loadouts only while its owning module (VANGUARD, urban combat) is off.
+
+The selection is local. In multiplayer the host's selection decides the battlefield systems, as host-side code owns them; each client chooses its own cockpit systems.
 
 ## Verification boundary
 
-Pure regression tests cover marker matching, default-deny module/content scope, transition notifications and dependencies on already-installed modules. The Release build and patch probe check the compiled native seams and patch ownership. Offline checks do not establish native picker input, live mission transitions, saved-loadout handling or multiplayer gameplay; those require an in-game run with matching mod versions.
-
-Verified on 2026-10-13:
-
-- Release candidate build: zero warnings, zero errors.
-- Pure runner: 307 suites passed, zero failed, 4,880,364 assertions. Final identity/graph check: two suites passed, 97 assertions.
-- Final candidate patch probe: 158 registered patch classes and 30 module descriptors; native lifecycle signatures, parameter bindings, module scope and dependency closure passed.
-- Actual compiled mission factory, using the installed Escalation JSON: every original JSON value preserved after restoring only the description; malformed input rejected; unknown future fields preserved.
-- Candidate: `.nomodkit/mission-profile/candidate/BoscaliSummer.dll`, SHA256 `084426b114131abea741a4433e6e55e84513af929767fd4fd4e9cc6d1bacdc4d`.
-
-The candidate was built offline. No game installation, user mission, deployment or live multiplayer session was changed for validation.
+Offline: Release build, the pure `MissionProfileTests`, and the patch probe (no module locked by default, switches honoured, immersion-only dependency closure, mission copy JSON preserved). The prompt window, live module switching inside a running mission and multiplayer have not been run in game.
