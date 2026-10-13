@@ -15,7 +15,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     // back the same frame the log is not in charge (the chat input is open, the capture is not seeing the game's lines, the option is off); the map is untouched. The mod's own objects are three roots under the HUD canvas: the
     // shade (the sun band and the cloud, first in the canvas so it lies behind every native mark; the feed's text is on the chat canvas, which draws above the HUD's), the furniture (the map's brackets and caption shelf on one surface,
     // over the map) and the log (its own root: it follows the pilot's Opacity). They are placed from the native rectangles (world corners into canvas units) whenever those change, and at every 10 Hz present; the log is also
-    // drawn again between ticks whenever its signature moves (a row wiping in or fading). The shade and the map's furniture are not scaled and not dimmed by the pilot's options (no scale, no opacity), but everything sways with the board and follows the Shade and the declutter level (no furniture at Lean and Minimal). The minimised map's dressing is hidden whole while HudMapState.HoloActive is set (a map hologram has the corner), and its caption shelf stands inside the frame (HUD holo pass C); the NAV DATA block of the bottom-right corner has its own two roots and its own file (StatusPanel.Nav.cs), driven from CornersFrame.
+    // drawn again between ticks whenever its signature moves (a row wiping in or fading). The shade and the map's furniture are not scaled and not dimmed by the pilot's options (no scale, no opacity), but everything sways with the board and follows the Shade and the declutter level (no furniture at Lean and Minimal). The minimised map's dressing is hidden whole while HudMapState.HoloActive is set (a map hologram has the corner), and its caption shelf stands inside the frame (HUD holo pass C); the NAV DATA block of the bottom-right corner has its own two roots and its own file (StatusPanel.Nav.cs), driven from CornersFrame, and so is the CUE stack at the left edge (StatusPanel.Cues.cs: the game's grey message boxes redrawn, its own two roots, also stood down with the Corners option).
     internal sealed partial class StatusPanel
     {
         private const int CornerQuads = 120;
@@ -68,6 +68,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             NavFrame(alive, tick);
             if (!(alive && Options.Corners && !cornersSuppressed && canvasRect != null)) { StandDownCorners(); return; }
+            CueFrame(tick);
             if (!screenCorners.Complete && findTries < 6 && Time.unscaledTime >= findAt)
             {
                 findAt = Time.unscaledTime + 2f;
@@ -104,6 +105,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (cornerShade != null) Show(cornerShade, false);
             if (cornerFurniture != null) Show(cornerFurniture, false);
             StandDownLog();
+            StandDownCues();
             feedLive = seenFeedUp = seenMapUp = false;
         }
 
@@ -145,6 +147,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             if (navFurniture != null) navShade.offsetMin = navShade.offsetMax = navFurniture.offsetMin = navFurniture.offsetMax = swayShift;
             if (logRoot != null) logRoot.offsetMin = logRoot.offsetMax = swayShift;
+            if (cueRoot != null) cueShade.offsetMin = cueShade.offsetMax = cueRoot.offsetMin = cueRoot.offsetMax = swayShift;
             if (cornerFurniture == null) return;
             cornerShade.offsetMin = cornerShade.offsetMax = swayShift;
             cornerFurniture.offsetMin = cornerFurniture.offsetMax = swayShift;
@@ -245,6 +248,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             DestroyNav();
             DestroyLog();
+            DestroyCues();
             screenCorners.Dispose();
             if (cornerShade != null) UnityEngine.Object.Destroy(cornerShade.gameObject);
             if (cornerFurniture != null) UnityEngine.Object.Destroy(cornerFurniture.gameObject);
