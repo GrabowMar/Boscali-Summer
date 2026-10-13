@@ -24,6 +24,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private Animator nativeAnimator;
         private SkinnedMeshRenderer nativeRenderer;
         private AnimatorCullingMode originalCulling;
+        private ShadowCastingMode nativeShadows;
         private GameObject root;
         private Material material;
         private Material bodyMaterial;
@@ -131,6 +132,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                 firstPerson.sharedMaterial = bodyMaterial;
             }
             nativeRenderer = source;
+            nativeShadows = source.shadowCastingMode;
             camera = renderCamera;
             frame = common.parent != null ? common.parent : common;
             nativeAnimator = animator;
@@ -518,6 +520,8 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             bool visible = bodyVisible && rendering == camera;
             if (firstPerson != null) firstPerson.enabled = visible;
             if (companion != null) companion.enabled = visible;
+            // The native pilot sits on top of the owned body: left casting here, it keeps the body in permanent shade.
+            if (nativeRenderer != null) nativeRenderer.shadowCastingMode = visible ? ShadowCastingMode.Off : nativeShadows;
             if (material != null) material.SetFloat(BodyVisibleId, visible && firstPerson == null ? 1f : 0f);
             if (bodyMaterial != null) bodyMaterial.SetFloat(BodyVisibleId, visible ? 1f : 0f);
         }
@@ -530,6 +534,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                 Camera.onPreCull -= OnPreCull;
                 hooked = false;
             }
+            if (nativeRenderer != null) nativeRenderer.shadowCastingMode = nativeShadows;
             if (nativeAnimator != null && nativeAnimator.cullingMode == AnimatorCullingMode.AlwaysAnimate)
                 nativeAnimator.cullingMode = originalCulling;
             if (root != null) { root.SetActive(false); Object.Destroy(root); }
