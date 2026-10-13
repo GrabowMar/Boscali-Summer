@@ -1,0 +1,223 @@
+{
+  "_note": "The radio in the cockpit, one run. Known lines of every net are put on air through ChatterAutomation.Demo (wingmen of four personas, AWACS, tower, command, two intercepted enemy pilots with an emergency missile call cutting in, a centre notice and a clearance through the game's own ReportText, then a scripted exchange), each followed by a capture of the strip. Two wingmen are also launched from the nearest field so the real wingman net (taxi, rolling, airborne, the tower's answers) speaks for 2.5 minutes. r0/r1 hold the director's state; d_* what each demo step was accepted. The checks assert the packs loaded clean, that lines of all five nets aired and that the Unity log has no Exception; the look is read off the captures.",
+  "name": "chatter",
+  "description": "Radio strip with lines of every net, the centre-notice reroute, an exchange, and a real wingman launch.",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 420,
+  "environment": {
+    "config": {
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "altitude": 3000,
+      "speed": 220,
+      "heading": 0,
+      "view": "cockpit"
+    },
+    {
+      "op": "wait",
+      "seconds": 8
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Chatter.Runtime.ChatterAutomation.Read",
+      "args": {},
+      "store": "r0"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.Automation.Launch",
+      "args": {
+        "lead": "player",
+        "count": 2
+      },
+      "store": "launch"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Chatter.Runtime.ChatterAutomation.Demo",
+      "args": {
+        "step": "wing"
+      },
+      "store": "d_wing"
+    },
+    {
+      "op": "wait",
+      "seconds": 7
+    },
+    {
+      "op": "capture",
+      "name": "wing"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Chatter.Runtime.ChatterAutomation.Demo",
+      "args": {
+        "step": "stations"
+      },
+      "store": "d_stations"
+    },
+    {
+      "op": "wait",
+      "seconds": 9
+    },
+    {
+      "op": "capture",
+      "name": "stations"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Chatter.Runtime.ChatterAutomation.Demo",
+      "args": {
+        "step": "enemy"
+      },
+      "store": "d_enemy"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "capture",
+      "name": "enemy"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Chatter.Runtime.ChatterAutomation.Demo",
+      "args": {
+        "step": "notice"
+      },
+      "store": "d_notice"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "capture",
+      "name": "notice"
+    },
+    {
+      "op": "wait",
+      "seconds": 14
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Chatter.Runtime.ChatterAutomation.Demo",
+      "args": {
+        "step": "exchange"
+      },
+      "store": "d_exchange"
+    },
+    {
+      "op": "wait",
+      "seconds": 9
+    },
+    {
+      "op": "capture",
+      "name": "exchange"
+    },
+    {
+      "op": "wait",
+      "seconds": 150
+    },
+    {
+      "op": "capture",
+      "name": "after-launch"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Chatter.Runtime.ChatterAutomation.Read",
+      "args": {},
+      "store": "r1"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "r0.events",
+      "min": 60
+    },
+    {
+      "check": "result_equals",
+      "path": "r0.packErrors",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "d_wing.accepted",
+      "value": 4
+    },
+    {
+      "check": "result_equals",
+      "path": "d_stations.accepted",
+      "value": 3
+    },
+    {
+      "check": "result_equals",
+      "path": "d_enemy.accepted",
+      "value": 3
+    },
+    {
+      "check": "result_equals",
+      "path": "d_exchange.accepted",
+      "value": 1
+    },
+    {
+      "check": "result_above",
+      "path": "r1.aired",
+      "min": 12
+    },
+    {
+      "check": "result_above",
+      "path": "r1.nets.Wing",
+      "min": 4
+    },
+    {
+      "check": "result_above",
+      "path": "r1.nets.Awacs",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "r1.nets.Tower",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "r1.nets.Command",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "r1.nets.Enemy",
+      "min": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "r1.unknown",
+      "value": 0
+    },
+    {
+      "check": "log_match",
+      "pattern": "Exception",
+      "max": 0
+    }
+  ]
+}

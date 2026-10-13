@@ -538,7 +538,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return result;
         }
 
-        private static void AddEntry(string text, bool killFeed)
+        /// <summary>A line that went on air on the radio (the Chatter module): logged with the game's own messages, but not offered to the news ticker,
+        /// which reads headlines out of the game's wording.</summary>
+        internal static void Radio(string text) => AddEntry(text, false, announce: false);
+
+        private static void AddEntry(string text, bool killFeed, bool announce = true)
         {
             if (string.IsNullOrWhiteSpace(text)) return;
 
@@ -564,7 +568,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             });
             if (paused) reportsWhilePaused++;
             while (history.Count > MaximumEntries) history.RemoveAt(history.Count - 1);
-            OnLineAdded?.Invoke(text);
+            if (announce) OnLineAdded?.Invoke(text);
         }
 
         private static bool PruneHistory()

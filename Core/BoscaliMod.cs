@@ -129,6 +129,8 @@ namespace BoscaliSummer.Core
                 modules.Add(new QoLModule());
             if (settings.Autopilot.Enabled.Value && !Application.isBatchMode)
                 modules.Add(new AutopilotModule());
+            // The radio installs before its publishers (Wing, Support), which resolve it late and stay silent without it.
+            modules.Add(new BoscaliSummer.Modules.Chatter.ChatterModule());
             // Wing publishes IWingSquad, which Squad and the WMC page resolve.
             modules.Add(new WingModule());
             if (settings.Progression.Enabled.Value)

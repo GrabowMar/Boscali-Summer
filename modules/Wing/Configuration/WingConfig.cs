@@ -8,8 +8,6 @@ namespace BoscaliSummer.Modules.Wing.Configuration
 {
     internal enum RadioLevel { Off, Essential, Full }
 
-    internal enum RadioVoice { Off, FollowGame, On }
-
     /// <summary>What the map and HUD mark (spec WMC program §5).</summary>
     internal enum HighlightMode { Off, Wing, WingAndTargets }
 
@@ -84,9 +82,9 @@ namespace BoscaliSummer.Modules.Wing.Configuration
         public ConfigEntry<float> FallBackRatio { get; }
         public ConfigEntry<string> Doctrine { get; }
         public ConfigEntry<RadioLevel> Radio { get; }
-        public ConfigEntry<RadioVoice> RadioVoiceMode { get; }
         public ConfigEntry<bool> ContactCalls { get; }
         public ConfigEntry<string> VoicePacks { get; }
+        public ConfigEntry<string> PackConditions { get; }
         public ConfigEntry<float> VoicePackVolume { get; }
         public ConfigEntry<bool> VerboseLogging { get; }
         public ConfigEntry<bool> DevTools { get; }
@@ -152,15 +150,16 @@ namespace BoscaliSummer.Modules.Wing.Configuration
                 "(targets of opportunity, long range), or a custom line guard,response,interval,spread,targets,reach. Cycle it " +
                 "from the radial Combat page.", null, new ConfigurationManagerAttributes { Order = 87 }));
             Radio = c.Bind("Radio", "Level", RadioLevel.Full, new ConfigDescription(
-                "Battlefield radio: Off, Essential (urgent, tactical and status reports) or Full (also sparse, contextual " +
-                "pilot exchanges during quiet flight).", null, new ConfigurationManagerAttributes { Order = 80 }));
-            RadioVoiceMode = c.Bind("Radio", "Voice", RadioVoice.Off, new ConfigDescription(
-                "Speak wingman calls with the game's text-to-speech: Off, On, or FollowGame (on when the game's chat " +
-                "text-to-speech is on; its speed and volume are used either way).", null, new ConfigurationManagerAttributes { Order = 79 }));
+                "The radio (wingmen, AWACS, tower, command, intercepted enemy traffic): Off, Essential (urgent, tactical and status calls) " +
+                "or Full (also ground chatter and pilots talking in quiet flight).", null, new ConfigurationManagerAttributes { Order = 80 }));
             VoicePacks = c.Bind("Radio", "VoicePacks", "", new ConfigDescription(
-                "Yappinator-compatible voice packs, comma-separated (one stable pack per pilot, round robin). Folders under " +
-                "config/BoscaliSummer/voicepacks, config/WingCommand/v1/voicepacks or plugins/WSOYappinator/audio. " +
-                "Missing clips keep subtitles and use TTS only when Voice enables it. No Yappinator DLL required.", null, new ConfigurationManagerAttributes { Order = 77 }));
+                "Recorded voice packs, comma-separated folder names (docs/CHATTER_PACKS.md). A pack may be recorded for one persona or one " +
+                "character (its pack.txt says so); each speaker keeps one pack for the mission. Folders under " +
+                "config/BoscaliSummer/voicepacks, config/WingCommand/v1/voicepacks or plugins/WSOYappinator/audio (WSO Yappinator packs " +
+                "work as they are). A line with no clip is shown and not voiced.", null, new ConfigurationManagerAttributes { Order = 77 }));
+            PackConditions = c.Bind("Radio", "PackConditions", "", new ConfigDescription(
+                "Extra condition words that are always true for chatter pack lines, comma-separated (docs/CHATTER_PACKS.md): a pack " +
+                "can keep lines behind a word of its own, such as profanity, and you switch them on here.", null, new ConfigurationManagerAttributes { Order = 75 }));
             VoicePackVolume = c.Bind("Radio", "VoicePackVolume", 0.8f, new ConfigDescription(
                 "Voice pack volume.", new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 76 }));
             ContactCalls = c.Bind("Radio", "ContactCalls", true, new ConfigDescription(

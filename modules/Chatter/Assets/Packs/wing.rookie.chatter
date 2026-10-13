@@ -1,0 +1,275 @@
+# Wingman net: rookie (young, eager, nervous, grows braver)
+
+@wing.copy status
+[rookie] Copy! Wilco, <lead>!
+[rookie] Roger, I am on it!
+[rookie] Copy that. Okay. Going now.
+[rookie] Wilco! Uh, understood, I mean.
+[rookie] Copy, <lead>. I will not mess it up.
+[rookie rain] Copy. Rain is loud up here, but copy.
+
+@wing.unable status
+[rookie] Unable! Sorry, <lead>, unable.
+[rookie] I cannot do that one, unable.
+[rookie] Unable. I wish I could, honestly.
+[rookie] Negative, unable. Sorry. Anything else?
+[rookie] Unable, <lead>. Tell me what I can do instead.
+[rookie loss] Unable. Please do not make me leave anyone.
+
+@wing.taskdone status
+[rookie] Task complete! I think. Yes, complete.
+[rookie] Done, <lead>! That went fine!
+[rookie] Finished it. What do you need next?
+[rookie] Complete! No problems at all.
+[rookie] All done. I did it right, did I?
+
+@wing.taxiing ambient
+[rookie] Taxiing! Starting to move.
+[rookie] Rolling out. Okay. Here we go.
+[rookie] Off the spot and taxiing, <lead>.
+[rookie] Moving. Slowly. Carefully.
+[rookie] Taxiing. Everything looks fine so far.
+
+@wing.holdingshort ambient
+[rookie] Holding short! Waiting for you.
+[rookie] At the line. Checks done. Twice.
+[rookie] Stopped short of the runway, <lead>.
+[rookie] Holding short. My hands are a bit damp.
+[rookie] Holding short, ready. I think.
+
+@wing.liningup ambient
+[rookie] Lining up! Here we go.
+[rookie] On the runway, lined up, <lead>.
+[rookie] Entering the runway. Wow, it is long.
+[rookie] Lined up. Please tell me when.
+[rookie] Lining up. Straight, I hope.
+
+@wing.rolling status
+[rookie] Rolling!
+[rookie] Rolling, <lead>! Takeoff roll!
+[rookie] Throttle up, rolling! Come on, girl.
+[rookie] Rolling now. This is the good part.
+[rookie] Brakes off, rolling! Here we go!
+[rookie night] Rolling. Lights ahead, that is all I can see.
+
+@wing.airborne status
+[rookie] Airborne!
+[rookie] Wheels up! Airborne, coming to join!
+[rookie] Airborne, <lead>. Gear is up. I checked.
+[rookie] Off the ground. Joining on you now.
+[rookie] Up and flying! Coming to you.
+
+@wing.down ambient
+[rookie] Down!
+[rookie] On the ground! Landed, <lead>!
+[rookie] Wheels down. Oh, that was fine.
+[rookie] Landed. My legs are shaking a little.
+[rookie] Down and rolling out. Home!
+[rookie recovery] Down! Home again, thank goodness.
+[rookie loss] Down. I wish the others were with us.
+
+@wing.goaround status
+[rookie] Going around!
+[rookie] Too high, going around, sorry!
+[rookie] Wave off! Going around, <lead>.
+[rookie] Going around. I will get it next time.
+[rookie] Not stable. Going around, better safe.
+
+@wing.engaging tactical
+[rookie] Engaging!
+[rookie] Engaging! Okay, okay, engaging.
+[rookie] I am going in, <lead>! Engaging!
+[rookie] Committing! Please stay close.
+[rookie] Engaged! This is really happening.
+[rookie night] Engaging. I cannot see him, but I will try.
+
+@wing.fox2 tactical
+[rookie] Fox two!
+[rookie] Fox two, <target>! Missile away!
+[rookie] Fox two on the <target>! Please hit!
+[rookie] Fox two, <target>. Come on, come on.
+[rookie] Fox two! That is a <target>, <lead>!
+[rookie night] Fox two! Bright, that was bright!
+
+@wing.fox3 tactical
+[rookie] Fox three!
+[rookie] Fox three, <target>! Radar missile away!
+[rookie] Fox three on the <target>! I am holding him!
+[rookie] Fox three, <target>. Hold the lock, hold it.
+[rookie] Fox three! At the <target>, <lead>!
+
+@wing.magnum tactical
+[rookie] Magnum!
+[rookie] Magnum on the <target>! Shooting at his radar!
+[rookie] Magnum, <target>! I fired, I really fired.
+[rookie] Magnum away! The <target> is looking at us.
+[rookie] Magnum, <target>! Oh, that went well.
+
+@wing.rifle tactical
+[rookie] Rifle!
+[rookie] Rifle on the <target>! Missile away!
+[rookie] Rifle! At the <target>, <lead>!
+[rookie] Rifle, <target>. Please be a good shot.
+[rookie] Rifle away! Target is a <target>!
+
+@wing.splash tactical
+[rookie] Splash!
+[rookie] Splash! Splash, <target>!
+[rookie] I got him! Splash one <target>!
+[rookie] Splash, <lead>! The <target> is gone!
+[rookie] Splash! Was that me? That was me!
+[rookie aftercombat] Splash, <target>. I did it. I actually did it.
+
+@wing.bandit tactical
+[rookie] Bandit, <bra>!
+[rookie] Bandit at <bra>! It is a <type>!
+[rookie] New bandit, <bra>! I see him, <lead>!
+[rookie] Bandit <bra>. A <type>. Right there.
+[rookie] Bandit! <bra>, I think, yes, <bra>!
+[rookie night] Bandit, <bra>! I can barely see him.
+[rookie rain] Bandit, <bra>! In the rain, a <type>!
+
+@wing.contact status
+[rookie] Contact, <bra>!
+[rookie] Contact at <bra>! Looks like a <type>.
+[rookie] New contact, <bra>. Ground, <type>.
+[rookie] Contact <bra>, <lead>. Did you see it?
+[rookie] I have a contact, <bra>! A <type>!
+[rookie night] Contact, <bra>. Down in the dark, a <type>.
+
+@wing.bogeydope tactical
+[rookie] Bandit, <bra>!
+[rookie] Closest is at <bra>, a <type>!
+[rookie] Bogey dope! Bandit <bra>, <type>.
+[rookie] Nearest bandit <bra>. It is a <type>, <lead>.
+[rookie] <bra>! A <type>! That is all I see.
+
+@wing.clean tactical
+[rookie] Clean!
+[rookie] Nothing out there, <lead>. Clean.
+[rookie] Naked! Nothing on my scope. I checked.
+[rookie] Clean. Quiet. Almost too quiet.
+[rookie] Skies are clean, I promise.
+[rookie aftercombat] Clean. We really got them all.
+
+@wing.panic emergency
+[rookie] Missile! Defending!
+[rookie] Missile, missile! Breaking!
+[rookie] Defending! Defending!
+[rookie] Missile on me! Help!
+
+@wing.defensiveclear tactical
+[rookie] Missile defeated! I beat it!
+[rookie] Defensive clear! It missed!
+[rookie] It is gone, <lead>! I am okay!
+[rookie] Defeated it. I did what they taught me.
+[rookie] Clear! Wow. Okay. Back in.
+
+@wing.pullup emergency
+[rookie] Pulling up!
+[rookie] Pull up, pull up!
+[rookie] Ground, pulling up!
+[rookie] Whoa, terrain, pulling up!
+
+@wing.breakoff emergency
+[rookie] Break off!
+[rookie] Too close, breaking!
+[rookie] Collision, breaking!
+[rookie] Watch out, break, break!
+
+@wing.maneuvering tactical
+[rookie] Maneuvering, <detail>!
+[rookie] Going <detail>, <lead>!
+[rookie] Okay, <detail>. Flying the <detail> now.
+[rookie] Executing <detail>! Stay with me.
+[rookie] <detail>! I am doing it right, yes?
+
+@wing.maneuverdone status
+[rookie] Maneuver complete!
+[rookie] Out of the maneuver. That was a lot.
+[rookie] Maneuver done, <lead>! Still in one piece.
+[rookie] Finished it. Back to normal.
+[rookie] Done flying it. Ready for more.
+
+@wing.fallingback tactical
+[rookie] Falling back!
+[rookie] There are too many! Falling back!
+[rookie] Disengaging, <lead>. I do not like these odds.
+[rookie] Falling back. Please follow me out.
+[rookie] Pulling out! Sorry, there are just too many.
+[rookie loss] Falling back! I do not want to lose anyone else.
+
+@wing.rejoining status
+[rookie] Rejoining!
+[rookie] Coming back to formation, <lead>.
+[rookie] I am out of it. Rejoining on you.
+[rookie] Disengaged, rejoining. Wow. That was close.
+[rookie] Back to you now! Rejoining!
+
+@wing.winchester status
+[rookie] Winchester!
+[rookie] I am Winchester, <lead>. Going home.
+[rookie] Winchester! Nothing left, heading back.
+[rookie] Out of weapons. Winchester, RTB.
+[rookie] Winchester. I wish I had one more.
+[rookie recovery] Winchester. Already heading home, <lead>.
+
+@wing.outofammo status
+[rookie] Winchester! Staying with you!
+[rookie] Out of weapons, but I am staying, <lead>.
+[rookie] No missiles left. I will fly cover.
+[rookie] Empty! I can still follow you.
+[rookie] Dry, sorry. I will stay on your wing.
+
+@wing.joker status
+[rookie] Joker! <n> minutes to bingo!
+[rookie] Joker, <lead>. <n> minutes to bingo.
+[rookie] Fuel is Joker. <n> minutes, I counted twice.
+[rookie] Joker fuel. About <n> minutes before Bingo.
+[rookie] I am at Joker. <n> minutes to bingo, okay?
+[rookie night] Joker. <n> minutes. I would like to land in daylight.
+
+@wing.bingo status
+[rookie] Bingo!
+[rookie] Bingo fuel, <lead>! Going home.
+[rookie] Bingo. I have to go now, sorry.
+[rookie] I am at Bingo. Only enough to get back.
+[rookie] Bingo! I really have to turn back.
+[rookie recovery] Bingo. Almost home already.
+
+@wing.fallingbehind status
+[rookie] Falling behind!
+[rookie] I cannot keep up, <lead>. Sorry!
+[rookie] Dropping back. Could you slow down?
+[rookie] You are pulling away. I am behind.
+[rookie] Behind the pace. I am coming, I promise.
+
+@wing.damaged status
+[rookie] I am hit!
+[rookie] I am hit, <lead>! Still flying though!
+[rookie] Damaged! Okay, she is holding.
+[rookie] Took a hit! Checking everything. Everything.
+[rookie] Damage! It is fine. It is fine, right?
+[rookie aftercombat] I took a hit back there. Still flying, though.
+
+@wing.airframelost tactical
+[rookie] <n> is down!
+[rookie] <n> is down! Oh no. <n> is down!
+[rookie] We lost <n>, <lead>!
+[rookie] <n> is gone. I saw it happen.
+[rookie] Airframe lost, <n>! Did anybody see a chute?
+[rookie loss] <n> is down. I am not going to panic.
+
+@wing.ejected tactical
+[rookie] <n> has ejected!
+[rookie] <n> ejected! I see the chute!
+[rookie] Chute! <n> is out, <lead>!
+[rookie] <n> got out. Thank goodness, <n> got out.
+[rookie] <n> ejected! Somebody go get him!
+
+@wing.escortlost tactical
+[rookie] Escort lost!
+[rookie] The escort is gone, <lead>!
+[rookie] We lost the one we were guarding!
+[rookie] Escort down. I am so sorry.
+[rookie] Lost the escort. What do we do now?

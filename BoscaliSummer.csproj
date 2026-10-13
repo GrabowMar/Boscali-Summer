@@ -229,6 +229,10 @@
     <EmbeddedResource Include="Core\Fx\Sfx\*.wav">
       <LogicalName>BoscaliSummer.Sfx.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
+    <!-- The built-in radio dialogue (docs/CHATTER_PACKS.md); ChatterHost loads every BoscaliSummer.Chatter.*.chatter. -->
+    <EmbeddedResource Include="modules\Chatter\Assets\Packs\*.chatter">
+      <LogicalName>BoscaliSummer.Chatter.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup Label="Superevent posters">

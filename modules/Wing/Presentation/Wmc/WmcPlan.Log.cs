@@ -115,7 +115,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             sortieEvents.Clear();
             WingEventRing events = c.Client ? null : c.Wing?.Events;
-            RadioLog radio = RadioDirector.Instance?.Log;
+            BoscaliSummer.Core.Chatter.ChatterLog radio = WingChatter.Instance?.Log;
             var filter = new LogFilter { Element = logElement, ById = logSelected, Id = c.Selection.Single, Rows = c.Rows, Count = c.Count };
             int n = LogRows.Fill(events, radio, logRows, LogRows.MaxRows, filter);
             for (int i = 0; i < n; i++)
