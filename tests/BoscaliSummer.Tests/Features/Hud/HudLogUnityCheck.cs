@@ -39,6 +39,15 @@ public static partial class HudLogUnityCheck
         Type t = owner as Type ?? owner.GetType();
         foreach (MethodInfo m in t.GetMethods(All))
             if (m.Name == name && m.GetParameters().Length == args.Length) return m.Invoke(owner is Type ? null : owner, args);
+        // No exact arity: a method whose extra trailing parameters are optional (reflection does not fill defaults by itself).
+        foreach (MethodInfo m in t.GetMethods(All)) {
+            ParameterInfo[] p = m.GetParameters();
+            if (m.Name != name || p.Length <= args.Length || !p[args.Length].IsOptional) continue;
+            object[] full = new object[p.Length];
+            args.CopyTo(full, 0);
+            for (int i = args.Length; i < p.Length; i++) full[i] = p[i].DefaultValue;
+            return m.Invoke(owner is Type ? null : owner, full);
+        }
         throw new MissingMethodException(t.FullName, name);
     }
     public static void Run()
