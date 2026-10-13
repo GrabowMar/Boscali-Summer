@@ -339,8 +339,16 @@
       "name": "cue-show-a"
     },
     {
-      "op": "wait",
-      "seconds": 0.03
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
+      "args": {
+        "push": false
+      },
+      "store": "cue_show_b"
+    },
+    {
+      "op": "capture",
+      "name": "cue-show-b"
     },
     {
       "op": "call",
@@ -356,7 +364,7 @@
     },
     {
       "op": "wait",
-      "seconds": 0.6
+      "seconds": 0.4
     },
     {
       "op": "call",
@@ -765,6 +773,11 @@
       "check": "result_equals",
       "path": "cue_corners_off_read.drawn",
       "value": 0
+    },
+    {
+      "check": "result_above",
+      "path": "cue_show_b.drawn",
+      "min": 0
     }
   ]
 }

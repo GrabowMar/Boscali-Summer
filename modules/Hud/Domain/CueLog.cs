@@ -38,13 +38,15 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>20 or 16 design units.</summary>
         public float Size;
         public float Arrival, Life;
+        /// <summary>When its SHOW starts: its arrival, or a little after it when it came in the same burst as the cue before (<see cref="CueTimeline.StartOf"/>). Its age, life and fade count from here; its slot from its arrival.</summary>
+        public float Start;
         /// <summary>Counts up with every cue ever added: a cue's identity.</summary>
         public int Serial;
         /// <summary>Seeds the decode's glyphs: the same words always scramble the same way.</summary>
         public int Seed;
 
-        public float Age(float now) => now - Arrival;
-        public bool Alive(float now) => now - Arrival < Life;
+        public float Age(float now) => now - Start;
+        public bool Alive(float now) => now - Start < Life;
     }
 
     /// <summary>
@@ -92,7 +94,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 Array.Copy(ring, 1, ring, 0, Capacity - 1);
                 count--;
             }
-            var cue = new Cue { Source = source, Class = cls, Severity = severity, Text = text, Size = size, Arrival = arrival, Life = CueTimeline.LifeOf(seconds), Serial = ++serial, Seed = CueText.Seed(text) };
+            float start = count > 0 ? CueTimeline.StartOf(arrival, ring[count - 1].Arrival, ring[count - 1].Start) : arrival;
+            var cue = new Cue { Source = source, Class = cls, Severity = severity, Text = text, Size = size, Arrival = arrival, Start = start, Life = CueTimeline.LifeOf(seconds), Serial = ++serial, Seed = CueText.Seed(text) };
             ring[count++] = cue;
             return cue;
         }
@@ -137,7 +140,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 for (int i = 0; i < count; i++)
                 {
                     h = h * 31 + shown[i].Serial;
-                    h = h * 31 + CueTimeline.Stage(now - shown[i].Arrival, shown[i].Life);
+                    h = h * 31 + CueTimeline.Stage(now - shown[i].Start, shown[i].Life);
+                    h = h * 31 + CueTimeline.SlideStage(now - shown[i].Arrival);
                 }
                 return h;
             }

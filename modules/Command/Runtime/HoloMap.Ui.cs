@@ -14,7 +14,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
     /// range and which way is up) and the scale bar at its lower right - the shelf glides between the two as the frame grows in <see cref="HoloPresentation.GrowSeconds"/>. While either is up the game's corner map is hidden
     /// through a CanvasGroup of ours on its root (alpha only, never SetActive on a native object), put back exactly the moment neither is. The game's dark plate behind its corner map (the Image of
     /// <c>DynamicMap.hudMapAnchor</c>'s parent, the <c>mapPanel</c> sprite) is hidden the same way (its renderer's alpha, put back with the map), and a soft feathered shade (<see cref="HudSprites.Feather"/>, the visor's
-    /// rgb(2, 12, 8), 0.5 for the MINI and 0.55 for the BIG one, reaching 40 units past the frame) stands in for it, so the additive picture stays readable over bright sky with no hard edge. The scale bar is a round
+    /// rgb(2, 12, 8), 0.65 for the MINI and 0.6 for the BIG one, reaching 40 units past the frame) stands in for it, so the additive picture stays readable over bright sky with no hard edge. The scale bar is a round
     /// number of kilometres (<see cref="HoloMarks.ScaleBar"/>) measured at its own row of the picture, as long as that is of the frame's width. Everything is a child of one root under the HUD canvas, sent behind the
     /// HUD's own elements; the root is the frame, so every mark and label is placed in units from its lower-left corner.
     /// </summary>
@@ -42,7 +42,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private Image nativePlate, shade;
         private float nativePlateAlpha = 1f;
         /// <summary>The shade's alpha behind the MINI and behind the BIG picture.</summary>
-        private const float ShadeMini = .5f, ShadeBig = .55f;
+        private const float ShadeMini = .65f, ShadeBig = .6f;
         /// <summary>The MINI's shelf ends this many units in (the scale bar and the grid reference have the rest of the row), and the room kept for the grid reference at the frame's lower right.</summary>
         private const float MiniShelfEnd = 140f, GridRoom = 44f;
         /// <summary>The BIG map's shelf is this long (design units from the frame's left): the caption and the range at its end, short enough to stay clear of the HUD's stores and board rows at the top of the screen.</summary>

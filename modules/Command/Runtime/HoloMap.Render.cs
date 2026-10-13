@@ -10,7 +10,7 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Command.Runtime
 {
     /// <summary>
-    /// The hologram's picture: a solid terrain tile. The ground is one lattice mesh (<see cref="HoloGrid"/>: a vertex per node, three index sets: the east-west lines, the north-south lines and the filled surface),
+    /// The hologram's picture: a solid terrain tile. The ground is one lattice mesh (<see cref="HoloGrid"/>: a vertex per node, four index sets: the land's east-west lines, its north-south lines, the few lines over open water (<see cref="HoloGrid.BuildLines"/>) and the filled surface),
     /// refilled only when the aircraft enters another cell or the range, the orientation, the presentation or the HUD ink changes; turning the picture (heading up) is the view matrix, never a rebuild. At 10 Hz as the
     /// MINI and 20 Hz as the BIG one (every frame while it changes size) it is drawn into a render texture of the mod's own by a command buffer executed on the spot: clear colour and depth to opaque black, a viewport as many
     /// pixels as the frame shows (times up to one and a half), the camera of <see cref="HoloView.Fit"/>, then THREE passes with the built-in line shader, so no game camera is touched. 1 the surface as filled triangles in pure black with
@@ -26,7 +26,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private const string LineShader = "Hidden/Internal-Colored";
         private const string AdditiveShader = "Unlit/AdditiveTextShader";
         // The mesh's sub-meshes.
-        private const int EastWestSub = 0, NorthSouthSub = 1, SurfaceSub = 2;
+        private const int EastWestSub = 0, NorthSouthSub = 1, SurfaceSub = 2, WaterSub = 3;
         private static readonly GhostTint FallbackInk = new GhostTint(127, 223, 154);
         private static readonly FieldInfo WeaponStatusField = AccessTools.Field(typeof(CombatHUD), "weaponStatus");
         private static readonly FieldInfo WeaponImageField = AccessTools.Field(typeof(WeaponStatus), "weaponImage");
@@ -36,11 +36,13 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private Material surfaceMaterial, lineMaterial, fadeMaterial;
         private Material additive;
         private bool additiveOwned;
-        private MaterialPropertyBlock eastWestBlock, northSouthBlock;
+        private MaterialPropertyBlock eastWestBlock, northSouthBlock, waterBlock;
         private RenderTexture rt;
         private CommandBuffer commands;
         private GhostVertex[] vertices;
-        private int[] eastWestIndices, northSouthIndices, triangleIndices;
+        private int[] eastWestIndices, northSouthIndices, triangleIndices, waterIndices;
+        private bool[] waterCells;
+        private int landEastWestCount, landNorthSouthCount, waterCount;
         private readonly float[] viewValues = new float[HoloView.Elements];
         private readonly float[] projectionValues = new float[HoloView.Elements];
         private Matrix4x4 viewMatrix, projectionMatrix;
@@ -73,18 +75,21 @@ namespace BoscaliSummer.Modules.Command.Runtime
             fadeMaterial = Line(shader, "BoscaliHoloFade", BlendMode.Zero, BlendMode.SrcColor, 0, CompareFunction.Always, Color.white);
             eastWestBlock = new MaterialPropertyBlock();
             northSouthBlock = new MaterialPropertyBlock();
+            waterBlock = new MaterialPropertyBlock();
 
             vertices = new GhostVertex[HoloGrid.MaxNodes];
             eastWestIndices = new int[HoloGrid.MaxLineIndices];
             northSouthIndices = new int[HoloGrid.MaxLineIndices];
             triangleIndices = new int[HoloGrid.MaxTriangleIndices];
+            waterIndices = new int[HoloGrid.MaxLineIndices];
+            waterCells = new bool[(HoloGrid.MaxSide - 1) * (HoloGrid.MaxSide - 1)];
             mesh = new Mesh { name = "BoscaliHoloMap", hideFlags = HideFlags.HideAndDontSave };
             mesh.MarkDynamic();
             mesh.SetVertexBufferParams(vertices.Length,
                 new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3),
                 new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.UNorm8, 4));
             mesh.SetVertexBufferData(vertices, 0, 0, vertices.Length);
-            mesh.subMeshCount = 3;
+            mesh.subMeshCount = 4;
             mesh.bounds = new Bounds(Vector3.zero, new Vector3(400000f, 60000f, 400000f));
             fadeMesh = BuildFadeMesh();
 
@@ -247,8 +252,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     halfZ = hz;
                     nodes = HoloGrid.Nodes(hx, hz);
                     HoloGrid.BuildIndices(hx, hz, eastWestIndices, northSouthIndices, triangleIndices, out int eastWestCount, out int northSouthCount, out int triangleCount);
-                    mesh.SetIndices(eastWestIndices, 0, eastWestCount, MeshTopology.Lines, EastWestSub, false);
-                    mesh.SetIndices(northSouthIndices, 0, northSouthCount, MeshTopology.Lines, NorthSouthSub, false);
                     mesh.SetIndices(triangleIndices, 0, triangleCount, MeshTopology.Triangles, SurfaceSub, false);
                 }
                 latticeShape = shape;
@@ -269,6 +272,12 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 cellX = cx;
                 cellZ = cz;
                 placed = true;
+                // Which segments are land lines and which are the few water ones depends on the heights just read.
+                HoloGrid.BuildLines(halfX, halfZ, cx, cz, field.SeaLevel, vertices, waterCells, eastWestIndices, northSouthIndices, waterIndices,
+                    out landEastWestCount, out landNorthSouthCount, out waterCount);
+                mesh.SetIndices(eastWestIndices, 0, landEastWestCount, MeshTopology.Lines, EastWestSub, false);
+                mesh.SetIndices(northSouthIndices, 0, landNorthSouthCount, MeshTopology.Lines, NorthSouthSub, false);
+                mesh.SetIndices(waterIndices, 0, waterCount, MeshTopology.Lines, WaterSub, false);
             }
             litVertices = HoloGrid.FillColours(field.SeaLevel, highest, ink, nodes, vertices);
             inkR = ink.R;
@@ -292,9 +301,12 @@ namespace BoscaliSummer.Modules.Command.Runtime
             ToMatrix(viewValues, ref viewMatrix);
             ToMatrix(projectionValues, ref projectionMatrix);
             // The material's colour is the line's strength: the east-west lines (bearing 90) and the north-south ones (bearing 0) against the way the camera looks.
-            float across = HoloGrid.LineStrength(90f, camera.Heading), away = HoloGrid.LineStrength(0f, camera.Heading);
+            // The MINI's are a little stronger overall; the water lines are one strength for both families.
+            float gain = HoloPresentation.LineGain(shape);
+            float across = HoloGrid.LineStrength(90f, camera.Heading) * gain, away = HoloGrid.LineStrength(0f, camera.Heading) * gain, wet = HoloGrid.WaterStrength * gain;
             eastWestBlock.SetColor(ColourId, new Color(across, across, across, 1f));
             northSouthBlock.SetColor(ColourId, new Color(away, away, away, 1f));
+            waterBlock.SetColor(ColourId, new Color(wet, wet, wet, 1f));
             commands.Clear();
             commands.SetRenderTarget(rt);
             commands.ClearRenderTarget(true, true, Color.black, HoloGrid.DepthClear(SystemInfo.usesReversedZBuffer));
@@ -302,8 +314,9 @@ namespace BoscaliSummer.Modules.Command.Runtime
             commands.SetViewport(new Rect(0f, 0f, pixelsWide, pixelsHigh));
             commands.SetViewProjectionMatrices(viewMatrix, GL.GetGPUProjectionMatrix(projectionMatrix, true));
             if (depthPath) commands.DrawMesh(mesh, surfaceModel, surfaceMaterial, SurfaceSub, 0);
-            commands.DrawMesh(mesh, lineModel, lineMaterial, EastWestSub, 0, eastWestBlock);
-            commands.DrawMesh(mesh, lineModel, lineMaterial, NorthSouthSub, 0, northSouthBlock);
+            if (landEastWestCount > 0) commands.DrawMesh(mesh, lineModel, lineMaterial, EastWestSub, 0, eastWestBlock);
+            if (landNorthSouthCount > 0) commands.DrawMesh(mesh, lineModel, lineMaterial, NorthSouthSub, 0, northSouthBlock);
+            if (waterCount > 0) commands.DrawMesh(mesh, lineModel, lineMaterial, WaterSub, 0, waterBlock);
             commands.SetViewProjectionMatrices(Matrix4x4.identity, Matrix4x4.identity);
             commands.DrawMesh(fadeMesh, Matrix4x4.identity, fadeMaterial, 0, 0);
             Graphics.ExecuteCommandBuffer(commands);
@@ -343,9 +356,11 @@ namespace BoscaliSummer.Modules.Command.Runtime
             if (additive != null && additiveOwned) Destroy(additive);
             additive = null;
             additiveOwned = false;
-            eastWestBlock = northSouthBlock = null;
+            eastWestBlock = northSouthBlock = waterBlock = null;
             vertices = null;
-            eastWestIndices = northSouthIndices = triangleIndices = null;
+            eastWestIndices = northSouthIndices = triangleIndices = waterIndices = null;
+            waterCells = null;
+            landEastWestCount = landNorthSouthCount = waterCount = 0;
             placed = false;
             depthPath = false;
             halfX = halfZ = nodes = 0;

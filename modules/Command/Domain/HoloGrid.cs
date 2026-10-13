@@ -6,7 +6,7 @@ namespace BoscaliSummer.Modules.Command.Domain
     /// The holo map's terrain tile: a square-celled lattice of nodes in ground axes, <c>2 * halfX + 1</c> by <c>2 * halfZ + 1</c>, snapped to the cell and centred on the aircraft within half a cell (vertex X and Z are metres from
     /// the snapped centre, Y the elevation in the game's global frame, one vertex per node). The cell size follows the picture's range (<see cref="CellMetres"/>: a fixed number of cells across twice the range), and the
     /// lattice is as big as the frame needs (<see cref="Extent"/>: the ground the frame sees at any heading, plus the rise of the hills before the frame's near edge), so the same lattice serves every heading and a
-    /// turn is the view matrix, never a rebuild. One vertex buffer feeds three index sets (<see cref="BuildIndices"/>): the lines running east-west, the lines running north-south and the filled surface the lines hide
+    /// turn is the view matrix, never a rebuild. One vertex buffer feeds the index sets (<see cref="BuildIndices"/> for the surface, <see cref="BuildLines"/> for the lines after each fill): the land's lines running east-west and north-south, the sparse faint net over open water and the filled surface the lines hide
     /// behind. The picture is additive light on black, so the colours are premultiplied: land in the HUD ink, brighter with height (the highest ground in view at the bright tone, never over a floor of
     /// <see cref="MinimumSpan"/> metres above the sea, so a plain does not shine like a peak), the sea a faint flat grid. The tile has no edge of its own: the frame clips it and the render fades the last
     /// <see cref="FadeShare"/> of it (<see cref="EdgeFade"/>). No Unity types.
@@ -15,8 +15,15 @@ namespace BoscaliSummer.Modules.Command.Domain
     {
         /// <summary>The land line at the sea's edge, as a share of the ink.</summary>
         internal const float LandFloor = .34f;
-        /// <summary>The sea line, as a share of the ink.</summary>
-        internal const float SeaStrength = .14f;
+        /// <summary>
+        /// What a sea node carries, as a share of the ink: the land floor, so a land line that ends in a sea node at the coast is as strong there as inland. The lines over water are not this: they are the
+        /// <see cref="WaterEvery"/>th lines only, drawn at <see cref="WaterStrength"/> of it (<see cref="BuildLines"/>).
+        /// </summary>
+        internal const float SeaStrength = LandFloor;
+        /// <summary>Over water only every this many lines of each family are drawn, counted by absolute cell index so the kept ones stay where they are as the aircraft moves.</summary>
+        internal const int WaterEvery = 8;
+        /// <summary>A water line's strength as a share of a land line's, both families alike (no emphasis for the way the camera looks over open water).</summary>
+        internal const float WaterStrength = .35f;
         /// <summary>Metres above the sea that count as the full height range at least.</summary>
         internal const float MinimumSpan = 300f;
         /// <summary>How far the bright tone is lifted from the ink toward white.</summary>
@@ -25,6 +32,8 @@ namespace BoscaliSummer.Modules.Command.Domain
         internal const float AwayStrength = .45f;
         /// <summary>How far the lines are lifted above the surface they are drawn on, in cells, so they do not fight it for the depth buffer.</summary>
         internal const float LineLift = .1f;
+        /// <summary>The MINI's lines are drawn this much stronger than the BIG map's (the material's strength, not the height shading): the small picture has to hold its own over bright snow and cloud.</summary>
+        internal const float MiniLineGain = 1.15f;
         /// <summary>The share of the frame at each edge over which the picture fades to nothing.</summary>
         internal const float FadeShare = .05f;
         /// <summary>The most cells from the centre to a side of the lattice (a lattice has at most (2 * this + 1) squared nodes: they fit 16-bit indices).</summary>
@@ -135,6 +144,70 @@ namespace BoscaliSummer.Modules.Command.Domain
             triangleCount = at;
         }
 
+        /// <summary>A node on the sea (at the sea's own level).</summary>
+        internal static bool IsSea(float height, float seaLevel) => height <= seaLevel + SeaTolerance;
+
+        /// <summary>Whether the line with this absolute cell index (east-west lines count rows, north-south ones columns) is one of the few drawn over water.</summary>
+        internal static bool WaterLineKept(int absoluteLine) => ((absoluteLine % WaterEvery) + WaterEvery) % WaterEvery == 0;
+
+        /// <summary>
+        /// Sorts the lattice's line segments after its heights are filled: the LAND lines (any segment that touches a cell with a node above the sea: all of them, whatever the strength of the node they end in) and
+        /// the WATER lines (a segment whose neighbouring cells, one or two, are all water: a cell is water when all four corners are sea), of which only every <see cref="WaterEvery"/>th line of each family is kept
+        /// (<see cref="WaterLineKept"/>, by absolute cell index: <paramref name="cellX"/> / <paramref name="cellZ"/> are the lattice centre's). Segments are index pairs as <see cref="BuildIndices"/> makes them: the
+        /// east-west and north-south land lines into their own arrays, both families of water lines into <paramref name="water"/>. <paramref name="waterCells"/> is scratch, (2 * halfX) * (2 * halfZ) long at least.
+        /// </summary>
+        internal static void BuildLines(int halfX, int halfZ, int cellX, int cellZ, float seaLevel, GhostVertex[] vertices, bool[] waterCells,
+            int[] landEastWest, int[] landNorthSouth, int[] water, out int landEastWestCount, out int landNorthSouthCount, out int waterCount)
+        {
+            int sx = 2 * halfX + 1, sz = 2 * halfZ + 1, cx = sx - 1, cz = sz - 1;
+            for (int j = 0; j < cz; j++)
+            for (int i = 0; i < cx; i++)
+            {
+                int a = j * sx + i, c = a + sx;
+                waterCells[j * cx + i] = IsSea(vertices[a].Y, seaLevel) && IsSea(vertices[a + 1].Y, seaLevel) && IsSea(vertices[c].Y, seaLevel) && IsSea(vertices[c + 1].Y, seaLevel);
+            }
+            int land = 0, other = 0, wet = 0;
+            for (int j = 0; j < sz; j++)
+            {
+                bool kept = WaterLineKept(cellZ + j - halfZ);
+                for (int i = 0; i < cx; i++)
+                {
+                    bool sea = (j >= cz || waterCells[j * cx + i]) && (j == 0 || waterCells[(j - 1) * cx + i]);
+                    if (!sea)
+                    {
+                        landEastWest[land++] = j * sx + i;
+                        landEastWest[land++] = j * sx + i + 1;
+                    }
+                    else if (kept)
+                    {
+                        water[wet++] = j * sx + i;
+                        water[wet++] = j * sx + i + 1;
+                    }
+                }
+            }
+            for (int i = 0; i < sx; i++)
+            {
+                bool kept = WaterLineKept(cellX + i - halfX);
+                for (int j = 0; j < cz; j++)
+                {
+                    bool sea = (i >= cx || waterCells[j * cx + i]) && (i == 0 || waterCells[j * cx + i - 1]);
+                    if (!sea)
+                    {
+                        landNorthSouth[other++] = j * sx + i;
+                        landNorthSouth[other++] = (j + 1) * sx + i;
+                    }
+                    else if (kept)
+                    {
+                        water[wet++] = j * sx + i;
+                        water[wet++] = (j + 1) * sx + i;
+                    }
+                }
+            }
+            landEastWestCount = land;
+            landNorthSouthCount = other;
+            waterCount = wet;
+        }
+
         /// <summary>
         /// Places every node of the lattice centred on a cell and reads its elevation (water at the field's sea level). Returns the highest elevation among the nodes within <paramref name="reach"/> metres of the centre
         /// (the ground the frame can see).
@@ -173,7 +246,7 @@ namespace BoscaliSummer.Modules.Command.Domain
             {
                 ref GhostVertex v = ref vertices[n];
                 float r, g, b;
-                if (v.Y <= seaLevel + SeaTolerance)
+                if (IsSea(v.Y, seaLevel))
                 {
                     r = ink.R * SeaStrength;
                     g = ink.G * SeaStrength;

@@ -175,7 +175,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 cues.Add(new Dictionary<string, object>
                 {
                     { "text", c.Text }, { "class", CueWords.Of(c.Class) }, { "severity", c.Severity.ToString() }, { "source", c.Source.ToString() },
-                    { "size", c.Size }, { "life", c.Life }, { "age", now - c.Arrival },
+                    { "size", c.Size }, { "life", c.Life }, { "age", now - c.Start }, { "delay", c.Start - c.Arrival },
                 });
             }
             HudBoard board = HudBoard.Instance;

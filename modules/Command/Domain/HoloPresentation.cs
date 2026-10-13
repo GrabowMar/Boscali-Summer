@@ -66,6 +66,9 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>The camera's tilt above the horizon for a presentation, in degrees.</summary>
         internal static float Tilt(HoloShape shape) => shape == HoloShape.Mini ? MiniTilt : BigTilt;
 
+        /// <summary>How much stronger the picture's lines are drawn: the MINI's by <see cref="HoloGrid.MiniLineGain"/>, the BIG map's as they are.</summary>
+        internal static float LineGain(HoloShape shape) => shape == HoloShape.Mini ? HoloGrid.MiniLineGain : 1f;
+
         /// <summary>
         /// Where the aircraft stands up the frame, as a share of the frame's height from its bottom edge: 38 % on the MINI heading up (the camera looks ahead of it), the middle on the MINI north up and always on
         /// the BIG one. <see cref="Aircraft"/> gives both coordinates.

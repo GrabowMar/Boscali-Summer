@@ -13,6 +13,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
     internal static class CueTimeline
     {
         public const float ShowSeconds = 0.32f, SnapSeconds = 0.14f, FlashSeconds = 0.12f, FadeSeconds = 0.35f, SlideSeconds = 0.12f;
+        /// <summary>Cues accepted within this many seconds of the one before are one burst, and a burst's cues start their SHOW <see cref="StaggerSeconds"/> apart, one after another, so they do not draw over each other.</summary>
+        public const float GroupSeconds = 0.05f, StaggerSeconds = 0.09f;
         /// <summary>How far outside its resting place each bracket half starts (and ends) in design units.</summary>
         public const float BracketRun = 46f;
         /// <summary>About 0.025 s a character to lock, never over 0.3 s for the whole message.</summary>
@@ -25,6 +27,17 @@ namespace BoscaliSummer.Modules.Hud.Domain
         {
             if (float.IsNaN(seconds) || float.IsInfinity(seconds) || seconds <= 0f) seconds = CueLog.DefaultSeconds;
             return Math.Min(CueLog.MaxSeconds, Math.Max(CueLog.MinLife, seconds));
+        }
+
+        /// <summary>
+        /// When a cue's SHOW starts: the instant it arrives, unless it arrives within <see cref="GroupSeconds"/> of the cue before it (<paramref name="previousArrival"/>), when it waits until <see cref="StaggerSeconds"/> after that
+        /// one started (<paramref name="previousStart"/>): three cues of one instant start 0, 0.09 and 0.18 s after it, and one that comes 0.2 s later is not held back. Until it starts a cue is invisible, but its slot is
+        /// already its own (the slides follow the arrivals), so nothing slides under it when it appears.
+        /// </summary>
+        public static float StartOf(float arrival, float previousArrival, float previousStart)
+        {
+            float later = previousStart + StaggerSeconds;
+            return arrival - previousArrival <= GroupSeconds && later > arrival ? later : arrival;
         }
 
         public static CuePhase PhaseOf(float age, float life) =>
@@ -66,7 +79,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>The alpha of the cue's words and furniture: 1 until the fade, then the five steps, 0 once the game's time is up.</summary>
         public static float Alpha(float age, float life)
         {
-            if (age >= life) return 0f;
+            if (age < 0f || age >= life) return 0f;
             if (age < life - FadeSeconds) return 1f;
             int step = (int)((age - (life - FadeSeconds)) / (FadeSeconds / Steps.Length));
             return Steps[Math.Min(Steps.Length - 1, Math.Max(0, step))];
@@ -81,10 +94,14 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>A number that is 0 while the cue stands still and otherwise steps every sixtieth of a second: the stack is drawn again when it changes (and not between).</summary>
         public static int Stage(float age, float life)
         {
+            if (age < 0f) return -2;      // not started yet (held back behind the cue before it)
             if (age >= life) return -1;
             bool moving = age < ShowSeconds || age >= life - FadeSeconds;
             return moving ? 1 + (int)(Math.Max(0f, age) * 60f) : 0;
         }
+
+        /// <summary>A number that steps every sixtieth of a second while a cue that arrived <paramref name="sinceArrival"/> ago is still sliding the older ones down, and is 0 after.</summary>
+        public static int SlideStage(float sinceArrival) => sinceArrival >= 0f && sinceArrival < SlideSeconds + 0.017f ? 1 + (int)(sinceArrival * 60f) : 0;
 
         /// <summary>One tone brighter: DIM to INK, INK to BRIGHT, BRIGHT to white; AMBER and RED to BRIGHT.</summary>
         public static ScopeTone Raise(ScopeTone tone)

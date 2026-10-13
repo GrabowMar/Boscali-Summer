@@ -317,6 +317,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 { "graphicsApi", SystemInfo.graphicsDeviceType.ToString() },
                 { "vertexCount", nodes },
                 { "litVertices", litVertices },
+                { "landLineSegments", (landEastWestCount + landNorthSouthCount) / 2 },
+                { "waterLineSegments", waterCount / 2 },
                 { "gridCellsX", halfX * 2 },
                 { "gridCellsZ", halfZ * 2 },
                 { "gridCellMetres", cellMetres },

@@ -198,7 +198,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// </summary>
         private float DrawCue(ScopeCanvas g, int place, Cue cue, float y, float clock, bool furniture, out float alpha)
         {
-            float age = clock - cue.Arrival, life = cue.Life;
+            float age = cue.Age(clock), life = cue.Life;
             alpha = CueTimeline.Alpha(age, life);
             if (alpha <= 0f) return 0f;
             bool flash = CueTimeline.Flash(age);

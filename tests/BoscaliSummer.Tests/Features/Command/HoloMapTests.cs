@@ -21,6 +21,7 @@ namespace BoscaliSummer.Tests.Features.Command
             TestHeights();
             TestIndices();
             TestColours();
+            TestWaterLines();
             TestEdgeFade();
             TestLineStrength();
             TestMatrices();
@@ -383,6 +384,87 @@ namespace BoscaliSummer.Tests.Features.Command
             v[v.Length - 1].R = 7;
             HoloGrid.FillColours(0f, highest, Ink, v.Length - 1, v);
             TestAssert.Eq(v[v.Length - 1].R, (byte)7, "Holo colours: a vertex past the count is left alone");
+        }
+
+        private static GhostVertex[] Coast(int halfX, int halfZ, int firstLandColumn)
+        {
+            // A synthetic lattice: sea (at the sea's level) west of firstLandColumn, land 100 m up from it eastward.
+            int sx = 2 * halfX + 1, sz = 2 * halfZ + 1;
+            var v = new GhostVertex[sx * sz];
+            for (int j = 0; j < sz; j++)
+            for (int i = 0; i < sx; i++) v[j * sx + i] = new GhostVertex { X = (i - halfX) * 625f, Y = i >= firstLandColumn ? 100f : 0f, Z = (j - halfZ) * 625f };
+            return v;
+        }
+
+        private static void TestWaterLines()
+        {
+            TestAssert.Eq(HoloGrid.WaterEvery, 8, "Holo water: every eighth line");
+            TestAssert.Near(HoloGrid.WaterStrength, .35f, "Holo water: ... at 35 % of a land line");
+            TestAssert.Near(HoloGrid.SeaStrength, HoloGrid.LandFloor, "Holo water: a sea node carries the land floor, so a land line that ends in one is as strong at the coast as inland");
+            foreach (int line in new[] { 0, 8, 16, 800, -8, -16, -800 }) TestAssert.That(HoloGrid.WaterLineKept(line), "Holo water: line " + line + " is kept");
+            foreach (int line in new[] { 1, 2, 7, 9, 15, 17, -1, -7, -9 }) TestAssert.That(!HoloGrid.WaterLineKept(line), "Holo water: line " + line + " is not");
+            int kept = 0;
+            for (int line = -40; line < 40; line++) if (HoloGrid.WaterLineKept(line)) kept++;
+            TestAssert.Eq(kept, 10, "Holo water: one line in eight over any run of them");
+            TestAssert.Near(HoloPresentation.LineGain(HoloShape.Mini), 1.15f, "Holo lines: the MINI's lines are 15 % stronger");
+            TestAssert.Near(HoloPresentation.LineGain(HoloShape.Big), 1f, "Holo lines: ... the BIG map's are as they are");
+
+            // A coast in a lattice of 9 x 9 nodes: sea in columns 0..5, land from column 6. Cells of columns 0..4 are water; the ones from column 5 touch land.
+            const int half = 4, sx = 9, sz = 9;
+            var buffers = new[] { new int[HoloGrid.MaxLineIndices], new int[HoloGrid.MaxLineIndices], new int[HoloGrid.MaxLineIndices] };
+            var cells = new bool[(sx - 1) * (sz - 1)];
+            GhostVertex[] v = Coast(half, half, 6);
+            HoloGrid.BuildLines(half, half, 0, 0, 0f, v, cells, buffers[0], buffers[1], buffers[2], out int landEw, out int landNs, out int water);
+            // Every land segment is there, whatever its row or column (none is thinned): 3 per row east-west, 4 columns of 8 north-south.
+            TestAssert.Eq(landEw, sz * 3 * 2, "Holo water: every east-west segment that touches land is a land line, in every row");
+            TestAssert.Eq(landNs, 4 * (sz - 1) * 2, "Holo water: ... and every north-south one, in every column");
+            for (int n = 0; n < landEw; n += 2) TestAssert.That(buffers[0][n] % sx >= 5, "Holo water: an east-west land segment starts at the coast or inland");
+            for (int n = 0; n < landNs; n += 2) TestAssert.That(buffers[1][n] % sx >= 5, "Holo water: a north-south land segment lies on the coast or inland");
+            // Water: the east-west line of row 4 (absolute line 0) over columns 0..5, and the north-south one of column 4 (absolute 0), the only kept lines of a lattice centred on cell 0.
+            TestAssert.Eq(water, 5 * 2 + (sz - 1) * 2, "Holo water: only the kept lines remain over open water (1 of 8 each way)");
+            for (int n = 0; n < water; n += 2)
+            {
+                int a = buffers[2][n], b = buffers[2][n + 1];
+                bool eastWest = b == a + 1;
+                TestAssert.That(eastWest ? a / sx == half : a % sx == half && b == a + sx, "Holo water: a water segment lies on a kept line");
+                TestAssert.That((a % sx) <= 5 && (b % sx) <= 5, "Holo water: ... in the sea");
+            }
+            // The kept lines stay where they are in the world as the lattice moves: shifted a cell east, the kept column is one node west of before.
+            HoloGrid.BuildLines(half, half, 1, 0, 0f, v, cells, buffers[0], buffers[1], buffers[2], out landEw, out landNs, out water);
+            bool columnKept = false;
+            for (int n = 0; n < water; n += 2)
+            {
+                int a = buffers[2][n], b = buffers[2][n + 1];
+                if (b == a + sx)
+                {
+                    TestAssert.Eq(a % sx, half - 1, "Holo water: the same absolute column is kept after the lattice moves a cell");
+                    columnKept = true;
+                }
+            }
+            TestAssert.That(columnKept, "Holo water: the kept column is still in the lattice");
+            HoloGrid.BuildLines(half, half, -3, 5, 0f, v, cells, buffers[0], buffers[1], buffers[2], out landEw, out landNs, out water);
+            for (int n = 0; n < water; n += 2)
+            {
+                int a = buffers[2][n], b = buffers[2][n + 1];
+                int line = b == a + 1 ? 5 + a / sx - half : -3 + a % sx - half;
+                TestAssert.That(HoloGrid.WaterLineKept(line), "Holo water: a kept segment's absolute line number is a multiple of 8 (got " + line + ")");
+            }
+            // Land counts do not depend on where the lattice is.
+            TestAssert.That(landEw == sz * 3 * 2 && landNs == 4 * (sz - 1) * 2, "Holo water: the land lines are the same wherever the lattice stands");
+
+            // All sea: nothing is a land line, and the water lines are all there is.
+            var open = new GhostVertex[sx * sz];
+            HoloGrid.BuildLines(half, half, 0, 0, 0f, open, cells, buffers[0], buffers[1], buffers[2], out landEw, out landNs, out water);
+            TestAssert.That(landEw == 0 && landNs == 0, "Holo water: open water has no land lines");
+            TestAssert.Eq(water, 2 * (sx - 1) * 2, "Holo water: ... one row and one column of the eight shown here, each the whole width");
+            // All land: nothing is thinned.
+            HoloGrid.BuildLines(half, half, 0, 0, 0f, Coast(half, half, 0), cells, buffers[0], buffers[1], buffers[2], out landEw, out landNs, out water);
+            TestAssert.That(landEw == sz * (sx - 1) * 2 && landNs == sx * (sz - 1) * 2 && water == 0, "Holo water: dry land keeps every line");
+            // A single land node makes its four cells land: the lines around it keep full strength.
+            GhostVertex[] island = Coast(half, half, sx);
+            island[half * sx + half].Y = 50f;
+            HoloGrid.BuildLines(half, half, 7, 7, 0f, island, cells, buffers[0], buffers[1], buffers[2], out landEw, out landNs, out water);
+            TestAssert.That(landEw == 6 * 2 && landNs == 6 * 2, "Holo water: the 12 segments of the four cells around one dry node are land lines (6 east-west, 6 north-south), however the lines count");
         }
 
         private static void TestEdgeFade()
@@ -1065,8 +1147,10 @@ namespace BoscaliSummer.Tests.Features.Command
                 var eastWest = new int[HoloGrid.MaxLineIndices];
                 var northSouth = new int[HoloGrid.MaxLineIndices];
                 var triangles = new int[HoloGrid.MaxTriangleIndices];
+                var water = new int[HoloGrid.MaxLineIndices];
+                var wetCells = new bool[(HoloGrid.MaxSide - 1) * (HoloGrid.MaxSide - 1)];
                 int nodes = HoloGrid.Nodes(halfX, halfZ);
-                double heights = 0, colours = 0, indices = 0;
+                double heights = 0, colours = 0, indices = 0, lines = 0;
                 const int warm = 20, runs = 200;
                 for (int n = -warm; n < runs; n++)
                 {
@@ -1078,17 +1162,22 @@ namespace BoscaliSummer.Tests.Features.Command
                     long c = Stopwatch.GetTimestamp();
                     HoloGrid.BuildIndices(halfX, halfZ, eastWest, northSouth, triangles, out _, out _, out _);
                     long d = Stopwatch.GetTimestamp();
+                    HoloGrid.BuildLines(halfX, halfZ, cx, cz, field.SeaLevel, v, wetCells, eastWest, northSouth, water, out _, out _, out _);
+                    long e = Stopwatch.GetTimestamp();
                     if (n < 0) continue;
                     heights += (b - a) * 1000.0 / Stopwatch.Frequency;
                     colours += (c - b) * 1000.0 / Stopwatch.Frequency;
                     indices += (d - c) * 1000.0 / Stopwatch.Frequency;
+                    lines += (e - d) * 1000.0 / Stopwatch.Frequency;
                 }
                 heights /= runs;
                 colours /= runs;
                 indices /= runs;
+                lines /= runs;
+                Console.WriteLine("Holo lattice {0}: the land / water line sort after each fill {1:0.000} ms", shape, lines);
                 Console.WriteLine("Holo lattice fill, {0} heading up at {1} km ({2} x {3} cells of {4:0} m, {5} nodes): heights {6:0.000} ms + colours {7:0.000} ms = {8:0.000} ms per cell change; index sets {9:0.000} ms (only when the size changes)",
                     shape, range, 2 * halfX, 2 * halfZ, cell, nodes, heights, colours, heights + colours, indices);
-                TestAssert.That(heights + colours < 3.0, "Holo grid: a full fill of the " + shape + " lattice must stay a few milliseconds (took " + (heights + colours) + " ms)");
+                TestAssert.That(heights + colours + lines < 4.0, "Holo grid: a full fill of the " + shape + " lattice with its line sort must stay a few milliseconds (took " + (heights + colours + lines) + " ms)");
             }
         }
 
