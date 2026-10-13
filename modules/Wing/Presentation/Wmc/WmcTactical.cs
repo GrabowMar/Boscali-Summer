@@ -44,8 +44,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public WmcForm Form => form;
 
-        public WmcRoute Route => route;
-
         public int Sub => sub;
 
         public string Hint => last != null && last.Count == 0 && !last.Client
@@ -105,19 +103,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             WmcNameField.BlurAny();
             if (last != null) Refresh(last);
             flow.RequestRelayout();
-        }
-
-        /// <summary>A control of a sub-page shows that sub-page first (automation).</summary>
-        public void ShowSubFor(string id)
-        {
-            if (id == null) return;
-            route.RevealFor(id);
-            if (id.StartsWith("form.", System.StringComparison.Ordinal)) ShowSub(SubFormation);
-            else if (id.StartsWith("plan.", System.StringComparison.Ordinal)) ShowSub(SubRoute);
-            else if (id.StartsWith("tac.orders.", System.StringComparison.Ordinal) || id.StartsWith("tac.react.", System.StringComparison.Ordinal)
-                     || id.StartsWith("tac.posture.", System.StringComparison.Ordinal)                     || id.StartsWith("tac.stance.", System.StringComparison.Ordinal) || id.StartsWith("tac.queue.", System.StringComparison.Ordinal)
-                     || id.StartsWith("tac.alert", System.StringComparison.Ordinal))
-                ShowSub(SubOrders);
         }
 
         /// <summary>A sub-page by its label (automation; ROUTE and FORM are the old names).</summary>

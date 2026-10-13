@@ -28,7 +28,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
     /// <summary>The radar colour ladder, in words as well as levels.</summary>
     internal static class RadarScale
     {
-        public const int Levels = 6;
 
         /// <summary>0 = no echo … 5 = extreme, from reflectivity in dBZ.</summary>
         public static int Level(float dbz)
@@ -39,19 +38,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
             if (dbz < 45f) return 3;
             if (dbz < 52f) return 4;
             return 5;
-        }
-
-        public static string Word(int level)
-        {
-            switch (level)
-            {
-                case 1: return "LIGHT";
-                case 2: return "MODERATE";
-                case 3: return "HEAVY";
-                case 4: return "INTENSE";
-                case 5: return "EXTREME";
-                default: return "NONE";
-            }
         }
     }
 }

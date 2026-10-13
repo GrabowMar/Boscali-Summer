@@ -74,56 +74,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// <see cref="WmcControls"/> (see <see cref="IWmcPage"/>).</summary>
     internal static class WmcKit
     {
-        /// <summary>The tallest empty band (px) inside <paramref name="body"/> between visible graphics on the page on show, the
-        /// trailing space under the last one excluded (spec bezel v2 §10 <c>gap_px</c>). Backdrops, spines and viewports (taller
-        /// than 120 px) do not count as content. Automation only: it allocates.</summary>
-        public static int LargestGap(RectTransform content, Rect body)
-        {
-            var spans = new List<Vector2>();
-            Rect cr = content.rect;
-            var corners = new Vector3[4];
-            float bodyBottom = body.y - body.height;
-            foreach (Graphic g in content.GetComponentsInChildren<Graphic>(false))
-            {
-                if (!g.enabled || g.color.a <= 0.01f) continue;
-                if (g is TMP_Text t && string.IsNullOrEmpty(t.text)) continue;
-                g.rectTransform.GetWorldCorners(corners);
-                float top = content.InverseTransformPoint(corners[1]).y - cr.yMax;
-                float bottom = content.InverseTransformPoint(corners[0]).y - cr.yMax;
-                if (top - bottom > 120f) continue;
-                top = Mathf.Min(top, body.y);
-                bottom = Mathf.Max(bottom, bodyBottom);
-                if (top - bottom <= 0.5f) continue;
-                spans.Add(new Vector2(top, bottom));
-            }
-            spans.Sort((a, b) => b.x.CompareTo(a.x));
-            float cursor = body.y;
-            int gap = 0;
-            foreach (Vector2 span in spans)
-            {
-                if (span.x < cursor) gap = Mathf.Max(gap, Mathf.RoundToInt(cursor - span.x));
-                cursor = Mathf.Min(cursor, span.y);
-            }
-            return gap;
-        }
-
-        /// <summary>Labels that would still spill out of their box at their smallest size (the automation's text-fit audit).
-        /// ponytail: estimated from the preferred width at the largest size scaled to the smallest; measure per size if the
-        /// estimate ever disagrees with a screenshot.</summary>
-        public static int Overflow(RectTransform root)
-        {
-            if (root == null) return 0;
-            int n = 0;
-            foreach (TMP_Text t in root.GetComponentsInChildren<TMP_Text>(false))
-            {
-                if (string.IsNullOrEmpty(t.text) || t.enableWordWrapping) continue;
-                float width = t.rectTransform.rect.width;
-                if (width <= 1f) continue;
-                float scale = t.enableAutoSizing && t.fontSizeMax > 0f ? t.fontSizeMin / t.fontSizeMax : 1f;
-                if (t.GetPreferredValues(t.text).x * scale > width + 1f) n++;
-            }
-            return n;
-        }
 
         /// <summary>A small, single-line text label (kit v2 <see cref="AvTextRole.ProseSmall"/>, coloured by the legacy class
         /// name where the fui sheet defines it).</summary>

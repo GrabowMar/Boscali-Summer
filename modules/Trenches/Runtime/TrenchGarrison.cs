@@ -151,17 +151,6 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             return changed;
         }
 
-        internal bool ObservedBy(FactionHQ observer)
-        {
-            if (observer == null) return false;
-            for (int i = 0; i < defenders.Length; i++)
-            {
-                Building unit = defenders[i];
-                if (unit != null && !unit.disabled && observer.IsTargetBeingTracked(unit)) return true;
-            }
-            return false;
-        }
-
         private bool Spawn(int slot)
         {
             var spawner = NetworkSceneSingleton<Spawner>.i;

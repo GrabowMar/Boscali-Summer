@@ -8,9 +8,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     {
         public static readonly WingDoctrine[] Profiles = { WingDoctrine.Reserve, WingDoctrine.Escort, WingDoctrine.Sweep };
         public static readonly float[] FallBackRatios = { 0f, 1.5f, 2f, 3f };
-        public static readonly string[] FallBackWords = { "NEVER", "1.5 : 1", "2 : 1", "3 : 1" };
-        public static readonly string[] WinchesterWords = { "REJOIN", "RTB", "REFIT" };
-        public static readonly string[] BingoWords = { "RTB", "REFIT" };
         public const string HostOnly = "The host sets these";
 
         public static string Cannot(WmcContext c) => c != null && c.Client ? HostOnly : "Wing Command is not ready";

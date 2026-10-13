@@ -32,8 +32,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return supplyFit ? "SUPPLY FIT" : "SAVED";
         }
 
-        public static string Picker(string template) => (template ?? NoTemplate) + " ›";
-
         public static string Chain(string code, string template, int stations) =>
             template == null ? code + " › " + NoTemplate : code + " › " + template + " › " + Count(stations, "STATION", "STATIONS");
 

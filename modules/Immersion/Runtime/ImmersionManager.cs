@@ -66,7 +66,6 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         }
 
         public string EffectId => "immersion";
-        public FxBudget Budget => new FxBudget(0, 1, 6, true);
 
         public void ReleaseFx()
         {

@@ -33,7 +33,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
     {
         private const int MaximumFactions = 8;
         private const float WorldSeconds = 5f, SnapshotSeconds = 1f;
-        private const int AiTeams = 2;
 
         private sealed class FactionFront
         {

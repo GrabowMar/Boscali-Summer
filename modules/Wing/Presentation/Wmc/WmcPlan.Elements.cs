@@ -282,9 +282,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             return n;
         }
 
-        private static string LaneName(WingService w, int e) =>
-            w != null && w.Roster.InUse(e) ? w.Roster.Name(e) : ElementRoster.Letter(e);
-
         /// <summary>Where lane <paramref name="e"/>'s element is and how fast it goes: its task lead when one flies, else its members'
         /// mean. False when it has none.</summary>
         internal static bool From(WingService w, int e, out float x0, out float z0, out float speed)

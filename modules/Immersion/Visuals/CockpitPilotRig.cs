@@ -379,12 +379,6 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             { throttleGrip = throttle.InverseTransformPoint(ThrottleHand.position); throttleRotation = Quaternion.Inverse(throttle.rotation) * ThrottleHand.rotation; }
         }
 
-        internal void SetControls(Transform stickTransform, Vector3 stickLocalGrip, Transform throttleTransform, Vector3 throttleLocalGrip)
-        {
-            SetControls(stickTransform, throttleTransform);
-            stickGrip = stickLocalGrip; throttleGrip = throttleLocalGrip;
-        }
-
         internal void AttachControls(Transform stickTransform, Vector3 stickLocalGrip, Quaternion stickLocalRotation,
             Transform throttleTransform, Vector3 throttleLocalGrip, Quaternion throttleLocalRotation)
         {

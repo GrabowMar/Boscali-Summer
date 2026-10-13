@@ -19,8 +19,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// I1: a card stuck on it and its RTB went to the wrong wingman). INSPECT keeps its own aircraft.</summary>
         public uint Inspected { get; private set; }
 
-        public void Inspect(uint id) => Inspected = id;
-
         public void Toggle(uint id)
         {
             element = -1;

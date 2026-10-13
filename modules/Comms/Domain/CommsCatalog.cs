@@ -203,22 +203,15 @@ namespace BoscaliSummer.Modules.Comms.Domain
 
         public static readonly string[] Throws = { "ROCK", "PAPER", "SCISSORS" };
 
-        /// <summary>Map hunt round lengths, in seconds.</summary>
-        public static readonly int[] HuntDurations = { 30, 45, 60, 90 };
-
         public static bool ValidPing(int index) => index >= 0 && index < Pings.Length;
         public static bool ValidSticker(int index) => index >= 0 && index < Stickers.Length;
         public static bool ValidPen(int index) => index >= 0 && index < Pens.Length;
         public static bool ValidWidth(int index) => index >= 0 && index < PenWidths.Length;
         public static bool ValidCall(int index) => index >= 0 && index < Calls.Length;
-        public static bool ValidDice(int index) => index >= 0 && index < DiceSides.Length;
         public static bool ValidThrow(int index) => index >= 0 && index < Throws.Length;
 
         public static int PollDuration(int index) =>
             PollDurations[index < 0 ? 0 : index >= PollDurations.Length ? PollDurations.Length - 1 : index];
-
-        public static int HuntDuration(int index) =>
-            HuntDurations[index < 0 ? 0 : index >= HuntDurations.Length ? HuntDurations.Length - 1 : index];
 
         /// <summary>The coin reads as words; the dice read as numbers.</summary>
         public static string DiceFace(int sides, int value)

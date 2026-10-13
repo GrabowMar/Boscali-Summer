@@ -28,8 +28,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Paint();
         }
 
-        public string Word => word;
-
         public void Place(float x, float y, float w, float h)
         {
             AvLay.Place(wash.rectTransform, x, y, w, h);
@@ -447,10 +445,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             slot = AvText.Make(Rect, "Slot", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
             Restyle();
         }
-
-        public string NameText => name.text;
-
-        public string SlotText => slot.text;
 
         /// <summary>Sets the words; true when the slot line changed (the caller relayouts).</summary>
         public bool SetText(string nameText, string slotText)

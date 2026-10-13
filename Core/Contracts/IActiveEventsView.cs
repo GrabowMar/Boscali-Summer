@@ -19,12 +19,6 @@ namespace BoscaliSummer.Core.Contracts
         /// <summary>The event rolling now, or null while the theater is calm.</summary>
         ActiveEventView Current { get; }
 
-        /// <summary>Bounded history, oldest first; never backfilled to a late joiner.</summary>
-        IReadOnlyList<ActiveEventView> History { get; }
-
-        /// <summary>Live modifier on support allocation costs; exactly 1 when calm.</summary>
-        float SupportCostMultiplier { get; }
-
         /// <summary>
         /// The same factor for one player, including any response they bought and any
         /// faction the active event is aimed at. The host answers this per requester; a

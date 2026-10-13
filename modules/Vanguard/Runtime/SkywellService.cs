@@ -113,9 +113,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         public static int Rounds(Aircraft tanker) =>
             instance != null && tanker != null && instance.kits.TryGetValue(tanker, out Kit k) ? k.Rounds : -1;
 
-        public static TenderState StateOf(Aircraft tanker) =>
-            instance != null && tanker != null && instance.kits.TryGetValue(tanker, out Kit k) ? k.State : TenderState.Stowed;
-
         /// <summary>
         /// Host: the slots the steered AI receivers fly to right now, whichever kit serves them or called them in: a receiver being
         /// served (or called in) flies to the hold slot, a just-served one to its break lane.

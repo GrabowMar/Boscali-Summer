@@ -512,26 +512,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         public static string RankName(WingRank rank) => PilotPerks.RankName(rank);
 
-        // Roster presentation.
-
-        /// <summary>Build a fresh display roster with flying pilots and seniority first, losses last.
-        /// Panels refresh this short list as XP changes.</summary>
-        public static List<WingPilot> DisplayRoster()
-        {
-            var alive = new List<WingPilot>();
-            var dead = new List<WingPilot>();
-            for (int i = 0; i < roster.Count; i++)
-            {
-                WingPilot pilot = roster[i];
-                if (pilot.Lost) dead.Add(pilot);
-                else alive.Add(pilot);
-            }
-
-            alive.Sort(CompareByXp);
-            alive.AddRange(dead);
-            return alive;
-        }
-
         /// <summary>Selectable pilots in descending seniority.</summary>
         public static List<WingPilot> SelectablePilots()
         {

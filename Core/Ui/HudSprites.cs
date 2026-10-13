@@ -46,10 +46,6 @@ namespace BoscaliSummer.Core.Ui
             return 0.5f * u + 0.5f * u * u * (3f - 2f * u);
         }
 
-        /// <summary>The base game's HUD panel shape: a dark slab with its lower-left corner cut at 45°.
-        /// 9-sliced so the cut stays 14 px at any size.</summary>
-        public static Sprite Chamfer => chamfer != null ? chamfer : (chamfer = BakeChamfer("BoscaliHud_Chamfer", 40, 14f));
-
         /// <summary>Texels of the left (and right) ramp of a <see cref="SunBand"/>: the sprite carries no size of its own, the image's <c>pixelsPerUnitMultiplier</c> is texels / (design units x board unit).</summary>
         public const int BandRamp = 40;
 
@@ -84,28 +80,6 @@ namespace BoscaliSummer.Core.Ui
             texture.Apply(false, false);
             Sprite sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f, 0u, SpriteMeshType.FullRect, border);
             sprite.name = texture.name;
-            sprite.hideFlags = HideFlags.HideAndDontSave;
-            return sprite;
-        }
-
-        private static Sprite BakeChamfer(string name, int size, float cut)
-        {
-            var texture = new Texture2D(size, size, TextureFormat.RGBA32, false)
-            {
-                name = name, filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.HideAndDontSave,
-            };
-            for (int y = 0; y < size; y++)
-                for (int x = 0; x < size; x++)
-                {
-                    // Signed distance (px) inside the diagonal x + y = cut, 1 px anti-aliased edge.
-                    float d = ((x + 0.5f) + (y + 0.5f) - cut) * 0.70710678f;
-                    texture.SetPixel(x, y, new Color(1f, 1f, 1f, Mathf.Clamp01(d + 0.5f)));
-                }
-            texture.Apply(false, true);
-            float border = cut + 2f;
-            Sprite sprite = Sprite.Create(texture, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), 100f, 0u,
-                SpriteMeshType.FullRect, new Vector4(border, border, border, border));
-            sprite.name = name;
             sprite.hideFlags = HideFlags.HideAndDontSave;
             return sprite;
         }

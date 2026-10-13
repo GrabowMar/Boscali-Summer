@@ -11,9 +11,6 @@ namespace BoscaliSummer.Core.Contracts
         /// <summary>Stable lowercase id, e.g. "canopy" or "rain-field".</summary>
         string EffectId { get; }
 
-        /// <summary>Declared cost for diagnostics; individual limits are owner-enforced.</summary>
-        FxBudget Budget { get; }
-
         /// <summary>Release every allocation (RTs, clips, materials, volumes). Idempotent.</summary>
         void ReleaseFx();
 

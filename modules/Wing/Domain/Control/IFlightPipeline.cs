@@ -14,14 +14,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// <summary>Seed every loop from the aircraft and the output actually applied.</summary>
         void Track(in AircraftState s, in ControlOutput applied, AirframeProfile p);
 
-        /// <summary>The roll stick really applied after this tick's Step, when the caller overrode the output.</summary>
-        void NoteAppliedRoll(float appliedRoll);
-
         /// <summary>Which constraint bound the last command, for the HUD, overlay and telemetry.</summary>
         BindingReport Report { get; }
-
-        /// <summary>The attitude-level demand of the last tick (bank, load factor, energy rate) for telemetry.</summary>
-        AttitudeCommand LastAttitude { get; }
 
         bool GcasActive { get; }
     }

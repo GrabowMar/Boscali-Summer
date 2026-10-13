@@ -58,7 +58,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         }
 
         public bool Final => Outcome != TaskedOutcome.Queued;
-        public string Words => TaskedWords.Of(Outcome, Detail);
         internal TaskedResult AsReplay() => new TaskedResult(Outcome, CallId, RequestId, Charged, Detail, true);
     }
 
@@ -220,7 +219,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         }
 
         public TaskedBoard Board => board;
-        public bool Retired => retired;
         /// <summary>Raised once when a queued claim reaches its final verdict (winner, loser, failure or scene end).</summary>
         public event Action<ulong, int, TaskedResult> Resolved;
 

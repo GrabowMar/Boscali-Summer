@@ -96,41 +96,6 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         /// <summary>Server lines on the host, replicated curves on clients: what to draw.</summary>
         internal IReadOnlyList<TrenchLine> DisplayLines => GameAccess.IsServer() ? Lines : clientLineList;
 
-        public void CountNear(FactionHQ observer, float x, float z, float radius,
-            out int friendlyDefenders, out int observedHostileDefenders, out int suppressedFriendly)
-        {
-            friendlyDefenders = observedHostileDefenders = suppressedFriendly = 0;
-            if (observer == null || settings == null || !settings.Enabled.Value ||
-                !GameAccess.IsServer() || radius <= 0f) return;
-            float radiusSq = radius * radius;
-            for (int i = 0; i < lines.Count; i++)
-            {
-                TrenchLine line = lines[i];
-                if (line == null || line.Overrun || line.DefenderCount <= 0 || line.Curve == null) continue;
-                float dx = line.Center.x - x, dz = line.Center.z - z;
-                float reach = radius + line.Radius;
-                if (dx * dx + dz * dz > reach * reach) continue;
-                bool near = false;
-                for (int station = 0; station < line.Curve.Length; station++)
-                {
-                    dx = line.Curve[station].x - x;
-                    dz = line.Curve[station].z - z;
-                    if (dx * dx + dz * dz > radiusSq) continue;
-                    near = true;
-                    break;
-                }
-                if (!near) continue;
-                if (ReferenceEquals(line.OwnerHq, observer))
-                {
-                    friendlyDefenders += line.DefenderCount;
-                    if (line.Suppressed) suppressedFriendly += line.DefenderCount;
-                }
-                else if (garrisons.TryGetValue(line.Id, out TrenchGarrison garrison) &&
-                         garrison.ObservedBy(observer))
-                    observedHostileDefenders += line.DefenderCount;
-            }
-        }
-
         /// <summary>Client-side: a committed or grown curve arrives; carve the same ditch.</summary>
         internal void ReceiveGeometry(int id, int ownerHash, TrenchStage stage,
             Vector3[] curve, Vector3[] threat, Vector3[] support, Vector3[] redoubt,

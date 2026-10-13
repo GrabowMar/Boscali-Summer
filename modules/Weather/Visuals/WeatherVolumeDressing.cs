@@ -22,7 +22,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
     internal sealed class WeatherVolumeDressing : IClientEffect
     {
         public string EffectId => "clouds";
-        public FxBudget Budget => new FxBudget(16 * 1024 * 1024, 3, 0, true);
         public void ReleaseFx() => Restore();
         public void DescribeFx(IDictionary<string, object> state)
         {
@@ -104,11 +103,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         internal int TargetWidth => pass.Width;
         internal int TargetHeight => pass.Height;
         internal long TargetBytes => pass.TargetBytes;
-
-        /// <summary>False once the shader or noise is known to be unavailable: the caller
-        /// keeps native clouds. True before the first frame, so native clouds never pop in
-        /// while the volume preloads.</summary>
-        internal bool Usable => !failed;
 
         internal WeatherVolumeDressing(ManualLogSource log)
         {

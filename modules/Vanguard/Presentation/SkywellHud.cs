@@ -64,23 +64,6 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             }
         }
 
-        // The player's own unit system: the cues used to hard-code metres and tonnes.
-        private static readonly char[] Scratch = new char[24];
-
-        private static bool Imperial => PlayerSettings.unitSystem != PlayerSettings.UnitSystem.Metric;
-
-        /// <summary>A short distance in the player's units: "12m" or "39ft".</summary>
-        private static string Dist(float metres)
-        {
-            int len = AvUnitTable.AltitudeReading(Scratch, 0, metres, Imperial ? AvUnits.Imperial : AvUnits.Metric);
-            return new string(Scratch, 0, len);
-        }
-
-        /// <summary>A stock in the player's units: "12.3 t" or "27100 lb".</summary>
-        private static string Mass(float kg, int decimals) => Imperial
-            ? Mathf.Round(kg * 2.20462f / 100f) * 100f + " lb"
-            : (kg / 1000f).ToString(decimals == 1 ? "0.0" : "0.00", System.Globalization.CultureInfo.InvariantCulture) + " t";
-
         public void Toggle()
         {
             if (Local(out Aircraft a) && SkywellBoard.KitStation(a) != null) SkywellNet.RequestToggle(a);

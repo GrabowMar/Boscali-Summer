@@ -35,8 +35,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
             Restyle();
         }
 
-        internal RectTransform Rect => rect;
-
         /// <summary>The four digits "mmss" (StrPanelText.Flap); "" shows nothing.</summary>
         internal void Set(string mmss)
         {

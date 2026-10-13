@@ -31,6 +31,5 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         public bool IsActive(float now) => now < ExpiryTime;
-        public float SecondsRemaining(float now) => Mathf.Max(0f, ImpactTime - now);
     }
 }

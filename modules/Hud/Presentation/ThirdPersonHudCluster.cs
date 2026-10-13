@@ -110,8 +110,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             public float LastClosure;
         }
 
-        public bool Available => root != null;
-
         /// <summary>The flight boxes are on screen (the board asks so that it can take them down the frame third person ends while the missile card stays).</summary>
         public bool FlightShown => builtActive && flightShown;
 
@@ -443,9 +441,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             PresentTargetCard(cameraTexture, cameraCode, rangeM, closureMps, screenW, screenH, ink, units);
             PresentMissileCard(ThirdPersonHudLayout.MissileCard(screenW, screenH, raised), ink, units);
         }
-
-        /// <summary>The RWR panel look: near-black plate tinted toward the theme ink.</summary>
-        private static Color PlateTint(Color ink) => new Color(ink.r * 0.04f, ink.g * 0.07f, ink.b * 0.08f, 0.62f);
 
         private static Color WithAlpha(Color c, float a) => new Color(c.r, c.g, c.b, a);
 

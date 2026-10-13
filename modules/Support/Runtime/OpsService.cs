@@ -85,16 +85,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             ResetForScene();
         }
 
-        // ---- Reads ---------------------------------------------------------------------------------
-
-        internal bool TryDesk(FactionHQ owner, out OpsDesk desk)
-        {
-            desk = null;
-            if (owner == null || !factions.TryGetValue(owner, out FactionOps f)) return false;
-            desk = f.Desk;
-            return true;
-        }
-
         private bool Enabled => manager?.Settings != null && manager.Settings.Enabled.Value && manager.Settings.OpsEnabled.Value;
 
         /// <summary>The vulnerable anchor of an operation stands: the data center for CYBER operations (and, while an ASAT counts down, its launcher), the held building for the FOB.</summary>

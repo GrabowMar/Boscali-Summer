@@ -79,7 +79,5 @@ namespace BoscaliSummer.Modules.Support.Presentation
         void Send();
         void SetSource(BirdKind source);
         void CycleZoom();
-        /// <summary>Any real operator input on the feed (keeps the idle clock and the host lease).</summary>
-        void Touch();
     }
 }

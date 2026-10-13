@@ -93,7 +93,6 @@ namespace BoscaliSummer.Fire
         internal double MaxApplyMs { get; private set; }
         internal double LastCarveMs { get; private set; }
         internal int CarveCount { get; private set; }
-        internal int PendingJobs => jobs.Count;
 
         private void Awake() => Instance = this;
         private void Start()

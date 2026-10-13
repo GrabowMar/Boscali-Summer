@@ -92,7 +92,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public SkyBuilder Weight(float value) { weight = value; return this; }
         public SkyBuilder Patchy() { patchy = true; return this; }
         public SkyBuilder Embedded() { embedded = true; return this; }
-        public SkyBuilder Jitter(float baseFrac, float cover, int rungs) { jitter = new JitterRow(baseFrac, cover, rungs); return this; }
         public SkyBuilder Roles(params Role[] values) { foreach (Role r in values) roles |= r; return this; }
 
         internal SkyDef Build(int index)

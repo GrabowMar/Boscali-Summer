@@ -54,8 +54,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private readonly Vector3[] corners = new Vector3[4];
 
-        public bool Available => root != null;
-
         /// <summary>Where a page's events go (the board's ticker): set by the owner of the board.</summary>
         public Action<string, HudTone, string, string> Notice;
 

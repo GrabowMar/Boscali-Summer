@@ -45,8 +45,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal int FrontSetFocus(Front front, float x, float z) =>
             SendSpace(SpaceCommandKind.FrontFocus, 0, new[] { Pack(front, 0), SofCodes.PackPoint(x, z) });
 
-        internal int FrontClearFocus(Front front) => SendSpace(SpaceCommandKind.FrontFocus, 0, new[] { Pack(front, 1), 0 });
-
         /// <summary>Queue a programme on a front.</summary>
         internal int FrontQueue(Front front, ProgrammeId programme) =>
             FrontRules.BelongsTo(front, programme) ? SendSpace(SpaceCommandKind.FrontQueue, Pack(front, (int)programme), null) : 0;
@@ -58,8 +56,5 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>Burn one of the faction's satellites to a map point (u,v in 0..1); the host judges fuel and burn state.</summary>
         internal int RelocateBird(int bird, float u, float v) =>
             bird < 0 || bird >= SpaceRules.BirdCount ? 0 : SendSpace(SpaceCommandKind.RelocateBird, 0, new[] { bird, GeoSpace.Pack(u, v) });
-
-        /// <summary>The "ALL" amount of a donation button: the host clamps it to the bar's remaining cost and the pilot's balance.</summary>
-        internal const int DonateAll = 100000;
     }
 }

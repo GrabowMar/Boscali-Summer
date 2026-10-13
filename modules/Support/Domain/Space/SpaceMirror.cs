@@ -328,8 +328,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>Last generation handed out. Never decreases, not even across a scene reset.</summary>
         public int Generation => generation;
 
-        public bool Has(ulong player) => subs.ContainsKey(player);
-
         /// <summary>Creates the member's record when absent. True only when it was newly created (a fresh join).</summary>
         public bool Ensure(ulong player)
         {

@@ -159,21 +159,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             if (store.Tally(lines) && Write()) WingLog.Verbose("[Pilots] service records written");
         }
 
-        /// <summary>Scenario hygiene: a fresh <c>pilots.sim.json</c>, so a scenario never touches the player's saved pilots.</summary>
-        public static void UseScratch()
-        {
-            scratch = true;
-            try
-            {
-                if (File.Exists(FilePath)) File.Delete(FilePath);
-            }
-            catch (Exception e)
-            {
-                WingLog.Logger.LogWarning("[Pilots] could not clear " + SimFile + ": " + e.Message);
-            }
-            Load();
-        }
-
         /// <summary>The pilots in every readable top-level JSON file of <paramref name="dir"/> (read only); <paramref name="files"/> counts the files.</summary>
         private static List<CustomPilotRecord> LoadFolder(string dir, out int files)
         {

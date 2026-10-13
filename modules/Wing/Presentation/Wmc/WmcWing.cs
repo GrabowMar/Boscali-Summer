@@ -62,10 +62,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public int Sub => sub;
 
-        public string SubName => sub >= 0 && sub < SubLabels.Length ? SubLabels[sub] : "";
-
-        public WmcStudio Studio => studioPage;
-
         public string Hint => sub == SubStudio ? studioPage.Hint : hint;
 
         public string Alert => alert;
@@ -113,16 +109,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             for (int i = 0; i < subTabs.Length; i++) subTabs[i].Latched = i == k;
             AvPopup.CloseAny();
             if (last != null) Refresh(last);
-        }
-
-        /// <summary>A control of a sub-page shows that sub-page first (automation).</summary>
-        public void ShowSubFor(string id)
-        {
-            if (id == null) return;
-            if (id.StartsWith("sq.sub.", System.StringComparison.Ordinal)) return;
-            if (id.StartsWith("insp.", System.StringComparison.Ordinal)) ShowSub(SubAircraft);
-            else if (id.StartsWith("sq.", System.StringComparison.Ordinal)) ShowSub(SubStudio);
-            else if (id.StartsWith("wing.", System.StringComparison.Ordinal)) ShowSub(SubRoster);
         }
 
         /// <summary>The wing and the roster's statuses, once a panel refresh; the statuses are rebuilt only when the roster's version

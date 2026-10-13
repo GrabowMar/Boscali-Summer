@@ -1492,12 +1492,6 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             NotifyPlayer("CHANGING WEATHER RESUMED", null);
         }
 
-        // ---- Weather console (Ctrl+O) -----------------------------------------------------
-
-        /// <summary>The state on screen now.</summary>
-        internal WeatherRegimeType ShownState =>
-            Field != null ? SkyMath.ClassOf(Field.RowAt(0f, 0f)) : RegimeSnapshot.FromConditions(currentConditions).Type;
-
         /// <summary>Metres from the theater centre along the tape to the nearest marker line, or -1 without one (the nextFrontKm readout).</summary>
         private float NextMarkerKm()
         {

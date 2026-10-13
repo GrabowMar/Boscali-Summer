@@ -145,8 +145,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             lastYaw = applied.Yaw;
         }
 
-        public void NoteAppliedRoll(float appliedRoll) => lastRoll = appliedRoll;
-
         /// <summary>A new profile (another airframe) re-seeds the learned authorities; the first use seeds the hover trim.</summary>
         private void Seed(AirframeProfile p)
         {

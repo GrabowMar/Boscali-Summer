@@ -8,8 +8,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
     {
         private OverlordService overlord;
 
-        internal OverlordService Overlord => overlord;
-
         internal void AttachOverlord(OverlordService service) => overlord = service;
 
         /// <summary>The faction's last OVERLORD actions (newest last) for its own console. Empty when OVERLORD has done nothing or is not running.</summary>

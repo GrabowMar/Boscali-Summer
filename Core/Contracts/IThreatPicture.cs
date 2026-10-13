@@ -187,19 +187,6 @@ namespace BoscaliSummer.Core.Contracts
         /// <summary>Deepest penetration into any ring at this point and height, and how many rings cover it.</summary>
         bool TryGetCoverage(int observer, float x, float z, float agl, out float depthMetres, out int rings);
 
-        /// <summary>Metres of the leg a→b inside rings of <paramref name="kindMask"/>, sampled at 16 points.</summary>
-        bool TryGetSegmentExposure(int observer, float ax, float az, float bx, float bz, float agl, byte kindMask,
-            out float exposedMetres);
-
-        /// <summary>
-        /// Tests 9 release points on a ±80° arc of <paramref name="releaseRange"/> around the
-        /// target, facing the attacker, and returns the cheapest by 10 × radar-cone metres +
-        /// point-defence metres. Allocation-free. False with no picture, or when this frame's
-        /// eight searches (all callers) are spent: ask again next frame.
-        /// </summary>
-        bool TryFindAttackProfile(int observer, float fromX, float fromZ, float targetX, float targetZ,
-            float releaseRange, float transitAgl, float releaseAgl, out AttackProfile profile);
-
         bool TryGetAreaIntel(int observer, float x, float z, float radius, out AreaIntel intel);
     }
 }

@@ -49,7 +49,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public string LastWords => words;
         public float LastWordsAt => wordsAt;
         public AvState LastWordsTone => wordsTone;
-        internal FrontRoomView View => view;
 
         public void Configure(SupportManager supportManager, CallsController callsController, SpaceFeedController feedController)
         {

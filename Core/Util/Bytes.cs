@@ -25,7 +25,6 @@ namespace BoscaliSummer.Core.Util
 
         public int Length { get; private set; }
         public bool Overflow { get; private set; }
-        public byte[] Buffer => buffer;
 
         public void Reset()
         {

@@ -47,8 +47,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         public WingMetrics Metrics { get; } = new WingMetrics();
         public float MissionTime => missionTime;
         public double LastFrameAiMs { get; private set; }
-        /// <summary>This mission's AI time per frame (plan M8 budget: 0.3 ms for a 4-ship), over frames with members.</summary>
-        public double AiMsMean => aiFrames > 0 ? aiMsSum / aiFrames : 0.0;
         public double AiMsMax { get; private set; }
         private double aiMsSum;
         private long aiFrames;

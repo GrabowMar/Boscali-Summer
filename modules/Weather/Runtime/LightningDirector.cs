@@ -23,7 +23,6 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private GameObject root;
         private Material boltMaterial;
         public string EffectId => "lightning";
-        public FxBudget Budget => new FxBudget(0, 2, 2, false);
         internal float FlashNow { get; private set; }
         internal Vector4 FlashA { get; private set; }
         internal Vector4 FlashB { get; private set; }

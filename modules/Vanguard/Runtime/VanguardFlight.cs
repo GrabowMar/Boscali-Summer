@@ -212,8 +212,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (role == VanguardRole.Towed) SeduceTowed();
         }
 
-        public void Scuttle() => Detonate();
-
         // Radar-guided missiles chasing the launcher may switch onto this airframe.
         private void SeduceThreats()
         {

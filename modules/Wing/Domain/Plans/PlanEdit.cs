@@ -19,21 +19,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public static PlanStep Attack(uint target) =>
             new PlanStep { Kind = PlanKind.Attack, Targets = new[] { target }, End = PlanEnd.TargetsDown };
 
-        /// <summary>Inserts after step <paramref name="after"/> of the lane (-1 or its last: at the end); the index, or -1 when the
-        /// lane is full. AFTERs on the lane's later steps follow them.</summary>
-        public static int Insert(WingPlan plan, int lane, int after, PlanStep step)
-        {
-            if (lane < 0 || lane >= WingPlan.Lanes || step == null || plan.Steps[lane].Count >= WingPlan.MaxSteps) return -1;
-            int count = plan.Steps[lane].Count;
-            int at = after < 0 || after >= count - 1 ? count : after + 1;
-            ForEachLink(plan, (s) =>
-            {
-                if (s.AfterLane == lane && s.AfterStep >= at) s.AfterStep++;
-            });
-            plan.Steps[lane].Insert(at, step);
-            return at;
-        }
-
         /// <summary>Removes a step: what waited for it starts on EXECUTE, AFTERs on the lane's later steps follow them.</summary>
         public static void Remove(WingPlan plan, int lane, int step)
         {

@@ -51,7 +51,6 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         private int reportedControls = -1;
 
         public string EffectId => "cockpit-pilot";
-        public FxBudget Budget => new FxBudget(393216, 10, 0, true);
 
         internal void Configure(ImmersionSettings value, ManualLogSource log) { settings = value; logger = log; Live = this; }
 

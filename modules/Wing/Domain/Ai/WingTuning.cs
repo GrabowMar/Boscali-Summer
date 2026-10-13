@@ -29,14 +29,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         /// <summary>Long-reach standing weapons range, and the cap for explicit Attack and Splash, in metres.</summary>
         public const float ReachLongMetres = 12000f;
-        public const float CollisionHorizon = 6f;
-
-
-        // Economy tuning.
-
-        /// <summary>One-time command-right fee for active mission aircraft, as a fraction of list
-        /// price.</summary>
-        public const float RecruitmentCostRate = 0.25f;
 
         // Pilot progression uses a shared triangular rank curve.
 
@@ -48,9 +40,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         /// <summary>Triangular rank step: Wingman 1, Veteran 3, Ace 6, Legend 10 steps.</summary>
         public const int XpPerRank = 120;
-
-        /// <summary>Rank-effect scale; at full effect, Legend gains roughly 12% envelope and shot-cycle
-        /// improvement over Rookie.</summary>
-        public const float RankEffect = 1f;
     }
 }

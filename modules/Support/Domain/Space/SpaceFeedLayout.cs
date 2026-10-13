@@ -33,7 +33,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public int TrackRows, CardRows, ConsoleLines;
         /// <summary>The lowest edge of any box.</summary>
         public float Bottom { get; private set; }
-        public int CardCount => CardRows;
 
         /// <param name="full">The station: the sensor frame on the left, the control column fixed at 458 wide on the right.</param>
         public static SpaceFeedLayout Compute(float width, float height, bool full)

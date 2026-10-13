@@ -198,14 +198,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Restyle();
         }
 
-        public string StampWord => stamp.Word;
-
-        public string RankText => rankLine.text;
-
-        public string TabText => tab.text;
-
-        public int RibbonCount => face.RibbonCount;
-
         public void SetPilot(WingPilot pilot)
         {
             int currentFaction = pilot != null && pilot.PortraitFaction >= 0 ? pilot.PortraitFaction : PortraitFactions.Local;

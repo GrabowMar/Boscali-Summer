@@ -288,15 +288,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 m.Damage.Damaged, err10, closure, phase);
         }
 
-        /// <summary>Members per settle phase (automation reads it).</summary>
-        public int Settled(SettlePhase phase)
-        {
-            int n = 0;
-            foreach (WingMember m in Members)
-                if (m.Settle != null && m.Settle.Phase == phase) n++;
-            return n;
-        }
-
         /// <summary>A settled member flies its settle instead of the formation (and is on the ground with the fly-by-wire
         /// off, so the no-FBW release must not fire); once lifted off it rejoins. True when it was flown here.</summary>
         private bool StepSettle(WingMember m, WingFrame frame, float dt)

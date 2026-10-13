@@ -652,8 +652,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static bool BoxHeld() => ControlHeld() || ShiftHeld();
         private static bool ControlHeld() => Input.GetKey(KeyCode.LeftControl) ||
             Input.GetKey(KeyCode.RightControl);
-        private static bool AddHeld() => ShiftHeld() || Input.GetKey(KeyCode.LeftAlt) ||
-            Input.GetKey(KeyCode.RightAlt);
         private static bool ShiftHeld() => Input.GetKey(KeyCode.LeftShift) ||
             Input.GetKey(KeyCode.RightShift);
         private static bool BoxBlocked() => MapPicker.IsBusy ||

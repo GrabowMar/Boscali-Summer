@@ -18,9 +18,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>The SOF page (or an armed AIM: TEAM call) is on screen: while it is, the feed asks the host for a state.</summary>
         internal MirrorFeed<SofStateData> SofFeed => sofFeed ?? (sofFeed = new MirrorFeed<SofStateData>(sofMirror, SpaceCommandKind.SofSync));
 
-        /// <summary>RAISE a team at a standing camp. Returns the request id (0 when not sent).</summary>
-        internal int SofRaise() => SendSpace(SpaceCommandKind.SofRaise, 0, null);
-
         /// <summary>PUSH, HOLD, EXFIL, LIFT or CANCEL for one team.</summary>
         internal int SofOrder(int slot, TeamVerb verb) => slot < 0 || slot >= SofRules.MaxTeams ? 0 : SendSpace(SpaceCommandKind.SofOrder, SofCodes.PackOrder(slot, verb), null);
 
@@ -28,9 +25,5 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal int SofMission(int slot, MissionKind kind, int targetId, float x, float z) =>
             slot < 0 || slot >= SofRules.MaxTeams || kind == MissionKind.None ? 0 :
             SendSpace(SpaceCommandKind.SofMission, 0, new[] { SofCodes.PackMission(slot, kind), kind == MissionKind.Recon ? SofCodes.PackPoint(x, z) : targetId });
-
-        /// <summary>DIVERT a team to a new destination (cancels its mission).</summary>
-        internal int SofDivert(int slot, float x, float z) =>
-            slot < 0 || slot >= SofRules.MaxTeams ? 0 : SendSpace(SpaceCommandKind.SofDivert, 0, new[] { slot, SofCodes.PackPoint(x, z) });
     }
 }

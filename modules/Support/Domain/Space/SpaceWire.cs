@@ -111,7 +111,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         }
 
         public SpaceReply AsReplay() => new SpaceReply(Protocol, Kind, RequestId, Outcome, CallId, Charged, Detail, true, Claimant);
-        public SpaceReply With(string claimant) => new SpaceReply(Protocol, Kind, RequestId, Outcome, CallId, Charged, Detail, Replayed, claimant);
         public MarkVerdict Verdict => (MarkVerdict)Outcome;
         public TaskedOutcome Tasked => (TaskedOutcome)Outcome;
         /// <summary>CYBER verbs carry a <see cref="CyberOutcome"/> byte; <see cref="CallId"/> is the node id.</summary>

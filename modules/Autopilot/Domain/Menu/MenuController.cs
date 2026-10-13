@@ -113,7 +113,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public string Refusal => Now < refusalUntil ? refusal : null;
         public MenuCategory Category => Cat >= 0 ? model.Categories[Cat] : null;
         private bool HoldLike => Mode == MenuMode.Hold && (cDown || Pending);
-        private bool VirtualPointer => Mode == MenuMode.Hold || Device == MenuDevice.Pad;
 
         public List<MenuRow> Items
         {

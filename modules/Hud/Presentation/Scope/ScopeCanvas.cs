@@ -83,8 +83,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public static float Seg(float t, float a, float b) => Clamp01((t - a) / (b - a));
 
-        public static float Ease(float t) { t = Clamp01(t); return t * t * (3f - 2f * t); }
-
         public static float EaseOut(float t) { t = 1f - Clamp01(t); return 1f - t * t * t; }
 
         /// <summary>0..1 sine at <paramref name="hz"/>.</summary>

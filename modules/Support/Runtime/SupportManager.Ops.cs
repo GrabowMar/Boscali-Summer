@@ -67,14 +67,5 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         /// <summary>The NET or SOF page is on screen: while it is, the feed asks the host for a state.</summary>
         internal MirrorFeed<OpsStateData> OpsFeed => opsFeed ?? (opsFeed = new MirrorFeed<OpsStateData>(opsMirror, SpaceCommandKind.OpSync));
-
-        /// <summary>FUND tap: 25 allocation (<paramref name="large"/> false) or 50. Returns the request id (0 when not sent).</summary>
-        internal int OpsFund(OpDomain domain, bool large) => SendSpace(SpaceCommandKind.OpFund, (int)domain | (large ? 2 : 0), null);
-
-        /// <summary>Start (or retarget) an operation. The target is a bird 0..2 (ASAT), a SAM C2 node id (ZERO-DAY) or a held building id (FOB).</summary>
-        internal int OpsPlan(OpKind kind, int target) =>
-            OpsRules.Valid(kind) && target >= 0 ? SendSpace(SpaceCommandKind.OpPlan, 0, new[] { (int)kind, target }) : 0;
-
-        internal int OpsCancel(OpDomain domain) => SendSpace(SpaceCommandKind.OpCancel, (int)domain, null);
     }
 }

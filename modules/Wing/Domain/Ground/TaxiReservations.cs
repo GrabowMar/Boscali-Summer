@@ -47,13 +47,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public int OwnerOfNode(int node) => nodeOwner[node];
 
-        /// <summary>The owner directly ahead of <paramref name="owner"/> on <paramref name="edge"/> (−1: none).</summary>
-        public int Ahead(int owner, int edge)
-        {
-            int i = edgeUsers[edge].IndexOf(owner);
-            return i > 0 ? edgeUsers[edge][i - 1] : -1;
-        }
-
         public bool Blocked(int edge) => blocked[edge];
 
         /// <summary>The owner <paramref name="owner"/> last found holding what it asked for (−1: none).</summary>

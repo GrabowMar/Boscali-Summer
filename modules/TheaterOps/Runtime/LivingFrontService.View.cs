@@ -220,7 +220,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         public IReadOnlyList<TheaterFrontView> Fronts => Snapshot?.Fronts ?? Array.Empty<TheaterFrontView>();
         public IReadOnlyList<TheaterProposalView> Proposals => Snapshot?.Proposals ?? Array.Empty<TheaterProposalView>();
         public TheaterOperationView ActiveOperation => Snapshot?.Operation;
-        public IReadOnlyList<string> StaffLog => Snapshot?.Log ?? Array.Empty<string>();
 
         public void Refresh()
         {

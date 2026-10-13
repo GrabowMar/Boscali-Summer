@@ -460,9 +460,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (!string.IsNullOrEmpty(prompt)) { Console.Footer.Set(prompt, AvState.Caution); return; }
                 Console.Footer.Set(ambient ?? "READY", AvState.Inert);
             }
-
-            /// <summary>Explanatory copy under a heading: dim, wrapped, never truncated.</summary>
-            protected static void Note(AvFlow page, string text) => page.Add(new AvNote(page.Content, text));
         }
 
         private static int CountEnabled(List<HUDOptions_ToggleButton> sources)

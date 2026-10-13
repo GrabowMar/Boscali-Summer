@@ -47,28 +47,5 @@ namespace BoscaliSummer.Modules.Support.Runtime
             census[hq] = (t, count);
             return count;
         }
-
-        /// <summary>
-        /// The faction's share of the counted objectives (the same <see cref="ObjectiveShare"/> the ASAT victim reads: held plus half the contested, over every ground airbase) and the
-        /// best share any other faction holds. NaN when the map has nothing to count: no lead, so no funding.
-        /// </summary>
-        internal void ObjectiveShares(FactionHQ owner, out float share, out float bestRival)
-        {
-            share = bestRival = float.NaN;
-            if (owner == null) return;
-            ObjectiveCount mine = Census(owner);
-            if (mine.n <= 0) return;
-            share = ObjectiveShare(owner);
-            var hqs = FactionRegistry.GetAllHQs();
-            float best = -1f;
-            if (hqs != null)
-                foreach (FactionHQ hq in hqs)
-                {
-                    if (hq == null || hq == owner) continue;
-                    float rival = ObjectiveShare(hq);
-                    if (!float.IsNaN(rival)) best = Mathf.Max(best, rival);
-                }
-            bestRival = best < 0f ? float.NaN : best;
-        }
     }
 }

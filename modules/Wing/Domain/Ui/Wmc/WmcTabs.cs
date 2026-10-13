@@ -14,13 +14,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// BEHAVIOUR holds TUNING · PLAN · TIMELINE · LOG; WING holds the roster with INSPECT, and the STUDIO.</summary>
         public static readonly string[] Labels = { "TACTICAL", "BEHAVIOUR", "SUPPLY", "LOADOUT", "WING" };
 
-        private static readonly string[][] prefixes =
-        {
-            // ROUTE·AP kept its plan.* ids when it moved to TACTICAL; they are matched before BEHAVIOUR's plan.*.
-            new[] { "tac.", "form.", "plan.route.", "plan.ap.", "plan.scope." }, new[] { "opt.", "plan." }, new[] { "sup." }, new[] { "lo." },
-            new[] { "wing.", "sq.", "insp." },
-        };
-
         /// <summary>A tab by its label (any case; older names open the tab that holds them now); −1 when there is none. Numbers are
         /// refused: the 4-tab numbers meant other tabs (critic §14.9), so a scenario that still uses one fails instead of opening the
         /// wrong page.</summary>
@@ -37,15 +30,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
 
         private static bool Is(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
-
-        /// <summary>The tab a control id belongs to; −1 for the header's own controls and unknown ids.</summary>
-        public static int Of(string id)
-        {
-            if (id == null) return -1;
-            for (int i = 0; i < prefixes.Length; i++)
-                foreach (string p in prefixes[i])
-                    if (id.StartsWith(p, StringComparison.Ordinal)) return i;
-            return -1;
-        }
     }
 }

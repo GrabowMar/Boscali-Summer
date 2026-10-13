@@ -54,19 +54,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         private static bool Landed(Aircraft aircraft) => aircraft.IsLanded() || (aircraft.radarAlt < 3f && Mathf.Abs(aircraft.speed) < 1.5f);
 
-        // ---- Cover ---------------------------------------------------------------------------------------
-
-        /// <summary>A human pilot got a kill credit on an enemy ground unit: any pinned team of the pilot's faction within 2 km remembers it (the only way a COVER claim pays).</summary>
-        internal void NoteKillBy(Player player, Unit target)
-        {
-            if (!GameAccess.IsServer() || factions.Count == 0 || player == null || player.HQ == null || target == null || target.NetworkHQ == null || target.NetworkHQ == player.HQ || !(target is GroundVehicle)) return;
-            if (!factions.TryGetValue(player.HQ, out FactionSof f)) return;
-            ulong id = PlayerIdentity.Of(player);
-            if (id == PlayerIdentity.None) return;
-            GlobalPosition p = target.transform.position.ToGlobalPosition();
-            f.Desk.CoverKillBy(id, (float)p.x, (float)p.z);
-        }
-
         /// <summary>An enemy ground unit died: every faction's pinned team within 2 km of it is relieved and its lost-timer extended (answering a COVER post is killing what is on the team).</summary>
         internal void NoteKill(Unit target)
         {

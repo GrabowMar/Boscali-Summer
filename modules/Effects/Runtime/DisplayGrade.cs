@@ -41,7 +41,6 @@ namespace BoscaliSummer.Modules.Effects.Runtime
         private float nextApply;
 
         public string EffectId => "display-grade";
-        public FxBudget Budget => new FxBudget(0, 0, 0, false);
 
         public void Configure(EffectsSettings effectsSettings, ManualLogSource log)
         {

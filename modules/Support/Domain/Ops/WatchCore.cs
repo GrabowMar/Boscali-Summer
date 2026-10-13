@@ -135,8 +135,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
 
         public bool QuietOfHumans(int humans, float now) => idle.QuietOfHumans(humans, now);
 
-        public bool Due(float now) => SpaceRules.MissionTime(now) && now >= nextThinkAt;
-
         /// <summary>Do not think again for <paramref name="seconds"/> (the adapter's cheap poll while nothing can happen).</summary>
         public void Defer(float now, float seconds)
         {

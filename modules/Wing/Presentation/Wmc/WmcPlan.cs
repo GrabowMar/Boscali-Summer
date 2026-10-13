@@ -44,8 +44,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public int Sub => sub;
 
-        public string SubName => sub >= 0 && sub < SubLabels.Length ? SubLabels[sub] : "";
-
         public string Hint => sub == SubStances ? options.Hint
             : "PLAN (dashed) is frozen at EXECUTE; REAL (solid) is when each step went out and was done. Tap a bar for its step.";
 
@@ -87,14 +85,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvPopup.CloseAny();
             sortieKey = long.MinValue;
             if (last != null) Refresh(last);
-        }
-
-        /// <summary>A control of a sub-page shows that sub-page first (automation).</summary>
-        public void ShowSubFor(string id)
-        {
-            if (id == null) return;
-            if (id.StartsWith("opt.", System.StringComparison.Ordinal)) ShowSub(SubStances);
-            else if (id.StartsWith("plan.", System.StringComparison.Ordinal) && !id.StartsWith("plan.sub.", System.StringComparison.Ordinal)) ShowSub(SubSortie);
         }
 
         /// <summary>A sub-page by its label (automation). Scenarios written for TUNING / OPTIONS open STANCES; PLAN, ELEMENTS, RECORD,

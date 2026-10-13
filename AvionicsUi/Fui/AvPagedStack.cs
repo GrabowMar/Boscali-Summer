@@ -51,8 +51,6 @@ namespace NOAvionics
         private int Pages => Mathf.Max(1, (count + rows.Length - 1) / rows.Length);
         private bool Paged => Pages > 1;
 
-        public void SetPage(int page) => Go(page);
-
         /// <summary>Jump to the page holding <paramref name="item"/>.</summary>
         public void Reveal(int item) => Go(item / rows.Length);
 

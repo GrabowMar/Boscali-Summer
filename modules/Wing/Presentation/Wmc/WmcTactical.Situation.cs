@@ -19,18 +19,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private string alertText;
         private AvRow alertStrip;
 
-        /// <summary>Alerts standing now (automation).</summary>
-        public int AlertsShown => alertCount < 0 ? 0 : alertCount;
-
-        /// <summary>The ids of the order-grid cells that cannot be pressed now (automation).</summary>
-        public List<string> DisabledOrders()
-        {
-            var off = new List<string>();
-            for (int k = 0; k < shownCells.Length; k++)
-                if (!shownEnabled[k] && shownCells[k].Id != null) off.Add(shownCells[k].Id);
-            return off;
-        }
-
         private void BuildAlerts(AvFlow f)
         {
             alertStrip = f.Add(new AvRow(f.Content, () => AlertClick(0)));

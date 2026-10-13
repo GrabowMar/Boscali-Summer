@@ -198,15 +198,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             flow.RequestRelayout();
         }
 
-        /// <summary>A control id of the autopilot's modes or held values opens them first (automation).</summary>
-        public void RevealFor(string id)
-        {
-            if (id == null || !id.StartsWith("plan.ap.", System.StringComparison.Ordinal) || id == "plan.ap.nav" || id == "plan.ap.off" || id == "plan.ap.more") return;
-            if (apOpen) return;
-            apOpen = true;
-            ShowApDetail();
-        }
-
         public void Shown(WmcContext c)
         {
         }

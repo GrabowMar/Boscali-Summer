@@ -61,9 +61,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// <summary>The node of service point <paramref name="i"/>, −1 when the field has no such point.</summary>
         public int ServiceNode(int i) => i >= 0 && i < serviceNodes.Length ? serviceNodes[i] : -1;
 
-
-        public int Threshold(int runway, bool reverse) => runway >= 0 && runway < thresholds.GetLength(0) ? thresholds[runway, reverse ? 1 : 0] : -1;
-
         public int NearestNode(Vec3 p)
         {
             int best = -1;

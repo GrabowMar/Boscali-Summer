@@ -63,28 +63,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public HangarSample[] Hangars = new HangarSample[0];
         public WingPose[] ServicePoints = new WingPose[0], Pads = new WingPose[0];
 
-        /// <summary>The airbases of a nomodkit dump; entries the dump could not read (<c>{name, error}</c>) and
-        /// malformed JSON give nothing rather than an exception.</summary>
-        public static List<AirbaseSample> FromDumpJson(string json)
-        {
-            var result = new List<AirbaseSample>();
-            if (!MiniJson.TryParse(json, out object root) || !(root is Dictionary<string, object> dump) ||
-                !MiniJson.TryGetList(dump, "airbases", out List<object> airbases)) return result;
-            foreach (object item in airbases)
-            {
-                if (!(item is Dictionary<string, object> a) || a.ContainsKey("error")) continue;
-                try
-                {
-                    result.Add(Read(a));
-                }
-                catch (Exception)
-                {
-                    // One unreadable airbase never hides the others.
-                }
-            }
-            return result;
-        }
-
         private static AirbaseSample Read(Dictionary<string, object> a) => new AirbaseSample
         {
             Name = MiniJson.GetString(a, "name"),

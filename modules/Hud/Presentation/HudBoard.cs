@@ -331,9 +331,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             ShotFeed.Ledger.Launch(missile.GetInstanceID(), info.bomb, ShotBook.Short(info), now);
             shotBook.Launched(missile, info, now);
         }
-
-        // IMissileView: the C-menu rides the live own-missile list (MissileTracker), launch order.
-        bool IMissileView.Available => bootAircraft != null && !bootAircraft.disabled;
         bool IMissileView.Active => missileView.Active;
         int IMissileView.Count => missileTracker.Missiles.Count;
         bool IMissileView.CanEnter => missileTracker.Missiles.Count > 0 && !missileView.Active;

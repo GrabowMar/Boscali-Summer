@@ -36,15 +36,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             }
         }
 
-        /// <summary>Rotary-compatible manoeuvres; only level breaks avoid unsupported vertical energy
-        /// demands.</summary>
-        public static bool RotaryCapable(ManeuverKind kind) =>
-            kind == ManeuverKind.BreakLeft ||
-            kind == ManeuverKind.BreakRight ||
-            kind == ManeuverKind.WingWaggle ||
-            kind == ManeuverKind.NotchThreat ||
-            kind == ManeuverKind.MaskTerrain;
-
         /// <summary>Minimum entry altitude in metres AGL, allowing room for each manoeuvre's
         /// descent.</summary>
         public static float MinEntryAltitudeAgl(ManeuverKind kind)

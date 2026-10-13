@@ -80,45 +80,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private readonly List<ActiveStrikeInfo> activeStrikes = new List<ActiveStrikeInfo>(8);
 
         private Action<GlobalPosition> localPick;
-
-        public bool TryGetNear(float x, float z, float vicinity,
-            out string label, out float secondsToImpact)
-        {
-            label = null;
-            secondsToImpact = 0f;
-            if (float.IsNaN(x) || float.IsNaN(z) || float.IsNaN(vicinity) ||
-                float.IsInfinity(x) || float.IsInfinity(z) || float.IsInfinity(vicinity) ||
-                vicinity < 0f)
-                return false;
-            float now = MissionNow();
-            float soonest = float.MaxValue;
-            for (int i = 0; i < activeStrikes.Count; i++)
-            {
-                ActiveStrikeInfo strike = activeStrikes[i];
-                if (!strike.IsActive(now) ||
-                    (strike.ActionId != SupportActionId.Artillery &&
-                     strike.ActionId != SupportActionId.FlareMissile &&
-                     strike.ActionId != SupportActionId.Emp &&
-                     strike.ActionId != SupportActionId.Prsm &&
-                     strike.ActionId != SupportActionId.Cruise)) continue;
-                GlobalPosition point = strike.Target;
-                if (float.IsNaN(point.x) || float.IsNaN(point.z) ||
-                    float.IsInfinity(point.x) || float.IsInfinity(point.z) ||
-                    float.IsNaN(strike.Radius) || float.IsInfinity(strike.Radius)) continue;
-                float dx = point.x - x, dz = point.z - z;
-                float reach = Mathf.Max(vicinity, strike.Radius);
-                if (dx * dx + dz * dz > reach * reach) continue;
-                float eta = strike.SecondsRemaining(now);
-                if (eta >= soonest) continue;
-                soonest = eta;
-                secondsToImpact = eta;
-                label = strike.ActionId == SupportActionId.FlareMissile ? "DECOY BARRAGE"
-                    : strike.ActionId == SupportActionId.Artillery ? "KINETIC ROD"
-                    : strike.ActionId == SupportActionId.Prsm ? "PRSM"
-                    : strike.ActionId == SupportActionId.Cruise ? "CRUISE" : "EMP STRIKE";
-            }
-            return label != null;
-        }
         /// <summary>The local pilot's own strikes in the air or just landed (what the map overlay reads), for the TAC BOARD's STRIKE page.</summary>
         internal IReadOnlyList<ActiveStrikeInfo> ActiveStrikes => activeStrikes;
 
@@ -239,7 +200,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         ManualLogSource ISupportHost.Logger => logger;
         VanillaSupportCatalog ISupportHost.Vanilla => vanilla;
         int ISupportHost.SceneGeneration => sceneGeneration;
-        bool ISupportHost.TryGetSpaceState(FactionHQ owner, out SpaceState state) => TryGetSpaceState(owner, out state);
 
         internal void AttachSpace(SpaceService service)
         {
@@ -280,8 +240,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             state = null;
             return space != null && space.TryGetStateCoarse(owner, out state);
         }
-
-        public IReadOnlyList<SupportActionDefinition> Actions => catalog.Actions;
         public bool BypassRequirements => !OpsAutomation.Strict && bypassRequirements != null && bypassRequirements.Value;
         public bool DisableCooldowns => disableCooldowns != null && disableCooldowns.Value;
         public bool RequestPending => pending;

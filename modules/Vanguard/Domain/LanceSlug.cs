@@ -11,8 +11,6 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
     {
         public const int MaxUnits = 6, MaxParts = 20;
         public const float UnitFalloff = 0.75f;
-        /// <summary>sqrt(0.1) * 3000: below this speed the slug has no punch left.</summary>
-        public const float StopSpeed = 948.68f;
 
         public static bool ThroughEnabled(float power01) => power01 >= LanceCapacitor.ThroughMinPower;
 

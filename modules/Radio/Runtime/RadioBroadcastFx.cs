@@ -42,8 +42,6 @@ namespace BoscaliSummer.Modules.Radio.Runtime
 
         public string EffectId => "radio-fx";
 
-        public FxBudget Budget => new FxBudget(0, 0, 2, true);
-
         public void ReleaseFx()
         {
             Dispose();

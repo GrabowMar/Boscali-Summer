@@ -98,8 +98,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 SupportCapabilities.Recon, null, new UnlaseAction()));
         }
 
-        public IReadOnlyList<SupportActionDefinition> Actions => actions;
-
         public SupportActionDefinition Find(SupportActionId id)
         {
             for (int i = 0; i < actions.Count; i++)

@@ -52,10 +52,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
 
         public static string Tint(string text, Color c) => "<color=" + Hex(c) + ">" + text + "</color>";
 
-        /// <summary>The footer slab word of a tone: NEG, WARN, READY, or INT for anything else.</summary>
-        public static string SlabWord(AvState tone) =>
-            tone == AvState.Danger ? "NEG" : tone == AvState.Caution ? "WARN" : tone == AvState.Ready ? "READY" : "INT";
-
         public static Color SlabFill(AvState tone) =>
             AvStyleHost.FuiFill("slab " + AvStates.Class(tone), AvTheme.Accent);
 

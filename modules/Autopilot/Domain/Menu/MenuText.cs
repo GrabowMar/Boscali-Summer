@@ -8,7 +8,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
     {
         public const string Dot = " · ";
         public const string Times = "×";
-        public const string Arrow = " → ";
 
         /// <summary>Upper case, cut to <paramref name="max"/> characters with an ellipsis. Null is empty.</summary>
         public static string Upper(string text, int max = 22)

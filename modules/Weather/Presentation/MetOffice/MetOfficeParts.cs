@@ -103,7 +103,6 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         public AvControl Minus => minus;
         public AvControl Plus => plus;
         public AvControl Left => left;
-        public AvControl Extra => extra;
 
         public MetStepRow(RectTransform parent, AvControl.Spec minusSpec, AvControl.Spec plusSpec)
         {
@@ -125,10 +124,6 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             Restyle();
             return this;
         }
-
-        public MetStepRow WithLeft(AvControl.Spec spec, float width) { left = AvControl.Make(Rect, spec); leftW = width; return this; }
-
-        public MetStepRow WithExtra(AvControl.Spec spec, float width) { extra = AvControl.Make(Rect, spec); extraW = width; return this; }
 
         public void SetValue(string text) => AvText.Set(value, text);
 

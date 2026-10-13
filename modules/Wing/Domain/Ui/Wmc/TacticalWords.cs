@@ -42,26 +42,4 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {
-    /// <summary>TUNING's OVERRIDES (spec tactical v3 §5): how a doctrine differs from the one it would inherit, on the axes the AI
-    /// reads (targets, range, weapons, radar); guard, response, interval and spread are not wired yet, so they are never listed.</summary>
-    internal static class DoctrineDiff
-    {
-        private static readonly DoctrineAxis[] Axes = { DoctrineAxis.Targets, DoctrineAxis.Reach, DoctrineAxis.Weapons, DoctrineAxis.Radar };
-        private static readonly string[] AxisWords = { "TARGETS", "RANGE", "WEAPONS", "RADAR" };
-
-        /// <summary>"TARGETS AIR · RADAR SILENT"; empty when the two agree.</summary>
-        public static string Words(WingDoctrine d, WingDoctrine inherited)
-        {
-            string s = "";
-            for (int a = 0; a < Axes.Length; a++)
-            {
-                DoctrineAxis axis = Axes[a];
-                byte v = d.Get(axis);
-                if (v == inherited.Get(axis)) continue;
-                string word = WingDoctrine.ValueName(axis, v);
-                s += (s.Length > 0 ? " · " : "") + AxisWords[a] + " " + (word ?? "?").ToUpperInvariant();
-            }
-            return s;
-        }
-    }
 }

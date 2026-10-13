@@ -48,33 +48,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (map.TryGetValue(id, out Entry e) && e.Host == control.transform) map.Remove(id);
         }
 
-        public bool Has(string id) => id != null && map.ContainsKey(id);
-
         public void Clear()
         {
             map.Clear();
-        }
-
-        /// <summary>Press <paramref name="id"/> as a left click would. False when nothing answers it or it is hidden; a disabled
-        /// control takes the click and ignores it.</summary>
-        public bool Press(string id)
-        {
-            if (string.IsNullOrEmpty(id)) return false;
-            if (map.TryGetValue(id, out Entry e))
-            {
-                if (e.Act != null)
-                {
-                    if (e.Shown != null && !e.Shown()) return false;
-                    e.Act();
-                    return true;
-                }
-                if (e.Host == null || !e.Host.gameObject.activeInHierarchy) return false;
-                if (e.Hit == null) e.Hit = e.Host.GetComponentInChildren<AvHit>(true);
-                if (e.Hit == null) return false;
-                e.Hit.OnPointerClick(new PointerEventData(EventSystem.current) { button = PointerEventData.InputButton.Left });
-                return true;
-            }
-            return false;
         }
 
         private void Set(string id, Transform host)

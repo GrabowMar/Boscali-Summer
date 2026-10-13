@@ -33,8 +33,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         private float nextAuthority;
         private bool authoritative;
 
-        internal bool Authoritative => authoritative;
-
         public void Configure(TheaterOpsSettings config, TheaterOpsNet net)
         {
             settings = config;

@@ -75,8 +75,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         /// <summary>The id the page is editing; the field remembers it when it takes focus.</summary>
         public string EditingId { get; set; }
 
-        public bool Focused => focused;
-
         /// <summary>The field holds text not yet saved (the build card's EDITED).</summary>
         public bool Dirty => focused && input != null && input.text != shown;
 
@@ -122,14 +120,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (input == null || !input.interactable || EventSystem.current == null) return;
             EventSystem.current.SetSelectedGameObject(input.gameObject);
             input.ActivateInputField();
-        }
-
-        /// <summary>Automation: commit what is typed, as Enter would.</summary>
-        public void Submit(string text)
-        {
-            if (input == null) return;
-            if (!focused) idAtFocus = EditingId;
-            OnEndEdit(text ?? input.text);
         }
 
         private void OnFocus()

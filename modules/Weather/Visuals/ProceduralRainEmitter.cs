@@ -27,8 +27,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         public string EffectId => "streaks";
 
-        public FxBudget Budget => new FxBudget(0, 1, 0, true);
-
         public void ReleaseFx()
         {
             if (ps != null) Destroy(ps);

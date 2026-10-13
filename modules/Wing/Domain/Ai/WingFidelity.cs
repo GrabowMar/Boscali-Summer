@@ -27,17 +27,11 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// <summary>Whether the complete Smart behaviour set is enabled.</summary>
         public static bool Full => !performance;
 
-        /// <summary>Physics-tick interval between full formation geometry updates.</summary>
-        public static int GeometryStride => performance ? 3 : 1;
-
         /// <summary>Multiplier for mode-scaled periodic and UI intervals.</summary>
         public static float IntervalScale => performance ? 2.5f : 1f;
 
         /// <summary>Scale a base interval by mode. Missile evasion, takeover interaction, and radio
         /// anti-spam use independent fixed timers.</summary>
         public static float Interval(float seconds) => seconds * IntervalScale;
-
-        public static string Summary() =>
-            $"mode={Mode} stride={GeometryStride} intervalScale={IntervalScale:0.0}";
     }
 }

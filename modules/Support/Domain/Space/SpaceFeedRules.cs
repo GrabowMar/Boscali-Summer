@@ -44,9 +44,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             closedAt = float.NaN;
         }
 
-        public bool IsIdle(float now) =>
-            SpaceRules.MissionTime(now) && SpaceRules.MissionTime(lastInput) && now - lastInput >= SpaceFeedRules.IdleSeconds;
-
         public void Close(float now)
         {
             if (!SpaceRules.MissionTime(now)) return;
@@ -141,29 +138,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             }
         }
 
-        // ---- Safety (owner ruling: always accessible, stays open on threats) ---------------------------------
-
-        /// <summary>No real input for this long closes the feed (mission seconds).</summary>
-        public const float IdleSeconds = 8f;
-
         /// <summary>A closed feed's choices come back for this long (mission seconds).</summary>
         public const float DraftSeconds = 120f;
 
         /// <summary>A known hostile aircraft closer than this is a bandit warning (metres).</summary>
         public const float BanditWarnMeters = 30000f;
-
-        /// <summary>
-        /// Close reasons, never a threat. The operator must exist; an airborne-open window also needs its ownship; focus loss and
-        /// eight idle mission seconds close. Ground entry (<paramref name="requireOwnship"/> false) needs no aircraft.
-        /// </summary>
-        public static FeedCloseReason CloseReason(in CockpitThreatSnapshot s, bool focused, float idleSeconds, bool requireOwnship = true)
-        {
-            if (!s.ValidOperator) return FeedCloseReason.InvalidOperator;
-            if (requireOwnship && !s.ValidOwnship) return FeedCloseReason.InvalidOwnship;
-            if (!focused) return FeedCloseReason.FocusLost;
-            if (float.IsFinite(idleSeconds) && idleSeconds >= IdleSeconds) return FeedCloseReason.Idle;
-            return FeedCloseReason.None;
-        }
 
         private static bool TerrainOn(in CockpitThreatSnapshot s) => s.ValidOwnship && float.IsFinite(s.TerrainUrgency) && s.TerrainUrgency > 0f;
         private static bool MissileOn(in CockpitThreatSnapshot s) => s.ValidOwnship && s.MissileWarning;
@@ -205,7 +184,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public const int ZoomSteps = 3;
 
         public static int PageCount(int contacts) => contacts <= 0 ? 1 : (contacts + ContactsPerPage - 1) / ContactsPerPage;
-        public static int ClampPage(int page, int contacts) => Math.Max(0, Math.Min(page, PageCount(contacts) - 1));
 
         /// <summary>Paging for a surface that shows <paramref name="perPage"/> track-file rows (the compact page shows fewer than the station).</summary>
         public static int PageCount(int contacts, int perPage) => contacts <= 0 || perPage <= 0 ? 1 : (contacts + perPage - 1) / perPage;
@@ -296,13 +274,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             string words = TaskedWords.Of(outcome, detail);
             return replayed ? "EARLIER SEND · " + words : words;
         }
-
-        /// <summary>The TASKED section caption: how many are posted and how many do not fit the board.</summary>
-        public static string CaptionOf(int posted, int capacity) =>
-            posted <= 0 ? "TASKED CALLS · NONE" : posted <= capacity ? "TASKED CALLS · " + posted : "TASKED CALLS · " + posted + " (+" + (posted - capacity) + " MORE)";
-
-        public static string PostWord(PostStatus status) =>
-            status == PostStatus.Stale ? "STALE" : status == PostStatus.Launching ? "LAUNCHING" : "READY";
 
         /// <summary>Bracket label for a host-revealed contact: the noisy probable class and its percentage, when one is carried.</summary>
         public static string ContactLabel(ProbableClass probable, int percent)

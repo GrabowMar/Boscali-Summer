@@ -44,13 +44,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public static void FormUp(WingScope scope) => WingOrders.Run(WingOrder.Of(OrderKind.FormUp, scope));
 
-        /// <summary>The wing's helicopters land around you and wait (spec M4 §5).</summary>
-        public static void LandHere() => LandHere(default);
-
-        public static void LandHere(WingScope scope) => WingOrders.Run(WingOrder.Of(OrderKind.LandHere, scope));
-
-        public static void TakeOff() => TakeOff(default);
-
         public static void TakeOff(WingScope scope) => WingOrders.Run(WingOrder.Of(OrderKind.TakeOff, scope));
 
         public static void NextShape() => WingOrders.Run(WingOrder.Of(OrderKind.NextShape));
@@ -100,25 +93,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
         }
 
-        /// <summary>Takes command of the selected friendly aircraft, else the nearest one ahead (spec M3 §5).</summary>
-        public static void Recruit()
-        {
-            if (!Ready(out WingService w)) return;
-            Aircraft player = w.Player;
-            if (player == null)
-            {
-                WingToast.Show("Not flying");
-                return;
-            }
-            Aircraft target = SelectedFriendly(player, w) as Aircraft ?? NearestFriendlyAhead(player, w) as Aircraft;
-            if (target == null)
-            {
-                WingToast.Show("No friendly aircraft to adopt");
-                return;
-            }
-            WingOrders.Run(new WingOrder { Kind = OrderKind.Recruit, Units = new[] { target.persistentID.Id } });
-        }
-
         public static float MoveAheadMetres = 10000f, PatrolHalfMetres = 10000f, OrderHeightMin = 50f, ScoutAheadMetres = 20000f;
 
         /// <summary>The wing orbits the point below the player (spec M4 §2.4).</summary>
@@ -129,15 +103,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public static void HoldHere(WingScope scope) =>
             Order(p => WingTask.Hold(Point(p, 0f, 0f), Vec3.HeadingDeg(p.transform.forward.ToVec3())), scope);
 
-        /// <summary>Spec M4 §7.1: a wing helicopter lands next to the nearest downed wing pilot for the pickup.</summary>
-        public static void Rescue() => Rescue(default);
-
         public static void Rescue(WingScope scope) => WingOrders.Run(WingOrder.Of(OrderKind.Rescue, scope));
-
-        /// <summary>Spec M4 §7.2: helicopters carrying cargo land, deploy it and rejoin.</summary>
-        public static void DeliverCargo() => DeliverCargo(default);
-
-        public static void DeliverCargo(WingScope scope) => WingOrders.Run(WingOrder.Of(OrderKind.DeliverCargo, scope));
 
         public static void MoveAhead() => MoveAhead(default);
 
@@ -280,34 +246,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
 
         public static void EscortMe() => WingOrders.Run(WingOrder.Of(OrderKind.EscortMe));
-
-        private static Unit SelectedFriendly(Aircraft player, WingService w)
-        {
-            List<Unit> targets = player.weaponManager != null ? player.weaponManager.GetTargetList() : null;
-            if (targets == null) return null;
-            foreach (Unit u in targets)
-                if (u != null && !u.disabled && !ReferenceEquals(u, player) && u.NetworkHQ == player.NetworkHQ &&
-                    !(u is Aircraft a && w.IsMember(a))) return u;
-            return null;
-        }
-
-        private static readonly List<Aircraft> candidates = new List<Aircraft>();
-        private static Vec3[] candidatePositions = new Vec3[64];
-
-        private static Unit NearestFriendlyAhead(Aircraft player, WingService w)
-        {
-            candidates.Clear();
-            foreach (Aircraft a in UnitRegistry.allAircraft)
-            {
-                if (a == null || a.disabled || ReferenceEquals(a, player) || a.NetworkHQ != player.NetworkHQ || w.IsMember(a)) continue;
-                candidates.Add(a);
-            }
-            if (candidatePositions.Length < candidates.Count) candidatePositions = new Vec3[candidates.Count];
-            for (int i = 0; i < candidates.Count; i++) candidatePositions[i] = candidates[i].GlobalPosition().ToVec3();
-            int chosen = EscortPick.Nearest(player.GlobalPosition().ToVec3(), player.transform.forward.ToVec3(),
-                candidatePositions, candidates.Count);
-            return chosen >= 0 ? candidates[chosen] : null;
-        }
 
         /// <summary>The configured airframe to call, or null for the player's own type.</summary>
         public static AircraftDefinition CallAirframe()

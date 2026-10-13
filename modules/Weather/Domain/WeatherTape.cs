@@ -89,7 +89,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public float OpeningEnd { get; private set; }
         /// <summary>True when the first story is a front (the front rule, or a pinned front-bearing story): Solve may place a front opening.</summary>
         public bool OpensWithFront { get; private set; }
-        public int KeyframeCount => Keyframes.Length;
         public bool HasFront => Fronts.Length > 0;
         /// <summary>s_ev: the first front's s_lead (the ramp start of the opening run's end boundary), or NaN without a front.</summary>
         public float SEv => Fronts.Length > 0 ? Fronts[0].SLead : float.NaN;

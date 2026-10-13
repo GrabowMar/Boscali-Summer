@@ -39,18 +39,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             r.activated = true;
         }
 
-        /// <summary>Radars switched on across the wing (automation).</summary>
-        public int RadarsOn
-        {
-            get
-            {
-                int n = 0;
-                foreach (WingMember m in Members)
-                    if (!m.Released && m.Alive && m.Aircraft.radar is Radar r && r != null && r.activated) n++;
-                return n;
-            }
-        }
-
         /// <summary>A station member <paramref name="m"/> may use under <paramref name="d"/> (loaded, and allowed).</summary>
         internal static bool UsableBy(WingMember m, in WingDoctrine d, WeaponStation w) => Usable(m.Aircraft, w) && Allowed(d, m.Engaged, w);
 

@@ -37,7 +37,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         private IFlightPipeline Active => Mode == TiltwingMode.Plane ? Plane : (IFlightPipeline)Rotary;
 
         public BindingReport Report => Active.Report;
-        public AttitudeCommand LastAttitude => Active.LastAttitude;
         public bool GcasActive => Active.GcasActive;
 
         public GuidanceCommand Guide(in FlightIntent intent, in AircraftState s, AirframeProfile p)
@@ -84,8 +83,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             Prime(s, p);
             Active.Track(s, applied, p);
         }
-
-        public void NoteAppliedRoll(float appliedRoll) => Active.NoteAppliedRoll(appliedRoll);
 
         private void Prime(in AircraftState s, AirframeProfile p)
         {

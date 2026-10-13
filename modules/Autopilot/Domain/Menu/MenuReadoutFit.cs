@@ -6,21 +6,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
     /// <summary>Greedy word wrap by measured width; a hyphenated token (AAM-4) never splits.</summary>
     internal static class MenuReadoutFit
     {
-        /// <summary>Lines the text needs at <paramref name="width"/>; 0 for empty text. A token wider than the line counts as one line.</summary>
-        public static int Lines(string text, float width, IMenuMetrics m, MenuFont font, float t)
-        {
-            if (string.IsNullOrEmpty(text)) return 0;
-            int lines = 1;
-            float used = 0f, space = m.Width(" ", font) * t;
-            foreach (string word in text.Split(' '))
-            {
-                float ww = m.Width(word, font) * t;
-                if (used == 0f) used = ww;
-                else if (used + space + ww <= width) used += space + ww;
-                else { lines++; used = ww; }
-            }
-            return lines;
-        }
 
         /// <summary>The words of the greedy wrap, one string per line (the view sets them with explicit breaks so TMP never re-wraps differently).</summary>
         public static List<string> Wrap(string text, float width, IMenuMetrics m, MenuFont font, float t)

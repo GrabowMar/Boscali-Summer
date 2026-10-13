@@ -12,16 +12,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
     /// ours (<see cref="CombatSupervisor"/>).</summary>
     internal sealed partial class WingService
     {
-        public int EngagedCount
-        {
-            get
-            {
-                int n = 0;
-                foreach (WingMember m in Members)
-                    if (m.Engaged) n++;
-                return n;
-            }
-        }
 
         private readonly OutnumberedJudge judge = new OutnumberedJudge();
         private float outnumberedClock;
@@ -163,9 +153,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         /// test as the outnumbered judge. False when there is none.</summary>
         public bool NearestAirThreat(Aircraft listener, out Vec3 pos, out Vec3 vel, out string type) =>
             NearestAirThreat(listener, out pos, out vel, out type, out _);
-
-        /// <summary>The nearest known air threat itself (automation's Splash).</summary>
-        public bool NearestAirThreatUnit(Aircraft listener, out Unit unit) => NearestAirThreat(listener, out _, out _, out _, out unit);
 
         private bool NearestAirThreat(Aircraft listener, out Vec3 pos, out Vec3 vel, out string type, out Unit unit)
         {
@@ -467,14 +454,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             }
             WingLog.Logger.LogInfo($"[Wing] ECM {(started ? "on" : "off")} for {capable} aircraft");
             return capable;
-        }
-
-        /// <summary>Members jamming now (the grid's ECM stays lit while any in scope does).</summary>
-        public bool Jamming(Func<WingMember, bool> who)
-        {
-            foreach (WingMember m in Members)
-                if (!float.IsNaN(m.JamUntil) && (who == null || who(m))) return true;
-            return false;
         }
 
         /// <summary>Every tick: jammers pulse until their minute is up (or the aircraft is gone).</summary>

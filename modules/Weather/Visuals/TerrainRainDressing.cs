@@ -43,8 +43,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         public string EffectId => "terrain-rain";
 
-        public FxBudget Budget => new FxBudget(0, 8, 0, true);
-
         public void ReleaseFx()
         {
             Reset();

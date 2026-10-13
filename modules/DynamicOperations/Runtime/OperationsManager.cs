@@ -88,17 +88,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         public event Action<int, float> MoraleAwarded;
         public event Action<SortieOutcome> Finished;
 
-        public bool HasCompletedContract(int factionInstanceId)
-        {
-            if (!GameAccess.IsServer() || settings?.Enabled.Value != true ||
-                !MissionManager.IsRunning || !ReferenceEquals(missionIdentity, MissionManager.CurrentMission) ||
-                factionInstanceId == 0) return false;
-            foreach (var entry in boards)
-                if (entry.Key != null && entry.Key.GetInstanceID() == factionInstanceId)
-                    return entry.Value.CompletedContract;
-            return false;
-        }
-
         /// <summary>True while a local pilot with a faction could be shown sorties: the transport then keeps its own snapshot fresh with no surface open.</summary>
         internal bool WantsHeartbeat => settings != null && settings.Enabled.Value && MissionManager.IsRunning &&
             ReferenceEquals(missionIdentity, MissionManager.CurrentMission) &&

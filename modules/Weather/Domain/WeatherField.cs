@@ -76,12 +76,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public float Temperature;
         public float Dewpoint;
 
-        public PrecipitationKind Precipitation => WeatherField.Classify(RainRate);
-
         public float WindSpeed => (float)Math.Sqrt(WindX * WindX + WindZ * WindZ);
-
-        /// <summary>Downwind heading in degrees. Displays use <see cref="WeatherWords.WindFrom"/>.</summary>
-        public float WindHeading => WeatherMath.VectorToHeading(WindX, WindZ);
     }
 
     /// <summary>

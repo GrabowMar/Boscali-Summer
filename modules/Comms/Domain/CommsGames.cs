@@ -146,25 +146,6 @@ namespace BoscaliSummer.Modules.Comms.Domain
 
         public IReadOnlyList<ScoreRow> Rows => rows;
 
-        public void Award(ulong player, string name, int points, bool win)
-        {
-            if (points == 0 && !win) return;
-            for (int i = 0; i < rows.Count; i++)
-            {
-                if (rows[i].Player != player) continue;
-                ScoreRow row = rows[i];
-                row.Name = name ?? row.Name;
-                row.Points += points;
-                if (win) row.Wins++;
-                rows[i] = row;
-                Sort();
-                return;
-            }
-            if (rows.Count >= MaxRows) return;
-            rows.Add(new ScoreRow { Player = player, Name = name, Points = points, Wins = win ? 1 : 0 });
-            Sort();
-        }
-
         /// <summary>Replace the table wholesale: what a peer does with the host's broadcast.</summary>
         public void Set(IList<ScoreRow> table)
         {
@@ -172,13 +153,6 @@ namespace BoscaliSummer.Modules.Comms.Domain
             if (table != null)
                 for (int i = 0; i < table.Count && rows.Count < MaxRows; i++) rows.Add(table[i]);
             Sort();
-        }
-
-        public int PointsOf(ulong player)
-        {
-            for (int i = 0; i < rows.Count; i++)
-                if (rows[i].Player == player) return rows[i].Points;
-            return 0;
         }
 
         public void Clear() => rows.Clear();

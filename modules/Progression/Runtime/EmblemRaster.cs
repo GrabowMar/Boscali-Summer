@@ -294,9 +294,6 @@ namespace BoscaliSummer.Modules.Progression.Runtime
             return Len(Math.Max(dx, 0f), Math.Max(dy, 0f)) + Math.Min(Math.Max(dx, dy), 0f);
         }
 
-        private static float RoundBox(float x, float y, float halfX, float halfY, float radius) =>
-            Box(x, y, halfX - radius, halfY - radius) - radius;
-
         private static float Stroke(float x, float y, float ax, float ay, float bx, float by)
         {
             float ex = bx - ax, ey = by - ay, wx = x - ax, wy = y - ay;

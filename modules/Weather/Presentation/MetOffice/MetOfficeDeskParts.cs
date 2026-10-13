@@ -171,8 +171,6 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             Auto = AvControl.Make(Rect, autoSpec);
         }
 
-        public int SkyAt(int slot) => slot >= 0 && slot < TileCount ? sky[slot] : -1;
-
         public void Show(WeatherRegimeType cls, int selectedSky, int pinnedSky, int overheadSky)
         {
             selected = selectedSky;

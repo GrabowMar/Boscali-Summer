@@ -154,7 +154,6 @@ namespace BoscaliSummer.Modules.Cinematography.Runtime
                 Revision++;
             }
         }
-        internal void ToggleSmooth() { if (!Playing) Plan.smooth = !Plan.smooth; }
         private void Retime()
         { for (int i = 0; i < Plan.keys.Length; i++) Plan.keys[i].time = Plan.keys.Length == 1 ? 0 : Plan.duration * i / (Plan.keys.Length - 1); }
 
