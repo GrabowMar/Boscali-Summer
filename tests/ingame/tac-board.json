@@ -1,7 +1,7 @@
 {
-  "_note": "The TAC BOARD in the cockpit, ONE run for every look. Cruise first, the dock geometry probe, then ten looks, each set through HudAutomation.Configure (the SET console's own settings contract) with 2 s for the board's 10 Hz tick and a capture: cruise-wide (the defaults, every option set explicitly), look-stack, look-wide-scale07, look-wide-scale13-moved (scale 1.3, 300 left, 120 down), look-shade0, look-shade1, look-lean, look-minimal, look-board-off (the game's own weapon, countermeasure and power panels must be back; the restyled kill feed and map stay) and look-board-on. Then the cruise SYSTEMS strip with the THREAT page switched off (the mission's own radar emitter keeps the THREAT page up from the first second otherwise, so every look above is a THREAT look; round 1 of the in-game run never saw the strip): cruise-systems-wide and cruise-systems-stack. Then a bandit head-on at 8 km, the missile shot (shot, shot-later, after) and the tracker probe. Configure changes the options IN MEMORY ONLY: the config file is never written and the last op puts the pilot's own values back (cfg_restored), so a run leaves the player's saved settings alone. results.json holds the dock / fire / msl probes and what each Configure applied (cfg_*). The checks assert the options really reached the contract, that the shot happened and that the Unity log has no Exception; nothing asserts the board's pixels, that is read off the captures.",
+  "_note": "The TAC BOARD in the cockpit, ONE run for every look. Cruise first, the dock geometry probe, then ten looks, each set through HudAutomation.Configure (the SET console's own settings contract) with 2 s for the board's 10 Hz tick and a capture: cruise-wide (the defaults, every option set explicitly), look-stack, look-wide-scale07, look-wide-scale13-moved (scale 1.3, 300 left, 120 down), look-shade0, look-shade1, look-lean, look-minimal, look-board-off (the game's own weapon, countermeasure and power panels must be back; the restyled kill feed and map stay) and look-board-on. Then the CUE stack: HudAutomation.Cue pushes an action report (weapon safety lock disabled: AMBER), a damage failure the way StatusDisplay writes one (alert-coloured: RED), a funds line and a score line through the game's own calls (the funds line shows only while the game's allocation display is visible), and reports the cue ring; captures at 0.15 s (SHOW: bracket halves, decode), 1 s (HOLD) and 4.8 s (the fade, a flicker step) after the push, and 1.5 s later (gone: the game's own boxes are back, cue_gone.drawn 0). Then the cruise SYSTEMS strip with the THREAT page switched off (the mission's own radar emitter keeps the THREAT page up from the first second otherwise, so every look above is a THREAT look; round 1 of the in-game run never saw the strip): cruise-systems-wide and cruise-systems-stack. Then a bandit head-on at 8 km, the missile shot (shot, shot-later, after) and the tracker probe. Configure changes the options IN MEMORY ONLY: the config file is never written and the last op puts the pilot's own values back (cfg_restored), so a run leaves the player's saved settings alone. results.json holds the dock / fire / msl probes and what each Configure applied (cfg_*). The checks assert the options really reached the contract, that the shot happened and that the Unity log has no Exception; nothing asserts the board's pixels, that is read off the captures.",
   "name": "tac-board",
-  "description": "TAC BOARD looks in one cockpit run: wide, stack, scale 0.7 and 1.3 moved, shade 0 and 1, lean, minimal, board off and on; then four DL EVT LOG lines through the game's feed, then a missile shot.",
+  "description": "TAC BOARD looks in one cockpit run: wide, stack, scale 0.7 and 1.3 moved, shade 0 and 1, lean, minimal, board off and on; then four DL EVT LOG lines through the game's feed, then the CUE stack (an action report, an alert-coloured failure, a funds and a score line through the game's own calls, captured 0.15 s, 1 s and 4.8 s after and once gone), then a missile shot.",
   "mods": [
     "boscalisummer"
   ],
@@ -322,6 +322,76 @@
     },
     {
       "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
+      "args": {},
+      "store": "cue"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.15
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
+      "args": {
+        "push": false
+      },
+      "store": "cue_show"
+    },
+    {
+      "op": "capture",
+      "name": "cue-show"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.85
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
+      "args": {
+        "push": false
+      },
+      "store": "cue_hold"
+    },
+    {
+      "op": "capture",
+      "name": "cue-hold"
+    },
+    {
+      "op": "wait",
+      "seconds": 3.8
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
+      "args": {
+        "push": false
+      },
+      "store": "cue_fade"
+    },
+    {
+      "op": "capture",
+      "name": "cue-fade"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Cue",
+      "args": {
+        "push": false
+      },
+      "store": "cue_gone"
+    },
+    {
+      "op": "capture",
+      "name": "cue-gone"
+    },
+    {
+      "op": "call",
       "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Configure",
       "args": {
         "layout": "Stack"
@@ -495,6 +565,36 @@
       "check": "result_equals",
       "path": "feed.ok",
       "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "cue.ok",
+      "value": true
+    },
+    {
+      "check": "result_above",
+      "path": "cue.count",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "cue_show.drawn",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "cue_hold.drawn",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "cue_fade.drawn",
+      "min": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "cue_gone.drawn",
+      "value": 0
     },
     {
       "check": "result_above",

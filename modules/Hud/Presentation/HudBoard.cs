@@ -77,6 +77,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>Hand the board the pilot's options; the next 10 Hz tick takes the first snapshot.</summary>
         public void Configure(HudSettings hudSettings) => settings = hudSettings;
 
+        /// <summary>How many CUE stack cues are on the screen and which game boxes they stand in for (the sim probe in <c>HudAutomation</c> reads them; -1: no board).</summary>
+        internal int CueDrawn => panel != null ? panel.CueDrawn : -1;
+        internal int CueInCharge => panel != null ? panel.CueInCharge : -1;
+
         /// <summary>The live own-missile set (the sim probe in <c>HudAutomation</c> reads it).</summary>
         internal MissileTracker Tracker => missileTracker;
 
@@ -107,8 +111,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         public IHudLine Acquire(string owner, string channel, string key) => store.Acquire(owner, channel, key);
-        public void Notice(string channel, HudTone tone, string text, string detail = null) =>
+        public void Notice(string channel, HudTone tone, string text, string detail = null)
+        {
+            // The radio module sends the game's centre notices ("Weapon safety lock Disabled") to the ticker's "sys" channel and keeps them off the game's own box: while the CUE stack is drawing that box they are its cues instead, shown once.
+            if (channel == "sys" && CueFeed.TakeNotice(text, tone)) return;
             store.Notice(channel, tone, text, detail);
+        }
 
         public bool TryGetScreenBox(out float left, out float top, out float right, out float bottom)
         {
