@@ -5,6 +5,7 @@ using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.Support.Domain.Space;
+using BoscaliSummer.Modules.Support.Runtime.Actions;
 using NuclearOption.Networking;
 using UnityEngine;
 
@@ -244,19 +245,36 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// </summary>
         internal int OpenOptical(FactionHQ owner, GlobalPosition point, float baseRadius, out SupportResult refusal)
         {
-            refusal = SupportResult.Accepted;
+            if (!OpticalRadius(owner, point, baseRadius, out float radius, out refusal)) return -1;
+            int admitted = OpenWindow(owner, point, radius, BirdKind.Optical, 0f, float.MaxValue);
+            if (admitted < 0) refusal = SupportResult.SpawnFailed;
+            return admitted;
+        }
+
+        private static bool OpticalRadius(FactionHQ owner, GlobalPosition point, float baseRadius, out float radius, out SupportResult refusal)
+        {
+            refusal = SupportResult.Accepted; radius = 0f;
             bool known = SpaceSky.TrySample(point, out WeatherViewSample sky);
             OpticalVerdict verdict = SpaceFeedRules.Optical(known, sky);
             if (verdict != OpticalVerdict.Ok)
             {
                 refusal = verdict == OpticalVerdict.NightUnavailable ? SupportResult.OpticalNight : SupportResult.SkyUnknown;
-                return -1;
+                return false;
             }
             // CYBER BIRD JAM halves the footprint of a jammed faction's camera.
             float jam = CyberService.Active != null ? CyberService.Active.BirdOpticalFactor(owner) : 1f;
-            int admitted = OpenWindow(owner, point, SpaceFeedRules.OpticalRadius(baseRadius, sky) * jam, BirdKind.Optical, 0f, float.MaxValue);
-            if (admitted < 0) refusal = SupportResult.SpawnFailed;
-            return admitted;
+            radius = SpaceFeedRules.OpticalRadius(baseRadius, sky) * jam;
+            return true;
+        }
+
+        /// <summary>OVERLORD's resumable twin of <see cref="OpenWindow"/> / <see cref="OpenOptical"/>: null where those return -1, else the unit walk to step.</summary>
+        internal SpaceObservations.OpenWalk BeginScan(FactionHQ owner, GlobalPosition point, float radius, bool radar)
+        {
+            SpaceObservations observations = ObservationsFor(owner);
+            if (observations == null) return null;
+            if (radar) return observations.BeginOpen(point, radius, BirdKind.Radar, 0f, ReconAction.StationaryThreshold);
+            return OpticalRadius(owner, point, radius, out float optical, out _)
+                ? observations.BeginOpen(point, optical, BirdKind.Optical, 0f, float.MaxValue) : null;
         }
 
         // ---- TASKED calls (host authority; Task 6 network handlers call these) ---------------------
