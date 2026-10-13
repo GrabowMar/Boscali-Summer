@@ -25,9 +25,6 @@ namespace BoscaliSummer.Core.Game
 
         private static FieldInfo overlayPrefabField;
         private static FieldInfo markerPrefabField;
-        private static FieldInfo overlayPointerField;
-        private static FieldInfo overlayDotField;
-        private static FieldInfo overlayRingField;
         private static FieldInfo overlayInfoField;
         private static FieldInfo destroySpriteField;
         private static FieldInfo waypointSpriteField;
@@ -46,13 +43,6 @@ namespace BoscaliSummer.Core.Game
         {
             public TMP_FontAsset Font;
             public Material FontMaterial;
-            public Color Colour;
-            public Sprite Pointer;
-            public Sprite Dot;
-            public Sprite Ring;
-            public Vector2 PointerSize;
-            public Vector2 DotSize;
-            public Vector2 RingSize;
 
             /// <summary>Vanilla's label is font size 32 scaled 0.5, i.e. 16 px on screen.</summary>
             public float LabelScale;
@@ -123,9 +113,6 @@ namespace BoscaliSummer.Core.Game
             {
                 overlayPrefabField = AccessTools.Field(typeof(ObjectiveOverlayManager), "overlayPrefab");
                 markerPrefabField = AccessTools.Field(typeof(ObjectiveMarkerManager), "markerPrefab");
-                overlayPointerField = AccessTools.Field(typeof(ObjectiveOverlay), "objectivePointer");
-                overlayDotField = AccessTools.Field(typeof(ObjectiveOverlay), "objectiveDot");
-                overlayRingField = AccessTools.Field(typeof(ObjectiveOverlay), "sizeIndicator");
                 overlayInfoField = AccessTools.Field(typeof(ObjectiveOverlay), "objectiveInfo");
                 destroySpriteField = AccessTools.Field(typeof(ObjectiveMarker), "destroyObjective");
                 waypointSpriteField = AccessTools.Field(typeof(ObjectiveMarker), "waypointObjective");
@@ -191,8 +178,7 @@ namespace BoscaliSummer.Core.Game
         {
             if (reflectionTried) return;
             reflectionTried = true;
-            if (overlayPrefabField != null && markerPrefabField != null && overlayPointerField != null &&
-                overlayDotField != null && overlayRingField != null && overlayInfoField != null &&
+            if (overlayPrefabField != null && markerPrefabField != null && overlayInfoField != null &&
                 destroySpriteField != null && waypointSpriteField != null && captureSpriteField != null &&
                 reconSpriteField != null)
                 return;
@@ -210,28 +196,20 @@ namespace BoscaliSummer.Core.Game
                     : null;
                 if (prefab == null) return false;
 
-                // The serialized fields are the game's own names; the fallback scan covers a
-                // prefab whose child objects were renamed.
-                Image pointer = Typed<Image>(prefab, overlayPointerField) ?? Named<Image>(prefab, "objectivePointer");
-                Image dot = Typed<Image>(prefab, overlayDotField) ?? Named<Image>(prefab, "objectiveDot");
-                Image ring = Typed<Image>(prefab, overlayRingField) ?? Named<Image>(prefab, "objectiveSizeIndicator");
+                // Only the label is read: the overlay's pointer, dot and ring sprites are white on
+                // opaque black and need the game's additive material, so nothing of ours draws them.
+                // The serialized field is the game's own name; the fallback scan covers a prefab
+                // whose child object was renamed.
                 TextMeshProUGUI label = Typed<TextMeshProUGUI>(prefab, overlayInfoField) ?? Named<TextMeshProUGUI>(prefab, "ObjectiveInfo");
-                if (pointer == null || dot == null || ring == null || label == null) return false;
+                if (label == null) return false;
 
                 style = new CockpitStyle
                 {
-                    Pointer = pointer.sprite,
-                    PointerSize = Size(pointer.rectTransform, 25f),
-                    Dot = dot.sprite,
-                    DotSize = Size(dot.rectTransform, 10f),
-                    Ring = ring.sprite,
-                    RingSize = Size(ring.rectTransform, 20f),
                     Font = label.font,
                     FontMaterial = label.fontSharedMaterial,
-                    Colour = label.color,
                     LabelScale = Scale(label.rectTransform, 0.5f)
                 };
-                return style.Pointer != null && style.Dot != null && style.Ring != null && style.Font != null;
+                return style.Font != null;
             }
             catch (Exception e)
             {
@@ -297,9 +275,6 @@ namespace BoscaliSummer.Core.Game
                     return candidate;
             return null;
         }
-
-        private static Vector2 Size(RectTransform rect, float fallback) =>
-            rect != null && rect.sizeDelta.x > 0.5f && rect.sizeDelta.y > 0.5f ? rect.sizeDelta : new Vector2(fallback, fallback);
 
         /// <summary>
         /// The vanilla labels carry their real size in a 0.5 transform scale, so a mod that

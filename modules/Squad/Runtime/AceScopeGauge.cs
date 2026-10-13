@@ -22,6 +22,8 @@ namespace BoscaliSummer.Modules.Squad.Runtime
 
         public void Register() => ScopeGauges.Register("ace", Read);
 
+        public void Unregister() => ScopeGauges.Unregister("ace", Read);
+
         public bool Read(out GaugeSpec gauge)
         {
             gauge = default;

@@ -31,7 +31,7 @@ namespace Vanguard
         static readonly Spec[] Missiles =
         {
             new Spec { Key = "VG_MaldX", Name = "MALD-X BAIT", Short = "BAIT", Model = "MaldX",
-                Description = "Loud fighter-signature decoy. Weaves toward your designated or locked target at 230 m/s and loiters over it for five minutes. Enemy radar sites that hold it for 3 s are EXPOSED to your side for 60 s; radar missiles chasing friendly aircraft within 4 km may switch to it.",
+                Description = "Chaff-laying decoy. Weaves toward your designated or locked target at 230 m/s, seeding a chaff cloud every 300 m, and circles it for five minutes. Each cloud hangs for a minute: a radar missile whose line of sight to a friendly aircraft crosses one is blinded, and that cloud is spent. Enemy radar sites that hold the decoy for 3 s are EXPOSED to your side for 60 s.",
                 Mass = 140, Yield = 1, Cost = 0.3f, Value = 90, RadarSize = 3.0f, Thrust = 900, BurnTime = 600, GLimit = 6, TurnRate = 12,
                 Racks = new[] { "AGM_heavy_single", "AGM_heavy_triple", "CruiseMissile1_internalx2" } },
             new Spec { Key = "VG_MaldJ", Name = "ADM-160J MALD-J", Short = "MALD-J", Model = "MaldJ",
@@ -41,11 +41,11 @@ namespace Vanguard
             new Spec { Key = "VG_Remora", Name = "XQ-58V REMORA", Short = "REMORA", Model = "Remora",
                 Description = "ARCHER loyal-wingman drone with two mini radar missiles on underwing rails. Holds a wing slot and draws radar-guided missiles. VANGUARD: DESIGNATE your target and it turns in and fires both rounds inside 12 km, then rejoins; designate again when empty and it rams with its 60 kg warhead. Six-minute endurance.",
                 Mass = 450, Yield = 60, Pierce = 300, Cost = 0.8f, Value = 40, RadarSize = 0.15f, Thrust = 4200, BurnTime = 360, GLimit = 9, TurnRate = 25,
-                Racks = new[] { "AGM_heavy_single", "CruiseMissile1_internalx2" } },
+                Racks = new[] { "ARM1_single" } }, // 4.4 m long and 2.1 m across folded: the ARM pylon is the one slot its size (FitReport)
             new Spec { Key = "VG_HawcX", Name = "HAWC-X SKIP Glider", Short = "HAWC-X", Model = "HawcX",
                 Description = "SKIP glider. Boosts to 24 km and drops its booster, skips twice through glowing phases where nothing can track it (and it takes no updates), then dives. In the final dive, DESIGNATE a new target within 20 km to shift it.",
                 Mass = 1500, Yield = 150, Pierce = 2500, Cost = 4f, Value = 30, RadarSize = 0.003f, Thrust = 180000, BurnTime = 22, GLimit = 25, TurnRate = 18,
-                Racks = new[] { "AGM_heavy_single", "CruiseMissile1_internalx2" } },
+                Racks = new[] { "BallisticMissile1_single", "BallisticMissile1_internalx2" } }, // 6.4 m: only the ballistic missile's slots hold it
             new Spec { Key = "VG_AegisDart", Name = "AIM-X AEGIS", Short = "AEGIS", Model = "AegisInterceptor",
                 Description = "Low-profile three-dart hit-to-kill pod. Automatic: darts drop clear, pitch onto a missile locked on you and ignite; all-direction protection inside 1.1 km. SNAP: tap the station with a locked aircraft, helicopter or drone inside 2.5 km and 70 deg of the nose for a double-damage dart. The last dart stays with the defence while a missile is inbound.",
                 Mass = 25, Yield = .2f, Pierce = 50, Cost = 0.15f, Value = 2, RadarSize = 0.0005f, Thrust = 9000, BurnTime = 2.5f, GLimit = 60, TurnRate = 55,
@@ -79,6 +79,7 @@ namespace Vanguard
         public static void Run()
         {
             ImportModels();
+            RetireMounts(); // VanguardBuilder.fit.cs
             var materials = Materials();
             var infos = new Dictionary<string, WeaponInfo>();
             foreach (Spec spec in Missiles) infos[spec.Key] = Missile(spec, materials);
@@ -691,16 +692,27 @@ namespace Vanguard
             var mount = Copy<WeaponMount>(donor, "WM_" + json);
             var g = Clone(D + "GameObject/" + donor + "_PLACEHOLDER.prefab");
             g.name = json;
+            // Measure the donor before it is hidden: the slot each round fills, the gap to the next station, and whether a rail carries it.
+            var stations = g.GetComponentsInChildren<MountedMissile>(true);
+            var slots = stations.Select(s => LocalBounds(s.transform, s.gameObject)).ToArray();
+            bool railed = LocalBounds(g.transform, g, f => !f.GetComponentInParent<MountedMissile>(true)) != null;
             HideRenderers(g);
             // Keep the donor rack hardware visible; only its ammunition is replaced.
             foreach (var r in g.GetComponentsInChildren<Renderer>(true))
                 if (!r.GetComponentInParent<MountedMissile>(true)) r.enabled = true;
-            foreach (var station in g.GetComponentsInChildren<MountedMissile>(true))
+            for (int i = 0; i < stations.Length; i++)
             {
+                var station = stations[i];
                 GameObject rackVisual = Visual(station.transform, spec.Model, materials);
                 // Those FBX files already hold the stowed pose; HAMILCAR holds the flight pose but its joints are not WingL/WingR:
-                // Hamilcar() stows the mount visual itself.
+                // Hamilcar() stows and places the mount visual itself.
                 if (!StowedInFbx(spec.Model) && spec.Model != "Hamilcar") StowWings(rackVisual, station.transform);
+                if (spec.Model != "Hamilcar")
+                {
+                    float pitch = stations.Where(other => other != station)
+                        .Select(other => Vector3.Distance(other.transform.position, station.transform.position)).DefaultIfEmpty(float.MaxValue).Min();
+                    Seat(rackVisual, slots[i], railed, pitch, donor.IndexOf("internal", StringComparison.Ordinal) >= 0, json); // VanguardBuilder.fit.cs
+                }
                 Edit(station, s => P(s, "info").objectReferenceValue = info);
             }
             SaveMount(g, mount, json, info, donor);
@@ -762,7 +774,10 @@ namespace Vanguard
             HideRenderers(g);
             var first = g.GetComponentsInChildren<MountedMissile>(true).Single();
             Vector3 home = first.transform.localPosition;
-            Visual(first.transform.parent, "AegisPod", materials).transform.localPosition = home;
+            var pod = Visual(first.transform.parent, "AegisPod", materials);
+            pod.transform.localPosition = home;
+            home += PodLift(g, pod); // VanguardBuilder.fit.cs
+            pod.transform.localPosition = home;
             // Copy clean donor cells before dressing any one of them. Copying a dressed
             // first cell duplicated its VanguardVisual on all subsequent rounds.
             var cells = new MountedMissile[AegisCells.Length];

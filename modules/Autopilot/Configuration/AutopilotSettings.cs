@@ -9,7 +9,7 @@ namespace BoscaliSummer.Modules.Autopilot.Configuration
         public ConfigEntry<bool> IlsHud { get; }
         public ConfigEntry<float> GlideslopeDegrees { get; }
         public ConfigEntry<UnityEngine.KeyCode> AceRadialKey { get; }
-        public ConfigEntry<bool> ReplaceNativeWheel { get; }
+        public ConfigEntry<bool> OnRadialBinding { get; }
         public ConfigEntry<bool> ChaffOnCountermeasureKey { get; }
         public ConfigEntry<UnityEngine.KeyCode> ChaffKey { get; }
 
@@ -26,17 +26,20 @@ namespace BoscaliSummer.Modules.Autopilot.Configuration
                 new ConfigDescription(
                     "ILS glideslope angle in degrees for the hand-flown APPROACH page (the landing autopilot flies its own slope).",
                     new AcceptableValueRange<float>(IlsGuidance.MinSlope, IlsGuidance.MaxSlope)));
-            ReplaceNativeWheel = config.Bind("Autopilot", "InteractionMenuReplacesRadial", true,
-                "The interaction menu opens on the game's own Radial Menu binding (keyboard, HOTAS or gamepad) and " +
-                "the native wheel stays closed. Hold the binding, point at a category and a row, release to run it; " +
-                "release at the centre to keep the menu open for clicks. A quick tap is left to the game.");
+            // A new key name on purpose (GitHub issue 11): the old InteractionMenuReplacesRadial was on by default and is saved as on in every
+            // config written since, and taking the game's wheel away breaks other mods that add to it.
+            OnRadialBinding = config.Bind("Autopilot", "InteractionMenuOnRadialBinding", false,
+                "Off (default): the game's Radial Menu binding opens the game's own wheel, and the interaction menu opens only on AceRadialKey. " +
+                "On: the interaction menu takes that binding (HOTAS or gamepad button) and the native wheel stays closed; other mods that add " +
+                "entries to the native wheel are then out of reach.");
             // The game ships no keyboard binding for Radial Menu (only a mouse button and the gamepad), so the keyboard needs this key of its own.
             AceRadialKey = config.Bind("Autopilot", "AceRadialKey", UnityEngine.KeyCode.C,
-                "Keyboard key that opens the interaction menu at once (default C; None leaves only the Radial Menu binding). " +
+                "Keyboard key that opens the interaction menu at once (default C; None closes this way in). " +
                 "Tap it to keep the menu open for clicks, or hold it, point at a row and release.");
             ChaffOnCountermeasureKey = config.Bind("Autopilot", "ChaffOnCountermeasureKey", true,
-                "Your aircraft carries a chaff dispenser (single player and hosting). On: holding the game's countermeasure button " +
-                "also dispenses chaff while a radar-guided missile is inbound. Off: chaff only from the interaction menu (DEFENCE > POP CHAFF) or ChaffKey. " +
+                "Your aircraft carries a chaff dispenser (single player and hosting). Chaff is one more stop of the game's Next Countermeasure key, " +
+                "and while it is selected the countermeasure button dispenses it. On: with flares or the jammer selected, holding the countermeasure button " +
+                "also dispenses chaff while a radar-guided missile is inbound. Off: chaff only when selected, from the interaction menu (DEFENCE > POP CHAFF) or on ChaffKey. " +
                 "Chaff dazzles a radar seeker most when you fly across its line of sight, and does nothing head-on.");
             ChaffKey = config.Bind("Autopilot", "ChaffKey", UnityEngine.KeyCode.None,
                 "Keyboard key that pops one chaff salvo (default None: use the countermeasure button or the interaction menu).");

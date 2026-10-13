@@ -86,6 +86,7 @@
   <ItemGroup Label="Game">
     <Reference Include="Assembly-CSharp"><HintPath>$(ManagedDir)\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Assembly-CSharp-firstpass"><HintPath>$(ManagedDir)\Assembly-CSharp-firstpass.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Newtonsoft.Json"><HintPath>$(ManagedDir)\Newtonsoft.Json.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Mirage"><HintPath>$(ManagedDir)\Mirage.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Mirage.SocketLayer"><HintPath>$(ManagedDir)\Mirage.SocketLayer.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UniTask"><HintPath>$(ManagedDir)\UniTask.dll</HintPath><Private>false</Private></Reference>

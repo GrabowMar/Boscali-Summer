@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Tests.Features.Vanguard
 {
-    /// <summary>Pins MALD-X BAIT cruise, loiter, exposure and lure numbers.</summary>
+    /// <summary>Pins MALD-X BAIT cruise, loiter, exposure and chaff numbers.</summary>
     internal static class MaldxTests
     {
         public static void Run()
@@ -49,9 +49,14 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             cap.Forget(9);
             TestAssert.Eq(cap.Exposed(63f), 0, "a destroyed site is forgotten");
 
-            TestAssert.Near(SeductionRule.LureRadius, 4000f, "lure covers friendlies within 4 km");
-            TestAssert.That(SeductionRule.Lures("ARH", 0.24f) && SeductionRule.Lures("SARH", 0.24f), "radar seekers bite at 25 %");
-            TestAssert.That(!SeductionRule.Lures("ARH", 0.26f) && !SeductionRule.Lures("IR", 0f), "above 25 % or IR: no switch");
+            var sight = new Vector3(10000f, 0f, 0f); // seeker at the origin, target 10 km east
+            TestAssert.That(MaldxRules.Screens(new Vector3(5000f, 0f, 500f), sight), "a cloud 500 m off the line of sight blinds the seeker");
+            TestAssert.That(!MaldxRules.Screens(new Vector3(5000f, 0f, 700f), sight), "700 m off the line: clear");
+            TestAssert.That(MaldxRules.Screens(new Vector3(10400f, 300f, 0f), sight), "a target inside a cloud is covered");
+            TestAssert.That(!MaldxRules.Screens(new Vector3(-700f, 0f, 0f), sight) && !MaldxRules.Screens(new Vector3(10700f, 0f, 0f), sight),
+                "a cloud behind the seeker or beyond the target does nothing");
+            TestAssert.That(MaldxRules.Screens(new Vector3(0f, 0f, 500f), Vector3.zero), "seeker on top of its target: plain distance");
+            TestAssert.That(MaldxRules.ChaffSpacing < MaldxRules.ChaffRadius, "clouds overlap into a corridor");
         }
     }
 }

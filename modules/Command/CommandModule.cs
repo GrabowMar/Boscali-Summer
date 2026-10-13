@@ -13,7 +13,7 @@ namespace BoscaliSummer.Modules.Command
     internal sealed class CommandModule : IModule
     {
         private static readonly ModuleMetadata Module =
-            new ModuleMetadata("command", "Tactical command and theater SA", "progression");
+            new ModuleMetadata("command", "Avionics and tactical map");
 
         public ModuleMetadata Metadata => Module;
 
@@ -62,15 +62,10 @@ namespace BoscaliSummer.Modules.Command
             context.AddService<IMapProjection>(new MfdMapProjection());
             ThreatMapOverlay threats = context.AddSceneService<ThreatMapOverlay>(54);
             context.AddService<ThreatMapOverlay>(threats);
-            StrViewHub strHub = context.AddSceneService<StrViewHub>(55);
-            strHub.Configure(context.Settings.Command);
-            StrMfdPanel strategic = context.AddSceneService<StrMfdPanel>(56);
             context.AddSceneService<MapUiManager>(57);
             context.AddSceneService<SettingsMfdPanel>(58)
                 .Configure(context.Settings.Command, context.Logger, overlay,
                     context.HostSettings, context.ClientSettings);
-            context.AddSceneService<FactionResourceRecorder>(59);
-            context.AddSceneService<StrMapOverlay>(60);
             context.AddSceneService<TerrainGhostOverlay>(61).Configure(context.Settings.Command);
             context.AddSceneService<HoloMap>(62).Configure(context.Settings.Command);
 
@@ -80,7 +75,6 @@ namespace BoscaliSummer.Modules.Command
             manager.Configure(moraleNet, territory);
             overlay.Configure(context.Settings.Command, compat, territory);
             threats.Configure(context.Settings.Command);
-            strategic.Configure(context.Settings.Command, strHub, context.Logger);
         }
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Command.Configuration;
 using BoscaliSummer.Modules.Command.Domain;
@@ -115,12 +116,15 @@ namespace BoscaliSummer.Modules.Command.Runtime
             LayersFromSettings();
         }
 
-        private void Awake() => Active = this;
+        private void OnEnable() => Active = this;
 
-        private void OnDestroy()
+        private void OnDisable()
         {
+            ResetForScene();
             if (Active == this) Active = null;
         }
+
+        private void OnDestroy() => OnDisable();
 
         public void ResetForScene()
         {
@@ -144,6 +148,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
         private void Update()
         {
+            if (!MissionProfile.FullExperience) return;
             if (!DynamicMap.mapMaximized || Time.unscaledTime < nextTick) return;
             nextTick = Time.unscaledTime + TickSeconds;
             TickNow();
@@ -152,6 +157,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         /// <summary>Builds now. Selection, hover and every press call it.</summary>
         internal void TickNow()
         {
+            if (settings != null && !MissionProfile.FullExperience) return;
             float now = Time.unscaledTime;
             if (FeedsSource != null) feeds = FeedsSource();
             else StrFeedsReader.Read(ref feeds, this, now);
@@ -217,6 +223,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
         /// <summary>StrActions.Run through the verbs, then TickNow.</summary>
         public StrAct Run(StrActionKind kind, StrItemId id, int arg = 0)
         {
+            if (settings != null && !MissionProfile.FullExperience)
+                return new StrAct(StrWhy.Forbidden, "STR IS AVAILABLE IN THE BOSCALI SUMMER MISSION");
             StrAct act = StrActions.Run(kind, id, arg, Current, Verbs ?? verbs, ref ui, Time.unscaledTime);
             TickNow();
             return act;

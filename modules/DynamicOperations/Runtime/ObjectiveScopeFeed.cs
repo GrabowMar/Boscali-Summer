@@ -35,6 +35,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 
         public void Register() => ScopeFeeds.Register<ObjectiveScope>(Read);
 
+        public void Unregister() => ScopeFeeds.Unregister<ObjectiveScope>(Read);
+
         public bool Read(out ObjectiveScope data)
         {
             if (frame != Time.frameCount)

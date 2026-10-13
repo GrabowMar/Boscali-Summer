@@ -17,6 +17,9 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.That(!ChaffRules.ShouldRun(false, true, false, true, 10), "linked: nothing without the button");
             TestAssert.That(!ChaffRules.ShouldRun(false, false, true, true, 10), "unlinked: the button leaves the chaff alone");
 
+            TestAssert.That(ChaffRules.NextIsChaff(1, 2) && ChaffRules.NextIsChaff(0, 1), "Next Countermeasure from the last station lands on chaff");
+            TestAssert.That(!ChaffRules.NextIsChaff(0, 2) && !ChaffRules.NextIsChaff(255, 2) && !ChaffRules.NextIsChaff(0, 0), "not from an earlier one, from the game's 'none', or with no station");
+
             TestAssert.That(ChaffRules.Refilled(rearmWasPending: true, rearmPending: false, flaresBefore: 10, flaresNow: 10), "a finished rearm refills it");
             TestAssert.That(ChaffRules.Refilled(false, false, 10, 48), "so do flares coming back up");
             TestAssert.That(!ChaffRules.Refilled(true, true, 10, 10) && !ChaffRules.Refilled(false, false, 10, 8), "a pending rearm or flares going down do not");

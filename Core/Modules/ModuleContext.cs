@@ -21,6 +21,7 @@ namespace BoscaliSummer.Core.Modules
         private readonly List<IHostSettingsView> registeredHostSettings = new List<IHostSettingsView>();
         private readonly List<ClientSettingToggle> registeredClientSettings = new List<ClientSettingToggle>();
         private readonly List<IClientEffect> registeredEffects = new List<IClientEffect>();
+        private readonly List<Action> teardown = new List<Action>();
 
         public ManualLogSource Logger { get; }
         public ModConfiguration Settings { get; }
@@ -99,9 +100,20 @@ namespace BoscaliSummer.Core.Modules
             registeredEffects.Add(effect);
         }
 
+        public void OnTeardown(Action action)
+        {
+            if (action != null) teardown.Add(action);
+        }
+
         internal void Rollback()
         {
             sceneLifecycle.Unregister(moduleId);
+            for (int i = teardown.Count - 1; i >= 0; i--)
+            {
+                try { teardown[i](); }
+                catch (Exception error) { Logger.LogWarning("Module subscription teardown failed: " + error); }
+            }
+            teardown.Clear();
             for (int i = registeredEffects.Count - 1; i >= 0; i--)
             {
                 IClientEffect effect = registeredEffects[i];
@@ -120,8 +132,23 @@ namespace BoscaliSummer.Core.Modules
                 Services.Remove(registeredServices[i]);
             registeredServices.Clear();
             for (int i = installedComponents.Count - 1; i >= 0; i--)
+                if (installedComponents[i] is MonoBehaviour behaviour && behaviour != null)
+                {
+                    // Profile changes happen at the native mission-loading boundary. End
+                    // callbacks and network handlers now, before the next mission can spawn.
+                    behaviour.enabled = false;
+                    behaviour.StopAllCoroutines();
+                }
+            // Reset while sibling components still exist; managers often reset their networks.
+            for (int i = installedComponents.Count - 1; i >= 0; i--)
+                if (installedComponents[i] != null && installedComponents[i] is ISceneService sceneService)
+                {
+                    try { sceneService.ResetForScene(); }
+                    catch (Exception error) { Logger.LogWarning("Module teardown reset failed: " + error); }
+                }
+            for (int i = installedComponents.Count - 1; i >= 0; i--)
                 if (installedComponents[i] != null)
-                    UnityEngine.Object.Destroy(installedComponents[i]);
+                    UnityEngine.Object.DestroyImmediate(installedComponents[i]);
             installedComponents.Clear();
         }
     }

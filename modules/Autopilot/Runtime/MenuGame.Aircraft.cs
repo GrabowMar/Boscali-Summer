@@ -123,10 +123,14 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             if (w.HasCountermeasures)
             {
                 w.Countermeasure = MenuText.Upper(active.displayName, 20);
-                if (stations != null && stations.Count > 1)
+                ChaffDispenser dispenser = ChaffDispenser.Instance;
+                bool chaffStop = dispenser != null && dispenser.Fitted;     // the dispenser is one more stop of the cycle, after the last station
+                if (stations != null && stations.Count + (chaffStop ? 1 : 0) > 1)
                 {
                     w.CountermeasureIndex = cm.activeIndex;
-                    w.NextCountermeasure = MenuText.Upper(StationName(stations[cm.activeIndex >= stations.Count - 1 ? 0 : cm.activeIndex + 1]), 20); // NextCountermeasure() wraps the same way
+                    bool last = cm.activeIndex >= stations.Count - 1;
+                    w.NextCountermeasure = chaffStop && !dispenser.Selected && last ? "CHAFF"
+                        : MenuText.Upper(StationName(stations[last ? 0 : cm.activeIndex + 1]), 20); // NextCountermeasure() wraps the same way
                 }
                 FlareEjector[] ejectors = FlaresOf(a);
                 w.HasFlares = ejectors.Length > 0;
@@ -218,7 +222,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "flight/eject": return With(a => a.StartEjectionSequence());
                 case "view/cam": return With(a => SwitchCamera(a, cockpit: InOrbit()));
                 case "view/map": return OpenMap;
-                case "defence/flares": return With(a => a.countermeasureManager.PopFlares());
+                case "defence/flares": return With(a => { ChaffDispenser.Instance?.Deselect(); a.countermeasureManager.PopFlares(); });
                 case "defence/cm": return With(a => a.countermeasureManager.NextCountermeasure());
                 case "defence/radar": return With(a => a.CmdToggleRadar());
                 case "defence/chaff": return () => ChaffDispenser.Instance?.Pop();

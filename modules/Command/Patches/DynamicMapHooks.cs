@@ -52,14 +52,24 @@ namespace BoscaliSummer.Modules.Command.Patches
         private static void Postfix(DynamicMap __instance) => MfdTerrainRelief.PinNative(__instance);
     }
 
-    /// <summary>A completed box or relief grab drag must not also click the icon beneath its release.</summary>
+    /// <summary>
+    /// A completed box or relief grab drag must not also click the icon beneath its release, and one mouse click is one click
+    /// (GitHub issue 14). The game hands a left click to the icons twice: its Select action on the press, to the icon NEAREST the cursor
+    /// within 100 px (source Controller), then the pointer click on the release, to the icon UNDER it (source Mouse). On the maximised map
+    /// the second one toggles, so the pair selected two contacts when the two icons differed and selected then dropped one when they were
+    /// the same. The press is dropped while the left mouse button is in play; a gamepad's Select has no mouse button and keeps the game's click.
+    /// </summary>
     [HarmonyPatch(typeof(UnitMapIcon), nameof(UnitMapIcon.ClickIcon))]
     internal static class MapBoxIconClickGuardPatch
     {
-        private static bool Prefix(UnitMapIcon __instance)
+        private static bool Prefix(UnitMapIcon __instance, MapIcon.ClickSource clickSource)
         {
             if (MfdMapInteractions.BlockIconClick() || ReliefNavigator.BlockIconClick()) return false;
-            return !MfdMapInteractions.HandleUnitClick(__instance);
+            bool pointer = clickSource == MapIcon.ClickSource.Mouse;
+            if (!pointer && DynamicMap.mapMaximized &&
+                (Input.GetMouseButton(0) || Input.GetMouseButtonDown(0) || Input.GetMouseButtonUp(0))) return false;
+            // The pointer click may arrive the frame after the release: it is the map's toggle either way, never the game's own select.
+            return !MfdMapInteractions.HandleUnitClick(__instance, pointer);
         }
     }
 

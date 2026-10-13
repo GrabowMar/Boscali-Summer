@@ -39,6 +39,12 @@ Assembly pluginAssembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(plugi
 
 (string Type, string Method)[] targets =
 {
+    ("NuclearOption.SavedMission.MissionGroup", "get_AllGroups"),
+    ("MissionManager", "SetMission"),
+    ("NuclearOption.SavedMission.Mission", "OnSceneLoaded"),
+    ("MissionManager", "OnSyncMissionChanged"),
+    ("MissionManager", "StopMission"),
+    ("LevelInfo", "LoadFromMission"),
     ("ControlsFilter", "SetFlightAssist"),
     ("ControlsFilter", "GetAim"),
     ("NightVision", "NightVis_OnSwitchCam"),
@@ -469,6 +475,9 @@ if (runwayProjection.ReturnType != typeof(void) || glideslopeProjection.ReturnTy
 // time rather than degrading. Neither probe checked these names before.
 (string Type, string Method, string[] Parameters)[] parameterNames =
 {
+    ("MissionManager", "SetMission", new[] { "mission", "checkIfSame" }),
+    ("MissionManager", "OnSyncMissionChanged", new[] { "tuple" }),
+    ("LevelInfo", "LoadFromMission", new[] { "mission" }),
     ("ControlsFilter", "SetFlightAssist", new[] { "enabled", "aircraft" }),
     ("Missile", "UserCode_RpcDetonate_897349600", new[] { "hitArmor", "useUnit", "hitTerrain" }),
     ("Hangar", "TrySpawnAircraft", new[] { "player", "definition" }),
@@ -497,6 +506,26 @@ foreach ((string typeName, string methodName, string[] expected) in parameterNam
                 $"{typeName}.{methodName} no longer has a parameter named '{name}' " +
                 $"(found: {string.Join(", ", actual)}). Harmony binds by name.");
 }
+
+// The profile prefix must finish before native mission units are linked or spawned.
+Type nativeMission = gameAssembly.GetType("NuclearOption.SavedMission.Mission", true)!;
+Type nativeMissionManager = gameAssembly.GetType("MissionManager", true)!;
+MethodInfo setMission = nativeMissionManager.GetMethod("SetMission", AllMembers, null,
+    new[] { nativeMission, typeof(bool) }, null) ?? throw new MissingMethodException("MissionManager.SetMission(Mission, bool)");
+MethodInfo missionSceneLoaded = nativeMission.GetMethod("OnSceneLoaded", AllMembers, null,
+    new[] { nativeMissionManager }, null) ?? throw new MissingMethodException("Mission.OnSceneLoaded(MissionManager)");
+Type missionSyncTuple = typeof(ValueTuple<,,>).MakeGenericType(
+    gameAssembly.GetType("NetworkMission+SyncMission", true)!,
+    gameAssembly.GetType("NetworkMission+State", true)!, typeof(bool));
+MethodInfo syncMission = nativeMissionManager.GetMethod("OnSyncMissionChanged", AllMembers, null,
+    new[] { missionSyncTuple }, null) ?? throw new MissingMethodException("MissionManager.OnSyncMissionChanged(mission tuple)");
+MethodInfo stopMission = nativeMissionManager.GetMethod("StopMission", AllMembers, null,
+    Type.EmptyTypes, null) ?? throw new MissingMethodException("MissionManager.StopMission()");
+MethodInfo missionEnvironment = gameAssembly.GetType("LevelInfo", true)!.GetMethod("LoadFromMission", AllMembers, null,
+    new[] { nativeMission }, null) ?? throw new MissingMethodException("LevelInfo.LoadFromMission(Mission)");
+if (setMission.ReturnType != typeof(void) || missionSceneLoaded.ReturnType != typeof(void) ||
+    syncMission.ReturnType != typeof(void) || stopMission.ReturnType != typeof(void) || missionEnvironment.ReturnType != typeof(void))
+    throw new InvalidOperationException("Native mission profile lifecycle signatures changed");
 
 // Theater priority binds MissionPosition by parameter name and by overload. The Unit
 // overload is public; the Distance overload that sorts depot/airbase delivery is internal,
@@ -560,6 +589,12 @@ if (gameAssembly.GetType("PlayerSettings", true)!.GetField("unitSystem", AllMemb
 
 string[] patchTypes =
 {
+    "BoscaliSummer.Core.Game.BoscaliMission+MissionGroupsPatch",
+    "BoscaliSummer.Core.Game.BoscaliMission+SetMissionPatch",
+    "BoscaliSummer.Core.Game.BoscaliMission+SceneLoadedPatch",
+    "BoscaliSummer.Core.Game.BoscaliMission+SyncMissionPatch",
+    "BoscaliSummer.Core.Game.BoscaliMission+StopMissionPatch",
+    "BoscaliSummer.Core.Game.BoscaliMission+MissionEnvironmentPatch",
     "BoscaliSummer.Fire.BulletImpactPatch",
     "BoscaliSummer.Fire.GroundVehicleDestructionPatch",
     "BoscaliSummer.Fire.MissileImpactPatch",
@@ -617,7 +652,10 @@ string[] patchTypes =
     "BoscaliSummer.Modules.Autopilot.Patches.AutopilotLandInputPatch",
     "BoscaliSummer.Modules.Autopilot.Patches.FlightAssistReportPatch",
     "BoscaliSummer.Modules.Autopilot.Patches.RadialMenuLifecyclePatches",
-    "BoscaliSummer.Modules.Autopilot.Patches.BoscaliMenuActionPatches"
+    "BoscaliSummer.Modules.Autopilot.Patches.BoscaliMenuActionPatches",
+    "BoscaliSummer.Modules.Autopilot.Patches.ChaffNextPatch",
+    "BoscaliSummer.Modules.Autopilot.Patches.ChaffTriggerPatch",
+    "BoscaliSummer.Modules.Autopilot.Patches.ChaffActivePatch"
     ,"BoscaliSummer.Modules.Squad.Patches.SquadDamagePatch"
     ,"BoscaliSummer.Modules.Squad.Patches.SquadKillPatch"
     ,"BoscaliSummer.Modules.Squad.Patches.SquadPilotDeathPatch"
@@ -651,9 +689,11 @@ foreach (string patchType in patchTypes)
 Type moduleContract = pluginAssembly.GetType("BoscaliSummer.Core.Modules.IModule", true)!;
 PropertyInfo modulePatchTypes = moduleContract.GetProperty("PatchTypes")!;
 var registeredPatchTypes = new HashSet<Type>();
-foreach (Type module in pluginAssembly.GetTypes())
-    if (!module.IsAbstract && moduleContract.IsAssignableFrom(module))
-        registeredPatchTypes.UnionWith((Type[])modulePatchTypes.GetValue(Activator.CreateInstance(module, true)) ?? []);
+Type[] moduleTypes = pluginAssembly.GetTypes()
+    .Where(module => !module.IsAbstract && moduleContract.IsAssignableFrom(module)).ToArray();
+foreach (Type module in moduleTypes)
+    registeredPatchTypes.UnionWith((Type[])modulePatchTypes.GetValue(Activator.CreateInstance(module, true)) ?? []);
+ProbeMissionProfile(pluginAssembly, moduleContract, moduleTypes);
 string[] unregisteredPatchTypes = pluginAssembly.GetTypes()
     .Where(type => !registeredPatchTypes.Contains(type) &&
         type.GetCustomAttributesData().Any(attribute => attribute.AttributeType.Name == "HarmonyPatch"))
@@ -665,6 +705,8 @@ if (unregisteredPatchTypes.Length > 0)
 
 string[] featureTypes =
 {
+    "BoscaliSummer.Core.Modules.MissionProfileModule",
+    "BoscaliSummer.Modules.Command.StrategicCommandModule",
     "BoscaliSummer.Modules.FireAndDestruction.FireAndDestructionModule",
     "BoscaliSummer.Modules.UrbanCombat.UrbanCombatModule",
     "BoscaliSummer.Modules.Radio.RadioModule",
@@ -1189,8 +1231,48 @@ if (pluginAssembly.GetReferencedAssemblies().Any(reference =>
     reference.Name?.IndexOf("WingCommand", StringComparison.OrdinalIgnoreCase) >= 0))
     throw new InvalidOperationException("Optional in-tree Wing integration must not require a WingCommand assembly reference");
 ProbeClientImmersionComposition(pluginAssembly);
-Console.WriteLine($"Patch target probe: game methods/fields, Harmony parameters, {patchTypes.Length} patch classes, {featureTypes.Length + 1} modules, radio assets, wire contracts, dynamic operation reward/road signatures, and Mirage seams resolved.");
+Console.WriteLine($"Patch target probe: game methods/fields, Harmony parameters, {registeredPatchTypes.Count} registered patch classes, {moduleTypes.Length} modules, mission scope, radio assets, wire contracts, dynamic operation reward/road signatures, and Mirage seams resolved.");
 return 0;
+
+static void ProbeMissionProfile(Assembly plugin, Type moduleContract, Type[] modules)
+{
+    const BindingFlags flags = BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+    Type profile = plugin.GetType("BoscaliSummer.Core.Game.MissionProfile", true)!;
+    MethodInfo allows = profile.GetMethod("AllowsModule", flags)!;
+    MethodInfo identify = profile.GetMethod("IsFullMission", flags)!;
+    bool Allowed(string id, bool full) => (bool)allows.Invoke(null, new object[] { id, full })!;
+    bool Identified(string description) => (bool)identify.Invoke(null, new object[] { description })!;
+    if ((bool)profile.GetProperty("FullExperience", flags)!.GetValue(null)! ||
+        Identified(null) || Identified("Boscali Summer") || Identified("Escalation") ||
+        !Identified("Escalation copy\n\nFull Boscali Summer experience enabled for this dedicated Escalation scenario.") ||
+        Identified("Escalation copy\n\nFull Boscali Summer experience enabled for this dedicated Escalation scenario.\n"))
+        throw new InvalidOperationException("Mission profile must default to common and require the dedicated mission marker suffix");
+    if (Allowed(null, true) || Allowed("unclassified-module", true) || Allowed("unclassified-module", false))
+        throw new InvalidOperationException("Unclassified modules must fail closed in every mission profile");
+
+    var common = new HashSet<string>(new[]
+    {
+        "mission-profile", "session", "hud", "radio", "performance", "immersion", "effects", "qol",
+        "autopilot", "chatter", "wing", "command", "comms", "cinematography"
+    }, StringComparer.Ordinal);
+    var seen = new HashSet<string>(StringComparer.Ordinal);
+    PropertyInfo metadataProperty = moduleContract.GetProperty("Metadata")!;
+    foreach (Type module in modules)
+    {
+        object metadata = metadataProperty.GetValue(Activator.CreateInstance(module, true))!;
+        Type metadataType = metadata.GetType();
+        string id = (string)metadataType.GetProperty("Id")!.GetValue(metadata)!;
+        if (!seen.Add(id) || !Allowed(id, true) || Allowed(id, false) != common.Contains(id))
+            throw new InvalidOperationException("Compiled module has duplicate, missing or incorrect mission scope: " + id);
+        if (!common.Contains(id)) continue;
+        foreach (string dependency in (string[])metadataType.GetProperty("Dependencies")!.GetValue(metadata)!)
+            if (!common.Contains(dependency))
+                throw new InvalidOperationException("Common module requires a full-mission dependency: " + id + " -> " + dependency);
+    }
+    if (!seen.Contains("mission-profile") || !seen.Contains("strategic-command"))
+        throw new InvalidOperationException("Dedicated mission registration and STR scope must each have a module owner");
+    Console.WriteLine("  Mission scope: marker-only opt-in, default-deny modules, common dependency closure, and full-only STR");
+}
 
 static void ProbeClientImmersionComposition(Assembly plugin)
 {

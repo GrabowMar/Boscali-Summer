@@ -30,9 +30,11 @@
 
 Nuclear Option hands you a jet and a war. **Boscali Summer builds everything around the canopy glass**: a wing that flies on your orders, a front line that grinds through towns and leaves them burning, satellites, hackers and special forces on call, storm fronts rolling in off the coast, and a radio full of people having a worse day than you.
 
+Choose **Boscali Summer** in the mission picker's **Boscali Summer** group for the full experience. It is a separate copy of the installed game's Escalation mission. Vanilla and workshop missions keep the cockpit/HUD, avionics, radio, comms and player-controlled wing tools; STR, support operations and the systems that rewrite the battlefield run only in the dedicated mission. Your existing mission files are preserved. See [mission compatibility](docs/MISSION_COMPATIBILITY.md) for the feature scope.
+
 <table align="center">
 <tr>
-<td align="center"><b>28</b><br><sub>modules</sub></td>
+<td align="center"><b>30</b><br><sub>modules</sub></td>
 <td align="center"><b>47</b><br><sub>skies</sub></td>
 <td align="center"><b>11</b><br><sub>VANGUARD systems</sub></td>
 <td align="center"><b>9</b><br><sub>automatic HUD pages</sub></td>
@@ -293,7 +295,7 @@ Not on the route: new maps, VR, missile physics, mid-mission saves or another we
 
 ## First flight
 
-Start a mission and look for these:
+Start **Boscali Summer** from its own mission-picker group for every system below. Other vanilla and workshop missions use the compatibility feature set automatically:
 
 | | |
 | --- | --- |
@@ -302,8 +304,8 @@ Start a mission and look for these:
 | <kbd>F1</kbd> | Settings window, if ConfigurationManager is installed: on/off switches for the mod's systems, and the keys. Tuning values are in the config file only. |
 | <kbd>Ctrl</kbd> + <kbd>O</kbd> | MET OFFICE weather console. The host controls it, clients read along. |
 | **WMC** | Map page for your wing: pilots, formations, loadouts and orders |
-| **STR** | Map page for theater command: territory, front line and staff |
-| **OPS** | Map page for support calls, fronts and readiness |
+| **STR** | Dedicated mission only: theater command, territory, front line and staff |
+| **OPS** | Dedicated mission only: support calls, fronts and readiness |
 | **SET** | Map page for module settings, plus host controls for shared rules |
 
 Settings live in `BepInEx/config/com.marci.boscalisummer.cfg`. Modules depend on each other in places, so turning one off can hide features in another.

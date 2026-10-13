@@ -12,7 +12,7 @@ namespace Vanguard
         static void ValidateRemoraRig()
         {
             var flight = Clone(R + "VG_Remora.prefab");
-            var mounted = Clone(R + "VG_Remora_AGM_heavy_single.prefab");
+            var mounted = Clone(R + "VG_Remora_ARM1_single.prefab");
             try
             {
                 var nodes = flight.GetComponentsInChildren<Transform>(true);

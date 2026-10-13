@@ -32,6 +32,12 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             ammo > 0 && (salvo || (linked && countermeasureHeld && radarMissileInbound));
 
         /// <summary>
+        /// The dispenser is one more stop of the Next Countermeasure cycle, after the game's last station: FLARES, JAMMER, CHAFF, FLARES.
+        /// An index past the list (255: the game chose "none") is left to the game.
+        /// </summary>
+        public static bool NextIsChaff(int activeIndex, int stations) => stations > 0 && activeIndex == stations - 1;
+
+        /// <summary>
         /// The dispenser is refilled with the rest of the aircraft: when a rearm it asked for completes, or when the flares come back up.
         /// </summary>
         public static bool Refilled(bool rearmWasPending, bool rearmPending, int flaresBefore, int flaresNow) =>

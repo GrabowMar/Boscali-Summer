@@ -76,6 +76,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         public void ResetForScene()
         {
+            if (installer.Root != null) installer.Root.SetActive(false);
             installer.Reset();
             ResetContent();
         }
@@ -96,7 +97,15 @@ namespace BoscaliSummer.Modules.Command.Presentation
             nextLog = 0f;
         }
 
-        private void OnDestroy() => ResetForScene();
+        private void OnEnable() => Active = this;
+
+        private void OnDisable()
+        {
+            ResetForScene();
+            if (Active == this) Active = null;
+        }
+
+        private void OnDestroy() => OnDisable();
 
         /// <summary>Automation: the bezel press plus a page switch, the way a player opens the tab (map already maximised).</summary>
         internal void OpenForAutomation(int page)

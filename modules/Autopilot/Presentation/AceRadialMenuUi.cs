@@ -80,7 +80,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
         {
             float now = Time.unscaledTime;
             KeyCode key = settings?.AceRadialKey?.Value ?? KeyCode.None;
-            bool radial = settings?.ReplaceNativeWheel?.Value ?? true;
+            bool radial = settings?.OnRadialBinding?.Value ?? false;
             OwnsRadialButton = radial;
             if (key != openKey) { openKey = key; if (controller != null) controller.OpenKeyName = KeyName(key); }
             AceRadialPauseGate.Tick(now);

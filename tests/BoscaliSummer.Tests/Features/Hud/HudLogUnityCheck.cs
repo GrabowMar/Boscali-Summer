@@ -254,10 +254,7 @@ public static partial class HudLogUnityCheck
             Type styleOwner = Type("BoscaliSummer.Core.Game.VanillaHudStyle");
             object style = Activator.CreateInstance(styleOwner.GetNestedType("CockpitStyle", All));
             var font = AvBundle.Font("NOA Rajdhani Medium SDF");
-            Set(style,"Font",font); Set(style,"FontMaterial",font.material); Set(style,"Colour",Color.cyan);
-            Set(style,"Pointer",AvSprites.White); Set(style,"Dot",AvSprites.White); Set(style,"Ring",AvSprites.White);
-            Set(style,"PointerSize",new Vector2(12,12)); Set(style,"DotSize",new Vector2(4,4));
-            Set(style,"RingSize",new Vector2(32,32)); Set(style,"LabelScale",.5f);
+            Set(style,"Font",font); Set(style,"FontMaterial",font.material); Set(style,"LabelScale",.5f);
             Type cardType=Type("BoscaliSummer.Modules.DynamicOperations.Domain.ContractCard");
             Type viewType=Type("BoscaliSummer.Core.Contracts.SecondaryObjectiveView");
             Type markerType=Type("BoscaliSummer.Modules.DynamicOperations.Runtime.ContractMarker");
@@ -269,8 +266,14 @@ public static partial class HudLogUnityCheck
                 object marker=Activator.CreateInstance(markerType,All,null,new object[]{canvas.transform,"Contract "+i,style},null);
                 float x=i==1?440f:-440f, y=170f-i*170f;
                 Call(marker,"SetVisible",true); Call(marker,"Place",x,y);
-                Call(marker,"SetIcons",Vector3.forward,new Vector3(500,0,5000),90f);
-                Call(marker,"SetLabel",card,9400f,i!=2,x,470f,i==1,i==1?Color.yellow:Color.cyan);
+                Call(marker,"SetPointer",i==1?0f:90f,i==1);
+                if(i==0) {
+                    var lens=new GameObject("Contract lens").AddComponent<Camera>(); lens.fieldOfView=60f; lens.enabled=false;
+                    Call(marker,"SetRing",500f,3000f,720f,lens,false,Color.cyan);
+                    Object.DestroyImmediate(lens.gameObject);
+                    Check(((RectTransform)Field(marker,"ring")).gameObject.activeSelf,"Contract area ring draws inside its fade range.");
+                }
+                Call(marker,"SetLabel",card,i==0?300f:9400f,i!=2,x,470f,i==1,Color.cyan,i==1?Color.yellow:Color.cyan);
                 Call(marker,"GlideLabel");
                 if(i==1) Check(((RectTransform)Field(marker,"label")).pivot.x==1f,"Contract right-edge label flips inward.");
             }

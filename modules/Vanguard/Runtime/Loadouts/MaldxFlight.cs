@@ -6,20 +6,23 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 {
     /// <summary>
     /// MALD-X BAIT flight (server): a loud 230 m/s weaving decoy at max(launch alt, 1500 m) that heads for the
-    /// designated / locked target and loiters over it, and pulls radar missiles off nearby friendly aircraft.
-    /// Emitter exposure runs in MaldxService.
+    /// designated / locked target and loiters over it, seeding a chaff cloud every 300 m flown.
+    /// What the clouds do, and emitter exposure, run in MaldxService.
     /// </summary>
     internal sealed partial class VanguardFlight
     {
         private bool baitAnnounced;
+        private GlobalPosition chaffAt;
         private readonly System.Collections.Generic.HashSet<uint> baitDrawn = new System.Collections.Generic.HashSet<uint>();
 
         private void PlanBait(GlobalPosition pos)
         {
-            if (!baitAnnounced)
+            if (!baitAnnounced || !FastMath.InRange(pos, chaffAt, MaldxRules.ChaffSpacing))
             {
+                if (!baitAnnounced) MaldxService.Launched(missile, launcher);
                 baitAnnounced = true;
-                MaldxService.Launched(missile, launcher);
+                chaffAt = pos;
+                MaldxService.Seed(missile, pos);
             }
             missile.SetThrottle(MaldxRules.Throttle(missile.speed));
             Vector3 flown = pos - launchPos;
@@ -65,20 +68,12 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             return lure != null && !lure.disabled && lure != missile ? lure : null;
         }
 
-        // LURE: radar missiles chasing any friendly aircraft within 4 km of the bait may switch onto it.
-        // Every distinct missile that ends up chasing the bait (lured or fired at it) counts as drawn.
-        private void LureThreats()
+        // Every distinct missile chasing the bait itself counts as drawn (sim gauge).
+        private void CountDrawn()
         {
             ThreatScan.Inbound(missile, inbound);
             for (int i = 0; i < inbound.Count; i++)
                 if (baitDrawn.Add(inbound[i].persistentID.Id)) VanguardStats.Bump("maldx.drawn");
-            ThreatScan.InboundNear(missile.NetworkHQ, missile.GlobalPosition(), SeductionRule.LureRadius, inbound);
-            for (int i = 0; i < inbound.Count; i++)
-            {
-                if (!SeductionRule.Lures(inbound[i].GetSeekerType(), Random.value)) continue;
-                SeekerCapture.Retarget(inbound[i], missile);
-                VanguardStats.Bump("maldx.lured");
-            }
         }
     }
 }

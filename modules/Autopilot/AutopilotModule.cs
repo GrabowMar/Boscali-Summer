@@ -15,7 +15,10 @@ namespace BoscaliSummer.Modules.Autopilot
             typeof(AutopilotLandInputPatch),
             typeof(FlightAssistReportPatch),
             typeof(RadialMenuLifecyclePatches),
-            typeof(BoscaliMenuActionPatches)
+            typeof(BoscaliMenuActionPatches),
+            typeof(ChaffNextPatch),
+            typeof(ChaffTriggerPatch),
+            typeof(ChaffActivePatch)
         };
 
         public ModuleMetadata Metadata => Module;
@@ -35,7 +38,7 @@ namespace BoscaliSummer.Modules.Autopilot
             RadialMenuAccess.Initialise();
             context.Logger.LogInfo("Autopilot land=local ownship native-autopilot takeover; radial=" +
                 (RadialMenuAccess.Available ? "native wheel entry" : "native wheel unavailable") +
-                "; interaction menu on " + (settings.ReplaceNativeWheel.Value ? "the Radial Menu binding" : "no binding") + ", extra key=" + settings.AceRadialKey.Value);
+                "; interaction menu on " + (settings.OnRadialBinding.Value ? "the Radial Menu binding" : "its own key only") + ", extra key=" + settings.AceRadialKey.Value);
         }
     }
 }

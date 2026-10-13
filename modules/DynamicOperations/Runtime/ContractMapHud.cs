@@ -189,10 +189,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 return false;
             }
 
-            Sprite sprite = mapStyle.Ring;
-            if (sprite == null && VanillaHudStyle.TryCockpit(out VanillaHudStyle.CockpitStyle cockpit)) sprite = cockpit.Ring;
             style = mapStyle;
-            ringSprite = sprite;
+            ringSprite = mapStyle.Ring;
 
             root = new GameObject("Boscali Contract Map Layer", typeof(RectTransform));
             rootRect = (RectTransform)root.transform;

@@ -47,8 +47,7 @@
       "op": "call",
       "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
       "args": {
-        "action": "lure",
-        "bait": 1
+        "action": "lure"
       },
       "store": "pinned"
     },
@@ -214,12 +213,7 @@
     },
     {
       "check": "result_above",
-      "path": "lured.maldx_lured",
-      "min": 1
-    },
-    {
-      "check": "result_above",
-      "path": "lured.maldx_drawn",
+      "path": "lured.maldx_chaffed",
       "min": 1
     }
   ]

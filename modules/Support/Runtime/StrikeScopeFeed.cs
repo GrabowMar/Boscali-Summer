@@ -69,6 +69,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
             ScopeGauges.Register("mark", ReadMark);
         }
 
+        public void Unregister()
+        {
+            ScopeFeeds.Unregister<StrikeScope>(Read);
+            ScopeGauges.Unregister("perk", ReadPerk);
+            ScopeGauges.Unregister("mark", ReadMark);
+        }
+
         // ------------------------------------------------------------------------------------------------ the page feed
 
         public bool Read(out StrikeScope data)

@@ -80,15 +80,18 @@ namespace BoscaliSummer.Core
             if (!Application.isBatchMode)
                 services.Add<ICanopyGlassView>(new BoscaliSummer.Modules.Weather.Visuals.CanopyGlassView());
             ModuleServices.Active = services;
+            MissionProfile.Changed += OnMissionProfileChanged;
+            MissionProfile.Preparing += ResetForMission;
         }
 
         public static BoscaliMod Start(ManualLogSource logger, ModConfiguration settings)
         {
             GameAccess.Initialise();
+            MissionProfile.SetDescription(null);
             var mod = new BoscaliMod(logger, settings);
             try
             {
-                mod.Load(Compose(settings));
+                mod.Load(mod.ModulesForProfile());
                 CapabilityReport.Log();
                 return mod;
             }
@@ -109,6 +112,7 @@ namespace BoscaliSummer.Core
             // each resolve it late and work without it.
             var modules = new List<IModule>
             {
+                new MissionProfileModule(),
                 new SessionModule(),
                 new FireAndDestructionModule(),
                 new UrbanCombatModule(),
@@ -138,10 +142,10 @@ namespace BoscaliSummer.Core
                 modules.Add(new SquadModule());
                 modules.Add(new ProgressionModule());
             }
-            // Support and Command declare "progression" in metadata, so the graph skips
-            // them with a warning when Progression is off instead of silently.
+            // Support needs progression; the ordinary avionics remain available without it.
             if (settings.Support.Enabled.Value) modules.Add(new SupportModule());
             if (settings.Command.Enabled.Value) modules.Add(new CommandModule());
+            if (settings.Command.Enabled.Value) modules.Add(new StrategicCommandModule());
             if (settings.DynamicOperations.Enabled.Value) modules.Add(new DynamicOperationsModule());
             if (settings.HighCommand.Enabled.Value) modules.Add(new HighCommandModule());
             // Intel publishes IThreatPicture ahead of TheaterOps, whose director reads it
@@ -162,6 +166,52 @@ namespace BoscaliSummer.Core
             return modules.ToArray();
         }
 
+        private IModule[] ModulesForProfile()
+        {
+            var modules = new List<IModule>();
+            foreach (IModule module in Compose(settings))
+                if (MissionProfile.AllowsModule(module.Metadata.Id, MissionProfile.FullExperience))
+                    modules.Add(module);
+            return modules.ToArray();
+        }
+
+        private void OnMissionProfileChanged(bool fullExperience)
+        {
+            if (disposed) return;
+            if (fullExperience)
+            {
+                var existing = new HashSet<string>(StringComparer.Ordinal);
+                foreach (LoadedModule loaded in loadedModules) existing.Add(loaded.Metadata.Id);
+                var additions = new List<IModule>();
+                foreach (IModule module in ModulesForProfile())
+                    if (!existing.Contains(module.Metadata.Id)) additions.Add(module);
+                Load(additions);
+            }
+            else
+            {
+                // Remove all gameplay patches before tearing down any of their services.
+                for (int i = loadedModules.Count - 1; i >= 0; i--)
+                    if (!MissionProfile.AllowsModule(loadedModules[i].Metadata.Id, false))
+                        loadedModules[i].Harmony.UnpatchSelf();
+                for (int i = loadedModules.Count - 1; i >= 0; i--)
+                {
+                    LoadedModule loaded = loadedModules[i];
+                    if (MissionProfile.AllowsModule(loaded.Metadata.Id, false)) continue;
+                    loaded.Context.Rollback();
+                    loadedModules.RemoveAt(i);
+                }
+                sceneLifecycle.ResetAll();
+            }
+            logger.LogInfo(fullExperience
+                ? "Mission profile: full Boscali Summer experience."
+                : "Mission profile: vanilla/workshop compatibility; mission overhaul disabled.");
+        }
+
+        private void ResetForMission()
+        {
+            if (!disposed) sceneLifecycle.ResetAll();
+        }
+
         private void Load(IReadOnlyList<IModule> modules)
         {
             if (modules == null) throw new ArgumentNullException(nameof(modules));
@@ -172,7 +222,9 @@ namespace BoscaliSummer.Core
                     throw new ArgumentException("Module entries cannot be null.", nameof(modules));
 
             // A module whose dependency is switched off in settings is left out, not fatal.
-            string[] missing = ModuleGraph.MissingDependencies(requested);
+            var existing = new HashSet<string>(StringComparer.Ordinal);
+            foreach (LoadedModule loaded in loadedModules) existing.Add(loaded.Metadata.Id);
+            string[] missing = ModuleGraph.MissingDependencies(requested, existing);
             var loadable = new List<IModule>(modules.Count);
             for (int i = 0; i < modules.Count; i++)
             {
@@ -184,9 +236,12 @@ namespace BoscaliSummer.Core
             var metadata = new ModuleMetadata[modules.Count];
             for (int i = 0; i < modules.Count; i++) metadata[i] = modules[i].Metadata;
 
-            int[] order = ModuleGraph.Sort(metadata);
-            ValidatePatchOwnership(modules);
+            int[] order = ModuleGraph.Sort(metadata, existing);
+            var allModules = new List<IModule>(modules);
+            foreach (LoadedModule loaded in loadedModules) allModules.Add(loaded.Module);
+            ValidatePatchOwnership(allModules);
             var installed = new Dictionary<string, bool>(StringComparer.Ordinal);
+            foreach (string id in existing) installed[id] = true;
             var candidates = new List<LoadedModule>(modules.Count);
 
             for (int orderIndex = 0; orderIndex < order.Length; orderIndex++)
@@ -227,6 +282,7 @@ namespace BoscaliSummer.Core
 
             sceneLifecycle.ResetAll();
             var started = new Dictionary<string, bool>(StringComparer.Ordinal);
+            foreach (string id in existing) started[id] = true;
             for (int i = 0; i < candidates.Count; i++)
             {
                 LoadedModule candidate = candidates[i];
@@ -326,6 +382,8 @@ namespace BoscaliSummer.Core
         {
             if (disposed) return;
             disposed = true;
+            MissionProfile.Changed -= OnMissionProfileChanged;
+            MissionProfile.Preparing -= ResetForMission;
             for (int i = loadedModules.Count - 1; i >= 0; i--)
                 loadedModules[i].Harmony.UnpatchSelf();
             for (int i = loadedModules.Count - 1; i >= 0; i--)
@@ -337,6 +395,8 @@ namespace BoscaliSummer.Core
             services.Clear();
             if (ReferenceEquals(ModuleServices.Active, services)) ModuleServices.Active = null;
             if (runtimeRoot != null) UnityEngine.Object.Destroy(runtimeRoot);
+            BoscaliMission.Unregister();
+            MissionProfile.SetDescription(null);
         }
     }
 }

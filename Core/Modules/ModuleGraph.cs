@@ -10,12 +10,14 @@ namespace BoscaliSummer.Core.Modules
         /// off), or null when it can load. A module built on a module that cannot load cannot
         /// load either, so exclusion follows the chain.
         /// </summary>
-        public static string[] MissingDependencies(IReadOnlyList<ModuleMetadata> modules)
+        public static string[] MissingDependencies(IReadOnlyList<ModuleMetadata> modules,
+            IReadOnlyCollection<string> available = null)
         {
             if (modules == null) throw new ArgumentNullException(nameof(modules));
 
             var missing = new string[modules.Count];
             var loadable = new HashSet<string>(StringComparer.Ordinal);
+            if (available != null) loadable.UnionWith(available);
             for (int i = 0; i < modules.Count; i++)
                 if (!loadable.Add(modules[i].Id))
                     throw new InvalidOperationException("Duplicate module ID: " + modules[i].Id);
@@ -39,7 +41,8 @@ namespace BoscaliSummer.Core.Modules
             return missing;
         }
 
-        public static int[] Sort(IReadOnlyList<ModuleMetadata> modules)
+        public static int[] Sort(IReadOnlyList<ModuleMetadata> modules,
+            IReadOnlyCollection<string> available = null)
         {
             if (modules == null) throw new ArgumentNullException(nameof(modules));
 
@@ -56,8 +59,9 @@ namespace BoscaliSummer.Core.Modules
             var states = new byte[modules.Count];
             var order = new int[modules.Count];
             int cursor = 0;
+            var existing = available == null ? null : new HashSet<string>(available, StringComparer.Ordinal);
             for (int i = 0; i < modules.Count; i++)
-                Visit(i, modules, byId, states, order, ref cursor);
+                Visit(i, modules, byId, existing, states, order, ref cursor);
             return order;
         }
 
@@ -65,6 +69,7 @@ namespace BoscaliSummer.Core.Modules
             int index,
             IReadOnlyList<ModuleMetadata> modules,
             Dictionary<string, int> byId,
+            HashSet<string> existing,
             byte[] states,
             int[] order,
             ref int cursor)
@@ -78,9 +83,12 @@ namespace BoscaliSummer.Core.Modules
             for (int i = 0; i < dependencies.Length; i++)
             {
                 if (!byId.TryGetValue(dependencies[i], out int dependencyIndex))
+                {
+                    if (existing != null && existing.Contains(dependencies[i])) continue;
                     throw new InvalidOperationException(
                         "Module '" + modules[index].Id + "' depends on missing module '" + dependencies[i] + "'.");
-                Visit(dependencyIndex, modules, byId, states, order, ref cursor);
+                }
+                Visit(dependencyIndex, modules, byId, existing, states, order, ref cursor);
             }
 
             states[index] = 2;

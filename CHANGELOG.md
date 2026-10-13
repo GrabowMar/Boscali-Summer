@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- **Chaff is a countermeasure like the others** (issue 10): `Next Countermeasure` now steps FLARES, JAMMER, CHAFF, and while chaff
+  is selected the `Countermeasures` button dispenses it. The selection shows on the TAC BOARD, the game's own readout and the
+  C menu. Single player and hosting, like the dispenser itself.
+- **The C menu no longer takes the game's radial wheel** (issue 11): the `Radial Menu` binding opens the game's own wheel again, so
+  mods that add to it work; the C menu opens on its own key (`Autopilot.AceRadialKey`, default C). Set the new
+  `Autopilot.InteractionMenuOnRadialBinding` to on to open it from a HOTAS or gamepad button as before.
+- **Objective marker redrawn** (issue 13): the contract marker in the cockpit drew a black square behind its area ring. It is now
+  drawn in the visor's own line work: corner brackets on the point, a chevron at the screen edge when the target is out of view,
+  a dashed area ring, and a shelf with the title and the distance that fills as the hold progresses.
+- **Map selection** (issue 14): one left click on the big map selected two contacts, or selected one and dropped it again,
+  because the game handed the click to the icons twice. One click is one click now.
+- **Dedicated mission:** a separate **Boscali Summer** mission-picker group contains a copy of the installed game's Escalation. Existing user missions are preserved.
+- **Mission compatibility:** vanilla and workshop missions retain cockpit/HUD, avionics, radio, comms and player-controlled wing tools. STR, AI war direction, support, extra objectives, progression/aces, garrisons, trenches, events, dynamic weather, fire/destruction and VANGUARD systems run only in the dedicated mission. Mission changes remove their runtime services and patches; the serialized mission marker also reaches multiplayer clients.
+
 ## 0.2.2 — update
 
 - **Chaff**: your aircraft now carries a chaff dispenser (single player and hosting), built on the

@@ -14,6 +14,7 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
             if (__instance == null || __instance.definition == null) return;
             if (SentinelDrone.Attach(__instance) == null) GlaiveDrone.Attach(__instance); // GLAIVE-2A gets its own rig
             WeaponArticulation.Attach(__instance);
+            MaldxChaff.Attach(__instance);
             OrcaVisuals.Attach(__instance);
             RemoraVisuals.Attach(__instance);
             MaldjEmitter.Attach(__instance);

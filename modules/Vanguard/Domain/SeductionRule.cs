@@ -21,11 +21,5 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         /// </summary>
         public static bool SeducesTowed(string seekerType, float range, float aspect, float roll) =>
             IsRadarSeeker(seekerType) && range <= TowedRange && roll < (aspect < 0f ? TowedRearChance : TowedFrontChance);
-
-        /// <summary>MALD-X: radar missiles chasing any friendly aircraft this close to the bait may switch to it.</summary>
-        public const float LureRadius = 4000f;
-        internal static float LureChance = 0.25f; // per 0.5 s check; the nomodkit sim pins it to 1
-
-        public static bool Lures(string seekerType, float roll) => IsRadarSeeker(seekerType) && roll < LureChance;
     }
 }

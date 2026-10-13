@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using BoscaliSummer.Core.Lifecycle;
@@ -18,6 +19,9 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
     /// <para>The ejector is deliberately NOT registered with the aircraft's <c>CountermeasureManager</c>: the game addresses countermeasures
     /// by their index in that list, over the network too, and a station only this machine knows would shift or overrun it elsewhere.
     /// It is fired directly instead (the menu's POP CHAFF, the optional key, or the countermeasure button while a radar missile is inbound).
+    /// For the pilot it is still one more stop of the game's Next Countermeasure cycle, after the last real station (<see cref="TakeNext"/>):
+    /// while it is the selected one the countermeasure button runs the dispenser and the game's own trigger is never raised
+    /// (<see cref="TakeTrigger"/>), so the selection stays on this machine and no index it does not know goes to another.
     /// The TAC BOARD's CM tiles find it anyway: they scan the airframe for <c>Countermeasure</c> components.</para>
     /// <para>Fitted only where this machine runs the simulation (single player, hosting): a bundle raises its event locally, and a seeker
     /// that runs on another machine would never hear it.</para>
@@ -46,6 +50,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         private static readonly FieldInfo BundleTime = AccessTools.Field(typeof(RadarChaff), "chaffTime");
         private static readonly FieldInfo BundleDragField = AccessTools.Field(typeof(RadarChaff), "drag");
         private static readonly FieldInfo BundleParticles = AccessTools.Field(typeof(RadarChaff), "chaffParticles");
+        private static readonly FieldInfo Stations = AccessTools.Field(typeof(CountermeasureManager), "countermeasureStations");
 
         /// <summary>Every private field the kit writes still exists; a game update that renames one leaves the aircraft without chaff, not broken.</summary>
         private static readonly bool Supported =
@@ -62,6 +67,8 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         private int load, flaresBefore;
         private bool rearmPending;
         private float salvoUntil, nextFire, nextService;
+        private Sprite flareIcon;
+        private int heldFrame = -10;
 
         public static ChaffDispenser Instance { get; private set; }
 
@@ -69,6 +76,51 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         public bool Fitted => ejector != null;
         public int Ammo => ejector != null ? ejector.ammo : 0;
         public int MaxAmmo => load;
+
+        /// <summary>Chaff is the pilot's selected countermeasure: the countermeasure button dispenses it.</summary>
+        public bool Selected { get; private set; }
+
+        /// <summary>
+        /// The game's Next Countermeasure step on the local aircraft. From the last real station it lands on chaff (true: the game's own step
+        /// is skipped); from chaff it hands back to the game, whose step wraps to its first station.
+        /// </summary>
+        public bool TakeNext(CountermeasureManager manager)
+        {
+            if (ejector == null || owner == null || manager != owner.countermeasureManager) return false;
+            if (Selected) { Selected = false; return false; }
+            if (!(Stations?.GetValue(manager) is ICollection stations) || !ChaffRules.NextIsChaff(manager.activeIndex, stations.Count)) return false;
+            if (owner.countermeasureTrigger) owner.Countermeasures(false, manager.activeIndex);     // what the game's own step does: let go of the old one
+            Selected = true;
+            ShowSelected();
+            return true;
+        }
+
+        /// <summary>
+        /// The countermeasure button on the local aircraft while chaff is selected: the press is noted for this frame and kept from the game
+        /// (true), so no flare leaves and nothing is sent. The game asks again every frame the button is held, because its trigger never rises.
+        /// </summary>
+        public bool TakeTrigger(Aircraft aircraft, bool active)
+        {
+            if (!Selected || !active || aircraft != owner) return false;
+            heldFrame = Time.frameCount;
+            return true;
+        }
+
+        /// <summary>The dispenser, when it is this manager's selected countermeasure; else null.</summary>
+        public Countermeasure SelectedFor(CountermeasureManager manager) =>
+            Selected && owner != null && manager == owner.countermeasureManager ? ejector : null;
+
+        /// <summary>Hand the selection back to the game's own station (POP FLARES selects the flares, as in the game).</summary>
+        public void Deselect() => Selected = false;
+
+        /// <summary>The game's countermeasure readout shows the dispenser (the flare's picture: the game has no chaff sprite, and none is a white block).</summary>
+        private void ShowSelected()
+        {
+            CombatHUD hud = SceneSingleton<CombatHUD>.i;
+            if (hud == null || ejector == null || hud.aircraft != owner) return;
+            hud.DisplayCountermeasures(DisplayName, flareIcon, ejector.ammo);
+            hud.DisplayCountermeasureAmmo(ejector.ammo);
+        }
 
         /// <summary>The countermeasure button also runs the dispenser while a radar missile is inbound.</summary>
         public bool Linked
@@ -117,13 +169,15 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             if (KeyPressed()) Pop();
 
             bool held = aircraft.countermeasureTrigger;
-            if (!ChaffRules.ShouldRun(now < salvoUntil, Linked, held, held && RadarMissileInbound(aircraft), ejector.ammo) || now < nextFire) return;
+            bool chosen = Selected && Time.frameCount - heldFrame <= 1;     // the button, asked for by the game this frame or the last (update order)
+            if (!ChaffRules.ShouldRun(now < salvoUntil || chosen, Linked, held, held && RadarMissileInbound(aircraft), ejector.ammo) || now < nextFire) return;
             nextFire = now + ChaffRules.Interval;
             ejector.Fire();
             aircraft.RequestRearm();      // what the game does for every flare it fires: the rearm that follows refills the dispenser too
             // Fire() wrote the chaff count into the native countermeasure readout; put the pilot's selected one back
             CountermeasureManager manager = aircraft.countermeasureManager;
-            if (manager != null && manager.activeIndex != byte.MaxValue) manager.UpdateHUD();
+            if (Selected) ShowSelected();
+            else if (manager != null && manager.activeIndex != byte.MaxValue) manager.UpdateHUD();
         }
 
         private bool KeyPressed()
@@ -150,6 +204,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             if (ejector.ammo < load && ChaffRules.Refilled(rearmPending, pending, flaresBefore, flaresNow)) ejector.ammo = load;
             rearmPending = pending;
             flaresBefore = flaresNow;
+            if (Selected) ShowSelected();      // a rearm or a refit lets the game write its own station back into the readout
         }
 
         private void Fit(Aircraft aircraft)
@@ -162,6 +217,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 flares = aircraft.GetComponentsInChildren<FlareEjector>(true);
                 if (flares.Length == 0) return;
                 FlareEjector flare = flares[0];
+                flareIcon = flare.displayImage;
                 var ports = FlarePorts.GetValue(flare) as FlareEjector.EjectionPoint[];
                 GameObject round = Bundle(flare);
                 if (ports == null || ports.Length == 0 || round == null) return;
@@ -266,6 +322,8 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             if (ejector != null) Destroy(ejector.gameObject);
             ejector = null;
             owner = null;
+            Selected = false;
+            flareIcon = null;
             flares = Array.Empty<FlareEjector>();
             load = 0;
             flaresBefore = 0;

@@ -204,7 +204,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         private void Effects()
         {
-            if (role == VanguardRole.Decoy) { LureThreats(); return; }
+            if (role == VanguardRole.Decoy) { CountDrawn(); return; }
             if (role == VanguardRole.Drone)
                 SeduceThreats();
             if (role == VanguardRole.Jammer) JamNoise();
