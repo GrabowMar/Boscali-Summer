@@ -21,7 +21,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
             fx.transform.SetParent(Datum.origin, false);
             fx.gameObject.SetActive(true);
             active.Add(fx);
-            fx.Start(point);
+            fx.Launch(point);
             return fx;
         }
 
@@ -53,7 +53,8 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private Light glow;
         private float finishedAt = -1f;
 
-        public void Start(Vector3 at)
+        // Not "Start": Unity treats that name as its own message and rejects one that takes a parameter.
+        public void Launch(Vector3 at)
         {
             if (heads == null)
             {

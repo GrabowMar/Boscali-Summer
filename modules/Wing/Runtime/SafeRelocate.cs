@@ -10,8 +10,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 {
     /// <summary>Moves a stuck aircraft to a pose on the ground (raised by its spawn offset), once (spec M3 §2.1): every rigidbody of the aircraft keeps its offset
     /// from the root, velocities are zeroed, and every finite-difference velocity is reseeded (Aircraft, Pilot,
-    /// GForceDamage, ImpactDetector, FuelTank: zero means "no previous value", native §E2) so the move is not an
-    /// impact.</summary>
+    /// ImpactDetector, FuelTank: zero means "no previous value", native §E2) so the move is not an impact.
+    /// The game's GForceDamage is a plain class that no component holds, so there is nothing of it to reseed.</summary>
     internal static class SafeRelocate
     {
         public static float SurfaceProbeHeight = 20f;
@@ -86,7 +86,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     if (pilot != null) pilot.velocityPrev = Vector3.zero;
             foreach (GameObject o in objects)
             {
-                foreach (GForceDamage g in o.GetComponentsInChildren<GForceDamage>(true)) g.velocityPrev = Vector3.zero;
                 if (ImpactPrev != null)
                     foreach (ImpactDetector d in o.GetComponentsInChildren<ImpactDetector>(true)) ImpactPrev.SetValue(d, Vector3.zero);
                 if (FuelPrev != null)

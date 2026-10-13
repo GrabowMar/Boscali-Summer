@@ -6,6 +6,8 @@
     <LangVersion>12</LangVersion>
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
+    <!-- WingBoardScope is linked without the runtime that fills it (as in BoscaliSummer.Tests). -->
+    <NoWarn>$(NoWarn);CS0649</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="..\..\modules\Wing\Domain\Pure\*.cs" LinkBase="Pure" />
