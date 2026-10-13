@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Support.Configuration;
@@ -13,7 +12,6 @@ using BoscaliSummer.Modules.Support.Presentation.Ops;
 using BoscaliSummer.Modules.Support.Runtime;
 using NOAvionics;
 using NuclearOption.MissionEditorScripts;
-using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Support.Presentation

@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Vanguard.Domain;
-using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Vanguard.Runtime

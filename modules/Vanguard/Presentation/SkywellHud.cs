@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using NOAvionics;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Services;

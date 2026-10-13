@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
-using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Command.Configuration;

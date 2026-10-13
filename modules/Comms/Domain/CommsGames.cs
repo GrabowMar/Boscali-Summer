@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Comms.Domain
 {

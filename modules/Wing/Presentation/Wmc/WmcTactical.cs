@@ -1,6 +1,4 @@
 using NOAvionics;
-
-using BoscaliSummer.Modules.Wing.Networking;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>TACTICAL (spec 2026-10-04 §4.2, mockups board/orders.html, formation.html, route.html), the page the player spends most of the

@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.Reflection;
-using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Vanguard.Domain;
 using BoscaliSummer.Modules.Vanguard.Runtime;

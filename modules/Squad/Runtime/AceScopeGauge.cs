@@ -1,4 +1,3 @@
-using System;
 using BoscaliSummer.Core.Contracts;
 using NOAvionics;
 using UnityEngine;

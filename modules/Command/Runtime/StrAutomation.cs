@@ -1,7 +1,6 @@
 #if !PUBLIC_RELEASE
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Modules.Command.Presentation;
 using BoscaliSummer.Modules.Command.Presentation.MapUi;

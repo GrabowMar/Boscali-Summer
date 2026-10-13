@@ -5,7 +5,6 @@ using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Math;
 using NuclearOption.SavedMission;
-using NuclearOption.SavedMission.Objectives;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.TheaterOps.Runtime

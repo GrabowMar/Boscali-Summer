@@ -2,7 +2,6 @@ using NOAvionics;
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.EventSystems;
 
 namespace BoscaliSummer.Modules.Wing.Presentation
 {

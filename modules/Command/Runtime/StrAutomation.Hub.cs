@@ -7,7 +7,6 @@ using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Modules.Command.Presentation.MapUi;
-using UnityEngine;
 using static BoscaliSummer.Core.Diagnostics.AutomationArgs;
 
 namespace BoscaliSummer.Modules.Command.Runtime

@@ -1,7 +1,5 @@
 using System;
 using BoscaliSummer.Modules.Support.Domain;
-using BoscaliSummer.Modules.Support.Domain.Calls;
-using BoscaliSummer.Modules.Support.Domain.Cyber;
 using NOAvionics;
 
 namespace BoscaliSummer.Modules.Support.Presentation.Ops

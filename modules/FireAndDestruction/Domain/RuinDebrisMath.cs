@@ -1,5 +1,4 @@
 using System;
-using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.FireAndDestruction.Domain
 {

@@ -4,7 +4,6 @@ using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Command.Configuration;
 using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Modules.Command.Presentation.MapUi;
-using NOAvionics;
 using NuclearOption.UIStyleSystem;
 using UnityEngine;
 using UnityEngine.Rendering;

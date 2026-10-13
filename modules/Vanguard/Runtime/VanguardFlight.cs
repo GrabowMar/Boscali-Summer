@@ -1,4 +1,3 @@
-using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Vanguard.Domain;
 using HarmonyLib;
 using UnityEngine;

@@ -1,5 +1,4 @@
 using System;
-using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Hud.Domain;
 using NOAvionics;

@@ -1,4 +1,3 @@
-using System;
 using BoscaliSummer.Modules.TheaterOps.Domain;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Services;

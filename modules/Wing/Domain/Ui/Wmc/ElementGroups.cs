@@ -1,5 +1,3 @@
-using System.Globalization;
-
 using BoscaliSummer.Modules.Wing.Networking;
 namespace BoscaliSummer.Modules.Wing.Domain
 {

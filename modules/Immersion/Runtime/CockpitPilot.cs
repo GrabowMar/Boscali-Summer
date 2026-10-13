@@ -7,7 +7,6 @@ using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.Immersion.Configuration;
-using BoscaliSummer.Modules.Immersion.Domain;
 using BoscaliSummer.Modules.Immersion.Visuals;
 using HarmonyLib;
 using UnityEngine;

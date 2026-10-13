@@ -1,6 +1,3 @@
-using System;
-
-using BoscaliSummer.Core.Math;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>Which friendly aircraft "Escort target" means when the player has none selected: the nearest within

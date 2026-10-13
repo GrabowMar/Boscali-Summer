@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Vanguard.Domain;
 using BoscaliSummer.Modules.Vanguard.Runtime;
-using HarmonyLib;
 using UnityEngine;
 using static BoscaliSummer.Core.Diagnostics.AutomationArgs;
 

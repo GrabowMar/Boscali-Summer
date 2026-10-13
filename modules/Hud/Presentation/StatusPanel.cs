@@ -5,7 +5,6 @@ using BoscaliSummer.Modules.Hud.Domain;
 using BoscaliSummer.Modules.Hud.Runtime;
 using HarmonyLib;
 using NOAvionics;
-using NuclearOption.UIStyleSystem;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;

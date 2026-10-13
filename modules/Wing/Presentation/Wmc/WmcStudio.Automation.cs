@@ -1,10 +1,5 @@
 #if !PUBLIC_RELEASE
 using System;
-using System.Collections.Generic;
-using System.Globalization;
-
-using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Runtime;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     // SQUADRON › STUDIO for scenarios (Automation.Wmc sq_* arguments): pick a pilot, start a draft, type through the page's own commit

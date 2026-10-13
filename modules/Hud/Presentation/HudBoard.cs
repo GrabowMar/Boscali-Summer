@@ -7,7 +7,6 @@ using BoscaliSummer.Modules.Hud.Patches;
 using BoscaliSummer.Modules.Hud.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
-using NOAvionics;
 using UnityEngine;
 namespace BoscaliSummer.Modules.Hud.Presentation
 {

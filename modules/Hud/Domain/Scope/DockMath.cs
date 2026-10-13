@@ -1,5 +1,4 @@
 using System;
-using BoscaliSummer.Core.Contracts;
 
 namespace BoscaliSummer.Modules.Hud.Domain
 {

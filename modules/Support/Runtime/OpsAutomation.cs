@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using BoscaliSummer.Modules.Support.Domain;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
 using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Space;

@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Cinematography.Presentation;
-using BoscaliSummer.Modules.Cinematography.Runtime;
 using UnityEngine;
 
 namespace BoscaliSummer.Cinematics

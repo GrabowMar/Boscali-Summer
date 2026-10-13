@@ -6,7 +6,6 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using BoscaliSummer.Core.Contracts;
 using System.Collections.Generic;
-using BoscaliSummer.Core.Fx;
 
 namespace BoscaliSummer.Modules.Weather.Visuals
 {

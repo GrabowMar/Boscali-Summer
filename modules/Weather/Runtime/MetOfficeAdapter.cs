@@ -1,6 +1,5 @@
 using System;
 using BoscaliSummer.Modules.Weather.Domain;
-using NOAvionics;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Weather.Runtime

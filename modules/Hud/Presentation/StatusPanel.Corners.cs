@@ -1,5 +1,4 @@
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Hud.Domain;
 using BoscaliSummer.Modules.Hud.Runtime;

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using BoscaliSummer.Modules.TheaterOps.Domain;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
-using BoscaliSummer.Core.Math;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.TheaterOps.Runtime

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Fronts;
-using BoscaliSummer.Modules.Support.Presentation.Fronts;
 using BoscaliSummer.Modules.Support.Runtime;
 using NOAvionics;
 

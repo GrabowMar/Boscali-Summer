@@ -5,7 +5,6 @@ using System.Globalization;
 using System.Reflection;
 using BepInEx.Configuration;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Diagnostics;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.Hud.Configuration;

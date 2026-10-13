@@ -1,7 +1,6 @@
 #if !PUBLIC_RELEASE
 using NuclearOption.Networking;
 using System.Collections.Generic;
-using BoscaliSummer.Modules.Support.Domain.Fronts;
 using UnityEngine;
 using static BoscaliSummer.Core.Diagnostics.AutomationArgs;
 

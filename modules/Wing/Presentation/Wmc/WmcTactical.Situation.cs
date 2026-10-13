@@ -1,5 +1,4 @@
 using NOAvionics;
-using System.Collections.Generic;
 
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;

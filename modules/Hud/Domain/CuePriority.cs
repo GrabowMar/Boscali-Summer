@@ -1,5 +1,3 @@
-using System;
-
 namespace BoscaliSummer.Modules.Hud.Domain
 {
     /// <summary>The nine pages of the TAC BOARD scope, highest priority first (the prototype's 90..10).</summary>

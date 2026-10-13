@@ -4,7 +4,6 @@ using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Net;
-using BoscaliSummer.Modules.Vanguard.Domain;
 using BoscaliSummer.Modules.Vanguard.Presentation;
 using BoscaliSummer.Modules.Vanguard.Runtime;
 using Mirage;

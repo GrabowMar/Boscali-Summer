@@ -6,7 +6,6 @@ using UnityEngine;
 using HarmonyLib;
 
 using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Presentation;
 using BoscaliSummer.Core.Contracts;
 #pragma warning disable IDE0051 // Harmony invokes the explicitly registered survivor hooks.
 
