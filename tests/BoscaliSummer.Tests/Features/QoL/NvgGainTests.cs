@@ -59,13 +59,13 @@ namespace BoscaliSummer.Tests.Features.QoL
             // The C-menu offers the gain step only while the goggles are on and metering.
             MenuWorld w = MenuWorlds.Default();
             w.NvgOn = true;
-            TestAssert.That(Find(MenuCatalog.Build(w), "lights/nvg-gain") == null, "Vanilla night vision has no gain row");
+            TestAssert.That(Find(MenuCatalog.Build(w), "view/nvg-gain") == null, "Vanilla night vision has no gain row");
             w.HasNvgGain = true;
             w.NvgGain = 2;
-            MenuRow row = Find(MenuCatalog.Build(w), "lights/nvg-gain");
+            MenuRow row = Find(MenuCatalog.Build(w), "view/nvg-gain");
             TestAssert.That(row != null && row.State == "NVG GAIN: MED", "The gain row names the current step");
             w.NvgOn = false;
-            TestAssert.That(Find(MenuCatalog.Build(w), "lights/nvg-gain") == null, "Goggles off: no gain row");
+            TestAssert.That(Find(MenuCatalog.Build(w), "view/nvg-gain") == null, "Goggles off: no gain row");
         }
 
         private static MenuRow Find(MenuModel model, string id)

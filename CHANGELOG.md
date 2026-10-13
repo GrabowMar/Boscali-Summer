@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.1 — update
+## 0.2.2 — update
 
 - **Chaff**: your aircraft now carries a chaff dispenser (single player and hosting), built on the
   game's own unused chaff classes. It dazzles radar-guided missiles, most when you fly across the
@@ -22,6 +22,17 @@
   go of the open key too early keeps the menu for a click instead of closing it; rows picked with
   the arrows or the mouse wheel run on release; switches inside a list stay up so several can be
   flipped in one visit; a click on the hub goes back and a click in the open closes.
+- **Radio chatter rebuilt**: the radio is rebuilt from scratch as script packs, with AWACS, tower,
+  enemy and command nets, voice packs, a comms block in the left column and the radio in the MFD
+  log. Not yet played through in game.
+- **Fused night vision**: a white-phosphor tube with metered, gating gain and a thermal glow on hot
+  units; VIEW has SET NVG GAIN while night vision is on.
+- **Holo map and terrain ghost**: the corner map is a standing mini hologram that the held map key
+  grows into the big one (a tap still opens the MFD map), and a wire relief of the ground shows
+  through the cockpit. NAV DATA and the DL EVT LOG event log join the visor.
+
+## 0.2.1 — update
+
 
 - **MFD index rail rebuilt**: the button column on the right of the map is a new panel in the
   same style as the MFD consoles. Its keys now follow the colour scheme chosen on SET > DISPLAY the

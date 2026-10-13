@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.1-alpha"><img src="https://img.shields.io/badge/release-0.2.1_alpha-f0b56e?style=flat-square&labelColor=0b1b23" alt="Release 0.2.1 alpha"></a>
+  <a href="https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.2-alpha"><img src="https://img.shields.io/badge/release-0.2.2_alpha-f0b56e?style=flat-square&labelColor=0b1b23" alt="Release 0.2.2 alpha"></a>
   <img src="https://img.shields.io/badge/Nuclear_Option-0.34.2-7fd6cf?style=flat-square&labelColor=0b1b23" alt="Nuclear Option 0.34.2">
   <a href="https://github.com/BepInEx/BepInEx/releases"><img src="https://img.shields.io/badge/BepInEx-5.4.23%2B-7fd6cf?style=flat-square&labelColor=0b1b23" alt="BepInEx 5.4.23 or newer"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-8fb4b8?style=flat-square&labelColor=0b1b23" alt="MIT license"></a>
@@ -178,7 +178,7 @@ The banner at the top is generated from the mod's own terrain heightmap by [`too
 **Then:**
 
 1. Install BepInEx into the game folder, start the game once so it creates its folders, and close it.
-2. Download **`BoscaliSummer-0.2.1.zip`** from the [release page](https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.1-alpha) and extract it into the game folder. You should end up with:
+2. Download **`BoscaliSummer-0.2.2.zip`** from the [release page](https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.2-alpha) and extract it into the game folder. You should end up with:
 
    ```text
    Nuclear Option/BepInEx/plugins/BoscaliSummer/BoscaliSummer.dll
