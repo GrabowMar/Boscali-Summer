@@ -103,9 +103,42 @@ beat late when time 50 if=briefed
         {
             Parses();
             ReportsMistakes();
+            KnowsPmc();
             PlaysBeats();
             KeepsProgress();
             BuiltInScriptsAreSound();
+        }
+
+        private static void KnowsPmc()
+        {
+            ScenarioDef def = ScenarioParser.Parse("pmc.scenario", @"
+scenario pmc-one
+title ""P""
+base ""B""
+contract bdf
+lock bdf
+unit freighter like COIN side=pmc at 1 2 3
+objective find pmc ""Find her"" reach 1 2 3 range=100
+beat go when start
+  enlist pmc
+beat brief when join side=pmc
+  hint ""words""
+");
+            TestAssert.Eq(string.Join(" / ", def.Errors), "", "a PMC script reads without complaint");
+            TestAssert.That(def.UsesPmc, "a script with a PMC unit, objective or enlist uses the PMC side");
+            TestAssert.That(def.Contract == ScenarioSide.Bdf, "contract names the employer");
+            TestAssert.That(def.Units[0].Side == ScenarioSide.Pmc && def.Objectives[0].Side == ScenarioSide.Pmc && def.Beats[1].Side == ScenarioSide.Pmc,
+                "pmc is a side for units, objectives and beats");
+            TestAssert.Eq(SideNames.Of(ScenarioSide.Pmc), "PMC", "the PMC side's mission faction name");
+            TestAssert.Eq(SideNames.Of(ScenarioSide.Bdf), "Boscali", "the BDF side's mission faction name");
+            TestAssert.Eq(SideNames.Of(ScenarioSide.Any), "", "no side has no faction name");
+
+            ScenarioDef enlistOnly = ScenarioParser.Parse("e.scenario", "scenario e\ntitle \"E\"\nbase \"B\"\nbeat go when start\n  enlist pmc\n");
+            TestAssert.That(enlistOnly.UsesPmc, "enlisting into PMC alone makes the mission need a PMC side");
+            ScenarioDef plain = ScenarioParser.Parse("p.scenario", "scenario p\ntitle \"P\"\nbase \"B\"\nlock pala\nbeat go when start\n  enlist bdf\n");
+            TestAssert.That(!plain.UsesPmc && plain.Contract == ScenarioSide.Any, "a BDF/PALA script needs no PMC side and has no contract");
+            ScenarioDef bad = ScenarioParser.Parse("b.scenario", "scenario b\ntitle \"B\"\nbase \"B\"\ncontract pmc\n");
+            TestAssert.That(bad.Errors.Exists(e => e.Contains("contract needs the employer")), "PMC cannot be its own employer");
         }
 
         private static void Parses()
@@ -203,7 +236,7 @@ time 30
             {
                 "bad.scenario:2:", "'|' text line belongs under 'about'", "unknown statement 'frobnicate'", "a reach objective needs a side",
                 "reach needs <x> <height> <z>", "'then' belongs under an 'objective' or 'on'", "'say' belongs under a 'beat'", "unknown net 'radio'",
-                "orbit needs", "unknown trigger 'someday'", "side is bdf, pala or both", "nobody in the cast is called 'ghost'", "there is no shot 'missing'",
+                "orbit needs", "unknown trigger 'someday'", "side is bdf, pala, pmc or both", "nobody in the cast is called 'ghost'", "there is no shot 'missing'",
                 "a quote is left open", "beat 'd' is written twice", "copy needs:", "picture needs an id", "picture needs: poster", "there is no picture 'nope'",
                 "sky is storm", "clock is an hour of the day", "unit needs 'at <x> <height> <z>'", "need is any, all, order or a percentage", "time is an hour of the day"
             })

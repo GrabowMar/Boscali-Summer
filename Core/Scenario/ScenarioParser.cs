@@ -152,8 +152,12 @@ namespace BoscaliSummer.Core.Scenario
                 case "begin": def.Begin.AddRange(row.Rest()); return def.Begin.Count > 0 ? null : "begin needs objective names";
                 case "about": inAbout = true; return null;
                 case "lock":
-                    if (!Side(row.Next(), out ScenarioSide locked) || locked == ScenarioSide.Any) return "lock needs a side: bdf or pala";
+                    if (!Side(row.Next(), out ScenarioSide locked) || locked == ScenarioSide.Any) return "lock needs a side: bdf, pala or pmc";
                     def.Locked.Add(locked);
+                    return null;
+                case "contract":
+                    if (!Side(row.Next(), out def.Contract) || def.Contract == ScenarioSide.Any || def.Contract == ScenarioSide.Pmc)
+                        return "contract needs the employer: bdf or pala";
                     return null;
                 case "time": return row.Number(out def.Time) && def.Time >= 0f && def.Time < 24f ? null : "time is an hour of the day, 0 to 24";
                 case "weather": return row.Number(out def.Weather) && def.Weather >= 0f && def.Weather <= 1f ? null : "weather is 0 (clear) to 1 (storm)";
@@ -226,8 +230,8 @@ namespace BoscaliSummer.Core.Scenario
                 return "unit needs 'at <x> <height> <z>'";
             if (!row.Opt("heading", ref unit.Heading) || !row.Opt("speed", ref unit.Speed)) return "heading and speed are numbers";
             string side = row.Opt("side");
-            if (side != null && !Side(side, out unit.Side)) return "side is bdf or pala";
-            if (unit.Kind != null && unit.Side == ScenarioSide.Any) return "a new unit needs side=bdf or side=pala";
+            if (side != null && !Side(side, out unit.Side)) return "side is bdf, pala or pmc";
+            if (unit.Kind != null && unit.Side == ScenarioSide.Any) return "a new unit needs side=bdf, side=pala or side=pmc";
             string loadout = row.Opt("loadout");
             if (loadout != null) unit.Loadout = loadout.Split('+');
             string sail = row.Opt("to");
@@ -271,11 +275,11 @@ namespace BoscaliSummer.Core.Scenario
                     objective.Kind = ObjectiveKind.Reach;
                     if (!row.Number(out objective.X) || !row.Number(out objective.Y) || !row.Number(out objective.Z)) return "reach needs <x> <height> <z>";
                     if (!row.Opt("range", ref objective.Range) || objective.Range <= 0f) return "range is metres";
-                    return objective.Side == ScenarioSide.Any ? "a reach objective needs a side: bdf or pala" : null;
+                    return objective.Side == ScenarioSide.Any ? "a reach objective needs a side: bdf, pala or pmc" : null;
                 case "destroy": objective.Kind = ObjectiveKind.Destroy; break;
                 case "capture":
                     objective.Kind = ObjectiveKind.Capture;
-                    if (objective.Side == ScenarioSide.Any) return "a capture objective needs a side: bdf or pala";
+                    if (objective.Side == ScenarioSide.Any) return "a capture objective needs a side: bdf, pala or pmc";
                     break;
                 case "after": objective.Kind = ObjectiveKind.After; break;
                 case "sortie":
@@ -396,7 +400,7 @@ namespace BoscaliSummer.Core.Scenario
                 return trigger + " needs a name";
             beat.Repeat = row.Word("repeat");
             string side = row.Opt("side");
-            if (side != null && !Side(side, out beat.Side)) return "side is bdf, pala or both";
+            if (side != null && !Side(side, out beat.Side)) return "side is bdf, pala, pmc or both";
             beat.If = row.Opt("if");
             beat.Unless = row.Opt("unless");
             return null;
@@ -460,7 +464,7 @@ namespace BoscaliSummer.Core.Scenario
                 case "enlist":
                     action.Kind = ActionKind.Enlist;
                     action.Name = (row.Next() ?? "").ToLowerInvariant();
-                    if (!Side(action.Name, out ScenarioSide enlisted) || enlisted == ScenarioSide.Any) return "enlist needs a side: bdf or pala";
+                    if (!Side(action.Name, out ScenarioSide enlisted) || enlisted == ScenarioSide.Any) return "enlist needs a side: bdf, pala or pmc";
                     break;
                 case "sky":
                     action.Kind = ActionKind.Sky;
@@ -543,6 +547,7 @@ namespace BoscaliSummer.Core.Scenario
             {
                 case "bdf": case "boscali": side = ScenarioSide.Bdf; return true;
                 case "pala": case "primeva": side = ScenarioSide.Pala; return true;
+                case "pmc": side = ScenarioSide.Pmc; return true;
                 case "both": case "any": return true;
                 default: return false;
             }

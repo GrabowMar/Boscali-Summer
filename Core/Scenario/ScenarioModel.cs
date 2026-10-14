@@ -4,7 +4,16 @@ using System.Collections.Generic;
 namespace BoscaliSummer.Core.Scenario
 {
     /// <summary>Which side a statement is for. <see cref="Any"/>: both, or the side does not matter.</summary>
-    internal enum ScenarioSide : byte { Any, Bdf, Pala }
+    internal enum ScenarioSide : byte { Any, Bdf, Pala, Pmc }
+
+    /// <summary>The faction name a side has in mission files. PMC is the third side added by the Pmc module, hostile to both others.</summary>
+    internal static class SideNames
+    {
+        public const string Bdf = "Boscali", Pala = "Primeva", Pmc = "PMC";
+
+        public static string Of(ScenarioSide side) =>
+            side == ScenarioSide.Bdf ? Bdf : side == ScenarioSide.Pala ? Pala : side == ScenarioSide.Pmc ? Pmc : "";
+    }
 
     /// <summary>Somebody who speaks in the script: a callsign on one of the radio nets.</summary>
     internal sealed class ScenarioCast
@@ -145,6 +154,23 @@ namespace BoscaliSummer.Core.Scenario
         public readonly List<string> Without = new List<string>(), Hold = new List<string>(), Begin = new List<string>();
         /// <summary>Sides nobody may join in this mission.</summary>
         public readonly List<ScenarioSide> Locked = new List<ScenarioSide>();
+        /// <summary>The side a PMC mission works for. Parsed only: v1 keeps PMC hostile to everybody.</summary>
+        public ScenarioSide Contract;
+
+        /// <summary>True when any statement puts somebody on the PMC side; the mission then needs a PMC faction.</summary>
+        public bool UsesPmc
+        {
+            get
+            {
+                if (Locked.Contains(ScenarioSide.Pmc)) return true;
+                foreach (ScenarioUnit unit in Units) if (unit.Side == ScenarioSide.Pmc) return true;
+                foreach (ScenarioObjective objective in Objectives) if (objective.Side == ScenarioSide.Pmc) return true;
+                foreach (ScenarioBeat beat in Beats)
+                    foreach (ScenarioAction action in beat.Actions)
+                        if (action.Kind == ActionKind.Enlist && action.Name == "pmc") return true;
+                return false;
+            }
+        }
         public readonly Dictionary<string, ScenarioCast> Cast = new Dictionary<string, ScenarioCast>(StringComparer.Ordinal);
         public readonly Dictionary<string, ScenarioShot> Shots = new Dictionary<string, ScenarioShot>(StringComparer.Ordinal);
         public readonly Dictionary<string, ScenarioPicture> Pictures = new Dictionary<string, ScenarioPicture>(StringComparer.Ordinal);
