@@ -22,12 +22,13 @@ about
 time 16
 weather 0.3
 ending 14
-# Nobody flies for the other side here: the people coming for the ship are nobody's air force.
+# Nobody joins a regular side here: the pilot flies for the company, and the people coming for the ship are nobody's air force.
 lock pala
+lock bdf
 begin find_ship ship_lost stage_plaza stage_fall stage_rear
 
 # The freighter, and the people who want her. Boats first, then a second pair with two light aircraft over them.
-unit halcyon_dawn  new ship LandingCraft1 side=bdf  at 30000 2 -9000  heading=57  to=40500,-2500
+unit halcyon_dawn  new ship LandingCraft1 side=pmc at 30000 2 -9000  heading=57  to=40500,-2500
 unit pirate_boat_1 new ship PatrolBoat1   side=pala at 24500 2 -12500 heading=50  to=33000,-7000 skill=0.45
 unit pirate_boat_2 new ship PatrolBoat1   side=pala at 24800 2 -13100 heading=50  to=33000,-7000 skill=0.45
 unit pirate_boat_3 new ship PatrolBoat1   side=pala at 36000 2 -15000 heading=5   to=37000,-5000 skill=0.45
@@ -78,21 +79,21 @@ objective stage_fall wait 29
 objective stage_rear wait 38
   then spawn rear_1 rear_2 rear_3 rear_4 rear_5
 
-objective find_ship bdf "Find the Halcyon Dawn" reach 31500 400 -8000 range=4500
+objective find_ship pmc"Find the Halcyon Dawn" reach 31500 400 -8000 range=4500
   then spawn pirate_boat_1 pirate_boat_2
   then start first_boats first_clock
-objective first_boats bdf "Sink the boarding boats" destroy pirate_boat_1 pirate_boat_2
+objective first_boats pmc"Sink the boarding boats" destroy pirate_boat_1 pirate_boat_2
   then stop first_clock
   then spawn pirate_boat_3 pirate_boat_4 pirate_air_1 pirate_air_2
   then start second_wave second_clock
 objective first_clock wait 600
   then finish first_boats
-objective second_wave bdf "Break the second wave" destroy pirate_boat_3 pirate_boat_4 pirate_air_1 pirate_air_2
+objective second_wave pmc"Break the second wave" destroy pirate_boat_3 pirate_boat_4 pirate_air_1 pirate_air_2
   then stop second_clock
   then start home_safe
 objective second_clock wait 720
   then finish second_wave
-objective home_safe bdf wait 12
+objective home_safe pmcwait 12
   then victory 14
 # If the freighter goes down, the other side has won the evening.
 objective ship_lost pala destroy halcyon_dawn
@@ -137,7 +138,7 @@ beat intro when start
   cut strip  "Wars like this one run out of pilots before they run out of money. So they hire." photo=hired stamp="IGNUS CHAIN, ISLAND FIVE - 13 JUN 2034 / DAY 12"
   cut ship   "Summer Wing" "Tradewind Air Services, contract 0417. No flag. No side. Not yet." photo=docks
   dip
-  enlist bdf
+  enlist pmc
   seat "VT-7 Vagrant" at 40000 650 -1500 heading=235 speed=110
 
 beat brief when join

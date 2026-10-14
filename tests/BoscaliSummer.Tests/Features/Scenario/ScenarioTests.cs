@@ -139,6 +139,13 @@ beat brief when join side=pmc
             TestAssert.That(!plain.UsesPmc && plain.Contract == ScenarioSide.Any, "a BDF/PALA script needs no PMC side and has no contract");
             ScenarioDef bad = ScenarioParser.Parse("b.scenario", "scenario b\ntitle \"B\"\nbase \"B\"\ncontract pmc\n");
             TestAssert.That(bad.Errors.Exists(e => e.Contains("contract needs the employer")), "PMC cannot be its own employer");
+
+            string chapterOne = File.ReadAllText(Path.Combine(RepoRoot(), "modules", "Scenario", "Assets", "summer-wing.scenario"));
+            ScenarioDef summer = ScenarioParser.Parse("summer-wing.scenario", chapterOne);
+            TestAssert.That(summer.UsesPmc && summer.Locked.Contains(ScenarioSide.Bdf) && summer.Locked.Contains(ScenarioSide.Pala),
+                "chapter 1 is flown for PMC, with both regular sides locked");
+            TestAssert.That(summer.Units.Exists(u => u.Name == "halcyon_dawn" && u.Side == ScenarioSide.Pmc), "the freighter is the PMC's client, on its side");
+            TestAssert.That(summer.Objectives.TrueForAll(o => o.Id != "find_ship" || o.Side == ScenarioSide.Pmc), "the pilot's objectives are PMC's");
         }
 
         private static void Parses()
