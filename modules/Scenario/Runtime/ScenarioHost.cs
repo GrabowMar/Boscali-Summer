@@ -370,19 +370,32 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             if (side == ScenarioSide.Pmc)
             {
                 // The PMC HQ is the host's alone for now: a client cannot join it.
-                if (!GameAccess.IsServer()) { view.Card("PMC contract", "PMC contracts are single-player for now. Pick a side.", 8f); return; }
+                if (!GameAccess.IsServer()) { GiveBackJoin("PMC contracts are single-player for now: host this mission to fly it."); return; }
                 wanted = FactionRegistry.HqFromName(SideNames.Pmc);
             }
             else
                 foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
                     if (PortraitFactions.Of(hq) == (side == ScenarioSide.Bdf ? 0 : 1)) wanted = hq;
-            if (wanted == null) { log?.LogWarning("[Scenario] this mission has no " + side + " side to join."); return; }
+            if (wanted == null)
+            {
+                log?.LogWarning("[Scenario] this mission has no " + side + " side to join.");
+                GiveBackJoin("This mission has no " + side + " side to join.");
+                return;
+            }
             player.SetFaction(wanted);
             if (SceneSingleton<DynamicMap>.i != null) SceneSingleton<DynamicMap>.i.SetFaction(wanted);
             hidden = null;
             NuclearOption.UI.LeaderboardMenu menu = FindObjectOfType<NuclearOption.UI.LeaderboardMenu>();
             if (menu != null) menu.Close();
             else if (SceneSingleton<GameplayUI>.i != null) SceneSingleton<GameplayUI>.i.CloseJoinMenu();
+        }
+
+        /// <summary>An enlist that could not happen: the game's own join screen comes back instead of staying hidden for good.</summary>
+        private void GiveBackJoin(string why)
+        {
+            ownJoin = false;
+            ShowGameUi();
+            view.Card("No contract", why, 8f);
         }
 
         public void Say(ScenarioCast cast, string text, float seconds)

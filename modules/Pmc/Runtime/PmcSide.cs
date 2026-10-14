@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using BepInEx.Logging;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Scenario;
 using BoscaliSummer.Modules.Pmc.Configuration;
 using HarmonyLib;
@@ -66,7 +67,9 @@ namespace BoscaliSummer.Modules.Pmc.Runtime
             Hq = null;
             UnitIds.Clear();
             UnitPids.Clear();
-            if (Faction == null) return null;
+            // The server makes and spawns the HQ. A client building its own would never be spawned, and would leave PMC in its registries
+            // for the vanilla missions after (a client never runs SetMission, where Forget happens).
+            if (Faction == null || !GameAccess.IsServer()) return null;
             try
             {
                 GameObject parent = GameObject.Find("SceneEssentials/FactionHQ");

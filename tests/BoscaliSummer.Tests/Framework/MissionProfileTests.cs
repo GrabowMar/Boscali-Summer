@@ -24,6 +24,7 @@ namespace BoscaliSummer.Tests.Framework
                 TestAssert.That(MissionProfile.AllowsModule(id) && !MissionProfile.IsCore(id),
                     "nothing is locked until the player switches it off: " + id);
             TestAssert.That(!MissionProfile.AllowsModule(null), "a null module id is never allowed");
+            TestAssert.That(MissionProfile.IsCore("pmc"), "the PMC side is never a mission switch: a live PMC HQ needs its patches until the mission ends");
             foreach (string id in new[] { "wing", "command", "radio", "immersion", "autopilot" })
                 TestAssert.That(!MissionProfile.IsBattlefield(id), "the immersion-only preset must keep cockpit systems: " + id);
             foreach (string id in new[] { "support", "strategic-command", "weather", "theater-ops", "vanguard" })

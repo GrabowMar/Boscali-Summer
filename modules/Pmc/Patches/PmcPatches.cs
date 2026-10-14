@@ -152,7 +152,8 @@ namespace BoscaliSummer.Modules.Pmc.Patches
                 if (!IsPmc(__instance) || unit == null) return true;
                 PmcSide.UnitIds.Add(unit.GetInstanceID());
                 PmcSide.UnitPids.Add(unit.persistentID);
-                try { SceneSingleton<DynamicMap>.i?.AddIcon(unit.persistentID); }
+                // As vanilla does for a synced unit: only a friendly or spectating map shows it.
+                try { __instance.DisplayFactionUnit(unit.persistentID); }
                 catch (Exception e) { PatchGuard.Report("PmcRegisterUnit", e); }
                 return false;
             }
@@ -189,8 +190,9 @@ namespace BoscaliSummer.Modules.Pmc.Patches
                 if (PmcSide.Hq == null || HQ == null) return;
                 try
                 {
+                    // A PMC pilot's map shows the side's own units; anybody else's only the ones it has found.
                     foreach (PersistentID id in PmcSide.UnitPids)
-                        if (HQ.trackingDatabase.ContainsKey(id)) __instance.AddIcon(id);
+                        if (HQ == PmcSide.Hq || HQ.trackingDatabase.ContainsKey(id)) __instance.AddIcon(id);
                 }
                 catch (Exception e) { PatchGuard.Report("PmcGenerateMap", e); }
             }
