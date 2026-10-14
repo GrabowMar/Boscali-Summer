@@ -152,6 +152,7 @@
     <Compile Include="..\..\Core\Modules\ModuleGraph.cs" Link="Framework\FeatureGraph.cs" />
     <Compile Include="..\..\Core\Game\MissionProfile.cs" Link="Framework\MissionProfile.cs" />
     <Compile Include="..\..\Core\Scenario\*.cs" LinkBase="Framework\Scenario" />
+    <Compile Include="..\..\modules\Pmc\Runtime\PmcColor.cs" Link="Features\Pmc\PmcColor.cs" />
     <Compile Include="..\..\Core\Services\ServiceRegistry.cs" Link="Framework\ServiceRegistry.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrPagePlan.cs" Link="Features\Command\StrPagePlan.cs" />
     <Compile Include="..\..\modules\Command\Domain\StrOrgLayout.cs" Link="Features\Command\StrOrgLayout.cs" />

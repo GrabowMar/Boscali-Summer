@@ -58,6 +58,7 @@ namespace BoscaliSummer.Core.Config
         public PerformanceSettings Performance { get; }
         public CinematographySettings Cinematography { get; }
         public BoscaliSummer.Modules.Scenario.Configuration.ScenarioSettings Scenario { get; }
+        public BoscaliSummer.Modules.Pmc.Configuration.PmcSettings Pmc { get; }
         public BoscaliSummer.Modules.Effects.Configuration.EffectsSettings Effects { get; }
 
         public ModConfiguration(ConfigFile config)
@@ -98,6 +99,7 @@ namespace BoscaliSummer.Core.Config
                 Performance = new PerformanceSettings(config);
                 Cinematography = new CinematographySettings(config);
                 Scenario = new BoscaliSummer.Modules.Scenario.Configuration.ScenarioSettings(config);
+                Pmc = new BoscaliSummer.Modules.Pmc.Configuration.PmcSettings(config);
                 Effects = new BoscaliSummer.Modules.Effects.Configuration.EffectsSettings(config);
                 LegacyConfigMigration.RemoveEntries(config);
                 // Last, so every module's entries are present to be sorted into what the

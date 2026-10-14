@@ -122,6 +122,8 @@ namespace BoscaliSummer.Core
             {
                 new MissionProfileModule(),
                 // Mission scripts: the scripted missions in the picker, their dialogue and cutscenes.
+                // The third side scripted missions can seat the pilot on.
+                new BoscaliSummer.Modules.Pmc.PmcModule(),
                 new BoscaliSummer.Modules.Scenario.ScenarioModule(),
                 new SessionModule(),
                 new FireAndDestructionModule(),

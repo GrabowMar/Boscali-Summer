@@ -730,6 +730,7 @@ string[] featureTypes =
 {
     "BoscaliSummer.Core.Modules.MissionProfileModule",
     "BoscaliSummer.Modules.Scenario.ScenarioModule",
+    "BoscaliSummer.Modules.Pmc.PmcModule",
     "BoscaliSummer.Modules.Command.StrategicCommandModule",
     "BoscaliSummer.Modules.FireAndDestruction.FireAndDestructionModule",
     "BoscaliSummer.Modules.UrbanCombat.UrbanCombatModule",
