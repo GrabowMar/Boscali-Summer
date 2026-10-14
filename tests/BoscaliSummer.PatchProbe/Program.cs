@@ -1411,6 +1411,29 @@ beat b when done raid
     if (errors.Count != 1 || !errors[0].Contains("old format", StringComparison.Ordinal))
         throw new InvalidOperationException("A base mission in the old file format must be reported, not scripted");
 
+    // A PMC side is added when a script uses one: modelled on the first faction, with no supplies, and named by its units and objectives.
+    JsonNode withFactions = JsonNode.Parse(sourceJson)!;
+    withFactions["factions"] = JsonNode.Parse("""[{"factionName":"Boscali","preventJoin":false,"supplies":[{"type":"COIN","count":2}],"startingBalance":900.0}]""");
+    string factionsJson = withFactions.ToJsonString();
+    const string pmcScript = header + "unit hired like COIN side=pmc at 1 2 3\nobjective find pmc \"Find\" reach 1 2 3 range=100\nbegin find\n";
+    var pmcErrors = new List<string>();
+    string pmcBuilt = Build(factionsJson, pmcScript, pmcErrors);
+    JsonArray pmcFactions = JsonNode.Parse(pmcBuilt)!["factions"]!.AsArray();
+    if (pmcErrors.Count != 0 || pmcFactions.Count != 2 || pmcFactions[1]!["factionName"]!.GetValue<string>() != "PMC" ||
+        pmcFactions[1]!["supplies"]!.AsArray().Count != 0 || pmcFactions[1]!["startingBalance"]!.GetValue<double>() != 900.0 ||
+        pmcFactions[0]!["factionName"]!.GetValue<string>() != "Boscali")
+        throw new InvalidOperationException("A PMC script must add one PMC faction modelled on the first: " + string.Join(" / ", pmcErrors));
+    if (!pmcBuilt.Contains("\"faction\":\"PMC\"") || !pmcBuilt.Contains("\"Faction\":\"PMC\""))
+        throw new InvalidOperationException("A side=pmc unit and a pmc objective must name the PMC faction");
+    if (JsonNode.Parse(Build(pmcBuilt, pmcScript, new List<string>()))!["factions"]!.AsArray().Count != 2)
+        throw new InvalidOperationException("A mission that already has a PMC faction must not get a second one");
+    if (JsonNode.Parse(Build(factionsJson, header, new List<string>()))!["factions"]!.AsArray().Count != 1)
+        throw new InvalidOperationException("A script without PMC must not add a PMC faction");
+    var noFactionErrors = new List<string>();
+    Build(sourceJson, pmcScript, noFactionErrors);
+    if (!noFactionErrors.Exists(e => e.Contains("no factions to model a PMC side on")))
+        throw new InvalidOperationException("A PMC script on a mission without factions must be reported, not thrown");
+
     // Every script that ships must read cleanly, and build cleanly against its real base mission when one is at hand.
     Type parser = plugin.GetType("BoscaliSummer.Core.Scenario.ScenarioParser", true)!;
     MethodInfo parse = parser.GetMethod("Parse", flags, new[] { typeof(string), typeof(string) })!;
