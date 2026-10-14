@@ -86,6 +86,45 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>How many waypoint legs the pilot's own cruise strike <paramref name="requestId"/> has confirmed (0 when none are known).</summary>
         internal int CruiseLegCount(int requestId) => cruiseLegs.TryGetValue(requestId, out CruiseLegMirror mirror) ? mirror.Legs.Count : 0;
 
+        /// <summary>The confirmed waypoint legs of the pilot's own cruise strike <paramref name="requestId"/> (null when none are known).</summary>
+        internal IReadOnlyList<GlobalPosition> CruiseLegs(int requestId) => cruiseLegs.TryGetValue(requestId, out CruiseLegMirror mirror) ? mirror.Legs : null;
+
+        /// <summary>The local pilot's cruise strike still in flight (the first called), and how many legs its confirmed route holds.</summary>
+        internal bool TryFlyingCruise(out int requestId, out int legs)
+        {
+            requestId = 0; legs = 0;
+            float now = MissionNow();
+            for (int i = 0; i < activeStrikes.Count; i++)
+            {
+                ActiveStrikeInfo strike = activeStrikes[i];
+                if (strike.ActionId != SupportActionId.Cruise || strike.ImpactTime <= now) continue;
+                requestId = strike.RequestId;
+                legs = CruiseLegCount(requestId);
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>Client: sends one steering leg for the flying cruise. The host validates the strike and its owner; the answer lands in <see cref="ReceiveCruiseLegs"/>.</summary>
+        internal bool RequestWaypoint(GlobalPosition leg)
+        {
+            if (!TryFlyingCruise(out int requestId, out _) || network == null) return false;
+            pendingWaypoint = requestId; // held before the send: a server peer answers inside it
+            if (network.RequestWaypoint(requestId, leg, false)) return true;
+            pendingWaypoint = -1;
+            return false;
+        }
+
+        /// <summary>Client: drops every queued leg of the flying cruise; the missiles fly direct again.</summary>
+        internal bool ClearCruiseLegs()
+        {
+            if (!TryFlyingCruise(out int requestId, out _) || network == null) return false;
+            pendingWaypoint = requestId;
+            if (network.RequestWaypoint(requestId, default, true)) return true;
+            pendingWaypoint = -1;
+            return false;
+        }
+
         public SupportSettings Settings => settings;
 
         /// <summary>Latest accepted radar scan of the local player, for the imager.</summary>

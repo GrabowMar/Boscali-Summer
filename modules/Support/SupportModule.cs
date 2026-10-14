@@ -72,7 +72,7 @@ namespace BoscaliSummer.Modules.Support
             FrontController fronts = context.AddSceneService<FrontController>(62);
             fronts.Configure(manager, calls, feed);
             CallsPanel panel = context.AddSceneService<CallsPanel>(55);
-            panel.Configure(manager, calls, fronts);
+            panel.Configure(manager, calls, fronts, feed);
             var perkFan = new OpsPerkFan(manager, calls);
             context.AddService<IOpsPerks>(perkFan);
             var scopeFeed = new StrikeScopeFeed(manager, perkFan);

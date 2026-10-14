@@ -20,7 +20,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             CallsPanel panel = Find<CallsPanel>();
             if (panel == null) return Fail("Open", "no OPS panel in this scene");
-            panel.OpenForAutomation((OpsTab)Mathf.Clamp((int)Number(args, "tab", 1f), 1, 2));
+            panel.OpenForAutomation((OpsTab)Mathf.Clamp((int)Number(args, "tab", 1f), 1, 3));
             return Readout(null);
         }
 

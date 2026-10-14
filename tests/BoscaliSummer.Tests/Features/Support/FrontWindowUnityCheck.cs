@@ -64,8 +64,10 @@ public static class FrontWindowUnityCheck
                 string name = live ? "live" : "cold";
                 RenderMfd("fronts", OpsTab.Fronts, name, PageView(live, false), 896f);
                 RenderMfd("perks", OpsTab.Perks, name, PageView(live, false), 896f);
+                RenderMfd("tasked", OpsTab.Tasked, name, PageView(live, false), 896f);
             }
             RenderMfd("perks", OpsTab.Perks, "armed", PageView(true, true), 896f);
+            RenderMfd("tasked", OpsTab.Tasked, "armed", PageView(true, true), 896f);
             Check(!engineError, "Unity reported an engine error while painting the front window.");
             AvBundle.ResetForTests();
             if (Failures.Count > 0) throw new Exception(Failures.Count + " visual gate failures:\n" + string.Join("\n", Failures.GetRange(0, Math.Min(80, Failures.Count))));
@@ -421,6 +423,16 @@ public static class FrontWindowUnityCheck
         OpsPageViews.Perks(v, tiles);
         OpsPageViews.Cards(v, Fronts(live), true, ClockNow);
         OpsPageViews.Order(v, tiles, AimSource.Map, "GRID 34-11", false, armed ? "ARMED · PRSM STRIKE · PRESS AGAIN OR RIGHT-CLICK MAP" : "", v.Allocation);
+        if (live)
+        {
+            var posts = new List<FeedPost>
+            {
+                new FeedPost { CallId = 7, Action = SupportActionId.Prsm, WatchOfficer = true, Points = new FeedPoint[3], Expires = ClockNow + 95f },
+                new FeedPost { CallId = 9, Action = SupportActionId.Artillery, Maker = "VIPER 2", Points = new FeedPoint[1], Price = 6, Expires = ClockNow + 40f, Launching = true, Claimant = "HAWK 1" }
+            };
+            OpsPageViews.Tasked(v, posts, true, ClockNow, armed ? 7 : 0, false);
+            v.CruiseFlying = true; v.CruiseLegs = 2; v.CruiseRoute = "34-11 \u203A 36-12";
+        }
         SupportActionId[] favourites = { SupportActionId.Recon, SupportActionId.Prsm, SupportActionId.JtacMark, SupportActionId.Cruise };
         for (int i = 0; i < favourites.Length; i++) foreach (CallTile t in tiles) if (t.Id == favourites[i]) v.Favourites[i] = t;
         return v;
