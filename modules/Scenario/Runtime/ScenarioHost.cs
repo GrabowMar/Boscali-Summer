@@ -188,6 +188,8 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
                 foreach (ScenarioAction action in beat.Actions)
                     if (action.Kind == ActionKind.Enlist || action.Kind == ActionKind.Choose) ownJoin = true;
             log?.LogInfo("[Scenario] '" + running.Id + "' is running: " + running.Beats.Count + " beat(s).");
+            if (running.Contract != ScenarioSide.Any)
+                log?.LogInfo("[Scenario] contract " + running.Contract + ": not yet acted on; PMC is hostile to every side.");
         }
 
         private void Unbind()
@@ -296,10 +298,12 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             if (!joined && GameAccess.TryGetLocalFaction(out FactionHQ hq))
             {
                 int faction = PortraitFactions.Of(hq);
-                if (faction >= 0)
+                ScenarioSide side = hq.faction != null && hq.faction.factionName == SideNames.Pmc ? ScenarioSide.Pmc
+                    : faction == 0 ? ScenarioSide.Bdf : faction == 1 ? ScenarioSide.Pala : ScenarioSide.Any;
+                if (side != ScenarioSide.Any)
                 {
                     joined = true;
-                    runner.Side = faction == 0 ? ScenarioSide.Bdf : ScenarioSide.Pala;
+                    runner.Side = side;
                     runner.Raise(TriggerKind.Join);
                 }
             }
@@ -363,8 +367,15 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             choosing = false;
             if (joined || !GameManager.GetLocalPlayer(out NuclearOption.Networking.Player player)) return;
             FactionHQ wanted = null;
-            foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
-                if (PortraitFactions.Of(hq) == (side == ScenarioSide.Bdf ? 0 : 1)) wanted = hq;
+            if (side == ScenarioSide.Pmc)
+            {
+                // The PMC HQ is the host's alone for now: a client cannot join it.
+                if (!GameAccess.IsServer()) { view.Card("PMC contract", "PMC contracts are single-player for now. Pick a side.", 8f); return; }
+                wanted = FactionRegistry.HqFromName(SideNames.Pmc);
+            }
+            else
+                foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
+                    if (PortraitFactions.Of(hq) == (side == ScenarioSide.Bdf ? 0 : 1)) wanted = hq;
             if (wanted == null) { log?.LogWarning("[Scenario] this mission has no " + side + " side to join."); return; }
             player.SetFaction(wanted);
             if (SceneSingleton<DynamicMap>.i != null) SceneSingleton<DynamicMap>.i.SetFaction(wanted);
