@@ -171,8 +171,8 @@ namespace BoscaliSummer.Modules.Support.Configuration
                 "less and a ballistic aimpoint seeker are accepted. Check the startup log for the definitions this game build loaded.");
             CruiseDefinitionKey = config.Bind("Support", "CruiseDefinitionKey", string.Empty,
                 "Exact jsonKey of the missile used by the cruise strike. Empty auto-picks " +
-                "a non-nuclear vanilla missile. Only non-nuclear missiles with a yield of 200 or " +
-                "less and a cruise seeker are accepted. The trajectory (dive vs skim) is fixed by the " +
+                "a non-nuclear vanilla missile. Only non-nuclear missiles (yield 10000 or " +
+                "less) with a cruise seeker are accepted. The trajectory (dive vs skim) is fixed by the " +
                 "chosen definition and read live off the missile; pick a top-attack definition for dive. Check the startup log for the definitions this game build loaded.");
 
             CallKey1 = BindCallKey(config, 1);
