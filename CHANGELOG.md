@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.4 — update
+
+- **Classic corner map by default**: fresh configs use the game's own corner map, with the holo map
+  and terrain ghost off; switching the holo map off now sticks. Opted-in holo maps draw visible air
+  contacts ahead of ground clutter.
+- **No more flicker with the expanded layout off**: the stock layout no longer redraws its panels
+  every frame.
+- **Infantry emplacements**: squad encampments are placed on clear ground and no longer spawn inside
+  a helicopter.
+- **Radar trucks join EW**: new friendly radar trucks are enrolled in the electronic-warfare network,
+  so the truck count can grow.
+- **Free Flight stays clear**: the native Free Flight mission gets no trenches and no occupied
+  buildings.
+- **EVENT PICTURES switch**: SET > CLIENT > PERFORMANCE > WORLD can turn event pictures off and show
+  generic symbols instead.
+- **OPS TASKED tab**: claim posted strikes and steer the cruise missile; the CRUISE perk now flies
+  the game's own cruise missile, so steering works.
+- **Distant clouds** no longer boil.
+
 ## 0.2.3 — update
 
 - **Map selection reaches the target list**: while you fly, contacts picked on the expanded map (click, box,
