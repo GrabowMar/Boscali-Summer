@@ -79,21 +79,21 @@ objective stage_fall wait 29
 objective stage_rear wait 38
   then spawn rear_1 rear_2 rear_3 rear_4 rear_5
 
-objective find_ship pmc"Find the Halcyon Dawn" reach 31500 400 -8000 range=4500
+objective find_ship pmc "Find the Halcyon Dawn" reach 31500 400 -8000 range=4500
   then spawn pirate_boat_1 pirate_boat_2
   then start first_boats first_clock
-objective first_boats pmc"Sink the boarding boats" destroy pirate_boat_1 pirate_boat_2
+objective first_boats pmc "Sink the boarding boats" destroy pirate_boat_1 pirate_boat_2
   then stop first_clock
   then spawn pirate_boat_3 pirate_boat_4 pirate_air_1 pirate_air_2
   then start second_wave second_clock
 objective first_clock wait 600
   then finish first_boats
-objective second_wave pmc"Break the second wave" destroy pirate_boat_3 pirate_boat_4 pirate_air_1 pirate_air_2
+objective second_wave pmc "Break the second wave" destroy pirate_boat_3 pirate_boat_4 pirate_air_1 pirate_air_2
   then stop second_clock
   then start home_safe
 objective second_clock wait 720
   then finish second_wave
-objective home_safe pmcwait 12
+objective home_safe pmc wait 12
   then victory 14
 # If the freighter goes down, the other side has won the evening.
 objective ship_lost pala destroy halcyon_dawn
