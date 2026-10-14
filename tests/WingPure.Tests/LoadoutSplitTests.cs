@@ -14,6 +14,7 @@ namespace WingPure.Tests
                 new[] { new[] { 2 }, new int[0], new int[0] });
             TestAssert.Eq(layout.Stations, 3, "Each native set has an independent row");
             TestAssert.That(layout.Name(0) == "Left outer" && layout.Name(1) == "Right outer", "Keep side names");
+            TestAssert.That(layout.Partner(0) == 1 && layout.Partner(1) == 0 && layout.Partner(2) == -1, "Pair sides find each other; a lone station has no partner");
             var keys = new List<string> { "AGM", "AAM" };
             layout.Normalize(keys);
             TestAssert.That(keys.Count == 3 && keys[0] == "AGM" && keys[1] == "AAM" && keys[2] == null, "Opening a saved asymmetric fit preserves both sides");

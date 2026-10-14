@@ -40,6 +40,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public bool MirrorsPrevious(int st) => st > 0 && st < withPrev.Length && withPrev[st];
 
+        /// <summary>The other side of a symmetry pair, or −1.</summary>
+        public int Partner(int st) => MirrorsPrevious(st) ? st - 1 : MirrorsPrevious(st + 1) ? st + 1 : -1;
+
         public int PylonsAt(int set) => set < pylons.Length ? Math.Max(0, pylons[set]) : 0;
 
         public int PylonsOf(int st)
