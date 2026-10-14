@@ -294,13 +294,19 @@ Shader "Boscali/FlightCloudComposite"
                 // The clamp box comes from the nine quarter-size texels marched this frame, one of every four half-size texels. A cloud thinner than that (a far layer seen edge-on) is
                 // inside the box only on the frames whose marched row happens to cross it: clamped hard, it blinked on and off along the horizon. A sky that barely moves on screen
                 // keeps most of its history (a 15 % pull toward the box per frame still clears a cloud that has really gone); a moving one is clamped as before.
-                float4 carried = lerp(history, boxed, saturate(0.15 + motion * 3.0));
+                // Distant cloud is cached harder: past the near limit (45 km, fully by 120 km)
+                // a texel covers kilometres of sky, so each fresh sample disagrees with the
+                // last far more than the cloud changed. History then yields only 4 % toward
+                // the clamp box and a fresh texel enters at 3 % per visit, while motion and
+                // lightning (in `motion`) still force a prompt refresh.
+                float farCache = smoothstep(45000.0, 120000.0, distance);
+                float4 carried = lerp(history, boxed, saturate(lerp(0.15, 0.04, farCache) + motion * 3.0));
                 if (!fresh) return Resolved(lerp(carried, upsampled, motion), sceneDepth, cloudDepth);
                 // The clamp already pulled the carried value into the fresh range, so new and
                 // vanished cloud still converge within a few frames. A fresh texel enters half
                 // as its own sample and half as the blend around it, and at most a quarter per
                 // visit at rest (was a half of the raw sample for dense cloud: visible grain).
-                return Resolved(lerp(carried, lerp(freshVal, smooth, 0.5), max(0.08 + 0.17 * freshVal.a, motion)), sceneDepth, cloudDepth);
+                return Resolved(lerp(carried, lerp(freshVal, smooth, 0.5), max(lerp(0.08 + 0.17 * freshVal.a, 0.03, farCache), motion)), sceneDepth, cloudDepth);
             }
             ENDHLSL
         }

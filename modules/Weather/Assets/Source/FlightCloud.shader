@@ -1582,7 +1582,12 @@ Shader "Boscali/FlightCloud"
                 // Set-pieces: adaptive steps of about 0.6 % of the distance (a fraction of a
                 // tower's width at any range), four at a time through empty air, backing up to
                 // fine steps where cloud begins.
-                float tHero = s0 + jitter * clamp(s0 * 0.006, 150.0, 900.0);
+                // Distant segments march from fixed sample positions: the cycling dither moves
+                // a far sample by kilometres, and the sky boiled however much history it
+                // kept. Near segments keep the dither (the resolve averages it out); far
+                // ones lean on the resolve's distance-weighted history instead.
+                float segJitter = farSeg || (hero && h0 >= CLOUD_NEAR_LIMIT) ? 0.5 : jitter;
+                float tHero = s0 + segJitter * clamp(s0 * 0.006, 150.0, 900.0);
                 float fineUntil = -1.0;
                 bool stride = false;
                 [loop]
@@ -1596,7 +1601,7 @@ Shader "Boscali/FlightCloud"
                     float sampleStart = lerp(a * a, a * a * a, proximity);
                     float sampleEnd = lerp(b * b, b * b * b, proximity);
                     float stepLength = hero ? fine : span * (sampleEnd - sampleStart);
-                    float t = hero ? tHero : s0 + span * lerp(sampleStart, sampleEnd, jitter);
+                    float t = hero ? tHero : s0 + span * lerp(sampleStart, sampleEnd, segJitter);
                     float3 world = origin + ray * t;
                     gHeroOnly = t > CLOUD_FAR_LIMIT;
                     gFoot = max(t * _CloudPixelAngle, stepLength * 0.35);
@@ -1740,7 +1745,7 @@ Shader "Boscali/FlightCloud"
             // Airlight is already applied per sample inside the march.
 
             RainCurtainLayers rain = MarchRainCurtain(origin, ray, sceneDistance,
-                jitter, phase, cloudDistance);
+                0.5, phase, cloudDistance);
             float4 rainyCloud = CompositeRainCurtain(float4(colour, opacity), cloudDistance, rain);
             colour = rainyCloud.rgb;
             opacity = rainyCloud.a;
@@ -1796,14 +1801,17 @@ Shader "Boscali/FlightCloud"
                 }
             }
 
+            // Thin layers sample at the fixed mid-step (0.5), like the rain curtain:
+            // their chords reach the horizon, where a cycling offset moves a sample
+            // plane by kilometres and the layer shimmered at the horizon.
             // Non-overlapping height bands have a known order along a rising/falling ray.
             // Split each chord at cloud depth, then compose its front and back portions in
             // that order. Reuse each density sample; no second slab march is needed.
             float slabLimit = min(sceneDistance, CLOUD_HORIZON_LIMIT);
             if (opacity > 0.996) slabLimit = min(slabLimit, cloudDistance);
-            SlabLayers fog = MarchSlab(ro, ray, slabLimit, cloudDistance, 2.0, -30.0, 330.0, phase, jitter);
-            SlabLayers middle = MarchSlab(ro, ray, slabLimit, cloudDistance, 0.0, _TapeChord.x, _TapeChord.y, phase, jitter);
-            SlabLayers high = MarchSlab(ro, ray, slabLimit, cloudDistance, 1.0, _TapeChord.z, _TapeChord.w, phase, jitter);
+            SlabLayers fog = MarchSlab(ro, ray, slabLimit, cloudDistance, 2.0, -30.0, 330.0, phase, 0.5);
+            SlabLayers middle = MarchSlab(ro, ray, slabLimit, cloudDistance, 0.0, _TapeChord.x, _TapeChord.y, phase, 0.5);
+            SlabLayers high = MarchSlab(ro, ray, slabLimit, cloudDistance, 1.0, _TapeChord.z, _TapeChord.w, phase, 0.5);
             SlabLayer front = fog.front;
             SlabLayer back = fog.back;
             if (ray.y < 0.0) { front = high.front; back = high.back; }

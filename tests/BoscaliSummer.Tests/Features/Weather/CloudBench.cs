@@ -109,6 +109,8 @@ public sealed class CloudBench : MonoBehaviour
         string only = Environment.GetEnvironmentVariable("CLOUD_BENCH_ONLY");
         string[] filters = string.IsNullOrEmpty(only) ? Array.Empty<string>() : only.Split(',');
         bool staticView = Environment.GetEnvironmentVariable("CLOUD_BENCH_STATIC") == "1";
+        bool seqView = Environment.GetEnvironmentVariable("CLOUD_BENCH_SEQ") == "1";
+        bool flashSeq = Environment.GetEnvironmentVariable("CLOUD_BENCH_FLASH") == "1";
         string poseFile = Environment.GetEnvironmentVariable("CLOUD_BENCH_POSES");
         var fixedPoses = new Dictionary<string, float[]>();
         if (!string.IsNullOrEmpty(poseFile))
@@ -472,6 +474,12 @@ public sealed class CloudBench : MonoBehaviour
                         cmd.DrawMesh(cube, box, composite, 0, 0);
                     }
                     else cmd.DrawMesh(cube, box, m, 0, 0);
+                    if (flashSeq && mode == "temporal" && index >= 0)
+                    {
+                        frame.Flash = index >= 12 ? 1f : 0f;
+                        frame.FlashA = new Vector4(0f, 3500f, 0f, 1f);
+                        uniforms.Apply(m, field, frame, noise);
+                    }
                     camera.Render();
                     if (moving && index >= 0 && (index % 30 == 0 || index == frames - 1))
                     {
@@ -482,6 +490,15 @@ public sealed class CloudBench : MonoBehaviour
                         Directory.CreateDirectory(s.Name);
                         File.WriteAllBytes(s.Name + "/" + index.ToString("D4") + ".png", readback.EncodeToPNG());
                         routeLog.AppendLine(FormattableString.Invariant($"{index},{position.x:F1},{position.y:F1},{position.z:F1},{density:F4},{inCloud:F4}"));
+                    }
+                    if (seqView && mode == "temporal" && index >= 0)
+                    {
+                        RenderTexture.active = target;
+                        readback.ReadPixels(new Rect(0, 0, Width, Height), 0, 0);
+                        readback.Apply();
+                        RenderTexture.active = null;
+                        Directory.CreateDirectory(s.Name + "-seq");
+                        File.WriteAllBytes(s.Name + "-seq/" + index.ToString("D4") + ".png", readback.EncodeToPNG());
                     }
                 }
                 lowRes.InvalidateHistory();
