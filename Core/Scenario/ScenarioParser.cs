@@ -162,6 +162,10 @@ namespace BoscaliSummer.Core.Scenario
                 case "time": return row.Number(out def.Time) && def.Time >= 0f && def.Time < 24f ? null : "time is an hour of the day, 0 to 24";
                 case "weather": return row.Number(out def.Weather) && def.Weather >= 0f && def.Weather <= 1f ? null : "weather is 0 (clear) to 1 (storm)";
                 case "ending": return row.Number(out def.Ending) && def.Ending >= 1f && def.Ending <= 120f ? null : "ending is 1 to 120 seconds";
+                case "gamemusic":
+                    if (!row.Word("off")) return "gamemusic needs: off";
+                    def.GameMusic = false;
+                    return null;
                 case "cast": return ReadCast(row, def);
                 case "unit": return ReadUnit(row, def, line);
                 case "copy":
@@ -331,6 +335,30 @@ namespace BoscaliSummer.Core.Scenario
             return null;
         }
 
+        private static readonly string[] BoardNames = { "feed", "clean", "title", "news", "paper", "map", "sat", "dossier", "chapter" };
+
+        /// <summary>The words a cut may give its board; each board reads the ones it uses (docs/SCENARIOS.md).</summary>
+        private static readonly string[] BoardWords =
+        {
+            "channel", "kicker", "headline", "sub", "ticker", "tag", "clock", "date", "masthead", "edition", "body", "number", "company", "heading",
+            "mark", "note", "area", "arrows", "retreat", "front", "labels", "marks", "header", "legend",
+        };
+
+        private static readonly string[] EffectNames = { "glitch", "strike", "lock", "lost", "alert", "warm", "cold", "night" };
+
+        /// <summary>A comma list of effect names, in <see cref="CutFx"/> order.</summary>
+        private static bool Effects(string list, out CutFx fx)
+        {
+            fx = CutFx.None;
+            foreach (string name in list.Split(','))
+            {
+                int index = Array.IndexOf(EffectNames, name.Trim());
+                if (index < 0) return false;
+                fx |= (CutFx)(1 << index);
+            }
+            return true;
+        }
+
         private static string ReadShot(Row row, ScenarioDef def, int line)
         {
             var shot = new ScenarioShot { Id = row.Next(), Line = line };
@@ -369,6 +397,9 @@ namespace BoscaliSummer.Core.Scenario
             if (!row.Opt("seconds", ref shot.Seconds) || !row.Opt("fov", ref shot.Fov)) return "seconds and fov are numbers";
             if (shot.Seconds < 1f || shot.Seconds > 60f) return "a shot lasts 1 to 60 seconds";
             if (shot.Fov < 15f || shot.Fov > 80f) return "fov is 15 to 80 degrees";
+            if (!row.Opt("shake", ref shot.Shake) || !row.Opt("roll", ref shot.Roll)) return "shake and roll are numbers";
+            if (shot.Shake < 0f || shot.Shake > 1f) return "shake is 0 to 1";
+            if (shot.Roll < -20f || shot.Roll > 20f) return "roll is -20 to 20 degrees";
             if (def.Shots.ContainsKey(shot.Id)) return "shot '" + shot.Id + "' is written twice";
             def.Shots[shot.Id] = shot;
             return null;
@@ -426,6 +457,20 @@ namespace BoscaliSummer.Core.Scenario
                     action.Photo = row.Opt("photo");
                     action.Stamp = row.Opt("stamp");
                     if (action.Stamp != null && action.Stamp.Length > 80) return "a stamp is up to 80 characters";
+                    string fx = row.Opt("fx");
+                    if (fx != null && !Effects(fx, out action.Fx)) return "fx is a list of: " + string.Join(", ", EffectNames);
+                    action.Voice = row.Opt("voice");
+                    if (action.Voice != null && !IsFileName(action.Voice)) return "voice needs a file name (an .mp3 or .ogg beside the script)";
+                    action.Board = row.Opt("board");
+                    if (action.Board != null && Array.IndexOf(BoardNames, action.Board) < 0) return "board is one of: " + string.Join(", ", BoardNames);
+                    foreach (string key in BoardWords)
+                    {
+                        string word = row.Opt(key);
+                        if (word == null) continue;
+                        if (!Words(word)) return key + " is up to " + MaxTextChars + " characters";
+                        if (action.Words == null) action.Words = new Dictionary<string, string>(StringComparer.Ordinal);
+                        action.Words[key] = word;
+                    }
                     break;
                 case "card":
                     action.Kind = ActionKind.Card;

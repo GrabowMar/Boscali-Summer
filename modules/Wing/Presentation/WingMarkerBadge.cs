@@ -128,6 +128,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 label.fontStyle = FontStyles.Bold;
                 label.alignment = TextAlignmentOptions.Center;
                 label.raycastTarget = false;
+                label.fontSharedMaterial = Outlined(label.fontSharedMaterial);
                 known.Status = label;
             }
 
@@ -140,6 +141,21 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             rt.sizeDelta = new Vector2(120f, 18f);
             if (label.color != color) label.color = color;
             if (!ReferenceEquals(label.text, text)) label.text = text;
+        }
+
+        private static Material outlined;
+
+        /// <summary>One shared copy of the font material with a dark outline: the badge reads on snow, sea and relief alike,
+        /// with no plate behind it.</summary>
+        private static Material Outlined(Material font)
+        {
+            if (outlined != null || font == null) return outlined != null ? outlined : font;
+            outlined = new Material(font) { name = "WingCommand_BadgeOutline" };
+            outlined.EnableKeyword(ShaderUtilities.Keyword_Outline);
+            outlined.SetFloat(ShaderUtilities.ID_OutlineWidth, 0.28f);
+            outlined.SetColor(ShaderUtilities.ID_OutlineColor, new Color(0f, 0f, 0f, 0.85f));
+            outlined.SetFloat(ShaderUtilities.ID_FaceDilate, 0.12f);
+            return outlined;
         }
 
         private static Vector2 ScreenPoint(RectTransform transform, Vector2 point, Camera camera) =>

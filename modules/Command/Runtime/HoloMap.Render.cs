@@ -386,7 +386,9 @@ namespace BoscaliSummer.Modules.Command.Runtime
             // The material's colour is the line's strength: the east-west lines (bearing 90) and the north-south ones (bearing 0) against the way the camera looks.
             // The MINI's are a little stronger overall; the water lines are one strength for both families.
             float gain = HoloPresentation.LineGain(shape);
-            float across = HoloGrid.LineStrength(90f, camera.Heading) * gain, away = HoloGrid.LineStrength(0f, camera.Heading) * gain, wet = HoloGrid.WaterStrength * gain;
+            // Seen from straight above (the 2D MINI) no line runs away from the viewer: both families at full strength.
+            bool flat = camera.Tilt >= 89f;
+            float across = (flat ? 1f : HoloGrid.LineStrength(90f, camera.Heading)) * gain, away = (flat ? 1f : HoloGrid.LineStrength(0f, camera.Heading)) * gain, wet = HoloGrid.WaterStrength * gain;
             eastWestBlock.SetColor(ColourId, new Color(across, across, across, 1f));
             northSouthBlock.SetColor(ColourId, new Color(away, away, away, 1f));
             waterBlock.SetColor(ColourId, new Color(wet, wet, wet, 1f));

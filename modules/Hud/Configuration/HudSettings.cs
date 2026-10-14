@@ -54,6 +54,14 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             Scale = config.Bind(section, "Scale", d.Scale,
                 new ConfigDescription("Size multiplier for the whole board." + live,
                     new AcceptableValueRange<float>(BoardOptions.ScaleMin, BoardOptions.ScaleMax)));
+            // 0.2.5 made the board smaller by default; a file still holding the old untouched default 1 takes the new one, once.
+            ConfigEntry<int> smallerBoard = config.Bind(section, "SmallerDefaultScale", 0,
+                new ConfigDescription("Internal marker, leave as it is: 1 once a Scale left at the old default (1) has moved to the new one.", new AcceptableValueRange<int>(0, 1)));
+            if (smallerBoard.Value < 1)
+            {
+                if (Scale.Value == 1f) Scale.Value = d.Scale;
+                smallerBoard.Value = 1;
+            }
 
             OffsetX = config.Bind(section, "OffsetX", d.OffsetX,
                 new ConfigDescription("How far the board is moved left from the right screen edge, in units (a unit is a 1080p pixel, scaled by the screen's height)." + live,

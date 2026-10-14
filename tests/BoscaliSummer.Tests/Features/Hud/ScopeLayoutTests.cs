@@ -49,6 +49,12 @@ namespace BoscaliSummer.Tests.Features.Hud
             Same(live.Gauges, 476f, 322f, 440f, 30f, "WIDE gauge line (two lines) hangs 8 under the page");
             Same(live.Ticker, 476f, 358f, 440f, 12f, "WIDE ticker hangs 6 under the gauge line");
             Same(live.Hero, 0f, 6f, 272f, 152f, "HERO does not move with the page");
+            BoardBlocks rwr = All(BoardLayout.Wide, ScopeLayout.Full, 2);
+            rwr.StatusH = ScopeLayout.Compact;
+            BoardGeometry warned = ScopeLayout.Compute(rwr);
+            Same(warned.Page, 476f, 24f, 440f, 290f, "STATUS does not move the warning page");
+            Same(warned.Status, 476f, 322f, 440f, 96f, "STATUS hangs 8 under the warning page");
+            Same(warned.Gauges, 476f, 426f, 440f, 30f, "the gauge line hangs 8 under STATUS");
 
             // STACK (LAYOUT.md 4): box 448, cruise 358, live 570.
             BoardGeometry sc = ScopeLayout.Compute(All(BoardLayout.Stack, ScopeLayout.Compact));

@@ -176,6 +176,11 @@ namespace BoscaliSummer.Modules.Cinematography.Runtime
             float fov = Mathf.Clamp(shot.Fov <= 0f ? 45f : shot.Fov, 15f, 80f);
             foreach (ShotKey key in plan.keys) key.fov = fov;
             plan.options.realtimeClock = true;
+            float shake = Mathf.Clamp01(shot.Shake);
+            plan.options.shakeMeters = 0.75f * shake;
+            plan.options.shakeDegrees = 3f * shake;
+            plan.options.rollDegrees = Mathf.Clamp(shot.Roll, -20f, 20f);
+            plan.options.seed = (int)(shot.X + shot.Z) & 0x7fff;
             return plan;
         }
 

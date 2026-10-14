@@ -25,10 +25,10 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>The texture the picture is drawn into (a part of it, as many pixels as the frame shows times <see cref="Oversample"/> at most) and the smallest part used.</summary>
         internal const int TextureWidth = 1280, TextureHeight = 960, MinimumPixels = 96;
         internal const float Oversample = 1.5f;
-        /// <summary>Degrees above the horizon the camera looks from: the MINI is close to a plan view, the BIG one shows more relief.</summary>
-        internal const float MiniTilt = 68f, BigTilt = 55f;
-        /// <summary>Where the aircraft stands in the frame: across the middle always, and up from the bottom edge as a share of the frame's height. Heading up the MINI puts it low, so more of what is ahead shows.</summary>
-        internal const float AircraftAcross = .5f, MiniAircraftUp = .38f;
+        /// <summary>Degrees above the horizon the camera looks from: the MINI is a flat 2D plan view like the game's own corner map, the BIG one shows relief.</summary>
+        internal const float MiniTilt = 90f, BigTilt = 55f;
+        /// <summary>Where the aircraft stands in the frame: across the middle always, and up from the bottom edge as a share of the frame's height. The MINI centres it, as the game's corner map does.</summary>
+        internal const float AircraftAcross = .5f, MiniAircraftUp = .5f;
         /// <summary>Grid cells across the picture's reach (twice the range, at the aircraft's depth): a denser grid for the bigger picture.</summary>
         internal const int MiniCells = 48, BigCells = 96;
 

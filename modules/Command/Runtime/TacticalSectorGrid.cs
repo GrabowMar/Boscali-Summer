@@ -668,7 +668,13 @@ namespace BoscaliSummer.Modules.Command.Runtime
                         holdStrength[index] = nodeAnchors[index] == 1 ? 1f : nodeAnchors[index] == 2 ? -1f : 0f;
                     float hold = holdStrength[index];
                     SectorControl previousState = sectorStates[index];
-                    sectorStates[index] = (SectorControl)ControlFieldCore.Classify(hold, friendly, hostile, nodeAnchors[index] == 3);
+                    SectorControl state = (SectorControl)ControlFieldCore.Classify(hold, friendly, hostile, nodeAnchors[index] == 3);
+                    // Ground under anyone's influence is never a hole: a hold inside the epsilon
+                    // goes to the side it leans (or is heading), so the zero contour has owned
+                    // squares on both sides. Neutral stays for ground no one reaches.
+                    if (state == SectorControl.Neutral && target != 0f)
+                        state = (hold != 0f ? hold : target) > 0f ? SectorControl.Friendly : SectorControl.Hostile;
+                    sectorStates[index] = state;
 
                     // Only a real change bumps the grid version: a repainted but identical
                     // front must not trigger a texture upload. The hold epsilon catches
@@ -1177,7 +1183,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
             // paint), so the buffer needs no clear first.
             pixelBufferBlank = false;
 
-            float fillAlpha = Math.Clamp(globalOpacity * 255f * 0.45f, 18f, 56f);
+            // A wash, not a paint job: the terrain underneath has to stay readable.
+            float fillAlpha = Math.Clamp(globalOpacity * 255f * 0.32f, 12f, 40f);
             float pxPerCellX = CellSize / WorldSizeX * texWidth;
             float pxPerCellY = CellSize / WorldSizeY * texHeight;
             float originPxX = (OriginX + WorldSizeX * 0.5f) / WorldSizeX * texWidth;
@@ -1186,6 +1193,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             // field value into "pixels inside the border".
             float edgeScale = Math.Min(pxPerCellX, pxPerCellY) / 1.5f;
             int period = Math.Clamp((int)(Math.Min(pxPerCellX, pxPerCellY) / 2f), 4, 12);
+            int hairline = Math.Max(1, period / 5);
 
             // The pixel centre's place in the field depends on its column alone, or its row
             // alone, so those terms are worked out once per column and per row, not once per
@@ -1326,7 +1334,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
                         int cellRow = rows[y].Cell;
                         int rowOffset = y * texWidth;
                         int phase = (xMin + y) % period;
-                        int stripeCell = -1, stripeRun = 0;
                         for (int x = xMin; x <= xMax; x++, phase = phase + 1 == period ? 0 : phase + 1)
                         {
                             ref BakeColumn column = ref columns[x];
@@ -1360,22 +1367,20 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
                             if (hatched)
                             {
-                                // A contested square is hatched red/blue, never a third colour: the
-                                // stripe runs follow the cell's control value, so the wider run is
-                                // the side that holds more of the square.
+                                // No man's land, never a third colour: the wash fades and thin
+                                // diagonal hairlines in the challenger's colour cross it. The base
+                                // keeps the side that leads (the hold contour), so a glance still
+                                // says who is ahead without a field of full-width stripes.
                                 float contested = column.KLow + column.KDelta * sy;
                                 float hatch = ClampF((contested - 0.5f) * edgeScale + 0.5f, 0f, 1f);
                                 if (hatch > 0f)
                                 {
-                                    int col = column.Cell;
-                                    if (col != stripeCell)
+                                    if (phase < hairline)
                                     {
-                                        stripeCell = col;
-                                        stripeRun = StripeRun(cellRow * ResolutionX + col, period);
+                                        friendly += ((friendly >= 0.5f ? 0f : 1f) - friendly) * hatch;
+                                        alpha += fillAlpha * HatchStrength * hatch;
                                     }
-                                    bool blue = phase < stripeRun;
-                                    friendly += ((blue ? 1f : 0f) - friendly) * hatch;
-                                    alpha += fillAlpha * HatchStrength * hatch;
+                                    else alpha *= 1f - NoMansLandFade * hatch;
                                 }
                             }
 
@@ -1470,7 +1475,9 @@ namespace BoscaliSummer.Modules.Command.Runtime
         /// <summary>Pixels inside the border where the rim line peaks; it is twice this wide.</summary>
         private const float RimInset = 1.25f;
         private const float RimStrength = 1.6f;
-        private const float HatchStrength = 0.6f;
+        private const float HatchStrength = 0.9f;
+        /// <summary>How far contested ground's wash fades between the hairlines.</summary>
+        private const float NoMansLandFade = 0.55f;
         /// <summary>Steps of hold the tint can tell apart; the display hash re-bakes on one step.</summary>
         private const float TintHoldSteps = 8f;
 
@@ -1523,17 +1530,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
         {
             float hold = holdStrength[index];
             return sectorStates[index] == SectorControl.Neutral || !float.IsFinite(hold) ? 0f : Math.Sign(hold);
-        }
-
-        /// <summary>
-        /// Pixels of one stripe period that belong to the friendly side: the cell's control
-        /// value, so the wider run is the side that holds more of the square.
-        /// </summary>
-        private int StripeRun(int index, int period)
-        {
-            float hold = holdStrength[index];
-            float share = Math.Clamp((float.IsFinite(hold) ? hold : 0f) * 0.5f + 0.5f, 0f, 1f);
-            return Math.Clamp((int)Math.Round(share * period), 1, period - 1);
         }
     }
 }

@@ -186,10 +186,16 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
 
         public MenuRect Disc(int i) => new MenuRect(DiscX[i] - Rd, DiscY[i] - Rd, DiscX[i] + Rd, DiscY[i] + Rd);
 
-        /// <summary>The nearest disc within <paramref name="pad"/> of its rim, or -1.</summary>
-        public int DiscAt(float x, float y, float pad)
+        /// <summary>How far past the outer rim of the ring discs the Voronoi zones reach (design px, times <see cref="Rho"/>).</summary>
+        public const float RingSlopPx = 70f;
+
+        /// <summary>Voronoi pick: anywhere in the band from the hub's zone out to <see cref="RingSlopPx"/> past the discs belongs to the nearest disc, or -1.</summary>
+        public int DiscAt(float x, float y)
         {
-            int best = -1; double bd = Rd + pad;
+            float dx = x - Cx, dy = y - Cy, r2 = dx * dx + dy * dy;
+            float inner = HubR + DiscSlopPx * Rho, outer = R + Rd + RingSlopPx * Rho;
+            if (r2 <= inner * inner || r2 > outer * outer) return -1;
+            int best = -1; double bd = double.MaxValue;
             for (int i = 0; i < Count; i++)
             {
                 double d = Math.Sqrt((x - DiscX[i]) * (x - DiscX[i]) + (y - DiscY[i]) * (y - DiscY[i]));

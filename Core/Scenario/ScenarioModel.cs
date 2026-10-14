@@ -95,7 +95,28 @@ namespace BoscaliSummer.Core.Scenario
         public ShotKind Kind;
         public float X, Y, Z, ToX, ToY, ToZ, LookX, LookY, LookZ;
         public float Radius = 1500f, Height = 400f, From, To = 60f, Seconds = 8f, Fov = 45f;
+        /// <summary>Handheld shake 0..1 and a held roll in degrees.</summary>
+        public float Shake, Roll;
         public int Line;
+    }
+
+    /// <summary>A cut's screen effects (<c>fx=strike,lock</c>), layered over the surveillance feed for that one shot.</summary>
+    [Flags]
+    internal enum CutFx : ushort
+    {
+        None = 0,
+        /// <summary>The feed keeps breaking up: interference bursts and torn words all through the shot.</summary>
+        Glitch = 1,
+        /// <summary>A blast as the shot opens: a white-hot flash and a long burst of interference.</summary>
+        Strike = 2,
+        /// <summary>A tracking box closes on the middle of the picture and locks.</summary>
+        Lock = 4,
+        /// <summary>The feed drops to static for the shot's last second.</summary>
+        Lost = 8,
+        /// <summary>The frame pulses red under a flash-traffic banner.</summary>
+        Alert = 16,
+        /// <summary>Colour grades: sunset gold, steel blue, night-vision green.</summary>
+        Warm = 32, Cold = 64, Night = 128,
     }
 
     internal enum TriggerKind : byte { Start, Join, Spawn, Airborne, Landed, Time, Started, Done, Flag }
@@ -112,6 +133,12 @@ namespace BoscaliSummer.Core.Scenario
         public string Title;
         /// <summary>A cut's picture and its place-and-date stamp, when it has them.</summary>
         public string Photo, Stamp;
+        public CutFx Fx;
+        /// <summary>A cut's board (<c>board=news</c>) and that board's own words (<c>headline=</c>, <c>ticker=</c>...); null for the surveillance feed.</summary>
+        public string Board;
+        public Dictionary<string, string> Words;
+        /// <summary>A cut's narration: an .mp3 or .ogg spoken as the shot starts.</summary>
+        public string Voice;
         public float Seconds;
         /// <summary>Where a <c>seat</c> puts the pilot: a point, a compass heading and a speed in metres a second.</summary>
         public float X, Y, Z, Heading, Speed;
@@ -126,6 +153,13 @@ namespace BoscaliSummer.Core.Scenario
         public ScenarioShot Shot;
         public string Title, Caption, Stamp;
         public ScenarioPicture Photo;
+        public CutFx Fx;
+        public string Board;
+        public Dictionary<string, string> Words;
+        public string Voice;
+
+        /// <summary>One of the board's words, or <paramref name="otherwise"/>.</summary>
+        public string Word(string key, string otherwise = null) => Words != null && Words.TryGetValue(key, out string value) ? value : otherwise;
     }
 
     /// <summary>A piece of the story: when <see cref="Trigger"/> happens for a pilot it is meant for, its actions play in order.</summary>
@@ -151,6 +185,8 @@ namespace BoscaliSummer.Core.Scenario
         public float Time = -1f, Weather = -1f;
         /// <summary>Seconds between the mission being decided and the game's end screen, so the last words can be said; negative leaves the base mission's.</summary>
         public float Ending = -1f;
+        /// <summary>False keeps the game's own music silent for the whole mission (<c>gamemusic off</c>); the script's tracks still play.</summary>
+        public bool GameMusic = true;
         public readonly List<string> Without = new List<string>(), Hold = new List<string>(), Begin = new List<string>();
         /// <summary>Sides nobody may join in this mission.</summary>
         public readonly List<ScenarioSide> Locked = new List<ScenarioSide>();

@@ -20,6 +20,7 @@ namespace BoscaliSummer.Modules.Command.Configuration
         public ConfigEntry<bool> StrOverlayOperation { get; }
         public ConfigEntry<bool> StrOverlaySorties { get; }
         public ConfigEntry<bool> ThreatHeat { get; }
+        public ConfigEntry<bool> MapRoads { get; }
         public ConfigEntry<float> OverlayOpacity { get; }
         public ConfigEntry<int> GridCellSizeMetres { get; }
         public ConfigEntry<float> GridRefreshInterval { get; }
@@ -35,6 +36,8 @@ namespace BoscaliSummer.Modules.Command.Configuration
         public ConfigEntry<float> BackgroundImageOpacity { get; }
 
         public ConfigEntry<bool> MapTerrainImage { get; }
+        public ConfigEntry<bool> MapIndustry { get; }
+        public ConfigEntry<bool> MapSupplyRoutes { get; }
         public ConfigEntry<bool> MapRelief3D { get; }
         public ConfigEntry<bool> MapSymbology { get; }
         public ConfigEntry<bool> MapMinis3D { get; }
@@ -124,6 +127,16 @@ namespace BoscaliSummer.Modules.Command.Configuration
                 if (savedHolo > 0) HoloRangeKm.Value = HoloPresentation.MigrateHoloRange(savedHolo);
                 HoloTileRanges.Value = 1;
             }
+            // 0.2.4 turned the terrain ghost and holo maps off by default; a cfg saved by 0.2.3 still holds the old on values.
+            ConfigEntry<int> quietDefaults = config.Bind("Command", "QuietVisorDefaults", 0,
+                new ConfigDescription("Internal marker, leave as it is: 1 once a config saved before 0.2.5 has had TerrainGhost, HoloMap and TacMapMode set back to their off defaults.", new AcceptableValueRange<int>(0, 1)));
+            if (quietDefaults.Value < 1)
+            {
+                TerrainGhost.Value = 0f;
+                HoloMap.Value = false;
+                TacMap.Value = TacMapMode.Classic;
+                quietDefaults.Value = 1;
+            }
             AvionicsCustomKeyHue = config.Bind("Avionics", "CustomKeyHue", 190f,
                 new ConfigDescription("Custom scheme: hue of keys and selection, in degrees.", new AcceptableValueRange<float>(0f, 360f)));
             AvionicsCustomGlassHue = config.Bind("Avionics", "CustomGlassHue", 200f,
@@ -174,7 +187,10 @@ namespace BoscaliSummer.Modules.Command.Configuration
                 "STR layer on the expanded map: the sorties tied to the operation, and enemy command posts (this build ties no sortie and reports no post yet). The layer plate's SORTIES switch changes it in game.");
 
             ThreatHeat = config.Bind("Command", "ThreatHeat", true,
-                "Faction-known hostile sensor reach as smooth vector envelopes; solid radar and dashed optical/IR. The local faction's tracked picture and your aircraft's detection envelope drive it. The MAP bezel's SENSOR REACH layer switches it in game.");
+                "On the MAP relief, the hovered unit's sensor (solid) and weapon (dashed) ranges drawn on the terrain in place of the stock flat circles. The MAP bezel's HOVER RANGES layer switches it in game.");
+
+            MapRoads = config.Bind("Command", "MapRoads", false,
+                "On the MAP relief, the game's road network drawn as amber lines on the terrain. The MAP bezel's ROADS layer switches it in game.");
 
             OverlayOpacity = config.Bind("Command", "OverlayOpacity", 0.35f,
                 new ConfigDescription(
@@ -225,6 +241,12 @@ namespace BoscaliSummer.Modules.Command.Configuration
 
             MapTerrainImage = config.Bind("Command", "MapTerrainImage", true,
                 "Display satellite terrain map image under tactical overlays.");
+
+            MapIndustry = config.Bind("Command", "MapIndustry", true,
+                "On the expanded map, mark the factories (square), depots (diamond) and ammo dumps (triangle) your side knows of, in side colours. The MAP bezel's INDUSTRY layer switches it in game.");
+
+            MapSupplyRoutes = config.Bind("Command", "MapSupplyRoutes", false,
+                "On the expanded map, a dashed line from each friendly factory, depot and ammo dump to the nearest point of the front, and a chevron on every known supply truck. The MAP bezel's SUPPLY ROUTES layer switches it in game.");
 
             MapRelief3D = config.Bind("Command", "MapRelief3D", true,
                 "Show a tilted tactical model from baked game terrain when the expanded map is open. The native map remains available when terrain data is missing or this is off.");

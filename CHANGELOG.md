@@ -18,6 +18,15 @@
 - **OPS TASKED tab**: claim posted strikes and steer the cruise missile; the CRUISE perk now flies
   the game's own cruise missile, so steering works.
 - **Distant clouds** no longer boil.
+- **PMC third faction**: scripted missions and the editor can bring in a PMC side (a port of
+  ThirdFaction, MIT); the Summer Wing mission is flown for the PMC.
+- **WMC LOADOUT symmetry**: pylon pairs can be linked or split (issue 19).
+- **Wing on the map**: wing markers carry tethers and outlined badges, and the right-click card has
+  wing orders.
+- **Cutscene boards**: the scripted missions show news, paper, map, satellite and dossier boards with
+  voiced narration.
+- **Tester feedback**: RWR and status are split, the board is a little smaller, and a one-time
+  settings reset applies the new defaults.
 
 ## 0.2.3 — update
 

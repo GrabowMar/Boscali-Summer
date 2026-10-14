@@ -49,7 +49,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Furniture = allow.Furniture;
             g.Open = true;
             g.Begin(pal, unit, hp, pixel);
-            PaintHeader(g, w, flashOn);
+            PaintHeader(g, page, w, flashOn);
             if (strip)
             {
                 g.Origin(0f, bodyH);
@@ -70,12 +70,38 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         /// <summary>The page's header (LAYOUT.md 3.5): the shelf with the page's title and its headline, which is INK 12 unless it is a caution or a warning (bold 14 in that tone, pulsing while it flashes).</summary>
-        private void PaintHeader(ScopeCanvas g, float w, bool flashOn)
+        private void PaintHeader(ScopeCanvas g, ScopePageBase p, float w, bool flashOn)
         {
-            ScopeHeadline hl = HeadlineOf(page);
+            ScopeHeadline hl = HeadlineOf(p);
             bool hot = hl.Tone == Amber || hl.Tone == Red;
             if (hot && hl.Flash) scopeBeat = true;
-            g.PageShelf(0f, 0f, w, page.Title, hl.Text, hot ? hl.Tone : Ink, hot ? 14f : 12f, hot, hot && hl.Flash && flashOn ? 0.45f : 1f);
+            g.PageShelf(0f, 0f, w, p.Title, hl.Text, hot ? hl.Tone : Ink, hot ? 14f : 12f, hot, hot && hl.Flash && flashOn ? 0.45f : 1f);
+        }
+
+        /// <summary>
+        /// STATUS (<see cref="BoardGeometry.Status"/>): the SYSTEMS page's compact strip, shelf and brackets, painted under a warning page so the aircraft's state stays on the board while the RWR (or any other
+        /// page) has the scope. One surface; no wipe of its own (it comes and goes with the page above it).
+        /// </summary>
+        private void PaintStatus(in ScopePalette pal, in BoardGeometry geo, bool flashOn)
+        {
+            BoardRect r = geo.Status;
+            ScopePageBase sys = pages[(int)ScopePage.Systems];
+            float w = r.W, hS = r.H, body = ScopeLayout.Body(true, false);
+            Show(statusRect, true);
+            PlaceOnGrid(statusRect, (r.X - PageGrow) * unit, (r.Y - PageGrow) * unit, Whole((w + PageGrow * 2f) * unit), Whole((hS + PageGrow * 2f) * unit));
+            ScopeCanvas g = statusCanvas;
+            g.Furniture = allow.Furniture;
+            g.Open = true;
+            g.Begin(pal, unit, Whole((hS + PageGrow * 2f) * unit), pixel);
+            g.Origin(PageGrow, PageGrow);
+            g.Raise(ScopeLayout.Lift(true));
+            try { sys.Paint(g, new PagePaint(w, body, true, ScopeLayout.SafeTop(true), now, units)); }
+            catch (Exception e) { ReportOnce(sys, e); }
+            g.Raise(0f);
+            PaintHeader(g, sys, w, flashOn);
+            g.Brackets(-3f, 14f, w + 6f, hS - 11f, 10f, Dim);
+            g.End();
+            statusVector.Commit();
         }
     }
 }

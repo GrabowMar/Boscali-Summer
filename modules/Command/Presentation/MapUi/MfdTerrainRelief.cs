@@ -57,7 +57,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private const float SeaSurfaceLift = .012f;
         private const float SeaSurfaceAlpha = .30f;
         private const float LandFieldGain = 2f;
-        private const float LandFieldAlpha = .55f;
+        private const float LandFieldAlpha = .40f;
 
         private static DynamicMap owner;
         private static MapSettings source;
@@ -248,7 +248,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             if (!ready) return false;
             if (heightField == null)
-                heightField = new TerrainHeightField(heights, dryLand, Samples, source.MapSize.x / (Samples - 1), 0f);
+                heightField = new TerrainHeightField(heights, dryLand, Samples, source.MapSize.x / (Samples - 1), 0f, source.MapSize.y / (Samples - 1));
             field = heightField;
             return true;
         }
@@ -792,8 +792,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     byte[] bytes = EmbeddedResources.ReadAll(stream, 8 * 1024 * 1024);
                     if (bytes == null) return;
                     var loaded = new Texture2D(2, 2, TextureFormat.RGB24, false);
-                    if (!loaded.LoadImage(bytes, true) || loaded.width > 4096 || loaded.height > 4096)
+                    if (!loaded.LoadImage(bytes, false) || loaded.width > 4096 || loaded.height > 4096)
                     { Object.Destroy(loaded); return; }
+                    // Forests, farmland, rock and deserts from the game's own splatmaps, then the CPU copy goes.
+                    ReliefLandCover.Paint(loaded, mapAssetName, dryLand, Samples);
+                    loaded.Apply(false, true);
                     loaded.name = "NOAvionics.IntelligenceTerrainStyle";
                     loaded.filterMode = FilterMode.Bilinear;
                     styleTexture = loaded;
@@ -1132,7 +1135,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (minisShown) RestoreGlyphs();
                 return;
             }
-            float time = Time.unscaledTime, size = camera.orthographicSize;
+            // The SYMBOL SCALE choice sizes the miniatures like the flat glyphs; a change rewrites at once.
+            float time = Time.unscaledTime, size = camera.orthographicSize * MapSymbology.SizeFactor();
             bool sweep = time >= lastMinis + MiniSweep;
             if (!minisForce && !sweep && Mathf.Approximately(size, minisSize) &&
                 !(minisMoved && time >= nextMinis)) return;
@@ -1221,11 +1225,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     if (!(mapIcon is UnitMapIcon icon) || !(icon.unit is Aircraft) ||
                         icon.iconImage == null || !icon.iconImage.isActiveAndEnabled ||
                         !iconFixes.TryGetValue(mapIcon, out IconFix fix) || !fix.Airborne) continue;
-                    Vector3 model = new Vector3(
-                        fix.X / source.MapSize.x * ModelSpanX,
-                        Mathf.Max(WaterModelHeight + 1f,
-                            (fix.Altitude - seaLevel) * VerticalScale * ModelWidth / 81920f),
-                        fix.Z / source.MapSize.y * ModelSpanZ);
+                    // The same height PlaceProjectedIcon gives the glyph (lift is clamped), so the
+                    // trail runs into the icon rather than beside it.
+                    float ground = GroundHeight(fix.X, fix.Z);
+                    float lift = Mathf.Clamp((fix.Altitude - seaLevel) * VerticalScale * ModelWidth / 81920f -
+                        ground, 0f, MaximumAirLift);
+                    Vector3 model = new Vector3(fix.X / source.MapSize.x * ModelSpanX,
+                        ground + 1f + (lift > .5f ? lift : 0f), fix.Z / source.MapSize.y * ModelSpanZ);
                     aircraftTrails.Record(icon, model, icon.iconImage.color);
                     seen++;
                 }
@@ -1233,6 +1239,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 nextTrailSample = time + .45f;
             }
             else aircraftTrails.Refresh(camera, sceneRoot.transform.position, viewRevision, time);
+            aircraftTrails.Follow();
         }
 
         /// <summary>

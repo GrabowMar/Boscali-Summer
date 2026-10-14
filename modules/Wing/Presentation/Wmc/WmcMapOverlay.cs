@@ -5,6 +5,7 @@ using UnityEngine.UI;
 
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
+using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Math;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
@@ -30,6 +31,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private readonly List<RouteRing> rings = new List<RouteRing>();
         private readonly List<Color> legColors = new List<Color>();
         private readonly List<Color> ringColors = new List<Color>();
+        /// <summary>Who attacks what: member, its target and the member's colour, one entry per tether.</summary>
+        private readonly List<Unit> tetherFrom = new List<Unit>(), tetherTo = new List<Unit>();
+        private readonly List<Color> tetherColors = new List<Color>();
         private readonly List<Image> lines = new List<Image>();
         private readonly List<Image> nodes = new List<Image>();
         private readonly List<Image> ringImages = new List<Image>();
@@ -127,7 +131,20 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             rings.Clear();
             legColors.Clear();
             ringColors.Clear();
+            tetherFrom.Clear();
+            tetherTo.Clear();
+            tetherColors.Clear();
             WingService w = WingService.Instance;
+            if (w != null && WingSettings.Instance.MapMarkers.Value == HighlightMode.WingAndTargets)
+                foreach (WingMember m in w.Members)
+                {
+                    if (!m.Alive || m.Released) continue;
+                    Unit t = WingMarkers.TargetOf(m);
+                    if (t == null) continue;
+                    tetherFrom.Add(m.Aircraft);
+                    tetherTo.Add(t);
+                    tetherColors.Add(ElementColor(w.ElementOf(m)));
+                }
             if (w != null && w.Selection != null && !c.Client)
                 for (int e = 0; e < ElementRoster.MaxElements; e++)
                 {
@@ -285,6 +302,15 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 if (r.color != color) r.color = color;
                 Show(r.gameObject);
             }
+            // Tethers join the two icons where the map draws them, so an enemy end is its faction-known fix and a
+            // hidden track draws none.
+            for (int i = 0; i < tetherFrom.Count; i++)
+            {
+                if (!IconAt(tetherFrom[i], out Vector3 from) || !IconAt(tetherTo[i], out Vector3 to)) continue;
+                Color color = tetherColors[i];
+                color.a = 0.55f;
+                Segment(line++, from, to, inverse, color);
+            }
             // Review focus 5: anything past this refresh's counts goes (a merged or finished element leaves nothing).
             for (int i = line; i < lines.Count; i++) HideObject(lines[i]);
             for (int i = node; i < nodes.Count; i++)
@@ -294,6 +320,16 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
             for (int i = ringShown; i < ringImages.Count; i++) HideObject(ringImages[i]);
             shown = true;
+        }
+
+        private bool IconAt(Unit unit, out Vector3 at)
+        {
+            at = default;
+            if (unit == null || !DynamicMap.TryGetMapIcon(unit, out UnitMapIcon icon) || icon == null || icon.iconImage == null ||
+                !icon.iconImage.gameObject.activeInHierarchy) return false;
+            at = layer.InverseTransformPoint(icon.iconImage.transform.position);
+            at.z = 0f;
+            return true;
         }
 
         private void Segment(int i, Vector3 from, Vector3 to, float width, Color color)

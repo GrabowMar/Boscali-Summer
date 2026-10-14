@@ -307,14 +307,13 @@ public static partial class MapOverlayUnityCheck
     private static void Threat(GameObject services,DynamicMap map,string state)
     {
         var view=(Behaviour)services.AddComponent(T("Command.Presentation.ThreatMapOverlay")); view.enabled=false; Call(view,"TryInitialize");
-        Array samples=(Array)Get(view,"samples"); Type sampleType=samples.GetType().GetElementType(); int count=state=="empty" ?0:state=="budget" ?32:state=="overlap" ?3:1;
+        Array samples=(Array)Get(view,"samples"); Type sampleType=samples.GetType().GetElementType(); int count=state=="empty" ?0:1;
         for(int i=0;i<count;i++) { object sample=Activator.CreateInstance(sampleType); Set(sample,"Position",new Vector3((i%8)*6500f-25000f,0f,(i/8)*12000f-20000f)); Set(sample,"RadarRadius",state=="optical" ?0f:42000f); Set(sample,"OpticalRadius",state=="optical" || state=="budget" || i==2 ?26000f:0f); samples.SetValue(sample,i); }
-        Set(view,"<TrackedEmitters>k__BackingField",count); Call(view,"Bake");
-        Graphic graphic=(Graphic)Get(view,"graphic");
+        Graphic graphic=(Graphic)Get(view,"graphic"); Call(graphic,"SetSource",samples,count,map,.65f);
         using(var vh=new VertexHelper()) {
             Call(graphic,"OnPopulateMesh",vh);
             Check(state=="empty" ? vh.currentVertCount==0:vh.currentVertCount>100,"Threat vector mesh clears/paints known envelopes.");
-            Check(vh.currentVertCount<43000,"Threat vectors remain within the 32-site budget.");
+            Check(vh.currentVertCount<43000,"Hover range vectors stay within budget.");
             bool feather=false;
             for(int i=0;i<vh.currentVertCount;i++){var v=UIVertex.simpleVert;vh.PopulateUIVertex(ref v,i);feather|=v.color.a==0;}
             Check(state=="empty"||feather,"Sensor envelopes have transparent feathered edges.");

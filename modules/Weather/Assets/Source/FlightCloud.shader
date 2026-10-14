@@ -59,8 +59,8 @@ Shader "Boscali/FlightCloud"
         // bottom-left, bottom-right, top-left, top-right) and the target size (w, h, 1/w, 1/h).
         float4x4 _CloudFrustum;
         float4 _CloudLowResSize;
-        // Temporal update: xy the texel of each 2x2 block marched this frame, z the
-        // per-frame dither offset; _CloudCheckerOn turns the quarter-resolution march on.
+        // Temporal update: xy the texel of each 2x2 block marched this frame, z unused (the dither
+        // is frozen per texel); _CloudCheckerOn turns the quarter-resolution march on.
         float4 _CloudChecker;
         float _CloudCheckerOn;
 
@@ -910,6 +910,16 @@ Shader "Boscali/FlightCloud"
             return exp(-distanceToSample * extinction);
         }
 
+        // Cloud airlight. Round 6 hazes cloud at 0.7 of the ground haze so tops and bases keep contrast up close; from 10 km
+        // the share grows from 10 km to 1.6 by 60 km (2026-10-14: distant cloud read as hard dark shapes on the horizon) and it melts into the haze.
+        float CloudAir(float distanceToSample, float cameraHeight, float sampleHeight)
+        {
+            // Clear air has almost no extinction, so a power of it alone left distant cumulus as dark shapes: a visibility floor
+            // (unchanged inside 8 km, ~0.45 at 40 km, ~0.15 at 100 km) melts them into the horizon haze whatever the air.
+            float air = pow(AirTransmittance(distanceToSample, cameraHeight, sampleHeight), lerp(0.7, 1.6, smoothstep(10000.0, 60000.0, distanceToSample)));
+            return min(air, exp(-max(0.0, distanceToSample - 8000.0) / 40000.0));
+        }
+
         // The thin layers (middle alto-, high cirro-) as a 2D field at the layer's mid altitude, from the tape row at the
         // sample: four weighted morphologies (cells, ripples, streaks, veil), each at the row's period rung (CloudBodies.Slab2D
         // is the twin at footprint zero). Two octaves at non-integer scales and a slow warp keep any tile from repeating visibly.
@@ -1143,12 +1153,15 @@ Shader "Boscali/FlightCloud"
         // shaded base 15 km away came out at about half the luminance of the fog (lit/dark of distant fair-weather cumulus stuck at 1.7,
         // overcast sheets at 1.1-1.4: flat). Air in the shadow of a cloud or a deck is dimmer too; the fog keeps 35 % of its brightness
         // at black and all of it from a luminance of 0.85 up, so lit tops and clear sky are unchanged.
-        float3 ShadedFog(float3 light)
+        // The shading only holds while the air in the cloud's shadow is a real part of the path (tens of km). From 10 km it gives way to the
+        // plain fog colour (from 10 km, fully by 60 km): shaded fog made distant cloud dark smudges on the horizon that more haze could never brighten.
+        float3 ShadedFog(float3 light, float distance)
         {
             float l = dot(light, float3(0.2126, 0.7152, 0.0722));
             // Round 6: the shaded airlight is darker (0.35 -> 0.10 of the fog at black, curved) and sky-blue, so a distant shaded base keeps its depth against a lit top.
             float s = saturate(l / 0.85);
-            return _CloudFogColor * lerp(0.10, 1.0, pow(s, 1.4)) * lerp(float3(0.84, 0.95, 1.14), 1.0, s);
+            float3 shaded = _CloudFogColor * lerp(0.10, 1.0, pow(s, 1.4)) * lerp(float3(0.84, 0.95, 1.14), 1.0, s);
+            return lerp(shaded, _CloudFogColor, smoothstep(10000.0, 60000.0, distance));
         }
 
         void AddSlabSample(inout SlabLayer layer, float optical, float3 light, float distance)
@@ -1164,8 +1177,8 @@ Shader "Boscali/FlightCloud"
             if (layer.opacity <= 0.0) return;
             float depth = layer.weightedDistance / layer.opacity;
             float fade = 1.0 - smoothstep(CLOUD_HORIZON_FADE, CLOUD_HORIZON_LIMIT, depth);
-            float air = pow(AirTransmittance(depth, ro.y, ro.y + ray.y * depth), 0.7); // round 6: cloud is hazed at 0.7 of the ground haze
-            layer.colour = lerp(ShadedFog(layer.colour / layer.opacity) * layer.opacity, layer.colour, air) * fade;
+            float air = CloudAir(depth, ro.y, ro.y + ray.y * depth);
+            layer.colour = lerp(ShadedFog(layer.colour / layer.opacity, depth) * layer.opacity, layer.colour, air) * fade;
             layer.opacity *= fade;
             layer.weightedDistance *= fade;
         }
@@ -1238,7 +1251,15 @@ Shader "Boscali/FlightCloud"
                 float overlap = SlabOverlap(yA, yB, row.baseY, row.baseY + row.thick);
                 if (overlap <= 0.002) continue;
                 g.y = row.baseY + 0.5 * row.thick;
-                float d = Slab2D(g, layer, row, max(t * _CloudPixelAngle * aniso, patternFoot)) * row.strength * slantGain * horizonKeep;
+                // Horizon band (2026-10-14): where the cells foreshorten below a pixel the layer is not erased (that left a clear strip
+                // above every horizon) but replaced by its own statistics: cover x a typical interior, broken up by one cheap 38 km
+                // mesoscale noise. Hundreds of foreshortened cells stack in a grazing pixel, so the mean is what the eye would see;
+                // it cannot alias, and skipping Slab2D there makes the band cheaper than the pattern it replaces.
+                float bandMean = 0.0;
+                if (layer < 1.5 && horizonKeep < 0.999)
+                    bandMean = row.cover * 0.55 * (0.45 + 1.1 * SmoothNoise2(g.xz / 38000.0 + float2(0.13, 0.71), SALT_DECK_A).x);
+                float pattern = horizonKeep > 0.001 ? Slab2D(g, layer, row, max(t * _CloudPixelAngle * aniso, patternFoot)) : 0.0;
+                float d = lerp(bandMean, pattern, horizonKeep) * row.strength * slantGain;
                 if (d <= 0.002) continue;
                 // Thin cloud: its own depth toward the sun is all that shades it.
                 float toSun = row.thick * 0.5 / max(0.12, _CloudSunDirection.y);
@@ -1526,10 +1547,9 @@ Shader "Boscali/FlightCloud"
             pixelHash *= 0x846ca68bu;
             pixelHash ^= pixelHash >> 16;
             float ign = (pixelHash & 65535u) / 65536.0;
-            // Temporal accumulation: the dither cycles each frame, so carried values average
-            // the march noise away instead of freezing one dither pattern in. Full and half
-            // resolution keep the stable dither (nothing averages it there).
-            if (_CloudCheckerOn > 0.5) ign = frac(ign + _CloudChecker.z);
+            // The dither is frozen per texel (user ruling 2026-10-14): a cycling dither averaged out over frames but
+            // read as unstable, boiling cloud. Each texel now always marches the same positions, so a still view
+            // converges to one fixed picture; the composite's 3x3 kernel melts the static pattern.
             float jitter = lerp(0.1, 0.9, ign);
 
             // Up to four segments along the ray: full detail to the near limit, a coarse march
@@ -1604,6 +1624,8 @@ Shader "Boscali/FlightCloud"
                     float t = hero ? tHero : s0 + span * lerp(sampleStart, sampleEnd, segJitter);
                     float3 world = origin + ray * t;
                     gHeroOnly = t > CLOUD_FAR_LIMIT;
+                    // A third of the step: far steps run up to ~17 km, and sharper noise there (an eighth, tried 2026-10-14)
+                    // showed the steps as hard horizontal slices. Distant cloud is meant to be soft and hazed.
                     gFoot = max(t * _CloudPixelAngle, stepLength * 0.35);
                     gVert = farSeg ? 0.5 * abs(ray.y) * stepLength : 0.0;
                     float d = DensityOrEmpty(world, farSeg ? 1.2 : hero ? 1.0 : 0.0);
@@ -1728,8 +1750,8 @@ Shader "Boscali/FlightCloud"
                         // opacity-weighted distance jumped where that distance jumps (grazing
                         // rays crossing from the near map to the far map drew a step above
                         // the horizon under overcast).
-                        float sampleAir = pow(AirTransmittance(t, ro.y, ro.y + ray.y * t), 0.7); // round 6: lit tops and shaded bases keep more of their contrast at 20-30 km
-                        colour += contribution * deckMul * lerp(ShadedFog(light), light, sampleAir);
+                        float sampleAir = CloudAir(t, ro.y, ro.y + ray.y * t);
+                        colour += contribution * deckMul * lerp(ShadedFog(light, t), light, sampleAir);
                         weightedDistance += contribution * t;
                         
                         transmittance *= absorb;

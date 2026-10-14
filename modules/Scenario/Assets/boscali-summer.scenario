@@ -117,11 +117,11 @@ beat intro when start
   clock 17.45
   sky storm
   cut port     "The Boscali Republic" "June 2034. Fifty-two million people. One archipelago. One summer left."
-  cut capital  "02:10. Every relay tower in the outer islands goes dark in the same second. By sunrise PALA owns the networks, the ports, and the story." photo=coup stamp="OUTER ISLANDS - 02 JUN 2034 / DAY 1"
-  cut occupier "The capital lasts nine days. The government leaves Agrapol by the north road, in whatever still has charge." photo=capital stamp="AGRAPOL - 10 JUN 2034 / DAY 9"
+  cut capital  "02:10. Every relay tower in the outer islands goes dark in the same second. By sunrise PALA owns the networks, the ports, and the story." photo=coup stamp="OUTER ISLANDS - 02 JUN 2034 / DAY 1" fx=glitch
+  cut occupier "The capital lasts nine days. The government leaves Agrapol by the north road, in whatever still has charge." photo=capital stamp="AGRAPOL - 10 JUN 2034 / DAY 9" fx=lost
   cut front    "PALA's armour outruns its own supply drones. The advance stops forty kilometres short of the last free port." photo=stretched stamp="THE NORTH SHORE - 21 JUN 2034 / DAY 20"
-  cut fleet    "Then the Home Fleet comes in out of the storm, transponders dark. Nobody had thought to ask the navy whose side it was on." photo=fleet stamp="MARIS ROADS - 23 JUN 2034 / DAY 22"
-  cut column   "At first light the Republic goes south. Both armies have run out of pilots. Neither has run out of money." photo=hired stamp="MARIS - 24 JUN 2034 / DAY 23"
+  cut fleet    "Then the Home Fleet comes in out of the storm, transponders dark. Nobody had thought to ask the navy whose side it was on." photo=fleet stamp="MARIS ROADS - 23 JUN 2034 / DAY 22" fx=alert
+  cut column   "At first light the Republic goes south. Both armies have run out of pilots. Neither has run out of money." photo=hired stamp="MARIS - 24 JUN 2034 / DAY 23" fx=warm
   cut strip    "Boscali Summer" "Pick a side."
   dip
   clock 7.4

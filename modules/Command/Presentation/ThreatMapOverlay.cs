@@ -1,7 +1,5 @@
-using System;
-using System.Collections.Generic;
+using HarmonyLib;
 using BoscaliSummer.Modules.Command.Configuration;
-using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Contracts;
@@ -14,26 +12,16 @@ using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Command.Presentation
 {
-    /// <summary>Faction-known sensor envelopes on the native map. One bounded vector mesh,
-    /// solid radar / dashed optical, using the same ground projection as native contacts.
-    /// These are detection estimates, not missile ranges; terrain masking is not applied.</summary>
+    /// <summary>Range rings of the hovered map unit, drawn on the relief. The stock tooltip draws its
+    /// weapon and sensor circles on the flat sheet, which the relief pins and hides, so they land in the
+    /// wrong place there: while the relief draws, those circles are switched off and the same two ranges
+    /// are drawn as projected vector rings instead (solid: sensor reach, dashed: weapon reach).</summary>
     internal sealed class ThreatMapOverlay : MonoBehaviour, ISceneService
     {
-        private const int MaxEmitters = 32;
-        private const int SensorCacheLimit = 512;
-        private const float RefreshSeconds = 1f;
+        private const int MaxEmitters = 1;
         private const float MinimumDrawableRadius = 1f;
 
-        private sealed class Sensor
-        {
-            public TargetDetector[] Detectors;
-            public Radar Radar;
-            public TargetDetector Optical;
-
-            public bool Any => Radar != null || Optical != null;
-        }
-
-        /// <summary>One emitter's contribution to the field, kept from the envelope pass to the bake.</summary>
+        /// <summary>One unit's two ranges, kept from the range pass to the bake.</summary>
         private struct Sample
         {
             public Vector3 Position;
@@ -41,22 +29,14 @@ namespace BoscaliSummer.Modules.Command.Presentation
             public float OpticalRadius;
         }
 
-        private readonly struct Contact
-        {
-            public Contact(Unit unit, Vector3 position, float distanceSquared)
-            {
-                Unit = unit;
-                Position = position;
-                DistanceSquared = distanceSquared;
-            }
-
-            public readonly Unit Unit;
-            public readonly Vector3 Position;
-            public readonly float DistanceSquared;
-        }
-
-        private static readonly Comparison<Contact> NearestFirst =
-            (a, b) => a.DistanceSquared.CompareTo(b.DistanceSquared);
+        private static readonly AccessTools.FieldRef<DynamicMap, MapToolTip> ToolTipRef =
+            AccessTools.FieldRefAccess<DynamicMap, MapToolTip>("toolTip");
+        private static readonly AccessTools.FieldRef<MapToolTip, MapIcon> HoverRef =
+            AccessTools.FieldRefAccess<MapToolTip, MapIcon>("icon");
+        private static readonly AccessTools.FieldRef<MapToolTip, Image> Circle1Ref =
+            AccessTools.FieldRefAccess<MapToolTip, Image>("circle1");
+        private static readonly AccessTools.FieldRef<MapToolTip, Image> Circle2Ref =
+            AccessTools.FieldRefAccess<MapToolTip, Image>("circle2");
 
         private CommandSettings settings;
 
@@ -64,26 +44,14 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private GameObject root;
         private RectTransform rootRect;
         private ThreatEnvelopeGraphic graphic;
-        private readonly List<Contact> contacts = new List<Contact>(MaxEmitters * 2);
-        private readonly Dictionary<int, Sensor> sensorCache = new Dictionary<int, Sensor>(MaxEmitters * 4);
         private readonly Sample[] samples = new Sample[MaxEmitters];
-
-        private float nextRefresh;
         private bool initialized;
 
         /// <summary>True once the map is on screen and the overlay can be drawn at all.</summary>
         public bool Available => initialized && dynamicMap != null;
 
-        /// <summary>How many known sites supplied a drawable detection envelope.</summary>
-        public int TrackedEmitters { get; private set; }
-
-        /// <summary>
-        /// The widest estimated detection envelope in kilometres.
-        /// </summary>
-        public float WidestEnvelopeKm { get; private set; }
-
-        public bool HasOwnship { get; private set; }
-        public bool HasPicture { get; private set; }
+        /// <summary>The hovered unit's sensor reach in kilometres; 0 when nothing with a sensor is hovered.</summary>
+        public float HoverSensorKm { get; private set; }
 
         public bool Visible => settings != null && settings.ThreatHeat.Value;
 
@@ -91,7 +59,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
         {
             if (settings == null || settings.ThreatHeat.Value == visible) return;
             settings.ThreatHeat.Value = visible;
-            nextRefresh = 0f;
         }
 
         public void Configure(CommandSettings config)
@@ -108,16 +75,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
             }
 
             graphic = null;
-            HasOwnship = false;
-            HasPicture = false;
-
-            contacts.Clear();
-            sensorCache.Clear();
             rootRect = null;
             dynamicMap = null;
-            TrackedEmitters = 0;
-            WidestEnvelopeKm = 0f;
-            nextRefresh = 0f;
+            HoverSensorKm = 0f;
             initialized = false;
             TheaterFrame.Invalidate();
         }
@@ -132,9 +92,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 return;
             }
 
-            // The layer toggle hides the field; it must never gate readiness. Initialising only
-            // while the layer is on makes switching it off a one-way door: the overlay reports
-            // unavailable, and the panel cannot offer the click that would bring it back.
             if (!initialized && DynamicMap.mapMaximized) TryInitialize();
 
             if (!initialized || dynamicMap == null || dynamicMap.mapImage == null)
@@ -143,22 +100,32 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 return;
             }
 
-            bool shown = settings.ThreatHeat.Value && DynamicMap.mapMaximized;
-            bool wasShown = root.activeSelf;
+            // The flat map's own circles are right; only the relief needs the replacement.
+            bool relief = ModuleServices.TryGet(out IMapProjection projection) && projection.IsActive;
+            bool shown = settings.ThreatHeat.Value && DynamicMap.mapMaximized && relief;
             SetShown(shown);
             if (!shown) return;
 
             // The map regenerates its image on a scene change; stay on it when it does.
             if (rootRect.parent != dynamicMap.mapImage.transform) Reparent();
+            Refresh();
+        }
 
-            // Coming back on screen bakes on the first frame, not on the next tick.
-            if (!wasShown) nextRefresh = 0f;
+        /// <summary>The stock tooltip re-scales and re-enables its range circles in its own refresh
+        /// (they are the ones sized to one unit before scaling); switch them off after it.</summary>
+        private void LateUpdate()
+        {
+            if (root == null || !root.activeSelf) return;
+            MapToolTip tip = ToolTipRef(dynamicMap);
+            if (tip == null) return;
+            HideRangeCircle(Circle1Ref(tip));
+            HideRangeCircle(Circle2Ref(tip));
+        }
 
-            if (Time.unscaledTime >= nextRefresh)
-            {
-                nextRefresh = Time.unscaledTime + RefreshSeconds;
-                Refresh();
-            }
+        private static void HideRangeCircle(Image circle)
+        {
+            // Airbase and factory progress dials reuse these images at 50-70 px; leave those alone.
+            if (circle != null && circle.enabled && circle.rectTransform.sizeDelta == Vector2.one) circle.enabled = false;
         }
 
         private void TryInitialize()
@@ -166,26 +133,14 @@ namespace BoscaliSummer.Modules.Command.Presentation
             dynamicMap = SceneSingleton<DynamicMap>.i;
             if (dynamicMap == null || dynamicMap.mapImage == null) return;
 
-            root = new GameObject("BoscaliThreatEnvelopes", typeof(RectTransform), typeof(ThreatEnvelopeGraphic));
+            root = new GameObject("BoscaliHoverRanges", typeof(RectTransform), typeof(ThreatEnvelopeGraphic));
             rootRect = (RectTransform)root.transform;
-            rootRect.SetParent(dynamicMap.mapImage.transform, false);
-            rootRect.anchorMin = Vector2.zero;
-            rootRect.anchorMax = Vector2.one;
-            rootRect.offsetMin = Vector2.zero;
-            rootRect.offsetMax = Vector2.zero;
-            rootRect.pivot = new Vector2(0.5f, 0.5f);
-            rootRect.localScale = Vector3.one;
-            rootRect.localPosition = Vector3.zero;
+            Reparent();
 
             graphic = root.GetComponent<ThreatEnvelopeGraphic>();
             graphic.raycastTarget = false;
 
-            // Vector ink sits above the territory tint and below the map's native contacts.
-            root.transform.SetSiblingIndex(dynamicMap.mapImage.transform.childCount > 1 ? 1 : 0);
-
-            SetShown(true);
             initialized = true;
-            Plugin.Logger?.LogInfo("[COM] Vector sensor envelopes initialized (32 sites maximum).");
         }
 
         private void Reparent()
@@ -198,168 +153,81 @@ namespace BoscaliSummer.Modules.Command.Presentation
             rootRect.pivot = new Vector2(0.5f, 0.5f);
             rootRect.localScale = Vector3.one;
             rootRect.localPosition = Vector3.zero;
+            // Vector ink sits above the territory tint and below the map's native contacts.
             rootRect.SetSiblingIndex(dynamicMap.mapImage.transform.childCount > 1 ? 1 : 0);
         }
 
         private void SetShown(bool visible)
         {
+            if (!visible) HoverSensorKm = 0f;
             if (root == null || root.activeSelf == visible) return;
             root.SetActive(visible);
         }
 
-        // --------------------------------------------------------------- envelope pass
+        // --------------------------------------------------------------- range pass
 
         private void Refresh()
         {
-            FactionHQ hq = dynamicMap.HQ;
-            Aircraft ownship = ResolveOwnship();
-            HasOwnship = ownship != null;
-            HasPicture = hq != null;
-            if (hq == null)
-            {
-                TrackedEmitters = 0;
-                WidestEnvelopeKm = 0f;
-                Bake();
-                return;
-            }
-
-            CollectContacts(hq, ownship);
-            if (contacts.Count > 1) contacts.Sort(NearestFirst);
-
-            Vector3 ownPosition = ownship != null ? ownship.GlobalPosition().AsVector3() : Vector3.zero;
-            float ownRcs = ownship != null ? ownship.RCS : 0f;
-            float ownVisibility = ownship != null ? ownship.GetVisibility() : 0f;
-
             int used = 0;
-            float widest = 0f;
-            for (int i = 0; i < contacts.Count && used < MaxEmitters; i++)
+            HoverSensorKm = 0f;
+            MapToolTip tip = ToolTipRef(dynamicMap);
+            Unit unit = tip != null && tip.isActiveAndEnabled && HoverRef(tip) is UnitMapIcon icon ? icon.unit : null;
+            // The stock tooltip shows an aircraft's rings to its own side only, and none for a missile.
+            FactionHQ hq = dynamicMap.HQ;
+            if (unit != null && !unit.disabled && !(unit is Missile) &&
+                (!(unit is Aircraft) || hq == null || unit.NetworkHQ == hq) && TryPosition(unit, out Vector3 position))
             {
-                Contact contact = contacts[i];
-                Sensor sensor = ResolveSensor(contact.Unit);
-                if (sensor == null || !sensor.Any) continue;
-
-                float radarRadius = 0f;
-                if (sensor.Radar != null && sensor.Radar.IsOperational())
+                float sensor = SensorRange(unit), weapon = WeaponRange(unit);
+                if (sensor >= MinimumDrawableRadius || weapon >= MinimumDrawableRadius)
                 {
-                    RadarParams parameters = sensor.Radar.RadarParameters;
-                    Transform scanner = sensor.Radar.GetScanPoint();
-                    // A sensor with no mast falls back to the emitter's own altitude rather
-                    // than inventing a horizon the game never checked.
-                    float sensorAltitude = scanner != null
-                        ? contact.Position.y + scanner.position.y - contact.Unit.transform.position.y
-                        : contact.Position.y;
-                    radarRadius = ownship == null ? parameters.maxRange : ThreatEnvelope.RadarRadius(
-                        new RadarEnvelope(parameters.maxRange, parameters.maxSignal, parameters.minSignal),
-                        new TargetSignature(ownRcs, ownPosition.y),
-                        sensorAltitude);
-                }
-
-                float opticalRadius = 0f;
-                if (ownship != null && sensor.Optical != null && sensor.Optical.IsOperational())
-                {
-                    opticalRadius = ThreatEnvelope.OpticalRadius(
-                        sensor.Optical.GetVisualRange(), ownVisibility,
-                        sensor.Optical.GetVisualMagnification());
-                }
-
-                if (!float.IsFinite(radarRadius)) radarRadius = 0f;
-                if (!float.IsFinite(opticalRadius)) opticalRadius = 0f;
-                if (radarRadius < MinimumDrawableRadius && opticalRadius < MinimumDrawableRadius) continue;
-
-                samples[used].Position = contact.Position;
-                samples[used].RadarRadius = radarRadius;
-                samples[used].OpticalRadius = opticalRadius;
-                widest = Mathf.Max(widest, Mathf.Max(radarRadius, opticalRadius));
-                used++;
-            }
-
-            TrackedEmitters = used;
-            WidestEnvelopeKm = widest * 0.001f;
-            Bake();
-        }
-
-        /// <summary>
-        /// Every hostile the local side is currently tracking, at the position the faction
-        /// believes it is. An untracked emitter is not on this side's picture and heat-maps
-        /// nothing — the same rule every other enemy display in this module follows.
-        /// </summary>
-        private void CollectContacts(FactionHQ hq, Aircraft ownship)
-        {
-            contacts.Clear();
-
-            List<Unit> all = UnitRegistry.allUnits;
-            if (all == null) return;
-
-            Vector3 ownPosition = ownship != null ? ownship.GlobalPosition().AsVector3() : Vector3.zero;
-            for (int i = 0; i < all.Count; i++)
-            {
-                Unit unit = all[i];
-                if (unit == null || unit.disabled || unit == ownship) continue;
-                if (unit.NetworkHQ == null || unit.NetworkHQ == hq) continue;
-                if (!hq.IsTargetBeingTracked(unit)) continue;
-
-                GlobalPosition? known = hq.GetKnownPosition(unit);
-                if (!known.HasValue) continue;
-
-                Vector3 position = known.Value.AsVector3();
-                float dx = position.x - ownPosition.x;
-                float dz = position.z - ownPosition.z;
-                if (float.IsFinite(position.x) && float.IsFinite(position.y) && float.IsFinite(position.z))
-                    contacts.Add(new Contact(unit, position, dx * dx + dz * dz));
-            }
-        }
-
-        private static Aircraft ResolveOwnship()
-        {
-            return GameManager.GetLocalPlayer<Player>(out Player player) && player != null &&
-                   player.Aircraft != null && !player.Aircraft.disabled
-                ? player.Aircraft
-                : null;
-        }
-
-        /// <summary>
-        /// The best radar and the best optical detector on a unit, resolved once and kept:
-        /// units do not grow sensors mid-mission, and without the cache this would walk every
-        /// tracked unit's hierarchy on every bake. The cache is bounded like the sortie
-        /// classifier's emitter cache.
-        /// </summary>
-        private Sensor ResolveSensor(Unit unit)
-        {
-            int id = unit.GetInstanceID();
-            if (!sensorCache.TryGetValue(id, out Sensor sensor))
-            {
-                if (sensorCache.Count >= SensorCacheLimit) sensorCache.Clear();
-                sensor = new Sensor { Detectors = unit.GetComponentsInChildren<TargetDetector>(true) };
-                sensorCache[id] = sensor;
-            }
-            sensor.Radar = null; sensor.Optical = null;
-            TargetDetector[] detectors = sensor.Detectors;
-            for (int i = 0; i < detectors.Length; i++)
-            {
-                TargetDetector detector = detectors[i];
-                if (detector == null || !detector.IsOperational()) continue;
-
-                if (detector is Radar radar && radar.GetRadarRange() > 0f &&
-                    (sensor.Radar == null || radar.GetRadarRange() > sensor.Radar.GetRadarRange()))
-                {
-                    sensor.Radar = radar;
-                }
-
-                if (detector.GetVisualRange() > 0f &&
-                    (sensor.Optical == null || detector.GetVisualRange() > sensor.Optical.GetVisualRange()))
-                {
-                    sensor.Optical = detector;
+                    samples[0] = new Sample { Position = position, RadarRadius = sensor, OpticalRadius = weapon };
+                    used = 1;
+                    HoverSensorKm = sensor * 0.001f;
                 }
             }
-
-            return sensor;
+            if (graphic != null)
+                graphic.SetSource(samples, used, dynamicMap, settings != null ? settings.OverlayOpacity.Value : .65f);
         }
 
-        private void Bake()
+        /// <summary>Own side: the live position. Others: only what the local faction knows.</summary>
+        private bool TryPosition(Unit unit, out Vector3 position)
         {
-            if (graphic == null) return;
-            graphic.SetSource(samples, TrackedEmitters, dynamicMap,
-                settings != null ? settings.OverlayOpacity.Value : .65f);
+            FactionHQ hq = dynamicMap.HQ;
+            GlobalPosition? at = hq == null || unit.NetworkHQ == hq ? unit.GlobalPosition() : hq.GetKnownPosition(unit);
+            position = at.HasValue ? at.Value.AsVector3() : default;
+            return at.HasValue && float.IsFinite(position.x) && float.IsFinite(position.z);
+        }
+
+        /// <summary>The stock tooltip's sensor figure: the longest radar range, else the longest visual range.</summary>
+        private static float SensorRange(Unit unit)
+        {
+            // ponytail: walks the hovered unit's hierarchy every frame; one unit, cache it if it ever shows in a profile.
+            float best = 0f;
+            foreach (TargetDetector detector in unit.GetComponentsInChildren<TargetDetector>())
+            {
+                if (detector is Radar && detector.GetRadarRange() > best) best = detector.GetRadarRange();
+                else if (detector.GetVisualRange() > best) best = detector.GetVisualRange();
+            }
+            return float.IsFinite(best) ? best : 0f;
+        }
+
+        /// <summary>The stock tooltip's weapon figure: an aircraft's selected station, else the longest
+        /// anti-air or anti-missile station.</summary>
+        private static float WeaponRange(Unit unit)
+        {
+            if (unit is Aircraft aircraft)
+            {
+                WeaponInfo info = aircraft.weaponManager != null ? aircraft.weaponManager.currentWeaponStation?.WeaponInfo : null;
+                return info != null ? info.targetRequirements.maxRange : 0f;
+            }
+            float best = 0f;
+            foreach (WeaponStation station in unit.weaponStations)
+            {
+                WeaponInfo info = station?.WeaponInfo;
+                if (info != null && (info.effectiveness.antiAir > 0f || info.effectiveness.antiMissile > 0f))
+                    best = Mathf.Max(best, info.targetRequirements.maxRange);
+            }
+            return best;
         }
 
         [RequireComponent(typeof(CanvasRenderer))]

@@ -39,9 +39,9 @@
     <Compile Include="..\..\modules\Support\Domain\TheaterGrid.cs" Link="Features\Support\TheaterGrid.cs" />
     <Compile Include="..\..\modules\Command\Presentation\MapUi\SettingsChoices.cs" Link="Features\Command\SettingsChoices.cs" />
     <Compile Include="..\..\modules\Command\Domain\FactionMoraleState.cs" Link="Features\Command\FactionMoraleState.cs" />
-    <Compile Include="..\..\modules\Command\Domain\ThreatEnvelope.cs" Link="Features\Command\ThreatEnvelope.cs" />
     <Compile Include="..\..\modules\Command\Domain\ReliefRig.cs" Link="Features\Command\ReliefRig.cs" />
     <Compile Include="..\..\modules\Command\Domain\ReliefHoles.cs" Link="Features\Command\ReliefHoles.cs" />
+    <Compile Include="..\..\modules\Command\Domain\LandCover.cs" Link="Features\Command\LandCover.cs" />
     <Compile Include="..\..\modules\Command\Domain\ReliefClusters.cs" Link="Features\Command\ReliefClusters.cs" />
     <Compile Include="..\..\modules\Command\Domain\TerrainHeightField.cs" Link="Features\Command\TerrainHeightField.cs" />
     <Compile Include="..\..\modules\Command\Domain\TerrainGhostGrid.cs" Link="Features\Command\TerrainGhostGrid.cs" />

@@ -182,7 +182,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
         }
 
-        private static float SizeFactor()
+        internal static float SizeFactor()
         {
             MapOptions options = SceneSingleton<MapOptions>.i;
             float size = options != null ? options.iconSize : .8f;

@@ -249,6 +249,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             };
         }
 
+        private static Texture2D scanTexture;
+
+        private static Texture2D ScanTexture()
+        {
+            if (scanTexture != null) return scanTexture;
+            scanTexture = new Texture2D(1, 3, TextureFormat.RGBA32, false) { name = "BoscaliFeedScanlines", wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Point };
+            scanTexture.SetPixels(new[] { Color.white, Color.clear, Color.clear });
+            scanTexture.Apply(false, true);
+            return scanTexture;
+        }
+
         private TargetCardWidgets BuildTargetCard(string name, string tagWord)
         {
             const float header = ThirdPersonHudLayout.TargetCardHeaderHeight;
@@ -271,6 +282,19 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             feedRect.offsetMax = new Vector2(-4f, -header);
             RawImage feed = feedObject.GetComponent<RawImage>();
             feed.raycastTarget = false;
+
+            // Video-link scanlines over the picture (one shared 1x3 texture, repeated per 3 px); the missile's seeker link is the rougher of the two.
+            var scanObject = new GameObject("Scanlines", typeof(RectTransform), typeof(RawImage));
+            RectTransform scanRect = (RectTransform)scanObject.transform;
+            scanRect.SetParent(feedRect, false);
+            scanRect.anchorMin = Vector2.zero;
+            scanRect.anchorMax = Vector2.one;
+            scanRect.offsetMin = scanRect.offsetMax = Vector2.zero;
+            RawImage scan = scanObject.GetComponent<RawImage>();
+            scan.raycastTarget = false;
+            scan.texture = ScanTexture();
+            scan.color = new Color(0f, 0f, 0f, tagWord == "MSL" ? 0.4f : 0.3f);
+            scan.uvRect = new Rect(0f, 0f, 1f, 60f);
 
             // Centre reticle: four short ticks around a gap, the RWR's plane-cross idiom.
             var reticle = new Image[4];

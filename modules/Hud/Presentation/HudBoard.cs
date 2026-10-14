@@ -252,6 +252,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             // The cockpit already has its own native tac screen for this feed; the card only
             // earns its space in the external views this module can force the HUD into.
+            if (hudAircraft != null) TargetCamLook.Apply(hudAircraft.targetCam);      // the cockpit tac screen and the card share vanilla's camera
             Texture cameraTexture = null;
             string cameraCode = null;
             float range = float.NaN, closure = float.NaN;

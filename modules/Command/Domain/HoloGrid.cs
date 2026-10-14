@@ -113,7 +113,8 @@ namespace BoscaliSummer.Modules.Command.Domain
         }
 
         private static int Cells(float metres, float cellMetres) =>
-            Math.Min(MaxHalf, Math.Max(2, (int)MathF.Ceiling(Math.Min(metres, 1e9f) / cellMetres) + 1));
+            // Floor + 2, not ceiling + 1: a reach of a whole number of cells (the flat MINI's side) still leaves room for the half-cell snap.
+            Math.Min(MaxHalf, Math.Max(2, (int)MathF.Floor(Math.Min(metres, 1e9f) / cellMetres) + 2));
 
         /// <summary>Nodes in a lattice of this reach.</summary>
         internal static int Nodes(int halfX, int halfZ) => (2 * halfX + 1) * (2 * halfZ + 1);

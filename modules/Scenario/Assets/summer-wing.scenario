@@ -22,6 +22,7 @@ about
 time 16
 weather 0.3
 ending 14
+gamemusic off
 # Nobody joins a regular side here: the pilot flies for the company, and the people coming for the ship are nobody's air force.
 lock pala
 lock bdf
@@ -110,33 +111,38 @@ picture front   poster frontline_overstretch
 picture hired   poster veteran_contractor_influx
 picture docks   poster merchant_fleet_charter
 
-shot city    orbit airbase "City Airport" radius=2400 height=420 from=20 to=58 seconds=7
-shot column  chase unit coup_3 back=24 up=4 right=-18 seconds=9 fov=42
-shot plaza   orbit at 1500 9 3235 radius=260 height=32 from=35 to=105 seconds=9 fov=42
-shot line    orbit at 1650 9 3235 radius=95 height=7 from=40 to=110 seconds=8 fov=50
-shot fall    orbit airbase "City Airport" radius=3200 height=900 from=300 to=338 seconds=8
-shot rear    chase unit rear_3 back=30 up=4 right=8 seconds=8 fov=42
-shot fleet   orbit unit fleet_1 radius=330 height=40 from=20 to=80 seconds=9 fov=40
-shot wake    orbit unit fleet_2 radius=620 height=120 from=60 to=15 seconds=8
-shot strip   orbit airbase "Island5 Airstrip" radius=1500 height=380 from=250 to=310 seconds=8
-shot ship    orbit unit halcyon_dawn  radius=260  height=60  from=200 to=290 seconds=8 fov=38
+shot city     fly 900 260 4300 to -700 230 3950 look -5000 120 2650 seconds=10 fov=34
+shot column   orbit unit coup_3 radius=420 height=180 from=205 to=222 seconds=7 fov=22 shake=0.12
+shot column-2 orbit unit coup_1 radius=300 height=150 from=48 to=60 seconds=6.5 fov=26 shake=0.12
+shot plaza-h  orbit at 1450 9 3235 radius=520 height=200 from=75 to=86 seconds=4.5 fov=24 shake=0.12
+shot plaza-h2 orbit at 1500 9 3235 radius=260 height=170 from=150 to=162 seconds=4.5 fov=30 shake=0.12
+shot line     orbit unit push_6 radius=34 height=2.5 from=125 to=140 seconds=5 fov=58 shake=0.65 roll=4
+shot fall     orbit at -4800 40 2650 radius=3000 height=850 from=20 to=34 seconds=6.5
+shot rear     chase unit rear_3 back=30 up=4 right=8 seconds=9 fov=42
+shot fleet    orbit unit fleet_1 radius=60 height=520 from=20 to=40 seconds=7 fov=72
+shot wake     chase unit fleet_2 back=-150 up=6 right=95 seconds=7.5 fov=38 shake=0.08
+shot strip    orbit airbase "Island5 Airstrip" radius=1500 height=380 from=250 to=300 seconds=10.5
+shot ship     orbit unit halcyon_dawn radius=260 height=60 from=210 to=270 seconds=7.5 fov=38
 
-# The war, told once, where a player first meets it: the coup, the capital, the retreat, the fleet, and then the people who are paid
-# to fly through all of it. Ten shots, cut to the length of the track; the world statements above put the armies under the camera on time.
+# The war, told once, by a Republic soldier who lived it. Visual thesis: the ground the Republic holds shrinks in the frame, from the
+# Agrapol skyline to one freighter on an empty sea. Combat is news helicopter footage; the one ground shot is the contact beat and carries
+# no narration. A line of narration runs on over a cut without voice=. Between the fighting come the papers, the map and the file.
 beat intro when start
   music "synthetic-warfront.mp3"
   clock 16.0
   sky storm
-  cut city   "The Boscali Republic" "June 2034. Fifty-two million people. One archipelago. One summer left."
-  cut column "02:10. Every relay tower in the islands goes dark in the same second. When the screens come back, the armour is already inside the cities. Nobody fires a shot. Nobody has been told who to shoot." photo=coup stamp="AGRAPOL - 02 JUN 2034 / REPUBLIC HOLDS 100% / DAY 1"
-  cut plaza  "It takes the garrison two days to learn that the orders on the net are not from its own generals. Then it fights. Street by street, under its own towers." photo=front stamp="AGRAPOL, GOVERNMENT QUARTER - 05 JUN 2034 / REPUBLIC HOLDS 61% / DAY 4"
-  cut line   "Every block costs PALA a day it did not plan for. Every block costs the Republic men it cannot replace."
-  cut fall   "On the ninth day the capital goes quiet. PALA holds the ports, the grid, the airwaves, and the story." photo=capital stamp="AGRAPOL - 10 JUN 2034 / REPUBLIC HOLDS 23% / DAY 9"
-  cut rear   "What is left of the army goes north across Heartland with whatever still has fuel. One island. Forty kilometres of it. Nothing behind them but the sea." stamp="HEARTLAND, NORTH ROAD - 12 JUN 2034 / REPUBLIC HOLDS 9% / DAY 11"
-  cut fleet  "And out of that sea, transponders dark, comes the one thing the coup forgot to buy: the Home Fleet." stamp="HOME FLEET - EMCON ALPHA / COURSE 225 / SPEED 28 KN"
-  cut wake   "Every hull the Republic has left, steering for Heartland. If it gets there, this war is not over. It is just starting."
-  cut strip  "Wars like this one run out of pilots before they run out of money. So they hire." photo=hired stamp="IGNUS CHAIN, ISLAND FIVE - 13 JUN 2034 / DAY 12"
-  cut ship   "Summer Wing" "Tradewind Air Services, contract 0417. No flag. No side. Not yet." photo=docks
+  cut city     "The Boscali Republic" "I was born in Agrapol. Fifty-two million of us on these islands. That summer, the worst thing we expected was the heat." board=title date="IGNUS ARCHIPELAGO  /  JUNE 2034" voice=summer-vo-01-city.mp3
+  cut column   "Two in the morning, every screen in the country went black. When they came back, there were tanks on the ring road. Our tanks. Nobody would say who was driving." board=news channel=brn tag="Live from BRN Sky 1" clock="AGRAPOL 02:14" headline="Relay network down across all islands" sub="Armoured columns reported inside Agrapol. General Staff denies issuing orders" ticker="Markets suspended until further notice | Curfew declared in the outer islands | President's office: the government is in control | Ferries to Heartland cancelled" voice=summer-vo-02-column.mp3
+  cut column-2 "Two in the morning, every screen in the country went black. When they came back, there were tanks on the ring road. Our tanks. Nobody would say who was driving." board=news channel=brn tag="Live from BRN Sky 1  /  ring road" clock="AGRAPOL 02:14" headline="Relay network down across all islands" sub="Armoured columns reported inside Agrapol. General Staff denies issuing orders" ticker="Markets suspended until further notice | Curfew declared in the outer islands | President's office: the government is in control | Ferries to Heartland cancelled"
+  cut plaza-h  "We held the government quarter for nine days. Block by block. You learn a city fast when you're losing it." board=news channel=iwn tag="IWN helicopter  /  over Agrapol" kicker="Agrapol" clock="DAY 4  15:41" headline="Garrison fights back in government quarter" sub="Republic holds 61%. Footage filmed by residents" ticker="UN Security Council to meet Thursday | PALA claims order restored in outer islands | Oil up 14% on shipping fears" voice=summer-vo-03-plaza.mp3
+  cut plaza-h2 "We held the government quarter for nine days. Block by block. You learn a city fast when you're losing it." board=news channel=iwn tag="IWN helicopter  /  over Agrapol" kicker="Agrapol" clock="DAY 4  15:41" headline="Garrison fights back in government quarter" sub="Republic holds 61%. Footage filmed by residents" ticker="UN Security Council to meet Thursday | PALA claims order restored in outer islands | Oil up 14% on shipping fears"
+  cut line     "Every block costs them a day. Every block costs us people we can't replace." board=news channel=iwn tag="Raw footage" kicker="Agrapol" clock="DAY 6  09:02" headline="Garrison fights back in government quarter" sub="Republic holds 61%. Footage filmed by residents" ticker="UN Security Council to meet Thursday | PALA claims order restored in outer islands | Oil up 14% on shipping fears"
+  cut fall     "On the tenth morning, the radio stopped telling us to hold. It just played music." board=paper photo=capital masthead="The Agrapol Herald" date="Wednesday, 10 June 2034" edition="Last edition" headline="Capital falls" sub="Government leaves by the north road; PALA holds the ports, the grid and the airwaves" body="The last convoy of the Republic's government crossed the Maris bridge shortly before dawn, carrying what one official called the state, in four lorries. By noon the presidential palace flew a flag few residents recognised. The Herald's presses will be silent from tomorrow. Our correspondents remain in the city." voice=summer-vo-05-fall.mp3
+  cut rear     "So we went east. Anything with fuel in it. One road, one island, and the sea at the end." board=map area="4000 1500 30000" headline="Heartland  /  situation" date="12 Jun 2034  /  day 11  /  Republic holds 9%" front="8000 4500 8600 2500 8300 500 8800 -1500" arrows="-6000 2500 -1000 3000 3000 3200; -4000 -1000 1000 300 5500 1300; 2000 -5000 4000 -1500 6500 800" retreat="4500 2600 8500 2300 12500 2100" labels="Republic@11000 4200; PALA@-6500 5200" voice=summer-vo-06-rear.mp3
+  cut fleet    "Then somebody on the net said the navy was out. Nobody knew whose side it was on." board=sat header="KH-11 pass 0412Z  /  orbit 18 877  /  GSD 0.4 m" date="Maris Roads  /  23 Jun 2034" marks="fleet_1:DDG  Republic Home Fleet, fleet_2:CVL, fleet_3:FFG, fleet_4:FSG" voice=summer-vo-07-fleet.mp3
+  cut wake     "It was ours. Every hull we had left, running dark for Heartland." board=clean voice=summer-vo-08-wake.mp3
+  cut strip    "But ships don't fly. Our pilots were dead, or flying for the other side. So the money did what the army couldn't. It hired." board=dossier photo=hired company="Tradewind Air Services" date="Island Five, Ignus chain  /  13 Jun 2034" heading="Pilots wanted" body="Fixed and rotary wing. Prior service not asked about. Paid weekly, in dollars. Aircraft and fuel provided. Next of kin form required. Contract No. 0417. Term: open." mark="Hired" note="Summer Wing, day 12" voice=summer-vo-09-strip.mp3
+  cut ship     "Summer Wing" "No flag. No side. Not yet." board=chapter number="Chapter one" voice=summer-vo-10-ship.mp3
   dip
   enlist pmc
   seat "VT-7 Vagrant" at 40000 650 -1500 heading=235 speed=110

@@ -13,23 +13,28 @@ namespace BoscaliSummer.Modules.Command.Domain
     {
         private readonly float[] heights;
         private readonly bool[] dry;
-        private readonly float half;
+        private readonly float half, halfZ;
 
-        internal TerrainHeightField(float[] heights, bool[] dryLand, int side, float metresPerSample, float seaLevel)
+        /// <param name="metresPerSampleZ">North-south spacing when it differs (the naval map is 163.84 x 81.92 km on the same square sheet); 0 = square.</param>
+        internal TerrainHeightField(float[] heights, bool[] dryLand, int side, float metresPerSample, float seaLevel, float metresPerSampleZ = 0f)
         {
+            if (metresPerSampleZ == 0f) metresPerSampleZ = metresPerSample;
             if (heights == null || dryLand == null || side < 2 || heights.Length != side * side ||
-                dryLand.Length != heights.Length || !(metresPerSample > 0f))
+                dryLand.Length != heights.Length || !(metresPerSample > 0f) || !(metresPerSampleZ > 0f))
                 throw new ArgumentException("A height field needs a square sheet of samples and a mask of the same size.");
             this.heights = heights;
             dry = dryLand;
             Side = side;
             MetresPerSample = metresPerSample;
+            MetresPerSampleZ = metresPerSampleZ;
             SeaLevel = seaLevel;
             half = (side - 1) * metresPerSample * .5f;
+            halfZ = (side - 1) * metresPerSampleZ * .5f;
         }
 
         internal int Side { get; }
         internal float MetresPerSample { get; }
+        internal float MetresPerSampleZ { get; }
         /// <summary>Elevation of the water surface, and the lowest height <see cref="Sample"/> returns.</summary>
         internal float SeaLevel { get; }
 
@@ -39,7 +44,7 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// </summary>
         internal float Sample(float globalX, float globalZ)
         {
-            float sx = (globalX + half) / MetresPerSample, sz = (globalZ + half) / MetresPerSample;
+            float sx = (globalX + half) / MetresPerSample, sz = (globalZ + halfZ) / MetresPerSampleZ;
             if (!(sx >= 0f && sx <= Side - 1 && sz >= 0f && sz <= Side - 1)) return SeaLevel;
             int x = Math.Min(Side - 2, (int)sx), z = Math.Min(Side - 2, (int)sz);
             float fx = sx - x, fz = sz - z;
@@ -52,7 +57,7 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>True where the nearest sample is dry ground; false over water and off the sheet.</summary>
         internal bool IsLand(float globalX, float globalZ)
         {
-            float sx = (globalX + half) / MetresPerSample, sz = (globalZ + half) / MetresPerSample;
+            float sx = (globalX + half) / MetresPerSample, sz = (globalZ + halfZ) / MetresPerSampleZ;
             if (!(sx >= -.5f && sx < Side - .5f && sz >= -.5f && sz < Side - .5f)) return false;
             return dry[Math.Min(Side - 1, (int)(sz + .5f)) * Side + Math.Min(Side - 1, (int)(sx + .5f))];
         }

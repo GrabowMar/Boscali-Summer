@@ -39,7 +39,7 @@ namespace BoscaliSummer.Tests.Features.Hud
         {
             BoardOptions d = BoardOptions.Default;
             TestAssert.That(d.Enabled && d.Layout == BoardLayout.Wide, "On, Wide");
-            TestAssert.Near(d.Scale, 1f, "Scale 1");
+            TestAssert.Near(d.Scale, 0.85f, "Scale 0.85");
             TestAssert.Near(d.OffsetX, 0f, "OffsetX 0");
             TestAssert.Near(d.OffsetY, 0f, "OffsetY 0");
             TestAssert.Near(d.Opacity, 1f, "Opacity 1");
