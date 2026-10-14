@@ -31,6 +31,11 @@ namespace BoscaliSummer.Core.Game
 
         public static bool AllowsModule(string id) => id != null && (IsCore(id) || !disabled.Contains(id));
 
+        /// <summary>Free Flight keeps the terrain and civilian buildings clear of mod fortifications.</summary>
+        public static bool AllowsFortifications(string missionName) =>
+            !string.IsNullOrWhiteSpace(missionName) &&
+            !string.Equals(missionName.Trim(), "Free Flight", StringComparison.OrdinalIgnoreCase);
+
         /// <summary>The module whose switch governs an embedded Boscali asset, or null for native and workshop content.</summary>
         public static string ContentOwner(string key)
         {

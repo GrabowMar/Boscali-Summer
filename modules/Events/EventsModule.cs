@@ -35,6 +35,10 @@ namespace BoscaliSummer.Modules.Events
             SuperEventAlert alert = context.AddSceneService<SuperEventAlert>(67);
             alert.Configure(context.Settings.Events, manager);
 
+            context.AddClientSetting("WORLD EVENTS", "EVENT PICTURES",
+                "Show event artwork. OFF uses a generic event symbol in event cards, archive dossiers and alerts. Applies now.",
+                context.Settings.Events.PicturesEnabled);
+
             // How hard events bite, and whether the scripted ones fire at all. The calm
             // period between them is rotation pacing, set once in the config file.
             context.AddHostSettings(new HostSettingsTable("WORLD EVENTS")

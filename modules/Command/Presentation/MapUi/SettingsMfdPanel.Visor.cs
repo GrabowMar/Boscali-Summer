@@ -15,8 +15,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static readonly string[] TacMapNames = { "HOLO", "CLASSIC" };
         private static readonly string[] TacMapBriefs =
         {
-            "HOLO: the corner map is a small terrain map of the ground around you; hold the map key to blow it up.",
-            "CLASSIC: the game's own corner map, as before. Holding the map key still raises the big map.",
+            "HOLO: the optional terrain corner map. Turn on HOLO MAP below to enable it.",
+            "CLASSIC: the game's own corner map. HOLO MAP below separately enables the held map.",
         };
         private static readonly int[] MiniRanges = { 10, 20, 40 };
         private static readonly string[] MiniRangeNames = { "10 KM", "20 KM", "40 KM" };
@@ -43,11 +43,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 "A faint wire relief of the ground around and below you, over the view. 0% turns it off.");
 
             // The corner map: a small hologram or the game's own, and how far the small one reaches (which waits on the mode).
-            Func<bool> tacHolo = () => settings.TacMap.Value == TacMapMode.Holo;
+            Func<bool> tacHolo = () => settings.HoloMap.Value && settings.TacMap.Value == TacMapMode.Holo;
             BoardStrip(flow, page, "TAC MAP", TacMapNames, TacMapBriefs,
                 () => settings.TacMap.Value == TacMapMode.Holo ? 0 : 1, i => settings.TacMap.Value = i == 0 ? TacMapMode.Holo : TacMapMode.Classic, () => true, () => "");
             BoardStrip(flow, page, "MINI RANGE", MiniRangeNames, MiniRangeBriefs,
-                () => Array.IndexOf(MiniRanges, settings.TacMapRangeKm.Value), i => settings.TacMapRangeKm.Value = MiniRanges[i], tacHolo, () => "Set TAC MAP to HOLO first.");
+                () => Array.IndexOf(MiniRanges, settings.TacMapRangeKm.Value), i => settings.TacMapRangeKm.Value = MiniRanges[i], tacHolo, () => "Turn on HOLO MAP and set TAC MAP to HOLO first.");
 
             // The map key's middle stop: the switch first, then the radius and the orientation, which wait on the switch as the TAC BOARD's options wait on the board. NORTH UP also turns the mini hologram, so it waits on neither being off.
             Func<bool> holoOn = () => settings.HoloMap.Value;
@@ -55,7 +55,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Func<bool> turns = () => holoOn() || tacHolo();
             Func<string> turnsOff = () => "Turn on HOLO MAP or set TAC MAP to HOLO first.";
             ToggleCell(flow, flow.Grid(1), page, "HOLO MAP",
-                "Hold the map key to project a big 3D terrain map of the ground around you; tap it for the full map.",
+                "Enable holographic maps. OFF restores the classic corner map and the normal map key immediately.",
                 () => settings.HoloMap.Value, v => settings.HoloMap.Value = v);
             BoardStrip(flow, page, "HOLO RANGE", HoloRangeNames, HoloRangeBriefs,
                 () => Array.IndexOf(HoloRanges, settings.HoloRangeKm.Value), i => settings.HoloRangeKm.Value = HoloRanges[i], holoOn, holoOff);

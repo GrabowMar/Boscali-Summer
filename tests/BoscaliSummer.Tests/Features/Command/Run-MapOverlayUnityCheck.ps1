@@ -5,10 +5,12 @@ param(
     [string]$ModAssembly,
     [Alias('ExcludeWing')][switch]$NonWingOnly,
     [switch]$StrOnly,
+    [switch]$MapTasksOnly,
     [switch]$PrepareOnly
 )
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot/../../../UnityCheck.Common.ps1"
+$PreviewDirectory = [IO.Path]::GetFullPath($PreviewDirectory)
 if (-not $ModAssembly) { $ModAssembly = Join-Path $repo 'bin/Release/netstandard2.1/BoscaliSummer.dll' }
 New-UnityCheckProject $PreviewDirectory '{"dependencies":{"com.unity.ugui":"1.0.0","com.unity.textmeshpro":"3.0.6","com.unity.modules.audio":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.uielements":"1.0.0","com.unity.modules.physics":"1.0.0","com.unity.modules.animation":"1.0.0","com.unity.modules.ai":"1.0.0","com.unity.modules.particlesystem":"1.0.0","com.unity.modules.assetbundle":"1.0.0"}}' -Folders 'Assets/Harness', 'NOAvionics'
 Copy-GameDlls "$PreviewDirectory/Assets/" $UnityCheckFilter.ManagedWide $UnityCheckFilter.BepInEx
@@ -17,13 +19,14 @@ Copy-Item -LiteralPath "$PSScriptRoot/MapOverlayUnityCheck.cs", "$PSScriptRoot/M
 Copy-AvionicsStyles $PreviewDirectory
 $widgets = @('TrenchMapOverlay', 'TrenchMapGraphic', 'ComMapOverlay', 'FrontlineGraphic', 'ThreatMapOverlay', 'CommsMapLayer', 'CommsMapTag', 'CommsInkGraphic', 'CommsPulseGraphic', 'AircraftTrailGraphic', 'StrMapOverlay', 'StrMapTag', 'StrMapCard', 'StrMapChrome')
 if (-not $NonWingOnly) { $widgets += @('WingMarkerBadge', 'WingMapRingGraphic', 'WmcMapOverlay') }
-$executeMethod = if ($StrOnly) { 'MapOverlayUnityCheck.RunStr' } elseif ($NonWingOnly) { 'MapOverlayUnityCheck.RunNonWing' } else { 'MapOverlayUnityCheck.Run' }
+if ($MapTasksOnly) { $widgets = @('ThreatMapOverlay', 'ContractMapHud', 'ContractMapTag') }
+$executeMethod = if ($MapTasksOnly) { 'MapOverlayUnityCheck.RunMapTasks' } elseif ($StrOnly) { 'MapOverlayUnityCheck.RunStr' } elseif ($NonWingOnly) { 'MapOverlayUnityCheck.RunNonWing' } else { 'MapOverlayUnityCheck.Run' }
 [ordered]@{
     assembly_sha256 = (Get-FileHash -LiteralPath "$PreviewDirectory/Assets/BoscaliSummer.dll").Hash
     fixture_sha256 = (Get-FileHash -LiteralPath "$PreviewDirectory/Assets/Harness/MapOverlayUnityCheck.cs").Hash
     str_fixture_sha256 = (Get-FileHash -LiteralPath "$PreviewDirectory/Assets/Harness/MapOverlayUnityCheck.Str.cs").Hash
     production_widgets = $widgets
-    non_wing_only = [bool]$NonWingOnly
+    non_wing_only = [bool]($NonWingOnly -or $MapTasksOnly)
     execute_method = $executeMethod
     limits = 'Synthetic native DynamicMap/FactionHQ lifecycle shells and mirrored display data. No world observation, native map input, flight, replication, scene reload or oblique relief acceptance.'
 } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath "$PreviewDirectory/inputs.json"

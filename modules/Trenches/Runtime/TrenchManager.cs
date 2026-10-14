@@ -117,7 +117,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             Vector3[] curve, Vector3[] threat, Vector3[] support, Vector3[] redoubt,
             Vector3[][] links, Vector3[][] spurs)
         {
-            if (GameAccess.IsServer()) return;
+            if (GameAccess.IsServer() || !BoscaliMission.FortificationsAllowed) return;
             // Threat vectors stay unit XZ: only ditch traces snap height to local terrain.
             SnapHeights(curve);
             SnapHeights(support);
@@ -253,9 +253,9 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         private void Update()
         {
             if (settings == null || !GameAccess.IsServer()) return;
-            if (!settings.Enabled.Value)
+            if (!settings.Enabled.Value || !BoscaliMission.FortificationsAllowed)
             {
-                if (lines.Count > 0 || commitJob != null)
+                if (lines.Count > 0 || commitJob != null || planJob != null || growJob != null)
                 {
                     for (int i = 0; i < lines.Count; i++) TrenchNet.BroadcastRemoved(lines[i].Id);
                     ResetForScene();

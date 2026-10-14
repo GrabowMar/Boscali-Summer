@@ -110,13 +110,14 @@ namespace BoscaliSummer.Modules.Events.Presentation
                     art.uvRect = CropUv(SpriteUv(poster), w / poster.texture.width, h / poster.texture.height);
                 float want = markSize * Mathf.Max(0.1f, MarkScale);
                 float size = Mathf.Min(want, Mathf.Min(w, h) * 0.6f);
-                if (poster == null && Mathf.Abs(want - shownMark) > 0.5f) { shownMark = want; AvIcons.Set(mark, glyphIcon, want); }
+                if (poster == null && Mathf.Abs(size - shownMark) > 0.5f) { shownMark = size; AvIcons.Set(mark, glyphIcon, size); }
                 AvLay.Place(mark.rectTransform, (w - size) * 0.5f, (h - size) * 0.5f, size, size);
             }
 
             public void Bind(Sprite art, AvIcon categoryGlyph, Color ink)
             {
-                poster = art;
+                poster = EventArtCache.PicturesEnabled ? art : null;
+                if (!EventArtCache.PicturesEnabled) categoryGlyph = AvIcon.AlertTriangle;
                 bool hasArt = poster != null;
                 this.art.texture = hasArt ? poster.texture : null;
                 this.art.enabled = hasArt;

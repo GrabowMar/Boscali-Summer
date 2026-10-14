@@ -855,6 +855,19 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.Eq(count, 96, "Holo marks: at most 96 units are drawn");
             for (int i = 0; i < count; i++)
                 TestAssert.Near(list[i].Range, all[i], "Holo marks: the 96 listed are the 96 nearest, nearest first");
+
+            list = new HoloMark[3]; count = 0;
+            foreach (float distance in new[] { 10f, 20f, 30f })
+                HoloMarks.Offer(list, ref count, new HoloMark { Range = distance }, prioritizeAir: true);
+            TestAssert.That(HoloMarks.Offer(list, ref count, new HoloMark { Kind = HoloKind.Air, Range = 500f }, prioritizeAir: true),
+                "Holo marks: nearby ground clutter cannot evict a visible aircraft");
+            TestAssert.That(HoloMarks.Offer(list, ref count, new HoloMark { Kind = HoloKind.Air, Range = 200f }, prioritizeAir: true),
+                "Holo marks: another aircraft enters the bounded list");
+            TestAssert.That(list[0].Range == 200f && list[1].Range == 500f && list[2].Range == 10f,
+                "Holo marks: air contacts first, nearest first within each class");
+            HoloMarks.Offer(list, ref count, new HoloMark { Kind = HoloKind.Air, Range = 900f }, prioritizeAir: true);
+            TestAssert.That(!HoloMarks.Offer(list, ref count, new HoloMark { Range = 1f }, prioritizeAir: true),
+                "Holo marks: an all-air list keeps its aircraft even over nearer ground");
         }
 
         private static void TestWords()

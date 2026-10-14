@@ -232,6 +232,19 @@ public static class EventsUnityCheck
             CheckImageExposure(f);
             Snapshot(f, "active");
 
+            EventsSettings pictures = Field<EventsSettings>(f.Panel, "settings");
+            pictures.PicturesEnabled.Value = false;
+            RefreshPanel(f);
+            CheckPictures(f.Console.Root, false, "active event switched to symbols");
+            Check(EventArtCache.Get(ev.Current.IconKey, "default") == null && EventArtCache.Thumb(ev.Current.IconKey, "default") == null,
+                "pictures off bypasses both poster and thumbnail caches");
+            Snapshot(f, "symbols");
+            pictures.PicturesEnabled.Value = true;
+            RefreshPanel(f);
+            CheckPictures(f.Console.Root, true, "same active event restored to pictures");
+            CheckImageExposure(f);
+            Snapshot(f, "pictures-restored");
+
             // 3. Penalty superevent with a script, ending soon.
             f.Mission.MissionTime = 1000f;
             EventDefinition super = FirstSuper();
@@ -280,6 +293,23 @@ public static class EventsUnityCheck
             DisposeFixtures();
             Encyclopedia.i = null;
         }
+    }
+
+    private static void CheckPictures(RectTransform root, bool pictures, string where)
+    {
+        int plates = 0;
+        foreach (RawImage art in root.GetComponentsInChildren<RawImage>(true))
+        {
+            if (art.name != "Art") continue;
+            var mark = art.transform.parent.GetComponentInChildren<TMP_Text>(true);
+            bool hasPicture = art.enabled && art.texture != null;
+            if (pictures) { if (hasPicture) plates++; continue; }
+            Check(!hasPicture && mark != null && mark.gameObject.activeSelf, where + ": art is replaced by a visible symbol");
+            Check(mark != null && mark.font != null && mark.font.HasCharacter(AvIconTable.Char(AvIcon.AlertTriangle)),
+                where + ": the generic symbol exists in the actual loaded font");
+            plates++;
+        }
+        Check(plates > 0, where + ": at least one event plate must be checked");
     }
 
     private static void CheckImageExposure(PanelFixture f)
@@ -624,6 +654,18 @@ public static class EventsUnityCheck
                     t => t.name == "Count" && t.transform.parent.name == "Shelf " + ArchiveShelf.Names[shelf]);
                 Check(expected > 0 && count != null && count.text == expected.ToString(),
                     prefix + ShelfTags[shelf] + ": the shelf tab must carry its real record count (" + (count != null ? count.text : "none") + " vs " + expected + ")");
+                if (shelf == ArchiveShelf.Events)
+                {
+                    var config = (EventsSettings)typeof(EventArtCache).GetField("settings", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
+                    config.PicturesEnabled.Value = false;
+                    typeof(EventDeskArchive).GetMethod("Update", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(archive, null);
+                    CheckPictures(root, false, "open archive switched to symbols");
+                    Frame("events-symbols");
+                    config.PicturesEnabled.Value = true;
+                    typeof(EventDeskArchive).GetMethod("Update", BindingFlags.NonPublic | BindingFlags.Instance).Invoke(archive, null);
+                    CheckPictures(root, true, "same open archive restored to pictures");
+                    Frame("events-restored");
+                }
             }
             Check(ArchiveShelf.CountOf(ArchiveShelf.Ground) == Encyclopedia.i.vehicles.Count - 1,
                 "a definition the game has disabled must not be filed on its shelf");

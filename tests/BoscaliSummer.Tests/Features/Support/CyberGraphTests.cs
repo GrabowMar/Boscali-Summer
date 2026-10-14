@@ -184,6 +184,20 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(!set.TruckLocked(5, 0f), "unknown truck is never locked");
             TestAssert.Eq(set.Health(AnchorKind.EwTruck, 9), AnchorHealth.Down, "unknown anchor reads down");
 
+            var growing = new CyberAnchorSet(1, 0);
+            growing.SetPosition(AnchorKind.EwTruck, 0, 0f, 0f);
+            TestAssert.Eq(growing.Add(AnchorKind.EwTruck, float.NaN, 2f), -1, "invalid enrollment leaves capacity unchanged");
+            TestAssert.Eq(growing.Add(AnchorKind.EwTruck, 30000f, 100f), 1, "a new radar truck fills the second EW slot");
+            TestAssert.Eq(growing.Add(AnchorKind.EwTruck, 40000f, 100f), -1, "native enrollment respects the two-truck wire cap");
+            TestAssert.Eq(growing.CopyTrucks(list), 2, "new EW truck contributes reach immediately");
+            TestAssert.That(CyberGraph.Reachable(Node(99, NodeKind.Radar, 45000f, 100f), list, null, out int viaTruck, out _) && viaTruck == 1,
+                "the enrolled radar truck extends reachable network nodes");
+            growing.Trace(1, 500f);
+            growing.Set(AnchorKind.EwTruck, 1, 0f, true, 501f);
+            growing.Restore(AnchorKind.EwTruck, 1, 35000f, 100f, 502f);
+            TestAssert.That(!growing.TruckLocked(1, 502f) && growing.RevealUntil(1) == 0f,
+                "a replacement truck does not inherit its wreck's trace lock or reveal");
+
             set.Set(AnchorKind.DataCenter, 0, 0f, true, 10f);
             TestAssert.That(!set.DataCenterUp, "a down data center gives no bonus");
 

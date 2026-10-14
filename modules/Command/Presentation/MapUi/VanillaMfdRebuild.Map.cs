@@ -31,14 +31,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private static readonly string[] LayerSubtitles =
                 { "Mission markers", "Target markers", "Jam indicators", "Grid coordinates", "Pilot icons", "Base icons" };
             private static readonly string[] OverlayNames =
-                { "CONTROL FIELD", "FRONT LINE", "SENSOR CONTOURS", "SATELLITE MAP" };
+                { "CONTROL FIELD", "FRONT LINE", "SENSOR REACH", "SATELLITE MAP" };
             private static readonly string[] OverlaySubtitles =
                 { "Sector control", "Control boundary", "Sensor coverage", "Terrain imagery" };
             private static readonly string[] OverlayBriefs =
             {
                 "Who holds each sector. Source: actual ground units, airbases.",
                 "Boundary of the two held areas. Source: the control field.",
-                "Hostile radar and optical/IR reach over you. Source: tracks your side holds; terrain masking is not applied.",
+                "Solid: radar detection estimate. Dashed: optical/IR detection estimate. Faction-known sites only; terrain masking is not applied. Without an aircraft, radar shows nominal scan range.",
                 "Terrain imagery under the symbols in place of the plain vector base.",
             };
             private static readonly string[] HoverNames = { "OFF", "UNIT INFO", "AMMUNITION", "ORDERS" };
@@ -54,7 +54,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private static readonly string[] ReadoutKeys =
                 { "SECTOR CELL", "CONTROL DATA", "THREAT TRACKS", "TERRAIN DECK" };
             private static readonly string[] LegendLabels =
-                { "FRIENDLY GROUND", "HOSTILE GROUND", "CONTESTED", "FRONT LINE", "RADAR HEAT", "OPTICAL / IR" };
+                { "FRIENDLY GROUND", "HOSTILE GROUND", "CONTESTED", "FRONT LINE", "RADAR / SOLID", "OPTICAL / DASHED" };
             private static readonly AvIcon[] LayerGlyphs =
                 { AvIcon.Flag, AvIcon.Target, AvIcon.WaveSine, AvIcon.Ruler2, AvIcon.User, AvIcon.Plane };
             private static readonly AvIcon[] OverlayGlyphs =
@@ -526,6 +526,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 public override void Restyle()
                 {
+                    Paint();
                     frame.Paint(AvStyleHost.FuiFill("card", AvTheme.SurfaceInert),
                                 AvStyleHost.FuiBorder("card", AvTheme.Hairline));
                     Color ink = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
@@ -541,7 +542,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 ComMapOverlay source = Overlay;
                 ThreatMapOverlay threatSource = Threats;
                 bool overlaysReady = available && source != null && source.LayersAvailable;
-                bool threatsReady = available && threatSource != null && threatSource.Available;
+                bool threatsReady = available && threatSource != null && threatSource.Available && threatSource.HasPicture;
 
                 visibleLayers = 0;
                 for (int i = 0; i < NativeLayerCount; i++)
@@ -592,7 +593,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     !overlaysReady ? AvState.Inert : source.HasControlData ? AvState.Ready : AvState.Caution);
                 metrics[2].Set(!threatsReady ? "—" : AvNum.Fixed(threatSource.TrackedEmitters, 0),
                     !threatsReady ? "" : threatSource.TrackedEmitters > 0
-                        ? AvNum.Fixed(threatSource.WidestEnvelopeKm, 0) + " KM" : "NONE",
+                        ? AvNum.Fixed(threatSource.WidestEnvelopeKm, 0) + (threatSource.HasOwnship ? " KM" : " KM / NOMINAL") : "NONE",
                     threatsReady ? 1f : 0f,
                     !threatsReady ? AvState.Inert : threatSource.TrackedEmitters > 0 ? AvState.Caution : AvState.Ready);
                 metrics[3].Set(overlaysReady ? (source.TerrainImageVisible ? "SAT" : "VEC") : "—",

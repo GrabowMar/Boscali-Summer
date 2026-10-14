@@ -4,44 +4,41 @@ using System.Collections.Generic;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>An airframe's hardpoints as LOADOUT shows them (spec WMC rebuild §LOADOUT; critique 14): a STATION is one table row — a
-    /// hardpoint set plus the sets after it that mirror it (SymmetryWithPrev) — counted once everywhere; a PYLON is one physical
-    /// hardpoint. Picks follow the game's own editor: every set of the station takes the store, stations the new store blocks are
+    /// hardpoint set, including each side of a symmetry pair; a PYLON is one physical
+    /// hardpoint. Picks follow the game's own editor: the set takes the store, stations the new store blocks are
     /// emptied, and a blocked station takes nothing. <see cref="WillClear"/> predicts what the launch's own check empties.</summary>
     internal sealed class StationLayout
     {
-        private readonly string[] names, pairNames;
-        private readonly int[] pylons, firstOf, stationOf;
+        private readonly string[] names;
+        private readonly bool[] withPrev;
+        private readonly int[] pylons;
         private readonly int[][] precludes;
 
-        public StationLayout(string[] names, string[] pairNames, bool[] withPrev, int[] pylons, int[][] precludes)
+        public StationLayout(string[] names, bool[] withPrev, int[] pylons, int[][] precludes)
         {
             Sets = names?.Length ?? 0;
             this.names = names ?? new string[0];
-            this.pairNames = pairNames ?? new string[Sets];
+            this.withPrev = withPrev ?? new bool[Sets];
             this.pylons = pylons ?? new int[Sets];
             this.precludes = precludes ?? new int[Sets][];
-            stationOf = new int[Sets];
-            var first = new List<int>();
             for (int s = 0; s < Sets; s++)
             {
-                bool mirrors = s > 0 && withPrev != null && s < withPrev.Length && withPrev[s];
-                if (!mirrors) first.Add(s);
-                stationOf[s] = first.Count - 1;
                 Pylons += s < this.pylons.Length ? Math.Max(0, this.pylons[s]) : 0;
             }
-            firstOf = first.ToArray();
         }
 
         public int Sets { get; }
-        public int Stations => firstOf.Length;
+        public int Stations => Sets;
         public int Pylons { get; }
 
-        public int First(int st) => firstOf[st];
+        public int First(int st) => st;
 
         /// <summary>One past the station's last set.</summary>
-        public int End(int st) => st + 1 < firstOf.Length ? firstOf[st + 1] : Sets;
+        public int End(int st) => st + 1;
 
-        public int StationOf(int set) => stationOf[set];
+        public int StationOf(int set) => set;
+
+        public bool MirrorsPrevious(int st) => st > 0 && st < withPrev.Length && withPrev[st];
 
         public int PylonsAt(int set) => set < pylons.Length ? Math.Max(0, pylons[set]) : 0;
 
@@ -52,15 +49,11 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return n;
         }
 
-        /// <summary>The pair's name, else the first set's name without a leading LEFT/RIGHT (a pair's own name is often blank), else
-        /// "STATION n".</summary>
+        /// <summary>The native set name, including LEFT/RIGHT, else "STATION n".</summary>
         public string Name(int st)
         {
             int s = First(st);
-            bool pair = End(st) - s > 1;
-            if (pair && !string.IsNullOrWhiteSpace(Get(pairNames, s))) return pairNames[s].Trim();
             string n = (Get(names, s) ?? "").Trim();
-            if (pair) n = StripSide(n);
             return n.Length > 0 ? n : "STATION " + (st + 1);
         }
 
@@ -70,7 +63,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return keys != null && s < keys.Count ? keys[s] : null;
         }
 
-        /// <summary>Fits <paramref name="key"/> on every set of the station and empties the stations it blocks; returns how many it
+        /// <summary>Fits <paramref name="key"/> on this station and empties the stations it blocks; returns how many it
         /// emptied, or −1 (and changes nothing) when the station is itself blocked.</summary>
         public int Pick(List<string> keys, int st, string key)
         {
@@ -108,12 +101,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return -1;
         }
 
-        /// <summary>One key per set, and a mirrored pair carrying its first set's store.</summary>
+        /// <summary>One key per set, preserving asymmetric and empty sides of a pair.</summary>
         public void Normalize(List<string> keys)
         {
             while (keys.Count < Sets) keys.Add(null);
-            for (int st = 0; st < Stations; st++)
-                for (int s = First(st) + 1; s < End(st); s++) keys[s] = keys[First(st)];
         }
 
         /// <summary>The launch's own check (WingLoadoutCatalog.ClearBlockedMounts): sets in order, a fitted set any fitted set it lists
@@ -159,13 +150,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
                     if (j >= 0 && j < Sets && StationOf(j) == by) return true;
             }
             return false;
-        }
-
-        private static string StripSide(string n)
-        {
-            foreach (string side in new[] { "Left ", "Right " })
-                if (n.StartsWith(side, StringComparison.OrdinalIgnoreCase)) return n.Substring(side.Length).TrimStart();
-            return n;
         }
 
         private static T Get<T>(T[] a, int i) => a != null && i < a.Length ? a[i] : default;

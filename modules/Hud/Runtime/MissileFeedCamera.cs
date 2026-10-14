@@ -42,17 +42,25 @@ namespace BoscaliSummer.Modules.Hud.Runtime
 
         public void Tick(IReadOnlyList<Missile> live, bool allowed, float now)
         {
+            if (!allowed)
+            {
+                if (cam != null) cam.enabled = false;
+                riding = null;
+                Texture = null;
+                lostAt = -1f;
+                return;
+            }
             // A camera enabled for one frame renders once; switch it off again afterwards.
             if (cam != null && cam.enabled && Time.frameCount > enabledFrame) cam.enabled = false;
 
             Missile last = null;
-            for (int i = live.Count - 1; allowed && last == null && i >= 0; i--)
+            for (int i = live.Count - 1; last == null && i >= 0; i--)
                 if (live[i] != null && !live[i].disabled) last = live[i];
 
             if (last == null)
             {
                 riding = null;
-                if (!allowed || Texture == null) { Texture = null; lostAt = -1f; }
+                if (Texture == null) { lostAt = -1f; }
                 else if (lostAt < 0f) lostAt = now;
                 else if (now - lostAt > HoldSeconds) { Texture = null; lostAt = -1f; }
                 return;

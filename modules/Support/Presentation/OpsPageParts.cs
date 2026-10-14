@@ -122,8 +122,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             painted = true;
             Color tone = FrontKit.Tone(c.Tone);
             rail.color = c.Known ? AvInk.State(c.Tone) : AvInk.Frame;
-            FrontKit.Set(readiness, "R" + c.Readiness, AvInk.Ink);
-            for (int i = 0; i < pips.Length; i++) pips[i].color = i < c.Readiness ? AvInk.Select : AvInk.Frame.WithAlpha(0.45f);
+            FrontKit.Set(readiness, c.Known ? "R" + c.Readiness : "\u2014", AvInk.Ink);
+            for (int i = 0; i < pips.Length; i++) pips[i].color = c.Known && i < c.Readiness ? AvInk.Select : AvInk.Frame.WithAlpha(0.45f);
 
             float barX = 12f + LabelW, barW = supWell.rectTransform.rect.width, half = barW * 0.5f, len = Mathf.Abs(c.Superiority) / 100f * half;
             supFill.color = AvInk.State(c.Tone).WithAlpha(c.Known ? 0.85f : 0f);

@@ -63,6 +63,7 @@ namespace BoscaliSummer.Core.Game
             mfd.SetupButtons();
 
             Button bezel = buttons[slot];
+            AvInput.StripNavigation(bezel); // a flight stick must never steer focus across the bezel and fire a screen
             bezel.gameObject.SetActive(DynamicMap.mapMaximized);
             bezel.enabled = true;
             bezel.interactable = true;

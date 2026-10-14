@@ -8,6 +8,10 @@ namespace BoscaliSummer.Tests.Framework
     {
         public static void Run()
         {
+            foreach (string name in new[] { "Free Flight", "  free flight  ", "FREE FLIGHT", null, "", "  " })
+                TestAssert.That(!MissionProfile.AllowsFortifications(name), "Free Flight or an unloaded mission cannot fortify: " + name);
+            foreach (string name in new[] { "Escalation", "Boscali Summer", "Free Flight 2", "Workshop Free Flight" })
+                TestAssert.That(MissionProfile.AllowsFortifications(name), "other named missions retain fortification: " + name);
             string[] optional =
             {
                 "radio", "immersion", "effects", "qol", "autopilot", "chatter", "wing", "command", "comms",

@@ -800,6 +800,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private readonly TMP_Text range;
         private readonly string[] states = new string[MaxStations];
         private readonly int[] pylons = new int[MaxStations];
+        private readonly bool[] mirrored = new bool[MaxStations];
         private readonly string[] stationStore = new string[MaxStations], stationMass = new string[MaxStations];
         private readonly bool[] canClear = new bool[MaxStations], enabled = new bool[MaxStations];
         private readonly StationMapMath.Spot[] spots = new StationMapMath.Spot[MaxStations * 2];
@@ -873,12 +874,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
 
         /// <summary>How many stations, and each one's pylon count (a pair is two boxes on the map).</summary>
-        public void SetStations(int n, IList<int> pylonCounts)
+        public void SetStations(int n, IList<int> pylonCounts, IList<bool> withPrev = null)
         {
             count = Mathf.Clamp(n, 0, MaxStations);
             for (int i = 0; i < count; i++)
             {
                 pylons[i] = pylonCounts != null && i < pylonCounts.Count ? pylonCounts[i] : 1;
+                mirrored[i] = withPrev != null && i < withPrev.Count && withPrev[i];
                 if (stationStore[i] == null) stationStore[i] = "";
                 if (stationMass[i] == null) stationMass[i] = "";
                 if (states[i] == null) states[i] = "inert";
@@ -1026,7 +1028,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Color line = AvStyleHost.FuiColor("frame", AvTheme.Frame);
             AvStrokes.Polyline(b, xs, ys, xs.Length, true, 1.4f, new Rgba(line.r, line.g, line.b, line.a));
             outline.Commit();
-            int n = StationMapMath.Spots(Subset(), 92f * k, 100f * k, BoxSize, spots);
+            int n = StationMapMath.Spots(Subset(), 92f * k, 100f * k, BoxSize, spots, mirrored);
             for (int i = 0; i < boxes.Length; i++)
             {
                 Box box = boxes[i];

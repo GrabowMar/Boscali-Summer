@@ -799,7 +799,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 Target target = board.Targets[i]; Operation op = target.Mission;
                 bool active = op.State == OperationState.Active;
                 bool known = op.IsLive && MarkerPosition(player.HQ, target) && Finite(target.Position);
-                bool marker = active && known;
+                bool marker = op.IsLive && known;
                 bool tied = op.FocusId > 0;
                 bool covered = tied && board.HasFocus && board.Focus.Covers(op.FocusId, op.FocusAnchor);
                 tiedLive |= covered && op.IsLive;
@@ -850,7 +850,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             bool fixedSite = op.Returning || ReferenceEquals(target.Unit, null) || op.Kind == OperationKind.StrikePost ||
                 op.Kind == OperationKind.DamageAssessment && target.Life.Neutralized;
             float age = -1f;
-            ObjectiveContact contact = op.State != OperationState.Active ? ObjectiveContact.Unavailable :
+            ObjectiveContact contact = !op.IsLive ? ObjectiveContact.Unavailable :
                 !marker ? ObjectiveContact.Lost : fixedSite ? ObjectiveContact.Fixed : ObjectiveContact.Known;
             if (marker && !fixedSite)
             {

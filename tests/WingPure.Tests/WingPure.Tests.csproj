@@ -10,6 +10,9 @@
     <NoWarn>$(NoWarn);CS0649</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\..\modules\Wing\Domain\Economy\StationLayout.cs" Link="Economy\StationLayout.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Economy\LoadoutSummary.cs" Link="Economy\LoadoutSummary.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Economy\LoadoutTemplateCodec.cs" Link="Economy\LoadoutTemplateCodec.cs" />
     <Compile Include="..\..\modules\Wing\Domain\Pure\*.cs" LinkBase="Pure" />
     <Compile Include="..\..\Core\Util\MiniJson.cs" Link="MiniJson.cs" />
     <Compile Include="..\..\Core\Contracts\Scope\WingBoardScope.cs" Link="WingBoardScope.cs" />

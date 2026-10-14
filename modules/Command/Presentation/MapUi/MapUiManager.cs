@@ -9,6 +9,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     {
         private float nextRefresh;
         private int screenCount = -1;
+        private Vector2 canvasSize;
         private bool mapWasMaximized;
         private void LateUpdate()
         {
@@ -33,10 +34,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 {
                     int count = Count(MapUiAccess.GetLeftScreens(mfd)) + Count(MapUiAccess.GetRightScreens(mfd));
                     var size = MfdLayout.CanvasSize(canvas);
-                    if (count != screenCount || size != MfdRailPatch.AppliedCanvasSize)
+                    // AppliedCanvasSize is zero in stock layout. Compare the observed
+                    // canvas instead, or a saved OFF setting tears down the finish at 10 Hz.
+                    if (count != screenCount || size != canvasSize)
                     {
                         MfdRailPatch.OnStructureChanged(map);
                         screenCount = count;
+                        canvasSize = size;
                     }
                     MfdRailPatch.Reconcile();
                     VanillaMfdRebuild.Tick();
@@ -66,6 +70,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             MapUiPointer.ResetFloating();
             nextRefresh = 0f;
             screenCount = -1;
+            canvasSize = Vector2.zero;
             mapWasMaximized = false;
         }
         private void OnDestroy() => ResetForScene();

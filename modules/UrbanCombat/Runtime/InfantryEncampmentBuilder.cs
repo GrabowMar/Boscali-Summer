@@ -206,7 +206,7 @@ namespace BoscaliSummer.Garrisons
                 if (!Physics.Raycast(candidate + Vector3.up * 10f, Vector3.down, out RaycastHit ground,
                     60f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore) ||
                     ground.point.y <= Datum.LocalSeaY + 1f || ground.normal.y < 0.8f) continue;
-                return CreateNewSite(ground.point, owner, airbase, TroopDeploymentMath.DefaultSquadSize, true);
+                if (CreateNewSite(ground.point, owner, airbase, TroopDeploymentMath.DefaultSquadSize, true)) return true;
             }
             return false;
         }
@@ -359,11 +359,12 @@ namespace BoscaliSummer.Garrisons
             Vector3 position, Quaternion rotation, string label)
         {
             BuildingDefinition def = Resolve(preferredKey, fallbackKeyword);
-            if (def == null || def.unitPrefab == null || spawner == null) return null;
+            if (def == null || spawner == null || !GameAccess.IsServer() || site.Owner == null ||
+                !GroundPlacement.TryPlace(def, position, rotation, out Vector3 placed)) return null;
 
             return spawner.SpawnBuilding(
                 def.unitPrefab,
-                position.ToGlobalPosition(),
+                placed.ToGlobalPosition(),
                 rotation,
                 site.Owner,
                 site.Airbase,

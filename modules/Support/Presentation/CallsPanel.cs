@@ -286,7 +286,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             tiles.Clear();
             foreach (CallRow row in CallSheet.Rows)
                 tiles.Add(CallsView.Tile(row, manager.Quote(row.Id), manager.LockReason(row.Id), manager.LocalAllocation,
-                    manager.LocalCooldownRemaining(row.Id), calls.Armed == row.Id, false, !manager.Online));
+                    manager.LocalCooldownRemaining(row.Id), calls.Armed == row.Id, calls.PendingAction == row.Id, !manager.Online));
             view.Allocation = (int)manager.LocalAllocation;
             OpsPageViews.Perks(view, tiles);
             FrontMirror fm = manager.FrontMirror;

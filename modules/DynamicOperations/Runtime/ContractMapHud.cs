@@ -8,27 +8,18 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 {
-    /// <summary>
-    /// The map half of the contract HUD: accepted contracts drawn as vanilla-style objective
-    /// markers on the maximized tactical map, parented to the map image so they pan and zoom
-    /// with it. Every visual fact is read from the game's own marker prefab, so the tags look
-    /// like the objectives beside them. Vanilla's marker and overlay objects are not involved
-    /// and are not modified.
-    /// </summary>
+    /// <summary>Offered and accepted tasks on the native map, using host-permitted fixes
+    /// and the shared relief projection. Passive annotations; native clicks remain authoritative.</summary>
+    [DefaultExecutionOrder(101)] // After the map commits the displayed relief pose.
     internal sealed class ContractMapHud : MonoBehaviour, ISceneService
     {
         private const int MaxTags = OperationBoard.MaximumCards;
         private const float ContentSeconds = 0.5f;
-        private const float MinimumRingPixels = 24f;
-        private const float RingAlpha = 0.35f;
 
         private OperationsManager manager;
         private GameObject root;
         private RectTransform rootRect;
         private ContractMapTag[] tags;
-        private VanillaHudStyle.MapStyle style;
-        private Sprite ringSprite;
-        private bool warned;
         private readonly ContractCard[] cards = new ContractCard[MaxTags];
         private readonly Vector2[] positions = new Vector2[MaxTags];
         private readonly bool[] shown = new bool[MaxTags];
@@ -44,8 +35,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         public void ResetForScene()
         {
             if (root != null) Destroy(root);
-            root = null; rootRect = null; tags = null; ringSprite = null; style = default;
-            cardCount = 0; warned = false;
+            root = null; rootRect = null; tags = null;
+            cardCount = 0;
             nextContent = 0f;
             for (int i = 0; i < cards.Length; i++)
             {
@@ -112,7 +103,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             cardCount = 0;
             if (manager.IsFresh && views != null)
                 for (int i = 0; i < views.Count && cardCount < MaxTags; i++)
-                    if (ContractCard.TryRead(views[i], out ContractCard card)) cards[cardCount++] = card;
+                    if (ContractCard.TryRead(views[i], out ContractCard card, includeOffers: true)) cards[cardCount++] = card;
         }
 
         private void Render(DynamicMap map)
@@ -126,7 +117,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 return;
             }
 
-            bool projected = ModuleServices.TryGet(out IMapProjection projection);
+            bool projected = ModuleServices.TryGet(out IMapProjection projection) && projection.IsActive;
             for (int i = 0; i < tags.Length; i++)
             {
                 shown[i] = false;
@@ -135,35 +126,35 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                     tags[i].SetVisible(false);
                     continue;
                 }
-                shown[i] = true;
-                if (projected &&
-                    projection.TryProject(cards[i].X, cards[i].Z, out float x, out float y))
+                if (projected)
+                {
+                    shown[i] = projection.TryProject(cards[i].X, cards[i].Z, out float x, out float y);
                     positions[i] = new Vector2(x, y);
+                    if (!shown[i]) tags[i].SetVisible(false);
+                }
                 else
+                {
+                    shown[i] = true;
                     positions[i] = new Vector2(cards[i].X * factor, cards[i].Z * factor);
+                }
             }
 
-            float inverse = 1f / zoom;
-            VanillaHudStyle.Palette colours = VanillaHudStyle.Colours;
+            float screenScale = Mathf.Abs(rootRect.lossyScale.x);
+            if (!float.IsFinite(screenScale) || screenScale < .001f) { Hide(); return; }
+            float inverse = 1f / screenScale;
             for (int i = 0; i < tags.Length; i++)
             {
                 if (!shown[i]) continue;
-                ContractCard card = cards[i];
-
-                bool caution = card.Tone == MarkerTone.Caution;
                 ContractMapTag tag = tags[i];
                 tag.SetVisible(true);
-                tag.Place(positions[i].x, positions[i].y, inverse, zoom);
-                tag.Apply(card, style, caution ? colours.Warning : style.LabelColour);
-
-                Color colour = caution ? colours.Warning : colours.AllClear;
-                // The relief pins the native sheet at zoom 1, so a flat diameter would keep one pixel size at every relief zoom
-                // and orbit: ask the projection how far the radius spans on screen; a flat map answers false and keeps the flat maths.
-                float diameter = projected && projection.TryScale(card.X, card.Z, card.Radius, out float units)
-                    ? 2f * units
-                    : 2f * card.Radius * factor;
-                tag.SetRing(card.Radius > 0f && ringSprite != null && diameter * zoom >= MinimumRingPixels,
-                    diameter, new Color(colour.r, colour.g, colour.b, RingAlpha));
+                tag.Place(positions[i].x, positions[i].y, inverse, screenScale);
+                float lift = 0f;
+                for (int j = 0; j < i; j++)
+                    if (shown[j] && Mathf.Abs(positions[i].x-positions[j].x)*screenScale < 230f &&
+                        Mathf.Abs(positions[i].y-positions[j].y)*screenScale < 60f)
+                        lift += 58f;
+                tag.Apply(cards[i], lift);
+                tag.SetRing(cards[i], map, projected ? projection : null, positions[i], screenScale);
             }
         }
 
@@ -173,25 +164,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             for (int i = 0; i < tags.Length; i++) tags[i].SetVisible(false);
         }
 
-        /// <summary>
-        /// Build the tag pool from the game's own marker style. Fails closed: when vanilla's
-        /// map style cannot be read, nothing is built and the layer stays hidden.
-        /// </summary>
         private bool Build()
         {
-            if (!VanillaHudStyle.TryMap(out VanillaHudStyle.MapStyle mapStyle))
-            {
-                if (!warned)
-                {
-                    warned = true;
-                    Plugin.Logger?.LogWarning("[Operations] Vanilla map marker style unavailable; contract map markers stay hidden this scene.");
-                }
-                return false;
-            }
-
-            style = mapStyle;
-            ringSprite = mapStyle.Ring;
-
             root = new GameObject("Boscali Contract Map Layer", typeof(RectTransform));
             rootRect = (RectTransform)root.transform;
             rootRect.SetParent(transform, false);
@@ -201,7 +175,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 
             tags = new ContractMapTag[MaxTags];
             for (int i = 0; i < tags.Length; i++)
-                tags[i] = new ContractMapTag(rootRect, "Contract " + i, style, ringSprite);
+                tags[i] = new ContractMapTag(rootRect, "Contract " + i);
             return true;
         }
     }

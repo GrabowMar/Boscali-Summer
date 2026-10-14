@@ -54,6 +54,10 @@ namespace BoscaliSummer.Tests.Features.DynamicOperations
         {
             TestAssert.That(!ContractCard.TryRead(null, out _), "a missing view is not a card");
             TestAssert.That(!ContractCard.TryRead(View(active: false), out _), "an offered contract is not drawn");
+            TestAssert.That(ContractCard.TryRead(View(active: false), out ContractCard offer, includeOffers: true) &&
+                offer.IsOffered && offer.HasMarker, "map offers retain the host-permitted location without becoming HUD work");
+            TestAssert.That(ContractCard.TryRead(View(active: false, x: float.NaN), out ContractCard unknown, includeOffers: true) &&
+                !unknown.HasMarker, "an offer with invalid coordinates does not become a map origin fix");
 
             TestAssert.That(ContractCard.TryRead(View(active: true), out ContractCard card), "an active contract reads");
             TestAssert.That(card.Family == "RECON", "the family comes from the wire title: " + card.Family);

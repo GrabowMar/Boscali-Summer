@@ -514,7 +514,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         {
             int n = sets.Length;
             var names = new string[n];
-            var pairs = new string[n];
             var withPrev = new bool[n];
             var pylons = new int[n];
             var precludes = new int[n][];
@@ -522,14 +521,13 @@ namespace BoscaliSummer.Modules.Wing.Domain
             {
                 HardpointSet set = sets[i];
                 names[i] = set?.name;
-                pairs[i] = set?.SymmetryName;
                 withPrev[i] = set != null && set.SymmetryWithPrev;
                 pylons[i] = set?.hardpoints != null ? set.hardpoints.Count : 0;
                 List<byte> p = set?.precludingHardpointSets;
                 precludes[i] = new int[p != null ? p.Count : 0];
                 for (int j = 0; j < precludes[i].Length; j++) precludes[i][j] = p[j];
             }
-            return new StationLayout(names, pairs, withPrev, pylons, precludes);
+            return new StationLayout(names, withPrev, pylons, precludes);
         }
 
         /// <summary>Log unreadable role data once per airframe and offer its standard fit.</summary>

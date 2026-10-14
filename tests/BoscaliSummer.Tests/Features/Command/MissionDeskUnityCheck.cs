@@ -204,7 +204,7 @@ public static class MissionDeskUnityCheck
 
     private static object Card(State state, int id, bool lastKnown = false)
     {
-        bool complete = state == State.Completed, offered = state == State.Offered, known = state != State.Lost && !complete && !offered;
+        bool complete = state == State.Completed, offered = state == State.Offered, known = state != State.Lost && !complete;
         object[] values = { id, state == State.Long ? "COVER THE EASTERN LOGISTICS REPLENISHMENT CORRIDOR" : "COVER THE SUPPLY RUN",
             "Cover the munitions truck while it reaches friendly units. Hold nearby for sixty seconds, then wait for a confirmed ammunition transfer.",
             state == State.Long ? "Eastern Forward Logistics / Emergency Munitions Carrier" : "HLT Munitions Truck",
@@ -228,18 +228,18 @@ public static class MissionDeskUnityCheck
             phases.SetValue(Activator.CreateInstance(phase, All, null, new object[] { (byte)(i + 1), names[i], conditions[i], EnumValue("ObjectivePhaseStatus", status), i == 1 ? .55f : status == "Done" ? 1f : 0f }, null), i);
         }
         return Activator.CreateInstance(assembly.GetType(Contracts + "ObjectiveTasking", true), All, null, new object[] {
-            EnumValue("ObjectiveFamily", "Logistics"), EnumValue("ObjectiveAsset", "GroundVehicle"), EnumValue("ObjectiveContact", state == State.Lost ? "Lost" : state == State.Offered || state == State.Completed ? "Unavailable" : lastKnown ? "LastKnown" : "Known"), state == State.Lost ? 26f : lastKnown ? 20f : 0f,
+            EnumValue("ObjectiveFamily", "Logistics"), EnumValue("ObjectiveAsset", "GroundVehicle"), EnumValue("ObjectiveContact", state == State.Lost ? "Lost" : state == State.Completed ? "Unavailable" : lastKnown ? "LastKnown" : "Known"), state == State.Lost ? 26f : lastKnown ? 20f : 0f,
             state == State.Completed ? "Ammunition transfer confirmed." : state == State.Offered ? "Accept and join the supply truck." : state == State.Lost || lastKnown ? "Reacquire the supply truck." : "Cover the supply truck.",
             state == State.Lost ? "Position is unconfirmed." : "", "Keep the eastern line supplied.", phases,
             EnumValue("ObjectiveLifecycle", state == State.Offered ? "Offered" : state == State.Completed ? "Completed" : "Active"),
-            "Ends the sortie without an award.", EnumValue("ObjectiveAllegiance", "Friendly") }, null);
+            "Ends the sortie without an award.", EnumValue("ObjectiveAllegiance", "Friendly"), -1 }, null);
     }
     private static object EnumValue(string type, string value) => Enum.Parse(assembly.GetType(Contracts + type, true), value);
     private static void AssertPlot(object tasking, State state)
     {
         object plot = tasking.GetType().GetProperty("Plot", All).GetValue(tasking);
-        bool permitted = state == State.Active || state == State.Long;
-        Check((bool)plot.GetType().GetProperty("HasPlottedContact", All).GetValue(plot) == permitted, "Only fresh accepted permitted coordinates get a task contact.");
+        bool permitted = state == State.Active || state == State.Long || state == State.Offered;
+        Check((bool)plot.GetType().GetProperty("HasPlottedContact", All).GetValue(plot) == permitted, "Only fresh offered or accepted permitted coordinates get a task contact.");
         Check((bool)plot.GetType().GetProperty("HasBearing", All).GetValue(plot) == permitted, "Only a permitted contact gets an ownship bearing.");
         if (state == State.Stale) Check(((TMP_Text)Field(plot, "caption")).text.Contains("STALE"), "Stale host position is explicitly withheld.");
         if (state == State.Unknown)

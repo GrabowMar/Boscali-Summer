@@ -19,6 +19,17 @@ namespace BoscaliSummer.Core.Game
         /// <summary>The mission whose start prompt is still unanswered; null when there is nothing to ask.</summary>
         internal static string PendingMission { get; private set; }
 
+        /// <summary>Read the native mission on both host and client; do not rewrite the player's module/settings choices.</summary>
+        internal static bool FortificationsAllowed
+        {
+            get
+            {
+                Mission mission = MissionManager.CurrentMission;
+                return mission != null && !ReferenceEquals(mission, Mission.NullMission) &&
+                    MissionProfile.AllowsFortifications(mission.Name);
+            }
+        }
+
         /// <summary>Picker groups to add to the game's mission list (the scripted missions). Asked whenever the game reads its list.</summary>
         internal static Func<IReadOnlyList<MissionGroup>> ExtraGroups;
 

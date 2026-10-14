@@ -40,7 +40,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                 case FrontOutcome.UplinksMax: return "UPLINKS AT MAX";
                 case FrontOutcome.NeedsCyber3: return "NEEDS CYBER READINESS 3";
                 case FrontOutcome.DataCentersMax: return "DATA CENTERS AT MAX";
-                case FrontOutcome.TrucksMax: return "TRUCKS AT MAX";
+                case FrontOutcome.TrucksMax: return "EW TRUCK LIMIT: 2";
                 case FrontOutcome.TeamCap: return "TEAM CAP REACHED";
                 case FrontOutcome.CampsMax: return "CAMPS AT MAX";
                 case FrontOutcome.NoHeldBuilding: return "HOLD A BUILDING FIRST";

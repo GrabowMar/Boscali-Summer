@@ -83,7 +83,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static readonly List<Mesh> meshes = new List<Mesh>(18);
         private static readonly List<MeshCollider> colliders = new List<MeshCollider>(17);
         private static readonly List<MeshRenderer> controlRenderers = new List<MeshRenderer>(16);
-        private static readonly List<MeshRenderer> threatRenderers = new List<MeshRenderer>(16);
         private static readonly Dictionary<GameObject, bool> nativeGrid = new Dictionary<GameObject, bool>();
         private static readonly HashSet<GameObject> otherLabels = new HashSet<GameObject>();
         private sealed class StemMark { internal Image Line, Foot; }
@@ -188,7 +187,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static Material groundMaterial;
         private static Material controlMaterial;
         private static Material seaControlMaterial;
-        private static Material threatMaterial;
         private static Material gridMaterial;
         private static readonly Color32 MinorGrid = new Color32(54, 128, 140, 41);
         private static readonly Color32 MajorGrid = new Color32(77, 158, 173, 77);
@@ -202,8 +200,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static Image nativeImage;
         private static RawImage controlImage;
         private static bool controlWasEnabled;
-        private static RawImage threatImage;
-        private static bool threatWasEnabled;
         private static readonly ReliefRig rig = new ReliefRig();
         private static int viewRevision;
         private static int hoveredStackCount;
@@ -688,8 +684,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // raster at its own strength, as the flat map does (the plane was .32); the hue is untouched (red/blue colour-blind safety).
             // The relief harness measured the sweep .32 / .60 / .80 / 1 and gates the contrast.
             seaControlMaterial = FieldMaterial(shader, 1f, 3101);
-            threatMaterial = new Material(shader) { color = Color.white.WithAlpha(.35f) };
-            threatMaterial.renderQueue = 3110;
             gridMaterial = new Material(shader) { mainTexture = Texture2D.whiteTexture,
                 color = Color.white };
 
@@ -707,7 +701,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 collider.sharedMesh = mesh;
                 colliders.Add(collider);
                 controlRenderers.Add(AddFieldTile(mesh, "Control", controlMaterial, 0.12f));
-                threatRenderers.Add(AddFieldTile(mesh, "Threat", threatMaterial, 0.22f));
             }
 
             Mesh grid = MakeGroundGrid();
@@ -742,10 +735,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             seaCollider.sharedMesh = water;
             colliders.Add(seaCollider);
             // The old heightfield includes encoded seabed. Keep its baked colors off the
-            // water, but draw the control and threat fields at sea level as well as on land.
+            // water, but draw the control field at sea level as well as on land.
             // Opaque land depth hides these flat field planes wherever terrain rises above them.
             controlRenderers.Add(AddFieldTile(water, "ControlSea", seaControlMaterial, .05f));
-            threatRenderers.Add(AddFieldTile(water, "ThreatSea", threatMaterial, .07f));
 
             var cameraObject = new GameObject("Camera", typeof(Camera));
             cameraObject.transform.SetParent(sceneRoot.transform, false);
@@ -1862,23 +1854,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 seaControlMaterial.mainTexture = controlImage.texture;
             }
             if (controlImage != null && controlImage.enabled) controlImage.enabled = false;
-
-            if (threatImage == null)
-            {
-                Transform child = owner.mapImage.transform.Find("BoscaliThreatHeat");
-                if (child != null)
-                {
-                    threatImage = child.GetComponent<RawImage>();
-                    if (threatImage != null) threatWasEnabled = threatImage.enabled;
-                }
-            }
-            bool threatOn = threatImage != null && threatImage.texture != null &&
-                threatImage.gameObject.activeInHierarchy && Plugin.Settings.Command.ThreatHeat.Value;
-            foreach (MeshRenderer renderer in threatRenderers)
-                if (renderer.enabled != threatOn) { renderer.enabled = threatOn; nextRender = 0f; }
-            if (threatOn && threatMaterial.mainTexture != threatImage.texture)
-                threatMaterial.mainTexture = threatImage.texture;
-            if (threatImage != null && threatImage.enabled) threatImage.enabled = false;
         }
 
         internal static void Restore()
@@ -1960,10 +1935,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 controlImage.enabled = controlWasEnabled &&
                     (Plugin.Settings?.Command?.FrontlinesOverlay?.Value ?? false);
             controlImage = null;
-            if (threatImage != null)
-                threatImage.enabled = threatWasEnabled &&
-                    (Plugin.Settings?.Command?.ThreatHeat?.Value ?? false);
-            threatImage = null;
             if (nativeImage != null)
             {
                 Color color = nativeImage.color;
@@ -1983,14 +1954,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             meshes.Clear();
             colliders.Clear();
             controlRenderers.Clear();
-            threatRenderers.Clear();
             if (groundMaterial != null) Object.Destroy(groundMaterial);
             if (controlMaterial != null) Object.Destroy(controlMaterial);
             if (seaControlMaterial != null) Object.Destroy(seaControlMaterial);
-            if (threatMaterial != null) Object.Destroy(threatMaterial);
             if (gridMaterial != null) Object.Destroy(gridMaterial);
             if (waterMaterial != null) Object.Destroy(waterMaterial);
-            groundMaterial = controlMaterial = seaControlMaterial = threatMaterial = gridMaterial = waterMaterial = null;
+            groundMaterial = controlMaterial = seaControlMaterial = gridMaterial = waterMaterial = null;
             if (texture != null) { texture.Release(); Object.Destroy(texture); }
             texture = null;
             renderRequest.destination = null;

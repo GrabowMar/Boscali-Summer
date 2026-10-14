@@ -5,7 +5,7 @@ using UnityEngine;
 using BoscaliSummer.Modules.Wing.Domain;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    // LOADOUT's HARDPOINTS: a station map beside the station table (a station is one row everywhere, a pair counts once, only ✕ empties
+    // LOADOUT's HARDPOINTS: a station map beside the station table (each side of a pair has its own row, only ✕ empties
     // one, a blocked station names what blocks it), and the store picker kept open below for the selected station.
     internal sealed partial class WmcLoadout
     {
@@ -19,6 +19,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private bool hpResetPending;
         private readonly List<WingLoadoutCatalog.StoreOption> stores = new List<WingLoadoutCatalog.StoreOption>();
         private readonly List<int> pylonCounts = new List<int>();
+        private readonly List<bool> mirroredStations = new List<bool>();
 
         private void BuildHardpoints(AvFlow f)
         {
@@ -48,8 +49,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 hpBoard.SetPage(0);
             }
             pylonCounts.Clear();
-            for (int st = 0; st < n; st++) pylonCounts.Add(layout.PylonsOf(st));
-            hpBoard.SetStations(n, pylonCounts);
+            mirroredStations.Clear();
+            for (int st = 0; st < n; st++)
+            {
+                pylonCounts.Add(layout.PylonsOf(st));
+                mirroredStations.Add(layout.MirrorsPrevious(st));
+            }
+            hpBoard.SetStations(n, pylonCounts, mirroredStations);
             // The selection: kept while it exists, else the first station that takes a store.
             if (selStation < 0 || selStation >= n)
             {

@@ -167,9 +167,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         private void FailFeed(Exception e, float wall)
         {
-            failedUntil = wall + 2f; // latch: a flag alone would be re-set by the next refresh
+            failedUntil = wall + 2f; // back off for a moment, then the dirty retry below runs
             Plugin.Logger?.LogError("SPACE feed refresh failed: " + e);
-            visible = false;
+            dirty = true; // stay visible: the failedUntil backoff above retries instead of killing the feed until reopen
         }
 
         /// <summary>A faction change clears the old mirror and draft before anything repaints.</summary>

@@ -240,7 +240,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                         case FilterAvailable:
                             return "NO OFFERS ON THE BOARD\nContracts are drawn from the live battlefield as the front moves.";
                         case FilterActive:
-                            return "NO ACCEPTED CONTRACTS\nAccept an offer to place its marker on the map.";
+                            return "NO ACCEPTED CONTRACTS\nReview the offered locations on the map, then accept a task.";
                         default:
                             return "NO CLOSED CONTRACTS\nCompleted and lapsed contracts stay listed for a short while.";
                     }

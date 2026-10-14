@@ -178,7 +178,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // The missile feed: a camera on the last own weapon in the air, every frame (its pose must follow the weapon), wherever the HUD is up; riding a missile the screen is the feed already.
             CombatHUD nativeHud = SceneSingleton<CombatHUD>.i;
             bool hudUp = nativeHud != null && nativeHud.iconLayer != null && nativeHud.iconLayer.gameObject.activeInHierarchy;
-            missileFeed.Tick(missileTracker.Missiles, hudUp && !viewingMissile, Time.unscaledTime);
+            missileFeed.Tick(missileTracker.Missiles, (settings?.PageMissileCam.Value ?? options.PageMissileCam) && hudUp && !viewingMissile, Time.unscaledTime);
             if (!thirdPerson)
             {
                 // The feed's card stays in the cockpit; the flight boxes around it go the same frame third person ends (the read below runs now).

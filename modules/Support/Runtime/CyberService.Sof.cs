@@ -8,7 +8,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
     internal sealed partial class CyberService
     {
         /// <summary>The mod's own EW truck and data center units, so the SOF ground list does not count them twice.</summary>
-        internal bool IsAnchorUnit(Unit unit) => spawner.Owns(unit);
+        internal bool IsAnchorUnit(Unit unit)
+        {
+            if (spawner.Owns(unit)) return true;
+            if (unit == null) return false;
+            foreach (var pair in factions)
+                if (pair.Key == unit.NetworkHQ)
+                    foreach (AnchorSlot slot in pair.Value.Slots)
+                        if (slot.Unit == unit) return true;
+            return false;
+        }
 
         /// <summary>The faction holds a node within <paramref name="metres"/> of the point (the +15 % CYBER ring boost on a SOF mission).</summary>
         internal bool HoldsNodeNear(FactionHQ owner, float x, float z, float metres)

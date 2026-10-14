@@ -77,7 +77,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private bool NorthUp => NorthOverride ?? settings.HoloNorthUp.Value;
 
         /// <summary>The TAC MAP is on HOLO: the corner map is the standing MINI. CLASSIC leaves the game's own corner map alone.</summary>
-        private bool MiniOn => (TacOverride ?? settings.TacMap.Value) == TacMapMode.Holo;
+        private bool MiniOn => settings.HoloMap.Value && (TacOverride ?? settings.TacMap.Value) == TacMapMode.Holo;
 
         internal void Configure(CommandSettings value)
         {

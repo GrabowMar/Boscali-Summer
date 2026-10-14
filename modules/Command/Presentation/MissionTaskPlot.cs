@@ -180,7 +180,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             }
 
             ObjectiveContact quality = entry?.Tasking?.Contact ?? ObjectiveContact.Known;
-            bool known = fresh && entry != null && entry.IsActive && entry.HasMarker &&
+            bool known = fresh && entry != null && (entry.IsActive || entry.IsOffered) && entry.HasMarker &&
                 quality != ObjectiveContact.Lost && quality != ObjectiveContact.Unavailable &&
                 InTheater(entry.X, entry.Z);
             bool lastKnown = known && quality == ObjectiveContact.LastKnown;
@@ -257,7 +257,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             if (!plotted)
             {
                 notice.text = !fresh ? "HOST REPORT STALE\nTask position is withheld." : entry == null ? "SELECT A TASK" :
-                    entry.IsOffered ? "LOCATION AVAILABLE AFTER ACCEPTANCE" : !entry.IsActive ? "TASK CLOSED / NO ACTIVE FIX" : "CONTACT LOST / NO CURRENT FIX";
+                    entry.IsOffered ? "OFFER / POSITION NOT REPORTED" : !entry.IsActive ? "TASK CLOSED / NO ACTIVE FIX" : "CONTACT LOST / NO CURRENT FIX";
                 AvLay.Place(notice.rectTransform, 12f, Mathf.Max(0f, h*.5f-22f), w-24f, 44f);
             }
             caption.text = PlotCaption(plotted, ownship, lastKnown);

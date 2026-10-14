@@ -21,6 +21,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         public readonly string NextAction;
         public readonly string Blocker;
         public readonly string PhaseTitle;
+        public readonly bool IsOffered;
+        public readonly bool LastKnown;
         private readonly string titleLine;
 
         /// <summary>The host could mark a position for it; a lost contact cannot be drawn.</summary>
@@ -29,6 +31,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         private ContractCard(SecondaryObjectiveView view)
         {
             Id = view.Id;
+            IsOffered = view.IsOffered;
+            LastKnown = view.Tasking?.Contact == ObjectiveContact.LastKnown;
             Title = string.IsNullOrEmpty(view.Title) ? "SECONDARY OBJECTIVE" : view.Title;
             Family = OperationTitles.FamilyFor(view.Title);
             Status = view.Status ?? string.Empty;
@@ -45,10 +49,10 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
             titleLine = OperationMarkerCopy.Title(Id, Title);
         }
 
-        public static bool TryRead(SecondaryObjectiveView view, out ContractCard card)
+        public static bool TryRead(SecondaryObjectiveView view, out ContractCard card, bool includeOffers = false)
         {
             card = default;
-            if (view == null || !view.IsActive) return false;
+            if (view == null || !(view.IsActive || includeOffers && view.IsOffered)) return false;
             card = new ContractCard(view);
             return true;
         }

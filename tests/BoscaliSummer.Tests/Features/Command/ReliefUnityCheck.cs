@@ -72,10 +72,6 @@ public static class ReliefUnityCheck
                 .GetComponent<RawImage>();
             control.transform.SetParent(image.transform, false);
             control.texture = MakeControl();
-            var threat = new GameObject("BoscaliThreatHeat", typeof(RectTransform), typeof(RawImage))
-                .GetComponent<RawImage>();
-            threat.transform.SetParent(image.transform, false);
-            threat.texture = MakeThreat();
             var map = new GameObject("DynamicMap", typeof(DynamicMap)).GetComponent<DynamicMap>();
             map.mapImage = image;
             map.iconLayer = image;
@@ -131,7 +127,7 @@ public static class ReliefUnityCheck
             MfdTerrainRelief.Tick();
             AssertViewportTerrain(map, "zoom restored");
             if (flatLabels.activeSelf) throw new Exception("Flat coordinates remained on oblique terrain.");
-            if (control.enabled || threat.enabled)
+            if (control.enabled)
                 throw new Exception("A flat tactical field remained over the model.");
             if (!MfdTerrainRelief.TryProject(0f, 0f, ((RectTransform)image.transform).rect, out Vector2 center))
                 throw new Exception("Terrain projection unavailable.");
@@ -345,7 +341,7 @@ public static class ReliefUnityCheck
             close.Apply();
             File.WriteAllBytes("terrain-close-preview.png", close.EncodeToPNG());
             MfdTerrainRelief.Restore();
-            if (!control.enabled || !threat.enabled || !flatLabels.activeSelf ||
+            if (!control.enabled || !flatLabels.activeSelf ||
                 !secondTrack.iconImage.enabled || MfdTerrainRelief.IsDrawing)
                 throw new Exception("Closing the terrain model did not restore native overlay state.");
             if (Vector2.Distance(cachedTrack.iconImage.transform.localPosition,
@@ -1044,22 +1040,6 @@ public static class ReliefUnityCheck
         return texture;
     }
 
-    private static Texture2D MakeThreat()
-    {
-        const int side = 128;
-        var texture = new Texture2D(side, side, TextureFormat.RGBA32, false);
-        var pixels = new Color32[side * side];
-        for (int z = 0; z < side; z++)
-        for (int x = 0; x < side; x++)
-        {
-            float dx = (x - 86f) / 18f, dz = (z - 57f) / 18f;
-            float ring = Mathf.Abs(dx * dx + dz * dz - 1f);
-            byte alpha = (byte)Mathf.Clamp((0.18f - ring) * 140f, 0f, 35f);
-            pixels[z * side + x] = new Color32(240, 138, 55, alpha);
-        }
-        texture.SetPixels32(pixels);
-        texture.Apply();
-        return texture;
-    }
+
 }
 #endif
