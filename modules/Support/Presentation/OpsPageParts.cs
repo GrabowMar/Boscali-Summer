@@ -122,8 +122,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             painted = true;
             Color tone = FrontKit.Tone(c.Tone);
             rail.color = c.Known ? AvInk.State(c.Tone) : AvInk.Frame;
-            FrontKit.Set(readiness, "R" + c.Readiness, AvInk.Ink);
-            for (int i = 0; i < pips.Length; i++) pips[i].color = i < c.Readiness ? AvInk.Select : AvInk.Frame.WithAlpha(0.45f);
+            FrontKit.Set(readiness, c.Known ? "R" + c.Readiness : "\u2014", AvInk.Ink);
+            for (int i = 0; i < pips.Length; i++) pips[i].color = c.Known && i < c.Readiness ? AvInk.Select : AvInk.Frame.WithAlpha(0.45f);
 
             float barX = 12f + LabelW, barW = supWell.rectTransform.rect.width, half = barW * 0.5f, len = Mathf.Abs(c.Superiority) / 100f * half;
             supFill.color = AvInk.State(c.Tone).WithAlpha(c.Known ? 0.85f : 0f);
@@ -160,15 +160,19 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private float width = 458f;
 
         public PerkRowPart(RectTransform parent, Action<SupportActionId> press, SupportActionId id)
+            : this(parent, () => press?.Invoke(id), "Perk " + id) { }
+
+        /// <summary>A row whose press is not a perk (a TASKED post): the caller decides what the press means.</summary>
+        public PerkRowPart(RectTransform parent, Action press, string objectName)
         {
-            Rect = AvLay.Child(parent, "Perk " + id);
+            Rect = AvLay.Child(parent, objectName);
             back = FrontKit.Panel(Rect, "Back", 0f, 0f, width, Height);
             rail = FrontKit.Solid(Rect, "Rail", 0f, 0f, 3f, Height, Color.clear);
             name = FrontKit.Mono(Rect, "Name", 12f, 0f, 128f, Height, 12f, TextAlignmentOptions.MidlineLeft, true);
             rung = FrontKit.Mono(Rect, "Rung", 142f, 0f, 66f, Height, 10.5f, TextAlignmentOptions.MidlineLeft);
             price = FrontKit.Mono(Rect, "Price", 210f, 0f, 60f, Height, 10.5f, TextAlignmentOptions.MidlineLeft);
             state = FrontKit.Mono(Rect, "State", 272f, 0f, 120f, Height, 10.5f, TextAlignmentOptions.MidlineLeft, true);
-            button = AvControl.Make(Rect, new AvControl.Spec("ARM", () => press?.Invoke(id), AvButtonStyle.Primary));
+            button = AvControl.Make(Rect, new AvControl.Spec("ARM", () => press?.Invoke(), AvButtonStyle.Primary));
             button.SingleLine();
             Layout(width);
             Restyle();

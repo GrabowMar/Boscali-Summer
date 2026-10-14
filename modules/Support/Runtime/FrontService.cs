@@ -237,8 +237,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             if (cyber != null && cyber.TryDesk(hq, out CyberDesk cd))
             {
-                w.DataCenters = cd.Anchors.LiveCount(AnchorKind.DataCenter); w.DataCenterMax = cd.Anchors.Count(AnchorKind.DataCenter);
-                w.Trucks = cd.Anchors.LiveCount(AnchorKind.EwTruck); w.TruckMax = cd.Anchors.Count(AnchorKind.EwTruck);
+                w.DataCenters = cd.Anchors.LiveCount(AnchorKind.DataCenter); w.DataCenterMax = AnchorRules.MaxDataCenters;
+                w.Trucks = cd.Anchors.LiveCount(AnchorKind.EwTruck); w.TruckMax = AnchorRules.MaxTrucks;
                 s.AnchorsLive = w.DataCenters + w.Trucks;
                 int held = 0; float trace = 0f;
                 foreach (CyberIntrusion x in cd.Network.Active) { held += x.HeldCount; trace = Mathf.Max(trace, x.Trace); }

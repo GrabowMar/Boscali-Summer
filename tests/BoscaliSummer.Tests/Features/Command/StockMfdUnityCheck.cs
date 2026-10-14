@@ -148,8 +148,8 @@ public static class StockMfdUnityCheck
         {
             Grid(presenter, "layers", new[] { "OBJECTIVES", "TARGET DETAILS", "JAMMING", "GRID LABELS", "PILOTS", "AIRBASES" },
                 new[] { "Mission markers", "Target markers", "Jam indicators", "Grid coordinates", "Pilot icons", "Base icons" });
-            Grid(presenter, "overlays", new[] { "CONTROL FIELD", "FRONT LINE", "SENSOR CONTOURS", "SATELLITE MAP" },
-                new[] { "Sector control", "Control boundary", "Sensor coverage", "Terrain imagery" });
+            Grid(presenter, "overlays", new[] { "CONTROL FIELD", "FRONT LINE", "INDUSTRY", "SUPPLY ROUTES" },
+                new[] { "Sector control", "Control boundary", "Factories, depots, ammo dumps", "Depot lines and trucks" });
             Grid(presenter, "hover", new[] { "OFF", "UNIT INFO", "AMMUNITION", "ORDERS" },
                 new[] { "No hover tooltip", "Unit information", "Weapon and ammunition", "Current unit orders" }, true);
             Grid(presenter, "sizes", new[] { "SMALL 60%", "MEDIUM 80%", "LARGE 100%" }, new[] { "COMPACT", "BALANCED", "FULL SIZE" }, true);

@@ -371,6 +371,68 @@
       "args": {}
     },
     {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Open",
+      "store": "tasked",
+      "args": {
+        "tab": 3
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "tasked_state",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "tasked"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "cruise",
+      "args": {
+        "verb": "cruise"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "cruise_state",
+      "args": {}
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "steer",
+      "args": {
+        "verb": "steer"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "after_steer",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "tasked_steer"
+    },
+    {
       "op": "end"
     }
   ],
@@ -472,6 +534,26 @@
       "check": "result_below",
       "path": "after_rod.rodTargetAlive",
       "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "tasked_state.tab",
+      "min": 2.5
+    },
+    {
+      "check": "result_above",
+      "path": "tasked_state.taskedRows",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "cruise_state.cruiseFlying",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "after_steer.cruiseLegs",
+      "min": 0.5
     }
   ]
 }

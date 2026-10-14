@@ -20,7 +20,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             CallsPanel panel = Find<CallsPanel>();
             if (panel == null) return Fail("Open", "no OPS panel in this scene");
-            panel.OpenForAutomation((OpsTab)Mathf.Clamp((int)Number(args, "tab", 1f), 1, 2));
+            panel.OpenForAutomation((OpsTab)Mathf.Clamp((int)Number(args, "tab", 1f), 1, 3));
             return Readout(null);
         }
 
@@ -85,6 +85,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
                         request = post;
                     }
                     break;
+                case "cruise": // 20 km off the nose: the scan's contacts are long gone by this point of the run
+                    if (GameManager.GetLocalAircraft(out Aircraft ac) && ac != null)
+                        request = m.RequestAt(SupportActionId.Cruise, (ac.transform.position + ac.transform.forward * 20000f).ToGlobalPosition());
+                    break;
+                case "steer": request = Steer(m) ? 1 : 0; break;
                 default: return Fail("Verb", "unknown verb '" + verb + "'");
             }
             Dictionary<string, object> r = Readout(m);
@@ -134,6 +139,18 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return true;
         }
 
+        /// <summary>STEER on the TASKED tab, then the armed map pick 5 km off the nose, as the right-click would.</summary>
+        private static bool Steer(SupportManager m)
+        {
+            CallsController calls = Find<CallsController>();
+            if (calls == null || !GameManager.GetLocalAircraft(out Aircraft own) || own == null) return false;
+            calls.SteerCruise();
+            var pick = typeof(SupportManager).GetField("localPick", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(m) as System.Action<GlobalPosition>;
+            if (pick == null) return false;
+            pick((own.transform.position + own.transform.forward * 5000f).ToGlobalPosition());
+            return true;
+        }
+
         public static Dictionary<string, object> Read(Dictionary<string, object> args) => Readout(null);
 
         private static Dictionary<string, object> Readout(SupportManager m)
@@ -153,6 +170,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 r["perksTotal"] = pv.PerksTotal;
                 r["frontsAhead"] = pv.FrontsAhead;
                 r["alerts"] = pv.Alerts;
+                r["taskedRows"] = pv.Tasked.Count;
                 var cards = new List<object>(3);
                 foreach (FrontCardView c in pv.Cards)
                     cards.Add(new Dictionary<string, object> { { "front", (int)c.Front }, { "readiness", c.Readiness }, { "superiority", c.Superiority }, { "directive", c.Directive }, { "building", c.Building }, { "alert", c.Alert } });
@@ -207,6 +225,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             r["spaceContacts"] = m.SpaceMirror.State.Contacts.Count;
             r["spaceMarks"] = m.SpaceMirror.State.Marks.Count;
             r["spacePosts"] = m.SpaceMirror.State.Posts.Count;
+            r["cruiseFlying"] = m.TryFlyingCruise(out _, out int cruiseLegs) ? 1 : 0;
+            r["cruiseLegs"] = cruiseLegs;
             return r;
         }
 

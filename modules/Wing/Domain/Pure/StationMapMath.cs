@@ -17,25 +17,30 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
         /// <summary>The boxes for <paramref name="pylons"/> (pylon count per station). A pair makes two boxes (right first, then its
         /// mirror), so the result is at most <c>2 × pylons.Length</c> long. Boxes closer than <paramref name="minDist"/> are pushed
         /// aft until clear, within the map's half height.</summary>
-        public static int Spots(int[] pylons, float halfW, float halfH, float minDist, Spot[] into)
+        public static int Spots(int[] pylons, float halfW, float halfH, float minDist, Spot[] into, bool[] withPrev = null)
         {
             if (pylons == null || into == null) return 0;
             int wings = 0, centre = 0;
-            foreach (int p in pylons)
-                if (p >= 2) wings++;
+            for (int s = 0; s < pylons.Length; s++)
+            {
+                if (Mirrors(withPrev, s)) continue;
+                if (pylons[s] >= 2 || Mirrors(withPrev, s + 1)) wings++;
                 else centre++;
+            }
             int n = 0, k = 0, j = 0;
             for (int s = 0; s < pylons.Length && n < into.Length; s++)
             {
-                if (pylons[s] >= 2)
+                bool splitPair = Mirrors(withPrev, s + 1);
+                if (pylons[s] >= 2 || splitPair)
                 {
                     float t = wings == 1 ? 0.5f : k / (float)(wings - 1);
                     k++;
                     float x = halfW * (0.30f + 0.62f * t), y = halfH * (0.02f + 0.26f * t);
                     y = Clear(into, n, x, y, halfH, minDist);
                     if (n + 1 >= into.Length) break;
-                    into[n++] = new Spot { Station = s, X = x, Y = y };
-                    into[n++] = new Spot { Station = s, X = -x, Y = y };
+                    into[n++] = new Spot { Station = s, X = splitPair ? -x : x, Y = y };
+                    into[n++] = new Spot { Station = splitPair ? s + 1 : s, X = splitPair ? x : -x, Y = y };
+                    if (splitPair) s++;
                 }
                 else
                 {
@@ -47,6 +52,8 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
             }
             return n;
         }
+
+        private static bool Mirrors(bool[] withPrev, int s) => withPrev != null && s > 0 && s < withPrev.Length && withPrev[s];
 
         private static float Clear(Spot[] placed, int count, float x, float y, float halfH, float minDist)
         {

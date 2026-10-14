@@ -178,7 +178,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // The missile feed: a camera on the last own weapon in the air, every frame (its pose must follow the weapon), wherever the HUD is up; riding a missile the screen is the feed already.
             CombatHUD nativeHud = SceneSingleton<CombatHUD>.i;
             bool hudUp = nativeHud != null && nativeHud.iconLayer != null && nativeHud.iconLayer.gameObject.activeInHierarchy;
-            missileFeed.Tick(missileTracker.Missiles, hudUp && !viewingMissile, Time.unscaledTime);
+            missileFeed.Tick(missileTracker.Missiles, (settings?.PageMissileCam.Value ?? options.PageMissileCam) && hudUp && !viewingMissile, Time.unscaledTime);
             if (!thirdPerson)
             {
                 // The feed's card stays in the cockpit; the flight boxes around it go the same frame third person ends (the read below runs now).
@@ -252,6 +252,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             // The cockpit already has its own native tac screen for this feed; the card only
             // earns its space in the external views this module can force the HUD into.
+            if (hudAircraft != null) TargetCamLook.Apply(hudAircraft.targetCam);      // the cockpit tac screen and the card share vanilla's camera
             Texture cameraTexture = null;
             string cameraCode = null;
             float range = float.NaN, closure = float.NaN;

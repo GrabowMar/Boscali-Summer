@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using BoscaliSummer.Core.Fx;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 
 namespace BoscaliSummer.Modules.Hud.Runtime
@@ -13,10 +14,12 @@ namespace BoscaliSummer.Modules.Hud.Runtime
     /// </summary>
     internal sealed class MissileFeedCamera
     {
-        private const int Width = 384, Height = 216;
-        private const float Fps = 20f, FieldOfView = 50f, HoldSeconds = 1.5f;
+        // A seeker video link, not a camera: a coarse point-filtered picture at a choppy rate, graded by its own post stack (Grade).
+        private const int Width = 160, Height = 90;
+        private const float Fps = 15f, FieldOfView = 40f, HoldSeconds = 1.5f;
 
         private Camera cam;
+        private VolumeStack stack;
         private RenderTexture picture;
         private Missile riding;
         private float nextFrame, lostAt = -1f;
@@ -42,17 +45,25 @@ namespace BoscaliSummer.Modules.Hud.Runtime
 
         public void Tick(IReadOnlyList<Missile> live, bool allowed, float now)
         {
+            if (!allowed)
+            {
+                if (cam != null) cam.enabled = false;
+                riding = null;
+                Texture = null;
+                lostAt = -1f;
+                return;
+            }
             // A camera enabled for one frame renders once; switch it off again afterwards.
             if (cam != null && cam.enabled && Time.frameCount > enabledFrame) cam.enabled = false;
 
             Missile last = null;
-            for (int i = live.Count - 1; allowed && last == null && i >= 0; i--)
+            for (int i = live.Count - 1; last == null && i >= 0; i--)
                 if (live[i] != null && !live[i].disabled) last = live[i];
 
             if (last == null)
             {
                 riding = null;
-                if (!allowed || Texture == null) { Texture = null; lostAt = -1f; }
+                if (Texture == null) { lostAt = -1f; }
                 else if (lostAt < 0f) lostAt = now;
                 else if (now - lostAt > HoldSeconds) { Texture = null; lostAt = -1f; }
                 return;
@@ -81,7 +92,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             if (refused) return false;
             if (picture == null)
             {
-                picture = new RenderTexture(Width, Height, 24, RenderTextureFormat.ARGB32) { name = "BoscaliMissileFeed" };
+                picture = new RenderTexture(Width, Height, 24, RenderTextureFormat.ARGB32) { name = "BoscaliMissileFeed", filterMode = FilterMode.Point };
                 picture.Create();
                 if (!FxRtPool.Own(picture))
                 {
@@ -110,11 +121,38 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             UniversalAdditionalCameraData data = cam.GetUniversalAdditionalCameraData();
             if (data != null)
             {
-                data.renderPostProcessing = false;
                 data.antialiasing = AntialiasingMode.None;
                 data.renderShadows = false;
+                // Our own volume stack, set by hand and never updated from the scene's volumes: the world's grade stays off this feed and this one off the world.
+                stack = VolumeManager.instance.CreateStack();
+                Grade(stack);
+                cam.SetVolumeFrameworkUpdateMode(VolumeFrameworkUpdateMode.ViaScripting);      // before the stack: switching the mode builds the camera a stack of its own
+                data.volumeStack = stack;
+                data.renderPostProcessing = true;
             }
             return true;
+        }
+
+        /// <summary>The seeker look: black and white, hard contrast, white-hot bloom, heavy coarse grain and a dark lens rim.</summary>
+        private static void Grade(VolumeStack s)
+        {
+            ColorAdjustments color = s.GetComponent<ColorAdjustments>();
+            color.saturation.value = -100f;
+            color.contrast.value = 25f;
+            color.postExposure.value = -0.2f;
+            Bloom bloom = s.GetComponent<Bloom>();
+            bloom.threshold.value = 0.95f;
+            bloom.intensity.value = 0.35f;
+            bloom.scatter.value = 0.6f;
+            FilmGrain grain = s.GetComponent<FilmGrain>();
+            grain.type.value = FilmGrainLookup.Custom;      // built-in lookups are stripped from the game (NRE in SetupGrain)
+            grain.texture.value = TargetCamLook.Noise();
+            grain.intensity.value = 0.5f;
+            grain.response.value = 0.4f;
+            Vignette rim = s.GetComponent<Vignette>();
+            rim.intensity.value = 0.38f;
+            rim.smoothness.value = 0.4f;
+            s.GetComponent<ChromaticAberration>().intensity.value = 0.25f;
         }
 
         /// <summary>Drop the camera and its picture (scene reset, board off). Idempotent.</summary>
@@ -122,6 +160,8 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         {
             if (cam != null) Object.Destroy(cam.gameObject);
             cam = null;
+            stack?.Dispose();
+            stack = null;
             if (picture != null)
             {
                 FxRtPool.Disown(picture);

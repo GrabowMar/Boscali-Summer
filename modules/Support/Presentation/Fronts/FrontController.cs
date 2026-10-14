@@ -37,6 +37,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private float nextRefresh, nextPress, wordsAt = -100f;
         private int lastFaction, selectedNode, selectedTeam = -1, selectedTarget;
         private int pendingRequest;
+        private float pendingAtWall, failedUntil;
+        private bool refreshFaulted;
         private Front pendingFront;
         private string words = "";
         private AvState wordsTone = AvState.Inert;
@@ -69,6 +71,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             Shut();
             selectedNode = 0; selectedTeam = -1; selectedTarget = 0;
             pendingRequest = 0;
+            failedUntil = 0f; refreshFaulted = false;
             words = "";
             wordsAt = -100f;
             lastFaction = 0;
@@ -139,16 +142,20 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     if (badSince < 0f) badSince = Time.unscaledTime;
                     if (Time.unscaledTime - badSince >= BadGraceSeconds) { badSince = -1f; Close(); return; }
                 }
-                if (Time.unscaledTime < nextRefresh) return;
+                if (pendingRequest != 0 && Time.unscaledTime - pendingAtWall > 6f) { pendingRequest = 0; Say("NEGATIVE: NO ANSWER \u2014 PRESS AGAIN", AvState.Danger); }
+                if (Time.unscaledTime < failedUntil || Time.unscaledTime < nextRefresh) return;
                 nextRefresh = Time.unscaledTime + Refresh;
                 Build();
                 window.Paint(view);
+                refreshFaulted = false;
                 Footer();
             }
             catch (Exception e)
             {
-                Plugin.Logger?.LogError("OPS front window refresh failed, closing: " + e);
-                Close();
+                failedUntil = Time.unscaledTime + 2f; // a transient mirror glitch backs off and retries; it must not close the window
+                if (!refreshFaulted) Plugin.Logger?.LogError("OPS front window refresh failed: " + e);
+                refreshFaulted = true;
+                nextRefresh = failedUntil;
             }
         }
 
@@ -284,7 +291,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         private bool Sent(Front front, int request, string refusal)
         {
-            if (request > 0) { pendingRequest = request; pendingFront = front; return true; }
+            if (pendingRequest != 0) { Say("NEGATIVE: WAITING FOR THE HOST", AvState.Danger); return false; }
+            if (request > 0) { pendingRequest = request; pendingFront = front; pendingAtWall = Time.unscaledTime; return true; }
             Say("NEGATIVE: " + refusal, AvState.Danger);
             return false;
         }
@@ -298,6 +306,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         private bool Gate()
         {
+            if (pendingRequest != 0) { Say("NEGATIVE: WAITING FOR THE HOST", AvState.Danger); return false; }
             if (Time.unscaledTime < nextPress) return false;
             nextPress = Time.unscaledTime + PressGap;
             return manager != null;

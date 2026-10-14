@@ -76,7 +76,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>What a pilot gets who has touched nothing. (A zeroed struct is NOT this: it has the board off.)</summary>
         public static BoardOptions Default => new BoardOptions
         {
-            Enabled = true, Layout = BoardLayout.Wide, Scale = 1f, OffsetX = 0f, OffsetY = 0f, Opacity = 1f, Shade = 0.45f,
+            Enabled = true, Layout = BoardLayout.Wide, Scale = 0.85f, OffsetX = 0f, OffsetY = 0f, Opacity = 1f, Shade = 0.45f,
             Declutter = BoardDeclutter.Full, ScopeMode = BoardScopeMode.Auto,
             PageThreat = true, PageShot = true, PageMissileCam = true, PageApproach = true, PageWing = true, PageStrike = true, PageDock = true, PageObjective = true, PageSystems = true,
             ThreatHoldSeconds = 6f, PageMinSeconds = 3f,

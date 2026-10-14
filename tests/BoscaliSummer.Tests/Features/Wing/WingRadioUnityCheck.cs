@@ -216,7 +216,7 @@ public static class WingRadioUnityCheck
         string[] state = { "ready", "inert", "ready", "ready", "ready", "caution", "caution", "inert" };
         object board = Field(page, "hpBoard"), picker = Field(page, "picker");
         Call(Field(page, "hpEmpty"), "Set", 0, "");
-        Call(board, "SetStations", stores.Length, new List<int> { 2, 2, 1, 1, 1, 1, 1, 1 });
+        Call(board, "SetStations", stores.Length, new List<int> { 2, 2, 1, 1, 1, 1, 1, 1 }, null);
         for (int i = 0; i < stores.Length; i++) Call(board, "Bind", i, stores[i], mass[i], state[i], i != 1 && i != 7, i != 1, "Pick the store.");
         Call(board, "SetSelected", 0); Call(board, "Rebuild");
         Call(picker, "SetHead", "STATION 1 · OUTER WING ×2", "HOLDS ARAD-121");

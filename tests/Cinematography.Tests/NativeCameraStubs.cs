@@ -34,7 +34,7 @@ namespace UnityEngine
     public static class Application { public static bool isFocused=true,isBatchMode; }
     public enum KeyCode { None,Escape }
     public static class Input { public static bool GetKeyDown(KeyCode key)=>false; }
-    public static class Mathf { public static float Clamp(float x,float lo,float hi)=>Math.Clamp(x,lo,hi);public static float Min(float a,float b)=>Math.Min(a,b); }
+    public static class Mathf { public static float Clamp01(float x)=>Math.Clamp(x,0f,1f);public static float Clamp(float x,float lo,float hi)=>Math.Clamp(x,lo,hi);public static float Min(float a,float b)=>Math.Min(a,b); }
     public static class Screen { public static int width=1920,height=1080; }
     public static class Debug { public static void LogWarning(string x) { } }
 }

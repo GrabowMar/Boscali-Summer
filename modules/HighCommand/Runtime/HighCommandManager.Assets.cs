@@ -93,22 +93,44 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
         private void CollectSites(FactionHQ hq, List<string> sites, Dictionary<string, string> labels)
         {
             sites.Clear();
-            int inspected = 0;
-            foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
+            // A base with an enemy base next door is no place for a post: it dies to the neighbour's guns every respawn,
+            // and the ammo-dump posts chain-collapse. Contested bases are used only when the faction has nothing else.
+            for (int pass = 0; pass < 2 && sites.Count == 0; pass++)
             {
-                if (++inspected > 64 || sites.Count >= CommandTree.MaximumSites) break;
-                if (airbase == null || airbase.CurrentHQ != hq || airbase.AttachedAirbase ||
-                    airbase.UnitDestroyed() || airbase.center == null) continue;
-                if (sites.Contains(airbase.name)) continue;
-                sites.Add(airbase.name);
-                labels[airbase.name] = MfdAirbaseFormatter.Format(airbase);
+                int inspected = 0;
+                foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
+                {
+                    if (++inspected > 64 || sites.Count >= CommandTree.MaximumSites) break;
+                    if (airbase == null || airbase.CurrentHQ != hq || airbase.AttachedAirbase ||
+                        airbase.UnitDestroyed() || airbase.center == null) continue;
+                    if (sites.Contains(airbase.name) || (pass == 0 && Contested(airbase))) continue;
+                    sites.Add(airbase.name);
+                    labels[airbase.name] = MfdAirbaseFormatter.Format(airbase);
+                }
             }
             sites.Sort(StringComparer.Ordinal);
         }
 
+        private const float ContestedRadius = 4000f;
+
+        /// <summary>A hostile-held airbase stands within <see cref="ContestedRadius"/> of this one.</summary>
+        private static bool Contested(Airbase airbase)
+        {
+            Vector3 at = airbase.center.position;
+            int inspected = 0;
+            foreach (Airbase other in FactionRegistry.airbaseLookup.Values)
+            {
+                if (++inspected > 64) break;
+                if (other == null || other == airbase || other.center == null || other.UnitDestroyed() ||
+                    other.CurrentHQ == null || other.CurrentHQ == airbase.CurrentHQ) continue;
+                if ((other.center.position - at).sqrMagnitude < ContestedRadius * ContestedRadius) return true;
+            }
+            return false;
+        }
+
         private Airbase FindBase(FactionCommand owner, string siteName)
         {
-            Airbase fallback = null;
+            Airbase fallback = null, contested = null;
             int inspected = 0;
             foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
             {
@@ -117,12 +139,16 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
                     airbase.UnitDestroyed() || airbase.center == null) continue;
                 if (!string.Equals(airbase.name, siteName, StringComparison.Ordinal))
                 {
-                    if (fallback == null) fallback = airbase;
+                    if (fallback == null)
+                    {
+                        if (!Contested(airbase)) fallback = airbase;
+                        else if (contested == null) contested = airbase;
+                    }
                     continue;
                 }
                 return airbase;
             }
-            return fallback;
+            return fallback ?? contested;
         }
 
         // ---- Posts ------------------------------------------------------------------------

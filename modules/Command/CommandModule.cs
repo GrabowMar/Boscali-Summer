@@ -62,6 +62,12 @@ namespace BoscaliSummer.Modules.Command
             context.AddService<IMapProjection>(new MfdMapProjection());
             ThreatMapOverlay threats = context.AddSceneService<ThreatMapOverlay>(54);
             context.AddService<ThreatMapOverlay>(threats);
+            RoadMapOverlay roads = context.AddSceneService<RoadMapOverlay>(54);
+            roads.Configure(context.Settings.Command);
+            context.AddService<RoadMapOverlay>(roads);
+            LogisticsMapOverlay logistics = context.AddSceneService<LogisticsMapOverlay>(55);
+            context.AddService<LogisticsMapOverlay>(logistics);
+            logistics.Configure(context.Settings.Command);
             context.AddSceneService<MapUiManager>(57);
             context.AddSceneService<SettingsMfdPanel>(58)
                 .Configure(context.Settings.Command, context.Logger, overlay,

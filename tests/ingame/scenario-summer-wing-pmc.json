@@ -1,0 +1,48 @@
+{
+  "name": "scenario-summer-wing-pmc",
+  "description": "Summer Wing (chapter 1) flown for the PMC side. The sim plugin wants the mission name to equal the launch argument, so first copy modules/Scenario/Assets/summer-wing.scenario to <game>/BepInEx/config/BoscaliSummer/scenarios/summer-sim.scenario with the id summer-sim, the title scenario:summer-sim and the campaign summer-sim. Then: the PMC HQ is made and spawned, the intro plays and enlists the pilot into PMC and seats them in a Vagrant pointed at the freighter, and the flight reaches her.",
+  "mission": "scenario:summer-sim",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 330,
+  "environment": {
+    "config": {
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
+        }
+      }
+    }
+  },
+  "ops": [
+    { "op": "wait", "seconds": 5 },
+    { "op": "call", "method": "BoscaliSummer.Modules.Scenario.Runtime.ScenarioAutomation.State", "store": "intro" },
+    { "op": "capture", "name": "intro-start", "hide_ui": false },
+    { "op": "wait", "seconds": 45 },
+    { "op": "capture", "name": "intro-middle", "hide_ui": false },
+    { "op": "wait", "seconds": 45 },
+    { "op": "call", "method": "BoscaliSummer.Modules.Scenario.Runtime.ScenarioAutomation.State", "store": "after_intro" },
+    { "op": "capture", "name": "after-intro", "hide_ui": false },
+    { "op": "wait", "seconds": 8 },
+    { "op": "call", "method": "BoscaliSummer.Modules.Scenario.Runtime.ScenarioAutomation.State", "store": "joined" },
+    { "op": "capture", "name": "seated-pmc", "hide_ui": false },
+    { "op": "wait", "seconds": 80 },
+    { "op": "call", "method": "BoscaliSummer.Modules.Scenario.Runtime.ScenarioAutomation.State", "store": "contact" },
+    { "op": "capture", "name": "freighter", "hide_ui": false },
+    { "op": "end" }
+  ],
+  "checks": [
+    { "check": "status_ok" },
+    { "check": "result_equals", "path": "intro.script", "value": "summer-sim" },
+    { "check": "result_above", "path": "joined.joined", "min": 0.5 },
+    { "check": "result_equals", "path": "joined.side", "value": "Pmc" },
+    { "check": "log_match", "pattern": "\\[Pmc\\] HQ made", "min": 1 },
+    { "check": "log_match", "pattern": "\\[Pmc\\] HQ spawned, net id", "min": 1 },
+    { "check": "log_match", "pattern": "\\[Scenario\\] the pilot is seated in a", "min": 1 },
+    { "check": "log_match", "pattern": "\\[Pmc\\] (no FactionHQ|HQ could not|HQ spawn failed)", "max": 0 },
+    { "check": "log_match", "pattern": "\\[Scenario\\] .*(could not|has no|no such|problem)", "max": 0 },
+    { "check": "log_match", "pattern": "Exception.*(FactionHQ|FactionRegistry|MissionStatsTracker|Pmc)|(FactionHQ|FactionRegistry|MissionStatsTracker|Pmc).*Exception", "max": 0 },
+    { "check": "log_match", "pattern": "was not found in lookup|MissionLoadException|Failed to load mission", "max": 0 }
+  ]
+}

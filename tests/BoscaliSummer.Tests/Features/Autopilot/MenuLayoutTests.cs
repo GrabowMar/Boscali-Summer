@@ -113,8 +113,12 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.Near(MenuLayout.AngleOf(0f, 10f), 180f, "down is 180 degrees");
             TestAssert.Near(MenuLayout.AngleOf(-10f, 0f), 270f, "left is 270 degrees");
             TestAssert.Near(MenuLayout.AngleDiff(350f, 10f), -20f, "angle difference wraps");
-            TestAssert.Eq(l.DiscAt(l.DiscX[0], l.DiscY[0], 0f), 0, "a point on a disc picks it");
-            TestAssert.Eq(l.DiscAt(l.Cx, l.Cy, 0f), -1, "the hub is no category");
+            TestAssert.Eq(l.DiscAt(l.DiscX[0], l.DiscY[0]), 0, "a point on a disc picks it");
+            TestAssert.Eq(l.DiscAt(l.Cx, l.Cy), -1, "the hub is no category");
+            float mx = (l.DiscX[0] + l.DiscX[1]) / 2f, my = (l.DiscY[0] + l.DiscY[1]) / 2f;
+            TestAssert.Eq(l.DiscAt(l.DiscX[0] + (mx - l.DiscX[0]) * 0.9f, l.DiscY[0] + (my - l.DiscY[0]) * 0.9f), 0, "just short of halfway to a neighbour is still this disc (Voronoi)");
+            TestAssert.Eq(l.DiscAt(l.Cx + (l.DiscX[0] - l.Cx) * 0.6f, l.Cy + (l.DiscY[0] - l.Cy) * 0.6f), 0, "inside the ring, between hub and disc, is the disc's");
+            TestAssert.Eq(l.DiscAt(l.Cx + (l.DiscX[0] - l.Cx) * 2f, l.Cy + (l.DiscY[0] - l.Cy) * 2f), -1, "far outside the ring is nobody's");
             TestAssert.That(l.PlateContains(3, null, l.Widest[3].L + 2f, l.DiscY[3]), "a label plate picks its category too");
             TestAssert.That(!l.PlateContains(3, null, l.Widest[3].R - 1f, l.DiscY[3]), "the plate as drawn hugs its text: the air at the end of the widest plate is not the category");
         }

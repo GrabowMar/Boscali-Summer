@@ -60,7 +60,7 @@ namespace BoscaliSummer.Garrisons
             GarrisonOccupancy.IsOccupied(shell);
 
         internal static bool SiegeActive =>
-            Urban.GarrisonsEnabled.Value && Urban.SiegeEnabled.Value;
+            BoscaliMission.FortificationsAllowed && Urban.GarrisonsEnabled.Value && Urban.SiegeEnabled.Value;
 
         internal static bool ArmorActive => SiegeActive && Urban.SiegeArmorBonus.Value;
 
@@ -351,7 +351,7 @@ namespace BoscaliSummer.Garrisons
         bool IZoneFortificationService.TryFortify(
             Airbase airbase, FactionHQ owner, NuclearOption.Networking.Player requester, int shells)
         {
-            if (!GameAccess.IsServer() || airbase == null || owner == null || requester == null ||
+            if (!BoscaliMission.FortificationsAllowed || !GameAccess.IsServer() || airbase == null || owner == null || requester == null ||
                 airbase.AttachedAirbase || airbase.CurrentHQ != owner || requester.HQ != owner)
                 return false;
 
@@ -380,7 +380,7 @@ namespace BoscaliSummer.Garrisons
         /// </summary>
         public bool TryOccupyBuilding(GameObject shell, FactionHQ owner)
         {
-            if (shell == null || !Urban.GarrisonsEnabled.Value || IsCriticalName(shell.name)) return false;
+            if (!BoscaliMission.FortificationsAllowed || shell == null || !Urban.GarrisonsEnabled.Value || IsCriticalName(shell.name)) return false;
             Building building = shell.GetComponentInParent<Building>();
             if (building != null && (building.disabled || (building.NetworkHQ != null && building.NetworkHQ != owner)))
                 return false;
@@ -412,7 +412,7 @@ namespace BoscaliSummer.Garrisons
 
         private bool Occupy(GameObject shell, FactionHQ owner, Airbase airbase, int key, string tag)
         {
-            if (!GameAccess.IsServer() || shell == null || owner == null ||
+            if (!BoscaliMission.FortificationsAllowed || !GameAccess.IsServer() || shell == null || owner == null ||
                 NetworkSceneSingleton<Spawner>.i == null || GarrisonOccupancy.IsOccupied(shell))
                 return false;
 
@@ -557,7 +557,7 @@ namespace BoscaliSummer.Garrisons
 
         public void ScheduleCapture(Airbase airbase, FactionHQ owner)
         {
-            if (!GameAccess.IsServer() || airbase == null) return;
+            if (!BoscaliMission.FortificationsAllowed || !GameAccess.IsServer() || airbase == null) return;
             int key = airbase.GetInstanceID();
             if (records.TryGetValue(key, out GarrisonRecord current) && current.Owner == owner) return;
 
@@ -575,7 +575,7 @@ namespace BoscaliSummer.Garrisons
 
         private void Update()
         {
-            if (!GameAccess.IsServer()) return;
+            if (!GameAccess.IsServer() || !BoscaliMission.FortificationsAllowed) return;
             if (!initialScanComplete && Time.unscaledTime >= initialScanAt)
             {
                 RebuildShellCatalogue();
@@ -890,6 +890,7 @@ namespace BoscaliSummer.Garrisons
 
         internal bool IsMissionRooftopAvailable(int id)
         {
+            if (!BoscaliMission.FortificationsAllowed) return false;
             for (int i = 0; i < shellCatalogue.Count; i++)
             {
                 GameObject shell = shellCatalogue[i];
@@ -904,6 +905,7 @@ namespace BoscaliSummer.Garrisons
         internal bool TryMissionRooftop(float x, float z, out int id, out float roofX, out float roofZ)
         {
             id = 0; roofX = roofZ = 0f;
+            if (!BoscaliMission.FortificationsAllowed) return false;
             if (!GameAccess.IsServer()) return false;
             float best = 2500f * 2500f;
             for (int i = 0; i < shellCatalogue.Count; i++)

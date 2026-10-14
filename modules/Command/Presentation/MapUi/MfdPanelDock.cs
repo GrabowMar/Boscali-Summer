@@ -149,9 +149,30 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (rt == null) return;
             if (IsDocked(screen))
             {
-                if (IsStockScreen(screen) && !VanillaMfdRebuild.IsHosted(screen))
-                    VanillaMfdRebuild.TryApply(screen);
-                return;
+                bool captured = false;
+                for (int i = 0; i < docked.Count; i++)
+                    if (docked[i].Screen == screen) { captured = true; break; }
+                if (captured)
+                {
+                    if (IsStockScreen(screen) && !VanillaMfdRebuild.IsHosted(screen))
+                        VanillaMfdRebuild.TryApply(screen);
+                    return;
+                }
+                // Installers clone their template's parent. A screen born in a temporary
+                // slot must inherit the template's native bay before that slot is removed.
+                for (int i = 0; i < docked.Count; i++)
+                {
+                    Docked home = docked[i];
+                    if (home.Screen == null || home.Screen.transform.parent != rt.parent) continue;
+                    rt.SetParent(home.Parent, false);
+                    rt.anchorMin = home.AnchorMin;
+                    rt.anchorMax = home.AnchorMax;
+                    rt.pivot = home.Pivot;
+                    rt.localScale = home.LocalScale;
+                    rt.localPosition = screen.isActive ? Vector3.zero : UnityEngine.Screen.width *
+                        (left ? Vector3.left : Vector3.right);
+                    break;
+                }
             }
 
             docked.Add(new Docked
@@ -429,6 +450,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// <summary>Put every docked screen back where it came from.</summary>
         public static void Restore()
         {
+            // A toggle can run before the next structure sweep notices a newly installed
+            // screen. Rescue those template siblings before destroying any slot.
+            int slotCount = slots.Count;
+            for (int i = 0; i < slotCount; i++)
+            {
+                if (slots[i] == null) continue;
+                bool left = true;
+                foreach (Docked home in docked)
+                    if (home.Screen != null && home.Screen.transform.parent == slots[i]) { left = home.Left; break; }
+                foreach (MFDScreen screen in slots[i].GetComponentsInChildren<MFDScreen>(true)) Dock(screen, left);
+            }
             // Restore each native displayPanel pointer before moving the screen out of the
             // dock; a late CloseScreen/ShowScreen callback will then always see native UI.
             VanillaMfdRebuild.Restore();
@@ -440,6 +472,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             for (int i = 0; i < slots.Count; i++)
                 if (slots[i] != null) Object.Destroy(slots[i].gameObject);
             slots.Clear();
+            // An empty dock must no longer block native map gestures in stock layout.
+            if (dock != null)
+            {
+                dock.gameObject.SetActive(false);
+                dock.name = DockName + ".Retired";
+                Object.Destroy(dock.gameObject);
+            }
+            dock = null;
         }
 
         /// <summary>Forget the dock at end of mission; the next scene builds its own.</summary>
@@ -449,8 +489,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             MfdScreenChromePatch.Reset();
             MfdPresentation.Restore();
             Restore();
-            if (dock != null) Object.Destroy(dock.gameObject);
-            dock = null;
         }
     }
 }

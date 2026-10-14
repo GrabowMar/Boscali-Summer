@@ -31,6 +31,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private int callGeneration = 1;           // bumps on teardown and disarm: an old TASKED arm can never fire after either
         private int claimRequest, claimPost;      // the one TASKED claim in flight (SPACE request id), 0 when none
         private float claimStartedAt;
+        private bool steering;                    // a cruise-leg map pick is armed (the pick itself lives in the manager)
+        private bool cruiseClearAwaited;          // the STEER press in flight was a route clear, not a leg
+        private SupportActionId? pendingAction;   // the CALL in flight, for its perk row's PENDING paint
         private SupportManager manager;
         private SupportSettings settings;
         private IObservationSource observations;
@@ -43,6 +46,14 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public AimSource AimNow { get; private set; }
         public string LastWords { get; private set; } = "";
         public bool Pending => request.Pending;
+        /// <summary>The CALL in flight (its perk row paints PENDING), null when none is.</summary>
+        public SupportActionId? PendingAction => request.Pending ? pendingAction : null;
+        /// <summary>The TASKED post armed for a claim, 0 when none (the PERKS tab paints its FIRE state from this).</summary>
+        public int TaskedArmedId => tasked.PostId;
+        /// <summary>A TASKED claim is waiting for the host's verdict.</summary>
+        public bool TaskedClaimPending => claimRequest != 0;
+        /// <summary>A cruise-leg map pick is armed.</summary>
+        public bool SteeringCruise => steering;
 
         /// <summary>Raised with every line of words the controller says (arm, refusal, receipt): the C2 console mirrors them.</summary>
         internal event System.Action<string> Spoke;
@@ -72,12 +83,12 @@ namespace BoscaliSummer.Modules.Support.Presentation
             this.settings = settings;
             this.observations = observations;
             for (int i = 0; i < Favourites.Length; i++) Favourites[i] = Defaults[i];
-            if (manager != null) manager.SpaceReplied += OnSpaceReply;
+            if (manager != null) { manager.SpaceReplied += OnSpaceReply; manager.CruiseReplied += OnCruiseReply; }
         }
 
         private void OnDestroy()
         {
-            if (manager != null) manager.SpaceReplied -= OnSpaceReply;
+            if (manager != null) { manager.SpaceReplied -= OnSpaceReply; manager.CruiseReplied -= OnCruiseReply; }
         }
 
         public void ResetForScene()
@@ -86,8 +97,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
             request.Clear();
             ClearTasked();
             claimRequest = claimPost = 0; // a scene change abandons any claim in flight: its receipt belongs to the old scene
+            steering = false;
             mapAim = null;
             armHasPick = false;
+            cruiseClearAwaited = false;
+            pendingAction = null;
             LastWords = "";
             LastWordsAt = -100f;
         }
@@ -117,6 +131,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
             if (arm.Press(id, now) == ArmStep.Armed)
             {
+                steering = false;
                 tasked.Clear(); // a STANDARD arm gives way to nothing and a TASKED arm gives way to it
                 mapAim = null;
                 bool mapOk = manager.ArmLocalPick(Label(id), point =>
@@ -141,6 +156,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         {
             arm.Clear();
             ClearTasked();
+            steering = false;
             manager?.Disarm();
             Say("DISARMED", AvUiCue.Release);
         }
@@ -203,6 +219,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (tasked.Press(postId, manager.SpaceMirror.Generation, callGeneration, now) == ArmStep.Armed)
             {
                 arm.Clear();
+                steering = false;
                 manager.Disarm(); // one armed intent at a time: a STANDARD arm gives way
                 Say("ARMED · TASKED " + (post.Points != null ? post.Points.Length : 0) + " TARGET" +
                     (post.Points != null && post.Points.Length == 1 ? "" : "S") + " · " + (post.Price > 0 ? post.Price + " ALLOC" : "FREE") + " · PRESS AGAIN", AvUiCue.Engage);
@@ -225,6 +242,17 @@ namespace BoscaliSummer.Modules.Support.Presentation
             Say(words, state == TaskedReceiptState.Launched ? AvUiCue.Confirm
                 : state == TaskedReceiptState.Refused ? AvUiCue.Caution
                 : state == TaskedReceiptState.Launching ? AvUiCue.Engage : AvUiCue.Press);
+        }
+
+        /// <summary>The host's cruise verdict: only now is a leg (or a clear) confirmed; a refusal is worded, never silent.</summary>
+        private void OnCruiseReply(SupportResult result, int legs)
+        {
+            bool cleared = cruiseClearAwaited;
+            cruiseClearAwaited = false;
+            if (result == SupportResult.Accepted)
+                Say(cleared ? "CRUISE ROUTE CLEARED \u00B7 FLYING DIRECT" : "LEG CONFIRMED \u00B7 " + legs + " SET \u00B7 STEER FOR ANOTHER LEG", AvUiCue.Confirm);
+            else
+                Say("NEGATIVE: CRUISE " + (cleared ? "CLEAR" : "LEG") + " REFUSED \u2014 CHECK THE ROUTE AND STEER AGAIN", AvUiCue.Caution);
         }
 
         private void OnSpaceReply(SpaceReply reply)
@@ -264,7 +292,38 @@ namespace BoscaliSummer.Modules.Support.Presentation
         internal void Answer(int requestId, bool accepted, string words)
         {
             if (!request.Resolve(requestId)) return; // late answer after the local timeout: the host reply is the truth
+            pendingAction = null;
             Say(accepted ? "SHOT · " + words : words, accepted ? AvUiCue.Confirm : AvUiCue.Caution);
+        }
+
+        /// <summary>
+        /// Steers the pilot's flying cruise: first press arms one map leg, the right-click sends it, STEER again while
+        /// armed clears the whole route instead. One leg per press, so the map gesture is never re-armed under the pilot.
+        /// </summary>
+        public void SteerCruise()
+        {
+            if (manager == null) return;
+            if (steering)
+            {
+                steering = false;
+                manager.Disarm();
+                cruiseClearAwaited = true;
+                Say(manager.ClearCruiseLegs() ? "CLEAR SENT · STAND BY FOR THE HOST" : "STEER OFF", AvUiCue.Release);
+                return;
+            }
+            if (!manager.TryFlyingCruise(out int id, out int legs)) { Say("NEGATIVE: NO CRUISE IN FLIGHT \u2014 FIRE CRUISE FIRST", AvUiCue.Caution); return; }
+            if (legs >= StrikeBallistics.MaxLegs) { Say("NEGATIVE: ROUTE FULL \u2014 " + StrikeBallistics.MaxLegs + " LEGS ALREADY SET", AvUiCue.Caution); return; }
+            arm.Clear(); tasked.Clear();
+            steering = true;
+            bool ok = manager.ArmLocalPick("CRUISE LEG " + (legs + 1) + " OF " + StrikeBallistics.MaxLegs, point =>
+            {
+                steering = false;
+                if (!manager.RequestWaypoint(point)) { Say(CallWords.Refusal(CallRefusal.Unavailable), AvUiCue.Caution); return; }
+                cruiseClearAwaited = false;
+                Say("LEG SENT \u00B7 STAND BY FOR THE HOST", AvUiCue.Engage);
+            });
+            if (!ok) { steering = false; Say(CallWords.Refusal(CallRefusal.Unavailable), AvUiCue.Caution); return; }
+            Say("STEER CRUISE \u00B7 RIGHT-CLICK MAP FOR THE LEG \u00B7 STEER AGAIN CLEARS THE ROUTE", AvUiCue.Engage);
         }
 
         private void Fire(SupportActionId id, GlobalPosition target, float now)
@@ -274,7 +333,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (requestId <= 0) { Say(CallWords.Refusal(CallRefusal.Unavailable), AvUiCue.Caution); return; } // arm stays
             if (id != SupportActionId.JtacUnlase) { arm.Clear(); manager.Disarm(); } // UNLASE never disturbs an armed CALL
             if (manager.LastRequestOffline) { request.Clear(); Say(CallWords.Refusal(CallRefusal.Offline), AvUiCue.Caution); return; }
-            if (!request.Pending) return; // answered in-process: Answer already said the real words
+            pendingAction = id;
+            if (!request.Pending) { pendingAction = null; return; } // answered in-process: Answer already said the real words
             AimNow = AimSource.None;
             Say("PENDING · " + Label(id), AvUiCue.Press);
         }
@@ -289,7 +349,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 arm.Clear(); // ESC (or a scene reset) cancelled the manager's pick: do not stay half armed
                 Say("DISARMED", AvUiCue.Release);
             }
-            if (request.Tick(now, out _)) { manager.AbandonPending(); Say(CallWords.Refusal(CallRefusal.Timeout), AvUiCue.Caution); }
+            if (request.Tick(now, out _)) { pendingAction = null; manager.AbandonPending(); Say(CallWords.Refusal(CallRefusal.Timeout), AvUiCue.Caution); }
             if (tasked.Tick(now)) Say("DISARMED", AvUiCue.Release);
             else if (tasked.PostId != 0 && (tasked.Revalidate(manager.SpaceMirror.Generation, callGeneration) || !StillOpen(tasked.PostId, now)))
             {
@@ -301,6 +361,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 claimRequest = claimPost = 0;
                 Say("NEGATIVE: NO ANSWER — CHECK THE BOARD BEFORE PRESSING AGAIN", AvUiCue.Caution);
             }
+            if (steering && !manager.LocalPickArmed) steering = false; // ESC (or a scene reset) dropped the pick under the steer
             AimNow = arm.Armed == null ? AimSource.None : Aim.Pick(TryPod(out _), mapAim.HasValue, TryTeamAim(out _));
 
             if (GameplayUI.GameIsPaused || InputFieldChecker.InsideInputField || !Application.isFocused) return;

@@ -239,10 +239,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             bool scopeOn = Options.ScopeMode != BoardScopeMode.Off && page.Ready && (!compact || systemsStrip);
             float target = scopeOn ? (compact ? ScopeLayout.Compact : ScopeLayout.Full) : 0f;
             transition.Update((int)selector.Page * 2 + (compact ? 1 : 0), target, now);
+            // A warning page (the RWR above all) does not take the aircraft's state away: SYSTEMS' compact strip stays under it as STATUS, by the strip's own rule.
+            bool statusOn = scopeOn && !compact && systemsStrip && pages[(int)ScopePage.Systems].Ready;
             var blocks = new BoardBlocks
             {
                 Layout = Options.Layout, Hero = header.HasWeapon, Pwr = header.HasCap, PwrCost = header.HasCost, Exp = header.HasCm, NoShelves = !allow.Furniture, Lamps = lampRow, PageH = transition.Height,
-                GaugeLines = gaugeLines, Ticker = allow.ShowTicker && board.HasTicker,
+                StatusH = statusOn ? ScopeLayout.Compact : 0f, GaugeLines = gaugeLines, Ticker = allow.ShowTicker && board.HasTicker,
             };
             BoardGeometry geo = ScopeLayout.Compute(blocks);
             if (geo.Height <= 0f)
@@ -258,6 +260,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // under it): a page, a gauge line or a notice coming and going never moves the page's rectangle.
             BoardBlocks cruise = blocks;
             cruise.PageH = ScopeLayout.Compact;
+            cruise.StatusH = 0f;
             cruise.GaugeLines = 0;
             cruise.Ticker = false;
             PlaceBoard(geo, ScopeLayout.Compute(cruise).Height, out float fromTop);
@@ -275,8 +278,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             bool flashOn = lastPhase % 2 == 0;      // FlashHz full cycles a second: on for half of each (LAYOUT.md 3.4, 10: 3 Hz)
             if (geo.Page.Present) PaintPage(pal, geo, compact, strip, flashOn);
             else { Show(scopeRect, false); scopeBeat = false; }
+            if (!geo.Status.Present) Show(statusRect, false);
             if (shellToo)
             {
+                if (geo.Status.Present) PaintStatus(pal, geo, flashOn);
                 PaintWing(pal, geo, flashOn);
                 PaintStores(pal, geo, flashOn);
             }

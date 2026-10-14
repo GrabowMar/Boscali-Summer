@@ -34,10 +34,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private RectTransform canvasRect;
         private RectTransform root;
         private CanvasGroup rootGroup;
-        private RectTransform scopeRect, pageRect, overlayRect, frameRect, storesRect;
-        private AvVector shellVector, pageVector, overlayVector, frameVector, storesVector;
-        private ScopeText shellText, pageText, overlayText, storesText;
-        private ScopeCanvas shellCanvas, pageCanvas, overlayCanvas, frameCanvas, storesCanvas;
+        private RectTransform scopeRect, pageRect, overlayRect, frameRect, storesRect, statusRect;
+        private AvVector shellVector, pageVector, overlayVector, frameVector, storesVector, statusVector;
+        private ScopeText shellText, pageText, overlayText, storesText, statusText;
+        private ScopeCanvas shellCanvas, pageCanvas, overlayCanvas, frameCanvas, storesCanvas, statusCanvas;
         private TMP_FontAsset font;
         private Material fontMaterial;
         private Image nativeSafety;
@@ -144,6 +144,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             frameRect = Pinned(scopeRect, "Frame", false);
             frameVector = AvVector.Create(frameRect, "Strokes", FrameQuads);
             frameCanvas = new ScopeCanvas(frameVector.Buffer, null, "scope.frame");
+
+            // STATUS: the aircraft's compact SYSTEMS strip under a warning page, so the RWR never takes the aircraft's state off the board. One masked surface: body, shelf and brackets.
+            statusRect = Pinned(root, "Status", true);
+            statusVector = AvVector.Create(statusRect, "Strokes", PageQuads);
+            statusText = new ScopeText(Holder(statusRect, "Words"), font, fontMaterial);
+            statusCanvas = new ScopeCanvas(statusVector.Buffer, statusText, "scope.status");
 
             BuildBoard();
         }
@@ -263,10 +269,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             dock = null;
             rootCanvas = null;
             canvasRect = null;
-            scopeRect = pageRect = overlayRect = frameRect = storesRect = null;
-            shellVector = pageVector = overlayVector = frameVector = storesVector = null;
-            shellText = pageText = overlayText = storesText = null;
-            shellCanvas = pageCanvas = overlayCanvas = frameCanvas = storesCanvas = null;
+            scopeRect = pageRect = overlayRect = frameRect = storesRect = statusRect = null;
+            shellVector = pageVector = overlayVector = frameVector = storesVector = statusVector = null;
+            shellText = pageText = overlayText = storesText = statusText = null;
+            shellCanvas = pageCanvas = overlayCanvas = frameCanvas = storesCanvas = statusCanvas = null;
             nativeSafety = null;
             board = null;
             StoreIcons.Clear();      // the baked pictures are this scene's

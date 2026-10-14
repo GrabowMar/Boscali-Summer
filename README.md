@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.3-alpha"><img src="https://img.shields.io/badge/release-0.2.3_alpha-f0b56e?style=flat-square&labelColor=0b1b23" alt="Release 0.2.3 alpha"></a>
+  <a href="https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.4-alpha"><img src="https://img.shields.io/badge/release-0.2.4_alpha-f0b56e?style=flat-square&labelColor=0b1b23" alt="Release 0.2.4 alpha"></a>
   <img src="https://img.shields.io/badge/Nuclear_Option-0.34.2-7fd6cf?style=flat-square&labelColor=0b1b23" alt="Nuclear Option 0.34.2">
   <a href="https://github.com/BepInEx/BepInEx/releases"><img src="https://img.shields.io/badge/BepInEx-5.4.23%2B-7fd6cf?style=flat-square&labelColor=0b1b23" alt="BepInEx 5.4.23 or newer"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-8fb4b8?style=flat-square&labelColor=0b1b23" alt="MIT license"></a>
@@ -195,15 +195,19 @@ Cargo-launched systems need an aircraft with a compatible cargo bay. The [change
 Where the mod has been, where it is, and where it's pointed.
 
 <p align="center">
-  <img src="media/readme/flight-plan.svg" alt="Flight plan: releases 0.1.1 to 0.2.2 flown, then 0.3 Counterplay, 0.4 Fronts and 0.5 Campaign planned, with the Flying Fortress at the end of the route" width="100%">
+  <img src="media/readme/flight-plan.svg" alt="Flight plan by major release: 0.1 flown, 0.2 public alpha is the present position, then 0.3 UI and OPS, 0.4 weapons and mechanics, 0.5 and 0.6 mechanics, 0.7 the Flying Fortress, 0.8 maps, 0.9 campaign and 1.0 release" width="100%">
 </p>
 
 <details>
 <summary><b>Legs already flown</b></summary>
 <br>
 
+The graphic shows major releases only. The updates in between:
+
 | Release | Date | What landed |
 | --- | --- | --- |
+| **0.2.4** | 14 Oct 2026 | Classic corner map by default, OPS TASKED tab with a steerable cruise missile, community fixes |
+| **0.2.3** | 13 Oct 2026 | Map selection feeds the target list, the scripted Boscali Summer mission, mission scripts, C menu stays open |
 | **0.2.2** | 13 Oct 2026 | Chaff, rebuilt radio nets, fused night vision, holo map and terrain ghost, regrouped C ring |
 | **0.2.1** | 12 Oct 2026 | Visor TAC BOARD, relief map pass, redrawn insignia, display grade |
 | **0.2.0** | 10 Oct 2026 | First public alpha: Wing Command built in, TAC BOARD, C ring, VANGUARD, MET OFFICE, airborne insertions, OPS fronts |
@@ -217,54 +221,67 @@ The [changelog](CHANGELOG.md) has the details from 0.2.0 on.
 
 ### Systems check
 
-A rough reading of each system in 0.2.2. Gut feel from the cockpit, not telemetry.
+How far each system is from where it should be at 1.0. Nothing is finished yet: everything in 0.2 is experimental. These are rough estimates, not telemetry.
 
 <p align="center">
-  <img src="media/readme/systems.svg" alt="Systems check for 0.2.2 alpha. Flying: wing, TAC BOARD, C ring, weather, pilot immersion, fire and destruction. Rough or experimental: radio nets, VANGUARD, towns and trenches, STR command map, OPS fronts, airborne. Unreliable: multiplayer. Not built: campaign save. Flying Fortress: classified." width="100%">
+  <img src="media/readme/systems.svg" alt="Systems check for 0.2 alpha, completeness against 1.0. Rough: wing 60%, weather 60%, TAC BOARD 55%, C ring 55%, fire and destruction 55%, pilot immersion 45%, towns and trenches 45%, OPS fronts 40%, VANGUARD 35%, STR command map 35%, radio nets 25%, airborne 25%. Unreliable: multiplayer 20%. Not built: campaign 10%. Flying Fortress: classified." width="100%">
 </p>
 
 ### Next legs
 
 No dates. This is a hobby alpha, and the route gets re-planned whenever Nuclear Option updates.
 
-**0.3 · COUNTERPLAY** · *answers for the things that keep killing you*
+**0.3 · UI + OPS** · *polish what you look at, finish what you command*
 
-- [ ] **Difficulty presets** for the host (Relaxed, Standard, Vanilla): air-defence interception odds, AA reloads, AI skill, damage taken
-- [ ] **SEAD contracts** that pay for radar and SAM kills, with a bonus for clearing a corridor
-- [ ] **Death debrief card:** what killed you, from how far, and what would have beaten it
 - [ ] **HUD quick wins:** IAS/CAS speed mode, cycle targets by type, weapon cycle skips empty stations, a voiced PULL UP
-- [ ] **Offline sandbox options:** infinite fuel and ammo, funds and unlocks, single player only
-- [ ] **Host rules:** friendly-nuke safe zones, a cap on AI tactical nukes, team-killer handling, catch-up for late joiners
-- [ ] **A performance budget** for every feature, measured late in a long match
-- [x] **Lock nearest threat** and **chaff** landed early, in 0.2.2
-
-**0.4 · FRONTS** · *after the next big game update*
-
-- [ ] **Nuclear Option 0.35 compatibility**, the first job once the game updates
+- [ ] **Death debrief card:** what killed you, from how far, and what would have beaten it
 - [ ] **Autonomous fronts:** SPACE, CYBER and SOF run themselves while you set the priorities
 - [ ] **SOF radar raids** and **CYBER datalink blackouts** that punch a hole in the enemy air defence for a few minutes
-- [ ] **Wing orders from multiplayer clients**, not only the host
-- [ ] **Waypoint autopilot** and a single-player time-skip for long transits
-- [ ] **Comeback mechanics:** escalation scaled to the losing side, reinforcement waves for whoever is behind
+- [ ] **STR command map finished:** the wave desk and the strike post
 - [ ] **First-flight primer** for the wing, the C ring, OPS and contracts
+- [x] **Lock nearest threat**, **chaff** and the **OPS TASKED tab** landed early, in 0.2.x
 
-**0.5 · CAMPAIGN** · *the war remembers*
+**0.4 · WEAPONS + MECHANICS** · *answers for the things that keep killing you*
 
-- [ ] **A war that persists:** fronts, captured bases, faction pools and open contracts carry over between sessions
-- [ ] **Training contracts:** SEAD, VTOL, carrier landings and the strategic layer
+- [ ] **A few more weapons** for VANGUARD
+- [ ] **Difficulty presets** for the host (Relaxed, Standard, Vanilla): air-defence interception odds, AA reloads, AI skill, damage taken
+- [ ] **SEAD contracts** that pay for radar and SAM kills, with a bonus for clearing a corridor
+
+**0.5 · MECHANICS**
+
+- [ ] **Host rules:** friendly-nuke safe zones, a cap on AI tactical nukes, team-killer handling, catch-up for late joiners
+- [ ] **Comeback mechanics:** escalation scaled to the losing side, reinforcement waves for whoever is behind
+- [ ] **Wing orders from multiplayer clients**, not only the host
+
+**0.6 · MECHANICS**
+
+- [ ] **Waypoint autopilot** and a single-player time-skip for long transits
 - [ ] **AWACS and tanker service** built on SKYWELL
 - [ ] **Simple ATC:** landing clearance and vectors to the nearest base
+- [ ] **Offline sandbox options:** infinite fuel and ammo, funds and unlocks, single player only
 
-**Beyond**
+**0.7 · FLYING FORTRESS** · `CLASSIFIED`
 
-- [ ] **Campaign chain:** a sequence of sessions and maps with carry-over (the script side exists: chapters that unlock and flags that carry over; the war itself does not carry over yet)
+**0.8 · MAPS** · *more places to fight over*
 
-Not on the route: new maps, VR, missile physics, mid-mission saves or another weapon pack. The game's developers and other mods have those covered.
+- [ ] **Support for more maps** through an external custom maps mod
+
+**0.9 · CAMPAIGN** · *the war remembers*
+
+- [ ] **A war that persists:** fronts, captured bases, faction pools and open contracts carry over between sessions
+- [ ] **Campaign chain:** a sequence of sessions and maps with carry-over (the script side exists: chapters that unlock and flags that carry over)
+- [ ] **Training contracts:** SEAD, VTOL, carrier landings and the strategic layer
+
+**1.0 · RELEASE** · *last polish*
+
+**Along the way:** compatibility with each new Nuclear Option update comes first, and every feature gets a performance budget measured late in a long match.
+
+Not on the route: VR, missile physics or mid-mission saves. The game's developers and other mods have those covered.
 
 > [!IMPORTANT]
-> **DESTINATION: FLYING FORTRESS** · `CLASSIFIED`
+> **WAYPOINT 0.7: FLYING FORTRESS** · `CLASSIFIED`
 >
-> The far end of the route. Something enormous, armed and airborne over Boscali, and every leg before it is a step towards being able to build it. Details when it flies.
+> Something enormous, armed and airborne over Boscali, and every leg before it is a step towards being able to build it. Details when it flies.
 
 ## Install
 
@@ -283,7 +300,7 @@ Not on the route: new maps, VR, missile physics, mid-mission saves or another we
 **Then:**
 
 1. Install BepInEx into the game folder, start the game once so it creates its folders, and close it.
-2. Download **`BoscaliSummer-0.2.3.zip`** from the [release page](https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.3-alpha) and extract it into the game folder. You should end up with:
+2. Download **`BoscaliSummer-0.2.4.zip`** from the [release page](https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.4-alpha) and extract it into the game folder. You should end up with:
 
    ```text
    Nuclear Option/BepInEx/plugins/BoscaliSummer/BoscaliSummer.dll

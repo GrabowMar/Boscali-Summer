@@ -35,7 +35,7 @@ namespace BoscaliSummer.Core.Contracts
     /// <summary>What a live operation asks of a sortie; None means the card is not tied.</summary>
     internal enum FocusRole : byte { None = 0, Assault = 1, Defend = 2, Recon = 3 }
 
-    /// <summary>One card's link to the faction operation; the card's own site before acceptance lives here, never in HasMarker.</summary>
+    /// <summary>One card's link to the faction operation; the card's known site is also available before acceptance.</summary>
     internal sealed class SortieLink
     {
         public const int MaximumPlace = 40;

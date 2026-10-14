@@ -40,6 +40,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
         private EventAircraftPreview preview;
         private int shelf, selected;
         private bool open, keyboardTouched, keyboardWas, pauseWas;
+        private bool pictures;
 
         internal bool IsOpen => open;
         internal AvWindow Window => window;
@@ -131,6 +132,12 @@ namespace BoscaliSummer.Modules.Events.Presentation
         private void Update()
         {
             if (!open) return;
+            if (pictures != EventArtCache.PicturesEnabled)
+            {
+                pictures = EventArtCache.PicturesEnabled;
+                if (shelf == ArchiveShelf.Events && Count > 0)
+                    dossier.Bind(EventCatalog.All[selected], selected);
+            }
             if (Input.GetKeyDown(KeyCode.Escape)) Close();
             else if (Input.GetKeyDown(KeyCode.DownArrow)) Step(1);
             else if (Input.GetKeyDown(KeyCode.UpArrow)) Step(-1);
@@ -282,6 +289,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 else if (showDossier)
                 {
                     DropPreview();
+                    pictures = EventArtCache.PicturesEnabled;
                     dossier.Bind(EventCatalog.All[selected], selected);
                     record = EventCatalog.All[selected].Title.ToUpperInvariant();
                 }

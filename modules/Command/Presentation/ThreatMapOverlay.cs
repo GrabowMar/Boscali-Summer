@@ -1,9 +1,10 @@
-using System;
-using System.Collections.Generic;
+using HarmonyLib;
 using BoscaliSummer.Modules.Command.Configuration;
-using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Modules.Command.Presentation.MapUi;
 using NOAvionics;
 using NuclearOption.Networking;
 using UnityEngine;
@@ -11,55 +12,16 @@ using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Command.Presentation
 {
-    /// <summary>
-    /// The hostile sensor picture as contours: one raster over the theater map whose intensity at
-    /// a spot is how strongly the best tracked hostile sensor would see the player's own aircraft
-    /// there. A near radar is hotter than a distant one, and overlapping coverage resolves to
-    /// the strongest tracked emitter. Only the resulting range contours are drawn.
-    ///
-    /// <para>Client-local presentation only. It reads the faction's own tracking database, so it
-    /// shows the picture the player's side actually holds — an untracked emitter contributes no
-    /// heat, and a contact's blob sits on the position the faction believes it is at, never on a
-    /// live transform. No network traffic, no world mutation, no game state changed.</para>
-    ///
-    /// <para>Bounded and cheap by construction: one texture on one quad, no per-emitter objects,
-    /// and no per-frame work at all — the raster is stretch-anchored to the map, so pan and zoom
-    /// transform it for free. A bake clears a flat pre-allocated buffer, splats one bounded disc
-    /// per tracked emitter inside its own bounding box, and recolours; it runs once per
-    /// <see cref="RefreshSeconds"/> and sleeps entirely while the map is closed.</para>
-    ///
-    /// <para>Coverage is drawn as the radio-horizon and scan-limit picture, and it is the
-    /// optimistic one: look-down clutter only subtracts from the signal, and terrain line of sight
-    /// is a per-bearing cut this raster does not pay a raycast fan for. Both omissions overstate
-    /// coverage, which is the safe direction for a warning.</para>
-    /// </summary>
+    /// <summary>Range rings of the hovered map unit, drawn on the relief. The stock tooltip draws its
+    /// weapon and sensor circles on the flat sheet, which the relief pins and hides, so they land in the
+    /// wrong place there: while the relief draws, those circles are switched off and the same two ranges
+    /// are drawn as projected vector rings instead (solid: sensor reach, dashed: weapon reach).</summary>
     internal sealed class ThreatMapOverlay : MonoBehaviour, ISceneService
     {
-        private const int MaxEmitters = 32;
-        private const int SensorCacheLimit = 512;
-        private const float RefreshSeconds = 1f;
+        private const int MaxEmitters = 1;
         private const float MinimumDrawableRadius = 1f;
 
-        /// <summary>Longest side of the sampled sensor field in pixels.</summary>
-        private const int HeatTextureMax = 256;
-        private static readonly float[] ContourLevels = { 0.25f, 0.55f, 0.82f };
-
-        /// <summary>Optical/IR coverage is the quieter threat: same field, half the intensity.</summary>
-        private const float OpticalWeight = 0.5f;
-
-        private const float FallbackTheaterMetres = 81920f;
-
-        private static readonly Color32 ClearPixel = new Color32(0, 0, 0, 0);
-
-        private sealed class Sensor
-        {
-            public Radar Radar;
-            public TargetDetector Optical;
-
-            public bool Any => Radar != null || Optical != null;
-        }
-
-        /// <summary>One emitter's contribution to the field, kept from the envelope pass to the bake.</summary>
+        /// <summary>One unit's two ranges, kept from the range pass to the bake.</summary>
         private struct Sample
         {
             public Vector3 Position;
@@ -67,54 +29,29 @@ namespace BoscaliSummer.Modules.Command.Presentation
             public float OpticalRadius;
         }
 
-        private readonly struct Contact
-        {
-            public Contact(Unit unit, Vector3 position, float distanceSquared)
-            {
-                Unit = unit;
-                Position = position;
-                DistanceSquared = distanceSquared;
-            }
-
-            public readonly Unit Unit;
-            public readonly Vector3 Position;
-            public readonly float DistanceSquared;
-        }
-
-        private static readonly Comparison<Contact> NearestFirst =
-            (a, b) => a.DistanceSquared.CompareTo(b.DistanceSquared);
+        private static readonly AccessTools.FieldRef<DynamicMap, MapToolTip> ToolTipRef =
+            AccessTools.FieldRefAccess<DynamicMap, MapToolTip>("toolTip");
+        private static readonly AccessTools.FieldRef<MapToolTip, MapIcon> HoverRef =
+            AccessTools.FieldRefAccess<MapToolTip, MapIcon>("icon");
+        private static readonly AccessTools.FieldRef<MapToolTip, Image> Circle1Ref =
+            AccessTools.FieldRefAccess<MapToolTip, Image>("circle1");
+        private static readonly AccessTools.FieldRef<MapToolTip, Image> Circle2Ref =
+            AccessTools.FieldRefAccess<MapToolTip, Image>("circle2");
 
         private CommandSettings settings;
 
         private DynamicMap dynamicMap;
         private GameObject root;
         private RectTransform rootRect;
-        private RawImage fieldImage;
-        private Texture2D fieldTexture;
-        private float[] field;
-        private Color32[] pixels;
-        private readonly List<Contact> contacts = new List<Contact>(MaxEmitters * 2);
-        private readonly Dictionary<int, Sensor> sensorCache = new Dictionary<int, Sensor>(MaxEmitters * 4);
+        private ThreatEnvelopeGraphic graphic;
         private readonly Sample[] samples = new Sample[MaxEmitters];
-
-        private Vector2 theater;
-        private float nextRefresh;
         private bool initialized;
-        private int lastBakeHash;
-        private bool bakeHashValid;
 
         /// <summary>True once the map is on screen and the overlay can be drawn at all.</summary>
         public bool Available => initialized && dynamicMap != null;
 
-        /// <summary>How many tracked emitters the last bake contributed heat.</summary>
-        public int TrackedEmitters { get; private set; }
-
-        /// <summary>
-        /// The widest envelope among them, in kilometres. A ground radar's radio horizon against
-        /// a high target reaches past the far map edge on this scale, so the map is hot around
-        /// the emitters rather than only inside a ring: this is the number that says so.
-        /// </summary>
-        public float WidestEnvelopeKm { get; private set; }
+        /// <summary>The hovered unit's sensor reach in kilometres; 0 when nothing with a sensor is hovered.</summary>
+        public float HoverSensorKm { get; private set; }
 
         public bool Visible => settings != null && settings.ThreatHeat.Value;
 
@@ -122,7 +59,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
         {
             if (settings == null || settings.ThreatHeat.Value == visible) return;
             settings.ThreatHeat.Value = visible;
-            nextRefresh = 0f;
         }
 
         public void Configure(CommandSettings config)
@@ -138,18 +74,10 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 root = null;
             }
 
-            Destroy(fieldTexture);
-            fieldTexture = null;
-            fieldImage = null;
-            field = null;
-            pixels = null;
-
-            contacts.Clear();
-            sensorCache.Clear();
+            graphic = null;
             rootRect = null;
             dynamicMap = null;
-            TrackedEmitters = 0;
-            nextRefresh = 0f;
+            HoverSensorKm = 0f;
             initialized = false;
             TheaterFrame.Invalidate();
         }
@@ -164,9 +92,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 return;
             }
 
-            // The layer toggle hides the field; it must never gate readiness. Initialising only
-            // while the layer is on makes switching it off a one-way door: the overlay reports
-            // unavailable, and the panel cannot offer the click that would bring it back.
             if (!initialized && DynamicMap.mapMaximized) TryInitialize();
 
             if (!initialized || dynamicMap == null || dynamicMap.mapImage == null)
@@ -175,22 +100,32 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 return;
             }
 
-            bool shown = settings.ThreatHeat.Value && DynamicMap.mapMaximized;
-            bool wasShown = root.activeSelf;
+            // The flat map's own circles are right; only the relief needs the replacement.
+            bool relief = ModuleServices.TryGet(out IMapProjection projection) && projection.IsActive;
+            bool shown = settings.ThreatHeat.Value && DynamicMap.mapMaximized && relief;
             SetShown(shown);
             if (!shown) return;
 
             // The map regenerates its image on a scene change; stay on it when it does.
             if (rootRect.parent != dynamicMap.mapImage.transform) Reparent();
+            Refresh();
+        }
 
-            // Coming back on screen bakes on the first frame, not on the next tick.
-            if (!wasShown) nextRefresh = 0f;
+        /// <summary>The stock tooltip re-scales and re-enables its range circles in its own refresh
+        /// (they are the ones sized to one unit before scaling); switch them off after it.</summary>
+        private void LateUpdate()
+        {
+            if (root == null || !root.activeSelf) return;
+            MapToolTip tip = ToolTipRef(dynamicMap);
+            if (tip == null) return;
+            HideRangeCircle(Circle1Ref(tip));
+            HideRangeCircle(Circle2Ref(tip));
+        }
 
-            if (Time.unscaledTime >= nextRefresh)
-            {
-                nextRefresh = Time.unscaledTime + RefreshSeconds;
-                Refresh();
-            }
+        private static void HideRangeCircle(Image circle)
+        {
+            // Airbase and factory progress dials reuse these images at 50-70 px; leave those alone.
+            if (circle != null && circle.enabled && circle.rectTransform.sizeDelta == Vector2.one) circle.enabled = false;
         }
 
         private void TryInitialize()
@@ -198,41 +133,14 @@ namespace BoscaliSummer.Modules.Command.Presentation
             dynamicMap = SceneSingleton<DynamicMap>.i;
             if (dynamicMap == null || dynamicMap.mapImage == null) return;
 
-            theater = TheaterFrame.Resolve(dynamicMap);
-            if (theater.x <= 1f || theater.y <= 1f)
-            {
-                theater = new Vector2(FallbackTheaterMetres, FallbackTheaterMetres);
-                Plugin.Logger?.LogWarning("[COM] Threat heat could not resolve the theater span; " +
-                    "falling back to " + FallbackTheaterMetres + "m.");
-            }
-
-            GetTextureSize(out int width, out int height);
-            EnsureTexture(width, height);
-
-            root = new GameObject("BoscaliThreatHeat", typeof(RectTransform), typeof(RawImage));
+            root = new GameObject("BoscaliHoverRanges", typeof(RectTransform), typeof(ThreatEnvelopeGraphic));
             rootRect = (RectTransform)root.transform;
-            rootRect.SetParent(dynamicMap.mapImage.transform, false);
-            rootRect.anchorMin = Vector2.zero;
-            rootRect.anchorMax = Vector2.one;
-            rootRect.offsetMin = Vector2.zero;
-            rootRect.offsetMax = Vector2.zero;
-            rootRect.pivot = new Vector2(0.5f, 0.5f);
-            rootRect.localScale = Vector3.one;
-            rootRect.localPosition = Vector3.zero;
+            Reparent();
 
-            fieldImage = root.GetComponent<RawImage>();
-            fieldImage.texture = fieldTexture;
-            fieldImage.raycastTarget = false;
+            graphic = root.GetComponent<ThreatEnvelopeGraphic>();
+            graphic.raycastTarget = false;
 
-            // Just above the territory tint, below the trench trace, the frontline and the map's
-            // own symbols: a soft ground-cover wash, not a line and not a marker.
-            root.transform.SetSiblingIndex(dynamicMap.mapImage.transform.childCount > 1 ? 1 : 0);
-
-            SetShown(true);
             initialized = true;
-            Plugin.Logger?.LogInfo("[COM] Threat heat overlay initialized (" + width + "x" + height +
-                " field over a " + Mathf.RoundToInt(theater.x) + "x" + Mathf.RoundToInt(theater.y) +
-                "m theater, " + MaxEmitters + " emitters maximum).");
         }
 
         private void Reparent()
@@ -245,295 +153,178 @@ namespace BoscaliSummer.Modules.Command.Presentation
             rootRect.pivot = new Vector2(0.5f, 0.5f);
             rootRect.localScale = Vector3.one;
             rootRect.localPosition = Vector3.zero;
+            // Vector ink sits above the territory tint and below the map's native contacts.
             rootRect.SetSiblingIndex(dynamicMap.mapImage.transform.childCount > 1 ? 1 : 0);
         }
 
         private void SetShown(bool visible)
         {
+            if (!visible) HoverSensorKm = 0f;
             if (root == null || root.activeSelf == visible) return;
             root.SetActive(visible);
         }
 
-        // --------------------------------------------------------------- envelope pass
+        // --------------------------------------------------------------- range pass
 
         private void Refresh()
         {
-            FactionHQ hq = dynamicMap.HQ;
-            Aircraft ownship = ResolveOwnship();
-            if (hq == null || ownship == null)
-            {
-                TrackedEmitters = 0;
-                WidestEnvelopeKm = 0f;
-                Bake();
-                return;
-            }
-
-            CollectContacts(hq, ownship);
-            if (contacts.Count > 1) contacts.Sort(NearestFirst);
-
-            Vector3 ownPosition = ownship.GlobalPosition().AsVector3();
-            float ownRcs = ownship.RCS;
-            float ownVisibility = ownship.GetVisibility();
-
             int used = 0;
-            float widest = 0f;
-            for (int i = 0; i < contacts.Count && used < MaxEmitters; i++)
+            HoverSensorKm = 0f;
+            MapToolTip tip = ToolTipRef(dynamicMap);
+            Unit unit = tip != null && tip.isActiveAndEnabled && HoverRef(tip) is UnitMapIcon icon ? icon.unit : null;
+            // The stock tooltip shows an aircraft's rings to its own side only, and none for a missile.
+            FactionHQ hq = dynamicMap.HQ;
+            if (unit != null && !unit.disabled && !(unit is Missile) &&
+                (!(unit is Aircraft) || hq == null || unit.NetworkHQ == hq) && TryPosition(unit, out Vector3 position))
             {
-                Contact contact = contacts[i];
-                Sensor sensor = ResolveSensor(contact.Unit);
-                if (sensor == null || !sensor.Any) continue;
-
-                float radarRadius = 0f;
-                if (sensor.Radar != null)
+                float sensor = SensorRange(unit), weapon = WeaponRange(unit);
+                if (sensor >= MinimumDrawableRadius || weapon >= MinimumDrawableRadius)
                 {
-                    RadarParams parameters = sensor.Radar.RadarParameters;
-                    Transform scanner = sensor.Radar.GetScanPoint();
-                    // A sensor with no mast falls back to the emitter's own altitude rather
-                    // than inventing a horizon the game never checked.
-                    float sensorAltitude = scanner != null
-                        ? scanner.GlobalPosition().AsVector3().y
-                        : contact.Position.y;
-                    radarRadius = ThreatEnvelope.RadarRadius(
-                        new RadarEnvelope(parameters.maxRange, parameters.maxSignal, parameters.minSignal),
-                        new TargetSignature(ownRcs, ownPosition.y),
-                        sensorAltitude);
-                }
-
-                float opticalRadius = 0f;
-                if (sensor.Optical != null)
-                {
-                    opticalRadius = ThreatEnvelope.OpticalRadius(
-                        sensor.Optical.GetVisualRange(), ownVisibility,
-                        sensor.Optical.GetVisualMagnification());
-                }
-
-                if (radarRadius < MinimumDrawableRadius && opticalRadius < MinimumDrawableRadius) continue;
-
-                samples[used].Position = contact.Position;
-                samples[used].RadarRadius = radarRadius;
-                samples[used].OpticalRadius = opticalRadius;
-                widest = Mathf.Max(widest, Mathf.Max(radarRadius, opticalRadius));
-                used++;
-            }
-
-            TrackedEmitters = used;
-            WidestEnvelopeKm = widest * 0.001f;
-            Bake();
-        }
-
-        /// <summary>
-        /// Every hostile the local side is currently tracking, at the position the faction
-        /// believes it is. An untracked emitter is not on this side's picture and heat-maps
-        /// nothing — the same rule every other enemy display in this module follows.
-        /// </summary>
-        private void CollectContacts(FactionHQ hq, Aircraft ownship)
-        {
-            contacts.Clear();
-
-            List<Unit> all = UnitRegistry.allUnits;
-            if (all == null) return;
-
-            Vector3 ownPosition = ownship.GlobalPosition().AsVector3();
-            for (int i = 0; i < all.Count; i++)
-            {
-                Unit unit = all[i];
-                if (unit == null || unit.disabled || unit == ownship) continue;
-                if (unit.NetworkHQ == null || unit.NetworkHQ == hq) continue;
-                if (!hq.IsTargetBeingTracked(unit)) continue;
-
-                GlobalPosition? known = hq.GetKnownPosition(unit);
-                if (!known.HasValue) continue;
-
-                Vector3 position = known.Value.AsVector3();
-                float dx = position.x - ownPosition.x;
-                float dz = position.z - ownPosition.z;
-                contacts.Add(new Contact(unit, position, dx * dx + dz * dz));
-            }
-        }
-
-        private static Aircraft ResolveOwnship()
-        {
-            return GameManager.GetLocalPlayer<Player>(out Player player) && player != null &&
-                   player.Aircraft != null && !player.Aircraft.disabled
-                ? player.Aircraft
-                : null;
-        }
-
-        /// <summary>
-        /// The best radar and the best optical detector on a unit, resolved once and kept:
-        /// units do not grow sensors mid-mission, and without the cache this would walk every
-        /// tracked unit's hierarchy on every bake. The cache is bounded like the sortie
-        /// classifier's emitter cache.
-        /// </summary>
-        private Sensor ResolveSensor(Unit unit)
-        {
-            int id = unit.GetInstanceID();
-            if (sensorCache.TryGetValue(id, out Sensor cached)) return cached;
-            if (sensorCache.Count >= SensorCacheLimit) return null;
-
-            Sensor sensor = new Sensor();
-            TargetDetector[] detectors = unit.GetComponentsInChildren<TargetDetector>(true);
-            for (int i = 0; i < detectors.Length; i++)
-            {
-                TargetDetector detector = detectors[i];
-                if (detector == null || !detector.IsOperational()) continue;
-
-                if (detector is Radar radar && radar.GetRadarRange() > 0f &&
-                    (sensor.Radar == null || radar.GetRadarRange() > sensor.Radar.GetRadarRange()))
-                {
-                    sensor.Radar = radar;
-                }
-
-                if (detector.GetVisualRange() > 0f &&
-                    (sensor.Optical == null || detector.GetVisualRange() > sensor.Optical.GetVisualRange()))
-                {
-                    sensor.Optical = detector;
+                    samples[0] = new Sample { Position = position, RadarRadius = sensor, OpticalRadius = weapon };
+                    used = 1;
+                    HoverSensorKm = sensor * 0.001f;
                 }
             }
-
-            sensorCache[id] = sensor;
-            return sensor;
+            if (graphic != null)
+                graphic.SetSource(samples, used, dynamicMap, settings != null ? settings.OverlayOpacity.Value : .65f);
         }
 
-        // -------------------------------------------------------------------- raster
-
-        private void GetTextureSize(out int width, out int height)
+        /// <summary>Own side: the live position. Others: only what the local faction knows.</summary>
+        private bool TryPosition(Unit unit, out Vector3 position)
         {
-            float longest = Mathf.Max(theater.x, theater.y);
-            width = Mathf.Clamp(Mathf.RoundToInt(HeatTextureMax * theater.x / longest), 1, HeatTextureMax);
-            height = Mathf.Clamp(Mathf.RoundToInt(HeatTextureMax * theater.y / longest), 1, HeatTextureMax);
+            FactionHQ hq = dynamicMap.HQ;
+            GlobalPosition? at = hq == null || unit.NetworkHQ == hq ? unit.GlobalPosition() : hq.GetKnownPosition(unit);
+            position = at.HasValue ? at.Value.AsVector3() : default;
+            return at.HasValue && float.IsFinite(position.x) && float.IsFinite(position.z);
         }
 
-        private void EnsureTexture(int width, int height)
+        /// <summary>The stock tooltip's sensor figure: the longest radar range, else the longest visual range.</summary>
+        private static float SensorRange(Unit unit)
         {
-            if (fieldTexture != null && fieldTexture.width == width && fieldTexture.height == height) return;
-
-            Destroy(fieldTexture);
-
-            fieldTexture = new Texture2D(width, height, TextureFormat.RGBA32, false)
+            // ponytail: walks the hovered unit's hierarchy every frame; one unit, cache it if it ever shows in a profile.
+            float best = 0f;
+            foreach (TargetDetector detector in unit.GetComponentsInChildren<TargetDetector>())
             {
-                name = "BoscaliThreatHeat",
-                filterMode = FilterMode.Bilinear,
-                wrapMode = TextureWrapMode.Clamp,
-                hideFlags = HideFlags.HideAndDontSave,
-            };
-
-            bakeHashValid = false;
-            field = new float[width * height];
-            pixels = new Color32[width * height];
-            Array.Clear(pixels, 0, pixels.Length);
-            fieldTexture.SetPixels32(pixels);
-            fieldTexture.Apply(false);
-
-            if (fieldImage != null) fieldImage.texture = fieldTexture;
-        }
-
-        private void Bake()
-        {
-            if (fieldTexture == null || field == null) return;
-
-            int width = fieldTexture.width;
-            int height = fieldTexture.height;
-
-            // Skip the splat, recolour and upload when no emitter moved a cell or changed radius by 100 m.
-            float alpha = settings != null ? settings.OverlayOpacity.Value : 0.35f;
-            float cellX = theater.x / (width - 1);
-            float cellY = theater.y / (height - 1);
-            int hash = unchecked((width * 397 ^ height) * 397 ^ alpha.GetHashCode());
-            hash = unchecked(hash * 397 ^ TrackedEmitters);
-            hash = unchecked(hash * 397 ^ theater.GetHashCode());
-            for (int i = 0; i < TrackedEmitters; i++)
-            {
-                Sample s = samples[i];
-                hash = unchecked(hash * 31 + Mathf.RoundToInt(s.Position.x / cellX));
-                hash = unchecked(hash * 31 + Mathf.RoundToInt(s.Position.z / cellY));
-                hash = unchecked(hash * 31 + Mathf.RoundToInt(s.RadarRadius / 100f));
-                hash = unchecked(hash * 31 + Mathf.RoundToInt(s.OpticalRadius / 100f));
+                if (detector is Radar && detector.GetRadarRange() > best) best = detector.GetRadarRange();
+                else if (detector.GetVisualRange() > best) best = detector.GetVisualRange();
             }
-            if (bakeHashValid && hash == lastBakeHash) return;
-            bakeHashValid = true;
-            lastBakeHash = hash;
-
-            Array.Clear(field, 0, field.Length);
-
-            for (int i = 0; i < TrackedEmitters; i++)
-            {
-                Sample sample = samples[i];
-                Splat(sample.Position, sample.RadarRadius, 1f, width, height);
-                Splat(sample.Position, sample.OpticalRadius, OpticalWeight, width, height);
-            }
-
-            Colorize();
-            fieldTexture.SetPixels32(pixels);
-            fieldTexture.Apply(false);
+            return float.IsFinite(best) ? best : 0f;
         }
 
-        /// <summary>
-        /// One emitter's coverage disc, sampled only inside its own bounding box and merged by
-        /// maximum, so overlapping emitters never brighten each other into a false absolute.
-        /// </summary>
-        private void Splat(Vector3 centre, float radius, float weight, int width, int height)
+        /// <summary>The stock tooltip's weapon figure: an aircraft's selected station, else the longest
+        /// anti-air or anti-missile station.</summary>
+        private static float WeaponRange(Unit unit)
         {
-            if (radius < MinimumDrawableRadius) return;
-
-            float cellX = theater.x / (width - 1);
-            float cellY = theater.y / (height - 1);
-            float halfX = theater.x * 0.5f;
-            float halfY = theater.y * 0.5f;
-
-            int minX = Mathf.Max(0, Mathf.FloorToInt((centre.x - radius + halfX) / cellX));
-            int maxX = Mathf.Min(width - 1, Mathf.CeilToInt((centre.x + radius + halfX) / cellX));
-            int minY = Mathf.Max(0, Mathf.FloorToInt((centre.z - radius + halfY) / cellY));
-            int maxY = Mathf.Min(height - 1, Mathf.CeilToInt((centre.z + radius + halfY) / cellY));
-            float radiusSquared = radius * radius;
-            float invRadius = 1f / radius;
-
-            for (int y = minY; y <= maxY; y++)
+            if (unit is Aircraft aircraft)
             {
-                float dz = y * cellY - halfY - centre.z;
-                float dzSquared = dz * dz;
-                // The whole row is outside the disc: every pixel in it would skip.
-                if (dzSquared >= radiusSquared) continue;
-                int row = y * width;
+                WeaponInfo info = aircraft.weaponManager != null ? aircraft.weaponManager.currentWeaponStation?.WeaponInfo : null;
+                return info != null ? info.targetRequirements.maxRange : 0f;
+            }
+            float best = 0f;
+            foreach (WeaponStation station in unit.weaponStations)
+            {
+                WeaponInfo info = station?.WeaponInfo;
+                if (info != null && (info.effectiveness.antiAir > 0f || info.effectiveness.antiMissile > 0f))
+                    best = Mathf.Max(best, info.targetRequirements.maxRange);
+            }
+            return best;
+        }
 
-                for (int x = minX; x <= maxX; x++)
+        [RequireComponent(typeof(CanvasRenderer))]
+        [DefaultExecutionOrder(101)]
+        private sealed class ThreatEnvelopeGraphic : MaskableGraphic
+        {
+            private readonly Vector2[] points = new Vector2[161];
+            private readonly Sample[] sites = new Sample[MaxEmitters];
+            private int count, revision = -1;
+            private float opacity, lastScale, lastFactor;
+            private DynamicMap map;
+            private bool projected;
+            private Color lastRadarInk, lastOpticalInk;
+
+            internal void SetSource(Sample[] source, int length, DynamicMap owner, float alpha)
+            {
+                bool changed = count != length || map != owner || opacity != alpha;
+                count = length; map = owner; opacity = Mathf.Clamp01(alpha);
+                for (int i = 0; i < count; i++)
                 {
-                    float dx = x * cellX - halfX - centre.x;
-                    float heat = ThreatEnvelope.SplatHeat(invRadius, radiusSquared, dx, dzSquared, weight);
-                    if (heat <= 0f) continue;
-                    int index = row + x;
-                    if (heat > field[index]) field[index] = heat;
+                    changed |= sites[i].Position != source[i].Position ||
+                        sites[i].RadarRadius != source[i].RadarRadius || sites[i].OpticalRadius != source[i].OpticalRadius;
+                    sites[i] = source[i];
+                }
+                if (changed) SetVerticesDirty();
+            }
+
+            private void LateUpdate()
+            {
+                bool active = ModuleServices.TryGet(out IMapProjection projection) && projection.IsActive;
+                int view = active ? projection.Revision : 0;
+                float scale = transform.lossyScale.x;
+                float factor = map != null ? map.mapDisplayFactor : 0f;
+                Color radarInk = AvTheme.RailDanger, opticalInk = AvTheme.RailCaution;
+                if (active == projected && view == revision && scale == lastScale && factor == lastFactor &&
+                    radarInk == lastRadarInk && opticalInk == lastOpticalInk) return;
+                projected = active; revision = view; lastScale = scale; lastFactor = factor;
+                lastRadarInk = radarInk; lastOpticalInk = opticalInk;
+                SetVerticesDirty();
+            }
+
+            protected override void OnPopulateMesh(VertexHelper vh)
+            {
+                vh.Clear();
+                if (map == null || !isActiveAndEnabled || !(map.mapDisplayFactor > 0f)) return;
+                float scale = Mathf.Max(.001f, Mathf.Abs(transform.lossyScale.x));
+                bool active = ModuleServices.TryGet(out IMapProjection projection) && projection.IsActive;
+                Color radar = AvTheme.RailDanger.WithAlpha(Mathf.Clamp01(opacity * 1.8f));
+                Color optical = AvTheme.RailCaution.WithAlpha(Mathf.Clamp01(opacity * 1.6f));
+                for (int i = 0; i < count; i++)
+                {
+                    Sample site = sites[i];
+                    Ring(vh, site.Position, site.RadarRadius, false, radar, projection, active, scale);
+                    Ring(vh, site.Position, site.OpticalRadius, true, optical, projection, active, scale);
+                    if (Project(site.Position.x, site.Position.z, projection, active, out Vector2 at))
+                    {
+                        float r = 4f / scale;
+                        Color ink = site.RadarRadius > 0f ? radar : optical;
+                        MapStroke.Segment(vh, at + Vector2.left*r, at + Vector2.up*r, .65f/scale, 1f/scale, ink);
+                        MapStroke.Segment(vh, at + Vector2.up*r, at + Vector2.right*r, .65f/scale, 1f/scale, ink);
+                        MapStroke.Segment(vh, at + Vector2.right*r, at + Vector2.down*r, .65f/scale, 1f/scale, ink);
+                        MapStroke.Segment(vh, at + Vector2.down*r, at + Vector2.left*r, .65f/scale, 1f/scale, ink);
+                    }
                 }
             }
-        }
 
-        private void Colorize()
-        {
-            float alpha = settings != null ? settings.OverlayOpacity.Value : 0.35f;
-            Color cool = AvTheme.RailCaution;
-            Color hot = AvTheme.RailDanger;
-            int width = fieldTexture.width;
-            int height = fieldTexture.height;
-
-            for (int y = 0; y < height; y++)
-            for (int x = 0; x < width; x++)
+            private void Ring(VertexHelper vh, Vector3 centre, float radius, bool dashed, Color ink,
+                IMapProjection projection, bool active, float scale)
             {
-                int i = y * width + x;
-                float heat = field[i];
-                float right = x + 1 < width ? field[i + 1] : heat;
-                float above = y + 1 < height ? field[i + width] : heat;
-                int band = -1;
-                for (int level = 0; level < ContourLevels.Length; level++)
+                if (!float.IsFinite(radius) || radius < MinimumDrawableRadius) return;
+                // Screen-space chord error below a fraction of a pixel at normal map scales.
+                // ponytail: 160 stations per envelope; bounded below 43000 vertices for 32 dual-sensor sites.
+                int segments = Mathf.Clamp(Mathf.CeilToInt(Mathf.Sqrt(radius * map.mapDisplayFactor * scale) * 6f), 48, 160);
+                int run = 0;
+                for (int i = 0; i <= segments; i++)
                 {
-                    float threshold = ContourLevels[level];
-                    if ((heat < threshold && (right >= threshold || above >= threshold)) ||
-                        (heat >= threshold && (right < threshold || above < threshold)))
-                        band = level;
+                    float angle = i * (2f * Mathf.PI / segments);
+                    bool visible = Project(centre.x + Mathf.Cos(angle)*radius, centre.z + Mathf.Sin(angle)*radius,
+                        projection, active, out Vector2 point);
+                    if (visible) points[run++] = point * scale;
+                    if (!visible || i == segments || dashed && i % 4 == 3)
+                    {
+                        MapStroke.Ribbon(vh, points, 0, run, 1f/scale, .7f, 1f, ink);
+                        run = 0;
+                    }
                 }
-                if (band < 0) { pixels[i] = ClearPixel; continue; }
-                Color ink = Color.Lerp(cool, hot, band / 2f);
-                pixels[i] = new Color32((byte)(ink.r * 255f), (byte)(ink.g * 255f),
-                    (byte)(ink.b * 255f), (byte)(Mathf.Clamp01(alpha * (0.7f + band * 0.25f)) * 255f));
+            }
+
+            private bool Project(float x, float z, IMapProjection projection, bool active, out Vector2 point)
+            {
+                if (active)
+                {
+                    bool ok = projection.TryProject(x, z, out float px, out float py);
+                    point = new Vector2(px, py); return ok;
+                }
+                point = new Vector2(x * map.mapDisplayFactor, z * map.mapDisplayFactor);
+                return float.IsFinite(point.x) && float.IsFinite(point.y);
             }
         }
     }

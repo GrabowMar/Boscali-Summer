@@ -30,6 +30,8 @@ namespace BoscaliSummer.Core.Contracts
         /// <summary>Orbit: distance from the centre, height above it, and the bearings the camera sweeps between.</summary>
         public float Radius, Height, FromDegrees, ToDegrees;
         public float Seconds, Fov;
+        /// <summary>Handheld shake 0..1 and a held roll in degrees.</summary>
+        public float Shake, Roll;
     }
 
     /// <summary>

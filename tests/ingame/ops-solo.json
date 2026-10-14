@@ -238,7 +238,7 @@
     },
     {
       "check": "result_above",
-      "path": "m5.windowOpenN",
+      "path": "m4.windowOpenN",
       "min": 0.5
     },
     {

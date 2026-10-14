@@ -28,6 +28,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public bool Lamps;
         /// <summary>The page's current height in board units, header included (animated between <see cref="ScopeLayout.Compact"/> and <see cref="ScopeLayout.Full"/>); 0: no page.</summary>
         public float PageH;
+        /// <summary>The STATUS block under a page that is not SYSTEMS (the aircraft's compact SYSTEMS strip, kept while a warning page has the scope): <see cref="ScopeLayout.Compact"/> or 0.</summary>
+        public float StatusH;
         /// <summary>0: no gauge is live; else the lines the live gauges pack into, 1 or 2 (<see cref="GaugeRow.Lay"/>).</summary>
         public int GaugeLines;
         public bool Ticker;
@@ -37,10 +39,10 @@ namespace BoscaliSummer.Modules.Hud.Domain
     internal struct BoardGeometry
     {
         public float Width, Height;
-        public BoardRect Hero, Pwr, Exp, Lamps, Page, Gauges, Ticker;
+        public BoardRect Hero, Pwr, Exp, Lamps, Page, Gauges, Ticker, Status;
 
         /// <summary>The blocks, in the order of <see cref="Block"/>: the shade's cloud field (<see cref="ShadeField"/>) is the strongest of their fall-offs.</summary>
-        public const int BlockCount = 7;
+        public const int BlockCount = 8;
 
         public readonly BoardRect Box => new BoardRect(0f, 0f, Width, Height);
 
@@ -55,6 +57,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 case 4: return Page;
                 case 5: return Gauges;
                 case 6: return Ticker;
+                case 7: return Status;
                 default: return default;
             }
         }
@@ -134,6 +137,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             }
             // The page never depends on what hangs under it.
             if (b.PageH > 0f) { g.Page = new BoardRect(wingX, y, wingW, b.PageH); y = g.Page.Bottom + PageGap; }
+            if (b.StatusH > 0f) { g.Status = new BoardRect(wingX, y, wingW, b.StatusH); y = g.Status.Bottom + PageGap; }
             if (b.GaugeLines > 0) { g.Gauges = new BoardRect(wingX, y, wingW, b.GaugeLines > 1 ? GaugeLine2 : GaugeLine1); y = g.Gauges.Bottom + GaugeGap; }
             if (b.Ticker) g.Ticker = new BoardRect(wingX, y, wingW, TickerH);
 

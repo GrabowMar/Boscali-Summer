@@ -565,7 +565,7 @@ namespace BoscaliSummer.Tests.Features.Command
             HoloCamera mini = Camera(HoloShape.Mini, true, 340f / 300f, 20);
             HoloView.View(mini, view);
             TestAssert.Near(view[0], 1f, "Holo view: north up leaves east on the right");
-            TestAssert.Near(view[10] + (float)Math.Cos(68.0 * Math.PI / 180.0), 0f, "Holo view: depth grows with north by the tilt's cosine");
+            TestAssert.Near(view[10] + (float)Math.Cos(HoloPresentation.MiniTilt * Math.PI / 180.0), 0f, "Holo view: depth grows with north by the tilt's cosine");
             TestAssert.That(Math.Abs(view[11] + mini.Distance) < 1f, "Holo view: north up, aircraft in the middle: the camera is its distance away");
             HoloView.Projection(mini, proj);
             float focal = (float)(1.0 / Math.Tan(12.0 * Math.PI / 180.0));
@@ -670,7 +670,7 @@ namespace BoscaliSummer.Tests.Features.Command
         {
             // The aircraft's place in the frame, both sizes, both orientations.
             HoloPresentation.Aircraft(HoloShape.Mini, false, out float across, out float up);
-            TestAssert.That(across == .5f && Math.Abs(up - .38f) < 1e-6f, "Tac place: the MINI heading up puts the aircraft in the middle across and 38 % up (got " + across + ", " + up + ")");
+            TestAssert.That(across == .5f && Math.Abs(up - .5f) < 1e-6f, "Tac place: the MINI heading up puts the aircraft in the middle across and in the middle up, as the game's corner map (got " + across + ", " + up + ")");
             HoloPresentation.Aircraft(HoloShape.Mini, true, out across, out up);
             TestAssert.That(across == .5f && up == .5f, "Tac place: ... the MINI north up in the middle");
             foreach (bool northUp in new[] { false, true })
@@ -711,7 +711,7 @@ namespace BoscaliSummer.Tests.Features.Command
                                 HoloView.GroundAt(camera, -1f, 1f, out float farLeft, out float farAhead) &
                                 HoloView.GroundAt(camera, 1f, 1f, out float farRight, out _), "Holo fit: all four frame corners see ground");
                 TestAssert.That(Math.Abs(nearLeft + nearRight) < 1f && Math.Abs(farLeft + farRight) < 1f, "Holo fit: the corners are mirrored across the aircraft");
-                TestAssert.That(nearAhead < 0f && farAhead > 0f && -nearLeft < -farLeft, "Holo fit: the frame sees ground behind the aircraft and ahead of it, wider far off");
+                TestAssert.That(nearAhead < 0f && farAhead > 0f && (camera.Tilt >= 89f ? Math.Abs(nearLeft - farLeft) < 1f : -nearLeft < -farLeft), "Holo fit: the frame sees ground behind the aircraft and ahead of it, wider far off (as wide on the flat 2D MINI)");
 
                 // A corner's ground goes back to the same corner of the frame.
                 HoloView.Project(camera, nearLeft, 0f, nearAhead, out float cx, out float cy);
@@ -855,6 +855,19 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.Eq(count, 96, "Holo marks: at most 96 units are drawn");
             for (int i = 0; i < count; i++)
                 TestAssert.Near(list[i].Range, all[i], "Holo marks: the 96 listed are the 96 nearest, nearest first");
+
+            list = new HoloMark[3]; count = 0;
+            foreach (float distance in new[] { 10f, 20f, 30f })
+                HoloMarks.Offer(list, ref count, new HoloMark { Range = distance }, prioritizeAir: true);
+            TestAssert.That(HoloMarks.Offer(list, ref count, new HoloMark { Kind = HoloKind.Air, Range = 500f }, prioritizeAir: true),
+                "Holo marks: nearby ground clutter cannot evict a visible aircraft");
+            TestAssert.That(HoloMarks.Offer(list, ref count, new HoloMark { Kind = HoloKind.Air, Range = 200f }, prioritizeAir: true),
+                "Holo marks: another aircraft enters the bounded list");
+            TestAssert.That(list[0].Range == 200f && list[1].Range == 500f && list[2].Range == 10f,
+                "Holo marks: air contacts first, nearest first within each class");
+            HoloMarks.Offer(list, ref count, new HoloMark { Kind = HoloKind.Air, Range = 900f }, prioritizeAir: true);
+            TestAssert.That(!HoloMarks.Offer(list, ref count, new HoloMark { Range = 1f }, prioritizeAir: true),
+                "Holo marks: an all-air list keeps its aircraft even over nearer ground");
         }
 
         private static void TestWords()
@@ -956,7 +969,7 @@ namespace BoscaliSummer.Tests.Features.Command
             state.Tick(1f, false);
             TestAssert.Eq(HoloPresentation.Choose(state.Stage, true, true), HoloShape.Mini, "Tac map: ... and shrinks back to the MINI on release");
 
-            TestAssert.Near(HoloPresentation.Tilt(HoloShape.Mini), 68f, "Tac map: the MINI is seen from 68 degrees, close to a plan view");
+            TestAssert.Near(HoloPresentation.Tilt(HoloShape.Mini), 90f, "Tac map: the MINI is a flat 2D plan view");
             TestAssert.Near(HoloPresentation.Tilt(HoloShape.Big), 55f, "Tac map: the BIG one from 55, for more relief");
             TestAssert.Eq(HoloPresentation.GridCells(HoloShape.Mini), 48, "Tac map: the MINI's grid is 48 cells across");
             TestAssert.Eq(HoloPresentation.GridCells(HoloShape.Big), 96, "Tac map: ... the BIG one's 96");

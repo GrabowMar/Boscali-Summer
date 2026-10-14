@@ -20,6 +20,7 @@ namespace BoscaliSummer.Modules.Command.Configuration
         public ConfigEntry<bool> StrOverlayOperation { get; }
         public ConfigEntry<bool> StrOverlaySorties { get; }
         public ConfigEntry<bool> ThreatHeat { get; }
+        public ConfigEntry<bool> MapRoads { get; }
         public ConfigEntry<float> OverlayOpacity { get; }
         public ConfigEntry<int> GridCellSizeMetres { get; }
         public ConfigEntry<float> GridRefreshInterval { get; }
@@ -35,6 +36,8 @@ namespace BoscaliSummer.Modules.Command.Configuration
         public ConfigEntry<float> BackgroundImageOpacity { get; }
 
         public ConfigEntry<bool> MapTerrainImage { get; }
+        public ConfigEntry<bool> MapIndustry { get; }
+        public ConfigEntry<bool> MapSupplyRoutes { get; }
         public ConfigEntry<bool> MapRelief3D { get; }
         public ConfigEntry<bool> MapSymbology { get; }
         public ConfigEntry<bool> MapMinis3D { get; }
@@ -102,16 +105,16 @@ namespace BoscaliSummer.Modules.Command.Configuration
         {
             DisplayLife = config.Bind("Command", "DisplayLife", 0.6f,
                 new ConfigDescription("Live signal on the maximized MFD: the power-on raster, the slow refresh sweep and harder jam and hit break-up. 0 keeps the display still.", new AcceptableValueRange<float>(0f, 1f)));
-            TerrainGhost = config.Bind("Command", "TerrainGhost", 0.35f,
+            TerrainGhost = config.Bind("Command", "TerrainGhost", 0f,
                 new ConfigDescription("Visor terrain ghost: a very faint wire relief of the real ground around and below your aircraft, drawn over the cockpit view in the HUD's colours. Ground that can hit you glows amber. 0 turns it off, 1 is clearly visible. Needs a map with baked terrain. Applies now; no restart.", new AcceptableValueRange<float>(0f, 1f)));
-            TacMap = config.Bind("Command", "TacMapMode", TacMapMode.Holo,
-                new ConfigDescription("TAC MAP, the corner map at the bottom left of the HUD. Holo (default): a small solid terrain map of the ground around your aircraft in the HUD's colours, with your view wedge, the units the map shows, the nearest airbase and a scale bar; hold the map key to blow it up to a big map. Classic: the game's own corner map as before (holding the map key still raises the hologram). Needs a map with baked terrain, else the game's corner map stays. Applies now; no restart."));
+            TacMap = config.Bind("Command", "TacMapMode", TacMapMode.Classic,
+                new ConfigDescription("TAC MAP, the corner map at the bottom left of the HUD. Classic (default): the game's own corner map. Holo: an optional terrain map with your view wedge, visible contacts and scale bar. Needs HOLO MAP on and a map with baked terrain, else the game's corner map stays. Applies now; no restart."));
             // A range saved before the tile (2026-10-13) is the old disc's option: read it before the binds take it from the orphan table (and clamp it to the new list).
             int savedMini = SavedInt(config, "TacMapRangeKm"), savedHolo = SavedInt(config, "HoloRangeKm");
             TacMapRangeKm = config.Bind("Command", "TacMapRangeKm", 20,
                 new ConfigDescription("TAC MAP: how far the small terrain map reaches from your aircraft to its side, in kilometres: 10, 20 or 40. Applies now; no restart.", new AcceptableValueList<int>(10, 20, 40)));
-            HoloMap = config.Bind("Command", "HoloMap", true,
-                new ConfigDescription("Holo map: hold the map key to project a big 3D terrain map of the real ground around your aircraft, drawn in the HUD's colours over the middle of the screen; it goes when you let go. A quick tap still opens the full map. Off makes the key open the full map the moment it is pressed. Needs a map with baked terrain. Applies now; no restart."));
+            HoloMap = config.Bind("Command", "HoloMap", false,
+                new ConfigDescription("Enable holographic maps (off by default). Hold the map key for the big terrain map; tap for the full map. Off restores the classic corner map and opens the full map on key press, regardless of TacMapMode. Needs baked terrain. Applies now; no restart."));
             HoloRangeKm = config.Bind("Command", "HoloRangeKm", 40,
                 new ConfigDescription("Holo map: how far the big terrain map reaches from your aircraft to its side, in kilometres: 20, 40 or 80. Applies now; no restart.", new AcceptableValueList<int>(20, 40, 80)));
             HoloNorthUp = config.Bind("Command", "HoloNorthUp", false,
@@ -123,6 +126,16 @@ namespace BoscaliSummer.Modules.Command.Configuration
                 if (savedMini > 0) TacMapRangeKm.Value = HoloPresentation.MigrateMiniRange(savedMini);
                 if (savedHolo > 0) HoloRangeKm.Value = HoloPresentation.MigrateHoloRange(savedHolo);
                 HoloTileRanges.Value = 1;
+            }
+            // 0.2.4 turned the terrain ghost and holo maps off by default; a cfg saved by 0.2.3 still holds the old on values.
+            ConfigEntry<int> quietDefaults = config.Bind("Command", "QuietVisorDefaults", 0,
+                new ConfigDescription("Internal marker, leave as it is: 1 once a config saved before 0.2.5 has had TerrainGhost, HoloMap and TacMapMode set back to their off defaults.", new AcceptableValueRange<int>(0, 1)));
+            if (quietDefaults.Value < 1)
+            {
+                TerrainGhost.Value = 0f;
+                HoloMap.Value = false;
+                TacMap.Value = TacMapMode.Classic;
+                quietDefaults.Value = 1;
             }
             AvionicsCustomKeyHue = config.Bind("Avionics", "CustomKeyHue", 190f,
                 new ConfigDescription("Custom scheme: hue of keys and selection, in degrees.", new AcceptableValueRange<float>(0f, 360f)));
@@ -174,7 +187,10 @@ namespace BoscaliSummer.Modules.Command.Configuration
                 "STR layer on the expanded map: the sorties tied to the operation, and enemy command posts (this build ties no sortie and reports no post yet). The layer plate's SORTIES switch changes it in game.");
 
             ThreatHeat = config.Bind("Command", "ThreatHeat", true,
-                "Tracked hostile sensor coverage as range contours. The local faction's tracked picture and your aircraft's detection envelope drive it. The MAP bezel's SENSOR CONTOURS layer switches it in game.");
+                "On the MAP relief, the hovered unit's sensor (solid) and weapon (dashed) ranges drawn on the terrain in place of the stock flat circles. The MAP bezel's HOVER RANGES layer switches it in game.");
+
+            MapRoads = config.Bind("Command", "MapRoads", false,
+                "On the MAP relief, the game's road network drawn as amber lines on the terrain. The MAP bezel's ROADS layer switches it in game.");
 
             OverlayOpacity = config.Bind("Command", "OverlayOpacity", 0.35f,
                 new ConfigDescription(
@@ -225,6 +241,12 @@ namespace BoscaliSummer.Modules.Command.Configuration
 
             MapTerrainImage = config.Bind("Command", "MapTerrainImage", true,
                 "Display satellite terrain map image under tactical overlays.");
+
+            MapIndustry = config.Bind("Command", "MapIndustry", true,
+                "On the expanded map, mark the factories (square), depots (diamond) and ammo dumps (triangle) your side knows of, in side colours. The MAP bezel's INDUSTRY layer switches it in game.");
+
+            MapSupplyRoutes = config.Bind("Command", "MapSupplyRoutes", false,
+                "On the expanded map, a dashed line from each friendly factory, depot and ammo dump to the nearest point of the front, and a chevron on every known supply truck. The MAP bezel's SUPPLY ROUTES layer switches it in game.");
 
             MapRelief3D = config.Bind("Command", "MapRelief3D", true,
                 "Show a tilted tactical model from baked game terrain when the expanded map is open. The native map remains available when terrain data is missing or this is off.");

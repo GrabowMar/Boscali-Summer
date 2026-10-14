@@ -29,10 +29,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private const float ActionGap = 3f;
 
         private static readonly List<Unit> candidates = new List<Unit>(MaximumSelected);
-        private static readonly List<MenuAction> actions = new List<MenuAction>(8);
-        private static readonly List<MapContextRead.Row> rows = new List<MapContextRead.Row>(10);
-        /// <summary>Two neighbouring <see cref="Half"/> actions share one line.</summary>
-        private struct MenuAction { internal string Label; internal AvIcon Icon; internal Action Invoke; internal bool Half; }
+        private static readonly List<MapMenuAction> actions = new List<MapMenuAction>(8);
+        private static readonly List<MapMenuRow> rows = new List<MapMenuRow>(10), wingRows = new List<MapMenuRow>(4);
 
         private static RectTransform box;
         private static RectTransform menu;
@@ -302,6 +300,24 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (nearby > 1)
                     Add("SELECT NEARBY  /  " + nearby, AvIcon.Stack2, () => SelectNearby(map, click));
             }
+            // The wing's orders for this click: Wing owns and runs them, the card only presses.
+            wingRows.Clear();
+            if (airbase == null && ModuleServices.TryGet(out IMapWingMenu wing))
+            {
+                int first = actions.Count;
+                wing.Fill(contact != null ? contact.unit : null, ground, wingRows, actions);
+                for (int i = first; i < actions.Count; i++)
+                {
+                    MapMenuAction a = actions[i];
+                    Action run = a.Invoke;
+                    a.Invoke = () =>
+                    {
+                        HideMenu();
+                        run?.Invoke();
+                    };
+                    actions[i] = a;
+                }
+            }
             // The world camera is the player's only while they fly nothing (the vanilla icon-click rule).
             if (!GameManager.GetLocalAircraft(out Aircraft flown) || flown == null || flown.disabled)
             {
@@ -328,6 +344,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             for (int i = 0; i < actions.Count; i++, lines++)
                 if (Paired(i)) i++;
             Color tone = MapContextRead.Fill(map, ground, mark, rows);
+            // A wingman's own rows lead the card: that is what the click was about.
+            rows.InsertRange(0, wingRows);
             float body = HeadHeight + rows.Count * RowHeight + 8f;
             float height = body + lines * (ActionHeight + ActionGap) + 5f;
             var go = new GameObject("NOAvionics.MapContext", typeof(RectTransform));
@@ -382,12 +400,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         }
 
         private static void Add(string label, AvIcon icon, Action invoke, bool half = false) =>
-            actions.Add(new MenuAction { Label = label, Icon = icon, Invoke = invoke, Half = half });
+            actions.Add(new MapMenuAction { Label = label, Icon = icon, Invoke = invoke, Half = half });
 
         private static bool Paired(int index) =>
             actions[index].Half && index + 1 < actions.Count && actions[index + 1].Half;
 
-        private static void PlaceAction(MenuAction action, float x, float y, float width)
+        private static void PlaceAction(MapMenuAction action, float x, float y, float width)
         {
             AvControl button = AvControl.Make(menu,
                 new AvControl.Spec(action.Label, action.Invoke, AvButtonStyle.Default, action.Icon));
@@ -761,6 +779,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (markGlyph != null) Object.Destroy(markGlyph.gameObject);
             markGlyph = null;
             rows.Clear();
+            wingRows.Clear();
             rightPress = false;
             leftPress = false;
             boxReleaseFrame = -1;

@@ -40,6 +40,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         private int pageRows = SpaceFeedLayout.Tiles6;
         private bool visible, leaseOpen, dirty;
+
+        /// <summary>The OPS page's PERKS tab is on screen: hold the feed lease for its TASKED rows (posts arrive with the rows) without rebuilding the ORBIT view.</summary>
+        internal bool PanelWatch { get; set; }
         private float nextRefresh, nextActivity, failedUntil;
         private int lastFaction;
 
@@ -80,6 +83,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             ClearView();
             leaseOpen = false;
             visible = false;
+            PanelWatch = false;
             baselined = false;
             SpaceCockpitThreatProbe.ResetForScene();
             DisposeSensors();
@@ -135,7 +139,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             WatchFaction();
             ExpireRequests(now);
 
-            bool wanted = visible;
+            bool wanted = visible || PanelWatch;
             leaseOpen = manager.SpaceFeedWanted; // a link or faction reset clears the manager's lease; follow it so the feed re-opens
             if (wanted && !leaseOpen) { manager.SpaceOpenFeed(); leaseOpen = true; }
             else if (!wanted && leaseOpen)
@@ -145,7 +149,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 if (imager != null) imager.Visible = false;
                 if (sar != null) sar.Visible = false;
             }
-            if (!wanted) return;
+            if (!visible) return; // a PERKS-tab lease only wants the posts, not the ORBIT view
 
             float wall = Time.unscaledTime;
             if (wall < failedUntil) return; // a refresh fault holds the feed off for a moment, however often the panel re-shows it
@@ -163,9 +167,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         private void FailFeed(Exception e, float wall)
         {
-            failedUntil = wall + 2f; // latch: a flag alone would be re-set by the next refresh
+            failedUntil = wall + 2f; // back off for a moment, then the dirty retry below runs
             Plugin.Logger?.LogError("SPACE feed refresh failed: " + e);
-            visible = false;
+            dirty = true; // stay visible: the failedUntil backoff above retries instead of killing the feed until reopen
         }
 
         /// <summary>A faction change clears the old mirror and draft before anything repaints.</summary>

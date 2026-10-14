@@ -297,6 +297,27 @@ namespace BoscaliSummer.Modules.Support.Networking
             return true;
         }
 
+        /// <summary>
+        /// Submits one cruise waypoint leg (or a clear) for the sender's own strike. The server's own player is
+        /// validated in-process like every other request; a remote client sends the leg and nothing else (the host
+        /// derives the strike, its owner and the price of the route). False when nothing could be sent.
+        /// </summary>
+        internal bool RequestWaypoint(int requestId, GlobalPosition leg, bool clear)
+        {
+            if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && local != null)
+            {
+                manager.ApplyWaypoint(local, requestId, leg, clear);
+                return true;
+            }
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
+            if (client == null || !client.Active) return false;
+            client.Send(new CruiseWaypointMessage
+            {
+                Protocol = ProtocolVersion, RequestId = requestId, X = leg.x, Z = leg.z, Clear = clear
+            });
+            return true;
+        }
+
         /// <summary>Server to one requester. Only the requesting player is ever addressed.</summary>
         internal void SendSpaceReply(Player player, SpaceReply reply)
         {

@@ -44,6 +44,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public CyberAnchorSet Anchors;
             public readonly List<AnchorSlot> Slots = new List<AnchorSlot>(4);
             public CyberDesk Desk;
+            public float NextTruckRefresh;
         }
 
         /// <summary>What the pure desk needs from the live game: the clock, the census, the wallet and the TASKED board.</summary>
@@ -118,7 +119,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         /// <summary>
         /// DATA CENTER or EW TRUCK programme finished: the first dead anchor of that kind has its restore bar filled, so the existing rebuild puts it back where it stood (after its
-        /// 120 s grace, if that has not passed yet). False when none of that kind is down.
+        /// 120 s grace, if that has not passed yet). If initial placement left capacity unused, builds another anchor instead.
         /// </summary>
         internal bool CompleteRebuild(FactionHQ owner, AnchorKind kind)
         {
@@ -129,7 +130,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 slot.Bar.Fund(slot.Bar.Goal);
                 return true;
             }
-            return false;
+            return TryExpand(f, kind);
         }
 
         /// <summary>True once this faction has at least one standing EW truck.</summary>
@@ -179,6 +180,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         private void TickFaction(FactionCyber f, float now)
         {
+            if (now >= f.NextTruckRefresh)
+            {
+                f.NextTruckRefresh = now + 10f;
+                EnrollTrucks(f, now);
+            }
             foreach (AnchorSlot slot in f.Slots) Measure(f, slot, now);
             Rebuild(f, now);
             TickNodes(f, now);
@@ -218,7 +224,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 slot.Bar.Fund(slot.Kind == AnchorKind.EwTruck ? manager.EwTruckRebuildFunding(f.Owner, dt) : manager.DataCenterRebuildFunding(f.Owner, dt));
                 if (!slot.Bar.Complete || now < slot.NextRebuildTry) continue;
                 slot.NextRebuildTry = now + RelocateRetrySeconds;
-                spawner.DiscardGroup(slot.Unit);
+                if (spawner.Owns(slot.Unit)) spawner.DiscardGroup(slot.Unit);
                 Unit made;
                 bool ok = slot.Kind == AnchorKind.EwTruck ? spawner.TryCreateTruck(f.Owner, slot.Index, slot.Spot, slot.Parent, out made)
                     : spawner.TryCreateCenter(f.Owner, slot.Index, slot.Spot, slot.Parent, out made);
@@ -234,6 +240,83 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         // ---- Establish ---------------------------------------------------------------------------------
 
+        /// <summary>New faction-owned radar trucks fill empty/dead EW slots; no ownership, movement or extra wire is imposed on native vehicles.</summary>
+        private void EnrollTrucks(FactionCyber f, float now)
+        {
+            List<Unit> all = UnitRegistry.allUnits;
+            if (all == null || all.Count > MaximumScanUnits) return;
+            // Native wreck cleanup can remove registry entries during enrollment.
+            for (int i = 0; i < all.Count; i++)
+            {
+                Unit unit = all[i];
+                if (!(unit is GroundVehicle) || unit.NetworkHQ != f.Owner || unit.radar == null ||
+                    UplinkSpawner.Down(unit, f.Owner) || !(unit.definition is VehicleDefinition definition) ||
+                    Array.IndexOf(CyberAnchorSpawner.TruckKeys, definition.jsonKey) < 0 || IsAnchor(unit)) continue;
+                bool enrolled = false;
+                AnchorSlot vacant = null;
+                foreach (AnchorSlot slot in f.Slots)
+                {
+                    if (slot.Unit == unit) { enrolled = true; break; }
+                    if (slot.Kind == AnchorKind.EwTruck && UplinkSpawner.Down(slot.Unit, f.Owner)) vacant = vacant ?? slot;
+                }
+                if (enrolled) continue;
+                GlobalPosition p = unit.transform.position.ToGlobalPosition();
+                if (vacant != null)
+                {
+                    if (spawner.Owns(vacant.Unit)) spawner.DiscardGroup(vacant.Unit);
+                    vacant.Unit = unit; vacant.Baseline = UplinkSpawner.Health(unit);
+                    vacant.Spot = p; vacant.Parent = null; vacant.Bar.Reset(); vacant.LastFund = now;
+                    f.Anchors.Restore(AnchorKind.EwTruck, vacant.Index, (float)p.x, (float)p.z, now);
+                }
+                else
+                {
+                    int index = f.Anchors.Add(AnchorKind.EwTruck, (float)p.x, (float)p.z);
+                    if (index < 0) break;
+                    f.Slots.Add(new AnchorSlot(AnchorKind.EwTruck, index, unit, p, null));
+                }
+                f.BaseRound = 0;
+                Plugin.Logger?.LogInfo("[Support.Cyber] " + f.Owner.name + " enrolled native radar truck " + definition.jsonKey + ".");
+            }
+        }
+
+        /// <summary>A completed programme can grow the initial placement up to the two-anchor cap, as well as rebuild a lost anchor.</summary>
+        private bool TryExpand(FactionCyber f, AnchorKind kind)
+        {
+            int index = f.Anchors.Count(kind);
+            int maximum = kind == AnchorKind.EwTruck ? AnchorRules.MaxTrucks : AnchorRules.MaxDataCenters;
+            if (index >= maximum) return false;
+            Vector2 span = TheaterFrame.Resolve();
+            var truckSites = new List<Site>(); var truckCands = new List<SiteCandidate>();
+            var centerSites = new List<Site>(); var centerCands = new List<SiteCandidate>();
+            CollectSites(f.Owner, span, truckSites, truckCands, centerSites, centerCands);
+            var sites = kind == AnchorKind.EwTruck ? truckSites : centerSites;
+            var candidates = kind == AnchorKind.EwTruck ? truckCands : centerCands;
+            var avoid = new List<SiteCandidate>(4);
+            foreach (AnchorSlot slot in f.Slots)
+                if (f.Anchors.TryPosition(slot.Kind, slot.Index, out float x, out float z))
+                {
+                    var point = new SiteCandidate(slot.Index, x, z, 0f, 0f);
+                    if (slot.Kind == kind) avoid.Add(point);
+                    else candidates.RemoveAll(c => (c.X - x) * (c.X - x) + (c.Z - z) * (c.Z - z) < 600f * 600f);
+                }
+            var picks = new List<int>();
+            CyberPlacement.Pick(candidates, span.magnitude, candidates.Count, avoid, span.magnitude * CyberPlacement.SeparationFraction, picks);
+            foreach (int id in picks)
+            {
+                Site site = sites[id];
+                Unit unit;
+                bool ok = kind == AnchorKind.EwTruck ? spawner.TryCreateTruck(f.Owner, index, site.Anchor, site.Parent, out unit)
+                    : spawner.TryCreateCenter(f.Owner, index, site.Anchor, site.Parent, out unit);
+                if (!ok) continue;
+                GlobalPosition p = unit.transform.position.ToGlobalPosition();
+                if (f.Anchors.Add(kind, (float)p.x, (float)p.z) < 0) { spawner.DiscardGroup(unit); return false; }
+                f.Slots.Add(new AnchorSlot(kind, index, unit, site.Anchor, site.Parent));
+                f.BaseRound = 0;
+                return true;
+            }
+            return false;
+        }
+
         private sealed class Site
         {
             public Airbase Parent; public GlobalPosition Anchor;
@@ -247,22 +330,18 @@ namespace BoscaliSummer.Modules.Support.Runtime
             Vector2 span = TheaterFrame.Resolve();
             var truckSites = new List<Site>(); var truckCands = new List<SiteCandidate>();
             var centerSites = new List<Site>(); var centerCands = new List<SiteCandidate>();
-            if (FactionRegistry.airbaseLookup != null)
-            {
-                int inspected = 0, held = 0;
-                foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
-                {
-                    if (++inspected > 128 || held >= MaximumBases) break;
-                    if (airbase == null || airbase.disabled || airbase.AttachedAirbase || airbase.CurrentHQ != owner || airbase.center == null) continue;
-                    held++;
-                    Collect(owner, airbase, span.magnitude, truckSites, truckCands, centerSites, centerCands);
-                }
-            }
+            CollectSites(owner, span, truckSites, truckCands, centerSites, centerCands);
             var picks = new List<int>();
-            CyberPlacement.Pick(truckCands, span.magnitude, AnchorRules.MaxTrucks, null, 0f, picks);
             var pickedTrucks = new List<SiteCandidate>();
-            var slots = new List<AnchorSlot>(4);
-            int created = 0;
+            var native = new FactionCyber { Owner = owner, Anchors = new CyberAnchorSet(0, 0) };
+            EnrollTrucks(native, SupportManager.MissionNow());
+            var slots = native.Slots;
+            int created = slots.Count;
+            foreach (AnchorSlot slot in slots)
+                if (native.Anchors.TryPosition(slot.Kind, slot.Index, out float x, out float z))
+                    pickedTrucks.Add(new SiteCandidate(slot.Index, x, z, 0f, 0f));
+            CyberPlacement.Pick(truckCands, span.magnitude, AnchorRules.MaxTrucks - created, pickedTrucks,
+                span.magnitude * CyberPlacement.SeparationFraction, picks);
             foreach (int id in picks)
             {
                 if (!spawner.TryCreateTruck(owner, created, truckSites[id].Anchor, truckSites[id].Parent, out Unit truck)) continue;
@@ -290,6 +369,20 @@ namespace BoscaliSummer.Modules.Support.Runtime
             made.Desk.EnemyTraceFactor = _ => TraceFactorOf(captured.Owner); // an enemy holding our DATA CENTER node: x1.3 (hold effects live in the holder's desk)
             made.Desk.Happened += e => OnEvent(captured, e);
             return true;
+        }
+
+        private void CollectSites(FactionHQ owner, Vector2 span, List<Site> truckSites, List<SiteCandidate> truckCands,
+            List<Site> centerSites, List<SiteCandidate> centerCands)
+        {
+            if (FactionRegistry.airbaseLookup == null) return;
+            int inspected = 0, held = 0;
+            foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
+            {
+                if (++inspected > 128 || held >= MaximumBases) break;
+                if (airbase == null || airbase.disabled || airbase.AttachedAirbase || airbase.CurrentHQ != owner || airbase.center == null) continue;
+                held++;
+                Collect(owner, airbase, span.magnitude, truckSites, truckCands, centerSites, centerCands);
+            }
         }
 
         private void Collect(FactionHQ owner, Airbase parent, float diagonal, List<Site> truckSites, List<SiteCandidate> truckCands,

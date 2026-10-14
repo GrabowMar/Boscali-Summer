@@ -47,6 +47,11 @@ namespace BoscaliSummer.Tests.Features.Command
             TestAssert.Near(field.Sample(float.NaN, 0f), 0f, "Height field: a position that is not a number reads as sea");
             TestAssert.That(field.IsLand(0f, 0f) && field.IsLand(-100f, 100f), "Height field: dry samples are land");
             TestAssert.That(!field.IsLand(-160f, 0f) && !field.IsLand(0f, 160f), "Height field: off the sheet is not land");
+            // A map twice as wide as tall (the naval map, 163.84 x 81.92 km) on the same square sheet: x 200 m apart, z 100 m.
+            var wide = new TerrainHeightField(heights, AllTrue(9), 3, 200f, 0f, 100f);
+            TestAssert.Near(wide.Sample(200f, -100f), 30f, "Height field: a wide map's east edge is twice as far as its north edge");
+            TestAssert.Near(wide.Sample(-200f, 100f), 70f, "Height field: a wide map's z axis keeps its own spacing");
+            TestAssert.That(wide.IsLand(0f, 100f) && !wide.IsLand(0f, 160f), "Height field: a wide map's land mask ends at its own north edge");
 
             // A shore: one sea sample (encoded at -200 m) beside dry ground. Water counts as the sea level, never as -200 m.
             var shore = new TerrainHeightField(new float[] { -200f, 100f, 100f, 100f },

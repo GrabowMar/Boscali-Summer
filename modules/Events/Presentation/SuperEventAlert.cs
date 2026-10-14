@@ -72,10 +72,12 @@ namespace BoscaliSummer.Modules.Events.Presentation
         private float layoutWidth;
         private float layoutOffset;
         private bool failed;
+        private bool pictures;
 
         public void Configure(EventsSettings config, EventsManager manager)
         {
             settings = config;
+            EventArtCache.Configure(config);
             events = manager;
         }
 
@@ -161,10 +163,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
             compactImpact.text = view.EffectSummary;
             compactImpact.color = ink;
 
-            Sprite poster = EventArtCache.Get(view.IconKey, "tier_super");
-            AvIcon categoryIcon = EventsMfdPanel.CategoryIcon(view.Category);
-            plate.Bind(poster, categoryIcon, ink);
-            compactPlate.Bind(poster, categoryIcon, ink);
+            BindPictures();
 
             expandedPanel.gameObject.SetActive(true);
             compactPanel.gameObject.SetActive(false);
@@ -182,8 +181,23 @@ namespace BoscaliSummer.Modules.Events.Presentation
             if (root == null || !root.activeSelf) activeView = null;
         }
 
+        private void BindPictures()
+        {
+            pictures = EventArtCache.PicturesEnabled;
+            if (activeView == null) return;
+            AvState state = activeView.EffectSummary.StartsWith("-", StringComparison.Ordinal) ? AvState.Ready : AvState.Danger;
+            Color ink = AvStyleHost.FuiColor(AvStates.Class(state), AvTheme.RailDanger);
+            Sprite poster = EventArtCache.Get(activeView.IconKey, "tier_super");
+            AvIcon icon = EventsMfdPanel.CategoryIcon(activeView.Category);
+            plate.Bind(poster, icon, ink);
+            compactPlate.Bind(poster, icon, ink);
+            plate.Layout(plate.Root.rect.width, plate.Root.rect.height);
+            compactPlate.Layout(compactPlate.Root.rect.width, compactPlate.Root.rect.height);
+        }
+
         private void Tick()
         {
+            if (pictures != EventArtCache.PicturesEnabled) BindPictures();
             float now = Time.unscaledTime;
             if (now >= closeAt) targetAlpha = 0f;
             float fade = targetAlpha > group.alpha ? FadeInSeconds : FadeOutSeconds;

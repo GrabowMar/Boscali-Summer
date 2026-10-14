@@ -17,6 +17,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         /// <summary>The badge children of one host, found once (only this class creates them).</summary>
         private sealed class Slots
         {
+            public RectTransform Layer;
             public WingMapRingGraphic Ring;
             public Image Selection;
             public TMP_Text Status;
@@ -54,11 +55,22 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             bool outlined = presentation.Outline != WingMapPresentation.OutlineKind.None;
             if (!outlined && !presentation.CommandBrackets)
             {
+                if (known.Layer != null) known.Layer.gameObject.SetActive(false);
                 if (ring != null) ring.gameObject.SetActive(false);
                 if (known.Selection != null) known.Selection.gameObject.SetActive(false);
                 if (known.Status != null) known.Status.gameObject.SetActive(false);
                 return;
             }
+
+            if (known.Layer == null)
+            {
+                var go = new GameObject("WingCommand_BadgeLayer", typeof(RectTransform), typeof(WingMapBadgePose));
+                known.Layer = go.GetComponent<RectTransform>();
+                known.Layer.SetParent(host.rectTransform, false);
+                go.GetComponent<WingMapBadgePose>().Host = host;
+            }
+            known.Layer.gameObject.SetActive(true);
+            CancelIconScale(host, known.Layer);
 
             // Measure rendered icon dimensions because native local scale includes zoom, icon size, and
             // heading rotation.
@@ -78,7 +90,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 {
                     var go = new GameObject(RingObjectName, typeof(RectTransform), typeof(WingMapRingGraphic));
                     ring = go.GetComponent<WingMapRingGraphic>();
-                    ring.rectTransform.SetParent(host.rectTransform, worldPositionStays: false);
+                    ring.rectTransform.SetParent(known.Layer, worldPositionStays: false);
                     known.Ring = ring;
                 }
                 ring.gameObject.SetActive(true);
@@ -111,11 +123,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 var go = new GameObject(StatusObjectName, typeof(RectTransform), typeof(TextMeshProUGUI));
                 label = go.GetComponent<TMP_Text>();
-                label.rectTransform.SetParent(host.rectTransform, worldPositionStays: false);
+                label.rectTransform.SetParent(known.Layer, worldPositionStays: false);
                 label.fontSize = 11f;
                 label.fontStyle = FontStyles.Bold;
                 label.alignment = TextAlignmentOptions.Center;
                 label.raycastTarget = false;
+                label.fontSharedMaterial = Outlined(label.fontSharedMaterial);
                 known.Status = label;
             }
 
@@ -130,8 +143,62 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (!ReferenceEquals(label.text, text)) label.text = text;
         }
 
+        private static Material outlined;
+
+        /// <summary>One shared copy of the font material with a dark outline: the badge reads on snow, sea and relief alike,
+        /// with no plate behind it.</summary>
+        private static Material Outlined(Material font)
+        {
+            if (outlined != null || font == null) return outlined != null ? outlined : font;
+            outlined = new Material(font) { name = "WingCommand_BadgeOutline" };
+            outlined.EnableKeyword(ShaderUtilities.Keyword_Outline);
+            outlined.SetFloat(ShaderUtilities.ID_OutlineWidth, 0.28f);
+            outlined.SetColor(ShaderUtilities.ID_OutlineColor, new Color(0f, 0f, 0f, 0.85f));
+            outlined.SetFloat(ShaderUtilities.ID_FaceDilate, 0.12f);
+            return outlined;
+        }
+
         private static Vector2 ScreenPoint(RectTransform transform, Vector2 point, Camera camera) =>
             RectTransformUtility.WorldToScreenPoint(camera, transform.TransformPoint(point));
+
+        // Cancel nonuniform icon scale before the children cancel heading; doing both on a single
+        // transform leaves shear. The native map and relief can change both after Apply's postfix.
+        private static void CancelIconScale(Image host, RectTransform layer)
+        {
+            layer.anchoredPosition = Vector2.zero;
+            Vector3 scale = host.transform.localScale;
+            layer.localScale = new Vector3(1f / Mathf.Max(.0001f, scale.x),
+                1f / Mathf.Max(.0001f, scale.y), 1f / Mathf.Max(.0001f, scale.z));
+        }
+
+        internal static void RefreshPose(Image host)
+        {
+            if (host == null || !slots.TryGetValue(host, out Slots known) || known.Layer == null) return;
+            CancelIconScale(host, known.Layer);
+            Canvas canvas = host.canvas;
+            Camera camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+            Rect rect = host.rectTransform.rect;
+            Vector2 origin = ScreenPoint(host.rectTransform, rect.min, camera);
+            WingMapBadgeGeometry geometry = WingMapBadgeGeometry.ForIcon(
+                Vector2.Distance(origin, ScreenPoint(host.rectTransform, new Vector2(rect.xMax, rect.yMin), camera)),
+                Vector2.Distance(origin, ScreenPoint(host.rectTransform, new Vector2(rect.xMin, rect.yMax), camera)));
+            if (known.Ring != null && known.Ring.gameObject.activeSelf)
+            {
+                AlignToScreen(known.Ring.rectTransform, canvas, camera);
+                known.Ring.SetGeometry(geometry);
+            }
+            if (known.Selection != null && known.Selection.gameObject.activeSelf)
+            {
+                AlignToScreen(known.Selection.rectTransform, canvas, camera);
+                known.Selection.rectTransform.sizeDelta = Vector2.one * (geometry.CommandHalfExtentPixels * 2f);
+            }
+            if (known.Status != null && known.Status.gameObject.activeSelf)
+            {
+                RectTransform rt = known.Status.rectTransform;
+                AlignToScreen(rt, canvas, camera);
+                rt.position = host.rectTransform.position + rt.up * ((geometry.OuterRadiusPixels + 9f) * rt.lossyScale.y);
+            }
+        }
 
         /// <summary>Centre badge geometry on the icon in screen-pixel coordinates.</summary>
         private static void AlignToScreen(RectTransform badge, Canvas canvas, Camera camera)
@@ -164,7 +231,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 var go = new GameObject(SelectionObjectName, typeof(RectTransform), typeof(Image));
                 badge = go.GetComponent<Image>();
-                badge.rectTransform.SetParent(host.rectTransform, worldPositionStays: false);
+                badge.rectTransform.SetParent(known.Layer, worldPositionStays: false);
                 badge.sprite = IconFactory.Get("selection");
                 badge.preserveAspect = true;
                 known.Selection = badge;
@@ -178,6 +245,15 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             badge.color = new Color(Mathf.Clamp01(color.r + 0.65f),
                 Mathf.Clamp01(color.g + 0.65f), Mathf.Clamp01(color.b + 0.65f), 1f);
         }
+    }
+
+    /// <summary>Size against the final map pose, after native refresh, symbol fitting and relief projection.</summary>
+    internal sealed class WingMapBadgePose : MonoBehaviour
+    {
+        internal Image Host;
+        private void OnEnable() => Canvas.preWillRenderCanvases += Refresh;
+        private void OnDisable() => Canvas.preWillRenderCanvases -= Refresh;
+        private void Refresh() => WingMarkerBadge.RefreshPose(Host);
     }
 
     /// <summary>Unfilled UI ring with feathered edges, avoiding overlapping silhouette copies from Unity

@@ -135,6 +135,18 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
 
         public int Count(AnchorKind kind) => slots[(int)kind].Length;
 
+        /// <summary>Enroll a new native anchor within the existing wire/mission ceiling.</summary>
+        public int Add(AnchorKind kind, float x, float z)
+        {
+            int index = Count(kind);
+            int maximum = kind == AnchorKind.EwTruck ? AnchorRules.MaxTrucks : AnchorRules.MaxDataCenters;
+            if (index >= maximum || !float.IsFinite(x) || !float.IsFinite(z)) return -1;
+            Array.Resize(ref slots[(int)kind], index + 1);
+            slots[(int)kind][index] = new Slot();
+            SetPosition(kind, index, x, z);
+            return index;
+        }
+
         public int LiveCount(AnchorKind kind)
         {
             int n = 0;
@@ -175,6 +187,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         {
             Set(kind, index, 1f, false, now);
             SetPosition(kind, index, x, z);
+            if (InRange(kind, index)) slots[(int)kind][index].LockUntil = slots[(int)kind][index].RevealUntil = 0f;
         }
 
         public bool TruckLocked(int index, float now) => InRange(AnchorKind.EwTruck, index) && now < slots[0][index].LockUntil;

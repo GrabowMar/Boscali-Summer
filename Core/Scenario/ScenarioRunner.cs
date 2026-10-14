@@ -178,7 +178,7 @@ namespace BoscaliSummer.Core.Scenario
                         if (!def.Shots.TryGetValue(cut.Name, out ScenarioShot shot)) continue;
                         ScenarioPicture photo = null;
                         if (cut.Photo != null) def.Pictures.TryGetValue(cut.Photo, out photo);
-                        cuts.Add(new ScenarioCut { Shot = shot, Title = cut.Title, Caption = cut.Text, Stamp = cut.Stamp, Photo = photo });
+                        cuts.Add(new ScenarioCut { Shot = shot, Title = cut.Title, Caption = cut.Text, Stamp = cut.Stamp, Photo = photo, Fx = cut.Fx, Board = cut.Board, Words = cut.Words, Voice = cut.Voice });
                     }
                     if (cuts.Count == 0 || stage.Cut(cuts)) break;
                     // No camera (the pilot is flying, or cutscenes are off): the words still get read.

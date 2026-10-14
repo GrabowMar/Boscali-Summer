@@ -36,15 +36,16 @@ namespace BoscaliSummer.Modules.Command.Domain
 
         /// <summary>
         /// Offers a mark to a list kept in order of rising range and no longer than the array or <paramref name="limit"/> (the MINI keeps fewer than the BIG): a mark nearer than the farthest kept takes
-        /// its place and pushes the farthest out; a mark of equal range goes after those already listed. Returns whether the mark was kept.
+        /// its place and pushes the farthest out; a mark of equal range goes after those already listed. With prioritizeAir, airborne contacts take slots before surface clutter.
+        /// Returns whether the mark was kept.
         /// </summary>
-        internal static bool Offer(HoloMark[] list, ref int count, in HoloMark mark, int limit = int.MaxValue)
+        internal static bool Offer(HoloMark[] list, ref int count, in HoloMark mark, int limit = int.MaxValue, bool prioritizeAir = false)
         {
             int cap = Math.Min(limit, list.Length);
             if (count > cap) count = Math.Max(cap, 0);
-            if (cap <= 0 || (count == cap && !(mark.Range < list[count - 1].Range))) return false;
+            if (cap <= 0 || (count == cap && !Before(mark, list[count - 1], prioritizeAir))) return false;
             int at = count < cap ? count : count - 1;
-            while (at > 0 && mark.Range < list[at - 1].Range)
+            while (at > 0 && Before(mark, list[at - 1], prioritizeAir))
             {
                 list[at] = list[at - 1];
                 at--;
@@ -53,6 +54,9 @@ namespace BoscaliSummer.Modules.Command.Domain
             if (count < cap) count++;
             return true;
         }
+
+        private static bool Before(in HoloMark a, in HoloMark b, bool prioritizeAir) =>
+            prioritizeAir && a.Kind != b.Kind ? a.Kind == HoloKind.Air : a.Range < b.Range;
 
         /// <summary>A range as the map prints it: "20 KM", "2.5 KM", "850 M".</summary>
         internal static string Range(float metres)

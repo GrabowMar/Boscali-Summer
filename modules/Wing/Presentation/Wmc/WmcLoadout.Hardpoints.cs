@@ -5,7 +5,7 @@ using UnityEngine;
 using BoscaliSummer.Modules.Wing.Domain;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    // LOADOUT's HARDPOINTS: a station map beside the station table (a station is one row everywhere, a pair counts once, only ✕ empties
+    // LOADOUT's HARDPOINTS: a station map beside the station table (each side of a pair has its own row, only ✕ empties
     // one, a blocked station names what blocks it), and the store picker kept open below for the selected station.
     internal sealed partial class WmcLoadout
     {
@@ -19,12 +19,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private bool hpResetPending;
         private readonly List<WingLoadoutCatalog.StoreOption> stores = new List<WingLoadoutCatalog.StoreOption>();
         private readonly List<int> pylonCounts = new List<int>();
+        private readonly List<bool> mirroredStations = new List<bool>();
 
         private void BuildHardpoints(AvFlow f)
         {
             hpHead = f.Add(new WmcHeadBar(f.Content, AvIcon.Stack2, "HARDPOINTS"));
             hpEmpty = f.Add(new WmcLines(f.Content, 1));
-            hpBoard = f.Add(new WmcStationBoard(f.Content, ids, SelectStation, ClearStation, TurnStations));
+            hpBoard = f.Add(new WmcStationBoard(f.Content, ids, SelectStation, ClearStation, TurnStations, ToggleLink));
             picker = f.Add(new WmcStorePicker(f.Content, ids, PickStore, TurnStores));
         }
 
@@ -45,11 +46,17 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 hpResetPending = false;
                 selStation = -1;
                 pickerPage = 0;
+                splitPairs.Clear();
                 hpBoard.SetPage(0);
             }
             pylonCounts.Clear();
-            for (int st = 0; st < n; st++) pylonCounts.Add(layout.PylonsOf(st));
-            hpBoard.SetStations(n, pylonCounts);
+            mirroredStations.Clear();
+            for (int st = 0; st < n; st++)
+            {
+                pylonCounts.Add(layout.PylonsOf(st));
+                mirroredStations.Add(layout.MirrorsPrevious(st));
+            }
+            hpBoard.SetStations(n, pylonCounts, mirroredStations);
             // The selection: kept while it exists, else the first station that takes a store.
             if (selStation < 0 || selStation >= n)
             {
@@ -104,7 +111,41 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             bool can = fitted || blockedBy < 0;
             string tip = LoadoutWords.StationName(layout.Name(st), pylons) + " · " + (!can ? StoreWords.Why(StoreVerdict.Blocked, 0)
                 : fitted && !flies ? StoreWords.Why(verdict, RankFor(o)) : "Pick the store for " + layout.Name(st) + ".");
-            hpBoard.Bind(st, storeText, mass, flies ? "ready" : fitted ? "caution" : "inert", fitted, can, tip);
+            int link = layout.Partner(st) < 0 ? 0 : Linked(st) ? 1 : 2;
+            hpBoard.Bind(st, storeText, mass, flies ? "ready" : fitted ? "caution" : "inert", fitted, can, tip, link);
+        }
+
+        // ---------------------------------------------------------------- symmetry pairs (the game's own link / split)
+
+        /// <summary>Pairs the player split, by their lower station; cleared with the template.</summary>
+        private readonly HashSet<int> splitPairs = new HashSet<int>();
+
+        /// <summary>A pair is linked (a pick or ✕ fits both sides) until split, and only while both sides hold the same store: a saved
+        /// asymmetric fit opens split.</summary>
+        private bool Linked(int st)
+        {
+            int p = layout != null ? layout.Partner(st) : -1;
+            return p >= 0 && !splitPairs.Contains(Mathf.Min(st, p)) && layout.KeyOf(keys, st) == layout.KeyOf(keys, p);
+        }
+
+        /// <summary>Split a linked pair; link a split one, the other side taking this side's store.</summary>
+        private void ToggleLink(int st)
+        {
+            if (current == null || layout == null || st < 0 || st >= layout.Stations) return;
+            int p = layout.Partner(st);
+            if (p < 0) return;
+            if (Linked(st))
+            {
+                splitPairs.Add(Mathf.Min(st, p));
+                WmcPanel.Instance?.Refresh();
+                return;
+            }
+            splitPairs.Remove(Mathf.Min(st, p));
+            string key = layout.KeyOf(keys, st);
+            if (string.IsNullOrEmpty(key)) layout.Clear(keys, p);
+            else if (layout.Pick(keys, p, key) < 0) WingToast.Show(StoreWords.Why(StoreVerdict.Blocked, 0));
+            WingLoadoutTemplates.SetMounts(current, keys);
+            WmcPanel.Instance?.Refresh();
         }
 
         /// <summary>The keys with unknown stores left out (they never reach the launch, so they block nothing).</summary>
@@ -217,12 +258,15 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 ClearStation(selStation);
                 return;
             }
+            bool linked = Linked(selStation);
             int emptied = layout.Pick(keys, selStation, entries[i].Key);
             if (emptied < 0)
             {
                 WingToast.Show(StoreWords.Why(StoreVerdict.Blocked, 0));
                 return;
             }
+            // A blocked other side stays as it was; the pair then reads split.
+            if (linked) emptied += Mathf.Max(0, layout.Pick(keys, layout.Partner(selStation), entries[i].Key));
             WingLoadoutTemplates.SetMounts(current, keys);
             if (emptied > 0)
                 WingToast.Show(emptied == 1 ? "1 station emptied: the new store blocks it" : AvNum.Fixed(emptied, 0) + " stations emptied: the new store blocks them");
@@ -233,6 +277,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             if (current == null || layout == null) return;
             if (st < 0 || st >= layout.Stations) return;
+            if (Linked(st)) layout.Clear(keys, layout.Partner(st));
             layout.Clear(keys, st);
             WingLoadoutTemplates.SetMounts(current, keys);
             WmcPanel.Instance?.Refresh();

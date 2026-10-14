@@ -23,6 +23,7 @@ about
 time 6.5
 weather 0.3
 ending 12
+gamemusic off
 hold Base_A Base_B
 begin patrol clock
 unit raider like COIN at 100 700 -200 heading=90 speed=92 skill=0.7
@@ -43,10 +44,10 @@ on ""Base Objective""
 cast boss command ""BOSS"" ""Somebody in charge""
 shot wide orbit airbase ""Big Base"" radius=900 height=200 from=10 to=80 seconds=6 fov=50
 shot ship orbit unit Carrier
-shot run fly 0 100 0 to 500 120 800 look 1000 0 1000 seconds=4
+shot run fly 0 100 0 to 500 120 800 look 1000 0 1000 seconds=4 shake=0.4 roll=-6
 beat opening when start unless=seen
-  cut wide ""A Title"" ""Under it""
-  cut ship ""Just a caption"" photo=snap stamp=""PLACE / DAY 1""
+  cut wide ""A Title"" ""Under it"" board=news channel=iwn headline=""Big news"" ticker=""one | two""
+  cut ship ""Just a caption"" photo=snap stamp=""PLACE / DAY 1"" fx=strike,lock voice=line.mp3
   remember seen
 beat brief when join side=bdf
   say boss ""Hello there.""
@@ -103,9 +104,49 @@ beat late when time 50 if=briefed
         {
             Parses();
             ReportsMistakes();
+            KnowsPmc();
             PlaysBeats();
             KeepsProgress();
             BuiltInScriptsAreSound();
+        }
+
+        private static void KnowsPmc()
+        {
+            ScenarioDef def = ScenarioParser.Parse("pmc.scenario", @"
+scenario pmc-one
+title ""P""
+base ""B""
+contract bdf
+lock bdf
+unit freighter like COIN side=pmc at 1 2 3
+objective find pmc ""Find her"" reach 1 2 3 range=100
+beat go when start
+  enlist pmc
+beat brief when join side=pmc
+  hint ""words""
+");
+            TestAssert.Eq(string.Join(" / ", def.Errors), "", "a PMC script reads without complaint");
+            TestAssert.That(def.UsesPmc, "a script with a PMC unit, objective or enlist uses the PMC side");
+            TestAssert.That(def.Contract == ScenarioSide.Bdf, "contract names the employer");
+            TestAssert.That(def.Units[0].Side == ScenarioSide.Pmc && def.Objectives[0].Side == ScenarioSide.Pmc && def.Beats[1].Side == ScenarioSide.Pmc,
+                "pmc is a side for units, objectives and beats");
+            TestAssert.Eq(SideNames.Of(ScenarioSide.Pmc), "PMC", "the PMC side's mission faction name");
+            TestAssert.Eq(SideNames.Of(ScenarioSide.Bdf), "Boscali", "the BDF side's mission faction name");
+            TestAssert.Eq(SideNames.Of(ScenarioSide.Any), "", "no side has no faction name");
+
+            ScenarioDef enlistOnly = ScenarioParser.Parse("e.scenario", "scenario e\ntitle \"E\"\nbase \"B\"\nbeat go when start\n  enlist pmc\n");
+            TestAssert.That(enlistOnly.UsesPmc, "enlisting into PMC alone makes the mission need a PMC side");
+            ScenarioDef plain = ScenarioParser.Parse("p.scenario", "scenario p\ntitle \"P\"\nbase \"B\"\nlock pala\nbeat go when start\n  enlist bdf\n");
+            TestAssert.That(!plain.UsesPmc && plain.Contract == ScenarioSide.Any, "a BDF/PALA script needs no PMC side and has no contract");
+            ScenarioDef bad = ScenarioParser.Parse("b.scenario", "scenario b\ntitle \"B\"\nbase \"B\"\ncontract pmc\n");
+            TestAssert.That(bad.Errors.Exists(e => e.Contains("contract needs the employer")), "PMC cannot be its own employer");
+
+            string chapterOne = File.ReadAllText(Path.Combine(RepoRoot(), "modules", "Scenario", "Assets", "summer-wing.scenario"));
+            ScenarioDef summer = ScenarioParser.Parse("summer-wing.scenario", chapterOne);
+            TestAssert.That(summer.UsesPmc && summer.Locked.Contains(ScenarioSide.Bdf) && summer.Locked.Contains(ScenarioSide.Pala),
+                "chapter 1 is flown for PMC, with both regular sides locked");
+            TestAssert.That(summer.Units.Exists(u => u.Name == "halcyon_dawn" && u.Side == ScenarioSide.Pmc), "the freighter is the PMC's client, on its side");
+            TestAssert.That(summer.Objectives.TrueForAll(o => o.Id != "find_ship" || o.Side == ScenarioSide.Pmc), "the pilot's objectives are PMC's");
         }
 
         private static void Parses()
@@ -115,7 +156,7 @@ beat late when time 50 if=briefed
             TestAssert.That(def.Id == "test-one" && def.Title == "Test One" && def.Base == "Escalation" && def.Group == "Tests", "the header is read");
             TestAssert.That(def.Campaign == "saga" && def.Chapter == 2 && def.Saga == "saga", "the campaign and chapter are read");
             TestAssert.Eq(def.About, "First line goes on.\n\nSecond paragraph.", "about lines join into paragraphs");
-            TestAssert.That(def.Time == 6.5f && def.Weather == 0.3f && def.Ending == 12f, "time, weather and ending are read");
+            TestAssert.That(def.Time == 6.5f && def.Weather == 0.3f && def.Ending == 12f && !def.GameMusic, "time, weather, ending and gamemusic are read");
             TestAssert.Eq(string.Join(",", def.Without) + ";" + string.Join(",", def.Hold) + ";" + string.Join(",", def.Begin),
                 "weather,events;Base_A,Base_B;patrol,clock", "module, hold and begin lists are read");
 
@@ -149,12 +190,16 @@ beat late when time 50 if=briefed
                 "an orbit shot keeps its target and numbers");
             TestAssert.That(def.Shots["ship"].Kind == ShotKind.OrbitUnit && def.Shots["ship"].Seconds == 8f, "a shot's options have defaults");
             TestAssert.That(def.Shots["run"].Kind == ShotKind.Fly && def.Shots["run"].ToZ == 800f && def.Shots["run"].LookX == 1000f, "a fly shot keeps its three points");
+            TestAssert.That(def.Shots["run"].Shake == 0.4f && def.Shots["run"].Roll == -6f && def.Shots["wide"].Shake == 0f, "a shot may shake and roll; by default it holds steady");
 
             ScenarioBeat opening = def.Beats[0];
             TestAssert.That(opening.Trigger == TriggerKind.Start && opening.Unless == "seen" && opening.Actions.Count == 3 &&
                 opening.Actions[0].Title == "A Title" && opening.Actions[0].Text == "Under it" && opening.Actions[1].Title == null &&
                 opening.Actions[1].Text == "Just a caption" && opening.Actions[1].Photo == "snap" && opening.Actions[1].Stamp == "PLACE / DAY 1" &&
-                opening.Actions[0].Photo == null, "a cut has a caption or a title with a line under it, and may carry a picture and a stamp");
+                opening.Actions[0].Photo == null && opening.Actions[0].Fx == CutFx.None && opening.Actions[1].Fx == (CutFx.Strike | CutFx.Lock) &&
+                opening.Actions[0].Board == "news" && opening.Actions[0].Words["headline"] == "Big news" && opening.Actions[0].Words["ticker"] == "one | two" &&
+                opening.Actions[1].Board == null && opening.Actions[1].Words == null && opening.Actions[1].Voice == "line.mp3" && opening.Actions[0].Voice == null,
+                "a cut has a caption or a title with a line under it, and may carry a picture and a stamp");
             TestAssert.That(def.Beats[1].Side == ScenarioSide.Bdf && def.Beats[1].Trigger == TriggerKind.Join && def.Beats[1].Actions.Count == 4, "a beat keeps its side and actions");
             TestAssert.That(def.Beats[3].Repeat && def.Beats[3].Arg == "raid" && def.Beats[4].Trigger == TriggerKind.Time && def.Beats[4].Seconds == 50f &&
                 def.Beats[4].If == "briefed", "triggers keep their objective, clock time and conditions");
@@ -183,12 +228,15 @@ picture p file ""../escape.png""
 cast boss command ""BOSS""
 shot s orbit nowhere
 shot s2 orbit unit Thing
+shot s3 orbit unit Thing shake=2
 beat b when someday
 beat c when join side=martians
 beat d when start
   say ghost ""boo""
   cut missing
   cut s2 ""words"" photo=nope
+  cut s2 ""words"" fx=strike,sparkles
+  cut s2 ""words"" board=hologram
   sky purple
   clock 30
   card ""unclosed
@@ -203,9 +251,9 @@ time 30
             {
                 "bad.scenario:2:", "'|' text line belongs under 'about'", "unknown statement 'frobnicate'", "a reach objective needs a side",
                 "reach needs <x> <height> <z>", "'then' belongs under an 'objective' or 'on'", "'say' belongs under a 'beat'", "unknown net 'radio'",
-                "orbit needs", "unknown trigger 'someday'", "side is bdf, pala or both", "nobody in the cast is called 'ghost'", "there is no shot 'missing'",
+                "orbit needs", "unknown trigger 'someday'", "side is bdf, pala, pmc or both", "nobody in the cast is called 'ghost'", "there is no shot 'missing'",
                 "a quote is left open", "beat 'd' is written twice", "copy needs:", "picture needs an id", "picture needs: poster", "there is no picture 'nope'",
-                "sky is storm", "clock is an hour of the day", "unit needs 'at <x> <height> <z>'", "need is any, all, order or a percentage", "time is an hour of the day"
+                "sky is storm", "fx is a list of: glitch", "board is one of: feed", "shake is 0 to 1", "clock is an hour of the day", "unit needs 'at <x> <height> <z>'", "need is any, all, order or a percentage", "time is an hour of the day"
             })
                 TestAssert.That(all.Contains(expected), "a mistake is named with its line: missing '" + expected + "' in\n" + all);
             TestAssert.That(def.Cast.Count == 1 && def.Beats.Count >= 1, "one bad line never costs the rest of a script");

@@ -86,6 +86,45 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>How many waypoint legs the pilot's own cruise strike <paramref name="requestId"/> has confirmed (0 when none are known).</summary>
         internal int CruiseLegCount(int requestId) => cruiseLegs.TryGetValue(requestId, out CruiseLegMirror mirror) ? mirror.Legs.Count : 0;
 
+        /// <summary>The confirmed waypoint legs of the pilot's own cruise strike <paramref name="requestId"/> (null when none are known).</summary>
+        internal IReadOnlyList<GlobalPosition> CruiseLegs(int requestId) => cruiseLegs.TryGetValue(requestId, out CruiseLegMirror mirror) ? mirror.Legs : null;
+
+        /// <summary>The local pilot's cruise strike still in flight (the first called), and how many legs its confirmed route holds.</summary>
+        internal bool TryFlyingCruise(out int requestId, out int legs)
+        {
+            requestId = 0; legs = 0;
+            float now = MissionNow();
+            for (int i = 0; i < activeStrikes.Count; i++)
+            {
+                ActiveStrikeInfo strike = activeStrikes[i];
+                if (strike.ActionId != SupportActionId.Cruise || strike.ImpactTime <= now) continue;
+                requestId = strike.RequestId;
+                legs = CruiseLegCount(requestId);
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>Client: sends one steering leg for the flying cruise. The host validates the strike and its owner; the answer lands in <see cref="ReceiveCruiseLegs"/>.</summary>
+        internal bool RequestWaypoint(GlobalPosition leg)
+        {
+            if (!TryFlyingCruise(out int requestId, out _) || network == null) return false;
+            pendingWaypoint = requestId; // held before the send: a server peer answers inside it
+            if (network.RequestWaypoint(requestId, leg, false)) return true;
+            pendingWaypoint = -1;
+            return false;
+        }
+
+        /// <summary>Client: drops every queued leg of the flying cruise; the missiles fly direct again.</summary>
+        internal bool ClearCruiseLegs()
+        {
+            if (!TryFlyingCruise(out int requestId, out _) || network == null) return false;
+            pendingWaypoint = requestId;
+            if (network.RequestWaypoint(requestId, default, true)) return true;
+            pendingWaypoint = -1;
+            return false;
+        }
+
         public SupportSettings Settings => settings;
 
         /// <summary>Latest accepted radar scan of the local player, for the imager.</summary>
@@ -1048,12 +1087,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (GameAccess.IsServer()) ReceiveCruiseLegs(message);
         }
 
+        /// <summary>The host's answer to this pilot's own waypoint request: the verdict and the confirmed leg count after it.</summary>
+        internal event Action<SupportResult, int> CruiseReplied;
+
         internal void ReceiveCruiseLegs(CruiseLegsMessage message)
         {
             GameManager.GetLocalPlayer<Player>(out Player player);
             if (player == null || player.HQ == null || message.FactionName != FactionKey(player.HQ)) return;
             if (message.OwnerId != PlayerIdentity.Of(player)) return;
-            if (message.RequestId == pendingWaypoint)
+            bool mine = message.RequestId == pendingWaypoint;
+            if (mine)
             {
                 pendingWaypoint = -1;
                 SupportResult result = (SupportResult)message.Result;
@@ -1064,7 +1107,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             for (int i = 0; i < activeStrikes.Count; i++)
                 if (activeStrikes[i].RequestId == message.RequestId && activeStrikes[i].ActionId == SupportActionId.Cruise)
                     known = activeStrikes[i];
-            if (!known.HasValue) return;
+            if (!known.HasValue) { if (mine) CruiseReplied?.Invoke((SupportResult)message.Result, CruiseLegCount(message.RequestId)); return; }
             if (cruiseLegs.Count >= CruiseTasking.MaxStrikes && !cruiseLegs.ContainsKey(message.RequestId))
                 cruiseLegs.Clear();
             var mirror = new CruiseLegMirror { Dive = message.Dive, Tti = message.Tti };
@@ -1076,6 +1119,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     mirror.Legs.Add(new GlobalPosition(message.X[i], 0f, message.Z[i]));
                 }
             cruiseLegs[message.RequestId] = mirror;
+            if (mine) CruiseReplied?.Invoke((SupportResult)message.Result, mirror.Legs.Count);
             if (float.IsFinite(message.Tti) && message.Tti > 0f)
             {
                 SupportActionDefinition def = catalog != null ? catalog.Find(SupportActionId.Cruise) : null;

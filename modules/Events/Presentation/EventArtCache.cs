@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using BepInEx;
+using BoscaliSummer.Modules.Events.Configuration;
 using BoscaliSummer.Core.Util;
 using UnityEngine;
 
@@ -38,6 +39,10 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
         private static string root;
         private static bool prepared;
+        private static EventsSettings settings;
+
+        internal static bool PicturesEnabled => settings?.PicturesEnabled.Value != false;
+        internal static void Configure(EventsSettings config) => settings = config;
 
         /// <summary>
         /// The poster for the first key that has one, falling back to <c>default.png</c>.
@@ -46,6 +51,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
         /// </summary>
         public static Sprite Get(string artKey, string fallbackKey)
         {
+            if (!PicturesEnabled) return null;
             Sprite sprite = Load(artKey);
             if (sprite != null) return sprite;
             sprite = Load(fallbackKey);
@@ -59,6 +65,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
         /// </summary>
         public static Texture Thumb(string artKey, string fallbackKey)
         {
+            if (!PicturesEnabled) return null;
             string id = artKey + "|" + fallbackKey;
             if (Thumbs.TryGetValue(id, out Texture2D cached)) return cached;
             if (Thumbs.Count >= MaximumEntries) return null;

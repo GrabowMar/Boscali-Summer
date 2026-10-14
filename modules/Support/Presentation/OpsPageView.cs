@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Fronts;
+using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Runtime;
 using NOAvionics;
 
@@ -33,6 +34,13 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public bool Enabled, Armed;
     }
 
+    /// <summary>One TASKED post row of the PERKS tab: a posted strike any faction pilot can claim, painted in the perk row's columns.</summary>
+    internal struct TaskedRowView
+    {
+        public int PostId;
+        public PerkRowView Row;
+    }
+
     /// <summary>Everything the OPS page paints. Built each refresh by <see cref="OpsPageViews"/> from the manager, the controller and the front mirror.</summary>
     internal sealed class OpsPageView
     {
@@ -46,6 +54,12 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public AvState WordsTone = AvState.Ready;
         public bool Armed, Pending;
         public string FrontWords = "";
+        public readonly List<TaskedRowView> Tasked = new List<TaskedRowView>(MaxTaskedRows);
+        public int TaskedTotal;
+        public bool CruiseFlying, Steering;
+        public string CruiseRoute = "";
+        public int CruiseLegs;
+        public const int MaxTaskedRows = SpaceWire.MaxPosts;
         public AvState FrontWordsTone = AvState.Inert;
     }
 
@@ -153,6 +167,46 @@ namespace BoscaliSummer.Modules.Support.Presentation
             }
             v.PerksReady = ready;
             v.PerksTotal = tiles.Count;
+        }
+
+        /// <summary>
+        /// The TASKED rows: live posts only (stale ones are gone), in mirror order, capped for the page. The press itself is
+        /// re-validated by <see cref="CallsController.PressTasked"/>; a row only has to say what the post is and what pressing does.
+        /// </summary>
+        public static void Tasked(OpsPageView v, IReadOnlyList<FeedPost> posts, bool known, float now, int armedPostId, bool claimPending)
+        {
+            v.Tasked.Clear();
+            v.TaskedTotal = 0;
+            if (!known || posts == null) return;
+            for (int i = 0; i < posts.Count; i++)
+            {
+                FeedPost post = posts[i];
+                PostStatus status = SpaceFeedRules.PostStatusOf(post, now);
+                if (status == PostStatus.Stale) continue;
+                v.TaskedTotal++;
+                if (v.Tasked.Count >= OpsPageView.MaxTaskedRows) continue;
+                int targets = post.Points != null ? Math.Max(1, post.Points.Length) : 1;
+                bool armed = post.CallId != 0 && armedPostId == post.CallId;
+                bool launching = status == PostStatus.Launching;
+                string source = post.WatchOfficer ? "OVERLORD" : string.IsNullOrEmpty(post.Maker) ? "OPERATOR" : "OPERATOR " + post.Maker;
+                string state = launching ? (string.IsNullOrEmpty(post.Claimant) ? "LAUNCHING" : "LAUNCHING \u00B7 " + post.Claimant)
+                    : (armed ? "ARMED" : FrontRules.Clock(Math.Max(0f, post.Expires - now))) + " \u00B7 " + source;
+                v.Tasked.Add(new TaskedRowView
+                {
+                    PostId = post.CallId,
+                    Row = new PerkRowView
+                    {
+                        Name = TaskedKinds.Label(post.Action),
+                        RungWord = targets + " TGT",
+                        Price = post.Price > 0 ? post.Price + " ALLOC" : "FREE",
+                        State = state,
+                        Button = launching ? "···" : armed && claimPending ? "WAIT" : armed ? "FIRE" : "CLAIM",
+                        Tone = armed ? AvState.Caution : launching ? AvState.Info : AvState.Ready,
+                        Enabled = !launching && !(armed && claimPending),
+                        Armed = armed
+                    }
+                });
+            }
         }
 
         public static AvState Ink(CallState s) =>

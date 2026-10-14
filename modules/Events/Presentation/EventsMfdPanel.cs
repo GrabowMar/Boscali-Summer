@@ -75,10 +75,12 @@ namespace BoscaliSummer.Modules.Events.Presentation
         private bool boundAimed;
         private bool boundResolved;
         private float nextRefresh;
+        private bool boundPictures;
 
         public void Configure(EventsSettings config, EventsManager manager, ManualLogSource log)
         {
             settings = config;
+            EventArtCache.Configure(config);
             events = manager;
             installer.Log = log;
             installer.Builder = BuildScreen;
@@ -360,9 +362,11 @@ namespace BoscaliSummer.Modules.Events.Presentation
             float started = current != null ? current.StartedAtMissionTime : 0f;
             bool resolved = current != null && current.TargetResolved;
             bool rebind = id != boundId || started != boundStart || aimedAtLocal != boundAimed ||
-                          multiplier != boundMultiplier || cooldown != boundCooldown || resolved != boundResolved;
+                          multiplier != boundMultiplier || cooldown != boundCooldown || resolved != boundResolved ||
+                          boundPictures != EventArtCache.PicturesEnabled;
             if (rebind)
             {
+                boundPictures = EventArtCache.PicturesEnabled;
                 boundId = id;
                 boundStart = started;
                 boundAimed = aimedAtLocal;

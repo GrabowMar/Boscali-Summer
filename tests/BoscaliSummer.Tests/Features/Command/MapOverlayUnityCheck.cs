@@ -13,6 +13,9 @@ using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
 using static UnityCheckHarness;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Services;
+using BoscaliSummer.Modules.DynamicOperations.Domain;
 
 // Only native scene lifecycle is suppressed. All map widgets, meshes, glyphs, raster
 // bakes and caption builders come from the production BoscaliSummer assembly.
@@ -47,7 +50,7 @@ public static partial class MapOverlayUnityCheck
     private static readonly List<string> captures = new List<string> { "file\twidth\theight\tsurfaces" };
     private static int checks;
     private static string capture;
-    private static bool nonWingOnly;
+    private static bool nonWingOnly, tasksOnly;
     private static Type T(string name) => Mod.GetType(name.StartsWith("BoscaliSummer.") ? name : Prefix + name, true);
     private static FieldInfo Member(object owner, string name)
     {
@@ -70,6 +73,8 @@ public static partial class MapOverlayUnityCheck
     private static object New(string name, params object[] args) => Activator.CreateInstance(T(name), BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, args, null);
     private static void Check(bool condition, string detail) { checks++; if (!condition) failures.Add(capture + ": " + detail); }
 
+    public static void RunMapTasks() { nonWingOnly=true; tasksOnly=true; Run(); }
+
     public static void RunNonWing()
     {
         nonWingOnly = true;
@@ -86,10 +91,16 @@ public static partial class MapOverlayUnityCheck
             if (!nonWingOnly) Call(T("Wing.Runtime.WingLog"), "Init", new ManualLogSource("MapPreview"));
             Directory.CreateDirectory("renders");
             PointerGuard();
-            StrCases();
+            if (!tasksOnly) StrCases();
             if (!strOnly) {
             foreach (Vector2 size in new[] { new Vector2(1280,720), new Vector2(1920,1080) })
                 foreach (float zoom in new[] { .7f, 1f, 1.8f }) {
+                    if (tasksOnly) {
+                        foreach(string state in new[]{"empty","radar","optical","overlap","budget","relief"}) Case(size,zoom,"threat",state);
+                        foreach(string state in new[]{"offered","active","mixed","lost","cluster","relief"}) Case(size,zoom,"tasks",state);
+                        Case(size,zoom,"combined","mixed");
+                        continue;
+                    }
                     foreach (string state in new[] { "empty", "calm", "contested", "salient" }) Case(size, zoom, "control", state);
                     Case(size, zoom, "trenches", "stages");
                     if (!nonWingOnly) {
@@ -100,7 +111,7 @@ public static partial class MapOverlayUnityCheck
                     foreach (string state in new[] { "empty", "sparse", "long", "cluster", "cluster-edge", "filtered", "hunt" }) Case(size, zoom, "comms", state);
                     foreach (string state in new[] { "empty", "populated", "faded", "cleared" }) Case(size,zoom,"aircraft-trails",state);
                 }
-            foreach (Vector2 size in new[] { new Vector2(1280,720), new Vector2(1920,1080) }) Case(size,8f,"trenches","stages");
+            if (!tasksOnly) foreach (Vector2 size in new[] { new Vector2(1280,720), new Vector2(1920,1080) }) Case(size,8f,"trenches","stages");
             }
         } catch (Exception error) { failures.Add("exception: " + error); Debug.LogException(error); }
         File.WriteAllLines("measurements.tsv", measurements); File.WriteAllLines("captures.tsv", captures);
@@ -178,6 +189,11 @@ public static partial class MapOverlayUnityCheck
         DynamicMap map = services.AddComponent<PreviewDynamicMap>(); map.enabled = false; map.mapImage = image; map.iconLayer = image; map.mapDisplayFactor = 900f / 81920f;
         map.HQ = services.AddComponent<PreviewFactionHQ>(); map.HQ.enabled = false; SceneSingleton<DynamicMap>.i = map; Set(typeof(DynamicMap),"<mapMaximized>k__BackingField",true);
         Call(T("BoscaliSummer.Core.Game.TheaterFrame"), "Invalidate");
+        var previousServices=ModuleServices.Active;
+        var projection=new FixtureProjection(map.mapDisplayFactor);
+        if(state=="relief") { ModuleServices.Active=new ServiceRegistry(); ModuleServices.Active.Add<IMapProjection>(projection); }
+        if(surface=="tasks" || surface=="combined") Tasks(services,map,state);
+        if(surface=="combined") Threat(services,map,"overlap");
         if (surface == "control") Control(services,map,state);
         if (surface == "trenches") Trenches(services,map);
         if (surface == "wing") Wing(image.transform,camera);
@@ -191,7 +207,7 @@ public static partial class MapOverlayUnityCheck
         var png = new Texture2D((int)size.x,(int)size.y,TextureFormat.RGB24,false); png.ReadPixels(new Rect(0,0,size.x,size.y),0,0); png.Apply();
         File.WriteAllBytes("renders/" + capture + ".png",png.EncodeToPNG()); captures.Add(capture + ".png\t" + (int)size.x + "\t" + (int)size.y + "\t" + surface);
         RenderTexture.active = null; camera.targetTexture = null; target.Release(); Object.DestroyImmediate(target); Object.DestroyImmediate(png);
-        SceneSingleton<DynamicMap>.i = null; Set(typeof(DynamicMap),"<mapMaximized>k__BackingField",false); Object.DestroyImmediate(services); Object.DestroyImmediate(canvas.gameObject); Object.DestroyImmediate(camera.gameObject);
+        ModuleServices.Active=previousServices; SceneSingleton<DynamicMap>.i = null; Set(typeof(DynamicMap),"<mapMaximized>k__BackingField",false); Object.DestroyImmediate(services); Object.DestroyImmediate(canvas.gameObject); Object.DestroyImmediate(camera.gameObject);
     }
 
     private static void Control(GameObject services, DynamicMap map, string state)
@@ -291,12 +307,63 @@ public static partial class MapOverlayUnityCheck
     private static void Threat(GameObject services,DynamicMap map,string state)
     {
         var view=(Behaviour)services.AddComponent(T("Command.Presentation.ThreatMapOverlay")); view.enabled=false; Call(view,"TryInitialize");
-        Array samples=(Array)Get(view,"samples"); Type sampleType=samples.GetType().GetElementType(); int count=state=="empty" ?0:state=="overlap" ?3:1;
-        for(int i=0;i<count;i++) { object sample=Activator.CreateInstance(sampleType); Set(sample,"Position",new Vector3(i*13000f-13000f,0f,i*12000f-12000f)); Set(sample,"RadarRadius",state=="optical" ?0f:42000f); Set(sample,"OpticalRadius",state=="optical" || i==2 ?26000f:0f); samples.SetValue(sample,i); }
-        Set(view,"<TrackedEmitters>k__BackingField",count); Call(view,"Bake");
-        Texture2D texture=(Texture2D)Get(view,"fieldTexture"); Color32[] pixels=texture.GetPixels32(); int visible=0; foreach(Color32 pixel in pixels) if(pixel.a>0) visible++;
-        Check(state=="empty" ? visible==0:visible>0,"Threat production raster clears/paints from synthetic envelopes.");
-        Call(view,"SetShown",false); Check(!((GameObject)Get(view,"root")).activeSelf,"Threat map close hides real raster."); Call(view,"SetShown",true);
+        Array samples=(Array)Get(view,"samples"); Type sampleType=samples.GetType().GetElementType(); int count=state=="empty" ?0:1;
+        for(int i=0;i<count;i++) { object sample=Activator.CreateInstance(sampleType); Set(sample,"Position",new Vector3((i%8)*6500f-25000f,0f,(i/8)*12000f-20000f)); Set(sample,"RadarRadius",state=="optical" ?0f:42000f); Set(sample,"OpticalRadius",state=="optical" || state=="budget" || i==2 ?26000f:0f); samples.SetValue(sample,i); }
+        Graphic graphic=(Graphic)Get(view,"graphic"); Call(graphic,"SetSource",samples,count,map,.65f);
+        using(var vh=new VertexHelper()) {
+            Call(graphic,"OnPopulateMesh",vh);
+            Check(state=="empty" ? vh.currentVertCount==0:vh.currentVertCount>100,"Threat vector mesh clears/paints known envelopes.");
+            Check(vh.currentVertCount<43000,"Hover range vectors stay within budget.");
+            bool feather=false;
+            for(int i=0;i<vh.currentVertCount;i++){var v=UIVertex.simpleVert;vh.PopulateUIVertex(ref v,i);feather|=v.color.a==0;}
+            Check(state=="empty"||feather,"Sensor envelopes have transparent feathered edges.");
+        }
+        Check(!graphic.raycastTarget,"Sensor envelopes preserve native pointer input.");
+        Call(view,"SetShown",false); Check(!((GameObject)Get(view,"root")).activeSelf,"Map close hides real vectors."); Call(view,"SetShown",true);
+    }
+    private sealed class FixtureProjection : IMapProjection
+    {
+        private readonly float factor;
+        internal FixtureProjection(float factor) { this.factor=factor; }
+        public bool IsActive=>true;
+        public int Revision=>1;
+        public bool TryProject(float x,float z,out float px,out float py) {
+            px=(x+z*.25f)*factor; py=z*factor*.55f+Mathf.Sin(x/10000f)*20f;
+            return float.IsFinite(px)&&float.IsFinite(py);
+        }
+        public bool TryScale(float x,float z,float metres,out float units) { units=metres*factor;return true; }
+    }
+    private static void Tasks(GameObject services,DynamicMap map,string state)
+    {
+        var view=(Behaviour)services.AddComponent(T("DynamicOperations.Runtime.ContractMapHud"));view.enabled=false;
+        Call(view,"Build");
+        RectTransform layer=(RectTransform)Get(view,"rootRect"); layer.SetParent(map.mapImage.transform,false);
+        layer.anchorMin=layer.anchorMax=layer.pivot=new Vector2(.5f,.5f);layer.anchoredPosition=Vector2.zero;
+        Array cards=(Array)Get(view,"cards");
+        int count=state=="mixed"||state=="cluster"||state=="relief"?3:1;
+        for(int i=0;i<count;i++) {
+            bool offered=state=="offered"||i==0&&count>1;
+            var entry=new SecondaryObjectiveView(71+i,i==0?"RECONNAISSANCE PASS":i==1?"COVER THE SUPPLY RUN":"CAPTURE FORWARD BASE",
+                "","","ACTIVE","",.3f,320f,1400,125,false,offered,!offered,state!="lost",
+                state=="cluster"?0f:-24000f+i*26000f,state=="cluster"?0f:-8000f+i*13000f,6000f);
+            Check(ContractCard.TryRead(entry,out ContractCard card,true),"map accepts both offers and active tasks");cards.SetValue(card,i);
+        }
+        Set(view,"cardCount",count); Call(view,"Render",map);
+        Array tags=(Array)Get(view,"tags"); int shown=0;
+        for(int i=0;i<tags.Length;i++) {
+            object tag=tags.GetValue(i);var root=(RectTransform)Get(tag,"root");
+            if(!root.gameObject.activeSelf)continue;shown++;
+            var text=(TMP_Text)Get(tag,"label");
+            Check(text.text.Contains(i==0&&state!="active"&&state!="lost"?"OFFER":"ACCEPTED"),"map task state is explicit");
+            Check(!text.raycastTarget,"task caption preserves native map clicks");
+            Check(text.preferredHeight<=text.rectTransform.rect.height,"short task captions retain all status lines");
+            Check(Mathf.Abs(text.transform.lossyScale.x-1f)<.001f,"task captions remain screen-sized through map zoom");
+            MeshGate((Graphic)Get(tag,"symbol"),1,512);MeshGate((Graphic)Get(tag,"area"),1,2000);
+            if(i>0&&state=="cluster")Check(((TMP_Text)Get(tags.GetValue(i-1),"label")).rectTransform.anchoredPosition.y<text.rectTransform.anchoredPosition.y,"coincident task captions are separated");
+        }
+        Check(shown==(state=="lost"?0:count),"only host-permitted positions become map tasks");
+        Call(view,"Hide");foreach(object tag in tags) Check(!((RectTransform)Get(tag,"root")).gameObject.activeSelf,"map close hides task slots");
+        Call(view,"Render",map);
     }
     private static void Routes(DynamicMap map,string state)
     {

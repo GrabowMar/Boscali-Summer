@@ -1,128 +1,115 @@
 using BoscaliSummer.Modules.DynamicOperations.Domain;
-using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Contracts;
+using NOAvionics;
+using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 {
-    /// <summary>
-    /// One contract's tag on the tactical map, styled entirely from the game's own objective
-    /// marker: the family's vanilla icon, a legacy label in the vanilla map font and, when the
-    /// contract owns an area, the vanilla radius-ring idiom. The tag root is counter-scaled
-    /// against the map zoom so the icon and label keep their screen size, while the ring is
-    /// scaled back with the map so it hugs the ground the contract covers.
-    /// </summary>
+    /// <summary>Offers use open corners, accepted tasks a diamond. Both use host-permitted
+    /// fixes and project their operating areas through the map's current ground projection.</summary>
     internal sealed class ContractMapTag
     {
-        private const float LabelWidth = 400f;
-        private const float LabelHeight = 24f;
-
         private readonly RectTransform root;
-        private readonly Image icon;
-        private readonly Text label;
-        private readonly Image ring;
+        private readonly AvVector symbol, area;
+        private readonly TMP_Text label;
+        private int labelId = -1, areaId = -1, areaRevision = -1;
+        private string title, phase;
+        private bool offered, lastKnown, returning;
+        private Color labelTint;
+        private float labelLift = -1f, areaRadius, areaZoom, areaFactor;
+        private Vector2 areaCentre;
+        private IMapProjection areaProjection;
 
-        public ContractMapTag(RectTransform parent, string name, in VanillaHudStyle.MapStyle style, Sprite ringSprite)
+        internal ContractMapTag(RectTransform parent, string name)
         {
-            root = Rect(parent, name, Vector2.zero);
-            ring = Picture(root, "Area Ring", ringSprite);
-            icon = Picture(root, "Icon", null);
-            label = Caption(root, "Label", style);
-            SetRing(false, 0f, Color.clear);
+            root = AvLay.Child(parent, name);
+            root.anchorMin = root.anchorMax = root.pivot = new Vector2(.5f, .5f);
+            root.sizeDelta = Vector2.zero;
+            area = AvVector.Create(root, "Task operating area", 512);
+            symbol = AvVector.Create(root, "Task fix", 32);
+            label = AvText.Make(root, "Task identity", AvTextRole.DataSmall, "", TextAlignmentOptions.TopLeft);
+            label.rectTransform.anchorMin = label.rectTransform.anchorMax = new Vector2(.5f, .5f);
+            label.rectTransform.pivot = new Vector2(0f, 1f);
+            label.rectTransform.sizeDelta = new Vector2(220f, 56f);
+            label.fontSize = 13f;
+            label.enableWordWrapping = false;
+            label.overflowMode = TextOverflowModes.Ellipsis;
+            label.richText = false;
+            label.raycastTarget = false;
             SetVisible(false);
         }
 
-        public void SetVisible(bool visible)
-        {
-            if (root.gameObject.activeSelf != visible) root.gameObject.SetActive(visible);
-        }
+        public void SetVisible(bool visible) => root.gameObject.SetActive(visible);
 
-        /// <summary>Where the tag sits, in map-local units, and the zoom it counter-scales against.</summary>
         public void Place(float x, float y, float inverseZoom, float zoom)
         {
             root.anchoredPosition = new Vector2(x, y);
-            float scale = float.IsFinite(inverseZoom) && inverseZoom > 0f ? inverseZoom : 1f;
-            root.localScale = new Vector3(scale, scale, 1f);
-            float map = float.IsFinite(zoom) && zoom > 0f ? zoom : 1f;
-            ring.rectTransform.localScale = new Vector3(map, map, 1f);
+            root.localScale = new Vector3(inverseZoom, inverseZoom, 1f);
         }
 
-        /// <summary>The icon and label a marker shows.</summary>
-        public void Apply(in ContractCard card, in VanillaHudStyle.MapStyle style, Color labelColour)
+        public void Apply(in ContractCard next, float lift)
         {
-            MarkerIconKind kind = card.Icon;
-            icon.sprite = Icon(style, kind);
-            float size = ContractMarkerLook.IconSize(kind);
-            icon.rectTransform.sizeDelta = new Vector2(size, size);
-            icon.color = Color.white;
-            label.enabled = true;
-            string titleText = card.TitleLine;
-            if (label.text != titleText) label.text = titleText;
-            label.rectTransform.anchoredPosition = new Vector2(0f, size);
-            label.color = labelColour;
+            Color tint = next.LastKnown || next.Tone == MarkerTone.Caution ? AvTheme.RailCaution :
+                next.IsOffered ? AvTheme.Dim : AvTheme.RailReady;
+            if (labelId == next.Id && title == next.Title && phase == next.PhaseTitle &&
+                offered == next.IsOffered && lastKnown == next.LastKnown && returning == next.Returning && labelTint == tint && labelLift == lift) return;
+            labelId = next.Id; title = next.Title; phase = next.PhaseTitle;
+            offered = next.IsOffered; lastKnown = next.LastKnown; returning = next.Returning; labelTint = tint; labelLift = lift;
+            areaId = -1;
+            label.color = tint;
+            string text = "#" + next.Id + " / " + (next.IsOffered ? "OFFER" : "ACCEPTED") +
+                (next.LastKnown ? " / LAST KNOWN" : "") + "\n" + next.Title + "\n" +
+                (next.IsOffered ? "ACCEPT IN MIS" : next.Returning ? "RETURN TO BASE" : next.PhaseTitle);
+            if (label.text != text) label.text = text;
+            label.rectTransform.anchoredPosition = new Vector2(18f, 20f + lift);
+            var b = symbol.Buffer; b.Clear();
+            var ink = new Rgba(tint.r, tint.g, tint.b, .95f);
+            if (next.IsOffered) AvStrokes.Bracket(b, -7f, -7f, 14f, 14f, 4f, 1.4f, ink);
+            else
+            {
+                AvStrokes.Line(b, -8, 0, 0, 8, 1.5f, ink, 1f);
+                AvStrokes.Line(b, 0, 8, 8, 0, 1.5f, ink, 1f);
+                AvStrokes.Line(b, 8, 0, 0, -8, 1.5f, ink, 1f);
+                AvStrokes.Line(b, 0, -8, -8, 0, 1.5f, ink, 1f);
+            }
+            AvStrokes.Line(b, 8, 8, 14, 20+lift, 1f, ink, 1f);
+            AvStrokes.Line(b, 14, 20+lift, 74, 20+lift, 1f, ink, 1f);
+            symbol.Commit();
         }
 
-        /// <summary>The area ring in map-local diameter, or hidden when the area is too small to read.</summary>
-        public void SetRing(bool visible, float diameter, Color colour)
+        public void SetRing(in ContractCard next, DynamicMap map, IMapProjection projection, Vector2 centre, float zoom)
         {
-            if (ring.gameObject.activeSelf != visible) ring.gameObject.SetActive(visible);
-            if (!visible) return;
-            ring.rectTransform.sizeDelta = new Vector2(diameter, diameter);
-            ring.color = colour;
-        }
-
-        private static Sprite Icon(in VanillaHudStyle.MapStyle style, MarkerIconKind kind) => kind switch
-        {
-            MarkerIconKind.Destroy => style.DestroyIcon,
-            MarkerIconKind.Recon => style.ReconIcon,
-            MarkerIconKind.Capture => style.CaptureIcon,
-            _ => style.WaypointIcon
-        };
-
-        private static RectTransform Rect(RectTransform parent, string name, Vector2 size)
-        {
-            var go = new GameObject(name, typeof(RectTransform));
-            RectTransform rect = (RectTransform)go.transform;
-            rect.SetParent(parent, false);
-            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.sizeDelta = size;
-            return rect;
-        }
-
-        private static Image Picture(RectTransform parent, string name, Sprite sprite)
-        {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
-            RectTransform rect = (RectTransform)go.transform;
-            rect.SetParent(parent, false);
-            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            Image image = go.GetComponent<Image>();
-            image.sprite = sprite;
-            image.raycastTarget = false;
-            return image;
-        }
-
-        private static Text Caption(RectTransform parent, string name, in VanillaHudStyle.MapStyle style)
-        {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Text));
-            RectTransform rect = (RectTransform)go.transform;
-            rect.SetParent(parent, false);
-            rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.sizeDelta = new Vector2(LabelWidth, LabelHeight);
-            Text text = go.GetComponent<Text>();
-            text.font = style.LabelFont;
-            if (style.LabelMaterial != null) text.material = style.LabelMaterial;
-            text.fontSize = Mathf.RoundToInt(style.LabelSize);
-            text.color = style.LabelColour;
-            text.alignment = TextAnchor.MiddleCenter;
-            text.horizontalOverflow = HorizontalWrapMode.Overflow;
-            text.verticalOverflow = VerticalWrapMode.Overflow;
-            text.raycastTarget = false;
-            float scale = style.LabelScale > 0.01f ? style.LabelScale : 0.5f;
-            rect.localScale = new Vector3(scale, scale, 1f);
-            return text;
+            int revision = projection?.Revision ?? 0;
+            if (areaId == next.Id && areaRadius == next.Radius && areaZoom == zoom &&
+                areaFactor == map.mapDisplayFactor && areaCentre == centre && areaProjection == projection && areaRevision == revision) return;
+            areaId = next.Id; areaRadius = next.Radius; areaZoom = zoom; areaFactor = map.mapDisplayFactor;
+            areaCentre = centre; areaProjection = projection; areaRevision = revision;
+            var b = area.Buffer; b.Clear();
+            if (!(next.Radius > 0f)) { area.Commit(); return; }
+            Color tint = label.color;
+            var ink = new Rgba(tint.r, tint.g, tint.b, .5f);
+            Vector2 previous = default;
+            bool hadPrevious = false;
+            // One ground circle at 128 stations; relief must never use a screen-space circle.
+            for (int i = 0; i <= 128; i++)
+            {
+                float angle = i * (Mathf.PI * 2f / 128f);
+                float x = next.X + Mathf.Cos(angle) * next.Radius, z = next.Z + Mathf.Sin(angle) * next.Radius;
+                Vector2 point;
+                bool valid = true;
+                if (projection != null)
+                {
+                    valid = projection.TryProject(x, z, out float px, out float py);
+                    point = new Vector2(px, py);
+                }
+                else point = new Vector2(x * map.mapDisplayFactor, z * map.mapDisplayFactor);
+                point = (point-centre) * zoom;
+                if (valid && hadPrevious && (!next.IsOffered || i % 4 < 3))
+                    AvStrokes.Line(b, previous.x, previous.y, point.x, point.y, 1f, ink, 1f);
+                previous = point; hadPrevious = valid;
+            }
+            area.Commit();
         }
     }
 }

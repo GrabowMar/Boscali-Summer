@@ -66,6 +66,10 @@ Shader "Boscali/FlightCloudComposite"
                 // melts the march's per-texel dither) times a depth match.
                 float2 p = uv * _CloudLowResSize.xy - 0.5;
                 float2 centre = floor(p + 0.5);
+                // Distant cloud is drawn soft: past 15-60 km the kernel widens to the whole 3x3 (about two texels of blur), which melts
+                // the far march's coarse steps that otherwise read as hard horizontal slices along the horizon.
+                float far = smoothstep(15000.0, 60000.0, min(depth, tex2Dlod(_CloudLowResDepth, float4((centre + 0.5) * _CloudLowResSize.zw, 0, 0)).r));
+                float spread = lerp(0.45, 0.15, far);
                 float4 c = 0.0;
                 float total = 0.0;
                 [unroll]
@@ -74,11 +78,13 @@ Shader "Boscali/FlightCloudComposite"
                     [unroll]
                     for (int x = -1; x <= 1; x++)
                     {
+                        // Taps stay one texel apart: spread two apart (bilinear colour, point depth) they disagreed along depth edges and
+                        // drew distant cloud as 2-texel blocks on the sea horizon.
                         float2 texel = centre + float2(x, y);
                         float2 tuv = (texel + 0.5) * _CloudLowResSize.zw;
                         float2 offset = texel - p;
                         // 0.45: about one texel of blur. At 1.1 the kernel was so narrow that the dither of nearby cloud came through as speckle.
-                        float spatial = exp(-dot(offset, offset) * 0.45);
+                        float spatial = exp(-dot(offset, offset) * spread);
                         float texelDepth = tex2Dlod(_CloudLowResDepth, float4(tuv, 0, 0)).r;
                         float4 sample = tex2Dlod(_CloudLowResColour, float4(tuv, 0, 0));
                         // Only a cloud that hides what is behind it may ignore that depth. A thin sample cut short by terrain is not the sky beside it:
@@ -245,7 +251,24 @@ Shader "Boscali/FlightCloudComposite"
                 }
                 upsampled /= max(1e-5, total);
                 soft /= max(1e-5, softTotal);
-                if (total <= 1e-5) return Resolved(0.0, sceneDepth, sceneDepth);
+                bool historyUsable = _CloudHistoryValid > 0.5 && _CloudChecker.w > 0.5;
+                // Frozen sky: the march is deterministic per texel, so with the camera at rest every texel is final once marched.
+                if (historyUsable && _CloudCamDelta.w < 0.001 && dot(_CloudCamDelta.xyz, _CloudCamDelta.xyz) < 1e-4)
+                {
+                    if (fresh) return Resolved(freshVal, sceneDepth, freshData.g / viewLength);
+                    ResolveOut parked;
+                    parked.colour = tex2Dlod(_CloudHistoryTex, float4(uv, 0, 0));
+                    parked.depth = tex2Dlod(_CloudHistoryDepth, float4(uv, 0, 0));
+                    return parked;
+                }
+                // No fresh neighbour on this texel's side of a depth edge (sky beside the terrain horizon) this phase: keep its own
+                // history instead of drawing it empty, which blinked the horizon line every checker cycle.
+                if (total <= 1e-5)
+                {
+                    float keptWeight;
+                    float4 kept = historyUsable ? HistoryAt(uv, sceneDepth, keptWeight) : 0.0;
+                    return Resolved(historyUsable && keptWeight > 1e-5 ? kept : 0.0, sceneDepth, sceneDepth);
+                }
                 float distance = distanceWeight > 1e-5 ? distanceSum / distanceWeight : freshData.g;
                 // One marched texel is one dithered sample: on its own it is grain. The nine-sample blend around it is the same sky with the dither averaged out.
                 float4 smooth = upsampled;
@@ -294,13 +317,24 @@ Shader "Boscali/FlightCloudComposite"
                 // The clamp box comes from the nine quarter-size texels marched this frame, one of every four half-size texels. A cloud thinner than that (a far layer seen edge-on) is
                 // inside the box only on the frames whose marched row happens to cross it: clamped hard, it blinked on and off along the horizon. A sky that barely moves on screen
                 // keeps most of its history (a 15 % pull toward the box per frame still clears a cloud that has really gone); a moving one is clamped as before.
-                float4 carried = lerp(history, boxed, saturate(0.15 + motion * 3.0));
+                // Distant cloud is cached harder: past the near limit (45 km, fully by 120 km)
+                // a texel covers kilometres of sky, so each fresh sample disagrees with the
+                // last far more than the cloud changed. History then yields only 4 % toward
+                // the clamp box and a fresh texel enters at 3 % per visit, while motion and
+                // lightning (in `motion`) still force a prompt refresh.
+                float farCache = smoothstep(45000.0, 120000.0, distance);
+                // Frozen sky: the march dither is fixed per texel, so a texel marched again from the same view returns the same value.
+                // Where the sky is still on screen (under ~1/8 px a frame: any sky at rest, distant cloud in cruise) a fresh texel is
+                // simply kept and the other three hold their history untouched. Blending or clamping toward neighbours marched in a
+                // different checker phase made a 4-frame wobble. Moving sky keeps the clamped blend below.
+                float rest = occludedHistory ? 0.0 : 1.0 - saturate(motion * 40.0);
+                float4 carried = lerp(history, boxed, saturate(lerp(0.15, 0.04, farCache) + motion * 3.0) * (1.0 - rest));
                 if (!fresh) return Resolved(lerp(carried, upsampled, motion), sceneDepth, cloudDepth);
-                // The clamp already pulled the carried value into the fresh range, so new and
-                // vanished cloud still converge within a few frames. A fresh texel enters half
-                // as its own sample and half as the blend around it, and at most a quarter per
-                // visit at rest (was a half of the raw sample for dense cloud: visible grain).
-                return Resolved(lerp(carried, lerp(freshVal, smooth, 0.5), max(0.08 + 0.17 * freshVal.a, motion)), sceneDepth, cloudDepth);
+                // Moving sky: the clamp already pulled the carried value into the fresh range, so new and vanished cloud still
+                // converge within a few frames. A fresh texel enters half as its own sample and half as the blend around it,
+                // at most a quarter per visit (distant cloud 3 %).
+                float entry = max(lerp(0.08 + 0.17 * freshVal.a, 0.03, farCache), motion);
+                return Resolved(lerp(carried, lerp(lerp(freshVal, smooth, 0.5), freshVal, rest), lerp(entry, 1.0, rest)), sceneDepth, cloudDepth);
             }
             ENDHLSL
         }

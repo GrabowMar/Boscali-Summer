@@ -16,6 +16,7 @@ namespace BoscaliSummer.Modules.Events.Configuration
         public ConfigEntry<int> HistoryLength { get; }
         public ConfigEntry<bool> SuperEventsEnabled { get; }
         public ConfigEntry<bool> AlertsEnabled { get; }
+        public ConfigEntry<bool> PicturesEnabled { get; }
         public ConfigEntry<int> AlertSeconds { get; }
 
         public EventsSettings(ConfigFile config)
@@ -52,6 +53,9 @@ namespace BoscaliSummer.Modules.Events.Configuration
             AlertsEnabled = config.Bind(section, "AlertsEnabled", true,
                 "Show the superevent alert banner when one begins. Client-local: every " +
                 "player chooses for themselves.");
+            PicturesEnabled = config.Bind(section, "PicturesEnabled", true,
+                "Show event artwork. OFF replaces pictures in EVN cards, archive dossiers and superevent alerts " +
+                "with a generic event symbol. Client-local; applies now without changing event effects.");
             AlertSeconds = config.Bind(section, "AlertSeconds", 24,
                 new ConfigDescription(
                     "How long a superevent alert stays on screen before it dismisses itself.",

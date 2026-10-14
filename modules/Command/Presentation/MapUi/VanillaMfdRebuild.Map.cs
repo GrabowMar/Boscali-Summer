@@ -23,7 +23,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private sealed class MapPresenter : Presenter
         {
             private const int NativeLayerCount = 6;
-            private const int OverlayLayerCount = 4;
+            private const int OverlayLayerCount = 5;
+            private const int RoadsLayer = 4;
             private const int OverlayCount = OverlayLayerCount;
 
             private static readonly string[] LayerNames =
@@ -31,15 +32,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private static readonly string[] LayerSubtitles =
                 { "Mission markers", "Target markers", "Jam indicators", "Grid coordinates", "Pilot icons", "Base icons" };
             private static readonly string[] OverlayNames =
-                { "CONTROL FIELD", "FRONT LINE", "SENSOR CONTOURS", "SATELLITE MAP" };
+                { "CONTROL FIELD", "FRONT LINE", "INDUSTRY", "SUPPLY ROUTES", "ROADS" };
             private static readonly string[] OverlaySubtitles =
-                { "Sector control", "Control boundary", "Sensor coverage", "Terrain imagery" };
+                { "Sector control", "Control boundary", "Factories, depots, ammo dumps", "Depot lines and trucks", "Road network on the relief" };
             private static readonly string[] OverlayBriefs =
             {
                 "Who holds each sector. Source: actual ground units, airbases.",
                 "Boundary of the two held areas. Source: the control field.",
-                "Hostile radar and optical/IR reach over you. Source: tracks your side holds; terrain masking is not applied.",
-                "Terrain imagery under the symbols in place of the plain vector base.",
+                "Square: factory. Diamond: depot. Triangle: ammo dump. Side colours; enemy sites only where your side knows them.",
+                "Dashed: each friendly factory, depot and ammo dump to the nearest point of the front. Chevron: a friendly supply truck and its heading; small diamond: a known enemy truck.",
+                "Relief only: the game's road network drawn on the terrain. Source: the mission's road map.",
             };
             private static readonly string[] HoverNames = { "OFF", "UNIT INFO", "AMMUNITION", "ORDERS" };
             private static readonly string[] HoverNotes =
@@ -52,13 +54,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private static readonly string[] SizeNames = { "SMALL", "MEDIUM", "LARGE" };
             private static readonly string[] SizeSubtitles = { "COMPACT", "BALANCED", "FULL SIZE" };
             private static readonly string[] ReadoutKeys =
-                { "SECTOR CELL", "CONTROL DATA", "THREAT TRACKS", "TERRAIN DECK" };
+                { "SECTOR CELL", "CONTROL DATA", "INDUSTRY", "CONVOYS" };
             private static readonly string[] LegendLabels =
-                { "FRIENDLY GROUND", "HOSTILE GROUND", "CONTESTED", "FRONT LINE", "RADAR HEAT", "OPTICAL / IR" };
+                { "FRIENDLY GROUND", "HOSTILE GROUND", "CONTESTED", "FRONT LINE", "INDUSTRY SITE", "SUPPLY ROUTE" };
             private static readonly AvIcon[] LayerGlyphs =
                 { AvIcon.Flag, AvIcon.Target, AvIcon.WaveSine, AvIcon.Ruler2, AvIcon.User, AvIcon.Plane };
             private static readonly AvIcon[] OverlayGlyphs =
-                { AvIcon.Shield, AvIcon.Line, AvIcon.Radar2, AvIcon.Satellite };
+                { AvIcon.Shield, AvIcon.Line, AvIcon.BuildingFactory, AvIcon.Truck, AvIcon.Map2 };
             private static readonly AvIcon[] HoverGlyphs =
                 { AvIcon.X, AvIcon.InfoCircle, AvIcon.Bolt, AvIcon.ListDetails };
             private static readonly AvIcon[] SizeGlyphs =
@@ -68,7 +70,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private readonly SymbolTile[] previewTiles = new SymbolTile[3];
 
             private ComMapOverlay overlay;
-            private ThreatMapOverlay threats;
+            private LogisticsMapOverlay logistics;
+            private RoadMapOverlay roads;
             private MfdPagingGrid layers, overlays, hover, sizes;
             private AvControl presetAll, presetNone, presetDefaults;
             private AvNote detailSummary, previewCaption;
@@ -108,12 +111,21 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
             }
 
-            private ThreatMapOverlay Threats
+            private LogisticsMapOverlay Logistics
             {
                 get
                 {
-                    if (threats == null) ModuleServices.TryGet(out threats);
-                    return threats;
+                    if (logistics == null) ModuleServices.TryGet(out logistics);
+                    return logistics;
+                }
+            }
+
+            private RoadMapOverlay Roads
+            {
+                get
+                {
+                    if (roads == null) ModuleServices.TryGet(out roads);
+                    return roads;
                 }
             }
 
@@ -126,8 +138,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 {
                     "Sector cell: the side of one control-field cell in metres. Cells only coarsen on very large theaters.",
                     "Control data: LIVE when ground presence feeds the sector control field, NO DATA before either side has ground units.",
-                    "Threat tracks: emitters tracked right now, with the widest engagement envelope in kilometres.",
-                    "Terrain deck: SAT when satellite imagery is the map base, VEC for the plain vector map."
+                    "Industry: factories, depots and ammo dumps your side knows of, both sides, and how many friendly ones have a line to the front.",
+                    "Convoys: supply trucks your side knows of, both sides."
                 };
                 for (int i = 0; i < metrics.Length; i++) AvHelpTip.Attach(metrics[i].Rect.gameObject, metricTips[i]);
 
@@ -163,7 +175,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 AddGrid(page, layers);
 
                 page.Section(AvIcon.Scale, "THEATER OVERLAYS", "BOSCALI PLOT");
-                overlays = new MfdPagingGrid(page.Content, 2, 2, pager: false, rowHeight: 56f, tile: true);
+                overlays = new MfdPagingGrid(page.Content, 3, 2, pager: false, rowHeight: 56f, tile: true);
                 overlays.SetGlyphs(i => OverlayGlyphs[Mathf.Clamp(i, 0, OverlayGlyphs.Length - 1)]);
                 AddGrid(page, overlays);
 
@@ -217,24 +229,28 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 if (index == 0) return Overlay != null && Overlay.ControlFieldVisible;
                 if (index == 1) return Overlay != null && Overlay.FrontLineVisible;
-                if (index == 2) return Threats != null && Threats.Visible;
-                return Overlay != null && Overlay.TerrainImageVisible;
+                if (index == 2) return Logistics != null && Logistics.IndustryVisible;
+                if (index == 3) return Logistics != null && Logistics.SupplyVisible;
+                if (index == RoadsLayer) return Roads != null && Roads.Visible;
+                return false;
             }
 
             private void SetOverlayLayer(int index, bool visible)
             {
                 if (index == 0) Overlay?.SetControlFieldVisible(visible);
                 else if (index == 1) Overlay?.SetFrontLineVisible(visible);
-                else if (index == 2) Threats?.SetVisible(visible);
-                else Overlay?.SetTerrainImageVisible(visible);
+                else if (index == 2) Logistics?.SetIndustryVisible(visible);
+                else if (index == 3) Logistics?.SetSupplyVisible(visible);
+                else if (index == RoadsLayer) Roads?.SetVisible(visible);
             }
 
             /// <summary>Whether one overlay has the map and the state it needs to draw at all.</summary>
             private bool OverlayReady(int index)
             {
                 if (index < 2) return Overlay != null && Overlay.LayersAvailable;
-                if (index == 2) return Threats != null && Threats.Available;
-                return Overlay != null && Overlay.LayersAvailable;
+                if (index < 4) return Logistics != null && Logistics.Available;
+                if (index == RoadsLayer) return Roads != null && Roads.Available;
+                return false;
             }
 
             /// <summary>Both presets state the whole set; already-satisfied layers are skipped.</summary>
@@ -269,8 +285,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 options.SetToolTipType((int)MapOptions.TooltipType.Info);
                 options.SetIconSize(2);
 
+                // The game has no road layer of its own, so DEFAULTS leaves ROADS as it is.
                 for (int i = 0; i < OverlayLayerCount; i++)
-                    if (OverlayReady(i) && !OverlayLayer(i)) SetOverlayLayer(i, true);
+                    if (i != RoadsLayer && OverlayReady(i) && !OverlayLayer(i)) SetOverlayLayer(i, true);
 
                 RequestRefresh();
             }
@@ -499,8 +516,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     for (int i = 0; i < LegendLabels.Length; i++)
                     {
                         Color32 l = i == 1 ? hostile : i == 2 ? contestedLeft : i == 3 ? front
-                            : i == 4 ? (Color32)AvTheme.RailDanger : i == 5 ? (Color32)AvTheme.RailCaution : friendly;
-                        Color32 r = i == 2 ? contestedRight : l;
+                            : i == 4 || i == 5 ? (Color32)AvTheme.RailInfo : friendly;
+                        Color32 r = i == 2 ? contestedRight : i == 4 ? (Color32)AvTheme.RailDanger : l;
                         left[i].color = l;
                         right[i].color = r;
                     }
@@ -526,6 +543,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 public override void Restyle()
                 {
+                    Paint();
                     frame.Paint(AvStyleHost.FuiFill("card", AvTheme.SurfaceInert),
                                 AvStyleHost.FuiBorder("card", AvTheme.Hairline));
                     Color ink = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
@@ -539,9 +557,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 bool available = Available;
                 ComMapOverlay source = Overlay;
-                ThreatMapOverlay threatSource = Threats;
+                LogisticsMapOverlay logisticsSource = Logistics;
                 bool overlaysReady = available && source != null && source.LayersAvailable;
-                bool threatsReady = available && threatSource != null && threatSource.Available;
+                bool logisticsReady = available && logisticsSource != null && logisticsSource.Available &&
+                    (logisticsSource.IndustryVisible || logisticsSource.SupplyVisible);
 
                 visibleLayers = 0;
                 for (int i = 0; i < NativeLayerCount; i++)
@@ -590,14 +609,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 metrics[1].Set(overlaysReady ? (source.HasControlData ? "LIVE" : "NO DATA") : "—", "",
                     overlaysReady ? 1f : 0f,
                     !overlaysReady ? AvState.Inert : source.HasControlData ? AvState.Ready : AvState.Caution);
-                metrics[2].Set(!threatsReady ? "—" : AvNum.Fixed(threatSource.TrackedEmitters, 0),
-                    !threatsReady ? "" : threatSource.TrackedEmitters > 0
-                        ? AvNum.Fixed(threatSource.WidestEnvelopeKm, 0) + " KM" : "NONE",
-                    threatsReady ? 1f : 0f,
-                    !threatsReady ? AvState.Inert : threatSource.TrackedEmitters > 0 ? AvState.Caution : AvState.Ready);
-                metrics[3].Set(overlaysReady ? (source.TerrainImageVisible ? "SAT" : "VEC") : "—",
-                    overlaysReady ? (source.TerrainImageVisible ? "SATELLITE" : "VECTOR (OFF)") : "",
-                    overlaysReady ? 1f : 0f, overlaysReady ? AvState.Ready : AvState.Inert);
+                // Counts come from the overlay's last pass, so both layers hidden reads a dash, never a stale zero.
+                metrics[2].Set(logisticsReady ? AvNum.Fixed(logisticsSource.SiteCount, 0) : "—",
+                    logisticsReady ? AvNum.Fixed(logisticsSource.RouteCount, 0) + " TO FRONT" : "",
+                    logisticsReady ? 1f : 0f, logisticsReady ? AvState.Ready : AvState.Inert);
+                metrics[3].Set(logisticsReady ? AvNum.Fixed(logisticsSource.TruckCount, 0) : "—",
+                    logisticsReady ? "TRUCKS" : "", logisticsReady ? 1f : 0f, logisticsReady ? AvState.Ready : AvState.Inert);
 
                 detailSummary.Set(!available ? "—" : "TOOLTIP " + TooltipName());
 

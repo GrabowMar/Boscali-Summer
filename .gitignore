@@ -76,5 +76,6 @@ __pycache__/
 modules/Vanguard/Assets/Models/
 modules/Events/Assets/Source/
 /docs/*
+!/docs/COMMUNITY_FIXES_2026-10-14.md
 !/docs/MISSION_COMPATIBILITY.md
 !/CHANGELOG.md

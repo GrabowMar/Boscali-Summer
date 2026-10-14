@@ -102,7 +102,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private float previousFov;
         private bool hasPrevious;
         private int checkerFrame;
-        private float jitterPhase;
         private float previousFlash;
         internal float[] HeroStrengths => heroShown;
 
@@ -119,7 +118,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             previousCamera = null;
             previousTarget = null;
             checkerFrame = 0;
-            jitterPhase = 0f;
         }
 
         /// <summary>Jump set-pieces and fog to their targets (the bench, or a preload).</summary>
@@ -336,10 +334,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             Shader.SetGlobalMatrix(PrevMatrixId, previousProjection * previousRotation);
             Shader.SetGlobalVector(CamDeltaId, new Vector4(delta.x, delta.y, delta.z, rotMotion));
             Vector2 offset = CheckerOrder[checkerFrame & 3];
-            // The march dither cycles each frame (golden-ratio steps never line up with the
-            // 4-frame checkerboard period), so temporal accumulation converges to smooth cloud.
-            jitterPhase = (jitterPhase + 0.6180339887f) % 1f;
-            Shader.SetGlobalVector(CheckerId, new Vector4(offset.x, offset.y, jitterPhase, reusable ? 1f : 0f));
+            // z (the old per-frame dither phase) is unused: the march dither is frozen per texel.
+            Shader.SetGlobalVector(CheckerId, new Vector4(offset.x, offset.y, 0f, reusable ? 1f : 0f));
             checkerFrame++;
             previousRotation = view;
             previousRotation.SetColumn(3, new Vector4(0f, 0f, 0f, 1f));

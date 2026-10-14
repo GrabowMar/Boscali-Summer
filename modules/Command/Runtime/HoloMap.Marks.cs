@@ -78,9 +78,13 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 if (m.Kind == HoloKind.Air)
                 {
                     float top = Mathf.Max(ground, HoloView.MarkHeight(m.Height - sea, radius));
-                    if (!At(e, top, n, out float tx, out float ty) || !Inside(tx, ty, edge)) continue;
+                    // A high contact can project above the tile while its ground fix is
+                    // nearby. Keep its symbol in view instead of silently dropping it.
+                    if ((!At(e, top, n, out float tx, out float ty) || !Inside(tx, ty, 8f * u)) &&
+                        (!At(e, ground, n, out tx, out ty) || !Inside(tx, ty, 8f * u))) continue;
                     if (At(e, ground, n, out float gx, out float gy)) AvStrokes.Line(b, gx, gy, tx, ty, w, new Rgba(c.R, c.G, c.B, .4f));
-                    AvStrokes.Diamond(b, tx, ty, 3f * u, w * 1.3f, c);
+                    AvStrokes.Diamond(b, tx, ty, 5f * u, w * 1.8f, c);
+                    AvStrokes.Line(b, tx - 7f * u, ty, tx + 7f * u, ty, w * 1.3f, c);
                 }
                 else
                 {
@@ -320,7 +324,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     {
                         East = x, North = z, Height = air ? IconPosition(icon).y / factor : 0f, Range = Mathf.Sqrt(flat),
                         Colour = (uint)(colour.r << 16 | colour.g << 8 | colour.b), Kind = air ? HoloKind.Air : HoloKind.Surface,
-                    }, unitCap);
+                    }, unitCap, prioritizeAir: true);
                 }
             }
             ScanBases(limit, HoloMarks.MaximumAirbases);

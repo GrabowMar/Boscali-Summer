@@ -750,13 +750,15 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                     if (y >= row.Rect.T && y < row.Rect.B) return new Hit { Type = HitType.Row, Index = row.Index };
                 return new Hit { Type = HitType.Dock };
             }
-            int cat = layout.DiscAt(x, y, MenuLayout.DiscSlopPx * layout.Rho);
             // the plate as drawn (it hugs its own text), not the widest one: empty air beside a short plate is not that category
+            int cat = -1;
             for (int i = 0; cat < 0 && i < layout.Count; i++)
             {
                 MenuCategory c = model.Categories[i];
                 if (layout.PlateContains(i, i == Cat || c.BadgeShow ? c.Badge : null, x, y)) cat = i;
             }
+            // a plate wins where it reaches into a neighbour's cell; everywhere else round the ring the nearest disc takes it
+            if (cat < 0) cat = layout.DiscAt(x, y);
             return cat >= 0 ? new Hit { Type = HitType.Category, Index = cat } : default;
         }
 
