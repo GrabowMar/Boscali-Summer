@@ -762,7 +762,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     }
 
     /// <summary>LOADOUT's HARDPOINTS: a small top-view station map (the airframe's outline and numbered station boxes) beside the station
-    /// table (the number, the store or what blocks it or EMPTY, its mass and ✕ to clear). The map and the table select together.</summary>
+    /// table (the number, the store or what blocks it or EMPTY, its mass, link/split on a pair's sides and ✕ to clear). The map and the table select together.</summary>
     internal sealed class WmcStationBoard : AvPart
     {
         public const int MaxStations = 24, RowsPerPage = 8;
@@ -778,7 +778,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             public AvFrame Frame;
             public Image Rail;
             public TMP_Text Num, Store, Mass;
-            public AvControl Clear;
+            public AvControl Clear, Link;
             public string StoreFull, MassFull, StateClass = "inert";
             public bool Shown, CanClear, Enabled = true, Hover;
         }
@@ -803,11 +803,14 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private readonly bool[] mirrored = new bool[MaxStations];
         private readonly string[] stationStore = new string[MaxStations], stationMass = new string[MaxStations];
         private readonly bool[] canClear = new bool[MaxStations], enabled = new bool[MaxStations];
+        /// <summary>0 not a pair side, 1 linked, 2 split.</summary>
+        private readonly int[] linkState = new int[MaxStations];
         private readonly StationMapMath.Spot[] spots = new StationMapMath.Spot[MaxStations * 2];
         private int count, page, selected = -1;
         private float mapW, mapH;
 
-        public WmcStationBoard(RectTransform parent, WmcControls ids, Action<int> onSelect, Action<int> onClear, Action<int> onPage)
+        public WmcStationBoard(RectTransform parent, WmcControls ids, Action<int> onSelect, Action<int> onClear, Action<int> onPage,
+            Action<int> onLink)
         {
             Rect = AvLay.Child(parent, "StationBoard");
             select = onSelect;
@@ -838,6 +841,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 r.Mass = WmcSheet.Text(r.Root, "Mass", AvTextRole.DataSmall, TextAlignmentOptions.MidlineRight);
                 r.Clear = AvControl.Make(r.Root, new AvControl.Spec("", () => onClear(page * RowsPerPage + slot), AvButtonStyle.Quiet, AvIcon.X));
                 r.Clear.Help = "Empty this station.";
+                r.Link = AvControl.Make(r.Root, new AvControl.Spec("", () => onLink(page * RowsPerPage + slot), AvButtonStyle.Quiet, AvIcon.Link));
                 AvHit hit = AvHit.On(r.Frame);
                 hit.Hover = h => { r.Hover = h; Paint(r); };
                 hit.Click = e => select(page * RowsPerPage + slot);
@@ -845,6 +849,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 rows[i] = r;
                 ids.Add("lo.hp" + i, r.Root);
                 ids.Add("lo.hp" + i + ".clear", r.Clear);
+                ids.Add("lo.hp" + i + ".link", r.Link);
             }
             prev = WmcSheet.Chevron(Rect, () => onPage(-1), true, "Previous stations");
             next = WmcSheet.Chevron(Rect, () => onPage(1), false, "Next stations");
@@ -903,7 +908,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         /// <summary>One station's words. <paramref name="stateClass"/> is "ready" (flies), "caution" (a store that will not fly),
         /// "inert" (empty or blocked).</summary>
-        public void Bind(int station, string store, string mass, string stateClass, bool clearable, bool canPick, string tip)
+        public void Bind(int station, string store, string mass, string stateClass, bool clearable, bool canPick, string tip, int link = 0)
         {
             if (station < 0 || station >= MaxStations) return;
             stationStore[station] = store ?? "";
@@ -911,6 +916,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             states[station] = stateClass;
             canClear[station] = clearable;
             enabled[station] = canPick;
+            linkState[station] = link;
             int slot = station - page * RowsPerPage;
             if (slot >= 0 && slot < RowsPerPage) AvHelpTip.Attach(rows[slot].Frame.gameObject, tip);
         }
@@ -940,6 +946,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 AvText.Set(r.Mass, r.MassFull);
                 r.Clear.gameObject.SetActive(r.CanClear);
                 r.Clear.Interactable = true;
+                r.Link.gameObject.SetActive(linkState[st] != 0);
+                if (linkState[st] != 0)
+                {
+                    r.Link.SetIcon(linkState[st] == 1 ? AvIcon.Link : AvIcon.Unlink);
+                    r.Link.Help = linkState[st] == 1 ? "Linked with the other side: a pick fits both. Click to split the pair."
+                        : "Split: each side takes its own store. Click to link, the other side taking this one's store.";
+                }
                 AvHit hit = r.Frame.GetComponent<AvHit>();
                 if (hit != null) hit.Interactable = r.Enabled;
                 Paint(r);
@@ -959,7 +972,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private float RowHeight(Row r, float w) => Mathf.Max(RowMin, AvText.Height(r.Store, StoreW(w)) + 8f);
 
-        private float StoreW(float w) => Mathf.Max(40f, w - 3f - NumW - MassW - Clear - 14f);
+        private float StoreW(float w) => Mathf.Max(40f, w - 3f - NumW - MassW - 2f * Clear - 16f);
 
         private float TableWidth(float w) => w - Mathf.Clamp(w * 0.31f, 112f, 150f) - 6f;
 
@@ -998,7 +1011,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 AvLay.Place(r.Rail.rectTransform, 0f, 0f, 3f, h);
                 AvLay.Place(r.Num.rectTransform, 5f, 0f, NumW, h);
                 AvLay.Place(r.Store.rectTransform, 5f + NumW + 2f, 0f, StoreW(tw), h);
-                AvLay.Place(r.Mass.rectTransform, tw - Clear - MassW - 6f, 0f, MassW, h);
+                AvLay.Place(r.Mass.rectTransform, tw - 2f * Clear - MassW - 8f, 0f, MassW, h);
+                AvLay.Place(r.Link.Rect, tw - 2f * Clear - 6f, (h - 22f) * 0.5f, Clear, 22f);
                 AvLay.Place(r.Clear.Rect, tw - Clear - 4f, (h - 22f) * 0.5f, Clear, 22f);
                 y += h + RowGap;
             }
@@ -1073,6 +1087,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             r.Store.color = !r.Enabled ? AvTheme.Disabled : AvInk.Ink;
             r.Mass.color = AvInk.Dim;
             r.Clear.Restyle();
+            r.Link.Restyle();
         }
 
         public override void Restyle()
