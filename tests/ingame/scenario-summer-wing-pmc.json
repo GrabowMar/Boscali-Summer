@@ -37,6 +37,8 @@
     { "check": "result_equals", "path": "intro.script", "value": "summer-sim" },
     { "check": "result_above", "path": "joined.joined", "min": 0.5 },
     { "check": "result_equals", "path": "joined.side", "value": "Pmc" },
+    { "check": "result_equals", "path": "joined.flight_controls_enabled", "value": 1 },
+    { "check": "result_equals", "path": "joined.join_menu_open", "value": 0 },
     { "check": "log_match", "pattern": "\\[Pmc\\] HQ made", "min": 1 },
     { "check": "log_match", "pattern": "\\[Pmc\\] HQ spawned, net id", "min": 1 },
     { "check": "log_match", "pattern": "\\[Scenario\\] the pilot is seated in a", "min": 1 },

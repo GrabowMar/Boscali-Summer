@@ -10,12 +10,13 @@ if (-not (Test-Path -LiteralPath $Unity)) { throw "Unity Editor not found: $Unit
 $fixture = Resolve-UnityCheckDir $EvidenceDir 'BoscaliPilotCheck-'
 if (Test-Path -LiteralPath "$fixture/Assets/Assembly-CSharp.dll") { throw 'Use an isolated pilot fixture without game runtime initializers.' }
 $editorVersion = if ($Unity -like '*62f3*') { '2022.3.62f3' } else { '2022.3.62f2' }
-New-UnityCheckProject $fixture '{"dependencies":{"com.unity.render-pipelines.universal":"14.0.12","com.unity.modules.animation":"1.0.0","com.unity.modules.assetbundle":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.physics":"1.0.0"}}' -Folders 'Assets/Resources', 'Assets/Code' -EditorVersion $editorVersion
+New-UnityCheckProject $fixture '{"dependencies":{"com.unity.render-pipelines.universal":"14.0.12","com.unity.modules.animation":"1.0.0","com.unity.modules.assetbundle":"1.0.0","com.unity.modules.audio":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.particlesystem":"1.0.0","com.unity.modules.physics":"1.0.0"}}' -Folders 'Assets/Resources', 'Assets/Code' -EditorVersion $editorVersion
 # Compile unmodified production source with test-only native type stubs. Do not import
 # the game assembly or its Burst/Input bootstrap. Source hashes identify the closure.
 foreach ($source in @('modules/Immersion/Visuals/CockpitPilotRig.cs', 'modules/Immersion/Domain/PilotPoseMath.cs',
     'modules/Immersion/Runtime/CockpitPilot.cs', 'Core/Lifecycle/ISceneService.cs',
     'modules/Immersion/Visuals/PilotReflection.cs', 'modules/Immersion/Visuals/PilotShaderBundle.cs',
+    'modules/Immersion/Domain/HelmetMath.cs', 'modules/Immersion/Domain/VisorMath.cs', 'Core/Math/Scalar.cs',
     'modules/Weather/Visuals/CanopyGlassResolver.cs', 'modules/Weather/Domain/CanopyScoring.cs',
     'modules/Weather/Visuals/CanopyGlassView.cs', 'Core/Contracts/ICanopyGlassView.cs',
     'Core/Contracts/FxBudget.cs', 'Core/Contracts/IClientEffect.cs', 'Core/Util/EmbeddedResources.cs', 'Core/Contracts/IKneeboardGallery.cs')) {
@@ -27,7 +28,10 @@ foreach ($source in @('modules/Immersion/Visuals/CockpitPilotRig.cs', 'modules/I
     if (-not (Test-Path -LiteralPath $path)) { throw "Required pilot implementation missing: $path" }
     Copy-Item -LiteralPath $path -Destination "$fixture/Assets/Code/" -Force
 }
-Copy-Item -Path "$repo/Core/Fx/*.cs" -Destination "$fixture/Assets/Code/" -Force
+# Explicit: the Fx folder holds other features' in-progress files that need packages this fixture does not build.
+foreach ($source in 'Core/Fx/FxBus.cs', 'Core/Fx/FxRtPool.cs', 'Core/Fx/FxQualityMapper.cs', 'Core/Fx/FxRegistry.cs', 'Core/Fx/FxVoiceBus.cs') {
+    Copy-Item -LiteralPath (Join-Path $repo $source) -Destination "$fixture/Assets/Code/" -Force
+}
 $bundle = Join-Path $repo 'modules/Immersion/Assets/pilot.bundle'
 if (-not (Test-Path -LiteralPath $bundle)) { throw "Compile the pilot shader bundle first: $bundle" }
 # Unity's normal C# response file embeds the production bundle under its real resource

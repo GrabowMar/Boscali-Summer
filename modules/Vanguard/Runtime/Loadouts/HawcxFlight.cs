@@ -22,7 +22,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         private void PlanHawcx(GlobalPosition pos, float age)
         {
-            GlobalPosition aim = TargetPosition(out Vector3 targetVel);
+            GlobalPosition aim;
+            Vector3 targetVel = Vector3.zero;
+            if (landingZone.HasValue) aim = landingZone.Value;
+            else aim = TargetPosition(out targetVel);
             Vector3 to = aim - pos;
             Vector3 flat = new Vector3(to.x, 0f, to.z);
             GlidePlan plan = GlideProfile.Plan(age, flat.magnitude, pos.y, seed, hawcxFinal);
@@ -70,6 +73,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         // A designation is consumed once: re-designating the same unit does nothing, a new one inside the reach shifts.
         private bool HawcxShift(GlobalPosition aim)
         {
+            if (landingZone.HasValue) return false; // the zone stands: designations do not nudge a zoned glider
             Unit designated = DroneOrders.StrikeTarget(launcher);
             if (designated == hawcxDesignation) return false;
             hawcxDesignation = designated;

@@ -18,5 +18,31 @@
     <Compile Include="..\..\Core\Contracts\Scope\WingBoardScope.cs" Link="WingBoardScope.cs" />
     <Compile Include="..\..\Core\Contracts\IWingSortieOrders.cs" Link="IWingSortieOrders.cs" />
     <Compile Include="..\BoscaliSummer.Tests\TestAssert.cs" Link="TestAssert.cs" />
+    <!-- Ground departure regressions link the actual engine-free taxi state machine. -->
+    <Compile Include="..\..\Core\Math\Vec3.cs" Link="Ground\Vec3.cs" />
+    <Compile Include="..\..\Core\Math\Scalar.cs" Link="Ground\Scalar.cs" />
+    <Compile Include="..\..\Core\Math\Isa.cs" Link="Ground\Isa.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Control\AircraftState.cs" Link="Ground\AircraftState.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Control\AirframeProfile.cs" Link="Ground\AirframeProfile.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Control\ControlOutput.cs" Link="Ground\ControlOutput.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Guidance\FlightIntent.cs" Link="Ground\FlightIntent.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Limits\BindingReport.cs" Link="Ground\BindingReport.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Ai\WingEvents.cs" Link="Ground\WingEvents.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Ground\AirbaseSample.cs" Link="Ground\AirbaseSample.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Ground\TaxiGraph.cs" Link="Ground\TaxiGraph.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Ground\TaxiReservations.cs" Link="Ground\TaxiReservations.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Ground\FieldTraffic.cs" Link="Ground\FieldTraffic.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Ground\Departure.cs" Link="Ground\Departure.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Ground\GroundGuidance.cs" Link="Ground\GroundGuidance.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Ground\GroundPilot.cs" Link="Ground\GroundPilot.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Ground\StuckWatchdog.cs" Link="Ground\StuckWatchdog.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Ground\ServiceSpots.cs" Link="Ground\ServiceSpots.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Ground\FieldBounds.cs" Link="Ground\FieldBounds.cs" />
+    <Content Include="..\ingame\airbases.json" Link="airbases.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Fixtures\Airports\boscali-north-hangars.json" Link="boscali-north-hangars.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Fixtures\Airports\archipelago-airbases.json" Link="archipelago-airbases.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Fixtures\Airports\mission-airfields.json" Link="mission-airfields.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Fixtures\Airports\native-land-hangars.json" Link="native-land-hangars.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Fixtures\Airports\native-land-identities.json" Link="native-land-identities.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

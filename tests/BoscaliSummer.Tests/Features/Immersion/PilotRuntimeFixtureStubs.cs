@@ -58,7 +58,7 @@ public sealed class CameraStateManager : MonoBehaviour
     public Transform cameraPivot;
     public object currentState, cockpitState;
 }
-public sealed class LevelInfo : MonoBehaviour { public float GetAmbientLight() => 1f; }
+public sealed class LevelInfo : MonoBehaviour { public Light sun; public float GetAmbientLight() => 1f; }
 
 namespace HarmonyLib
 {
@@ -93,6 +93,7 @@ namespace BoscaliSummer.Core.Services
 namespace BoscaliSummer.Modules.Immersion.Configuration
 {
     internal sealed class FixtureSetting { public bool Value = true; }
+    internal sealed class FixtureFloatSetting { public float Value = 1f; }
     internal sealed class ImmersionSettings
     {
         internal readonly FixtureSetting Enabled = new FixtureSetting();
@@ -100,6 +101,7 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
         internal readonly FixtureSetting PilotReflectionEnabled = new FixtureSetting();
         internal readonly FixtureSetting PilotControlMotionEnabled = new FixtureSetting();
         internal readonly FixtureSetting ComfortMotionEnabled = new FixtureSetting();
+        internal readonly FixtureFloatSetting HelmetReflection = new FixtureFloatSetting();
     }
 }
 namespace BoscaliSummer.Modules.Immersion.Runtime

@@ -39,8 +39,9 @@ namespace BoscaliSummer.Garrisons
         public const float GlideSink = 18f;
         public const float GlideRatio = 2.5f;
         public const float GlideMaxSpeed = GlideSink * GlideRatio;
-        public const float PullHeight = 350f;
-        public const float TeamStack = 60f;
+        /// <summary>Canopy pull height over the slot: low enough that the ride down is seconds, not a minute under an open canopy.</summary>
+        public const float PullHeight = 150f;
+        public const float TeamStack = 25f;
         /// <summary>Below this height above the ground there is no glide: canopies open off the ramp.</summary>
         public const float LowDropHeight = 400f;
         public const float DeploySeconds = 3f;
@@ -78,6 +79,8 @@ namespace BoscaliSummer.Garrisons
         /// <summary>Ground point the first team lands on: where the server resolves the stick.</summary>
         public Vector3 StickLanding { get; }
         public float TotalSeconds { get; }
+        /// <summary>When the first jumper touches down: the stick has reached the ground.</summary>
+        public float FirstLandingSeconds { get; }
 
         private HaloGlidePlan(Team[] teams, Jumper[] jumpers, bool low)
         {
@@ -85,9 +88,10 @@ namespace BoscaliSummer.Garrisons
             this.jumpers = jumpers;
             LowDrop = low;
             StickLanding = teams[0].Slot;
-            float last = 0f;
-            foreach (Jumper j in jumpers) last = Math.Max(last, j.LandAt);
+            float last = 0f, first = float.MaxValue;
+            foreach (Jumper j in jumpers) { last = Math.Max(last, j.LandAt); first = Math.Min(first, j.LandAt); }
             TotalSeconds = last + LandingHold;
+            FirstLandingSeconds = first;
         }
 
         /// <param name="exit">Ramp exit point at release.</param>

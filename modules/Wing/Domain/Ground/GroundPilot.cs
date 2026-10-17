@@ -108,6 +108,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         private float lineUpStuckSince = float.NaN, lineUpStuckToSlot;
         private bool lineUpMoved;
         private int hangar, startNode, standNode = -1;
+        private Vec3[] initialTaxiPrefix;
         private bool arriving, pulledAside;
         private int asideFor = -1, asideNode = -1, asideBack = -1;
         private float asideSince;
@@ -138,8 +139,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
         private int lineupSlotIndex;
 
         /// <summary>A member launched from hangar <paramref name="hangarIndex"/> (−1: none) joins the taxi graph at that
-        /// hangar's exit, else at <paramref name="startNode"/> (a service spot's), else at the node nearest to it.</summary>
-        public GroundPilot(int owner, FieldTraffic field, AirframeClass cls, WingPose spawn, int hangarIndex, int startNode = -1)
+        /// hangar's exit, else at <paramref name="startNode"/> (a service spot's), else at the node nearest to it.
+        /// A queue spot supplies the remaining bends of its current edge in <paramref name="taxiPrefix"/>.</summary>
+        public GroundPilot(int owner, FieldTraffic field, AirframeClass cls, WingPose spawn, int hangarIndex, int startNode = -1, Vec3[] taxiPrefix = null)
         {
             Owner = owner;
             traffic = field;
@@ -147,6 +149,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             this.spawn = spawn;
             hangar = hangarIndex;
             this.startNode = startNode;
+            initialTaxiPrefix = taxiPrefix;
             lastPose = spawn;
         }
 
@@ -213,6 +216,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             startNode = standNode;
             standNode = hangar = -1;
             spawn = lastPose;
+            initialTaxiPrefix = null;
             RoofOverhead = false;
             enqueued = taxiReleased = clearedThreshold = rolling = airborneReported = exitedHangar = false;
             liftoffTime = settleStart = rollStart = float.NaN;
@@ -358,7 +362,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
                         }
                         else
                         {
-                            RouteFrom(new[] { s.Pos }, StartNode(s.Pos));
+                            RouteFrom(initialTaxiPrefix ?? new[] { s.Pos }, StartNode(s.Pos));
+                            initialTaxiPrefix = null;
                             TowRound(s, p);
                             Enter(GroundPhase.TaxiOut, time);
                             Log(events, time, slot, WingEventKind.Taxiing);
@@ -466,7 +471,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
             traffic.ReportRoute(Owner, nodes, edges, step);
 
             float total = cum[cum.Length - 1];
-            float stopAt = total;
+            float goalDistance = (s.Pos - path[path.Length - 1]).Horizontal.Length;
+            // Projection can reach the end while still beside it. Pursue the physical goal, with every
+            // obstacle and reservation below retaining authority to shorten the available distance.
+            float stopAt = Math.Max(total, along + goalDistance);
             GroundStop binding = GroundStop.None;
             bool reservationWait = false;
             float obstacle = ObstacleStop(along, s, p, out int member);
@@ -550,8 +558,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 Enter(GroundPhase.HoldShort, time);
                 Log(events, time, slot, WingEventKind.HoldingShort);
             }
-            float speed = Vec3.Dot(s.Vel, s.Fwd.Horizontal.Normalized);
-            bool atGoal = total - along < LineupTolerance + 2f && speed < StoppedSpeed;
+            float speed = s.Vel.Horizontal.Length;
+            bool atGoal = total - along < LineupTolerance + 2f && goalDistance < LineupTolerance + 2f && speed < StoppedSpeed;
             Stop = relocationWanted ? GroundStop.Relocating : atGoal ? GroundStop.Goal : binding;
             StopWho = Stop == GroundStop.Member ? member : Stop == GroundStop.Claims ? traffic.Reservations.WaitingForAny(Owner) : -1;
             if (arriving && atGoal)
@@ -593,9 +601,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
                     break;
             }
 
-            GroundCommand c = GroundGuidance.Pursue(path, ref progress, s, stopAt - along);
+            float stopDistance = stopAt - along;
+            GroundCommand c = GroundGuidance.Pursue(path, ref progress, s, stopDistance);
             LastCommand = c;
-            StopDistance = stopAt - along;
+            StopDistance = stopDistance;
             return controller.Step(c, s, p, dt);
         }
 
@@ -655,6 +664,11 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 pulledAside = false;
                 traffic.Reservations.ReleaseAll(Owner);
                 RouteFrom(new[] { s.Pos }, asideNode);
+                if (!passed)
+                {
+                    relocationWanted = true;
+                    relocateFrom = s.Pos;
+                }
                 return new ControlOutput { Brake = 1f };
             }
             if (Watchdog.Update(s.Pos, false, dt) == WatchdogAction.Relocate)
@@ -662,9 +676,15 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 pulledAside = false;
                 relocationWanted = true;
                 relocateFrom = s.Pos;
+                // A busy goal can defer relocation. Restore the taxi route before the next Taxi step:
+                // the refuge path has different point indices from the route kept while pulled aside.
+                traffic.Reservations.ReleaseAll(Owner);
+                RouteFrom(new[] { s.Pos }, asideNode);
+                return new ControlOutput { Brake = 1f };
             }
             float along = Along(s.Pos);
-            GroundCommand c = GroundGuidance.Pursue(path, ref progress, s, cum[cum.Length - 1] - along);
+            float stopDistance = Math.Max(cum[cum.Length - 1] - along, (s.Pos - path[path.Length - 1]).Horizontal.Length);
+            GroundCommand c = GroundGuidance.Pursue(path, ref progress, s, stopDistance);
             return controller.Step(c, s, p, dt);
         }
 
@@ -715,19 +735,20 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 traffic.Departures.ClearedThreshold(Owner);
             }
             float toSlot = cum[lineupSlotIndex] - along;
-            float speed = Vec3.Dot(s.Vel, s.Fwd.Horizontal.Normalized);
+            float speed = s.Vel.Horizontal.Length;
             Vec3 dir = traffic.Runway.Direction(traffic.Reverse);
             if (!lineUpMoved && toSlot > LineupTolerance)
             {
                 if (float.IsNaN(lineUpStuckSince)) { lineUpStuckSince = time; lineUpStuckToSlot = toSlot; }
                 else if (lineUpStuckToSlot - toSlot > LineupProgressMetres) { lineUpStuckSince = time; lineUpStuckToSlot = toSlot; }
-                else if (time - lineUpStuckSince > LineUpStuckSeconds && PutOnSlot(p, dir, time, events, slot))
+                else if (time - lineUpStuckSince > LineUpStuckSeconds && PutOnSlot(p.SpanM, dir, time, events, slot))
                     return new ControlOutput { Brake = 1f };
             }
             else lineUpStuckSince = float.NaN;
             float heading = Math.Abs(Scalar.Wrap180(Vec3.HeadingDeg(s.Fwd) - Vec3.HeadingDeg(dir)));
-            bool stoppedOnSlot = toSlot < LineupTolerance && speed < StoppedSpeed;
-            if (!stoppedOnSlot) settleStart = float.NaN;
+            bool stoppedAtProjection = toSlot < LineupTolerance && speed < StoppedSpeed;
+            bool stoppedOnSlot = stoppedAtProjection && (s.Pos - path[lineupSlotIndex]).Horizontal.Length < LineupTolerance;
+            if (!stoppedAtProjection) settleStart = float.NaN;
             else if (float.IsNaN(settleStart)) settleStart = time;
             if (stoppedOnSlot && heading < LineupAlignDeg)
             {
@@ -740,20 +761,21 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 Enter(GroundPhase.Roll, time);
                 return new ControlOutput { Brake = 1f };
             }
-            // Stopped on the slot but off the runway heading past the settle: put it on exactly (the roll cannot steer
+            // Stopped beside or past the slot, or off the runway heading: put it on exactly (the roll cannot steer
             // out tens of degrees — wing-taxi sim 2026-10-06: a 40° roll entry ground-looped 86 m off the runway).
-            if (stoppedOnSlot && time - settleStart >= AlignSettleSeconds && !lineUpMoved &&
-                PutOnSlot(p, dir, time, events, slot)) return new ControlOutput { Brake = 1f };
+            if (stoppedAtProjection && time - settleStart >= AlignSettleSeconds && !lineUpMoved &&
+                PutOnSlot(p.SpanM, dir, time, events, slot)) return new ControlOutput { Brake = 1f };
             GroundCommand c = GroundGuidance.Pursue(path, ref progress, s, toSlot);
             return controller.Step(c, s, p, dt);
         }
 
         /// <summary>Once per line-up: the engine moves the aircraft onto its slot facing down the runway (the group's runway is
         /// locked for it), unless someone is within its span of the slot.</summary>
-        private bool PutOnSlot(AirframeProfile p, Vec3 dir, float time, WingEventRing events, int slot)
+        private bool PutOnSlot(float span, Vec3 dir, float time, WingEventRing events, int slot)
         {
             Vec3 lane = path[lineupSlotIndex];
-            if (traffic.Occupied(lane, Math.Max(RelocateClearRadius, p.SpanM + RelocateSpanMargin), Owner)) return false;
+            float clear = Math.Max(RelocateClearRadius, span + RelocateSpanMargin);
+            if (traffic.Occupied(lane, clear, Owner) || traffic.RelocatedNear(lane, clear, Owner)) return false;
             lineUpMoved = true;
             if (!taxiReleased)
             {
@@ -781,7 +803,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 SetPath(new[] { s.Pos, s.Pos + dir * Math.Max(500f, traffic.Runway.Length) });
                 Log(events, time, slot, WingEventKind.Rolling);
             }
-            GroundCommand c = GroundGuidance.Pursue(path, ref progress, s, 1e6f);
+            GroundCommand c = GroundGuidance.Pursue(path, ref progress, s, 1e6f, extendEnd: true);
             ControlOutput o = controller.Step(c, s, p, 0f);
             // Anything foreign in the lane ahead (the whole runway: one long segment): hold or reject the takeoff.
             float along = Along(s.Pos);
@@ -1051,7 +1073,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             // Night-2 sim (SFB-81): nobody nearer than this aircraft's span and a margin — 30 m is less than a bomber's wingspan.
             float clear = Math.Max(RelocateClearRadius, span + RelocateSpanMargin);
             if ((owner >= 0 && owner != Owner) || traffic.Occupied(at, clear, Owner) || traffic.RelocatedNear(at, clear, Owner))
-                return arriving && Restand(s, time, events, slot);
+                return arriving ? Restand(s, time, events, slot) : RecoverLineup(s, span, time, events, slot);
             traffic.Reservations.ReleaseAll(Owner);
             holdClaim[0] = hold;
             traffic.Reservations.TryAdvance(Owner, arriving ? TaxiPriority.TaxiIn : TaxiPriority.Departing, holdClaim, noEdges, 0, 0);
@@ -1067,6 +1089,27 @@ namespace BoscaliSummer.Modules.Wing.Domain
             Watchdog.Restart(at);
             Log(events, time, slot, WingEventKind.Relocated);
             return true;
+        }
+
+        /// <summary>A blocked hold-short must not leave a whole convoy waiting forever. Once the existing watchdog
+        /// asks for a tow, its sequenced runway slot is an alternative only when the runway and destination are clear.</summary>
+        private bool RecoverLineup(in AircraftState s, float span, float time, WingEventRing events, int slot)
+        {
+            if (!enqueued || Phase != GroundPhase.HoldShort || traffic.Departures.NativeLandingPending ||
+                traffic.Departures.RunwayBusy || !LineupSlotFree(span) ||
+                !traffic.Departures.MayLineUp(Owner, time) || !LineupSlotFree(span)) return false;
+            BeginLineUp(s.Pos, time);
+            relocationWanted = false;
+            Log(events, time, slot, WingEventKind.LiningUp);
+            return PutOnSlot(span, traffic.Runway.Direction(traffic.Reverse), time, events, slot);
+        }
+
+        private bool LineupSlotFree(float span)
+        {
+            traffic.Departures.SlotOf(Owner, out int row, out int column);
+            Vec3 at = LineupPlanner.Slot(traffic.Runway, traffic.Reverse, row, column, traffic.Departures.Abreast, traffic.Departures.Rows);
+            float clear = Math.Max(RelocateClearRadius, span + RelocateSpanMargin);
+            return !traffic.Occupied(at, clear, Owner) && !traffic.RelocatedNear(at, clear, Owner);
         }
 
         /// <summary>The path is <paramref name="prefix"/> (from where the aircraft is) followed by the route from

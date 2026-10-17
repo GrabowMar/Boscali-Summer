@@ -81,6 +81,13 @@ namespace BoscaliSummer.Tests.Features.UrbanCombat
                 TestAssert.That(worst < 10f, $"jumper {i} moves continuously (worst step {worst:0.0} m)");
             }
 
+            // The paradrop resolves at first touchdown: someone is down there before the stick's last jumper lands.
+            bool firstDown = false;
+            for (int i = 0; i < 16; i++) firstDown |= full.Sample(i, full.FirstLandingSeconds + 0.01f).Phase == HaloPhase.Landed;
+            TestAssert.That(firstDown, "a jumper is on the ground at FirstLandingSeconds");
+            TestAssert.That(full.FirstLandingSeconds < full.TotalSeconds - HaloGlidePlan.LandingHold,
+                "the stick touches down before its last jumper lands");
+
             // Landed jumpers stand on the ground they were given (roofs included).
             Func<Vector3, float> roof = p => Flat(p, target) < 40f ? 25f : 0f;
             HaloGlidePlan onRoof = HaloGlidePlan.Build(exit, velocity, target, roof, 4);

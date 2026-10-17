@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.2.5 — update
+
+- **Near-future helmet display**: the cockpit visor is a curved HMD glass with an electrochromic sun
+  tint, breath fog, a faint coating that shifts hue toward the rim, and hairline scratches drawn at
+  screen resolution that catch the sun only where it lines up, and the brow shade above 6 G. There is
+  no helmet frame or outline. Sun glare is a tight core, a short halo and eight soft rays, with no
+  full-screen veil. Canopy reflections are remade with a Fresnel rim, a sun glint and a faint night
+  glow. New config-file settings: HelmetCurvature and HelmetReflection (IMMERSION section). The TAC board stays flat.
+
+- **HALO jump flares**: orange-white burns and short spark trails sit on both ankle canisters
+  during the wingsuit glide, with warm smoke near the jumper. They extinguish at canopy
+  deployment; troop movement, landing outcomes and countermeasures are unchanged.
+- **Landing zones**: right-click the big map to SET, MOVE or CLEAR a landing zone (parachute
+  marker). While set, your HALO paratrooper sticks and Vanguard gliders (HAWC-X, KESTREL,
+  HAMILCAR) aim at the zone instead of their designated target; moving it never diverts a
+  stick or glider already airborne, and a respawn starts clean. Green smoke marks the
+  touchdown once a landing is expected (first HALO canopy, HAMILCAR on Final), and a HUD
+  cue card (HALO/HAMILCAR ▸ LZ range, DROP/RELEASE NOW in green, OUT OF GLIDE in amber)
+  shows while you carry a load for the zone.
+
+- **Chaff visuals**: dispenser bursts and MALD-X ribbons scatter denser, brighter folded silver fibres
+  with drag, tumbling sunlight reflections and a soft fade, replacing the expanding smoke puffs.
+  Countermeasure timing, ammunition, radar behavior and multiplayer authority are unchanged.
+- **Wing departures**: taxi guidance keeps to nearby route segments, checks the actual hold-short and
+  lineup positions, and recovers an overshot slot before starting the takeoff roll. South Boscali uses
+  the runway end reached by its taxi roads; fixed-wing launches skip remote service points at highway
+  strips while helicopters retain those launch positions.
+- **Wing airport sweep**: keep curved taxi paths for queued launches, reject disconnected service
+  routes, and give runway-entry priority to the physical convoy leader. Pull-aside recovery restores
+  its route correctly; a stuck queue can tow to its assigned clear runway slot under the normal
+  departure clearance, including landing and occupied-runway checks after the group takes its lock.
+
 ## 0.2.4 — update
 
 - **Classic corner map by default**: fresh configs use the game's own corner map, with the holo map

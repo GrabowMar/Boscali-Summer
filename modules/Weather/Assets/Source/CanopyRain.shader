@@ -1,6 +1,6 @@
 // Boscali canopy rain render: a pure heightfield visualizer over the per-pane
 // droplet simulation (Hidden/BoscaliCanopyDroplets). Every pane samples the same
-// metric pattern density (3 tiles/m on a per-pane planar frame picked from mesh
+// nominal metric density (3 tiles/m on a per-pane planar frame picked from mesh
 // bounds), so split windscreens agree on drop size by construction. The render
 // holds no time and no flow: all motion lives in the sim, which is what keeps
 // panes from ever disagreeing frame to frame. Beads refract the finished world frame
@@ -90,21 +90,39 @@ Shader "Boscali/CanopyRain"
             {
                 clip(max(_Intensity, _Frost) - 0.001);
 
-                float4 drop = tex2D(_DropTex, i.simUv);
+                // Fixed, gentle domain variation breaks the larger repeating state tile.
+                // It follows the glass, never time/camera motion, and adds no texture taps.
+                float2 phase = float2(dot(i.simUv, float2(0.73, 1.17)),
+                    dot(i.simUv, float2(-0.91, 0.67))) + _Salt.xy;
+                float2 wave, derivative;
+                sincos(phase, wave, derivative);
+                float2 simUv = i.simUv + wave * 0.17;
+                derivative *= 0.17;
+                float4 drop = tex2D(_DropTex, simUv);
                 float hC = drop.r;
-                // Thick water is a bead; the thin layer and runner memory are sheet film.
-                float bead = smoothstep(0.08, 0.32, hC);
-                float film = saturate(smoothstep(0.015, 0.1, hC) * 0.6 + drop.g * 0.8) * (1.0 - bead);
-                float cover = saturate(bead + drop.g * 0.25);
+                // Screen-width filtering steadies tiny beads on raked panes. Bound the
+                // width so dry texels stay dry, even when a bead is smaller than a pixel.
+                float waterWidth = min(fwidth(hC), 0.04);
+                float filmWidth = min(waterWidth, 0.01);
+                float bead = smoothstep(0.08 - waterWidth, 0.32 + waterWidth, hC);
+                // B is fine cloud moisture, separate from R beads and G runner memory:
+                // it softens the scene through film blur without inventing raindrops.
+                float film = saturate(smoothstep(0.015 - filmWidth, 0.1 + filmWidth, hC) * 0.6
+                    + drop.g * 0.8 + drop.b * 0.7) * (1.0 - bead);
+                float cover = saturate(bead + drop.g * 0.25 + drop.b * 0.2);
                 float paneEdge = max(abs(i.paneUv.x * 2.0 - 1.0), abs(i.paneUv.y * 2.0 - 1.0));
                 float grain = frac(sin(dot(floor(i.simUv * 24.0), float2(12.9898,78.233))) * 43758.5453);
                 float cold = _Frost * smoothstep(0.68, 0.98, paneEdge) * (0.5 + grain * 0.5);
                 // Dry glass needs no gradient taps, lighting or scene refraction.
                 clip(max(max(cover, film * _Refract), cold) - 0.004);
-                float hx = tex2D(_DropTex, i.simUv + float2(TEXEL, 0.0)).r
-                    - tex2D(_DropTex, i.simUv - float2(TEXEL, 0.0)).r;
-                float hy = tex2D(_DropTex, i.simUv + float2(0.0, TEXEL)).r
-                    - tex2D(_DropTex, i.simUv - float2(0.0, TEXEL)).r;
+                float hx = tex2D(_DropTex, simUv + float2(TEXEL, 0.0)).r
+                    - tex2D(_DropTex, simUv - float2(TEXEL, 0.0)).r;
+                float hy = tex2D(_DropTex, simUv + float2(0.0, TEXEL)).r
+                    - tex2D(_DropTex, simUv - float2(0.0, TEXEL)).r;
+                // Chain rule keeps the lens normal consistent with the varied footprint.
+                float2 gradient = float2(hx, hy);
+                hx = gradient.x * (1.0 + derivative.x * 0.73) - gradient.y * derivative.y * 0.91;
+                hy = gradient.x * derivative.x * 1.17 + gradient.y * (1.0 + derivative.y * 0.67);
 
                 // Pane basis in object space, flipped to the authored normal side.
                 float3 exO = _MapAxis < 0.5 ? float3(1, 0, 0) : (_MapAxis < 1.5 ? float3(0, 0, 1) : float3(1, 0, 0));

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Vanguard.Domain;
@@ -70,9 +71,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             // The live unit appears where the visual one stops rolling: RollOff ahead of the cradle seat.
             Transform payload = missile.transform.Find("Payload");
             hamilcarSeat = payload != null ? payload.localPosition.z : 0f;
-            // No designation: land straight ahead at the end of the reach.
-            hamilcarAim = launchPos + bearing * HamilcarProfile.Reach(launchPos.y);
-            hamilcarAim.y = 0f;
+            // The landing zone when set; no designation: land straight ahead at the end of the reach.
+            hamilcarAim = landingZone ?? launchPos + bearing * HamilcarProfile.Reach(launchPos.y);
+            if (!landingZone.HasValue) hamilcarAim.y = 0f;
             HamilcarPlan();
             HamilcarLast = this;
             missile.onDisableUnit += _ => { if (hamilcarPhase != HamilcarPhase.Husk) VanguardStats.Bump("hamilcar.lost"); };
@@ -99,7 +100,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         // Reach, landing centre and the landing-zone search: at release, once more HamilcarSecondLook out, and from HamilcarAimAt.
         private void HamilcarPlan()
         {
-            if (target != null && !target.disabled) hamilcarAim = TargetPosition(out _);
+            if (!landingZone.HasValue && target != null && !target.disabled) hamilcarAim = TargetPosition(out _);
             GlobalPosition pos = missile.GlobalPosition();
             float reach = HamilcarProfile.Reach(launchPos.y - hamilcarAim.y);
             var centre = new GlobalPosition(HamilcarProfile.Centre(launchPos.AsVector3(), hamilcarAim.AsVector3(), reach, out bool isShort));
@@ -243,6 +244,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             {
                 case HamilcarPhase.Glide:
                     HamilcarLine(pos); // the glide starts where the wing is out, not at the hold
+                    break;
+                case HamilcarPhase.Final:
+                    // A landing spot exists and Final is flown to it: green smoke marks the touchdown (this peer only).
+                    if (!hamilcarNoLz) LandingSmoke.Pop(hamilcarSpot.AsVector3(), 30f);
                     break;
                 case HamilcarPhase.Slide:
                     Vector3 velocity = missile.rb.velocity, off = hamilcarAim - pos;

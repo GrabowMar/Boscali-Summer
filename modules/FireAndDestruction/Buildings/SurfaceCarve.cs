@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Threading.Tasks;
@@ -29,13 +29,8 @@ namespace BoscaliSummer.Fire
         {
             surface = null;
             BeginLoad();
-            // Only if a hit lands before scene warm-up finished. A failed load must read as
-            // missing meshes, never as an AggregateException on the main thread.
-            if (!loading.IsCompleted)
-            {
-                try { loading.Wait(); }
-                catch (System.AggregateException) { return false; }
-            }
+            // A hit before warm-up reads as missing meshes; never block the caller on the load.
+            if (!loading.IsCompleted) return false;
             if (loading.IsFaulted) return false;
             return map != null && map.TryGetValue(name, out surface);
         }

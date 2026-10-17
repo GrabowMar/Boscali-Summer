@@ -23,6 +23,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static readonly int ColourId = Shader.PropertyToID("_CloudLowResColour");
         /// <summary>The colour target as a global: its alpha is the cloud cover over the sky (SunShaftsPass).</summary>
         internal static readonly int CoverId = Shader.PropertyToID("_BoscaliCloudCover");
+        internal static readonly int CoverFrameId = Shader.PropertyToID("_BoscaliCloudCoverFrame");
         private static readonly int DepthId = Shader.PropertyToID("_CloudLowResDepth");
         private static readonly int SizeId = Shader.PropertyToID("_CloudLowResSize");
         private static readonly int QuarterSizeId = Shader.PropertyToID("_CloudQuarterSize");
@@ -89,6 +90,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// composite at the result. The caller restores its own render targets afterwards.</summary>
         internal void Record(CommandBuffer cmd, Material march, Material composite, bool temporal)
         {
+            cmd.SetGlobalFloat(CoverFrameId, 1f);
             var half = new Vector4(Width, Height, 1f / Width, 1f / Height);
             var quarter = new Vector4(quarterColour.width, quarterColour.height, 1f / quarterColour.width, 1f / quarterColour.height);
             march.SetVector(SizeId, half);

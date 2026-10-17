@@ -13,7 +13,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// <summary>Regulated pure pursuit along a taxi path (spec M3 §2.1).
     /// <list type="bullet">
     /// <item>Progress: the path segment the aircraft is on — the nearest of the next <see cref="ProgressWindow"/>
-    /// segments (past a hairpin the aircraft still projects inside the segment it left); it only moves forward.</item>
+    /// segments within <see cref="Lookahead"/> (past a hairpin the aircraft still projects inside the segment it left);
+    /// it only moves forward.</item>
     /// <item>Curvature to the point one lookahead (max(<see cref="Lookahead"/>, 1.5 s of travel)) along the path:
     /// κ = 2·y/d², y the point's offset to the right of the nose, d its distance. A point behind the nose (a route that
     /// doubles back) turns the aircraft around at the tightest radius, <see cref="MinTurnRadius"/>, at walking pace.</item>
@@ -28,7 +29,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public static float MinTurnRadius = 15f;
         public static int ProgressWindow = 3;
 
-        public static GroundCommand Pursue(Vec3[] path, ref int progress, in AircraftState s, float stopDistance)
+        public static GroundCommand Pursue(Vec3[] path, ref int progress, in AircraftState s, float stopDistance, bool extendEnd = false)
         {
             if (stopDistance < StopRadius || path == null || path.Length < 2) return new GroundCommand { Stop = true };
             Vec3 pos = s.Pos.Horizontal;
@@ -39,20 +40,24 @@ namespace BoscaliSummer.Modules.Wing.Domain
             // Advance past segments whose end the aircraft has reached, and to a later segment that is nearer.
             while (progress < path.Length - 2 && Along(path[progress].Horizontal, path[progress + 1].Horizontal, pos) >= 1f) progress++;
             float nearest = SegmentDistance(path, progress, pos);
-            for (int k = progress + 1; k <= Math.Min(progress + ProgressWindow, path.Length - 2); k++)
+            int searchEnd = Math.Min(progress + ProgressWindow, path.Length - 2);
+            for (int k = progress + 1; k <= searchEnd; k++)
             {
                 float d = SegmentDistance(path, k, pos);
-                if (d < nearest)
+                if (d <= Lookahead && d < nearest)
                 {
                     nearest = d;
                     progress = k;
                 }
             }
             Vec3 a = path[progress].Horizontal, b = path[progress + 1].Horizontal;
-            float t = Scalar.Clamp(Along(a, b, pos), 0f, 1f);
+            float projection = Along(a, b, pos);
+            float t = Scalar.Clamp(projection, 0f, 1f);
 
             float lookahead = Math.Max(Lookahead, LookaheadTime * speed);
-            Vec3 target = Walk(path, progress, a + (b - a) * t, lookahead, out _);
+            Vec3 target = Walk(path, progress, a + (b - a) * t, lookahead, extendEnd);
+            if (extendEnd && progress == path.Length - 2 && projection > 1f)
+                target += (b - a) * (projection - 1f);
             Vec3 toTarget = target - pos;
             float d2 = Math.Max(toTarget.SqrLength, 1e-2f);
             float lateral = Vec3.Dot(toTarget, right);
@@ -93,7 +98,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return len2 < 1e-6f ? 1f : Vec3.Dot(p - a, ab) / len2;
         }
 
-        private static Vec3 Walk(Vec3[] path, int segment, Vec3 from, float distance, out int endSegment)
+        private static Vec3 Walk(Vec3[] path, int segment, Vec3 from, float distance, bool extendEnd)
         {
             Vec3 at = from;
             for (int k = segment; k < path.Length - 1; k++)
@@ -102,16 +107,15 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 float leg = (next - at).Length;
                 if (leg >= distance)
                 {
-                    endSegment = k;
                     return at + (next - at) * (distance / Math.Max(leg, 1e-4f));
                 }
                 distance -= leg;
                 at = next;
             }
-            endSegment = path.Length - 2;
-            // Past the end: extend along the last segment so the nose stays on the line.
+            // The endpoint is the taxi goal; extrapolating it drives an overshot aircraft away from its stand.
+            // A takeoff roll keeps the runway heading even if it passes the end before becoming airborne.
             Vec3 last = (path[path.Length - 1] - path[path.Length - 2]).Horizontal.Normalized;
-            return at + last * distance;
+            return extendEnd ? at + last * distance : at;
         }
     }
 

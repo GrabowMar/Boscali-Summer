@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Vanguard.Domain;
 using HarmonyLib;
 using UnityEngine;
@@ -31,6 +32,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private readonly Vector3 bearing;
         private readonly float cruiseAltitude;
         private Unit target;
+        /// <summary>The launcher's landing zone, read once at release: gliders aim at it instead of their designation, and moving it later never diverts this flight.</summary>
+        private readonly GlobalPosition? landingZone;
         private bool fins;
         private Vector3 previousInterceptRelative;
         private bool hasInterceptSample;
@@ -58,6 +61,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             Vector3 forward = missile.transform.forward;
             forward.y = 0f;
             bearing = forward.sqrMagnitude > 1e-4f ? forward.normalized : Vector3.forward;
+            if ((role == VanguardRole.Glider || role == VanguardRole.Lander) &&
+                LandingZones.TryGet(launcher, out GlobalPosition zone)) landingZone = zone;
             if (role == VanguardRole.Gunship) InitGunship(target, aimpoint);
             if (role == VanguardRole.Sentinel) InitSentinel(target);
             if (role == VanguardRole.Scout) InitScout(target);

@@ -461,7 +461,7 @@ namespace BoscaliSummer.Garrisons
         public bool TryDeployEncampment(Vector3 position, FactionHQ owner, Airbase airbase, int troopCount)
         {
             return GameAccess.IsServer() && owner != null &&
-                InfantryEncampmentBuilder.DeployOrReinforce(position, owner, airbase, troopCount);
+                InfantryEncampmentBuilder.DeployParadropEncampment(position, owner, airbase, troopCount);
         }
 
         private readonly List<PendingCapture> pending = new List<PendingCapture>();

@@ -83,9 +83,10 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         }
 
         internal void UpdateSim(IReadOnlyList<CanopySurface> surfaces, float rain,
-            float speedNorm, Vector3 slipWorld, float dt)
+            float speedNorm, Vector3 slipWorld, float dt, float condensation = 0f, float evaporation = 1f)
         {
-            if (surfaces == null || surfaces.Count == 0 || (rain <= 0.001f && sim.PaneCount == 0)) return;
+            if (surfaces == null || surfaces.Count == 0 ||
+                (rain <= 0.001f && condensation <= 0.001f && sim.PaneCount == 0)) return;
             if (updateMaterial == null)
             {
                 Shader updateShader = CanopyShaderBundle.GetUpdateShader();
@@ -106,7 +107,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             using (FxBus.Time("canopy"))
             {
                 sim.Update(updateMaterial, surfaces, flowsTiles,
-                rain, speedNorm, dt);
+                    rain, speedNorm, dt, condensation, evaporation);
             }
         }
 

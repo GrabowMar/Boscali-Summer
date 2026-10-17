@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {
@@ -7,12 +8,12 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// <summary>Who may be where on one field's taxi graph (spec M3 §2.1), shared by every Wing Command aircraft there.
     /// <list type="bullet">
     /// <item>Nodes (junctions, hold-shorts, thresholds) are exclusive: one owner at a time.</item>
-    /// <item>Edges are directional: owners travelling the same way share an edge in the order they entered it (a
+    /// <item>Edges are directional: owners travelling the same way share an edge in physical travel order (a
     /// convoy; each keeps its distance to <see cref="Ahead"/>), and nobody enters against that direction.</item>
     /// <item>An owner claims along its route item by item (edge, far node, next edge, ...) and stops at the first item
     /// it cannot have; what stopped it is remembered for <see cref="FindDeadlock"/>. It releases each node and edge
     /// once past it. The sole owner of an edge may turn back on it (its direction flips); a convoy may not. Only the
-    /// head of a convoy (the first on the edge) may claim the node at its far end. The route's first node is claimed
+    /// head of a convoy may claim the node at its far end (entry order is the fallback without position samples). The route's first node is claimed
     /// only when asked (<c>claimStart</c>: not by an owner already past it).</item>
     /// <item>A blocked edge (a wreck, native traffic) is never granted.</item>
     /// <item>A deadlock's victim is an owner waiting to enter an edge (it stands at a node it holds and can take another
@@ -24,6 +25,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
     internal sealed class TaxiReservations
     {
         private readonly TaxiGraph graph;
+        private readonly IReadOnlyDictionary<int, Vec3> positions;
         private readonly int[] nodeOwner;
         private readonly List<int>[] edgeUsers;
         private readonly int[] edgeDirection;   // +1 from→to, −1 to→from, 0 free
@@ -34,9 +36,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
         private readonly HashSet<int> waitingOnEdge = new HashSet<int>(), noDetour = new HashSet<int>();
         private readonly List<int> seen = new List<int>();
 
-        public TaxiReservations(TaxiGraph g)
+        public TaxiReservations(TaxiGraph g, IReadOnlyDictionary<int, Vec3> positions = null)
         {
             graph = g;
+            this.positions = positions;
             nodeOwner = new int[g.NodeCount];
             for (int i = 0; i < nodeOwner.Length; i++) nodeOwner[i] = -1;
             edgeUsers = new List<int>[g.EdgeCount];
@@ -99,10 +102,11 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 if (!ClaimEdge(owner, e, direction)) return granted;
                 granted++;
                 if (!lastNode && k == from + steps - 1) break;
-                if (edgeUsers[e][0] != owner)
+                int head = ConvoyHead(e);
+                if (head != owner)
                 {
                     // Behind others on the edge: its far node is theirs to take first.
-                    waitingFor[owner] = edgeUsers[e][0];
+                    waitingFor[owner] = head;
                     waitingOnEdge.Remove(owner);
                     return granted;
                 }
@@ -186,6 +190,21 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
 
         private readonly List<int> starts = new List<int>();
+
+        private int ConvoyHead(int edge)
+        {
+            List<int> users = edgeUsers[edge];
+            int first = users[0], head = first;
+            if (positions == null || users.Count < 2) return first;
+            float best = float.NegativeInfinity;
+            foreach (int user in users)
+            {
+                if (!positions.TryGetValue(user, out Vec3 at)) return first;
+                float progress = graph.ProgressOnEdge(edge, at) * edgeDirection[edge];
+                if (progress > best + 0.01f) { best = progress; head = user; }
+            }
+            return head;
+        }
 
         private bool Next(int owner, out int next) =>
             (waitingFor.TryGetValue(owner, out next) && Holds(next)) || memberWaits.TryGetValue(owner, out next);

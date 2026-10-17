@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.4-alpha"><img src="https://img.shields.io/badge/release-0.2.4_alpha-f0b56e?style=flat-square&labelColor=0b1b23" alt="Release 0.2.4 alpha"></a>
+  <a href="https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.5-alpha"><img src="https://img.shields.io/badge/release-0.2.5_alpha-f0b56e?style=flat-square&labelColor=0b1b23" alt="Release 0.2.5 alpha"></a>
   <img src="https://img.shields.io/badge/Nuclear_Option-0.34.2-7fd6cf?style=flat-square&labelColor=0b1b23" alt="Nuclear Option 0.34.2">
   <a href="https://github.com/BepInEx/BepInEx/releases"><img src="https://img.shields.io/badge/BepInEx-5.4.23%2B-7fd6cf?style=flat-square&labelColor=0b1b23" alt="BepInEx 5.4.23 or newer"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-8fb4b8?style=flat-square&labelColor=0b1b23" alt="MIT license"></a>
@@ -300,7 +300,7 @@ Not on the route: VR, missile physics or mid-mission saves. The game's developer
 **Then:**
 
 1. Install BepInEx into the game folder, start the game once so it creates its folders, and close it.
-2. Download **`BoscaliSummer-0.2.4.zip`** from the [release page](https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.4-alpha) and extract it into the game folder. You should end up with:
+2. Download **`BoscaliSummer-0.2.5.zip`** from the [release page](https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.5-alpha) and extract it into the game folder. You should end up with:
 
    ```text
    Nuclear Option/BepInEx/plugins/BoscaliSummer/BoscaliSummer.dll
@@ -430,6 +430,19 @@ dotnet build BoscaliSummer.sln -c Release -p:GameDir="C:\Program Files (x86)\Ste
 - The plugin targets `netstandard2.1`. Tests target `net8.0` and are console runners, not `dotnet test` projects (that command runs nothing): after the build, run `dotnet tests/BoscaliSummer.Tests/bin/Release/net8.0/BoscaliSummer.Tests.dll`.
 - To bump the version, change `<Version>` in `BoscaliSummer.csproj` **and** `PluginVersion` in `Core/Plugin.cs`. The build fails if they differ.
 - A green build doesn't mean the game is happy. Test in game, and in multiplayer if you touched anything networked.
+
+For Unity asset work through Claude, Codex or OpenCode, nomodkit reads [tools/unity-mcp.json](tools/unity-mcp.json). With `boscalisummer` registered in nomodkit, preview the setup, apply it, then open the editor:
+
+```powershell
+nomod unity mcp setup --mod boscalisummer
+nomod unity mcp setup --mod boscalisummer --confirm
+nomod unity mcp launch --mod boscalisummer --confirm
+nomod unity mcp status --mod boscalisummer --json
+```
+
+Setup maintains an ignored Unity **2022.3.62f3** workspace at `.nomodkit/unity-mcp`, with MCP for Unity **10.3.0**, URP **14.0.12**, and staged copies of the repository's weather, avionics, pilot, fire, night-vision and emblem asset sources. Locally available Vanguard and airborne models are optional. Only supported asset types are staged; mod/game C# and asset build scripts stay outside the editor project. Keep the editor open while clients use `http://127.0.0.1:8080/mcp`.
+
+Edit staged assets for previews, then deliberately copy desired changes back to their source paths. Rerun setup after source changes to sync the copies; it refuses to overwrite modified staged assets. The existing `tools/Compile-*Assets.ps1` scripts remain the build paths for shipped bundles, and Unity previews do not replace the existing offline or in-game checks.
 
 <details>
 <summary><b>Where things are</b></summary>

@@ -25,5 +25,13 @@ namespace BoscaliSummer.Modules.Weather.Domain
             float step = Math.Max(0f, dt) * rate;
             return current < target ? Math.Min(target, current + step) : Math.Max(target, current - step);
         }
+
+        // Saturated, cold air retains moisture; warm air with a dewpoint deficit clears it.
+        public static float Evaporation(float temperatureC, float dewpointC)
+        {
+            float deficit = Scalar.Clamp01((temperatureC - dewpointC) / 15f);
+            float warmth = Scalar.Clamp01((temperatureC + 10f) / 40f);
+            return 0.2f + deficit * 0.8f + warmth * 0.4f;
+        }
     }
 }

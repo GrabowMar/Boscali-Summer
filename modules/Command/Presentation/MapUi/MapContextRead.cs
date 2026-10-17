@@ -64,6 +64,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (mark.HasValue)
                 rows.Add(new MapMenuRow { Key = "FROM MARK", Value = MfdMapInteractions.LegText(mark.Value, ground),
                     Tone = AvStyleHost.FuiColor("select", AvTheme.Accent) });
+            if (ModuleServices.TryGet(out ILandingZone zone) && zone.TryGetLocal(out GlobalPosition lz))
+                rows.Add(new MapMenuRow { Key = "FROM LZ", Value = MfdMapInteractions.LegText(lz, ground),
+                    Tone = AvStyleHost.FuiColor("friendly", AvTheme.Friendly) });
 
             if (hq == null || !ModuleServices.TryGet(out IThreatPicture picture)) return tone;
             if (!picture.IsReady(observer))

@@ -17,9 +17,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
     {
         // Statics, not constants: the look is tuned live through the bridge.
         /// <summary>How far the light is smeared (share of the way to the sun) and how much of it is added.</summary>
-        internal static float Reach = 0.9f, Strength = 0.35f;
+        internal static float Reach = 0.9f, Strength = 0.3f;
         /// <summary>Radius of the glow around the sun, in screen heights.</summary>
-        internal static float GlowRadius = 0.6f;
+        internal static float GlowRadius = 0.45f;
 
         private static readonly int A = Shader.PropertyToID("_BoscaliShaftsA"), B = Shader.PropertyToID("_BoscaliShaftsB");
         private static readonly int SunId = Shader.PropertyToID("_ShaftSun"), ParamsId = Shader.PropertyToID("_ShaftParams");
@@ -29,6 +29,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private Camera camera;
         private Vector3 toSun;
         private Color tint;
+        private float fallbackTransmission = 1f;
         private bool active, hooked, shaderMissing;
 
         /// <summary>Automation: frame of the last draw.</summary>
@@ -40,7 +41,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             ConfigureInput(ScriptableRenderPassInput.Depth);
         }
 
-        internal void Tick(LevelInfo level, Camera view, bool enabled)
+        internal void Tick(LevelInfo level, Camera view, bool enabled, float transmission = 1f)
         {
             active = enabled && view != null && level != null && level.sun != null && level.sunObject != null &&
                 level.sunObject.activeInHierarchy && !shaderMissing &&
@@ -53,6 +54,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 material = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
             }
             camera = view;
+            fallbackTransmission = Mathf.Clamp01(transmission);
             toSun = -level.sun.transform.forward;
             // The same air as the disc: white overhead, orange and dim at the horizon, gone once it has set.
             float elevation = Mathf.Asin(Mathf.Clamp(toSun.y, -1f, 1f)) * Mathf.Rad2Deg;
@@ -76,7 +78,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
             if (material == null || renderingData.cameraData.camera != camera) return;
-            Vector4 clip = renderingData.cameraData.GetProjectionMatrix() * renderingData.cameraData.GetViewMatrix() *
+            Vector4 clip = renderingData.cameraData.GetProjectionMatrix() * camera.worldToCameraMatrix *
                 new Vector4(toSun.x, toSun.y, toSun.z, 0f);
             if (clip.w <= 1e-4f) return; // the sun is behind the camera
             float u = clip.x / clip.w * 0.5f + 0.5f, v = clip.y / clip.w * 0.5f + 0.5f;
@@ -89,7 +91,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             frame.height = Mathf.Max(1, frame.height / 4);
             frame.depthBufferBits = 0;
             frame.msaaSamples = 1;
-            float clouds = Shader.GetGlobalTexture(CloudLowRes.CoverId) != null ? 1f : 0f;
 
             CommandBuffer cmd = CommandBufferPool.Get("Boscali Sun Shafts");
             try
@@ -99,11 +100,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 cmd.GetTemporaryRT(B, frame, FilterMode.Bilinear);
                 cmd.SetGlobalVector(SunId, new Vector4(u, v, aspect, GlowRadius));
                 cmd.SetGlobalColor(TintId, tint);
-                cmd.SetGlobalVector(ParamsId, new Vector4(clouds, 0f, Reach, strength));
+                cmd.SetGlobalVector(ParamsId, new Vector4(1f, fallbackTransmission, Reach, strength));
                 cmd.Blit(Texture2D.blackTexture, A, material, 0);
                 cmd.Blit(A, B, material, 1);
                 // A second, shorter smear fills the gaps between the first one's sixteen steps.
-                cmd.SetGlobalVector(ParamsId, new Vector4(clouds, 0f, Reach * 0.25f, strength));
+                cmd.SetGlobalVector(ParamsId, new Vector4(1f, fallbackTransmission, Reach * 0.25f, strength));
                 cmd.Blit(B, A, material, 1);
                 cmd.Blit(A, renderer.cameraColorTargetHandle, material, 2);
                 // URP tracks its own attachments; give the camera its targets back.

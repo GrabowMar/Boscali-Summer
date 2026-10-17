@@ -12,10 +12,12 @@ Shader "Boscali/SunShafts"
         CGINCLUDE
         #include "UnityCG.cginc"
         sampler2D _MainTex;
+        float4 _MainTex_TexelSize;
         sampler2D _CameraDepthTexture;
         sampler2D _BoscaliCloudCover; // a: cloud cover over the sky, from the half-resolution cloud pass
         float4 _ShaftSun;    // xy: the sun in the viewport, z: width over height, w: glow radius in screen heights
-        float4 _ShaftParams; // x: 1 when the cloud cover is live, z: smear reach (share of the way to the sun), w: strength
+        float _BoscaliCloudCoverFrame;
+        float4 _ShaftParams; // x: use resolved cover, y: fallback light transmission, z: smear reach, w: strength
         float4 _ShaftTint;   // rgb: the sun's colour through the air
 
         struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
@@ -27,6 +29,21 @@ Shader "Boscali/SunShafts"
             o.uv = v.texcoord;
             return o;
         }
+
+        float InViewport(float2 uv)
+        {
+            return step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
+        }
+
+        float3 Source(float2 uv)
+        {
+            float valid = InViewport(uv);
+            #if UNITY_UV_STARTS_AT_TOP
+            if (_MainTex_TexelSize.y < 0.0) uv.y = 1.0 - uv.y;
+            #endif
+            // A clamped edge replicated bright texels outside the view and drew long border streaks.
+            return tex2Dlod(_MainTex, float4(uv, 0, 0)).rgb * valid;
+        }
         ENDCG
 
         Pass
@@ -37,10 +54,12 @@ Shader "Boscali/SunShafts"
             float4 frag(v2f i) : SV_Target
             {
                 float sky = step(0.9999, Linear01Depth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv)));
-                float open = saturate(1.0 - tex2Dlod(_BoscaliCloudCover, float4(i.uv, 0, 0)).a * _ShaftParams.x);
+                float cover = tex2Dlod(_BoscaliCloudCover, float4(i.uv, 0, 0)).a;
+                float open = lerp(_ShaftParams.y, saturate(1.0 - cover), _ShaftParams.x * _BoscaliCloudCoverFrame);
                 float2 d = (i.uv - _ShaftSun.xy) * float2(_ShaftSun.z, 1.0);
-                float near = saturate(1.0 - length(d) / _ShaftSun.w);
-                return float4(_ShaftTint.rgb * (near * near * near * sky * open * open), 1.0);
+                float radial = length(d) / max(_ShaftSun.w, 0.001);
+                float corona = exp2(-6.0 * radial * radial) * saturate(1.0 - radial);
+                return float4(_ShaftTint.rgb * (corona * sky * open * open), 1.0);
             }
             ENDCG
         }
@@ -61,7 +80,7 @@ Shader "Boscali/SunShafts"
                 float weight = 1.0, total = 0.0;
                 for (int s = 0; s < TAPS; s++)
                 {
-                    sum += tex2Dlod(_MainTex, float4(uv, 0, 0)).rgb * weight;
+                    sum += Source(uv) * weight;
                     total += weight;
                     weight *= 0.94;
                     uv += stride;
@@ -77,7 +96,7 @@ Shader "Boscali/SunShafts"
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
-            float4 frag(v2f i) : SV_Target { return float4(tex2Dlod(_MainTex, float4(i.uv, 0, 0)).rgb * _ShaftParams.w, 0.0); }
+            float4 frag(v2f i) : SV_Target { return float4(Source(i.uv) * _ShaftParams.w, 0.0); }
             ENDCG
         }
     }

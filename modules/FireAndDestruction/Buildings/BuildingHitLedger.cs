@@ -107,7 +107,8 @@ namespace BoscaliSummer.Fire
             mark.Object.name = "BoscaliSummer.ImpactResidue"; mark.Object.SetActive(true);
             // Thin projection prevents a front-wall impact staining floors or the opposite wall.
             ConfigureProjector(mark.Object, point, normal, Mathf.Clamp(size * 0.65f, 0.35f, 7f), 0.6f, material);
-            mark.Object.GetComponent<DecalProjector>().fadeFactor = 0.48f;
+            DecalProjector projector = mark.Object.GetComponent<DecalProjector>();
+            if (projector != null) projector.fadeFactor = 0.48f;
         }
         internal void Forget(int owner)
         {

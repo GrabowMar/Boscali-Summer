@@ -3,7 +3,7 @@ using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Immersion.Domain
 {
-    /// <summary>Uniform math for the glass-only helmet visor overlay.</summary>
+    /// <summary>Uniform math for the helmet visor overlay.</summary>
     internal static class VisorMath
     {
         /// <summary>Below this every visor layer is invisible and the overlay quad is disabled.</summary>
@@ -28,8 +28,10 @@ namespace BoscaliSummer.Modules.Immersion.Domain
     }
 
     /// <summary>
-    /// The visor's layer image, built once off the main thread (RGBA, row 0 = bottom):
-    /// R = smudges and scratches (upper two-thirds), G = breath-fog mask (lower edge), B = helmet brow (top edge).
+    /// The visor's soft layer image, built once off the main thread (RGBA, row 0 = bottom):
+    /// G = breath-fog mask (lower edge), B = helmet brow (top edge). R and A are unused. Scratches and
+    /// the shell frame are drawn by the shader at screen resolution, never baked: a low-res
+    /// mask stretched across the screen reads as blobs.
     /// </summary>
     internal static class VisorMask
     {
@@ -37,33 +39,6 @@ namespace BoscaliSummer.Modules.Immersion.Domain
         {
             if (width < 16 || height < 16 || width > 4096 || height > 4096) return null;
             var rgba = new byte[width * height * 4];
-            var smudge = new float[width * height];
-            var rng = new Random(seed);
-            for (int i = 0; i < 40; i++)
-            {
-                float radius = 6f + (float)rng.NextDouble() * 22f, alpha = .15f + (float)rng.NextDouble() * .3f;
-                float cx = (float)rng.NextDouble() * width;
-                float cy = height * .33f + radius + (float)rng.NextDouble() * Math.Max(1f, height * .67f - 2f * radius);
-                for (int y = (int)(cy - radius); y <= (int)(cy + radius); y++)
-                    for (int x = (int)(cx - radius); x <= (int)(cx + radius); x++)
-                    {
-                        if (x < 0 || y < 0 || x >= width || y >= height) continue;
-                        float d = (float)Math.Sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy)) / radius;
-                        if (d < 1f) smudge[y * width + x] = Math.Max(smudge[y * width + x], alpha * (1f - d) * (1f - d));
-                    }
-            }
-            for (int i = 0; i < 6; i++)
-            {
-                double angle = rng.NextDouble() * Math.PI;
-                float length = 12f + (float)rng.NextDouble() * 33f;
-                float x0 = (float)rng.NextDouble() * width, y0 = height * .4f + (float)rng.NextDouble() * height * .55f;
-                for (float s = 0f; s < length; s += .5f)
-                {
-                    int x = (int)(x0 + Math.Cos(angle) * s), y = (int)(y0 + Math.Sin(angle) * s);
-                    if (x < 0 || y < 0 || x >= width || y >= height || y < height * .33f) continue;
-                    smudge[y * width + x] = Math.Max(smudge[y * width + x], .12f);
-                }
-            }
             for (int y = 0; y < height; y++)
             {
                 float v = y / (float)(height - 1);
@@ -75,10 +50,8 @@ namespace BoscaliSummer.Modules.Immersion.Domain
                     float arch = .03f * (1f - (2f * u - 1f) * (2f * u - 1f));
                     float brow = Smooth(.93f - arch, 1f, v);
                     int p = (y * width + x) * 4;
-                    rgba[p] = (byte)(Scalar.Clamp01(smudge[y * width + x]) * 255f + .5f);
                     rgba[p + 1] = (byte)(fog * 255f + .5f);
                     rgba[p + 2] = (byte)(brow * 255f + .5f);
-                    rgba[p + 3] = 255;
                 }
             }
             return rgba;

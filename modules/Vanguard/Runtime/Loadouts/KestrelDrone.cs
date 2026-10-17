@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Vanguard.Domain;
 using BoscaliSummer.Modules.Vanguard.Networking;
 using BoscaliSummer.Modules.Vanguard.Presentation;
@@ -39,6 +40,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private float enteredOrbit, departedAt, nextPlan, nextSense, nextSnapshot, nextHud;
         private int cursor, hudSpotted; // cursor: where the next spot pass starts in UnitRegistry.allUnits
         private bool configured, held;  // held: the +1 is out and not yet taken back
+        private bool zoneLocked;        // a landing zone was set at release: the orbit never retasks
         private string hudKey, hudDetail;
 
         public KestrelPhase Phase { get; private set; }
@@ -86,7 +88,14 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             lastOrder = DroneOrders.StrikeTarget(missile.owner); // only a CHANGE of designation after launch moves the orbit
             objectiveUnit = GroundHostile(lastOrder) ? lastOrder : GroundHostile(requested) ? requested : null;
             // A designation carries where its target stands, on the faction picture or not.
-            if (objectiveUnit != null) objective = objectiveUnit.GlobalPosition();
+            // A set landing zone stands over any designation: orbit the zone, never retask.
+            if (LandingZones.TryGet(missile.owner, out GlobalPosition zone))
+            {
+                objectiveUnit = null;
+                objective = zone;
+                zoneLocked = true;
+            }
+            else if (objectiveUnit != null) objective = objectiveUnit.GlobalPosition();
             else
             {
                 // Nothing to watch: park ahead of the launch, over the ground height found under the launch point.
@@ -153,6 +162,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         // to another ground target moves the orbit, as the GLAIVE-2S hand-off does.
         private void Designate()
         {
+            if (zoneLocked) return;
             Unit order = DroneOrders.StrikeTarget(missile.owner);
             if (order == lastOrder) return;
             lastOrder = order;

@@ -49,11 +49,8 @@ namespace BoscaliSummer.Tests.Features.Immersion
             double fogBottom = Mean(mask, W, H, 1, 0f, .3f), fogTop = Mean(mask, W, H, 1, .7f, 1f);
             TestAssert.That(fogBottom > 40 && fogBottom > fogTop * 5 + 1, "Breath fog sits at the lower edge.");
             TestAssert.That(Mean(mask, W, H, 2, .96f, 1f) > 100 && Mean(mask, W, H, 2, 0f, .85f) == 0, "The helmet brow lives only at the top edge.");
-            TestAssert.That(Mean(mask, W, H, 0, 0f, .25f) == 0, "Smudges never sit in the lower quarter of the view.");
-            int smudged = 0;
-            for (int i = 0; i < W * H; i++) if (mask[i * 4] > 10) smudged++;
-            float coverage = smudged / (float)(W * H);
-            TestAssert.That(coverage > .01f && coverage < .3f, "Smudges are sparse, coverage " + coverage);
+            TestAssert.That(Mean(mask, W, H, 0, 0f, 1f) == 0 && Mean(mask, W, H, 3, 0f, 1f) == 0,
+                "Scratches and the shell frame are drawn by the shader, so the mask carries neither.");
         }
 
         private static double Mean(byte[] rgba, int w, int h, int channel, float v0, float v1)

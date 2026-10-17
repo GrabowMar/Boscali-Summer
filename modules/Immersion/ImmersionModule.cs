@@ -59,7 +59,7 @@ namespace BoscaliSummer.Modules.Immersion
                 "Cockpit view: MFD glass night boost so instruments glow at dusk and night.",
                 context.Settings.Immersion.MfdGlowEnabled, ClientPreset.Light);
             context.AddClientSetting("IMMERSION", "HELMET VISOR",
-                "Cockpit view: glass-only helmet visor - daytime sun tint, smudges lit by the sun, breath fog when breathing hard, brow shadow above 6 G.",
+                "Cockpit view: near-future helmet-mounted display - curved visor, electrochromic sun tint, breath fog, sun-lit scratches, visor and canopy reflections.",
                 context.Settings.Immersion.HelmetVisorEnabled, ClientPreset.Light);
             context.AddClientSetting("IMMERSION", "SURFACE IMMERSION",
                 "Cockpit view: subtle damage shading on supported opaque cockpit materials. Weather owns glass moisture.",

@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
+using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Autopilot.Configuration;
 using BoscaliSummer.Modules.Autopilot.Domain;
@@ -15,7 +16,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
     /// A chaff dispenser on the local player's own aircraft. The game ships the whole mechanic (<c>ChaffEjector</c>, <c>RadarChaff</c>,
     /// and both radar seekers listening on <c>Unit.onAddRadarChaff</c>) but no aircraft carries an ejector and no bundle prefab exists,
     /// so this builds both from the game's own classes: one <c>ChaffEjector</c> on the flare ejector's ports, firing a bundle made of a
-    /// <c>RadarChaff</c> and a puff in the flare smoke's material. No patch, no network message.
+    /// <c>RadarChaff</c> and a cloud of tumbling metallic fibres. No new network message.
     /// <para>The ejector is deliberately NOT registered with the aircraft's <c>CountermeasureManager</c>: the game addresses countermeasures
     /// by their index in that list, over the network too, and a station only this machine knows would shift or overrun it elsewhere.
     /// It is fired directly instead (the menu's POP CHAFF, the optional key, or the countermeasure button while a radar missile is inbound).
@@ -32,7 +33,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         private const float ServiceSeconds = 0.5f, BundleDrag = 0.02f;
 
         private static readonly FieldInfo FlarePorts = AccessTools.Field(typeof(FlareEjector), "ejectionPoints");
-        private static readonly FieldInfo FlarePrefab = AccessTools.Field(typeof(FlareEjector), "flarePrefab");
         private static readonly FieldInfo FlareVelocity = AccessTools.Field(typeof(FlareEjector), "ejectionVelocity");
         private static readonly FieldInfo FlareVariance = AccessTools.Field(typeof(FlareEjector), "ejectionVelocityVariance");
         private static readonly FieldInfo FlareSound = AccessTools.Field(typeof(FlareEjector), "ejectionSound");
@@ -54,7 +54,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
 
         /// <summary>Every private field the kit writes still exists; a game update that renames one leaves the aircraft without chaff, not broken.</summary>
         private static readonly bool Supported =
-            FlarePorts != null && FlarePrefab != null && FlareVelocity != null && FlareVariance != null && FlareSound != null && FlareVolume != null &&
+            FlarePorts != null && FlareVelocity != null && FlareVariance != null && FlareSound != null && FlareVolume != null &&
             ChaffPorts != null && ChaffPrefab != null && ChaffVelocity != null && ChaffVariance != null && ChaffSound != null && ChaffVolume != null &&
             ChaffDoors != null && ChaffInterval != null && ChaffGrouping != null && ChaffMax != null &&
             BundleTime != null && BundleDragField != null && BundleParticles != null;
@@ -64,6 +64,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         private ChaffEjector ejector;
         private FlareEjector[] flares = Array.Empty<FlareEjector>();
         private GameObject bundleHolder, bundle;
+        private readonly ChaffVisuals visuals = new ChaffVisuals();
         private int load, flaresBefore;
         private bool rearmPending;
         private float salvoUntil, nextFire, nextService;
@@ -147,6 +148,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             if (bundleHolder != null) Destroy(bundleHolder);     // its particles live in the old scene's origin space
             bundleHolder = null;
             bundle = null;
+            visuals.Clear();
         }
 
         private void Awake() => Instance = this;
@@ -219,7 +221,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 FlareEjector flare = flares[0];
                 flareIcon = flare.displayImage;
                 var ports = FlarePorts.GetValue(flare) as FlareEjector.EjectionPoint[];
-                GameObject round = Bundle(flare);
+                GameObject round = Bundle();
                 if (ports == null || ports.Length == 0 || round == null) return;
 
                 var chaffPorts = new ChaffEjector.EjectionPoint[ports.Length];
@@ -257,22 +259,13 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         }
 
         /// <summary>
-        /// The bundle the ejector spawns: the game's <c>RadarChaff</c> (flight, lifetime, the seeker event) with a glitter puff in the flare
-        /// smoke's material. Kept active under an inactive holder, so every copy the game instantiates wakes up and the template never runs.
+        /// The bundle the ejector spawns: the game's <c>RadarChaff</c> (flight, lifetime, the seeker event) with a foil burst.
+        /// Kept active under an inactive holder, so every copy the game instantiates wakes up and the template never runs.
         /// </summary>
-        private GameObject Bundle(FlareEjector flare)
+        private GameObject Bundle()
         {
             if (bundle != null) return bundle;
-            Material puff = null;
-            var flareRound = FlarePrefab.GetValue(flare) as GameObject;
-            if (flareRound != null)
-                foreach (ParticleSystemRenderer r in flareRound.GetComponentsInChildren<ParticleSystemRenderer>(true))
-                {
-                    if (r.sharedMaterial == null) continue;
-                    if (puff == null) puff = r.sharedMaterial;
-                    if (r.sharedMaterial.name.IndexOf("smoke", StringComparison.OrdinalIgnoreCase) >= 0) { puff = r.sharedMaterial; break; }
-                }
-            if (puff == null || Datum.origin == null) return null;
+            if (Datum.origin == null) return null;
 
             bundleHolder = new GameObject("Boscali / Chaff Bundle Holder");
             bundleHolder.SetActive(false);
@@ -281,33 +274,8 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             go.transform.SetParent(bundleHolder.transform, false);
 
             ParticleSystem particles = go.AddComponent<ParticleSystem>();
-            ParticleSystem.MainModule main = particles.main;
-            main.loop = true;                                   // RadarChaff destroys the bundle only while its particles still play
-            main.duration = ChaffRules.BundleSeconds * 2f;      // so the opening burst happens once
-            main.startLifetime = new ParticleSystem.MinMaxCurve(2f, 3.5f);
-            main.startSpeed = new ParticleSystem.MinMaxCurve(1f, 6f);
-            main.startSize = new ParticleSystem.MinMaxCurve(1.2f, 2.8f);
-            main.startColor = new Color(0.86f, 0.9f, 0.96f, 0.5f);
-            main.gravityModifier = 0.02f;
-            main.maxParticles = 48;
-            main.simulationSpace = ParticleSystemSimulationSpace.Custom;    // the flare smoke's choice: the cloud stays put through origin shifts
-            main.customSimulationSpace = Datum.origin;
-            ParticleSystem.EmissionModule emission = particles.emission;
-            emission.rateOverTime = 5f;
-            emission.SetBursts(new[] { new ParticleSystem.Burst(0f, 12) });
-            ParticleSystem.ShapeModule shape = particles.shape;
-            shape.shapeType = ParticleSystemShapeType.Sphere;
-            shape.radius = 0.6f;
-            ParticleSystem.SizeOverLifetimeModule size = particles.sizeOverLifetime;
-            size.enabled = true;
-            size.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.Linear(0f, 0.6f, 1f, 3f));
-            ParticleSystem.ColorOverLifetimeModule fade = particles.colorOverLifetime;
-            fade.enabled = true;
-            var gradient = new Gradient();
-            gradient.SetKeys(new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
-                new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(0.6f, 0.4f), new GradientAlphaKey(0f, 1f) });
-            fade.color = gradient;
-            go.GetComponent<ParticleSystemRenderer>().sharedMaterial = puff;
+            // Missing render assets must never disable the native countermeasure.
+            visuals.Configure(particles, Datum.origin, ChaffRules.BundleSeconds);
 
             RadarChaff chaff = go.AddComponent<RadarChaff>();
             BundleTime.SetValue(chaff, ChaffRules.BundleSeconds);

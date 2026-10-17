@@ -53,6 +53,22 @@ namespace BoscaliSummer.Tests.Features.Weather
                 "Airspeed must clear residual water faster");
             TestAssert.That(CanopyShaderParams.Wetness(1f, 0f, 1f, 100f) == 0f,
                 "Long dry interval must clear without undershoot");
+            float coldHumid = CanopyShaderParams.Evaporation(-5f, -5f);
+            float warmDry = CanopyShaderParams.Evaporation(30f, 5f);
+            TestAssert.That(coldHumid > 0f && coldHumid < warmDry,
+                "Cold saturated air must clear glass more slowly than warm dry air");
+            TestAssert.That(CanopyShaderParams.Evaporation(15f, 15f) < CanopyShaderParams.Evaporation(15f, -10f),
+                "Humidity must reduce evaporation at the same temperature");
+            TestAssert.That(CanopyShaderParams.Evaporation(15f, 30f) > 0f &&
+                CanopyShaderParams.Evaporation(15f, 30f) <= 0.5f,
+                "Saturated and supersaturated air retain a small nonzero drying rate");
+            foreach (float temperature in new[] { -100f, -5f, 15f, 100f })
+                foreach (float dewpoint in new[] { -100f, -5f, 15f, 100f })
+                {
+                    float evaporation = CanopyShaderParams.Evaporation(temperature, dewpoint);
+                    TestAssert.That(evaporation >= 0.2f && evaporation <= 1.4f,
+                        "Evaporation stays bounded for extreme temperature/dewpoint pairs");
+                }
         }
     }
 }
