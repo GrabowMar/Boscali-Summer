@@ -42,6 +42,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         public void ResetForScene()
         {
+            Presentation.MaldxChaff.Clear();
             Baits.Clear();
             Clouds.Clear();
             Ledgers.Clear();

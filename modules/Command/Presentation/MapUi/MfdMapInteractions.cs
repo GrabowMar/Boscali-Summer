@@ -37,6 +37,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// <summary>The dropped range mark: a map close keeps it, a scene reset forgets it.</summary>
         private static GlobalPosition? mark;
         private static RectTransform markGlyph;
+        private static RectTransform lzGlyph;
         private static bool boxPress;
         private static bool boxDragged;
         private static Vector2 boxStart;
@@ -138,6 +139,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 return;
             }
             DrawMark(map);
+            DrawLandingZone(map);
             // The input module may hand the icon its click on the release frame or the one after, so a
             // bare-map release waits out both before it is allowed to clear.
             if (clearFrame >= 0 && Time.frameCount > clearFrame + 1)
@@ -324,6 +326,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Unit goTo = contact != null ? contact.unit : null;
                 Add(goTo != null ? "GO TO UNIT" : "GO TO PLACE", AvIcon.Camera, () => GoTo(goTo, ground));
             }
+            // The landing zone stands until moved or cleared: every HALO stick and glider this
+            // pilot releases aims at it (Urban Combat owns the zone and its host sync).
+            bool zoned = TryZone(out _);
+            if (ModuleServices.TryGet(out ILandingZone _) && GameManager.GetLocalAircraft(out Aircraft _))
+            {
+                Add(zoned ? "MOVE LANDING ZONE" : "SET LANDING ZONE", AvIcon.Parachute, () => SetLandingZone(ground), zoned);
+                if (zoned) Add("CLEAR LANDING ZONE", AvIcon.Eraser, () => SetLandingZone(null), true);
+            }
             bool marked = mark.HasValue;
             Add(marked ? "MOVE MARK" : "DROP RANGE MARK HERE", AvIcon.Ruler2, () => SetMark(ground), marked);
             if (marked) Add("CLEAR MARK", AvIcon.Eraser, () => SetMark(null), true);
@@ -421,6 +431,23 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// <summary>Bearing and range from the dropped range mark, or null while none is set.</summary>
         internal static string FromMark(GlobalPosition to) => mark.HasValue ? LegText(mark.Value, to) : null;
 
+        private static bool TryZone(out GlobalPosition point)
+        {
+            point = default;
+            return ModuleServices.TryGet(out ILandingZone zone) && zone.TryGetLocal(out point);
+        }
+
+        private static void SetLandingZone(GlobalPosition? point)
+        {
+            if (ModuleServices.TryGet(out ILandingZone zone))
+            {
+                if (point.HasValue) zone.SetLocal(point.Value);
+                else zone.ClearLocal();
+            }
+            HideMenu();
+            Echo(point.HasValue ? "LANDING ZONE SET  /  PARATROOPERS AND GLIDERS AIM THERE" : "LANDING ZONE CLEARED");
+        }
+
         private static void SetMark(GlobalPosition? point)
         {
             mark = point;
@@ -454,6 +481,41 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             markGlyph.gameObject.SetActive(true);
             markGlyph.localPosition = new Vector3(local.x, local.y, 0f);
+        }
+
+        private static void DrawLandingZone(DynamicMap map)
+        {
+            RectTransform viewport = map.mapBackground.rectTransform;
+            bool has = TryZone(out GlobalPosition point);
+            RectTransform sheet = has ? MfdTerrainRelief.MapImageRect(map.mapImage) : null;
+            Vector3 local = default;
+            bool shown = sheet != null &&
+                MfdTerrainRelief.TryProject(point.x, point.z, sheet.rect, out Vector2 at) &&
+                viewport.rect.Contains(local = viewport.InverseTransformPoint(sheet.TransformPoint(at)));
+            if (!shown)
+            {
+                if (lzGlyph != null) lzGlyph.gameObject.SetActive(false);
+                return;
+            }
+            if (lzGlyph == null || lzGlyph.parent != viewport)
+            {
+                if (lzGlyph != null) Object.Destroy(lzGlyph.gameObject);
+                Color tone = AvStyleHost.FuiColor("friendly", AvTheme.Friendly);
+                TMP_Text glyph = AvIcons.Make(viewport, AvIcon.Parachute, 22f, tone);
+                glyph.name = "NOAvionics.LandingZone";
+                lzGlyph = glyph.rectTransform;
+                lzGlyph.sizeDelta = new Vector2(26f, 26f);
+                TMP_Text label = AvText.Make(lzGlyph, "Label", AvTextRole.Micro, "LZ",
+                    TextAlignmentOptions.Center);
+                label.color = tone;
+                label.raycastTarget = false;
+                label.rectTransform.anchorMin = label.rectTransform.anchorMax =
+                    label.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+                label.rectTransform.sizeDelta = new Vector2(30f, 12f);
+                label.rectTransform.anchoredPosition = new Vector2(0f, -15f);
+            }
+            lzGlyph.gameObject.SetActive(true);
+            lzGlyph.localPosition = new Vector3(local.x, local.y, 0f);
         }
 
         private static void Focus(GlobalPosition ground, bool zoom)
@@ -778,6 +840,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             HideMenu();
             if (markGlyph != null) Object.Destroy(markGlyph.gameObject);
             markGlyph = null;
+            if (lzGlyph != null) Object.Destroy(lzGlyph.gameObject);
+            lzGlyph = null;
             rows.Clear();
             wingRows.Clear();
             rightPress = false;

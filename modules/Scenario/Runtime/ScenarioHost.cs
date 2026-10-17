@@ -70,7 +70,9 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             ["cuts_played"] = cutsPlayed, ["shots_played"] = shotsPlayed, ["lines_said"] = linesSaid, ["last_line"] = lastLine,
             ["objective_events"] = heard, ["flags"] = runner == null ? "" : string.Join(",", runner.Flags),
             ["finished"] = runner != null && runner.Finished ? 1 : 0, ["idle"] = runner != null && runner.Idle ? 1 : 0,
-            ["music_playing"] = music != null && music.isPlaying ? 1 : 0, ["game_music_muted"] = gameMusicMuted ? 1 : 0
+            ["music_playing"] = music != null && music.isPlaying ? 1 : 0, ["game_music_muted"] = gameMusicMuted ? 1 : 0,
+            ["flight_controls_enabled"] = GameManager.flightControlsEnabled ? 1 : 0,
+            ["join_menu_open"] = NuclearOption.UI.LeaderboardMenu.IsOpen() ? 1 : 0
         };
 #endif
 
@@ -487,6 +489,9 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             NuclearOption.UI.LeaderboardMenu menu = FindObjectOfType<NuclearOption.UI.LeaderboardMenu>();
             if (menu != null) menu.Close();
             else if (SceneSingleton<GameplayUI>.i != null) SceneSingleton<GameplayUI>.i.CloseJoinMenu();
+            // Escape can disable controls while the join canvas is hidden for a cutscene.
+            // Native CloseJoinMenu does not restore them (only ResumeGame does).
+            GameManager.flightControlsEnabled = true;
         }
 
         /// <summary>An enlist that could not happen: the game's own join screen comes back instead of staying hidden for good.</summary>

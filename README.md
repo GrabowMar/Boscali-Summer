@@ -431,6 +431,19 @@ dotnet build BoscaliSummer.sln -c Release -p:GameDir="C:\Program Files (x86)\Ste
 - To bump the version, change `<Version>` in `BoscaliSummer.csproj` **and** `PluginVersion` in `Core/Plugin.cs`. The build fails if they differ.
 - A green build doesn't mean the game is happy. Test in game, and in multiplayer if you touched anything networked.
 
+For Unity asset work through Claude, Codex or OpenCode, nomodkit reads [tools/unity-mcp.json](tools/unity-mcp.json). With `boscalisummer` registered in nomodkit, preview the setup, apply it, then open the editor:
+
+```powershell
+nomod unity mcp setup --mod boscalisummer
+nomod unity mcp setup --mod boscalisummer --confirm
+nomod unity mcp launch --mod boscalisummer --confirm
+nomod unity mcp status --mod boscalisummer --json
+```
+
+Setup maintains an ignored Unity **2022.3.62f3** workspace at `.nomodkit/unity-mcp`, with MCP for Unity **10.3.0**, URP **14.0.12**, and staged copies of the repository's weather, avionics, pilot, fire, night-vision and emblem asset sources. Locally available Vanguard and airborne models are optional. Only supported asset types are staged; mod/game C# and asset build scripts stay outside the editor project. Keep the editor open while clients use `http://127.0.0.1:8080/mcp`.
+
+Edit staged assets for previews, then deliberately copy desired changes back to their source paths. Rerun setup after source changes to sync the copies; it refuses to overwrite modified staged assets. The existing `tools/Compile-*Assets.ps1` scripts remain the build paths for shipped bundles, and Unity previews do not replace the existing offline or in-game checks.
+
 <details>
 <summary><b>Where things are</b></summary>
 <br>

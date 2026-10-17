@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 namespace BoscaliSummer.Core.Game
 {
@@ -30,7 +30,7 @@ namespace BoscaliSummer.Core.Game
                     return cached;
                 }
             }
-            catch (System.Exception) { }
+            catch (System.Exception e) { Debug.LogWarning("[BoscaliSummer] TheaterFrame MapSettings read failed: " + e.Message); }
 
             try
             {
@@ -51,7 +51,7 @@ namespace BoscaliSummer.Core.Game
                     }
                 }
             }
-            catch (System.Exception) { }
+            catch (System.Exception e) { Debug.LogWarning("[BoscaliSummer] TheaterFrame DynamicMap read failed: " + e.Message); }
 
             try
             {
@@ -59,7 +59,7 @@ namespace BoscaliSummer.Core.Game
                 if (levelInfo != null && levelInfo.mapSize > 1000f)
                     cached = new Vector2(levelInfo.mapSize * 2f, levelInfo.mapSize);
             }
-            catch (System.Exception) { }
+            catch (System.Exception e) { Debug.LogWarning("[BoscaliSummer] TheaterFrame LevelInfo read failed: " + e.Message); }
 
             return cached;
         }

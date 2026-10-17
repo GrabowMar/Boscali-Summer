@@ -6,8 +6,10 @@ $fixture = Resolve-UnityCheckDir $EvidenceDir 'BoscaliWeatherCheck-'
 if (Test-Path -LiteralPath $fixture) { throw "Evidence directory already exists: $fixture" }
 if (-not (Test-Path -LiteralPath $Unity)) { throw "Unity Editor not found: $Unity" }
 New-UnityCheckProject $fixture '{"dependencies":{"com.unity.modules.audio":"1.0.0","com.unity.modules.assetbundle":"1.0.0","com.unity.modules.particlesystem":"1.0.0","com.unity.modules.imageconversion":"1.0.0","com.unity.modules.physics":"1.0.0"}}' -Folders 'Assets/Resources', 'Assets/Code'
+# This built-in-pipeline fixture has no URP passes or native sun-disc ownership.
 Get-ChildItem "$repo/modules/Weather/Visuals/*.cs" |
-    Where-Object { $_.Name -notin @('WeatherVolumeDressing.cs', 'WeatherCloudShadows.cs', 'WeatherCloudPass.cs', 'CanopySceneCopy.cs') } |
+    Where-Object { $_.Name -notin @('WeatherVolumeDressing.cs', 'WeatherCloudShadows.cs', 'WeatherCloudPass.cs',
+        'CanopySceneCopy.cs', 'CloudProbePass.cs', 'SunShaftsPass.cs', 'SunDisc.cs') } |
     Copy-Item -Destination "$fixture/Assets/Code/"
 Copy-Item "$repo/modules/Weather/Audio/*.cs" "$fixture/Assets/Code/"
 Copy-Item "$PSScriptRoot/CloudDressingStubs.cs" "$fixture/Assets/Code/"
@@ -16,7 +18,8 @@ Copy-Item "$repo/Core/Math/Deterministic.cs", "$repo/Core/Math/Scalar.cs" "$fixt
 Copy-Item "$repo/Core/Contracts/FxBudget.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/Core/Contracts/IClientEffect.cs", "$repo/Core/Contracts/ICanopyGlassView.cs", "$repo/Core/Contracts/IWeatherView.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/Core/Util/EmbeddedResources.cs", "$repo/Core/Util/PcmWav.cs", "$repo/Core/Util/Bytes.cs" "$fixture/Assets/Code/"
-Copy-Item "$repo/Core/Fx/*.cs" "$fixture/Assets/Code/"
+# Landing smoke depends on native floating-origin APIs absent from the fixture stubs.
+Get-ChildItem "$repo/Core/Fx/*.cs" | Where-Object { $_.Name -ne 'LandingSmoke.cs' } | Copy-Item -Destination "$fixture/Assets/Code/"
 Copy-Item "$PSScriptRoot/WeatherUnityCheck.cs" "$fixture/Assets/Code/"
 Copy-Item "$PSScriptRoot/RainBench.cs" "$fixture/Assets/Code/"
 Copy-Item "$repo/modules/Weather/Assets/Source/*" "$fixture/Assets/Resources/" -Recurse -Force

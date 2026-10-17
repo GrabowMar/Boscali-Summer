@@ -18,6 +18,10 @@ namespace BoscaliSummer.Core.Contracts
         bool SurfaceImmersionEnabled { get; set; }
         bool WindAudioEnabled { get; set; }
         bool HelmetVisorEnabled { get; set; }
+        /// <summary>Spherical curvature of the helmet visor and the TAC BOARD on it, 0 (flat) to 1.</summary>
+        float HelmetCurvature { get; set; }
+        /// <summary>Visor and canopy reflection strength, 0 to 1.</summary>
+        float HelmetReflection { get; set; }
         bool MachBuffetEnabled { get; set; }
         bool PilotBreathingEnabled { get; set; }
     }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Core.Fx;
 using UnityEngine;
 
 namespace BoscaliSummer.Garrisons
@@ -62,6 +63,7 @@ namespace BoscaliSummer.Garrisons
                 return;
             }
             var go = new GameObject("BoscaliSummer.HaloDrop");
+            if (Datum.origin != null) go.transform.SetParent(Datum.origin, false);
             if (!Track(go)) return;
             go.AddComponent<HaloDropOperation>().Initialize(plan, startDelay, jumper, canopy);
         }
@@ -75,11 +77,13 @@ namespace BoscaliSummer.Garrisons
         [DefaultExecutionOrder(1000)]
         private sealed class HaloDropOperation : MonoBehaviour
         {
-            private const float TrailSeconds = 14f;
-            private const float TrailStep = 0.5f;
-            private const int TrailPoints = (int)(TrailSeconds / TrailStep) + 1;
+            /// <summary>Seconds between puffs off each jumper's ankles; at glide speed they chain into a continuous trail.</summary>
+            private const float PuffInterval = 0.25f;
+            /// <summary>Longest stretch a single frame catches up after a hitch; beyond it the trail skips rather than bursts.</summary>
+            private const float MaximumCatchUp = 2f;
+            /// <summary>Live puffs for a full stick: 16 jumpers x (7 s life / 0.25 s) = 448, with headroom.</summary>
+            private const int MaximumTrailPuffs = 512;
             private static readonly string[] BodyShapes = { "Track", "Exit", "Hang", "SteerL", "SteerR", "Flare", "Land" };
-            private static Material smokeMaterial;
 
             private sealed class Jumper
             {
@@ -87,21 +91,26 @@ namespace BoscaliSummer.Garrisons
                 public SkinnedMeshRenderer BodyMesh, CanopyMesh;
                 public int[] Shapes;
                 public int Snivel, Packed;
-                public LineRenderer Smoke;
                 public HaloPhase LastPhase;
             }
 
             private HaloGlidePlan plan;
             private float startAt;
+            private bool smokePopped;
             private Jumper[] jumpers;
+            private HaloFlareVisuals flares;
             private readonly float[] weights = new float[7];
-            private readonly Vector3[] trail = new Vector3[TrailPoints];
+            private ParticleSystem trail;
+            private float[] nextPuffAt;
 
             public void Initialize(HaloGlidePlan haloPlan, float startDelay, GameObject jumperTemplate, GameObject canopyTemplate)
             {
                 plan = haloPlan;
                 startAt = Time.time + startDelay;
                 jumpers = new Jumper[plan.Count];
+                flares = new HaloFlareVisuals(transform, GlowFx.Glow);
+                trail = CreateTrail();
+                nextPuffAt = new float[plan.Count];
                 for (int i = 0; i < plan.Count; i++)
                 {
                     GameObject body = Instantiate(jumperTemplate, transform);
@@ -117,7 +126,6 @@ namespace BoscaliSummer.Garrisons
                         BodyMesh = body.GetComponentInChildren<SkinnedMeshRenderer>(true),
                         CanopyMesh = chute.GetComponentInChildren<SkinnedMeshRenderer>(true),
                         Shapes = new int[BodyShapes.Length],
-                        Smoke = CreateSmoke(body.name),
                         LastPhase = HaloPhase.Aboard,
                     };
                     Mesh bodyMesh = j.BodyMesh != null ? j.BodyMesh.sharedMesh : null;
@@ -131,40 +139,62 @@ namespace BoscaliSummer.Garrisons
                 }
             }
 
-            private LineRenderer CreateSmoke(string owner)
+            /// <summary>
+            /// One emitter for the whole stick, silent on its own: <see cref="EmitTrail"/> places every puff.
+            /// Local to the drop, so the trail rides the floating origin with the rest of the stick.
+            /// </summary>
+            private ParticleSystem CreateTrail()
             {
-                var go = new GameObject(owner + "_Smoke");
+                var go = new GameObject("HALO smoke trail");
                 go.transform.SetParent(transform, false);
-                LineRenderer line = go.AddComponent<LineRenderer>();
-                line.sharedMaterial = SmokeMaterial();
-                line.useWorldSpace = true;
-                line.alignment = LineAlignment.View;
-                line.numCapVertices = 2;
-                line.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                line.receiveShadows = false;
-                line.widthCurve = AnimationCurve.Linear(0f, 0.5f, 1f, 4.5f);
-                var fade = new Gradient();
-                fade.SetKeys(
-                    new[] { new GradientColorKey(new Color(0.92f, 0.92f, 0.9f), 0f), new GradientColorKey(new Color(0.75f, 0.76f, 0.78f), 1f) },
-                    new[] { new GradientAlphaKey(0.6f, 0f), new GradientAlphaKey(0f, 1f) });
-                line.colorGradient = fade;
-                line.positionCount = 0;
-                return line;
-            }
+                go.SetActive(false);
+                var particles = go.AddComponent<ParticleSystem>();
+                var main = particles.main;
+                main.playOnAwake = false;
+                main.loop = true;
+                main.duration = 1f;
+                main.startLifetime = new ParticleSystem.MinMaxCurve(5f, 7f);
+                main.startSpeed = 0f;
+                main.startSize = new ParticleSystem.MinMaxCurve(1.1f, 1.6f);
+                main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+                main.startColor = Color.white;
+                main.gravityModifier = 0f;
+                main.maxParticles = MaximumTrailPuffs;
+                main.simulationSpace = ParticleSystemSimulationSpace.Local;
+                main.cullingMode = ParticleSystemCullingMode.PauseAndCatchup;
 
-            private static Material SmokeMaterial()
-            {
-                if (smokeMaterial != null) return smokeMaterial;
-                Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit") ?? Shader.Find("Sprites/Default");
-                var m = new Material(shader) { name = "BoscaliSummer.HaloSmoke" };
-                m.SetOverrideTag("RenderType", "Transparent");
-                m.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
-                if (m.HasProperty("_Surface")) m.SetFloat("_Surface", 1f);
-                if (m.HasProperty("_SrcBlend")) m.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
-                if (m.HasProperty("_DstBlend")) m.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-                if (m.HasProperty("_ZWrite")) m.SetFloat("_ZWrite", 0f);
-                m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-                return smokeMaterial = m;
+                var emission = particles.emission;
+                emission.enabled = false;
+                var shape = particles.shape;
+                shape.enabled = false;
+
+                var size = particles.sizeOverLifetime;
+                size.enabled = true;
+                size.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(
+                    new Keyframe(0f, 0.6f), new Keyframe(0.25f, 1f), new Keyframe(1f, 2.4f)));
+
+                // Warm at the canister, then grey-white as it drifts back and thins out.
+                var fade = particles.colorOverLifetime;
+                fade.enabled = true;
+                var gradient = new Gradient();
+                gradient.SetKeys(
+                    new[] { new GradientColorKey(new Color(1f, 0.56f, 0.2f), 0f),
+                        new GradientColorKey(new Color(0.92f, 0.92f, 0.9f), 0.2f),
+                        new GradientColorKey(new Color(0.72f, 0.73f, 0.75f), 1f) },
+                    new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(0.5f, 0.08f),
+                        new GradientAlphaKey(0.38f, 0.5f), new GradientAlphaKey(0f, 1f) });
+                fade.color = gradient;
+
+                var renderer = particles.GetComponent<ParticleSystemRenderer>();
+                renderer.renderMode = ParticleSystemRenderMode.Billboard;
+                renderer.sharedMaterial = SmokeFx.Puff;
+                renderer.minParticleSize = 0f;
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+
+                go.SetActive(true);
+                particles.Play();
+                return particles;
             }
 
             private void LateUpdate()
@@ -175,9 +205,16 @@ namespace BoscaliSummer.Garrisons
                     Destroy(gameObject);
                     return;
                 }
+                flares.BeginFrame(t);
                 for (int i = 0; i < jumpers.Length; i++)
+                {
+                    EmitTrail(i, t);
                     Draw(i, jumpers[i], t);
+                }
+                flares.EndFrame();
             }
+
+            private void OnDestroy() => flares?.Clear();
 
             private static Vector3 Local(Vector3 global) => new GlobalPosition(global.x, global.y, global.z).ToLocalPosition();
 
@@ -186,9 +223,13 @@ namespace BoscaliSummer.Garrisons
                 HaloSample s = plan.Sample(index, t);
                 bool visible = s.Phase != HaloPhase.Aboard && s.Phase != HaloPhase.Gone;
                 if (j.Body.gameObject.activeSelf != visible) j.Body.gameObject.SetActive(visible);
-                DrawSmoke(index, j, t, visible);
                 if (!visible) return;
 
+                if (!smokePopped && s.Phase == HaloPhase.Canopy)
+                {
+                    smokePopped = true;
+                    LandingSmoke.Pop(plan.StickLanding, Mathf.Clamp(plan.TotalSeconds - t + 5f, 12f, 60f));
+                }
                 if (s.Phase == HaloPhase.Landed && j.LastPhase != HaloPhase.Landed) LandingDust(Local(s.Position));
                 j.LastPhase = s.Phase;
 
@@ -200,6 +241,14 @@ namespace BoscaliSummer.Garrisons
                 if (j.BodyMesh != null)
                     for (int k = 0; k < weights.Length; k++)
                         if (j.Shapes[k] >= 0) j.BodyMesh.SetBlendShapeWeight(j.Shapes[k], weights[k] * 100f);
+
+                if (s.Smoke && j.BodyMesh != null)
+                {
+                    Vector3 velocity = (s.Position - plan.Sample(index, t - 0.05f).Position) / 0.05f;
+                    flares.Draw(j.BodyMesh.transform.TransformPoint(HaloFlareVisuals.TrackLeftNozzle),
+                        j.BodyMesh.transform.TransformPoint(HaloFlareVisuals.TrackRightNozzle),
+                        velocity, t + index * 0.193f, burning: true);
+                }
 
                 bool chute = s.Canopy > 0.001f;
                 if (j.Canopy.gameObject.activeSelf != chute) j.Canopy.gameObject.SetActive(chute);
@@ -246,23 +295,23 @@ namespace BoscaliSummer.Garrisons
                 }
             }
 
-            private void DrawSmoke(int index, Jumper j, float t, bool visible)
+            /// <summary>
+            /// Puffs off each jumper's ankle canisters during the glide. Each puff is placed from the plan at
+            /// the time it was made, so the trail is exact at any frame rate and costs one sample per puff.
+            /// </summary>
+            private void EmitTrail(int index, float t)
             {
-                int count = 0;
-                if (visible)
-                    for (int k = 0; k < TrailPoints; k++)
-                    {
-                        HaloSample past = plan.Sample(index, t - k * TrailStep);
-                        if (!past.Smoke)
-                        {
-                            if (count == 0) continue;
-                            break;
-                        }
-                        // The canisters ride the ankles, a body length behind the pelvis in the glide.
-                        trail[count++] = Local(past.Position - past.Heading * 0.9f);
-                    }
-                j.Smoke.positionCount = count >= 2 ? count : 0;
-                if (count >= 2) j.Smoke.SetPositions(trail);
+                if (t - nextPuffAt[index] > MaximumCatchUp) nextPuffAt[index] = t - MaximumCatchUp;
+                while (nextPuffAt[index] <= t)
+                {
+                    float at = nextPuffAt[index];
+                    nextPuffAt[index] += PuffInterval;
+                    HaloSample past = plan.Sample(index, at);
+                    if (!past.Smoke) continue;
+                    // The canisters ride the ankles, a body length behind the pelvis in the glide.
+                    Vector3 ankle = Local(past.Position - past.Heading * 0.9f);
+                    trail.Emit(new ParticleSystem.EmitParams { position = trail.transform.InverseTransformPoint(ankle) }, 1);
+                }
             }
 
             private static void LandingDust(Vector3 pelvis)

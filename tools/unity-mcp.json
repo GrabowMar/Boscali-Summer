@@ -1,0 +1,45 @@
+{
+  "project_dir": ".nomodkit/unity-mcp",
+  "unity_version": "2022.3.62f3",
+  "package_version": "10.3.0",
+  "server_url": "http://127.0.0.1:8080",
+  "packages": {
+    "com.unity.render-pipelines.universal": "14.0.12"
+  },
+  "assets": [
+    {
+      "source": "modules/Weather/Assets/Source",
+      "destination": "Assets/BoscaliSummer/Weather"
+    },
+    {
+      "source": "AvionicsUi/Assets/Source",
+      "destination": "Assets/BoscaliSummer/Avionics"
+    },
+    {
+      "source": "modules/Immersion/Assets/Source",
+      "destination": "Assets/BoscaliSummer/Pilot"
+    },
+    {
+      "source": "modules/FireAndDestruction/Assets/Source",
+      "destination": "Assets/BoscaliSummer/Fire"
+    },
+    {
+      "source": "modules/QoL/Assets/Source",
+      "destination": "Assets/BoscaliSummer/NightVision"
+    },
+    {
+      "source": "modules/Progression/Assets/Source",
+      "destination": "Assets/BoscaliSummer/Emblems"
+    },
+    {
+      "source": "modules/Vanguard/Assets/Models",
+      "destination": "Assets/BoscaliSummer/VanguardModels",
+      "optional": true
+    },
+    {
+      "source": "modules/UrbanCombat/Assets/Models",
+      "destination": "Assets/BoscaliSummer/AirborneModels",
+      "optional": true
+    }
+  ]
+}

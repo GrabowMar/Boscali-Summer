@@ -98,6 +98,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             public FieldTraffic Traffic;
             public WingPose Spawn;
             public int HangarIndex = -1, StartNode = -1;
+            public Vec3[] TaxiPrefix;
             public WingLedger.Charge Charge;
             public float Since;
             public bool Settling;
@@ -391,7 +392,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     if (launch == null)
                     {
                         quote = WingLedger.Quote(definition, hq, false, sandbox, r.Price, held);
-                        launch = FromServicePoint(airbase, definition, traffic, hq, player, loadout, fuel, livery);
+                        launch = FromServicePoint(airbase, definition, traffic, hq, player, loadout, fuel, livery,
+                            ProfileReader.ClassOf(template) == AirframeClass.FixedWing);
                     }
                     if (launch == null)
                     {
@@ -518,9 +520,9 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         /// <summary>A field without a usable hangar: the aircraft appears at rest on the first free service-point spot
         /// (clear of members, pending launches and other aircraft on the field).</summary>
         private GroundLaunch FromServicePoint(Airbase airbase, AircraftDefinition definition, FieldTraffic traffic, FactionHQ hq, Aircraft player,
-            Loadout loadout, float fuel, LiveryKey livery)
+            Loadout loadout, float fuel, LiveryKey livery, bool taxiRequired)
         {
-            if (!ServiceSpots.Pick(traffic, SpotTaken(traffic), out ServiceSpot spot)) return null;
+            if (!ServiceSpots.Pick(traffic, SpotTaken(traffic), out ServiceSpot spot, taxiRequired)) return null;
             Vec3 at = spot.WingPose.Pos;
             // Service points float above the pavement (2.3 m at airstrip_city2 spot 0): rest on the surface nearest the
             // point's height — never the first from above, which under a roof is the roof (as SafeRelocate does).
@@ -534,13 +536,15 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             float surfaceY = SurfacePick.Closest(at.Y, ys, n, SafeRelocate.SurfaceProbeHeight);
             Vec3 pos = new Vec3(at.X, surfaceY + definition.spawnOffset.y, at.Z);
             Quaternion rotation = Quaternion.LookRotation(spot.WingPose.Fwd.Horizontal.Normalized.ToUnity()) * Quaternion.Euler(definition.restRotation);
-            Aircraft a = NetworkSceneSingleton<Spawner>.i.SpawnAircraft(null, definition.unitPrefab, loadout, fuel, livery, pos.ToGlobal(),
+            Spawner spawner = NetworkSceneSingleton<Spawner>.i;
+            if (spawner == null) return null;
+            Aircraft a = spawner.SpawnAircraft(null, definition.unitPrefab, loadout, fuel, livery, pos.ToGlobal(),
                 rotation, Vector3.zero, null, hq, "WingCommand_" + Guid.NewGuid().ToString("N").Substring(0, 8),
                 player.skill, player.bravery);
             if (a == null) return null;
             // R5: AUTO from a service point gets the game's own AI pick, as a hangar spawn does (else the aircraft flies loadouts[1]).
             if (loadout == null && a.weaponManager != null) a.Networkloadout = a.weaponManager.SelectAIAircraftWeapons(airbase);
-            return new GroundLaunch { Aircraft = a, Traffic = traffic, Spawn = spot.WingPose, StartNode = spot.StartNode };
+            return new GroundLaunch { Aircraft = a, Traffic = traffic, Spawn = spot.WingPose, StartNode = spot.StartNode, TaxiPrefix = spot.TaxiPrefix };
         }
 
         private Func<Vec3, bool> SpotTaken(FieldTraffic traffic) => at =>
@@ -604,7 +608,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     WingLog.Logger.LogWarning("[Spawn] " + g.Aircraft.definition.unitName + " appeared " + (off / 1000f).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)
                         + " km from its launch point at " + g.Field?.name);
                 WingService wing = WingService.Instance;
-                if (wing != null && wing.AdoptGround(g.Aircraft, g.Traffic, g.Spawn, g.HangarIndex, g.StartNode, g.Pilot))
+                if (wing != null && wing.AdoptGround(g.Aircraft, g.Traffic, g.Spawn, g.HangarIndex, g.StartNode, g.Pilot, g.TaxiPrefix))
                 {
                     WingLedger.Joined(g.Aircraft, g.Charge);
                     WingMember m = wing.MemberOf(g.Aircraft);

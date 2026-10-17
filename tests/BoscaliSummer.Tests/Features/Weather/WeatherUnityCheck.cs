@@ -304,6 +304,88 @@ public sealed class WeatherUnityCheck : MonoBehaviour
         Check(!dressing.Draw(simSurfaces, camera, 0f, 1f), "Warm dry glass recovers fully from frost");
         dressing.Detach();
         Check(FxRtPool.UsedBytes == 0, "Thermal pane cleanup releases owned render targets");
+
+        // Cloud moisture is a fine film, not rainfall. Read the real GPU state so
+        // a visually subtle film still has a precise deposition/drying check.
+        typeof(CanopyShaderDressing).GetField("material", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(dressing, new Material(shader));
+        PrimeSim(dressing, updateShader, simSurfaces, 90, 0f, 0f, Vector3.zero, 1f, 0.2f);
+        Vector3 cloudState = MeanState(dressing, simSurfaces[0]);
+        Check(cloudState.z > 0.01f && cloudState.x == 0f && cloudState.y == 0f,
+            "Cloud-only moisture deposits film without spawning beads or runner trails: " + cloudState);
+        var cloudScene = new Texture2D(64, 64, TextureFormat.RGB24, true);
+        for (int y = 0; y < 64; y++)
+            for (int x = 0; x < 64; x++)
+            {
+                float grey = 0.18f + 0.24f * y / 63f + (((x / 4 + y / 4) & 1) == 0 ? 0.04f : -0.04f);
+                cloudScene.SetPixel(x, y, new Color(grey, grey, grey));
+            }
+        cloudScene.Apply();
+        dressing.SetScene(cloudScene);
+        dressing.SetLighting(Vector3.up, Color.black, new Color(0.55f, 0.6f, 0.68f, 1f), true);
+        Check(dressing.Draw(simSurfaces, camera, 1f, 1f), "Cloud film draws without rain");
+        Color32[] cloudFilm = Capture(camera, texture, "canopy-cloud-film.png");
+        Check(DiffCount(simDried, cloudFilm, 2) > 50, "Cloud film subtly softens the scene copy");
+        PrimeSim(dressing, updateShader, simSurfaces, 30, 0f, 0f, Vector3.zero, 0f, 0.2f);
+        float humidFilm = MeanState(dressing, simSurfaces[0]).z;
+        Check(humidFilm > 0f && humidFilm < cloudState.z, "Film starts drying when cloud deposition stops");
+        dressing.ClearWater();
+        PrimeSim(dressing, updateShader, simSurfaces, 90, 0f, 0f, Vector3.zero, 1f, 0.2f);
+        PrimeSim(dressing, updateShader, simSurfaces, 30, 0f, 0f, Vector3.zero, 0f, 1.4f);
+        Check(MeanState(dressing, simSurfaces[0]).z < humidFilm,
+            "Warm dry air clears cloud film faster than humid air");
+        dressing.ClearWater();
+        PrimeSim(dressing, updateShader, simSurfaces, 90, 0f, 0f, Vector3.zero, 1f, 0.2f);
+        PrimeSim(dressing, updateShader, simSurfaces, 30, 0f, 1f, Vector3.right, 0f, 0.2f);
+        Check(MeanState(dressing, simSurfaces[0]).z < humidFilm,
+            "Airflow clears cloud film faster than still humid air");
+        PrimeSim(dressing, updateShader, simSurfaces, 900, 0f, 1f, Vector3.right, 0f, 1.4f);
+        Check(MeanState(dressing, simSurfaces[0]).z == 0f, "Dry airflow eventually clears cloud film completely");
+        dressing.Detach();
+
+        // Cell-sized bands reveal restricted spawn jitter even when individual beads
+        // look plausible. Measure real GPU water at several ages in still/fast air.
+        typeof(CanopyShaderDressing).GetField("material", BindingFlags.Instance | BindingFlags.NonPublic)
+            .SetValue(dressing, new Material(shader));
+        dressing.SetScene(cloudScene);
+        dressing.SetLighting(Vector3.up, Color.black, new Color(0.55f, 0.6f, 0.68f, 1f), true);
+        string scatterLog = "";
+        var coherenceByMode = new double[2];
+        for (int mode = 0; mode < 2; mode++)
+        {
+            dressing.ClearWater();
+            int previousFrame = 0;
+            double coherence = 0;
+            foreach (int frame in new[] { 30, 90, 180 })
+            {
+                PrimeSim(dressing, updateShader, simSurfaces, frame - previousFrame, 1f, mode,
+                    mode == 0 ? Vector3.zero : Vector3.right * 2f);
+                double score = GridCoherence(dressing, simSurfaces[0]);
+                coherence += score / 3;
+                scatterLog += "speed=" + mode + " frame=" + frame + " coherence=" + score.ToString("F6", System.Globalization.CultureInfo.InvariantCulture) + "\n";
+                previousFrame = frame;
+                if (frame == 90)
+                {
+                    var wide = new RenderTexture(1024, 1024, 24);
+                    camera.targetTexture = wide;
+                    camera.orthographicSize = 0.6f;
+                    Check(dressing.Draw(simSurfaces, camera, 1f, 1f), "Wide scatter pane draws");
+                    Capture(camera, wide, "canopy-scatter-" + (mode == 0 ? "parked" : "fast") + ".png");
+                    camera.targetTexture = texture;
+                    camera.orthographicSize = 0.65f;
+                    wide.Release();
+                }
+            }
+            coherenceByMode[mode] = coherence;
+            scatterLog += "speed=" + mode + " mean=" + coherence.ToString("F6", System.Globalization.CultureInfo.InvariantCulture) + "\n";
+        }
+        File.WriteAllText("canopy-scatter.txt", scatterLog);
+        // Allow random sample noise while rejecting coherent cell-sized bands.
+        Check(coherenceByMode[0] < 0.15, "Parked beads must not align to the simulation grid: " + coherenceByMode[0]);
+        Check(coherenceByMode[1] < 0.15, "Fast-flow beads must not align to the simulation grid: " + coherenceByMode[1]);
+        dressing.Detach();
+        UnityEngine.Object.Destroy(cloudScene);
+        Check(FxRtPool.UsedBytes == 0, "Cloud film cleanup releases every owned render target");
         UnityEngine.Object.Destroy(rigRoot);
         var terrainMap = new GameObject("Map");
         var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
@@ -655,14 +737,63 @@ public sealed class WeatherUnityCheck : MonoBehaviour
     // has no embedded bundle to load it from).
     private static void PrimeSim(CanopyShaderDressing dressing, Shader updateShader,
         System.Collections.Generic.IReadOnlyList<CanopySurface> surfaces,
-        int frames, float rain, float speed, Vector3 slip)
+        int frames, float rain, float speed, Vector3 slip, float condensation = 0f, float evaporation = 1f)
     {
         var updateField = typeof(CanopyShaderDressing).GetField("updateMaterial", BindingFlags.Instance | BindingFlags.NonPublic);
 
         if (updateField.GetValue(dressing) as Material == null)
             updateField.SetValue(dressing, new Material(updateShader));
         for (int f = 0; f < frames; f++)
-            dressing.UpdateSim(surfaces, rain, speed, slip, 1f / 30f);
+            dressing.UpdateSim(surfaces, rain, speed, slip, 1f / 30f, condensation, evaporation);
+    }
+
+    private static Vector3 MeanState(CanopyShaderDressing dressing, CanopySurface surface)
+    {
+        Color32[] pixels = StatePixels(dressing, surface);
+        Vector3 mean = Vector3.zero;
+        foreach (Color32 pixel in pixels) mean += new Vector3(pixel.r, pixel.g, pixel.b);
+        return mean / (pixels.Length * 255f);
+    }
+
+    private static Color32[] StatePixels(CanopyShaderDressing dressing, CanopySurface surface)
+    {
+        var simulation = (CanopyDropletSim)typeof(CanopyShaderDressing)
+            .GetField("sim", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(dressing);
+        RenderTexture state = simulation.StateFor(CanopyDropletSim.KeyFor(surface.Renderer.GetInstanceID(), surface.Submesh));
+        Check(state != null, "Canopy GPU state exists for moisture readback");
+        RenderTexture previous = RenderTexture.active;
+        RenderTexture.active = state;
+        var image = new Texture2D(state.width, state.height, TextureFormat.RGBA32, false, true);
+        image.ReadPixels(new Rect(0, 0, state.width, state.height), 0, 0); image.Apply();
+        Color32[] pixels = image.GetPixels32();
+        UnityEngine.Object.Destroy(image);
+        RenderTexture.active = previous;
+        return pixels;
+    }
+
+    private static double GridCoherence(CanopyShaderDressing dressing, CanopySurface surface)
+    {
+        Color32[] pixels = StatePixels(dressing, surface);
+        int size = CanopyDropletSim.StateSize;
+        var cosine = new double[size];
+        var sine = new double[size];
+        for (int x = 0; x < size; x++)
+        {
+            double phase = 2 * Math.PI * 24 * (x + 0.5) / size;
+            cosine[x] = Math.Cos(phase); sine[x] = Math.Sin(phase);
+        }
+        double mass = 0, realX = 0, imaginaryX = 0, realY = 0, imaginaryY = 0;
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                double water = pixels[y * size + x].r;
+                mass += water;
+                realX += water * cosine[x]; imaginaryX += water * sine[x];
+                realY += water * cosine[y]; imaginaryY += water * sine[y];
+            }
+        Check(mass > 256, "Scatter check contains enough bead water to judge placement");
+        return Math.Sqrt(Math.Max(realX * realX + imaginaryX * imaginaryX,
+            realY * realY + imaginaryY * imaginaryY)) / mass;
     }
 
     private static double DiffMass(Color32[] a, Color32[] b)

@@ -67,7 +67,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private const float SightReach = 30000f, SightCeiling = 14000f;
         private float sightDepth, sightOpen = 1f, nextSight;
         private int sightTap;
-        private bool sightLine;
+        private Vector3 sightOrigin, sightDirection;
+        private float sightStep;
 
         private int mapUpdates;
         private GameObject root;
@@ -327,24 +328,30 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// </summary>
         internal float TransmissionAt(float x, float y, float z)
         {
-            if (!Active) return sightOpen = 1f;
+            if (!Active) { sightTap = 0; sightDepth = 0f; return sightOpen = 1f; }
             // Out of the top of the cloud layers, or 30 km for a low sun: at 90 km the taps sat a kilometre apart and
             // a scattered field always read as solid, which put the setting sun out over an open horizon.
             float reach = Mathf.Min(SightReach, (SightCeiling - y) / Mathf.Max(lightDirection.y, 0.03f));
-            if (reach <= 0f) return sightOpen = 1f;
+            if (reach <= 0f) { sightTap = 0; sightDepth = 0f; return sightOpen = 1f; }
             // At most 75 measuring calls a second (every frame at 75 fps or less): above that the same line only refreshes a little less often,
             // and the sun disc already eases the result.
             if (Time.unscaledTime < nextSight) return sightOpen;
             nextSight = Time.unscaledTime + 1f / 75f;
-            float step = reach / SightTaps;
+            if (sightTap == 0)
+            {
+                sightOrigin = new Vector3(x, y, z);
+                sightDirection = lightDirection;
+                sightStep = reach / SightTaps;
+            }
             for (int i = 0; i < SightTapsPerCall; i++)
             {
-                // Alternate lines sit half a step apart, so a cloud narrower than a step still dims the sun.
-                Vector3 p = new Vector3(x, y, z) + lightDirection * (step * (sightTap + (sightLine ? 0.25f : 0.75f)));
-                sightDepth += DensityAt(p.x, p.y, p.z) * step * 0.0021f;
+                // Fixed midpoints on one held ray: alternating phases published different cloud depths every
+                // eight calls, which the bright sun's optical-depth response amplified into visible blinking.
+                Vector3 p = sightOrigin + sightDirection * (sightStep * (sightTap + 0.5f));
+                sightDepth += DensityAt(p.x, p.y, p.z) * sightStep * 0.0021f;
                 if (++sightTap < SightTaps) continue;
                 sightOpen = Mathf.Clamp01(Mathf.Exp(-sightDepth));
-                sightDepth = 0f; sightTap = 0; sightLine = !sightLine;
+                sightDepth = 0f; sightTap = 0;
             }
             return sightOpen;
         }
@@ -352,6 +359,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         internal void Restore()
         {
             RainCurtainsEnabled = false;
+            sightTap = 0; sightDepth = nextSight = 0f; sightOpen = 1f;
             Invalidate();
             probePass.Dispose();
             pass.Dispose();
@@ -379,6 +387,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private void Hide(string reason)
         {
             RainCurtainsEnabled = false;
+            sightTap = 0; sightDepth = nextSight = 0f; sightOpen = 1f;
             HideReason = reason;
             if (renderer != null) renderer.enabled = false;
             pass.Dispose();

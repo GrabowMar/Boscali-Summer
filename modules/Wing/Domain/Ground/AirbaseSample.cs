@@ -197,7 +197,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         private static Vec3 V(Dictionary<string, object> d, string key) =>
             d.TryGetValue(key, out object v) && v is List<object> xyz ? Vec(xyz) : Vec3.Zero;
 
-        private static Vec3 Vec(List<object> xyz) => new Vec3(Num(xyz[0]), Num(xyz[1]), Num(xyz[2]));
+        private static Vec3 Vec(List<object> xyz) => xyz != null && xyz.Count >= 3 ? new Vec3(Num(xyz[0]), Num(xyz[1]), Num(xyz[2])) : Vec3.Zero;
 
         private static float F(Dictionary<string, object> d, string key) => d.TryGetValue(key, out object v) ? Num(v) : 0f;
 

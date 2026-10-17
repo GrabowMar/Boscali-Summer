@@ -1,7 +1,9 @@
 #if !PUBLIC_RELEASE
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Services;
 using UnityEngine;
 using static BoscaliSummer.Core.Diagnostics.AutomationArgs;
 
@@ -28,6 +30,10 @@ namespace BoscaliSummer.Garrisons
                 case "exfil": return Exfil(lead);
                 case "watch": return Watch(Text(args, "op") ?? "BoscaliSummer.HaloDrop", Text(args, "child") ?? "Jumper_1",
                     Number(args, "distance", 12f), Number(args, "height", 3f));
+                case "lz": return Zone(args, lead);
+                case "lzfit": return Fit(lead);
+                case "lzdrop": return Drop(lead, args);
+                case "lzstatus": return ZoneStatus();
                 case "status": return Status();
                 case "hover": return Hover(lead, Number(args, "height", 30f), Text(args, "over") == "building");
                 default: return Failure("AirborneAutomation", "Step", "unknown action");
@@ -171,6 +177,205 @@ namespace BoscaliSummer.Garrisons
             foreach (Transform t in root.transform)
                 if (t.gameObject.activeSelf && (t.name.StartsWith("Jumper_", StringComparison.Ordinal) || t.name.StartsWith("Trooper_", StringComparison.Ordinal))) n++;
             return n;
+        }
+
+        // ---- landing zone (tests/ingame/landing-zone.json): store ops on the lead, a real
+        // controller drop against a far designated aimpoint, and where the stick actually goes.
+
+        private static GlobalPosition dropZone, dropAim;
+        private static bool dropRecorded;
+
+        private static GlobalPosition Point(Dictionary<string, object> args, Aircraft lead)
+        {
+            if (Has(args, "rel") && lead != null)
+            {
+                GlobalPosition at = lead.GlobalPosition();
+                return new GlobalPosition(at.x + Number(args, "dx", 0f), 0f, at.z + Number(args, "dz", 0f));
+            }
+            return new GlobalPosition(Number(args, "x", 0f), 0f, Number(args, "z", 0f));
+        }
+
+        private static Dictionary<string, object> Zone(Dictionary<string, object> args, Aircraft lead)
+        {
+            if (lead == null) return Failure("AirborneAutomation", "lz", "no friendly aircraft");
+            switch (Text(args, "do") ?? "set")
+            {
+                case "clear":
+                    LandingZones.Order(lead, null);
+                    break;
+                case "status":
+                    break;
+                case "localset":
+                    if (!ModuleServices.TryGet(out ILandingZone local)) return Failure("AirborneAutomation", "lz", "no ILandingZone service");
+                    local.SetLocal(Point(args, lead));
+                    break;
+                case "localclear":
+                    if (!ModuleServices.TryGet(out ILandingZone zoneSvc)) return Failure("AirborneAutomation", "lz", "no ILandingZone service");
+                    zoneSvc.ClearLocal();
+                    break;
+                default:
+                    GlobalPosition point = Point(args, lead);
+                    point.y = AirAssaultController.HaloGroundAt(point.AsVector3());
+                    LandingZones.Order(lead, point);
+                    break;
+            }
+            var state = new Dictionary<string, object> { ["ok"] = true };
+            state["has"] = LandingZones.TryGet(lead, out GlobalPosition zone) ? 1 : 0;
+            if (LandingZones.TryGet(lead, out zone)) { state["x"] = zone.x; state["z"] = zone.z; }
+            state["localHas"] = ModuleServices.TryGet(out ILandingZone svc) && svc.HasLocal ? 1 : 0;
+            return state;
+        }
+
+        private static Dictionary<string, object> Fit(Aircraft lead)
+        {
+            if (lead == null) return Failure("AirborneAutomation", "lzfit", "no friendly aircraft");
+            if (!Encyclopedia.WeaponLookup.TryGetValue(AirAssaultController.HaloMountKey, out WeaponMount mount) || mount == null)
+                return Failure("AirborneAutomation", "lzfit", "HALO mount missing from the bundle");
+            WeaponManager prefab = (lead.definition as AircraftDefinition)?.unitPrefab.GetComponentInChildren<WeaponManager>(true);
+            HardpointSet[] sets = lead.weaponManager.hardpointSets;
+            for (int i = 0; prefab != null && i < sets.Length && i < prefab.hardpointSets.Length; i++)
+                foreach (WeaponMount option in prefab.hardpointSets[i].weaponOptions)
+                    if (!sets[i].weaponOptions.Contains(option)) sets[i].weaponOptions.Add(option);
+            var loadout = new NuclearOption.SavedMission.Loadout { weapons = new List<WeaponMount>() };
+            int bays = 0;
+            for (int i = 0; i < sets.Length; i++)
+            {
+                bool bay = sets[i].weaponOptions.Contains(mount);
+                loadout.weapons.Add(bay ? mount : null);
+                if (bay) bays++;
+            }
+            if (bays == 0) return Failure("AirborneAutomation", "lzfit", "no cargo bay offers the HALO mount");
+            lead.Networkloadout = loadout;
+            lead.weaponManager.SpawnWeapons();
+            int troops = 0;
+            foreach (MountedTroops t in lead.GetComponentsInChildren<MountedTroops>(true)) troops++;
+            if (troops == 0) { MountedTroops bay = BayTroops(lead); if (bay != null) troops = bay.ammo; }
+            int hardpoints = 0, spawned = 0;
+            var spawnedField = HarmonyLib.AccessTools.Field(typeof(Hardpoint), "spawnedPrefab");
+            foreach (HardpointSet s in sets)
+                foreach (Hardpoint h in s.hardpoints)
+                {
+                    hardpoints++;
+                    if (spawnedField != null && spawnedField.GetValue(h) is GameObject go && go != null) spawned++;
+                }
+            string inside = "";
+            foreach (HardpointSet s in sets)
+            {
+                foreach (Hardpoint h in s.hardpoints)
+                {
+                    if (spawnedField == null || !(spawnedField.GetValue(h) is GameObject go) || go == null) continue;
+                    var types = new List<string>();
+                    foreach (Component c in go.GetComponentsInChildren<Component>(true)) types.Add(c.GetType().Name);
+                    inside = go.name + ": " + string.Join("|", types);
+                    break;
+                }
+                if (inside.Length > 0) break;
+            }
+            var names = new List<string>();
+            foreach (HardpointSet s in sets) names.Add(s.weaponMount != null ? s.weaponMount.name : "-");
+            return new Dictionary<string, object>
+            {
+                ["ok"] = true, ["bays"] = bays, ["troops"] = troops,
+                ["stations"] = lead.weaponStations != null ? lead.weaponStations.Count : -1,
+                ["sets"] = string.Join(",", names),
+                ["restricted"] = lead.NetworkHQ != null && lead.NetworkHQ.restrictedWeapons.Contains(mount.name) ? 1 : 0,
+                ["hardpoints"] = hardpoints, ["spawned"] = spawned,
+                ["prefabNull"] = mount.prefab == null ? 1 : 0,
+                ["inside"] = inside,
+                ["troopsAll"] = UnityEngine.Object.FindObjectsOfType<MountedTroops>(true).Length,
+                ["children"] = lead.GetComponentsInChildren<Transform>(true).Length,
+                ["chain"] = Chain(lead),
+            };
+        }
+
+        private static string Chain(Aircraft lead)
+        {
+            var field = HarmonyLib.AccessTools.Field(typeof(Hardpoint), "spawnedPrefab");
+            if (field == null) return "nofield";
+            foreach (HardpointSet s in lead.weaponManager.hardpointSets)
+                foreach (Hardpoint h in s.hardpoints)
+                {
+                    if (!(field.GetValue(h) is GameObject go) || go == null) continue;
+                    var names = new List<string>();
+                    for (Transform t = go.transform; t != null; t = t.parent) names.Add(t.name);
+                    return string.Join("<", names) + " | rootIsLead=" + (go.transform.root == lead.transform);
+                }
+            return "none";
+        }
+
+        // Sim spawns hang the airframe (and its bay mounts) off a separate root, so troops are
+        // resolved through the hardpoints' spawned prefabs, not the aircraft hierarchy.
+        private static MountedTroops BayTroops(Aircraft lead)
+        {
+            var field = HarmonyLib.AccessTools.Field(typeof(Hardpoint), "spawnedPrefab");
+            if (field == null || lead.weaponManager == null) return null;
+            foreach (HardpointSet s in lead.weaponManager.hardpointSets)
+                foreach (Hardpoint h in s.hardpoints)
+                    if (field.GetValue(h) is GameObject go && go != null)
+                    {
+                        MountedTroops troops = go.GetComponentInChildren<MountedTroops>(true);
+                        if (troops != null && troops.ammo > 0) return troops;
+                    }
+            return null;
+        }
+
+        private static int Aboard(Aircraft lead)
+        {
+            int aboard = 0;
+            foreach (MountedTroops troops in lead.GetComponentsInChildren<MountedTroops>())
+                aboard = Math.Max(aboard, troops.ammo);
+            MountedTroops bay = BayTroops(lead);
+            return bay != null ? Math.Max(aboard, bay.ammo) : aboard;
+        }
+
+        private static Dictionary<string, object> Drop(Aircraft lead, Dictionary<string, object> args)
+        {
+            AirAssaultController controller = AirAssaultController.Instance;
+            if (lead == null || controller == null) return Failure("AirborneAutomation", "lzdrop", "need lead and controller");
+            dropAim = new GlobalPosition(Number(args, "ax", 0f), 0f, Number(args, "az", 0f));
+            LandingZones.TryGet(lead, out dropZone);
+            dropRecorded = true;
+            int aboard = Aboard(lead);
+            controller.DeployFromWeaponStation(lead, BayTroops(lead), null, null, dropAim);
+            int troops = 0, active = 0, ammo = 0;
+            foreach (MountedTroops t in lead.GetComponentsInChildren<MountedTroops>(true))
+            {
+                troops++;
+                if (t.gameObject.activeInHierarchy) active++;
+                ammo = Math.Max(ammo, t.ammo);
+            }
+            return new Dictionary<string, object>
+            {
+                ["ok"] = true, ["aboard"] = aboard, ["left"] = Aboard(lead),
+                ["troops"] = troops, ["troopsActive"] = active, ["troopsAmmo"] = ammo,
+                ["stations"] = lead.weaponStations != null ? lead.weaponStations.Count : -1,
+            };
+        }
+
+        private static float Flat(Vector3 a, Vector3 b) => new Vector2(a.x - b.x, a.z - b.z).magnitude;
+
+        private static Dictionary<string, object> ZoneStatus()
+        {
+            var state = new Dictionary<string, object> { ["ok"] = true, ["camps"] = InfantryEncampmentBuilder.ActiveSiteCount };
+            state["smoke"] = GameObject.Find("BoscaliSummer.LandingSmoke") != null ? 1 : 0;
+            float toZone = -1f, toAim = -1f;
+            int jumpers = 0;
+            GameObject root = GameObject.Find("BoscaliSummer.HaloDrop");
+            if (root != null && dropRecorded)
+                foreach (Transform t in root.transform)
+                {
+                    if (!t.gameObject.activeSelf || !t.name.StartsWith("Jumper_", StringComparison.Ordinal)) continue;
+                    jumpers++;
+                    Vector3 g = t.position.ToGlobalPosition().AsVector3();
+                    float dz = Flat(g, dropZone.AsVector3()), da = Flat(g, dropAim.AsVector3());
+                    toZone = toZone < 0f ? dz : Math.Min(toZone, dz);
+                    toAim = toAim < 0f ? da : Math.Min(toAim, da);
+                }
+            state["jumpers"] = jumpers;
+            state["toZone"] = toZone;
+            state["toAim"] = toAim;
+            state["campNearZone"] = dropRecorded && InfantryEncampmentBuilder.FindNearbySite(dropZone.ToLocalPosition(), 500f) != null ? 1 : 0;
+            return state;
         }
 
         private static Dictionary<string, object> Status() => new Dictionary<string, object>

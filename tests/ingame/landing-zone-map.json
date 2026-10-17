@@ -1,0 +1,31 @@
+{
+  "name": "landing-zone-map",
+  "description": "Landing zone on the big map: local set rides ILandingZone, the parachute/LZ marker shows on the maximized map, survives close/reopen, and clears.",
+  "mods": ["boscalisummer"],
+  "timeout_s": 420,
+  "ops": [
+    { "op": "seat", "id": "player", "near": [-6000, 10000], "altitude": 2500, "speed": 180, "heading": 270, "view": "cockpit" },
+    { "op": "wait", "seconds": 8 },
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "lz", "do": "localset", "x": -5000, "z": 11000 }, "store": "set" },
+    { "op": "call", "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure", "args": { "open": true, "rangeKm": 40, "northUp": false }, "store": "mapOpen" },
+    { "op": "wait", "seconds": 2 },
+    { "op": "capture", "name": "lz-map-set" },
+    { "op": "call", "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure", "args": { "open": false }, "store": "mapClosed" },
+    { "op": "wait", "seconds": 1 },
+    { "op": "call", "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure", "args": { "open": true, "rangeKm": 40, "northUp": false }, "store": "mapReopen" },
+    { "op": "wait", "seconds": 2 },
+    { "op": "capture", "name": "lz-map-reopen" },
+    { "op": "call", "method": "BoscaliSummer.Garrisons.AirborneAutomation.Step", "args": { "action": "lz", "do": "localclear" }, "store": "cleared" },
+    { "op": "wait", "seconds": 1 },
+    { "op": "capture", "name": "lz-map-cleared" },
+    { "op": "call", "method": "BoscaliSummer.Modules.Command.Runtime.HoloMapAutomation.Configure", "args": { "restore": true }, "store": "restored" },
+    { "op": "end" }
+  ],
+  "checks": [
+    { "check": "status_ok" },
+    { "check": "result_above", "path": "set.localHas", "min": 0.5 },
+    { "check": "result_below", "path": "cleared.localHas", "max": 0.5 },
+    { "check": "log_match", "pattern": "NullReferenceException", "max": 0 }
+  ]
+}
+

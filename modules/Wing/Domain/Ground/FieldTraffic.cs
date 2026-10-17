@@ -64,7 +64,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         {
             Field = field;
             Graph = TaxiGraph.Build(field);
-            Reservations = new TaxiReservations(Graph);
+            Reservations = new TaxiReservations(Graph, positions);
             blockedHere = new bool[Graph.EdgeCount];
             RunwayIndex = runwayIndex;
             Reverse = reverse;
@@ -75,8 +75,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// <summary>The member to back off and reroute out of a deadlock, −1 when there is none.</summary>
         public int Victim { get; private set; } = -1;
 
-        /// <summary>The first runway usable for takeoff (and its direction: the end nearer the field centre starts the roll,
-        /// so the taxi is short), or false when the field has none.</summary>
+        /// <summary>The first runway usable for takeoff: prefer the end reached by its taxi roads or native entries,
+        /// then the end nearer the field centre. False when the field has none.</summary>
         public static bool TryPickRunway(AirbaseSample field, out int index, out bool reverse)
         {
             for (int r = 0; r < field.Runways.Length; r++)
@@ -84,11 +84,26 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 RunwaySample runway = field.Runways[r];
                 if (!runway.Takeoff) continue;
                 index = r;
-                reverse = runway.Reversable && (runway.End - field.Center).Horizontal.Length < (runway.Start - field.Center).Horizontal.Length;
+                bool startAccess = HasTaxiAccess(field, runway, runway.Start), endAccess = HasTaxiAccess(field, runway, runway.End);
+                reverse = runway.Reversable && (startAccess != endAccess ? endAccess :
+                    (runway.End - field.Center).Horizontal.Length < (runway.Start - field.Center).Horizontal.Length);
                 return true;
             }
             index = -1;
             reverse = false;
+            return false;
+        }
+
+        private static bool HasTaxiAccess(AirbaseSample field, RunwaySample runway, Vec3 threshold)
+        {
+            foreach (WingPose entry in runway.Entries)
+                if (!runway.Contains(entry.Pos, TaxiGraph.EntryClearance) &&
+                    (entry.Pos - threshold).Horizontal.Length < TaxiGraph.EntrySearchRadius) return true;
+            foreach (Vec3[] road in field.Roads)
+                if (road != null && road.Length >= 2)
+                    foreach (Vec3 p in road)
+                        if (!runway.Contains(p, TaxiGraph.HoldShortClear) &&
+                            (p - threshold).Horizontal.Length < TaxiGraph.EntrySearchRadius) return true;
             return false;
         }
 

@@ -22,6 +22,9 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private RenderTexture target;
         private CommandBuffer capture;
         private static readonly int StrengthId = Shader.PropertyToID("_ReflectionStrength");
+        private static readonly int SunDirId = Shader.PropertyToID("_SunDirWorld");
+        private static readonly int SunColorId = Shader.PropertyToID("_SunColor");
+        private static readonly int AmbientId = Shader.PropertyToID("_Ambient");
         private Material glass;
         private float glassStrength = -1f;
         private CockpitPilotRig boundRig;
@@ -36,7 +39,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         internal RenderTexture Target => target;
         internal void SetGlassView(ICanopyGlassView value) => canopy = value;
 
-        internal void Tick(CockpitPilotRig rig, Transform cockpit, Camera eye, Camera renderCamera, float ambient, bool enabled)
+        internal void Tick(CockpitPilotRig rig, Transform cockpit, Camera eye, Camera renderCamera, float ambient, bool enabled, float reflectionStrength = 1f)
         {
             draws = 0;
             if (!enabled || canopy == null || rig == null || !rig.Valid || cockpit == null || eye == null || renderCamera == null)
@@ -54,9 +57,10 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             int size = FxBus.EffectiveQuality == FxQuality.Low ? 128 : 256;
             if (target != null && target.width != size) DropTarget();
             if (!EnsureTarget(size)) return;
-            // Additive ghost of the ambient-lit capture: a touch stronger in the dark, where a canopy mirrors best.
-            float strength = .5f + (1f - Mathf.Clamp01(ambient)) * .25f;
-            if (strength != glassStrength) { glass.SetFloat(StrengthId, strength); glassStrength = strength; }
+            // Fresnel in the shader does the angular work; this is the pilot-tuned base, stronger in the dark where a canopy mirrors best.
+            float strength = (.55f + (1f - Mathf.Clamp01(ambient)) * .35f) * HelmetMath.Sanitize(reflectionStrength, HelmetMath.DefaultReflection);
+            if (strength != glassStrength) { glass.SetFloat(StrengthId, strength); glass.SetFloat(AmbientId, Mathf.Clamp01(ambient)); glassStrength = strength; }
+            WriteSun();
             Vector3 center = rig.Frame.TransformPoint(localCenter);
             Matrix4x4 planeToWorld = Matrix4x4.TRS(center, rig.Frame.rotation, Vector3.one);
             double now = Time.unscaledTimeAsDouble;
@@ -83,6 +87,16 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             (surface.Lod == null || surface.Renderer.isVisible) && (camera.cullingMask & (1 << surface.Renderer.gameObject.layer)) != 0 &&
             GeometryUtility.TestPlanesAABB(frustum, surface.Renderer.bounds);
 
+        private void WriteSun()
+        {
+            LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
+            Light sun = level != null ? level.sun : null;
+            if (sun == null) { glass.SetVector(SunDirId, new Vector4(0, 1, 0, 0)); glass.SetColor(SunColorId, Color.black); return; }
+            Vector3 toSun = -sun.transform.forward;
+            glass.SetVector(SunDirId, new Vector4(toSun.x, toSun.y, toSun.z, 0));
+            Color tint = sun.color * Mathf.Clamp(sun.intensity, 0f, 2f);
+            glass.SetColor(SunColorId, tint);
+        }
         private bool EnsureTarget(int size)
         {
             if (target != null) return true;

@@ -7,16 +7,21 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Immersion.Visuals
 {
     /// <summary>
-    /// Glass-only helmet visor: one Screen Space Overlay quad sorted under the vanilla HUD and blackout
-    /// image, one mask generated off the main thread, five uniforms. The quad is disabled - no draw at
-    /// all - whenever every layer is idle (night, sun out of view, calm breathing, below 6 G).
+    /// Near-future helmet visor on one Screen Space Overlay quad: electrochromic tint, breath fog, a
+    /// faint coating that shifts hue toward the rim, the brow shade above 6 G, and hairline scratches
+    /// that catch the sun. Sorted under the vanilla HUD so symbology is never tinted. There is no
+    /// helmet frame: an outline imitating the shell reads as a cheap overlay, so the glass carries
+    /// everything. One generated soft mask (G fog, B brow); scratches are drawn by the shader.
+    /// The quad is disabled - no draw at all - while there is nothing to show.
     /// </summary>
     internal sealed class VisorOverlay
     {
         private const int Width = 512, Height = 288;
         private static readonly AccessTools.FieldRef<FlightHud, Canvas> HudCanvas = HudRef();
         private static readonly int TintId = Shader.PropertyToID("_Tint"), SunId = Shader.PropertyToID("_SunLit"),
-            FogId = Shader.PropertyToID("_Fog"), BrowId = Shader.PropertyToID("_Brow"), LightId = Shader.PropertyToID("_Light");
+            FogId = Shader.PropertyToID("_Fog"), BrowId = Shader.PropertyToID("_Brow"), LightId = Shader.PropertyToID("_Light"),
+            CurveId = Shader.PropertyToID("_Curve"), ReflectId = Shader.PropertyToID("_Reflect"),
+            SunViewId = Shader.PropertyToID("_SunView");
         private GameObject root;
         private Canvas canvas;
         private RawImage image;
@@ -29,44 +34,54 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         /// <summary>Automation only: scripted sim flight hides the vanilla HUD the visor normally follows.</summary>
         internal bool IgnoreHud;
         private FogPulse fog;
-        private float tint, brow, sunLit, wTint = -1f, wSun = -1f, wFog = -1f, wBrow = -1f, wLight = -1f;
+        private float tint, brow, sunLit, curve, reflect, light = 1f;
+        private Vector4 sunView;
+        private readonly float[] written = new float[8];
+        private bool writtenValid;
 
         internal bool Visible => image != null && image.enabled;
         internal float Tint => tint;
         internal float SunLit => sunLit;
         internal float Fog => fog.Value;
         internal float Brow => brow;
+        internal float Curve => curve;
         internal int SortingOrder => canvas != null ? canvas.sortingOrder : 0;
         internal string HudMode => hud != null ? hud.renderMode.ToString() : "none";
 
+        /// <summary>
+        /// One frame of the visor. <paramref name="sunViewport"/> is the sun's position on the view
+        /// (viewport x, y in 0..1; z > 0 in front of the camera); curvature and reflection are the
+        /// pilot's 0..1 settings.
+        /// </summary>
         internal void Tick(PilotCue cues, PilotPhysiology p, float sunLit01, float light01, float temperatureC,
-            bool temperatureKnown, bool enabled, float dt)
+            bool temperatureKnown, bool enabled, float dt, Vector3 sunViewport, float sunFacing01,
+            float curvature01, float reflection01)
         {
             if (!enabled || p == null) { Hide(); return; }
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             Light sun = level != null ? level.sun : null;
             float elevation = sun != null ? Mathf.Asin(Mathf.Clamp(-sun.transform.forward.y, -1f, 1f)) * Mathf.Rad2Deg : -90f;
-            tint = VisorMath.Ease(tint, VisorMath.SunVisor(elevation), dt, 2f);
-            sunLit = Mathf.Clamp01(sunLit01);
+            curve = HelmetMath.Sanitize(curvature01, HelmetMath.DefaultCurvature);
+            reflect = HelmetMath.Sanitize(reflection01, HelmetMath.DefaultReflection);
+            float targetTint = HelmetMath.ElectroTint(elevation, sunFacing01, light01);
+            tint = VisorMath.Ease(tint, targetTint, dt, 2f);
+            light = Mathf.Clamp01(light01); sunLit = Mathf.Clamp01(sunLit01);
+            sunView = new Vector4(sunViewport.x, sunViewport.y, sunViewport.z, 0f);
             if ((cues & PilotCue.Exhale) != 0 && VisorMath.FogsOnExhale(p.Exertion01, temperatureC, temperatureKnown))
                 fog.Trigger(.6f + .4f * p.Exertion01);
             fog.Step(dt);
             brow = VisorMath.Ease(brow, VisorMath.Brow(p.LoadG), dt, .4f);
             bool active = Mathf.Max(Mathf.Max(tint, sunLit), Mathf.Max(fog.Value, brow)) > VisorMath.Idle;
-            if (!active || !Ensure()) { if (image != null && image.enabled) image.enabled = false; return; }
+            if (!active || !Ensure()) { SetEnabled(false); return; }
             bool hudVisible = IgnoreHud || hud == null || hud.gameObject.activeInHierarchy;
-            if (image.enabled != hudVisible) image.enabled = hudVisible;
+            SetEnabled(hudVisible);
             if (!hudVisible) return;
-            Write(TintId, tint, ref wTint);
-            Write(SunId, sunLit, ref wSun);
-            Write(FogId, fog.Value, ref wFog);
-            Write(BrowId, brow, ref wBrow);
-            Write(LightId, Mathf.Clamp01(light01), ref wLight);
+            WriteAll();
         }
 
         internal void Hide()
         {
-            if (image != null && image.enabled) image.enabled = false;
+            SetEnabled(false);
             fog = default;
             brow = sunLit = 0f; // the sun visor stays where it was; it eases with the sun, not with view changes
         }
@@ -77,8 +92,14 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             if (root != null) Object.Destroy(root);
             if (material != null) Object.Destroy(material);
             if (texture != null) Object.Destroy(texture);
-            root = null; canvas = null; image = null; hud = null; material = null; texture = null;
-            wTint = wSun = wFog = wBrow = wLight = -1f;
+            root = null; canvas = null; image = null; hud = null;
+            material = null; texture = null;
+            writtenValid = false;
+        }
+
+        private void SetEnabled(bool on)
+        {
+            if (image != null && image.enabled != on) image.enabled = on;
         }
 
         private bool Ensure()
@@ -111,11 +132,14 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                     if (!shaderWarned) { shaderWarned = true; Plugin.Logger?.LogWarning("[Immersion] Helmet visor shader missing from pilot.bundle; visor disabled."); }
                     return false;
                 }
-                material = new Material(shader) { name = "Boscali.Visor", hideFlags = HideFlags.HideAndDontSave };
+                material = new Material(shader) { name = "Boscali.VisorGlass", hideFlags = HideFlags.HideAndDontSave };
             }
-            root = new GameObject("Boscali.VisorOverlay");
+            ResolveOrder(out int order, out int layerId);
+            root = new GameObject("Boscali.VisorGlass");
             canvas = root.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.sortingOrder = order;
+            canvas.sortingLayerID = layerId;
             var node = new GameObject("Visor", typeof(RectTransform));
             node.transform.SetParent(root.transform, false);
             var rect = (RectTransform)node.transform;
@@ -125,29 +149,38 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             image.texture = texture;
             image.material = material;
             image.enabled = false;
-            canvas.sortingOrder = UnderHud();
-            if (hud != null) canvas.sortingLayerID = hud.rootCanvas.sortingLayerID;
-            wTint = wSun = wFog = wBrow = wLight = -1f;
+            writtenValid = false;
             return true;
         }
 
-        // One below the lower of the vanilla HUD and blackout canvases: HUD text is never tinted, blackout covers the visor.
-        private int UnderHud()
+        // One below the lower of HUD and blackout: the glass never tints symbology and the blackout always wins.
+        private void ResolveOrder(out int order, out int layerId)
         {
             FlightHud flight = SceneSingleton<FlightHud>.i;
             hud = flight != null && HudCanvas != null ? HudCanvas(flight) : null;
-            int order = int.MaxValue;
-            if (hud != null) order = hud.rootCanvas.sortingOrder;
+            int hudOrder = hud != null ? hud.rootCanvas.sortingOrder : 0;
+            layerId = hud != null ? hud.rootCanvas.sortingLayerID : 0;
             CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
             Image blackout = cameras != null ? cameras.GetBlackoutImage() : null;
-            if (blackout != null && blackout.canvas != null) order = Mathf.Min(order, blackout.canvas.rootCanvas.sortingOrder);
-            return order == int.MaxValue ? 0 : order - 1;
+            int blackoutOrder = blackout != null && blackout.canvas != null ? blackout.canvas.rootCanvas.sortingOrder : int.MaxValue;
+            order = Mathf.Min(hudOrder, blackoutOrder) - 1;
         }
 
-        private void Write(int id, float value, ref float written)
+        private void WriteAll()
         {
-            if (Mathf.Abs(value - written) <= .002f) return;
-            written = value;
+            Write(0, TintId, tint); Write(1, SunId, sunLit);
+            Write(2, FogId, fog.Value); Write(3, BrowId, brow);
+            Write(4, LightId, light); Write(5, CurveId, curve);
+            Write(6, ReflectId, reflect);
+            // The sun moves across the view every frame; it bypasses the dead-band cache.
+            material.SetVector(SunViewId, sunView);
+            writtenValid = true;
+        }
+
+        private void Write(int slot, int id, float value)
+        {
+            if (writtenValid && Mathf.Abs(value - written[slot]) <= .002f) return;
+            written[slot] = value;
             material.SetFloat(id, value);
         }
 

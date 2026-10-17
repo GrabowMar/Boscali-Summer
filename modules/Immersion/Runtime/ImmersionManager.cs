@@ -196,6 +196,18 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             set { if (settings != null) settings.HelmetVisorEnabled.Value = value; }
         }
 
+        public float HelmetCurvature
+        {
+            get => settings != null ? settings.HelmetCurvature.Value : .55f;
+            set { if (settings != null) settings.HelmetCurvature.Value = Mathf.Clamp01(value); }
+        }
+
+        public float HelmetReflection
+        {
+            get => settings != null ? settings.HelmetReflection.Value : 1f;
+            set { if (settings != null) settings.HelmetReflection.Value = Mathf.Clamp01(value); }
+        }
+
         public bool MachBuffetEnabled
         {
             get => settings != null && settings.MachBuffetEnabled.Value;
@@ -337,11 +349,13 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
                     level != null ? 1f - Mathf.Clamp01(level.GetCloudOcclusion(camera.transform.position)) : 1f);
             float ambient = level != null ? level.GetAmbientLight() : 1f;
             if (environmentValid) ambient *= 1f - environment.CloudShade01 * 0.35f;
-            // Smudges catch light only when looking toward a visible sun (60 deg off-axis -> none, ~18 deg -> full).
+            // Scratches catch light only when looking toward a visible sun (60 deg off-axis -> none, ~18 deg -> full).
             Light sunLight = level != null ? level.sun : null;
             float facing = sunLight != null ? Mathf.Clamp01((Vector3.Dot(camera.transform.forward, -sunLight.transform.forward) - .5f) / .45f) : 0f;
+            Vector3 sunViewport = sunLight != null ? camera.WorldToViewportPoint(camera.transform.position - sunLight.transform.forward) : new Vector3(.5f, .5f, -1f);
             visor.Tick(Cues, physiology, glare.Visibility * facing * facing, ambient,
-                environmentValid ? environment.TemperatureC : 15f, environmentValid, settings.HelmetVisorEnabled.Value, dt);
+                environmentValid ? environment.TemperatureC : 15f, environmentValid, settings.HelmetVisorEnabled.Value, dt,
+                sunViewport, facing, settings.HelmetCurvature.Value, settings.HelmetReflection.Value);
             mfdGlow.Tick(aircraft, true, ambient, settings.MfdGlowEnabled.Value);
             surface.Tick(aircraft, true, settings.SurfaceImmersionEnabled.Value);
             EnsureAudioComponents();
@@ -474,6 +488,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             state["visorSunLit"] = visor.SunLit;
             state["visorFog"] = visor.Fog;
             state["visorBrow"] = visor.Brow;
+            state["visorCurve"] = visor.Curve;
             state["visorSortingOrder"] = visor.SortingOrder;
             state["visorHudMode"] = visor.HudMode;
 

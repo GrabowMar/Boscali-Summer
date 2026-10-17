@@ -40,6 +40,8 @@ namespace BoscaliSummer.Modules.UrbanCombat
             AirAssaultController assault = context.AddSceneService<AirAssaultController>(31);
             context.AddService<IAirAssaultObservation>(assault);
             context.AddService<IAirAssaultOrders>(context.AddSceneService<AirAssaultNet>(33));
+            context.AddService<ILandingZone>(context.AddSceneService<LandingZoneNet>(35));
+            context.AddSceneService<LandingZoneCue>(36);
             BaseDefenseAlarmService alarm = context.AddSceneService<BaseDefenseAlarmService>(32);
             context.AddSceneService<WarzoneDressingService>(34);
             context.AddService<IBuildingOccupancy>(garrisons);

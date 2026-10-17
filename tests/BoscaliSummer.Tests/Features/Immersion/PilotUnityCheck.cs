@@ -513,8 +513,9 @@ public sealed class PilotUnityCheck : MonoBehaviour
         yield return new WaitForEndOfFrame();
         Texture2D halfFrame = Read(eyeTarget);
         int centreIndex = eyeTarget.height/2*eyeTarget.width + eyeTarget.width/2;
-        float premultiplied = 128f/255f, opacity = .12f*.35f;
-        float expected = premultiplied*opacity + without[centreIndex].r/255f*(1-premultiplied*opacity);
+        // Additive reflection on the head-on centre of this pane: Schlick F0 .04, ambient 1 (dark boost .75), edge and facing 1, shader gain 1.4.
+        float premultiplied = 128f/255f, opacity = .12f*.04f*3.2f*.75f*1.4f;
+        float expected = without[centreIndex].r/255f + premultiplied*opacity;
         float observed = halfFrame.GetPixel(eyeTarget.width/2,eyeTarget.height/2).r;
         Destroy(halfFrame);
         log.AppendLine("Premultiplied-alpha GPU diagnostic: observed=" + observed + " expected=" + expected);

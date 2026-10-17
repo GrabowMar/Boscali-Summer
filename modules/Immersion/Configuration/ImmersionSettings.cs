@@ -22,6 +22,8 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
         public ConfigEntry<bool> MachBuffetEnabled { get; }
         public ConfigEntry<bool> PilotBreathingEnabled { get; }
         public ConfigEntry<bool> HelmetVisorEnabled { get; }
+        public ConfigEntry<float> HelmetCurvature { get; }
+        public ConfigEntry<float> HelmetReflection { get; }
         public ConfigEntry<bool> PilotBodyEnabled { get; }
         public ConfigEntry<bool> PilotControlMotionEnabled { get; }
         public ConfigEntry<bool> PilotReflectionEnabled { get; }
@@ -72,7 +74,13 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
             PilotBreathingEnabled = config.Bind(section, "PilotBreathingEnabled", true,
                 "Cockpit view: oxygen-mask breathing, anti-G straining grunts, G-suit hiss and a faint heartbeat near blackout, all paced by the game's own G-LOC model.");
             HelmetVisorEnabled = config.Bind(section, "HelmetVisorEnabled", true,
-                "Cockpit view: glass-only helmet visor - daytime sun tint, smudges lit by the sun, breath fog when breathing hard, brow shadow above 6 G. No frame.");
+                "Cockpit view: near-future helmet-mounted display - curved visor, electrochromic sun tint, scratches lit by the sun, breath fog when breathing hard and visor reflections.");
+            HelmetCurvature = config.Bind(section, "HelmetCurvature", .55f,
+                new ConfigDescription("Cockpit view: spherical curvature of the helmet visor and the TAC BOARD on it. 0 is the old flat glass, 1 wraps hardest around the eye.",
+                    new AcceptableValueRange<float>(0f, 1f)));
+            HelmetReflection = config.Bind(section, "HelmetReflection", 1f,
+                new ConfigDescription("Cockpit view: visor and canopy reflections - Fresnel rim on the visor, pilot reflection and sun glint on the windscreen. 0 turns reflections off.",
+                    new AcceptableValueRange<float>(0f, 1f)));
             PilotBodyEnabled = config.Bind(section, "PilotBodyEnabled", true,
                 "Show the native pilot's flight suit, arms and legs in first person. Local presentation only.");
             PilotControlMotionEnabled = config.Bind(section, "PilotControlMotionEnabled", true,

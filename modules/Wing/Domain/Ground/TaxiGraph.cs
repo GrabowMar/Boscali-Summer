@@ -49,6 +49,23 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public IReadOnlyList<int> EdgesOf(int node) => adjacency[node];
         public int OtherEnd(int e, int node) => from[e] == node ? to[e] : from[e];
 
+        /// <summary>Distance along an edge at its nearest horizontal projection, measured from EdgeFrom.</summary>
+        public float ProgressOnEdge(int edge, Vec3 pos)
+        {
+            Vec3[] path = points[edge];
+            float nearest = float.MaxValue, progress = 0f, walked = 0f;
+            for (int i = 1; i < path.Length; i++)
+            {
+                Vec3 a = path[i - 1].Horizontal, ab = path[i].Horizontal - a;
+                float length = ab.Length;
+                float t = length < 1e-4f ? 0f : Scalar.Clamp(Vec3.Dot(pos.Horizontal - a, ab) / (length * length), 0f, 1f);
+                float distance = (a + ab * t - pos.Horizontal).SqrLength;
+                if (distance < nearest) { nearest = distance; progress = walked + length * t; }
+                walked += length;
+            }
+            return progress;
+        }
+
         /// <summary>The exit node of hangar <paramref name="hangarIndex"/>, −1 when the field has no such hangar.</summary>
         public int HangarExit(int hangarIndex) => hangarIndex >= 0 && hangarIndex < hangarExits.Length ? hangarExits[hangarIndex] : -1;
 

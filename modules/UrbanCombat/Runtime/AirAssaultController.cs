@@ -119,13 +119,16 @@ namespace BoscaliSummer.Garrisons
             Vector3 velocity = aircraft.rb != null ? aircraft.rb.velocity : aircraft.transform.forward * 60f;
             // Every peer predicts the same ramp point from replicated state; the stick leaves it once the ramp is down.
             Vector3 exit = ComputeCargoDropExitPosition(aircraft, dropCount) + velocity * HaloRampSeconds;
-            Vector3? aim = HaloAim(aircraft, target, aimpoint);
+            // A set landing zone stands over the fire-time designation (read here, at release,
+            // on every peer: the host broadcasts each zone, so every plan agrees).
+            bool onZone = LandingZones.TryGet(aircraft, out GlobalPosition zone);
+            Vector3? aim = onZone ? zone.AsVector3() : HaloAim(aircraft, target, aimpoint);
             HaloGlidePlan plan = HaloGlidePlan.Build(exit.ToGlobalPosition().AsVector3(), velocity, aim, HaloGroundAt, dropCount);
             ConsumeTroops(aircraft, troops, station, dropCount);
             Throttle(aircraft, MinFireInterval);
             Vector3 landing = plan.StickLanding;
             Plugin.Logger.LogInfo($"[AIRBORNE] HALO stick of {dropCount} away from {aircraft.name}: " +
-                (aim.HasValue ? "gliding onto the designated target" : "no designation, gliding down the heading") +
+                (onZone ? "gliding onto the landing zone" : aim.HasValue ? "gliding onto the designated target" : "no designation, gliding down the heading") +
                 $" ({(plan.LowDrop ? "low drop, canopies off the ramp" : "wingsuit glide")}), on the ground in {plan.TotalSeconds:0} s. {troops.ammo} aboard.");
 
             if (GameAccess.IsServer())
@@ -133,7 +136,8 @@ namespace BoscaliSummer.Garrisons
                 FactionHQ owner = aircraft.NetworkHQ;
                 Airbase airbase = FindNearestAirbase(aircraft.transform.position);
                 var ground = new GlobalPosition(landing.x, landing.y, landing.z);
-                Schedule(HaloRampSeconds + plan.TotalSeconds, () => ResolveParadrop(ground, owner, airbase, dropCount));
+                // The stick is on the ground once its first jumper touches down; the rest of the stick lands within seconds.
+                Schedule(HaloRampSeconds + plan.FirstLandingSeconds, () => ResolveParadrop(ground, owner, airbase, dropCount));
             }
 
             if (GameManager.IsHeadless) return;

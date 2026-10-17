@@ -234,6 +234,9 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             flightClouds?.Restore();
             heatHaze.Restore();
 
+            sunDisc.Release();
+            sunShafts.Dispose();
+
             baselineCaptured = false;
             isManualOverride = false;
             consoleAuto = false;
@@ -285,6 +288,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             flightClouds?.Restore();
             heatHaze.Restore();
             sunShafts.Dispose();
+            sunDisc.Release();
             flightClouds = null;
         }
 
@@ -550,10 +554,10 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             }
             // Clouds, rain and terrain must read the same atmosphere for this frame.
             if (liveWeather) { UpdateRainSystems(weatherTime); sunDisc.Tick(LevelInfo.i, view, viewTransmission, Time.deltaTime); }
-            else { environmentSnapshot = default; TeardownRainSystems(); atmosphere.Restore(); }
+            else { environmentSnapshot = default; TeardownRainSystems(); atmosphere.Restore(); sunDisc.Release(); }
             if (!Application.isBatchMode && settings != null && settings.Enabled.Value) heatHaze.Update(Time.unscaledTime);
             else heatHaze.Restore();
-            sunShafts.Tick(LevelInfo.i, view, liveWeather && settings.SunShaftsEnabled.Value);
+            sunShafts.Tick(LevelInfo.i, view, liveWeather && settings.SunShaftsEnabled.Value, viewTransmission);
             bool wantClouds = liveWeather && settings.CinematicCloudsEnabled.Value;
             if (wantClouds)
             {
@@ -735,7 +739,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             visualIntensity *= rainExposure;
             viewPrecipitation = rainIntensity;
             viewCondensation = cloudMoisture * rainExposure;
-            float glassMoisture = Mathf.Max(rainIntensity, isCockpit ? cloudMoisture * rainExposure : 0f);
+            float glassMoisture = Mathf.Max(rainIntensity, viewCondensation);
 
             // Haze first: everything below reads the fog colour it produces.
             if (hazeEnabled)
@@ -790,13 +794,14 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 settings.RainAudioEnabled.Value && !underwaterView, cameras.followingUnit is Aircraft ? ias : 0f,
                 heightAboveGround, rainExposure);
             // The sim remains current outside cockpit view, but submits at most 30 blits/s per pane.
-            float speedNorm = Mathf.Clamp01(ias / 250f);
+            Vector3 glassAirflow = currentWind - airVel;
+            float speedNorm = Mathf.Clamp01(glassAirflow.magnitude / 250f);
             if (!shaderRequested || canopyWetness <= 0.001f) canopyShader.ClearWater();
             else
-                // Cloud droplets wet the glass as film, not a field of fixed beads (in cloud
-                // that read as grain); only rain seeds beads at full rate.
-                canopyShader.UpdateSim(canopySurfaces, Mathf.Max(rainIntensity, glassMoisture * 0.35f), speedNorm,
-                    currentWind - airVel, Time.deltaTime);
+                // Cloud droplets feed their own thin-film channel; only falling rain seeds beads.
+                canopyShader.UpdateSim(canopySurfaces, rainIntensity, speedNorm,
+                    glassAirflow, Time.deltaTime, viewCondensation,
+                    CanopyShaderParams.Evaporation(viewTemperature, viewDewpoint));
             bool shaderDrawn = false;
             if (shaderRequested)
                 canopyShader.SetColdMoisture(viewTemperature, glassMoisture, Time.deltaTime);

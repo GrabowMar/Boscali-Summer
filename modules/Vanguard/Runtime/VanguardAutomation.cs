@@ -1,6 +1,7 @@
 #if !PUBLIC_RELEASE
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Vanguard.Domain;
 using UnityEngine;
@@ -32,7 +33,7 @@ namespace BoscaliSummer.Vanguard
                 return Failure("VanguardAutomation", "Step", "requires a hosted single-player nomodkit scenario");
             Aircraft lead = FindAircraft(Text(args, "faction") ?? "Boscali");
             Aircraft bandit = FindAircraft(Text(args, "enemy") ?? "Primeva");
-            if (bandit != null) enemyHq = bandit.NetworkHQ; // REMORA STRIKE may kill the bandit before batch-2 steps
+            if (bandit != null && bandit.NetworkHQ != null) enemyHq = bandit.NetworkHQ; // REMORA STRIKE may kill the bandit before batch-2 steps; a dropped link must not erase it either
             if (lead != null && lead != trackedLead)
             {
                 trackedLead = lead;
@@ -50,7 +51,9 @@ namespace BoscaliSummer.Vanguard
                 case "launch":
                     string at = Text(args, "at");
                     if (at == "point") return LaunchAtPoint(Text(args, "key"), lead, Number(args, "x", 0f), Number(args, "z", 0f));
-                    return Launch(Text(args, "key"), lead, at == "threat" ? threat : at == "ground" ? groundTarget : at == "ship" ? testShip : (Unit)bandit);
+                    Dictionary<string, object> launched = Launch(Text(args, "key"), lead, at == "threat" ? threat : at == "ground" ? groundTarget : at == "ship" ? testShip : (Unit)bandit);
+                    if (lead != null && LandingZones.TryGet(lead, out GlobalPosition lzAtLaunch)) { probeLaunch = lzAtLaunch; probeLaunchSet = true; }
+                    return launched;
                 case "lure":
                     Modules.Vanguard.Domain.SeductionRule.TowedRearChance = Number(args, "chance", 0.35f);
                     Modules.Vanguard.Domain.SeductionRule.TowedFrontChance = Number(args, "chance", 0.12f);
@@ -78,6 +81,7 @@ namespace BoscaliSummer.Vanguard
                 case "threatwhen": return SkywellThreatWhen(bandit, args);
                 case "seatfly": return SkywellFly(args);
                 case "rxstatus": return SkywellRxStatus(args);
+                case "lz": return LandingZoneStep(args, lead);
                 case "status": return Status(lead);
                 case "orca": return Orca(args, lead);
                 case "kestrel": return Kestrel(args, lead);
@@ -280,6 +284,123 @@ namespace BoscaliSummer.Vanguard
                 if (!a.disabled && a.NetworkHQ != null && a.NetworkHQ.faction != null &&
                     a.NetworkHQ.faction.factionName.IndexOf(faction, StringComparison.OrdinalIgnoreCase) >= 0) return a;
             return null;
+        }
+
+        // ---- landing zone (tests/ingame/landing-zone.json): set/clear the lead's zone and read
+        // where each live glider actually is relative to it, the designated target, and a probe point.
+
+        private static float hawProbeMin = -1f;
+        private static GlobalPosition lastZone; // last point set through this seam: the default probe
+        private static bool lastZoneSet;
+        private static GlobalPosition probeLaunch; // the lead's zone at the last launch: where that glider was aimed
+        private static bool probeLaunchSet;
+
+        private static float FlatDist(GlobalPosition a, GlobalPosition b) => new Vector2(a.x - b.x, a.z - b.z).magnitude;
+
+        private static Dictionary<string, object> LandingZoneStep(Dictionary<string, object> args, Aircraft lead)
+        {
+            string op0 = Text(args, "do") ?? "set";
+            if (lead == null && op0 != "status" && op0 != "kill")
+                return Failure("VanguardAutomation", "lz", "no friendly aircraft");
+
+            switch (Text(args, "do") ?? "set")
+            {
+                case "clear":
+                    LandingZones.Order(lead, null);
+                    break;
+                case "status":
+                    break;
+                case "kill":
+                    // Respawn-clean, registry-wide: give the lead a zone, then disable whichever
+                    // friendly aircraft holds one (the scene scan may no longer see a landed one).
+                    if (lead != null) LandingZones.Order(lead, new GlobalPosition(Number(args, "x", 0f), 0f, Number(args, "z", 0f)));
+                    foreach (Aircraft a in UnitRegistry.allAircraft)
+                        if (!a.disabled && LandingZones.TryGet(a, out _)) { a.DisableUnit(); break; }
+                    break;
+                case "neartarget":
+                    if (groundTarget == null) return Failure("VanguardAutomation", "lz", "no ground target yet");
+                    GlobalPosition tp = groundTarget.GlobalPosition();
+                    var np = new GlobalPosition(tp.x + Number(args, "dx", 400f), 0f, tp.z + Number(args, "dz", 0f));
+                    Vector3 nlocal = np.ToLocalPosition();
+                    float ny = Physics.Raycast(new Vector3(nlocal.x, Datum.LocalSeaY + 9000f, nlocal.z), Vector3.down, out RaycastHit nhit, 12000f,
+                        (int)PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore)
+                        ? nhit.point.ToGlobalPosition().AsVector3().y : 0f;
+                    LandingZones.Order(lead, new GlobalPosition(np.x, ny, np.z));
+                    lastZone = np;
+                    lastZoneSet = true;
+                    break;
+                default:
+                    GlobalPosition point;
+                    if (Has(args, "rel"))
+                    {
+                        GlobalPosition at = lead.GlobalPosition();
+                        point = new GlobalPosition(at.x + Number(args, "dx", 0f), 0f, at.z + Number(args, "dz", 0f));
+                    }
+                    else point = new GlobalPosition(Number(args, "x", 0f), 0f, Number(args, "z", 0f));
+                    Vector3 local = point.ToLocalPosition();
+                    float y = Physics.Raycast(new Vector3(local.x, Datum.LocalSeaY + 9000f, local.z), Vector3.down, out RaycastHit hit, 12000f,
+                        (int)PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore)
+                        ? hit.point.ToGlobalPosition().AsVector3().y : 0f;
+                    LandingZones.Order(lead, new GlobalPosition(point.x, y, point.z));
+                    lastZone = point;
+                    lastZoneSet = true;
+                    break;
+            }
+            var state = new Dictionary<string, object> { ["ok"] = true };
+            Aircraft banditNow = FindAircraft("Primeva");
+            state["enemyHq"] = enemyHq != null ? 1 : 0;
+            state["bandit"] = banditNow != null ? 1 : 0;
+            state["banditHq"] = banditNow != null && banditNow.NetworkHQ != null ? 1 : 0;
+            bool has = LandingZones.TryGet(lead, out GlobalPosition zone);
+            state["has"] = has ? 1 : 0;
+            if (has) { state["x"] = zone.x; state["z"] = zone.z; }
+            bool probe = Has(args, "px") || probeLaunchSet || lastZoneSet;
+            var probePoint = Has(args, "px") ? new GlobalPosition(Number(args, "px", 0f), 0f, Number(args, "pz", 0f)) : probeLaunchSet ? probeLaunch : lastZone;
+            var hamFlight = Modules.Vanguard.Runtime.VanguardFlight.HamilcarLast;
+            if (hamFlight != null)
+            {
+                var aimField = HarmonyLib.AccessTools.Field(typeof(Modules.Vanguard.Runtime.VanguardFlight), "hamilcarAim");
+                var spotField = HarmonyLib.AccessTools.Field(typeof(Modules.Vanguard.Runtime.VanguardFlight), "hamilcarSpot");
+                if (aimField?.GetValue(hamFlight) is GlobalPosition aimNow)
+                {
+                    state["aimX"] = aimNow.x; state["aimZ"] = aimNow.z;
+                    if (has) state["aimToZone"] = FlatDist(aimNow, zone);
+                }
+                if (spotField?.GetValue(hamFlight) is GlobalPosition spotNow) { state["spotX"] = spotNow.x; state["spotZ"] = spotNow.z; }
+                var lzField = HarmonyLib.AccessTools.Field(typeof(Modules.Vanguard.Runtime.VanguardFlight), "landingZone");
+                state["lzCaptured"] = lzField?.GetValue(hamFlight) is GlobalPosition ? 1 : 0;
+            }
+            Missile ham = Modules.Vanguard.Runtime.VanguardFlight.HamilcarLast?.Missile;
+            if (ham != null && !ham.disabled)
+            {
+                if (has) state["hamToZone"] = FlatDist(ham.GlobalPosition(), zone);
+                if (groundTarget != null) state["hamToTarget"] = FlatDist(ham.GlobalPosition(), groundTarget.GlobalPosition());
+                if (probe) state["hamToProbe"] = FlatDist(ham.GlobalPosition(), probePoint);
+                if (has && groundTarget != null) state["hamCloser"] = FlatDist(ham.GlobalPosition(), zone) < FlatDist(ham.GlobalPosition(), groundTarget.GlobalPosition()) ? 1 : 0;
+            }
+            foreach (Modules.Vanguard.Runtime.KestrelDrone drone in UnityEngine.Object.FindObjectsOfType<Modules.Vanguard.Runtime.KestrelDrone>())
+                if (!drone.GetComponent<Missile>().disabled)
+                {
+                    if (has) state["kestrelCentreToZone"] = FlatDist(drone.Centre, zone);
+                    if (probe) state["kestrelCentreToProbe"] = FlatDist(drone.Centre, probePoint);
+                    break;
+                }
+            if (Launched.TryGetValue(VanguardKeys.HawcX, out Missile haw) && haw != null && !haw.disabled)
+            {
+                if (has) state["hawToZone"] = FlatDist(haw.GlobalPosition(), zone);
+                if (groundTarget != null) state["hawToTarget"] = FlatDist(haw.GlobalPosition(), groundTarget.GlobalPosition());
+                if (probe)
+                {
+                    float d = FlatDist(haw.GlobalPosition(), probePoint);
+                    state["hawToProbe"] = d;
+                    hawProbeMin = hawProbeMin < 0f ? d : Math.Min(hawProbeMin, d);
+                }
+            }
+            if (has && groundTarget != null && Launched.TryGetValue(VanguardKeys.HawcX, out Missile haw2) && haw2 != null && !haw2.disabled)
+                state["hawCloser"] = FlatDist(haw2.GlobalPosition(), zone) < FlatDist(haw2.GlobalPosition(), groundTarget.GlobalPosition()) ? 1 : 0;
+            state["hawProbeMin"] = hawProbeMin;
+            state["smoke"] = GameObject.Find("BoscaliSummer.LandingSmoke") != null ? 1 : 0;
+            return state;
         }
 
         private static Dictionary<string, object> Catalog()

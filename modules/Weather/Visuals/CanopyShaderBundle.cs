@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using BoscaliSummer.Core.Util;
 using UnityEngine;
 
@@ -23,6 +23,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static Shader flightCloudShader;
         private static Shader flightCloudCompositeShader;
         private static Shader sunShaftsShader;
+        private static Shader sunDiscShader;
         private static bool attempted;
         private static bool prewarmed;
 
@@ -108,6 +109,12 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             return sunShaftsShader;
         }
 
+        internal static Shader GetSunDiscShader()
+        {
+            GetShader();
+            return sunDiscShader;
+        }
+
         internal static Shader GetShader()
         {
             if (shader != null) return shader;
@@ -140,6 +147,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                             flightCloudCompositeShader = shaders[i];
                         if (shaders[i] != null && shaders[i].name == "Boscali/SunShafts" && shaders[i].isSupported)
                             sunShaftsShader = shaders[i];
+                        if (shaders[i] != null && shaders[i].name == "Boscali/SunDisc" && shaders[i].isSupported)
+                            sunDiscShader = shaders[i];
                     }
                 }
                 if (shader != null || terrainShader != null || updateShader != null ||
@@ -148,8 +157,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 bundle.Unload(true);
                 bundle = null;
             }
-            catch (Exception)
+            catch (Exception e)
             {
+                Debug.LogWarning("[BoscaliSummer] Canopy shader bundle load failed: " + e.Message);
                 shader = null;
             }
 

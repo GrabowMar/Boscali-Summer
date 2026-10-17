@@ -343,9 +343,9 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         }
 
         /// <summary>Adopt an aircraft launched on a field: it starts on the ground under a <see cref="GroundPilot"/>.</summary>
-        public bool AdoptGround(Aircraft a, FieldTraffic field, WingPose spawn, int hangarIndex, int startNode, WingPilot pilot = null)
+        public bool AdoptGround(Aircraft a, FieldTraffic field, WingPose spawn, int hangarIndex, int startNode, WingPilot pilot = null, Vec3[] taxiPrefix = null)
         {
-            WingMember m = AdoptMember(a, n => new GroundPilot(n.Id, field, n.Profile.Class, spawn, hangarIndex, startNode), pilot);
+            WingMember m = AdoptMember(a, n => new GroundPilot(n.Id, field, n.Profile.Class, spawn, hangarIndex, startNode, taxiPrefix), pilot);
             if (m == null) return false;
             if (m.Profile.Class == AirframeClass.FixedWing)
             {

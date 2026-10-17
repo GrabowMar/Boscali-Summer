@@ -19,6 +19,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static readonly int FlowTilesId = Shader.PropertyToID("_FlowTiles");
         private static readonly int RainId = Shader.PropertyToID("_Rain");
         private static readonly int SpeedId = Shader.PropertyToID("_SpeedN");
+        private static readonly int CondensationId = Shader.PropertyToID("_Condensation");
+        private static readonly int EvaporationId = Shader.PropertyToID("_Evaporation");
         private static readonly int DtId = Shader.PropertyToID("_Dt");
         private static readonly int SimTimeId = Shader.PropertyToID("_SimTime");
 
@@ -38,7 +40,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         internal static int KeyFor(int rendererId, int submesh) => rendererId * 31 + submesh;
 
         internal bool Update(Material updateMaterial, IReadOnlyList<CanopySurface> surfaces,
-            Vector2[] flowsTiles, float rain, float speedNorm, float dt)
+            Vector2[] flowsTiles, float rain, float speedNorm, float dt,
+            float condensation = 0f, float evaporation = 1f)
         {
             if (updateMaterial == null || surfaces == null) return false;
 
@@ -71,6 +74,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 updateMaterial.SetVector(FlowTilesId, new Vector4(flowsTiles[i].x, flowsTiles[i].y, 0f, 0f));
                 updateMaterial.SetFloat(RainId, Mathf.Clamp01(rain));
                 updateMaterial.SetFloat(SpeedId, Mathf.Clamp01(speedNorm));
+                updateMaterial.SetFloat(CondensationId, Mathf.Clamp01(condensation));
+                updateMaterial.SetFloat(EvaporationId, Mathf.Clamp(evaporation, 0.2f, 1.4f));
                 updateMaterial.SetFloat(DtId, step);
                 updateMaterial.SetFloat(SimTimeId, simTime);
                 Graphics.Blit(pane.Read, pane.Write, updateMaterial);

@@ -60,6 +60,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         private void OnBeginCamera(ScriptableRenderContext context, Camera rendering)
         {
+            // A resolved cover belongs only to the camera/frame that executes Record below.
+            Shader.SetGlobalFloat(CloudLowRes.CoverFrameId, 0f);
             if (rendering == null) return;
             if (volume != null) volume.forceRenderingOff = rendering != camera;
             if (rendering != camera) return;
@@ -102,6 +104,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         public void Dispose()
         {
+            Shader.SetGlobalFloat(CloudLowRes.CoverFrameId, 0f);
             if (hooked) RenderPipelineManager.beginCameraRendering -= OnBeginCamera;
             hooked = false;
             if (volume != null) volume.forceRenderingOff = false;

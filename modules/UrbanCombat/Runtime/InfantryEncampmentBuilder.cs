@@ -169,6 +169,31 @@ namespace BoscaliSummer.Garrisons
             return CreateNewSite(dropPos, owner, airbase, troopCount);
         }
 
+        /// <summary>
+        /// Paradrop: dig in at the touchdown point, or at the first workable ground near it.
+        /// The exact slot is often a roof, a slope or a treeline where no emplacement fits, so
+        /// (like a rappel camp) the search walks rings outward instead of giving up on the
+        /// one point the stick aimed at. Positions are local; each candidate is snapped to
+        /// the ground it would stand on before it is tried.
+        /// </summary>
+        public static bool DeployParadropEncampment(Vector3 position, FactionHQ owner, Airbase airbase, int troopCount)
+        {
+            if (!GameAccess.IsServer() || owner == null) return false;
+            if (DeployOrReinforce(position, owner, airbase, troopCount)) return true;
+            float[] radii = { 14f, 30f, 55f, 90f };
+            for (int r = 0; r < radii.Length; r++)
+                for (int k = 0; k < 8; k++)
+                {
+                    float a = k * (Mathf.PI * 0.25f) + r * 0.35f;
+                    Vector3 candidate = position + new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a)) * radii[r];
+                    if (!Physics.Raycast(candidate + Vector3.up * 30f, Vector3.down, out RaycastHit ground,
+                            120f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore) ||
+                        ground.point.y <= Datum.LocalSeaY + 1f || ground.normal.y < 0.8f) continue;
+                    if (DeployOrReinforce(ground.point, owner, airbase, troopCount)) return true;
+                }
+            return false;
+        }
+
         internal static int ActiveSiteCount => ActiveSites.Count;
 
         /// <summary>How many camps one stick establishes, per base-of-operations doctrine.</summary>

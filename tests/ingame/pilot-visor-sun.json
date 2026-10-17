@@ -1,0 +1,39 @@
+{
+  "name": "pilot-visor-sun",
+  "mods": ["boscalisummer"],
+  "timeout_s": 150,
+  "timescale": 1,
+  "_note": "Visor and sun-glare look check: a low afternoon sun swept across the view, captured with the HUD hidden by the sim (the visor is told to ignore it). Frames are for reading by eye; the checks only prove the layers draw. Needs the sun inside the sweep: if no frame shows the disc, change heading or time_of_day.",
+  "ops": [
+    {"op": "atmosphere", "time_of_day": 16.5, "conditions": 0.05, "cloud_height": 3000, "wind_speed": 2, "wind_heading": 90, "wind_turbulence": 0.05, "moon_phase": 14},
+    {"op": "seat", "id": "player", "aircraft": "FS-20 Vortex", "altitude": 4000, "speed": 200, "heading": 250, "view": "cockpit", "timeout": 30},
+    {"op": "fly", "id": "player", "program": [{"level": 320}]},
+    {"op": "wait", "seconds": 6},
+    {"op": "call", "method": "BoscaliSummer.Modules.Immersion.Runtime.ImmersionAutomation.Configure", "args": {"visorIgnoreHud": true, "visor": true}, "store": "visor_forced"},
+    {"op": "call", "method": "BoscaliSummer.Modules.Immersion.Runtime.ImmersionAutomation.Look", "args": {"pitch": -10, "yaw": 0, "seconds": 20}, "store": "look_0"},
+    {"op": "wait", "seconds": 2.5},
+    {"op": "call", "method": "BoscaliSummer.Modules.Immersion.Runtime.ImmersionAutomation.Readout", "args": {}, "store": "sun_a"},
+    {"op": "capture", "name": "sun-a", "hide_ui": false},
+    {"op": "call", "method": "BoscaliSummer.Modules.Immersion.Runtime.ImmersionAutomation.Look", "args": {"pitch": -10, "yaw": -30, "seconds": 20}, "store": "look_1"},
+    {"op": "wait", "seconds": 2.5},
+    {"op": "capture", "name": "sun-b", "hide_ui": false},
+    {"op": "call", "method": "BoscaliSummer.Modules.Immersion.Runtime.ImmersionAutomation.Look", "args": {"pitch": -10, "yaw": 30, "seconds": 20}, "store": "look_2"},
+    {"op": "wait", "seconds": 2.5},
+    {"op": "capture", "name": "sun-c", "hide_ui": false},
+    {"op": "call", "method": "BoscaliSummer.Modules.Immersion.Runtime.ImmersionAutomation.Look", "args": {"pitch": -25, "yaw": 0, "seconds": 20}, "store": "look_3"},
+    {"op": "wait", "seconds": 2.5},
+    {"op": "capture", "name": "sun-d", "hide_ui": false},
+    {"op": "call", "method": "BoscaliSummer.Modules.Immersion.Runtime.ImmersionAutomation.Look", "args": {"pitch": -25, "yaw": -60, "seconds": 20}, "store": "look_4"},
+    {"op": "wait", "seconds": 2.5},
+    {"op": "capture", "name": "sun-e", "hide_ui": false},
+    {"op": "call", "method": "BoscaliSummer.Modules.Immersion.Runtime.ImmersionAutomation.Look", "args": {"pitch": -25, "yaw": 60, "seconds": 20}, "store": "look_5"},
+    {"op": "wait", "seconds": 2.5},
+    {"op": "capture", "name": "sun-f", "hide_ui": false},
+    {"op": "call", "method": "BoscaliSummer.Modules.Immersion.Runtime.ImmersionAutomation.Readout", "args": {}, "store": "sun_end"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "result_above", "path": "sun_a.visorVisible", "min": 1}
+  ]
+}

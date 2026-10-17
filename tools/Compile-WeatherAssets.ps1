@@ -104,7 +104,9 @@ Set-Content -LiteralPath "$tempProject/Assets/Editor/BuildWeatherBundle.cs" -Val
 
 Write-Host "Running Unity batchmode AssetBundle compiler..."
 $arguments = @("-batchmode", "-projectPath", $tempProject, "-executeMethod", "BuildWeatherBundle.Run", "-logFile", "$tempProject/build.log")
-$process = Start-Process -FilePath $Unity -ArgumentList $arguments -WorkingDirectory $tempProject -WindowStyle Hidden -Wait -PassThru
+$process = Start-Process -FilePath $Unity -ArgumentList $arguments -WorkingDirectory $tempProject -WindowStyle Hidden -PassThru
+# Wait for the editor, not persistent child services such as Unity's licensing client.
+$process.WaitForExit()
 
 if ($process.ExitCode -ne 0 -or -not (Test-Path "$tempProject/build_result.txt") -or
     (Get-Content "$tempProject/build_result.txt" -Raw).Trim() -ne 'SUCCESS') {
