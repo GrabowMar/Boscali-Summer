@@ -13,6 +13,12 @@ namespace BoscaliSummer.Core.Contracts
 
         bool Say(ChatterSpeaker speaker, string key, string text, ChatterPriority priority = ChatterPriority.Status);
 
+        /// <summary>Shows a mission script's already paced dialogue in COMMS immediately. False when no readout can present it.</summary>
+        bool Scripted(in ChatterAired line);
+
+        /// <summary>Removes mission dialogue and its reading hold when the script ends; ordinary radio traffic stays.</summary>
+        void EndScripted();
+
         /// <summary>The one speaker of a ground or airborne station on a net ("COMMAND", "MAGIC"), the same object every call.</summary>
         ChatterSpeaker Station(ChatterNet net, string callsign);
 

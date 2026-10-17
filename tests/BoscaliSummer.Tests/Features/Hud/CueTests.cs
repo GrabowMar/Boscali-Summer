@@ -84,20 +84,20 @@ namespace BoscaliSummer.Tests.Features.Hud
 
         private static void Fitting()
         {
-            TestAssert.Eq(CueFit.BigChars, 32, "32 characters at 20");
-            TestAssert.Eq(CueFit.SmallChars, 40, "40 characters at 16");
-            string t32 = new string('A', 32), t33 = new string('A', 33), t40 = new string('B', 40);
-            TestAssert.That(CueFit.Fit(t32, out float s) == t32 && s == 20f, "32 characters stay at 20");
-            TestAssert.That(CueFit.Fit(t33, out s) == t33 && s == 16f, "33 drop to 16");
-            TestAssert.That(CueFit.Fit(t40, out s) == t40 && s == 16f, "40 stay at 16");
+            TestAssert.Eq(CueFit.BigChars, 40, "40 characters at 16");
+            TestAssert.Eq(CueFit.SmallChars, 46, "46 characters at 14");
+            string t40 = new string('A', 40), t41 = new string('A', 41), t46 = new string('B', 46);
+            TestAssert.That(CueFit.Fit(t40, out float s) == t40 && s == 16f, "40 characters stay at 16");
+            TestAssert.That(CueFit.Fit(t41, out s) == t41 && s == 14f, "41 drop to 14");
+            TestAssert.That(CueFit.Fit(t46, out s) == t46 && s == 14f, "46 stay at 14");
             string longLine = "REINFORCEMENTS ARE INBOUND FROM THE NORTHERN STAGING AREA";
             string cut = CueFit.Fit(longLine, out s);
-            TestAssert.Eq(cut, "REINFORCEMENTS ARE INBOUND FROM THE", "Longer than 40: whole words off the end (the next word would not fit)");
-            TestAssert.That(s == 16f && cut.Length <= 40 && !cut.Contains(".") && !cut.EndsWith(" "), "...at 16, no dots");
-            TestAssert.Eq(CueFit.Fit("ONE TWO THREE FOUR FIVE SIX SEVEN - EIGHT NINE", out s), "ONE TWO THREE FOUR FIVE SIX SEVEN", "A dash left at the end of a cut goes too");
-            TestAssert.Eq(CueFit.Fit(new string('X', 60), out s), new string('X', 40), "One word as long as the line is cut");
-            // A message that fits at 20 draws inside the stack's 420 units.
-            TestAssert.That(32 * CueFit.Advance * CueFit.BigSize <= CueFit.MaxWidth && 40 * CueFit.Advance * CueFit.SmallSize <= CueFit.MaxWidth, "Both limits are inside 420");
+            TestAssert.Eq(cut, "REINFORCEMENTS ARE INBOUND FROM THE NORTHERN", "Longer than 46: whole words off the end (the next word would not fit)");
+            TestAssert.That(s == 14f && cut.Length <= 46 && !cut.Contains(".") && !cut.EndsWith(" "), "...at 14, no dots");
+            TestAssert.Eq(CueFit.Fit("ONE TWO THREE FOUR FIVE SIX SEVEN EIGHT NINE - TEN ELEVEN", out s), "ONE TWO THREE FOUR FIVE SIX SEVEN EIGHT NINE", "A dash left at the end of a cut goes too");
+            TestAssert.Eq(CueFit.Fit(new string('X', 60), out s), new string('X', 46), "One word as long as the line is cut");
+            // The two fitting limits draw inside the stack's 420 units.
+            TestAssert.That(40 * CueFit.Advance * CueFit.BigSize <= CueFit.MaxWidth && 46 * CueFit.Advance * CueFit.SmallSize <= CueFit.MaxWidth, "Both limits are inside 420");
         }
 
         private static void Life()
@@ -228,7 +228,7 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(log.Add(CueSource.Action, "<b></b>", CueSeverity.Normal, 100f, 5f) == null && log.Count == 0, "A message with nothing in it is not kept");
             Cue first = log.Add(CueSource.Action, "Weapon safety lock <b>Disabled</b>", CueSeverity.Normal, 100f, 5f);
             TestAssert.Eq(first.Text, "WEAPON SAFETY LOCK DISABLED", "The words are capitals without tags");
-            TestAssert.That(first.Class == CueClass.Wpn && first.Severity == CueSeverity.Caution && first.Size == 20f && first.Life == 5f, "Class, severity, size and life are worked out");
+            TestAssert.That(first.Class == CueClass.Wpn && first.Severity == CueSeverity.Caution && first.Size == 16f && first.Life == 5f, "Class, severity, size and life are worked out");
             TestAssert.Eq(first.Serial, 1, "The first cue is number 1");
             log.Add(CueSource.Action, "Gear down", CueSeverity.Normal, 101f, 5f);
             log.Add(CueSource.Reserve, "FS-20 RESERVE GRANTED", CueSeverity.Normal, 102f, 5f);
@@ -341,9 +341,9 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(shown[0] == d, "Stagger: ... newest first");
             // The slide follows the arrivals: by the time a held-back cue appears, nothing is still sliding through its slot.
             var burst = new[] { c, b, a };
-            TestAssert.Near(CueLayout.Offset(burst, 1, 20.09f), 34f * CueTimeline.Slide(0.09f), "Stagger: the older cues slide while the newer ones are not yet drawn");
-            TestAssert.That(CueLayout.Offset(burst, 2, 20.09f) > 2f * 34f * 0.95f && CueLayout.Offset(burst, 1, 20.09f) > 34f * 0.95f, "Stagger: ... and are all but at rest when the second one appears");
-            TestAssert.Near(CueLayout.Offset(burst, 2, 20.18f), 68f, "Stagger: ... and at rest when the third one does");
+            TestAssert.Near(CueLayout.Offset(burst, 1, 20.09f), 40f * CueTimeline.Slide(0.09f), "Stagger: the older cues slide while the newer ones are not yet drawn");
+            TestAssert.That(CueLayout.Offset(burst, 2, 20.09f) > 2f * 40f * 0.95f && CueLayout.Offset(burst, 1, 20.09f) > 40f * 0.95f, "Stagger: ... and are all but at rest when the second one appears");
+            TestAssert.Near(CueLayout.Offset(burst, 2, 20.18f), 80f, "Stagger: ... and at rest when the third one does");
             int Sig(float now)
             {
                 int n = log.Select(now, BoardDeclutter.Full, 15, shown);
@@ -357,7 +357,7 @@ namespace BoscaliSummer.Tests.Features.Hud
         {
             TestAssert.Near(CueLayout.Top(1080f), 324f, "Top at 30 % of 1080");
             TestAssert.Near(CueLayout.Top(1200f), 360f, "...of 1200");
-            TestAssert.That(CueLayout.Left == 16f && CueLayout.Pitch == 34f, "16 in, 34 apart");
+            TestAssert.That(CueLayout.Left == 16f && CueLayout.Pitch == 40f, "16 in, 40 apart");
             TestAssert.Near(CueLayout.ShelfWidth(3), 80f, "A shelf for SYS: 12 in, the word, 4 clear, a short hairline");
             TestAssert.Near(CueLayout.ShelfWidth(5), 95f, "...for FUNDS");
             var shown = new Cue[3];
@@ -367,10 +367,10 @@ namespace BoscaliSummer.Tests.Features.Hud
             shown[2] = log.Add(CueSource.Action, "C", CueSeverity.Normal, 1f, 5f);
             TestAssert.Near(CueLayout.Offset(shown, 0, 10f), 0f, "The newest is in the first slot");
             TestAssert.Near(CueLayout.Offset(shown, 1, 10f), 0f, "An older cue has not moved at the instant a newer one comes");
-            TestAssert.Near(CueLayout.Offset(shown, 1, 10.06f), 34f * 0.875f, "...is 7/8 of a slot down half way through the slide");
-            TestAssert.Near(CueLayout.Offset(shown, 1, 10.12f), 34f, "...and a slot down after 0.12 s");
-            TestAssert.Near(CueLayout.Offset(shown, 2, 20f), 68f, "The third is two slots down once everything has settled");
-            TestAssert.Near(CueLayout.Offset(shown, 2, 10.06f), 34f + 34f * 0.875f, "...and slides from the second slot while only the newest slides");
+            TestAssert.Near(CueLayout.Offset(shown, 1, 10.06f), 40f * 0.875f, "...is 7/8 of a slot down half way through the slide");
+            TestAssert.Near(CueLayout.Offset(shown, 1, 10.12f), 40f, "...and a slot down after 0.12 s");
+            TestAssert.Near(CueLayout.Offset(shown, 2, 20f), 80f, "The third is two slots down once everything has settled");
+            TestAssert.Near(CueLayout.Offset(shown, 2, 10.06f), 40f + 40f * 0.875f, "...and slides from the second slot while only the newest slides");
         }
 
         private static void Tones()

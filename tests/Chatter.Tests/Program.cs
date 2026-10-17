@@ -117,6 +117,69 @@ B[*]: Night second.
     Check(!d.Raise(40f, "t.emg", a), "Off says nothing");
 }
 
+// --- mission dialogue shares COMMS without queue delay or an optional-chatter gate
+{
+    ChatterDirector d = Director(Pack);
+    var aired = new List<ChatterAired>();
+    d.Aired = aired.Add;
+    ChatterSpeaker a = Pilot("a", "veteran"), b = Pilot("b", "rookie");
+    Check(d.StartExchange(0f, new[] { a, b }), "an ambient exchange is waiting before the script");
+    d.Level = ChatterLevel.Off;
+    var story = new ChatterAired
+    {
+        Net = ChatterNet.Command, Speaker = "BROKER", SpeakerId = "scenario:broker", Role = "TRADEWIND AIR SERVICES",
+        Text = "You have the flight.", Seconds = 44f
+    };
+    Check(d.Scripted(1f, story), "mission dialogue airs with optional chatter off");
+    Check(!d.ExchangeRunning && d.Pending == 0, "mission dialogue cancels the ambient exchange");
+    Check(aired.Count == 1 && d.AiredCount == 1 && d.Log.Count == 1, "mission dialogue reaches the readout and radio history exactly once");
+    Check(aired[0].Scripted && aired[0].Event == "scenario" && aired[0].Time == 1f && aired[0].Role == story.Role,
+        "the readout receives the story clock and station identity");
+    Check(aired[0].Seconds == 44f && d.Busy(44.99f) && !d.Busy(45f), "the full slow-reading duration survives the normal radio hold ceiling");
+    d.Tick(1f);
+    Check(aired.Count == 1 && d.Busy(1f), "a paused mission clock cannot advance its scripted hold");
+    d.Level = ChatterLevel.Full;
+    Check(d.Raise(2f, "t.tac", b), "a tactical call can wait behind the script");
+    d.Tick(2f);
+    Check(aired.Count == 1 && d.Pending == 1, "ordinary tactical traffic cannot interrupt mission dialogue");
+    Check(d.Raise(3f, "t.emg", a), "a live emergency is accepted during the script");
+    d.Tick(3f);
+    Check(aired.Count == 2 && aired[1].Priority == ChatterPriority.Emergency && aired[1].Cut, "a live emergency still takes the radio");
+    Check(d.Scripted(3.1f, story) && aired.Count == 3 && !aired[2].Cut, "mission dialogue leaves an emergency voice already playing intact");
+    Check(d.Raise(3.2f, "t.emg", b, "second-emergency"), "a second emergency can wait while the first speaks");
+    d.Tick(3.2f);
+    Check(aired.Count == 3, "scripted dialogue preserves the active emergency's priority until its own airtime ends");
+    d.Tick(3f + aired[1].Seconds + 0.01f);
+    Check(aired.Count == 4 && aired[3].Event == "t.emg", "the next emergency can interrupt the remaining long story hold");
+    Check(d.Busy(47f), "short emergency transmissions cannot shorten the remaining story hold");
+    d.Reset(9);
+    Check(d.Log.Count == 0 && d.Pending == 0 && !d.Busy(0f), "scene reset releases the story and clears its history");
+    Check(d.Scripted(0f, story, present: false) && aired.Count == 4 && d.Log.Count == 1 && d.Busy(40f),
+        "a cutscene fallback keeps history and pacing without duplicating the COMMS readout");
+    story.Seconds = float.NaN;
+    Check(!d.Scripted(1f, story) && d.Log.Count == 1, "invalid story duration cannot leave an immortal readout");
+
+    d.Reset(10);
+    aired.Clear();
+    Check(d.Raise(0f, "t.emg", a), "an emergency starts before a short story line");
+    d.Tick(0f);
+    story.Seconds = 0.2f;
+    Check(d.Scripted(0.1f, story) && !aired[1].Cut && d.Busy(1f), "a short story line cannot shorten a longer emergency");
+    Check(d.Raise(0.4f, "t.tac", b), "tactical traffic queues after the short story line ends");
+    d.Tick(0.4f);
+    Check(aired.Count == 2 && d.Pending == 1, "the surviving emergency priority still holds tactical traffic");
+    d.EndScripted();
+    Check(d.Busy(1f) && !d.Busy(aired[0].Seconds + 0.01f), "ending a script releases only its own hold and preserves a real emergency");
+    d.Reset(11);
+    story.Seconds = 44f;
+    Check(d.Scripted(0f, story), "a fresh mission line starts before mission-end cleanup");
+    d.EndScripted();
+    Check(!d.Busy(0.1f) && d.Log.Count == 1, "mission end clears the scripted hold immediately while retaining radio history");
+    Check(d.Raise(0.2f, "t.status", a), "routine traffic is accepted after mission dialogue ends");
+    d.Tick(0.2f);
+    Check(d.Log.Count == 2, "mission dialogue cannot hold routine traffic after its script has ended");
+}
+
 // --- drawing lines
 {
     ChatterDirector d = Director(Pack);

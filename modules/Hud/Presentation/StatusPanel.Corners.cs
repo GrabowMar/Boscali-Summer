@@ -10,24 +10,17 @@ using static BoscaliSummer.Core.Contracts.ScopeTone;
 
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
-    // The two other screen corners in the board's look (LAYOUT.md 7; the option Corners): the kill feed at the top-left ("DL EVT LOG", StatusPanel.EventLog.cs: the mod's own event log drawn in place of the game's feed text, HUD holo
-    // pass D) and the minimised map at the bottom-left ("TAC MAP"). The feed's own text and its dark plate are hidden (NativeScreenCorners, through groups of ours) while the log and the board's shade stand in for them, and given
-    // back the same frame the log is not in charge (the chat input is open, the capture is not seeing the game's lines, the option is off); the map is untouched. The mod's own objects are three roots under the HUD canvas: the
-    // shade (the sun band and the cloud, first in the canvas so it lies behind every native mark; the feed's text is on the chat canvas, which draws above the HUD's), the furniture (the map's brackets and caption shelf on one surface,
-    // over the map) and the log (its own root: it follows the pilot's Opacity). They are placed from the native rectangles (world corners into canvas units) whenever those change, and at every 10 Hz present; the log is also
-    // drawn again between ticks whenever its signature moves (a row wiping in or fading). The shade and the map's furniture are not scaled and not dimmed by the pilot's options (no scale, no opacity), but everything sways with the board and follows the Shade and the declutter level (no furniture at Lean and Minimal). The minimised map's dressing is hidden whole while HudMapState.HoloActive is set (a map hologram has the corner), and its caption shelf stands inside the frame (HUD holo pass C); the NAV DATA block of the bottom-right corner has its own two roots and its own file (StatusPanel.Nav.cs), driven from CornersFrame, and so is the CUE stack at the left edge (StatusPanel.Cues.cs: the game's grey message boxes redrawn, its own two roots, also stood down with the Corners option).
+    // Native corner presentation: DL EVT LOG replaces the captured feed, TAC MAP dresses the minimised map.
+    // Feed text and plate are restored immediately when capture is unhealthy, chat opens or the presentation gate closes.
+    // One faint feathered shadow spans the occupied log, COMMS and status column. It shares their sway and follows Shade/Opacity;
+    // the sections add no shadows of their own. NAV DATA retains its separate bottom-right presentation.
     internal sealed partial class StatusPanel
     {
         private const int CornerQuads = 120;
 
         private readonly NativeScreenCorners screenCorners = new NativeScreenCorners();
         private RectTransform cornerShade, cornerFurniture, cornerSurface;
-        private Image feedBand;
-        private RawImage feedCloud;
-        private Texture2D feedTexture;
-        private byte[] feedBytes;
-        private BoardGeometry feedFor;
-        private Vector2 feedBandBase;
+        private Image leftShadow;
         private AvVector cornerVector;
         private ScopeText cornerText;
         private ScopeCanvas cornerCanvas;
@@ -68,7 +61,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             NavFrame(alive, tick);
             if (!(alive && Options.Corners && !cornersSuppressed && canvasRect != null)) { StandDownCorners(); return; }
-            CueFrame(tick);
             if (!screenCorners.Complete && findTries < 6 && Time.unscaledTime >= findAt)
             {
                 findAt = Time.unscaledTime + 2f;
@@ -91,6 +83,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 try { PaintCorners(feedUp, mapUp); }
                 catch (System.Exception e) { StandDownCorners(); BoscaliSummer.Core.Diagnostics.PatchGuard.Report("Hud.Corners", e); }
             }
+            CueFrame(tick);
+            PaintLeftShadow();
             // The game's plate and text are hidden only while our own log is up in the HUD: a hidden HUD canvas takes it with it and gives them back.
             bool hide = feedLive && logRoot != null && logRoot.gameObject.activeInHierarchy;
             screenCorners.HidePlate(hide);
@@ -115,10 +109,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (canvasRect == null) return false;
             cornerShade = CornerRoot("BoscaliCornerShade");
             cornerShade.SetAsFirstSibling();
-            feedBand = ShadeChild<Image>(cornerShade, "FeedBand");
-            feedBand.sprite = HudSprites.SunBand(0f);
-            feedBand.type = Image.Type.Sliced;
-            feedCloud = ShadeChild<RawImage>(cornerShade, "FeedCloud");
+            leftShadow = ShadeChild<Image>(cornerShade, "LeftStackShadow");
+            HudSprites.Slice(leftShadow, HudSprites.Feather);
             cornerFurniture = CornerRoot("BoscaliCornerFurniture");
             cornerSurface = Pinned(cornerFurniture, "Corners", false);
             cornerVector = AvVector.Create(cornerSurface, "Strokes", CornerQuads);
@@ -147,11 +139,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             if (navFurniture != null) navShade.offsetMin = navShade.offsetMax = navFurniture.offsetMin = navFurniture.offsetMax = swayShift;
             if (logRoot != null) logRoot.offsetMin = logRoot.offsetMax = swayShift;
-            if (cueRoot != null) cueShade.offsetMin = cueShade.offsetMax = cueRoot.offsetMin = cueRoot.offsetMax = swayShift;
+            if (cueRoot != null) cueRoot.offsetMin = cueRoot.offsetMax = swayShift;
             if (cornerFurniture == null) return;
             cornerShade.offsetMin = cornerShade.offsetMax = swayShift;
             cornerFurniture.offsetMin = cornerFurniture.offsetMax = swayShift;
-            feedBand.rectTransform.anchoredPosition = feedBandBase - new Vector2(0f, swayShift.y);
         }
 
         /// <summary>A native rectangle in canvas units from the canvas's top-left corner (x right, y down), through its world corners.</summary>
@@ -176,6 +167,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!(feedUp || mapUp))
             {
                 feedLive = false;
+                BoscaliSummer.Core.Ui.LeftHudStack.LogBottom = 0f;
                 if (cornerShade != null) { Show(cornerShade, false); Show(cornerFurniture, false); }
                 if (logRoot != null) Show(logRoot, false);
                 return;
@@ -189,11 +181,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             // The feed corner: the log, when it is in charge of it (else the game's feed is as the game made it and nothing of the log is up).
             feedLive = feed && LogInCharge(true) && PaintEventLog(l * k, t * k);
+            if (!feedLive) BoscaliSummer.Core.Ui.LeftHudStack.LogBottom = 0f;
             if (!feedLive && logRoot != null) Show(logRoot, false);
-            float strength = Mathf.Clamp01(Options.Shade);
-            bool shade = feedLive && logPlan.Present && strength > 0.001f;
-            Show(cornerShade, shade);
-            if (shade) PaintFeedShade(strength * logLit, logPlan.Left, logPlan.Top, logPlan.Width, logPlan.Height);
 
             Show(cornerFurniture, map);
             PlaceOnGrid(cornerSurface, 0f, 0f, Whole(canvasW), Whole(canvasH));
@@ -205,33 +194,38 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         /// <summary>
-        /// The feed's shade (LAYOUT.md 2): the band, 760 x 190 from the top-left of the screen with its right end ramping out over the last 280 (the left ramp is off the screen), and ONE cloud behind the log's block (the mock's
-        /// 0, 8, 480 x 98 for the four lines of a box 475 x 90): the rectangle from the block's top + 8, as wide and 8 taller than the block, grown to 32 x 16 units so a new row does not bake the field again every time.
-        /// <paramref name="strength"/> is the pilot's Shade times how lit the log is (its brightest row's fade), so the shade goes out with the last row.
+        /// One faint feathered shadow behind the occupied left column, with no overlapping per-section shadows.
         /// </summary>
-        private void PaintFeedShade(float strength, float x, float y, float w, float h)
+        private void PaintLeftShadow()
         {
-            PlaceBoxAt(feedBand.rectTransform, new BoardRect(-ScopeLayout.BandRamp, 0f, 760f + ScopeLayout.BandRamp, ScopeLayout.BandHeight), baseUnit);
-            feedBandBase = feedBand.rectTransform.anchoredPosition;
-            feedBand.rectTransform.anchoredPosition = feedBandBase - new Vector2(0f, swayShift.y);
-            float ramp = HudSprites.BandRamp / (ScopeLayout.BandRamp * baseUnit);
-            if (feedBand.pixelsPerUnitMultiplier != ramp) feedBand.pixelsPerUnitMultiplier = ramp;
-            var band = new Color(ShadeColor.r, ShadeColor.g, ShadeColor.b, ScopeLayout.BandAlpha * strength);
-            if (feedBand.color != band) feedBand.color = band;
-            Show(feedBand, true);
-
-            var geo = new BoardGeometry { Hero = new BoardRect(x, y + 8f, Mathf.Ceil(w / 32f) * 32f, Mathf.Ceil((h + 8f) / 16f) * 16f) };
-            BoardRect area = ShadeField.Area(geo);
-            if (feedTexture == null || !ShadeField.SameBlocks(feedFor, geo))
+            float top = float.PositiveInfinity, bottom = 0f, lit = 0f;
+            if (feedLive && logPlan.Present)
             {
-                BakeField(geo, area, ref feedTexture, feedCloud, ref feedBytes);
-                feedFor = geo;
+                top = logPlan.Top; bottom = logPlan.Top + logPlan.Height; lit = logLit;
             }
-            if (feedCloud.texture != feedTexture) feedCloud.texture = feedTexture;      // a rebuilt tree shows the texture that outlived the old one
-            PlaceBoxAt(feedCloud.rectTransform, area, baseUnit);
-            var cloud = new Color(ShadeColor.r, ShadeColor.g, ShadeColor.b, ScopeLayout.CloudAlpha * strength);
-            if (feedCloud.color != cloud) feedCloud.color = cloud;
-            Show(feedCloud, true);
+            if (LeftHudStack.CommsBottom > 0f)
+            {
+                top = Mathf.Min(top, LeftHudStack.CommsTop);
+                bottom = Mathf.Max(bottom, LeftHudStack.CommsBottom); lit = 1f;
+            }
+            if (cueCount > 0 && cueLit > 0f)
+            {
+                top = Mathf.Min(top, LeftHudStack.CueTop(canvasRect.rect.height / baseUnit));
+                bottom = Mathf.Max(bottom, cueBottom); lit = Mathf.Max(lit, cueLit);
+            }
+            float alpha = LeftHudStack.ShadowAlpha * Mathf.Clamp01(Options.Shade) * Mathf.Clamp01(Options.Opacity) * lit;
+            if (bottom <= 0f || alpha <= 0.001f)
+            {
+                if (cornerShade != null) Show(cornerShade, false);
+                return;
+            }
+            if (!EnsureCornerTree()) return;
+            const float feather = 12f;
+            PlaceBoxAt(leftShadow.rectTransform, new BoardRect(LeftHudStack.Left - feather, top - feather,
+                LeftHudStack.Width + feather * 2f, bottom - top + feather * 2f), baseUnit);
+            leftShadow.color = new Color(ShadeColor.r, ShadeColor.g, ShadeColor.b, alpha);
+            Show(leftShadow, true);
+            Show(cornerShade, true);
         }
 
         /// <summary>TAC MAP: four DIM brackets round the plate, the caption shelf inside their lower left, and a small north tick with its "N" where the turning map's north meets the frame.</summary>
@@ -252,13 +246,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             screenCorners.Dispose();
             if (cornerShade != null) UnityEngine.Object.Destroy(cornerShade.gameObject);
             if (cornerFurniture != null) UnityEngine.Object.Destroy(cornerFurniture.gameObject);
-            if (feedTexture != null) UnityEngine.Object.Destroy(feedTexture);
             cornerShade = cornerFurniture = cornerSurface = null;
-            feedBand = null;
-            feedCloud = null;
-            feedTexture = null;
-            feedBytes = null;
-            feedFor = default;
+            leftShadow = null;
             cornerVector = null;
             cornerText = null;
             cornerCanvas = null;

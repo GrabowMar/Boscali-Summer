@@ -59,6 +59,19 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         public bool Say(ChatterSpeaker speaker, string key, string text, ChatterPriority priority = ChatterPriority.Status) =>
             director.Say(Time.time, speaker, key, text, priority);
 
+        public bool Scripted(in ChatterAired line)
+        {
+            if (!isActiveAndEnabled || Application.isBatchMode) return false;
+            if (strip == null) strip = new ChatterStrip(transform);
+            return director.Scripted(Time.time, line);
+        }
+
+        public void EndScripted()
+        {
+            director.EndScripted();
+            strip?.ClearScripted();
+        }
+
         public ChatterSpeaker Station(ChatterNet net, string callsign)
         {
             callsign = ChatterLibrary.Clean(callsign);
@@ -85,6 +98,8 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             strip?.Clear();
             nextWorld = 0f;
         }
+
+        private void OnDisable() => strip?.Clear();
 
         private void OnDestroy()
         {

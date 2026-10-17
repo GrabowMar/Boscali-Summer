@@ -154,11 +154,11 @@ namespace BoscaliSummer.Modules.Hud.Domain
     /// <summary>Where the stack goes, pure (design units, y down from the top-left of the screen).</summary>
     internal static class CueLayout
     {
-        /// <summary>The stack's left edge, 16 in; its top at 30 % of the screen's height; 34 between cues.</summary>
-        public const float Left = 16f, TopFraction = 0.30f, Pitch = 34f;
+        /// <summary>The stack's left edge, 16 in; its minimum top at 30 % of the screen's height; 40 between cues.</summary>
+        public const float Left = 16f, TopFraction = 0.30f, Pitch = 40f;
         /// <summary>The words start this far in from the left edge (the shelf's caption inset), the bracket halves hug the words this far outside them, an arm is 5 long.</summary>
         public const float TextInset = 12f, HugGap = 8f, Arm = 5f;
-        /// <summary>Rows inside a cue's slot: the shelf's line, the message's middle, the underline, the brackets' top and bottom (with the shelf; the bare cue of Lean and Minimal sits <see cref="BareLift"/> higher). The next slot's shelf (and its stub) is 34 on.</summary>
+        /// <summary>Rows inside a cue's slot: the shelf's line, the message's middle, the underline, the brackets' top and bottom (with the shelf; the bare cue of Lean and Minimal sits <see cref="BareLift"/> higher). The next slot's shelf is 40 on.</summary>
         public const float ShelfRow = 4f, MessageRow = 21f, UnderlineRow = 31f, BracketTop = 12f, BracketBottom = 31f, BareLift = 8f;
 
         public static float Top(float designHeight) => (float)Math.Round(designHeight * TopFraction);

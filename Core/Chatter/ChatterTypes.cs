@@ -46,12 +46,16 @@ namespace BoscaliSummer.Core.Chatter
         public ChatterNet Net;
         public ChatterPriority Priority;
         public string Speaker, SpeakerId, Event, LineId, Text;
+        /// <summary>Optional station or organization named by a mission script.</summary>
+        public string Role;
         /// <summary>The speaker's persona and character when the line aired (either may be null): a recorded voice is chosen by them.</summary>
         public string Persona, Character;
         /// <summary>How long the channel is held for it.</summary>
         public float Seconds;
         /// <summary>It took the channel from a line that was still on air.</summary>
         public bool Cut;
+        /// <summary>Mission dialogue: its readout follows the paused mission clock and its explicit duration.</summary>
+        public bool Scripted;
     }
 
     /// <summary>The lines that went on air, oldest first: a fixed ring that overwrites the oldest when full.</summary>

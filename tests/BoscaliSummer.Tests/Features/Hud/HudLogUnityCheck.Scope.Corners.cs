@@ -257,13 +257,13 @@ public static partial class HudLogUnityCheck
         float u = rig.U, s = rig.S, h = rig.Size.y;
         List<Rect> quads = CornerQuads(rig);
         Dictionary<string, Rect> words = CornerWords(rig);
-        // DL EVT LOG (its own surface: EventLog check): the caption is on the log's shelf, 6 under the block's top, which is 12 under the box's top (y 18, the board's shelves'), 12 in from the block's left edge, which is 4 in from the box's.
+        // DL EVT LOG (its own surface): the caption is on the log's shelf, 6 under its top, 12 in from the column's shared 16-unit inset.
         Dictionary<string, Rect> logWords = LogWords(rig);
         Check(logWords.ContainsKey("DL EVT LOG") == feed, "DL EVT LOG: the caption is on the shelf (" + feed + "): " + res);
         if (feed)
         {
             Rect w = logWords["DL EVT LOG"];
-            Check(Mathf.Abs(w.center.y - 18f * u) <= 4f && Mathf.Abs(w.xMin - 16f * u) <= 6f * u, "DL EVT LOG: the caption sits on the shelf's line at x 16: " + w + " " + res);
+            Check(Mathf.Abs(w.center.y - 18f * u) <= 4f && Mathf.Abs(w.xMin - 28f * u) <= 6f * u, "DL EVT LOG: the caption sits on the shared shelf's line at x 28: " + w + " " + res);
         }
         // TAC MAP: the plate is x 0..320 by 760..1080 (native units); brackets 4 in at left and right, 6 under the top, 12 over the bottom, arm 18 (design units at 1080p: native units carried by k); the caption shelf INSIDE the frame at its
         // lower left: its line 14 over the bottom brackets' line, from 6 in from the left brackets (where a screen-edge marker cannot sit on it).
@@ -482,7 +482,7 @@ public static partial class HudLogUnityCheck
         var shade = (RectTransform)Field(rig.Status, "cornerShade");
         var furniture = (RectTransform)Field(rig.Status, "cornerFurniture");
         var band = ((Image)Field(rig.Status, "shadeBand")).rectTransform;
-        var feedBand = ((Image)Field(rig.Status, "feedBand")).rectTransform;
+        var feedBand = ((Image)Field(rig.Status, "leftShadow")).rectTransform;
         Vector2 at = root.anchoredPosition;
         float bandY = band.position.y, feedBandY = feedBand.position.y;
         Call(rig.Status, "ApplySway", 2.4f / rig.U, -1.2f / rig.U);      // 2.4 and -1.2 pixels of units: rounds to 2 and -1
@@ -491,7 +491,7 @@ public static partial class HudLogUnityCheck
         Check(shade.offsetMin == new Vector2(2f, -1f) && furniture.offsetMax == new Vector2(2f, -1f), "sway: the corners moved with it: " + shade.offsetMin + " " + furniture.offsetMax);
         var logRoot = (RectTransform)Field(rig.Status, "logRoot");
         Check(logRoot.offsetMin == new Vector2(2f, -1f) && logRoot.offsetMax == new Vector2(2f, -1f), "sway: ...and the event log: " + logRoot.offsetMin);
-        Check(Mathf.Abs(band.position.y - bandY) < 0.01f && Mathf.Abs(feedBand.position.y - feedBandY) < 0.01f, "sway: both sun bands stay hung from the top of the screen");
+        Check(Mathf.Abs(band.position.y - bandY) < 0.01f && Mathf.Abs(feedBand.position.y - feedBandY + 1f) < 0.01f, "sway: the board sun band stays fixed and the shared left shadow follows the ink");
         Canvas.ForceUpdateCanvases();
         CornerPlaces(rig, true, true);      // the furniture surface moved as a whole: its quads are where they were in it
         CornerShot(rig, "sway");

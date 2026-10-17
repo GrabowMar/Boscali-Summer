@@ -52,6 +52,7 @@ namespace BoscaliSummer.Core.Chatter
         private Random rng = new Random(1);
 
         private float busyUntil = float.NegativeInfinity;
+        private float scriptedUntil = float.NegativeInfinity;
         private ChatterPriority onAir;
         private ChatterExchangeDef exchange;
         private ChatterSpeaker[] cast;
@@ -68,7 +69,7 @@ namespace BoscaliSummer.Core.Chatter
         /// <summary>Events that were raised but that no pack has (for one warning each).</summary>
         public readonly HashSet<string> Unknown = new HashSet<string>(StringComparer.Ordinal);
 
-        public bool Busy(float now) => now < busyUntil;
+        public bool Busy(float now) => now < System.Math.Max(busyUntil, scriptedUntil);
 
         /// <summary>A new mission: nothing waiting, nothing remembered. The packs stay.</summary>
         public void Reset(int seed)
@@ -81,6 +82,8 @@ namespace BoscaliSummer.Core.Chatter
             Conditions.Clear();
             rng = new Random(seed);
             busyUntil = float.NegativeInfinity;
+            scriptedUntil = float.NegativeInfinity;
+            onAir = default;
             LastUrgent = float.NegativeInfinity;
             exchange = null;
             cast = null;
@@ -114,6 +117,41 @@ namespace BoscaliSummer.Core.Chatter
             if (Level == ChatterLevel.Essential && priority == ChatterPriority.Ambient) return false;
             if (Repeat(now, key)) return false;
             return Enqueue(now, new Entry { Speaker = speaker, Priority = priority, Key = key, Event = "say", Text = ChatterLibrary.Clean(text), Born = now });
+        }
+
+        /// <summary>
+        /// Mission dialogue is already paced by its script: air it now, even with optional radio chatter off, and hold its full reading duration.
+        /// Emergency calls may still interrupt it. The script owns repeats and supplies the next line.
+        /// </summary>
+        public bool Scripted(float now, in ChatterAired line, bool present = true)
+        {
+            if (string.IsNullOrWhiteSpace(line.Text) || !(line.Seconds > 0f) || float.IsInfinity(line.Seconds)) return false;
+            ChatterAired aired = line;
+            aired.Time = now;
+            aired.Priority = ChatterPriority.Tactical;
+            aired.Event = "scenario";
+            aired.Scripted = true;
+            bool emergency = now < busyUntil && onAir == ChatterPriority.Emergency;
+            aired.Cut = Busy(now) && !emergency;
+            CancelExchange();
+            scriptedUntil = now + aired.Seconds;
+            if (!emergency)
+            {
+                busyUntil = scriptedUntil;
+                onAir = aired.Priority;
+            }
+            LastUrgent = now;
+            AiredCount++;
+            Log.Push(aired);
+            if (present) Aired?.Invoke(aired);
+            return true;
+        }
+
+        /// <summary>A script ended without a scene load: release its reading hold without cutting a real transmission.</summary>
+        public void EndScripted()
+        {
+            if (onAir == ChatterPriority.Tactical && busyUntil == scriptedUntil) busyUntil = float.NegativeInfinity;
+            scriptedUntil = float.NegativeInfinity;
         }
 
         private bool Repeat(float now, string key)
@@ -192,9 +230,10 @@ namespace BoscaliSummer.Core.Chatter
                 for (int i = 1; i < pending.Count; i++)
                     if (pending[i].Priority > pending[best].Priority || pending[i].Priority == pending[best].Priority && pending[i].Born < pending[best].Born) best = i;
                 Entry e = pending[best];
-                bool busy = now < busyUntil;
-                if (busy && !(e.Priority >= ChatterPriority.Tactical && e.Priority > onAir)) return;
-                if (!busy && now < busyUntil + GapSeconds && e.Priority < ChatterPriority.Emergency) return;
+                bool busy = Busy(now);
+                ChatterPriority priority = now < busyUntil ? onAir : ChatterPriority.Tactical;
+                if (busy && !(e.Priority >= ChatterPriority.Tactical && e.Priority > priority)) return;
+                if (!busy && now < System.Math.Max(busyUntil, scriptedUntil) + GapSeconds && e.Priority < ChatterPriority.Emergency) return;
                 if (alive != null && !alive(e.Speaker)) { Drop(best); continue; }
                 pending.RemoveAt(best);
                 Air(now, e, busy);

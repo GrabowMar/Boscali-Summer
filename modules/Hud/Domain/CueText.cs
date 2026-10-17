@@ -115,12 +115,12 @@ namespace BoscaliSummer.Modules.Hud.Domain
     }
 
     /// <summary>
-    /// How a cue's words fit the stack, pure. The stack is 420 design units wide at most; the mono face advances 0.65 em a character, so 20 units holds 32 characters and 16 holds 40. A message too long for 20 drops to 16; one too
-    /// long for 16 loses whole words from its end (never dots, never half a word unless it is one word). A message that is cut ends on a word, not on a dash or a comma.
+    /// How a cue's words fit the stack, pure. The stack is 420 design units wide at most; the mono face advances 0.65 em a character, so 16 units holds 40 characters and 14 holds 46. A message too long for 16 drops to 14; one too
+    /// long for 14 loses whole words from its end (never dots, never half a word unless it is one word). A message that is cut ends on a word, not on a dash or a comma.
     /// </summary>
     internal static class CueFit
     {
-        public const float MaxWidth = 420f, BigSize = 20f, SmallSize = 16f, Advance = 0.65f;
+        public const float MaxWidth = 420f, BigSize = 16f, SmallSize = 14f, Advance = 0.65f;
         public static readonly int BigChars = (int)(MaxWidth / (Advance * BigSize)), SmallChars = (int)(MaxWidth / (Advance * SmallSize));
 
         public static string Fit(string plain, out float size)
