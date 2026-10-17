@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.5 — update
 
 - **Near-future helmet display**: the cockpit visor is a curved HMD glass with an electrochromic sun
   tint, breath fog, a faint coating that shifts hue toward the rim, and hairline scratches drawn at
