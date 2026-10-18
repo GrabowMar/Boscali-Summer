@@ -61,6 +61,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             chips = null;
             if (viewOpen) AvInput.Deselect();
             viewOpen = false;
+            if (comms != null) comms.PanelOpen = false;
             nextRefresh = 0f;
             ResetMap();
             ResetLog();
@@ -88,6 +89,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
         private void SetViewOpen(bool open)
         {
+            if (comms != null) comms.PanelOpen = open;
             if (viewOpen == open) return;
             viewOpen = open;
             // A text field that loses its screen must hand the keyboard back to the flight

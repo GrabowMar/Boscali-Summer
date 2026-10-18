@@ -37,7 +37,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// <summary>The dropped range mark: a map close keeps it, a scene reset forgets it.</summary>
         private static GlobalPosition? mark;
         private static RectTransform markGlyph;
-        private static RectTransform lzGlyph;
         private static bool boxPress;
         private static bool boxDragged;
         private static Vector2 boxStart;
@@ -139,7 +138,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 return;
             }
             DrawMark(map);
-            DrawLandingZone(map);
             // The input module may hand the icon its click on the release frame or the one after, so a
             // bare-map release waits out both before it is allowed to clear.
             if (clearFrame >= 0 && Time.frameCount > clearFrame + 1)
@@ -483,41 +481,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             markGlyph.localPosition = new Vector3(local.x, local.y, 0f);
         }
 
-        private static void DrawLandingZone(DynamicMap map)
-        {
-            RectTransform viewport = map.mapBackground.rectTransform;
-            bool has = TryZone(out GlobalPosition point);
-            RectTransform sheet = has ? MfdTerrainRelief.MapImageRect(map.mapImage) : null;
-            Vector3 local = default;
-            bool shown = sheet != null &&
-                MfdTerrainRelief.TryProject(point.x, point.z, sheet.rect, out Vector2 at) &&
-                viewport.rect.Contains(local = viewport.InverseTransformPoint(sheet.TransformPoint(at)));
-            if (!shown)
-            {
-                if (lzGlyph != null) lzGlyph.gameObject.SetActive(false);
-                return;
-            }
-            if (lzGlyph == null || lzGlyph.parent != viewport)
-            {
-                if (lzGlyph != null) Object.Destroy(lzGlyph.gameObject);
-                Color tone = AvStyleHost.FuiColor("friendly", AvTheme.Friendly);
-                TMP_Text glyph = AvIcons.Make(viewport, AvIcon.Parachute, 22f, tone);
-                glyph.name = "NOAvionics.LandingZone";
-                lzGlyph = glyph.rectTransform;
-                lzGlyph.sizeDelta = new Vector2(26f, 26f);
-                TMP_Text label = AvText.Make(lzGlyph, "Label", AvTextRole.Micro, "LZ",
-                    TextAlignmentOptions.Center);
-                label.color = tone;
-                label.raycastTarget = false;
-                label.rectTransform.anchorMin = label.rectTransform.anchorMax =
-                    label.rectTransform.pivot = new Vector2(0.5f, 0.5f);
-                label.rectTransform.sizeDelta = new Vector2(30f, 12f);
-                label.rectTransform.anchoredPosition = new Vector2(0f, -15f);
-            }
-            lzGlyph.gameObject.SetActive(true);
-            lzGlyph.localPosition = new Vector3(local.x, local.y, 0f);
-        }
-
         private static void Focus(GlobalPosition ground, bool zoom)
         {
             ReliefNavigator.Focus(ground, zoom);
@@ -840,8 +803,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             HideMenu();
             if (markGlyph != null) Object.Destroy(markGlyph.gameObject);
             markGlyph = null;
-            if (lzGlyph != null) Object.Destroy(lzGlyph.gameObject);
-            lzGlyph = null;
             rows.Clear();
             wingRows.Clear();
             rightPress = false;

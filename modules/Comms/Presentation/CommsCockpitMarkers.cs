@@ -107,6 +107,8 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 CommsItem item = items[i];
                 if (item.Kind != CommsItemKind.Ping || item.Expires <= now || state.IsMuted(item.Author) ||
                     !CommsCatalog.ValidPing(item.Style)) continue;
+                // Your own call rides on your own aircraft: a marker there would only point at you.
+                if (item.IsCall && item.Author == manager.LocalId) continue;
                 if (float.IsNaN(item.Height)) item.Height = GroundHeight(item.X, item.Z);
                 pings.Add(item);
             }

@@ -59,15 +59,19 @@ namespace BoscaliSummer.Modules.Comms.Runtime
         private const float SilentHostSeconds = 8f;
         private const float HighlightSeconds = 3.5f;
         private const float SoundGapSeconds = 0.35f;
+        private const float FollowSeconds = 0.1f;
 
         private CommsSettings settings;
         private CommsNet net;
         private ManualLogSource logger;
 
+        // The hold key counts only while COM is up (UpdateInput clears it otherwise), so Shift-drag boxes elsewhere.
         bool IMapBoxInput.BlocksBoxSelection => CommsInput.Typing() ||
             CommsInput.DrawToolArmed || CommsInput.GestureActive ||
-            (settings != null && settings.DrawHoldKey.Value != KeyCode.None &&
-             Input.GetKey(settings.DrawHoldKey.Value));
+            (CommsInput.DrawHoldKey != KeyCode.None && Input.GetKey(CommsInput.DrawHoldKey));
+
+        /// <summary>Set by the COM panel: the screen is up over the big map. Map marks are made only then.</summary>
+        public bool PanelOpen;
 
         private readonly CommsAuthority authority = new CommsAuthority();
         private readonly CommsClientState client = new CommsClientState();
@@ -103,6 +107,7 @@ namespace BoscaliSummer.Modules.Comms.Runtime
         private float heardAt = float.NegativeInfinity;
         private bool wasEnabled;
         private float nextSound;
+        private float nextFollow;
 
         public CommsClientState State => client;
         public ulong LocalId => client.LocalId;
@@ -203,8 +208,30 @@ namespace BoscaliSummer.Modules.Comms.Runtime
             client.Tick(now);
 
             if (Application.isBatchMode) return;
+            FollowCallers(now);
             Announce(now);
             UpdateInput(now);
+        }
+
+        /// <summary>
+        /// A brevity call's ping rides on its caller: every peer moves its own display copy onto the
+        /// caller's aircraft, so SPIKE marks where they are now, not where they keyed the radio. A
+        /// caller who flies nothing any more leaves it where it last was.
+        /// </summary>
+        private void FollowCallers(float now)
+        {
+            if (now < nextFollow) return;
+            nextFollow = now + FollowSeconds;
+            IReadOnlyList<CommsItem> items = client.Board.Items;
+            for (int i = 0; i < items.Count; i++)
+            {
+                CommsItem item = items[i];
+                if (!item.IsCall || !CommsIdentity.TryAircraft(item.Author, out Aircraft aircraft)) continue;
+                GlobalPosition at = aircraft.transform.position.ToGlobalPosition();
+                // A fresh array: on the host this copy shares its points with the authority's record.
+                item.Points = StrokeCodec.Point(at.x, at.z);
+                item.Height = (float)at.y;
+            }
         }
 
         // ---- Requests --------------------------------------------------------------------------
@@ -415,7 +442,8 @@ namespace BoscaliSummer.Modules.Comms.Runtime
         private void UpdateInput(float now)
         {
             DynamicMap map = SceneSingleton<DynamicMap>.i;
-            bool open = map != null && map.mapImage != null && DynamicMap.mapMaximized;
+            // Clicks on the map while another screen is up belong to that screen, not to a COM tool.
+            bool open = map != null && map.mapImage != null && DynamicMap.mapMaximized && PanelOpen;
             CommsInput.DrawHoldKey = open ? settings.DrawHoldKey.Value : KeyCode.None;
             if (!open)
             {

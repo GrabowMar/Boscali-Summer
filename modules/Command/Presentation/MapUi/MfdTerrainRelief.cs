@@ -1296,8 +1296,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     ? Mathf.Max(symbolRect.rect.width, symbolRect.rect.height) : 15f;
                 float size = pixels * Mathf.Max(Mathf.Abs(symbol.lossyScale.x),
                     Mathf.Abs(symbol.lossyScale.y));
-                float cap = icon is AirbaseMapIcon ? 13f : selected ? 17f : 11f;
-                if (size > cap && size > .01f) symbol.localScale *= cap / size;
+                // An airbase wears the game's own round base icon at one legible size, grown or shrunk to it.
+                bool airfield = icon is AirbaseMapIcon;
+                float cap = airfield ? 22f : selected ? 17f : 11f;
+                if ((size > cap || airfield) && size > .01f) symbol.localScale *= cap / size;
             }
             if (icon is UnitMapIcon unitIcon && headings.TryGetValue(unitIcon, out HeadingMark mark))
             {
@@ -1329,8 +1331,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     typeof(CanvasRenderer), typeof(Image), typeof(AirbaseHitTarget));
                 go.transform.SetParent(icon.iconImage.transform.parent, false);
                 go.transform.SetAsLastSibling();
+                // Only a click target: the base reads as the game's own icon, not a second frame over it.
                 Image image = go.GetComponent<Image>();
-                image.sprite = MapSymbolAtlas.AirbaseMark;
+                image.color = Color.clear;
                 image.raycastTarget = true;
                 go.GetComponent<AirbaseHitTarget>().Icon = icon;
                 mark = new AirbaseMark { Image = image };
@@ -1347,9 +1350,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             float side = 34f / scale;
             if (!Mathf.Approximately(marker.sizeDelta.x, side))
                 marker.sizeDelta = Vector2.one * side;
-            Color tone = icon.iconImage.color;
-            tone.a = Mathf.Min(tone.a, .9f);
-            if (mark.Image.color != tone) mark.Image.color = tone;
         }
 
         internal static void ProjectMarker(Transform marker, float mapDisplayFactor)

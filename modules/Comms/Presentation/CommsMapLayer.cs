@@ -52,6 +52,8 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         private float nextTags;
         private bool lastProjectionActive;
         private int lastProjectionRevision;
+        private bool lastZoned;
+        private float lastZoneX, lastZoneZ;
 
         public void Configure(CommsSettings config, CommsManager owner, ManualLogSource log)
         {
@@ -75,9 +77,23 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             nextTags = 0f;
             lastProjectionActive = false;
             lastProjectionRevision = 0;
+            lastZoned = false;
         }
 
         private void OnDestroy() => ResetForScene();
+
+        /// <summary>
+        /// The local pilot's landing zone, drawn with the comms ink so it sits on the map exactly like a ping.
+        /// Urban Combat owns the zone; this reads it through the Core contract and draws nothing without it.
+        /// </summary>
+        internal static bool TryLandingZone(out float x, out float z)
+        {
+            x = z = 0f;
+            if (!ModuleServices.TryGet(out ILandingZone zone) || !zone.TryGetLocal(out GlobalPosition at)) return false;
+            x = at.x;
+            z = at.z;
+            return true;
+        }
 
         private void Update()
         {
@@ -104,6 +120,15 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             {
                 lastProjectionActive = projected;
                 lastProjectionRevision = projectionRevision;
+                zoomed = true;
+            }
+
+            bool zoned = TryLandingZone(out float zoneX, out float zoneZ);
+            if (zoned != lastZoned || zoneX != lastZoneX || zoneZ != lastZoneZ)
+            {
+                lastZoned = zoned;
+                lastZoneX = zoneX;
+                lastZoneZ = zoneZ;
                 zoomed = true;
             }
 
@@ -179,6 +204,10 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             float now = Time.unscaledTime;
             ulong self = manager.LocalId;
             int side = manager.LocalFaction;
+
+            if (TryLandingZone(out float zoneX, out float zoneZ))
+                Tag(CommsProjection.At(zoneX, zoneZ, factor), inverse, "LANDING ZONE", CommsMesh.Tone(CommsTone.Friendly),
+                    new Vector2(0f, -22f), 11f, bold: true);
 
             // Newest first, so a fresh ping always gets its name when the tags run out.
             IReadOnlyList<CommsItem> items = state.Board.Items;
@@ -461,6 +490,14 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             CommsClientState state = manager.State;
             IReadOnlyList<CommsItem> items = state.Board.Items;
 
+            if (CommsMapLayer.TryLandingZone(out float zoneX, out float zoneZ))
+            {
+                Vector2 zone = CommsProjection.At(zoneX, zoneZ, factor);
+                Color32 friendly = CommsMesh.Tone(CommsTone.Friendly);
+                CommsMesh.Ring(vh, zone, 16f * px, 0.9f * px, CommsMesh.Fade(friendly, 0.55f), 28);
+                CommsMesh.Glyph(vh, "lz", zone, 11f * px, 1.35f * px, friendly, under: true);
+            }
+
             // Stickers and labels first, then strokes newest first, all out of one vertex
             // budget: a heavy doodler can only lose their own oldest lines, never anyone's
             // stickers.
@@ -575,7 +612,8 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             {
                 CommsItem item = items[i];
                 if (item.Kind != CommsItemKind.Ping || manager.State.IsMuted(item.Author)) continue;
-                if (now - item.Created < PulseSeconds || item.Expires - now < FadeSeconds) return true;
+                // A call's ping rides on its caller's aircraft, so it moves for as long as it lives.
+                if (item.IsCall || now - item.Created < PulseSeconds || item.Expires - now < FadeSeconds) return true;
             }
             return false;
         }

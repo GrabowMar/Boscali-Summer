@@ -66,6 +66,20 @@ namespace BoscaliSummer.Modules.Comms.Runtime
         public static bool TryLocal(out Player player) =>
             GameManager.GetLocalPlayer<Player>(out player) && player != null;
 
+        /// <summary>The aircraft a player with this id flies now; false while they fly nothing.</summary>
+        public static bool TryAircraft(ulong id, out Aircraft aircraft)
+        {
+            aircraft = null;
+            if (id == PlayerIdentity.None || UnitRegistry.playerLookup == null) return false;
+            foreach (Player player in UnitRegistry.playerLookup.Values)
+            {
+                if (player == null || Id(player) != id) continue;
+                aircraft = player.Aircraft;
+                return aircraft != null && !aircraft.disabled;
+            }
+            return false;
+        }
+
         private static void Resolve()
         {
             if (resolved) return;
