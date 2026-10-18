@@ -2,6 +2,13 @@
 
 ## 0.2.5 — update
 
+- **Left HUD and dialogue**: mission dialogue joins COMMS with its speaker and organization.
+  The event log, COMMS and status flashes share a left inset, native type and thin frames;
+  wrapped radio traffic pushes flashes down, and smaller regular status text keeps adjacent
+  messages clear. Scripted readouts pause with the mission and clear when it ends.
+  A single barely visible shadow now backs the whole left column; brighter log copy and
+  slightly larger COMMS text replace the separate dark clouds behind each section.
+
 - **Near-future helmet display**: the cockpit visor is a curved HMD glass with an electrochromic sun
   tint, breath fog, a faint coating that shifts hue toward the rim, and hairline scratches drawn at
   screen resolution that catch the sun only where it lines up, and the brow shade above 6 G. There is

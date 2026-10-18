@@ -13,7 +13,7 @@ using static UnityCheckHarness;
 // The CUE stack (HUD holo pass E, 2026-10-13): the game's short messages on grey boxes drawn at the left edge, from stand-in native boxes (the corners' rig plus an action report with its grey plate and text, a reserve notice, a funds
 // line and a score text, each where the game puts them at the top of the screen). The messages are pushed into the stack's ledger the way the patches push them (CueFeed.Log.Add: the game's rich text, how it was coloured, the game's time for
 // it); the stack's own clock is set by the check, so every phase is drawn at a fixed age. The cases: one cue at 0.05 / 0.15 / 0.3 s (the bracket halves snapping in from 46 outside, the decode, the underline, a tone brighter for 0.12 s),
-// the hold, the five fade steps, three cues stacked with a fourth in the ring and a new one sliding the others down, a long message (16 units, whole words, no dots), AMBER and RED, Lean (no shelf or class word) and Minimal (only AMBER and
+// the hold, the five fade steps, three cues stacked with a fourth in the ring and a new one sliding the others down, a long message (14 units, whole words, no dots), AMBER and RED, Lean (no shelf or class word) and Minimal (only AMBER and
 // RED), the option off (the stand-ins' alphas come back exactly), a capture that sees nothing (fail open, one box at a time), a box that was never found, the closed gate, Opacity, Shade and the teardown. Renders cues-<case>-<W>x<H>.png.
 // Run alone with -pages cues.
 public static partial class HudLogUnityCheck
@@ -209,7 +209,7 @@ public static partial class HudLogUnityCheck
         return CueLabels(rig).Where(l => Mathf.Abs(CanvasRectOf(canvasRect, l.rectTransform).center.y - y) <= 4.5f * rig.U).OrderBy(l => Mathf.Abs(CanvasRectOf(canvasRect, l.rectTransform).center.y - y)).FirstOrDefault();
     }
 
-    private static TextMeshProUGUI CueMessage(CueRig rig, int i, bool shelf = true) => CueLabelAt(rig, Spot(rig, i, "Y") + (shelf ? 21f : 13f), SpotText(rig, i) != null && SpotText(rig, i).Length > 32 ? 16f : 20f);
+    private static TextMeshProUGUI CueMessage(CueRig rig, int i, bool shelf = true) => CueLabelAt(rig, Spot(rig, i, "Y") + (shelf ? 21f : 13f), SpotText(rig, i) != null && SpotText(rig, i).Length > 40 ? 14f : 16f);
     private static TextMeshProUGUI CueCaption(CueRig rig, int i) => CueLabelAt(rig, Spot(rig, i, "Y") + 4f);
 
     private static float GroupAlpha(Component c) { var g = c.GetComponent<CanvasGroup>(); return g != null ? g.alpha : 1f; }
@@ -220,7 +220,7 @@ public static partial class HudLogUnityCheck
     private static void CueShot(CueRig rig, string name)
     {
         string tag = "cues-" + name + "-" + (int)rig.Size.x + "x" + (int)rig.Size.y;
-        foreach (string root in new[] { "cueShade", "cueRoot" })
+        foreach (string root in new[] { "cornerShade", "cueRoot" })
         {
             var tree = (RectTransform)Field(rig.Status, root);
             if (tree != null) foreach (Graphic g in tree.GetComponentsInChildren<Graphic>(true)) Check(!g.raycastTarget, "Cues take no click: " + g.name + " " + tag);
@@ -289,7 +289,7 @@ public static partial class HudLogUnityCheck
             CueAdd("Action", ArmedRich, "Normal", CueNow);
             NativeSays(rig, "Action", true);
             CueAt(rig, 0.05f);
-            Check(CueUp(rig) && Up("cueShade", rig.Status) && CueDrawn(rig) == 1, "One cue: the stack and its shade are up: " + res);
+            Check(CueUp(rig) && Up("cornerShade", rig.Status) && CueDrawn(rig) == 1, "One cue: the stack and its shade are up: " + res);
             Check(CueCharge(rig) == 15, "One cue: all four game boxes are held and in charge (15): " + CueCharge(rig) + " " + res);
             Check(NativeAlpha(rig, "Action") == 0f && NativeAlpha(rig, "Reserve") == 0f && NativeAlpha(rig, "Allocation") == 0f && NativeAlpha(rig, "Score") == 0f, "One cue: the game's four boxes are hidden through groups of ours: " + res);
             Check(rig.ActionText.gameObject.activeInHierarchy && rig.ActionBox.activeSelf && rig.ActionText.color.a > 0.99f && rig.ActionText.text == ArmedRich, "One cue: ...the game's action box is still on, its text and colour untouched (only not seen): " + res);
@@ -300,7 +300,7 @@ public static partial class HudLogUnityCheck
             CueDecoded(rig, 0, 0.05f, ArmedWords, "show 0.05 " + res);
             TextMeshProUGUI msg = CueMessage(rig, 0), cap = CueCaption(rig, 0);
             Check(msg != null && cap != null && Plain(cap) == "WPN", "Show 0.05: the shelf's class word is WPN: " + res);
-            Check(msg.color.r > 0.97f && msg.color.g > 0.97f && msg.color.b > 0.97f && (msg.fontStyle & FontStyles.Bold) != 0, "Show 0.05: the message is bold and a tone brighter than BRIGHT (white) for the first 0.12 s: " + msg.color + " " + res);
+            Check(msg.color.r > 0.97f && msg.color.g > 0.97f && msg.color.b > 0.97f && (msg.fontStyle & FontStyles.Bold) == 0, "Show 0.05: the message is regular and a tone brighter than BRIGHT (white) for the first 0.12 s: " + msg.color + " " + res);
             Check(cap.color.a > 0.99f && Luma(cap.color) > Luma(new Color(0.5f, 0.87f, 0.6f)) - 0.05f, "Show 0.05: ...the class word a tone brighter too (INK, not DIM): " + cap.color + " " + res);
             Check(Spot(rig, 0, "Locked") > 0f && Spot(rig, 0, "Locked") < ArmedWords.Length, "Show 0.05: part of it has locked: " + Spot(rig, 0, "Locked") + " " + res);
             List<Rect> quads = CueQuadsOf(rig);
@@ -330,12 +330,12 @@ public static partial class HudLogUnityCheck
             quads = CueQuadsOf(rig);
             msg = CueMessage(rig, 0); cap = CueCaption(rig, 0);
             Color amber = new Color32(255, 216, 74, 255);
-            Check(Near(msg.color.r, amber.r, 0.03f) && Near(msg.color.g, amber.g, 0.03f) && Near(msg.color.b, amber.b, 0.03f) && (msg.fontStyle & FontStyles.Bold) != 0, "Hold: weapons ARMED is bold AMBER: " + msg.color + " " + res);
+            Check(Near(msg.color.r, amber.r, 0.03f) && Near(msg.color.g, amber.g, 0.03f) && Near(msg.color.b, amber.b, 0.03f) && (msg.fontStyle & FontStyles.Bold) == 0, "Hold: weapons ARMED is regular AMBER: " + msg.color + " " + res);
             Check(cap.color.a < 0.8f && cap.color.a > 0.6f && (cap.fontStyle & FontStyles.Bold) == 0, "Hold: the class word is DIM (INK at 0.70) and regular: " + cap.color + " " + res);
             Check(HasLine(quads, true, (top + 31f) * u, hugL * u, hugR * u), "Hold: the underline is whole: " + res);
             Check(HasLine(quads, true, (top + 4f) * u, 16f * u, 24f * u), "Hold: the shelf's hairline starts at x 16: " + res);
             Check(quads.Any(q => Near(q.width, 4f * u, 1.2f) && Near(q.height, 4f * u, 1.2f) && Near(q.center.y, (top + 4f) * u, 2f)), "Hold: ...and ends in a 4 x 4 node: " + res);
-            Check(Mathf.Abs(Spot(rig, 0, "TextW") - Plain(msg).Length * 13f) < 0.01f && Spot(rig, 0, "TextW") <= 420f, "Hold: 27 characters at 20 are 351 wide, inside 420: " + Spot(rig, 0, "TextW") + " " + res);
+            Check(Mathf.Abs(Spot(rig, 0, "TextW") - Plain(msg).Length * 10.4f) < 0.01f && Spot(rig, 0, "TextW") <= 420f, "Hold: characters at 16 advance 10.4 units, inside 420: " + Spot(rig, 0, "TextW") + " " + res);
             CueShot(rig, "hold");
 
             // FADE: the underline retracts to the right, the halves spread out, the words step 1, 0.55, 0.85, 0.3, then nothing.
@@ -393,18 +393,25 @@ public static partial class HudLogUnityCheck
             string[] words = { "$12.3M (+$803.7K)", "DETECTED UNITS +1,0", "FS-20 RESERVE GRANTED" }, classes = { "FUNDS", "FUNDS", "RSV" };
             for (int i = 0; i < 3; i++)
             {
-                Check(Near(Spot(rig, i, "Y"), top + 34f * i, 0.01f), "Stack: cue " + i + " is " + i + " slots under the top (34 apart): " + Spot(rig, i, "Y") + " " + res);
+                Check(Near(Spot(rig, i, "Y"), top + 40f * i, 0.01f), "Stack: cue " + i + " is " + i + " slots under the top (40 apart): " + Spot(rig, i, "Y") + " " + res);
                 Check(SpotText(rig, i) == words[i], "Stack: newest on top: cue " + i + " reads '" + words[i] + "': '" + SpotText(rig, i) + "' " + res);
                 Check(Plain(CueCaption(rig, i) ?? CueMessage(rig, i)) == classes[i], "Stack: cue " + i + "'s class word is " + classes[i] + " " + res);
                 Check(CueMessage(rig, i) != null && Plain(CueMessage(rig, i)) == words[i], "Stack: cue " + i + "'s message is drawn in capitals: '" + (CueMessage(rig, i) != null ? Plain(CueMessage(rig, i)) : "none") + "' " + res);
                 CueGeometry(rig, i, 4f - (i == 0 ? 1.5f : i == 1 ? 1f : 0.5f), 8f, true, "stack " + i + " " + res);
+                if (i > 0)
+                {
+                    var canvasRect = (RectTransform)rig.C.Canvas.transform;
+                    Rect previous = CanvasRectOf(canvasRect, CueMessage(rig, i - 1).rectTransform);
+                    Rect caption = CanvasRectOf(canvasRect, CueCaption(rig, i).rectTransform);
+                    Check(previous.yMax + u <= caption.yMin, "Stack: cue " + i + "'s caption clears the previous message: " + previous + " / " + caption + " " + res);
+                }
             }
             Check(CueLabels(rig).All(l => Plain(l) != "SYS" && !Plain(l).Contains("LANDING")), "Stack: the fourth, oldest cue is not drawn: " + res);
-            Check(Spot(rig, 2, "Y") + 34f < (size.y - 320f * rig.C.S) / u && Spot(rig, 0, "Y") > 100f, "Stack: under the event log and over the corner map: " + res);
+            Check(Spot(rig, 2, "Y") + 40f < (size.y - 320f * rig.C.S) / u && Spot(rig, 0, "Y") > 100f, "Stack: under the event log and over the corner map: " + res);
             Check(Mathf.Abs(CanvasRectOf((RectTransform)rig.C.Canvas.transform, CueCaption(rig, 0).rectTransform).xMin - 28f * u) <= 6f * u, "Stack: anchored at the left, the shelf's caption 16 + 12 in: " + res);
-            var patch = (Image)Field(rig.Status, "cuePatch");
+            var patch = (Image)Field(rig.Status, "leftShadow");
             Rect patchBox = CanvasRectOf((RectTransform)rig.C.Canvas.transform, patch.rectTransform);
-            Check(patch.gameObject.activeInHierarchy && patch.color.a > 0.3f && patchBox.yMin <= (Spot(rig, 0, "Y") - 20f) * u && patchBox.yMax >= (Spot(rig, 2, "Y") + 30f) * u && patchBox.xMin < 16f * u && patchBox.xMax > (Spot(rig, 2, "TextX") + Spot(rig, 2, "TextW")) * u, "Stack: one soft shade behind all three, as wide and as tall as they are, its core under the ink: " + patchBox + " " + patch.color.a + " " + res);
+            Check(patch.gameObject.activeInHierarchy && patch.color.a > 0f && patch.color.a <= 0.06f && patchBox.yMin <= (Spot(rig, 0, "Y") - 12f) * u && patchBox.yMax >= (Spot(rig, 2, "Y") + 30f) * u && patchBox.xMin < 16f * u && patchBox.xMax > (Spot(rig, 2, "TextX") + Spot(rig, 2, "TextW")) * u, "Stack: one soft shade behind all three, as wide and as tall as they are, its core under the ink: " + patchBox + " " + patch.color.a + " " + res);
             Check(NativeAlpha(rig, "Action") == 0f && NativeAlpha(rig, "Reserve") == 0f && NativeAlpha(rig, "Allocation") == 0f && NativeAlpha(rig, "Score") == 0f, "Stack: every game box is hidden: " + res);
             CueShot(rig, "stack3");
 
@@ -415,10 +422,10 @@ public static partial class HudLogUnityCheck
             Check(Near(Spot(rig, 0, "Y"), top, 0.01f) && Near(Spot(rig, 1, "Y"), top, 0.01f), "Slide: at the instant a cue arrives the others have not moved: " + Spot(rig, 1, "Y") + " " + res);
             Check(SpotText(rig, 0) == "RADAR ARMED" && SpotText(rig, 1) == "$12.3M (+$803.7K)", "Slide: the new cue is on top: " + res);
             CueAt(rig, 4.06f);
-            Check(Near(Spot(rig, 1, "Y"), top + 34f * 0.875f, 1f) && Near(Spot(rig, 2, "Y"), top + 34f + 34f * 0.875f, 1f) , "Slide: 0.06 s in, the others are 7/8 of the way down: " + Spot(rig, 1, "Y") + " " + Spot(rig, 2, "Y") + " " + res);
+            Check(Near(Spot(rig, 1, "Y"), top + 40f * 0.875f, 1f) && Near(Spot(rig, 2, "Y"), top + 40f + 40f * 0.875f, 1f) , "Slide: 0.06 s in, the others are 7/8 of the way down: " + Spot(rig, 1, "Y") + " " + Spot(rig, 2, "Y") + " " + res);
             CueShot(rig, "slide");
             CueAt(rig, 4.2f);
-            Check(Near(Spot(rig, 1, "Y"), top + 34f, 0.5f) && Near(Spot(rig, 2, "Y"), top + 68f, 0.5f), "Slide: and a slot down at 0.12 s: " + res);
+            Check(Near(Spot(rig, 1, "Y"), top + 40f, 0.5f) && Near(Spot(rig, 2, "Y"), top + 80f, 0.5f), "Slide: and a slot down at 0.12 s: " + res);
         }
         finally { CueEnd(rig); }
     }
@@ -432,19 +439,19 @@ public static partial class HudLogUnityCheck
         float u = rig.U;
         try
         {
-            // A long message: 90 characters drop to 16 units, then lose whole words, no dots, and stay inside 420.
+            // A long message drops to 14 units, then loses whole words, no dots, and stays inside 420.
             const string Long = "Reinforcements are inbound from the northern staging area with fuel and ammunition for all squadrons";
             CueAdd("Action", Long, "Normal", CueNow);
             NativeSays(rig, "Action", true, Long);
             CueAt(rig, 1f);
             string cut = SpotText(rig, 0);
-            Check(cut == "REINFORCEMENTS ARE INBOUND FROM THE" && !cut.Contains(".") && !cut.EndsWith(" "), "Long: whole words up to the room, no dots: '" + cut + "' " + res);
-            Check(Spot(rig, 0, "TextW") <= 420f && Mathf.Abs(Spot(rig, 0, "TextW") - cut.Length * 10.4f) < 0.01f, "Long: at 16 units, inside 420: " + Spot(rig, 0, "TextW") + " " + res);
+            Check(cut == "REINFORCEMENTS ARE INBOUND FROM THE NORTHERN" && !cut.Contains(".") && !cut.EndsWith(" "), "Long: whole words up to the room, no dots: '" + cut + "' " + res);
+            Check(Spot(rig, 0, "TextW") <= 420f && Mathf.Abs(Spot(rig, 0, "TextW") - cut.Length * 9.1f) < 0.01f, "Long: at 14 units, inside 420: " + Spot(rig, 0, "TextW") + " " + res);
             Check(CueMessage(rig, 0) != null && Plain(CueMessage(rig, 0)) == cut, "Long: the message is drawn whole: " + res);
             CueGeometry(rig, 0, 1f, 5f, true, "long " + res);
             CueShot(rig, "long");
 
-            // 33 characters: 16 units, nothing lost.
+            // 37 characters: the regular 16 unit size, nothing lost.
             CueClear();
             CueAdd("Action", "Stability Assist enabled for all axes", "Normal", CueNow);
             CueAt(rig, 1f);
@@ -461,9 +468,9 @@ public static partial class HudLogUnityCheck
             TextMeshProUGUI safe = CueMessage(rig, 0), armed = CueMessage(rig, 1), fire = CueMessage(rig, 2);
             Check(safe != null && armed != null && fire != null, "Tones: three messages are drawn: " + res);
             Check(Plain(CueCaption(rig, 0)) == "WPN" && Plain(CueCaption(rig, 1)) == "WPN" && Plain(CueCaption(rig, 2)) == "DMG", "Tones: SAFE and ARMED are WPN, the failure DMG: " + res);
-            Check(Near(armed.color.r, amber.r, 0.03f) && Near(armed.color.g, amber.g, 0.03f) && (armed.fontStyle & FontStyles.Bold) != 0, "Tones: ARMED is bold AMBER: " + armed.color + " " + res);
-            Check(Near(fire.color.r, red.r, 0.03f) && Near(fire.color.g, red.g, 0.03f) && Near(fire.color.b, red.b, 0.03f) && (fire.fontStyle & FontStyles.Bold) != 0, "Tones: an alert-coloured failure is bold RED: " + fire.color + " " + res);
-            Check(Luma(safe.color) > Luma(armed.color) && safe.color.b > 0.8f && (safe.fontStyle & FontStyles.Bold) != 0, "Tones: SAFE is bold BRIGHT: " + safe.color + " " + res);
+            Check(Near(armed.color.r, amber.r, 0.03f) && Near(armed.color.g, amber.g, 0.03f) && (armed.fontStyle & FontStyles.Bold) == 0, "Tones: ARMED is regular AMBER: " + armed.color + " " + res);
+            Check(Near(fire.color.r, red.r, 0.03f) && Near(fire.color.g, red.g, 0.03f) && Near(fire.color.b, red.b, 0.03f) && (fire.fontStyle & FontStyles.Bold) == 0, "Tones: an alert-coloured failure is regular RED: " + fire.color + " " + res);
+            Check(Luma(safe.color) > Luma(armed.color) && safe.color.b > 0.8f && (safe.fontStyle & FontStyles.Bold) == 0, "Tones: SAFE is regular BRIGHT: " + safe.color + " " + res);
             List<Rect> quads = CueQuadsOf(rig);
             float lbar = Spot(rig, 2, "LeftBar") * u, y = Spot(rig, 2, "Y");
             Check(quads.Any(q => Near(q.center.x, lbar, 1.6f) && q.height > 15f * u * 0.9f), "Tones: the red cue's brackets are drawn: " + res);
@@ -531,7 +538,7 @@ public static partial class HudLogUnityCheck
             PresentCorners(rig.C);
             Check(NativeAlpha(rig, "Action") == 1f && NativeAlpha(rig, "Allocation") == 1f && NativeAlpha(rig, "Score") == 1f, "Option: Corners off, the game's boxes are whole (alpha 1): " + res);
             Check(NativeAlpha(rig, "Reserve") == 0.8f, "Option: ...and a group the game's own object had is at its own alpha, 0.8: " + NativeAlpha(rig, "Reserve") + " " + res);
-            Check(!CueUp(rig) && !Up("cueShade", rig.Status) && CueCharge(rig) == 0, "Option: nothing of the stack is up: " + res);
+            Check(!CueUp(rig) && !Up("cornerShade", rig.Status) && CueCharge(rig) == 0, "Option: nothing of the stack is up: " + res);
             Check(rig.ActionBox.activeSelf && rig.ActionText.gameObject.activeSelf && rig.ReserveBox.activeSelf, "Option: no native object was ever switched off by the mod: " + res);
             CueShot(rig, "off");
             Set(rig.Status, "Options", PilotOptions());
@@ -552,10 +559,10 @@ public static partial class HudLogUnityCheck
             Check(Near(((CanvasGroup)Field(rig.Status, "cueGroup")).alpha, 0.5f, 0.001f), "Opacity: the stack's own group follows it: " + res);
             Set(rig.Status, "Options", PilotOptions("Shade", 0f));
             CuePresent(rig, 1f);
-            Check(!Up("cueShade", rig.Status) && CueUp(rig) && Near(((CanvasGroup)Field(rig.Status, "cueGroup")).alpha, 1f, 0.001f), "Shade 0: no shade, the cues stay: " + res);
+            Check(!Up("cornerShade", rig.Status) && CueUp(rig) && Near(((CanvasGroup)Field(rig.Status, "cueGroup")).alpha, 1f, 0.001f), "Shade 0: no shade, the cues stay: " + res);
             Set(rig.Status, "Options", PilotOptions("Shade", 1f));
             CuePresent(rig, 1f);
-            Check(Up("cueShade", rig.Status) && ((Image)Field(rig.Status, "cuePatch")).color.a > 0.5f, "Shade 1: a stronger shade: " + ((Image)Field(rig.Status, "cuePatch")).color.a + " " + res);
+            Check(Up("cornerShade", rig.Status) && Near(((Image)Field(rig.Status, "leftShadow")).color.a, 0.06f, 0.001f), "Shade 1: the shared shadow stays barely visible: " + ((Image)Field(rig.Status, "leftShadow")).color.a + " " + res);
             Set(rig.Status, "Options", PilotOptions());
             CuePresent(rig, 1f);
 
@@ -627,7 +634,7 @@ public static partial class HudLogUnityCheck
             NativeSays(rig, "Action", true);
             CueAt(rig, 1f);
             var root = (RectTransform)Field(rig.Status, "cueRoot");
-            var shade = (RectTransform)Field(rig.Status, "cueShade");
+            var shade = (RectTransform)Field(rig.Status, "cornerShade");
             Call(rig.Status, "ApplySway", 2.4f / rig.U, -1.2f / rig.U);
             Check(root.offsetMin == new Vector2(2f, -1f) && shade.offsetMax == new Vector2(2f, -1f), "Sway: the stack and its shade move with the board, by whole pixels: " + root.offsetMin + " " + res);
             Call(rig.Status, "ApplySway", 0f, 0f);

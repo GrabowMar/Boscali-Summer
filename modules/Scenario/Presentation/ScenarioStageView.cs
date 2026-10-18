@@ -9,7 +9,7 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Scenario.Presentation
 {
     /// <summary>
-    /// What a mission script puts on the screen: the transmission plate (who is speaking, their words typed on), title cards, hints, and a cutscene's dressing:
+    /// A mission script's fallback transmission plate (normal dialogue uses COMMS), title cards, hints, and a cutscene's dressing:
     /// letterbox bars, a vignette, film grain, captions, a typed place-and-date stamp, dips to black, and pictures that land like polaroids (taped, developing
     /// in) and then line up along the top bar as a timeline, pinned to a red string. A cutscene is framed as a surveillance feed: corner brackets, scan lines,
     /// a recording lamp with a running clock, the camera's own height, heading and grid read off live, and a burst of interference on every cut. A cut's
@@ -306,6 +306,12 @@ namespace BoscaliSummer.Modules.Scenario.Presentation
             dialogue.sizeDelta = new Vector2(PlateWidth, Mathf.Max(96f, height));
             lineFrom = Time.time;
             lineUntil = lineFrom + seconds;
+        }
+
+        internal void HideDialogue()
+        {
+            lineUntil = -1f;
+            Paint();
         }
 
         /// <summary>A title card: <paramref name="title"/> large (it may be null) with <paramref name="words"/> under it.</summary>

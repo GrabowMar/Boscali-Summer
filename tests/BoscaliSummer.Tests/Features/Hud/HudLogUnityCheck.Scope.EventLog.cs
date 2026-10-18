@@ -148,7 +148,7 @@ public static partial class HudLogUnityCheck
             Check(PlateAlpha(rig) == 0f && TextAlpha(rig) == 0f, "Log six: the game's plate and text hidden: " + res);
             Check(rig.Texts.All(t => t.gameObject.activeInHierarchy && t.color.a > 0.99f), "Log six: ...and not one of the game's text objects was switched off or recoloured: " + res);
             float left = PlanF(rig, "Left"), top = PlanF(rig, "Top"), width = PlanF(rig, "Width"), first = PlanF(rig, "FirstRowY"), stampX = PlanF(rig, "StampX"), lineX = PlanF(rig, "LineX");
-            Check(Mathf.Abs(left - 4f) < 0.01f && Mathf.Abs(top - 12f) < 0.01f && Mathf.Abs(first - 36f) < 0.01f, "Log six: the block hangs from the game's box (4 in, 12 down: the shelf's line at 18 like the board's), the first row 24 under its top: " + left + " " + top + " " + first + " " + res);
+            Check(Mathf.Abs(left - 16f) < 0.01f && Mathf.Abs(top - 12f) < 0.01f && Mathf.Abs(first - 36f) < 0.01f, "Log six: the block shares the left column's 16-unit inset, 12 down, the first row 24 under its top: " + left + " " + top + " " + first + " " + res);
             Check(width >= 280f && width <= 560f && width % 40f == 0f, "Log six: the block is 280 to 560 wide in steps of 40: " + width + " " + res);
             string[] classes = { "INTCP", "INTCP", "KILL", "NET", "COMM", "COMM" };
             string[] stamps = { "09:31", "09:32", "09:33", "09:34", "09:35", "09:36" };
@@ -165,12 +165,12 @@ public static partial class HudLogUnityCheck
             Rect stampBox = CanvasRectOf((RectTransform)rig.Canvas.transform, LogRow(rig, 0)[0].rectTransform);
             Check(Mathf.Abs(stampBox.xMin - stampX * u) <= 6f * u, "Log six: the stamp is 12 in from the block's edge: " + stampBox + " " + res);
             Check(Mathf.Abs(CanvasRectOf((RectTransform)rig.Canvas.transform, LogRow(rig, 0)[2].rectTransform).xMin - (lineX + 7.8f) * u) <= 6f * u, "Log six: the line starts a square's cell after the line column: " + res);
-            // Tones: a settled name is INK, the pilot's own BRIGHT, the verb DIM, a fresh row BRIGHT.
+            // Tones: settled copy is pale at 90%, own/fresh copy full strength, verbs and timestamps sit behind it.
             TextMeshProUGUI ink = LogLabel(rig, "FGA-57 ANVIL"), own = LogLabel(rig, "BOSCALI 2-1 [FS-20 VORTEX]"), verb = LogLabel(rig, "INTERCEPTED"), fresh = LogLabel(rig, "SPLASH ONE, BEARING 270"), stamp = LogLabel(rig, "09:31");
             Check(ink != null && own != null && verb != null && fresh != null && stamp != null, "Log six: the words are there to judge: " + res);
-            Check(Luma(own.color) > Luma(ink.color) + 0.05f, "Log six: the pilot's own name is BRIGHT, over a settled name's INK: " + Luma(own.color) + " " + Luma(ink.color) + " " + res);
-            Check(Luma(fresh.color) > Luma(ink.color) + 0.05f, "Log six: a row under 1.5 s old is BRIGHT: " + res);
-            Check(verb.color.a < 0.8f && ink.color.a > 0.99f && stamp.color.a < 0.8f, "Log six: the verb and the stamp are DIM (INK at 0.70), the name is not: " + verb.color.a + " " + ink.color.a + " " + res);
+            Check(Luma(own.color) * own.color.a > Luma(ink.color) * ink.color.a + 0.05f, "Log six: the pilot's own name has more visible emphasis than settled copy: " + res);
+            Check(Luma(fresh.color) * fresh.color.a > Luma(ink.color) * ink.color.a + 0.05f, "Log six: a row under 1.5 s old has full emphasis: " + res);
+            Check(Luma(verb.color) < Luma(ink.color) && ink.color.a >= 0.89f && stamp.color.a < 0.8f, "Log six: message copy stays readable while verbs and timestamps remain secondary: " + res);
             // The squares in the game's colours: two in each of the three interceptions' and the kill's rows (blue and red), one on the join line, one on the chat speaker; none for the radio call.
             Check(LogSwatches(rig, 0x58A8FF, 0xFF4D4D, 0xFFD84A, 0xAABBCC) == 8, "Log six: a square in front of each coloured name (8): " + LogSwatches(rig, 0x58A8FF, 0xFF4D4D, 0xFFD84A, 0xAABBCC) + " " + res);
             Check(LogSwatches(rig, 0x58A8FF) == 3 && LogSwatches(rig, 0xFF4D4D) == 3 && LogSwatches(rig, 0xFFD84A) == 1 && LogSwatches(rig, 0xAABBCC) == 1, "Log six: ...in the colour the game gave that name: " + res);
@@ -248,9 +248,9 @@ public static partial class HudLogUnityCheck
             int whole = Drawn();
             Check(whole > half && LogLabel(rig, "SPLASH ONE, BEARING 270") != null, "Log life: after 180 ms all of it: " + whole + " " + res);
             LogFrame(rig, LogNow + 1.0f);
-            float lit = Luma(LogLabel(rig, "WINGMAN:").color);
+            float lit = Luma(LogLabel(rig, "WINGMAN:").color) * LogLabel(rig, "WINGMAN:").color.a;
             LogFrame(rig, LogNow + 2.0f);
-            float settled = Luma(LogLabel(rig, "WINGMAN:").color);
+            float settled = Luma(LogLabel(rig, "WINGMAN:").color) * LogLabel(rig, "WINGMAN:").color.a;
             Check(lit > settled + 0.05f, "Log life: BRIGHT at 1 s, INK at 2 s, noticed on a frame between ticks: " + lit + " " + settled + " " + res);
             LogFrame(rig, LogNow + 11.5f);
             Check(Mathf.Abs(LogLabel(rig, "WINGMAN:").color.a - 0.5f) <= 0.12f, "Log life: half faded half way through the last second: " + LogLabel(rig, "WINGMAN:").color.a + " " + res);

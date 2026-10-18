@@ -159,7 +159,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
     }
 
     /// <summary>
-    /// Where DL EVT LOG's pieces go, pure. The block hangs from the game's feed box (its top-left corner, in design units; 4 in and <see cref="TopGap"/> down, which puts the shelf's line at y 18 like the board's shelves on the right):
+    /// Where DL EVT LOG's pieces go, pure. The block hangs from the game's feed box (its top-left corner, in design units; 16 in and <see cref="TopGap"/> down, which puts the shelf's line at y 18 like the board's shelves on the right):
     /// a caption shelf on top (its line 6 under the block's top, 280..560 wide in steps of 40 so it does not jump with every line), the rows 16 apart with the first one 24 under the top (8 without the shelf), a spine at the
     /// block's left edge with a tick on every row. A row is a stamp
     /// (<see cref="StampChars"/> cells), the class word (<see cref="ClassChars"/>) and the line, in the 12 unit mono face (<see cref="Advance"/> a cell), two cells between the class word and the line.
@@ -169,7 +169,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
     {
         /// <summary>A character cell of the 12 unit mono face (0.65 em).</summary>
         public const float Advance = 7.8f;
-        public const float Pitch = 16f, Margin = 4f, TopGap = 12f, MinWidth = 280f, MaxWidth = 560f, WidthStep = 40f, ShelfToRow = 24f, RowOffset = 8f, Indent = 12f, LeanIndent = 6f, RightPad = 8f, SpineTick = 4f;
+        public const float Pitch = 16f, Margin = 16f, TopGap = 12f, MinWidth = 280f, MaxWidth = 560f, WidthStep = 40f, ShelfToRow = 24f, RowOffset = 8f, Indent = 12f, LeanIndent = 6f, RightPad = 8f, SpineTick = 4f;
         public const int StampChars = 6, ClassChars = 5;
 
         public static EventLogPlan Plan(float boxLeft, float boxTop, int rows, int widestChars, BoardDeclutter level)

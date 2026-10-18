@@ -341,13 +341,13 @@ namespace BoscaliSummer.Tests.Features.Hud
             EventLogPlan none = EventLogLayout.Plan(0f, 0f, 0, 0, BoardDeclutter.Full);
             TestAssert.That(!none.Present, "No rows, no block");
             EventLogPlan p = EventLogLayout.Plan(0f, 0f, 4, 36, BoardDeclutter.Full);
-            TestAssert.Near(p.Left, 4f, "The block stands 4 in from the box");
+            TestAssert.Near(p.Left, 16f, "The block shares the left stack's 16 unit inset");
             TestAssert.Near(p.Top, 12f, "...and 12 under its top (the shelf's line is then at y 18, the board's own)");
             TestAssert.Near(p.FirstRowY, 36f, "The first row is 24 under the block's top, under the shelf");
             TestAssert.Near(p.RowY(3), 36f + 48f, "Rows are 16 apart");
             TestAssert.Near(p.Height, 24f + 48f + 8f, "The block ends 8 under its last row");
-            TestAssert.Near(p.StampX, 16f, "The stamp is 12 in from the block");
-            TestAssert.Near(p.ClassX, 16f + 7f * 7.8f, "The class word follows the six cell stamp and a cell");
+            TestAssert.Near(p.StampX, 28f, "The stamp is 12 in from the block");
+            TestAssert.Near(p.ClassX, 28f + 7f * 7.8f, "The class word follows the six cell stamp and a cell");
             TestAssert.Near(p.LineX, p.ClassX + 7f * 7.8f, "The line follows the five cell class word and two cells");
             TestAssert.That(p.Furniture, "Full draws the furniture");
             TestAssert.Near(p.SpineTop, p.FirstRowY - 8f, "The spine starts half a row over the first");
@@ -368,7 +368,7 @@ namespace BoscaliSummer.Tests.Features.Hud
             EventLogPlan min = EventLogLayout.Plan(0f, 0f, 2, 36, BoardDeclutter.Minimal);
             TestAssert.That(!min.Furniture && min.Rows == 2, "Minimal is the same");
             EventLogPlan moved = EventLogLayout.Plan(40f, 200f, 1, 10, BoardDeclutter.Full);
-            TestAssert.Near(moved.Left, 44f, "The block follows the box's corner");
+            TestAssert.Near(moved.Left, 56f, "The block follows the box's corner");
             TestAssert.Near(moved.Top, 212f, "...in both directions");
         }
     }

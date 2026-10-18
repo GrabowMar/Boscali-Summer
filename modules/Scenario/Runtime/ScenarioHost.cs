@@ -211,6 +211,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             cutPlaying = false;
             ShowGameUi();
             ShowFeed(true);
+            if (script != null && ModuleServices.TryGet(out IChatter chatter)) chatter.EndScripted();
             runner = null;
             script = null;
             bound = null;
@@ -505,20 +506,25 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
         public void Say(ScenarioCast cast, string text, float seconds)
         {
             ChatterNet net = Net(cast.Net);
-            view.Say(cast.Callsign, cast.Role, Tint(net), text, seconds);
+            var line = new ChatterAired
+            {
+                Net = net, Priority = ChatterPriority.Tactical, Speaker = cast.Callsign, SpeakerId = "scenario:" + cast.Id,
+                Role = cast.Role, Event = "scenario", Text = text, Seconds = seconds, Scripted = true
+            };
+            ModuleServices.TryGet(out IChatter chatter);
+            // A cutscene may hide the flight HUD; keep its fallback plate there.
+            bool inComms = !CutPlaying && chatter != null && chatter.Scripted(line);
+            if (inComms) view.HideDialogue();
+            else view.Say(cast.Callsign, cast.Role, Tint(net), text, seconds);
 #if !PUBLIC_RELEASE
             linesSaid++;
             lastLine = cast.Callsign + ": " + text;
 #endif
+            if (inComms) return;
             if (GameAssets.i != null && GameAssets.i.radioStatic != null) SoundManager.PlayInterfaceOneShot(GameAssets.i.radioStatic);
-            if (!ModuleServices.TryGet(out IChatter chatter) || chatter.Director == null) return;
-            // The radio keeps quiet under a scripted line, and the line goes in its log like any other.
-            chatter.Director.Hold(chatter.Now, seconds);
-            chatter.Director.Log.Push(new ChatterAired
-            {
-                Time = chatter.Now, Net = net, Priority = ChatterPriority.Tactical, Speaker = cast.Callsign, SpeakerId = "scenario:" + cast.Id,
-                Event = "scenario", Text = text, Seconds = seconds
-            });
+            if (chatter?.Director == null) return;
+            // Keep the fallback in the same radio history and hold, without a second HUD readout.
+            chatter.Director.Scripted(chatter.Now, line, present: false);
         }
 
         public void Card(string title, string text, float seconds) => view.Card(title, text, seconds);

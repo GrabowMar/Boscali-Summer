@@ -210,6 +210,8 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         public float Play(in ChatterAired line, Transform host, float volume)
         {
             if (source != null && line.Cut) source.Stop();
+            // Script words have their own duration and narration; generic pack recordings cannot stand in for them.
+            if (line.Scripted) return 0f;
             if (packs.Count == 0 || string.IsNullOrEmpty(line.SpeakerId)) return 0f;
             Pack pack = PackFor(line);
             if (pack == null) return 0f;

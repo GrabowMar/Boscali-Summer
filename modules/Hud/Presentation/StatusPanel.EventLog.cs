@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Hud.Domain;
 using BoscaliSummer.Modules.Hud.Patches;
 using NOAvionics;
@@ -87,6 +88,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 logLit = Math.Max(logLit, logRows[i].Alpha(clock));
             }
             logPlan = EventLogLayout.Plan(boxLeft, boxTop, logCount, widest, level);
+            LeftHudStack.LogBottom = logPlan.Present ? logPlan.Top + logPlan.Height : 0f;
             Show(logRoot, true);
             if (logGroup.alpha != Options.Opacity) logGroup.alpha = Options.Opacity;
             PlaceOnGrid(logSurface, 0f, 0f, Whole(canvasRect.rect.width), Whole(canvasRect.rect.height));
@@ -131,8 +133,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     x += EventLogLayout.Advance;
                     budget--;
                 }
-                ScopeTone tone = bright || span.Own ? Hi : span.Role == EventRole.Verb ? Dim : Ink;
-                x = Reveal(g, span.Text, x, cy, tone, alpha, ref budget);
+                ScopeTone tone = span.Role == EventRole.Verb && !bright && !span.Own ? Ink : Hi;
+                float emphasis = bright || span.Own ? 1f : 0.9f;
+                x = Reveal(g, span.Text, x, cy, tone, alpha * emphasis, ref budget);
             }
             if (line.Truncated && budget > 0) Reveal(g, "+", x + EventLogLayout.Advance, cy, Dim, alpha, ref budget);
         }
@@ -155,6 +158,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>Nothing of the log is up (the corner is the game's again, or there is no corner).</summary>
         private void StandDownLog()
         {
+            LeftHudStack.LogBottom = 0f;
             if (logRoot != null) Show(logRoot, false);
             logCharge = false;
             logSig = 0;
@@ -162,6 +166,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private void DestroyLog()
         {
+            LeftHudStack.LogBottom = 0f;
+            if (LeftHudStack.Font == font) { LeftHudStack.Font = null; LeftHudStack.FontMaterial = null; }
             eventLog.Clear();      // the scene is going: its lines are not the next one's
             if (logRoot != null) UnityEngine.Object.Destroy(logRoot.gameObject);
             logRoot = logSurface = null;

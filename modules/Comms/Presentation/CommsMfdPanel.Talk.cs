@@ -22,7 +22,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 BrevityCall brevity = CommsCatalog.Calls[i];
                 callSpecs[i] = new AvControl.Spec(brevity.Code, () => comms.Call(call), ToneStyle(brevity.Tone), CallIcons[i % CallIcons.Length]);
                 callHelps[i] = brevity.Code + ": " + brevity.Meaning +
-                    (brevity.MarksPosition ? " Also drops a ping at your aircraft." : "") +
+                    (brevity.MarksPosition ? " Also pins a ping to your aircraft." : "") +
                     " Always goes to your team.";
             }
             ButtonGrid(p, callSpecs, 3, callHelps);

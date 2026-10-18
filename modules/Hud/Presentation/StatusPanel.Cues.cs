@@ -14,13 +14,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 {
     // The CUE stack (HUD holo pass E, 2026-10-13): the game's short messages on grey boxes (the action report: weapon safety, flight assist, radar, gear, damage failures; the reserve notice; the funds line; the score line), drawn by the mod
     // at the LEFT edge in the visor's language, in place of the game's boxes. The messages are captured as the game shows them (Patches/CueFeedPatch.cs: text, the game's time for it, whether its colour marks a failure, into CueFeed.Log, the
-    // newest four) and painted here: a stack 16 units in from the left, its top at 30 % of the screen's height (under the event log, over the corner map), newest on top, at most three, 34 apart. One cue is a DIM class word on a short
-    // captioned shelf (SYS, WPN, DMG, FUNDS, RSV) and under it the message in capitals, bold, BRIGHT at 20 (AMBER for a caution, RED for an alert; 16, then whole words, when it is long), with a soft shade behind it. A cue SHOWS for 0.32 s
+    // newest four) and painted here: a stack 16 units in from the left, below COMMS and at least 30 % down the screen, newest on top, at most three, 40 apart. One cue is a DIM class word on a short
+    // captioned shelf (SYS, WPN, DMG, FUNDS, RSV) and under it the message in regular capitals, BRIGHT at 16 (AMBER for a caution, RED for an alert; 14, then whole words, when it is long), with a soft shade behind it. A cue SHOWS for 0.32 s
     // (two bracket halves snap in from 46 units outside, the message decodes left to right, an underline draws, the whole cue is a tone brighter for 0.12 s), HOLDS for as long as the game keeps its own line (at least 1.2 s) and FADES for
     // the last 0.35 s (the underline retracts, the brackets spread out, the words flicker 1, 0.55, 0.85, 0.3, 0); the others slide down a slot over 0.12 s when a new one comes (Domain/CueTimeline.cs: everything is a function of the cue's age).
     // The game's own boxes are hidden through NativeCues (owned CanvasGroups, alpha 0) while their cues are drawn, one box at a time: a box that was not found, or whose text the capture never saw (CueLog.Healthy), stays the game's. The
-    // Corners option governs the whole port (off: the game's boxes exactly as they are); Lean has no shelf or class word, Minimal only the AMBER and RED cues. The tree is two roots under the HUD canvas, like NAV DATA's: the shade
-    // (behind every native mark) and the ink (a group of its own whose alpha is the pilot's Opacity); both follow the sway and the device pixel grid. The surface is drawn again only when something moved a step (CueLog.Signature).
+    // Corners option governs the whole port (off: the game's boxes exactly as they are); Lean has no shelf or class word, Minimal only the AMBER and RED cues. The ink has its own group whose alpha is the pilot's Opacity;
+    // it shares the left column's one faint shadow (StatusPanel.Corners), follows sway and the device pixel grid, and redraws only when something moved a step (CueLog.Signature).
     internal sealed partial class StatusPanel
     {
         private const int CueQuads = 120;
@@ -38,11 +38,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly Cue[] cueShown = new Cue[CueLog.MaxShown];
         private readonly CueSpot[] cueSpots = new CueSpot[CueLog.MaxShown];
         private readonly char[] cueChars = new char[96];
-        private RectTransform cueRoot, cueSurface, cueShade;
-        /// <summary>The one soft patch of shade behind the whole stack (a feathered sprite larger than the cues by its edge, so each cue lies in its full part).</summary>
-        private Image cuePatch;
-        /// <summary>The patch's alpha at full Shade strength (x the Shade option, at most <see cref="CuePatchMax"/>): a cue's words are bigger than the board's, over any sky.</summary>
-        private const float CuePatchAlpha = 0.9f, CuePatchMax = 0.8f;
+        private RectTransform cueRoot, cueSurface;
+        private float cueBottom, cueLit;
         private CanvasGroup cueGroup;
         private AvVector cueVector;
         private ScopeText cueText;
@@ -94,6 +91,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             int shown = charge == 0 ? 0 : cueLog.Select(clock, level, charge, cueShown);
             int signature = CueLog.Signature(clock, level, charge, cueShown, shown) * 31 + (int)(Mathf.Clamp01(Options.Shade) * 100f);
             Vector2 canvasSize = canvasRect.rect.size;
+            signature = signature * 31 + Mathf.RoundToInt(LeftHudStack.CueTop(canvasSize.y / baseUnit));
             if (charge != cueCharge || signature != cueSig || canvasSize != seenCueCanvas || (tick && shown > 0))
             {
                 cueCharge = charge;
@@ -118,7 +116,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void HideCueTree()
         {
             if (cueRoot != null) Show(cueRoot, false);
-            if (cueShade != null) Show(cueShade, false);
+            cueBottom = cueLit = 0f;
             cueCount = 0;
         }
 
@@ -136,10 +134,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             if (cueRoot != null) return true;
             if (canvasRect == null) return false;
-            cueShade = CornerRoot("BoscaliCueShade");
-            cueShade.SetAsFirstSibling();
-            cuePatch = ShadeChild<Image>(cueShade, "CuePatch");
-            HudSprites.Slice(cuePatch, HudSprites.Feather);
             cueRoot = CornerRoot("BoscaliCues");
             cueGroup = cueRoot.gameObject.AddComponent<CanvasGroup>();
             cueGroup.ignoreParentGroups = true;      // the pilot's opacity is this group's alone, as the board's is
@@ -157,7 +151,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             if (!EnsureCueTree()) return;
             float k = 1f / baseUnit, canvasW = canvasRect.rect.width, canvasH = canvasRect.rect.height;
-            float top = CueLayout.Top(canvasH * k), strength = Mathf.Clamp01(Options.Shade);
+            float top = LeftHudStack.CueTop(canvasH * k);
             bool furniture = Options.Declutter == BoardDeclutter.Full;
             Show(cueRoot, true);
             if (cueGroup.alpha != Options.Opacity) cueGroup.alpha = Options.Opacity;
@@ -165,30 +159,22 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             ScopeCanvas g = cueCanvas;
             g.Furniture = furniture;
             g.Begin(Palette(), baseUnit, Whole(canvasH), pixel);
-            float inkRight = 0f, inkBottom = 0f, lit = 0f;
+            float inkBottom = 0f, lit = 0f;
             for (int i = 0; i < CueLog.MaxShown; i++)
             {
                 cueSpots[i] = default;
                 if (i >= shown) continue;
                 float y = Mathf.Round(top + CueLayout.Offset(cueShown, i, clock));
-                float right = DrawCue(g, i, cueShown[i], y, clock, furniture, out float alpha);
+                DrawCue(g, i, cueShown[i], y, clock, furniture, out float alpha);
                 if (alpha <= 0f) continue;
-                inkRight = Mathf.Max(inkRight, right);
                 inkBottom = Mathf.Max(inkBottom, y + CueLayout.Pitch - 3f);
                 lit = Mathf.Max(lit, alpha);
             }
             g.End();
             cueVector.Commit();
             cueCount = shown;
-            // The shade: one patch over the whole stack, as lit as its brightest cue.
-            bool shade = strength > 0.001f && lit > 0f;
-            Show(cueShade, shade);
-            if (!shade) return;
-            float feather = HudSprites.FeatherEdge, left = CueLayout.Left - feather, topEdge = top - feather;
-            PlaceBoxAt(cuePatch.rectTransform, new BoardRect(left, topEdge, inkRight + feather - left, inkBottom + feather - topEdge), baseUnit);
-            var colour = new Color(ShadeColor.r, ShadeColor.g, ShadeColor.b, Mathf.Min(CuePatchMax, CuePatchAlpha * strength) * lit);
-            if (cuePatch.color != colour) cuePatch.color = colour;
-            Show(cuePatch, true);
+            cueBottom = inkBottom;
+            cueLit = lit;
         }
 
         /// <summary>
@@ -221,7 +207,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Line(rBar, barBottom, rBar - CueLayout.Arm, barBottom, line, alpha);
             CueTimeline.Underline(age, life, out float ulFrom, out float ulTo);
             if (ulTo - ulFrom > 0.001f) g.Line(hugL + (hugR - hugL) * ulFrom, under, hugL + (hugR - hugL) * ulTo, under, line, line == Dim ? alpha : alpha * 0.55f);
-            g.Text(new ReadOnlySpan<char>(cueChars, 0, length), tx, row, words, cue.Size, ScopeAlign.Left, true, alpha);
+            g.Text(new ReadOnlySpan<char>(cueChars, 0, length), tx, row, words, cue.Size, ScopeAlign.Left, false, alpha);
             cueSpots[place] = new CueSpot { Cue = cue, Y = y, TextX = tx, TextW = textW, LeftBar = lBar, RightBar = rBar, Alpha = alpha, Locked = CueTimeline.Locked(age, cue.Text.Length) };
             return Math.Max(hugR, furniture ? x + shelfW + 8f : 0f);
         }
@@ -232,9 +218,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             cueNatives.Dispose();
             cueLog.Clear();      // the scene is going: its messages are not the next one's
             if (cueRoot != null) UnityEngine.Object.Destroy(cueRoot.gameObject);
-            if (cueShade != null) UnityEngine.Object.Destroy(cueShade.gameObject);
-            cueRoot = cueSurface = cueShade = null;
-            cuePatch = null;
+            cueRoot = cueSurface = null;
+            cueBottom = cueLit = 0f;
             cueGroup = null;
             cueVector = null;
             cueText = null;

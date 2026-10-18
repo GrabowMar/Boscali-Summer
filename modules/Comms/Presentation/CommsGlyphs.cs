@@ -31,7 +31,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             "mark", "enemy", "sam", "attack", "defend", "rally", "help", "spike",
             "star", "heart", "smile", "skull", "flame", "crown", "bolt", "flag", "question", "exclaim", "eye", "mug",
             "pen", "line", "arrow", "circle", "box", "eraser", "measure", "text", "sticker", "ping", "off",
-            "undo", "hunt", "guess", "dice", "rps", "poll", "comms", "trash",
+            "undo", "hunt", "guess", "dice", "rps", "poll", "comms", "trash", "lz",
         };
 
         private static float[][] Build(string key)
@@ -232,6 +232,14 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                     {
                         Poly(-0.9f, 0.85f, 0.9f, 0.85f, 0.9f, -0.35f, -0.2f, -0.35f, -0.6f, -0.85f, -0.55f, -0.35f, -0.9f, -0.35f),
                         Circle(-0.4f, 0.25f, 0.08f, 6), Circle(0f, 0.25f, 0.08f, 6), Circle(0.4f, 0.25f, 0.08f, 6),
+                    };
+                case "lz":
+                    // The pilot's landing zone: a canopy on its rigging over the ground bar.
+                    return new[]
+                    {
+                        Arc(0f, 0.05f, 0.8f, 0f, 180f, 16), Line(-0.8f, 0.05f, 0.8f, 0.05f),
+                        Line(-0.8f, 0.05f, 0f, -0.6f), Line(0.8f, 0.05f, 0f, -0.6f),
+                        Line(-0.6f, -0.9f, 0.6f, -0.9f),
                     };
                 default:
                     return null;

@@ -108,6 +108,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             font = nameLabel != null ? nameLabel.font : null;
             if (font == null) font = AvType.Face(AvFace.Mono);
             fontMaterial = nameLabel != null ? nameLabel.fontSharedMaterial : null;
+            BoscaliSummer.Core.Ui.LeftHudStack.Font = font;
+            BoscaliSummer.Core.Ui.LeftHudStack.FontMaterial = fontMaterial;
 
             var rootObject = new GameObject("BoscaliStatusPanel", typeof(RectTransform));
             root = (RectTransform)rootObject.transform;
