@@ -1,0 +1,153 @@
+{
+  "name": "wing-taxi-sweep",
+  "_notes": "wing-taxi across the Free Flight fields and three airframe sizes (one game launch per variant; run with speed 4). Wingmen launch only from the lead's side: the matrix is Boscali's fields; for Primeva's (highwaystrip1, airstrip_city2, airbase_desert1, airbase_mountains) add --set faction=Primeva --set field=<name>. Reads ground.liftoffs/relocated per variant; off-pavement excursions show in units.csv (y drop, bank) of the members, not in the verdict.",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 600,
+  "environment": {
+    "config": {
+      "boscalisummer": {
+        "Trenches": {
+          "Enabled": false
+        },
+        "TheaterOps": {
+          "Enabled": false
+        },
+        "Events": {
+          "Enabled": false
+        },
+        "Garrisons": {
+          "Enabled": false
+        },
+        "DynamicOperations": {
+          "Enabled": false
+        }
+      }
+    }
+  },
+  "vars": {
+    "field": "highwaystrip2",
+    "faction": "Boscali",
+    "type": "FS-20 Vortex",
+    "count": 2
+  },
+  "matrix": {
+    "field": [
+      "highwaystrip2",
+      "airbase_city",
+      "airbase_boscali_north",
+      "navalbase"
+    ],
+    "type": [
+      "FS-20 Vortex",
+      "KR-67 Ifrit",
+      "SFB-81 Darkreach"
+    ]
+  },
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "faction": "${faction}",
+      "at": {
+        "map": [
+          0,
+          0
+        ]
+      },
+      "altitude": 1500,
+      "speed": 180,
+      "heading": 0
+    },
+    {
+      "op": "record",
+      "ids": [
+        "*"
+      ],
+      "hz": 5
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "level": 400
+        }
+      ]
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.Automation.Launch",
+      "store": "launch",
+      "args": {
+        "lead": "lead",
+        "count": "${count}",
+        "field": "${field}",
+        "type": "${type}"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 10
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.Automation.Members",
+      "store": "members"
+    },
+    {
+      "op": "wait",
+      "seconds": 140
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.Automation.Ground",
+      "store": "mid"
+    },
+    {
+      "op": "wait",
+      "seconds": 150
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.Automation.Ground",
+      "store": "ground"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.Automation.DumpFields",
+      "store": "fields"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "alive",
+      "ids": [
+        "lead"
+      ]
+    },
+    {
+      "check": "result_above",
+      "path": "launch.launched",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "ground.aborted",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "ground.liftoffs",
+      "min": "${count}"
+    }
+  ]
+}
