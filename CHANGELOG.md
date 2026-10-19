@@ -2,6 +2,12 @@
 
 ## 0.2.5 — update
 
+- **Wing taxi fix**: a wingman that rolls just past its hold-short or stand now stops there and
+  carries on, instead of circling back for the exact spot and getting stuck off the pavement
+  (seen at highway strips, where wingmen could not reach the runway). A wingman leaving a hangar
+  whose way out crosses a taxi road close to the door now turns onto the road there, instead of
+  driving past it and looping back across the verge.
+
 - **Left HUD and dialogue**: mission dialogue joins COMMS with its speaker and organization.
   The event log, COMMS and status flashes share a left inset, native type and thin frames;
   wrapped radio traffic pushes flashes down, and smaller regular status text keeps adjacent

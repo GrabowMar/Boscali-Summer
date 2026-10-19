@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text.Json;
 using BoscaliSummer.Core.Math;
 using BoscaliSummer.Modules.Wing.Domain;
@@ -35,6 +36,36 @@ namespace WingPure.Tests
             field.Runways[0].Entries = new[] { new WingPose(new Vec3(40f, 0f, 1000f), -Vec3.Forward) };
             FieldTraffic.TryPickRunway(field, out _, out reverse);
             TestAssert.That(reverse, "native off-runway entries also provide threshold access");
+        }
+    }
+
+    internal static class GroundHangarExitTests
+    {
+        public static void Run()
+        {
+            // 2026-10-18: a hangar exit 40 m out can lie past the road it joins (highwaystrip2's hangar 2 by 8 m, highwaystrip1's by
+            // 19 m); out to the exit and back to the junction was a U-turn that looped jets off the pavement.
+            var profile = new AirframeProfile { Id = "generic-small", WheelbaseM = 6f, SteerLockDeg = 45f, SpanM = 12f, LengthM = 15f };
+            foreach ((string name, int hangar) in new[] { ("highwaystrip1", 1), ("highwaystrip1", 2), ("highwaystrip2", 2) })
+            {
+                AirbaseSample sample = GroundAirfieldFixture.Load(name);
+                FieldTraffic.TryPickRunway(sample, out int runway, out bool reverse);
+                WingPose spawn = sample.Hangars[hangar].Spawn;
+                var pilot = new GroundPilot(1, new FieldTraffic(sample, runway, reverse), AirframeClass.FixedWing, spawn, hangar);
+                var s = new AircraftState { Pos = spawn.Pos, Fwd = spawn.Fwd, Up = Vec3.Up, Right = Vec3.Cross(Vec3.Up, spawn.Fwd) };
+                pilot.Step(s, profile, null, 0f, 0.05f, null, 0);
+                pilot.Step(s, profile, null, GroundPilot.ParkedSeconds + 0.1f, 0.05f, null, 0);
+                TestAssert.Eq(pilot.Phase, GroundPhase.TaxiOut, name + " hangar " + hangar + " taxis out");
+                var path = (Vec3[])typeof(GroundPilot).GetField("path", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(pilot);
+                float sharpest = 0f;
+                for (int i = 1; i < path.Length - 1; i++)
+                {
+                    Vec3 into = (path[i] - path[i - 1]).Horizontal, onward = (path[i + 1] - path[i]).Horizontal;
+                    if (into.SqrLength < 1e-4f || onward.SqrLength < 1e-4f) continue;
+                    sharpest = Math.Max(sharpest, (float)Math.Acos(Scalar.Clamp(Vec3.Dot(into.Normalized, onward.Normalized), -1f, 1f)) * Scalar.Rad2Deg);
+                }
+                TestAssert.That(sharpest < 135f, name + " hangar " + hangar + " never turns back on its way out (sharpest " + sharpest.ToString("0") + " deg)");
+            }
         }
     }
 

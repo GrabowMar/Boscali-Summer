@@ -472,9 +472,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
             float total = cum[cum.Length - 1];
             float goalDistance = (s.Pos - path[path.Length - 1]).Horizontal.Length;
+            bool passedGoal = PassedEnd(s);
             // Projection can reach the end while still beside it. Pursue the physical goal, with every
             // obstacle and reservation below retaining authority to shorten the available distance.
-            float stopAt = Math.Max(total, along + goalDistance);
+            float stopAt = passedGoal ? along : Math.Max(total, along + goalDistance);
             GroundStop binding = GroundStop.None;
             bool reservationWait = false;
             float obstacle = ObstacleStop(along, s, p, out int member);
@@ -559,7 +560,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 Log(events, time, slot, WingEventKind.HoldingShort);
             }
             float speed = s.Vel.Horizontal.Length;
-            bool atGoal = total - along < LineupTolerance + 2f && goalDistance < LineupTolerance + 2f && speed < StoppedSpeed;
+            bool atGoal = (passedGoal || total - along < LineupTolerance + 2f && goalDistance < LineupTolerance + 2f) && speed < StoppedSpeed;
             Stop = relocationWanted ? GroundStop.Relocating : atGoal ? GroundStop.Goal : binding;
             StopWho = Stop == GroundStop.Member ? member : Stop == GroundStop.Claims ? traffic.Reservations.WaitingForAny(Owner) : -1;
             if (arriving && atGoal)
@@ -683,9 +684,18 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 return new ControlOutput { Brake = 1f };
             }
             float along = Along(s.Pos);
-            float stopDistance = Math.Max(cum[cum.Length - 1] - along, (s.Pos - path[path.Length - 1]).Horizontal.Length);
+            float stopDistance = PassedEnd(s) ? 0f : Math.Max(cum[cum.Length - 1] - along, (s.Pos - path[path.Length - 1]).Horizontal.Length);
             GroundCommand c = GroundGuidance.Pursue(path, ref progress, s, stopDistance);
             return controller.Step(c, s, p, dt);
+        }
+
+        /// <summary>The path's end is within <see cref="NodeClearRadius"/> and abeam or behind: it has been reached. The member
+        /// brakes where it is rather than turning back for the exact point (wing-taxi sim 2026-10-18, highway strip: an FS-20
+        /// ran 2 m past a hold-short at the end of a sharp turn, circled back for it and beached itself off the strip).</summary>
+        private bool PassedEnd(in AircraftState s)
+        {
+            Vec3 toEnd = (path[path.Length - 1] - s.Pos).Horizontal;
+            return toEnd.Length < NodeClearRadius && Vec3.Dot(toEnd, s.Fwd.Horizontal) <= 0f;
         }
 
         /// <summary>The point <paramref name="metres"/> along edge <paramref name="e"/> from its end <paramref name="from"/>
@@ -1125,7 +1135,26 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 nodePathIndex.Clear();
                 return;
             }
+            // A start past the route's next node (a hangar exit beyond the road it joins: highwaystrip2's hangar 2 lies 8 m past
+            // its junction, highwaystrip1's 19 m) is skipped; out to it and back is a U-turn off the pavement.
+            if (nodes.Count >= 2 && OnTheWay(prefix[prefix.Length - 1], nodes[0], nodes[1]))
+            {
+                nodes.RemoveAt(0);
+                edges.RemoveAt(0);
+            }
             SetRoutePath(prefix);
+        }
+
+        /// <summary>Node <paramref name="next"/> lies on the way from <paramref name="from"/> to node <paramref name="first"/>: ahead
+        /// of from, within <see cref="NodeClearRadius"/> of that line and further back from first than off it (on to first and
+        /// then to next turns over 135°; a corner at first is kept).</summary>
+        private bool OnTheWay(Vec3 from, int first, int next)
+        {
+            Vec3 a = from.Horizontal, ab = traffic.Graph.NodePos(first).Horizontal - a, an = traffic.Graph.NodePos(next).Horizontal - a;
+            float length = ab.Length;
+            if (length < 1f) return false;
+            float ahead = Vec3.Dot(an, ab) / length, lateral = (an - ab * (ahead / length)).Length;
+            return ahead > 0f && lateral <= NodeClearRadius && length - ahead > lateral;
         }
 
         /// <summary>The path for the current route: <paramref name="prefix"/>, then the route's points.</summary>

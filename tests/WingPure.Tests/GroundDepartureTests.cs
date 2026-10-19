@@ -136,6 +136,25 @@ namespace WingPure.Tests
         }
     }
 
+    internal static class GroundTaxiPassedGoalTests
+    {
+        public static void Run()
+        {
+            // wing-taxi sim 2026-10-18 (highway strip): an FS-20 ran a few metres past a hold-short at the end of a sharp turn,
+            // circled back for the exact point and beached itself off the strip.
+            var f = new GroundFixture();
+            Vec3 past = f.Hold + Vec3.Forward * 6f;
+            AircraftState rolling = GroundFixture.At(past);
+            rolling.Vel = Vec3.Forward * 3f;
+            rolling.Tas = 3f;
+            f.Tick(rolling, 2.1f);
+            ControlOutput o = f.Tick(rolling, 2.2f);
+            TestAssert.That(o.Throttle == 0f && o.Brake > 0f, "a hold-short just passed is braked for, not turned back to");
+            f.Tick(GroundFixture.At(past), 2.3f);
+            TestAssert.Eq(f.Pilot.Phase, GroundPhase.LineUp, "stopped just past the hold-short, it lines up from there");
+        }
+    }
+
     internal static class GroundLineupGoalTests
     {
         public static void Run() => GroundFixture.CheckLineupRecovery(Vec3.Right * 60f);
