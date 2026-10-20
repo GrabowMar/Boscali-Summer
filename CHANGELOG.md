@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.7 — hotfix
+## 0.2.6.2 — hotfix
 
 - **Screen smearing after a mission restart fixed** ([#22](https://github.com/GrabowMar/Boscali-Summer/issues/22)):
   after restarting a mission, selecting a target could freeze the picture into ghosted, overlapping
