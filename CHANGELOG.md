@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.7 — hotfix
+
+- **Screen smearing after a mission restart fixed** ([#22](https://github.com/GrabowMar/Boscali-Summer/issues/22)):
+  after restarting a mission, selecting a target could freeze the picture into ghosted, overlapping
+  frames. The missile and drone feed cameras now hand the game's post-processing back cleanly when a
+  mission ends, so the target camera no longer trips over them.
+
 ## 0.2.6 — spooky update
 
 - **OPS works both ways**: every OPS room now lets you see and answer what the enemy does to you.

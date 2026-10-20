@@ -188,6 +188,9 @@ namespace BoscaliSummer.Core.Fx
             Lenses.Remove(cam);      // also once a scene change has already destroyed it
             if (cam != null) Object.Destroy(cam.gameObject);
             cam = null;
+            // URP leaves the last rendered camera's stack as the current one and reads it before the next base camera resets it
+            // (CheckPostProcessForDepth for overlay stacks, e.g. the target camera): a disposed current stack NREs there every frame and smears the screen (issue #22).
+            if (stack != null && ReferenceEquals(VolumeManager.instance.stack, stack)) VolumeManager.instance.ResetMainStack();
             stack?.Dispose();
             stack = null;
             ours = null;
