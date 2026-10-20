@@ -1,1 +1,0 @@
-PASS: 69 production HUD/scope/log/wire renders, 33682 input-transparency/layout/lifecycle assertions. Synthetic native dock/font and telemetry; no native asset, live input or game adapter acceptance.
