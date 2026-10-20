@@ -25,9 +25,9 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
                 "[Support] Flare Barrage unavailable: no missile definition resolved.", out Vector3 ground);
             if (gate != SupportResult.Accepted) return gate;
 
-            float radius = Mathf.Min(context.Settings.FlareBarrageRadius.Value * context.Quality, 15000f);
-            int count = context.Settings.FlareBarrageCount.Value;
-            float duration = CyberService.ExploitDuration(context.Owner, context.Settings.FlareBarrageDuration.Value * context.Quality, 45f); // EXPLOIT x1.5 while a node is held
+            float radius = Mathf.Min(context.Settings.FlareBarrageRadius.Value * context.Power, 15000f);
+            int count = Mathf.Clamp(Domain.Fronts.PerkPower.Count(context.Settings.FlareBarrageCount.Value, context.Power), 12, 64); // the replicated name carries 12 .. 64
+            float duration = CyberService.ExploitDuration(context.Owner, context.Settings.FlareBarrageDuration.Value * context.Power, 45f); // EXPLOIT x1.5 while a node is held
             // The host's barrage values ride in the replicated name, so every peer seduces alike.
             string unique = SupportEffectPolicy.FlareName(SupportNaming.Unique("Flare", context), radius, duration, count);
 

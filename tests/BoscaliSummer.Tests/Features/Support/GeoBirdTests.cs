@@ -20,7 +20,22 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(dry.Relocate(0f, 0.9f, 0.5f).ToU == 0.2f, "not enough fuel: no move");
             TestAssert.That(b.Relocate(0f, 0.2f, 0.5f).DepartAt == 0f && b.Relocate(0f, 0.2f, 0.5f).Fuel == 100f, "a zero move costs nothing");
             TestAssert.That(b.Covers(0f, 0.3f, 0.5f, 0.14f) && !b.Covers(0f, 0.6f, 0.5f, 0.14f), "footprint gate");
+            Kilometres(b);
             HostRules();
+        }
+
+        /// <summary>On a 2:1 theatre a map unit north is half a theatre width on the ground: the footprint is a circle in km and burns cost by km.</summary>
+        private static void Kilometres(GeoBird b)
+        {
+            GeoBird.Aspect = 0.5f;
+            try
+            {
+                TestAssert.That(b.Covers(0f, 0.2f, 0.5f + 0.27f, 0.14f) && !b.Covers(0f, 0.2f + 0.27f, 0.5f, 0.14f), "the footprint reaches as far north as east, in km");
+                TestAssert.That(System.Math.Abs(GeoBird.Distance(0.3f, 0.1f, 0.3f, 0.5f) - 0.2f) < 1e-5f, "a north-south step is measured in theatre widths");
+                GeoBird north = b.Relocate(0f, 0.2f, 0.9f);
+                TestAssert.That(System.Math.Abs(north.Fuel - (100f - GeoBird.Cost(0.2f))) < 0.01f && System.Math.Abs(north.Duration - 0.2f / GeoBird.Slew) < 0.01f, "a north burn costs and lasts by its ground length");
+            }
+            finally { GeoBird.Aspect = 1f; }
         }
 
         /// <summary>The host side: SpaceState owns a GeoBird per bird, judges a relocation and gates a perk by footprint.</summary>

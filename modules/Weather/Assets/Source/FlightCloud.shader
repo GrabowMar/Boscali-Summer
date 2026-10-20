@@ -73,6 +73,8 @@ Shader "Boscali/FlightCloud"
         // Set-pieces this ray passes near; the rest are never evaluated along it.
         static uint gHeroMask = 0u;
         static bool gHeroOnly = false;
+        // The primary sample leaves the set-pieces out (MarchSky's ordinary stream past 2 km: they have their own).
+        static bool gNoHero = false;
         // Dominant density body's own normalized height. Capture after the primary sample;
         // subsequent shadow-density samples overwrite it. Empty samples always reset it.
         static float gLocalLightingHeight = 0.0;
@@ -97,6 +99,11 @@ Shader "Boscali/FlightCloud"
         #define CLOUD_HORIZON_LIMIT 1200000.0
         #define CLOUD_HORIZON_FADE 450000.0
 
+        // A 16-bit map height (CloudMaps.Word, CloudBodies.Word): high byte in the old channel, low byte in a spare one. Linear in both,
+        // so bilinear filtering and the near/far blend stay exact. One byte was 16 m of base and 63 m of top: smooth bases came out as
+        // flat terraces with straight edges along the map texels (2026-10-18).
+        float MapWord(float high, float low) { return (high * 65280.0 + low * 255.0) / 65535.0; }
+
         // The near map covers the flight domain; the coarse far map continues the same
         // field to the horizon. They agree in their overlap, so a short band blends them.
         bool SampleWeather(float2 xz, out float4 weather, out float4 profile, out float farShare)
@@ -120,8 +127,8 @@ Shader "Boscali/FlightCloud"
             float4 farWeather = tex2Dlod(_WeatherFarMapTex, float4(farUv, 0, 0));
             float4 farProfile = tex2Dlod(_WeatherFarProfileTex, float4(farUv, 0, 0));
             // Coverage fades toward the far edge; heights stay put so the fade thins
-            // the cloud instead of lowering it into the ground.
-            farWeather.rgb *= farFade;
+            // the cloud instead of lowering it into the ground. (g carries the top's low byte since 2026-10-18.)
+            farWeather.rb *= farFade;
             if (nearWeight <= 0.0) { weather = farWeather; profile = farProfile; return true; }
             weather = lerp(farWeather, tex2Dlod(_WeatherMapTex, float4(nearUv, 0, 0)), nearWeight);
             profile = lerp(farProfile, tex2Dlod(_WeatherProfileTex, float4(nearUv, 0, 0)), nearWeight);
@@ -725,7 +732,7 @@ Shader "Boscali/FlightCloud"
             // Filter the 1250 m detail to what one pixel and one step can resolve.
             float lod = max(coarse, LodFor(gFoot, 1250.0));
             float bodyLod = max(coarse, LodFor(gFoot, 24000.0));
-            float hero = gHeroMask != 0u ? Heroes(g, max(lod, 1.0)) : 0.0;
+            float hero = gHeroMask != 0u && !gNoHero ? Heroes(g, max(lod, 1.0)) : 0.0;
             float heroHeight = gLocalLightingHeight;
             if (gHeroOnly) return hero;
             if (g.y < _CloudAltitudeBounds.x || g.y > _CloudAltitudeBounds.y) return hero;
@@ -746,8 +753,8 @@ Shader "Boscali/FlightCloud"
             float puffLod = max(coarse, LodFor(gFoot, max(1200.0, LobeMetres(lobe.x) * 4.0)));
             // The far map cannot resolve erosion detail; keep its envelope smooth.
             coarse = max(coarse, farShare);
-            float baseY = profile.b * CLOUD_BASE_RANGE;
-            float topY = max(baseY + 280.0, weather.a * 16000.0);
+            float baseY = MapWord(profile.b, profile.g) * CLOUD_BASE_RANGE;
+            float topY = max(baseY + 280.0, MapWord(weather.a, weather.g) * 16000.0);
             float towerBlend = smoothstep(0.18, 0.60, row.anvil);
             float capTop = baseY + max(280.0, max(row.puffDepth, row.deckDepth)) * 1.15;
             float columnTop = max(baseY + 280.0, lerp(min(topY, capTop), topY, towerBlend));
@@ -888,7 +895,7 @@ Shader "Boscali/FlightCloud"
             gLocalLightingHeight = 0.0;
             gDeckSheet = 0.0;
             float3 g = world + _CloudWorldOffset;
-            if (!NearHero(g) && EmptyAt(g)) return 0.0;
+            if ((gNoHero || !NearHero(g)) && EmptyAt(g)) return 0.0;
             return Density(world, coarse);
         }
 
@@ -917,6 +924,11 @@ Shader "Boscali/FlightCloud"
             // Clear air has almost no extinction, so a power of it alone left distant cumulus as dark shapes: a visibility floor
             // (unchanged inside 8 km, ~0.45 at 40 km, ~0.15 at 100 km) melts them into the horizon haze whatever the air.
             float air = pow(AirTransmittance(distanceToSample, cameraHeight, sampleHeight), lerp(0.7, 1.6, smoothstep(10000.0, 60000.0, distanceToSample)));
+            // 2026-10-18 (user: "haze of terrain and clouds differs"): terrain takes vanilla's exponential fog (fogDensity, no altitude term), and low
+            // cloud took about half of it, so mountains washed blue while the cloud right above them stayed crisp. Low cloud now hazes no less
+            // than the ground at the same range (0.9 of it, past the first 2 km); from 3.5 km up to 9 km the altitude relief returns.
+            float ground = exp(-_CloudAirExtinction * 0.9 * max(0.0, distanceToSample - 2000.0));
+            air = min(air, lerp(ground, 1.0, smoothstep(3500.0, 9000.0, sampleHeight)));
             return min(air, exp(-max(0.0, distanceToSample - 8000.0) / 40000.0));
         }
 
@@ -1191,6 +1203,13 @@ Shader "Boscali/FlightCloud"
             nearLayer.opacity += transmit * farLayer.opacity;
         }
 
+        // Sun light forward-scattered through cloud, by the cosine to the sun: 0.45 in a ~7 degree core, 0.10 in a ~22 degree skirt (2026-10-18).
+        float SunGlowLobes(float cosine)
+        {
+            float a = 1.0 - cosine;
+            return 0.45 * exp(-a * 130.0) + 0.10 * exp(-a * 14.0);
+        }
+
         // March one chord (layer 0 = middle, 1 = high, 2 = the console fog bank), split around the opaque cloud's representative
         // distance. Camera altitude alone cannot order a nearby storm against an oblique layer. The chord [y0, y1] is the
         // tape-wide range of the layer; each sample reads its own row, so a base that changes along the tape is followed, and is
@@ -1267,7 +1286,8 @@ Shader "Boscali/FlightCloud"
                 // Look pass round 4: the old constant 0.22 sun fill lit a thick sheet the same from every direction (lit/dark 1.1-1.5, luma
                 // deviation under 0.02). It is now a dim base plus a glow toward the sun (hotspot, the reference's "light hotspot where the sun
                 // is"), and the sum goes through the shoulder so a thin layer facing the sun no longer clips flat white.
-                float slabGlow = saturate((phase - 0.5) / 1.5);
+                // 2026-10-18: the same plateau as the deck glow (a flat disc around the sun out to ~30 degrees); now the lobes, scaled to peak 1.
+                float slabGlow = SunGlowLobes(dot(ray, _CloudSunDirection)) / 0.55;
                 // A full deck of thin layer has no structure to light either (sky 27): the same two mesoscale lights as the low decks, gated by the layer's cover.
                 float deckGate = layer < 1.5 ? smoothstep(0.55, 0.9, row.cover) : 0.0;
                 // Darkens by at most 0.15 and brightens by up to 0.75: the density check holds that a middle layer seen through 40 km of air is visibly present (colour over 0.4; its probe sits at slabN 0.35,
@@ -1365,7 +1385,7 @@ Shader "Boscali/FlightCloud"
                 float4 weather, profile;
                 float farShare;
                 if (!SampleWeather(p.xz, weather, profile, farShare) || profile.a <= 0.02) continue;
-                float baseY = profile.b * CLOUD_BASE_RANGE;
+                float baseY = MapWord(profile.b, profile.g) * CLOUD_BASE_RANGE;
                 if (!ClipRainCurtainHeight(ro.y, ray.y, baseY + 40.0, s0, s1)) continue;
                 t = lerp(s0, s1, clamp(jitter, 0.1, 0.9));
                 p = ro + ray * t;
@@ -1494,33 +1514,38 @@ Shader "Boscali/FlightCloud"
         float4 MarchSky(float3 origin, float3 ray, float sceneDistance, float2 pixel, out float cloudDistance)
         {
             float3 ro = origin + _CloudWorldOffset;
-            float2 bounds = _CloudAltitudeBounds;
             float sceneLimit = min(sceneDistance, CLOUD_HORIZON_LIMIT);
+            // Ordinary weather keeps its own box, budget and sample positions whether or not a set-piece is near. Widening the box
+            // and cutting the far march around a set-piece for the rays that pass one drew hard vertical wedges in the deck, on
+            // the set-piece's bounding circles (2026-10-19).
             float start, finish;
+            RayBox(ro, ray, _CloudAltitudeBounds, start, finish);
+            finish = min(finish, min(sceneLimit, CLOUD_FAR_LIMIT));
+            // A visible set-piece gets its own bounded interval, even from the opposite map corner.
             gHeroMask = 0u;
+            float2 heroSpan = float2(1e9, -1e9);
             if (_HeroCount > 0.0)
             {
-                // Set-pieces widen the march only for the rays that pass near one.
-                float2 wide = float2(min(bounds.x, _CloudHeroBounds.x), max(bounds.y, _CloudHeroBounds.y));
-                if (RayBox(ro, ray, wide, start, finish))
+                float2 wide = float2(min(_CloudAltitudeBounds.x, _CloudHeroBounds.x), max(_CloudAltitudeBounds.y, _CloudHeroBounds.y));
+                float wideStart, wideFinish;
+                if (RayBox(ro, ray, wide, wideStart, wideFinish))
                 {
-                    gHeroMask = HeroMaskFor(ro, ray, min(finish, sceneLimit));
-                    if (gHeroMask != 0u) bounds = wide;
+                    wideFinish = min(wideFinish, sceneLimit);
+                    gHeroMask = HeroMaskFor(ro, ray, wideFinish);
+                    if (gHeroMask != 0u)
+                    {
+                        heroSpan = HeroInterval(ro, ray);
+                        heroSpan = float2(max(heroSpan.x, wideStart), min(heroSpan.y, wideFinish));
+                    }
                 }
             }
-            RayBox(ro, ray, bounds, start, finish);
-            finish = min(finish, sceneLimit);
-            // Ordinary weather retains its fixed budget/range. A visible set-piece gets
-            // its own bounded interval beyond it, even from the opposite map corner.
-            float2 heroSpan = gHeroMask != 0u ? HeroInterval(ro, ray) : float2(1e9, -1e9);
-            finish = min(finish, max(CLOUD_FAR_LIMIT, heroSpan.y));
 
             float transmittance = 1.0;
             float3 colour = 0.0;
             float weightedDistance = 0.0;
             // Once a sample's sun is extinguished, later samples in the same cloud take one
-            // coarse tap instead of three. Clear air re-opens it.
-            float sunOpen = 1.0;
+            // coarse tap instead of three. Clear air re-opens it. One per stream, so set-piece samples never change the deck's taps.
+            float sunOpen = 1.0, sunOpenHero = 1.0;
             float cosine = dot(ray, _CloudSunDirection);
             // Forward scattering, a sharp silver-lining lobe at the rims toward the
             // sun, and some back scatter.
@@ -1536,7 +1561,10 @@ Shader "Boscali/FlightCloud"
             float phaseRim = max(0.0, phase - phaseBody) * 0.85;
             // The hotspot: sun light that gets through a sheet or a deck is forward-scattered, so a thick layer glows around the sun (the
             // references' "light hotspot where the sun is") and is otherwise a flat grey. 0 beyond about 60 degrees from the sun.
-            float sunGlow = 0.55 * pow(saturate((phase - 0.5) / 1.5), 2.0);
+            // 2026-10-18: it was 0.55 * pow(saturate((phase - 0.5) / 1.5), 2): a plateau, flat out to ~30 degrees and gone by ~75, which drew a big
+            // flat disc with a rim around the sun inside cloud and on every deck. Two exponential lobes in (1 - cos) instead: a ~7 degree core and a
+            // ~22 degree skirt, the same peak, no plateau and no edge.
+            float sunGlow = SunGlowLobes(cosine);
             float awayFromSun = saturate(0.5 - 0.5 * cosine);
             // Integer avalanche removes IGN's visible diagonal lattice. This changes ray
             // sample placement only: the actual cloud field and detail stay anchored.
@@ -1546,220 +1574,240 @@ Shader "Boscali/FlightCloud"
             pixelHash ^= pixelHash >> 15;
             pixelHash *= 0x846ca68bu;
             pixelHash ^= pixelHash >> 16;
-            float ign = (pixelHash & 65535u) / 65536.0;
             // The dither is frozen per texel (user ruling 2026-10-14): a cycling dither averaged out over frames but
             // read as unstable, boiling cloud. Each texel now always marches the same positions, so a still view
             // converges to one fixed picture; the composite's 3x3 kernel melts the static pattern.
+            // 2026-10-18 (user: grain, worst in motion): white noise per texel only fell by a third under the 3x3 kernels, and in motion the resolve
+            // shows nearly raw fresh texels. Stratified instead: the four texels of a 2x2 block take the four quarters of the step (what the
+            // composite and the history average), and the blocks march by the R2 sequence, so the texels marched in one checker frame are spread
+            // over the step too. A small hash breaks R2's lattice. Still frozen per texel.
+            float2 px = floor(pixel);
+            float2 block = floor(px * 0.5);
+            float2 cell = px - block * 2.0;
+            float r2 = frac(block.x * 0.7548776662 + block.y * 0.5698402910);
+            float ign = frac(r2 + cell.x * 0.5 + cell.y * 0.25 + ((pixelHash & 65535u) / 65536.0 - 0.5) * 0.08);
             float jitter = lerp(0.1, 0.9, ign);
 
-            // Up to four segments along the ray: full detail to the near limit, a coarse march
-            // through the far level of detail out to the horizon, and a fine march across the
-            // set-pieces this ray passes beyond 20 km. Distant set-pieces are the size of a far
-            // step; marched with far steps they come out sliced into flat plates.
+            // Two sample streams merged by distance. The ordinary one is full detail to the near limit, then a coarse march
+            // through the far level of detail out to the horizon, placed exactly as on a ray that passes no set-piece. The
+            // set-piece one takes adaptive steps of about 0.6 % of the distance (a fraction of a tower's width at any range)
+            // across the set-pieces' interval, four at a time through empty air, backing up to fine steps where cloud begins:
+            // distant set-pieces are the size of a far step, and far steps slice them into flat plates. Within 2 km the
+            // ordinary samples carry the set-pieces (the near march is finer there) and the set-piece stream skips that stretch;
+            // beyond it each stream samples only its own cloud, so nothing is counted twice. Carried out to 20 km (2026-10-19),
+            // a set-piece 15-20 km away got the ordinary ~880 m spacing and showed the frozen dither as a diagonal hatch.
             float cutNear = clamp(CLOUD_NEAR_LIMIT, start, max(start, finish));
-            float h0 = finish, h1 = finish;
-            if (gHeroMask != 0u && finish > 20000.0)
-            {
-                h0 = clamp(max(heroSpan.x, 20000.0), start, finish);
-                h1 = clamp(heroSpan.y, start, finish);
-                if (h1 <= h0) { h0 = finish; h1 = finish; }
-            }
-            float b1 = min(cutNear, h0), b3 = max(cutNear, h1);
-            float b2 = cutNear <= h0 ? h0 : cutNear <= h1 ? cutNear : h1;
-            float nearTotal = max(1.0, cutNear - start - max(0.0, min(h1, cutNear) - min(h0, cutNear)));
-            float ordinaryFinish = min(finish, CLOUD_FAR_LIMIT);
-            float farTotal = max(1.0, ordinaryFinish - cutNear -
-                max(0.0, min(h1, ordinaryFinish) - max(h0, cutNear)));
+            float nearSpan = cutNear - start, farSpan = finish - cutNear;
+            // Resolve the first few hundred metres during entry/exit, including short
+            // upward chords. Fade back to the ordinary budget before distant clouds.
+            float nearProximity = 1.0 - smoothstep(500.0, 2500.0, start);
+            float nearSteps = clamp(floor(_CloudSteps * saturate(nearSpan / 12000.0 + 0.35) * (start > 25000.0 ? 0.68 : 1.0)), 4.0, 96.0);
+            nearSteps = max(nearSteps, floor(24.0 * nearProximity));
+            float farSteps = clamp(floor(_CloudFarSteps), 4.0, 96.0);
+            float carryEnd = min(finish, 2000.0);
+            // Distant segments march from fixed sample positions: the cycling dither moves
+            // a far sample by kilometres, and the sky boiled however much history it
+            // kept. Near segments keep the dither (the resolve averages it out); far
+            // ones lean on the resolve's distance-weighted history instead.
+            float heroJitter = heroSpan.x >= CLOUD_NEAR_LIMIT ? 0.5 : jitter;
+            float tHero = heroSpan.x + heroJitter * clamp(heroSpan.x * 0.006, 150.0, 900.0);
+            float fineUntil = -1.0;
+            bool stride = false;
+            // A set-piece within 20 km also gets the stretch the near march used to cover (it had 64 steps there).
+            int heroLeft = heroSpan.x < 20000.0 ? 128 : 96;
+            int segment = 0;
+            float n = 0.0;
             [loop]
-            for (int segment = 0; segment < 4; segment++)
+            for (int i = 0; i < 320; i++)
             {
-                float s0 = segment == 0 ? start : segment == 1 ? b1 : segment == 2 ? b2 : b3;
-                float s1 = segment == 0 ? b1 : segment == 1 ? b2 : segment == 2 ? b3 : finish;
-                if (finish <= start || s1 <= s0 + 1.0 || transmittance < 0.05) continue;
-                float mid = 0.5 * (s0 + s1);
-                bool hero = mid > h0 && mid < h1;
-                bool farSeg = !hero && mid > CLOUD_NEAR_LIMIT;
-                if (!hero)
+                if (transmittance < 0.05) break;
+                if (segment == 0 && (n >= nearSteps || nearSpan <= 1.0)) { segment = 1; n = 0.0; }
+                if (segment == 1 && (n >= farSteps || farSpan <= 1.0)) segment = 2;
+                if (tHero >= start && tHero < carryEnd) tHero = carryEnd + heroJitter * clamp(carryEnd * 0.006, 150.0, 900.0);
+                bool heroLive = heroLeft > 0 && tHero < heroSpan.y;
+                if (segment == 2 && !heroLive) break;
+                bool farSeg = segment == 1;
+                float s0 = farSeg ? cutNear : start;
+                float span = farSeg ? farSpan : nearSpan;
+                float steps = farSeg ? farSteps : nearSteps;
+                float proximity = farSeg ? 0.0 : nearProximity;
+                float segJitter = farSeg ? 0.5 : jitter;
+                float a = n / steps, b = (n + 1.0) / steps;
+                // Cubic spacing spends the same bounded budget on nearby filaments;
+                // distant segments keep quadratic spacing and their existing detail.
+                float sampleStart = lerp(a * a, a * a * a, proximity);
+                float sampleEnd = lerp(b * b, b * b * b, proximity);
+                float tOrdinary = s0 + span * lerp(sampleStart, sampleEnd, segJitter);
+                // ponytail: a set-piece backing up out of a stride can land behind an ordinary sample already taken (at most three
+                // fine steps); that sliver composites out of order.
+                bool hero = heroLive && (segment == 2 || tHero < tOrdinary);
+                farSeg = farSeg && !hero;
+                float fine = clamp(tHero * 0.006, 150.0, 900.0);
+                float stepLength = hero ? fine : span * (sampleEnd - sampleStart);
+                float t = hero ? tHero : tOrdinary;
+                if (hero) heroLeft--; else n += 1.0;
+                float3 world = origin + ray * t;
+                // A third of the step: far steps run up to ~17 km, and sharper noise there (an eighth, tried 2026-10-14)
+                // showed the steps as hard horizontal slices. Distant cloud is meant to be soft and hazed.
+                gFoot = max(t * _CloudPixelAngle, stepLength * 0.35);
+                gVert = farSeg ? 0.5 * abs(ray.y) * stepLength : 0.0;
+                gHeroOnly = hero;
+                gNoHero = !hero && t >= 2000.0;
+                float d = DensityOrEmpty(world, farSeg ? 1.2 : hero ? 1.0 : 0.0);
+                // The sun taps see all cloud (a set-piece shades the deck under it, a deck shades a set-piece), except past the
+                // far limit, where only set-pieces remain.
+                gHeroOnly = t > CLOUD_FAR_LIMIT;
+                gNoHero = false;
+                // Shadow probes also evaluate Density and overwrite its local profile.
+                // Keep the primary sample's height within its own cloud body.
+                float localLightingHeight = gLocalLightingHeight;
+                float deckSheet = gDeckSheet;
+                if (hero)
                 {
-                    s1 = min(s1, CLOUD_FAR_LIMIT);
-                    if (s1 <= s0 + 1.0) continue;
+                    if (d <= 0.003 && tHero > fineUntil) { tHero += fine * 4.0; stride = true; continue; }
+                    if (d > 0.003 && stride) { fineUntil = tHero; tHero -= fine * 3.0; stride = false; continue; }
+                    stride = false;
+                    tHero += fine;
                 }
-                float farPass = farSeg ? 1.0 : 0.0;
-                float span = s1 - s0;
-                float steps;
-                if (hero) steps = 96.0;
-                else if (farSeg) steps = _CloudFarSteps * span / farTotal;
-                else
+                float open = hero ? sunOpenHero : sunOpen;
+                if (d <= 0.003) { if (hero) sunOpenHero = 1.0; else sunOpen = 1.0; }
+                if (d > 0.003)
                 {
-                    steps = _CloudSteps * span / nearTotal * saturate(nearTotal / 12000.0 + 0.35);
-                    if (s0 > 25000.0) steps *= 0.68;
-                }
-                steps = clamp(floor(steps), 4.0, 96.0);
-                // Resolve the first few hundred metres during entry/exit, including short
-                // upward chords. Fade back to the ordinary budget before distant clouds.
-                float proximity = farSeg || hero ? 0.0 : 1.0 - smoothstep(500.0, 2500.0, s0);
-                steps = max(steps, floor(24.0 * proximity));
-                // Set-pieces: adaptive steps of about 0.6 % of the distance (a fraction of a
-                // tower's width at any range), four at a time through empty air, backing up to
-                // fine steps where cloud begins.
-                // Distant segments march from fixed sample positions: the cycling dither moves
-                // a far sample by kilometres, and the sky boiled however much history it
-                // kept. Near segments keep the dither (the resolve averages it out); far
-                // ones lean on the resolve's distance-weighted history instead.
-                float segJitter = farSeg || (hero && h0 >= CLOUD_NEAR_LIMIT) ? 0.5 : jitter;
-                float tHero = s0 + segJitter * clamp(s0 * 0.006, 150.0, 900.0);
-                float fineUntil = -1.0;
-                bool stride = false;
-                [loop]
-                for (int n = 0; n < 96; n++)
-                {
-                    if ((hero ? tHero >= s1 : n >= steps) || transmittance < 0.05) break;
-                    float a = n / steps, b = (n + 1.0) / steps;
-                    // Cubic spacing spends the same bounded budget on nearby filaments;
-                    // distant segments keep quadratic spacing and their existing detail.
-                    float fine = clamp(tHero * 0.006, 150.0, 900.0);
-                    float sampleStart = lerp(a * a, a * a * a, proximity);
-                    float sampleEnd = lerp(b * b, b * b * b, proximity);
-                    float stepLength = hero ? fine : span * (sampleEnd - sampleStart);
-                    float t = hero ? tHero : s0 + span * lerp(sampleStart, sampleEnd, segJitter);
-                    float3 world = origin + ray * t;
-                    gHeroOnly = t > CLOUD_FAR_LIMIT;
-                    // A third of the step: far steps run up to ~17 km, and sharper noise there (an eighth, tried 2026-10-14)
-                    // showed the steps as hard horizontal slices. Distant cloud is meant to be soft and hazed.
-                    gFoot = max(t * _CloudPixelAngle, stepLength * 0.35);
-                    gVert = farSeg ? 0.5 * abs(ray.y) * stepLength : 0.0;
-                    float d = DensityOrEmpty(world, farSeg ? 1.2 : hero ? 1.0 : 0.0);
-                    // Shadow probes also evaluate Density and overwrite its local profile.
-                    // Keep the primary sample's height within its own cloud body.
-                    float localLightingHeight = gLocalLightingHeight;
-                    float deckSheet = gDeckSheet;
-                    if (hero)
+                    // Light taps in one loop, so the (large) density function is compiled
+                    // once for all of them: three increasingly coarse intervals toward the
+                    // sun resolve nearby lobes and the thicker cloud behind them, and one
+                    // tap straight up measures the cloud shading this point from the sky.
+                    // Far away one coarse sun interval is indistinguishable and height
+                    // stands in for the cloud above.
+                    float optical = 0.0, above = 0.0;
+                    bool coarseSun = farSeg || open < 0.06;
+                    int taps = coarseSun ? 1 : 3;
+                    gLowReuse = true; // the sun taps reuse this sample's genus row
+                    [loop]
+                    for (int k = 0; k < taps; k++)
                     {
-                        if (d <= 0.003 && tHero > fineUntil) { tHero += fine * 4.0; stride = true; continue; }
-                        if (d > 0.003 && stride) { fineUntil = tHero; tHero -= fine * 3.0; stride = false; continue; }
-                        stride = false;
-                        tHero += fine;
+                        float3 offset = k == 2 ? float3(0.0, 380.0, 0.0)
+                            : _CloudSunDirection * (coarseSun ? 1500.0 : k == 0 ? 170.0 : 1250.0);
+                        float tapCoarse = coarseSun ? 1.8 : k == 0 ? 1.0 : k == 1 ? 1.6 : 1.2;
+                        float tap = DensityOrEmpty(world + offset, tapCoarse);
+                        if (k == 2) above = tap;
+                        else optical += tap * (coarseSun ? 3000.0 : k == 0 ? 340.0 : 2300.0);
                     }
-                    if (d <= 0.003) sunOpen = 1.0;
-                    if (d > 0.003)
+                    gLowReuse = false;
+                    optical *= 0.0040; // round 4: 0.0021 left fair-weather bodies lit through (flat 1.7-1.8 lit/dark)
+                    float h = saturate(localLightingHeight);
+                    float direct = exp(-optical);
+                    // The upward tap was only skipped when the sun was already out.
+                    bool sunOut = open < 0.06;
+                    if (hero) sunOpenHero = direct; else sunOpen = direct;
+                    // Subtle edge darkening away from the sun. This only attenuates:
+                    // direct-light occlusion comes from the sun march, without a gain
+                    // on dense samples that could flatten the sunlit structure.
+                    float powder = 1.0 - exp(-d * 6.0);
+                    direct *= lerp(1.0, lerp(0.72, 1.0, powder), awayFromSun * 0.5);
+                    // Sky light reaches a point only through the cloud above it, so
+                    // bases go dark and tops stay bright. Far away the height says enough.
+                    if (farSeg) above = d * (1.0 - h);
+                    else if (sunOut) above = d;
+                    float skyAccess = lerp(0.27, 1.0, h) * exp(-d * 0.70) * exp(-above * 1.7);
+                    // A cheaper multiple-scattering approximation, not a path tracer:
+                    // broaden one lobe and reduce its extinction, while local sky access
+                    // keeps bases and buried cores darker than exposed crowns. No
+                    // density-independent sun floor remains inside an opaque storm.
+                    float secondaryAccess = lerp(0.35, 1.0, h) * exp(-above * 0.5);
+                    // Round 4: 0.22 -> 0.12 (its decay follows the steeper optical depth). The fill was sun-coloured and as bright as the shade itself, which greyed the shaded sides and
+                    // capped lit/dark near 1.8; the shade is now the sky's blue (below) and this is only the in-cloud glow.
+                    float scattered = 0.12 * exp(-optical * 0.13) * secondaryPhase * secondaryAccess;
+                    float phaseHere = phaseBody + phaseRim * exp(-d * 2.2);
+                    // Shade is lit by blue sky, not grey: a cool tint keeps sunlit lobes and
+                    // shadowed lobes apart, like the reference flight footage.
+                    // Round 4: the shade is sky-blue light with a floor (0.19 of the ambient, tinted blue 0.80/0.96/1.25 so the shade reads (39,61,97)-like rather than slate; the open-sky part is 0.40, was 0.72, whose exposed shaded sides sat near 0.4 luminance against 0.95 lit): a base is never black (the references' darkest
+                    // 3 % is (39,61,97) in blue-sky scenes, (48,66,94) under a Cb), and lit/dark of towers stays under 4.4.
+                    float3 light = _CloudAmbientColor * float3(0.80, 0.96, 1.25) * (skyAccess * 0.40 + 0.19) +
+                        _CloudGroundColor * (1.0 - h) * exp(-d) +
+                        _CloudSunColor * (direct * phaseHere * 0.55 + scattered + sunGlow * exp(-optical * 0.10));
+                    // Lightning: the bolt's light scattering off the droplets around it. It
+                    // reaches the shadowed cores the sun cannot, so the whole storm flickers.
+                    // Not scaled by density (2026-10-19): it is light arriving, and the opacity already counts the droplets; times density
+                    // it left the thin cloud base, the part seen from under the storm, almost dark even at full flash.
+                    float3 flash = 0.0;
+                    if (_CloudFlash > 0.001)
                     {
-                        // Light taps in one loop, so the (large) density function is compiled
-                        // once for all of them: three increasingly coarse intervals toward the
-                        // sun resolve nearby lobes and the thicker cloud behind them, and one
-                        // tap straight up measures the cloud shading this point from the sky.
-                        // Far away one coarse sun interval is indistinguishable and height
-                        // stands in for the cloud above.
-                        float optical = 0.0, above = 0.0;
-                        bool coarseSun = farSeg || sunOpen < 0.06;
-                        int taps = coarseSun ? 1 : 3;
-                        gLowReuse = true; // the sun taps reuse this sample's genus row
-                        [loop]
-                        for (int k = 0; k < taps; k++)
+                        float3 globalSample = world + _CloudWorldOffset;
+                        float a = saturate(1.0 - length(globalSample - _CloudFlashA.xyz) / 12000.0);
+                        float b = saturate(1.0 - length(globalSample - _CloudFlashB.xyz) / 12000.0);
+                        flash = float3(0.65, 0.75, 1.0) * (a * a * _CloudFlashA.w + b * b * _CloudFlashB.w) * 1.4;
+                        light += flash;
+                    }
+                    // Near-field wisps: inside cloud the march saturates within metres and every
+                    // pixel would be the same flat grey. Modulate the scattered light itself by
+                    // world-anchored noise (filtered to the sample footprint), so filaments rush
+                    // past the camera. Light only: density, the CPU mirror and shadows agree.
+                    float wispFade = saturate(1.0 - gFoot / 150.0);
+                    if (wispFade > 0.01)
+                    {
+                        float3 wg = world + _CloudWorldOffset;
+                        float3 nwg = NoiseG(wg, NOISE_LOW);
+                        float3 wispN = tex3Dlod(_CloudNoiseTex, float4(nwg.xz / 1200.0 + 0.47, nwg.y / 1000.0 + 0.13, LodFor(gFoot, 1200.0))).rgb;
+                        float wisp = wispN.x * 0.45 + wispN.y * 0.20 + wispN.z * 0.35;
+                        // Smaller ragged filaments supply parallax as the aircraft crosses
+                        // the volume. Filter them out before a march interval can alias them.
+                        float filamentFade = (1.0 - smoothstep(600.0, 1800.0, t)) *
+                            (1.0 - smoothstep(20.0, 70.0, gFoot));
+                        if (filamentFade > 0.01)
                         {
-                            float3 offset = k == 2 ? float3(0.0, 380.0, 0.0)
-                                : _CloudSunDirection * (coarseSun ? 1500.0 : k == 0 ? 170.0 : 1250.0);
-                            float tapCoarse = coarseSun ? 1.8 : k == 0 ? 1.0 : k == 1 ? 1.6 : 1.2;
-                            float tap = DensityOrEmpty(world + offset, tapCoarse);
-                            if (k == 2) above = tap;
-                            else optical += tap * (coarseSun ? 3000.0 : k == 0 ? 340.0 : 2300.0);
+                            float filament = tex3Dlod(_CloudNoiseTex, float4(nwg.xz / 360.0 + 0.19,
+                                nwg.y / 300.0 + 0.67, LodFor(gFoot, 360.0))).g;
+                            wisp += (filament - 0.5) * 0.55 * filamentFade;
                         }
-                        gLowReuse = false;
-                        optical *= 0.0040; // round 4: 0.0021 left fair-weather bodies lit through (flat 1.7-1.8 lit/dark)
-                        float h = saturate(localLightingHeight);
-                        float direct = exp(-optical);
-                        // The upward tap was only skipped when the sun was already out.
-                        bool sunOut = sunOpen < 0.06;
-                        sunOpen = direct;
-                        // Subtle edge darkening away from the sun. This only attenuates:
-                        // direct-light occlusion comes from the sun march, without a gain
-                        // on dense samples that could flatten the sunlit structure.
-                        float powder = 1.0 - exp(-d * 6.0);
-                        direct *= lerp(1.0, lerp(0.72, 1.0, powder), awayFromSun * 0.5);
-                        // Sky light reaches a point only through the cloud above it, so
-                        // bases go dark and tops stay bright. Far away the height says enough.
-                        if (farSeg) above = d * (1.0 - h);
-                        else if (sunOut) above = d;
-                        float skyAccess = lerp(0.27, 1.0, h) * exp(-d * 0.70) * exp(-above * 1.7);
-                        // A cheaper multiple-scattering approximation, not a path tracer:
-                        // broaden one lobe and reduce its extinction, while local sky access
-                        // keeps bases and buried cores darker than exposed crowns. No
-                        // density-independent sun floor remains inside an opaque storm.
-                        float secondaryAccess = lerp(0.35, 1.0, h) * exp(-above * 0.5);
-                        // Round 4: 0.22 -> 0.12 (its decay follows the steeper optical depth). The fill was sun-coloured and as bright as the shade itself, which greyed the shaded sides and
-                        // capped lit/dark near 1.8; the shade is now the sky's blue (below) and this is only the in-cloud glow.
-                        float scattered = 0.12 * exp(-optical * 0.13) * secondaryPhase * secondaryAccess;
-                        float phaseHere = phaseBody + phaseRim * exp(-d * 2.2);
-                        // Shade is lit by blue sky, not grey: a cool tint keeps sunlit lobes and
-                        // shadowed lobes apart, like the reference flight footage.
-                        // Round 4: the shade is sky-blue light with a floor (0.19 of the ambient, tinted blue 0.80/0.96/1.25 so the shade reads (39,61,97)-like rather than slate; the open-sky part is 0.40, was 0.72, whose exposed shaded sides sat near 0.4 luminance against 0.95 lit): a base is never black (the references' darkest
-                        // 3 % is (39,61,97) in blue-sky scenes, (48,66,94) under a Cb), and lit/dark of towers stays under 4.4.
-                        float3 light = _CloudAmbientColor * float3(0.80, 0.96, 1.25) * (skyAccess * 0.40 + 0.19) +
-                            _CloudGroundColor * (1.0 - h) * exp(-d) +
-                            _CloudSunColor * (direct * phaseHere * 0.55 + scattered + sunGlow * exp(-optical * 0.10));
-                        // Lightning: the bolt's light scattering off the droplets around it. It
-                        // reaches the shadowed cores the sun cannot, so the whole storm flickers.
-                        if (_CloudFlash > 0.001)
-                        {
-                            float3 globalSample = world + _CloudWorldOffset;
-                            float a = saturate(1.0 - length(globalSample - _CloudFlashA.xyz) / 12000.0);
-                            float b = saturate(1.0 - length(globalSample - _CloudFlashB.xyz) / 12000.0);
-                            light += float3(0.65, 0.75, 1.0) * (a * a * _CloudFlashA.w + b * b * _CloudFlashB.w) * d * 1.4;
-                        }
-                        // Near-field wisps: inside cloud the march saturates within metres and every
-                        // pixel would be the same flat grey. Modulate the scattered light itself by
-                        // world-anchored noise (filtered to the sample footprint), so filaments rush
-                        // past the camera. Light only: density, the CPU mirror and shadows agree.
-                        float wispFade = saturate(1.0 - gFoot / 150.0);
-                        if (wispFade > 0.01)
-                        {
-                            float3 wg = world + _CloudWorldOffset;
-                            float3 nwg = NoiseG(wg, NOISE_LOW);
-                            float3 wispN = tex3Dlod(_CloudNoiseTex, float4(nwg.xz / 1200.0 + 0.47, nwg.y / 1000.0 + 0.13, LodFor(gFoot, 1200.0))).rgb;
-                            float wisp = wispN.x * 0.45 + wispN.y * 0.20 + wispN.z * 0.35;
-                            // Smaller ragged filaments supply parallax as the aircraft crosses
-                            // the volume. Filter them out before a march interval can alias them.
-                            float filamentFade = (1.0 - smoothstep(600.0, 1800.0, t)) *
-                                (1.0 - smoothstep(20.0, 70.0, gFoot));
-                            if (filamentFade > 0.01)
-                            {
-                                float filament = tex3Dlod(_CloudNoiseTex, float4(nwg.xz / 360.0 + 0.19,
-                                    nwg.y / 300.0 + 0.67, LodFor(gFoot, 360.0))).g;
-                                wisp += (filament - 0.5) * 0.55 * filamentFade;
-                            }
-                            light *= 1.0 + (wisp - 0.5) * 1.1 * (0.5 + saturate(d)) * wispFade;
-                        }
-                        float deckMul = 1.0;
-                        if (deckSheet > 0.01)
-                        {
-                            // Round 6: a smooth deck has no density structure to light, so its base was one grey (luma deviation 0.03-0.05 of skies 29, 34, 35, 36, 40). The transmitted
-                            // light varies with the deck's thickness at two mesoscales (5.2 km and 1.9 km, hash noise anchored to the world). Light only: density, the CPU twin and shadows agree.
-                            float3 dg = world + _CloudWorldOffset;
-                            float deckN = SmoothNoise2(dg.xz / 5200.0 + float2(0.37, 0.58), SALT_DECK_A).x * 0.65 + SmoothNoise2(dg.xz / 1900.0 + float2(0.81, 0.12), SALT_DECK_B).x * 0.35;
-                            deckMul = 1.0 + 1.4 * (deckN - 0.5) * deckSheet; // applied after the haze blend below: a deck is mostly airlight at 5-30 km and the modulation of its own light vanished in it
-                        }
-                        light = CloudShoulder(light, 0.62, 0.40);
-                        // Integrate actual density along this ray. A camera-wide multiplier
-                        // made the same edge eight times more opaque after entering it.
-                        // Dense cloud within a few hundred metres closes in: the far-tuned
-                        // extinction left ~2 km of view inside a cumulus core. It depends on
-                        // distance and density only, so nothing pops on entry and slots stay open.
-                        float nearClose = 1.0 + 5.0 * (1.0 - smoothstep(150.0, 900.0, t)) * smoothstep(0.15, 0.45, d);
-                        float absorb = exp(-d * stepLength * 0.003 * nearClose);
-                        float contribution = transmittance * (1.0 - absorb);
-                        // Haze each sample at its own distance: one haze per ray at the
-                        // opacity-weighted distance jumped where that distance jumps (grazing
-                        // rays crossing from the near map to the far map drew a step above
-                        // the horizon under overcast).
-                        float sampleAir = CloudAir(t, ro.y, ro.y + ray.y * t);
-                        colour += contribution * deckMul * lerp(ShadedFog(light, t), light, sampleAir);
-                        weightedDistance += contribution * t;
+                        light *= 1.0 + (wisp - 0.5) * 1.1 * (0.5 + saturate(d)) * wispFade;
+                    }
+                    float deckMul = 1.0;
+                    if (deckSheet > 0.01)
+                    {
+                        // Round 6: a smooth deck has no density structure to light, so its base was one grey (luma deviation 0.03-0.05 of skies 29, 34, 35, 36, 40). The transmitted
+                        // light varies with the deck's thickness at two mesoscales (5.2 km and 1.9 km, hash noise anchored to the world). Light only: density, the CPU twin and shadows agree.
+                        float3 dg = world + _CloudWorldOffset;
+                        float deckN = SmoothNoise2(dg.xz / 5200.0 + float2(0.37, 0.58), SALT_DECK_A).x * 0.65 + SmoothNoise2(dg.xz / 1900.0 + float2(0.81, 0.12), SALT_DECK_B).x * 0.35;
+                        deckMul = 1.0 + 1.4 * (deckN - 0.5) * deckSheet; // applied after the haze blend below: a deck is mostly airlight at 5-30 km and the modulation of its own light vanished in it
+                    }
+                    light = CloudShoulder(light, 0.62, 0.40);
+                    // Integrate actual density along this ray. A camera-wide multiplier
+                    // made the same edge eight times more opaque after entering it.
+                    // Dense cloud within a few hundred metres closes in: the far-tuned
+                    // extinction left ~2 km of view inside a cumulus core. It depends on
+                    // distance and density only, so nothing pops on entry and slots stay open.
+                    // 2026-10-18 (user: inside cloud is "too much see through"): x10 instead of x6, out to 1.6 km instead of 0.9, and from thin
+                    // cloud (density 0.04) instead of 0.15: a sheet's interior (0.2-0.4) left 2-4 km of view; now a few hundred metres.
+                    float nearClose = 1.0 + 9.0 * (1.0 - smoothstep(200.0, 1600.0, t)) * smoothstep(0.04, 0.30, d);
+                    float absorb = exp(-d * stepLength * 0.003 * nearClose);
+                    float contribution = transmittance * (1.0 - absorb);
+                    // Haze each sample at its own distance: one haze per ray at the
+                    // opacity-weighted distance jumped where that distance jumps (grazing
+                    // rays crossing from the near map to the far map drew a step above
+                    // the horizon under overcast).
+                    float sampleAir = CloudAir(t, ro.y, ro.y + ray.y * t);
+                    float3 lit = lerp(ShadedFog(light, t), light, sampleAir);
+                    // The flash lights the rain and haze around it as well, so the haze hides it as if it were a third as thick. Through
+                    // the full haze a storm night's flash 17-28 km away kept 0.3-2 % of its light and the base never lit (2026-10-19).
+                    lit += flash * max(0.0, exp(-_CloudAirExtinction * 0.3 * t) - sampleAir);
+                    colour += contribution * deckMul * lit;
+                    weightedDistance += contribution * t;
                         
-                        transmittance *= absorb;
-                    }
+                    transmittance *= absorb;
                 }
             }
             gVert = 0.0;
             gHeroOnly = false;
+            // The march stops at 5 % transmittance; that last 5 % let terrain and sky glow through every dense cloud (2026-10-18).
+            // A ray that closed is opaque: its light is scaled up to full instead.
+            if (transmittance < 0.05)
+            {
+                float closed = 1.0 / (1.0 - transmittance);
+                colour *= closed;
+                weightedDistance *= closed;
+                transmittance = 0.0;
+            }
             float opacity = 1.0 - transmittance;
             // Visible wisps need their real depth too: the composite displays opacity
             // above 0.002, so its reprojection cannot use the empty-ray far fallback.
@@ -1774,16 +1822,23 @@ Shader "Boscali/FlightCloud"
 
             // Horizon deck (spec 7.3): one plane at the tape's deck altitude; cover and depth per hit from the tape, and the deck supplies exactly the part of
             // its chord the march did not reach (wDeck): 0 while the whole chord is inside 220 km, 1 once it starts beyond it.
-            float horizonT = (_HorizonDeck - ro.y) / ray.y;
+            bool below = ro.y < _HorizonDeck;
+            // Under the deck, a sky pixel below the horizon is the sea or land past the camera's far plane (80 km). It takes the deck's own haze,
+            // mirrored about the horizon, so the two meet seamlessly; it used to show the skybox's clear-day horizon, a bright band under storm
+            // decks between the hazed deck and the hazed sea (2026-10-19).
+            bool mirrored = below && ray.y < 0.0 && sceneDistance >= CLOUD_HORIZON_LIMIT;
+            float deckY = mirrored ? -ray.y : ray.y;
+            float horizonT = (_HorizonDeck - ro.y) / deckY;
             // Sky pixels carry no occluder: let the deck run past the horizon limit there
             // (aerial perspective whitens it), so its far edge never draws a line.
             float deckLimit = sceneDistance >= CLOUD_HORIZON_LIMIT ? 2e7 : sceneDistance;
-            if (ray.y != 0.0 && horizonT > 0.0 && horizonT < deckLimit)
+            if (deckY != 0.0 && horizonT > 0.0 && horizonT < deckLimit)
             {
                 float2 hp = ro.xz + ray.xz * horizonT;
                 float4 hRow = TapeDeckRow(TapeS(hp));            // row 2: Streets, HorizonCover (z), HorizonDepth (w)
                 float hd = max(1.0, hRow.w);
-                float wDeck = DeckWeight(ro.y, ray.y, hd);
+                // The mirrored strip is all past the far plane: the march never reached it.
+                float wDeck = mirrored ? 1.0 : DeckWeight(ro.y, deckY, hd);
                 if (hRow.z > 0.01 && wDeck > 0.001)
                 {
                     float2 nhp = NoiseXZ(hp, NOISE_HORIZON);
@@ -1795,9 +1850,10 @@ Shader "Boscali/FlightCloud"
                     // A distance fade collapses to less than a pixel when the camera flies near
                     // the deck's altitude (hundreds of km per milliradian), drawing a hard step.
                     // Dissolve by view angle instead: always about four texels into the haze.
-                    float angleFade = smoothstep(0.0, _CloudPixelAngle * 4.0, abs(ray.y));
+                    // Only seen from above, where the deck meets the open sky: from under it the deck meets the mirrored strip, and the fade
+                    // opened a 0.4 degree slot of clear skybox along the horizon (the bright band under storm decks, 2026-10-19).
+                    float angleFade = below ? 1.0 : smoothstep(0.0, _CloudPixelAngle * 4.0, abs(ray.y));
                     float hOpacity = hCover * (1.0 - exp(-hPath * 0.00003)) * wDeck * angleFade;
-                    bool below = ro.y < _HorizonDeck;
                     float3 hLight = below
                         ? _CloudAmbientColor * 0.5 + _CloudGroundColor * 0.25 + _CloudSunColor * 0.06
                         : _CloudAmbientColor * 0.8 + _CloudSunColor * (phase * 0.35 + 0.2);
@@ -1847,6 +1903,9 @@ Shader "Boscali/FlightCloud"
             if (totalOpacity > 0.002)
                 cloudDistance = (front.weightedDistance + frontTransmit *
                     (opacity * cloudDistance + cloudTransmit * back.weightedDistance)) / totalOpacity;
+            // The blue strip under the horizon (2026-10-18, user: "gap on horizon") is the skybox showing past the water plane's far edge in its own
+            // _FogColor, which our overcast never tinted; RainAtmosphere now tints it. A fill here in the fog colour was tried and removed: at night the
+            // fog colour is brighter than the dark sea and drew a teal band 1.5 degrees deep.
             return float4(front.colour + frontTransmit * (colour + cloudTransmit * back.colour), totalOpacity);
         }
 

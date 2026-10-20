@@ -6,7 +6,7 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Vanguard.Runtime
 {
     /// <summary>
-    /// HAWC-X "SKIP" (server). Boost, two skips with a glow phase around each apex, then a FINAL dive that latches.
+    /// HAWC-X "SKIP" (server). Boost, three skips with a glow phase around each apex, then a FINAL dive that latches.
     /// In the final, outside the glow, a new pilot designation within GlideProfile.NudgeReach of the current aim
     /// shifts the dive onto it (Missile.SetTarget syncs the change to every peer).
     /// </summary>

@@ -110,6 +110,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
                 case IntrusionEnd.Unpaid: return "UPKEEP UNPAID";
                 case IntrusionEnd.SourceDown: return "EW TRUCK DOWN";
                 case IntrusionEnd.NodeLost: return "NODE DESTROYED";
+                case IntrusionEnd.Purged: return "PURGED BY THE ENEMY";
                 default: return "ENDED";
             }
         }

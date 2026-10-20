@@ -37,9 +37,10 @@ namespace BoscaliSummer.Tests.Features.Weather
             var structure = new byte[] { 0, 0, 220, 48 };
             var profiles = new byte[] { 0, 0, 86, 0 };
             WeatherPoint p = CloudBodies.SampleMap(structure, profiles, 1, 0.5f, 0.5f);
-            TestAssert.That(Math.Abs(p.LowTop - 48f / 255f * 16000f) < 0.01f,
+            // Heights are 16-bit since 2026-10-18: alpha is the high byte, green the low byte (zero here).
+            TestAssert.That(Math.Abs(p.LowTop - 48f * 256f / 65535f * 16000f) < 0.01f,
                 "Structure alpha transports only the low/tower ceiling");
-            TestAssert.That(p.CloudTop >= p.LowTop && Math.Abs(p.CloudBase - 86f / 255f * CloudMaps.BaseRange) < 0.01f,
+            TestAssert.That(p.CloudTop >= p.LowTop && Math.Abs(p.CloudBase - 86f * 256f / 65535f * CloudMaps.BaseRange) < 0.01f,
                 "CPU map decode retains the aggregate ceiling and the 4096 m cloud base");
             WeatherPoint blend = CloudBodies.BlendMaps(new WeatherPoint { LowTop = 1400f, CloudTop = 1400f }, p, 0.5f);
             TestAssert.That(Math.Abs(blend.LowTop - (1400f + p.LowTop) * 0.5f) < 0.01f,

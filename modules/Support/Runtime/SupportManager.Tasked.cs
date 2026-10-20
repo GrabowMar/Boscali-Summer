@@ -4,6 +4,7 @@ using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using NuclearOption.Networking;
@@ -72,6 +73,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             out int baselinePrice, out bool charge, out int detail)
         {
             baselinePrice = 0; charge = !BypassRequirements; detail = 0;
+            // Master switch, re-judged here because a queued claim is arbitrated after the request was admitted.
+            if (settings == null || !settings.Enabled.Value) return TaskedOutcome.Unavailable;
             if (SofPosts.IsPost(action)) return AuthorizeSofTasked(owner, playerId, action, claiming, out baselinePrice, out charge, out detail);
             if (TaskedKinds.DomainOf(action) == TaskedDomain.Cyber && CyberPackages.TryOfAction(action, out _))
                 return AuthorizeCyberTasked(owner, playerId, action, claiming, out baselinePrice, out charge, out detail);
@@ -125,7 +128,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             Player pilot = FindPlayer(owner, job.Pilot);
             if (definition == null || pilot == null || !(job.Slot is TaskedSlot slot)) { job.ReportFailure(); return; }
             var context = new SupportContext(pilot, new GlobalPosition(job.Aim.X, 0f, job.Aim.Z), job.RequestId, this,
-                slot.Transaction, job);
+                slot.Transaction, job, readiness.Power(pilot.HQ, Front.Space));
             SupportResult result;
             try { result = definition.Action.Execute(context); }
             catch (Exception e) { logger.LogError(e); result = SupportResult.SpawnFailed; }

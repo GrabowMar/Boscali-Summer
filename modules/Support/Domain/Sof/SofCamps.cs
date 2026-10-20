@@ -4,6 +4,15 @@ using BoscaliSummer.Modules.Support.Domain.Cyber;
 
 namespace BoscaliSummer.Modules.Support.Domain.Sof
 {
+    /// <summary>An enemy team this faction detected near its own sites (protocol 42): whose it is (their faction key and team slot), where, since when, and whether our QRF hunts it.</summary>
+    internal readonly struct SofHostile
+    {
+        public readonly int Attacker, Slot;
+        public readonly float X, Z, Since;
+        public readonly bool Hunted;
+        public SofHostile(int attacker, int slot, float x, float z, bool hunted, float since = 0f) { Attacker = attacker; Slot = slot; X = x; Z = z; Hunted = hunted; Since = since; }
+    }
+
     /// <summary>Spec 2.1 camp numbers. A camp reuses the CYBER anchor health words, grace and restore bar; only the goal and the effects differ.</summary>
     internal static class CampRules
     {

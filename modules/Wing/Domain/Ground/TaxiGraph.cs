@@ -35,6 +35,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         private int[] hangarExits = new int[0], serviceNodes = new int[0];
         private readonly List<int> runwayExits = new List<int>();
         private int[,] holdShorts = new int[0, 2], thresholds = new int[0, 2];
+        private Vec3[,][] lineups = new Vec3[0, 2][];
         private float mergeRadius;
 
         public int NodeCount => positions.Count;
@@ -71,6 +72,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         /// <summary>The hold-short before rolling on runway <paramref name="runway"/> in the given direction (−1: none).</summary>
         public int HoldShort(int runway, bool reverse) => runway >= 0 && runway < holdShorts.GetLength(0) ? holdShorts[runway, reverse ? 1 : 0] : -1;
+
+        /// <summary>The line-up from that hold-short to its threshold: the hold-short's road onward to the runway end where it runs
+        /// there, else the two points (null: none).</summary>
+        public Vec3[] Lineup(int runway, bool reverse) => runway >= 0 && runway < lineups.GetLength(0) ? lineups[runway, reverse ? 1 : 0] : null;
 
         /// <summary>Every runway exit node (the way off a runway after a landing).</summary>
         public IReadOnlyList<int> RunwayExits => runwayExits;
@@ -132,6 +137,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
             g.holdShorts = new int[field.Runways.Length, 2];
             g.thresholds = new int[field.Runways.Length, 2];
+            g.lineups = new Vec3[field.Runways.Length, 2][];
             for (int r = 0; r < field.Runways.Length; r++)
                 for (int d = 0; d < 2; d++)
                 {
@@ -140,10 +146,13 @@ namespace BoscaliSummer.Modules.Wing.Domain
                     bool reverse = d == 1;
                     if (!runway.Takeoff || (reverse && !runway.Reversable)) continue;
                     Vec3 threshold = reverse ? runway.End : runway.Start;
-                    Vec3 hold = HoldShortPosition(field, runway, reverse, threshold);
+                    Vec3 hold = HoldShortPosition(field, runway, reverse, threshold, g.mergeRadius, out List<Vec3> lineup);
                     int holdNode = g.Synthetic(hold, NodeKind.HoldShort);
                     int thresholdNode = g.AddNode(threshold, NodeKind.Threshold);
-                    g.AddEdge(holdNode, thresholdNode, new[] { hold, threshold });
+                    lineup.Insert(0, hold);
+                    lineup.Add(threshold);
+                    g.lineups[r, d] = lineup.ToArray();
+                    g.AddEdge(holdNode, thresholdNode, g.lineups[r, d]);
                     g.holdShorts[r, d] = holdNode;
                     g.thresholds[r, d] = thresholdNode;
                 }
@@ -168,9 +177,11 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// <summary>The runway's entry point nearest the threshold (within <see cref="EntrySearchRadius"/>, off the runway by
         /// <see cref="EntryClearance"/>), else the taxi road point nearest it that is <see cref="HoldShortClear"/> outside
         /// the runway (where the taxiway comes in), else a point <see cref="HoldShortBack"/> before the threshold and clear
-        /// of the runway edge on the side of the field centre.</summary>
-        private static Vec3 HoldShortPosition(AirbaseSample field, RunwaySample runway, bool reverse, Vec3 threshold)
+        /// of the runway edge on the side of the field centre. <paramref name="lineup"/>: a road hold-short's road onward to the
+        /// runway end (its points short of the runway), when it gets within <see cref="HoldShortClear"/> of the threshold.</summary>
+        private static Vec3 HoldShortPosition(AirbaseSample field, RunwaySample runway, bool reverse, Vec3 threshold, float merge, out List<Vec3> lineup)
         {
+            lineup = new List<Vec3>();
             float best = EntrySearchRadius;
             Vec3 found = Vec3.Zero;
             bool have = false;
@@ -198,11 +209,29 @@ namespace BoscaliSummer.Modules.Wing.Domain
                         have = true;
                     }
                 }
-            if (have) return found;
+            if (have)
+            {
+                // Whichever road from there runs on to the runway end (at airstrip_city2 three meet at the hold-short).
+                foreach (Vec3[] road in field.Roads)
+                    for (int k = 0; k < road.Length && lineup.Count == 0; k++)
+                        if ((road[k] - found).Length <= merge) Onward(road, k, runway, threshold, lineup);
+                return found;
+            }
             Vec3 dir = runway.Direction(reverse);
             Vec3 side = Vec3.Cross(Vec3.Up, dir);
             if (Vec3.Dot(field.Center - threshold, side) < 0f) side = -side;
             return threshold - dir * HoldShortBack + side * (0.5f * runway.Width + HoldShortSide);
+        }
+
+        /// <summary>The road's points after <paramref name="at"/>, toward its end nearer the threshold and short of the runway; none
+        /// unless they get within <see cref="HoldShortClear"/> of the threshold (wing-taxi sweep 2026-10-18, highwaystrip1: the road
+        /// curls on from the hold-short to the runway end, and straight across was a verge that jets crawled through and clipped).</summary>
+        private static void Onward(Vec3[] road, int at, RunwaySample runway, Vec3 threshold, List<Vec3> into)
+        {
+            into.Clear();
+            int step = (road[road.Length - 1] - threshold).Horizontal.Length < (road[0] - threshold).Horizontal.Length ? 1 : -1;
+            for (int k = at + step; k >= 0 && k < road.Length && !runway.Contains(road[k], 0f); k += step) into.Add(road[k]);
+            if (into.Count > 0 && (into[into.Count - 1] - threshold).Horizontal.Length > HoldShortClear) into.Clear();
         }
 
         private int NodeAt(Vec3 p)

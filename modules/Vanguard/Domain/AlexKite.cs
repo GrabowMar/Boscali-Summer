@@ -18,11 +18,11 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const string MountKey = "VG_AleX_Pod"; // WeaponMount jsonKey of the two-decoy pod
         public const float FreeSeconds = 20f;       // a cut decoy keeps radiating, then self-destructs
         public const float FreeFloor = 0.3f;        // it decelerates to this fraction of the host speed it was cut at
-        public const float DeflectRange = 6000f;
+        public const float DeflectRange = 8000f;
         public const float DeflectPull = 0.4f;      // aimpoint moved this far toward the decoy
         public const float SuppressSlow = 1.5f;     // turret locks on the host take 50 % longer
         public const float AiCutDelay = 1f;         // an AI host cuts this long after its first capture
-        public const float AiDeployRange = 10000f;  // an AI host with a pod deploys when a radar missile is this close
+        public const float AiDeployRange = 14000f;  // an AI host with a pod deploys when a radar missile is this close
         public const byte PipSup = 1, PipDef = 2, PipSed = 4;
 
         // ---- layers

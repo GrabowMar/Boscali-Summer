@@ -13,7 +13,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
     /// </summary>
     internal sealed class SofObservations
     {
-        private const int MaximumUnits = 4096, MaximumFresh = 512, MaximumEnemies = 1024, MaximumBases = 32, GroundTargets = 12, BuildingTargets = 8, RelayTargets = 4;
+        private const int MaximumFresh = 512, MaximumEnemies = 1024, MaximumBases = 32, GroundTargets = 12, BuildingTargets = 8, RelayTargets = 4;
         private const float RelayRevealRadius = 5000f, BuildingBaseRadius = 4000f;
         private struct Enemy { public float X, Z; public bool Armored; }
         private List<Enemy> enemies = new List<Enemy>(256), building = new List<Enemy>(256);   // the last whole snapshot, and the one being taken
@@ -39,7 +39,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             enemiesAt = now;
             snapshotAt = -1;
             List<Unit> all = UnitRegistry.allUnits;
-            if (all == null || all.Count > MaximumUnits) { enemies.Clear(); return; }
+            if (all == null) { enemies.Clear(); return; }
             building.Clear();
             snapshotAt = 0;
             snapshotViewer = viewer;
@@ -93,7 +93,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             List<Unit> all = UnitRegistry.allUnits;
             if (viewer == null) { into.Clear(); return; }
-            if (all == null || all.Count > MaximumUnits) return; // too big to scan: keep the last map and seeds rather than dropping every engaged target
+            if (all == null) return; // ponytail: a big mission is scanned whole (cheap early-outs, once per RefreshSeconds); slice it with a cursor if that ever shows in a profile
             into.Clear(); byKey.Clear(); relays.Clear(); sighted.Clear(); fresh.Clear(); ownBases.Clear(); enemyBases.Clear(); grounds.Clear(); buildings.Clear(); kept.Clear();
             CollectFresh(viewer);
             CollectBases(viewer);
@@ -171,7 +171,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private void CollectFresh(FactionHQ viewer)
         {
             var db = viewer.trackingDatabase;
-            if (db == null || db.Count > MaximumUnits) return;
+            if (db == null) return;
             float nativeNow = Time.timeSinceLevelLoad;
             foreach (var pair in db)
             {

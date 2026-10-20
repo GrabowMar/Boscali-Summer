@@ -1,12 +1,91 @@
 # Changelog
 
-## 0.2.5 — update
+## 0.2.6.2 — hotfix
 
+- **Screen smearing after a mission restart fixed** ([#22](https://github.com/GrabowMar/Boscali-Summer/issues/22)):
+  after restarting a mission, selecting a target could freeze the picture into ghosted, overlapping
+  frames. The missile and drone feed cameras now hand the game's post-processing back cleanly when a
+  mission ends, so the target camera no longer trips over them.
+
+## 0.2.6 — spooky update
+
+- **OPS works both ways**: every OPS room now lets you see and answer what the enemy does to you.
+  CYBER: when an enemy holds one of our radars, SAM nets, relays, uplinks or data centers, HQ calls it
+  out, the NETWORK room shows it under INFOCON, and PURGE (4 CR) cuts every enemy hold 20 s later;
+  the intruder sees PURGE INCOMING on that node and can burn it first, and each cut intrusion's trace
+  jumps 25 %. SOF: enemy teams near our camps, airbases, uplinks or EW sites are spotted and called
+  out, and SWEEP (4 CR) sends a QRF that hunts them for a minute (enough to pin a lone team; cover,
+  push or exfil saves it). SPACE: every orbital rod and STARFALL barrage is now announced to its
+  targets, an ASAT first puts a launcher on the pad for 60 s that the target side can see and kill
+  to stop the strike, and a satellite that relocates after the launch (or any satellite while SPACE
+  stands on DEFEND) dodges it. ZERO-DAY and a new forward base are announced too. The WATCH OFFICER
+  and AI factions defend with the same tools, and AI factions now build ASATs.
+  Needs everyone on the same version (protocol 42).
+
+- **Something is on the air this season.** We are not saying more. Happy Spooktober.
+- **A living sea**: the ocean now has real waves that follow the wind and build under storms:
+  long swell on a calm day, choppy wave rows and whitecaps in a fresh breeze, steep grey seas,
+  foam streaks and breaking crests in a gale, and surf along the shallows. The sea picks up the
+  storm you are flying under, so it roughens as a squall line arrives and calms behind it, and
+  drifting gust patches keep it from looking uniform. Sun glitter widens as the water roughens,
+  cloud and aircraft shadows fall on the waves, and ships sit in calm water instead of being cut
+  by crests. Jets passing low and fast over the water throw spray up behind them and leave a
+  foaming wash. Both are client-local, under SET › SEA (OCEAN WAVES, SEA SPRAY); off restores the
+  game's own water.
+
+- **Trenches look and fight better**: full trench detail (fire bays, wire, roofs, saps) now
+  shows wherever you are near the line, not only near its middle, so walking or flying along a
+  long position no longer drops to the plain far ridge halfway down it. The earthwork takes the
+  colour of the local ground, the fire-side wall is revetted with planks and posts, dry grass
+  creeps over the outer slopes, the wire strands show from every angle, and distant trenches no
+  longer shimmer. Positions now keep digging all session: when the front moves and old lines
+  are lost, new ones are dug instead of the map going empty. Nests spread along the whole line
+  instead of crowding one end, hot positions fill out to their full garrison, a line cut off by
+  the front comes back to life if the front swings back over its surviving nests, destroyed
+  sandbagged buildings stay destroyed, and players who take a long time to load still see
+  existing trench lines. A new position no longer gets dug along most of an existing friendly
+  one, a hit that kills no nest pauses digging for 20 seconds instead of a full minute (a lost
+  nest still stops it for a minute), the end of a long front is no longer skipped, and a sap
+  dug on steep ground no longer dips to sea level for other players.
+- **VANGUARD drone link**: a UAV TERMINAL in the spirit of Arma's drone terminal lists every VANGUARD drone you have
+  in the air (MALD, REMORA, HAWC-X, GLAIVE, KESTREL, HAMILCAR) with its live camera feed, a north-up tactical plot and
+  an asset card. Link any drone, TAKE CONTROL to fly it by hand (it goes the way your nose points while you keep flying),
+  click the plot to send it to a point it circles, or put it BACK ON TASK. NEXT and PREV switch drones and hand the stick
+  over. In flight the same controls live under C › WEAPONS › DRONE LINK, the linked drone's feed rides on a HUD card
+  (EO or white-hot IR, zoom, analogue static that thickens with range, a signal-lost freeze), and a new UAV screen on the
+  MFD shows the feed and the roster. The link reaches 40 km; past that the drone goes back to its own job.
+  The feed is a proper sensor ball: hand-flown it looks ahead, on its own job it stares down, on a waypoint it watches
+  the point and with a DESIGNATE it tracks and boxes the target. Its overlay carries heading, altitude and speed tapes,
+  the horizon, a gimbal box, the sensor point's slant range and grid, REMORA rounds and flares, link latency and a frame
+  counter; clouds and rain shafts now show in the drone and missile feeds. The UAV MFD adds a TELEMETRY row.
+- **Faster REMORA**: the escort drone has twice the thrust, so it keeps up with you in afterburner and runs its
+  targets down sooner.
 - **Wing taxi fix**: a wingman that rolls just past its hold-short or stand now stops there and
   carries on, instead of circling back for the exact spot and getting stuck off the pavement
   (seen at highway strips, where wingmen could not reach the runway). A wingman leaving a hangar
   whose way out crosses a taxi road close to the door now turns onto the road there, instead of
   driving past it and looping back across the verge.
+- **Manual TAC BOARD pages**: choose each HUD page from C-menu or SET and show up to four,
+  two across and two down (WIDE fills a row first, STACK a column), so the board no longer runs
+  across the screen. SYSTEMS is not a page choice any more: it always shows under the lamp line.
+  A page with nothing to show draws its own idle face (an empty radar-warning scope reads CLEAR,
+  WING says NO WINGMEN) instead of a generic standby; WING shows your wing whenever you have one
+  and MISSILE CAM follows your newest missile from the cockpit. Events never replace the selected
+  pages and alerts continue independently. Board Parts has six major section switches, with page
+  count, layout, declutter, size, shade and visor sway under Display Options.
+
+- **Countermeasures you can read**: the EXPENDABLES rows now run in the order the countermeasure
+  key steps through them, the jammer included, and only the selected one carries a caret and SEL.
+  Before, a selected jammer showed no mark at all. Rounds and charge are clean bars in one column.
+
+- **CARGO drop computer**: the airdrop page is rebuilt around a heading-up drop plot (drop zone,
+  release reach ring, steer cue), a RED / AMBER / GREEN jump light with the next action or the
+  seconds until the zone is in reach, the stick drawn as fireteams, a release checklist (load,
+  safety, drop zone, reach) and every load aboard by station.
+
+- **Cinematic cameras**: scripts can author heading-level chase shots, fixed-vantage tracking
+  and flybys, with off-centre subject framing that respects the camera's aspect and lens.
+  Camera motion now reports real velocity during slow playback and held actor-follow shots.
 
 - **Left HUD and dialogue**: mission dialogue joins COMMS with its speaker and organization.
   The event log, COMMS and status flashes share a left inset, native type and thin frames;
@@ -14,6 +93,8 @@
   messages clear. Scripted readouts pause with the mission and clear when it ends.
   A single barely visible shadow now backs the whole left column; brighter log copy and
   slightly larger COMMS text replace the separate dark clouds behind each section.
+
+## 0.2.5 — update
 
 - **Near-future helmet display**: the cockpit visor is a curved HMD glass with an electrochromic sun
   tint, breath fog, a faint coating that shifts hue toward the rim, and hairline scratches drawn at

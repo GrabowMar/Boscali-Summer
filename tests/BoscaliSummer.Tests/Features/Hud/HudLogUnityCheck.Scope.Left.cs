@@ -173,6 +173,19 @@ public static partial class HudLogUnityCheck
                     string.Join(" ", LeftStripLabels(strip).Select(t => t.text)) == heldEmergencyText,
                     "Routine traffic cannot displace the emergency calls that fit the bounded stack: " + tag);
             }
+            // The maximised map's left host slot sits where COMMS draws (vg-dronelink capture, 2026-10-20): COMMS stands down under it and comes back after.
+            var maximized = typeof(DynamicMap).GetProperty("mapMaximized", All);
+            int kept = (int)Field(strip, "used");
+            try
+            {
+                maximized.SetValue(null, true);
+                Call(strip, "Tick", true);
+                Check(!host.Canvas.enabled && (float)Field(Type("BoscaliSummer.Core.Ui.LeftHudStack"), "CommsBottom") == 0f,
+                    "COMMS stands down and releases its layout under the maximised map: " + tag);
+            }
+            finally { maximized.SetValue(null, false); }
+            Call(strip, "Tick", true);
+            Check(host.Canvas.enabled && (int)Field(strip, "used") == kept, "COMMS comes back with its rows when the map closes: " + tag);
             Call(strip, "Clear");
             Check(!host.Canvas.enabled && (int)Field(strip, "used") == 0, "Clearing COMMS drops its messages and hides it: " + tag);
             Check((float)Field(Type("BoscaliSummer.Core.Ui.LeftHudStack"), "CommsBottom") == 0f, "Clearing COMMS releases its layout reservation: " + tag);

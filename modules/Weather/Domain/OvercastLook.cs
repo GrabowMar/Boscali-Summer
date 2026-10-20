@@ -27,6 +27,25 @@ namespace BoscaliSummer.Modules.Weather.Domain
             return cover * below;
         }
 
+        /// <summary>
+        /// The fog colours at night (RainAtmosphere): vanilla's night fog is a saturated teal (blue up to six times the red) about seven times brighter
+        /// than its own night sky at the horizon; distant cloud and the far sea dissolve into it, and from above a storm deck the far deck glowed as a
+        /// cyan band, from under it the far sea (2026-10-19). After sunset
+        /// (<paramref name="sunHeight"/> is the sine of the sun's elevation; full from about 7 degrees down) it turns grey and takes the overcast darkening,
+        /// less what the fog already took under a deck (<paramref name="shade"/>), so the two never stack. Identity with the sun up; no clamp (the fog is HDR at altitude).
+        /// </summary>
+        public static void NightHaze(float sunHeight, float shade, ref float r, ref float g, ref float b)
+        {
+            if (!Scalar.IsFinite(sunHeight) || !Scalar.IsFinite(shade)) return;
+            float night = 1f - WeatherMath.Smoothstep(-0.12f, 0f, sunHeight);
+            if (night <= 0f) return;
+            float lum = 0.2126f * r + 0.7152f * g + 0.0722f * b;
+            float dark = 1f - TintDark * night * (1f - Scalar.Clamp01(shade));
+            r = (r + (lum - r) * night) * dark;
+            g = (g + (lum - g) * night) * dark;
+            b = (b + (lum - b) * night) * dark;
+        }
+
         /// <summary>The factor on <c>sun.intensity</c>: 1 in the open, <see cref="SunFloor"/> under a full shade.</summary>
         public static float SunScale(float shade) => 1f - (1f - SunFloor) * Scalar.Clamp01(shade);
 

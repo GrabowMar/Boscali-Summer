@@ -14,17 +14,14 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.That(AegisSnap.MaxRange == 2500f && AegisSnap.MaxOffNose == 70f && AegisSnap.Lifetime == 8f &&
                 AegisSnap.DefenceLifetime == 6f && AegisSnap.DamageScale == 2f, "snap envelope numbers follow MECHANICS.md");
 
-            TestAssert.That(AegisSnap.Judge(true, true, 1800f, 20f, 3, false) == SnapVerdict.Fire, "locked aircraft at 1.8 km, 20 deg: fire");
-            TestAssert.That(AegisSnap.Judge(true, true, 2500f, 70f, 3, false) == SnapVerdict.Fire, "envelope edges are inclusive");
-            TestAssert.That(AegisSnap.Judge(true, true, 2600f, 20f, 3, false) == SnapVerdict.OutOfRange, "2.6 km is out of range");
-            TestAssert.That(AegisSnap.Judge(true, true, 1800f, 75f, 3, false) == SnapVerdict.OffNose, "75 deg off the nose is refused");
-            TestAssert.That(AegisSnap.Judge(true, false, 900f, 0f, 3, false) == SnapVerdict.NotAir, "ground units and missiles are refused");
-            TestAssert.That(AegisSnap.Judge(false, false, 0f, 0f, 3, false) == SnapVerdict.NoTarget, "no lock, no shot");
-            TestAssert.That(AegisSnap.Judge(true, true, 900f, 0f, 0, false) == SnapVerdict.Empty, "empty pod");
-            TestAssert.That(AegisSnap.Judge(true, true, 900f, 0f, 1, true) == SnapVerdict.Reserved &&
-                AegisSnap.Judge(false, false, 0f, 0f, 1, true) == SnapVerdict.Reserved, "last dart is held while a threat is inbound");
-            TestAssert.That(AegisSnap.Judge(true, true, 900f, 0f, 2, true) == SnapVerdict.Fire &&
-                AegisSnap.Judge(true, true, 900f, 0f, 1, false) == SnapVerdict.Fire, "only the last dart is reserved, only under threat");
+            TestAssert.That(AegisSnap.Judge(true, true, 1800f, 20f, 3) == SnapVerdict.Fire, "locked aircraft at 1.8 km, 20 deg: fire");
+            TestAssert.That(AegisSnap.Judge(true, true, 2500f, 70f, 3) == SnapVerdict.Fire, "envelope edges are inclusive");
+            TestAssert.That(AegisSnap.Judge(true, true, 2600f, 20f, 3) == SnapVerdict.OutOfRange, "2.6 km is out of range");
+            TestAssert.That(AegisSnap.Judge(true, true, 1800f, 75f, 3) == SnapVerdict.OffNose, "75 deg off the nose is refused");
+            TestAssert.That(AegisSnap.Judge(true, false, 900f, 0f, 3) == SnapVerdict.NotAir, "ground units and missiles are refused");
+            TestAssert.That(AegisSnap.Judge(false, false, 0f, 0f, 3) == SnapVerdict.NoTarget, "no lock, no shot");
+            TestAssert.That(AegisSnap.Judge(true, true, 900f, 0f, 0) == SnapVerdict.Empty, "empty pod");
+            TestAssert.That(AegisSnap.Judge(true, true, 900f, 0f, 1) == SnapVerdict.Fire, "manual only: the last dart is the pilot's call and fires");
             TestAssert.That(AegisSnap.Reason(SnapVerdict.OutOfRange, 3240f) == "RANGE 3.2 km > 2.5" &&
                 AegisSnap.Reason(SnapVerdict.Fire, 0f) == null, "range reason uses invariant km");
 
@@ -33,16 +30,6 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.That(!AegisSnap.ServerAccepts(3100f, 20f) && !AegisSnap.ServerAccepts(1800f, 85f),
                 "server refuses a snap far outside the range or the off-nose cone (flies as a plain defence dart)");
 
-            var picker = new InterceptPicker();
-            var fast = new List<ThreatView> { new ThreatView(7, 1200f, 600f) };
-            TestAssert.That(new InterceptPicker().Pick(0f, new List<ThreatView> { new ThreatView(9, 3000f, 600f), new ThreatView(-41234, 900f, 600f) }) == 1,
-                "a missile spawned at runtime has a negative instance id and is still picked (the pick is its index)");
-            TestAssert.That(InterceptPicker.MaxRange >= 1100f + 100f && picker.Pick(0f, fast) == 0 &&
-                new InterceptPicker().Pick(0f, new List<ThreatView> { new ThreatView(8, InterceptPicker.MaxRange + 50f, 600f) }) == -1,
-                "defence window carries the cover's 0.15 s rail delay and still ends at MaxRange");
-            TestAssert.That(new InterceptPicker().Pick(0f, new List<ThreatView> { new ThreatView(1, 2800f, 1300f) }) == 0 &&
-                new InterceptPicker().Pick(0f, new List<ThreatView> { new ThreatView(1, 2800f, 600f) }) == -1,
-                "the launch is timed on seconds to impact: a fast closer is engaged far out, a slow one at the same range waits");
 
             TestAssert.That(AegisSnap.Damage(50f, 600f, AegisSnap.DamageScale) == 200f && AegisSnap.Damage(50f, 100f, 2f) == 100f &&
                 AegisSnap.Damage(50f, 3000f, 2f) == 400f && AegisSnap.Damage(50f, 600f, 1f) == 100f, "snap damage = defence dart x2, closure 1..4x");

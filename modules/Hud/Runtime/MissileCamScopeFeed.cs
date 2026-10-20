@@ -4,11 +4,10 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Hud.Runtime
 {
     /// <summary>
-    /// Hud's own provider of the MISSILE CAM page's feed (<see cref="MissileCamScope"/>): while the orbit camera rides one of our own missiles
-    /// (<see cref="MissileCam.IsOwnMissileView"/>) the missile's seeker state, where its target stands off the boresight (the last known place while it is blind), the range
-    /// to go with its closure and time, its attitude, the marks of the range tape and the path since launch (<see cref="ShotBook"/>). When the ridden missile ends (impact,
-    /// burnt out, shot down) it holds the last reading for <see cref="MissileCamMath.LostSeconds"/> as a lost feed with the result of the shot; the pilot leaving the view
-    /// while the missile flies on just ends the page. Once per frame at most; allocation-free in steady state. Client-local.
+    /// Hud's own provider of the MISSILE CAM page's feed (<see cref="MissileCamScope"/>): for the missile the orbit camera rides (<see cref="MissileCam.IsOwnMissileView"/>), else for
+    /// our newest one in the air (the pilot picked the page and watches from the cockpit), the missile's seeker state, where its target stands off the boresight (the last known place while it is blind), the range
+    /// to go with its closure and time, its attitude, the marks of the range tape and the path since launch (<see cref="ShotBook"/>). When the last of our missiles ends (impact,
+    /// burnt out, shot down) it holds the last reading for <see cref="MissileCamMath.LostSeconds"/> as a lost feed with the result of the shot. Once per frame at most; allocation-free in steady state. Client-local.
     /// </summary>
     internal sealed class MissileCamScopeFeed
     {
@@ -46,12 +45,14 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         private bool Build()
         {
             float now = Time.unscaledTime;
-            if (MissileCam.IsOwnMissileView(out _, out Missile m))
+            bool view = MissileCam.IsOwnMissileView(out _, out Missile m);
+            if (!view) m = Newest();
+            if (m != null)
             {
                 book.Track(now);
                 ShotRec rec = book.Ensure(m, now);
                 if (rec == null) return false;
-                Ride(m, rec, now);
+                Ride(m, rec, now, view);
                 riding = true;
                 lost = false;
                 lastSeen = now;
@@ -59,7 +60,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             }
             if (riding)
             {
-                // The ride is over: a missile that ended leaves a lost feed, one the pilot stepped off does not.
+                // The missile is gone and no other of ours flies: one that ended leaves a lost feed, one the pilot stepped off does not.
                 riding = false;
                 lost = ridden == null || ridden.disabled;
                 ridden = null;
@@ -77,7 +78,17 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             return true;
         }
 
-        private void Ride(Missile m, ShotRec rec, float now)
+        /// <summary>Our newest weapon still in the air (the tracker's list is launch order), or null.</summary>
+        private Missile Newest()
+        {
+            var list = tracker.Missiles;
+            for (int i = list.Count - 1; i >= 0; i--)
+                if (list[i] != null && !list[i].disabled) return list[i];
+            return null;
+        }
+
+        /// <summary>Read <paramref name="m"/> into the cache: the one the camera rides (<paramref name="view"/>), or the newest in the air while the pilot watches from the cockpit.</summary>
+        private void Ride(Missile m, ShotRec rec, float now, bool view)
         {
             var list = tracker.Missiles;
             int at = -1;
@@ -127,8 +138,8 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 pathD[n] = Flat(x - rec.Launch.X, z - rec.Launch.Z);
                 pathA[n] = y;
             }
-            // The missile the view steps to next (the tracker's list is launch order).
-            ShotRec next = list.Count > 1 && at >= 0 && list[(at + 1) % list.Count] != null ? book.Ensure(list[(at + 1) % list.Count], now) : null;
+            // The missile the view steps to next (the tracker's list is launch order); only a ride steps.
+            ShotRec next = view && list.Count > 1 && at >= 0 && list[(at + 1) % list.Count] != null ? book.Ensure(list[(at + 1) % list.Count], now) : null;
             cache = new MissileCamScope
             {
                 Index = at, Count = list.Count, Weapon = rec.Short, Full = rec.Full, Seeker = rec.Seeker, Target = targetWord, Next = next?.Short,

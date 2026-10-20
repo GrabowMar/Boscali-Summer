@@ -27,6 +27,14 @@ namespace BoscaliSummer.Modules.Wing.Domain
             if (e > 0) doctrines[e] = d;
         }
 
+        /// <summary>Element <paramref name="to"/> (B-D) starts with <paramref name="from"/>'s shape and doctrine (A: the wing's).</summary>
+        public void Copy(int from, int to)
+        {
+            if (to <= 0) return;
+            shapes[to] = from > 0 ? shapes[from] : null;
+            doctrines[to] = from > 0 ? doctrines[from] : null;
+        }
+
         public void Forget(int e)
         {
             if (e <= 0) return;

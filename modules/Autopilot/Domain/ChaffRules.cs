@@ -24,6 +24,23 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
 
         public static bool IsRadarSeeker(string seeker) => seeker == "ARH" || seeker == "SARH";
 
+        // Seduction (2026-10-20, user: chaff "does nothing basically"): the game's own dazzle counts only while a seeker holds an active lock,
+        // scores tail-on chaff as nothing, and stops counting once the dazzled seeker drops to search, so the jam never lasts long enough to
+        // break the lock. On top of it every ejection rolls this chance per radar missile tracking the aircraft; a seduced missile loses its target.
+        public const float SeduceBase = 0.15f, SeduceFullRange = 3000f, SeduceMaxRange = 8000f, SeduceTailFloor = 0.3f;
+
+        /// <summary>
+        /// The chance one ejection breaks a radar missile's lock: best on the beam (<paramref name="beam"/> 1 = flying across its line of sight)
+        /// and inside <see cref="SeduceFullRange"/>, a third of that tail-on or head-on, nothing past <see cref="SeduceMaxRange"/>.
+        /// Five ejections a second: on the beam up close about 55 % a one-second salvo, tail-on about 20 %.
+        /// </summary>
+        public static float SeduceChance(float rangeM, float beam)
+        {
+            float near = Math.Max(0f, Math.Min(1f, (SeduceMaxRange - rangeM) / (SeduceMaxRange - SeduceFullRange)));
+            float aspect = SeduceTailFloor + (1f - SeduceTailFloor) * Math.Max(0f, Math.Min(1f, beam));
+            return SeduceBase * aspect * near;
+        }
+
         /// <summary>
         /// Should the dispenser run this frame? A salvo from the menu or the key always does. Linked to the countermeasure button it runs
         /// only while that button is held AND a radar missile is inbound, so flares against a heat seeker never spend chaff.

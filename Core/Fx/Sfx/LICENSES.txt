@@ -24,3 +24,9 @@ Processing: mono, 22050 Hz, 16-bit, rumble below 40 Hz removed, levelled to -3 d
 
 Decoded but not shipped: "Tire.ogg" by egomassive (https://freesound.org/people/egomassive/sounds/536769/, CC0).
 The game's own skid loop already squeals at touchdown, so a second chirp would double it.
+
+The kaiju (kaiju-*.wav) is made by `synth` in tools/Build-SoundClips.py from CC0 recordings and synthesis, nothing else:
+voices layer a synthesized growling throat with "strenuous_grunts" by takareads (841313), "AS060822_Short Exertion" by
+SuddenDice (558618) and "Masked_Breathing_Raspy_Loop" by Mediasaur (788055), slowed three to four times (sources in
+modules/Immersion/Assets/Voice/LICENSES.txt); the shriek adds the leather creak above, the footfall the building collapse
+above, the laser charge a slowed breath. The beam, spike and claw sounds are pure synthesis.

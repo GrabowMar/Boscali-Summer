@@ -98,6 +98,8 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             // Every display loses its picture for a moment; a blast shakes it harder than a round going through.
             NOAvionics.AvFxDriver.Kick(blastDamage > pierceDamage ? 0.9f : 0.6f);
             if (settings.AirframeAudioEnabled.Value) foley?.Hit(pierceDamage, blastDamage);
+            if (GameManager.GetLocalAircraft(out Aircraft hit) && hit != null) // sparks ride with the jet, not left in the air behind it
+                ParticleFx.Spawn("fx-hit-sparks", hit.transform.position, hit.transform.rotation, 1f, hit.transform);
         }
 
         /// <summary>The kneeboard card changed (SQD STUDIO): paper noise, in or out of the cockpit view.</summary>
@@ -194,18 +196,6 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         {
             get => settings != null && settings.HelmetVisorEnabled.Value;
             set { if (settings != null) settings.HelmetVisorEnabled.Value = value; }
-        }
-
-        public float HelmetCurvature
-        {
-            get => settings != null ? settings.HelmetCurvature.Value : .55f;
-            set { if (settings != null) settings.HelmetCurvature.Value = Mathf.Clamp01(value); }
-        }
-
-        public float HelmetReflection
-        {
-            get => settings != null ? settings.HelmetReflection.Value : 1f;
-            set { if (settings != null) settings.HelmetReflection.Value = Mathf.Clamp01(value); }
         }
 
         public bool MachBuffetEnabled

@@ -19,6 +19,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public TeamState State;
         public Insertion Insert;
         public bool Push, Hold, Wounded, LiftWaiting, Carried, Lasing, HasDest, Exploit;
+        /// <summary>The viewer is the operator commanding this team.</summary>
+        public bool Mine;
+        /// <summary>An enemy QRF hunts the team (protocol 42).</summary>
+        public bool Hunted;
+        /// <summary>The operator who tasked the team (their callsign); empty while the team is autonomous, in OVERLORD's pool.</summary>
+        public string Controller;
         public float X, Z, DestX, DestZ, TargetX, TargetZ;
         public byte Exposure, Ammo, Odds;
         public MissionKind Mission;
@@ -45,6 +51,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
     internal struct SofEnemyRow
     {
         public float X, Z;
+        /// <summary>Detected near our own sites (a SWEEP can reach it) rather than only seen by our bird; our QRF hunts it (protocol 42).</summary>
+        public bool Near, Hunted;
     }
 
     internal struct SofEventRow
@@ -64,6 +72,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public bool Active;
         public byte TeamCap, TapIntrusions;
         public float TapUntil;
+        /// <summary>Our QRF reaches its targets at (0 = none rolling) and may roll again at (0 = now).</summary>
+        public float SweepEndsAt, SweepReadyAt;
         public readonly List<SofCampRow> Camps = new List<SofCampRow>();
         public readonly List<SofTeamRow> Teams = new List<SofTeamRow>();
         public readonly List<SofTargetRow> Targets = new List<SofTargetRow>();
@@ -73,7 +83,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
 
         public override SofStateData Clone()
         {
-            var c = new SofStateData { Protocol = Protocol, Active = Active, Seq = Seq, Now = Now, TeamCap = TeamCap, TapIntrusions = TapIntrusions, TapUntil = TapUntil };
+            var c = new SofStateData { Protocol = Protocol, Faction = Faction, Epoch = Epoch, Active = Active, Seq = Seq, Now = Now, TeamCap = TeamCap, TapIntrusions = TapIntrusions, TapUntil = TapUntil,
+                SweepEndsAt = SweepEndsAt, SweepReadyAt = SweepReadyAt };
             c.Camps.AddRange(Camps); c.Teams.AddRange(Teams); c.Targets.AddRange(Targets); c.Held.AddRange(Held); c.Enemies.AddRange(Enemies); c.Events.AddRange(Events);
             return c;
         }
@@ -82,6 +93,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public override bool SameAs(SofStateData o)
         {
             if (o == null || Active != o.Active || TeamCap != o.TeamCap || TapIntrusions != o.TapIntrusions || !SpaceMirror.SameExpiry(TapUntil, o.TapUntil) ||
+                !SpaceMirror.SameExpiry(SweepEndsAt, o.SweepEndsAt) || !SpaceMirror.SameExpiry(SweepReadyAt, o.SweepReadyAt) ||
                 Camps.Count != o.Camps.Count || Teams.Count != o.Teams.Count || Targets.Count != o.Targets.Count || Held.Count != o.Held.Count ||
                 Enemies.Count != o.Enemies.Count || Events.Count != o.Events.Count) return false;
             for (int i = 0; i < Camps.Count; i++)
@@ -93,7 +105,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             {
                 SofTeamRow a = Teams[i], b = o.Teams[i];
                 if (a.Slot != b.Slot || a.State != b.State || a.Insert != b.Insert || a.Push != b.Push || a.Hold != b.Hold || a.Wounded != b.Wounded || a.LiftWaiting != b.LiftWaiting ||
-                    a.Carried != b.Carried || a.Lasing != b.Lasing || a.HasDest != b.HasDest || a.Exploit != b.Exploit || a.Exposure != b.Exposure || a.Ammo != b.Ammo || a.Odds != b.Odds ||
+                    a.Carried != b.Carried || a.Lasing != b.Lasing || a.HasDest != b.HasDest || a.Exploit != b.Exploit || a.Mine != b.Mine || a.Hunted != b.Hunted || (a.Controller ?? "") != (b.Controller ?? "") ||
+                    a.Exposure != b.Exposure || a.Ammo != b.Ammo || a.Odds != b.Odds ||
                     a.Mission != b.Mission || a.TargetId != b.TargetId || !SpaceMirror.SamePoint(a.X, b.X) || !SpaceMirror.SamePoint(a.Z, b.Z) ||
                     !SpaceMirror.SamePoint(a.DestX, b.DestX) || !SpaceMirror.SamePoint(a.DestZ, b.DestZ) || !SpaceMirror.SamePoint(a.TargetX, b.TargetX) ||
                     !SpaceMirror.SamePoint(a.TargetZ, b.TargetZ) || !SpaceMirror.SameExpiry(a.EndsAt, b.EndsAt)) return false;
@@ -109,29 +122,31 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
                 if (a.Id != b.Id || !SpaceMirror.SamePoint(a.X, b.X) || !SpaceMirror.SamePoint(a.Z, b.Z) || !SpaceMirror.SameExpiry(a.Until, b.Until)) return false;
             }
             for (int i = 0; i < Enemies.Count; i++)
-                if (!SpaceMirror.SamePoint(Enemies[i].X, o.Enemies[i].X) || !SpaceMirror.SamePoint(Enemies[i].Z, o.Enemies[i].Z)) return false;
+                if (!SpaceMirror.SamePoint(Enemies[i].X, o.Enemies[i].X) || !SpaceMirror.SamePoint(Enemies[i].Z, o.Enemies[i].Z) ||
+                    Enemies[i].Near != o.Enemies[i].Near || Enemies[i].Hunted != o.Enemies[i].Hunted) return false;
             for (int i = 0; i < Events.Count; i++) if (Events[i].Seq != o.Events[i].Seq) return false;
             return true;
         }
     }
 
-    /// <summary>Engine-free SOF state codec (protocol 34). Every reader returns an inert value (Protocol 0 or the foreign byte alone) instead of throwing.</summary>
+    /// <summary>Engine-free SOF state codec (protocol 34; defence fields protocol 42). Every reader returns an inert value (Protocol 0 or the foreign byte alone) instead of throwing.</summary>
     internal static class SofWire
     {
-        public const int MaxCamps = CampRules.MaxCamps, MaxTeams = SofRules.MaxTeams, MaxTargets = SofDesk.MaxVisible, MaxHeld = SofRules.HeldCap, MaxEnemies = 4, MaxEvents = 3;
-        private const int MinCampBytes = 8, MinTeamBytes = 27, MinTargetBytes = 8, MinHeldBytes = 9, MinEnemyBytes = 6, MinEventBytes = 3;
+        public const int MaxCamps = CampRules.MaxCamps, MaxTeams = SofRules.MaxTeams, MaxTargets = SofDesk.MaxVisible, MaxHeld = SofRules.HeldCap, MaxEnemies = 4, MaxEvents = 3, MaxController = 16;
+        private const int MinCampBytes = 8, MinTeamBytes = 28, MinTargetBytes = 8, MinHeldBytes = 9, MinEnemyBytes = 7, MinEventBytes = 3;
         private const byte FlagActive = 1;
 
         public static void WriteState(ISpaceWriter w, SofStateData s)
         {
             w.WriteByte(s.Protocol);
             w.WriteByte(s.Active ? FlagActive : (byte)0);
-            SpaceWire.WriteVar(w, (uint)Math.Max(0, s.Seq));
-            SpaceWire.WriteFloat(w, s.Now);
+            s.WriteHeader(w);
             if (!s.Active) return;
             w.WriteByte(s.TeamCap);
             w.WriteByte(s.TapIntrusions);
             SpaceWire.WriteExpiry(w, s.TapUntil, s.Now);
+            SpaceWire.WriteExpiry(w, s.SweepEndsAt, s.Now);
+            SpaceWire.WriteExpiry(w, s.SweepReadyAt, s.Now);
             int n = Math.Min(s.Camps.Count, MaxCamps);
             w.WriteByte((byte)n);
             for (int i = 0; i < n; i++)
@@ -148,13 +163,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
                 SofTeamRow t = s.Teams[i];
                 w.WriteByte((byte)(t.Slot | ((int)t.State << 2)));
                 w.WriteByte((byte)((int)t.Insert | (t.Push ? 2 : 0) | (t.Hold ? 4 : 0) | (t.Wounded ? 8 : 0) | (t.LiftWaiting ? 16 : 0) | (t.Carried ? 32 : 0) | (t.Lasing ? 64 : 0) | (t.HasDest ? 128 : 0)));
-                w.WriteByte((byte)((int)t.Mission | (t.Exploit ? 8 : 0)));
+                w.WriteByte((byte)((int)t.Mission | (t.Exploit ? 8 : 0) | (t.Mine ? 16 : 0) | (t.Hunted ? 32 : 0)));
                 SpaceWire.WriteCoordinate(w, t.X); SpaceWire.WriteCoordinate(w, t.Z);
                 SpaceWire.WriteCoordinate(w, t.DestX); SpaceWire.WriteCoordinate(w, t.DestZ);
                 SpaceWire.WriteCoordinate(w, t.TargetX); SpaceWire.WriteCoordinate(w, t.TargetZ);
                 w.WriteByte(t.Exposure); w.WriteByte(t.Ammo); w.WriteByte(t.Odds);
                 SpaceWire.WriteVar(w, (uint)Math.Max(0, t.TargetId));
                 SpaceWire.WriteExpiry(w, t.EndsAt, s.Now);
+                SpaceWire.WriteText(w, t.Controller, MaxController);
             }
             n = Math.Min(s.Targets.Count, MaxTargets);
             w.WriteByte((byte)n);
@@ -176,7 +192,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             }
             n = Math.Min(s.Enemies.Count, MaxEnemies);
             w.WriteByte((byte)n);
-            for (int i = 0; i < n; i++) { SpaceWire.WriteCoordinate(w, s.Enemies[i].X); SpaceWire.WriteCoordinate(w, s.Enemies[i].Z); }
+            for (int i = 0; i < n; i++) { SpaceWire.WriteCoordinate(w, s.Enemies[i].X); SpaceWire.WriteCoordinate(w, s.Enemies[i].Z); w.WriteByte((byte)((s.Enemies[i].Near ? 1 : 0) | (s.Enemies[i].Hunted ? 2 : 0))); }
             n = Math.Min(s.Events.Count, MaxEvents);
             w.WriteByte((byte)n);
             for (int i = 0; i < n; i++)
@@ -193,12 +209,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             if (!r.TryReadByte(out byte version)) return Bad();
             if (version != protocol) return new SofStateData { Protocol = version };
             var s = new SofStateData { Protocol = version };
-            if (!r.TryReadByte(out byte flags) || (flags & ~FlagActive) != 0 || !SpaceWire.ReadInt(r, out int seq) || !SpaceWire.ReadFloat(r, out float now) || !SpaceRules.MissionTime(now)) return Bad();
-            s.Active = (flags & FlagActive) != 0; s.Seq = seq; s.Now = now;
+            if (!r.TryReadByte(out byte flags) || (flags & ~FlagActive) != 0 || !s.ReadHeader(r)) return Bad();
+            float now = s.Now;
+            s.Active = (flags & FlagActive) != 0;
             if (!s.Active) return s;
             if (!r.TryReadByte(out s.TeamCap) || s.TeamCap > MaxTeams || !r.TryReadByte(out s.TapIntrusions) || !SpaceWire.ReadExpiry(r, now, out float tap) ||
+                !SpaceWire.ReadExpiry(r, now, out float sweepEnds) || !SpaceWire.ReadExpiry(r, now, out float sweepReady) ||
                 !r.TryReadByte(out byte n) || n > MaxCamps || r.Remaining < n * MinCampBytes) return Bad();
             s.TapUntil = tap <= now ? 0f : tap;
+            s.SweepEndsAt = sweepEnds <= now ? 0f : sweepEnds; s.SweepReadyAt = sweepReady <= now ? 0f : sweepReady;
             for (int i = 0; i < n; i++)
             {
                 if (!r.TryReadByte(out byte health) || health > (byte)AnchorHealth.Down || !SpaceWire.ReadCoordinate(r, out float x) || !SpaceWire.ReadCoordinate(r, out float z) ||
@@ -208,14 +227,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             if (!r.TryReadByte(out n) || n > MaxTeams || r.Remaining < n * MinTeamBytes) return Bad();
             for (int i = 0; i < n; i++)
             {
-                if (!r.TryReadByte(out byte a) || (a & 3) >= MaxTeams || (a >> 2) > (byte)TeamState.Lost || !r.TryReadByte(out byte b) || !r.TryReadByte(out byte c) || (c & 7) > (byte)MissionKind.Tap || (c & ~15) != 0 ||
+                if (!r.TryReadByte(out byte a) || (a & 3) >= MaxTeams || (a >> 2) > (byte)TeamState.Lost || !r.TryReadByte(out byte b) || !r.TryReadByte(out byte c) || (c & 7) > (byte)MissionKind.Tap || (c & ~63) != 0 ||
                     !SpaceWire.ReadCoordinate(r, out float x) || !SpaceWire.ReadCoordinate(r, out float z) || !SpaceWire.ReadCoordinate(r, out float dx) || !SpaceWire.ReadCoordinate(r, out float dz) ||
                     !SpaceWire.ReadCoordinate(r, out float tx) || !SpaceWire.ReadCoordinate(r, out float tz) || !r.TryReadByte(out byte exposure) || exposure > 100 ||
-                    !r.TryReadByte(out byte ammo) || ammo > 100 || !r.TryReadByte(out byte odds) || odds > 100 || !SpaceWire.ReadInt(r, out int target) || !SpaceWire.ReadExpiry(r, now, out float ends)) return Bad();
+                    !r.TryReadByte(out byte ammo) || ammo > 100 || !r.TryReadByte(out byte odds) || odds > 100 || !SpaceWire.ReadInt(r, out int target) || !SpaceWire.ReadExpiry(r, now, out float ends) ||
+                    !SpaceWire.ReadText(r, MaxController, out string controller)) return Bad();
                 s.Teams.Add(new SofTeamRow
                 {
                     Slot = (byte)(a & 3), State = (TeamState)(a >> 2), Insert = (Insertion)(b & 1), Push = (b & 2) != 0, Hold = (b & 4) != 0, Wounded = (b & 8) != 0, LiftWaiting = (b & 16) != 0,
-                    Carried = (b & 32) != 0, Lasing = (b & 64) != 0, HasDest = (b & 128) != 0, Mission = (MissionKind)(c & 7), Exploit = (c & 8) != 0, X = x, Z = z, DestX = dx, DestZ = dz,
+                    Carried = (b & 32) != 0, Lasing = (b & 64) != 0, HasDest = (b & 128) != 0, Mission = (MissionKind)(c & 7), Exploit = (c & 8) != 0, Mine = (c & 16) != 0, Hunted = (c & 32) != 0, Controller = controller, X = x, Z = z, DestX = dx, DestZ = dz,
                     TargetX = tx, TargetZ = tz, Exposure = exposure, Ammo = ammo, Odds = odds, TargetId = target, EndsAt = ends <= now ? 0f : ends
                 });
             }
@@ -235,8 +255,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             if (!r.TryReadByte(out n) || n > MaxEnemies || r.Remaining < n * MinEnemyBytes) return Bad();
             for (int i = 0; i < n; i++)
             {
-                if (!SpaceWire.ReadCoordinate(r, out float x) || !SpaceWire.ReadCoordinate(r, out float z)) return Bad();
-                s.Enemies.Add(new SofEnemyRow { X = x, Z = z });
+                if (!SpaceWire.ReadCoordinate(r, out float x) || !SpaceWire.ReadCoordinate(r, out float z) || !r.TryReadByte(out byte ef) || (ef & ~3) != 0) return Bad();
+                s.Enemies.Add(new SofEnemyRow { X = x, Z = z, Near = (ef & 1) != 0, Hunted = (ef & 2) != 0 });
             }
             if (!r.TryReadByte(out n) || n > MaxEvents || r.Remaining < n * MinEventBytes) return Bad();
             for (int i = 0; i < n; i++)
@@ -270,6 +290,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             SofStateData copy = d.Clone();
             copy.Now = clientNow;
             if (copy.TapUntil > 0f) copy.TapUntil += offset;
+            if (copy.SweepEndsAt > 0f) copy.SweepEndsAt += offset;
+            if (copy.SweepReadyAt > 0f) copy.SweepReadyAt += offset;
             for (int i = 0; i < copy.Teams.Count; i++) { SofTeamRow t = copy.Teams[i]; if (t.EndsAt > 0f) t.EndsAt += offset; copy.Teams[i] = t; }
             for (int i = 0; i < copy.Held.Count; i++) { SofHeldRow h = copy.Held[i]; if (h.Until > 0f) h.Until += offset; copy.Held[i] = h; }
             return copy;
@@ -325,6 +347,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             foreach (SofTeamRow t in s.Teams) if (t.State != TeamState.Lost) teams++;
             return live + " CAMP" + (live == 1 ? "" : "S") + " · " + teams + "/" + s.TeamCap + " TEAMS · " + s.Held.Count + " HELD";
         }
+
+        /// <summary>Who commands a team, for its card: YOU, CTRL plus the operator's callsign, or AUTO while OVERLORD's pool holds it.</summary>
+        public static string Control(in SofTeamRow t) => t.Mine ? "YOU" : string.IsNullOrEmpty(t.Controller) ? "AUTO" : "CTRL " + t.Controller;
 
         public static string EventLine(in SofEventRow e)
         {

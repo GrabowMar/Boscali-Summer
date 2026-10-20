@@ -1,5 +1,8 @@
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Services;
 using NOAvionics;
 using System;
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 
@@ -18,8 +21,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private AvConsole BuildConsole(RectTransform body, float height, bool server)
         {
             string[] names = server ? ServerPageNames : ClientPageNames;
-            AvConsole c = AvConsole.Build(body, "SET", names[0], names.Length, AvTokens.PanelWidth, height);
-            c.PageChanged += index => c.SetTitle(names[index]);
+            // Optional: another module may add a sixth PILOT tab (it hides itself). No provider = exactly the five pages.
+            ISetExtras extras = null;
+            if (!server) ModuleServices.TryGet(out extras);
+            AvConsole c = AvConsole.Build(body, "SET", names[0], names.Length + (extras != null ? 1 : 0), AvTokens.PanelWidth, height);
+            c.PageChanged += index => c.SetTitle(index < names.Length ? names[index] : extras.ExtraTabTitle);
 
             // The kit has no slot for a control between the header and the tabs. A hidden metric reserves one
             // metric-height strip there and the mode switch (a module-local part) is drawn over exactly that strip.
@@ -49,23 +55,50 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             else
             {
-                ApplyTabHelp(c.Tabs(
-                        (AvIcon.Typography, "DISPLAY"),
-                        (AvIcon.Map2, "MAP"),
-                        (AvIcon.Eye, "COCKPIT"),
-                        (AvIcon.WaveSine, "IMMERSION"),
-                        (AvIcon.Gauge, "PERF")),
+                var items = new List<(AvIcon icon, string label)>
+                {
+                    (AvIcon.Typography, "DISPLAY"),
+                    (AvIcon.Map2, "MAP"),
+                    (AvIcon.Eye, "COCKPIT"),
+                    (AvIcon.WaveSine, "IMMERSION"),
+                    (AvIcon.Gauge, "PERF")
+                };
+                var hints = new List<string>
+                {
                     "Glass, surface texture, tint, motion and interface audio, with a live preview of the finish.",
                     "Map layout, terrain, backdrop imagery and the news ticker, with a layout schematic.",
                     "TAC BOARD HUD: layout, size, position, pages and blocks. Also the visor terrain ghost and the radial target presets.",
                     "Cockpit head inertia, camera vibrations, Mach buffeting, sun glare, G-vignette, and aerodynamic audio.",
                     "Client-local work budgets and panel effects, with a live frame-time trace. Each switch applies " +
-                    "during this mission. Installing a disabled Weather module requires a game restart.");
+                    "during this mission. Installing a disabled Weather module requires a game restart."
+                };
+                if (extras != null)
+                {
+                    items.Add((AvIcon.Skull, extras.ExtraTabLabel));
+                    hints.Add("Something is listening.");
+                }
+                AvTabBar tabs = c.Tabs(items.ToArray());
+                ApplyTabHelp(tabs, hints.ToArray());
                 BuildDisplayPage(c.Page(CDisplay), CDisplay);
                 BuildMapPage(c.Page(CMap), CMap);
                 BuildCockpitPage(c.Page(CCockpit), CCockpit);
                 BuildImmersionPage(c.Page(CImmersion), CImmersion);
                 BuildPerformancePage(c.Page(CPerf), CPerf);
+                if (extras != null)
+                {
+                    for (int page = 0; page < names.Length; page++) extras.BuildPilotPage(page, c.Page(page), c);
+                    extras.BuildExtraPage(CExtra, c.Page(CExtra), c);
+                    // The extra tab shows only while the provider says so (hidden before the first frame, then polled);
+                    // if it goes away while open, fall back to the first page.
+                    Action syncExtra = () =>
+                    {
+                        bool shown = extras.ExtraTabShown;
+                        tabs.SetShown(CExtra, shown);
+                        if (!shown && c.CurrentPage == CExtra) c.SetPage(CDisplay);
+                    };
+                    syncExtra();
+                    c.Ticker.Add(-1, AvTickRate.Slow, syncExtra);
+                }
             }
 
             ApplyOrders(c, server);

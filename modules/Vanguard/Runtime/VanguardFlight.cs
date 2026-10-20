@@ -81,6 +81,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 missile.DeployFins();
                 fins = true;
             }
+            if (VanguardKeys.IsSteerable(role) && SteerOrders.TryGet(missile, out SteerOrders.Order order) && Steer(order)) return;
             if (role == VanguardRole.Sentinel)
             {
                 TickSentinel();
@@ -145,12 +146,12 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             switch (role)
             {
                 case VanguardRole.Decoy: return MaldxRules.Lifetime;
-                case VanguardRole.Drone: return 360f;
+                case VanguardRole.Drone: return 480f;
                 case VanguardRole.Interceptor: return AegisLifetime();
                 case VanguardRole.Torpedo: return OrcaLifetime();
-                case VanguardRole.Carrier:
+                case VanguardRole.Carrier: return 300f;
                 case VanguardRole.Sentinel:
-                case VanguardRole.Gunship: return 300f;
+                case VanguardRole.Gunship: return 420f;
                 case VanguardRole.Towed: return 300f;
                 case VanguardRole.Glider: return 900f;
                 case VanguardRole.Lander: return HamilcarLifetime();
@@ -211,7 +212,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         {
             if (role == VanguardRole.Decoy) { CountDrawn(); return; }
             if (role == VanguardRole.Drone)
-                SeduceThreats();
+            { SeduceThreats(); PopFlares(); }
             if (role == VanguardRole.Jammer) JamNoise();
             if (role == VanguardRole.Towed) SeduceTowed();
         }
@@ -229,6 +230,30 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 if (SeductionRule.Seduces(threat.GetSeekerType(), range, Random.value))
                     SeekerCapture.Retarget(threat, missile);
             }
+        }
+
+        // Drone link (UAV terminal / UAV MFD / C-menu DRONE LINK): HAND flies the way the pilot's nose points, WPT flies to a point
+        // and circles it. The drone's own job holds meanwhile; a hand-flown REMORA keeps its ram fuse live. A dead pilot or a
+        // broken link (past DroneLink.MaxRangeM) hands the drone back to its job.
+        private bool Steer(SteerOrders.Order order)
+        {
+            if (launcher == null || launcher.disabled || !DroneLink.InRange(FastMath.Distance(launcher.GlobalPosition(), missile.GlobalPosition())))
+            {
+                SteerOrders.Remove(missile);
+                return false;
+            }
+            if (role == VanguardRole.Drone)
+            {
+                RamFuse();
+                if (missile.disabled) return true;
+            }
+            Vector3 self = missile.GlobalPosition().AsVector3();
+            Vector3 aim = order.Mode == DroneMode.Hand
+                ? DroneLink.HandAim(self, launcher.transform.forward, missile.radarAlt)
+                : DroneLink.OrbitAim(self, order.Point.AsVector3(), DroneLink.OrbitRadiusM);
+            missile.SetThrottle(role == VanguardRole.Drone ? RemoraArcher.Boost : 0.85f);
+            missile.SetAimpoint(new GlobalPosition(aim), Vector3.zero);
+            return true;
         }
 
         private void Detonate() => missile.Detonate(missile.rb.velocity, false, false);

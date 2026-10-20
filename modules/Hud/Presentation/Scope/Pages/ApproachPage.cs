@@ -51,6 +51,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public override char Code => 'A';
 
+        public override string IdleWord => "NO APPROACH";
+
+        public override string IdleHint => "LOWER THE GEAR NEAR A RUNWAY";
+
         public override bool Fast => live;
 
         public override bool HasStrip => live && d.Autoland;

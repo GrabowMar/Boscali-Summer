@@ -595,8 +595,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             int a = (z0 * mapSize + x0) * 4, b = (z0 * mapSize + x1) * 4;
             int c = (z1 * mapSize + x0) * 4, d = (z1 * mapSize + x1) * 4;
             float tx = x - x0, tz = z - z0;
-            float lowTop = MapChannel(structure, a, b, c, d, 3, tx, tz) * 16000f;
-            float cloudBase = MapChannel(profiles, a, b, c, d, 2, tx, tz) * CloudMaps.BaseRange;
+            float lowTop = Word(structure, a, b, c, d, 3, 1, tx, tz) * 16000f;
+            float cloudBase = Word(profiles, a, b, c, d, 2, 1, tx, tz) * CloudMaps.BaseRange;
             return new WeatherPoint
             {
                 BackgroundCover = MapChannel(structure, a, b, c, d, 0, tx, tz),
@@ -607,6 +607,10 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 RainRate = MapChannel(profiles, a, b, c, d, 3, tx, tz) * 100f,
             };
         }
+
+        /// <summary>A 16-bit map height (CloudMaps.Word): the high and low byte channels filtered apart and recombined, as the shader's MapWord does.</summary>
+        private static float Word(byte[] bytes, int a, int b, int c, int d, int high, int low, float x, float z) =>
+            (MapChannel(bytes, a, b, c, d, high, x, z) * 65280f + MapChannel(bytes, a, b, c, d, low, x, z) * 255f) / 65535f;
 
         private static float MapChannel(byte[] bytes, int a, int b, int c, int d, int channel, float x, float z) =>
             WeatherMath.Lerp(WeatherMath.Lerp(bytes[a + channel], bytes[b + channel], x),

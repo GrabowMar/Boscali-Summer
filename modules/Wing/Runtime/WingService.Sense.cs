@@ -35,7 +35,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 if (m.Damage.Update(sum, n, off))
                     Events.Push(new WingEvent { Time = missionTime, Member = m.Seat, Kind = WingEventKind.Damaged, Element = (byte)ElementOf(m) });
                 bool inFormation = !m.Engaged && m.Recovery == null && !m.OnGround && m.Settle == null;
-                m.Ammo = AmmoFraction(a);
+                m.Ammo = AmmoFraction(m);
                 if (m.Winchester.Update(m.Ammo <= 0f, inFormation))
                     Events.Push(new WingEvent { Time = missionTime, Member = m.Seat, Kind = WingEventKind.Winchester, Element = (byte)ElementOf(m) });
             }

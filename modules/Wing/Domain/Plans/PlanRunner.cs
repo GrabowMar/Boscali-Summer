@@ -169,7 +169,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         private static bool OnArea(PlanKind k) => k == PlanKind.Orbit || k == PlanKind.Cap || k == PlanKind.Sweep;
 
         /// <summary><paramref name="elapsed"/> &lt; 0: the clock has not started (not on its area yet).</summary>
-        private static bool Ended(PlanStep p, in LaneFacts f, float elapsed)
+        internal static bool Ended(PlanStep p, in LaneFacts f, float elapsed)
         {
             switch (p.End)
             {

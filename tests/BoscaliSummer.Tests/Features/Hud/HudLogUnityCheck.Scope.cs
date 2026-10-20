@@ -24,7 +24,7 @@ using static UnityCheckHarness;
 //                                      -spec <spec folder>     draws the shots over the spec's cockpit capture (takeover/assets/bg-cockpit-hud-takeover.jpg: the native top-right panel painted out)
 public static partial class HudLogUnityCheck
 {
-    private static readonly string[] ScopePageNames = { "systems", "threat", "shot", "missilecam", "approach", "wing", "strike", "dock", "objective", "stores" };
+    private static readonly string[] ScopePageNames = { "systems", "threat", "shot", "missilecam", "approach", "wing", "strike", "dock", "objective", "cargo", "stores" };
     private static readonly (float t, int w, int h)[] ScopeShotTimes = { (2f, 1920, 1080), (6f, 1920, 1080), (10f, 1920, 1080), (14f, 1920, 1080), (6f, 1280, 720) };
 
     /// <summary>(page, t, variant): one more 1080p shot of a page, its fixture branching on <c>s.Variant</c>.</summary>
@@ -38,6 +38,8 @@ public static partial class HudLogUnityCheck
         // an airframe without a capacitor, a flare call (DISPENSE) with the chaff selected, a bare helicopter (one dispenser, no jammer) and a gun-only aircraft with no countermeasures.
         ("stores", 6f, "default"), ("stores", 6f, "low"), ("stores", 6f, "empty"), ("stores", 6f, "reload"), ("stores", 6f, "nocap"), ("stores", 6f, "dispense"),
         ("stores", 6f, "rotary"), ("stores", 6f, "gunonly"),
+        // CARGO: a drop with no zone set, the glider focused, crates on the native release, a zone far behind.
+        ("cargo", 6f, "nozone"), ("cargo", 6f, "glider"), ("cargo", 6f, "native"), ("cargo", 6f, "far"),
     };
 
     static partial void FixtureSystems(float t, ScopeScene s);
@@ -50,6 +52,7 @@ public static partial class HudLogUnityCheck
     static partial void FixtureDock(float t, ScopeScene s);
     static partial void FixtureObjective(float t, ScopeScene s);
     static partial void FixtureStores(float t, ScopeScene s);
+    static partial void FixtureCargo(float t, ScopeScene s);
 
     private static void Fixture(string page, float t, ScopeScene s)
     {
@@ -65,6 +68,7 @@ public static partial class HudLogUnityCheck
             case "dock": FixtureDock(t, s); break;
             case "objective": FixtureObjective(t, s); break;
             case "stores": FixtureStores(t, s); break;
+            case "cargo": FixtureCargo(t, s); break;
             default: throw new ArgumentException("Unknown scope page: " + page);
         }
     }
@@ -140,7 +144,7 @@ public static partial class HudLogUnityCheck
         string[] names = pages.Length == 0 ? ScopePageNames : pages;
         foreach (string page in names)
         {
-            if (page == "shell" || page == "frame" || page == "lines" || page == "corners" || page == "nav" || page == "cues" || page == "left" || page == "repair") continue;      // dedicated block checks below
+            if (page == "shell" || page == "frame" || page == "lines" || page == "corners" || page == "nav" || page == "cues" || page == "left" || page == "repair" || page == "manual") continue;      // dedicated block checks below
             Check(Array.IndexOf(ScopePageNames, page) >= 0, "Unknown scope page in -pages: " + page);
             int drawn = 0;
             if (page != "stores") foreach (var shot in ScopeShotTimes) if (RenderScope(page, shot.t, new Vector2(shot.w, shot.h))) drawn++;
@@ -157,6 +161,7 @@ public static partial class HudLogUnityCheck
         if (pages.Length == 0 || Array.IndexOf(pages, "cues") >= 0) ScopeCues();
         if (pages.Length == 0 || Array.IndexOf(pages, "left") >= 0) ScopeLeft();
         if (pages.Length == 0 || Array.IndexOf(pages, "repair") >= 0) ScopeRepair();
+        if (pages.Length == 0 || Array.IndexOf(pages, "manual") >= 0) ScopeManual();
     }
 
     /// <summary>The spec's cockpit capture with the native top-right panel painted out (the backdrop of the takeover shots), else the older clean capture, else a hazy sky.</summary>
@@ -187,6 +192,7 @@ public static partial class HudLogUnityCheck
     private static bool RenderScope(string page, float t, Vector2 size, string variant = null)
     {
         MakeBoard(size, t, out Canvas canvas, out object status, out object frame);
+        SelectFixturePage(status, Field(status, "Options"), page);
         // Earlier moments of the scenario the page needs to have SEEN (a countermeasure call is judged against the rounds when its missile first became the nearest).
         foreach (float before in PreRoll(page, t))
         {
@@ -234,6 +240,7 @@ public static partial class HudLogUnityCheck
         TextMeshProUGUI nameLabel = NativeLabel(canvas.transform, "NativeName", font, 28f * k);
         status = Activator.CreateInstance(Type("BoscaliSummer.Modules.Hud.Presentation.StatusPanel"), true);
         Call(status, "Build", dock, nameLabel, null);
+        Set(status, "Options", PilotOptions());
         nameLabel.gameObject.SetActive(false);
         frame = Boxed("BoardFrame");
         Set(frame, "Now", t); Set(frame, "BootAge", -1f); Set(frame, "Units", AvUnits.Metric);
@@ -247,6 +254,9 @@ public static partial class HudLogUnityCheck
         foreach (Graphic g in root.GetComponentsInChildren<Graphic>(true)) Check(!g.raycastTarget, "HUD must not intercept pointer input: " + tag);
         foreach (string mesh in new[] { "shellVector", "pageVector", "overlayVector", "frameVector", "storesVector" })
             Check(!((AvVector)Field(status, mesh)).Buffer.Overflowed, "The " + mesh + " buffer did not fill: " + tag);
+        foreach (object surface in (Array)Field(status, "pageSurfaces"))
+            foreach (string mesh in new[] { "BodyVector", "OverlayVector", "FrameVector" })
+                Check(!((AvVector)Field(surface, mesh)).Buffer.Overflowed, "Every page column has sufficient " + mesh + " capacity: " + tag);
         var corners = new Vector3[4];
         foreach (TextMeshProUGUI label in root.GetComponentsInChildren<TextMeshProUGUI>())
         {

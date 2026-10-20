@@ -31,7 +31,8 @@ namespace BoscaliSummer.Vanguard
             if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NOMODKIT_SIM_SCENARIO")) ||
                 GameManager.gameState != GameState.SinglePlayer || !GameAccess.IsServer())
                 return Failure("VanguardAutomation", "Step", "requires a hosted single-player nomodkit scenario");
-            Aircraft lead = FindAircraft(Text(args, "faction") ?? "Boscali");
+            // "seated": the player's own aircraft (the drone link follows the local aircraft), not the first one of the faction
+            Aircraft lead = Has(args, "seated") && GameManager.GetLocalAircraft(out Aircraft seat) && seat != null ? seat : FindAircraft(Text(args, "faction") ?? "Boscali");
             Aircraft bandit = FindAircraft(Text(args, "enemy") ?? "Primeva");
             if (bandit != null && bandit.NetworkHQ != null) enemyHq = bandit.NetworkHQ; // REMORA STRIKE may kill the bandit before batch-2 steps; a dropped link must not erase it either
             if (lead != null && lead != trackedLead)
@@ -86,6 +87,7 @@ namespace BoscaliSummer.Vanguard
                 case "orca": return Orca(args, lead);
                 case "kestrel": return Kestrel(args, lead);
                 case "hamilcar": return Hamilcar(args, lead);
+                case "link": return LinkStep(args, lead);
                 case "showcase": return Showcase(lead);
                 case "view": return View(Text(args, "angle") ?? "front");
                 default: return Failure("VanguardAutomation", "Step", "unknown action");

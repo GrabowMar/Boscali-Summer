@@ -281,7 +281,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 : m.Settle != null ? MemberDuty.Settled
                 : m.OnGround ? MemberDuty.Grounded
                 : MemberDuty.Formation;
-            float ammo = AmmoFraction(m.Aircraft);
+            float ammo = AmmoFraction(m);
             Station(m, duty == MemberDuty.Formation, out byte err10, out sbyte closure, out byte phase);
             return SnapshotBuilder.Member(m.Aircraft.persistentID.Id, m.Seat, (byte)m.Brain.Mind.Current, duty,
                 m.Aircraft.GetFuelLevel(), ammo, m.Brain.LastRejoin.FallingBehind, m.Bingo.Bingo, m.Bingo.Joker, ammo <= 0f, ElementOf(m),

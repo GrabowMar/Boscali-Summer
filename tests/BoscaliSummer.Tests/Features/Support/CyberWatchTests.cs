@@ -141,7 +141,7 @@ namespace BoscaliSummer.Tests.Features.Support
         {
             var rig = new Rig();
             rig.World.HumanCount = 0; rig.Ai = true;
-            rig.Observe(Obs(NodeKind.SamC2, 40, 30000f, 0f)); // beyond the 18 km truck reach
+            rig.Observe(Obs(NodeKind.SamC2, 40, 40000f, 0f)); // beyond the 32 km truck reach
             rig.Tick(10f);
             TestAssert.Eq(rig.Acts.Count, 0, "a revealed node out of reach is not attempted");
             TestAssert.Eq(rig.Brain.Last.Why, CyberWatchWhy.NoNode, "and the reason is named");
@@ -238,7 +238,7 @@ namespace BoscaliSummer.Tests.Features.Support
             var rig = new Rig();
             rig.World.HumanCount = 1;
             // The relay is in truck reach; the SAM C2 is 12 km beyond the relay and out of truck reach.
-            rig.Observe(Obs(NodeKind.Relay, 41, 15000f, 0f), Obs(NodeKind.SamC2, 40, 26000f, 0f));
+            rig.Observe(Obs(NodeKind.Relay, 41, 25000f, 0f), Obs(NodeKind.SamC2, 40, 36000f, 0f));
             rig.Tick(120f);
             CyberWatchPlan deeper = rig.Acts.Find(p => p.Code == WatchCode.CyberDeeper);
             TestAssert.Eq(deeper.Action, CyberWatchAction.Hop, "OVERLORD chains from the held relay to the SAM C2 in its reach");

@@ -68,7 +68,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
 
         public override FrontStateData Clone()
         {
-            var c = new FrontStateData { Protocol = Protocol, Seq = Seq, Now = Now, PriorityLockUntil = PriorityLockUntil, PriorityBy = PriorityBy };
+            var c = new FrontStateData { Protocol = Protocol, Faction = Faction, Epoch = Epoch, Seq = Seq, Now = Now, PriorityLockUntil = PriorityLockUntil, PriorityBy = PriorityBy };
             for (int i = 0; i < Fronts.Length; i++) c.Fronts[i] = Fronts[i].Clone();
             return c;
         }
@@ -91,8 +91,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         public static void WriteState(ISpaceWriter w, FrontStateData s)
         {
             w.WriteByte(s.Protocol);
-            SpaceWire.WriteVar(w, (uint)Math.Max(0, s.Seq));
-            SpaceWire.WriteFloat(w, s.Now);
+            s.WriteHeader(w);
             for (int i = 0; i < s.Fronts.Length; i++)
             {
                 FrontRow f = s.Fronts[i];
@@ -131,8 +130,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             if (!r.TryReadByte(out byte version)) return new FrontStateData();
             if (version != protocol) return new FrontStateData { Protocol = version };
             var s = new FrontStateData { Protocol = version };
-            if (!SpaceWire.ReadInt(r, out int seq) || !SpaceWire.ReadFloat(r, out float now) || !SpaceRules.MissionTime(now)) return Bad();
-            s.Seq = seq; s.Now = now;
+            if (!s.ReadHeader(r)) return Bad();
+            float now = s.Now;
             for (int i = 0; i < s.Fronts.Length; i++)
             {
                 FrontRow f = s.Fronts[i];

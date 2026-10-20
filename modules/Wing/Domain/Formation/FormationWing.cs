@@ -28,6 +28,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// <summary>Still on the ground (taxiing, lining up, rolling): never holds the stagger gate behind it and is not
         /// part of the collision check.</summary>
         public bool Grounded;
+        /// <summary>Not holding its slot (fighting, going home, settled, defending, maneuvering): it holds no stagger gate
+        /// behind it (the member behind waited out the 30 s deadlock timer on every rejoin).</summary>
+        public bool Away;
     }
 #pragma warning restore CS0649
 
@@ -118,6 +121,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public void SetFormation(FormationDefinition definition, float spacing)
         {
+            // A crossover's mirror belongs to the shape that flew it: ECHELON RIGHT after a crossed COMBAT SPREAD flew left.
+            if (!ReferenceEquals(Frame.Definition, definition)) Solver.ResetShape();
             Frame.Definition = definition;
             Frame.Spacing = definition.ClampSpacing(spacing);
         }
@@ -145,6 +150,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
             {
                 History.Clear();
                 Route.Clear();
+                // The trailers' distances along the old route too: kept, they pinned every Trail reference onto the anchor.
+                ForgetRoutes();
             }
             leaderWasPresent = leader.Present;
             History.Push(Frame.Leader, dt);
@@ -172,7 +179,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             }
             for (int i = 0; i < count; i++)
                 Frame.StaggerClear[i] = i == 0 || Frame.Established[i - 1] || members[i - 1].Role != Role.Slot || members[i - 1].Grounded ||
-                                        Side(Frame.Slots[i].Lateral) != Side(Frame.Slots[i - 1].Lateral);
+                                        members[i - 1].Away || Side(Frame.Slots[i].Lateral) != Side(Frame.Slots[i - 1].Lateral);
 
             bodies[0] = !separateBody
                 ? new CollisionBody
@@ -181,13 +188,15 @@ namespace BoscaliSummer.Modules.Wing.Domain
                     Vel = leader.Present ? leader.Vel : Frame.Leader.Vel,
                     Radius = leaderRadius,
                     Rank = 0,
+                    // A lost leader is no aircraft: its last estimate pushed the members off an empty point.
+                    Ignored = !leader.Present,
                 }
                 : new CollisionBody { Pos = body.Pos, Vel = body.Vel, Radius = leaderRadius, Rank = 0, Ignored = !body.Present };
             for (int i = 0; i < count; i++)
                 bodies[i + 1] = new CollisionBody
                 {
                     Pos = members[i].State.Pos, Vel = members[i].State.Vel, Radius = members[i].Radius,
-                    Rank = members[i].Rank > 0 ? members[i].Rank : i + 1, Ignored = members[i].Grounded,
+                    Rank = members[i].Rank != 0 ? members[i].Rank : i + 1, Ignored = members[i].Grounded,
                 };
             int extra = others == null ? 0 : Math.Min(otherCount, bodies.Length - count - 1);
             for (int k = 0; k < extra; k++) bodies[count + 1 + k] = others[k];

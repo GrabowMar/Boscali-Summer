@@ -22,7 +22,8 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         private static readonly Comparison<Countermeasure> ByName = (a, b) =>
             a == null || b == null ? (a == null ? (b == null ? 0 : 1) : -1) : string.CompareOrdinal(a.displayName, b.displayName);
 
-        private static readonly AccessTools.FieldRef<RadarJammer, float> JamIntensity = NativeRefs.Field<RadarJammer, float>("jammingIntensity");
+        // jamIntensityPrev is what Fire() last pushed into the aircraft's ECM, zeroed by Update() 0.1 s after the last pulse; jammingIntensity is the serialized maximum (always > 0, the old always-ON bug).
+        private static readonly AccessTools.FieldRef<RadarJammer, float> JamIntensity = NativeRefs.Field<RadarJammer, float>("jamIntensityPrev");
         /// <summary>A jammer is jamming while its intensity is above this.</summary>
         private const float JamOn = 0.01f;
 
@@ -106,6 +107,28 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             }
             for (int s = 0; s < stationCount; s++)
                 stations[s].Tag = HudCm.TagOf(stations[s].Mask, stations[s].Chargeable, names[s]);
+            InCycleOrder(aircraft);
+        }
+
+        private readonly string[] cycle = new string[8];
+        private readonly int[] rank = new int[HudCm.MaxStations], order = new int[HudCm.MaxStations], moved = new int[HudCm.MaxStations];
+        private readonly CmStation[] sorted = new CmStation[HudCm.MaxStations];
+        private readonly string[] sortedNames = new string[HudCm.MaxStations];
+
+        /// <summary>The stations in the order the game's Next Countermeasure steps through them, so the board's rows read top to bottom as the key cycles (the scan found them by name).</summary>
+        private void InCycleOrder(Aircraft aircraft)
+        {
+            int known = BoscaliSummer.Core.Game.AircraftReadout.CountermeasureOrder(aircraft, cycle);
+            for (int s = 0; s < stationCount; s++) rank[s] = HudCm.CycleRank(names[s], cycle, known);
+            HudCm.CycleOrder(rank, stationCount, order);
+            for (int k = 0; k < stationCount; k++)
+            {
+                sorted[k] = stations[order[k]];
+                sortedNames[k] = names[order[k]];
+                moved[order[k]] = k;
+            }
+            for (int k = 0; k < stationCount; k++) { stations[k] = sorted[k]; names[k] = sortedNames[k]; }
+            for (int i = 0; i < parts.Length; i++) if (partStation[i] >= 0) partStation[i] = moved[partStation[i]];
         }
 
         /// <summary>The full load: the ejectors remember theirs; a jammer is one charge; anything else is unknown (0).</summary>

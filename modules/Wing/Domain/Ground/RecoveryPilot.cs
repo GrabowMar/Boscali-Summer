@@ -83,7 +83,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         /// <summary>The approach for the flight pipeline; <paramref name="handOver"/> once close enough to land, the retry
         /// wait is over and (a jet) the runway is its turn. Until then it holds at the point.</summary>
-        public FlightIntent ApproachIntent(in AircraftState s, AirframeProfile p, float time, float dt, out bool handOver)
+        /// <param name="threatened">A missile guides on the member, or its defence has not yet ended: no hand-over to the game's
+        /// landing, which would not defend it.</param>
+        public FlightIntent ApproachIntent(in AircraftState s, AirframeProfile p, float time, float dt, out bool handOver,
+            bool threatened = false)
         {
             Vec3 point = ApproachPoint(s);
             Vec3 to = (point - s.Pos).Horizontal;
@@ -91,7 +94,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             // (review M3c I1), and it may be handed over from anywhere on it.
             float reach = holding ? 2f * HoldOrbit.RadiusFor(FormationPilot.OrbitSpeed(p)) + ApproachReached : ApproachReached;
             bool reached = to.Length < reach;
-            handOver = reached && time >= retryAt && (Vertical || Field.TryClaimLanding(owner, time));
+            handOver = reached && !threatened && time >= retryAt && (Vertical || Field.TryClaimLanding(owner, time));
             Vec3 dir = to.SqrLength > 1e-4f ? to.Normalized : s.Fwd.Horizontal.Normalized;
             Vec3 heading = Vertical ? dir : Field.Runway.Direction(Field.Reverse);
             RefState reference = new RefState(point, dir * p.CruiseSpeed, Vec3.Zero);

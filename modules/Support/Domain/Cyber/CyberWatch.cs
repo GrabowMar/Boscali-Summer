@@ -19,7 +19,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         bool PackageRoom { get; }
     }
 
-    internal enum CyberWatchAction : byte { None = 0, Hop = 1, Burn = 2, Drop = 3 }
+    internal enum CyberWatchAction : byte { None = 0, Hop = 1, Burn = 2, Drop = 3, Purge = 4 }
 
     /// <summary>Why OVERLORD did nothing on a think (the transcript and the log name it). None when it acted.</summary>
     internal enum CyberWatchWhy : byte { None, NotDue, Paced, Suspended, NoAnchors, NoSlot, NoNode, Holding, Resting, Failed }
@@ -54,7 +54,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
     internal sealed class CyberWatchBrain : WatchBrainBase
     {
         public const float ThinkSeconds = 2f, BurnTrace = 70f, SafeTrace = 96f, HopBudgetTrace = 92f, PilotBurnMeters = 40000f, PilotBurnMinHoldSeconds = 45f,
-            RestSeconds = 45f, AiRestSeconds = 150f, BurnSpacingSeconds = 480f, NodeBackoffSeconds = 60f, BurnBackoffSeconds = 30f;
+            RestSeconds = 45f, AiRestSeconds = 150f, BurnSpacingSeconds = 480f, NodeBackoffSeconds = 60f, BurnBackoffSeconds = 30f, PurgeAfterSeconds = 30f;
         public const int MaxHeldByOverlord = 2, MaxBackoffs = 32;
         private const ulong Me = SpaceContacts.WatchOfficerId;
 
@@ -67,14 +67,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         /// <summary>The CYBER front's directive and focus pin (the host sets it every tick; neutral = BALANCED, the rule as it always was).</summary>
         public DirectorBias Bias = DirectorBias.Neutral(Front.Cyber);
 
-        public int Hops, Deepers, Burns, Drops, Failures, Thinks;
+        public int Hops, Deepers, Burns, Drops, Purges, Failures, Thinks;
         public CyberWatchPlan Last { get; private set; }
 
         public override void Reset()
         {
             base.Reset(); backoff.Clear(); trucks.Clear(); held.Clear();
             restUntil = burnBackoffUntil = clock = 0f; lastBurnAt = float.NegativeInfinity;
-            Hops = Deepers = Burns = Drops = Failures = Thinks = 0;
+            Hops = Deepers = Burns = Drops = Purges = Failures = Thinks = 0;
             Last = default;
         }
 
@@ -128,6 +128,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         private CyberWatchPlan Decide(CyberDesk desk, ICyberWatchWorld world, WatchPacer pacer, bool aiFaction, float now)
         {
             pacer.SetUrgent(WatchDomain.Cyber, false); // refreshed below only while an intrusion could be traced inside one AI gap
+            CyberWatchPlan purge = PurgePlan(desk, world, now);
+            if (purge.Action != CyberWatchAction.None) return purge;
             if (desk.Anchors.Count(AnchorKind.EwTruck) == 0) return CyberWatchPlan.Idle(CyberWatchWhy.NoAnchors);
             Prune(now);
             int humans = world.Humans;
@@ -158,6 +160,21 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             if (!quiet) return CyberWatchPlan.Idle(CyberWatchWhy.Suspended);
             if (now < restUntil) return CyberWatchPlan.Idle(CyberWatchWhy.Resting);
             return StartPlan(desk, humans, factor, planned, now);
+        }
+
+        /// <summary>
+        /// Defence before offence: an enemy hold on our network is purged when a PURGE can run. DEFEND purges at once; otherwise OVERLORD lets the oldest hold age
+        /// <see cref="PurgeAfterSeconds"/> first (the intruder's window; an operator can always purge sooner).
+        /// </summary>
+        private CyberWatchPlan PurgePlan(CyberDesk desk, ICyberWatchWorld world, float now)
+        {
+            IReadOnlyList<CyberBreach> b = desk.Breaches;
+            if (b.Count == 0 || desk.PurgeEndsAt > now || now < desk.PurgeReadyAt) return CyberWatchPlan.Idle(CyberWatchWhy.None);
+            bool defend = Bias.Directive == FrontDirective.Defend;
+            float oldest = now;
+            for (int i = 0; i < b.Count; i++) oldest = Math.Min(oldest, b[i].Since);
+            if (!defend && now - oldest < PurgeAfterSeconds) return CyberWatchPlan.Idle(CyberWatchWhy.None);
+            return new CyberWatchPlan(CyberWatchAction.Purge, CyberWatchWhy.None, 0, b[0].Kind, WatchCode.CyberPurge, b.Count, 0);
         }
 
         private CyberWatchPlan Yield(CyberDesk desk, ICyberWatchWorld world, CyberIntrusion mine, float now)
@@ -227,6 +244,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             {
                 case CyberWatchAction.Hop: r = desk.Hop(Me, plan.NodeId); break;
                 case CyberWatchAction.Burn: r = desk.Burn(Me, plan.NodeId); break;
+                case CyberWatchAction.Purge: r = desk.Purge(Me); break;
                 default: r = desk.Drop(Me, plan.NodeId); break;
             }
             if (!r.Ok)
@@ -242,6 +260,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             {
                 case CyberWatchAction.Hop: if (plan.Code == WatchCode.CyberDeeper) Deepers++; else Hops++; break;
                 case CyberWatchAction.Burn: Burns++; lastBurnAt = now; break;
+                case CyberWatchAction.Purge: Purges++; return new CyberWatchPlan(plan.Action, CyberWatchWhy.None, plan.NodeId, plan.Kind, plan.Code, plan.A, plan.B, r.Outcome);
                 default: Drops++; break;
             }
             // A burned or dropped intrusion rests before the next one: effects come in bursts, not as a permanent state.

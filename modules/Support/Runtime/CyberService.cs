@@ -73,6 +73,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         // Optional hooks: each is implemented by exactly one of the other files (the call is removed when it is not).
         partial void TickNodes(FactionCyber f, float now);
         partial void TickEffects(float now);
+        partial void TickDefence(float now);
         partial void RecordEvent(FactionCyber f, CyberEvent e);
         partial void RevealTraced(FactionCyber f, CyberEvent e);
         partial void ResetEffects();
@@ -176,6 +177,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (TryEstablish(hq, out f)) { factions.Add(hq, f); Plugin.Logger?.LogInfo("[Support.Cyber] " + hq.name + ": " + f.Slots.Count + " native anchor(s), " + CyberAnchorSpawner.Describe() + "."); }
             }
             TickEffects(now);
+            TickDefence(now);
         }
 
         private void TickFaction(FactionCyber f, float now)
@@ -244,9 +246,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private void EnrollTrucks(FactionCyber f, float now)
         {
             List<Unit> all = UnitRegistry.allUnits;
-            if (all == null || all.Count > MaximumScanUnits) return;
-            // Native wreck cleanup can remove registry entries during enrollment.
-            for (int i = 0; i < all.Count; i++)
+            if (all == null) return;
+            // Native wreck cleanup can remove registry entries during enrollment. ponytail: only the first MaximumScanUnits are read on a bigger mission; a rotating cursor if trucks past it matter.
+            for (int i = 0; i < all.Count && i < MaximumScanUnits; i++)
             {
                 Unit unit = all[i];
                 if (!(unit is GroundVehicle) || unit.NetworkHQ != f.Owner || unit.radar == null ||
@@ -326,7 +328,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private bool TryEstablish(FactionHQ owner, out FactionCyber made)
         {
             made = null;
-            if (UnitRegistry.allUnits != null && UnitRegistry.allUnits.Count > MaximumScanUnits) return false;
             Vector2 span = TheaterFrame.Resolve();
             var truckSites = new List<Site>(); var truckCands = new List<SiteCandidate>();
             var centerSites = new List<Site>(); var centerCands = new List<SiteCandidate>();

@@ -19,6 +19,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal MirrorFeed<SofStateData> SofFeed => sofFeed ?? (sofFeed = new MirrorFeed<SofStateData>(sofMirror, SpaceCommandKind.SofSync));
 
         /// <summary>PUSH, HOLD, EXFIL, LIFT or CANCEL for one team.</summary>
+        /// <summary>SWEEP: send the QRF against every hostile team detected near our sites. Carries nothing.</summary>
+        internal int SofSweep() => SendSpace(SpaceCommandKind.SofSweep, 0, null);
+
         internal int SofOrder(int slot, TeamVerb verb) => slot < 0 || slot >= SofRules.MaxTeams ? 0 : SendSpace(SpaceCommandKind.SofOrder, SofCodes.PackOrder(slot, verb), null);
 
         /// <summary>Start a mission. RECON takes the point (<paramref name="x"/>, <paramref name="z"/>); every other kind takes the target id the mirror listed.</summary>

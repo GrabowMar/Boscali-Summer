@@ -9,6 +9,7 @@ namespace BoscaliSummer.Tests.Features.Vanguard
     {
         public static void Run()
         {
+            TestAssert.That(RemoraArcher.Rounds == 2, "two missiles only: four would be too strong");
             TestAssert.That(RemoraArcher.Left(0) == 2 && RemoraArcher.Left(1) == 1 && RemoraArcher.Left(2) == 1 &&
                 RemoraArcher.Left(3) == 0, "two rounds, one bit per rail");
             TestAssert.That(RemoraArcher.NextPylon(0) == 0 && RemoraArcher.NextPylon(1) == 1 && RemoraArcher.NextPylon(2) == 0 &&
@@ -18,7 +19,7 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.That(RemoraArcher.Decide(true, true, 1, true) == RemoraPhase.Engage, "rounds left keep engaging an air target");
             TestAssert.That(RemoraArcher.Decide(true, true, 0, true) == RemoraPhase.Escort, "after the volley the same cue sends it home");
             TestAssert.That(RemoraArcher.Decide(true, true, 0, false) == RemoraPhase.Ram, "a fresh cue with no rounds rams");
-            TestAssert.That(RemoraArcher.Decide(true, false, 2, false) == RemoraPhase.Ram, "ground designations are rammed, rounds kept");
+            TestAssert.That(RemoraArcher.Decide(true, false, 2, false) == RemoraPhase.Ram, "ground designations are bombed, rounds kept");
 
             TestAssert.That(RemoraArcher.CanFire(11999f, 59f, 1.5f, 1, true), "inside 12 km, the 60 deg cone and the 1.5 s interval");
             TestAssert.That(!RemoraArcher.CanFire(12001f, 0f, 9f, 2, true), "beyond 12 km holds fire");
@@ -26,19 +27,29 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.That(!RemoraArcher.CanFire(5000f, 0f, 1.4f, 1, true), "1.5 s between rounds");
             TestAssert.That(!RemoraArcher.CanFire(5000f, 0f, 9f, 0, true), "empty rails hold fire");
             TestAssert.That(!RemoraArcher.CanFire(5000f, 0f, 9f, 2, false), "no faction track holds fire");
+            TestAssert.That(RemoraArcher.CanFire(8000f, 110f, 2f, 1, true, RemoraArcher.DefenceCone), "defence shots at inbound missiles use the wide cone");
+            TestAssert.That(!RemoraArcher.CanFire(8000f, 110f, 2f, 1, true), "the same shot on the hunt cone holds fire");
             TestAssert.That(RemoraArcher.HoldsForTrack(5000f, 10f, 2, false), "in range and cone, rounds left, no track = waiting on a sensor");
             TestAssert.That(!RemoraArcher.HoldsForTrack(5000f, 10f, 2, true) && !RemoraArcher.HoldsForTrack(13000f, 10f, 2, false) &&
                 !RemoraArcher.HoldsForTrack(5000f, 70f, 2, false) && !RemoraArcher.HoldsForTrack(5000f, 10f, 0, false),
                 "tracked, out of range, out of cone or empty is not a track hold");
 
+            TestAssert.That(RemoraArcher.CanDefend(RemoraArcher.DefendRange, 1) && !RemoraArcher.CanDefend(RemoraArcher.DefendRange + 1f, 1) &&
+                !RemoraArcher.CanDefend(5000f, 0), "defence envelope needs a round and an inbound inside 9 km");
+            TestAssert.That(RemoraArcher.FlareBursts == 6, "six flare bursts");
+            TestAssert.That(RemoraArcher.ShouldFlare(2500f, 300f, 6, RemoraArcher.FlareInterval), "close, fast IR missile draws a burst");
+            TestAssert.That(!RemoraArcher.ShouldFlare(3100f, 300f, 6, 9f) && !RemoraArcher.ShouldFlare(2500f, 50f, 6, 9f) &&
+                !RemoraArcher.ShouldFlare(2500f, 300f, 0, 9f) && !RemoraArcher.ShouldFlare(2500f, 300f, 6, 0.5f),
+                "far, slow, empty or just-popped holds the flares");
+
             TestAssert.That(Near(RemoraArcher.FuseRadius(0f, 0.02f), RemoraArcher.RamFuseMin) &&
-                Near(RemoraArcher.FuseRadius(-300f, 0.02f), RemoraArcher.RamFuseMin), "slow or opening ram keeps the tight 6 m fuse");
+                Near(RemoraArcher.FuseRadius(-300f, 0.02f), RemoraArcher.RamFuseMin), "slow or opening bomb keeps the tight 6 m fuse");
             TestAssert.That(Near(RemoraArcher.FuseRadius(700f, 0.02f), 8.4f), "700 m/s closing: window 1.2 steps wide");
             TestAssert.That(Near(RemoraArcher.FuseRadius(5000f, 0.02f), RemoraArcher.RamFuseMax), "fuse never opens past 12 m");
 
             TestAssert.That(RemoraArcher.Status(2, 2, RemoraPhase.Escort) == "ARCHER 2/2 READY", "ready line");
             TestAssert.That(RemoraArcher.Status(3, 4, RemoraPhase.Engage) == "ARCHER ENGAGING 3/4", "engaging line sums drones");
-            TestAssert.That(RemoraArcher.Status(0, 2, RemoraPhase.Ram) == "REMORA WINCHESTER — RAMMING", "ram line");
+            TestAssert.That(RemoraArcher.Status(0, 2, RemoraPhase.Ram) == "REMORA GUIDED BOMB — INBOUND", "bomb line");
             TestAssert.That(RemoraArcher.Status(0, 2, RemoraPhase.Escort) == "REMORA WINCHESTER", "empty escort line");
 
             RemoraArcher.Elevons(0f, 0f, out float l0, out float r0);

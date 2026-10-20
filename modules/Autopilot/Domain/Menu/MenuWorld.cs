@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BoscaliSummer.Core.Contracts;
 
 namespace BoscaliSummer.Modules.Autopilot.Domain
 {
@@ -14,6 +15,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public string Name = "";
         public int Ammo;
         public StationClass Class;
+        public CargoKind Cargo;
     }
 
     internal sealed class WorldPerk
@@ -102,6 +104,9 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public bool TurretAuto;
         /// <summary>The airframe has weapon bay doors, and they are being held open.</summary>
         public bool HasBayDoors, BayDoorsOpen;
+        /// <summary>Standing drop-zone owner and a faction-known, designated ground fix for the cargo branch.</summary>
+        public bool CargoZoneAvailable, CargoZoneSet, CargoZoneCapable, CargoFixAvailable;
+        public string CargoZoneLeg = "", CargoFixName = "";
 
         // DEFENCE
         public bool HasCountermeasures;
@@ -121,6 +126,11 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         /// <summary>The countermeasure button also dispenses chaff while a radar missile is inbound.</summary>
         public bool ChaffLinked;
         public bool HasDrones, DronesStriking, DronesCanStrike;
+        /// <summary>Drone link (WEAPONS > DRONE LINK): the linkable drones flying (not AEGIS/ORCA/ALE-X) as callsigns and state lines in
+        /// launch order, the linked one (-1 none), whether it is hand-flown, whether the HUD feed card is on.</summary>
+        public List<string> DroneNames = new List<string>(), DroneStates = new List<string>();
+        public int DroneLinked = -1;
+        public bool DroneHand, DroneFeed;
         /// <summary>REMORA drones flying now.</summary>
         public int Drones;
 
@@ -151,8 +161,10 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public int BoardLayout;
         /// <summary>Indices into <see cref="MenuCatalog.BoardShades"/> and <see cref="MenuCatalog.BoardSizes"/>.</summary>
         public int BoardShade, BoardSize = 1;
-        public bool BoardScopeAuto = true;
-        /// <summary>The board switches that are on, as "pages/slug" and "parts/slug" (<see cref="MenuCatalog.BoardPages"/>, <see cref="MenuCatalog.BoardParts"/>).</summary>
+        public int BoardPageCount = 1;
+        public BoardPage BoardPage1 = BoardPage.Threat, BoardPage2 = BoardPage.Shot, BoardPage3 = BoardPage.Wing, BoardPage4 = BoardPage.Objective;
+        public bool BoardPagesOn = true, BoardSway = true;
+        /// <summary>The major board elements that are on, as "parts/slug" (<see cref="MenuCatalog.BoardParts"/>).</summary>
         public HashSet<string> BoardSwitches = new HashSet<string>();
 
         // COCKPIT (cabin)

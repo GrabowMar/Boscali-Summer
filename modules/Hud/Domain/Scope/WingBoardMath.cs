@@ -71,15 +71,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return n;
         }
 
-        /// <summary>The page has something to show on its own account: someone is out of slot, fighting or has a missile on it. (A hit, running dry and turning for home are
-        /// events: the page holds for a few seconds after each, it does not stay up for the rest of the sortie.)</summary>
-        public static bool NeedsAttention(WingBoardMember[] m, int count)
-        {
-            for (int i = 0; i < count; i++)
-                if (m[i].State == WingState.Join || m[i].State == WingState.Engage || m[i].State == WingState.Defend) return true;
-            return false;
-        }
-
         /// <summary>How many rows to draw, how tall, how far apart; whether a row has its task line and whether the ack log has room (three or fewer wingmen).</summary>
         public static void Rows(int count, out int shown, out float rowH, out float step, out bool taskLine, out bool acks)
         {

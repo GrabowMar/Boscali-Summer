@@ -57,6 +57,7 @@ static class Program
         finally { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
         CameraLifecycleTests.Run(Check);
         EditorTests.Run(Check);
+        FramingTests.Run(Check);
         TimingTests.Run(Check);
         ApiTests.Run(Check);
         InboxTests.Run(Check);

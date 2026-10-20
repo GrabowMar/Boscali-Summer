@@ -4,7 +4,7 @@ using BoscaliSummer.Core.Math;
 namespace BoscaliSummer.Modules.Support.Domain.Space
 {
     /// <summary>
-    /// One geostationary station-keeping satellite over the theatre (map u,v in 0..1). It sits parked at a point and covers a circular footprint around it.
+    /// One geostationary station-keeping satellite over the theatre (map u,v in 0..1). It sits parked at a point and covers a circular footprint (in ground km) around it.
     /// A burn moves it: it slews to a new parked point at a fixed speed and the fuel is spent up front, in proportion to the distance (plus a small fixed burn cost).
     /// Pure value type: the position at any mission time is a function of the burn that started it, so every client agrees with no per-frame state.
     /// </summary>
@@ -27,7 +27,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             FromU = fromU; FromV = fromV; ToU = toU; ToV = toV; DepartAt = departAt; Fuel = Math.Max(0f, Math.Min(100f, fuel));
         }
 
-        public static float Distance(float u0, float v0, float u1, float v1) => Scalar.Distance2D(u0, v0, u1, v1);
+        /// <summary>
+        /// Theatre height over width. Distances are ground kilometres in theatre widths (a v step counts <c>Aspect</c> widths), so a footprint
+        /// is a circle on the ground and a north-south burn costs what an east-west one of the same length does. Set every frame from the live
+        /// map on host and clients (<c>SupportManager.Update</c>); 1 (a square theatre) until then and in tests.
+        /// </summary>
+        public static float Aspect = 1f;
+
+        public static float Distance(float u0, float v0, float u1, float v1) => Scalar.Distance2D(u0, v0 * Aspect, u1, v1 * Aspect);
 
         /// <summary>Fuel percent a burn over <paramref name="distance"/> costs (0 for no move).</summary>
         public static float Cost(float distance) => distance < 0.005f ? 0f : BurnBase + BurnPerUnit * distance;

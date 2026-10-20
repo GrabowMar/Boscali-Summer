@@ -69,6 +69,30 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             return true;
         }
 
+        /// <summary>FORM UP calls off an RTB or refit still on its approach (or asked for on the runway); a landing, one down at
+        /// the field, or one at bingo fuel (its monitor stays tripped, so it would never be sent again) goes on. Returns how many
+        /// in <paramref name="who"/> are still going home (a refit already departing again is rejoining).</summary>
+        public int CallOffRecovery(Func<WingMember, bool> who = null)
+        {
+            int home = 0;
+            foreach (WingMember m in Members)
+            {
+                if (m.Released || (m.Recovery == null && !m.HasPendingRecovery) || (who != null && !who(m))) continue;
+                RecoveryPhase p = m.Recovery != null ? m.Recovery.Phase : RecoveryPhase.Approach;
+                if (p == RecoveryPhase.Departing || p == RecoveryPhase.Done) continue;
+                if (p != RecoveryPhase.Approach || m.Bingo.Bingo)
+                {
+                    home++;
+                    continue;
+                }
+                m.Recovery?.Leave();
+                m.Recovery = null;
+                m.HasPendingRecovery = false;
+                WingLog.Logger.LogInfo($"[Wing] #{m.Number} recovery called off; rejoining");
+            }
+            return home;
+        }
+
         public int RecoverAll(RecoveryIntent intent, Func<WingMember, bool> who = null)
         {
             int n = 0;
@@ -103,8 +127,12 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             switch (r.Phase)
             {
                 case RecoveryPhase.Approach:
-                    FlightIntent intent = r.ApproachIntent(m.Last, m.Profile, missionTime, dt, out bool handOver);
+                    // Going home still survives: the approach is the defence's home, and no landing is handed over mid-defence.
+                    SenseThreat(m);
+                    FlightIntent intent = r.ApproachIntent(m.Last, m.Profile, missionTime, dt, out bool handOver,
+                        m.Brain.Threat.Present || m.Brain.Defence.Active);
                     ControlWriter.Fly(m.Aircraft, m.Brain.FlyIntent(intent, frame, m.Last, m.Profile, dt), m.Profile.Class);
+                    Trigger(m.Aircraft, m.Brain.LastDefence.Countermeasures);
                     if (!handOver) return true;
                     // Landing first: the guards protect it from the moment the game's state enters (its search may fail
                     // at once).
@@ -143,6 +171,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         /// <summary>Airborne again from the field: a refit is over, and a recovery asked for on the runway starts now.</summary>
         private void AirborneAfterGround(WingMember m)
         {
+            m.Flew = true;
             ReleasePad(m);
             m.Recovery = null;
             if (!m.HasPendingRecovery) return;
@@ -301,7 +330,9 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             }
             if (m.BingoField == null) return false;
             float distance = (m.BingoField.transform.position - m.Aircraft.transform.position).magnitude;
-            bool afterburner = m.Profile.Class == AirframeClass.FixedWing && m.Last.Throttle >= m.Profile.AfterburnerThrottle;
+            // Live, not m.Last: the sensors are not read while every member flies the game's combat state, and a frozen value taught
+            // the estimate the fight's afterburner burn as the cruise rate (bingo early) or never learned the fight at all.
+            bool afterburner = m.Profile.Class == AirframeClass.FixedWing && m.Aircraft.GetInputs().throttle >= m.Profile.AfterburnerThrottle;
             bool bingo = m.Bingo.Update(m.Aircraft.GetFuelLevel(), distance, m.Profile.CruiseSpeed, step, afterburner);
             // The radio says it (spec M7 §1.3).
             if (m.Bingo.JokerNow) Events.Push(new WingEvent { Time = missionTime, Member = m.Seat, Kind = WingEventKind.Joker });
@@ -338,13 +369,19 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             return best;
         }
 
-        /// <summary>Munitions aboard as a fraction of a full load (cargo aside); 1 with no weapon stations.</summary>
-        internal static float AmmoFraction(Aircraft a)
+        /// <summary>Munitions member <paramref name="m"/>'s WEAPONS doctrine lets it use, as a fraction of a full load: a
+        /// missiles-only member with gun rounds left is Winchester once its missiles are gone.</summary>
+        internal float AmmoFraction(WingMember m) => AmmoFraction(m.Aircraft, DoctrineFor(m).Weapons);
+
+        /// <summary>Munitions aboard as a fraction of a full load (cargo aside; with <paramref name="weapons"/>, only the stations
+        /// it allows, radar aside); 1 with no such stations.</summary>
+        internal static float AmmoFraction(Aircraft a, WeaponsPolicy weapons = WeaponsPolicy.Auto)
         {
             int total = 0, full = 0;
             if (a.weaponStations != null)
                 foreach (WeaponStation w in a.weaponStations)
-                    if (w != null && !w.Cargo && w.FullAmmo > 0)
+                    if (w != null && !w.Cargo && w.FullAmmo > 0 &&
+                        (weapons == WeaponsPolicy.Auto || WeaponsFilter.AllowsStation(weapons, StoreOf(w.WeaponInfo), false, true)))
                     {
                         total += w.GetAmmoTotal();
                         full += w.FullAmmo;

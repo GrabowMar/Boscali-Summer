@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace BoscaliSummer.Modules.Support.Domain.Cyber
 {
     internal enum IntrusionPhase : byte { Idle = 0, Hopping = 1, Holding = 2, Ended = 3 }
-    internal enum IntrusionEnd : byte { None = 0, Dropped = 1, Burned = 2, Traced = 3, Unpaid = 4, SourceDown = 5, NodeLost = 6, Scene = 7 }
+    internal enum IntrusionEnd : byte { None = 0, Dropped = 1, Burned = 2, Traced = 3, Unpaid = 4, SourceDown = 5, NodeLost = 6, Scene = 7, Purged = 8 }
 
     internal readonly struct HeldNode
     {
@@ -12,6 +12,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         public readonly NodeKind Kind;
         public readonly float Since;
         public HeldNode(int nodeId, NodeKind kind, float since) { NodeId = nodeId; Kind = kind; Since = since; }
+    }
+
+    /// <summary>One enemy hold on this faction's own network: who holds it (their faction key and their node id), what and where it is, since when.</summary>
+    internal readonly struct CyberBreach
+    {
+        public readonly int Attacker, NodeId;
+        public readonly NodeKind Kind;
+        public readonly float X, Z, Since;
+        public CyberBreach(int attacker, int nodeId, NodeKind kind, float x, float z, float since) { Attacker = attacker; NodeId = nodeId; Kind = kind; X = x; Z = z; Since = since; }
     }
 
     /// <summary>What one <see cref="CyberIntrusion.Advance"/> did: a node arrived, the trace bar filled, how many 10 s upkeep ticks fell due.</summary>
@@ -29,6 +38,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         public const int StartCost = 6, StartCostExploit = 5, UpkeepSeconds = 10, UpkeepPerNode = 0, MaxHeldPerFaction = 4, MaxHeldPerIntrusion = 4;
         public const float TraceMax = 100f, HeldTraceRate = 0.5f, DataCenterTraceFactor = 0.8f, DataCenterUpkeepFactor = 0.75f;
         public const float ExploitHopFactor = 0.75f, MaxAdvanceSeconds = 5f, MinTraceFactor = 0.25f, MaxTraceFactor = 3f;
+        /// <summary>PURGE (protocol 42): the defender pays 4 CR, every enemy hold on its network is cut 20 s later, each cut intrusion's trace jumps 25 %, then 90 s of cooldown.</summary>
+        public const int PurgeCost = 4, MaxBreaches = 6;
+        public const float PurgeSeconds = 20f, PurgeCooldownSeconds = 90f, PurgeTraceKick = 25f;
 
         public static int IntrusionCap(int humans) => humans >= 5 ? 3 : 2;
 
@@ -111,6 +123,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         }
 
         public void CancelHop() { HopTarget = 0; }
+
+        /// <summary>A PURGE cut one of this intrusion's holds: the defenders saw where it came from. The trace jumps but never fills here; the next second of holding does that through the normal trace path.</summary>
+        public void Kick(float amount)
+        {
+            if (Ended || !(amount > 0f)) return;
+            Trace = Math.Min(CyberRules.TraceMax - 0.01f, Trace + amount);
+        }
 
         /// <summary>Integrates trace and upkeep up to <paramref name="now"/> (at most 5 s per call, so a hitch cannot trace a pilot out). <paramref name="traceFactor"/> scales every trace gain.</summary>
         public IntrusionStep Advance(float now, float traceFactor)

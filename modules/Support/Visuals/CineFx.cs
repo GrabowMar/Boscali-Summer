@@ -59,7 +59,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
                         {
                             float u = (x + 0.5f) / tile * 2f - 1f, v = (y + 0.5f) / tile * 2f - 1f;
                             float r = Mathf.Sqrt(u * u + v * v);
-                            float mask = 1f - Mathf.SmoothStep(0.3f, 1f, r);
+                            float mask = 1f - Smooth(0.3f, 1f, r);
                             float n = Fbm(u * 1.9f + seed, v * 1.9f + seed * 0.7f);
                             float a = Mathf.Clamp01((n - 0.22f) * 2.3f) * mask;
                             a = Mathf.Pow(a, 0.85f);
@@ -89,7 +89,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
                         float u = (x + 0.5f) / res * 2f - 1f, v = (y + 0.5f) / res * 2f - 1f;
                         float r = Mathf.Sqrt(u * u + v * v);
                         float a = Mathf.Exp(-r * r * 6f) + 0.32f * Mathf.Exp(-r * 3.2f);
-                        a *= 1f - Mathf.SmoothStep(0.8f, 1f, r);
+                        a *= 1f - Smooth(0.8f, 1f, r);
                         px[y * res + x] = new Color(1f, 1f, 1f, Mathf.Clamp01(a));
                     }
                 glowTexture.SetPixels(px);
@@ -112,8 +112,8 @@ namespace BoscaliSummer.Modules.Support.Visuals
                         float u = (x + 0.5f) / res * 2f - 1f, v = (y + 0.5f) / res * 2f - 1f;
                         float r = Mathf.Sqrt(u * u + v * v);
                         float d = (r - 0.88f) / 0.06f;
-                        float a = Mathf.Exp(-d * d) + 0.16f * Mathf.SmoothStep(0.15f, 0.88f, r) * (1f - Mathf.SmoothStep(0.88f, 0.97f, r));
-                        a *= 1f - Mathf.SmoothStep(0.95f, 1f, r);
+                        float a = Mathf.Exp(-d * d) + 0.16f * Smooth(0.15f, 0.88f, r) * (1f - Smooth(0.88f, 0.97f, r));
+                        a *= 1f - Smooth(0.95f, 1f, r);
                         a *= 0.82f + 0.18f * Mathf.PerlinNoise(Mathf.Atan2(v, u) * 5f + 10f, r * 6f);
                         px[y * res + x] = new Color(1f, 1f, 1f, Mathf.Clamp01(a));
                     }
@@ -122,6 +122,9 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 return ringTexture;
             }
         }
+
+        // the shader smoothstep for the texture edge fades; Mathf.SmoothStep(from, to, t) is an eased lerp, and used as one it scaled the ring alpha by ~0.002 (invisible rings) and the glow centre by 0.2
+        private static float Smooth(float e0, float e1, float x) { float t = Mathf.Clamp01((x - e0) / (e1 - e0)); return t * t * (3f - 2f * t); }
 
         private static Texture2D NewTexture(string name, int res) =>
             new Texture2D(res, res, TextureFormat.RGBA32, false) { name = name, wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };

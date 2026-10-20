@@ -13,7 +13,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// <summary>BEHAVIOUR › STANCES (spec 2026-10-04 §4.1; was TUNING), top to bottom in the order it is used: the scope, the stance
     /// book (a plate per stance, as ORDERS' slots), the selected stance in words with APPLY under it, its settings, its key and default
     /// orders, then who flies what (IN USE) and the player's radio. A stance is a named doctrine preset (<see cref="Stance"/>): ENGAGE (targets,
-    /// range, weapons, radar), DEFEND (missile guard, response, spread, fall back), FLY · AFTER (interval, power, winchester, bingo),
+    /// range, weapons, radar), DEFEND (missile guard, response, fall back), FLY · AFTER (interval, power, winchester, bingo),
     /// the slot (wing key + 1-6) it sits in and the orders it is the default for. Built-ins are read-only (SAVE AS copies one); yours
     /// save to stances.user.json at each pick. APPLY flies the stance for the scope (<see cref="WmcStanceActions.Apply"/>).
     /// EDIT › LIVE keeps what TUNING did: the same rows then set the scope's own doctrine and the wing's follow-ons at once. IN USE shows
@@ -157,18 +157,19 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 }, "opt.radar.", new[] { "on", "silent", "off" }, Kind.Axis, DoctrineAxis.Radar);
 
             flow.Section(AvIcon.AlertTriangle, "DEFEND", "");
-            Row("MSL GUARD", new[] { "OFF", "SELF", "WING", "LEAD" },
+            Row("MSL GUARD", new[] { "OFF", "ON" },
                 new[]
                 {
-                    "No missile guard: an aircraft only breaks and expends countermeasures for itself.",
-                    "Each aircraft guards itself.", "An anti-missile store may protect any wingman.", "The leader is guarded first.",
-                }, "opt.guard.", new[] { "off", "self", "wing", "lead" }, Kind.Axis, DoctrineAxis.Guard);
+                    "Off: hold the slot against a missile, flares and chaff only, no break turn.",
+                    "On: break from a missile (see RESPONSE).",
+                }, "opt.guard.", new[] { "off", "on" }, Kind.Axis, DoctrineAxis.Guard);
             Row("RESPONSE", new[] { "BREAK", "PRESS" },
-                new[] { "Break: notch, beam or flare out of a missile.", "Press: hold heading to kill a radar-guided missile's launcher." },
+                new[]
+                {
+                    "Break: notch, beam or flare out of a missile.",
+                    "Press: while our own radar-guided missile flies, hold heading against a radar missile (chaff only) until it is 3 s out.",
+                },
                 "opt.response.", new[] { "break", "press" }, Kind.Axis, DoctrineAxis.Response);
-            Row("SPREAD", new[] { "OFF", "ON" },
-                new[] { "Stay in formation when threatened.", "Spread out when threatened." },
-                "opt.spread.", new[] { "off", "on" }, Kind.Axis, DoctrineAxis.Spread);
             Row("FALL BACK", new[] { "KEEP", "NEVER", "1.5 : 1", "2 : 1", "3 : 1" },
                 new[]
                 {
@@ -179,7 +180,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
             flow.Section(AvIcon.Plane, "FLY · AFTER", "");
             Row("INTERVAL", new[] { "CLOSE", "STD", "OPEN" },
-                new[] { "Close: stick to the slot.", "Standard slot interval.", "Open: a wider slot interval." },
+                new[] { "Close: three quarters of the spacing preset.", "Standard: the spacing preset.", "Open: one and a half times the spacing preset." },
                 "opt.interval.", new[] { "close", "std", "open" }, Kind.Axis, DoctrineAxis.Interval);
             Row("POWER", new[] { "BUSTER", "GATE" },
                 new[] { "Full power, no afterburner (the whole wing, at once: not kept in a stance).", "Afterburner allowed (the whole wing, at once: not kept in a stance)." },
@@ -731,8 +732,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (inUse.Clears[item].gameObject.activeSelf != inClear[item]) inUse.Clears[item].gameObject.SetActive(inClear[item]);
         }
 
-        /// <summary>An element back to the wing's doctrine; an aircraft back to its element's (a whole profile, since the executor
-        /// refuses element-wide axes one aircraft at a time). ponytail: no new order kind — the values match, so the line goes.</summary>
+        /// <summary>An element back to the wing's doctrine (ponytail: pinned to the same values, which is what an element B-D
+        /// inherits anyway); an aircraft's own doctrine goes, so it follows its element's again.</summary>
         private void Clear(int i)
         {
             WingService w = last?.Wing;
@@ -746,12 +747,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 }));
                 return;
             }
-            WingMember m = last.MemberOf(inMember[i]);
-            if (m == null) return;
-            WmcUi.Order(last, () => WingOrders.Run(new WingOrder
-            {
-                Kind = OrderKind.SetDoctrine, Text = w.DoctrineOf(w.ElementOf(m)).ToString(), Scope = WingScope.OfMembers(inMember[i]),
-            }));
+            WmcUi.Order(last, () => WingOrders.Run(new WingOrder { Kind = OrderKind.ClearDoctrine, Scope = WingScope.OfMembers(inMember[i]) }));
         }
 
         /// <summary>The IN USE lines (a pooled <see cref="AvList"/> that never pages: it holds the most a wing can have), or the one

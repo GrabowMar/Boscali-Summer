@@ -1,0 +1,415 @@
+{
+  "name": "vg-dronelink",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 420,
+  "environment": {
+    "config": {
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
+        }
+      },
+      "com.marci.boscalisummer": {
+        "Mission": {
+          "AskAtStart": false
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "faction": "Boscali",
+      "aircraft": "FS-20 Vortex",
+      "near": [
+        48000,
+        -8000
+      ],
+      "altitude": 5000,
+      "speed": 200,
+      "heading": 0,
+      "view": "cockpit"
+    },
+    {
+      "op": "wait",
+      "seconds": 8
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.ForceWeather",
+      "store": "sky",
+      "args": {
+        "regime": "Broken",
+        "conditions": 0.9,
+        "cloudHeight": 2200,
+        "seed": 91
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "launch",
+        "key": "VG_Remora",
+        "seated": 1
+      },
+      "store": "launch1"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "launch",
+        "key": "VG_Remora",
+        "seated": 1
+      },
+      "store": "launch2"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "launch",
+        "key": "VG_MaldX",
+        "seated": 1
+      },
+      "store": "launch3"
+    },
+    {
+      "op": "wait",
+      "seconds": 8
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "link",
+        "do": "feed",
+        "seated": 1
+      },
+      "store": "feedOn"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "link",
+        "seated": 1
+      },
+      "store": "roster"
+    },
+    {
+      "op": "capture",
+      "name": "dl-feed-card",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "link",
+        "do": "hand",
+        "seated": 1
+      },
+      "store": "hand1"
+    },
+    {
+      "op": "fly",
+      "id": "player",
+      "program": [
+        {
+          "turn": {
+            "heading": 90,
+            "bank": 30
+          }
+        },
+        {
+          "level": 300
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 25
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "link",
+        "seated": 1
+      },
+      "store": "handTurn"
+    },
+    {
+      "op": "capture",
+      "name": "dl-hand-card",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "link",
+        "do": "next",
+        "seated": 1
+      },
+      "store": "next"
+    },
+    {
+      "op": "capture",
+      "name": "dl-switch-burst",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "link",
+        "do": "terminal",
+        "seated": 1
+      },
+      "store": "term"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "dl-terminal",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "link",
+        "do": "wpt",
+        "north": 6000,
+        "east": 2000,
+        "seated": 1
+      },
+      "store": "wpt"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "capture",
+      "name": "dl-terminal-wpt",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "link",
+        "do": "look",
+        "seated": 1
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "link",
+        "do": "zoom",
+        "seated": 1
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "dl-terminal-ir",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "link",
+        "do": "close",
+        "seated": 1
+      },
+      "store": "closed"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "link",
+        "do": "mfd",
+        "seated": 1
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "link",
+        "seated": 1
+      },
+      "store": "mfd"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Readout",
+      "args": {},
+      "store": "wx"
+    },
+    {
+      "op": "capture",
+      "name": "dl-mfd",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "link",
+        "do": "unmap",
+        "seated": 1
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "roster.count",
+      "min": 3
+    },
+    {
+      "check": "result_above",
+      "path": "roster.feed",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "hand1.hostMode",
+      "min": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "hand1.hostMode",
+      "max": 1.5
+    },
+    {
+      "check": "result_below",
+      "path": "handTurn.headingGap",
+      "max": 35
+    },
+    {
+      "check": "result_above",
+      "path": "handTurn.headingGap",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "next.linked",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "next.hostMode",
+      "min": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "next.hands",
+      "max": 1.5
+    },
+    {
+      "check": "result_above",
+      "path": "next.hands",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "term.terminal",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "wpt.hostMode",
+      "min": 1.5
+    },
+    {
+      "check": "result_below",
+      "path": "wpt.hands",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "closed.terminal",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "mfd.mfd",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "handTurn.speed",
+      "min": 330
+    },
+    {
+      "check": "result_above",
+      "path": "handTurn.spiKm",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "wpt.lensEl",
+      "min": -89
+    },
+    {
+      "check": "result_above",
+      "path": "wx.feedCloudFrames",
+      "min": 10
+    },
+    {
+      "check": "log_match",
+      "pattern": "Exception",
+      "max": 0
+    }
+  ]
+}

@@ -7,7 +7,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 {
     /// <summary>
     /// The stores side of the TAC BOARD (prototype: <c>takeover/stores.js</c>; LAYOUT.md 3.1 to 3.3), drawn as three separate blocks into the rectangles <see cref="ScopeLayout"/> gives them: HERO (the selected weapon: the rounds,
-    /// the arm word, its name and class, its picture, the station rail), PWR BUS (the capacitor as a row of cells) and EXPENDABLES (every dispenser as a dot matrix, the jammer as a bar). Each has a caption shelf, drawn only while
+    /// the arm word, its name and class, its picture, the station rail), PWR BUS (the capacitor as a row of cells) and EXPENDABLES (one row per countermeasure in cycle order, the selected one with the caret, each level a bar). Each has a caption shelf, drawn only while
     /// the board has its furniture (<see cref="ScopeCanvas.Furniture"/>). Fed by <see cref="StoresScope"/> (Hud's own provider over the aircraft); a block with no data is not there, and <see cref="WeaponDrawn"/> /
     /// <see cref="CmDrawn"/> / <see cref="CapDrawn"/> say which native box it replaced (the board shows the native one again otherwise). The weapon's and the jammer's pictures are the game's own sprites (<see cref="StoreIcons"/>: baked into an
     /// alpha mask): a sprite cannot be drawn through the stroke canvas, so the header writes where each goes into <see cref="Art"/> and the board puts an image there (StatusPanel.Stores.cs); without a picture HERO draws the class glyph.

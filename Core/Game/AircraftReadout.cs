@@ -29,6 +29,26 @@ namespace BoscaliSummer.Core.Game
             catch (ArgumentOutOfRangeException) { return null; }
         }
 
+        private static FieldInfo stationName;
+
+        /// <summary>
+        /// The display names of the aircraft's countermeasure stations in the order the game's Next Countermeasure steps through them, written into <paramref name="names"/>; the count written, 0 when the list cannot be read.
+        /// </summary>
+        public static int CountermeasureOrder(Aircraft aircraft, string[] names)
+        {
+            CountermeasureManager manager = aircraft != null ? aircraft.countermeasureManager : null;
+            if (manager == null || !(CountermeasureStations?.GetValue(manager) is IList stations)) return 0;
+            int n = 0;
+            for (int i = 0; i < stations.Count && n < names.Length; i++)
+            {
+                object station = stations[i];
+                if (station == null) continue;
+                stationName ??= AccessTools.Field(station.GetType(), "displayName");
+                names[n++] = stationName?.GetValue(station) as string;
+            }
+            return n;
+        }
+
         /// <summary>The aircraft's first seat (<c>pilots[0]</c>), or null when there is no aircraft or no seat.</summary>
         public static Pilot PrimaryPilot(Aircraft aircraft) =>
             aircraft != null && aircraft.pilots != null && aircraft.pilots.Length > 0 ? aircraft.pilots[0] : null;

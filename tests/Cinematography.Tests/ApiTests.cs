@@ -60,7 +60,56 @@ static class ApiTests
             Call("new",("id","shot01"));Call("capture");Call("save");Call("new",("id","other"));
             int beforeLoad=director.Revision;director.Load();
             check(director.Revision>beforeLoad && !Ok(Call("options",("json","{}"),("expected_revision",beforeLoad))),"console load invalidates stale automation revision");
+            TrackingRigs(director,check);
         }
         finally { director.ResetForScene();if(Directory.Exists(BepInEx.Paths.ConfigPath))Directory.Delete(BepInEx.Paths.ConfigPath,true);UnitRegistry.allUnits.Clear(); }
+    }
+
+    private static void TrackingRigs(CinematicDirector director,Action<bool,string> check)
+    {
+        var actor=UnitRegistry.allUnits[0];
+        actor.transform.position=new Vector3(100,200,300);
+        float half=MathF.Sqrt(.5f);actor.transform.rotation=new Quaternion(0,half,0,half);
+        var camera=SceneSingleton<CameraStateManager>.i;
+        var actions=(string[])Call("schema")["actions"];
+        check(actions.Contains("chase") && actions.Contains("track") && actions.Contains("flyby"),"tracking rigs discoverable");
+        check(Ok(Call("chase",("actor","actor1"),("duration",5))) && director.Plan.options.headingOnlyAnchor,
+            "chase authors level heading frame");
+        check(Ok(Call("play")) && Math.Abs(camera.transform.position.x-70)<.01f && Math.Abs(camera.transform.position.z-320)<.01f,
+            "chase uses aircraft heading at runtime");
+        check(!Ok(Call("track",("actor","actor1"))),"cannot author tracking rig during playback");Call("stop");
+        director.ToggleOption("anchor");
+        check(director.Plan.options.stabilizeAnchor && !director.Plan.options.headingOnlyAnchor && ShotPlan.Validate(director.Plan,out _),
+            "console world-anchor toggle clears conflicting heading mode");
+
+        camera.transform.position=new Vector3(40,260,400);camera.mainCamera.fieldOfView=42;
+        var before=director.Plan;
+        check(!Ok(Call("track",("actor","missing"))) && ReferenceEquals(before,director.Plan),"missing tracking actor preserves plan");
+        check(!Ok(Call("flyby",("actor","actor1"),("x",float.NaN))) && ReferenceEquals(before,director.Plan),"invalid flyby offset preserves plan");
+        var duplicate=new Unit { NetworkUniqueName="actor1" };UnitRegistry.allUnits.Add(duplicate);
+        check(!Ok(Call("track",("actor","actor1"))),"ambiguous tracking identity refused");UnitRegistry.allUnits.Remove(duplicate);
+        check(Ok(Call("track",("actor","actor1"))) && director.Plan.options.worldSpacePath && director.Plan.keys[0].fov==42,
+            "track captures free-camera world vantage and lens");
+        check(Ok(Call("save")) && Ok(Call("load")) && director.Plan.options.worldSpacePath,"tracking shot persistence");
+        check(Ok(Call("play")),"fixed tracking shot plays");
+        var rotation=camera.transform.rotation;
+        actor.transform.position=new Vector3(200,210,300);
+        NetworkSceneSingleton<MissionManager>.i.MissionTime+=1;
+        camera.currentState.UpdateState(camera);
+        check(camera.transform.position.x==40 && camera.transform.position.y==260 && camera.transform.position.z==400 &&
+            Math.Abs(Quaternion.Dot(rotation,camera.transform.rotation))<.999f,"tracking pans without translating camera");
+        actor.disabled=true;UnitRegistry.allUnits.Add(duplicate);camera.currentState.UpdateState(camera);
+        check(!director.Playing && director.Message=="ANCHOR LOST" && CinematicOverlay.ActiveCount==0,
+            "tracking actor loss aborts without rebinding replacement identity");
+        UnitRegistry.allUnits.Remove(duplicate);actor.disabled=false;actor.transform.position=new Vector3(100,200,300);
+
+        check(Ok(Call("flyby",("actor","actor1"))) && Math.Abs(director.Plan.keys[0].x-400)<.01f &&
+            Math.Abs(director.Plan.keys[0].z-380)<.01f && director.Plan.keys[0].fov==35,"flyby places vantage ahead and beside heading");
+        actor.transform.position=new Vector3(200,200,300);
+        check(Ok(Call("play")) && Math.Abs(camera.transform.position.x-400)<.01f && Math.Abs(camera.transform.position.z-380)<.01f,
+            "flyby vantage stays at authored world position when actor advances");Call("stop");
+        BoscaliSummer.Core.Game.GameAccess.Server=false;
+        check(!Ok(Call("chase",("actor","actor1"))) && !Ok(Call("track",("actor","actor1"))) && !Ok(Call("flyby",("actor","actor1"))),
+            "new rig commands retain private host gate");BoscaliSummer.Core.Game.GameAccess.Server=true;
     }
 }

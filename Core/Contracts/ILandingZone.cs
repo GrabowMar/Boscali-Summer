@@ -22,6 +22,9 @@ namespace BoscaliSummer.Core.Contracts
 
         /// <summary>Clears the local zone and tells the host.</summary>
         void ClearLocal();
+
+        /// <summary>How far a release at this height above the zone reaches, in flat metres: a HALO stick (<paramref name="halo"/>) or a Hamilcar glide. The pilot's drop cue.</summary>
+        float ReachM(bool halo, float heightAboveZone);
     }
 
     /// <summary>

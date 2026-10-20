@@ -7,6 +7,7 @@ namespace BoscaliSummer.Modules.UrbanCombat.Configuration
         public readonly ConfigEntry<bool> GarrisonsEnabled;
         public readonly ConfigEntry<int> GarrisonsPerZone;
         public readonly ConfigEntry<int> TroopsPerDeploy;
+        public readonly ConfigEntry<int> AirDefenseCampsPerZone;
         public readonly ConfigEntry<bool> SiegeEnabled;
         public readonly ConfigEntry<float> SiegeDefenseScale;
         public readonly ConfigEntry<bool> SiegeArmorBonus;
@@ -23,6 +24,13 @@ namespace BoscaliSummer.Modules.UrbanCombat.Configuration
                     "above this while siege is on; a successful Zone Fortification request adds one " +
                     "above the zone's current count. 0 leaves zones undefended without disabling " +
                     "the feature. " +
+                    "Host-authoritative: on a server, only the host's value applies.",
+                    new AcceptableValueRange<int>(0, 6)));
+            AirDefenseCampsPerZone = config.Bind("Air Defense", "CampsPerZone", 3,
+                new ConfigDescription(
+                    "Infantry air defence camps (two MANPADS, 23mm, MG) dug in around every held airbase at mission " +
+                    "start, 2-3 km out and facing the nearest enemy base, so enemy territory is dangerous to overfly. " +
+                    "0 turns them off. Capped at 64 camps per map. " +
                     "Host-authoritative: on a server, only the host's value applies.",
                     new AcceptableValueRange<int>(0, 6)));
             TroopsPerDeploy = config.Bind("Air Assault", "InfantryPerInsertion", 8,

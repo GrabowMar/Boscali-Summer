@@ -61,7 +61,14 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 return OrderResult.Refused("Cannot land there: " + why);
             ScopeTarget t = w.Roster.Resolve(o.Scope);
             if (t.Element < 0) return OrderResult.Refused("Wing cannot: " + t.Reason);
-            if (t.Everyone) MergeAll(w, o.Reason);
+            if (t.Everyone)
+            {
+                // Checked on the whole wing before anyone merges: a refused task leaves the elements as they were.
+                string refusal = w.TaskRefusal(o.Task);
+                if (refusal != null) return OrderResult.Refused("Wing cannot: " + refusal);
+                MergeAll(w, o.Reason);
+            }
+            else if (t.Detached) w.CarrySettings(t.From, t.Element);
             OrderResult r = w.OrderElement(t.Element, o.Task, o.Reason);
             if (!r.Accepted)
             {
@@ -69,6 +76,9 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 if (t.Detached) w.Roster.UndoDetach();
                 return OrderResult.Refused("Wing cannot: " + r.Reason);
             }
+            // Helicopters landed at an earlier LAND point go with the element (only FORM UP and TAKE OFF lifted them: a plan's
+            // LAND then MOVE left them on the ground); a rescue or cargo job lifts off by itself when done.
+            if (o.Task != null && o.Task.Kind != TaskKind.Form) w.TakeOff(m => w.ElementOf(m) == t.Element && m.Job == null);
             string who = t.Element == 0 ? "Wing" : w.Roster.Name(t.Element);
             return OrderResult.Acked($"{who}: {TaskWords(o.Task)}", t.Element);
         }
@@ -103,17 +113,21 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         private static OrderResult FormUp(WingService w, in WingScope scope, TransitionReason reason)
         {
+            // An RTB or refit still on its approach is called off; a landing, one down at the field, or one at bingo fuel goes on.
             if (scope.Kind == ScopeKind.Wing)
             {
+                int away = w.CallOffRecovery();
                 MergeAll(w, reason);
                 w.FormUp(reason);
-                return OrderResult.Acked("Form up", 0);
+                return OrderResult.Acked(away > 0 ? $"Form up, {away} going home" : "Form up", 0);
             }
             Func<WingMember, bool> who = Who(w, scope);
             // The members first: merging moves them to A, after which the element filter matches nobody (review P2 I4).
             var chosen = new List<WingMember>();
             foreach (WingMember m in w.Members)
                 if (who(m)) chosen.Add(m);
+            int home = w.CallOffRecovery(chosen.Contains);
+            if (home >= chosen.Count) return OrderResult.Refused(home == 1 ? "Going home" : $"{home} going home");
             // ponytail: forming up some members brings their whole elements back to A.
             for (int e = 1; e < ElementRoster.MaxElements; e++)
                 foreach (WingMember m in chosen)
@@ -127,7 +141,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             w.Disengage(these);
             w.TakeOff(these);
             foreach (WingMember m in chosen) m.Brain.FormUp(w.MissionTime, w.Events);
-            return OrderResult.Acked(chosen.Count == 1 ? "Rejoining" : $"{chosen.Count} rejoining", 0);
+            int rejoining = chosen.Count - home;
+            return OrderResult.Acked((rejoining == 1 ? "Rejoining" : $"{rejoining} rejoining") + (home > 0 ? $", {home} going home" : ""), 0);
         }
 
         private static OrderResult Immediate(WingService w, WingOrder o, Func<WingMember, bool> who)
@@ -166,7 +181,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 case OrderKind.Refit: return Recover(w, RecoveryIntent.Refit, "going to refit", who);
                 case OrderKind.Engage:
                 {
-                    if (!w.MayEngage(out int hostiles, out int members))
+                    if (!w.MayEngage(out int hostiles, out int members, who))
                         return OrderResult.Refused($"Outnumbered {hostiles} to {members} - Engage again to fight anyway");
                     int n = w.Engage(who);
                     return n > 0 ? OrderResult.Acked($"{n} engaging") : OrderResult.Refused("Nobody can engage: " + w.WhyNoneFight(who));
@@ -304,28 +319,51 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 case OrderKind.SetDoctrine:
                 {
                     if (!WingDoctrine.TryParse(o.Text, out WingDoctrine d)) return OrderResult.Refused("Unknown doctrine: " + o.Text);
-                    if (o.Scope.Kind == ScopeKind.Members)
+                    bool members = o.Scope.Kind == ScopeKind.Members;
+                    // The named aircraft take the whole profile; under the wing or an element, those with their own keep it.
+                    string cannot = Reaching(w, who, m => members ? d : w.DoctrineFor(m, d), out bool rechoose);
+                    if (cannot != null) return OrderResult.Refused(cannot);
+                    if (members)
                     {
                         // Spec WMC rebuild R3: the named aircraft only, not the first one's whole element.
                         int set = 0;
                         foreach (WingMember m in w.Members)
                             if (!m.Released && who(m) && w.SetMemberDoctrine(m, d)) set++;
-                        return set > 0 ? OrderResult.Acked($"{Aircraft(set)}: doctrine {d.PatternName}")
-                            : OrderResult.Refused("Too many aircraft with their own doctrine");
+                        if (set == 0) return OrderResult.Refused("Too many aircraft with their own doctrine");
+                        if (rechoose) w.Rechoose(who);
+                        return OrderResult.Acked($"{Aircraft(set)}: doctrine {d.PatternName}");
                     }
                     int e = ElementFor(w, o.Scope);
                     w.SetProfile(o.Scope.Kind == ScopeKind.Wing ? -1 : e, d);
-                    return OrderResult.Acked((e > 0 ? w.Roster.Name(e) + ": doctrine " : "Doctrine ") + d.PatternName);
+                    if (rechoose) w.Rechoose(who);
+                    return OrderResult.Acked((e > 0 ? w.Roster.Name(e) + ": doctrine " : "Doctrine ") + d.PatternName + KeptOwn(w, who));
                 }
                 case OrderKind.NextDoctrine:
                 {
                     int e = ElementFor(w, o.Scope);
                     WingDoctrine d = w.DoctrineOf(e).NextPattern();
+                    // The whole wing, or the element the scope points at (a member's: its element's).
+                    Func<WingMember, bool> reached = o.Scope.Kind == ScopeKind.Wing ? null : (Func<WingMember, bool>)(m => w.ElementOf(m) == e);
+                    string cannot = Reaching(w, reached, m => w.DoctrineFor(m, d), out bool rechoose);
+                    if (cannot != null) return OrderResult.Refused(cannot);
                     w.SetProfile(o.Scope.Kind == ScopeKind.Wing ? -1 : e, d);
+                    if (rechoose) w.Rechoose(reached);
                     string what = d.Targets == TargetPolicy.Hold ? "holding fire"
                         : d.Targets == TargetPolicy.Cover ? "covering you"
                         : "targets of opportunity";
-                    return OrderResult.Acked($"Doctrine {d.PatternName}: {what}");
+                    return OrderResult.Acked($"Doctrine {d.PatternName}: {what}" + KeptOwn(w, reached));
+                }
+                case OrderKind.ClearDoctrine:
+                {
+                    // OPTIONS' CLEAR: the named aircraft fly their element's doctrine again.
+                    string cannot = Reaching(w, who, m => w.DoctrineOf(w.ElementOf(m)), out bool rechoose);
+                    if (cannot != null) return OrderResult.Refused(cannot);
+                    int n = 0;
+                    foreach (WingMember m in w.Members)
+                        if (!m.Released && who(m) && w.ClearMemberDoctrine(m)) n++;
+                    if (n == 0) return OrderResult.Refused("No doctrine of its own to clear");
+                    if (rechoose) w.Rechoose(who);
+                    return OrderResult.Acked($"{Aircraft(n)}: element's doctrine");
                 }
                 default:
                     return OrderResult.Refused("Not supported yet");
@@ -336,23 +374,12 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         /// aircraft. The answer names those in scope that keep their own value, and those without a radar.</summary>
         private static OrderResult SetOverride(WingService w, in WingScope scope, DoctrineAxis axis, byte v, Func<WingMember, bool> who)
         {
-            if (axis == DoctrineAxis.Weapons)
-            {
-                // Review Focus R3a 5: an aircraft without the weapon would get an empty station list and fly home "out of
-                // ammo", so the order is refused naming it.
-                string cannot = null;
-                foreach (WingMember m in w.Members)
-                {
-                    if (m.Released || !m.Alive || (who != null && !who(m))) continue;
-                    bool gun = false, missile = false;
-                    Carries(m.Aircraft, ref gun, ref missile);
-                    string why = WeaponsFilter.Refusal((WeaponsPolicy)v, gun, missile);
-                    if (why != null) cannot = (cannot == null ? "" : cannot + ", ") + "#" + m.Number + " " + why;
-                }
-                if (cannot != null) return OrderResult.Refused("Wing cannot: " + cannot);
-            }
+            // Under the wing or an element, an aircraft with its own value keeps it.
+            bool members = scope.Kind == ScopeKind.Members;
+            string cannot = Reaching(w, who, m => members || !w.KeepsOwn(m, axis) ? w.DoctrineFor(m).With(axis, v) : w.DoctrineFor(m), out bool rechoose);
+            if (cannot != null) return OrderResult.Refused(cannot);
             string level;
-            if (scope.Kind == ScopeKind.Members)
+            if (members)
             {
                 if (!MemberDoctrines.PerAircraft(axis)) return OrderResult.Refused("Only targets, reach, weapons and radar can differ per aircraft");
                 int set = 0;
@@ -367,8 +394,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 w.SetAxis(e, axis, v);
                 level = e < 0 ? "Wing" : w.Roster.Name(e);
             }
-            // The game's AI keeps its current attack until its next choice: engaged members choose again now.
-            if (axis == DoctrineAxis.Weapons || axis == DoctrineAxis.Radar) w.Rechoose(who);
+            if (rechoose) w.Rechoose(who);
             string ack = $"{level}: {AxisWord(axis)} {ValueWord(axis, v)}";
             foreach (WingMember m in w.Members)
             {
@@ -377,6 +403,39 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 else if (axis == DoctrineAxis.Radar && m.Aircraft != null && !(m.Aircraft.radar is Radar)) ack += $", #{m.Number} has no radar";
             }
             return OrderResult.Acked(ack);
+        }
+
+        /// <summary>Every order that changes what aircraft fly (one setting, a profile, a stance, a clear) passes here first;
+        /// <paramref name="next"/> is the doctrine each in scope would fly. Review Focus R3a 5: one moved to WEAPONS it cannot
+        /// use (GUNS with no gun, MISSILES with none) would get an empty station list and fly home "out of ammo", so the order
+        /// is refused naming it. <paramref name="rechoose"/>: someone's WEAPONS or RADAR changes, and the game's AI keeps its
+        /// current attack until its next choice, so once applied the engaged members choose again.</summary>
+        private static string Reaching(WingService w, Func<WingMember, bool> who, Func<WingMember, WingDoctrine> next, out bool rechoose)
+        {
+            string cannot = null;
+            rechoose = false;
+            foreach (WingMember m in w.Members)
+            {
+                if (m.Released || !m.Alive || (who != null && !who(m))) continue;
+                WingDoctrine now = w.DoctrineFor(m), then = next(m);
+                rechoose |= then.Weapons != now.Weapons || then.Radar != now.Radar;
+                if (then.Weapons == now.Weapons) continue;
+                bool gun = false, missile = false;
+                Carries(m.Aircraft, ref gun, ref missile);
+                string why = WeaponsFilter.Refusal(then.Weapons, gun, missile);
+                if (why != null) cannot = (cannot == null ? "Wing cannot: " : cannot + ", ") + "#" + m.Number + " " + why;
+            }
+            return cannot;
+        }
+
+        /// <summary>", #n keeps its own" for each aircraft in scope with doctrine of its own, which an order to the wing or an
+        /// element does not reach (spec WMC rebuild R3).</summary>
+        private static string KeptOwn(WingService w, Func<WingMember, bool> who)
+        {
+            string s = "";
+            foreach (WingMember m in w.Members)
+                if (!m.Released && (who == null || who(m)) && w.KeepsOwn(m)) s += $", #{m.Number} keeps its own";
+            return s;
         }
 
         private static void Carries(Aircraft a, ref bool gun, ref bool missile)
@@ -414,14 +473,20 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             if (axis == DoctrineAxis.Targets && v == (byte)TargetPolicy.Hold) return "HOLD FIRE";
             if (axis == DoctrineAxis.Weapons && v == (byte)WeaponsPolicy.NoAirToGround) return "NO A-G";
             if (axis == DoctrineAxis.Spread) return v != 0 ? "SPREAD" : "NO SPREAD";
+            if (axis == DoctrineAxis.Guard) return v != 0 ? "ON" : "OFF";
             return (WingDoctrine.ValueName(axis, v) ?? "?").ToUpperInvariant();
         }
 
         private static OrderResult Recover(WingService w, RecoveryIntent intent, string what, Func<WingMember, bool> who)
         {
             int n = w.RecoverAll(intent, who);
-            return n > 0 ? OrderResult.Acked($"{n} wingm{(n == 1 ? "an" : "en")} {what}")
-                : OrderResult.Refused("No wingman can go: no friendly field, or already going");
+            if (n > 0) return OrderResult.Acked($"{n} wingm{(n == 1 ? "an" : "en")} {what}");
+            // Already on the way (bingo sent them first): what was asked is happening. A plan's RTB after BINGO blocked its lane here.
+            int going = 0;
+            foreach (WingMember m in w.Members)
+                if (!m.Released && (m.Recovery != null || m.HasPendingRecovery) && (who == null || who(m))) going++;
+            return going > 0 ? OrderResult.Acked($"{going} already going home")
+                : OrderResult.Refused("No wingman can go: no friendly field");
         }
 
         /// <summary>Wingmen always launch from a field (spec M3 §3). A requisition (spec WMC rebuild §SUPPLY) names its airframe,

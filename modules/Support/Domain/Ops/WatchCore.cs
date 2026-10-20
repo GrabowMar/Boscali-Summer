@@ -19,7 +19,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         None = 0,
         CyberHop = 1, CyberDeeper = 2, CyberBurnTrace = 3, CyberBurnPilots = 4, CyberDropTrace = 5, CyberDropYield = 6, CyberBurnYield = 7,
         SofRaise = 8, SofLase = 9, SofRecon = 10, SofSabotage = 11, SofPush = 12, SofHold = 13, SofResume = 14, SofExfil = 15, SofExfilDone = 16,
-        OpPlan = 17, OpFund = 18
+        OpPlan = 17, OpFund = 18,
+        /// <summary>Defence (protocol 42).</summary>
+        CyberPurge = 19, SofSweep = 20
     }
 
     /// <summary>One OVERLORD action as its own faction's console reads it: a sequence number, the desk, the reason code and two small arguments.</summary>
@@ -80,6 +82,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
                 case WatchCode.SofExfilDone: return "EXFIL " + Team(a) + " — NOTHING LEFT TO DO, AMMO " + b + " %";
                 case WatchCode.OpPlan: return "PLAN " + OpsWords.Short((OpKind)Math.Max(0, Math.Min(3, a))) + " — LEADING " + b + " % OF OBJECTIVES";
                 case WatchCode.OpFund: return "FUND " + OpsWords.Short((OpKind)Math.Max(0, Math.Min(3, a))) + " — LEADING, TREASURY ABOUT " + (b * 10).ToString(CultureInfo.InvariantCulture) + " CR";
+                case WatchCode.CyberPurge: return "PURGE — " + a + " ENEMY HOLD" + (a == 1 ? "" : "S") + " ON OUR NETWORK";
+                case WatchCode.SofSweep: return "SWEEP — QRF AFTER " + a + " HOSTILE TEAM" + (a == 1 ? "" : "S") + " NEAR OUR SITES";
                 default: return "";
             }
         }

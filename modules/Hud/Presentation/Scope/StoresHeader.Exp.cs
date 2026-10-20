@@ -1,4 +1,3 @@
-using System;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Hud.Domain;
 using UnityEngine;
@@ -6,8 +5,9 @@ using static BoscaliSummer.Core.Contracts.ScopeTone;
 
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
-    // EXPENDABLES (LAYOUT.md 3.3): the dispensers. Per dispenser a SEL marker, the bold count, its short name and its rounds as a dot matrix (EMPTY, in red, takes the matrix's place at none), a state word at the right
-    // end when it fits; under them the jammer: its picture, its charge as a thin bar and its state word.
+    // EXPENDABLES (LAYOUT.md 3.3, reworked 2026-10-18): one row per countermeasure, the jammer a row like the others, in the order the game's Next Countermeasure steps through them (CountermeasureWatch
+    // orders them). The selected row is the only one with the caret; its words are bold and BRIGHT and it says SEL at its end, the others are quiet. A row: caret, the count and short name (the jammer: its
+    // picture and JAM), the level as a bar in one column for every row, the state word at the right end when it fits.
     internal sealed partial class StoresHeader
     {
         /// <summary>
@@ -19,83 +19,70 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             float x = r.X, y = r.Y + (!stack && !g.Furniture ? -ScopeLayout.ExpShelfRow : 0f), w = r.W;
             g.CaptionShelf(r.X, r.Y, StoresLayout.ExpShelf(w), "EXPENDABLES");
             bool beat = false;
-            int rows = 0, jam = -1;
-            for (int i = 0; i < d.CmCount; i++)
-            {
-                if (d.Cm[i].Chargeable) { if (jam < 0) jam = i; }
-                // ponytail: the block has two rows (flares, chaff); an airframe with a third dispenser shows the first two.
-                else if (rows < StoresLayout.Rows) beat |= PaintDispenser(g, i, x, y + (rows++ == 0 ? StoresLayout.FlrY : StoresLayout.ChfY), w, flashOn);
-            }
-            if (jam >= 0) PaintJammer(g, d.Cm[jam], x, y + StoresLayout.JamRow(rows), w);
+            // ponytail: three rows; an airframe with a fourth countermeasure shows the first three stops of its cycle.
+            for (int i = 0; i < d.CmCount && i < StoresLayout.Rows; i++) beat |= PaintRow(g, i, x, y + StoresLayout.RowY(i), w, flashOn);
             return beat;
         }
 
-        /// <summary>One dispenser's row (its middle at <paramref name="cy"/>): bracketed and pulsing while the THREAT page calls for it.</summary>
-        private bool PaintDispenser(ScopeCanvas g, int index, float x, float cy, float w, bool flashOn)
+        /// <summary>One countermeasure's row (its middle at <paramref name="cy"/>): bracketed and pulsing while the THREAT page calls for it.</summary>
+        private bool PaintRow(ScopeCanvas g, int index, float x, float cy, float w, bool flashOn)
         {
             CmStation c = d.Cm[index];
-            bool call = StoresMath.Called(c, d.Call), selected = c.Selected, firing = index < cmUntil.Length && now < cmUntil[index];
-            CmCellState state = StoresMath.CmStateOf(c, call, firing);
+            bool selected = c.Selected, jammer = c.Chargeable;
+            bool call = StoresMath.Called(c, d.Call), firing = !jammer && index < cmUntil.Length && now < cmUntil[index];
             CmLevel level = HudCm.Level(c);
-            bool none = level == CmLevel.Empty;
             if (call) g.Brackets(x - StoresLayout.CallPad, cy - StoresLayout.CallHalf, w + 2f * StoresLayout.CallPad, 2f * StoresLayout.CallHalf, StoresLayout.CallArm, Hi, flashOn ? 1f : 0.4f);
+            if (selected) g.Tri(x + StoresLayout.CaretX, cy, 90f, StoresLayout.CaretSize, Hi);
 
-            g.Marker(x, cy, StoresLayout.MarkerSize, selected ? Hi : Dim, selected);
-            string count = ScopeStr.Int(c.Ammo);
-            g.Text(count, x + StoresLayout.CountX, cy, StoresMath.CountTone(level), StoresLayout.CountSize, ScopeAlign.Left, true);
-            g.Text(HudCm.Word(c), x + StoresLayout.CountX + ScopeCanvas.TextW(count, StoresLayout.CountSize) + StoresLayout.NameGap, cy, call || selected ? Hi : Dim, StoresLayout.WordSize, ScopeAlign.Left, call);
+            ScopeTone words = selected || call ? Hi : Dim;
+            if (jammer)
+            {
+                ArtKind kind = StoreIcons.Pick(c.Icon, out ArtBounds ink, out float width, out float height);
+                float iconX = x + StoresLayout.CountX;
+                ArtPlace place = kind != ArtKind.None ? StoreArt.Fit(ink, width, height, iconX, cy - StoresLayout.JamIcon / 2f, StoresLayout.JamIcon, StoresLayout.JamIcon) : default;
+                if (place.W > 0f) Art[JamArt] = new ArtSlot(c.Icon, place, words, 1f, kind == ArtKind.Mask);
+                else JamGlyph(g, iconX + StoresLayout.JamIcon / 2f, cy, words);
+                g.Text("JAM", x + StoresLayout.JamWordX, cy, words, StoresLayout.WordSize, ScopeAlign.Left, selected || call);
+            }
+            else if (c.Tag == "IR" || c.Tag == "RDR")
+            {
+                // Flares and chaff: our own picture where the jammer's stands (the game's chaff borrows the flare picture), the count where JAM is.
+                float gx = x + StoresLayout.CountX + StoresLayout.JamIcon / 2f;
+                if (c.Tag == "IR") FlareGlyph(g, gx, cy, words); else ChaffGlyph(g, gx, cy, words);
+                g.Text(ScopeStr.Int(c.Ammo), x + StoresLayout.JamWordX, cy, StoresMath.CountTone(level, selected), StoresLayout.CountSize, ScopeAlign.Left, true);
+            }
+            else
+            {
+                string count = ScopeStr.Int(c.Ammo);
+                g.Text(count, x + StoresLayout.CountX, cy, StoresMath.CountTone(level, selected), StoresLayout.CountSize, ScopeAlign.Left, true);
+                g.Text(HudCm.Word(c), x + StoresLayout.CountX + ScopeCanvas.TextW(count, StoresLayout.CountSize) + StoresLayout.NameGap, cy, words, StoresLayout.WordSize, ScopeAlign.Left, selected || call);
+            }
 
-            float matrixRight = x + StoresLayout.MatrixX;
-            if (none) g.Text("EMPTY", x + StoresLayout.MatrixX, cy, Red, StoresLayout.WordSize, ScopeAlign.Left, true);
-            else matrixRight += Matrix(g, c, index, x + StoresLayout.MatrixX, cy, w - StoresLayout.MatrixX, firing, level == CmLevel.Low);
+            float bx = x + StoresLayout.BarX, bw = StoresLayout.BarW(w);
+            if (!jammer && level == CmLevel.Empty) g.Text("EMPTY", bx, cy, Red, StoresLayout.WordSize, ScopeAlign.Left, true);
+            else Level(g, c, index, bx, cy, bw, selected, firing, level == CmLevel.Low);
 
-            // The state word at the right end: only when it leaves the matrix 8 units clear.
-            string word = StoresMath.StateWord(state);
-            if (word != null && !none && x + w - ScopeCanvas.TextW(word) >= matrixRight + StoresLayout.StateClear)
-                g.Text(word, x + w, cy, state == CmCellState.Low ? Amber : Hi, StoresLayout.WordSize, ScopeAlign.Right, true, state == CmCellState.Dispense && !flashOn ? 0.55f : 1f);
+            // The state word at the right end, when it leaves the bar clear: DISPENSE, FIRING, LOW or SEL for a dispenser; ON while the jammer jams, SEL while it is the selected one, else RDY / CHG.
+            string word = jammer ? (c.Active || !selected ? SystemsMath.JamWord(c) : "SEL") : level == CmLevel.Empty ? null : StoresMath.StateWord(StoresMath.CmStateOf(c, call, firing));
+            if (word != null && x + w - ScopeCanvas.TextW(word) >= bx + bw + StoresLayout.StateClear)
+            {
+                CmCellState state = jammer ? CmCellState.Ready : StoresMath.CmStateOf(c, call, firing);
+                ScopeTone tone = state == CmCellState.Low ? Amber : jammer && !c.Active && !selected ? Ink : Hi;
+                g.Text(word, x + w, cy, tone, StoresLayout.WordSize, ScopeAlign.Right, true, state == CmCellState.Dispense && !flashOn ? 0.55f : 1f);
+            }
             return call || firing;
         }
 
         /// <summary>
-        /// The dispenser's rounds as dots, 2 x 2 at a 4 unit pitch in up to three rows, filled column by column from the left: the rounds left INK (amber when low), the ones just fired BRIGHT, the spent ones a single DIM pixel.
-        /// Returns the matrix's width.
+        /// A row's level as a bar on a DIM track: the rounds left (the jammer's charge) INK, BRIGHT on the selected row, amber when low; the rounds just fired BRIGHT where the fill ended.
         /// </summary>
-        private float Matrix(ScopeCanvas g, in CmStation c, int index, float x, float cy, float room, bool firing, bool low)
+        private void Level(ScopeCanvas g, in CmStation c, int index, float x, float cy, float w, bool selected, bool firing, bool low)
         {
-            StoresMath.Matrix(c.Max > 0 ? c.Max : c.Ammo, room, out int rows, out int cols, out int perDot);
-            int dots = (Math.Max(1, c.Max > 0 ? c.Max : c.Ammo) + perDot - 1) / perDot, remain = (c.Ammo + perDot - 1) / perDot, hot = firing ? (cmFired[index] + perDot - 1) / perDot : 0;
-            ScopeTone tone = low ? Amber : Ink;
-            for (int col = 0; col < cols; col++)
-                for (int row = 0; row < rows; row++)
-                {
-                    int i = col * rows + row;
-                    if (i >= dots) break;
-                    float dx = x + col * StoresMath.MatrixPitch + 1f, dy = Mathf.Round(cy + (row - (rows - 1) / 2f) * StoresMath.MatrixPitch - 1f);
-                    if (i < remain) g.Fill(dx, dy, 2f, 2f, tone);
-                    else if (i < remain + hot) g.Fill(dx, dy, 2f, 2f, Hi, 0.9f);
-                    else g.Fill(dx, dy, 1f, 1f, Dim);
-                }
-            return cols * StoresMath.MatrixPitch;
-        }
-
-        /// <summary>
-        /// The jammer row (its middle at <paramref name="cy"/>): the game's own picture of it (else a small drawn bolt in a ring), JAM, its charge as a thin bar (the INK fill is the charge on a DIM track) and its state word
-        /// (RDY and CHG INK, ON BRIGHT; the kJ per second it draws is on PWR BUS).
-        /// </summary>
-        private void PaintJammer(ScopeCanvas g, in CmStation j, float x, float cy, float w)
-        {
-            string word = SystemsMath.JamWord(j);
-            bool on = j.Active;
-            ScopeTone tone = on ? Hi : Dim;
-            ArtKind kind = StoreIcons.Pick(j.Icon, out ArtBounds ink, out float width, out float height);
-            ArtPlace place = kind != ArtKind.None ? StoreArt.Fit(ink, width, height, x, cy - StoresLayout.JamIcon / 2f, StoresLayout.JamIcon, StoresLayout.JamIcon) : default;
-            if (place.W > 0f) Art[JamArt] = new ArtSlot(j.Icon, place, tone, 1f, kind == ArtKind.Mask);
-            else JamGlyph(g, x + StoresLayout.JamIcon / 2f, cy, tone);
-            g.Text("JAM", x + StoresLayout.JamWordX, cy, tone, StoresLayout.WordSize, ScopeAlign.Left, on);
-            float bx = x + StoresLayout.JamBarX, by = cy - StoresLayout.JamBarH / 2f, fill = Mathf.Round(StoresLayout.JamBarW * Mathf.Clamp01(j.Charge));
-            g.Fill(bx, by, fill, StoresLayout.JamBarH, Ink);
-            g.Fill(bx + fill, by, StoresLayout.JamBarW - fill, StoresLayout.JamBarH, Dim);
-            g.Text(word, x + w, cy, on ? Hi : Ink, StoresLayout.WordSize, ScopeAlign.Right, true);
+            float y = Mathf.Round(cy - StoresLayout.BarH / 2f), lit = Mathf.Round(w * StoresMath.BarShare(c));
+            float hot = firing && c.Max > 0 ? Mathf.Min(w - lit, Mathf.Round(w * cmFired[index] / (float)c.Max)) : 0f;
+            g.Fill(x, y, lit, StoresLayout.BarH, low ? Amber : selected ? Hi : Ink);
+            if (hot > 0f) g.Fill(x + lit, y, hot, StoresLayout.BarH, Hi, 0.9f);
+            if (lit + hot < w) g.Fill(x + lit + hot, y, w - lit - hot, StoresLayout.BarH, Dim);
         }
 
         /// <summary>The jammer's picture when the game's is not at hand: a bolt in a ring, as the game's own is.</summary>
@@ -105,6 +92,28 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Line(cx + 1f, cy - 4f, cx - 3f, cy + 1f, tone);
             g.Line(cx - 3f, cy + 1f, cx + 2f, cy, tone);
             g.Line(cx + 2f, cy, cx - 1f, cy + 4f, tone);
+        }
+
+        /// <summary>A flare: a burning pellet low right, its smoke trail curling up behind it.</summary>
+        private static void FlareGlyph(ScopeCanvas g, float cx, float cy, ScopeTone tone)
+        {
+            g.Ring(cx + 3f, cy + 3f, 2.5f, tone, 1f, 1f, tone, 1f);
+            g.Line(cx + 1f, cy + 1f, cx - 2f, cy - 2f, tone);
+            g.Line(cx - 2f, cy - 2f, cx - 3f, cy - 6f, tone, 0.7f);
+            g.Line(cx + 3f, cy, cx + 1f, cy - 3f, tone, 0.6f);
+            g.Line(cx + 1f, cy - 3f, cx + 2f, cy - 6f, tone, 0.4f);
+        }
+
+        /// <summary>Chaff: a cloud of short foil strips at odd angles.</summary>
+        private static void ChaffGlyph(ScopeCanvas g, float cx, float cy, ScopeTone tone)
+        {
+            g.Line(cx - 6f, cy - 4f, cx - 3f, cy - 5f, tone);
+            g.Line(cx, cy - 6f, cx + 2f, cy - 3f, tone);
+            g.Line(cx + 4f, cy - 4f, cx + 6f, cy - 6f, tone);
+            g.Line(cx - 5f, cy + 1f, cx - 2f, cy - 1f, tone);
+            g.Line(cx + 1f, cy, cx + 5f, cy + 1f, tone);
+            g.Line(cx - 3f, cy + 5f, cx - 1f, cy + 3f, tone);
+            g.Line(cx + 2f, cy + 4f, cx + 5f, cy + 6f, tone);
         }
     }
 }

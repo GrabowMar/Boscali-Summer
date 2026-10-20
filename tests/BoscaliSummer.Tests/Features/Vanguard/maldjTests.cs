@@ -16,7 +16,7 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.Near(MaldjShadow.Throttle(210f), 0.25f, "fast eases off");
             TestAssert.Near(MaldjShadow.Throttle(150f), 1f, "slow is full throttle");
             TestAssert.Near(MaldjShadow.Throttle(260f), 0f, "very fast idles");
-            TestAssert.Near(MaldjShadow.Lifetime, 240f, "four-minute endurance");
+            TestAssert.Near(MaldjShadow.Lifetime, 300f, "five-minute endurance");
 
             TestAssert.Near(MaldjShadow.WingDeploy(0.2f), 0f, "wings stowed before 0.3 s");
             TestAssert.Near(MaldjShadow.WingDeploy(0.55f), 0.5f, "wings half out at 0.55 s");
@@ -49,7 +49,7 @@ namespace BoscaliSummer.Tests.Features.Vanguard
 
             // Noise blinds a radar outright, so it must leave a burn-through window: the jammer 6 km from the radar is
             // quiet while an aircraft 8 km from it (2 km behind the jammer on the same line) already burns through.
-            TestAssert.That(MaldjShadow.NoiseRange < MaldjShadow.BurnThroughRange, "noise range is well inside burn-through range");
+            TestAssert.That(MaldjShadow.NoiseRange == 4000f && MaldjShadow.NoiseRange < MaldjShadow.BurnThroughRange, "noise bubble 4 km, well inside burn-through range");
             TestAssert.That(!MaldjShadow.Noises(north, new Vector3(0f, 0f, 6000f)), "jammer 6 km from the radar makes no noise");
             TestAssert.That(MaldjShadow.Noises(north, new Vector3(0f, 0f, 2500f)), "jammer overflying the radar (2.5 km) jams it");
             TestAssert.That(!MaldjShadow.Noises(north, new Vector3(0f, 0f, -2500f)), "a radar behind the jammer is not jammed");

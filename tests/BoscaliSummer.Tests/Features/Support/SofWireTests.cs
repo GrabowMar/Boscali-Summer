@@ -12,6 +12,9 @@ namespace BoscaliSummer.Tests.Features.Support
     internal static class SofWireTests
     {
         private const byte P = 34;
+        /// <summary>The local faction on the wire in these tests and the host scene epoch the fixture state was built in.</summary>
+        private const uint Us = 0x50F5EA11u;
+        private const ushort E = 5;
 
         private sealed class BufW : ISpaceWriter
         {
@@ -84,11 +87,11 @@ namespace BoscaliSummer.Tests.Features.Support
 
         private static SofStateData Full()
         {
-            var s = new SofStateData { Protocol = P, Active = true, Seq = 7, Now = 300f, TeamCap = 3, TapIntrusions = 2, TapUntil = 540f };
+            var s = new SofStateData { Protocol = P, Faction = Us, Epoch = E, Active = true, Seq = 7, Now = 300f, TeamCap = 3, TapIntrusions = 2, TapUntil = 540f };
             s.Camps.Add(new SofCampRow { Health = AnchorHealth.Damaged, X = 1200.5f, Z = -800f, Rebuild = 0 });
             s.Camps.Add(new SofCampRow { Health = AnchorHealth.Down, X = -3000f, Z = 4000.2f, Rebuild = 40 });
-            s.Teams.Add(new SofTeamRow { Slot = 0, State = TeamState.Moving, Insert = Insertion.Ground, Push = true, HasDest = true, X = 100f, Z = 200f, DestX = 5000f, DestZ = 6000f, TargetX = 5000f, TargetZ = 6000f, Exposure = 34, Ammo = 70, Odds = 62, Mission = MissionKind.Sabotage, Exploit = true, TargetId = 12, EndsAt = 0f });
-            s.Teams.Add(new SofTeamRow { Slot = 1, State = TeamState.OnSite, Insert = Insertion.Helicopter, Lasing = true, Carried = false, X = 9000f, Z = 9000f, TargetX = 9010f, TargetZ = 9020f, Exposure = 80, Ammo = 40, Odds = 55, Mission = MissionKind.Lase, TargetId = 4, EndsAt = 345f });
+            s.Teams.Add(new SofTeamRow { Slot = 0, State = TeamState.Moving, Insert = Insertion.Ground, Push = true, HasDest = true, X = 100f, Z = 200f, DestX = 5000f, DestZ = 6000f, TargetX = 5000f, TargetZ = 6000f, Exposure = 34, Ammo = 70, Odds = 62, Mission = MissionKind.Sabotage, Exploit = true, TargetId = 12, EndsAt = 0f, Mine = true, Controller = "VIPER-2" });
+            s.Teams.Add(new SofTeamRow { Slot = 1, State = TeamState.OnSite, Insert = Insertion.Helicopter, Lasing = true, Carried = false, Controller = "RAVEN-1", X = 9000f, Z = 9000f, TargetX = 9010f, TargetZ = 9020f, Exposure = 80, Ammo = 40, Odds = 55, Mission = MissionKind.Lase, TargetId = 4, EndsAt = 345f });
             s.Teams.Add(new SofTeamRow { Slot = 3, State = TeamState.Pinned, Wounded = true, LiftWaiting = true, Hold = true, X = -50f, Z = -50f, Exposure = 100, Ammo = 0, Odds = 10, Mission = MissionKind.Recon, EndsAt = 420f });
             for (int i = 1; i <= 6; i++) s.Targets.Add(new SofTargetRow { Id = i, Kind = (TargetKind)(i % 4), Sub = (AnchorSub)(i % 4), X = i * 1000f, Z = -i * 500f, Exploit = i % 2 == 0, Resisted = i == 3 });
             s.Held.Add(new SofHeldRow { Id = 1, X = 800f, Z = 900f, Until = 880f });
@@ -114,13 +117,26 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(t0.State == TeamState.Moving && t0.Push && t0.HasDest && t0.Exploit && t0.Mission == MissionKind.Sabotage && t0.TargetId == 12 && t0.Exposure == 34 && t0.Ammo == 70 && t0.Odds == 62, "team 0");
             TestAssert.That(t1.Slot == 1 && t1.Lasing && t1.Insert == Insertion.Helicopter && t1.Mission == MissionKind.Lase && Math.Abs(t1.EndsAt - 345f) < 0.2f, "team 1");
             TestAssert.That(t2.Slot == 3 && t2.State == TeamState.Pinned && t2.Wounded && t2.LiftWaiting && t2.Hold && t2.Exposure == 100, "team 3");
+            TestAssert.That(r.Faction == Us && r.Epoch == E, "the faction identity and the scene epoch survive the wire");
+            TestAssert.That(t0.Mine && t0.Controller == "VIPER-2" && !t1.Mine && t1.Controller == "RAVEN-1" && !t2.Mine && t2.Controller == "", "who commands each team survives the wire: you, another operator, nobody (autonomous)");
+            SofStateData otherOperator = Full(); var handed = otherOperator.Teams[1]; handed.Controller = "RAVEN-2"; otherOperator.Teams[1] = handed;
+            SofStateData notMine = Full(); var lost = notMine.Teams[0]; lost.Mine = false; notMine.Teams[0] = lost;
+            TestAssert.That(!Full().SameAs(otherOperator) && !Full().SameAs(notMine), "a change of controller, or of who it is, is a change");
+            SofStateData taken = Full(); var team = taken.Teams[2]; team.Controller = "KITE-4"; taken.Teams[2] = team;
+            TestAssert.That(!Full().SameAs(taken) && Full().SameAs(Full()), "an autonomous team taken by an operator is a change");
+            SofStateData longName = Full(); var named = longName.Teams[2]; named.Controller = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"; longName.Teams[2] = named;
+            TestAssert.Eq(SofWire.ReadState(new BufR(Sta(longName)), P).Teams[2].Controller, "ABCDEFGHIJKLMNOP", "a controller name is clipped to 16 characters on write");
+            TestAssert.That(SofPageWords.Control(t0) == "YOU" && SofPageWords.Control(t1) == "CTRL RAVEN-1" && SofPageWords.Control(t2) == "AUTO", "the card words say YOU, CTRL <name> or AUTO");
+            SofStateData noFaction = Full(); noFaction.Faction = 0;
+            SofStateData noEpoch = Full(); noEpoch.Epoch = 0;
+            TestAssert.That(SofWire.ReadState(new BufR(Sta(noFaction)), P).Protocol == 0 && SofWire.ReadState(new BufR(Sta(noEpoch)), P).Protocol == 0, "a state naming no faction or no scene is inert");
             TestAssert.Eq(r.Targets.Count, 6, "targets"); TestAssert.That(r.Targets[2].Resisted && r.Targets[1].Exploit && r.Targets[0].Kind == TargetKind.Anchor, "target flags");
             TestAssert.Eq(r.Held.Count, 1, "held"); TestAssert.Eq(r.Enemies.Count, 1, "enemy team");
             TestAssert.Eq(r.Events.Count, 2, "events"); TestAssert.That(r.Events[1].Kind == SofEventKind.Success && r.Events[1].Mission == MissionKind.Sabotage && r.Events[0].Slot == 3, "event rows");
             TestAssert.That(r.SameAs(SofWire.ReadState(new BufR(bytes), P)), "two decodes agree");
             // Inactive: header only.
-            byte[] off = Sta(new SofStateData { Protocol = P, Active = false, Seq = 2, Now = 10f });
-            TestAssert.That(off.Length <= 8 && !SofWire.ReadState(new BufR(off), P).Active, "an inactive state is a header");
+            byte[] off = Sta(new SofStateData { Protocol = P, Faction = Us, Epoch = E, Active = false, Seq = 2, Now = 10f });
+            TestAssert.That(off.Length <= 8 + FactionIdentity.Bytes && !SofWire.ReadState(new BufR(off), P).Active, "an inactive state is a header");
             // Foreign protocol and bad bytes.
             SofStateData foreign = SofWire.ReadState(new BufR(bytes), 33);
             TestAssert.That(foreign.Protocol == P && !foreign.Active && foreign.Teams.Count == 0, "foreign protocol is the byte alone");
@@ -148,12 +164,23 @@ namespace BoscaliSummer.Tests.Features.Support
         {
             var m = new SofMirror();
             SofStateData s = Full();
-            TestAssert.That(m.Apply(s, P, 400f) && m.Known && m.Seq == 7, "applied");
+            TestAssert.That(m.Apply(s, P, 400f, Us) && m.Known && m.Seq == 7, "applied");
             TestAssert.That(Math.Abs(m.State.TapUntil - 640f) < 0.2f && Math.Abs(m.State.Teams[1].EndsAt - 445f) < 0.2f && Math.Abs(m.State.Held[0].Until - 980f) < 0.2f, "expiries move onto the client clock");
-            TestAssert.That(!m.Apply(s, P, 400f), "an old sequence is refused");
+            TestAssert.That(!m.Apply(s, P, 400f, Us), "an old sequence is refused");
             SofStateData newer = Full(); newer.Seq = 8;
-            TestAssert.That(m.Apply(newer, P, 410f), "a newer one is applied");
-            TestAssert.That(!m.Apply(Full(), 33, 400f) && !m.Apply(null, P, 400f), "foreign and null are refused");
+            TestAssert.That(m.Apply(newer, P, 410f, Us), "a newer one is applied");
+            TestAssert.That(!m.Apply(Full(), 33, 400f, Us) && !m.Apply(null, P, 400f, Us), "foreign and null are refused");
+            TestAssert.That(m.State.Teams[0].Mine && m.State.Teams[0].Controller == "VIPER-2" && string.IsNullOrEmpty(m.State.Teams[2].Controller), "the mirror keeps who commands each team");
+            // The player switches faction; the old faction's team list, newer than anything applied, is still in flight.
+            m.Reset();
+            SofStateData old = Full(); old.Seq = 90;
+            TestAssert.That(!m.Apply(old, P, 411f, Us + 1) && !m.Known && m.State.Teams.Count == 0, "an old-faction snapshot with a higher sequence is refused and no team appears");
+            SofStateData theirs = Full(); theirs.Faction = Us + 1; theirs.Seq = 91;
+            TestAssert.That(m.Apply(theirs, P, 412f, Us + 1) && m.Known, "the new faction's state applies");
+            SofStateData earlier = Full(); earlier.Faction = Us + 1; earlier.Epoch = E - 1; earlier.Seq = 200;
+            TestAssert.That(!m.Apply(earlier, P, 413f, Us + 1), "a snapshot of an earlier host scene is refused whatever its sequence");
+            SofStateData later = Full(); later.Faction = Us + 1; later.Epoch = E + 1; later.Seq = 1;
+            TestAssert.That(m.Apply(later, P, 414f, Us + 1) && m.Epoch == E + 1, "a later host scene applies and restarts the sequence");
             TestAssert.That(m.TryLase(out string callsign, out float x, out float z) && callsign == "B-1" && Math.Abs(x - 9010f) < 0.2f && Math.Abs(z - 9020f) < 0.2f, "AIM: TEAM reads the lasing team");
             m.ResetLink();
             TestAssert.That(!m.Known && !m.TryLase(out _, out _, out _), "a link reset forgets everything");
@@ -232,7 +259,7 @@ namespace BoscaliSummer.Tests.Features.Support
             {
                 string w = SofOutcomeWords.Of((SofOutcome)o, 5);
                 TestAssert.That(w.Length > 0, "words for " + (SofOutcome)o);
-                bool refusal = o >= (byte)SofOutcome.NoTarget;
+                bool refusal = o >= (byte)SofOutcome.NoTarget && o != (byte)SofOutcome.Swept;
                 TestAssert.That(refusal == w.StartsWith("NEGATIVE: ") , "only refusals start NEGATIVE (" + (SofOutcome)o + ")");
                 if (refusal) TestAssert.That(w.Contains(" — "), "a refusal says what fixes it (" + (SofOutcome)o + ")");
             }

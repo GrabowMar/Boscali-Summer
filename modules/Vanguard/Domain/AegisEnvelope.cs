@@ -7,7 +7,6 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const float DropClearSeconds = .12f;
         public const float SlewEnd = .40f;
         public const float ArmSeconds = .42f;
-        public const float SensorConfirmSeconds = .15f;
 
         // Defence darts score on a near pass. In game the closest pass under native steering measured 12-23 m
         // (sim readout aegis.defencePassDm); a body-sized contact sphere never registered one.

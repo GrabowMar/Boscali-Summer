@@ -9,10 +9,10 @@ namespace Vanguard
     {
         // AEGIS-3 SNAP (modules/Vanguard/Domain/AegisSnap.cs). The dart WeaponInfo is also the pod station's info, so
         // its target requirements describe the manual snap: air only, 2.5 km, +-70 deg. Vanilla AI then picks the pod for
-        // close air targets and fires it through WeaponManager.Fire (AegisSnapPatch); the automatic missile defence
-        // (AegisService) launches through LaunchMount and ignores these fields. Each cell holds its dart for
+        // close air targets and fires it through WeaponManager.Fire (AegisSnapPatch). Manual fire only: no service
+        // launches through LaunchMount on its own. Each cell holds its dart for
         // AegisSnap.DoorLead so the cell cover (Door<i>) is open before the rail drops it. That delay also holds back every
-        // automatic defence dart; InterceptPicker.EngageSeconds (launch timed on seconds to impact) covers it.
+        // snap dart; the pilot fires it by hand (AegisSnap), nothing launches on its own.
         const float AegisSnapRange = 2500f, AegisSnapAlignment = 70f, AegisDoorLead = .15f;
 
         static void AegisSnapSetup(WeaponInfo info)

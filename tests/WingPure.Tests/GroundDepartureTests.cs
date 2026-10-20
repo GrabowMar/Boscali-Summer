@@ -152,6 +152,80 @@ namespace WingPure.Tests
             TestAssert.That(o.Throttle == 0f && o.Brake > 0f, "a hold-short just passed is braked for, not turned back to");
             f.Tick(GroundFixture.At(past), 2.3f);
             TestAssert.Eq(f.Pilot.Phase, GroundPhase.LineUp, "stopped just past the hold-short, it lines up from there");
+
+            // wing-taxi sweep 2026-10-18 (airbase_boscali_north, SFB-81): a 42 m bomber swept past its hold-short 18 m away, outside
+            // that radius, and circled on the grass for a minute to reach the exact point.
+            Vec3 wide = f.Hold + Vec3.Forward * 18f;
+            AircraftState sweeping = GroundFixture.At(wide);
+            sweeping.Vel = Vec3.Forward * 3f;
+            sweeping.Tas = 3f;
+            var small = new GroundFixture();
+            small.Tick(sweeping, 2.1f);
+            TestAssert.That(small.Tick(sweeping, 2.2f).Throttle > 0f, "a fighter 18 m past its hold-short still drives back to it");
+            var large = new GroundFixture();
+            large.Profile.SpanM = 42f;
+            large.Tick(sweeping, 2.1f);
+            ControlOutput b = large.Tick(sweeping, 2.2f);
+            TestAssert.That(b.Throttle == 0f && b.Brake > 0f, "a hold-short under a bomber's wing is braked for, not circled back to");
+        }
+    }
+
+    internal static class GroundTakeoffRunTests
+    {
+        public static void Run()
+        {
+            // The user's ruling 2026-10-19: launch fuel stays at 100 %, and SUPPLY flags the fields a fully fuelled SFB-81 cannot leave
+            // (sweep: highway strips 834/889 m, airstrip_city2 1199 m, desert1 1306 m ran it off the end; navalbase 1907 m just made it).
+            foreach (float runway in new[] { 834f, 889f, 1199f, 1306f })
+                TestAssert.That(TakeoffRuns.Short("SFB-81 Darkreach", runway), "an SFB-81 is flagged short at a " + runway + " m runway");
+            TestAssert.That(!TakeoffRuns.Short("SFB-81 Darkreach", 1907f) && !TakeoffRuns.Short("SFB-81 Darkreach", 2006f),
+                "navalbase and airbase_city are long enough for it");
+            TestAssert.That(!TakeoffRuns.Short("KR-67 Ifrit", 834f) && !TakeoffRuns.Short("FS-20 Vortex", 834f),
+                "types with no known limit are never flagged (a KR-67 flies from 834 m)");
+            TestAssert.That(!TakeoffRuns.Short("SFB-81 Darkreach", 0f), "a field with no takeoff runway is not called short");
+        }
+    }
+
+    internal static class GroundPullAsideNeedTests
+    {
+        public static void Run()
+        {
+            // wing-taxi sweep 2026-10-18 (airbase_city): a deadlock victim pulled aside off a node the member it waited for never
+            // drives through, was back on its route the next tick, and pulled aside again every second (30 times in a row).
+            var field = new AirbaseSample
+            {
+                Name = "Pull-aside need field", Center = new Vec3(-100f, 0f, -150f),
+                Roads = new[]
+                {
+                    new[] { new Vec3(-100f, 0f, -300f), new Vec3(-100f, 0f, -200f) },
+                    new[] { new Vec3(-100f, 0f, -200f), new Vec3(-100f, 0f, -100f) },
+                    new[] { new Vec3(-100f, 0f, -100f), new Vec3(-100f, 0f, 0f) },
+                    new[] { new Vec3(-100f, 0f, -200f), new Vec3(-200f, 0f, -200f) },
+                },
+                Runways = new[] { new RunwaySample
+                {
+                    Start = Vec3.Zero, End = new Vec3(0f, 0f, 1000f), Length = 1000f, Width = 40f,
+                    Takeoff = true, Entries = new[] { new WingPose(new Vec3(-100f, 0f, 0f), Vec3.Right) },
+                } },
+            };
+            var traffic = new FieldTraffic(field, 0, false);
+            var profile = new AirframeProfile();
+            var events = new WingEventRing();
+            // #1 stands just past the junction at z -100, facing #2 (nose to nose); its route starts at that junction, never at #2's.
+            AircraftState one = GroundFixture.At(new Vec3(-100f, 0f, -110f), -Vec3.Forward), two = GroundFixture.At(new Vec3(-100f, 0f, -200f));
+            var first = new GroundPilot(1, traffic, AirframeClass.FixedWing, new WingPose(one.Pos, one.Fwd), -1);
+            var second = new GroundPilot(2, traffic, AirframeClass.FixedWing, new WingPose(two.Pos, two.Fwd), -1);
+            traffic.Departures.Expect(1, 1);
+            traffic.Departures.Expect(2, 1);
+            for (float t = 0f; t < 10f; t += 0.1f)
+            {
+                traffic.Report(1, one.Pos);
+                traffic.Report(2, two.Pos);
+                traffic.Step(0.1f);
+                first.Step(one, profile, null, t, 0.1f, events, 0);
+                second.Step(two, profile, null, t, 0.1f, events, 1);
+            }
+            TestAssert.Eq(events.CountOf(WingEventKind.PulledAside), 0, "no pull-aside off a node the other member does not need");
         }
     }
 

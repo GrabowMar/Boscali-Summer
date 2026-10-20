@@ -17,7 +17,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private static readonly Dictionary<WeaponStation, float> LastPress = new Dictionary<WeaponStation, float>();
         private static readonly List<WeaponStation> Dead = new List<WeaponStation>();
         private static readonly Dictionary<WeaponInfo, bool> Known = new Dictionary<WeaponInfo, bool>();
-        private static readonly List<Missile> Inbound = new List<Missile>();
 
         // Per-frame callers (HUD, the WeaponManager.Fire patch): WeaponInfo.name allocates a string, so cache it per info asset.
         public static bool IsAegis(WeaponStation station)
@@ -50,11 +49,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (!known) PruneDead();
             bool held = known && now - last < AegisSnap.HeldGap;
             LastPress[station] = now;
-            // Tap to fire: holding the trigger must not dump the darts the automatic defence relies on.
+            // Tap to fire: holding the trigger must not dump the pod's darts.
             if (held || aircraft.remoteSim || station.SafetyIsOn(aircraft) || station.SalvoInProgress) return SnapVerdict.Busy;
             if (station.Ammo > 0 && !station.Ready())
             {
-                // Also covers the pod's own automatic defence launches, which the pilot did not trigger.
+                // Also covers a dart the pilot just launched by hand, which is still cycling the cell.
                 AegisHud.Notify(aircraft, HudTone.Caution, "SNAP — NO SOLUTION", "POD CYCLING");
                 return SnapVerdict.Busy;
             }
@@ -63,11 +62,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             Vector3 to = has ? target.GlobalPosition() - aircraft.GlobalPosition() : Vector3.zero;
             float range = to.magnitude;
             SnapVerdict verdict = AegisSnap.Judge(has, target is Aircraft, range, Vector3.Angle(aircraft.transform.forward, to),
-                station.Ammo, ThreatInbound(aircraft));
+                station.Ammo);
             if (verdict != SnapVerdict.Fire)
             {
                 VanguardStats.Bump("aegis.noSolution");
-                if (verdict == SnapVerdict.Reserved) VanguardStats.Bump("aegis.reserved");
                 AegisHud.Notify(aircraft, HudTone.Caution, "SNAP — NO SOLUTION", AegisSnap.Reason(verdict, range));
                 return verdict;
             }
@@ -77,19 +75,12 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             return verdict;
         }
 
-        private static bool ThreatInbound(Aircraft aircraft)
-        {
-            ThreatScan.Inbound(aircraft, Inbound);
-            for (int i = 0; i < Inbound.Count; i++)
-                if (Inbound[i].NetworkHQ != aircraft.NetworkHQ) return true;
-            return false;
-        }
     }
 
     /// <summary>AEGIS dart flight (server): cold-launch slew, lead pursuit and hit-to-kill contact for both uses.</summary>
     internal sealed partial class VanguardFlight
     {
-        private bool snap; // manual SNAP at an air unit, as opposed to the automatic missile defence
+        private bool snap; // manual SNAP at an air unit; a rejected snap flies out as a plain dart
         private int passDm = int.MaxValue;
 
         private void InitAegis()

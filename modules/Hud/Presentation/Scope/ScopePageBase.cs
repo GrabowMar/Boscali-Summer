@@ -73,17 +73,26 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>A one-letter code for the page (the header shows no pips for other live pages any more).</summary>
         public abstract char Code { get; }
 
-        /// <summary>The page has data to draw at all. Only SYSTEMS is ever shown without being live (cruise), and it is not Ready without an aircraft: the shell then leaves the scope out.</summary>
+        /// <summary>The page has data to draw. SYSTEMS can draw nominal aircraft data even when not live; an unavailable manual page keeps its slot with a standby message.</summary>
         public virtual bool Ready => true;
 
-        /// <summary>10 Hz data read; true while the page has live content.</summary>
+        /// <summary>10 Hz data read; true while the page has something to draw (<see cref="Paint"/>), false while its feed has nothing (<see cref="PaintIdle"/>).</summary>
         public abstract bool Poll(in ScopeEnv env);
+
+        /// <summary>The idle face's status word and the line under it: what the page would show and why there is nothing now (<c>CLEAR</c>, <c>NO WINGMEN</c>).</summary>
+        public virtual string IdleWord => "STANDBY";
+
+        public virtual string IdleHint => "NO DATA";
+
+        /// <summary>Draw the page while its feed has nothing (<see cref="Poll"/> false): by default its <see cref="IdleWord"/> and <see cref="IdleHint"/> in the middle of the body.</summary>
+        public virtual void PaintIdle(ScopeCanvas g, in PagePaint p)
+        {
+            g.Text(IdleWord, p.W / 2f, p.H / 2f - 14f, ScopeTone.Ink, 16f, ScopeAlign.Center, true);
+            g.Text(IdleHint, p.W / 2f, p.H / 2f + 10f, ScopeTone.Dim, 12f, ScopeAlign.Center);
+        }
 
         /// <summary>Repaint every frame (something moves or pulses) instead of at 10 Hz.</summary>
         public virtual bool Fast => false;
-
-        /// <summary>What the page has to say cannot wait for a glance at a pip (a fire, an engine out, BINGO): while live and critical it ranks above the pages that only inform (<see cref="CuePriority.CriticalSystemsRank"/>). Only SYSTEMS uses it.</summary>
-        public virtual bool Critical => false;
 
         /// <summary>The headline figure (read after <see cref="Poll"/>). Default: none.</summary>
         public virtual ScopeHeadline Headline() => default;

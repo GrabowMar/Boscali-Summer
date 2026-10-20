@@ -42,6 +42,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public override char Code => 'S';
 
+        public override string IdleWord => "NO SHOTS";
+
+        public override string IdleHint => "NONE OF YOUR WEAPONS IN FLIGHT";
+
         public override bool Fast => live;
 
         public override bool HasStrip => live;

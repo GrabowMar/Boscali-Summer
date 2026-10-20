@@ -11,9 +11,9 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
         {
             try
             {
-                SupportResult result = context.Host.StartSofRecon(context.Owner, context.Target, context.Quality);
+                SupportResult result = context.Host.StartSofRecon(context.Owner, context.Target, context.Power);
                 if (result == SupportResult.Accepted)
-                    try { Visuals.AreaFx.Sweep(Visuals.AreaFx.At(context.Target), SofService.PerkReconRadius * context.Quality, 6f, Visuals.AreaFx.TeamTint, context.Owner); }
+                    try { Visuals.AreaFx.Sweep(Visuals.AreaFx.At(context.Target), SofService.PerkReconRadius * context.Power, 6f, Visuals.AreaFx.TeamTint, context.Owner); }
                     catch (Exception e) { context.Logger.LogDebug("[Support] Recon team visual skipped: " + e.Message); }
                 return result;
             }

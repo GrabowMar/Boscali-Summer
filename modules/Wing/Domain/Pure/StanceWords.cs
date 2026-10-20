@@ -13,7 +13,7 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
         private static readonly string[] Names = { "MSL GUARD", "RESPONSE", "INTERVAL", "SPREAD", "TARGETS", "RANGE", "WEAPONS", "RADAR" };
         private static readonly string[][] Short =
         {
-            new[] { "OFF", "SELF", "WING", "LEAD" }, new[] { "BREAK", "PRESS" }, new[] { "CLOSE", "STD", "OPEN" }, new[] { "OFF", "ON" },
+            new[] { "OFF", "ON", "ON", "ON" }, new[] { "BREAK", "PRESS" }, new[] { "CLOSE", "STD", "OPEN" }, new[] { "OFF", "ON" },
             new[] { "HOLD", "AIR", "GND", "BOTH", "COVER" }, new[] { "6 KM", "12 KM" }, new[] { "AUTO", "MSL", "GUN", "NO A-G" },
             new[] { "ON", "SILENT", "OFF" },
         };
@@ -61,10 +61,8 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
                 default: sb.Append(", radar off"); break;
             }
             sb.Append('.');
-            if (axes[Guard] == 0) sb.Append(" No missile guard.");
-            else sb.Append(" Guard ").Append(axes[Guard] == 1 ? "yourself" : axes[Guard] == 2 ? "the wing" : "the lead").Append(" against missiles.");
-            sb.Append(axes[Response] == 1 ? " Press on against missiles." : " Break from missiles.");
-            if (axes[Spread] == 1) sb.Append(" Spread when threatened.");
+            if (axes[Guard] == 0) sb.Append(" Hold the slot against missiles, countermeasures only.");
+            else sb.Append(axes[Response] == 1 ? " Press on against radar missiles while ours fly." : " Break from missiles.");
             sb.Append(axes[Interval] == 0 ? " Fly close." : axes[Interval] == 2 ? " Fly open." : " Fly standard spacing.");
             if (fallBack >= 0 && fallBack < FallBackWords.Length)
                 sb.Append(fallBack == 0 ? " Never fall back." : " Fall back at " + FallBackWords[fallBack] + ".");

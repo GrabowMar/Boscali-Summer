@@ -13,12 +13,16 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         NoTarget = 5, NoCamp = 6, CampDown = 7, TeamCap = 8, NoTeam = 9, NotReady = 10, Pinned = 11, Wounded = 12, NoAmmo = 13,
         LowCredit = 14, Frozen = 15, RateLimited = 16, Unavailable = 17, BadOrder = 18, OutOfTheater = 19, Raising = 20,
         /// <summary>OPS FRONTS S2: an operator can no longer raise a team; the TRAIN TEAM programme does.</summary>
-        TrainOnly = 21
+        TrainOnly = 21,
+        /// <summary>Another operator has tasked this team and keeps it until it is back home, lost or they leave.</summary>
+        Controlled = 22,
+        /// <summary>Protocol 42: the defence verb SWEEP.</summary>
+        Swept = 23, NothingToSweep = 24, SweepCooling = 25
     }
 
     internal static class SofOutcomeWords
     {
-        public const byte MaxOutcome = (byte)SofOutcome.TrainOnly;
+        public const byte MaxOutcome = (byte)SofOutcome.SweepCooling;
 
         public static string Of(SofOutcome outcome, int detail = 0)
         {
@@ -45,6 +49,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
                 case SofOutcome.OutOfTheater: return "NEGATIVE: OUT OF THE THEATER — PICK A POINT ON THE MAP";
                 case SofOutcome.Raising: return "NEGATIVE: TEAM STILL RAISING — DEPLOYS IN " + SpaceRules.Clock(detail);
                 case SofOutcome.TrainOnly: return "NEGATIVE: TEAMS COME FROM THE TRAIN TEAM PROGRAMME — FUND IT FROM THE SOF FRONT";
+                case SofOutcome.Controlled: return "NEGATIVE: TEAM TASKED BY ANOTHER OPERATOR — USE ANOTHER TEAM";
+                case SofOutcome.Swept: return "QRF ROLLING — ON THE HOSTILE TEAMS IN " + Math.Max(0, detail) + " S";
+                case SofOutcome.NothingToSweep: return "NEGATIVE: NO HOSTILE TEAM DETECTED NEAR OUR SITES — NOTHING TO SWEEP";
+                case SofOutcome.SweepCooling: return detail > 0 ? "NEGATIVE: QRF REFITTING — READY IN " + SpaceRules.Clock(detail) : "NEGATIVE: THE QRF IS ALREADY ROLLING";
                 default: return "NEGATIVE: SOF OFFLINE — NO CAMP STANDING";
             }
         }
@@ -55,7 +63,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public readonly SofOutcome Outcome;
         public readonly int Slot, Charged, Detail;
         public SofResult(SofOutcome outcome, int slot = 0, int charged = 0, int detail = 0) { Outcome = outcome; Slot = slot; Charged = charged; Detail = detail; }
-        public bool Ok => Outcome == SofOutcome.Raised || Outcome == SofOutcome.Ordered || Outcome == SofOutcome.Sent || Outcome == SofOutcome.Diverted;
+        public bool Ok => Outcome == SofOutcome.Raised || Outcome == SofOutcome.Ordered || Outcome == SofOutcome.Sent || Outcome == SofOutcome.Diverted || Outcome == SofOutcome.Swept;
         public string Words => SofOutcomeWords.Of(Outcome, Detail);
     }
 
@@ -116,6 +124,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
     {
         public int Slot;
         public bool Active;
+        /// <summary>Who commands the team: OVERLORD (the TRAIN TEAM pool and its own work) or the one operator who tasked it (see <c>SofDesk.Order</c>). Back at a base it returns to OVERLORD's pool.</summary>
         public ulong Raiser;
         public TeamState State;
         public float X, Z, HomeX, HomeZ, DestX, DestZ, Exposure, Ammo = 100f;
@@ -133,7 +142,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public float TargetX, TargetZ;
         public bool Exploit, LaseActive;
         public int Odds;
+        /// <summary>DIRECT ACTION: the team raids <see cref="TargetKey"/> from where it stands; <see cref="RaidOdds"/> (percent) replaces the scene odds for the roll.</summary>
+        public bool Raid;
+        public int RaidOdds;
         public ulong CoverPilot, Carrier;
+        /// <summary>An enemy QRF hunts the team until this mission second (protocol 42): it counts as <see cref="SofRules.HuntExposers"/> more enemies around it.</summary>
+        public float HuntedUntil;
         public int CarrierId;
         public float CarrierSeenAt;
         /// <summary>The mission fee and who paid it; zero once the team is on site (a target lost before then refunds it).</summary>
@@ -195,6 +209,53 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public float FobZ { get; set; }
         /// <summary>Raised once per event after the desk applied it.</summary>
         public event Action<SofEvent> Happened;
+
+        // ---- Defence: hostile teams near this faction's own sites (protocol 42) ---------------------
+
+        private readonly List<SofHostile> hostiles = new List<SofHostile>(SofRules.MaxHostiles);
+        /// <summary>Enemy teams this faction has detected near its own sites (the runtime fills it every host second from the other desks).</summary>
+        public IReadOnlyList<SofHostile> Hostiles => hostiles;
+        /// <summary>The QRF reaches its targets at this mission second (0 = none rolling); the next may roll at <see cref="SweepReadyAt"/>.</summary>
+        public float SweepEndsAt { get; private set; }
+        public float SweepReadyAt { get; private set; }
+
+        public void SetHostiles(List<SofHostile> found)
+        {
+            hostiles.Clear();
+            for (int i = 0; found != null && i < found.Count && hostiles.Count < SofRules.MaxHostiles; i++) hostiles.Add(found[i]);
+        }
+
+        /// <summary>SWEEP: a QRF rolls on every hostile team detected near our sites and reaches them <see cref="SofRules.SweepSeconds"/> later. Costs CR; one at a time, then a refit.</summary>
+        public SofResult Sweep(ulong op)
+        {
+            float now = ports.Now;
+            if (hostiles.Count == 0) return new SofResult(SofOutcome.NothingToSweep);
+            if (SweepEndsAt > now) return new SofResult(SofOutcome.SweepCooling);
+            if (now < SweepReadyAt) return new SofResult(SofOutcome.SweepCooling, 0, 0, (int)Math.Ceiling(SweepReadyAt - now));
+            SofOutcome paid = ports.TrySpend(op, SofRules.SweepCost, out int detail);
+            if (paid != SofOutcome.None) return new SofResult(paid, 0, 0, detail);
+            SweepEndsAt = now + SofRules.SweepSeconds;
+            SweepReadyAt = SweepEndsAt + SofRules.SweepCooldownSeconds;
+            return new SofResult(SofOutcome.Swept, 0, SofRules.SweepCost, (int)SofRules.SweepSeconds);
+        }
+
+        /// <summary>True once, when the rolling QRF arrives (the runtime then hunts every hostile team it still detects).</summary>
+        public bool TakeSweepDue(float now)
+        {
+            if (SweepEndsAt <= 0f || now < SweepEndsAt) return false;
+            SweepEndsAt = 0f;
+            return true;
+        }
+
+        /// <summary>An enemy QRF reached this team: it is hunted until <paramref name="until"/>. False when the slot has no team in the field.</summary>
+        public bool Hunt(int slot, float until)
+        {
+            if (slot < 0 || slot >= Teams.Length) return false;
+            SofTeam t = Teams[slot];
+            if (!t.Active || t.Carried || (t.State != TeamState.Moving && t.State != TeamState.OnSite && t.State != TeamState.Pinned && t.State != TeamState.Returning)) return false;
+            t.HuntedUntil = Math.Max(t.HuntedUntil, until);
+            return true;
+        }
 
         public int ActiveCount
         {
@@ -343,6 +404,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             float now = ports.Now;
             SofTeam t = Get(slot);
             if (t == null) return new SofResult(SofOutcome.NoTeam);
+            if (HeldByOther(t, op)) return new SofResult(SofOutcome.Controlled, slot);
             SofResult gate = Gate(t, now, true);
             if (gate.Outcome != SofOutcome.None) return gate;
             if (t.State != TeamState.Ready) return new SofResult(SofOutcome.NotReady, slot);
@@ -362,7 +424,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             int cost = SofRules.CostOf(kind, exploit);
             SofOutcome paid = ports.TrySpend(op, cost, out int detail);
             if (paid != SofOutcome.None) return new SofResult(paid, slot, 0, detail);
-            t.MissionCost = cost; t.MissionPayer = op;
+            t.MissionCost = cost; t.MissionPayer = op; t.Raiser = op;
             t.Mission = kind; t.TargetId = id; t.TargetKind = tk; t.TargetSub = sub; t.TargetKey = key; t.TargetX = tx; t.TargetZ = tz; t.Exploit = exploit;
             t.ExemptKey = kind != MissionKind.Recon && (tk == TargetKind.Ground || tk == TargetKind.Anchor) ? key : 0;
             t.DestX = tx; t.DestZ = tz; t.HasDest = true; t.HoldOn = false; t.PushOn = false;
@@ -377,10 +439,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             float now = ports.Now;
             SofTeam t = Get(slot);
             if (t == null) return new SofResult(SofOutcome.NoTeam);
+            if (HeldByOther(t, op)) return new SofResult(SofOutcome.Controlled, slot);
             SofResult gate = Gate(t, now, false);
             if (gate.Outcome != SofOutcome.None) return gate;
             if (!float.IsFinite(x) || !float.IsFinite(z) || Math.Abs(x) > 2000000f || Math.Abs(z) > 2000000f) return new SofResult(SofOutcome.OutOfTheater, slot);
             if (t.State == TeamState.Raising || t.State == TeamState.Recovering) return new SofResult(SofOutcome.BadOrder, slot);
+            t.Raiser = op;
             ClearMission(t);
             t.DestX = x; t.DestZ = z; t.HasDest = true; t.HoldOn = false; t.LiftWaiting = false; t.Wounded = false;
             t.Insert = t.Carried ? Insertion.Helicopter : Insertion.Ground;
@@ -389,7 +453,73 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             return new SofResult(SofOutcome.Diverted, slot);
         }
 
+        /// <summary>Own teams on a mission or on the way: moving, on site, pinned or returning (the DIRECT ACTION odds count them).</summary>
+        public int Afield
+        {
+            get
+            {
+                int n = 0;
+                for (int i = 0; i < Teams.Length; i++)
+                    if (Teams[i].Active && (Teams[i].State == TeamState.Moving || Teams[i].State == TeamState.OnSite || Teams[i].State == TeamState.Returning || Teams[i].State == TeamState.Pinned)) n++;
+                return n;
+            }
+        }
+
+        /// <summary>
+        /// The team a DIRECT ACTION may use for <paramref name="op"/>: ready, with ammunition, not lifted, and either the operator's own or one of OVERLORD's pool (the rule <see cref="Order"/> uses). The operator's own team comes first.
+        /// </summary>
+        public bool TryReadyTeam(ulong op, out int slot)
+        {
+            slot = -1;
+            for (int i = 0; i < Teams.Length; i++)
+            {
+                SofTeam t = Teams[i];
+                if (!t.Active || t.State != TeamState.Ready || t.Carried || t.LiftWaiting || t.Ammo + 0.01f < AmmoPerMission || HeldByOther(t, op)) continue;
+                if (t.Raiser == op) { slot = i; return true; } // the operator's own team wins at once
+                if (slot < 0) slot = i;
+            }
+            return slot >= 0;
+        }
+
+        /// <summary>
+        /// DIRECT ACTION: the ready team raids <paramref name="target"/> from where it stands. It goes on site at once on a SABOTAGE mission that lasts <paramref name="seconds"/>, then rolls <paramref name="oddsPercent"/>
+        /// (the scene does not change it): success destroys the target, failure wounds the team and sends it home, exactly as a SABOTAGE does. The perk's price is the allocation the host already took, so the team is charged nothing.
+        /// </summary>
+        public SofResult Raid(ulong op, int slot, in SofTarget target, float seconds, int oddsPercent)
+        {
+            float now = ports.Now;
+            SofTeam t = Get(slot);
+            if (t == null) return new SofResult(SofOutcome.NoTeam);
+            if (HeldByOther(t, op)) return new SofResult(SofOutcome.Controlled, slot);
+            SofResult gate = Gate(t, now, true);
+            if (gate.Outcome != SofOutcome.None) return gate;
+            if (t.State != TeamState.Ready || t.Carried || t.LiftWaiting) return new SofResult(SofOutcome.NotReady, slot);
+            if (t.Ammo + 0.01f < AmmoPerMission) return new SofResult(SofOutcome.NoAmmo, slot);
+            if (target.Kind != TargetKind.Ground && target.Kind != TargetKind.Anchor) return new SofResult(SofOutcome.NoTarget, slot);
+            t.Raiser = op;
+            t.Mission = MissionKind.Sabotage; t.TargetId = target.Id; t.TargetKind = target.Kind; t.TargetSub = target.Sub; t.TargetKey = target.Key; t.TargetX = target.X; t.TargetZ = target.Z;
+            t.Exploit = false; t.ExemptKey = 0; t.MissionCost = 0; t.MissionPayer = op;
+            t.Raid = true; t.RaidOdds = Math.Max(1, Math.Min(100, oddsPercent)); t.Odds = t.RaidOdds;
+            t.HasDest = false; t.HoldOn = false; t.PushOn = false; t.LiftWaiting = false;
+            t.State = TeamState.OnSite; t.OnSiteStart = now; t.OnSiteEnd = now + Math.Max(1f, seconds);
+            Queue(SofEventKind.OnSite, t);
+            return new SofResult(SofOutcome.Sent, slot);
+        }
+
+        /// <summary>A valid order from an operator takes the team over from OVERLORD; another operator's team refuses it (OVERLORD included) until it is home, lost or its operator left.</summary>
         public SofResult Order(ulong op, int slot, TeamVerb verb)
+        {
+            SofTeam t = Get(slot);
+            if (t != null && HeldByOther(t, op)) return new SofResult(SofOutcome.Controlled, slot);
+            SofResult r = Run(op, slot, verb);
+            if (r.Ok && t != null) t.Raiser = op;
+            return r;
+        }
+
+        /// <summary>The team answers to someone else: OVERLORD's pool teams can be taken by any operator, an operator's team only by that operator.</summary>
+        private static bool HeldByOther(SofTeam t, ulong op) => t.Raiser != op && (op == SpaceContacts.WatchOfficerId || t.Raiser != SpaceContacts.WatchOfficerId);
+
+        private SofResult Run(ulong op, int slot, TeamVerb verb)
         {
             float now = ports.Now;
             SofTeam t = Get(slot);
@@ -443,7 +573,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         private void ClearMission(SofTeam t)
         {
             if (t.Mission == MissionKind.Lase && t.LaseActive) EndLase(t);
-            t.Mission = MissionKind.None; t.TargetId = 0; t.Exploit = false; t.MissionCost = 0;
+            t.Mission = MissionKind.None; t.TargetId = 0; t.Exploit = false; t.MissionCost = 0; t.Raid = false;
         }
 
         private void EndLase(SofTeam t)
@@ -510,8 +640,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
                 if (!ports.TargetAlive(t.TargetKind, t.TargetSub, t.ExemptKey)) t.ExemptKey = 0; // truly dead (the host keeps the key resolving whatever the fog says)
                 else if (exposers > 0 && SofRules.Distance(t.X, t.Z, t.TargetX, t.TargetZ) <= SofRules.ExposureRadius) exposers--;
             }
+            if (t.HuntedUntil > now) exposers += SofRules.HuntExposers; // an enemy QRF is on the team
             t.Exposure = Math.Max(0f, Math.Min(100f, t.Exposure + SofRules.ExposureDelta(exposers, scene.Stared, t.PushOn && moving, t.HoldOn, dt, ExposureScale)));
-            t.Odds = SofRules.Odds(t.Exposure, scene.Armored1000, t.Insert == Insertion.Helicopter, t.Exploit, ports.CyberNear(t.X, t.Z));
+            t.Odds = t.Raid ? t.RaidOdds : SofRules.Odds(t.Exposure, scene.Armored1000, t.Insert == Insertion.Helicopter, t.Exploit, ports.CyberNear(t.X, t.Z));
             if (t.State == TeamState.Pinned) { AdvancePinned(t, now); return; }
             if (t.Exposure >= SofRules.PinExposure && (moving || t.State == TeamState.OnSite))
             {
@@ -556,6 +687,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
                 if (t.Wounded) { t.State = TeamState.Recovering; t.RecoverUntil = now + SofRules.WoundedSeconds; }
                 else t.State = TeamState.Ready;
                 t.ExemptKey = 0;
+                t.Raiser = SpaceContacts.WatchOfficerId; // recovered at a base: the operator's hold ends
                 Queue(SofEventKind.Home, t);
                 return;
             }
@@ -590,7 +722,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             if (t.Mission != MissionKind.Recon && !ports.TargetAlive(t.TargetKind, t.TargetSub, t.TargetKey)) { Finish(t, false, false); return; } // target gone: ends quietly, never a success
             if (now < t.OnSiteEnd) return;
             if (t.Mission == MissionKind.Lase) { Finish(t, true, true); return; }
-            bool ok = ports.Roll(t.Odds <= 0 ? SofRules.Odds(t.Exposure, 0, t.Insert == Insertion.Helicopter, t.Exploit, ports.CyberNear(t.X, t.Z)) : t.Odds);
+            bool ok = ports.Roll(t.Raid ? t.RaidOdds : t.Odds <= 0 ? SofRules.Odds(t.Exposure, 0, t.Insert == Insertion.Helicopter, t.Exploit, ports.CyberNear(t.X, t.Z)) : t.Odds);
             if (!ok)
             {
                 t.Ammo = Math.Max(0f, t.Ammo - AmmoPerMission);
@@ -772,6 +904,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public void Reset()
         {
             for (int i = 0; i < Teams.Length; i++) Teams[i] = new SofTeam { Slot = i };
+            hostiles.Clear(); SweepEndsAt = SweepReadyAt = 0f;
             visible.Clear(); held.Clear(); pending.Clear(); Ids.Clear(); Reveal.Clear(); landedSince.Clear(); heliSeen.Clear(); Camps.Clear();
             lastTick = -1f;
         }

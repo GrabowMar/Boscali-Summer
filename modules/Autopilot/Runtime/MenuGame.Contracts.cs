@@ -70,22 +70,12 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
 
         private static readonly Dictionary<string, Flag<ITacBoardSettings>> BoardFlags = new Dictionary<string, Flag<ITacBoardSettings>>
         {
-            ["pages/threat"] = new Flag<ITacBoardSettings>(b => b.PageThreat, (b, v) => b.PageThreat = v),
-            ["pages/shot"] = new Flag<ITacBoardSettings>(b => b.PageShot, (b, v) => b.PageShot = v),
-            ["pages/missile-cam"] = new Flag<ITacBoardSettings>(b => b.PageMissileCam, (b, v) => b.PageMissileCam = v),
-            ["pages/approach"] = new Flag<ITacBoardSettings>(b => b.PageApproach, (b, v) => b.PageApproach = v),
-            ["pages/wing"] = new Flag<ITacBoardSettings>(b => b.PageWing, (b, v) => b.PageWing = v),
-            ["pages/strike"] = new Flag<ITacBoardSettings>(b => b.PageStrike, (b, v) => b.PageStrike = v),
-            ["pages/dock"] = new Flag<ITacBoardSettings>(b => b.PageDock, (b, v) => b.PageDock = v),
-            ["pages/objective"] = new Flag<ITacBoardSettings>(b => b.PageObjective, (b, v) => b.PageObjective = v),
-            ["pages/systems"] = new Flag<ITacBoardSettings>(b => b.PageSystems, (b, v) => b.PageSystems = v),
-            ["parts/lamps"] = new Flag<ITacBoardSettings>(b => b.ShowLamps, (b, v) => b.ShowLamps = v),
-            ["parts/strip"] = new Flag<ITacBoardSettings>(b => b.ShowSystemsStrip, (b, v) => b.ShowSystemsStrip = v),
-            ["parts/gauges"] = new Flag<ITacBoardSettings>(b => b.ShowGauges, (b, v) => b.ShowGauges = v),
-            ["parts/ticker"] = new Flag<ITacBoardSettings>(b => b.ShowTicker, (b, v) => b.ShowTicker = v),
+            ["parts/stores"] = new Flag<ITacBoardSettings>(b => b.ShowStores, (b, v) => b.ShowStores = v),
+            ["parts/pages"] = new Flag<ITacBoardSettings>(b => b.ScopeMode != BoardScopeMode.Off, (b, v) => b.ScopeMode = v ? BoardScopeMode.Manual : BoardScopeMode.Off),
+            ["parts/status"] = new Flag<ITacBoardSettings>(b => b.ShowLamps || b.ShowGauges, (b, v) => b.ShowLamps = b.ShowGauges = v),
+            ["parts/notices"] = new Flag<ITacBoardSettings>(b => b.ShowTicker, (b, v) => b.ShowTicker = v),
             ["parts/navdata"] = new Flag<ITacBoardSettings>(b => b.ShowNavData, (b, v) => b.ShowNavData = v),
             ["parts/corners"] = new Flag<ITacBoardSettings>(b => b.Corners, (b, v) => b.Corners = v),
-            ["parts/sway"] = new Flag<ITacBoardSettings>(b => b.Sway, (b, v) => b.Sway = v),
         };
 
         private static readonly Dictionary<string, Flag<IImmersionSettings>> FeelFlags = new Dictionary<string, Flag<IImmersionSettings>>
@@ -113,7 +103,10 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             w.BoardLayout = (int)board.Layout;
             w.BoardShade = MenuCatalog.Nearest(MenuCatalog.ShadeSteps, board.Shade);
             w.BoardSize = MenuCatalog.Nearest(MenuCatalog.SizeSteps, board.Scale);
-            w.BoardScopeAuto = board.ScopeMode == BoardScopeMode.Auto;
+            w.BoardPageCount = board.PageCount;
+            w.BoardPage1 = board.Page1; w.BoardPage2 = board.Page2; w.BoardPage3 = board.Page3; w.BoardPage4 = board.Page4;
+            w.BoardPagesOn = board.ScopeMode != BoardScopeMode.Off;
+            w.BoardSway = board.Sway;
             foreach (KeyValuePair<string, Flag<ITacBoardSettings>> flag in BoardFlags) if (flag.Value.Get(board)) w.BoardSwitches.Add(flag.Key);
         }
 
@@ -241,14 +234,24 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "hud/layout": return OnBoard(board => board.Layout = (BoardLayout)(((int)board.Layout + 1) % MenuCatalog.BoardLayouts.Length));
                 case "hud/shade": return OnBoard(board => board.Shade = Next(MenuCatalog.ShadeSteps, board.Shade));
                 case "hud/size": return OnBoard(board => board.Scale = Next(MenuCatalog.SizeSteps, board.Scale));
+                case "hud/count": return OnBoard(board => board.PageCount = board.PageCount % MenuCatalog.BoardPageCounts.Length + 1);
+                case "hud/sway": return OnBoard(board => board.Sway = !board.Sway);
                 case "hud/reset": return OnBoard(board => board.ResetToDefaults());
-                case "hud/pages/auto": return OnBoard(board => board.ScopeMode = board.ScopeMode == BoardScopeMode.Auto ? BoardScopeMode.Off : BoardScopeMode.Auto);
                 case "defence/drones": return StrikeOrScreen;
+                case "weapons/drones/hand": return () => Service<IDroneCommand>()?.ToggleHand();
+                case "weapons/drones/next": return () => Service<IDroneCommand>()?.Cycle(1);
+                case "weapons/drones/prev": return () => Service<IDroneCommand>()?.Cycle(-1);
+                case "weapons/drones/feed": return () => Service<IDroneCommand>()?.ToggleFeed();
+                case "weapons/drones/terminal": return () => Service<IDroneCommand>()?.OpenTerminal();
             }
             if (row.Id.StartsWith("comms/c", StringComparison.Ordinal)) return () => Service<IQuickCalls>()?.Call(index);
+            if (row.Id.StartsWith("weapons/drones/pick/", StringComparison.Ordinal)) return () => Service<IDroneCommand>()?.Link(index);
             if (row.Id.StartsWith("support/pit/station/", StringComparison.Ordinal)) return () => Service<ISkywellControl>()?.PrioritiseStation(index);
-            const string Pages = "hud/pages/", Parts = "hud/parts/", Feel = "cockpit/feel/";
-            if ((row.Id.StartsWith(Pages, StringComparison.Ordinal) || row.Id.StartsWith(Parts, StringComparison.Ordinal)) && BoardFlags.TryGetValue(row.Id.Substring(4), out Flag<ITacBoardSettings> part))
+            const string Page1 = "hud/page1/", Page2 = "hud/page2/", Page3 = "hud/page3/", Page4 = "hud/page4/", Parts = "hud/parts/", Feel = "cockpit/feel/";
+            int slot = row.Id.StartsWith(Page1, StringComparison.Ordinal) ? 1 : row.Id.StartsWith(Page2, StringComparison.Ordinal) ? 2 :
+                row.Id.StartsWith(Page3, StringComparison.Ordinal) ? 3 : row.Id.StartsWith(Page4, StringComparison.Ordinal) ? 4 : 0;
+            if (slot != 0) return OnBoard(board => SelectBoardPage(board, slot, (BoardPage)index));
+            if (row.Id.StartsWith(Parts, StringComparison.Ordinal) && BoardFlags.TryGetValue(row.Id.Substring(4), out Flag<ITacBoardSettings> part))
                 return OnBoard(board => part.Set(board, !part.Get(board)));
             if (row.Id.StartsWith(Feel, StringComparison.Ordinal) && FeelFlags.TryGetValue(row.Id.Substring(Feel.Length), out Flag<IImmersionSettings> effect))
                 return () => { IImmersionSettings feel = Service<IImmersionSettings>(); if (feel != null) effect.Set(feel, !effect.Get(feel)); };
@@ -262,6 +265,17 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
 
         /// <summary>The value of the step after the one nearest <paramref name="value"/>, wrapping: what a press of a cycle row over a float option sets.</summary>
         private static float Next(float[] steps, float value) => steps[(MenuCatalog.Nearest(steps, value) + 1) % steps.Length];
+
+        /// <summary>Keep all saved slots distinct, including hidden slots that a later count change may reveal.</summary>
+        private static void SelectBoardPage(ITacBoardSettings board, int slot, BoardPage page)
+        {
+            if (slot > board.PageCount) return;
+            BoardPage[] pages = { board.Page1, board.Page2, board.Page3, board.Page4 };
+            for (int i = 0; i < pages.Length; i++)
+                if (i != slot - 1 && pages[i] == page) { pages[i] = pages[slot - 1]; break; }
+            pages[slot - 1] = page;
+            board.Page1 = pages[0]; board.Page2 = pages[1]; board.Page3 = pages[2]; board.Page4 = pages[3];
+        }
 
         /// <summary>Statement over the TAC BOARD options, looked up again when the row is pressed.</summary>
         private static Action OnBoard(Action<ITacBoardSettings> run) =>

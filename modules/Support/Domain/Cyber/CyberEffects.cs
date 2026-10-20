@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Runtime;
 
 namespace BoscaliSummer.Modules.Support.Domain.Cyber
@@ -235,11 +236,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         public static CyberEffect Tap(int owner, int sourceId, float seconds, float now) =>
             new CyberEffect(EffectKind.TraceCut, EffectSource.Package, sourceId, owner, owner, 0f, 0f, 0f, 0u, CyberEffectBook.TraceCutFactor, now + seconds);
 
-        /// <summary>The effect of a fired package (or a RADAR BLIND / SAM NET DOWN perk, with the front <paramref name="quality"/> on radius and duration): area effects centred on the posted node point, against every other faction, for the package seconds (x1.5 EXPLOIT).</summary>
-        public static CyberEffect Package(in PackageDef def, int callId, float x, float z, int owner, bool exploit, float now, float quality = 1f)
+        /// <summary>
+        /// The effect of a fired package (or a RADAR BLIND / SAM NET DOWN perk, with the front <paramref name="power"/> on radius, duration and the depth of a jam): area effects centred on the posted node point, against every
+        /// other faction, for the package seconds (x1.5 EXPLOIT). <paramref name="durationBonus"/> is the room bonus on the length alone (SAM NET DOWN grows with the enemy nodes held).
+        /// </summary>
+        public static CyberEffect Package(in PackageDef def, int callId, float x, float z, int owner, bool exploit, float now, float power = 1f, float durationBonus = 1f)
         {
-            float seconds = (exploit ? def.Seconds * ExploitDurationFactor : def.Seconds) * quality;
-            return new CyberEffect(def.Effect, EffectSource.Package, callId, owner, 0, x, z, def.Radius * quality, 0u, def.Factor, now + seconds);
+            float seconds = (exploit ? def.Seconds * ExploitDurationFactor : def.Seconds) * power * durationBonus;
+            return new CyberEffect(def.Effect, EffectSource.Package, callId, owner, 0, x, z, def.Radius * power, 0u, PerkPower.JamFactor(def.Factor, power), now + seconds);
         }
     }
 }

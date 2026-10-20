@@ -21,6 +21,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         public NodeKind Kind;
         public float X, Z;
         public bool Held, Hopping, Exploit;
+        /// <summary>A node this faction holds whose owner is purging it right now (protocol 42): burn it or lose it.</summary>
+        public bool Purging;
+    }
+
+    /// <summary>An enemy hold on this faction's own network (protocol 42): what kind of node and where our unit stands.</summary>
+    internal struct CyberBreachRow
+    {
+        public NodeKind Kind;
+        public float X, Z;
     }
 
     internal struct CyberIntrusionRow
@@ -51,6 +60,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
     {
         public bool Active, DataCenterUp;
         public byte IntrusionCap, HeldTotal;
+        /// <summary>Our running PURGE lands at (0 = none) and the next may start at (0 = now).</summary>
+        public float PurgeEndsAt, PurgeReadyAt;
+        public readonly List<CyberBreachRow> Breaches = new List<CyberBreachRow>();
         public readonly List<CyberAnchorRow> Anchors = new List<CyberAnchorRow>();
         public readonly List<CyberNodeRow> Nodes = new List<CyberNodeRow>();
         public readonly List<CyberIntrusionRow> Intrusions = new List<CyberIntrusionRow>();
@@ -58,8 +70,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
 
         public override CyberStateData Clone()
         {
-            var c = new CyberStateData { Protocol = Protocol, Active = Active, DataCenterUp = DataCenterUp, Seq = Seq, Now = Now, IntrusionCap = IntrusionCap, HeldTotal = HeldTotal };
-            c.Anchors.AddRange(Anchors); c.Nodes.AddRange(Nodes); c.Events.AddRange(Events);
+            var c = new CyberStateData { Protocol = Protocol, Faction = Faction, Epoch = Epoch, Active = Active, DataCenterUp = DataCenterUp, Seq = Seq, Now = Now, IntrusionCap = IntrusionCap, HeldTotal = HeldTotal,
+                PurgeEndsAt = PurgeEndsAt, PurgeReadyAt = PurgeReadyAt };
+            c.Anchors.AddRange(Anchors); c.Nodes.AddRange(Nodes); c.Events.AddRange(Events); c.Breaches.AddRange(Breaches);
             foreach (CyberIntrusionRow x in Intrusions)
             {
                 CyberIntrusionRow y = x;
@@ -73,7 +86,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         public override bool SameAs(CyberStateData o)
         {
             if (o == null || Active != o.Active || DataCenterUp != o.DataCenterUp || IntrusionCap != o.IntrusionCap || HeldTotal != o.HeldTotal ||
-                Anchors.Count != o.Anchors.Count || Nodes.Count != o.Nodes.Count || Intrusions.Count != o.Intrusions.Count || Events.Count != o.Events.Count) return false;
+                Anchors.Count != o.Anchors.Count || Nodes.Count != o.Nodes.Count || Intrusions.Count != o.Intrusions.Count || Events.Count != o.Events.Count ||
+                Breaches.Count != o.Breaches.Count || !SpaceMirror.SameExpiry(PurgeEndsAt, o.PurgeEndsAt) || !SpaceMirror.SameExpiry(PurgeReadyAt, o.PurgeReadyAt)) return false;
+            for (int i = 0; i < Breaches.Count; i++)
+                if (Breaches[i].Kind != o.Breaches[i].Kind || !SpaceMirror.SamePoint(Breaches[i].X, o.Breaches[i].X) || !SpaceMirror.SamePoint(Breaches[i].Z, o.Breaches[i].Z)) return false;
             for (int i = 0; i < Anchors.Count; i++)
             {
                 CyberAnchorRow a = Anchors[i], b = o.Anchors[i];
@@ -83,7 +99,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             for (int i = 0; i < Nodes.Count; i++)
             {
                 CyberNodeRow a = Nodes[i], b = o.Nodes[i];
-                if (a.Id != b.Id || a.Kind != b.Kind || a.Held != b.Held || a.Hopping != b.Hopping || a.Exploit != b.Exploit ||
+                if (a.Id != b.Id || a.Kind != b.Kind || a.Held != b.Held || a.Hopping != b.Hopping || a.Exploit != b.Exploit || a.Purging != b.Purging ||
                     !SpaceMirror.SamePoint(a.X, b.X) || !SpaceMirror.SamePoint(a.Z, b.Z)) return false;
             }
             for (int i = 0; i < Intrusions.Count; i++)
@@ -100,22 +116,23 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         }
     }
 
-    /// <summary>Engine-free CYBER state codec (protocol 33). Every reader returns an inert value (Protocol 0 or the foreign byte alone) instead of throwing.</summary>
+    /// <summary>Engine-free CYBER state codec (protocol 33; defence rows protocol 42). Every reader returns an inert value (Protocol 0 or the foreign byte alone) instead of throwing.</summary>
     internal static class CyberWire
     {
-        public const int MaxAnchors = 4, MaxNodes = CyberGraph.MaxNodes, MaxIntrusions = CyberNetwork.MaxIntrusions, MaxHeld = CyberRules.MaxHeldPerIntrusion, MaxEvents = 3, MaxOperator = 16;
-        private const int MinNodeBytes = 8, MinAnchorBytes = 10, MinIntrusionBytes = 10, MinEventBytes = 4;
+        public const int MaxBreaches = CyberRules.MaxBreaches, MaxAnchors = 4, MaxNodes = CyberGraph.MaxNodes, MaxIntrusions = CyberNetwork.MaxIntrusions, MaxHeld = CyberRules.MaxHeldPerIntrusion, MaxEvents = 3, MaxOperator = 16;
+        private const int MinNodeBytes = 8, MinAnchorBytes = 10, MinIntrusionBytes = 10, MinEventBytes = 4, MinBreachBytes = 7;
         private const byte FlagActive = 1, FlagDataCenter = 2;
 
         public static void WriteState(ISpaceWriter w, CyberStateData s)
         {
             w.WriteByte(s.Protocol);
             w.WriteByte((byte)((s.Active ? FlagActive : 0) | (s.DataCenterUp ? FlagDataCenter : 0)));
-            SpaceWire.WriteVar(w, (uint)Math.Max(0, s.Seq));
-            SpaceWire.WriteFloat(w, s.Now);
+            s.WriteHeader(w);
             if (!s.Active) return;
             w.WriteByte(s.IntrusionCap);
             w.WriteByte(s.HeldTotal);
+            SpaceWire.WriteExpiry(w, s.PurgeEndsAt, s.Now);
+            SpaceWire.WriteExpiry(w, s.PurgeReadyAt, s.Now);
             int n = Math.Min(s.Anchors.Count, MaxAnchors);
             w.WriteByte((byte)n);
             for (int i = 0; i < n; i++)
@@ -132,7 +149,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             {
                 CyberNodeRow r = s.Nodes[i];
                 SpaceWire.WriteVar(w, (uint)Math.Max(0, r.Id));
-                w.WriteByte((byte)((int)r.Kind | (r.Held ? 8 : 0) | (r.Hopping ? 16 : 0) | (r.Exploit ? 32 : 0)));
+                w.WriteByte((byte)((int)r.Kind | (r.Held ? 8 : 0) | (r.Hopping ? 16 : 0) | (r.Exploit ? 32 : 0) | (r.Purging ? 64 : 0)));
                 SpaceWire.WriteCoordinate(w, r.X); SpaceWire.WriteCoordinate(w, r.Z);
             }
             n = Math.Min(s.Intrusions.Count, MaxIntrusions);
@@ -162,6 +179,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
                 w.WriteByte((byte)e.Reason);
                 SpaceWire.WriteVar(w, (uint)Math.Max(0, e.NodeId));
             }
+            n = Math.Min(s.Breaches.Count, MaxBreaches);
+            w.WriteByte((byte)n);
+            for (int i = 0; i < n; i++)
+            {
+                w.WriteByte((byte)s.Breaches[i].Kind);
+                SpaceWire.WriteCoordinate(w, s.Breaches[i].X); SpaceWire.WriteCoordinate(w, s.Breaches[i].Z);
+            }
         }
 
         public static CyberStateData ReadState(ISpaceReader r, byte protocol)
@@ -169,12 +193,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             if (!r.TryReadByte(out byte version)) return Bad();
             if (version != protocol) return new CyberStateData { Protocol = version };
             var s = new CyberStateData { Protocol = version };
-            if (!r.TryReadByte(out byte flags) || (flags & ~(FlagActive | FlagDataCenter)) != 0 || !SpaceWire.ReadInt(r, out int seq) ||
-                !SpaceWire.ReadFloat(r, out float now) || !SpaceRules.MissionTime(now)) return Bad();
-            s.Active = (flags & FlagActive) != 0; s.DataCenterUp = (flags & FlagDataCenter) != 0; s.Seq = seq; s.Now = now;
+            if (!r.TryReadByte(out byte flags) || (flags & ~(FlagActive | FlagDataCenter)) != 0 || !s.ReadHeader(r)) return Bad();
+            float now = s.Now;
+            s.Active = (flags & FlagActive) != 0; s.DataCenterUp = (flags & FlagDataCenter) != 0;
             if (!s.Active) return s;
             if (!r.TryReadByte(out s.IntrusionCap) || s.IntrusionCap > MaxIntrusions || !r.TryReadByte(out s.HeldTotal) || s.HeldTotal > CyberRules.MaxHeldPerFaction ||
+                !SpaceWire.ReadExpiry(r, now, out float purgeEnds) || !SpaceWire.ReadExpiry(r, now, out float purgeReady) ||
                 !r.TryReadByte(out byte n) || n > MaxAnchors || r.Remaining < n * MinAnchorBytes) return Bad();
+            s.PurgeEndsAt = purgeEnds <= now ? 0f : purgeEnds; s.PurgeReadyAt = purgeReady <= now ? 0f : purgeReady;
             for (int i = 0; i < n; i++)
             {
                 if (!r.TryReadByte(out byte bits) || (bits & ~7) != 0 || (bits & 1) > (int)AnchorKind.DataCenter || (bits >> 1) > (int)AnchorHealth.Down ||
@@ -186,9 +212,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             if (!r.TryReadByte(out n) || n > MaxNodes || r.Remaining < n * MinNodeBytes) return Bad();
             for (int i = 0; i < n; i++)
             {
-                if (!SpaceWire.ReadInt(r, out int id) || id <= 0 || !r.TryReadByte(out byte bits) || (bits & ~63) != 0 || (bits & 7) > (int)NodeKind.DataCenter ||
+                if (!SpaceWire.ReadInt(r, out int id) || id <= 0 || !r.TryReadByte(out byte bits) || (bits & ~127) != 0 || (bits & 7) > (int)NodeKind.DataCenter ||
                     !SpaceWire.ReadCoordinate(r, out float x) || !SpaceWire.ReadCoordinate(r, out float z)) return Bad();
-                s.Nodes.Add(new CyberNodeRow { Id = id, Kind = (NodeKind)(bits & 7), Held = (bits & 8) != 0, Hopping = (bits & 16) != 0, Exploit = (bits & 32) != 0, X = x, Z = z });
+                s.Nodes.Add(new CyberNodeRow { Id = id, Kind = (NodeKind)(bits & 7), Held = (bits & 8) != 0, Hopping = (bits & 16) != 0, Exploit = (bits & 32) != 0, Purging = (bits & 64) != 0, X = x, Z = z });
             }
             if (!r.TryReadByte(out n) || n > MaxIntrusions || r.Remaining < n * MinIntrusionBytes) return Bad();
             for (int i = 0; i < n; i++)
@@ -208,9 +234,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             for (int i = 0; i < n; i++)
             {
                 if (!SpaceWire.ReadInt(r, out int seq2) || !r.TryReadByte(out byte bits) || (bits & 7) < (int)CyberEventKind.HopStarted || (bits & 7) > (int)CyberEventKind.Traced ||
-                    ((bits >> 3) & 7) > (int)NodeKind.DataCenter || (bits & 128) != 0 || !r.TryReadByte(out byte reason) || reason > (byte)IntrusionEnd.Scene ||
+                    ((bits >> 3) & 7) > (int)NodeKind.DataCenter || (bits & 128) != 0 || !r.TryReadByte(out byte reason) || reason > (byte)IntrusionEnd.Purged ||
                     !SpaceWire.ReadInt(r, out int nodeId)) return Bad();
                 s.Events.Add(new CyberEventRow { Seq = seq2, Kind = (CyberEventKind)(bits & 7), Node = (NodeKind)((bits >> 3) & 7), Own = (bits & 64) != 0, Reason = (IntrusionEnd)reason, NodeId = nodeId });
+            }
+            if (!r.TryReadByte(out n) || n > MaxBreaches || r.Remaining < n * MinBreachBytes) return Bad();
+            for (int i = 0; i < n; i++)
+            {
+                if (!r.TryReadByte(out byte kind) || kind > (byte)NodeKind.DataCenter || !SpaceWire.ReadCoordinate(r, out float bx) || !SpaceWire.ReadCoordinate(r, out float bz)) return Bad();
+                s.Breaches.Add(new CyberBreachRow { Kind = (NodeKind)kind, X = bx, Z = bz });
             }
             return s;
         }
@@ -222,16 +254,18 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
     internal sealed class CyberMirror : FactionMirror<CyberStateData>
     {
         protected override bool Bounds(CyberStateData d) =>
-            d.Anchors.Count <= CyberWire.MaxAnchors && d.Nodes.Count <= CyberWire.MaxNodes && d.Intrusions.Count <= CyberWire.MaxIntrusions && d.Events.Count <= CyberWire.MaxEvents;
+            d.Anchors.Count <= CyberWire.MaxAnchors && d.Nodes.Count <= CyberWire.MaxNodes && d.Intrusions.Count <= CyberWire.MaxIntrusions && d.Events.Count <= CyberWire.MaxEvents && d.Breaches.Count <= CyberWire.MaxBreaches;
 
         protected override CyberStateData Shift(CyberStateData d, float offset, float clientNow)
         {
             var copy = new CyberStateData { Protocol = d.Protocol, Active = d.Active, DataCenterUp = d.DataCenterUp, Seq = d.Seq, Now = clientNow,
-                IntrusionCap = d.IntrusionCap, HeldTotal = d.HeldTotal };
+                IntrusionCap = d.IntrusionCap, HeldTotal = d.HeldTotal,
+                PurgeEndsAt = d.PurgeEndsAt > 0f ? d.PurgeEndsAt + offset : 0f, PurgeReadyAt = d.PurgeReadyAt > 0f ? d.PurgeReadyAt + offset : 0f };
             for (int i = 0; i < d.Anchors.Count; i++) { CyberAnchorRow a = d.Anchors[i]; if (a.LockUntil > 0f) a.LockUntil += offset; copy.Anchors.Add(a); }
             copy.Nodes.AddRange(d.Nodes);
             for (int i = 0; i < d.Intrusions.Count; i++) { CyberIntrusionRow x = d.Intrusions[i]; if (x.HopTarget != 0 && x.HopEndsAt > 0f) x.HopEndsAt += offset; copy.Intrusions.Add(x); }
             copy.Events.AddRange(d.Events);
+            copy.Breaches.AddRange(d.Breaches);
             return copy;
         }
 

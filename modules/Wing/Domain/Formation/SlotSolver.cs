@@ -55,6 +55,14 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// <summary>Level at once (a new wing).</summary>
         public void ResetStack() => StackOffset = StackNow = 0f;
 
+        /// <summary>A new shape flies as drawn: no mirror from a crossover, none half done, no turn counted toward the next.</summary>
+        public void ResetShape()
+        {
+            mirror = 1f;
+            crossTime = -1f;
+            turnAccum = 0f;
+        }
+
         private const int N = FormationCatalog.MaxSlots;
         private float compress = 1f, compressRate;
         private readonly float[] frameBank = new float[N];

@@ -85,7 +85,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
 
         // "Universal Render Pipeline/Unlit" made with new Material() is opaque: switch it to additive transparent so the
         // beam blends over the scene and fades to nothing instead of staying full brightness and popping off.
-        private static void MakeAdditive(Material m)
+        internal static void MakeAdditive(Material m)
         {
             if (!m.shader.name.StartsWith("Universal Render Pipeline", System.StringComparison.Ordinal)) return;
             m.SetFloat("_Surface", 1f);

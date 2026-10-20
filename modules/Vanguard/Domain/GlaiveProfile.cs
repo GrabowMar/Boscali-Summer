@@ -24,7 +24,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const float Reach = 350f;              // gun engages ground units within this of the centre
         public const float GunRange = 900f;
         public const float RetireHeight = 35f;
-        public const float Endurance = 150f;          // seconds on station
+        public const float Endurance = 210f;          // seconds on station
         public const float ShotInterval = .2f;
         public const float BurstPeriod = 3f;
         public const float BurstLength = 1f;

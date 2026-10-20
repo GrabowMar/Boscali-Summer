@@ -32,6 +32,7 @@ public static class CinematicConsolePreview
             AvFxDriver.Configure(AvFxTier.Off, false); AvStyleHost.SetTheme(AvThemeId.Steel);
             new GameObject("Events", typeof(EventSystem));
             CheckSweptClearance();
+            CameraRigPreview.Run();
             var canvas = new GameObject("Canvas", typeof(Canvas)).GetComponent<Canvas>();
             canvas.renderMode = RenderMode.WorldSpace;
             ((RectTransform)canvas.transform).sizeDelta = new Vector2(1920, 1080);
@@ -67,7 +68,7 @@ public static class CinematicConsolePreview
             Save(camera,target,"cinematic-overlay",new Rect(0,0,1920,1080));
             overlay.Paint(film,0);Save(camera,target,"cinematic-fade",new Rect(0,0,1920,1080));
             camera.targetTexture=null;Object.DestroyImmediate(target);
-            result = "PASS: three real editor pages and cinematic letterbox/title/fade overlays rendered; text floor/overflow/scroll and input transparency checked. Native PhysX grazing regression passes. Director/game/time/input live behavior remains unverified.";
+            result = "PASS: heading chase and fixed tracking rigs verified through native Unity projection at landscape/portrait aspects; three real editor pages and cinematic letterbox/title/fade overlays rendered; text floor/overflow/scroll and input transparency checked. Native PhysX grazing regression passes. Director/game/time/input live behavior remains unverified.";
         }
         catch (Exception e) { result = "FAIL: " + e; }
         File.WriteAllText("result.txt", result);

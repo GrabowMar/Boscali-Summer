@@ -3,10 +3,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.5-alpha"><img src="https://img.shields.io/badge/release-0.2.5_alpha-f0b56e?style=flat-square&labelColor=0b1b23" alt="Release 0.2.5 alpha"></a>
+  <a href="https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.6.2-alpha"><img src="https://img.shields.io/badge/release-0.2.6.2_alpha-f0b56e?style=flat-square&labelColor=0b1b23" alt="Release 0.2.6.2 alpha"></a>
   <img src="https://img.shields.io/badge/Nuclear_Option-0.34.2-7fd6cf?style=flat-square&labelColor=0b1b23" alt="Nuclear Option 0.34.2">
   <a href="https://github.com/BepInEx/BepInEx/releases"><img src="https://img.shields.io/badge/BepInEx-5.4.23%2B-7fd6cf?style=flat-square&labelColor=0b1b23" alt="BepInEx 5.4.23 or newer"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-8fb4b8?style=flat-square&labelColor=0b1b23" alt="MIT license"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-8fb4b8?style=flat-square&labelColor=0b1b23" alt="GPL-3.0 license"></a>
   <a href="#community"><img src="https://img.shields.io/badge/Discord-opening_soon-5865F2?style=flat-square&logo=discord&logoColor=white&labelColor=0b1b23" alt="Discord: opening soon"></a>
 </p>
 
@@ -24,6 +24,10 @@
   <a href="#first-flight">First flight</a> ·
   <a href="#troubleshooting">Troubleshooting</a> ·
   <a href="#community">Community</a>
+</p>
+
+<p align="center">
+  <a href="#screenshots"><img src="media/readme/hero.png" alt="Three FS-20 Vortex fighters low over the sea off Boscali at sunset, the sun's path burning on the water" width="100%"></a>
 </p>
 
 > *"All flights, Control. Weather is closing from the west, the front moved four klicks overnight and somebody is jamming the tower. Good morning, Boscali."*
@@ -89,7 +93,7 @@ Items marked 🧩 need [Blueprinter](https://github.com/nikkorap/NOBlueprinter-R
 
 ### 🎯 The visor
 
-- **TAC BOARD:** helmet-visor symbology for stores, countermeasures and cautions, with nine pages that appear when you need them: threats, shots, missile camera, approach, wing, strikes, refuelling, objectives, systems.
+- **TAC BOARD:** helmet-visor symbology for stores, countermeasures and cautions. Choose up to three information pages side by side: threats, shots, missile camera, approach, wing, strikes, refuelling, objectives, systems and cargo. Pages stay where you put them.
 - **C ring:** one key, ten categories of live actions. Keyboard, mouse or stick.
 - **Holo map and terrain ghost:** a standing hologram in the corner, and a wire relief of the ground showing through the cockpit.
 - **Fused night vision:** white phosphor with a thermal glow on hot units.
@@ -143,10 +147,18 @@ Cargo-launched systems need an aircraft with a compatible cargo bay. The [change
 
 <table>
 <tr>
-<td colspan="2"><a href="media/readme/formation.png"><img src="media/readme/formation.png" alt="Three FS-20 Vortex fighters in formation above mountains and broken cloud" width="100%"></a></td>
+<td colspan="2"><a href="media/readme/storm.png"><img src="media/readme/storm.png" alt="A three-ship of FS-20 Vortex fighters under the cloud base at dusk, a cumulonimbus tower and its anvil rising beside the low sun" width="100%"></a></td>
 </tr>
 <tr>
-<td colspan="2" align="center"><sub><b>Your wing</b> · three FS-20 Vortex over Boscali</sub></td>
+<td colspan="2" align="center"><sub><b>Storm season</b> · the wing under a cumulonimbus at dusk</sub></td>
+</tr>
+<tr>
+<td width="50%"><a href="media/readme/cloud-sea.png"><img src="media/readme/cloud-sea.png" alt="Three FS-20 Vortex fighters above a sea of cloud at sunset, contrails behind them"></a></td>
+<td width="50%"><a href="media/readme/sea-skim.png"><img src="media/readme/sea-skim.png" alt="An FS-20 Vortex skimming the sea at 14 metres toward the setting sun"></a></td>
+</tr>
+<tr>
+<td align="center"><sub><b>Above the deck</b> · a sea of cloud at sunset</sub></td>
+<td align="center"><sub><b>On the deck</b> · 14 m over the water, sun ahead</sub></td>
 </tr>
 <tr>
 <td width="50%"><a href="media/readme/cockpit.png"><img src="media/readme/cockpit.png" alt="FS-20 Vortex cockpit with the HUD and two wingmen ahead over broken cloud"></a></td>
@@ -181,10 +193,10 @@ Cargo-launched systems need an aircraft with a compatible cargo bay. The [change
 <td align="center"><sub><b>MET OFFICE</b> · the host's weather console</sub></td>
 </tr>
 <tr>
-<td colspan="2"><a href="media/readme/coast.png"><img src="media/readme/coast.png" alt="FS-20 Vortex above a coastal city under fair-weather cloud" width="100%"></a></td>
+<td colspan="2"><a href="media/readme/low-pass.png"><img src="media/readme/low-pass.png" alt="Side view of an FS-20 Vortex flying a few metres above a dark evening sea" width="100%"></a></td>
 </tr>
 <tr>
-<td colspan="2" align="center"><sub><b>Free Flight</b> · an FS-20 over the coastal city</sub></td>
+<td colspan="2" align="center"><sub><b>Low pass</b> · an FS-20 over the evening sea</sub></td>
 </tr>
 </table>
 
@@ -300,7 +312,7 @@ Not on the route: VR, missile physics or mid-mission saves. The game's developer
 **Then:**
 
 1. Install BepInEx into the game folder, start the game once so it creates its folders, and close it.
-2. Download **`BoscaliSummer-0.2.5.zip`** from the [release page](https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.5-alpha) and extract it into the game folder. You should end up with:
+2. Download **`BoscaliSummer-0.2.6.2.zip`** from the [release page](https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.6.2-alpha) and extract it into the game folder. You should end up with:
 
    ```text
    Nuclear Option/BepInEx/plugins/BoscaliSummer/BoscaliSummer.dll
@@ -335,17 +347,17 @@ Settings live in `BepInEx/config/com.marci.boscalisummer.cfg`. Modules depend on
 
 The TAC BOARD is the weapons, systems and warning display at the top of the screen: helmet-visor symbology with no panel behind it, spread wide along the top edge so it covers less of the sides. The classic narrow column is still there as the **STACK** layout. Its options are yours alone, apply at once and can be changed in flight, from whichever of these is handiest:
 
-- **SET → THIS PILOT → COCKPIT:** every option, in four groups. **Board**: on/off, layout (wide or stack), declutter level, size, position, opacity and shade. **Pages**: whether the board's page area shows pages at all, one switch per page (radar warning, shot, missile cam, approach, wing, strike, dock, objective, systems), how long a radar warning is held and the minimum time a page stays. **Blocks**: the lamp row, systems strip, gauge row and notice line. **Extras**: visor sway, restyling the kill feed and map, and **Reset to defaults**.
-- **C ring → HUD** (key 2, top right of the ring): every board switch. **Show/Hide TAC BOARD**, **Set HUD declutter** (full, lean, min), **Set board layout** (wide, stack), **Scope pages** (auto pages and each page), **Board parts** (lamps, systems strip, gauges, ticker, nav data, feed + map frame, visor sway), **Set shade**, **Set board size** and a held **Reset HUD**.
+- **SET → THIS PILOT → COCKPIT:** board on/off, layout, declutter, size, position, opacity, shade, manual page slots and major board parts.
+- **C ring → HUD** (key 2, top right of the ring): **Show/Hide TAC BOARD**, **Page 1 / 2 / 3**, **Display options**, **Board parts** and **Reset HUD**. Pick each slot's page manually; **Display options → Page count** chooses one, two or three simultaneous pages.
 - **F1:** the **TAC BOARD** switch only.
 - **Config file:** the same options under `[TacBoard]` in `com.marci.boscalisummer.cfg`.
 
 What each group does:
 
 - **Board.** **TAC BOARD** off hides the board and gives back the game's own weapon, countermeasure and power panels. **Layout** is wide or stack. **Size** runs from 60 % to 140 %, **move left** and **move down** slide the board away from the top-right corner (in units, a unit being a 1080p pixel), **opacity** fades the ink and **shade** sets the soft dark band behind it (0 % draws none, and a restyled kill feed then has no dark box either).
-- **Declutter.** Full shows everything the switches allow. Lean drops the gauge row, unlit lamps and captions, and shows the cruise systems strip only while something is wrong. Min keeps only the lock, spike and missile lamps and the pages that matter in a fight, and the strip only in a fire, engine out, bingo or lost structure.
-- **Pages.** Switch a page off and it never takes the page area and stops posting its notices, so leave the radar-warning page on unless you really want it gone. **RWR hold** is how many seconds the radar-warning page keeps a contact after its last warning, and **page min stay** how long a page (SYSTEMS excepted) holds the area once shown, so a flickering contact no longer makes the page pop on and off.
-- **Blocks.** The lamp row, the compact systems strip (it needs the SYSTEMS page and the pages set to auto), the gauge row and the notice line, each on or off.
+- **Declutter.** Full shows all enabled detail. Lean drops the gauge row, unlit lamps and captions, and shows supplementary systems status only while something is wrong. Min keeps threat lamps and critical supplementary status. Your manually selected pages stay available at every level.
+- **Pages.** One to three full pages sit side by side. Each slot keeps your choice even while its feed is idle; threats, approaches and damage never replace it. Selecting a page already in another visible slot swaps those slots. Alerts continue independently of the selected pages. **RWR hold** controls how long radar-warning contacts remain after their last warning.
+- **Board parts.** Six major switches: **Stores + power**, **Tactical pages**, **Aircraft status**, **Notices**, **Nav data** and **Map + feed**. Aircraft status controls its lamps, supplementary systems strip and gauges together. Hiding stores restores the native weapon, countermeasure and power panels.
 - **Extras.** **Visor sway** lets the symbols lag a little behind head movement, **restyle feed and map** draws the kill feed and the map frame in the board's look (it stays when the board is off), and **reset to defaults** puts every option back.
 
 </details>
@@ -475,6 +487,6 @@ Inside a module, `Domain/` holds game-independent logic (which is what the unit 
 ---
 
 <p align="center">
-  <sub><b>Boscali Summer</b> by GrabowMar · released under the <a href="LICENSE">MIT license</a></sub><br>
+  <sub><b>Boscali Summer</b> by GrabowMar · released under the <a href="LICENSE">GNU GPL v3</a> (versions up to 0.2.5 were MIT)</sub><br>
   <sub>An unofficial fan mod. Not affiliated with or endorsed by Shockfront Studios. Nuclear Option and its assets belong to their respective owners.</sub>
 </p>

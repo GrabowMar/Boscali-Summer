@@ -19,10 +19,10 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const float MinAgl = 300f;             // terrain floor under the glider
         public const float MaxDive = .2f, MaxClimb = .15f; // height change per metre flown: no overspeed, no stall
         public const float ClearSeconds = 2.5f;       // out of the hold: intangible and unsteered until then
-        public const float StationSeconds = 300f;     // counted from orbit entry
+        public const float StationSeconds = 420f;     // counted from orbit entry
         public const float HardCap = 900f;            // seconds after launch
         public const float DepartSeconds = 8f;        // straight leg before the quiet removal
-        public const float SpotRadius = 5000f;        // flat, around the orbit centre
+        public const float SpotRadius = 6500f;        // flat, around the orbit centre
         public const float SpotInterval = 2f;         // a spot stays fresh for 4 s
         public const int SpotCap = 48;                // units refreshed per pass
 

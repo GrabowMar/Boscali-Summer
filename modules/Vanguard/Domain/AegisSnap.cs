@@ -4,19 +4,19 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Vanguard.Domain
 {
     /// <summary>Outcome of one AEGIS trigger press. Busy = trigger held or station cycling: nothing judged, nothing shown.</summary>
-    internal enum SnapVerdict { Fire, Busy, Empty, Reserved, NoTarget, NotAir, OutOfRange, OffNose }
+    internal enum SnapVerdict { Fire, Busy, Empty, NoTarget, NotAir, OutOfRange, OffNose }
 
     /// <summary>
     /// AEGIS-3 "SNAP" (design/vanguard-remake/MECHANICS.md): a tap on the AEGIS station sends one dart at the locked
-    /// air unit inside 2.5 km and +-70 deg of the nose. The automatic missile defence keeps priority: with a threat
-    /// inbound the last dart is held for it.
+    /// air unit inside 2.5 km and +-70 deg of the nose. Manual only: nothing launches on its own, and the
+    /// last dart is the pilot''s call like any other.
     /// </summary>
     internal static class AegisSnap
     {
         public const float MaxRange = 2500f;
         public const float MaxOffNose = 70f;
         public const float Lifetime = 8f;          // snap dart
-        public const float DefenceLifetime = 6f;   // automatic missile-defence dart
+        public const float DefenceLifetime = 6f;   // a dart that left without a snap solution flies out its clock
         public const float DamageScale = 2f;       // snap contact damage vs the defence dart
         public const float HeldGap = .15f;         // trigger calls closer than this are one held press (tap to fire)
 
@@ -39,10 +39,9 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public static bool ServerAccepts(float range, float offNoseDeg) =>
             range <= MaxRange * RangeSlack && offNoseDeg <= MaxOffNose + AngleSlack;
 
-        public static SnapVerdict Judge(bool hasTarget, bool air, float range, float offNoseDeg, int ammo, bool threatInbound)
+        public static SnapVerdict Judge(bool hasTarget, bool air, float range, float offNoseDeg, int ammo)
         {
             if (ammo <= 0) return SnapVerdict.Empty;
-            if (ammo == 1 && threatInbound) return SnapVerdict.Reserved;
             if (!hasTarget) return SnapVerdict.NoTarget;
             if (!air) return SnapVerdict.NotAir;
             if (range > MaxRange) return SnapVerdict.OutOfRange;
@@ -56,7 +55,6 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
             switch (verdict)
             {
                 case SnapVerdict.Empty: return "NO DARTS LEFT";
-                case SnapVerdict.Reserved: return "LAST DART HELD FOR DEFENCE";
                 case SnapVerdict.NoTarget: return "NO LOCKED TARGET";
                 case SnapVerdict.NotAir: return "AIR TARGETS ONLY";
                 case SnapVerdict.OutOfRange: return "RANGE " + Km(range) + " km > 2.5";

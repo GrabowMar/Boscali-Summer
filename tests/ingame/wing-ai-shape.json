@@ -1,0 +1,196 @@
+{
+  "name": "wing-ai-shape",
+  "_notes": "Wing AI fix 2026-10-19 (FormationWing.SetFormation -> SlotSolver.ResetShape): #2 in COMBAT SPREAD (160 m right at Standard spacing) crosses over when the lead turns 90 deg right (toward its wide side), then the wing is ordered ECHELON RIGHT. Before the fix the crossover's mirror stayed and ECHELON RIGHT flew on the left.",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 400,
+  "environment": {
+    "config": {
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
+        }
+      },
+      "boscalisummer": {
+        "Trenches": {
+          "Enabled": false
+        },
+        "TheaterOps": {
+          "Enabled": false
+        },
+        "Events": {
+          "Enabled": false
+        },
+        "Garrisons": {
+          "Enabled": false
+        },
+        "DynamicOperations": {
+          "Enabled": false
+        },
+        "Debug": {
+          "WingVerboseLogging": true
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "map": [
+          10000,
+          -45000
+        ]
+      },
+      "altitude": 7000,
+      "speed": 220,
+      "heading": 90
+    },
+    {
+      "op": "record",
+      "ids": [
+        "*"
+      ],
+      "hz": 2
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "level": 60
+        },
+        {
+          "turn": {
+            "heading": 180,
+            "bank": 45
+          }
+        },
+        {
+          "level": 600
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Call",
+      "store": "call",
+      "args": {
+        "lead": "lead",
+        "count": 1,
+        "shape": "combat-spread"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 25
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.Automation.Members",
+      "store": "members"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "formed"
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "spread"
+    },
+    {
+      "op": "wait",
+      "seconds": 70
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "crossed"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Order",
+      "store": "shape",
+      "args": {
+        "verb": "shape",
+        "shape": "echelon-right"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "echelon"
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "echelon2"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "alive",
+      "ids": [
+        "lead"
+      ]
+    },
+    {
+      "check": "log_match",
+      "pattern": "\\[Wing\\] tick step \\d+ failed",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "spread.members.w2.slotLateral",
+      "min": 100
+    },
+    {
+      "check": "result_below",
+      "path": "crossed.members.w2.slotLateral",
+      "max": -100
+    },
+    {
+      "check": "result_above",
+      "path": "shape.accepted",
+      "min": 1
+    },
+    {
+      "check": "result_above",
+      "path": "echelon.members.w2.slotLateral",
+      "min": 40
+    },
+    {
+      "check": "result_above",
+      "path": "echelon2.members.w2.right",
+      "min": 20
+    }
+  ]
+}

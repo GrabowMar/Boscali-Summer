@@ -2,6 +2,7 @@ using System;
 using BoscaliSummer.Modules.Weather.Networking;
 using BoscaliSummer.Modules.Weather.Presentation;
 using BoscaliSummer.Modules.Weather.Runtime;
+using BoscaliSummer.Modules.Weather.Visuals;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Weather.Configuration;
 using BoscaliSummer.Core.Modules;
@@ -37,6 +38,10 @@ namespace BoscaliSummer.Modules.Weather
             WeatherMfdPanel panel = context.AddSceneService<WeatherMfdPanel>(65);
             panel.Configure(context.Settings.Weather, manager, context.Logger);
 
+            OceanDressing ocean = context.AddSceneService<OceanDressing>(66);
+            ocean.Configure(context.Settings.Weather, manager, context.Logger);
+            context.AddClientEffect(ocean);
+
             context.AddClientSetting("RAIN VISUALS", "RAIN FX MASTER",
                 "Stop falling-rain particles, canopy effects and rain haze. Terrain wetness has its own switch. " +
                 "Applies now; no mission or game restart.",
@@ -63,6 +68,16 @@ namespace BoscaliSummer.Modules.Weather
             context.AddClientSetting("SKY", "SUN SHAFTS",
                 "Beams of light around the sun, cut by clouds, terrain and aircraft. Client-local; applies now.",
                 context.Settings.Weather.SunShaftsEnabled, ClientPreset.Light);
+            context.AddClientSetting("SKY", "AURORA & SPRITES",
+                "Aurora on clear nights; red sprites and blue jets above distant night storms. Client-local; applies now.",
+                context.Settings.Weather.SkyPhenomenaEnabled, ClientPreset.Light);
+            context.AddClientSetting("SEA", "OCEAN WAVES",
+                "Waves that follow the wind and build under storms, with whitecaps, gale streaks and surf. " +
+                "Off restores the game's own water. Client-local; applies now.",
+                context.Settings.Weather.OceanWavesEnabled, ClientPreset.Light);
+            context.AddClientSetting("SEA", "SEA SPRAY",
+                "Spray behind aircraft flying low and fast over water. Client-local; applies now.",
+                context.Settings.Weather.SeaSprayEnabled);
 
             WeatherSettings weather = context.Settings.Weather;
             context.AddHostSettings(new HostSettingsTable("WEATHER", HostSettingsPage.Effects)

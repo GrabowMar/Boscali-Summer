@@ -213,10 +213,20 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return false;
         }
 
-        /// <summary>A field's row status: OFF, NO JETS (a carrier for a jet), READY (a hangar can spawn it), else APRON (a
-        /// service-point spawn).</summary>
+        /// <summary>A field's row status: OFF, NO JETS (a carrier for a jet), SHORT (its departure runway is shorter than the airframe
+        /// needs at full fuel, <see cref="TakeoffRuns"/>), READY (a hangar can spawn it), else APRON (a service-point spawn).</summary>
         public static string Status(Airbase f, AircraftDefinition d) =>
-            !IsOn(f) ? "OFF" : IsJet(d) && f.AttachedAirbase ? "NO JETS" : d != null && HangarReady(f, d) ? "READY" : "APRON";
+            !IsOn(f) ? "OFF" : IsJet(d) && f.AttachedAirbase ? "NO JETS" : d != null && TakeoffRuns.Short(d.unitName, RunwayOf(f)) ? "SHORT"
+            : d != null && HangarReady(f, d) ? "READY" : "APRON";
+
+        /// <summary>The length of the runway Wing departs from there (the first usable for takeoff, as FieldTraffic picks it); 0: none.</summary>
+        public static float RunwayOf(Airbase f)
+        {
+            if (f == null || f.runways == null) return 0f;
+            foreach (Airbase.Runway r in f.runways)
+                if (r != null && r.Takeoff) return r.Length;
+            return 0f;
+        }
 
         public static AircraftDefinition FindAirframe(string key)
         {

@@ -16,11 +16,18 @@ namespace BoscaliSummer.Core.Fx
 
         public static void Pop(Vector3 globalLanding, float seconds)
         {
-            Material mat = SmokeFx.Puff;
-            if (Datum.origin == null || mat == null) return;
-            seconds = Mathf.Max(1f, seconds);
+            Create(globalLanding, Mathf.Max(1f, seconds), false);
+        }
 
-            var go = new GameObject("BoscaliSummer.LandingSmoke");
+        /// <summary>A single selected-zone plume. Its owner removes it when the zone changes or clears.</summary>
+        public static GameObject Mark(Vector3 globalLanding) => Create(globalLanding, 5f, true);
+
+        private static GameObject Create(Vector3 globalLanding, float seconds, bool persistent)
+        {
+            Material mat = SmokeFx.Puff;
+            if (Datum.origin == null || mat == null) return null;
+
+            var go = new GameObject(persistent ? "BoscaliSummer.LandingZoneSmoke" : "BoscaliSummer.LandingSmoke");
             go.SetActive(false);
             go.transform.SetParent(Datum.origin, false);
             go.transform.position = new GlobalPosition(globalLanding.x, globalLanding.y, globalLanding.z).ToLocalPosition();
@@ -30,7 +37,7 @@ namespace BoscaliSummer.Core.Fx
             ParticleSystem particles = go.AddComponent<ParticleSystem>();
             var main = particles.main;
             main.playOnAwake = false;
-            main.loop = false;
+            main.loop = persistent;
             main.duration = seconds;
             // Once the window has ended and the last puff has faded, the system removes its own object.
             main.stopAction = ParticleSystemStopAction.Destroy;
@@ -49,8 +56,9 @@ namespace BoscaliSummer.Core.Fx
 
             var emission = particles.emission;
             // Full rate for most of the window, then tapering so the plume thins rather than stopping dead.
-            emission.rateOverTime = new ParticleSystem.MinMaxCurve(PuffsPerSecond, new AnimationCurve(
-                new Keyframe(0f, 1f), new Keyframe(0.8f, 1f), new Keyframe(1f, 0f)));
+            emission.rateOverTime = persistent ? new ParticleSystem.MinMaxCurve(PuffsPerSecond) :
+                new ParticleSystem.MinMaxCurve(PuffsPerSecond, new AnimationCurve(
+                    new Keyframe(0f, 1f), new Keyframe(0.8f, 1f), new Keyframe(1f, 0f)));
 
             var shape = particles.shape;
             shape.shapeType = ParticleSystemShapeType.Cone;
@@ -80,7 +88,8 @@ namespace BoscaliSummer.Core.Fx
             go.SetActive(true);
             particles.Play(true);
             // Safety net in case the stop action never fires.
-            Object.Destroy(go, seconds + 12f);
+            if (!persistent) Object.Destroy(go, seconds + 12f);
+            return go;
         }
     }
 }

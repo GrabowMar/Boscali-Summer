@@ -29,15 +29,7 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.That(DecoyRoute.Outbound(79000f) && !DecoyRoute.Outbound(81000f), "route length is 80 km");
             TestAssert.That(Mathf.Abs(DecoyRoute.Lateral(0f)) <= DecoyRoute.WeaveAmplitude, "weave stays inside its amplitude");
 
-            var picker = new InterceptPicker();
-            var threats = new List<ThreatView> { new ThreatView(1, 700f, 300f), new ThreatView(2, 800f, 700f),
-                new ThreatView(3, 900f, -50f), new ThreatView(4, 90f, 900f), new ThreatView(5, 2500f, 900f) };
-            // Pick answers with the index into the list (ids 1..5 sit at 0..4): a runtime missile's instance id is negative.
-            TestAssert.That(picker.Pick(0f, threats) == 1, "soonest impact in the close-range reaction envelope wins");
-            picker.Fired(0f, 2);
-            TestAssert.That(picker.Pick(2f, threats) == -1, "cooldown holds the next shot");
-            TestAssert.That(picker.Pick(4f, threats) == 0, "an engaged threat is not double-tapped");
-            TestAssert.That(picker.Pick(9f, threats) == 1, "a survivor is re-engaged after the memory lapses");
+            TestAssert.That(VanguardKeys.IsSteerable(VanguardRole.Decoy) && VanguardKeys.IsSteerable(VanguardRole.Jammer) && VanguardKeys.IsSteerable(VanguardRole.Drone) && VanguardKeys.IsSteerable(VanguardRole.Glider) && VanguardKeys.IsSteerable(VanguardRole.Sentinel) && VanguardKeys.IsSteerable(VanguardRole.Gunship) && VanguardKeys.IsSteerable(VanguardRole.Scout) && VanguardKeys.IsSteerable(VanguardRole.Lander) && !VanguardKeys.IsSteerable(VanguardRole.Interceptor) && !VanguardKeys.IsSteerable(VanguardRole.Torpedo) && !VanguardKeys.IsSteerable(VanguardRole.Towed), "hand-steerable: every Vanguard flight but AEGIS darts, ORCA and the ALE-X kite");
             TestAssert.That(AegisEnvelope.Contact(new Vector3(1,0,0),new Vector3(-1,0,0),.2f) &&
                 !AegisEnvelope.Contact(new Vector3(1,1,0),new Vector3(-1,1,0),.2f),
                 "swept contact catches a real high-speed hit and rejects a nearby miss");

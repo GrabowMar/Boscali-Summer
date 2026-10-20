@@ -76,10 +76,12 @@ public static class InteractionMenuUnityCheck
         F("pad-comms", MenuWorlds.Default, r => { r.PadY(true); r.Adv(0.2f); r.Stick(0.309f, 0.951f); r.Time += 1.05f; r.Stick(0.309f, 0.951f); r.Stick(0f, 0f); r.Time += 0.2f; r.Stick(1f, 0f); }, One),
         F("support-perks", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(7); for (int i = 0; i < 4; i++) r.Down(); r.Enter(); r.Down(); }, One),
         F("view-missile", MenuWorlds.Missile, r => { r.HoldOpen(); FlickTo(r, 270f, 0.87f); r.ToRow("view/mslnext"); r.Adv(0.1f); }, One),
-        // VIEW: the TAC BOARD rows under the camera rows, HUD DECLUTTER focused; then the board hidden: SHOW TAC BOARD focused, the two look rows dimmed with their reason
-        F("view-board", MenuWorlds.Default, r => { r.HoldOpen(); FlickTo(r, 54f, 0.87f); r.ToRow("hud/declutter", 0.95f); r.Adv(0.1f); }, Three),
+        // HUD: direct manual page slots, major board elements and the display options.
+        F("view-board", MenuWorlds.ThreeBoardPages, r => { r.HoldOpen(); FlickTo(r, 54f, 0.87f); r.ToRow("hud/page1", 0.95f); r.Adv(0.1f); }, Three),
         F("view-board-off", MenuWorlds.BoardOff, r => { r.HoldOpen(); FlickTo(r, 54f, 0.87f); r.ToRow("hud/board", 0.95f); r.Adv(0.1f); }, One),
-        F("hud-pages", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(2); r.ToRow("hud/pages"); r.Click(); r.ToRow("hud/pages/dock"); r.Adv(0.1f); }, One),
+        F("hud-pages", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(2); r.ToRow("hud/page1"); r.Click(); r.ToRow("hud/page1/dock"); r.Adv(0.1f); }, One),
+        F("hud-display", MenuWorlds.ThreeBoardPages, r => { r.LatchOpen(); r.PressDigit(2); r.ToRow("hud/display"); r.Click(); r.ToRow("hud/count"); r.Adv(0.1f); }, One),
+        F("hud-parts", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(2); r.ToRow("hud/parts"); r.Click(); r.ToRow("hud/parts/status"); r.Adv(0.1f); }, One),
         F("cockpit", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(6); r.ToRow("cockpit/receiver"); r.Adv(0.1f); }, Three),
         F("cockpit-feel", MenuWorlds.Default, r => { r.LatchOpen(); r.PressDigit(6); r.ToRow("cockpit/feel"); r.Click(); r.ToRow("cockpit/feel/visor"); r.Adv(0.1f); }, One),
         F("ground-flight", MenuWorlds.Ground, r => { r.LatchOpen(); r.PressDigit(3); r.Down(); }, One),

@@ -25,6 +25,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         /// <summary>A recovery asked for while it could not turn round (lining up, rolling): it starts once airborne.</summary>
         public RecoveryIntent PendingRecovery;
         public bool HasPendingRecovery, ReserveNow;
+        /// <summary>Has been airborne with the wing (joined in the air, or off the field): only then is coming home a sortie.</summary>
+        public bool Flew;
         public readonly BingoMonitor Bingo = new BingoMonitor();
         public float BingoClock, BingoFieldAt;
         /// <summary>Diagnostics: when the member last came to a stop on the ground, and whether that stop was logged.</summary>

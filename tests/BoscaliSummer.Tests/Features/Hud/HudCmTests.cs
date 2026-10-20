@@ -36,6 +36,27 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.That(HudCm.Counters(jammer, "SARH"), "A jammer answers radar seekers too");
             foreach (string seeker in new[] { "ARAD", "Laser", "Optical", "INS", "INS / Opt.", "", null })
                 TestAssert.That(!HudCm.Counters(flares, seeker) && !HudCm.Counters(chaff, seeker), "Nothing on the board counters " + (seeker ?? "null"));
+            CycleOrder();
+        }
+
+        /// <summary>The board's rows follow the game's Next Countermeasure cycle: its own stations in its order, anything it does not list (the mod's chaff) after them.</summary>
+        private static void CycleOrder()
+        {
+            string[] cycle = { "IR Flares", "Radar Jammer", null, null };
+            TestAssert.Eq(HudCm.CycleRank("IR Flares", cycle, 2), 0, "Flares are the cycle's first stop");
+            TestAssert.Eq(HudCm.CycleRank("Radar Jammer", cycle, 2), 1, "The jammer its second");
+            TestAssert.Eq(HudCm.CycleRank("Chaff", cycle, 2), 2, "Chaff is not in the game's list: after every listed station");
+            TestAssert.Eq(HudCm.CycleRank("IR Flares", cycle, 0), 0, "With no list readable everything ties");
+
+            // Scanned by name: Chaff, IR Flares, Radar Jammer. Cycle order: flares, jammer, chaff.
+            string[] scanned = { "Chaff", "IR Flares", "Radar Jammer" };
+            int[] rank = new int[4], order = new int[4];
+            for (int i = 0; i < scanned.Length; i++) rank[i] = HudCm.CycleRank(scanned[i], cycle, 2);
+            HudCm.CycleOrder(rank, scanned.Length, order);
+            TestAssert.That(scanned[order[0]] == "IR Flares" && scanned[order[1]] == "Radar Jammer" && scanned[order[2]] == "Chaff", "Rows read FLR, JAM, CHF: the order the key steps");
+            rank[0] = rank[1] = rank[2] = 0;
+            HudCm.CycleOrder(rank, 3, order);
+            TestAssert.That(order[0] == 0 && order[1] == 1 && order[2] == 2, "Ties keep the scan's order");
         }
     }
 }

@@ -21,11 +21,15 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         void Hop(int nodeId);
         void Burn(int nodeId);
         void Drop(int nodeId);
+        /// <summary>Purges every enemy hold on our own network (after a countdown; the host judges cost and cooldown).</summary>
+        void Purge();
         // SHADOW room. Verbs: 0 PUSH, 1 HOLD, 2 EXFIL, 3 LIFT; missions are the MissionKind byte.
         void SelectTeam(int slot);
         void SelectTarget(int targetId);
         void TeamOrder(int slot, int verb);
         void TeamMission(int slot, int missionKind, int targetId);
+        /// <summary>Sends a QRF against every hostile team detected near our sites (the host judges cost and cooldown).</summary>
+        void Sweep();
         /// <summary>Any real operator input (keeps the idle clock).</summary>
         void Touch();
         /// <summary>Asks for one of our satellites (a BirdKind) to burn to a new parked point (map u,v in 0..1). The host validates fuel and range.</summary>
@@ -41,5 +45,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         void Paint(FrontRoomView v);
         /// <summary>One frame of pointer input over the room's map (wheel zoom, drag pan); true when the room must repaint.</summary>
         bool Tick(UnityEngine.Vector2 mouse);
+        /// <summary>Esc: ends a local mode the room is in (a relocation proposal) and returns true, so the window stays open; false when there is nothing to end.</summary>
+        bool CancelMode();
     }
 }

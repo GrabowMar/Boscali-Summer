@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using BepInEx.Configuration;
 using BepInEx.Logging;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
@@ -21,16 +23,20 @@ namespace BoscaliSummer.Modules.Support.Presentation
     internal enum OpsTab : byte { Fronts = 1, Perks = 2, Tasked = 3 }
 
     /// <summary>
-    /// The OPS bezel page, in the shared console frame every other MFD panel wears (<see cref="AvConsole"/>): header, four metrics, two icon
-    /// tabs and the footer that carries the page's words and the hover help. FRONTS shows the three fronts as cards with an OPEN button each
-    /// (the windows are <see cref="FrontController"/>'s); PERKS lists the pilot's perks by front with ARM / FIRE, the ORDER row and four quick
-    /// keys; TASKED lists the faction's posted strikes with CLAIM / FIRE and steers the pilot's flying cruise. Keys 1-3 switch tabs only while the pointer is over the page. The panel owns no policy: every figure comes from
-    /// <see cref="SupportManager"/> and every press goes through <see cref="CallsController"/> or <see cref="FrontController"/>.
+    /// The OPS bezel page, in the shared console frame every other MFD panel wears (<see cref="AvConsole"/>): header, four metrics, three icon
+    /// tabs and the footer that carries the page's words and the hover help. FRONTS shows the three fronts as cards (status stamp, blocker,
+    /// readiness, superiority, your support, programme phase) with an OPEN button each (the windows are <see cref="FrontController"/>'s);
+    /// PERKS lists the pilot's perks by front as call cards and TASKED the faction's posted strikes as package cards: clicking a card only
+    /// inspects it. A strip pinned under the tabs (outside the scroller) shows the inspected or armed perk or package and carries ARM / FIRE /
+    /// DISARM, so those never scroll away; the quick keys and the cruise block (ADD LEG, CANCEL PICK, CLEAR ROUTE) sit in the pages. Keys 1-3
+    /// switch tabs only while the pointer is over the page, and never a key a favourite is bound to. The panel owns no policy: every figure
+    /// comes from <see cref="SupportManager"/> and every press goes through <see cref="CallsController"/> or <see cref="FrontController"/>.
     /// </summary>
     internal sealed class CallsPanel : MonoBehaviour, ISceneService
     {
         private const float Width = AvTokens.PanelWidth;
         private const float RefreshInterval = 0.2f;
+        private static readonly string[] PageTitles = { "FRONTS / FACTION STRATEGY", "PERKS / YOUR SUPPORT", "TASKED / FACTION STRIKE PACKAGES" };
 
         private readonly OpsPageView view = new OpsPageView();
         private readonly List<CallTile> tiles = new List<CallTile>(16);
@@ -48,24 +54,24 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private AvMetric[] metrics;
         private readonly FrontCardPart[] cards = new FrontCardPart[FrontRules.FrontCount];
         private readonly Dictionary<SupportActionId, PerkRowPart> perkRows = new Dictionary<SupportActionId, PerkRowPart>(16);
-        private AvRow order;
-        private AvControl execute, abort;
+        private OrderStrip strip;
+        private CruisePart cruisePart;
         private readonly AvControl[] quick = new AvControl[OpsPageView.FavouriteSlots];
         private AvSection[] groups;
         private AvSection taskedGroup;
-        private readonly PerkRowPart[] taskedRows = new PerkRowPart[OpsPageView.MaxTaskedRows];
-        private readonly int[] taskedIds = new int[OpsPageView.MaxTaskedRows];
-        private AvRow cruise, route, taskedOrder;
-        private AvControl steer, taskedFire, taskedAbort;
-        private int taskedArmed;
+        private readonly TaskedCardPart[] taskedRows = new TaskedCardPart[OpsPageView.MaxTaskedRows];
+        private readonly int[] readyByFront = new int[FrontRules.FrontCount];
         private OpsTab tab = OpsTab.Fronts;
+
+        // Local inspection state: which perk and which post the strip shows. Inspecting never arms, spends or claims.
+        private SupportActionId? inspectedPerk, lastArmed;
+        private int inspectedPost, lastArmedPost;
 
         private float nextRefresh, failedUntil;
         private bool refreshFaulted;
         private Canvas pageCanvas;
         private int aimCellX = int.MinValue, aimCellZ;
         private string aimGrid = "";
-        private SupportActionId armedId;
 
         public void Configure(SupportManager supportManager, CallsController callsController, FrontController frontController, SpaceFeedController feedController)
         {
@@ -82,13 +88,15 @@ namespace BoscaliSummer.Modules.Support.Presentation
             installer.Reset();
             console = null;
             metrics = null;
-            order = null; execute = abort = null; groups = null;
-            taskedGroup = null; cruise = route = taskedOrder = null; steer = taskedFire = taskedAbort = null; taskedArmed = 0;
-            for (int i = 0; i < taskedRows.Length; i++) { taskedRows[i] = null; taskedIds[i] = 0; }
+            groups = null; strip = null; cruisePart = null;
+            taskedGroup = null;
+            for (int i = 0; i < taskedRows.Length; i++) taskedRows[i] = null;
             if (feed != null) feed.PanelWatch = false;
             for (int i = 0; i < cards.Length; i++) cards[i] = null;
             perkRows.Clear();
             tab = OpsTab.Fronts;
+            inspectedPerk = lastArmed = null;
+            inspectedPost = lastArmedPost = 0;
             nextRefresh = failedUntil = 0f;
             pageCanvas = null;
         }
@@ -131,9 +139,21 @@ namespace BoscaliSummer.Modules.Support.Presentation
             for (int d = 1; d <= 3; d++)
             {
                 if (!Input.GetKeyDown(KeyCode.Alpha0 + d) && !Input.GetKeyDown(KeyCode.Keypad0 + d)) continue;
+                if (FavouriteOwns(KeyCode.Alpha0 + d) || FavouriteOwns(KeyCode.Keypad0 + d)) return; // one keypress, one action: a bound favourite wins, the tab does not switch
                 if ((OpsTab)d != tab) console.SetPage(d - 1);
                 return;
             }
+        }
+
+        /// <summary>True when a filled favourite slot is bound to exactly this bare key (CallsController polls it as a hotkey).</summary>
+        private bool FavouriteOwns(KeyCode key)
+        {
+            for (int i = 0; i < OpsPageView.FavouriteSlots; i++)
+            {
+                ConfigEntry<KeyboardShortcut> bound = FavouriteKey(i);
+                if (bound != null && bound.Value.MainKey == key && !bound.Value.Modifiers.Any() && calls.Favourites[i].HasValue) return true;
+            }
+            return false;
         }
 
         private bool PointerOverPage()
@@ -158,36 +178,37 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         private void BuildConsole(RectTransform host, float height)
         {
-            console = AvConsole.Build(host, "OPS", "SUPPORT OPERATIONS", 3, Width, height);
+            console = AvConsole.Build(host, "OPS", PageTitles[0], 3, Width, height);
             AvTabBar tabs = console.Tabs((AvIcon.Flag, "FRONTS"), (AvIcon.Target, "PERKS"), (AvIcon.Clipboard, "TASKED"));
             string[] hints =
             {
-                "[1] The three fronts: readiness, superiority, posture, what is being built. OPEN a front for its window.",
-                "[2] Your perks by front: arm one, aim it, fire it. The ORDER row and the quick keys.",
-                "[3] Strikes posted for the faction: CLAIM arms one, FIRE launches it. STEER routes your cruise strike in flight."
+                "[1] Fronts: status, blocker, readiness, superiority, your support, what is building. OPEN for its window.",
+                "[2] Click a perk to read its effect and price, ARM it in the strip, aim it, then FIRE.",
+                "[3] Click a posted strike to review it; ARM, then FIRE claims and launches it. The cruise block steers your salvo."
             };
             AvControl[] tabButtons = tabs.Rect.GetComponentsInChildren<AvControl>(true);
             for (int i = 0; i < tabButtons.Length && i < hints.Length; i++) tabButtons[i].Help = hints[i];
-            metrics = console.Metrics("ALLOCATION", "PERKS READY", "FRONTS AHEAD", "ALERTS");
+            metrics = console.Metrics("YOUR ALLOCATION", "PERKS READY", "FRONTS AHEAD", "ALERTS");
             console.PageChanged += OnPage;
 
-            // FRONTS: three cards.
+            // FRONTS: three cards. A short panel drops their secondary lines (programme, queue, directive, latest event) before anything else.
+            float body = height - (AvGridTokens.Header + 4f + AvGridTokens.Metric + 6f + AvGridTokens.Tab + 4f + AvGridTokens.Footer);
+            CardTier tier = body >= 540f ? CardTier.Full : body >= 360f ? CardTier.Mid : CardTier.Core;
             AvFlow p0 = console.Page(0);
-            for (int i = 0; i < cards.Length; i++) cards[i] = p0.Add(new FrontCardPart(p0.Content, (Front)i, OpenFront));
+            for (int i = 0; i < cards.Length; i++) cards[i] = p0.Add(new FrontCardPart(p0.Content, (Front)i, OpenFront, tier));
 
-            // PERKS: ORDER, quick keys, then the perks grouped by front.
+            // PERKS: the quick keys, then the perks grouped by front as call cards. The pinned strip sits over the top of the page.
+            float stripSpace = OrderStrip.Height - AvGridTokens.Gap;
             AvFlow p1 = console.Page(1);
-            p1.Section(AvIcon.Target, "ORDER", "ARM A PERK · AIM · FIRE");
-            order = p1.Add(new AvRow(p1.Content));
-            execute = order.AddTrailing(OpsKit.Spec("FIRE", () => { if (view.Armed) calls?.Press(armedId); }, AvButtonStyle.Danger));
-            abort = order.AddTrailing(OpsKit.Spec("ABORT", () => calls?.Disarm(), AvButtonStyle.Quiet));
-            execute.Help = "Fire the armed perk at the aim shown. The host spends and answers.";
-            abort.Help = "Disarm the armed perk. Nothing is spent.";
+            p1.Space(stripSpace);
             var specs = new AvControl.Spec[quick.Length];
             for (int i = 0; i < quick.Length; i++) { int slot = i; specs[i] = OpsKit.Spec("", () => PressQuick(slot), AvButtonStyle.Default); }
             AvButtons qb = p1.Buttons(specs);
-            for (int i = 0; i < quick.Length; i++) { quick[i] = qb.Controls[i]; quick[i].SingleLine(); }
-
+            for (int i = 0; i < quick.Length; i++)
+            {
+                quick[i] = qb.Controls[i]; quick[i].SingleLine();
+                quick[i].Help = "Quick slot " + (i + 1) + ": press to arm its perk, press again to fire. Bind a key in the mod settings (Support Keys, CallSlot " + (i + 1) + ").";
+            }
 
             groups = new AvSection[FrontRules.FrontCount];
             for (int f = 0; f < FrontRules.FrontCount; f++)
@@ -195,40 +216,41 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 var front = (Front)f;
                 groups[f] = p1.Section(f == 0 ? AvIcon.Satellite : f == 1 ? AvIcon.Antenna : AvIcon.UsersGroup, FrontRules.Name(front) + " PERKS");
                 foreach (CallRow r in CallSheet.Rows)
-                    if (r.Front == front) perkRows[r.Id] = p1.Add(new PerkRowPart(p1.Content, id => calls?.Press(id), r.Id));
+                    if (r.Front == front) perkRows[r.Id] = p1.Add(new PerkRowPart(p1.Content, InspectPerk, r.Id));
             }
 
-            // TASKED: the flying cruise's steer, then the posted strikes any pilot of the faction can claim (first press arms, second fires).
+            // TASKED: the flying cruise's block (only while one flies), then the posted strikes as package cards. Only real posts are drawn.
             AvFlow p2 = console.Page(2);
-            p2.Section(AvIcon.Target, "ORDER", "CLAIM \u00B7 FIRE");
-            taskedOrder = p2.Add(new AvRow(p2.Content));
-            taskedFire = taskedOrder.AddTrailing(OpsKit.Spec("FIRE", () => { if (taskedArmed != 0) calls?.PressTasked(taskedArmed); }, AvButtonStyle.Danger));
-            taskedAbort = taskedOrder.AddTrailing(OpsKit.Spec("ABORT", () => calls?.Disarm(), AvButtonStyle.Quiet));
-            taskedFire.Help = "Launch the claimed post at its own targets. The host answers.";
-            taskedAbort.Help = "Drop the claim. Nothing is spent.";
-            p2.Section(AvIcon.Bolt, "CRUISE", "STEER IN FLIGHT");
-            cruise = p2.Add(new AvRow(p2.Content));
-            steer = cruise.AddTrailing(OpsKit.Spec("STEER", () => calls?.SteerCruise(), AvButtonStyle.Default));
-            steer.Help = "Steer your cruise strike in flight: STEER, then right-click the map for the next leg. STEER while armed clears the route.";
-            route = p2.Add(new AvRow(p2.Content));
-            taskedGroup = p2.Section(AvIcon.Clipboard, "POSTED STRIKES", "");
+            p2.Space(stripSpace);
+            cruisePart = p2.Add(new CruisePart(p2.Content, () => calls?.AddLeg(), () => calls?.CancelPick(), () => calls?.ClearRoute()));
+            cruisePart.SetShown(false);
+            taskedGroup = p2.Section(AvIcon.Clipboard, "POSTED PACKAGES", "");
+            taskedGroup.SetShown(false);
             for (int i = 0; i < taskedRows.Length; i++)
             {
-                int slot = i;
-                taskedRows[i] = p2.Add(new PerkRowPart(p2.Content, () => { if (taskedIds[slot] != 0) calls?.PressTasked(taskedIds[slot]); }, "Perk Tasked " + i));
+                taskedRows[i] = p2.Add(new TaskedCardPart(p2.Content, InspectPost, "Perk Tasked " + i));
+                taskedRows[i].SetShown(false);
             }
 
             console.Orders(0,
-                "This board is the summary; OPEN a front to work it in its own window.",
+                "OPEN a front for its map, programmes and perks.",
+                "A stamp says OPERATIONAL, DEGRADED, OFFLINE or WAITING; the line under it names what is wrong now.",
                 "Readiness and superiority belong to the faction and are shared by every pilot on your side.");
             console.Orders(1,
-                "Arm a perk, aim it, then FIRE. ABORT disarms and spends nothing.",
-                "A perk that cannot be armed gives its reason on the status strip.",
-                "The quick keys work the ORDER row without this page open.");
+                "Click a perk to read its effect, price and gate. Nothing is spent until FIRE.",
+                "ARM it in the strip, aim it, then FIRE. DISARM spends nothing.",
+                "Click a quick button, or bind a key to it in the mod settings (Support Keys, CallSlot 1-4).");
             console.Orders(2,
-                "CLAIM arms a posted strike, FIRE launches it at the post's own targets.",
-                "STEER, then right-click the map: one leg per press, STEER again clears the route.");
+                "Click a package to review its targets and price; ARM it, then FIRE claims it and launches.",
+                "ADD LEG, then right-click the map: one leg per press. CANCEL PICK keeps the route; CLEAR ROUTE drops it.");
             console.Finish();
+
+            // The strip is a direct child of the console, after every page canvas, so it draws and takes clicks over scrolled content. It is
+            // seated just under the tab bar: the body rect is page > viewport > body in the console's own hierarchy.
+            strip = new OrderStrip(console.Root, StripPress, () => { calls?.Disarm(); nextRefresh = 0f; });
+            console.Ticker.Register(strip);
+            var bodyRect = (RectTransform)console.Page(0).Content.parent.parent;
+            strip.Dock(AvGridTokens.Pad, console.Page(0).Inner, -bodyRect.anchoredPosition.y + 4f);
             console.SetPage(0);
             OnPage(0);
         }
@@ -245,11 +267,45 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (id.HasValue) calls.Press(id.Value);
         }
 
-        private string KeyName(int slot)
+        /// <summary>The strip's primary button: ARM prepares (and never fires), FIRE sends only the exact perk or post armed right now.</summary>
+        private void StripPress(bool fire, int id)
+        {
+            if (calls == null) return;
+            if (tab == OpsTab.Tasked)
+            {
+                if (fire) calls.FireTasked(id); else calls.ArmTasked(id);
+            }
+            else
+            {
+                var perk = (SupportActionId)id;
+                if (fire) calls.FireArmed(perk); else calls.Arm(perk);
+            }
+            nextRefresh = 0f; // repaint on the next frame: the press feedback does not wait for the 0.2 s tick
+        }
+
+        private void InspectPerk(SupportActionId id)
+        {
+            inspectedPerk = id;
+            nextRefresh = 0f;
+        }
+
+        private void InspectPost(int postId)
+        {
+            inspectedPost = postId;
+            nextRefresh = 0f;
+        }
+
+        private ConfigEntry<KeyboardShortcut> FavouriteKey(int slot)
         {
             SupportSettings s = manager?.Settings;
-            var key = slot == 0 ? s?.CallKey1 : slot == 1 ? s?.CallKey2 : slot == 2 ? s?.CallKey3 : s?.CallKey4;
-            if (key == null || key.Value.MainKey == KeyCode.None) return (slot + 1).ToString();
+            return slot == 0 ? s?.CallKey1 : slot == 1 ? s?.CallKey2 : slot == 2 ? s?.CallKey3 : s?.CallKey4;
+        }
+
+        /// <summary>The chord the slot really answers to; an unbound slot (the default) is click-only and says so.</summary>
+        private string KeyName(int slot)
+        {
+            ConfigEntry<KeyboardShortcut> key = FavouriteKey(slot);
+            if (key == null || key.Value.MainKey == KeyCode.None) return "CLICK";
             return key.Value.ToString().Replace("Alpha", "").Replace("Keypad", "NUM ").ToUpperInvariant();
         }
 
@@ -257,6 +313,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
         {
             tab = (OpsTab)(page + 1);
             nextRefresh = 0f;
+            console?.SetTitle(PageTitles[Mathf.Clamp(page, 0, PageTitles.Length - 1)]);
+            if (strip != null) strip.Rect.gameObject.SetActive(tab != OpsTab.Fronts);
         }
 
         /// <summary>Maximize the map, press the OPS bezel and open <paramref name="next"/>, as the player would (automation).</summary>
@@ -288,12 +346,15 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 tiles.Add(CallsView.Tile(row, manager.Quote(row.Id), manager.LockReason(row.Id), manager.LocalAllocation,
                     manager.LocalCooldownRemaining(row.Id), calls.Armed == row.Id, calls.PendingAction == row.Id, !manager.Online));
             view.Allocation = (int)manager.LocalAllocation;
+            FollowArm();
             OpsPageViews.Perks(view, tiles);
             FrontMirror fm = manager.FrontMirror;
-            OpsPageViews.Cards(view, fm.State, fm.Known, now);
-            OpsPageViews.Order(view, tiles, calls.AimNow, AimGridNow(), calls.Pending, calls.LastWords, view.Allocation);
+            OpsPageViews.Cards(view, fm.State, fm.Known, now, manager.Online);
+            OpsPageViews.Order(view, tiles, calls.AimNow, AimGridNow(), calls.Pending, calls.LastWords, view.Allocation, inspectedPerk);
             SpaceFeedMirror sm = manager.SpaceMirror;
-            OpsPageViews.Tasked(view, sm.State.Posts, sm.Known, now, calls.TaskedArmedId, calls.TaskedClaimPending);
+            if (!sm.Known) inspectedPost = 0; // post ids restart with each faction's desk and each mission: a pick must not outlive the mirror it was made on and land on another faction's post
+            OpsPageViews.Tasked(view, sm.State.Posts, sm.Known, now, calls.TaskedArmedId, calls.TaskedClaimPending, inspectedPost);
+            if (view.PostGone) inspectedPost = OpsPageViews.PostGone; // the strip keeps saying so; nothing else is selected in its place
             view.CruiseFlying = manager.TryFlyingCruise(out int cruiseId, out view.CruiseLegs);
             view.CruiseRoute = view.CruiseFlying ? RouteLine(manager.CruiseLegs(cruiseId)) : "";
             view.Steering = calls.SteeringCruise;
@@ -309,6 +370,15 @@ namespace BoscaliSummer.Modules.Support.Presentation
             Paint(view);
         }
 
+        /// <summary>The strip follows the live order: a perk or post that just became armed (here or from a hotkey) is the one inspected.</summary>
+        private void FollowArm()
+        {
+            SupportActionId? armed = calls.Armed;
+            if (armed != lastArmed) { lastArmed = armed; if (armed.HasValue) inspectedPerk = armed; }
+            int post = calls.TaskedArmedId;
+            if (post != lastArmedPost) { lastArmedPost = post; if (post != 0) inspectedPost = post; }
+        }
+
         private string AimGridNow()
         {
             if (!calls.Armed.HasValue || !calls.TryAimPoint(out GlobalPosition p)) { aimCellX = int.MinValue; aimGrid = ""; return ""; }
@@ -317,55 +387,56 @@ namespace BoscaliSummer.Modules.Support.Presentation
             return aimGrid;
         }
 
-        /// <summary>Paints the metrics, the open page and the footer from <paramref name="v"/> (the harness feeds fixtures here).</summary>
+        /// <summary>Paints the metrics, the open page, the pinned strip and the footer from <paramref name="v"/> (the harness feeds fixtures here).</summary>
         internal void Paint(OpsPageView v)
         {
             if (console == null) return;
-            metrics[0].Set(v.Allocation.ToString(), "ALLOC", Mathf.Clamp01(v.Allocation / 100f), v.Allocation > 0 ? AvState.Ready : AvState.Caution);
+            metrics[0].Set(v.Allocation.ToString(), "AP", Mathf.Clamp01(v.Allocation / 100f), v.Allocation > 0 ? AvState.Ready : AvState.Caution);
             metrics[1].Set(v.PerksReady + "/" + v.PerksTotal, "READY", v.PerksTotal > 0 ? v.PerksReady / (float)v.PerksTotal : 0f, v.PerksReady > 0 ? AvState.Ready : AvState.Caution);
             metrics[2].Set(v.FrontsAhead + "/" + FrontRules.FrontCount, "AHEAD", v.FrontsAhead / (float)FrontRules.FrontCount, v.FrontsAhead > 0 ? AvState.Ready : AvState.Caution);
             metrics[3].Set(v.Alerts.ToString(), v.Alerts == 1 ? "ALERT" : "ALERTS", Mathf.Clamp01(v.Alerts / 3f), v.Alerts > 0 ? AvState.Danger : AvState.Ready);
 
-            // The other tab's page is off screen; OnPage forces a refresh the moment it is picked, so it repaints then.
-            if (tab != OpsTab.Perks)
+            // Only the open page is painted; OnPage forces a refresh the moment another one is picked, so it repaints then.
+            if (tab == OpsTab.Fronts)
                 for (int i = 0; i < cards.Length; i++) cards[i]?.Paint(v.Cards[i]);
 
-            armedId = default;
-            bool paintPerks = tab == OpsTab.Perks;
-            foreach (PerkRowView p in v.Perks)
+            if (tab == OpsTab.Perks)
             {
-                if (p.Armed) armedId = p.Id;
-                if (paintPerks && perkRows.TryGetValue(p.Id, out PerkRowPart row)) row.Paint(p);
+                Array.Clear(readyByFront, 0, readyByFront.Length);
+                foreach (PerkRowView p in v.Perks)
+                {
+                    if (perkRows.TryGetValue(p.Id, out PerkRowPart row)) row.Paint(p);
+                    if (p.Enabled && !p.Armed && !p.Pending) readyByFront[(int)p.Front]++;
+                }
+                for (int f = 0; f < groups.Length; f++) groups[f].SetCaption((v.PowerLine[f].Length > 0 ? v.PowerLine[f] + " · " : "") + readyByFront[f] + " READY");
+                strip?.Paint(v.PerkStrip.Has ? v.PerkStrip : OpsPageViews.Idle("WAITING FOR HOST", "NO PERKS READ YET", "", AvState.Inert));
+                for (int i = 0; i < quick.Length; i++)
+                {
+                    CallTile? t = v.Favourites[i];
+                    string key = KeyName(i);
+                    if (t.HasValue)
+                    {
+                        OpsKit.Label(quick[i], "[" + key + "] " + t.Value.Label);
+                        OpsKit.Enable(quick[i], t.Value.Enabled);
+                        quick[i].Armed = t.Value.State == CallState.Armed;
+                    }
+                    else
+                    {
+                        OpsKit.Label(quick[i], "[" + key + "] EMPTY");
+                        OpsKit.Enable(quick[i], false);
+                        quick[i].Armed = false;
+                    }
+                }
             }
-            order.Set(v.ArmedName, v.AimLine, v.OrderRight, v.Armed ? AvState.Caution : v.Pending ? AvState.Info : AvState.Ready);
-            order.Armed = v.Armed;
-            OpsKit.Enable(execute, v.Armed);
-            OpsKit.Enable(abort, v.Armed);
-            for (int i = 0; i < quick.Length; i++)
+            if (tab == OpsTab.Tasked)
             {
-                CallTile? t = v.Favourites[i];
-                string key = KeyName(i);
-                if (t.HasValue)
-                {
-                    OpsKit.Label(quick[i], "[" + key + "] " + t.Value.Label);
-                    OpsKit.Enable(quick[i], t.Value.Enabled);
-                    quick[i].Armed = t.Value.State == CallState.Armed;
-                }
-                else
-                {
-                    OpsKit.Label(quick[i], "[" + key + "] EMPTY");
-                    OpsKit.Enable(quick[i], false);
-                    quick[i].Armed = false;
-                }
+                PaintTasked(v);
+                strip?.Paint(v.PostStrip.Has ? v.PostStrip : OpsPageViews.Idle("WAITING FOR HOST", "THE SPACE FEED HAS NOT ANSWERED YET", "", AvState.Inert));
             }
-            if (tab == OpsTab.Tasked) PaintTasked(v);
-            int[] ready = new int[FrontRules.FrontCount];
-            foreach (PerkRowView p in v.Perks) if (p.Enabled) ready[(int)p.Front]++;
-            for (int f = 0; f < groups.Length; f++) groups[f].SetCaption(ready[f] + " READY");
 
             string words; AvState tone;
             if (tab == OpsTab.Perks) { words = v.Words.Length > 0 ? v.Words : "ARM A PERK, AIM, THEN FIRE"; tone = v.WordsTone; }
-            else if (tab == OpsTab.Tasked) { words = v.Words.Length > 0 ? v.Words : "CLAIM A POSTED STRIKE, THEN FIRE"; tone = v.WordsTone; }
+            else if (tab == OpsTab.Tasked) { words = v.Words.Length > 0 ? v.Words : "ARM A POSTED STRIKE, THEN FIRE"; tone = v.WordsTone; }
             else if (v.FrontWords.Length > 0) { words = v.FrontWords; tone = v.FrontWordsTone; }
             else { words = "OPEN A FRONT FOR ITS MAP, PROGRAMMES AND PERKS"; tone = AvState.Ready; }
             console.Footer.Set(words, tone);
@@ -376,37 +447,22 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (legs == null || legs.Count == 0) return "";
             var parts = new string[legs.Count];
             for (int i = 0; i < legs.Count; i++) parts[i] = OpsKit.Grid((float)legs[i].x, (float)legs[i].z);
-            return string.Join(" \u203A ", parts);
+            return string.Join(" › ", parts);
         }
 
         private void PaintTasked(OpsPageView v)
         {
-            taskedArmed = 0;
-            string armedName = "NOTHING CLAIMED", armedState = "CLAIM A POST BELOW";
-            foreach (TaskedRowView t in v.Tasked)
-                if (t.Row.Armed) { taskedArmed = t.PostId; armedName = t.Row.Name; armedState = t.Row.RungWord + " \u00B7 " + t.Row.Price; }
-            taskedOrder.Set(armedName, armedState, taskedArmed != 0 ? "PRESS FIRE" : "", taskedArmed != 0 ? AvState.Caution : AvState.Ready);
-            taskedOrder.Armed = taskedArmed != 0;
-            OpsKit.Enable(taskedFire, taskedArmed != 0);
-            OpsKit.Enable(taskedAbort, taskedArmed != 0);
-            route.Set("ROUTE", v.CruiseRoute.Length > 0 ? v.CruiseRoute : v.CruiseFlying ? "FLYING DIRECT" : "\u2014", "", v.CruiseRoute.Length > 0 ? AvState.Info : AvState.Inert);
-            taskedGroup.SetCaption(v.TaskedTotal == 0 ? "NONE POSTED" : v.TaskedTotal + " OPEN");
+            bool cruiseOn = v.CruiseFlying || v.Steering; // the block exists only while there is a salvo to steer
+            cruisePart.SetShown(cruiseOn);
+            if (cruiseOn) cruisePart.Paint(v);
+            taskedGroup.SetShown(v.Tasked.Count > 0);
+            taskedGroup.SetCaption(v.TaskedTotal > v.Tasked.Count ? v.Tasked.Count + " OF " + v.TaskedTotal + " OPEN" : v.TaskedTotal + " OPEN");
             for (int i = 0; i < taskedRows.Length; i++)
             {
-                bool has = i < v.Tasked.Count;
-                taskedIds[i] = has ? v.Tasked[i].PostId : 0;
-                taskedRows[i].Paint(has ? v.Tasked[i].Row : new PerkRowView
-                {
-                    Name = i == 0 ? "NONE POSTED" : "\u2014", RungWord = "", Price = "", State = "",
-                    Button = "", Tone = AvState.Inert
-                });
+                bool has = i < v.Tasked.Count; // only real posts are drawn: an empty slot is hidden, not painted as a dead row
+                taskedRows[i].SetShown(has);
+                if (has) taskedRows[i].Paint(v.Tasked[i]);
             }
-            string legs = v.CruiseLegs + "/" + StrikeBallistics.MaxLegs + " LEGS";
-            cruise.Set("CRUISE STEER", v.Steering ? "PICK THE LEG ON THE MAP · STEER AGAIN CLEARS" : v.CruiseFlying ? "IN FLIGHT · " + legs : "NO CRUISE IN FLIGHT",
-                v.CruiseFlying ? legs : "", v.Steering ? AvState.Caution : v.CruiseFlying ? AvState.Ready : AvState.Inert);
-            cruise.Armed = v.Steering;
-            OpsKit.Label(steer, v.Steering ? "CLEAR" : "STEER");
-            OpsKit.Enable(steer, v.CruiseFlying);
         }
     }
 }

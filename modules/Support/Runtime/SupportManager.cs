@@ -163,6 +163,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     return 2000f;
                 case SupportActionId.SabotageStrike:
                     return 1000f;
+                case SupportActionId.Overwatch:
+                    return 3000f;
+                case SupportActionId.Starfall:
+                    return 600f; // half the line: five rods 300 m apart, the aim in the middle
+                case SupportActionId.DirectAction:
+                    return 2000f;
                 case SupportActionId.Fortify:
                     return 650f; // Selection radius; the overlay resolves the actual owned zone.
                 default:
@@ -365,6 +371,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         private void Update()
         {
+            Vector2 theatre = TheaterFrame.Resolve(); // cached; host and clients measure GEO footprints and burns in the same ground km
+            GeoBird.Aspect = theatre.y / Mathf.Max(1f, theatre.x);
             UpdateSpaceMirror();
 
             // Prune expired active strikes
@@ -544,15 +552,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         /// <summary>
         /// The cooldown the host will apply to this player's next use of one perk: the rung's table value (R1 30 s .. R5 300 s),
-        /// per pilot and per perk. Scaled by the requester's re-tasking perk, and used for both the check and the reply, so the
-        /// countdown a client shows is the one the host enforced.
+        /// per pilot and per perk. Scaled by the requester's re-tasking perk, and shortened by the front's POWER while it is above 1 (seconds / power);
+        /// used for both the check and the reply, so the countdown a client shows is the one the host enforced.
         /// </summary>
         private float CooldownFor(Player player, SupportActionId action)
         {
             if (DisableCooldowns || player == null || !CallSheet.TryGet(action, out CallRow row)) return 0f;
-            return CallSheet.Cooldown(row.Rung) *
-                   perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCooldown) *
-                   EventsCooldownMultiplier(player);
+            float seconds = CallSheet.Cooldown(row.Rung) *
+                            perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCooldown) *
+                            EventsCooldownMultiplier(player);
+            return PerkPower.Cooldown(seconds, readiness.Power(player.HQ, row.Front));
         }
 
         /// <summary>
@@ -726,11 +735,17 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
         }
 
+        /// <summary>The newest host verdict for this pilot's own call (what the automation reads back): the perk, its result and the count the host echoed (contacts, rods, funds taken).</summary>
+        internal SupportActionId LastReplyAction { get; private set; }
+        internal SupportResult LastReplyResult { get; private set; }
+        internal int LastReplyContacts { get; private set; }
+
         internal void ReceiveResult(SupportResultMessage message)
         {
             if (!pending || message.RequestId != nextRequestId || message.Action != (byte)pendingAction) return;
             pending = false;
             SupportResult result = (SupportResult)message.Result;
+            LastReplyAction = (SupportActionId)message.Action; LastReplyResult = result; LastReplyContacts = message.Contacts;
             SupportActionDefinition action = catalog.Find((SupportActionId)message.Action);
             string name = action != null ? action.Name : "Support";
             calls?.Answer(message.RequestId, result == SupportResult.Accepted, result == SupportResult.Accepted ? name : CallWordsFor(message));
@@ -750,6 +765,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     : name + " accepted.";
                 if (action != null && action.Id == SupportActionId.ElintSweep)
                     Status = name + " complete: " + Mathf.Max(0, message.Contacts) + " emitting radar(s) located.";
+                if (action != null && action.Id == SupportActionId.Overwatch)
+                    Status = name + " accepted: following " + Mathf.Max(0, message.Contacts) + " moving contact(s).";
+                if (action != null && action.Id == SupportActionId.Siphon)
+                    Status = name + " accepted: " + Mathf.Max(0, message.Contacts) + " funds taken from the enemy budgets.";
+                if (action != null && action.Id == SupportActionId.Starfall)
+                    Status = name + " accepted: " + Mathf.Max(0, message.Contacts) + " rods released.";
+                if (action != null && action.Id == SupportActionId.DirectAction)
+                    Status = name + " accepted: the raid is under way.";
+                if (action != null && action.Id == SupportActionId.SabotageStrike)
+                    Status = name + (message.Contacts > 0 ? " accepted: the anchor is down." : " accepted: the sabotage failed, the team is compromised.");
                 if (action != null && action.Id == SupportActionId.Recon &&
                     float.IsFinite(message.X) && float.IsFinite(message.Z))
                 {
@@ -766,7 +791,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     Status = name + " accepted: imaging, " + Mathf.Max(0, message.Contacts) + " contact(s) revealed.";
                 }
                 float eta = action != null && (action.Id == SupportActionId.Prsm || action.Id == SupportActionId.Cruise) ? message.Duration :
-                            action != null && action.Id == SupportActionId.Artillery ? 8f :
+                            action != null && (action.Id == SupportActionId.Artillery || action.Id == SupportActionId.Starfall) ? 8f :
                             action != null && action.Id == SupportActionId.Emp ? SupportEffectPolicy.EmpDelay :
                             action != null && action.Id == SupportActionId.FlareMissile ? 5.5f : 0f;
                 if (!float.IsFinite(message.Radius) || message.Radius < 0f || message.Radius > 200000f ||
@@ -789,6 +814,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal SupportResult Evaluate(Player player, SupportRequestMessage request)
         {
             if (player == null || player.HQ == null) return SupportResult.InvalidTarget;
+            // Master switch: nothing below (rate limit, price, cooldown, effect) runs while OPS is off. SPACE commands and TASKED check it in their own services.
+            if (settings == null || !settings.Enabled.Value) return SupportResult.Disabled;
             if (!float.IsFinite(request.X) || !float.IsFinite(request.Y) || !float.IsFinite(request.Z) ||
                 Math.Abs(request.X) > 10000000f || Math.Abs(request.Y) > 10000000f || Math.Abs(request.Z) > 10000000f)
                 return SupportResult.InvalidTarget;
@@ -829,7 +856,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             CallRow row = default;
             if (!free && (cost <= 0f || !CallSheet.TryGet(action.Id, out row))) return SupportResult.CapabilityUnavailable;
             if (!free && !ReadinessOpen(player, row)) return SupportResult.NeedsReadiness;
-            float quality = free ? 1f : readiness.Quality(player.HQ, row.Front);
+            float power = free ? 1f : readiness.Power(player.HQ, row.Front);
 
             SpaceActionTransaction transaction = null;
             if (action.SpaceTask.HasValue)
@@ -856,7 +883,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     logger.LogInfo("[Support] " + action.Name + " snapped to MARK " + mark.Id + ".");
                 }
             }
-            var context = new SupportContext(player, aim, request.RequestId, this, transaction, quality: quality, markSnapped: snapped, markSar: sar);
+            var context = new SupportContext(player, aim, request.RequestId, this, transaction, power: power, markSnapped: snapped, markSar: sar);
             if (scene != sceneGeneration) { transaction?.Cancel(); return SupportResult.SpawnFailed; }
 
             SupportResult result;
@@ -1014,8 +1041,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         void ISupportHost.TrackCruiseStrike(int requestId, ulong requesterId, FactionHQ owner, GlobalPosition target, Missile first) =>
             Tasking.Track(requestId, requesterId, owner, target, first);
 
-        void ISupportHost.AddCruiseMissile(int requestId, Missile missile) =>
-            Tasking.AddMissile(requestId, missile);
+        void ISupportHost.AddCruiseMissile(ulong requesterId, int requestId, Missile missile) =>
+            Tasking.AddMissile(requesterId, requestId, missile);
 
         internal int TakeContacts(int requestId)
         {
@@ -1032,8 +1059,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>Server: validates a leg intent; every event broadcasts the strike's legs.</summary>
         internal void ApplyWaypoint(Player player, int requestId, GlobalPosition leg, bool clear)
         {
-            CruiseTasking.Strike strike = Tasking.Find(requestId);
-            if (strike == null || player == null || player.HQ == null || player.HQ != strike.Owner)
+            // The strike is found by the transport identity plus the id: a same-faction pilot cannot steer another's missiles.
+            ulong requester = player != null ? PlayerIdentity.Of(player) : PlayerIdentity.None;
+            CruiseTasking.Strike strike = requester != PlayerIdentity.None ? Tasking.Find(requester, requestId) : null;
+            if (strike == null || player.HQ == null || player.HQ != strike.Owner)
             {
                 BroadcastShell(player, requestId,
                     strike == null ? SupportResult.SpawnFailed : SupportResult.NotUnlocked);

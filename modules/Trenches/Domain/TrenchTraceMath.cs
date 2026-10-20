@@ -83,11 +83,17 @@ namespace BoscaliSummer.Modules.Trenches.Domain
             => Math.Max(NodeSpacing, Math.Max(0f, lineLength) / (MaximumNodes - 1));
 
         /// <summary>
-        /// Fraction of the line a bay slot sits at, centred in the slot so the end bays are
-        /// not half-cut by the line's caps. A spent budget yields the line's start.
+        /// Fraction of the line a bay slot sits at. Fixed per slot, never derived from the budget:
+        /// a slot spawns at the stage that adds it, so (slot + 0.5) / budget put every later slot
+        /// near 1.0 and seven of eight nests crowded the far end while two thirds of the line held
+        /// one gun. The order halves the gaps as the garrison grows (quarters, centre, eighths),
+        /// and slots 0 and 1 keep the quarter points they always had. A spent budget yields the
+        /// line's start.
         /// </summary>
         public static float NodeFraction(int slot, int budget)
-            => budget <= 0 ? 0f : Math.Clamp((slot + 0.5f) / budget, 0f, 1f);
+            => budget <= 0 || slot < 0 ? 0f : SlotFractions[Math.Min(slot, SlotFractions.Length - 1)];
+
+        private static readonly float[] SlotFractions = { 0.25f, 0.75f, 0.5f, 0.125f, 0.875f, 0.375f, 0.625f, 0.0625f };
 
         /// <summary>
         /// Extra half-width a bay adds at a distance from its node: full width through the
@@ -161,6 +167,10 @@ namespace BoscaliSummer.Modules.Trenches.Domain
         public const float MinimumGroundHeight = 2f;
         public const float MinimumNormalY = 0.97f;
         public const float ConstructionSuppressionSeconds = 60f;
+        // A hit that kills nothing pauses digging briefly: harassing fire nicked some nest every
+        // minute on a hot front, so the full pause on every hit kept the hottest lines from ever
+        // growing, the opposite of pressure pacing. A lost defender still pauses the full minute.
+        public const float HitSuppressionSeconds = 20f;
 
         // A front trace runs through contested ground, where cell ownership answers neither
         // side, so the owning side is read from the sign of the signed control field instead.
@@ -868,6 +878,17 @@ namespace BoscaliSummer.Modules.Trenches.Domain
 
         public static float SpacingFor(bool sameOwner)
             => sameOwner ? SameOwnerSpacing : OtherOwnerSpacing;
+
+        /// <summary>
+        /// Same-side overlap on top of the centre rule: a position runs up to 2400m, so 360m
+        /// between centres still let a new window lie along most of an existing line (a stacked
+        /// parallel ditch with doubled nests). More than a third of the candidate's anchors
+        /// within <see cref="OverlapRadius"/> of a same-side ditch refuses it.
+        /// </summary>
+        public const float OverlapRadius = 120f;
+
+        public static bool OverlapsExisting(int nearAnchors, int anchors)
+            => anchors > 0 && nearAnchors * 3 > anchors;
 
         public static bool CentresConflict(float distance, bool sameOwner)
             => !(distance >= 0f) || distance < SpacingFor(sameOwner);

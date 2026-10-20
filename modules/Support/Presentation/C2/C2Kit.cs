@@ -52,9 +52,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.C2
 
         public static string Tint(string text, Color c) => "<color=" + Hex(c) + ">" + text + "</color>";
 
-        public static Color SlabFill(AvState tone) =>
-            AvStyleHost.FuiFill("slab " + AvStates.Class(tone), AvTheme.Accent);
-
         /// <summary>The ink that sits on a slab (the palette's ground colour).</summary>
         public static Color SlabInk => AvStyleHost.FuiInk("slab", Color.black);
 

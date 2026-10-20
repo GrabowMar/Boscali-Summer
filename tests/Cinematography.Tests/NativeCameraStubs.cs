@@ -23,7 +23,7 @@ namespace UnityEngine
         public void SetParent(Transform parent,bool worldPositionStays=false) { }
         public void SetPositionAndRotation(Vector3 p, Quaternion r) { position=p;rotation=r; }
     }
-    public class Camera { public float fieldOfView = 45; }
+    public class Camera { public float fieldOfView = 45,aspect = 16f/9; }
     public static class Time { public static float timeScale = 1, fixedDeltaTime=.02f,unscaledTime; }
     public class GameObject { }
     public class MonoBehaviour

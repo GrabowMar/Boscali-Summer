@@ -27,6 +27,7 @@ namespace BoscaliSummer.Tests.Features.Support
             CheckTap();
             CheckFob();
             CheckReviewFixes();
+            CheckRaid();
         }
 
         private static void Near(float actual, float expected, string message, float tolerance = 0.05f) =>
@@ -99,6 +100,72 @@ namespace BoscaliSummer.Tests.Features.Support
         private static SofSeed Seed(TargetKind k, AnchorSub s, uint key, float x, float z, bool sighted = true) => new SofSeed(k, s, key, x, z, 1000f, sighted, false);
 
         // ---- Rules ---------------------------------------------------------------------------------
+
+        /// <summary>DIRECT ACTION (protocol 41): a ready team raids a revealed target from where it stands, 45 s / power, then one roll at the perk's odds.</summary>
+        private static void CheckRaid()
+        {
+            var p = new Ports();
+            SofDesk d = Desk(p);
+            TestAssert.That(!d.TryReadyTeam(Op, out _), "no team, no raid");
+            SofTeam t = ReadyTeam(d, p);
+            TestAssert.That(d.TryReadyTeam(Op, out int slot) && slot == 0, "the operator's own ready team is usable");
+            TestAssert.That(!d.TryReadyTeam(Op + 1, out _), "another operator's team is not");
+            TestAssert.Eq(d.Afield, 0, "a team at the camp is not afield");
+            Show(d, Seed(TargetKind.Ground, AnchorSub.Uplink, 40, 500f, 0f));
+            SofTarget target = d.Visible[0];
+            TestAssert.Eq(d.Raid(Op, 0, target, DirectAction.Seconds(1f), 65).Outcome, SofOutcome.Sent, "the raid starts");
+            TestAssert.That(t.State == TeamState.OnSite && t.Mission == MissionKind.Sabotage && t.Raid, "on site at once, on the SABOTAGE path");
+            TestAssert.Eq(t.TargetKey, 40u, "against the revealed unit");
+            TestAssert.Eq(d.Afield, 1, "and afield for the odds of the next one");
+            TestAssert.Eq(d.Send(Op, 0, MissionKind.Recon, 0, 1f, 1f).Outcome, SofOutcome.NotReady, "a raiding team takes no other order");
+            TestAssert.That(!d.TryReadyTeam(Op, out _), "nor a second raid");
+            Advance(d, p, 40f);
+            TestAssert.Eq(t.State, TeamState.OnSite, "still raiding before the 45 s are up");
+            TestAssert.That(!p.Log.Contains("sabotage Uplink"), "nothing destroyed yet");
+            Advance(d, p, 6f);
+            TestAssert.Eq(p.LastChance, 65, "the roll is the perk's odds, not the scene's");
+            TestAssert.That(p.Log.Contains("sabotage Uplink"), "success destroys the target through the host call");
+            TestAssert.That(t.State == TeamState.Ready && !t.Raid, "and the team is ready again");
+            TestAssert.That(t.Ammo < 100f, "a raid costs a mission's ammunition (the camp refills it again)");
+
+            // A lost roll wounds the team and sends it home.
+            var f = new Ports { RollResult = false };
+            SofDesk e = Desk(f);
+            SofTeam u = ReadyTeam(e, f);
+            Show(e, Seed(TargetKind.Anchor, AnchorSub.DataCenter, 41, 300f, 0f));
+            TestAssert.Eq(e.Raid(Op, 0, e.Visible[0], 30f, 40).Outcome, SofOutcome.Sent, "an anchor is a raid target too");
+            Advance(e, f, 31f);
+            TestAssert.Eq(f.LastChance, 40, "the roll used the raid odds");
+            TestAssert.That(!f.Log.Contains("sabotage DataCenter"), "a failed raid destroys nothing");
+            TestAssert.That(u.Wounded && !u.Raid && u.Mission == MissionKind.None, "it wounds the team and ends the raid");
+            Advance(e, f, 3f);
+            TestAssert.Eq(u.State, TeamState.Recovering, "and the team recovers at home");
+
+            // The target dying first ends the raid quietly.
+            var g = new Ports();
+            SofDesk h = Desk(g);
+            SofTeam v = ReadyTeam(h, g);
+            Show(h, Seed(TargetKind.Ground, AnchorSub.Uplink, 42, 200f, 0f));
+            h.Raid(Op, 0, h.Visible[0], 45f, 70);
+            g.Alive = false;
+            Advance(h, g, 3f);
+            TestAssert.That(v.State == TeamState.Ready && !g.Log.Contains("sabotage Uplink"), "a target gone before the end is no success");
+
+            // A team out of ammunition cannot go, the OVERLORD pool can be borrowed, and the operator's own team comes first.
+            var k = new Ports();
+            SofDesk m = Desk(k);
+            SofTeam pool = ReadyTeam(m, k);
+            pool.Raiser = BoscaliSummer.Modules.Support.Domain.Space.SpaceContacts.WatchOfficerId;
+            TestAssert.That(m.TryReadyTeam(Op, out int borrowed) && borrowed == 0, "an autonomous team may be ordered");
+            SofResult second = m.Raise(Op);
+            Advance(m, k, SofRules.RaiseSeconds + 1f);
+            TestAssert.That(m.TryReadyTeam(Op, out int first) && first == second.Slot, "the operator's own team is preferred");
+            m.Teams[second.Slot].Ammo = 10f;
+            TestAssert.That(m.TryReadyTeam(Op, out int fallback) && fallback == 0, "a team without ammunition is passed over");
+            pool.Ammo = 10f;
+            TestAssert.That(!m.TryReadyTeam(Op, out _), "none left");
+            TestAssert.Eq(m.Raid(Op, 0, target, 45f, 50).Outcome, SofOutcome.NoAmmo, "and the desk says so");
+        }
 
         private static void CheckRules()
         {

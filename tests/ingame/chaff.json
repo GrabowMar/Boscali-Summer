@@ -52,6 +52,7 @@
     { "check": "result_above", "path": "popped.bundles", "min": 1 },
     { "check": "result_above", "path": "end.heard", "min": 1 },
     { "check": "result_above", "path": "end.threatsGone", "min": 1 },
+    { "check": "result_above", "path": "end.seduced", "min": 1 },
     { "check": "log_match", "pattern": "ChaffDispenser|chaff dispenser not fitted", "max": 0 }
   ]
 }

@@ -23,7 +23,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         bool CyberNear(float x, float z);
     }
 
-    internal enum SofWatchAction : byte { None = 0, Raise = 1, Mission = 2, Order = 3 }
+    internal enum SofWatchAction : byte { None = 0, Raise = 1, Mission = 2, Order = 3, Sweep = 4 }
 
     /// <summary>Why OVERLORD did nothing on a think. None when it acted.</summary>
     internal enum SofWatchWhy : byte { None, NotDue, Paced, Suspended, NoCamp, NoSlot, NoWork, Waiting, Resting, Failed }
@@ -59,7 +59,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
     {
         public const float ThinkSeconds = 2f, HighValueScore = 10f, NearFrontMeters = 20000f, MaxEtaSeconds = 900f, SabotageCooldownSeconds = 600f,
             TargetBackoffSeconds = 600f, FailBackoffSeconds = 60f, ReconSpacingMeters = 1500f, ReconStandOffMeters = 900f, ReconRepeatSeconds = 300f, LostRestSeconds = 120f,
-            UrgentFloor = 15f, ApproachMeters = 1600f, PushBelow = 20f, PushStopAbove = 35f, HoldAt = 50f, ResumeBelow = 30f, ExfilAt = 40f, PushMinMeters = 1500f, StrandedMeters = 300f, RisingEpsilon = 0.2f;
+            UrgentFloor = 15f, SweepAfterSeconds = 30f, ApproachMeters = 1600f, PushBelow = 20f, PushStopAbove = 35f, HoldAt = 50f, ResumeBelow = 30f, ExfilAt = 40f, PushMinMeters = 1500f, StrandedMeters = 300f, RisingEpsilon = 0.2f;
         public const float ReadyMaxExposure = 10f, CommitCeiling = 85f, CommitMargin = 15f, OnSiteHoldAt = 45f, ProjectedExfil = 95f, ProjectedFloor = 40f, RiskRadiusMeters = 1000f, ArmourRadiusMeters = 1000f;
         public const int MaxBackoffs = 32, MaxRecon = 4, MaxRevealedNear = 3;
         private const ulong Me = SpaceContacts.WatchOfficerId;
@@ -75,7 +75,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         /// <summary>The SOF front's directive and focus pin (the host sets it every tick; neutral = RECON, the rule as it always was).</summary>
         public DirectorBias Bias = DirectorBias.Neutral(Front.Sof);
 
-        public int Raises, Missions, Orders, Failures, Thinks;
+        public int Raises, Missions, Orders, Sweeps, Failures, Thinks;
         public SofWatchPlan Last { get; private set; }
 
         public override void Reset()
@@ -84,7 +84,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             Array.Clear(reconAt, 0, reconAt.Length);
             reconHead = reconCount = 0;
             restUntil = clock = lastExposureAt = 0f; sabotageAt = float.NegativeInfinity; lastExposure = -1f; lastSlot = -1;
-            Raises = Missions = Orders = Failures = Thinks = 0;
+            Raises = Missions = Orders = Sweeps = Failures = Thinks = 0;
             Last = default;
         }
 
@@ -106,6 +106,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         private SofWatchPlan Decide(SofDesk desk, ISofWatchWorld world, WatchPacer pacer, bool aiFaction, float now)
         {
             Prune(now);
+            SofWatchPlan sweep = SweepPlan(desk, world, now);
+            if (sweep.Action != SofWatchAction.None) return sweep;
             int humans = world.Humans;
             SofTeam team = Mine(desk);
             if (team != null && team.State == TeamState.Lost) restUntil = Math.Max(restUntil, now + LostRestSeconds);
@@ -130,6 +132,18 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             }
         }
 
+        /// <summary>Defence first: a QRF rolls on hostile teams near our sites when one can. HOLD rolls it at once; otherwise OVERLORD lets the first one stay <see cref="SweepAfterSeconds"/> (the raider's window; an operator can always sweep sooner).</summary>
+        private SofWatchPlan SweepPlan(SofDesk desk, ISofWatchWorld world, float now)
+        {
+            int n = desk.Hostiles.Count;
+            if (n == 0 || desk.SweepEndsAt > now || now < desk.SweepReadyAt) return SofWatchPlan.Idle(SofWatchWhy.None);
+            float oldest = now;
+            for (int i = 0; i < n; i++) oldest = Math.Min(oldest, desk.Hostiles[i].Since);
+            if (Bias.Directive != FrontDirective.Hold && now - oldest < SweepAfterSeconds) return SofWatchPlan.Idle(SofWatchWhy.None);
+            return new SofWatchPlan(SofWatchAction.Sweep, SofWatchWhy.None, 0, MissionKind.None, 0, TeamVerb.Cancel, 0f, 0f, WatchCode.SofSweep, n, 0);
+        }
+
+        /// <summary>OVERLORD's team: a pool team (TRAIN TEAM, or one back from an operator) or one it raised. A team an operator has tasked answers to that operator and is never picked here.</summary>
         private SofTeam Mine(SofDesk desk)
         {
             for (int i = 0; i < desk.Teams.Length; i++) if (desk.Teams[i].Active && desk.Teams[i].Raiser == Me) return desk.Teams[i];
@@ -316,6 +330,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             switch (plan.Action)
             {
                 case SofWatchAction.Raise: r = desk.Raise(Me); break;
+                case SofWatchAction.Sweep: r = desk.Sweep(Me); break;
                 case SofWatchAction.Mission: r = desk.Send(Me, plan.Slot, plan.Mission, plan.Mission == MissionKind.Recon ? 0 : plan.TargetId, plan.X, plan.Z); break;
                 default: r = desk.Order(Me, plan.Slot, plan.Verb); break;
             }
@@ -330,6 +345,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             switch (plan.Action)
             {
                 case SofWatchAction.Raise: Raises++; break;
+                case SofWatchAction.Sweep: Sweeps++; break;
                 case SofWatchAction.Mission:
                     Missions++;
                     Back(plan.TargetId, now + TargetBackoffSeconds);

@@ -21,13 +21,6 @@ namespace BoscaliSummer.Modules.Immersion.Domain
         public static float Sanitize(float value, float fallback) =>
             Scalar.IsFinite(value) ? Scalar.Clamp01(value) : fallback;
 
-        /// <summary>Radial distance in centred space: 0 at boresight, 1 at mid-edge, ~1.41 at a corner.</summary>
-        public static float Radial(float u, float v)
-        {
-            float x = 2f * u - 1f, y = 2f * v - 1f;
-            return (float)Math.Sqrt(x * x + y * y);
-        }
-
         /// <summary>
         /// Spherical-visor warp: where a point painted for a flat screen is sampled on the curved
         /// visor. Identity at boresight for any curvature; the periphery is pulled outward, so
@@ -59,10 +52,6 @@ namespace BoscaliSummer.Modules.Immersion.Domain
             float m2 = m * m;
             return FresnelF0 + (1f - FresnelF0) * m2 * m2 * m;
         }
-
-        /// <summary>Fresnel from radial distance alone (overlay proxy: the edge of the quad is the grazing view).</summary>
-        public static float EdgeFresnel(float radial) =>
-            Fresnel(1f - Scalar.SmoothStep(.35f, 1.42f, radial) * .92f);
 
         /// <summary>
         /// Electrochromic sun-visor drive: the legacy elevation curve, darkened further when the

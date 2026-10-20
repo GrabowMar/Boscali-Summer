@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -65,6 +66,108 @@ namespace WingPure.Tests
                     sharpest = Math.Max(sharpest, (float)Math.Acos(Scalar.Clamp(Vec3.Dot(into.Normalized, onward.Normalized), -1f, 1f)) * Scalar.Rad2Deg);
                 }
                 TestAssert.That(sharpest < 135f, name + " hangar " + hangar + " never turns back on its way out (sharpest " + sharpest.ToString("0") + " deg)");
+            }
+        }
+    }
+
+    internal static class GroundDepartureEndTests
+    {
+        public static void Run()
+        {
+            // wing-taxi sweep 2026-10-18 (airbase_city): the runway end nearer the field centre (south) was taken while most of the
+            // field's hangars stand at the north end; every launch taxied 1.4-2.7 km, through a 160 deg junction, and one wrecked itself.
+            AirbaseSample city = GroundAirfieldFixture.Load("airbase_city");
+            FieldBounds.Prune(city);
+            TestAssert.That(FieldTraffic.TryPickRunway(city, out int runway, out bool reverse), "airbase_city has a departure runway");
+            TestAssert.Eq(runway, 0, "airbase_city keeps its first takeoff runway");
+            TestAssert.That(reverse, "airbase_city departs from the end its hangars are at");
+            var traffic = new FieldTraffic(city, runway, reverse);
+            var taken = new List<Vec3>();
+            var points = new List<int>();
+            for (int i = 0; i < 2 && ServiceSpots.Pick(traffic, at => taken.Exists(p => (p - at).Horizontal.Length < ServiceSpots.ClearRadius), out ServiceSpot spot); i++)
+            {
+                taken.Add(spot.WingPose.Pos);
+                points.Add(spot.Point);
+            }
+            TestAssert.That(points.Count == 2 && points[0] == 0 && points[1] == 3, "airbase_city launches from the service points nearest that end first");
+
+            var field = GroundAirfieldFixture.Synthetic();
+            field.Center = new Vec3(0f, 0f, 200f);
+            field.Roads = new[] { new[] { new Vec3(60f, 0f, -50f), new Vec3(60f, 0f, 1050f) } };
+            field.ServicePoints = new[] { new WingPose(new Vec3(60f, 0f, 950f), Vec3.Forward), new WingPose(new Vec3(60f, 0f, 1000f), Vec3.Forward) };
+            FieldTraffic.TryPickRunway(field, out _, out reverse);
+            TestAssert.That(reverse, "with both ends reached by road, the end nearer the launch places wins over the field centre");
+        }
+    }
+
+    internal static class GroundThresholdApproachTests
+    {
+        public static void Run()
+        {
+            // wing-taxi sweep 2026-10-18 (airbase_boscali_north, SFB-81; airbase_city's north end in the model): the road from the
+            // hangars reaches the threshold itself while the hold-short lies 36 m back on another road; jets ran onto the runway end,
+            // doubled back to the hold-short and turned round again to line up, a bomber circling the grass.
+            var profile = new AirframeProfile { Id = "generic-large", WheelbaseM = 14f, SteerLockDeg = 35f, SpanM = 42f, LengthM = 40f };
+            FieldInfo pathField = typeof(GroundPilot).GetField("path", BindingFlags.Instance | BindingFlags.NonPublic);
+            foreach ((string name, int hangar) in new[] { ("airbase_city", 7), ("airbase_boscali_north", 2) })
+            {
+                AirbaseSample sample = GroundAirfieldFixture.Load(name);
+                FieldBounds.Prune(sample);
+                FieldTraffic.TryPickRunway(sample, out int runway, out bool reverse);
+                var traffic = new FieldTraffic(sample, runway, reverse);
+                RunwaySample r = traffic.Runway;
+                Vec3 threshold = reverse ? r.End : r.Start;
+                WingPose spawn = sample.Hangars[hangar].Spawn;
+                var pilot = new GroundPilot(1, traffic, AirframeClass.FixedWing, spawn, hangar);
+                var s = new AircraftState { Pos = spawn.Pos, Fwd = spawn.Fwd, Up = Vec3.Up, Right = Vec3.Cross(Vec3.Up, spawn.Fwd) };
+                pilot.Step(s, profile, null, 0f, 0.05f, null, 0);
+                pilot.Step(s, profile, null, GroundPilot.ParkedSeconds + 0.1f, 0.05f, null, 0);
+                var path = (Vec3[])pathField.GetValue(pilot);
+                TestAssert.That(Array.TrueForAll(path, p => !r.Contains(p, 0f)), name + " hangar " + hangar + " holds short without driving onto the runway");
+                float fromThreshold = (path[path.Length - 1] - threshold).Horizontal.Length;
+                TestAssert.That(fromThreshold >= TaxiGraph.HoldShortClear - 5f, name + " hangar " + hangar + " holds clear of the threshold (" +
+                    fromThreshold.ToString("0") + " m)");
+                float sharpest = 0f;
+                for (int i = 1; i < path.Length - 1; i++)
+                {
+                    Vec3 into = (path[i] - path[i - 1]).Horizontal, onward = (path[i + 1] - path[i]).Horizontal;
+                    if (into.SqrLength < 1e-4f || onward.SqrLength < 1e-4f) continue;
+                    sharpest = Math.Max(sharpest, (float)Math.Acos(Scalar.Clamp(Vec3.Dot(into.Normalized, onward.Normalized), -1f, 1f)) * Scalar.Rad2Deg);
+                }
+                TestAssert.That(sharpest < 135f, name + " hangar " + hangar + " never doubles back to its hold-short (sharpest " + sharpest.ToString("0") + " deg)");
+            }
+        }
+    }
+
+    internal static class GroundLineupRoadTests
+    {
+        public static void Run()
+        {
+            // wing-taxi sweep 2026-10-18 (highwaystrip1): the line-up ran straight from the hold-short across the verge to the threshold,
+            // where the road it stood on carries on to the runway end; jets crawled through the dip at 1-2 m/s and clipped the edge.
+            MethodInfo begin = typeof(GroundPilot).GetMethod("BeginLineUp", BindingFlags.Instance | BindingFlags.NonPublic);
+            FieldInfo pathField = typeof(GroundPilot).GetField("path", BindingFlags.Instance | BindingFlags.NonPublic);
+            foreach (string name in new[] { "highwaystrip1", "highwaystrip2", "airstrip_city2" })
+            {
+                AirbaseSample sample = GroundAirfieldFixture.Load(name);
+                FieldTraffic.TryPickRunway(sample, out int runway, out bool reverse);
+                var traffic = new FieldTraffic(sample, runway, reverse);
+                Vec3 hold = traffic.Graph.NodePos(traffic.Graph.HoldShort(runway, reverse));
+                traffic.Departures.Expect(1, 1);
+                traffic.Departures.Enqueue(1, 0f);
+                traffic.Departures.MayLineUp(1, 0f);
+                var pilot = new GroundPilot(1, traffic, AirframeClass.FixedWing, new WingPose(hold, traffic.Runway.Direction(reverse)), -1);
+                begin.Invoke(pilot, new object[] { hold, 0f });
+                Vec3[] road = traffic.Graph.Lineup(runway, reverse), path = (Vec3[])pathField.GetValue(pilot);
+                TestAssert.That(road.Length > 2, name + "'s hold-short road runs on to the runway end");
+                for (int i = 1; i < road.Length - 1; i++)
+                    TestAssert.That(Array.IndexOf(path, road[i]) > 0, name + " lines up through road bend " + i);
+                // Off the road only where the hold-short node itself is, or between the road's end and the threshold.
+                float allowed = Math.Max(GroundAirportAuditTests.MaxRoadOffset(sample, new[] { hold, hold }),
+                    (road[road.Length - 2] - road[road.Length - 1]).Horizontal.Length) + 1f;
+                float offset = GroundAirportAuditTests.MaxRoadOffset(sample, path);
+                TestAssert.That(offset <= allowed, name + " lines up along its road, not across the verge (" + offset.ToString("0.0") +
+                    " m off, " + allowed.ToString("0.0") + " allowed)");
             }
         }
     }

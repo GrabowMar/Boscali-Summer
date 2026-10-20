@@ -16,7 +16,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
     {
         private const string Owner = "vanguard.aegis";
         private const string Channel = "vg.aegis";
-        private static readonly string ReadyDetail = "SNAP " + AegisSnap.Km(AegisSnap.MaxRange) + " km · AUTO DEFENCE";
+        private static readonly string ReadyDetail = "SNAP " + AegisSnap.Km(AegisSnap.MaxRange) + " km · MANUAL ONLY";
         private static IHudBoard board;
         private IHudLine line;
         private int readyAmmo = -1; // ammo the cached ready text was built for
@@ -46,7 +46,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         public static void Cue(Unit launcher, AegisCue cue)
         {
             if (cue == AegisCue.SnapHit) Notify(launcher, HudTone.Info, "SNAP HIT", "HIT-TO-KILL");
-            else Notify(launcher, HudTone.Warning, "INTERCEPT", "AUTO DEFENCE DART AWAY");
+            else Notify(launcher, HudTone.Warning, "INTERCEPT", "MANUAL ONLY DART AWAY");
         }
 
         private void Update()

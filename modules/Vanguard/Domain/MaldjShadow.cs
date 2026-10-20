@@ -20,12 +20,12 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         // Noise blinds a radar outright (Radar.CanSeeRadarReturn returns !IsJammed), so it must stay well inside
         // BurnThroughRange: the jammer sits between the radar and the hidden aircraft, and an equal range would blind the
         // radar to a burning-through aircraft too.
-        public const float NoiseRange = 3000f;
+        public const float NoiseRange = 4000f;
         public const float NoiseAmount = 1.5f;
         public const float CruiseSpeed = 200f;
         public const float MinAltitude = 300f;
         public const float MaxAltitude = 9000f;
-        public const float Lifetime = 240f;
+        public const float Lifetime = 300f;
         public const float WingStart = 0.3f;
         public const float WingEnd = 0.8f;
         public const float WingSweepDegrees = 90f;

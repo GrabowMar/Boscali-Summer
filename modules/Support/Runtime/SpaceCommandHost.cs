@@ -107,6 +107,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case SpaceCommandKind.CyberHop:
                 case SpaceCommandKind.CyberBurn:
                 case SpaceCommandKind.CyberDrop:
+                case SpaceCommandKind.CyberPurge:
                     // Every node id, valid or not, takes the same path; the desk answers NO TARGET for unknown, hidden and foreign ids alike.
                     CyberResult done = ports.Cyber(player, c.Kind, c.Target);
                     return new SpaceReply(protocol, c.Kind, c.RequestId, (byte)done.Outcome, done.NodeId, done.Charged, done.Detail);
@@ -114,6 +115,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case SpaceCommandKind.SofOrder:
                 case SpaceCommandKind.SofMission:
                 case SpaceCommandKind.SofDivert:
+                case SpaceCommandKind.SofSweep:
                     // Every team and target id, valid or not, takes the same path; the desk answers NO TARGET for unknown, hidden and foreign ids alike.
                     SofResult ran = ports.Sof(player, c);
                     return new SpaceReply(protocol, c.Kind, c.RequestId, (byte)ran.Outcome, ran.Slot, ran.Charged, ran.Detail);
@@ -128,11 +130,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case SpaceCommandKind.FrontFocus:
                 case SpaceCommandKind.FrontQueue:
                 case SpaceCommandKind.FrontDonate:
+                case SpaceCommandKind.RelocateBird:
                     // The faction comes from the transport, never from the message; a lock names who holds it in the claimant slot.
                     FrontResult fronted = ports.Front(player, c);
                     return new SpaceReply(protocol, c.Kind, c.RequestId, (byte)fronted.Outcome, 0, fronted.Charged, fronted.Detail, false, SpaceWire.Clean(fronted.By, SpaceReply.MaxClaimant));
-                default:
+                case SpaceCommandKind.ClaimTasked:
                     return ForTasked(c.Kind, c.RequestId, ports.Claim(player, c.RequestId, c.Target));
+                default:
+                    // A mutating kind nobody handles is refused outright; it must never reach an action-bearing verb.
+                    return new SpaceReply(protocol, c.Kind, c.RequestId, (byte)TaskedOutcome.Unavailable);
             }
         }
 

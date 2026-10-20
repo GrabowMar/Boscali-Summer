@@ -7,6 +7,8 @@ into a new empty folder. Decoding FLAC/MP3/OGG needs Blender (its `aud` module);
   "<blender>" -b --python tools/Build-SoundClips.py -- decode --src <downloads> --out <pcm dir>
   python -I tools/Build-SoundClips.py analyze --pcm <pcm dir> --sheet overview.png [--floor -12]   (find the cut points)
   python -I tools/Build-SoundClips.py build --pcm <pcm dir> [--sheet clips.png]
+  python -I tools/Build-SoundClips.py synth --pcm <pcm dir> --out <kaiju dir>   (the kaiju's sounds, made from the recordings)
+  python -I tools/Build-SoundClips.py build --pcm <kaiju dir>                   (writes only the kaiju-* clips)
 
 Output, all mono 16-bit 22050 Hz:
   modules/Immersion/Assets/Voice/<breath sound>.wav  named after the BreathSound it replaces (keh0.wav ...)
@@ -54,7 +56,18 @@ PICKS: dict[str, tuple[Path, str, float, float, str, float]] = {
     'radio-tail-0': (SFX, 'radio_end', 0.0, 0.37, 'dry', 1.0),
     'radio-tail-1': (SFX, 'radio_off', 0.0, 0.30, 'dry', 1.0),
     # 'tyre' (536769) is decoded but unused: the game's own skid loop already squeals at touchdown.
+    # The kaiju (modules/Kaiju), made by `synth`. Clips are capped at 3.5 s, so a longer sound is squeezed (speed > 1)
+    # and KaijuBody plays it at pitch 1/speed: change the two together.
+    'kaiju-roar': (SFX, 'kj_roar', 0.0, 4.9, 'dry', 1.45),
+    'kaiju-shriek': (SFX, 'kj_shriek', 0.0, 1.5, 'dry', 1.0),
+    'kaiju-bellow': (SFX, 'kj_bellow', 0.0, 5.5, 'dry', 1.6),
+    'kaiju-step': (SFX, 'kj_step', 0.0, 2.4, 'dry', 1.0),
+    'kaiju-charge': (SFX, 'kj_charge', 0.0, 3.0, 'dry', 1.0),
+    'kaiju-beam': (SFX, 'kj_beam', 0.0, 4.9, 'dry', 1.45),
+    'kaiju-spike': (SFX, 'kj_spike', 0.0, 1.5, 'dry', 1.0),
+    'kaiju-swipe': (SFX, 'kj_swipe', 0.0, 1.8, 'dry', 1.0),
 }
+GRUNTS = [(2.845, 3.25), (4.495, 4.83), (6.265, 6.60), (7.955, 8.31), (9.695, 10.09)]  # the keh0-4 cuts
 
 
 def decode(src: Path, out: Path) -> None:
@@ -203,6 +216,138 @@ def build(pcm: Path, sheet: Path | None) -> None:
     print('PASS', len(rows), 'of', len(PICKS), 'clips written,', total // 1024, 'KB')
 
 
+def kaiju(pcm: Path, out: Path) -> None:
+    """Make the kaiju's sources (the kj_* PICKS) from the decoded recordings. Voices are a buzzing throat with a
+    period-doubling growl, through giant-throat formants, layered with the grunt, exertion and breath recordings slowed
+    three to four times; steps, whooshes, the beam and its charge are noise and oscillators. Seeded: rebuilds match."""
+    rng = np.random.default_rng(1954)
+    rec = {k: load(pcm, k) for k in ('grunts', 'exertion', 'mask', 'leather', 'collapse')}
+    cut = lambda key, a, b: rec[key][int(a * RATE):int(b * RATE)]
+    secs = lambda s: np.arange(int(s * RATE)) / RATE
+    norm = lambda x: x / max(np.abs(x).max(), 1e-9)
+    curve = lambda t, *p: np.interp(t, p[0::2], p[1::2])
+    slow = lambda x, speed: resample(x, int(round(len(x) / speed)))
+    bell = lambda f, centre, octaves: np.exp(-.5 * (np.log2(np.maximum(f, 1) / centre) / octaves) ** 2)
+    drive = lambda x, k: np.tanh(k * x) / np.tanh(k)
+    tone = lambda f: np.sin(2 * np.pi * np.cumsum(f) / RATE)
+    noise = lambda t: rng.standard_normal(len(t))
+
+    def fit(x, t, at=0.0):
+        y, i = np.zeros(len(t)), int(at * RATE)
+        n = min(len(x), len(y) - i)
+        y[i:i + n] = x[:n]
+        return y
+
+    def wobble(t, hz, depth):
+        knots = rng.standard_normal(int(t[-1] * hz) + 2)
+        return 1 + depth * np.interp(t * hz, np.arange(len(knots)), knots)
+
+    def morph(x, gain):
+        """Filter through a moving magnitude response gain(t[frames, 1], f[1, bins]), short-time FFT."""
+        size, hop = 1024, 256
+        pad = np.concatenate([np.zeros(size), x, np.zeros(size)])
+        starts = np.arange(0, len(pad) - size + 1, hop)
+        window = np.hanning(size)
+        spectra = np.fft.rfft(np.stack([pad[s:s + size] for s in starts]) * window, axis=1)
+        frames = np.fft.irfft(spectra * gain((starts[:, None] - size / 2) / RATE, np.fft.rfftfreq(size, 1 / RATE)[None, :]), size, axis=1)
+        y = np.zeros(len(pad))
+        for s, frame in zip(starts, frames * window):
+            y[s:s + size] += frame
+        return y[size:size + len(x)] / 1.5
+
+    def room(x, seconds, mix):
+        """A big outdoor space: convolved with darkening, decaying noise."""
+        n = int(seconds * RATE)
+        tail = morph(rng.standard_normal(n) * np.exp(-6.9 * np.arange(n) / n), lambda t, f: 1 / (1 + (f / (3000 * np.exp(-1.2 * t))) ** 2))
+        wet = np.fft.irfft(np.fft.rfft(x, len(x) + n) * np.fft.rfft(tail, len(x) + n), len(x) + n)[:len(x)]
+        return x + mix * np.abs(x).max() * norm(wet)
+
+    def crackle(t, rate):
+        """Random clicks, `rate` per second, heavy-tailed loudness, each a 2 ms decay."""
+        clicks = np.where(rng.random(len(t)) < rate / RATE, noise(t) * (1 + rng.pareto(2.5, len(t))), 0)
+        return np.convolve(clicks, np.exp(-np.arange(int(.002 * RATE)) / (.0006 * RATE)))[:len(t)]
+
+    def voice(t, f0, opening, formants, rough, tilt):
+        """A throat: harmonics of f0 falling as 1/k^tilt, a subharmonic growl of depth `rough`, through formants
+        [(Hz shut, Hz wide, octaves, level)] that move with `opening` (0 shut, 1 wide)."""
+        phase = 2 * np.pi * np.cumsum(f0) / RATE
+        buzz = sum(np.where(k * f0 < 9000, np.sin(k * phase), 0) / k ** tilt for k in range(1, min(240, int(9000 / f0.min())) + 1))
+        buzz = buzz * (1 + rough * np.sin(phase / 2)) * wobble(t, 40, .15)
+        return morph(buzz, lambda tt, ff: .03 + sum(level * bell(ff, shut + (wide - shut) * np.interp(tt, t, opening), width)
+                                                     for shut, wide, width, level in formants))
+
+    sounds = {}
+    t = secs(4.9)  # roar
+    f0 = curve(t, 0, 55, .5, 85, 1.3, 98, 2.8, 90, 3.8, 72, 4.6, 50, 4.9, 46) * wobble(t, 6, .04) * (1 + .03 * np.sin(2 * np.pi * 5.5 * t))
+    throat = voice(t, f0, curve(t, 0, .1, .6, 1, 3.2, .9, 4.4, .25, 4.9, .1),
+                   [(260, 480, .3, 1), (560, 860, .3, .8), (1150, 1450, .35, .5), (2300, 2600, .4, .3)], .6, 1.0)
+    grunts = sum(fit(slow(cut('grunts', a, b), .3), t, at) for (a, b), at in zip(GRUNTS, (.4, 1.3, 2.2, 3.0)))
+    body = (.7 * norm(throat) + .55 * norm(fit(slow(cut('exertion', .2, .9), .26), t, .15)) + .35 * norm(grunts)
+            + .3 * norm(fit(slow(cut('mask', .78, 2.74), .4), t)) + .15 * tone(f0))
+    sounds['kj_roar'] = room(drive(norm(body), 2.2) * curve(t, 0, 0, .3, .85, .8, 1, 3.4, .9, 4.3, .25, 4.6, 0, 4.9, 0), 2.4, .35)
+
+    t = secs(1.5)  # flinch: a pained shriek
+    f0 = curve(t, 0, 140, .1, 250, .35, 300, .9, 230, 1.5, 150) * wobble(t, 12, .06)
+    cry = voice(t, f0, curve(t, 0, .3, .1, 1, .8, .8, 1.5, .2),
+                [(450, 650, .3, 1), (1200, 1700, .3, .9), (2400, 2900, .3, .6), (3500, 3800, .35, .3)], .45, .8)
+    body = .7 * norm(cry) + .45 * norm(fit(slow(cut('leather', .86, 1.8), .62), t, .02)) + .5 * norm(fit(slow(cut('grunts', *GRUNTS[1]), .55), t))
+    sounds['kj_shriek'] = room(drive(norm(body), 2.8) * curve(t, 0, 0, .05, 1, .5, .9, 1.2, .35, 1.45, 0, 1.5, 0), 1.6, .3)
+
+    t = secs(5.5)  # death: a long, falling bellow
+    f0 = curve(t, 0, 75, .5, 100, 1.6, 92, 3.2, 70, 4.6, 50, 5.5, 40) * wobble(t, 9, .06)
+    throat = voice(t, f0, curve(t, 0, .2, .5, 1, 2.5, .9, 4.6, .5, 5.5, .2),
+                   [(200, 400, .3, 1), (450, 720, .3, .8), (950, 1250, .35, .45), (1900, 2200, .4, .2)], curve(t, 0, .4, 5.5, .9), 1.15)
+    gurgle = fit(slow(cut('grunts', *GRUNTS[3]), .25), t, 3.0) + fit(slow(cut('grunts', *GRUNTS[4]), .25), t, 4.0)
+    body = (.7 * norm(throat) + .55 * norm(fit(slow(cut('exertion', .2, .9), .22), t, .1)) + .3 * norm(gurgle)
+            + .35 * norm(fit(slow(cut('mask', 8.82, 11.05), .35), t, .2)) + .15 * tone(f0))
+    sounds['kj_bellow'] = room(drive(norm(body), 2.0) * curve(t, 0, 0, .35, 1, 2.6, .9, 4.4, .5, 5.1, 0, 5.5, 0), 3.0, .4)
+
+    t = secs(2.4)  # footfall: a sub thump, slowed debris, a crack, rolling echo
+    thump = tone(curve(t, 0, 110, .06, 75, .3, 52, 2.4, 45)) * np.exp(-t / .5) * np.minimum(t / .004, 1)
+    debris = morph(fit(slow(cut('collapse', 0, 1.4), .55), t), lambda tt, ff: 1 / (1 + (ff / (2500 * np.exp(-.9 * tt))) ** 2))
+    crack = morph(noise(t) * np.exp(-t / .02), lambda tt, ff: bell(ff, 1200, 1.2))
+    body = .55 * norm(thump) + 1.4 * norm(debris * np.exp(-t / .8) * np.minimum(t / .015, 1)) + .5 * norm(crack)
+    sounds['kj_step'] = room(drive(norm(body), 3.5), 1.8, .35)
+
+    t = secs(3.0)  # laser charge: an accelerating whine, a rising hum and sparks over a long inhale
+    x = t / 3
+    phase = 2 * np.pi * np.cumsum(110 * (1500 / 110) ** x ** 1.7) / RATE
+    whine = (np.sin(phase) + .5 * np.sin(2.01 * phase) + .3 * np.sin(3.02 * phase) + .7 * np.sin(1.006 * phase)) * (.15 + .85 * x ** 1.3)
+    hum = sum(np.sin(k * 2 * np.pi * np.cumsum(curve(t, 0, 48, 3, 70)) / RATE) / k for k in range(1, 7)) * (.2 + .8 * x) * (1 + .5 * tone(curve(t, 0, 3, 3, 22)))
+    sparks = morph(crackle(t, curve(t, 0, 8, 3, 260)), lambda tt, ff: bell(ff, 3500, .9)) * x
+    inhale = morph(fit(slow(cut('mask', 8.82, 10.0), .4), t), lambda tt, ff: bell(ff, 700, 1.2)) * curve(t, 0, .3, 1.5, 1, 2.8, .3)
+    body = .6 * norm(whine) + .5 * norm(hum) + .45 * norm(sparks) + .35 * norm(inhale)
+    sounds['kj_charge'] = drive(norm(body), 1.8) * curve(t, 0, 0, .1, .4, 2.85, 1, 3, 1)
+
+    t = secs(4.9)  # beam: a crackling, humming roar with a blast at the start
+    rumble = morph(noise(t), lambda tt, ff: np.sqrt(60 / np.maximum(ff, 60)) / (1 + (ff / 900) ** 2)) * wobble(t, 2.5, .3)
+    hum = sum(np.sin(k * 2 * np.pi * np.cumsum(74 * (1 + .02 * np.sin(2 * np.pi * 7 * t))) / RATE) / k ** .9 for k in range(1, 11))
+    sparks = morph(crackle(t, np.full(len(t), 320.0)), lambda tt, ff: bell(ff, 2800, 1.1))
+    sizzle = morph(noise(t), lambda tt, ff: (ff / 3500) ** 4 / (1 + (ff / 3500) ** 4)) * wobble(t, 35, .4)
+    blast = tone(curve(t, 0, 80, .4, 45, 4.9, 45)) * np.exp(-t / .35)
+    body = .8 * norm(rumble) + .45 * norm(hum) + .7 * norm(sparks) + .3 * norm(sizzle) + .5 * norm(blast)
+    sounds['kj_beam'] = drive(norm(body), 2.0) * curve(t, 0, 0, .05, 1, 4.4, .95, 4.85, 0, 4.9, 0)
+
+    t = secs(1.5)  # spike volley: a meaty pop, a bony snap, four staggered whooshes
+    pop = tone(curve(t, 0, 120, .15, 45, 1.5, 40)) * np.exp(-t / .14) * np.minimum(t / .002, 1)
+    snap = morph(noise(t) * np.exp(-t / .012), lambda tt, ff: bell(ff, 2500, 1))
+    whoosh = sum(level * morph(noise(t), lambda tt, ff, d=d: bell(ff, np.interp(tt - d, (0, .35, 1), (350, 2400, 700)), .7))
+                 * np.exp(-.5 * ((t - d - .35) / .2) ** 2) for d, level in ((0, 1), (.07, .8), (.15, .7), (.24, .6)))
+    sounds['kj_spike'] = room(drive(norm(norm(pop) + .6 * norm(snap) + .7 * norm(whoosh)), 1.5), 1.3, .25)
+
+    t = secs(1.8)  # claw swipe: a huge fluttering air rush peaking 0.8 s in, with a sub whomp
+    centre = lambda tt: np.interp(tt, (0, .8, 1.6), (170, 650, 200))
+    air = morph(noise(t), lambda tt, ff: bell(ff, centre(tt), .8) + .35 * bell(ff, 3.5 * centre(tt), .6))
+    rush = norm(air) * np.exp(-.5 * ((t - .8) / .28) ** 2) * (1 + .3 * np.sin(2 * np.pi * 9 * t))
+    sounds['kj_swipe'] = room(drive(norm(rush + .3 * np.sin(2 * np.pi * 42 * t) * np.exp(-.5 * ((t - .85) / .18) ** 2)), 1.4), 1.0, .2)
+
+    out.mkdir(parents=True, exist_ok=True)
+    for key, y in sounds.items():
+        np.save(out / f'{key}.npy', y.astype(np.float32))
+        (out / f'{key}.rate').write_text(str(RATE))
+        print(f'synthesized {key}: {len(y) / RATE:.2f} s')
+
+
 def main() -> None:
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else sys.argv[1:]
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -211,9 +356,12 @@ def main() -> None:
     for name in ('analyze', 'build'):
         c = commands.add_parser(name); c.add_argument('--pcm', type=Path, required=True); c.add_argument('--sheet', type=Path)
         c.add_argument('--floor', type=float, default=-34.0, help='analyze: segment threshold in dB below the peak level')
+    s = commands.add_parser('synth'); s.add_argument('--pcm', type=Path, required=True); s.add_argument('--out', type=Path, required=True)
     args = parser.parse_args(argv)
     if args.command == 'decode':
         decode(args.src, args.out)
+    elif args.command == 'synth':
+        kaiju(args.pcm, args.out)
     elif args.command == 'analyze':
         analyze(args.pcm, args.sheet, args.floor)
     else:

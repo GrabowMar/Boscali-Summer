@@ -23,6 +23,8 @@ Get-ChildItem -LiteralPath "$repo/AvionicsUi", "$repo/AvionicsUi/Pure" -Filter '
 Get-ChildItem -LiteralPath "$repo/AvionicsUi/Fui" -Filter '*.cs' | Copy-Item -Destination "$PreviewDirectory/Assets/"
 # The v7 menu: every pure Domain/Menu file (model, catalog, layout, controller, hint, icon table) and the three presentation files that draw it.
 Get-ChildItem -LiteralPath "$repo/modules/Autopilot/Domain/Menu" -Filter '*.cs' | Copy-Item -Destination "$PreviewDirectory/Assets/"
+Copy-Item -LiteralPath "$repo/Core/Contracts/CargoKind.cs" -Destination "$PreviewDirectory/Assets/"
+Copy-Item -LiteralPath "$repo/Core/Contracts/ITacBoardSettings.cs" -Destination "$PreviewDirectory/Assets/"
 foreach ($f in 'MenuPalette.cs', 'MenuTextPool.cs', 'MenuPainter.cs', 'MenuPainter.Dock.cs') { Copy-Item -LiteralPath "$repo/modules/Autopilot/Presentation/$f" -Destination "$PreviewDirectory/Assets/" }
 # The same pure fixtures the unit tests use: scenario worlds, the input rig, the geometry checks (and the test font).
 foreach ($f in 'MenuWorlds.cs', 'MenuRig.cs', 'MenuGeometryChecks.cs') { Copy-Item -LiteralPath "$repo/tests/BoscaliSummer.Tests/Features/Autopilot/$f" -Destination "$PreviewDirectory/Assets/" }

@@ -22,6 +22,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private readonly List<Vector2> ownBases = new List<Vector2>(MaximumBases);
         private readonly Dictionary<uint, Unit> byId = new Dictionary<uint, Unit>(256);
         private readonly Dictionary<uint, bool> sightedUnits = new Dictionary<uint, bool>(256);
+        private readonly Dictionary<uint, Unit> known = new Dictionary<uint, Unit>(256);
+        private readonly List<uint> dropped = new List<uint>(16);
+        private int unitCursor, trackCursor;
 
         /// <summary>
         /// Fills <paramref name="into"/> with the viewer's observations. <paramref name="isAnchor"/> excludes the mod's own spawned anchors from
@@ -37,20 +40,25 @@ namespace BoscaliSummer.Modules.Support.Runtime
             CollectFresh(viewer);
             CollectBases(viewer);
             List<Unit> all = UnitRegistry.allUnits;
-            if (all == null || all.Count > MaximumUnits) return;
-            for (int i = 0; i < all.Count; i++)
+            if (all == null) return;
+            // A mission above MaximumUnits is read one rotating slice per pass. What earlier passes found stays in `known` until that unit is seen dead, taken or an anchor,
+            // never because the slice moved on, so a partial pass cannot make a node vanish (and a held one be lost). A mission that fits is read whole every pass, as before.
+            int count = all.Count, span = Math.Min(count, MaximumUnits), start = count > span ? unitCursor % count : 0;
+            if (count > span) unitCursor = start + span; else known.Clear();
+            for (int k = 0; k < span; k++)
             {
-                Unit unit = all[i];
-                if (unit == null || unit.disabled || unit.NetworkHQ == null || unit.NetworkHQ == viewer || !(unit is GroundVehicle) ||
-                    (isAnchor != null && isAnchor(unit)) || !(unit.definition is VehicleDefinition definition)) continue;
-                SourceClass cls = Classify(unit, definition);
-                if (cls == SourceClass.Other) continue;
-                uint id = unit.persistentID.Id;
-                if (id == 0 || byId.ContainsKey(id)) continue;
-                GlobalPosition p = unit.transform.position.ToGlobalPosition();
-                byId[id] = unit;
-                units.Add(new SourceUnit(id, cls, (float)p.x, (float)p.z, FrontDistance(p)));
+                Unit unit = all[(start + k) % count];
+                if (Candidate(unit, viewer, isAnchor, out _) && unit.persistentID.Id != 0) known[unit.persistentID.Id] = unit;
             }
+            dropped.Clear();
+            foreach (var pair in known)
+            {
+                if (!Candidate(pair.Value, viewer, isAnchor, out SourceClass cls)) { dropped.Add(pair.Key); continue; }
+                GlobalPosition p = pair.Value.transform.position.ToGlobalPosition();
+                byId[pair.Key] = pair.Value;
+                units.Add(new SourceUnit(pair.Key, cls, (float)p.x, (float)p.z, FrontDistance(p)));
+            }
+            for (int i = 0; i < dropped.Count; i++) known.Remove(dropped[i]);
             AddUnitPoints(enemyUplinks, NodeKind.Uplink);
             AddUnitPoints(enemyCenters, NodeKind.DataCenter);
             AddRelays(viewer);
@@ -71,6 +79,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 bool gone = unit.disabled || ((seed.Kind == NodeKind.Uplink || seed.Kind == NodeKind.DataCenter) && UplinkSpawner.Down(unit, owner));
                 into.Add(new NodeObservation(seed, keyOf(owner), sightedUnits.ContainsKey(unit.persistentID.Id), gone));
             }
+        }
+
+        /// <summary>An enemy radar or SAM ground unit the node builder can use (also the check a remembered unit must still pass).</summary>
+        private static bool Candidate(Unit unit, FactionHQ viewer, Predicate<Unit> isAnchor, out SourceClass cls)
+        {
+            cls = SourceClass.Other;
+            if (unit == null || unit.disabled || unit.NetworkHQ == null || unit.NetworkHQ == viewer || !(unit is GroundVehicle) ||
+                (isAnchor != null && isAnchor(unit)) || !(unit.definition is VehicleDefinition definition)) return false;
+            cls = Classify(unit, definition);
+            return cls != SourceClass.Other;
         }
 
         private static SourceClass Classify(Unit unit, VehicleDefinition definition)
@@ -131,10 +149,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private void CollectFresh(FactionHQ viewer)
         {
             var db = viewer.trackingDatabase;
-            if (db == null || db.Count > MaximumUnits) return;
+            if (db == null) return;
+            // Above MaximumUnits contacts the sightings are read one rotating slice per pass: a sighting missed this pass only delays a reveal, it never reveals or hides a node.
+            int skip = db.Count > MaximumUnits ? trackCursor % db.Count : 0, at = 0;
+            if (db.Count > MaximumUnits) trackCursor = skip + MaximumUnits;
             float nativeNow = Time.timeSinceLevelLoad;
             foreach (var pair in db)
             {
+                if (at++ < skip) continue;
+                if (at > skip + MaximumUnits) break;
                 TrackingInfo t = pair.Value;
                 if (t == null || !SpaceRevealWindow.NativeFresh(nativeNow, t.lastSpottedTime)) continue;
                 GlobalPosition p = t.lastKnownPosition;

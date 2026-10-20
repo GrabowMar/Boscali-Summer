@@ -145,7 +145,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         /// <summary>
-        /// OVERLORD stops: its intrusion is dropped and every team it raised is ordered home, so nothing keeps running (and tracing, and walking into fire) with nobody at the controls.
+        /// OVERLORD stops: its intrusion is dropped and every team it still commands is ordered home, so nothing keeps running (and tracing, and walking into fire) with nobody at the controls.
+        /// A team an operator has tasked (its Raiser is theirs) is not touched.
         /// Once per transition (the flag clears when the faction is staffed again); a refused order (a pinned team) is simply left to the desk's own rules.
         /// </summary>
         private void Release(FactionWatch run)

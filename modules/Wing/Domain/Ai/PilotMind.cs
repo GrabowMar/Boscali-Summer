@@ -74,12 +74,14 @@ namespace BoscaliSummer.Modules.Wing.Domain
             }
         }
 
-        /// <summary>Switch now, ignoring dwell (a player command). Returns false when already there.</summary>
+        /// <summary>Switch now, ignoring dwell (a player command, a missile, a maneuver's end). Returns false when already there.
+        /// Rejoin is the brain's way back, not a choice: the next decision may leave it at once (after a missile, a member holding
+        /// over a landing leader or trailing a jet flew 2 s toward a slot it could not hold).</summary>
         public bool Force(BehaviourId to)
         {
             if (Current == to) return false;
             Current = to;
-            Dwell = 0f;
+            Dwell = to == BehaviourId.Rejoin ? MinDwell : 0f;
             captured = default;
             lostSlot = default;
             return true;

@@ -17,7 +17,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// <summary>Where a field launch without a hangar stands (spec M3 §3.1): on service point j as the game parks it, or
     /// place l of a queue on that point's way out, <see cref="Spread"/>·l along its route to the hold-short and facing
     /// along it (they leave in route order, the parked one last, and nobody turns out across another); the first spot
-    /// with no aircraft within <see cref="ClearRadius"/>, every point before a second place, up to
+    /// with no aircraft within <see cref="ClearRadius"/>, points nearer the hold-short by route first, every point before a second place, up to
     /// <see cref="MaxLanes"/>, never within <see cref="Spread"/> of the hold-short or on a runway. Fixed-wing spots
     /// must be near the field's actual taxi roads when it has roads; vertical launches do not need that access.</summary>
     internal static class ServiceSpots
@@ -29,11 +29,35 @@ namespace BoscaliSummer.Modules.Wing.Domain
         {
             var nodes = new List<int>();
             var edges = new List<int>();
+            int[] order = ByRoute(field, nodes, edges);
             for (int lane = 0; lane < MaxLanes; lane++)
-                for (int j = 0; j < field.Field.ServicePoints.Length; j++)
+                foreach (int j in order)
                     if (TrySpot(field, j, lane, nodes, edges, taxiRequired, out spot) && !occupied(spot.WingPose.Pos)) return true;
             spot = default;
             return false;
+        }
+
+        /// <summary>Service points by taxi route to the departure hold-short, shortest first (index order breaks ties; sweep
+        /// 2026-10-18, airbase_city: in index order launches stood at the far end of the field from the departure end).</summary>
+        private static int[] ByRoute(FieldTraffic field, List<int> nodes, List<int> edges)
+        {
+            TaxiGraph g = field.Graph;
+            int n = field.Field.ServicePoints.Length, goal = g.HoldShort(field.RunwayIndex, field.Reverse);
+            var order = new int[n];
+            var keys = new double[n];
+            for (int j = 0; j < n; j++)
+            {
+                order[j] = j;
+                double length = 1e9;
+                if (goal >= 0 && TaxiRouter.Route(g, g.ServiceNode(j), goal, null, nodes, edges))
+                {
+                    length = 0;
+                    foreach (int e in edges) length += g.EdgeLength(e);
+                }
+                keys[j] = length + j * 1e-3;
+            }
+            Array.Sort(keys, order);
+            return order;
         }
 
         private static bool TrySpot(FieldTraffic field, int j, int lane, List<int> nodes, List<int> edges, bool taxiRequired, out ServiceSpot spot)

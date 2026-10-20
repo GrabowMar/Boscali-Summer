@@ -40,6 +40,16 @@
       "source": "modules/UrbanCombat/Assets/Models",
       "destination": "Assets/BoscaliSummer/AirborneModels",
       "optional": true
+    },
+    {
+      "source": "modules/Kaiju/Assets/Source",
+      "destination": "Assets/BoscaliSummer/Kaiju",
+      "optional": true
+    },
+    {
+      "source": "modules/Kaiju/Assets/Editor",
+      "destination": "Assets/BoscaliSummer/KaijuTools/Editor",
+      "optional": true
     }
   ]
 }

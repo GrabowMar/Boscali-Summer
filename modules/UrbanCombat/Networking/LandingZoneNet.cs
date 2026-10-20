@@ -112,6 +112,7 @@ namespace BoscaliSummer.Garrisons
 
         public void SetLocal(GlobalPosition point)
         {
+            if (!float.IsFinite(point.x) || !float.IsFinite(point.y) || !float.IsFinite(point.z)) return;
             if (!GameManager.GetLocalAircraft(out Aircraft aircraft) || aircraft == null || aircraft.disabled) return;
             local = point;
             localFrom = aircraft;
@@ -128,7 +129,9 @@ namespace BoscaliSummer.Garrisons
             Send(aircraft, false, 0f, 0f);
         }
 
-        private static void Send(Aircraft aircraft, bool hasZone, float x, float z)
+        public float ReachM(bool halo, float heightAboveZone) => halo ? LandingZoneReach.Halo(heightAboveZone) : LandingZoneReach.Glider(heightAboveZone);
+
+        private void Send(Aircraft aircraft, bool hasZone, float x, float z)
         {
             if (GameAccess.IsServer())
             {
@@ -142,10 +145,12 @@ namespace BoscaliSummer.Garrisons
         }
 
         /// <summary>Host: store the zone at ground height and tell every other peer.</summary>
-        private static void Apply(Aircraft aircraft, bool hasZone, float x, float z)
+        private void Apply(Aircraft aircraft, bool hasZone, float x, float z)
         {
+            if (hasZone && (!float.IsFinite(x) || !float.IsFinite(z))) return;
             float y = hasZone ? AirAssaultController.HaloGroundAt(new Vector3(x, 0f, z)) : 0f;
             LandingZones.Order(aircraft, hasZone ? new GlobalPosition(x, y, z) : (GlobalPosition?)null);
+            ResolveLocalHeight(aircraft, hasZone, x, y, z);
             Plugin.Logger.LogInfo(hasZone
                 ? $"[Landing Zone] {aircraft.name} aims at ({x:0}, {z:0})."
                 : $"[Landing Zone] {aircraft.name} cleared.");
@@ -185,6 +190,15 @@ namespace BoscaliSummer.Garrisons
             LandingZones.Order(unit, message.HasZone
                 ? new GlobalPosition(message.X, message.Y, message.Z)
                 : (GlobalPosition?)null);
+            ResolveLocalHeight(unit, message.HasZone, message.X, message.Y, message.Z);
+        }
+
+        /// <summary>Apply the host's ground height only to the local pilot's still-current order.</summary>
+        private void ResolveLocalHeight(Unit launcher, bool hasZone, float x, float y, float z)
+        {
+            if (!hasZone || localFrom != launcher || !local.HasValue ||
+                local.Value.x != x || local.Value.z != z || !float.IsFinite(y)) return;
+            local = new GlobalPosition(x, y, z);
         }
 
         private void OnDestroy()

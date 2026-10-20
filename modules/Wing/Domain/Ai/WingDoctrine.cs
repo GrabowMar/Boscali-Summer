@@ -2,7 +2,8 @@ using System;
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {
-    /// <summary>Who an anti-missile store may protect. Off still breaks and expends countermeasures.</summary>
+    /// <summary>MSL GUARD: Off holds the slot against a missile with countermeasures only; Self breaks. Wing and Lead are
+    /// read from old settings and fly as Self.</summary>
     public enum MissileGuard
     {
         Off,
@@ -11,14 +12,15 @@ namespace BoscaliSummer.Modules.Wing.Domain
         Lead,
     }
 
-    /// <summary>Press holds heading to kill a SARH missile. Break notches, beams, or flares.</summary>
+    /// <summary>Press holds heading against a radar missile while the member's own radar-guided missile flies. Break notches,
+    /// beams, or flares.</summary>
     public enum MissileResponse
     {
         Break,
         Press,
     }
 
-    /// <summary>Slot interval. Close also sticks to the slot and keeps the assigned echelon side.</summary>
+    /// <summary>Slot interval: scales the formation's spacing preset per element (<see cref="WingDoctrineRules.SpacingScale"/>).</summary>
     public enum FormationInterval
     {
         Close,
@@ -91,7 +93,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public WingDoctrine(MissileGuard guard, MissileResponse response, FormationInterval interval,
             bool spreadWhenThreatened, TargetPolicy targets, EngagementReach reach, WeaponsPolicy weapons, RadarPolicy radar)
         {
-            Guard = guard;
+            Guard = guard == MissileGuard.Off ? MissileGuard.Off : MissileGuard.Self;
             Response = guard == MissileGuard.Off ? MissileResponse.Break : response;
             Interval = interval;
             SpreadWhenThreatened = spreadWhenThreatened;
@@ -102,15 +104,15 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
 
         public static WingDoctrine Reserve => new WingDoctrine(
-            MissileGuard.Wing, MissileResponse.Press, FormationInterval.Close, true,
+            MissileGuard.Self, MissileResponse.Press, FormationInterval.Close, true,
             TargetPolicy.Hold, EngagementReach.Slot, WeaponsPolicy.Auto, RadarPolicy.On);
 
         public static WingDoctrine Escort => new WingDoctrine(
-            MissileGuard.Lead, MissileResponse.Break, FormationInterval.Standard, true,
+            MissileGuard.Self, MissileResponse.Break, FormationInterval.Standard, true,
             TargetPolicy.Cover, EngagementReach.Slot, WeaponsPolicy.Auto, RadarPolicy.On);
 
         public static WingDoctrine Sweep => new WingDoctrine(
-            MissileGuard.Wing, MissileResponse.Break, FormationInterval.Open, true,
+            MissileGuard.Self, MissileResponse.Break, FormationInterval.Open, true,
             TargetPolicy.Both, EngagementReach.Long, WeaponsPolicy.Auto, RadarPolicy.On);
 
         /// <summary>RESERVE, ESCORT, SWEEP, or CUSTOM, from the six profile axes (a silent SWEEP is still SWEEP).</summary>
@@ -192,7 +194,11 @@ namespace BoscaliSummer.Modules.Wing.Domain
             bool ok;
             switch (axis)
             {
-                case DoctrineAxis.Guard: ok = TryName(text, out MissileGuard g); value = (byte)g; break;
+                case DoctrineAxis.Guard:
+                    MissileGuard g = MissileGuard.Self;
+                    ok = text.Trim().Equals("On", StringComparison.OrdinalIgnoreCase) || TryName(text, out g);
+                    value = (byte)g;
+                    break;
                 case DoctrineAxis.Response: ok = TryName(text, out MissileResponse r); value = (byte)r; break;
                 case DoctrineAxis.Interval: ok = TryInterval(text, out FormationInterval i) && Word(text); value = (byte)i; break;
                 case DoctrineAxis.Spread: ok = TrySpread(text, out bool s); value = (byte)(s ? 1 : 0); break;

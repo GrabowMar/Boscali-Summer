@@ -88,7 +88,7 @@ public static partial class HudLogUnityCheck
     {
         var size = new Vector2(1280, 720);
         MakeBoard(size, 2f, out Canvas canvas, out object status, out object frame);
-        Set(status, "Options", PilotOptions("Scale", 1.4f, "OffsetY", 600f));
+        Set(status, "Options", PilotOptions("Scale", 1.4f, "OffsetY", 600f, "Page1", BoardPageOf("Wing")));
         var cruise = new ScopeScene(2f, size, frame);
         FixtureSystems(2f, cruise);
         StoresFixture("systems", 2f, cruise);
@@ -101,8 +101,9 @@ public static partial class HudLogUnityCheck
         StoresFixture("threat", 6f, live);
         Call(status, "Present", frame);
         Call(status, "Animate", 7f);
-        Check(root.sizeDelta.y > cruiseHeight * 2f, "hold: a live THREAT page makes the box much taller: " + cruiseHeight + " -> " + root.sizeDelta.y);
-        Check(Mathf.Abs(root.anchoredPosition.y - top) < 0.5f, "hold: ...and the box does not move for it (cruise height holds it on the screen): " + top + " -> " + root.anchoredPosition.y);
+        Check(PageTitle(status) == "WING", "A live THREAT feed cannot replace the manually selected WING page");
+        Check(Mathf.Abs(root.anchoredPosition.y - top) < 0.5f && Mathf.Abs(root.sizeDelta.y - cruiseHeight) < 0.5f,
+            "Incoming context does not resize or move the manually selected page");
         Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject); ScopeReset();
     }
 
@@ -110,7 +111,7 @@ public static partial class HudLogUnityCheck
     private static void FrameShot(string name, Vector2 size, string page, float t, object options)
     {
         MakeBoard(size, t, out Canvas canvas, out object status, out object frame);
-        Set(status, "Options", options);
+        SelectFixturePage(status, options, page);
         foreach (float before in PreRoll(page, t))
         {
             var rehearsal = new ScopeScene(before, size, frame);

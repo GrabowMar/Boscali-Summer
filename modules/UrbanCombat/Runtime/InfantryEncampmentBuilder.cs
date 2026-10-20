@@ -13,6 +13,8 @@ namespace BoscaliSummer.Garrisons
     {
         internal const string NamePrefix = "BoscaliSummer:Encampment:";
         internal const int MaximumSites = 12;
+        /// <summary>Game-start air defence camps; counted apart so they never block an insertion.</summary>
+        internal const int MaximumSeededSites = 64;
 
         public enum EncampmentType
         {
@@ -34,6 +36,7 @@ namespace BoscaliSummer.Garrisons
             public int Id;
             public EncampmentType Type;
             public bool Rappel;
+            public bool Seeded;
             /// <summary>One emplacement per slot; a destroyed one frees its slot for reinforcement.</summary>
             public readonly Building[] Slots = new Building[4];
 
@@ -165,7 +168,7 @@ namespace BoscaliSummer.Garrisons
                 ReinforceSite(existing, troopCount);
                 return true;
             }
-            if (ActiveSites.Count >= MaximumSites) return false;
+            if (ActiveSiteCount >= MaximumSites) return false;
             return CreateNewSite(dropPos, owner, airbase, troopCount);
         }
 
@@ -194,7 +197,56 @@ namespace BoscaliSummer.Garrisons
             return false;
         }
 
-        internal static int ActiveSiteCount => ActiveSites.Count;
+        /// <summary>Camps troops established (seeded air defence excluded): the insertion cap counts these.</summary>
+        internal static int ActiveSiteCount => CountSites(false);
+
+        private static int CountSites(bool seeded)
+        {
+            int n = 0;
+            foreach (EncampmentSite site in ActiveSites)
+                if (site.Seeded == seeded) n++;
+            return n;
+        }
+
+        /// <summary>
+        /// Game start (server): rings an owned zone with full-strength AA camps 2.2-3.2 km out,
+        /// fanned toward the nearest enemy base so the way in is covered and the runway stays clear.
+        /// </summary>
+        public static int SeedAirDefense(Airbase airbase, FactionHQ owner, int camps)
+        {
+            if (!GameAccess.IsServer() || airbase == null || owner == null || camps <= 0) return 0;
+            PruneFallenSites();
+            Vector3 home = airbase.transform.position;
+            Vector3 front = FrontDirection(home, owner);
+            int placed = 0;
+            for (int camp = 0; camp < camps && CountSites(true) < MaximumSeededSites; camp++)
+            {
+                float fan = (camp - (camps - 1) * 0.5f) * (360f / Mathf.Max(camps, 3)) * 0.6f;
+                for (int attempt = 0; attempt < 8; attempt++)
+                {
+                    float yaw = fan + ((attempt & 1) * 2 - 1) * attempt * 9f;
+                    Vector3 candidate = home + Quaternion.Euler(0f, yaw, 0f) * front * UnityEngine.Random.Range(2200f, 3200f);
+                    if (!GroundPlacement.DryGround(candidate, out Vector3 ground) || FindNearbySite(ground, 500f) != null) continue;
+                    if (CreateNewSite(ground, owner, airbase, TroopDeploymentMath.DefaultSquadSize, seeded: true)) { placed++; break; }
+                }
+            }
+            return placed;
+        }
+
+        private static Vector3 FrontDirection(Vector3 home, FactionHQ owner)
+        {
+            Vector3 best = Vector3.zero;
+            float bestSq = float.MaxValue;
+            if (FactionRegistry.airbaseLookup != null)
+                foreach (Airbase other in FactionRegistry.airbaseLookup.Values)
+                {
+                    if (other == null || other.AttachedAirbase || other.CurrentHQ == null || other.CurrentHQ == owner) continue;
+                    Vector3 d = Vector3.ProjectOnPlane(other.transform.position - home, Vector3.up);
+                    if (d.sqrMagnitude > 1f && d.sqrMagnitude < bestSq) { bestSq = d.sqrMagnitude; best = d; }
+                }
+            if (best == Vector3.zero) best = Quaternion.Euler(0f, UnityEngine.Random.Range(0f, 360f), 0f) * Vector3.forward;
+            return best.normalized;
+        }
 
         /// <summary>How many camps one stick establishes, per base-of-operations doctrine.</summary>
         internal static int RappelWanted(FactionHQ owner)
@@ -211,7 +263,7 @@ namespace BoscaliSummer.Garrisons
             int wanted = RappelWanted(owner);
             PruneFallenSites();
             int placed = 0;
-            for (int camp = 0; camp < wanted && ActiveSites.Count < MaximumSites; camp++)
+            for (int camp = 0; camp < wanted && ActiveSiteCount < MaximumSites; camp++)
                 if (TryCreateRappelCamp(position, owner, airbase)) placed++;
             return placed > 0;
         }
@@ -280,7 +332,7 @@ namespace BoscaliSummer.Garrisons
             }
         }
 
-        private static bool CreateNewSite(Vector3 center, FactionHQ owner, Airbase airbase, int troopCount, bool rappel = false)
+        private static bool CreateNewSite(Vector3 center, FactionHQ owner, Airbase airbase, int troopCount, bool rappel = false, bool seeded = false)
         {
             Spawner spawner = NetworkSceneSingleton<Spawner>.i;
             if (spawner == null) return false;
@@ -303,10 +355,12 @@ namespace BoscaliSummer.Garrisons
                 // Ids name the emplacements, so a pruned site's id is never handed out again.
                 Id = nextSiteId,
                 Rappel = rappel,
-                Type = rappel ? EncampmentType.MGNest : (EncampmentType)GarrisonComposition.EncampmentTypeIndex(groundCenter.x, groundCenter.z)
+                Seeded = seeded,
+                Type = seeded ? EncampmentType.AANest : rappel ? EncampmentType.MGNest
+                    : (EncampmentType)GarrisonComposition.EncampmentTypeIndex(groundCenter.x, groundCenter.z)
             };
             nextSiteId++;
-            site.Tier = site.Rappel ? 4 : TroopDeploymentMath.ComputeTier(site.Troops);
+            site.Tier = site.Rappel || site.Seeded ? 4 : TroopDeploymentMath.ComputeTier(site.Troops);
 
             SpawnEmplacements(site, spawner);
             if (!site.Standing) return false;
@@ -322,7 +376,7 @@ namespace BoscaliSummer.Garrisons
             if (spawner == null || site == null) return;
 
             site.Troops += Math.Max(1, troopCount);
-            site.Tier = site.Rappel ? 4 : TroopDeploymentMath.ComputeTier(site.Troops);
+            site.Tier = site.Rappel || site.Seeded ? 4 : TroopDeploymentMath.ComputeTier(site.Troops);
 
             SpawnEmplacements(site, spawner);
             if (site.Tier >= 4)

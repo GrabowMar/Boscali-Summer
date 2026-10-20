@@ -49,12 +49,29 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         public WingDoctrine DoctrineOf(int e) => Settings.DoctrineOf(e, Doctrine);
 
         /// <summary>The doctrine member <paramref name="m"/> flies: its element's, then its own (spec WMC rebuild R3).</summary>
-        public WingDoctrine DoctrineFor(WingMember m) =>
-            Settings.Members.Resolve((object)m.Aircraft != null ? m.Aircraft.persistentID.Id : 0u, DoctrineOf(ElementOf(m)));
+        public WingDoctrine DoctrineFor(WingMember m) => DoctrineFor(m, DoctrineOf(ElementOf(m)));
+
+        /// <summary>The doctrine member <paramref name="m"/> would fly inside an element flying <paramref name="element"/>.</summary>
+        public WingDoctrine DoctrineFor(WingMember m, WingDoctrine element) =>
+            Settings.Members.Resolve((object)m.Aircraft != null ? m.Aircraft.persistentID.Id : 0u, element);
 
         /// <summary>Whether <paramref name="m"/> keeps its own value of <paramref name="axis"/> when its element's changes.</summary>
         public bool KeepsOwn(WingMember m, DoctrineAxis axis) =>
             (object)m.Aircraft != null && Settings.Members.Has(m.Aircraft.persistentID.Id, axis);
+
+        /// <summary>Whether <paramref name="m"/> flies anything of its own (an order to its element or the wing does not reach it).</summary>
+        public bool KeepsOwn(WingMember m) => (object)m.Aircraft != null && Settings.Members.Has(m.Aircraft.persistentID.Id);
+
+        /// <summary>Member <paramref name="m"/> flies its element's doctrine again; false when it had nothing of its own.</summary>
+        public bool ClearMemberDoctrine(WingMember m) => (object)m.Aircraft != null && Settings.Members.Forget(m.Aircraft.persistentID.Id);
+
+        /// <summary>Members detached out of element <paramref name="from"/> into <paramref name="to"/> keep flying its shape and
+        /// doctrine (out of A: the wing's), not the wing's (a HOLD FIRE element's jets must not start engaging at long reach).</summary>
+        public void CarrySettings(int from, int to)
+        {
+            Settings.Copy(from, to);
+            wings[to]?.SetFormation(ShapeOf(to), Selection.SpacingMetres);
+        }
 
         /// <summary>One setting for the whole wing (<paramref name="element"/> &lt; 0: every element, the detached ones with
         /// their own doctrine too) or one element (A: the wing's doctrine, with B-D pinned first so they keep flying theirs).</summary>
@@ -126,7 +143,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             FactionHQ hq = a != null ? a.NetworkHQ : null;
             if (hq == null || hq.trackingDatabase == null || a.weaponStations == null || a.weaponManager == null) return;
             float range = WingDoctrineRules.EngageRange(doctrine.Reach) * m.Perks.ReachScale;
-            AnchorSample anchor = Planner.Active ? Planner.Sample() : AnchorNow();
+            AnchorSample anchor = AnchorOf(ElementOf(m));
             Vec3 cover = anchor.Present ? anchor.Pos : a.GlobalPosition().ToVec3();
             int others = 0;
             // Committed: the others' standing targets this check and the engaged members' own targets (review M5d-2 I1).

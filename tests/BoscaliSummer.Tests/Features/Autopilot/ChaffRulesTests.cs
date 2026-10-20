@@ -10,6 +10,13 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.That(ChaffRules.Load(48) == 48 && ChaffRules.Load(8) == ChaffRules.MinLoad && ChaffRules.Load(400) == ChaffRules.MaxLoad, "the load follows the flare load, within bounds");
             TestAssert.That(ChaffRules.IsRadarSeeker("ARH") && ChaffRules.IsRadarSeeker("SARH") && !ChaffRules.IsRadarSeeker("IR") && !ChaffRules.IsRadarSeeker(null), "chaff answers the two radar seekers only");
 
+            float beamClose = ChaffRules.SeduceChance(2000f, 1f), tailClose = ChaffRules.SeduceChance(2000f, 0f);
+            TestAssert.Near(beamClose, ChaffRules.SeduceBase, "seduction: full chance on the beam inside 3 km");
+            TestAssert.That(tailClose > 0f && tailClose < beamClose * 0.5f, "tail-on still has a chance, well under the beam's");
+            TestAssert.That(ChaffRules.SeduceChance(9000f, 1f) == 0f && ChaffRules.SeduceChance(5500f, 1f) < beamClose, "nothing past 8 km, less on the way in");
+            float salvo = 1f - (float)System.Math.Pow(1f - beamClose, 5);
+            TestAssert.That(salvo > 0.5f && salvo < 0.6f, "a one-second salvo on the beam seduces about half the time: " + salvo);
+
             TestAssert.That(ChaffRules.ShouldRun(salvo: true, linked: false, countermeasureHeld: false, radarMissileInbound: false, ammo: 1), "a salvo runs whatever else is true");
             TestAssert.That(!ChaffRules.ShouldRun(true, true, true, true, 0), "an empty dispenser never runs");
             TestAssert.That(ChaffRules.ShouldRun(false, true, true, true, 10), "linked: the countermeasure button runs it at a radar missile");

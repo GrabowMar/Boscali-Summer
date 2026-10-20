@@ -64,6 +64,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public override char Code => 'T';
 
+        public override string IdleWord => "CLEAR";
+
+        public override string IdleHint => "NO RADAR OR MISSILE WARNING";
+
         public override bool Fast => live;
 
         // ------------------------------------------------------------------------------------------------ poll
@@ -231,6 +235,18 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Read();
             Scope(g);
             Column(g);
+        }
+
+        /// <summary>Nothing inbound, nothing painting us: the empty scope (rings, the aircraft, its words) and CLEAR where the call box goes, so a quiet sky reads as watched, not as no data.</summary>
+        public override void PaintIdle(ScopeCanvas g, in PagePaint p)
+        {
+            keep.Clear();
+            Rings(g);
+            g.Jet(CX, CY, 0f, 9f, Ink, true);
+            g.Text("TTI RINGS", 5f, 41f, Dim);
+            g.Text("HDG UP", 5f, 56f, Faint);
+            g.Text(IdleWord, COL + CW / 2f, 52f, Hi, 14f, ScopeAlign.Center, true);
+            g.Text("NO WARNING", COL + CW / 2f, 70f, Dim, 12f, ScopeAlign.Center);
         }
 
         private static void At(float bearing, float r, out float x, out float y)

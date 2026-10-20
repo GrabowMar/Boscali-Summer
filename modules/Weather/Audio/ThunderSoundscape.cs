@@ -6,26 +6,36 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Weather.Audio
 {
-    /// <summary>Eight pending arrivals and two sources. Inaudible/refused arrivals are dropped.</summary>
+    /// <summary>Twelve pending arrivals and three sources. Inaudible/refused arrivals are dropped.</summary>
     internal sealed class ThunderSoundscape
     {
         private struct Arrival { internal float Due, Distance, Pan; internal uint Seed; }
-        private readonly Arrival[] queue = new Arrival[8];
-        private readonly AudioSource[] sources = new AudioSource[2];
-        private readonly AudioLowPassFilter[] filters = new AudioLowPassFilter[2];
-        private readonly float[] distances = new float[2];
+        /// <summary>Thunder is queued from this far (2026-10-18: was 10 km, which left most storms silent; past ~10 km it is a filtered rumble).</summary>
+        internal const float MaxDistance = 25000f;
+        private const int Voices = 3;
+        private readonly Arrival[] queue = new Arrival[12];
+        private readonly AudioSource[] sources = new AudioSource[Voices];
+        private readonly AudioLowPassFilter[] filters = new AudioLowPassFilter[Voices];
+        private readonly float[] distances = new float[Voices];
         private readonly AudioClip[] clips = new AudioClip[2];
         private static float[][] baked;
         private static int baking;
         private GameObject root;
         private int count;
         internal int Queued => count;
-        internal int Playing => (sources[0] != null && sources[0].isPlaying ? 1 : 0) +
-            (sources[1] != null && sources[1].isPlaying ? 1 : 0);
+        internal int Playing
+        {
+            get
+            {
+                int playing = 0;
+                foreach (AudioSource source in sources) if (source != null && source.isPlaying) playing++;
+                return playing;
+            }
+        }
 
         internal void Enqueue(float due, float distance, uint seed, float pan)
         {
-            if (distance < 0f || distance > 10000f || float.IsNaN(distance) || float.IsInfinity(distance) ||
+            if (distance < 0f || distance > MaxDistance || float.IsNaN(distance) || float.IsInfinity(distance) ||
                 float.IsNaN(due) || float.IsInfinity(due) || count >= queue.Length) return;
             queue[count++] = new Arrival { Due = due, Distance = distance, Seed = seed, Pan = Mathf.Clamp(pan, -0.75f, 0.75f) };
             if (Volatile.Read(ref baked) == null && Interlocked.CompareExchange(ref baking, 1, 0) == 0)
@@ -56,7 +66,9 @@ namespace BoscaliSummer.Modules.Weather.Audio
                 queue[i] = queue[--count]; if (missionTime - arrival.Due > 1f) continue;
                 var mixer = SoundManager.i != null ? SoundManager.i.EffectsMixer : null;
                 float[][] data = Volatile.Read(ref baked); if (mixer == null || data == null || data.Length != 2) continue;
-                int free = sources[0] == null || !sources[0].isPlaying ? 0 : sources[1] == null || !sources[1].isPlaying ? 1 : -1;
+                int free = -1;
+                for (int v = 0; v < Voices && free < 0; v++)
+                    if (sources[v] == null || !sources[v].isPlaying) free = v;
                 if (free < 0) continue;
                 EnsureSources(data); if (sources[free] == null) continue;
                 AudioSource source = sources[free]; source.pitch = 0.9f + WeatherMath.Hash01(arrival.Seed, 20) * 0.15f;
@@ -77,7 +89,11 @@ namespace BoscaliSummer.Modules.Weather.Audio
         {
             if (root != null) return;
             root = new GameObject("BoscaliThunder");
-            for (int i = 0; i < 2; i++)
+            for (int i = 0; i < clips.Length; i++)
+            {
+                clips[i] = AudioClip.Create("BoscaliThunder" + i, data[i].Length, 1, 22050, false); clips[i].SetData(data[i], 0);
+            }
+            for (int i = 0; i < Voices; i++)
             {
                 var voiceRoot = new GameObject("ThunderVoice" + i);
                 voiceRoot.transform.SetParent(root.transform, false);
@@ -85,7 +101,6 @@ namespace BoscaliSummer.Modules.Weather.Audio
                 sources[i].playOnAwake = false; sources[i].spatialBlend = 0f;
                 sources[i].dopplerLevel = 0f; sources[i].reverbZoneMix = 0f;
                 filters[i] = voiceRoot.AddComponent<AudioLowPassFilter>();
-                clips[i] = AudioClip.Create("BoscaliThunder" + i, data[i].Length, 1, 22050, false); clips[i].SetData(data[i], 0);
             }
         }
 
@@ -116,7 +131,8 @@ namespace BoscaliSummer.Modules.Weather.Audio
         internal void Dispose()
         {
             Clear(); if (root != null) UnityEngine.Object.Destroy(root); root = null;
-            for (int i = 0; i < 2; i++) { sources[i] = null; filters[i] = null; if (clips[i] != null) UnityEngine.Object.Destroy(clips[i]); clips[i] = null; }
+            for (int i = 0; i < Voices; i++) { sources[i] = null; filters[i] = null; }
+            for (int i = 0; i < clips.Length; i++) { if (clips[i] != null) UnityEngine.Object.Destroy(clips[i]); clips[i] = null; }
         }
     }
 }

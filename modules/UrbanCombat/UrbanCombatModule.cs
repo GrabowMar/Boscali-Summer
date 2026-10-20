@@ -53,6 +53,8 @@ namespace BoscaliSummer.Modules.UrbanCombat
             context.AddHostSettings(new HostSettingsTable("URBAN COMBAT")
                 .Toggle(1, context.Settings.UrbanCombat.GarrisonsEnabled, "ZONE GARRISONS",
                     "Occupied buildings near owned airbases become defensive positions; the Zone Fortification support action needs this on.")
+                .Number(5, context.Settings.UrbanCombat.AirDefenseCampsPerZone, "AA CAMPS PER ZONE",
+                    "Infantry MANPADS/23mm camps dug in around every held airbase at mission start; applies from the next mission.", 1)
                 .Number(4, context.Settings.UrbanCombat.GarrisonsPerZone, "NESTS PER ZONE",
                     "Base rooftop defenders for new zones; urban siege can add up to three, within the hard cap of six. Existing nests remain.", 1)
                 .Toggle(2, context.Settings.UrbanCombat.SiegeEnabled, "URBAN SIEGE",

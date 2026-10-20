@@ -22,6 +22,7 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
             KestrelDrone.Attach(__instance);
             HamilcarVisuals.Attach(__instance);
             if (VanguardKeys.RoleOf(__instance.definition.jsonKey) == VanguardRole.Towed) TowAnchor.Capture(__instance);
+            DroneRoster.Track(__instance);
         }
     }
 
@@ -62,14 +63,6 @@ namespace BoscaliSummer.Modules.Vanguard.Patches
         }
     }
 
-    [HarmonyPatch(typeof(Aircraft), nameof(Aircraft.LockedByMissile))]
-    internal static class AegisLockPatch
-    {
-        private static void Postfix(Aircraft __instance)
-        {
-            if (__instance.IsServer) AegisService.Watch(__instance);
-        }
-    }
 
     // SKYWELL: "firing" the kit toggles it on the owner peer. Cargo stations launch through LaunchMount, which
     // also advances the weapon index, so the whole call is skipped and the single round stays fireable.

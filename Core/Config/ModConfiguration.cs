@@ -17,6 +17,7 @@ using BoscaliSummer.Modules.Support.Configuration;
 using BoscaliSummer.Modules.Squad.Configuration;
 using BoscaliSummer.Modules.TheaterOps.Configuration;
 using BoscaliSummer.Modules.Trenches.Configuration;
+using BoscaliSummer.Modules.Kaiju.Configuration;
 using BoscaliSummer.Modules.UrbanCombat.Configuration;
 using BoscaliSummer.Modules.Weather.Configuration;
 using BoscaliSummer.Modules.Wing.Configuration;
@@ -47,6 +48,8 @@ namespace BoscaliSummer.Core.Config
         public TheaterOpsSettings TheaterOps { get; }
         public DynamicOperationsSettings DynamicOperations { get; }
         public TrenchesSettings Trenches { get; }
+        public KaijuSettings Kaiju { get; }
+        public BoscaliSummer.Modules.Spooktober.Configuration.SpooktoberSettings Spooktober { get; }
         public EventsSettings Events { get; }
         public CommsSettings Comms { get; }
         public QoLSettings QoL { get; }
@@ -88,6 +91,8 @@ namespace BoscaliSummer.Core.Config
                 TheaterOps = new TheaterOpsSettings(config);
                 DynamicOperations = new DynamicOperationsSettings(config);
                 Trenches = new TrenchesSettings(config);
+                Kaiju = new KaijuSettings(config);
+                Spooktober = new BoscaliSummer.Modules.Spooktober.Configuration.SpooktoberSettings(config);
                 Events = new EventsSettings(config);
                 Comms = new CommsSettings(config);
                 QoL = new QoLSettings(config);

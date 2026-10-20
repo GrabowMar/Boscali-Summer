@@ -6,8 +6,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
     /// <summary>The cloud renderer's weather maps for one tape and frame: a near map over the
     /// flight domain and a coarse far map (the level of detail out to the horizon), RGBA32
     /// bytes ready to upload. Pure: built on a worker, or once on the main thread to preload.
-    /// Structure: sheet cover, (unused), cell shape, low/tower top. Profiles: (unused), (unused),
-    /// cloud base, rain.</summary>
+    /// Structure: sheet cover, top low byte, cell shape, low/tower top (high byte). Profiles: (unused),
+    /// base low byte, cloud base (high byte), rain.</summary>
     internal sealed class CloudMaps
     {
         internal const int NearSize = 256;
@@ -59,13 +59,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 // (DeckTop). Include it even at a thinly covered edge, or empty-space skipping cuts tops off.
                 float visualTop = Math.Max(p.LowTop, p.DeckTop) + p.BaseVariation;
                 int i = (z * size + x) * 4;
+                // Heights are 16-bit (2026-10-18): one byte was 16 m of base and 63 m of top, so a smooth base came out as flat terraces whose edges ran
+                // along the map texels (straight-edged blocks under and over every sheet). High byte in the old channel, low byte in a spare one.
+                Word(visualTop / VolumeTop, out pixels[i + 3], out pixels[i + 1]);
                 pixels[i] = Byte(p.BackgroundCover);
-                pixels[i + 1] = 0;                              // the frontal shield's channel is free (spec 5.3)
                 pixels[i + 2] = Byte(p.CellShape);
-                pixels[i + 3] = Byte(visualTop / VolumeTop);
                 profiles[i] = 0;
-                profiles[i + 1] = 0;
-                profiles[i + 2] = Byte(p.CloudBase / BaseRange);
+                Word(p.CloudBase / BaseRange, out profiles[i + 2], out profiles[i + 1]);
                 profiles[i + 3] = Byte(p.RainRate / 100f);
                 rainMaximum = Math.Max(rainMaximum, profiles[i + 3] / 255f);
             }
@@ -132,5 +132,14 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static byte BaseToMapUnits(byte b) => (byte)(b * BaseRange / VolumeTop);
 
         private static byte Byte(float v) => (byte)(Math.Max(0f, Math.Min(1f, v)) * 255f + 0.5f);
+
+        /// <summary>A 0-1 height as 16 bits: <c>(high * 256 + low) / 65535</c>, decoded by <c>CloudBodies.Word</c> and the shader's <c>MapWord</c>. Linear in
+        /// both bytes, so bilinear filtering of the two channels stays exact; the high byte alone rounds down (the envelope stays conservative).</summary>
+        private static void Word(float v, out byte high, out byte low)
+        {
+            int word = (int)(Math.Max(0f, Math.Min(1f, v)) * 65535f + 0.5f);
+            high = (byte)(word >> 8);
+            low = (byte)(word & 255);
+        }
     }
 }

@@ -94,10 +94,30 @@ namespace BoscaliSummer.Modules.Cinematography.Runtime
                     var orbit=ShotRigs.Orbit(Plan.id,MissionIdentity,SceneIdentity,center,radius,height,Number(args,"duration",10),from,to);
                     orbit.anchorId=ActorArgument(args);accepted=SetShot(orbit,out error);break;
                 case "follow":
+                case "chase":
                     string actor=ActorArgument(args);
                     if(string.IsNullOrWhiteSpace(actor)) { accepted=false;error="Exact actor ID required";break; }
                     var follow=ShotRigs.Follow(Plan.id,MissionIdentity,SceneIdentity,actor,new System.Numerics.Vector3(
-                        Number(args,"x",-20),Number(args,"y",8),Number(args,"z",-30)),Number(args,"duration",10));accepted=SetShot(follow,out error);break;
+                        Number(args,"x",-20),Number(args,"y",8),Number(args,"z",-30)),Number(args,"duration",10));
+                    follow.options.headingOnlyAnchor=action=="chase";accepted=SetShot(follow,out error);break;
+                case "track":
+                case "flyby":
+                    string tracked=ActorArgument(args);
+                    if(string.IsNullOrWhiteSpace(tracked)) { accepted=false;error="Exact actor ID required";break; }
+                    ShotPose? subjectPose=ActorPose(FindActor(tracked));
+                    if(!subjectPose.HasValue) { accepted=false;error="ACTOR MISSING, DISABLED OR AMBIGUOUS";break; }
+                    ShotPlan tracking;
+                    if(action=="track")
+                    {
+                        var rig=SceneSingleton<CameraStateManager>.i;
+                        rig.GetCameraPosition(out GlobalPosition p,out Quaternion q);
+                        var vantage=new ShotPose(new System.Numerics.Vector3(p.x,p.y,p.z),
+                            new System.Numerics.Quaternion(q.x,q.y,q.z,q.w),rig.mainCamera.fieldOfView);
+                        tracking=ShotRigs.Track(Plan.id,MissionIdentity,SceneIdentity,tracked,vantage,Number(args,"duration",10));
+                    }
+                    else tracking=ShotRigs.Flyby(Plan.id,MissionIdentity,SceneIdentity,tracked,subjectPose.Value,
+                        new System.Numerics.Vector3(Number(args,"x",-80),Number(args,"y",10),Number(args,"z",300)),Number(args,"duration",10));
+                    accepted=SetShot(tracking,out error);break;
                 case "demo":
                     string subject=ActorArgument(args);
                     if(string.IsNullOrWhiteSpace(subject)) {accepted=false;error="Exact actor ID required";break;}

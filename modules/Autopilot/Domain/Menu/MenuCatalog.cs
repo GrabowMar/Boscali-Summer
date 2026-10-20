@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Core.Contracts;
 
 namespace BoscaliSummer.Modules.Autopilot.Domain
 {
@@ -21,30 +22,30 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public static readonly string[] BoardShades = { "OFF", "LOW", "MED", "HIGH" }, BoardSizes = { "SMALL", "NORMAL", "LARGE" }, Ghosts = { "OFF", "FAINT", "CLEAR" };
         public static readonly float[] ShadeSteps = { 0f, 0.35f, 0.7f, 1f }, SizeSteps = { 0.8f, 1f, 1.2f }, GhostSteps = { 0f, 0.35f, 0.8f };
 
-        /// <summary>The scope pages of the TAC BOARD (HUD > SCOPE PAGES), the board's parts (HUD > BOARD PARTS) and the cabin effects (COCKPIT > CABIN FEEL).
-        /// The Runtime adapter maps each slug to its option; a world lists the slugs that are on.</summary>
+        public static readonly string[] BoardPageCounts = { "1", "2", "3", "4" };
+        /// <summary>The manual page choices in BoardPage order (SYSTEMS keeps its place but is never offered: the board always shows it), the board's major elements and the cabin effects.
+        /// The Runtime adapter maps each part slug to its option; a world lists the parts that are on.</summary>
         public static readonly MenuSwitch[] BoardPages =
         {
-            // the words follow the options' own descriptions in the Hud module's settings
-            new MenuSwitch("threat", "THREAT PAGE", "LOCKS, RADAR PAINTS AND LAUNCHES AT YOU"),
-            new MenuSwitch("shot", "SHOT PAGE", "YOUR MISSILES AND BOMBS, LAUNCH TO RESULT"),
-            new MenuSwitch("missile-cam", "MISSILE CAM PAGE", "WHILE THE CAMERA RIDES ONE OF YOUR MISSILES"),
-            new MenuSwitch("approach", "APPROACH PAGE", "THE RUNWAY FUNNEL FOR ILS AND AUTOLAND"),
-            new MenuSwitch("wing", "WING PAGE", "WINGMEN: FORMATION, FUEL, AMMO AND ORDERS"),
-            new MenuSwitch("strike", "STRIKE PAGE", "YOUR STRIKES, RECON WINDOWS AND INTRUSIONS"),
-            new MenuSwitch("dock", "DOCK PAGE", "WHILE YOU HOOK UP TO A SKYWELL TANKER"),
-            new MenuSwitch("objective", "OBJECTIVE PAGE", "YOUR CONTRACT: ZONE, DEADLINE, AIR DEFENCES"),
-            new MenuSwitch("systems", "SYSTEMS PAGE", "CRUISE STRIP AND FIRE, ENGINE, FUEL WARNINGS"),
+            new MenuSwitch("threat", "THREAT", "LOCKS, RADAR PAINTS AND LAUNCHES AT YOU"),
+            new MenuSwitch("shot", "SHOT", "YOUR MISSILES AND BOMBS, LAUNCH TO RESULT"),
+            new MenuSwitch("missile-cam", "MISSILE CAM", "THE CAMERA VIEW OF ONE OF YOUR MISSILES"),
+            new MenuSwitch("approach", "APPROACH", "THE RUNWAY FUNNEL FOR ILS AND AUTOLAND"),
+            new MenuSwitch("wing", "WING", "WINGMEN: FORMATION, FUEL, AMMO AND ORDERS"),
+            new MenuSwitch("strike", "STRIKE", "YOUR STRIKES, RECON WINDOWS AND INTRUSIONS"),
+            new MenuSwitch("dock", "DOCK", "GUIDANCE TO CONNECT WITH A SKYWELL TANKER"),
+            new MenuSwitch("objective", "OBJECTIVE", "YOUR CONTRACT: ZONE, DEADLINE, AIR DEFENCES"),
+            new MenuSwitch("systems", "SYSTEMS", "CRUISE STRIP AND FIRE, ENGINE, FUEL WARNINGS"),
+            new MenuSwitch("cargo", "CARGO", "YOUR LOADS, DROP ZONE AND RELEASE RANGE"),
         };
         public static readonly MenuSwitch[] BoardParts =
         {
-            new MenuSwitch("lamps", "STATUS LAMPS", "SWITCH STATES AND THE THREAT LAMPS"),
-            new MenuSwitch("strip", "SYSTEMS STRIP", "CRUISE SUMMARY, NEEDS THE SYSTEMS PAGE"),
-            new MenuSwitch("gauges", "GAUGES", "THE GAUGE ROW UNDER THE PAGE AREA"),
-            new MenuSwitch("ticker", "TICKER", "THE NOTICE LINE AT THE FOOT OF THE BOARD"),
+            new MenuSwitch("stores", "STORES + POWER", "WEAPON, POWER AND COUNTERMEASURE PANELS"),
+            new MenuSwitch("pages", "TACTICAL PAGES", "THE MANUALLY SELECTED PAGE PANELS"),
+            new MenuSwitch("status", "LAMPS + GAUGES", "STATUS LAMPS AND GAUGE ROW; SYSTEMS ALWAYS SHOWS"),
+            new MenuSwitch("notices", "NOTICES", "THE NOTICE LINE AT THE FOOT OF THE BOARD"),
             new MenuSwitch("navdata", "NAV DATA", "WAY HOME, TARGET, FUEL AND MISSION CLOCK"),
-            new MenuSwitch("corners", "FEED + MAP FRAME", "KILL FEED AND MAP RESTYLE, STAYS WITH BOARD OFF"),
-            new MenuSwitch("sway", "VISOR SWAY", "SYMBOLS HANG IN THE AIR OFF THE GLASS", enable: true),
+            new MenuSwitch("corners", "MAP + FEED", "MAP FRAME AND KILL FEED, ALSO WITH BOARD OFF"),
         };
         public static readonly MenuSwitch[] FeelSwitches =
         {
@@ -189,6 +190,10 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             }
             c.Rows.Add(b.Reg(MenuRow.Submenu("weapons/select", "station-select", "SELECT STATION",
                 "ACTIVE: " + StationName(now) + " " + StationAmmo(now), "CHOOSE A HARDPOINT", Cut(w.Aircraft, 14) + D + MenuText.Plural(n, "STATION", "STATIONS"), "STATIONS", picks)));
+            MenuRow cargo = Cargo(w);
+            if (cargo != null) c.Rows.Add(b.Reg(cargo));
+            MenuRow drones = DroneLink(w);
+            if (drones != null) c.Rows.Add(b.Reg(drones));
             if (w.HasMultipleGuns)
                 c.Rows.Add(b.Reg(MenuRow.Toggle("weapons/link", "link-guns", w.GunsLinked,
                     F("LINK GUNS", "GUNS: SEPARATE", "FIRE ALL GUNS TOGETHER", "GUNS LINKED"),
@@ -205,6 +210,93 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             string tail = X + MenuText.Ammo(now.Ammo);
             Badge(c, StationTag(now, MenuModel.BadgeChars - 1 - tail.Length) + " " + tail, show: now.Ammo <= 0, alert: now.Ammo <= 0);
             return c;
+        }
+
+        private static MenuRow Cargo(MenuWorld w)
+        {
+            var kids = new List<MenuRow>();
+            int loads = 0;
+            for (int i = 0; i < w.Stations.Count; i++)
+            {
+                WorldStation station = w.Stations[i];
+                if (station.Cargo == CargoKind.None) continue;
+                loads++;
+                bool empty = station.Ammo <= 0;
+                string role = station.Cargo == CargoKind.Paratroopers ? "PARATROOPERS" : station.Cargo == CargoKind.Troops ? "TROOPS"
+                    : station.Cargo == CargoKind.Glider ? "GLIDER" : "CARGO";
+                MenuRow pick = MenuRow.Pick("weapons/cargo/st" + (i + 1), "hardpoint", "STA " + (i + 1) + D + StationName(station),
+                    role + ": " + (empty ? "EMPTY" : StationAmmo(station)), "ACTIVE" + D + role + " " + StationAmmo(station),
+                    i == w.ActiveStation, "SELECT LOAD; USE YOUR NORMAL FIRE CONTROL", "LOAD SELECTED", empty ? MenuTone.Dim : MenuTone.Normal, hatched: empty);
+                pick.Index = i;
+                kids.Add(pick);
+            }
+            if (loads == 0) return null;
+            kids.Insert(0, MenuRow.Action("weapons/cargo/next", "station-next", "NEXT CARGO LOAD", "LOADS: " + loads,
+                "SELECT THE NEXT CARGO, TROOP OR GLIDER STATION", "CARGO LOAD SELECTED"));
+            if (w.CargoZoneAvailable && w.CargoZoneCapable)
+            {
+                MenuRow set = MenuRow.Action("weapons/cargo/setzone", "camera-mark", "SET DZ AT TARGET",
+                    w.CargoFixAvailable ? "FIX: " + Cut(w.CargoFixName, 25) : "FIX: NO GROUND TARGET",
+                    "AIM FUTURE DROPS AT THE DESIGNATED GROUND FIX", "DROP ZONE SET");
+                if (!w.CargoFixAvailable) set.Blocked = "DESIGNATE A GROUND TARGET";
+                kids.Add(set);
+                MenuRow clear = MenuRow.Action("weapons/cargo/clearzone", "mark-clear", "CLEAR DROP ZONE",
+                    w.CargoZoneSet ? "DZ: " + Cut(w.CargoZoneLeg, 26) : "DZ: NONE",
+                    "FUTURE DROPS FOLLOW THEIR DESIGNATION", "DROP ZONE CLEARED");
+                if (!w.CargoZoneSet) clear.Blocked = "NO DROP ZONE SET";
+                kids.Add(clear);
+            }
+            if (w.MapAvailable && w.CargoZoneAvailable && w.CargoZoneCapable) kids.Add(MenuRow.Action("weapons/cargo/map", "map", "OPEN DROP ZONE MAP",
+                "MAP: RIGHT-CLICK GROUND", "SET OR MOVE THE DROP ZONE ON THE MAP", "MAP OPEN"));
+            return MenuRow.Submenu("weapons/cargo", "hardpoint", "CARGO / AIRDROP",
+                w.CargoZoneSet ? "DZ: " + Cut(w.CargoZoneLeg, 26) : "LOADS: " + loads,
+                "LOAD SELECTION AND DROP-ZONE CONTROLS", "CARGO / AIRDROP", "LOADS", kids);
+        }
+
+        /// <summary>
+        /// DRONE LINK: the VANGUARD drones flying, one of them linked. TAKE CONTROL flies the linked drone by hand (it goes where the
+        /// pilot's nose points), NEXT / PREV move the link and a hand-flown link hands the stick over, the HUD feed card, the UAV
+        /// terminal and a pick list. Only while a linkable drone is in the air.
+        /// </summary>
+        private static MenuRow DroneLink(MenuWorld w)
+        {
+            int n = w.DroneNames.Count;
+            if (!w.HasDrones || n == 0) return null;
+            int linked = w.DroneLinked >= 0 && w.DroneLinked < n ? w.DroneLinked : -1;
+            string name = linked >= 0 ? w.DroneNames[linked] : w.DroneNames[0];
+            var kids = new List<MenuRow>();
+            MenuRow hand = MenuRow.Toggle("weapons/drones/hand", "drone-strike", w.DroneHand,
+                F("TAKE CONTROL", "LINK: " + name, "FLY THE DRONE BY HAND: IT GOES WHERE YOUR NOSE POINTS", "HAND CONTROL: " + name),
+                F("RELEASE CONTROL", "HAND: " + name, "THE DRONE GOES BACK TO ITS OWN JOB", "BACK ON TASK: " + name, MenuTone.Caution), checkbox: false);
+            hand.IconOn = "drone-screen";
+            kids.Add(hand);
+            if (n > 1)
+            {
+                int next = linked < 0 ? 0 : (linked + 1) % n, prev = linked < 0 ? n - 1 : (linked + n - 1) % n;
+                string carry = w.DroneHand ? ", THE STICK GOES WITH IT" : "";
+                kids.Add(MenuRow.Action("weapons/drones/next", "station-next", "NEXT DRONE", "NEXT: " + w.DroneNames[next], "LINK THE NEXT DRONE" + carry, "LINK: " + w.DroneNames[next]));
+                kids.Add(MenuRow.Action("weapons/drones/prev", "station-prev", "PREV DRONE", "PREV: " + w.DroneNames[prev], "LINK THE PREVIOUS DRONE" + carry, "LINK: " + w.DroneNames[prev]));
+            }
+            kids.Add(MenuRow.Toggle("weapons/drones/feed", "missile-view", w.DroneFeed,
+                F("SHOW DRONE FEED", "HUD FEED: OFF", "THE LINKED DRONE'S CAMERA ON YOUR HUD", "DRONE FEED ON"),
+                F("HIDE DRONE FEED", "HUD FEED: ON", "FEED CARD OFF THE HUD; IT STAYS WHILE YOU HAND-FLY", "DRONE FEED OFF")));
+            kids.Add(MenuRow.Action("weapons/drones/terminal", "map", "OPEN UAV TERMINAL", "ON LINK: " + MenuText.Plural(n, "DRONE", "DRONES"),
+                "EVERY DRONE, ITS FEED, THE PLOT AND WAYPOINTS", "UAV TERMINAL"));
+            if (n > 1)
+            {
+                var picks = new List<MenuRow>(n);
+                for (int i = 0; i < n; i++)
+                {
+                    MenuRow pick = MenuRow.Pick("weapons/drones/pick/d" + (i + 1), "drone-strike", w.DroneNames[i], w.DroneStates[i], "LINKED" + D + w.DroneStates[i],
+                        i == linked, "LINK THIS DRONE: FEED, TERMINAL AND STICK FOLLOW IT", "LINK: " + w.DroneNames[i]);
+                    pick.Index = i;
+                    picks.Add(pick);
+                }
+                kids.Add(MenuRow.Submenu("weapons/drones/pick", "station-select", "SELECT DRONE", linked >= 0 ? "LINK: " + name : "LINK: NONE",
+                    "PICK THE DRONE THE LINK FOLLOWS", "DRONE LINK" + D + MenuText.Plural(n, "DRONE", "DRONES"), "DRONES", picks));
+            }
+            return MenuRow.Submenu("weapons/drones", "drone-strike", "DRONE LINK", w.DroneHand ? "HAND: " + name : linked >= 0 ? "LINK: " + name : "ON LINK: " + n,
+                "HAND-FLY, SWITCH AND WATCH YOUR VANGUARD DRONES", "DRONE LINK", "DRONES", kids);
         }
 
         // ------------------------------------------------------------------ HUD (the AR visor: the TAC BOARD in the top right)
@@ -241,26 +333,45 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             c.Rows.Add(b.Reg(MenuRow.Toggle("hud/board", "hud", w.BoardOn,
                 F("SHOW TAC BOARD", "CURRENT: OFF", "RESTORE THE TAC BOARD", "TAC BOARD ON"),
                 F("HIDE TAC BOARD", "CURRENT: ON", "GO BACK TO STOCK PANELS", "TAC BOARD OFF"), checkbox: false)));
-            // the look rows keep their place while the board is off, dimmed with the reason: a row is never added mid-session
+            // Slots stay in place when their count changes, so a live rebuild never moves an action under the pointer.
+            for (int slot = 1; slot <= BoardPageCounts.Length; slot++)
+            {
+                int selected = (int)(slot == 1 ? w.BoardPage1 : slot == 2 ? w.BoardPage2 : slot == 3 ? w.BoardPage3 : w.BoardPage4);
+                if (selected < 0 || selected >= BoardPages.Length || selected == (int)BoardPage.Systems) selected = (int)BoardPage.Threat;
+                string prefix = "hud/page" + slot;
+                var choices = new List<MenuRow>(BoardPages.Length);
+                for (int i = 0; i < BoardPages.Length; i++)
+                {
+                    if (i == (int)BoardPage.Systems) continue;
+                    MenuSwitch page = BoardPages[i];
+                    MenuRow choice = MenuRow.Pick(prefix + "/" + page.Slug, null, page.Name,
+                        "PAGE " + slot + ": AVAILABLE", "PAGE " + slot + ": SELECTED", i == selected, page.Desc,
+                        "PAGE " + slot + ": " + page.Name);
+                    choice.Index = i;
+                    choice.Verb = "SELECT";
+                    choice.Blocked = !w.BoardOn ? "TAC BOARD: OFF" : slot > w.BoardPageCount ? "INCREASE PAGE COUNT" : !w.BoardPagesOn ? "TACTICAL PAGES: OFF" : null;
+                    choices.Add(choice);
+                }
+                MenuRow pick = MenuRow.Submenu(prefix, "station-select", "SELECT PAGE " + slot,
+                    "PAGE " + slot + ": " + BoardPages[selected].Name, "CHOOSE THIS PANEL; IT STAYS UNTIL YOU CHANGE IT",
+                    "PAGE " + slot, "PAGE", choices, iconless: true);
+                pick.Blocked = choices[0].Blocked;
+                c.Rows.Add(b.Reg(pick));
+            }
+
             MenuRow declutter = MenuRow.Cycle("hud/declutter", "target-filter", "SET HUD DECLUTTER", "HUD DECLUTTER: ", BoardDeclutters, Clamp(w.BoardDeclutter, BoardDeclutters), "HUD DECLUTTER: ");
             MenuRow layout = MenuRow.Cycle("hud/layout", "shape", "SET BOARD LAYOUT", "BOARD LAYOUT: ", BoardLayouts, Clamp(w.BoardLayout, BoardLayouts), "BOARD LAYOUT: ");
             MenuRow shade = MenuRow.Cycle("hud/shade", "lights", "SET SHADE", "SHADE: ", BoardShades, Clamp(w.BoardShade, BoardShades), "SHADE: ");
             MenuRow size = MenuRow.Cycle("hud/size", "resize", "SET BOARD SIZE", "BOARD SIZE: ", BoardSizes, Clamp(w.BoardSize, BoardSizes), "BOARD SIZE: ");
-            if (!w.BoardOn) declutter.Blocked = layout.Blocked = shade.Blocked = size.Blocked = "TAC BOARD: OFF";
-            c.Rows.Add(b.Reg(declutter));
-            c.Rows.Add(b.Reg(layout));
-
-            List<MenuRow> pages = Switches("hud/pages/", "pages/", BoardPages, w.BoardSwitches, out int pagesOn);
-            pages.Insert(0, MenuRow.Toggle("hud/pages/auto", null, w.BoardScopeAuto,
-                F("ENABLE AUTO PAGES", "AUTO PAGES: OFF", "PAGES TAKE THE SCOPE WHEN THEY MATTER", "AUTO PAGES ON"),
-                F("DISABLE AUTO PAGES", "AUTO PAGES: ON", "NO PAGE EVER TAKES THE SCOPE", "AUTO PAGES OFF", MenuTone.Active)));
-            c.Rows.Add(b.Reg(MenuRow.Submenu("hud/pages", "station-select", "SCOPE PAGES",
-                w.BoardScopeAuto ? pagesOn + " OF " + BoardPages.Length + " ON" : "AUTO PAGES: OFF", "CHOOSE WHICH PAGES THE SCOPE MAY SHOW", "SCOPE", "PAGES", pages, iconless: true)));
+            MenuRow count = MenuRow.Cycle("hud/count", "station-select", "SET PAGE COUNT", "PAGE COUNT: ", BoardPageCounts, Clamp(w.BoardPageCount - 1, BoardPageCounts), "PAGE COUNT: ");
+            MenuRow sway = Switch("hud/", new MenuSwitch("sway", "VISOR SWAY", "SYMBOLS HANG IN THE AIR OFF THE GLASS", enable: true), w.BoardSway);
+            var display = new List<MenuRow> { count, layout, declutter, size, shade, sway };
+            if (!w.BoardOn) foreach (MenuRow row in display) row.Blocked = "TAC BOARD: OFF";
+            c.Rows.Add(b.Reg(MenuRow.Submenu("hud/display", "shape", "DISPLAY OPTIONS",
+                "PAGE COUNT: " + BoardPageCounts[Clamp(w.BoardPageCount - 1, BoardPageCounts)], "PAGE COUNT, LAYOUT, SIZE, SHADE AND SWAY", "DISPLAY", "OPTIONS", display)));
             List<MenuRow> parts = Switches("hud/parts/", "parts/", BoardParts, w.BoardSwitches, out int partsOn);
             c.Rows.Add(b.Reg(MenuRow.Submenu("hud/parts", "hardpoint", "BOARD PARTS",
-                partsOn + " OF " + BoardParts.Length + " ON", "SWITCH THE PIECES OF THE VISOR ON AND OFF", "VISOR", "PARTS", parts, iconless: true)));
-            c.Rows.Add(b.Reg(shade));
-            c.Rows.Add(b.Reg(size));
+                partsOn + " OF " + BoardParts.Length + " ON", "SHOW OR HIDE WHOLE ELEMENTS OF THE VISOR", "VISOR", "PARTS", parts, iconless: true)));
             MenuRow reset = MenuRow.Action("hud/reset", "countermeasure-cycle", "RESET HUD", "EVERY OPTION TO DEFAULT", "PUT THE WHOLE VISOR BACK AS IT SHIPPED", "HUD RESET");
             reset.HoldLabel = "HOLD TO RESET";
             c.Rows.Add(b.Reg(reset));

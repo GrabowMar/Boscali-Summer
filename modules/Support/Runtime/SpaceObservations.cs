@@ -26,6 +26,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private readonly Dictionary<UnitDefinition, int> types = new Dictionary<UnitDefinition, int>();
         private readonly SpaceRevealWindow[] windows = new SpaceRevealWindow[2];
         private readonly List<PersistentID> expired = new List<PersistentID>(MaximumIndexed);
+        // OVERWATCH: units the RADAR bird keeps following. Bounded (three jobs of eight units); refreshed every FollowSeconds; gone with the scene (Dispose).
+        private sealed class FollowJob { public Unit[] Units; public float Until, Next; }
+        private const int MaximumFollows = 3, MaximumFollowed = 8;
+        private const float FollowSeconds = 4f, MovingSpeed = 4f;
+        private readonly List<FollowJob> follows = new List<FollowJob>(MaximumFollows);
         private int nextId, nextType;
         private bool disposed;
         public SpaceContacts Contacts { get; } = new SpaceContacts();
@@ -105,6 +110,76 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
         }
 
+        /// <summary>
+        /// OVERWATCH: picks the moving enemy ground units nearest <paramref name="center"/> within <paramref name="radius"/> (at most <paramref name="count"/>, at least 4 m/s, in the open like every window sees them)
+        /// and follows them for <paramref name="seconds"/>: each refresh re-reports them to the faction's tracking database and re-admits them as RADAR contacts. Returns how many it follows (0 = none moves there).
+        /// </summary>
+        public int Follow(GlobalPosition center, float radius, int count, float seconds)
+        {
+            if (disposed || owner == null || !GameAccess.IsServer() || !(radius > 0f) || !(seconds > 0f)) return 0;
+            var units = UnitRegistry.allUnits;
+            if (units == null) return 0;
+            if (units.Count > MaximumNativeUnits) { NoteCap(units.Count); return 0; }
+            float now = SupportManager.MissionNow();
+            var found = new List<KeyValuePair<float, Unit>>(16);
+            double r2 = (double)radius * radius;
+            for (int i = 0; i < units.Count; i++)
+            {
+                Unit unit = units[i];
+                if (!Ground(unit) || unit.persistentID.Id == 0 || unit.NetworkHQ == null || unit.NetworkHQ == owner || Math.Abs(unit.speed) < MovingSpeed) continue;
+                GlobalPosition p = unit.transform.position.ToGlobalPosition();
+                double dx = p.x - center.x, dz = p.z - center.z, d2 = dx * dx + dz * dz;
+                if (d2 > r2 || !VisibleSurface(unit)) continue;
+                found.Add(new KeyValuePair<float, Unit>((float)d2, unit));
+            }
+            if (found.Count == 0) return 0;
+            found.Sort((a, b) => a.Key.CompareTo(b.Key));
+            int n = Math.Max(1, Math.Min(Math.Min(count, MaximumFollowed), found.Count));
+            var job = new FollowJob { Units = new Unit[n], Until = now + seconds, Next = now };
+            for (int i = 0; i < n; i++) job.Units[i] = found[i].Value;
+            if (follows.Count >= MaximumFollows) follows.RemoveAt(0);
+            follows.Add(job);
+            RefreshFollows(now);
+            return n;
+        }
+
+        private void RefreshFollows(float now)
+        {
+            for (int j = follows.Count - 1; j >= 0; j--)
+            {
+                FollowJob job = follows[j];
+                if (now >= job.Until) { follows.RemoveAt(j); continue; }
+                if (now < job.Next) continue;
+                job.Next = now + FollowSeconds;
+                for (int i = 0; i < job.Units.Length; i++)
+                {
+                    Unit unit = job.Units[i];
+                    if (!Ground(unit)) continue;
+                    try { owner.RpcUpdateTrackingInfo(unit.persistentID); }
+                    catch (Exception e) { Warn("Follow", e); return; }
+                    Observe(unit, unit.transform.position.ToGlobalPosition(), now, BirdKind.Radar);
+                }
+            }
+        }
+
+        private bool Followed(Unit unit)
+        {
+            for (int j = 0; j < follows.Count; j++)
+                for (int i = 0; i < follows[j].Units.Length; i++)
+                    if (ReferenceEquals(follows[j].Units[i], unit)) return true;
+            return false;
+        }
+
+#if !PUBLIC_RELEASE
+        /// <summary>TEST ONLY (<see cref="OpsAutomation"/>): the units OVERWATCH follows now, live or not.</summary>
+        internal void CopyFollowed(List<Unit> into)
+        {
+            float now = SupportManager.MissionNow();
+            for (int j = 0; j < follows.Count; j++)
+                if (now < follows[j].Until) into.AddRange(follows[j].Units);
+        }
+#endif
+
         /// <summary>An active SPACE reveal window of this faction covers the point: an enemy bird is looking there (the SOF Overwatch: SPACE beats SOF).</summary>
         public bool Covers(float x, float z, float now)
         {
@@ -117,6 +192,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             if (disposed || owner == null || !GameAccess.IsServer()) return;
             Contacts.Prune(now);
+            RefreshFollows(now);
             expired.Clear();
             foreach (var pair in indexed)
             {
@@ -124,8 +200,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (Contacts.TryReveal(entry.Id, now, out SpaceContact contact))
                 {
                     SpaceRevealWindow window = windows[(int)contact.Source];
-                    if (!Ground(entry.Unit) || !window.Contains(contact.X, contact.Z,
-                        contact.Moving ? Math.Max(4f, window.MinimumSpeed) : 0f, now)) Contacts.Forget(entry.Id);
+                    if (!Ground(entry.Unit) || (!window.Contains(contact.X, contact.Z,
+                        contact.Moving ? Math.Max(4f, window.MinimumSpeed) : 0f, now) && !Followed(entry.Unit))) Contacts.Forget(entry.Id);
                     else if (entry.Unit.NetworkHQ == owner && contact.Classification != ContactClass.Friendly)
                         Contacts.Reveal(entry.Id, ContactClass.Friendly, contact.TypeId, contact.X, contact.Z,
                             contact.Moving, contact.ObservedAt, contact.Source);
@@ -181,7 +257,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 owner.onRemoveUnit -= RemoveOwn;
             }
             foreach (Entry entry in indexed.Values) Detach(entry);
-            indexed.Clear(); ids.Clear(); types.Clear(); expired.Clear(); Contacts.Clear();
+            indexed.Clear(); ids.Clear(); types.Clear(); expired.Clear(); follows.Clear(); Contacts.Clear();
         }
 
         // These three are subscribed to vanilla FactionHQ events: nothing may throw back into the native delegate.

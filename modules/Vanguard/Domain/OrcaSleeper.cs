@@ -14,8 +14,8 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const float AttackRadius = 2000f;  // drop point this close to a hostile hull = attack run, not a mine
         public const float DiveRange = 1500f;     // sleeper glide pitches down onto the drop point from here
         public const float SleepDepth = -35f;
-        public const float SleepSeconds = 600f;
-        public const float WakeRange = 1200f;     // flat metres from the sleeper to a hostile hull
+        public const float SleepSeconds = 900f;
+        public const float WakeRange = 1600f;     // flat metres from the sleeper to a hostile hull
         public const float ScanInterval = 1f;
         public const float SettleRate = 1.5f;     // 1/s: a 200 m/s splash coasts ~130 m before it hangs still
 

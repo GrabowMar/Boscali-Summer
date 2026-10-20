@@ -54,7 +54,7 @@ namespace BoscaliSummer.Modules.Command.Domain
         internal const float CautionBoost = 2f;
         internal const float SeaStrength = .3f;
         /// <summary>The depression angle (degrees below the aircraft's horizontal) from which a vertex is at full strength, the one at and under which it is at <see cref="HorizonFloor"/>, and that share.</summary>
-        internal const float HorizonFullDegrees = 8f, HorizonFloorDegrees = 1f, HorizonFloor = .25f;
+        internal const float HorizonFloor = .25f;
         /// <summary>Metres from the aircraft between which the odd lines fade out (half at the middle), and between which the lines that are not a multiple of four fade out.</summary>
         internal const float ThinHalfFrom = 4000f, ThinHalfTo = 5000f, ThinQuarterFrom = 7000f, ThinQuarterTo = 8000f;
         internal const int SeaLineEvery = 4;

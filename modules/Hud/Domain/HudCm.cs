@@ -53,6 +53,26 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return upper.Length <= 3 ? upper : upper.Substring(0, 3);
         }
 
+        /// <summary>
+        /// Where the station named <paramref name="name"/> stands in the game's Next Countermeasure cycle (<paramref name="cycle"/>, its first <paramref name="known"/> names): its place, or after every listed
+        /// one (the mod's chaff is not in the game's list and is the cycle's last stop).
+        /// </summary>
+        public static int CycleRank(string name, string[] cycle, int known)
+        {
+            for (int i = 0; i < known; i++) if (cycle[i] == name) return i;
+            return known;
+        }
+
+        /// <summary>
+        /// Puts the first <paramref name="count"/> station slots in cycle order, stably (ties keep their order): <paramref name="order"/>[k] is the old slot that goes to place k.
+        /// </summary>
+        public static void CycleOrder(int[] rank, int count, int[] order)
+        {
+            for (int i = 0; i < count; i++) order[i] = i;
+            for (int a = 1; a < count; a++)
+                for (int b = a; b > 0 && rank[order[b]] < rank[order[b - 1]]; b--) (order[b], order[b - 1]) = (order[b - 1], order[b]);
+        }
+
         public static CmLevel Level(in CmStation s)
         {
             if (s.Chargeable) return CmLevel.Ok;

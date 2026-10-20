@@ -119,14 +119,21 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>The cells' fade after a shot: just-spent cells are BRIGHT at this alpha, fading over <see cref="StoresMath.ShotWordS"/>.</summary>
         public const float SpentCellAlpha = 0.6f;
 
-        // ---- EXPENDABLES (LAYOUT.md 3.3)
-        public const float FlrY = 25f, ChfY = 46f, JamY = 66f, MarkerSize = 5f, CountX = 10f, CountSize = 14f, NameGap = 5f, MatrixX = 68f, StateClear = 8f;
+        // ---- EXPENDABLES (LAYOUT.md 3.3, reworked 2026-10-18): one row per countermeasure, the jammer too, in the order the game's Next Countermeasure steps through them. Only the selected row has the
+        // caret; every row's level is a bar in one column at BarX, the state word right-aligned at the block's end.
+        public const float CaretX = 3f, CaretSize = 5f, CountX = 10f, CountSize = 14f, NameGap = 5f, BarX = 68f, BarH = 3f, StateClear = 8f;
+        /// <summary>The bar ends this far short of the block's end: room for the longest state word (DISPENSE) and its clearance.</summary>
+        public const float StateRoom = 72f, BarMinW = 24f;
         public const float CallPad = 5f, CallHalf = 9f, CallArm = 4f;
-        public const float JamIcon = 14f, JamWordX = 19f, JamBarX = 52f, JamBarW = 72f, JamBarH = 3f;
-        /// <summary>The dispensers a block has rows for: flares and chaff (an airframe with more shows the first two).</summary>
-        public const int Rows = 2;
+        /// <summary>The jammer's picture and word stand where a dispenser's count and short name do.</summary>
+        public const float JamIcon = 14f, JamWordX = 29f;
+        /// <summary>The countermeasures a block has rows for (an airframe with a fourth shows the first three of the cycle).</summary>
+        public const int Rows = 3;
 
-        /// <summary>The jammer row's y: under the dispenser rows there are, not under the two the block has room for (with flares only it sat 41 under them in game).</summary>
-        public static float JamRow(int dispensers) => dispensers >= Rows ? JamY : dispensers == 1 ? ChfY : FlrY;
+        /// <summary>The middle of row <paramref name="row"/> (0 = the first stop of the cycle): 25, 46, 66 under the block's top.</summary>
+        public static float RowY(int row) => row <= 0 ? 25f : row == 1 ? 46f : 66f;
+
+        /// <summary>The level bar's width in a block <paramref name="w"/> wide: 40 in WIDE (180), 76 in STACK (216); DISPENSE still fits after it.</summary>
+        public static float BarW(float w) => Math.Max(BarMinW, w - BarX - StateRoom);
     }
 }

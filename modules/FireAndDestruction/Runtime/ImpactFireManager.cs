@@ -708,6 +708,8 @@ namespace BoscaliSummer.Fire
                                 ? FuelDepotSmokePool.SmokeProfile.Forest
                                 : FuelDepotSmokePool.SmokeProfile.Building);
                         if (site.BuildingSmoke != null) smokeAcquireBudget--;
+                        if (buildingFire && site.BuildingSmoke != null) // the ignition flare-up a burning building gets once
+                            BoscaliSummer.Core.Fx.ParticleFx.Spawn("fx-fuel-fireball", site.Position.ToLocalPosition(), Quaternion.identity, Mathf.Clamp(halfExtents.magnitude / 30f, 0.5f, 2.5f));
                         site.BuildingSmoke?.SetForestClusterScale(site.ClusterScale);
                     }
                     site.NextSmoke = site.BuildingSmoke == null ? now + 2.4f : float.MaxValue;
@@ -815,8 +817,13 @@ namespace BoscaliSummer.Fire
                 fires.Count >= Fire.MaxActiveFires || source.Generation >= Fire.FireSpreadGenerations ||
                 source.SpreadAttempts >= 3 || now < source.NextSpread || spreadBudget <= 0) return;
 
-            // Exhaust invalid/burnt edges without spending a successful advance. The mask
-            // bounds every cell to one probe per edge; no six-point retry spiral per tick.
+            // Definitive verdicts retire an edge for good: fuel only ever burns away,
+            // so a gap never closes mid-mission, and burnt ground is never re-entered.
+            // The mask bounds every cell to one probe per retired edge; no six-point
+            // retry spiral per tick. Transient failures (terrain not streamed in yet,
+            // a momentarily full site cap) keep their edge instead: they reschedule
+            // for a normal spread interval rather than burning through every edge at
+            // 4 Hz in the first second.
             for (int option = 0; option < source.Cell.Count && spreadBudget > 0; option++)
             {
                 int best = -1; float score = float.MinValue;
@@ -827,26 +834,41 @@ namespace BoscaliSummer.Fire
                     if (value > score) { best = edge; score = value; }
                 }
                 if (best < 0) { source.NextSpread = float.MaxValue; return; }
-                source.TriedEdges |= 1 << best;
                 long key = source.Cell.Neighbours[best];
-                if (forestCooldowns.TryGetValue(key, out float burnedUntil) && now < burnedUntil) continue;
+                if (forestCooldowns.TryGetValue(key, out float burnedUntil) && now < burnedUntil)
+                {
+                    source.TriedEdges |= 1 << best;
+                    continue;
+                }
                 spreadBudget--;
-                FireFrontCell.Point seed = FireFrontCell.Seed((int)(key >> 32), (int)key);
-                FireFrontCell.Point a = source.Cell.Vertices[best], b = source.Cell.Vertices[(best + 1) % source.Cell.Count];
-                float edgeX = source.Position.x + (a.X + b.X) * 0.5f;
-                float edgeZ = source.Position.z + (a.Z + b.Z) * 0.5f;
                 // Require fuel on the crossing as well as in the destination. This makes
                 // gaps, shorelines and cleared strips stop the front instead of being jumped.
-                if (!forestIndex.ContainsWithin(edgeX, edgeZ, 8f) ||
-                    !forestIndex.ContainsWithin((edgeX + seed.X) * 0.5f, (edgeZ + seed.Z) * 0.5f, 12f) ||
-                    !forestIndex.Contains(seed.X, seed.Z)) continue;
+                if (!ForestSpreadPolicy.HasCrossingFuel(forestIndex, source.Cell, best))
+                {
+                    source.TriedEdges |= 1 << best;
+                    continue;
+                }
+                FireFrontCell.Point seed = FireFrontCell.Seed((int)(key >> 32), (int)key);
                 var candidate = new GlobalPosition(seed.X, source.Position.y, seed.Z);
-                if (!TrySnapForestFireToGround(candidate, FireFrontCell.Spacing * 1.5f, out GlobalPosition grounded)) continue;
+                if (!TrySnapForestFireToGround(candidate, FireFrontCell.Spacing * 1.5f, out GlobalPosition grounded))
+                {
+                    source.NextSpread = now + Fire.FireSpreadInterval;
+                    return;
+                }
                 float slope = (grounded.y - source.Position.y) / FireFrontCell.Spacing;
-                if (Mathf.Abs(slope) > 1.2f) continue;
+                if (Mathf.Abs(slope) > 1.2f)
+                {
+                    source.TriedEdges |= 1 << best;
+                    continue;
+                }
                 int before = fires.Count;
                 Ignite(grounded, now, true, source.Generation + 1, false);
-                if (fires.Count == before) return;
+                if (fires.Count == before)
+                {
+                    source.NextSpread = now + Fire.FireSpreadInterval;
+                    return;
+                }
+                source.TriedEdges |= 1 << best;
                 source.SpreadAttempts++;
                 float uphill = Mathf.Clamp(slope, -0.6f, 0.6f);
                 source.NextSpread = now + Fire.FireSpreadInterval * Mathf.Clamp(1f - score * 0.22f - uphill * 0.3f, 0.55f, 1.5f);

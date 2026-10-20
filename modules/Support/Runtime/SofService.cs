@@ -91,6 +91,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         partial void RecordEvent(FactionSof f, SofEvent e);
         partial void ResetEffects();
         partial void TickFob(FactionSof f, float now);
+        partial void TickDefence(float now);
 
         internal static SofService Active { get; private set; }
         internal CyberAnchorSpawner Spawner => spawner;
@@ -138,7 +139,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return false;
         }
 
-        /// <summary>TRAIN TEAM programme finished: one team is raised at the camp (or the FOB) for free, up to the front cap of four. The refusal says why when none could be.</summary>
+        /// <summary>TRAIN TEAM programme finished: one team is raised at the camp (or the FOB) for free, up to the front cap of four. It joins OVERLORD's pool until an operator tasks it. The refusal says why when none could be.</summary>
         internal SofResult TrainTeam(FactionHQ owner) =>
             owner != null && factions.TryGetValue(owner, out FactionSof f) ? f.Desk.Raise(Domain.Space.SpaceContacts.WatchOfficerId, Domain.Fronts.FrontRules.TeamCap) : new SofResult(SofOutcome.Unavailable);
 
@@ -208,6 +209,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (TryEstablish(hq, out f)) { factions.Add(hq, f); Plugin.Logger?.LogInfo("[Support.Sof] " + hq.name + ": " + f.Slots.Count + " native camp(s), " + CyberAnchorSpawner.DescribeCamp() + "."); }
                 else LogNoCampKeys(hq);
             }
+            TickDefence(now);
         }
 
         /// <summary>Once per mission: when no camp vehicle key resolves, say which keys were tried (a faction with no legal site just has no SOF, which is not logged here).</summary>
@@ -223,6 +225,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private void TickFaction(FactionSof f, float now)
         {
             foreach (CampSlot slot in f.Slots) Measure(f, slot, now);
+            // ponytail: no grace timer, an operator who left the faction hands the team back to OVERLORD's pool at once; add a delay if reconnect flapping matters.
+            foreach (SofTeam t in f.Desk.Teams)
+                if (t.Active && t.Raiser != Domain.Space.SpaceContacts.WatchOfficerId && !manager.InFaction(f.Owner, t.Raiser)) t.Raiser = Domain.Space.SpaceContacts.WatchOfficerId;
             Rebuild(f, now);
             f.Obs.Snapshot(f.Owner, now);
             if (now >= f.NextRefresh) { f.NextRefresh = now + RefreshSeconds; RefreshTargets(f); }
@@ -319,20 +324,20 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private bool TryEstablish(FactionHQ owner, out FactionSof made)
         {
             made = null;
-            if (UnitRegistry.allUnits != null && UnitRegistry.allUnits.Count > MaximumScanUnits) return false;
             Vector2 span = TheaterFrame.Resolve();
-            var sites = new List<Site>(); var cands = new List<SiteCandidate>();
+            var sites = new List<Site>(); var cands = new List<SiteCandidate>(); var bases = new List<Airbase>(MaximumBases);
             if (FactionRegistry.airbaseLookup != null)
             {
-                int inspected = 0, held = 0;
+                int inspected = 0;
                 foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
                 {
-                    if (++inspected > 128 || held >= MaximumBases) break;
+                    if (++inspected > 128 || bases.Count >= MaximumBases) break;
                     if (airbase == null || airbase.disabled || airbase.AttachedAirbase || airbase.CurrentHQ != owner || airbase.center == null) continue;
-                    held++;
+                    bases.Add(airbase);
                     Collect(owner, airbase, sites, cands);
                 }
             }
+            if (cands.Count == 0 && bases.Count > 0) CollectWide(owner, bases, sites, cands);
             var picks = new List<int>();
             CyberPlacement.Pick(cands, span.magnitude, CampRules.MaxCamps, null, 0f, picks);
             var slots = new List<CampSlot>(CampRules.MaxCamps);
@@ -345,8 +350,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             {
                 // Once per faction per mission: an offline SOF must say why (no held airbase, no legal ground on the rings, or the spawn failed).
                 if (loggedNoSite.Add(owner))
-                    Plugin.Logger?.LogWarning("[Support.Sof] " + owner.name + ": no camp placed (" + cands.Count + " legal site(s) on the 6.5/7.5 km airbase rings, " +
-                        picks.Count + " picked): SOF stays offline, retrying every " + (int)RelocateRetrySeconds + " s.");
+                    Plugin.Logger?.LogWarning("[Support.Sof] " + owner.name + ": no camp placed (" + bases.Count + " held airbase(s), " + cands.Count + " legal site(s) on the 6.5/7.5 km rings and the 3-12 km fan, " +
+                        picks.Count + " picked): SOF stays offline, retrying every " + (int)RelocateRetrySeconds + " s" + (bases.Count == 0 ? " (hold an airbase)." : "."));
                 return false;
             }
             var camps = new SofCampSet(slots.Count);
@@ -370,14 +375,36 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 for (int step = 0; step < 12; step++)
                 {
                     if (cands.Count >= CyberPlacement.MaxCandidates) return;
-                    float angle = (step * 5 % 12) * Mathf.PI / 6f;
-                    Vector3 desired = parent.center.position + new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle)) * (CampRadius + ring * 1000f);
-                    GlobalPosition anchor = desired.ToGlobalPosition();
-                    if (!spawner.TryPlanCamp(anchor, parent, out GlobalPosition[] cp, out _)) continue;
-                    float front = SupportTargeting.FrontDistanceOf(owner, desired);
-                    sites.Add(new Site(parent, anchor));
-                    cands.Add(new SiteCandidate(sites.Count - 1, (float)cp[0].x, (float)cp[0].z, front, front));
+                    TryAdd(owner, parent, (step * 5 % 12) * Mathf.PI / 6f, CampRadius + ring * 1000f, sites, cands);
                 }
+        }
+
+        private const int WideBudget = 96, WideRings = 6, WideBearings = 16;
+        private int wideCursor;
+
+        /// <summary>
+        /// The 6.5/7.5 km rings held nothing legal (water, steep or crowded ground): fan out to 3..12 km at 16 bearings with the same legality checks. At most <see cref="WideBudget"/> spots
+        /// per attempt, resuming where the last attempt stopped, so the 30 s retries cover the whole fan without paying for it all at once.
+        /// </summary>
+        private void CollectWide(FactionHQ owner, List<Airbase> bases, List<Site> sites, List<SiteCandidate> cands)
+        {
+            int total = bases.Count * WideRings * WideBearings, tries = Math.Min(total, WideBudget);
+            for (int k = 0; k < tries && cands.Count < CyberPlacement.MaxCandidates; k++)
+            {
+                int i = (wideCursor + k) % total;
+                TryAdd(owner, bases[i / (WideRings * WideBearings)], i % WideBearings * 2f * Mathf.PI / WideBearings, 3000f + i / WideBearings % WideRings * 1800f, sites, cands);
+            }
+            wideCursor = (wideCursor + tries) % total;
+        }
+
+        private void TryAdd(FactionHQ owner, Airbase parent, float angle, float radius, List<Site> sites, List<SiteCandidate> cands)
+        {
+            Vector3 desired = parent.center.position + new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle)) * radius;
+            GlobalPosition anchor = desired.ToGlobalPosition();
+            if (!spawner.TryPlanCamp(anchor, parent, out GlobalPosition[] cp, out _)) return;
+            float front = SupportTargeting.FrontDistanceOf(owner, desired);
+            sites.Add(new Site(parent, anchor));
+            cands.Add(new SiteCandidate(sites.Count - 1, (float)cp[0].x, (float)cp[0].z, front, front));
         }
     }
 }

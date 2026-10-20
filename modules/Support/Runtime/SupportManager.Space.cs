@@ -38,7 +38,30 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         // ---- Host helpers ---------------------------------------------------------------------
 
-        internal int FactionKeyOf(FactionHQ hq) => hq == null ? 0 : hq.GetInstanceID();
+        // Faction names are the same on every peer; Unity instance ids are not. The key below is the stable wire identity, so a host-side table key, a local faction-change test and the
+        // identity stamped on a mirrored state are the same number on both ends of a link (hash cached per HQ: the name is upper-cased and trimmed once, not per poll).
+        private static readonly System.Collections.Generic.Dictionary<FactionHQ, uint> wireIds = new System.Collections.Generic.Dictionary<FactionHQ, uint>(4);
+
+        internal static uint FactionWireOf(FactionHQ hq)
+        {
+            if (hq == null) return 0u;
+            if (wireIds.TryGetValue(hq, out uint known)) return known;
+            uint id = FactionIdentity.Of(FactionKey(hq));
+            if (hq.faction != null && !string.IsNullOrEmpty(hq.faction.factionName)) // a faction still without its name is not remembered
+            {
+                if (wireIds.Count >= 16) wireIds.Clear();
+                wireIds[hq] = id;
+            }
+            return id;
+        }
+
+        internal int FactionKeyOf(FactionHQ hq) => unchecked((int)FactionWireOf(hq));
+
+        /// <summary>The local player's faction on the wire right now (0 before the player has one): what a client mirror checks every incoming state against.</summary>
+        internal static uint LocalFactionWire() => GameManager.GetLocalPlayer<Player>(out Player local) && local != null ? FactionWireOf(local.HQ) : 0u;
+
+        /// <summary>The host's scene epoch stamped on every mirrored state (1..65535): it moves on with every scene reset, so a client can tell a state of the current scene from an earlier one.</summary>
+        internal ushort SceneEpoch => (ushort)(1 + sceneGeneration % 65535);
 
         internal Player FindTaskedPlayer(FactionHQ owner, ulong id) => FindPlayer(owner, id);
 
@@ -97,7 +120,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             if (data == null || data.Protocol != SupportNet.ProtocolVersion) return;
             float now = MissionNow();
-            if (!spaceMirror.Apply(data, SupportNet.ProtocolVersion, now) && logger != null && data.Generation > spaceMirror.Generation)
+            if (!spaceMirror.Apply(data, SupportNet.ProtocolVersion, now, LocalFactionWire()) && logger != null && data.Generation > spaceMirror.Generation)
                 logger.LogWarning("[Support.Space] Ignored a SPACE update the mirror could not place (generation " + data.Generation + ").");
         }
 

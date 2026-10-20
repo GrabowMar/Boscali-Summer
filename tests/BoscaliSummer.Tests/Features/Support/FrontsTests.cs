@@ -7,7 +7,9 @@ namespace BoscaliSummer.Tests.Features.Support
     /// <summary>Slice S1a: the pure front rules (funding, queue, lock, superiority) and their wire.</summary>
     internal static class FrontsTests
     {
-        private const byte P = 40;
+        private const byte P = 41;
+        private const uint Us = 0xC0DE5A11u;
+        private const ushort E = 2;
 
         private sealed class BufW : ISpaceWriter
         {
@@ -36,11 +38,65 @@ namespace BoscaliSummer.Tests.Features.Support
             Funding();
             Queueing();
             Building();
+            Settlement();
             Locks();
             AutoQueue();
             Superiority();
             Wire();
             MarkSnap();
+        }
+
+        private static int Rows(FrontBook b, Front f, FrontLogCode code)
+        {
+            int n = 0;
+            foreach (FrontLogRow r in b.Side(f).Log) if (r.Code == (byte)code) n++;
+            return n;
+        }
+
+        /// <summary>F16: DONE is written only when the owning adapter accepted the effect; a refusal logs FAILED with the reason and gives back what the programme captured, once.</summary>
+        private static void Settlement()
+        {
+            // A ZERO-DAY queued at half price, funded in full; the host changes the price scale while it builds, and the adapter finds nothing to hit.
+            var b = new FrontBook { CostScale = 0.5f };
+            b.Queue(Front.Cyber, ProgrammeId.ZeroDay, World(), 0f, out _);
+            b.Donate(Front.Cyber, ProgrammeId.ZeroDay, 300f);
+            b.Tick(0f, World());
+            b.CostScale = 2f;
+            float build = b.Side(Front.Cyber).Queue[0].Build;
+            List<FrontEvent> done = b.Tick(build + 1f, World());
+            TestAssert.That(done.Count == 1 && done[0].Id == ProgrammeId.ZeroDay && done[0].Front == Front.Cyber, "the finished programme is handed to its owner");
+            TestAssert.Near(done[0].Cost, 300f, "carrying what it captured when it was queued");
+            TestAssert.Eq(Rows(b, Front.Cyber, FrontLogCode.Done), 0, "no DONE line before the adapter answers");
+            float budget = b.Side(Front.Cyber).Budget;
+            b.Settle(done[0], FrontOutcome.NoSamNet, build + 2f);
+            TestAssert.Near(b.Side(Front.Cyber).Budget, budget + 300f, "a refused effect gives back the captured cost, not today's price");
+            FrontLogRow last = b.Side(Front.Cyber).Log[b.Side(Front.Cyber).Log.Count - 1];
+            TestAssert.That(last.Code == (byte)FrontLogCode.Failed && last.A == (short)ProgrammeId.ZeroDay && last.B == (short)FrontOutcome.NoSamNet, "and writes a FAILED line naming the programme and why");
+            TestAssert.Eq(Rows(b, Front.Cyber, FrontLogCode.Done), 0, "never a DONE line for it");
+            b.Settle(done[0], FrontOutcome.NoSamNet, build + 3f);
+            b.Settle(done[0], FrontOutcome.None, build + 3f);
+            TestAssert.Near(b.Side(Front.Cyber).Budget, budget + 300f, "a second answer refunds nothing more");
+            TestAssert.That(Rows(b, Front.Cyber, FrontLogCode.Failed) == 1 && Rows(b, Front.Cyber, FrontLogCode.Done) == 0, "and writes no second line");
+
+            // The adapter accepts: DONE, no money moves, and a late failure cannot undo it.
+            var c = new FrontBook();
+            c.Queue(Front.Cyber, ProgrammeId.EwTruck, new FrontWorld { Trucks = 1, TruckMax = 2 }, 0f, out _);
+            c.Donate(Front.Cyber, ProgrammeId.EwTruck, 120f);
+            c.Tick(0f, World());
+            List<FrontEvent> truck = c.Tick(120f, World());
+            TestAssert.Eq(truck.Count, 1, "the truck programme finishes");
+            float before = c.Side(Front.Cyber).Budget;
+            c.Settle(truck[0], FrontOutcome.None, 121f);
+            c.Settle(truck[0], FrontOutcome.TrucksMax, 122f);
+            TestAssert.That(Rows(c, Front.Cyber, FrontLogCode.Done) == 1 && Rows(c, Front.Cyber, FrontLogCode.Failed) == 0 && c.Side(Front.Cyber).Budget == before, "an accepted effect is DONE once and keeps its money spent");
+
+            // READINESS has no adapter: its DONE line is written when the level rises.
+            var r = new FrontBook();
+            r.Queue(Front.Sof, ProgrammeId.Readiness, World(), 0f, out _);
+            r.Donate(Front.Sof, ProgrammeId.Readiness, 150f);
+            r.Tick(0f, World());
+            r.Tick(120f, World());
+            TestAssert.That(r.Readiness(Front.Sof) == 2 && Rows(r, Front.Sof, FrontLogCode.Done) == 1, "READINESS is done and logged at once");
         }
 
         private static void Funding()
@@ -265,10 +321,21 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.Eq(FrontSuperiority.Compute(Front.Sof, S(teams: 9, bld: 9, camps: 9), S()), 100, "SOF ceiling");
             TestAssert.Eq(FrontSuperiority.Compute(Front.Sof, S(), S(teams: 2, bld: 1, camps: 2)), -20 - 10 - 20, "SOF negative");
 
-            TestAssert.Near(FrontSuperiority.Quality(100), 1.25f, "quality +25 %");
-            TestAssert.Near(FrontSuperiority.Quality(0), 1f, "quality neutral");
-            TestAssert.Near(FrontSuperiority.Quality(-100), 0.75f, "quality -25 %");
-            TestAssert.Near(FrontSuperiority.Quality(40), 1.1f, "quality at 40");
+            // POWER is piecewise linear through (-100, 0.6), (-40, 0.8), (0, 1.0), (40, 1.25), (100, 1.5).
+            TestAssert.Near(FrontSuperiority.Power(-100), 0.6f, "power floor");
+            TestAssert.Near(FrontSuperiority.Power(-40), 0.8f, "power at -40");
+            TestAssert.Near(FrontSuperiority.Power(0), 1f, "power neutral");
+            TestAssert.Near(FrontSuperiority.Power(40), 1.25f, "power at 40");
+            TestAssert.Near(FrontSuperiority.Power(100), 1.5f, "power ceiling");
+            TestAssert.Near(FrontSuperiority.Power(-70), 0.7f, "power between -100 and -40");
+            TestAssert.Near(FrontSuperiority.Power(-20), 0.9f, "power between -40 and 0");
+            TestAssert.Near(FrontSuperiority.Power(20), 1.125f, "power between 0 and 40");
+            TestAssert.Near(FrontSuperiority.Power(70), 1.375f, "power between 40 and 100");
+            TestAssert.Near(FrontSuperiority.Power(250), 1.5f, "power clamps above 100");
+            TestAssert.Near(FrontSuperiority.Power(-250), 0.6f, "power clamps below -100");
+            TestAssert.Eq(FrontSuperiority.PowerLine(40), "POWER ×1.25 · AHEAD", "what the pilot reads");
+            TestAssert.Eq(FrontSuperiority.PowerLine(-100), "POWER ×0.60 · LOST", "behind reads the same way");
+            TestAssert.Eq(FrontSuperiority.PowerWord(0), "POWER ×1.00", "the bare word for a card");
             TestAssert.Eq(FrontSuperiority.Word(100), "DOMINANT", "word 100");
             TestAssert.Eq(FrontSuperiority.Word(60), "DOMINANT", "word 60");
             TestAssert.Eq(FrontSuperiority.Word(59), "AHEAD", "word 59");
@@ -298,10 +365,15 @@ namespace BoscaliSummer.Tests.Features.Support
             b.ShareTick(10000f, 0.03f, 105f);
 
             FrontStateData s = b.Snapshot(P, 5, 110f);
+            s.Faction = Us; s.Epoch = E; // the host's subscription stamps these when it sends
             byte[] bytes = Bytes(s);
             FrontStateData back = FrontWire.ReadState(new BufR(bytes), P);
             TestAssert.Eq(back.Protocol, P, "protocol survives");
             TestAssert.Eq(back.Seq, 5, "seq");
+            TestAssert.That(back.Faction == Us && back.Epoch == E, "the faction identity and the scene epoch survive the wire");
+            FrontStateData noFaction = b.Snapshot(P, 5, 110f); noFaction.Epoch = E;
+            FrontStateData noEpoch = b.Snapshot(P, 5, 110f); noEpoch.Faction = Us;
+            TestAssert.That(FrontWire.ReadState(new BufR(Bytes(noFaction)), P).Seq == 0 && FrontWire.ReadState(new BufR(Bytes(noEpoch)), P).Seq == 0, "a state naming no faction or no scene is inert");
             TestAssert.That(back.SameAs(s), "round trip is identical");
             TestAssert.Eq(back.Fronts[(int)Front.Cyber].Superiority, (sbyte)-37, "negative superiority");
             TestAssert.Eq(back.Fronts[(int)Front.Cyber].Directive, FrontDirective.Attack, "directive");
@@ -314,6 +386,13 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.Eq(back.Fronts[(int)Front.Space].Queue.Count, 2, "queue rows");
             TestAssert.Eq(back.Fronts[(int)Front.Space].Queue[0].Id, ProgrammeId.LaunchSatellite, "queue head id");
             TestAssert.That(back.Fronts[(int)Front.Space].Queue[0].Percent > 0, "queue percent");
+            var nearly = new FrontBook();
+            nearly.Queue(Front.Sof, ProgrammeId.Readiness, World(), 0f, out _);
+            float full = FrontRules.Cost(ProgrammeId.Readiness, 1, 1f);
+            nearly.Donate(Front.Sof, ProgrammeId.Readiness, full - 0.4f);
+            TestAssert.Eq(nearly.Snapshot(P, 1, 1f).Fronts[(int)Front.Sof].Queue[0].Percent, (byte)99, "a bar 99.7 % funded is not 100 yet: 100 means the build runs");
+            nearly.Donate(Front.Sof, ProgrammeId.Readiness, 0.4f);
+            TestAssert.Eq(nearly.Snapshot(P, 1, 1f).Fronts[(int)Front.Sof].Queue[0].Percent, (byte)100, "paid in full reads 100");
             TestAssert.That(back.Fronts[(int)Front.Space].Log.Count > 0, "log rows");
             TestAssert.Near(back.Fronts[(int)Front.Space].Log[0].Time, 0f, "log age restored");
 
@@ -324,6 +403,7 @@ namespace BoscaliSummer.Tests.Features.Support
 
             // an expired lock is not sent
             FrontStateData late = b.Snapshot(P, 6, 500f);
+            late.Faction = Us; late.Epoch = E;
             FrontStateData lateBack = FrontWire.ReadState(new BufR(Bytes(late)), P);
             TestAssert.That(lateBack.PriorityLockUntil == 0f && lateBack.Fronts[1].DirectiveBy == "", "expired locks drop off");
 
@@ -331,7 +411,7 @@ namespace BoscaliSummer.Tests.Features.Support
             for (int n = 0; n < bytes.Length; n++) TestAssert.Eq(FrontWire.ReadState(new BufR(bytes, n), P).Seq, 0, "truncated at " + n);
             TestAssert.Eq(FrontWire.ReadState(new BufR(bytes), (byte)(P + 1)).Protocol, P, "foreign protocol is reported alone");
             byte[] bad = (byte[])bytes.Clone();
-            bad[6] = 0; // first front's readiness
+            bad[6 + FactionIdentity.Bytes] = 0; // first front's readiness (after the protocol byte, the identity, a one-byte sequence and the clock)
             TestAssert.Eq(FrontWire.ReadState(new BufR(bad), P).Seq, 0, "readiness 0 refused");
 
             // worst case: everything full, names at 16 chars

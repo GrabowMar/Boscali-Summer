@@ -10,10 +10,98 @@ namespace BoscaliSummer.Tests.Features.Hud
         public static void Run()
         {
             Layout();
+            ManualColumns();
             Wipe();
             Lamps();
             Gauges();
         }
+
+        /// <summary>The page grid: at most two across and two down, slot order left to right then down, a row that is not full against the right edge, SYSTEMS above it all.</summary>
+        private static void ManualColumns()
+        {
+            TestAssert.That(ScopeLayout.Columns(BoardLayout.Wide, 1) == 1 && ScopeLayout.Columns(BoardLayout.Wide, 2) == 2 && ScopeLayout.Columns(BoardLayout.Wide, 3) == 2 && ScopeLayout.Columns(BoardLayout.Wide, 4) == 2,
+                "WIDE fills a row of two first");
+            TestAssert.That(ScopeLayout.Columns(BoardLayout.Stack, 1) == 1 && ScopeLayout.Columns(BoardLayout.Stack, 2) == 1 && ScopeLayout.Columns(BoardLayout.Stack, 3) == 2 && ScopeLayout.Columns(BoardLayout.Stack, 4) == 2,
+                "STACK fills a column of two first");
+
+            // WIDE with the stores: the box keeps its 916; one page hangs in the spine under SYSTEMS, a row of two clears the stores (SAT foot 160 + 10).
+            BoardGeometry w1 = Grid(BoardLayout.Wide, 1);
+            TestAssert.Near(w1.Width, ScopeLayout.WideW, "WIDE one page: 916 wide");
+            Same(w1.Status, 476f, 24f, 440f, 96f, "SYSTEMS under the lamp line");
+            Same(w1.Slot0, 476f, 128f, 440f, 290f, "One page hangs 8 under SYSTEMS");
+            BoardGeometry w4 = Grid(BoardLayout.Wide, 4);
+            TestAssert.Near(w4.Width, ScopeLayout.WideW, "WIDE four pages: still 916 wide");
+            Same(w4.Status, 476f, 24f, 440f, 96f, "SYSTEMS does not move with the pages");
+            Same(w4.Slot0, 24f, 170f, 440f, 290f, "Page 1 top left, under the stores");
+            Same(w4.Slot1, 476f, 170f, 440f, 290f, "Page 2 top right, in the spine");
+            Same(w4.Slot2, 24f, 468f, 440f, 290f, "Page 3 bottom left");
+            Same(w4.Slot3, 476f, 468f, 440f, 290f, "Page 4 bottom right");
+            Same(w4.Page, 24f, 170f, 892f, 588f, "The page box holds the grid");
+            Same(w4.Gauges, 476f, 766f, 440f, 30f, "The gauge line hangs 8 under the last row, in the spine");
+            BoardGeometry w3 = Grid(BoardLayout.Wide, 3);
+            Same(w3.Slot2, 476f, 468f, 440f, 290f, "A third page sits under the spine, not under the empty corner");
+            TestAssert.That(!w3.Slot3.Present, "No fourth slot for three pages");
+
+            // STACK: one column of two, then a second column to its left; the stack itself stays the right-hand column.
+            BoardGeometry s2 = Grid(BoardLayout.Stack, 2);
+            TestAssert.Near(s2.Width, ScopeLayout.StackW, "STACK two pages: still one column");
+            Same(s2.Status, 4f, 224f, 440f, 96f, "STACK: SYSTEMS under the lamp line");
+            Same(s2.Slot0, 4f, 328f, 440f, 290f, "STACK page 1 under SYSTEMS");
+            Same(s2.Slot1, 4f, 626f, 440f, 290f, "STACK page 2 under page 1");
+            BoardGeometry s4 = Grid(BoardLayout.Stack, 4);
+            TestAssert.Near(s4.Width, 900f, "STACK four pages: two columns and the stack's insets");
+            Same(s4.Hero, 456f, 6f, 440f, 108f, "STACK: the stack is the right-hand column");
+            Same(s4.Slot0, 4f, 328f, 440f, 290f, "STACK page 1 top left");
+            Same(s4.Slot1, 456f, 328f, 440f, 290f, "STACK page 2 top right");
+            Same(s4.Slot3, 456f, 626f, 440f, 290f, "STACK page 4 bottom right");
+
+            foreach (BoardLayout layout in new[] { BoardLayout.Wide, BoardLayout.Stack })
+                for (int count = 1; count <= ScopeLayout.MaxSlots; count++)
+                {
+                    BoardGeometry g = Grid(layout, count);
+                    string tag = layout + " / " + count;
+                    int cols = ScopeLayout.Columns(layout, count);
+                    float spine = g.Width - (layout == BoardLayout.Stack ? ScopeLayout.StackX : 0f) - ScopeLayout.WingW;
+                    float minY = float.MaxValue;
+                    for (int i = 0; i < ScopeLayout.MaxSlots; i++)
+                    {
+                        BoardRect r = g.Slot(i);
+                        TestAssert.That(r.Present == (i < count), "Exactly the chosen slots are laid out: " + tag + " / " + i);
+                        if (!r.Present) continue;
+                        minY = Math.Min(minY, r.Y);
+                        TestAssert.That(r.W == ScopeLayout.WingW && r.H == ScopeLayout.Full && r.X >= 0f && r.Right <= g.Width && r.Bottom <= g.Height, "Every page is a full page inside the box: " + tag + " / " + i);
+                        TestAssert.That(r.X == spine || r.X == spine - ScopeLayout.WingW - ScopeLayout.PageGapX, "A page is in the spine or the column left of it: " + tag + " / " + i);
+                        if (i > 0 && i % cols != 0) TestAssert.That(r.X > g.Slot(i - 1).X && r.Y == g.Slot(i - 1).Y, "Slots run left to right along a row: " + tag + " / " + i);
+                    }
+                    TestAssert.That(g.Status.Bottom + ScopeLayout.PageGap <= minY, "SYSTEMS sits above every page: " + tag);
+                    TestAssert.Near(g.Slot(count - 1).X, spine, "The last page is in the spine, over the gauge line: " + tag);
+                    BoardBlocks hidden = GridBlocks(layout, count);
+                    hidden.StoresHidden = true;
+                    BoardGeometry withoutStores = ScopeLayout.Compute(hidden);
+                    TestAssert.That(!withoutStores.Hero.Present && !withoutStores.Pwr.Present && !withoutStores.Exp.Present, "The major stores switch hides every stores block");
+                    if (layout == BoardLayout.Wide)
+                        TestAssert.Near(withoutStores.Width, cols * ScopeLayout.WingW + (cols - 1) * ScopeLayout.PageGapX, "The stores group returns its reserved width: " + tag);
+                    foreach (var viewport in new[] { (w: 1280f, h: 720f), (w: 1440f, h: 1080f), (w: 1920f, h: 1080f), (w: 3440f, h: 1440f) })
+                        foreach (float requested in new[] { 0.6f, 0.85f, 1.4f })
+                        {
+                            float fitted = ScopeLayout.FitUnit(requested, 1f, viewport.w, viewport.h, g.Width, g.Height);
+                            TestAssert.That(fitted <= requested && g.Width * fitted <= viewport.w - 1f && g.Height * fitted <= viewport.h - 1f,
+                                "All requested pages fit without leaving the viewport: " + tag + " / " + viewport.w + " / " + requested);
+                        }
+                }
+            BoardGeometry wide4 = Grid(BoardLayout.Wide, 4);
+            TestAssert.Near(ScopeLayout.FitUnit(0.85f, 1f, 1920f, 1080f, wide4.Width, wide4.Height), 0.85f, "Four pages fit 1080p at the default size: the size is the pilot's");
+        }
+
+        private static BoardBlocks GridBlocks(BoardLayout layout, int count)
+        {
+            BoardBlocks b = All(layout, ScopeLayout.Full, 2);
+            b.PageCount = count;
+            b.StatusH = ScopeLayout.Compact;
+            return b;
+        }
+
+        private static BoardGeometry Grid(BoardLayout layout, int count) => ScopeLayout.Compute(GridBlocks(layout, count));
 
         private static BoardBlocks All(BoardLayout layout, float pageH, int gaugeLines = 1, bool ticker = true) => new BoardBlocks
         {
@@ -52,9 +140,9 @@ namespace BoscaliSummer.Tests.Features.Hud
             BoardBlocks rwr = All(BoardLayout.Wide, ScopeLayout.Full, 2);
             rwr.StatusH = ScopeLayout.Compact;
             BoardGeometry warned = ScopeLayout.Compute(rwr);
-            Same(warned.Page, 476f, 24f, 440f, 290f, "STATUS does not move the warning page");
-            Same(warned.Status, 476f, 322f, 440f, 96f, "STATUS hangs 8 under the warning page");
-            Same(warned.Gauges, 476f, 426f, 440f, 30f, "the gauge line hangs 8 under STATUS");
+            Same(warned.Status, 476f, 24f, 440f, 96f, "SYSTEMS takes the place under the lamp line");
+            Same(warned.Page, 476f, 128f, 440f, 290f, "The page hangs 8 under SYSTEMS");
+            Same(warned.Gauges, 476f, 426f, 440f, 30f, "the gauge line hangs 8 under the page");
 
             // STACK (LAYOUT.md 4): box 448, cruise 358, live 570.
             BoardGeometry sc = ScopeLayout.Compute(All(BoardLayout.Stack, ScopeLayout.Compact));
@@ -119,13 +207,18 @@ namespace BoscaliSummer.Tests.Features.Hud
             // Every combination: nothing negative, nothing outside the box, the box is as tall as the lowest block, no two blocks touch (the tightest gap is 6, lamp line to page).
             int boards = 0;
             foreach (BoardLayout layout in new[] { BoardLayout.Wide, BoardLayout.Stack })
-                for (int mask = 0; mask < 32; mask++)
+                for (int mask = 0; mask < 64; mask++)
                     foreach (float pageH in new[] { 0f, ScopeLayout.Compact, 160f, ScopeLayout.Full })
                         foreach (int lines in new[] { 0, 1, 2 })
+                            for (int pages = 1; pages <= ScopeLayout.MaxSlots; pages++)
                         {
-                            var blocks = new BoardBlocks { Layout = layout, Hero = (mask & 1) != 0, Pwr = (mask & 2) != 0, Exp = (mask & 4) != 0, Lamps = (mask & 8) != 0, Ticker = (mask & 16) != 0, PageH = pageH, GaugeLines = lines };
+                            var blocks = new BoardBlocks
+                            {
+                                Layout = layout, Hero = (mask & 1) != 0, Pwr = (mask & 2) != 0, Exp = (mask & 4) != 0, Lamps = (mask & 8) != 0, Ticker = (mask & 16) != 0, StatusH = (mask & 32) != 0 ? ScopeLayout.Compact : 0f,
+                                PageH = pageH, GaugeLines = lines, PageCount = pages,
+                            };
                             BoardGeometry g = ScopeLayout.Compute(blocks);
-                            string tag = layout + " " + mask + " " + pageH + " " + lines;
+                            string tag = layout + " " + mask + " " + pageH + " " + lines + " " + pages;
                             float lowest = 0f;
                             for (int i = 0; i < BoardGeometry.BlockCount; i++)
                             {
@@ -145,7 +238,7 @@ namespace BoscaliSummer.Tests.Features.Hud
                             TestAssert.Near(g.Height, lowest, "The box ends at its lowest block: " + tag);
                             boards++;
                         }
-            TestAssert.That(boards == 2 * 32 * 4 * 3, "Every combination was covered: " + boards);
+            TestAssert.That(boards == 2 * 64 * 4 * 3 * ScopeLayout.MaxSlots, "Every combination was covered: " + boards);
 
             TestAssert.Near(ScopeLayout.Body(true, false), 100f, "The compact body is the whole strip");
             TestAssert.Near(ScopeLayout.Body(false, false), 300f, "A full page body is 300");

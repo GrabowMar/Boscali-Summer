@@ -5,13 +5,15 @@ namespace BoscaliSummer.Modules.Cinematography
 {
     internal static class CinematicSchema
     {
-        internal static readonly string[] Actions={ "schema","status","get","pose","actors","list","detach","new","capture","set_shot","options","orbit","follow","demo","console",
+        internal static readonly string[] Actions={ "schema","status","get","pose","actors","list","detach","new","capture","set_shot","options","orbit","follow","chase","track","flyby","demo","console",
             "save","load","set_edit","append_clip","clear_edit","save_edit","load_edit","play","play_edit","pause","resume","seek","bookmark","stop" };
         internal static Dictionary<string,object> Describe() => new Dictionary<string,object>
         {
             ["ok"]=true,["api_version"]=1,["entry_point"]="BoscaliSummer.Cinematics.CinematicAutomation.Step",
             ["actions"]=(string[])Actions.Clone(),["max_fields"]=16,["max_json_bytes"]=ShotStore.FileLimit,["max_keys"]=64,["max_clips"]=32,
             ["max_edit_seconds"]=600,["rate_range"]=new[] {.05f,4f},["simulation_rate_range"]=new[] {.05f,1f},
+            ["anchor_modes"]="Actor-local by default; stabilizeAnchor: world axes; headingOnlyAnchor: heading with level horizon (mutually exclusive)",
+            ["tracking_options"]="worldSpacePath keeps camera keys global while tracking the actor; frameX/frameY: normalized viewport coordinates 0–1, default centre (0.5,0.5), requires lookAtTarget",
             ["mutation_context"]="enabled private host spectator; real slowmo additionally opted-in single-player",
             ["replay"]=false,["recorder"]="UNKNOWN",["seek_scope"]="camera only; world never rewinds",
             ["file_transport"]="Opt-in Cinematics/Inbox/<unique-id>.json -> Outbox/<unique-id>.json; atomic request write; at most one request per 0.2 seconds; last 128 replies retained",
@@ -21,7 +23,11 @@ namespace BoscaliSummer.Modules.Cinematography
             ["options_json_example"]=ShotStore.Encode(new ShotOptions()),
             ["json_commands"]=new Dictionary<string,string> { ["set_shot"]="json: validated ShotPlan",["options"]="json: ShotOptions; stop before replacing",
                 ["set_edit"]="json: ShotSequence with inline clips",["seek"]="seconds: camera playhead",["orbit"]="x,y,z,radius,height,duration,from,to; optional actor",
-                ["follow"]="actor: exact NetworkUniqueName; optional x,y,z offset,duration",["demo"]="actor: exact identity or nomodkit resolved actorUnit; authors a 15s follow/orbit/dolly test edit",["new"]="optional id",["load"]="optional id",["bookmark"]="optional label" },
+                ["follow"]="actor: exact NetworkUniqueName; optional x,y,z offset,duration",
+                ["chase"]="follow with headingOnlyAnchor; level horizon and heading-relative offsets; optional x,y,z,duration",
+                ["track"]="actor: exact identity; park at current free-camera global pose/FOV and track live actor; optional duration",
+                ["flyby"]="actor: exact identity; place once at heading-relative x,y,z (default -80,10,300), then track from fixed global vantage; optional duration",
+                ["demo"]="actor: exact identity or nomodkit resolved actorUnit; authors a 15s follow/orbit/dolly test edit",["new"]="optional id",["load"]="optional id",["bookmark"]="optional label" },
             ["expected_revision"]="Optional compare-and-reject guard for mutations; obtain revision from status. No automatic retry of capture/append/bookmark."
         };
         private const int CinematicsHistoryLimit=4096;

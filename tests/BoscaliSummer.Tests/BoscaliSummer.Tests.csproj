@@ -13,6 +13,7 @@
   <ItemGroup>
     <Compile Include="..\..\Core\Storage\AtomicFile.cs" Link="Framework\AtomicFile.cs" />
     <Compile Include="..\..\Core\Contracts\PortraitRole.cs" Link="Framework\PortraitRole.cs" />
+    <Compile Include="..\..\Core\Contracts\CargoKind.cs" Link="Framework\CargoKind.cs" />
     <Compile Include="..\..\modules\Wing\Domain\Personnel\PilotPortraitGenerator.cs" Link="Features\Wing\PilotPortraitGenerator.cs" />
     <Compile Include="..\..\modules\Weather\Domain\*.cs" LinkBase="Features\Weather" />
     <Compile Include="..\..\modules\Vanguard\Domain\*.cs" LinkBase="Features\Vanguard" />
@@ -136,10 +137,12 @@
     <Compile Include="..\..\modules\Progression\Runtime\EmblemMarks.cs" Link="Features\Progression\EmblemMarks.cs" />
     <Compile Include="..\..\modules\Progression\Runtime\LiveryCodec.cs" Link="Features\Progression\LiveryCodec.cs" />
     <Compile Include="..\..\modules\Support\Runtime\SupportModel.cs" Link="Features\Support\SupportModel.cs" />
+    <Compile Include="..\..\modules\Support\Runtime\SupportWords.cs" Link="Features\Support\SupportWords.cs" />
     <Compile Include="..\..\modules\Support\Runtime\JtacResolve.cs" Link="Features\Support\JtacResolve.cs" />
     <Compile Include="..\..\modules\Support\Runtime\StrikeBallistics.cs" Link="Features\Support\StrikeBallistics.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Runtime\TroopDeploymentMath.cs" Link="Features\UrbanCombat\TroopDeploymentMath.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Runtime\LandingZoneReach.cs" Link="Features\UrbanCombat\LandingZoneReach.cs" />
+    <Compile Include="..\..\modules\UrbanCombat\Runtime\LandingZoneMarkerMath.cs" Link="Features\UrbanCombat\LandingZoneMarkerMath.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Runtime\HaloGlidePlan.cs" Link="Features\UrbanCombat\HaloGlidePlan.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Runtime\FastRopePlan.cs" Link="Features\UrbanCombat\FastRopePlan.cs" />
     <Compile Include="..\..\modules\UrbanCombat\Runtime\GarrisonMarkerInfo.cs" Link="Features\UrbanCombat\GarrisonMarkerInfo.cs" />
@@ -149,6 +152,8 @@
     <Compile Include="..\..\modules\UrbanCombat\Visuals\WarzoneDressingMath.cs" Link="Features\UrbanCombat\WarzoneDressingMath.cs" />
     <Compile Include="..\..\modules\Trenches\Domain\TrenchTraceMath.cs" Link="Features\Trenches\TrenchTraceMath.cs" />
     <Compile Include="..\..\modules\Trenches\Domain\TrenchWire.cs" Link="Features\Trenches\TrenchWire.cs" />
+    <Compile Include="..\..\modules\Kaiju\Domain\*.cs" LinkBase="Features\Kaiju" />
+    <Compile Include="..\..\modules\Spooktober\Domain\*.cs" LinkBase="Features\Spooktober" />
     <Compile Include="..\..\Core\Modules\ModuleMetadata.cs" Link="Framework\FeatureMetadata.cs" />
     <Compile Include="..\..\Core\Modules\ModuleGraph.cs" Link="Framework\FeatureGraph.cs" />
     <Compile Include="..\..\Core\Game\MissionProfile.cs" Link="Framework\MissionProfile.cs" />

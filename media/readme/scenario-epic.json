@@ -1,0 +1,1560 @@
+{
+  "name": "readme-epic",
+  "mission": "Free Flight",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 700.0,
+  "timescale": 1.0,
+  "execution": {},
+  "ops": [
+    {
+      "op": "atmosphere",
+      "time_of_day": 17.55,
+      "conditions": 0.3,
+      "cloud_height": 2500,
+      "wind_speed": 4,
+      "wind_turbulence": 0,
+      "wind_heading": 90,
+      "moon_phase": 14
+    },
+    {
+      "op": "spawn",
+      "id": "a1",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "map": [
+          0,
+          50000
+        ]
+      },
+      "altitude": 500,
+      "speed": 210,
+      "heading": 270
+    },
+    {
+      "op": "spawn",
+      "id": "a2",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "near": {
+          "id": "a1",
+          "offset": [
+            26,
+            -2,
+            32
+          ]
+        }
+      },
+      "altitude": 498,
+      "speed": 210,
+      "heading": 270
+    },
+    {
+      "op": "spawn",
+      "id": "a3",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "near": {
+          "id": "a1",
+          "offset": [
+            -26,
+            -3,
+            34
+          ]
+        }
+      },
+      "altitude": 497,
+      "speed": 210,
+      "heading": 270
+    },
+    {
+      "op": "fly",
+      "id": "a1",
+      "program": [
+        {
+          "level": 500
+        }
+      ]
+    },
+    {
+      "op": "fly",
+      "id": "a2",
+      "program": [
+        {
+          "level": 500
+        }
+      ]
+    },
+    {
+      "op": "fly",
+      "id": "a3",
+      "program": [
+        {
+          "level": 500
+        }
+      ]
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.PinSky",
+      "args": {
+        "sky": 18
+      },
+      "store": "c01"
+    },
+    {
+      "op": "wait",
+      "seconds": 18
+    },
+    {
+      "op": "observe",
+      "follow": "a1"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "detach"
+      },
+      "store": "c02"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "new",
+        "id": "hero-front"
+      },
+      "store": "c03"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "follow",
+        "actor": "a1",
+        "x": 34,
+        "y": -5,
+        "z": 48,
+        "duration": 60
+      },
+      "store": "c04"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "options",
+        "json": "{\"lookAtTarget\": true, \"headingOnlyAnchor\": true, \"realtimeClock\": true, \"frameX\": 0.5, \"frameY\": 0.5}"
+      },
+      "store": "c05"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "play"
+      },
+      "store": "c06"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.5
+    },
+    {
+      "op": "capture",
+      "name": "hero-front-0",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "capture",
+      "name": "hero-front-1",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "capture",
+      "name": "hero-front-2",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "stop"
+      },
+      "store": "c07"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "new",
+        "id": "hero-back"
+      },
+      "store": "c08"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "follow",
+        "actor": "a1",
+        "x": -22,
+        "y": 7,
+        "z": -55,
+        "duration": 60
+      },
+      "store": "c09"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "options",
+        "json": "{\"lookAtTarget\": true, \"headingOnlyAnchor\": true, \"realtimeClock\": true, \"frameX\": 0.5, \"frameY\": 0.5}"
+      },
+      "store": "c10"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "play"
+      },
+      "store": "c11"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.5
+    },
+    {
+      "op": "capture",
+      "name": "hero-back-0",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "capture",
+      "name": "hero-back-1",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "capture",
+      "name": "hero-back-2",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "stop"
+      },
+      "store": "c12"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "new",
+        "id": "hero-orbit"
+      },
+      "store": "c13"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "orbit",
+        "actor": "a1",
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "radius": 70,
+        "height": 8,
+        "from": 0,
+        "to": 360,
+        "duration": 24
+      },
+      "store": "c14"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "play"
+      },
+      "store": "c15"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "capture",
+      "name": "hero-orbit-0",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "hero-orbit-1",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "hero-orbit-2",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "hero-orbit-3",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "hero-orbit-4",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "hero-orbit-5",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "hero-orbit-6",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "hero-orbit-7",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "hero-orbit-8",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "hero-orbit-9",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "hero-orbit-10",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "hero-orbit-11",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "stop"
+      },
+      "store": "c16"
+    },
+    {
+      "op": "spawn",
+      "id": "s1",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "map": [
+          -8000,
+          72000
+        ]
+      },
+      "altitude": 14,
+      "speed": 230,
+      "heading": 270
+    },
+    {
+      "op": "fly",
+      "id": "s1",
+      "program": [
+        {
+          "level": 400
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "new",
+        "id": "skim-back"
+      },
+      "store": "c17"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "follow",
+        "actor": "s1",
+        "x": -10,
+        "y": 2.5,
+        "z": -26,
+        "duration": 60
+      },
+      "store": "c18"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "options",
+        "json": "{\"lookAtTarget\": true, \"headingOnlyAnchor\": true, \"realtimeClock\": true, \"frameX\": 0.5, \"frameY\": 0.42}"
+      },
+      "store": "c19"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "play"
+      },
+      "store": "c20"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.5
+    },
+    {
+      "op": "capture",
+      "name": "skim-back-0",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "skim-back-1",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "skim-back-2",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "stop"
+      },
+      "store": "c21"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "new",
+        "id": "skim-side"
+      },
+      "store": "c22"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "follow",
+        "actor": "s1",
+        "x": -20,
+        "y": 1.5,
+        "z": -4,
+        "duration": 60
+      },
+      "store": "c23"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "options",
+        "json": "{\"lookAtTarget\": true, \"headingOnlyAnchor\": true, \"realtimeClock\": true, \"frameX\": 0.5, \"frameY\": 0.5}"
+      },
+      "store": "c24"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "play"
+      },
+      "store": "c25"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.5
+    },
+    {
+      "op": "capture",
+      "name": "skim-side-0",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "skim-side-1",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "stop"
+      },
+      "store": "c26"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.PinSky",
+      "args": {
+        "sky": 32
+      },
+      "store": "c27"
+    },
+    {
+      "op": "atmosphere",
+      "time_of_day": 17.7,
+      "conditions": 0.3,
+      "cloud_height": 2500,
+      "wind_speed": 4,
+      "wind_turbulence": 0,
+      "wind_heading": 90,
+      "moon_phase": 14
+    },
+    {
+      "op": "spawn",
+      "id": "c1",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "map": [
+          20000,
+          90000
+        ]
+      },
+      "altitude": 1500,
+      "speed": 210,
+      "heading": 270
+    },
+    {
+      "op": "spawn",
+      "id": "c2",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "near": {
+          "id": "c1",
+          "offset": [
+            26,
+            -2,
+            32
+          ]
+        }
+      },
+      "altitude": 1498,
+      "speed": 210,
+      "heading": 270
+    },
+    {
+      "op": "spawn",
+      "id": "c3",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "near": {
+          "id": "c1",
+          "offset": [
+            -26,
+            -3,
+            34
+          ]
+        }
+      },
+      "altitude": 1497,
+      "speed": 210,
+      "heading": 270
+    },
+    {
+      "op": "fly",
+      "id": "c1",
+      "program": [
+        {
+          "level": 500
+        }
+      ]
+    },
+    {
+      "op": "fly",
+      "id": "c2",
+      "program": [
+        {
+          "level": 500
+        }
+      ]
+    },
+    {
+      "op": "fly",
+      "id": "c3",
+      "program": [
+        {
+          "level": 500
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 18
+    },
+    {
+      "op": "observe",
+      "follow": "c1"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "detach"
+      },
+      "store": "c28"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "new",
+        "id": "deck-orbit"
+      },
+      "store": "c29"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "orbit",
+        "actor": "c1",
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "radius": 80,
+        "height": 10,
+        "from": 0,
+        "to": 360,
+        "duration": 24
+      },
+      "store": "c30"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "play"
+      },
+      "store": "c31"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "capture",
+      "name": "deck-orbit-0",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "deck-orbit-1",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "deck-orbit-2",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "deck-orbit-3",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "deck-orbit-4",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "deck-orbit-5",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "deck-orbit-6",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "deck-orbit-7",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "deck-orbit-8",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "deck-orbit-9",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "deck-orbit-10",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "deck-orbit-11",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "stop"
+      },
+      "store": "c32"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "new",
+        "id": "deck-back"
+      },
+      "store": "c33"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "follow",
+        "actor": "c1",
+        "x": -24,
+        "y": 9,
+        "z": -60,
+        "duration": 60
+      },
+      "store": "c34"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "options",
+        "json": "{\"lookAtTarget\": true, \"headingOnlyAnchor\": true, \"realtimeClock\": true, \"frameX\": 0.5, \"frameY\": 0.5}"
+      },
+      "store": "c35"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "play"
+      },
+      "store": "c36"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.5
+    },
+    {
+      "op": "capture",
+      "name": "deck-back-0",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "capture",
+      "name": "deck-back-1",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "stop"
+      },
+      "store": "c37"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.PinSky",
+      "args": {
+        "sky": 17
+      },
+      "store": "c38"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Console",
+      "args": {
+        "action": "open"
+      },
+      "store": "c39"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Console",
+      "args": {
+        "action": "press",
+        "control": "SetSupercell"
+      },
+      "store": "c40"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Console",
+      "args": {
+        "action": "press",
+        "control": "SetDistantCb"
+      },
+      "store": "c41"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Console",
+      "args": {
+        "action": "close"
+      },
+      "store": "c42"
+    },
+    {
+      "op": "atmosphere",
+      "time_of_day": 17.45,
+      "conditions": 0.6,
+      "cloud_height": 2500,
+      "wind_speed": 4,
+      "wind_turbulence": 0,
+      "wind_heading": 90,
+      "moon_phase": 14
+    },
+    {
+      "op": "spawn",
+      "id": "d1",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "map": [
+          -20000,
+          100000
+        ]
+      },
+      "altitude": 800,
+      "speed": 210,
+      "heading": 270
+    },
+    {
+      "op": "spawn",
+      "id": "d2",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "near": {
+          "id": "d1",
+          "offset": [
+            26,
+            -2,
+            32
+          ]
+        }
+      },
+      "altitude": 798,
+      "speed": 210,
+      "heading": 270
+    },
+    {
+      "op": "spawn",
+      "id": "d3",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "near": {
+          "id": "d1",
+          "offset": [
+            -26,
+            -3,
+            34
+          ]
+        }
+      },
+      "altitude": 797,
+      "speed": 210,
+      "heading": 270
+    },
+    {
+      "op": "fly",
+      "id": "d1",
+      "program": [
+        {
+          "level": 500
+        }
+      ]
+    },
+    {
+      "op": "fly",
+      "id": "d2",
+      "program": [
+        {
+          "level": 500
+        }
+      ]
+    },
+    {
+      "op": "fly",
+      "id": "d3",
+      "program": [
+        {
+          "level": 500
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 24
+    },
+    {
+      "op": "observe",
+      "follow": "d1"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "detach"
+      },
+      "store": "c43"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "new",
+        "id": "storm-orbit"
+      },
+      "store": "c44"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "orbit",
+        "actor": "d1",
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "radius": 90,
+        "height": 6,
+        "from": 0,
+        "to": 360,
+        "duration": 24
+      },
+      "store": "c45"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "play"
+      },
+      "store": "c46"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "capture",
+      "name": "storm-orbit-0",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "storm-orbit-1",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "storm-orbit-2",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "storm-orbit-3",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "storm-orbit-4",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "storm-orbit-5",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "storm-orbit-6",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "storm-orbit-7",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "storm-orbit-8",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "storm-orbit-9",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "storm-orbit-10",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "storm-orbit-11",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "stop"
+      },
+      "store": "c47"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "new",
+        "id": "storm-back"
+      },
+      "store": "c48"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "follow",
+        "actor": "d1",
+        "x": -24,
+        "y": 9,
+        "z": -60,
+        "duration": 60
+      },
+      "store": "c49"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "options",
+        "json": "{\"lookAtTarget\": true, \"headingOnlyAnchor\": true, \"realtimeClock\": true, \"frameX\": 0.5, \"frameY\": 0.5}"
+      },
+      "store": "c50"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "play"
+      },
+      "store": "c51"
+    },
+    {
+      "op": "wait",
+      "seconds": 1.5
+    },
+    {
+      "op": "capture",
+      "name": "storm-back-0",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "capture",
+      "name": "storm-back-1",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "stop"
+      },
+      "store": "c52"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.PinSky",
+      "args": {
+        "sky": 44
+      },
+      "store": "c53"
+    },
+    {
+      "op": "atmosphere",
+      "time_of_day": 20.6,
+      "conditions": 0.9,
+      "cloud_height": 2500,
+      "wind_speed": 4,
+      "wind_turbulence": 0,
+      "wind_heading": 90,
+      "moon_phase": 14
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "observe",
+      "follow": "d1"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "detach"
+      },
+      "store": "c54"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "new",
+        "id": "night-orbit"
+      },
+      "store": "c55"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "orbit",
+        "actor": "d1",
+        "x": 0,
+        "y": 0,
+        "z": 0,
+        "radius": 90,
+        "height": 6,
+        "from": 0,
+        "to": 360,
+        "duration": 28
+      },
+      "store": "c56"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "play"
+      },
+      "store": "c57"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "capture",
+      "name": "night-orbit-0",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "night-orbit-1",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "night-orbit-2",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "night-orbit-3",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "night-orbit-4",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "night-orbit-5",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "night-orbit-6",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "night-orbit-7",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "night-orbit-8",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "night-orbit-9",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "night-orbit-10",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "night-orbit-11",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "night-orbit-12",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "capture",
+      "name": "night-orbit-13",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.0
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Cinematics.CinematicAutomation.Step",
+      "args": {
+        "action": "stop"
+      },
+      "store": "c58"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    }
+  ],
+  "environment": {
+    "args": [],
+    "env": {},
+    "resolution": [
+      1920,
+      1080
+    ],
+    "fullscreen": false,
+    "framerate": 60,
+    "config": {}
+  }
+}

@@ -51,7 +51,8 @@ namespace BoscaliSummer.Modules.Support.Patches
                         r.enabled = false;
                     }
 
-                    Visuals.KineticRodStrikeVisuals.TriggerImpact(world);
+                    Runtime.SupportEffectPolicy.RodScales(unique, out _, out float rodRadius);
+                    Visuals.KineticRodStrikeVisuals.TriggerImpact(world, rodRadius);
                 }
                 else if (unique.StartsWith("BoscaliSummer:Support:Emp:", StringComparison.Ordinal))
                 {
@@ -114,7 +115,10 @@ namespace BoscaliSummer.Modules.Support.Patches
         {
             // Vanilla must set Networkdisabled before damage can call Missile.Detonate again.
             if (__state && __instance != null && __instance.disabled)
-                Runtime.RodBlast.Apply(__instance.transform.position, __instance.ownerID);
+            {
+                Runtime.SupportEffectPolicy.RodScales(__instance.UniqueName, out float damage, out float radius);
+                Runtime.RodBlast.Apply(__instance.transform.position, __instance.ownerID, damage, radius);
+            }
         }
     }
 

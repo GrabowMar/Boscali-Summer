@@ -16,8 +16,8 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.Near(OrcaSleeper.RestDepth(-20f), -16f, "shallow: 4 m off the seabed");
             TestAssert.Near(OrcaSleeper.RestDepth(-5f), -8f, "never shallower than -8 m");
 
-            TestAssert.That(!OrcaSleeper.Expired(599.9f) && OrcaSleeper.Expired(600f), "sleeps up to 600 s");
-            TestAssert.Eq(OrcaSleeper.WakeRange, 1200f, "hostile hull within 1.2 km wakes it");
+            TestAssert.That(!OrcaSleeper.Expired(899.9f) && OrcaSleeper.Expired(900f), "sleeps up to 900 s");
+            TestAssert.Eq(OrcaSleeper.WakeRange, 1600f, "hostile hull within 1.6 km wakes it");
             TestAssert.Eq(OrcaSleeper.AttackRadius, 2000f, "drop point within 2 km of a hostile hull attacks it");
             TestAssert.Eq(OrcaSleeper.ScanInterval, 1f, "sleeper scans at 1 Hz");
 

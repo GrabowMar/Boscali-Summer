@@ -74,6 +74,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         public void Activate()
         {
             Members.Clear();
+            Array.Clear(stepFaulted, 0, stepFaulted.Length);
             ResetStation();
             ResetElements();
             FieldRegistry.Clear();
@@ -143,20 +144,33 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 if (LastFrameAiMs > AiMsMax) AiMsMax = LastFrameAiMs;
             }
             LogEvents();
-            WingTakeover.Tick();
-            WingSearchAndRescue.Tick();
+            // UI and rescue: their fault must not reach the manager and stop the wing's AI with them.
+            try { WingTakeover.Tick(); } catch (Exception e) { StepFailed(7, e); }
+            try { WingSearchAndRescue.Tick(); } catch (Exception e) { StepFailed(8, e); }
+        }
+
+        private readonly bool[] stepFaulted = new bool[10];
+
+        /// <summary>A tick step threw: logged in full once per step and mission, then verbose (it is retried every tick).</summary>
+        private void StepFailed(int step, Exception e)
+        {
+            if (stepFaulted[step]) WingLog.Verbose($"[Wing] tick step {step} failed again: {e.Message}");
+            else WingLog.Logger.LogError($"[Wing] tick step {step} failed (the others go on): {e}");
+            stepFaulted[step] = true;
         }
 
         public void FixedTick(float dt)
         {
             missionTime += dt;
-            TrackLeader();
-            StepPlanner(dt);
-            SuperviseLandings();
-            SuperviseCombat(dt);
-            DisciplineRadars(dt);
-            SampleMembers(dt);
-            Prune();
+            // Each step on its own guard: one throw used to reach the manager, which disables the service for the mission (the clock,
+            // Prune and every supervisor stopped, members stuck in whatever phase they were in).
+            try { TrackLeader(); } catch (Exception e) { StepFailed(0, e); }
+            try { StepPlanner(dt); } catch (Exception e) { StepFailed(1, e); }
+            try { SuperviseLandings(); } catch (Exception e) { StepFailed(2, e); }
+            try { SuperviseCombat(dt); } catch (Exception e) { StepFailed(3, e); }
+            try { DisciplineRadars(dt); } catch (Exception e) { StepFailed(4, e); }
+            try { SampleMembers(dt); } catch (Exception e) { StepFailed(5, e); }
+            try { Prune(); } catch (Exception e) { StepFailed(6, e); }
             if (WingSettings.Instance.DevTools.Value && (traceClock += dt) >= GroundTraceSeconds)
             {
                 traceClock = 0f;
@@ -188,6 +202,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             FlyAs(m, WingPilotRoster.Assign(a, pilot));
             m.State = new WingFlightState(m);
             if (ground != null) m.Ground = ground(m);
+            m.Flew = m.Ground == null;
             m.Brain.AfterburnerAllowed = afterburner;
             m.Voice = nextVoice++;
             Members.Add(m);
@@ -226,7 +241,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             bool home = m.Aircraft != null && m.Aircraft.unitState == Unit.UnitState.Returned;
             PilotFate fate = PilotFates.Of(home, m.Aircraft == null || m.Aircraft.disabled, m.Pilot == null,
                 m.Pilot != null && m.Pilot.dead, Ejected(m));
-            if (home) WingPilotRoster.NoteSortie(m.Aircraft);
+            // A sortie is flown: called and dismissed (or aborted) on the ground earned 40 XP for nothing.
+            if (home && m.Flew) WingPilotRoster.NoteSortie(m.Aircraft);
             if (home) WingLedger.Returned(m.Aircraft);
             else WingLedger.Forget(m.Aircraft);
             WingPilotRoster.Retire(m.Aircraft.persistentID, fate != PilotFate.Down);
@@ -245,7 +261,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             float dt = Time.fixedDeltaTime;
             try
             {
-                FrameFor(Time.fixedTime, dt);
+                // The shared frame's fault is not this member's (the first to step each tick was charged, and released after three).
+                try { FrameFor(Time.fixedTime, dt); } catch (Exception e) { StepFailed(9, e); }
                 WingFrame frame = FrameOf(m);
                 // Slots follow this tick's frames (review P2 C1); the check only guards a member that joined after them.
                 bool framed = frame != null && m.Brain.Slot < frame.Count;
@@ -264,7 +281,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     return;
                 }
                 if (m.Recovery == null && !m.HasPendingRecovery) CheckBingo(m, dt);
-                m.Brain.Threat = ReadThreat(m);
+                SenseThreat(m);
                 ControlOutput o = m.Brain.Step(frame, m.Last, m.Profile, missionTime, dt, Events);
                 ControlWriter.Fly(m.Aircraft, o, m.Profile.Class);
                 m.Why.Update(m.Brain.Pipeline.Report, missionTime);
@@ -719,6 +736,10 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             {
                 leaderSensor.Restart();
                 foreach (WingMember x in Members) x.Sensor.Restart();
+                // The leader estimates too: their first frame back took the whole gap's velocity change as one tick's
+                // acceleration (a turn spiked every slot's feed-forward), and aft slots flew the pre-gap path.
+                Wing?.ResetLeader();
+                for (int e = 1; e < ElementRoster.MaxElements; e++) wings[e]?.ResetLeader();
             }
             frameTime = time;
             // Before any frame is built this tick (review P2 I2, I3): an emptied element forgets its lead; an element whose
@@ -748,6 +769,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 if (!Roster.InUse(e)) continue;
                 FormationWing wing = WingOf(e);
                 if (wing == null) continue;
+                // INTERVAL scales the spacing preset per element; the same shape keeps its solver.
+                wing.SetFormation(wing.Frame.Definition, Selection.SpacingMetres * WingDoctrineRules.SpacingScale(DoctrineOf(e).Interval));
                 int n = 0, o = 0;
                 foreach (WingMember m in Members)
                 {
@@ -761,7 +784,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     else if (o < others.Length)
                         others[o++] = new CollisionBody
                         {
-                            Pos = m.Last.Pos, Vel = m.Last.Vel, Radius = m.Profile.MaxRadius, Rank = m.Seat + 1, Ignored = m.OnGround,
+                            Pos = m.Last.Pos, Vel = m.Last.Vel, Radius = m.Profile.MaxRadius, Rank = CollisionRank(m), Ignored = m.OnGround,
                         };
                 }
                 // ponytail: one terrain floor for the wing (the highest under any member); per element if detached elements
@@ -800,8 +823,14 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             Role = m.Brain.Roles.Current,
             Id = m.Id,
             Grounded = m.OnGround,
-            Rank = m.Seat + 1,
+            Away = m.Engaged || m.Recovery != null || m.Settle != null
+                || m.Brain.Mind.Current == BehaviourId.Defend || m.Brain.Mind.Current == BehaviourId.React,
+            Rank = CollisionRank(m),
         };
+
+        /// <summary>Collision rank (a higher rank yields): the seat, or -1 for an aircraft the game flies (its combat state, its
+        /// landing), which applies no bias: by seat alone a pair of it and a junior member had nobody giving way.</summary>
+        private static int CollisionRank(WingMember m) => m.Engaged || Landing(m) ? -1 : m.Seat + 1;
 
         /// <summary>The frame of the member's element (null before the wing exists).</summary>
         public WingFrame FrameOf(WingMember m) => WingOf(ElementOf(m))?.Frame ?? Wing?.Frame;

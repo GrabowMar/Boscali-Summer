@@ -3,7 +3,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>BoscaliSummer</AssemblyName>
     <RootNamespace>BoscaliSummer</RootNamespace>
-    <Version>0.2.5</Version>
+    <Version>0.2.6.2</Version>
     <DebugType>portable</DebugType>
     <!-- CS0436: the vendored avionics sources compile into this assembly and the test assembly. -->
     <NoWarn>$(NoWarn);CS0436;MSB3277</NoWarn>
@@ -197,6 +197,17 @@
     </EmbeddedResource>
     <EmbeddedResource Include="modules\FireAndDestruction\Assets\structure.bundle" Condition="Exists('modules\FireAndDestruction\Assets\structure.bundle')">
       <LogicalName>BoscaliSummer.Destruction.structure.bundle</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Core\Fx\Assets\particles.bundle" Condition="Exists('Core\Fx\Assets\particles.bundle')">
+      <LogicalName>BoscaliSummer.Fx.particles.bundle</LogicalName>
+    </EmbeddedResource>
+    <!-- Built by tools/Compile-KaijuAssets.ps1. Optional: without it the Kaiju summon reports the bundle missing. -->
+    <EmbeddedResource Include="modules\Kaiju\Assets\kaiju.bundle" Condition="Exists('modules\Kaiju\Assets\kaiju.bundle')">
+      <LogicalName>BoscaliSummer.Kaiju.kaiju.bundle</LogicalName>
+    </EmbeddedResource>
+    <!-- Built by tools/Compile-SpooktoberAssets.ps1. Optional: without it the rad look is embers only. -->
+    <EmbeddedResource Include="modules\Spooktober\Assets\spooktober.bundle" Condition="Exists('modules\Spooktober\Assets\spooktober.bundle')">
+      <LogicalName>BoscaliSummer.Spooktober.spooktober.bundle</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="modules\Weather\Assets\weatherrain.bundle" Condition="Exists('modules\Weather\Assets\weatherrain.bundle')">
       <LogicalName>BoscaliSummer.Weather.weatherrain.bundle</LogicalName>

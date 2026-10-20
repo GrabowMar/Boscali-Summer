@@ -34,13 +34,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal bool FillState(Player viewer, CyberStateData into, int round = 0)
         {
             into.Active = false; into.DataCenterUp = false; into.IntrusionCap = 0; into.HeldTotal = 0;
-            into.Anchors.Clear(); into.Nodes.Clear(); into.Intrusions.Clear(); into.Events.Clear();
+            into.Anchors.Clear(); into.Nodes.Clear(); into.Intrusions.Clear(); into.Events.Clear(); into.Breaches.Clear(); into.PurgeEndsAt = into.PurgeReadyAt = 0f;
             if (viewer == null || viewer.HQ == null || manager?.Settings == null || !manager.Settings.CyberEnabled.Value ||
                 !factions.TryGetValue(viewer.HQ, out FactionCyber f)) return false;
             if (round == 0 || f.BaseRound != round) { BuildBase(f); f.BaseRound = round; }
             CyberStateData b = f.Base;
             into.Active = b.Active; into.DataCenterUp = b.DataCenterUp; into.IntrusionCap = b.IntrusionCap; into.HeldTotal = b.HeldTotal;
-            into.Anchors.AddRange(b.Anchors); into.Nodes.AddRange(b.Nodes);
+            into.Anchors.AddRange(b.Anchors); into.Nodes.AddRange(b.Nodes); into.Breaches.AddRange(b.Breaches);
+            into.PurgeEndsAt = b.PurgeEndsAt; into.PurgeReadyAt = b.PurgeReadyAt;
             ulong viewerId = PlayerIdentity.Of(viewer);
             for (int i = 0; i < b.Intrusions.Count; i++)
             {
@@ -62,7 +63,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private void BuildBase(FactionCyber f)
         {
             CyberStateData into = f.Base;
-            into.Anchors.Clear(); into.Nodes.Clear(); into.Intrusions.Clear(); into.Events.Clear();
+            into.Anchors.Clear(); into.Nodes.Clear(); into.Intrusions.Clear(); into.Events.Clear(); into.Breaches.Clear();
             f.BaseIntrusionOps.Clear(); f.BaseEventOps.Clear();
             float now = SupportManager.MissionNow();
             CyberDesk desk = f.Desk;
@@ -70,6 +71,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
             into.DataCenterUp = f.Anchors.DataCenterUp;
             into.IntrusionCap = (byte)Math.Min(CyberNetwork.MaxIntrusions, CyberRules.IntrusionCap(manager.HumanCount(f.Owner)));
             into.HeldTotal = (byte)Math.Min(CyberRules.MaxHeldPerFaction, desk.Network.Engaged);
+            into.PurgeEndsAt = desk.PurgeEndsAt > now ? desk.PurgeEndsAt : 0f;
+            into.PurgeReadyAt = desk.PurgeReadyAt > now ? desk.PurgeReadyAt : 0f;
+            foreach (CyberBreach br in desk.Breaches)
+            {
+                if (into.Breaches.Count >= CyberWire.MaxBreaches) break;
+                into.Breaches.Add(new CyberBreachRow { Kind = br.Kind, X = br.X, Z = br.Z });
+            }
             foreach (AnchorSlot slot in f.Slots)
             {
                 if (into.Anchors.Count >= CyberWire.MaxAnchors || !f.Anchors.TryPosition(slot.Kind, slot.Index, out float x, out float z)) continue;
@@ -82,7 +90,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             {
                 if (into.Nodes.Count >= CyberWire.MaxNodes) break;
                 bool held = desk.Network.Holds(n.Id);
-                into.Nodes.Add(new CyberNodeRow { Id = n.Id, Kind = n.Kind, X = n.X, Z = n.Z, Held = held, Hopping = !held && desk.Network.IsEngaged(n.Id), Exploit = CyberRules.Exploit(n.Kind) });
+                into.Nodes.Add(new CyberNodeRow { Id = n.Id, Kind = n.Kind, X = n.X, Z = n.Z, Held = held, Hopping = !held && desk.Network.IsEngaged(n.Id), Exploit = CyberRules.Exploit(n.Kind),
+                    Purging = held && VictimPurging(n.Victim, now) });
             }
             foreach (CyberIntrusion x in desk.Network.Active)
             {

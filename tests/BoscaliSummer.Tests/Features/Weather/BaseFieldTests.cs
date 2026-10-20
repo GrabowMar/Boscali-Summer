@@ -65,10 +65,11 @@ namespace BoscaliSummer.Tests.Features.Weather
             var structure = new byte[4];
             for (float baseM = 250f; baseM <= 3600f; baseM += 7f)
             {
-                byte b = (byte)(Math.Min(1f, baseM / CloudMaps.BaseRange) * 255f + 0.5f);
-                var profiles = new byte[] { 0, 0, b, 0 };
+                // 16-bit since 2026-10-18 (CloudMaps.Word): high byte in channel 2, low byte in channel 1. One byte was 16 m steps, which drew terraces.
+                int word = (int)(Math.Min(1f, baseM / CloudMaps.BaseRange) * 65535f + 0.5f);
+                var profiles = new byte[] { 0, (byte)(word & 255), (byte)(word >> 8), 0 };
                 WeatherPoint decoded = CloudBodies.SampleMap(structure, profiles, 1, 0.5f, 0.5f);
-                TestAssert.That(Math.Abs(decoded.CloudBase - baseM) <= CloudMaps.BaseRange / 255f * 0.5f + 0.01f, "16 m steps: " + baseM + " came back as " + decoded.CloudBase);
+                TestAssert.That(Math.Abs(decoded.CloudBase - baseM) <= 0.1f, "16-bit base: " + baseM + " came back as " + decoded.CloudBase);
             }
         }
 

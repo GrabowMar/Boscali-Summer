@@ -5,6 +5,10 @@ namespace BoscaliSummer.Modules.Weather.Domain
     internal struct LightningEvent
     {
         internal float X, Y, Z, BottomY, Time;
+        /// <summary>The storm's cloud top (m): tall storms throw sprites and jets at night.</summary>
+        internal float Top;
+        /// <summary>The storm's cloud base (m): only the channel below it is drawn (BottomY below Base is a ground strike).</summary>
+        internal float Base;
         internal uint Seed;
     }
 
@@ -16,6 +20,10 @@ namespace BoscaliSummer.Modules.Weather.Domain
     internal static class StormLightning
     {
         internal const float SlotSeconds = 2f;
+
+        /// <summary>Strikes per minute over the cell's own rate (2026-10-18, user: storms need more thunder): every peer runs the same pure
+        /// rule, so they still see the same strikes.</summary>
+        internal const float StrikeBoost = 2f;
 
         /// <summary>The strike of a storm cell in a 2 s slot, in world metres (the cell lives in the tape frame).</summary>
         internal static bool TryCell(in StormCell cell, in TapeFrame frame, int slot, out LightningEvent strike)
@@ -37,7 +45,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         private static bool TryEvent(float x, float z, float radius, float top, float bottom, float rate, uint seed, int slot, out LightningEvent strike)
         {
             strike = default;
-            if (slot < 0 || rate <= 0f || WeatherMath.Hash01(seed, slot, 91) >= Math.Min(1f, rate * SlotSeconds / 60f)) return false;
+            if (slot < 0 || rate <= 0f || WeatherMath.Hash01(seed, slot, 91) >= Math.Min(1f, rate * StrikeBoost * SlotSeconds / 60f)) return false;
             strike = new LightningEvent
             {
                 X = x + WeatherMath.HashRange(seed, slot, 92, 0, -radius * 0.4f, radius * 0.4f),
@@ -45,6 +53,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 Y = bottom + (top - bottom) * WeatherMath.HashRange(seed, slot, 94, 0, 0.35f, 0.7f),
                 BottomY = WeatherMath.Hash01(seed, slot, 95) < 0.25f ? 40f : bottom,
                 Time = slot * SlotSeconds + WeatherMath.HashRange(seed, slot, 96, 0, 0.02f, 1.98f),
+                Top = top,
+                Base = bottom,
                 Seed = seed ^ unchecked((uint)slot * 2654435761u),
             };
             return true;

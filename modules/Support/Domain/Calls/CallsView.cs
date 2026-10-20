@@ -29,6 +29,16 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
     /// <summary>What one perk tile shows. State priority: offline > pending > armed > locked > cooldown > allocation > ready.</summary>
     internal static class CallsView
     {
+        /// <summary>
+        /// The state word as a 21 px perk row has room for it (one line, 20 characters): a long gate is shortened (NEEDS STRIKE QUALIFICATION becomes NEEDS STRIKE QUAL., LOW ALLOC · NEED 10 AP loses the NEED,
+        /// NO SATELLITE · REBUILD IT keeps its first half). The pinned strip words the same state whole.
+        /// </summary>
+        public static string RowWord(string word)
+        {
+            if (string.IsNullOrEmpty(word) || word.Length <= 20) return word ?? "";
+            return word.Replace("QUALIFICATION", "QUAL.").Replace(" · REBUILD IT", "").Replace("NEED ", "");
+        }
+
         /// <param name="lockedReason">Empty when nothing blocks the perk, else the words of the gate (e.g. <c>NEEDS STRIKE QUALIFICATION</c>).</param>
         public static CallTile Tile(in CallRow row, in CallQuote quote, string lockedReason, float balance,
             float cooldownLeft, bool armed, bool pending, bool offline)

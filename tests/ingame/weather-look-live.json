@@ -1,0 +1,17 @@
+{
+  "name": "weather-look-live",
+  "mods": ["boscalisummer"],
+  "timeout_s": 2400,
+  "timescale": 1,
+  "_note": "A long hold for live look work by bridge (2026-10-18 weather pass): the player sits in an FS-20 over open sea north of the island and flies level for 35 minutes while skies, time of day and views are driven from outside (WeatherAutomation.PinSky / ApplyScenario / View, LevelInfo.i.SetTimeOfDay, bridge_screenshot).",
+  "ops": [
+    {"op": "atmosphere", "time_of_day": 12, "conditions": 0.1, "cloud_height": 2500, "wind_speed": 3, "wind_heading": 90, "wind_turbulence": 0.1, "moon_phase": 14},
+    {"op": "seat", "id": "player", "aircraft": "FS-20 Vortex", "near": [0, 130000], "altitude": 1500, "speed": 200, "heading": 0, "view": "cockpit", "timeout": 30},
+    {"op": "fly", "id": "player", "program": [{"level": 220}]},
+    {"op": "wait", "seconds": 2100},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"}
+  ]
+}

@@ -17,8 +17,14 @@ namespace BoscaliSummer.Tests.Features.Weather
             string march = File.ReadAllText(Path.Combine(root, "modules", "Weather", "Assets", "Source", "FlightCloud.shader"));
             string resolve = File.ReadAllText(Path.Combine(root, "modules", "Weather", "Assets", "Source", "FlightCloudComposite.shader"));
 
-            TestAssert.That(march.Contains("float segJitter = farSeg || (hero && h0 >= CLOUD_NEAR_LIMIT) ? 0.5 : jitter;"),
+            TestAssert.That(march.Contains("float segJitter = farSeg ? 0.5 : jitter;") &&
+                march.Contains("float heroJitter = heroSpan.x >= CLOUD_NEAR_LIMIT ? 0.5 : jitter;"),
                 "far segments and distant set-pieces march from fixed sample positions");
+            TestAssert.That(march.Contains("RayBox(ro, ray, _CloudAltitudeBounds, start, finish);") &&
+                !march.Contains("bounds = wide") && march.Contains("gNoHero = !hero && t >= 2000.0;") &&
+                march.Contains("float carryEnd = min(finish, 2000.0);"),
+                "ordinary cloud marches the same box and samples whether or not a set-piece is near (2026-10-19 wedges); " +
+                "set-pieces leave the near march at 2 km (carried to 20 km they showed a dither hatch)");
             TestAssert.That(march.Contains("lerp(sampleStart, sampleEnd, segJitter)"),
                 "the segment sample position uses the distance-chosen jitter");
             TestAssert.That(!march.Contains("_CloudChecker.z"),
@@ -29,7 +35,7 @@ namespace BoscaliSummer.Tests.Features.Weather
 
             TestAssert.That(march.Contains("gFoot = max(t * _CloudPixelAngle, stepLength * 0.35);"),
                 "far noise is filtered to a third of the step: sharper far noise drew the steps as horizontal slices");
-            TestAssert.That(resolve.Contains("float spread = lerp(0.45, 0.15, far);") && !resolve.Contains("float2(x, y) * (1.0 + far)"),
+            TestAssert.That(resolve.Contains("float spread = lerp(0.35, 0.15, far);") && !resolve.Contains("float2(x, y) * (1.0 + far)"),
                 "the composite blurs distant cloud with a wide kernel on adjacent taps (spaced taps drew blocks at depth edges)");
             TestAssert.That(march.Contains("lerp(0.7, 1.6, smoothstep(10000.0, 60000.0, distanceToSample))") &&
                 march.Contains("float sampleAir = CloudAir(t,") && march.Contains("float air = CloudAir(depth,"),

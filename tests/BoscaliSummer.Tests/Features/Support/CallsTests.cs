@@ -74,25 +74,29 @@ namespace BoscaliSummer.Tests.Features.Support
 
         private static void CheckPerkCatalogue()
         {
-            // Spec 3.6 as implemented: front, rung, id and label of all 14 perks.
+            // Spec 3.6 as implemented, plus the four protocol 41 perks: front, rung, id and label of all 18 perks (two may share a rung).
             var expected = new (SupportActionId id, Front front, int rung, string label)[]
             {
                 (SupportActionId.Recon, Front.Space, 1, "RECON PASS"),
                 (SupportActionId.SatCamera, Front.Space, 2, "SAT CAMERA"),
+                (SupportActionId.Overwatch, Front.Space, 2, "OVERWATCH"),
                 (SupportActionId.Prsm, Front.Space, 3, "PRSM"),
                 (SupportActionId.Cruise, Front.Space, 4, "CRUISE SALVO"),
+                (SupportActionId.Starfall, Front.Space, 4, "STARFALL"),
                 (SupportActionId.Artillery, Front.Space, 5, "ORBITAL ROD"),
                 (SupportActionId.ElintSweep, Front.Cyber, 1, "ELINT SWEEP"),
                 (SupportActionId.FlareMissile, Front.Cyber, 2, "DECOY BARRAGE"),
                 (SupportActionId.RadarBlind, Front.Cyber, 3, "RADAR BLIND"),
+                (SupportActionId.Siphon, Front.Cyber, 3, "SIPHON"),
                 (SupportActionId.SamNetDown, Front.Cyber, 4, "SAM NET DOWN"),
                 (SupportActionId.Emp, Front.Cyber, 5, "EMP"),
                 (SupportActionId.JtacMark, Front.Sof, 1, "JTAC LASE"),
                 (SupportActionId.ReconTeam, Front.Sof, 2, "RECON TEAM"),
                 (SupportActionId.Fortify, Front.Sof, 3, "FORTIFY"),
                 (SupportActionId.SabotageStrike, Front.Sof, 4, "SABOTAGE STRIKE"),
+                (SupportActionId.DirectAction, Front.Sof, 5, "DIRECT ACTION"),
             };
-            TestAssert.Eq(CallSheet.Rows.Count, expected.Length, "fourteen perks");
+            TestAssert.Eq(CallSheet.Rows.Count, expected.Length, "eighteen perks");
             var ids = new HashSet<SupportActionId>();
             var labels = new HashSet<string>();
             var rungs = new Dictionary<Front, HashSet<int>>
@@ -106,13 +110,21 @@ namespace BoscaliSummer.Tests.Features.Support
                 TestAssert.Eq(row.Label, expected[i].label, "perk label at row " + i);
                 TestAssert.That(row.Rung >= 1 && row.Rung <= 5, "rung is 1..5");
                 TestAssert.That(ids.Add(row.Id) && labels.Add(row.Label), "perk ids and labels are unique");
-                TestAssert.That(rungs[row.Front].Add(row.Rung), "one perk per rung per front");
+                rungs[row.Front].Add(row.Rung);
                 TestAssert.Eq(CallPricing.Quote(row.Rung, Plain()).Cost, new[] { 4, 6, 10, 16, 30 }[row.Rung - 1], "perk price by rung: " + row.Label);
                 TestAssert.Near(CallSheet.Cooldown(row.Rung), new[] { 30f, 45f, 60f, 120f, 300f }[row.Rung - 1], "perk cooldown by rung: " + row.Label);
             }
+            TestAssert.Eq(CallsView.RowWord("NEEDS STRIKE QUALIFICATION"), "NEEDS STRIKE QUAL.", "a long gate fits the row");
+            TestAssert.Eq(CallsView.RowWord("LOW ALLOC · NEED 10 AP"), "LOW ALLOC · 10 AP", "a low-allocation word fits the row");
+            TestAssert.Eq(CallsView.RowWord("NO SATELLITE · REBUILD IT"), "NO SATELLITE", "a lost-bird word fits the row");
+            TestAssert.Eq(CallsView.RowWord("NEEDS READINESS 4"), "NEEDS READINESS 4", "a short word is left alone");
             TestAssert.Eq(rungs[Front.Space].Count, 5, "SPACE has five rungs");
             TestAssert.Eq(rungs[Front.Cyber].Count, 5, "CYBER has five rungs");
-            TestAssert.Eq(rungs[Front.Sof].Count, 4, "SOF has four rungs");
+            TestAssert.Eq(rungs[Front.Sof].Count, 5, "SOF has five rungs");
+            TestAssert.That((byte)SupportActionId.Overwatch == 44 && (byte)SupportActionId.Starfall == 45 && (byte)SupportActionId.Siphon == 46 && (byte)SupportActionId.DirectAction == 47,
+                "the protocol 41 perk ids follow the highest earlier id");
+            TestAssert.That(CallSheet.NeedsAim(SupportActionId.Overwatch) && CallSheet.NeedsAim(SupportActionId.Starfall) && CallSheet.NeedsAim(SupportActionId.DirectAction) && !CallSheet.NeedsAim(SupportActionId.Siphon),
+                "SIPHON alone fires without an aim");
             // Ids added by S0 sit after the highest earlier id and never reuse a retired one.
             TestAssert.That((byte)SupportActionId.ReconTeam == 40 && (byte)SupportActionId.SabotageStrike == 41 &&
                 (byte)SupportActionId.RadarBlind == 42 && (byte)SupportActionId.SamNetDown == 43, "new perk ids are appended");

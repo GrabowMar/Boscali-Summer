@@ -156,9 +156,32 @@ namespace BoscaliSummer.Tests.Features.Hud
                 "Target card respects the safe margin at aspect " + aspect);
             TestAssert.That(card.Width == ThirdPersonHudLayout.TargetCardWidth, "Target card width is capped, never the full panel width");
 
-            RectF raised = ThirdPersonHudLayout.MissileCard(width, height, raised: true), low = ThirdPersonHudLayout.MissileCard(width, height, raised: false);
-            TestAssert.That(Inside(raised, screen) && !ThirdPersonHudLayout.Overlaps(raised, card), "The missile card stacks above the target card, on screen, at aspect " + aspect);
+            RectF over = ThirdPersonHudLayout.MissileCard(width, height, overTarget: true), low = ThirdPersonHudLayout.MissileCard(width, height, overTarget: false);
+            TestAssert.That(Inside(over, screen) && !ThirdPersonHudLayout.Overlaps(over, card) && over.Bottom > card.Top, "The missile card stacks above the target card, on screen, at aspect " + aspect);
             TestAssert.That(low.CenterY == card.CenterY && low.Height == card.Height, "With no target card the missile card takes its place");
+            RectF cockpit = ThirdPersonHudLayout.MissileCard(width, height, overTarget: false, raised: true);
+            TestAssert.That(cockpit.CenterY == over.CenterY, "In the cockpit (NAV DATA in the corner) the missile card stays one slot up");
+
+            // The feed column (user: "uav on bottom, missile and target on top"): the 368 x 253 UAV card on the bottom-right margin.
+            var uav = new RectF(width * 0.5f - 24f - 184f, -height * 0.5f + 24f + 126.5f, 368f, 253f);
+            RectF onUav = ThirdPersonHudLayout.TargetCard(width, height, true, uav);
+            RectF topMost = ThirdPersonHudLayout.MissileCard(width, height, overTarget: true, uav: uav);
+            TestAssert.That(onUav.Bottom >= uav.Top + ThirdPersonHudLayout.CardGap - 0.5f && topMost.Bottom >= onUav.Top + ThirdPersonHudLayout.CardGap - 0.5f &&
+                onUav.Right == card.Right && Inside(topMost, screen), "UAV at the bottom, the target card on it, the missile card on top, at aspect " + aspect);
+            RectF alone = ThirdPersonHudLayout.MissileCard(width, height, overTarget: false, raised: true, uav: uav);
+            TestAssert.That(alone.Bottom >= uav.Top + ThirdPersonHudLayout.CardGap - 0.5f && alone.Bottom < uav.Top + ThirdPersonHudLayout.CardGap + 0.5f,
+                "With no target card the missile card stands straight on the UAV card (cockpit too)");
+
+            // A TAC BOARD reaching down to just above the target card: the missile card goes left of the target card, clear of both.
+            var board = new RectF(width * 0.5f - 220f, onUav.Top + 6f + 200f, 440f, 400f);
+            RectF block = ThirdPersonHudLayout.AltitudeBlock(width, height, board);
+            RectF dodged = ThirdPersonHudLayout.MissileCard(width, height, overTarget: true, uav: uav, board: board, keepOff: block);
+            TestAssert.That(!ThirdPersonHudLayout.Overlaps(dodged, board) && !ThirdPersonHudLayout.Overlaps(dodged, onUav) && dodged.Right <= onUav.Left &&
+                Inside(dodged, screen), "A board in the way puts the missile card left of the target card at aspect " + aspect);
+            // ponytail: at 4:3 three cards side by side reach the aircraft; checked from 16:9 up only.
+            if (aspect >= 16f / 9f - 0.01f)
+                TestAssert.That(!ThirdPersonHudLayout.Overlaps(dodged, block) && !ThirdPersonHudLayout.Overlaps(dodged, uav) && !ThirdPersonHudLayout.Overlaps(dodged, frame),
+                    "The stepped-left missile card clears the ALT box and its fuel label, the UAV card and the aircraft at aspect " + aspect);
         }
 
         private static void KeepClearIsIdempotent()
