@@ -61,7 +61,8 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
 
         public bool Scripted(in ChatterAired line)
         {
-            if (!isActiveAndEnabled || Application.isBatchMode) return false;
+            // COMMS stands down under the maximised map, so the script's own plate presents the line there.
+            if (!isActiveAndEnabled || Application.isBatchMode || DynamicMap.mapMaximized) return false;
             if (strip == null) strip = new ChatterStrip(transform);
             return director.Scripted(Time.time, line);
         }

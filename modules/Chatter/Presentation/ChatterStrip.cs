@@ -148,7 +148,8 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             // Rows use their own clock: a paused mission holds dialogue while normal radio fades in real time.
             for (int i = used - 1; i >= 0; i--)
                 if (Clock(rows[i]) > rows[i].Until + FadeSeconds) Drop(i);
-            bool visible = used > 0 && (flying || HasScripted());
+            // The maximised map owns the screen (its left host slot sits where this column is): stand down under it; rows keep their clocks.
+            bool visible = used > 0 && !DynamicMap.mapMaximized && (flying || HasScripted());
             host.SetVisible(visible);
             if (!visible) { LeftHudStack.CommsBottom = 0f; return; }
             RefreshFace();
