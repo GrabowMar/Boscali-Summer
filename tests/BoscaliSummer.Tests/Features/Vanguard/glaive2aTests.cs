@@ -19,7 +19,7 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.Eq(SentinelProfile.Next(SentinelPhase.Brake, 40f, 10f, 1f, 300, 0f), SentinelPhase.Hover, "on station");
             TestAssert.Eq(SentinelProfile.Next(SentinelPhase.Hover, 90f, 400f, 0f, 1, 149f), SentinelPhase.Hover, "a re-park keeps station");
             TestAssert.Eq(SentinelProfile.Next(SentinelPhase.Hover, 90f, 0f, 0f, 0, 10f), SentinelPhase.Drop, "dry drops");
-            TestAssert.Eq(SentinelProfile.Next(SentinelPhase.Hover, 90f, 0f, 0f, 120, 150f), SentinelPhase.Drop, "150 s hover drops");
+            TestAssert.Eq(SentinelProfile.Next(SentinelPhase.Hover, 90f, 0f, 0f, 120, SentinelProfile.HoverSeconds), SentinelPhase.Drop, "hover clock drops");
             TestAssert.Eq(SentinelProfile.Next(SentinelPhase.Drop, 90f, 0f, 9f, 300, 0f), SentinelPhase.Drop, "drop is final");
 
             TestAssert.Near(SentinelProfile.NextDwell(0f, 100f, 3f, .2f), .2f, "dwell grows near and slow");
@@ -60,7 +60,7 @@ namespace BoscaliSummer.Tests.Features.Vanguard
 
             TestAssert.That(SentinelProfile.InArc(20f) && !SentinelProfile.InArc(20.1f) && SentinelProfile.InArc(-90f) && !SentinelProfile.InArc(-90.1f), "belly arc -90..+20");
             TestAssert.That(SentinelProfile.CanFire(1000f, -30f, .996f, true, 1f, 300), "clean shot");
-            TestAssert.That(!SentinelProfile.CanFire(1201f, -30f, .996f, true, 1f, 300), "out of range");
+            TestAssert.That(!SentinelProfile.CanFire(1501f, -30f, .996f, true, 1f, 300), "out of range");
             TestAssert.That(!SentinelProfile.CanFire(29f, -30f, .996f, true, 1f, 300), "inside min range");
             TestAssert.That(!SentinelProfile.CanFire(1000f, 25f, .996f, true, 1f, 300), "above the belly arc");
             TestAssert.That(!SentinelProfile.CanFire(1000f, -30f, .99f, true, 1f, 300), "turret still slewing");

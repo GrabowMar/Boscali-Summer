@@ -231,9 +231,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (Application.isPlaying) Destroy(part.gameObject); else DestroyImmediate(part.gameObject);
         }
 
+        // No Hide() first: on a scene reset the unload has already destroyed the chrome and card, and Hide touches them without Unity's null check.
+        // Remove hides each living piece itself, and Controls.Clear drops the card's buttons.
         private void Teardown()
         {
-            Hide();
             Remove(root);
             if (chrome != null) { Remove(chrome.Plate); Remove(chrome.Legend); }
             if (card != null) Remove(card.Root);

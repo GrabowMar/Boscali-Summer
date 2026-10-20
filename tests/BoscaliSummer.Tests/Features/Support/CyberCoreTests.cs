@@ -274,7 +274,7 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.Eq(miss.Words, none.Words, "identical words for hidden and unknown ids");
             TestAssert.Eq(rig.Ports.Balance, 1000, "a refusal charges nothing");
 
-            rig.Observe(Obs(NodeKind.Radar, 70, 10000f, 0f), Obs(NodeKind.Radar, 71, 30000f, 0f), Obs(NodeKind.SamC2, 72, 5000f, 5000f, sighted: false));
+            rig.Observe(Obs(NodeKind.Radar, 70, 10000f, 0f), Obs(NodeKind.Radar, 71, 40000f, 0f), Obs(NodeKind.SamC2, 72, 5000f, 5000f, sighted: false));
             TestAssert.Eq(rig.Desk.Visible.Count, 2, "two sighted nodes listed, the unsighted one stays hidden");
             int near = rig.IdOf(NodeKind.Radar, 70), far = rig.IdOf(NodeKind.Radar, 71);
             TestAssert.Eq(rig.Desk.Hop(Op, far).Outcome, CyberOutcome.OutOfReach, "a visible node beyond the truck reach");

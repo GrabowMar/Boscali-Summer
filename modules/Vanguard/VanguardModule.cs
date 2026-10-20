@@ -24,7 +24,6 @@ namespace BoscaliSummer.Modules.Vanguard
             typeof(Patches.VanguardSeekPatch),
             typeof(Patches.HawcxGlowPatch),
             typeof(Patches.VanguardSlowChecksPatch),
-            typeof(Patches.AegisLockPatch),
             typeof(Patches.AegisSnapPatch),
             typeof(Patches.AegisDoorsPatch),
             typeof(Patches.AegisFinsPatch),
@@ -75,8 +74,12 @@ namespace BoscaliSummer.Modules.Vanguard
             context.AddSceneService<Networking.AlexNet>(60);
             context.AddSceneService<Presentation.AlexHud>(60);
             context.AddSceneService<Presentation.SkywellScopeFeed>(60);
-            Networking.VanguardNet drones = context.AddSceneService<Networking.VanguardNet>(60);
+            Networking.VanguardNet net = context.AddSceneService<Networking.VanguardNet>(60);
+            Presentation.DroneLinkService drones = context.AddSceneService<Presentation.DroneLinkService>(60);
+            drones.Configure(net);
             context.AddService<IDroneCommand>(drones);
+            context.AddSceneService<Presentation.DroneFeedHud>(60).Configure(drones);       // the HUD feed card
+            context.AddSceneService<Presentation.DroneMfdPanel>(65).Configure(drones, context.Logger); // UAV on the MFD
             var scopeGauges = new VanguardScopeGauges(drones);
             scopeGauges.Register();      // the TAC BOARD's LANCE, AEGIS and REMORA gauges
             context.OnTeardown(scopeGauges.Unregister);

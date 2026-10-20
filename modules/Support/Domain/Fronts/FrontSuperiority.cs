@@ -56,8 +56,24 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
 
         private static float Clamp(float v, float limit) => float.IsNaN(v) ? 0f : Math.Max(-limit, Math.Min(limit, v));
 
-        /// <summary>Perk quality: radius, duration, accuracy.</summary>
-        public static float Quality(int s) => 1f + 0.25f * Math.Max(-100, Math.Min(100, s)) / 100f;
+        /// <summary>
+        /// Perk POWER from a front's superiority: piecewise linear through (-100, 0.6), (-40, 0.8), (0, 1.0), (40, 1.25), (100, 1.5). It scales a perk's radius, duration, strike count, damage and odds
+        /// (see <see cref="PerkPower"/>) and shortens its cooldown while above 1.
+        /// </summary>
+        public static float Power(int s)
+        {
+            float v = Math.Max(-100, Math.Min(100, s));
+            if (v <= -40f) return 0.6f + 0.2f * (v + 100f) / 60f;
+            if (v <= 0f) return 0.8f + 0.2f * (v + 40f) / 40f;
+            if (v <= 40f) return 1f + 0.25f * v / 40f;
+            return 1.25f + 0.25f * (v - 40f) / 60f;
+        }
+
+        /// <summary>What a pilot reads: <c>POWER ×1.25 · AHEAD</c>.</summary>
+        public static string PowerLine(int s) => PowerWord(s) + " · " + Word(s);
+
+        /// <summary><c>POWER ×1.25</c>.</summary>
+        public static string PowerWord(int s) => "POWER ×" + Power(s).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
 
         public static string Word(int s) => s >= 60 ? "DOMINANT" : s >= 20 ? "AHEAD" : s > -20 ? "CONTESTED" : s > -60 ? "BEHIND" : "LOST";
 

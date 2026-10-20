@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Autopilot.Domain;
 
 namespace BoscaliSummer.Tests.Features.Autopilot
@@ -25,7 +26,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
                 HasChaff = true, Chaff = 40, ChaffMax = 48, ChaffLinked = true, Threats = 3, ThreatKm = 18.4f, Inbound = 0, HasBayDoors = true,
                 CameraFollowing = true, Camera = ViewKind.Cockpit, HasCockpitPoint = true, MapAvailable = true,
                 MissileViewAvailable = true, CanEnterMissileView = true, Missiles = 2, MissileStatus = "2 MSL · CLOSEST 1.1 KM",
-                BoardAvailable = true, BoardOn = true, BoardDeclutter = 0, BoardLayout = 0, BoardShade = 2, BoardSize = 1, BoardScopeAuto = true,
+                BoardAvailable = true, BoardOn = true, BoardDeclutter = 0, BoardLayout = 0, BoardShade = 2, BoardSize = 1,
                 TerrainAvailable = true, HoloMap = true, TerrainGhost = 1, FeelAvailable = true, KneeboardAvailable = true, KneeboardCard = "Mission card",
                 MarkAvailable = true, HasMark = true, MarkAgeSeconds = 42f, CanCapture = true, CanCallAtMark = true, Armed = "SAT CAMERA",
                 PerksAvailable = true, SkywellCarried = true, SkywellStock = "FUEL 5.9T · AMMO 1.20T", CanExfil = false,
@@ -58,8 +59,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
                 new WorldFilter { Name = "Air threats", Active = true, Slot = 1 }, new WorldFilter { Name = "SAM sites", Slot = 2 }, new WorldFilter { Name = "SEAD package", Slot = 3 },
             });
             AddShapes(w);
-            // every board switch on but the DOCK page, every cabin effect on but the breathing
-            foreach (MenuSwitch s in MenuCatalog.BoardPages) if (s.Slug != "dock") w.BoardSwitches.Add("pages/" + s.Slug);
+            // Every major board element on; every cabin effect on but breathing.
             foreach (MenuSwitch s in MenuCatalog.BoardParts) w.BoardSwitches.Add("parts/" + s.Slug);
             foreach (MenuSwitch s in MenuCatalog.FeelSwitches) if (s.Slug != "breathing") w.Feel.Add(s.Slug);
             return w;
@@ -114,6 +114,13 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             return w;
         }
 
+        public static MenuWorld ThreeBoardPages()
+        {
+            MenuWorld w = Default();
+            w.BoardPageCount = 3;
+            return w;
+        }
+
         /// <summary>UH-90 IBIS on the rope: door guns, auto-hover instead of assist, squad exfil offered.</summary>
         public static MenuWorld Ibis()
         {
@@ -135,6 +142,24 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             return w;
         }
 
+        public static MenuWorld Cargo()
+        {
+            MenuWorld w = Default();
+            w.Aircraft = "VL-49 TARANTULA";
+            w.Stations = new List<WorldStation>
+            {
+                S("30MM GUN", 200, StationClass.Gun),
+                new WorldStation { Name = "HALO", Ammo = 32, Cargo = CargoKind.Paratroopers },
+                new WorldStation { Name = "HAMILCAR", Ammo = 1, Cargo = CargoKind.Glider },
+                new WorldStation { Name = "SUPPLIES", Ammo = 0, Cargo = CargoKind.Cargo },
+            };
+            w.ActiveStation = 1;
+            w.CargoZoneAvailable = w.CargoZoneCapable = w.CargoZoneSet = w.CargoFixAvailable = true;
+            w.CargoZoneLeg = "054 DEG / 4.2 KM";
+            w.CargoFixName = "SUPPLY DEPOT";
+            return w;
+        }
+
         public static IEnumerable<KeyValuePair<string, MenuWorld>> All()
         {
             yield return new KeyValuePair<string, MenuWorld>("default", Default());
@@ -145,6 +170,8 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             yield return new KeyValuePair<string, MenuWorld>("jammer", Jammer());
             yield return new KeyValuePair<string, MenuWorld>("pit", Pit());
             yield return new KeyValuePair<string, MenuWorld>("boardoff", BoardOff());
+            yield return new KeyValuePair<string, MenuWorld>("three-board-pages", ThreeBoardPages());
+            yield return new KeyValuePair<string, MenuWorld>("cargo", Cargo());
         }
     }
 }

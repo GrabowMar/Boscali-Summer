@@ -97,7 +97,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         private static float Floor(in WingSnapshot wing) =>
             wing.AllRotary ? 0f : (RolePolicy.RecoverFactor + MinSpeedMargin) * wing.MinSpeed;
 
-        private static string Validate(WingTask t, in WingSnapshot w)
+        internal static string Validate(WingTask t, in WingSnapshot w)
         {
             if (w.Members - w.Recovering <= 0) return "no wingman to give it to";
             int count = t.Points != null ? t.Points.Length : 0;

@@ -1,0 +1,346 @@
+{
+  "name": "wing-ai-plan-orbit",
+  "_notes": "Wing AI fix 2026-10-19 (WingPlans.OnStation orbit radius): plan lane A = ORBIT on the south-west coast (-30, -38 km; (0, -38 km) is inside a Primeva SAM ring that shot the wing down), ends on TIME 120 s, then RTB. Before the fix a jet orbiting 6-11 km round the point was never within 3 km of it: the clock never started and A2 never went out. The wing executes it 40 km out at 244 m/s: on station must mean near the ring flown at task speed, not 1.25 x the orbit radius at the member's own speed (21 km, the clock started at once).",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 900,
+  "environment": {
+    "config": {
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
+        }
+      },
+      "boscalisummer": {
+        "Trenches": {
+          "Enabled": false
+        },
+        "TheaterOps": {
+          "Enabled": false
+        },
+        "Events": {
+          "Enabled": false
+        },
+        "Garrisons": {
+          "Enabled": false
+        },
+        "DynamicOperations": {
+          "Enabled": false
+        },
+        "Debug": {
+          "WingVerboseLogging": true
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "map": [
+          10000,
+          -45000
+        ]
+      },
+      "altitude": 7000,
+      "speed": 220,
+      "heading": 90
+    },
+    {
+      "op": "record",
+      "ids": [
+        "*"
+      ],
+      "hz": 2
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "orbit": {
+            "bank": 20,
+            "seconds": 3000
+          }
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Call",
+      "store": "call",
+      "args": {
+        "lead": "lead",
+        "count": 2
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 25
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.Automation.Members",
+      "store": "members"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "formed"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Plan",
+      "store": "plan",
+      "args": {
+        "name": "ORBIT120",
+        "steps": [
+          {
+            "lane": 0,
+            "kind": "Orbit",
+            "x": -30000,
+            "z": -38000,
+            "end": "Time",
+            "seconds": 120
+          },
+          {
+            "lane": 0,
+            "kind": "Rtb"
+          }
+        ]
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "p30"
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "p60"
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "p90"
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "p120"
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "p150"
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "p180"
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "p210"
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "p240"
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "p270"
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "p300"
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "p330"
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "p360"
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "p390"
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "p420"
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "p450"
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "p480"
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "p510"
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "p540"
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "p570"
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "p600"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "alive",
+      "ids": [
+        "lead"
+      ]
+    },
+    {
+      "check": "log_match",
+      "pattern": "\\[Wing\\] tick step \\d+ failed",
+      "max": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "plan.ok",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "p600.plan.steps.A1.state",
+      "value": "Done"
+    },
+    {
+      "check": "result_above",
+      "path": "p600.plan.steps.A1.ended",
+      "min": 180
+    },
+    {
+      "check": "log_match",
+      "pattern": "\\[Plan\\] A2 Rtb: ",
+      "min": 1
+    },
+    {
+      "check": "log_match",
+      "pattern": "\\[Plan\\] A\\d blocked",
+      "max": 0
+    }
+  ]
+}

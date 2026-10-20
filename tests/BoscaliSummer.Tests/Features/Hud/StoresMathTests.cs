@@ -193,22 +193,18 @@ namespace BoscaliSummer.Tests.Features.Hud
 
         private static void Matrices()
         {
-            int[][] dims = { new[] { 48, 3, 16 }, new[] { 30, 3, 10 }, new[] { 72, 3, 24 }, new[] { 12, 1, 12 }, new[] { 13, 2, 7 }, new[] { 1, 1, 1 }, new[] { 0, 1, 1 } };
-            foreach (int[] g in dims)
-            {
-                StoresMath.Matrix(g[0], 112f, out int rows, out int cols, out int perDot);
-                TestAssert.That(rows == g[1] && cols == g[2] && perDot == 1, "A load of " + g[0] + " is " + rows + " rows x " + cols + " columns, a dot each");
-            }
-            StoresMath.Matrix(300, 112f, out int r, out int c, out int per);
-            TestAssert.That(per == 4 && r == 3 && c <= 28 && r * c * per >= 300, "A load too big for the room: one dot stands for several rounds: " + r + "x" + c + " at " + per);
-            StoresMath.Matrix(300, 148f, out r, out c, out per);
-            TestAssert.That(per == 3 && c <= 37 && r * c * per >= 300, "STACK's wider room needs fewer rounds a dot: " + r + "x" + c + " at " + per);
-            StoresMath.Matrix(72, 20f, out r, out c, out per);
-            TestAssert.That(c <= 5 && r * c * per >= 72, "A tiny room still holds the load: " + r + "x" + c + " at " + per);
+            // The level bar: rounds over the full load, a load with no full size full while any is left, the jammer's charge.
+            TestAssert.Near(StoresMath.BarShare(new CmStation { Ammo = 48, Max = 64 }), 0.75f, "48 of 64 lights three quarters");
+            TestAssert.Near(StoresMath.BarShare(new CmStation { Ammo = 0, Max = 64 }), 0f, "None left lights nothing");
+            TestAssert.Near(StoresMath.BarShare(new CmStation { Ammo = 99, Max = 64 }), 1f, "More than the full load never overflows the bar");
+            TestAssert.Near(StoresMath.BarShare(new CmStation { Ammo = 5, Max = 0 }), 1f, "No full size known: full while any is left");
+            TestAssert.Near(StoresMath.BarShare(new CmStation { Chargeable = true, Charge = 0.4f, Ammo = 1, Max = 1 }), 0.4f, "The jammer's bar is its charge");
 
             TestAssert.That(StoresMath.StateWord(CmCellState.Dispense) == "DISPENSE" && StoresMath.StateWord(CmCellState.Firing) == "FIRING" && StoresMath.StateWord(CmCellState.Low) == "LOW", "A dispenser's state words");
-            TestAssert.That(StoresMath.StateWord(CmCellState.Empty) == null && StoresMath.StateWord(CmCellState.Selected) == null && StoresMath.StateWord(CmCellState.Ready) == null, "EMPTY takes the matrix's place; a selection is the marker; READY says nothing");
-            TestAssert.That(StoresMath.CountTone(CmLevel.Ok) == ScopeTone.Hi && StoresMath.CountTone(CmLevel.Low) == ScopeTone.Amber && StoresMath.CountTone(CmLevel.Empty) == ScopeTone.Red, "The count: BRIGHT, amber low, red at none");
+            TestAssert.That(StoresMath.StateWord(CmCellState.Selected) == "SEL", "The selected row says SEL at its end (with its caret)");
+            TestAssert.That(StoresMath.StateWord(CmCellState.Empty) == null && StoresMath.StateWord(CmCellState.Ready) == null, "EMPTY takes the bar's place; READY says nothing");
+            TestAssert.That(StoresMath.CountTone(CmLevel.Ok, true) == ScopeTone.Hi && StoresMath.CountTone(CmLevel.Ok, false) == ScopeTone.Ink, "The count is BRIGHT on the selected row, INK on the others");
+            TestAssert.That(StoresMath.CountTone(CmLevel.Low, false) == ScopeTone.Amber && StoresMath.CountTone(CmLevel.Empty, true) == ScopeTone.Red, "...amber low and red at none, selected or not");
         }
 
         private static void Capacitor()

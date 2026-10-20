@@ -43,8 +43,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// blocked edge within its claims, a deadlock naming it the victim, or the watchdog (no progress) reroutes it: short
     /// of the edge to avoid, it keeps its route and claims up to the node before it and takes another way from there;
     /// on that edge, it turns back to that node when nobody follows it. With no other way it keeps its route (a victim
-    /// tells the field, which picks another) — unless it can pull aside: onto an edge at the node it is at (or just
-    /// passed, when nobody follows it) that the member it waits for will not use, <see cref="PullAsideMetres"/> in,
+    /// tells the field, which picks another) — unless it can pull aside: when the member it waits for will drive through
+    /// the node it is at (or just passed, when nobody follows it), onto an edge there that member will not use, <see cref="PullAsideMetres"/> in,
     /// where it waits until that member has passed the node (at most <see cref="PullAsideSeconds"/>, which the
     /// watchdog counts), then carries on. The watchdog then relocates it once to the hold-short, as soon as the
     /// hold-short is free (no claim, nobody within <see cref="RelocateClearRadius"/>) and claimed; it keeps trying to
@@ -108,7 +108,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         private float lineUpStuckSince = float.NaN, lineUpStuckToSlot;
         private bool lineUpMoved;
         private int hangar, startNode, standNode = -1;
-        private Vec3[] initialTaxiPrefix;
+        private Vec3[] initialTaxiPrefix, holdLead;
         private bool arriving, pulledAside;
         private int asideFor = -1, asideNode = -1, asideBack = -1;
         private float asideSince;
@@ -136,7 +136,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         private bool enqueued, taxiReleased, clearedThreshold, rolling, airborneReported, exitedHangar, relocationPending, relocationWanted;
         private WingPose relocation;
         private Vec3 relocateFrom;
-        private int lineupSlotIndex;
+        private int lineupSlotIndex, lineupEntryIndex;
 
         /// <summary>A member launched from hangar <paramref name="hangarIndex"/> (−1: none) joins the taxi graph at that
         /// hangar's exit, else at <paramref name="startNode"/> (a service spot's), else at the node nearest to it.
@@ -472,7 +472,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
             float total = cum[cum.Length - 1];
             float goalDistance = (s.Pos - path[path.Length - 1]).Horizontal.Length;
-            bool passedGoal = PassedEnd(s);
+            bool passedGoal = PassedEnd(s, p.SpanM);
             // Projection can reach the end while still beside it. Pursue the physical goal, with every
             // obstacle and reservation below retaining authority to shorten the available distance.
             float stopAt = passedGoal ? along : Math.Max(total, along + goalDistance);
@@ -620,6 +620,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
             bool atNode = along < NodeAt(on) + 0.5f;
             int u = nodes[on];
             if (!atNode && !traffic.Reservations.SoleUser(Owner, edges[on])) return false;
+            // Only a node the other member will drive through is worth clearing (sweep 2026-10-18, airbase_city: the other never
+            // passed it, the refuge was given up the next tick and the victim pulled aside again every second).
+            if (!traffic.RouteAhead(other, u)) return false;
             foreach (int e in g.EdgesOf(u))
             {
                 bool ahead = false;
@@ -684,18 +687,19 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 return new ControlOutput { Brake = 1f };
             }
             float along = Along(s.Pos);
-            float stopDistance = PassedEnd(s) ? 0f : Math.Max(cum[cum.Length - 1] - along, (s.Pos - path[path.Length - 1]).Horizontal.Length);
+            float stopDistance = PassedEnd(s, p.SpanM) ? 0f : Math.Max(cum[cum.Length - 1] - along, (s.Pos - path[path.Length - 1]).Horizontal.Length);
             GroundCommand c = GroundGuidance.Pursue(path, ref progress, s, stopDistance);
             return controller.Step(c, s, p, dt);
         }
 
-        /// <summary>The path's end is within <see cref="NodeClearRadius"/> and abeam or behind: it has been reached. The member
-        /// brakes where it is rather than turning back for the exact point (wing-taxi sim 2026-10-18, highway strip: an FS-20
-        /// ran 2 m past a hold-short at the end of a sharp turn, circled back for it and beached itself off the strip).</summary>
-        private bool PassedEnd(in AircraftState s)
+        /// <summary>The path's end is within <see cref="NodeClearRadius"/> (or under the wing: half the span) and abeam or behind:
+        /// it has been reached. The member brakes where it is rather than turning back for the exact point (wing-taxi sim
+        /// 2026-10-18, highway strip: an FS-20 ran 2 m past a hold-short at the end of a sharp turn, circled back for it and
+        /// beached itself off the strip; sweep, airbase_boscali_north: an SFB-81 swept 18 m past one and circled the grass).</summary>
+        private bool PassedEnd(in AircraftState s, float span)
         {
             Vec3 toEnd = (path[path.Length - 1] - s.Pos).Horizontal;
-            return toEnd.Length < NodeClearRadius && Vec3.Dot(toEnd, s.Fwd.Horizontal) <= 0f;
+            return toEnd.Length < Math.Max(NodeClearRadius, 0.5f * span) && Vec3.Dot(toEnd, s.Fwd.Horizontal) <= 0f;
         }
 
         /// <summary>The point <paramref name="metres"/> along edge <paramref name="e"/> from its end <paramref name="from"/>
@@ -723,8 +727,31 @@ namespace BoscaliSummer.Modules.Wing.Domain
             Vec3 threshold = traffic.Reverse ? r.End : r.Start;
             traffic.Departures.SlotOf(Owner, out int row, out int column);
             Vec3 lane = LineupPlanner.Slot(r, traffic.Reverse, row, column, traffic.Departures.Abreast, traffic.Departures.Rows);
-            SetPath(new[] { pos, threshold + dir * ThresholdEntry, lane - dir * LineupRunIn, lane, lane + dir * AlignTail });
-            lineupSlotIndex = 3;
+            // The road on to the runway end from where it holds (its own approach, else the hold-short's: TaxiGraph.Lineup), its
+            // bends after the leg nearest the aircraft.
+            Vec3[] road = holdLead ?? traffic.Graph.Lineup(traffic.RunwayIndex, traffic.Reverse) ?? new[] { pos, threshold };
+            int from = road.Length - 1;
+            float nearest = float.MaxValue;
+            for (int k = 0; k + 1 < road.Length; k++)
+            {
+                Vec3 a = road[k].Horizontal, ab = road[k + 1].Horizontal - a;
+                float t = ab.SqrLength < 1e-6f ? 0f : Scalar.Clamp(Vec3.Dot(pos.Horizontal - a, ab) / ab.SqrLength, 0f, 1f);
+                float d = (a + ab * t - pos.Horizontal).Length;
+                if (d >= nearest) continue;
+                nearest = d;
+                from = k + 1;
+            }
+            int bends = road.Length - 1 - from;
+            var points = new Vec3[5 + bends];
+            points[0] = pos;
+            Array.Copy(road, from, points, 1, bends);
+            points[1 + bends] = threshold + dir * ThresholdEntry;
+            points[2 + bends] = lane - dir * LineupRunIn;
+            points[3 + bends] = lane;
+            points[4 + bends] = lane + dir * AlignTail;
+            SetPath(points);
+            lineupEntryIndex = 1 + bends;
+            lineupSlotIndex = 3 + bends;
             taxiReleased = clearedThreshold = lineUpMoved = false;
             settleStart = lineUpStuckSince = float.NaN;
             Enter(GroundPhase.LineUp, time);
@@ -739,7 +766,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 taxiReleased = true;
                 traffic.Reservations.ReleaseAll(Owner);
             }
-            if (!clearedThreshold && along > cum[1] + ClearedPastThreshold)
+            if (!clearedThreshold && along > cum[lineupEntryIndex] + ClearedPastThreshold)
             {
                 clearedThreshold = true;
                 traffic.Departures.ClearedThreshold(Owner);
@@ -797,6 +824,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             traffic.NoteRelocation(Owner, lane);
             SetPath(new[] { lane, lane + dir * AlignTail });
             lineupSlotIndex = 0;
+            lineupEntryIndex = 1;
             lineUpStuckSince = float.NaN;
             Log(events, time, slot, WingEventKind.Relocated);
             return true;
@@ -1013,6 +1041,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             traffic.Reservations.TryAdvance(Owner, TaxiPriority.Departing, nodes, edges, 0, 0);
             SetRoutePath(new[] { pos });
             deadEndEdge = -1;
+            holdLead = null;
             Log(events, time, slot, WingEventKind.Rerouted);
             return true;
         }
@@ -1059,6 +1088,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             SetPath(points);
             progress = Math.Min(kept, points.Length - 2);
             deadEndEdge = -1;
+            holdLead = null;
         }
 
         private bool Kept(int edge, int keptEdges)
@@ -1127,6 +1157,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         private void RouteFrom(Vec3[] prefix, int start)
         {
             int goal = Goal;
+            holdLead = null;
             if (start < 0 || goal < 0 || !TaxiRouter.Route(traffic.Graph, start, goal, RouteCost, nodes, edges))
             {
                 nodes.Clear();
@@ -1142,7 +1173,46 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 nodes.RemoveAt(0);
                 edges.RemoveAt(0);
             }
+            int entry = arriving ? -1 : ThresholdNode();
+            if (entry > 0)
+            {
+                nodes.RemoveRange(entry + 1, nodes.Count - entry - 1);
+                edges.RemoveRange(entry, edges.Count - entry);
+            }
             SetRoutePath(prefix);
+            if (entry > 0) EndShortOfRunway();
+        }
+
+        /// <summary>The first route node between start and goal at the departure threshold (−1: none). Where the road from the
+        /// stands reaches the threshold itself and the hold-short lies on another road (airbase_boscali_north, airbase_city's north
+        /// end: 36 m back), the route to it ran onto the runway end and doubled back (sweep 2026-10-18: an SFB-81 circled the grass).</summary>
+        private int ThresholdNode()
+        {
+            RunwaySample r = traffic.Runway;
+            Vec3 threshold = traffic.Reverse ? r.End : r.Start;
+            for (int k = 1; k + 1 < nodes.Count; k++)
+                if ((traffic.Graph.NodePos(nodes[k]) - threshold).Horizontal.Length < NodeClearRadius) return k;
+            return -1;
+        }
+
+        /// <summary>The route, cut at that threshold node, ends <see cref="TaxiGraph.HoldShortClear"/> short of it on the road it
+        /// came by (it holds short there); the rest of that road is where it lines up (<see cref="holdLead"/>).</summary>
+        private void EndShortOfRunway()
+        {
+            int last = nodePathIndex[nodePathIndex.Count - 1], before = nodePathIndex[nodePathIndex.Count - 2];
+            float stop = Math.Max(cum[before], cum[last] - TaxiGraph.HoldShortClear);
+            int i = before;
+            while (i + 1 < last && cum[i + 1] <= stop) i++;
+            float segment = cum[i + 1] - cum[i];
+            Vec3 clip = segment > 1e-4f ? path[i] + (path[i + 1] - path[i]) * ((stop - cum[i]) / segment) : path[i];
+            holdLead = new Vec3[last - i + 1];
+            holdLead[0] = clip;
+            Array.Copy(path, i + 1, holdLead, 1, last - i);
+            var points = new Vec3[i + 2];
+            Array.Copy(path, points, i + 1);
+            points[i + 1] = clip;
+            SetPath(points);
+            nodePathIndex[nodePathIndex.Count - 1] = i + 1;
         }
 
         /// <summary>Node <paramref name="next"/> lies on the way from <paramref name="from"/> to node <paramref name="first"/>: ahead

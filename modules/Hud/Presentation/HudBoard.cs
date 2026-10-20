@@ -40,6 +40,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private ScopeProvider<SystemsScope> systemsProvider;
         private readonly StoresFeed storesFeed = new StoresFeed();
         private ScopeProvider<StoresScope> storesProvider;
+        private readonly CargoFeed cargoFeed = new CargoFeed();
+        private ScopeProvider<CargoScope> cargoProvider;
         private readonly MissileTracker missileTracker = new MissileTracker();
         private readonly ShotBook shotBook = new ShotBook(ShotFeed.Ledger);
         private ThreatScopeFeed threatFeed;
@@ -88,6 +90,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             ScopeFeeds.OnError = BoscaliSummer.Core.Diagnostics.PatchGuard.Report;
             ScopeFeeds.Register(systemsProvider ??= systemsFeed.Read);
             ScopeFeeds.Register(storesProvider ??= storesFeed.Read);
+            ScopeFeeds.Register(cargoProvider ??= cargoFeed.Read);
             ScopeFeeds.Register(threatProvider ??= threatFeed.Read);
             ScopeFeeds.Register(shotProvider ??= shotFeed.Read);
             ScopeFeeds.Register(camProvider ??= camFeed.Read);
@@ -127,7 +130,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private static readonly string[] ReadSites =
         {
             "Hud.Read.Missiles", "Hud.Read.Shots", "Hud.Read.Systems", "Hud.Read.Threats", "Hud.Read.Countermeasures", "Hud.Read.Fuel", "Hud.Read.Damage",
-            "Hud.Read.SystemsFeed", "Hud.Read.Stores", "Hud.Read.Nav", "Hud.Read.CombatFeeds",
+            "Hud.Read.SystemsFeed", "Hud.Read.Stores", "Hud.Read.Nav", "Hud.Read.CombatFeeds", "Hud.Read.Cargo",
         };
 
         private void LateUpdate()
@@ -237,6 +240,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                         case 7: systemsFeed.Update(hudAircraft, frame, damageWatch.Rotary); break;
                         case 8: storesFeed.Update(hudAircraft, frame, combat); break;
                         case 9: NavReader.Read(hudAircraft, frame, !viewingOwnExternally && !viewingMissile, targetReadout); break;      // after the fuel watch: HOME and FUEL come from it
+                        case 11: cargoFeed.Update(hudAircraft); break;
                         default:
                             threatFeed.Update(hudAircraft, frame);
                             shotFeed.Update(hudAircraft);
@@ -402,6 +406,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             shotFeed?.Clear();
             camFeed?.Clear();
             storesFeed.Clear();
+            cargoFeed.Clear();
             externalHud.Release();
             wingview.Reset();
             flightNumberHider.Dispose();
@@ -410,11 +415,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             ScopeFeeds.Unregister(systemsProvider);
             ScopeFeeds.Unregister(storesProvider);
+            ScopeFeeds.Unregister(cargoProvider);
             ScopeFeeds.Unregister(threatProvider);
             ScopeFeeds.Unregister(shotProvider);
             ScopeFeeds.Unregister(camProvider);
             systemsFeed.Clear();
             storesFeed.Clear();
+            cargoFeed.Clear();
             threatFeed.Clear();
             shotFeed.Clear();
             camFeed.Clear();

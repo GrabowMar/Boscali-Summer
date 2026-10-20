@@ -10,15 +10,17 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
     {
         None = 0, Started = 1, HopStarted = 2, Burned = 3, Dropped = 4,
         NoTarget = 5, OutOfReach = 6, NodeBusy = 7, StillHopping = 8, IntrusionCap = 9, HeldCap = 10, TruckDown = 11, TruckLocked = 12,
-        LowCredit = 13, Frozen = 14, RateLimited = 15, Unavailable = 16, BoardFull = 17, NoBoard = 18, AlreadyPosted = 19
+        LowCredit = 13, Frozen = 14, RateLimited = 15, Unavailable = 16, BoardFull = 17, NoBoard = 18, AlreadyPosted = 19,
+        /// <summary>Protocol 42: the defence verb PURGE.</summary>
+        PurgeStarted = 20, NothingToPurge = 21, PurgeCooling = 22
     }
 
-    /// <summary>The three operator verbs a host command maps onto (HOLD is a state, not a verb).</summary>
-    internal enum CyberVerb : byte { Hop = 0, Burn = 1, Drop = 2 }
+    /// <summary>The operator verbs a host command maps onto (HOLD is a state, not a verb). PURGE defends the faction's own network.</summary>
+    internal enum CyberVerb : byte { Hop = 0, Burn = 1, Drop = 2, Purge = 3 }
 
     internal static class CyberWords
     {
-        public const byte MaxOutcome = (byte)CyberOutcome.AlreadyPosted;
+        public const byte MaxOutcome = (byte)CyberOutcome.PurgeCooling;
 
         public static string Of(CyberOutcome outcome, int detail = 0)
         {
@@ -30,7 +32,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
                 case CyberOutcome.Burned: return "NODE BURNED — PACKAGE POSTED TO THE BOARD";
                 case CyberOutcome.Dropped: return "INTRUSION DROPPED";
                 case CyberOutcome.NoTarget: return "NEGATIVE: NO SUCH NODE — PICK ONE FROM THE MAP";
-                case CyberOutcome.OutOfReach: return "NEGATIVE: OUT OF REACH — HOP FROM A HELD NODE OR MOVE THE TRUCK IN";
+                case CyberOutcome.OutOfReach: return "NEGATIVE: OUT OF REACH — PICK A NODE IN REACH OF A TRUCK OR A HELD NODE";
                 case CyberOutcome.NodeBusy: return "NEGATIVE: NODE ALREADY HELD — PICK ANOTHER";
                 case CyberOutcome.StillHopping: return "NEGATIVE: STILL HOPPING — WAIT FOR THE NODE";
                 case CyberOutcome.IntrusionCap: return "NEGATIVE: INTRUSION CAP — WAIT FOR ONE TO END";
@@ -43,6 +45,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
                 case CyberOutcome.BoardFull: return "NEGATIVE: BOARD FULL — FIRE A POST OR DROP THE NODE";
                 case CyberOutcome.NoBoard: return "NEGATIVE: NO TASKED BOARD — THE SPACE DESK IS NOT UP, DROP THE NODE";
                 case CyberOutcome.AlreadyPosted: return "NEGATIVE: ALREADY POSTED — THAT PACKAGE IS ON THE BOARD, CLAIM IT OR DROP THE NODE";
+                case CyberOutcome.PurgeStarted: return "PURGE RUNNING — ENEMY HOLDS CUT IN " + Math.Max(0, detail) + " S";
+                case CyberOutcome.NothingToPurge: return "NEGATIVE: NO ENEMY HOLD ON OUR NETWORK — NOTHING TO PURGE";
+                case CyberOutcome.PurgeCooling: return detail > 0 ? "NEGATIVE: PURGE RECHARGING — READY IN " + SpaceRules.Clock(detail) : "NEGATIVE: A PURGE IS ALREADY RUNNING";
                 default: return "NEGATIVE: CYBER OFFLINE — NO EW ASSETS";
             }
         }
@@ -54,7 +59,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         public readonly int NodeId, Charged, Detail;
         public CyberResult(CyberOutcome outcome, int nodeId = 0, int charged = 0, int detail = 0)
         { Outcome = outcome; NodeId = nodeId; Charged = charged; Detail = detail; }
-        public bool Ok => Outcome == CyberOutcome.Started || Outcome == CyberOutcome.HopStarted || Outcome == CyberOutcome.Burned || Outcome == CyberOutcome.Dropped;
+        public bool Ok => Outcome == CyberOutcome.Started || Outcome == CyberOutcome.HopStarted || Outcome == CyberOutcome.Burned || Outcome == CyberOutcome.Dropped || Outcome == CyberOutcome.PurgeStarted;
         public string Words => CyberWords.Of(Outcome, Detail);
     }
 
@@ -198,6 +203,23 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             Sweep();
         }
 
+        /// <summary>PURGE: the victim cut this node out of every intrusion holding it; each one takes the trace kick. Returns how many holds ended.</summary>
+        public int Evict(int nodeId, float kick)
+        {
+            int n = 0;
+            for (int i = 0; i < active.Count; i++)
+            {
+                CyberIntrusion x = active[i];
+                if (!x.TryHeld(nodeId, out HeldNode node)) continue;
+                x.Kick(kick);
+                x.Release(nodeId, IntrusionEnd.Purged);
+                events.Add(new CyberEvent(CyberEventKind.Released, x.Operator, x.Id, nodeId, node.Kind, IntrusionEnd.Purged));
+                n++;
+            }
+            Sweep();
+            return n;
+        }
+
         public void Advance(float now, float traceFactor, List<UpkeepCharge> upkeep)
         {
             upkeep.Clear();
@@ -313,6 +335,51 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         public float CounterTrace { get; set; } = 1f;
         /// <summary>Raised once per intrusion event after the desk has applied it (console lines, notices, the mirror's event ring).</summary>
         public event Action<CyberEvent> Happened;
+
+        // ---- Defence: enemy holds on this faction's own network (protocol 42) -----------------------
+
+        private readonly List<CyberBreach> breaches = new List<CyberBreach>(CyberRules.MaxBreaches);
+        /// <summary>The enemy holds on this faction's own units as the host found them this second (the runtime fills it from every other faction's desk).</summary>
+        public IReadOnlyList<CyberBreach> Breaches => breaches;
+        /// <summary>The running PURGE lands at this mission second (0 = none); the next one may start at <see cref="PurgeReadyAt"/>.</summary>
+        public float PurgeEndsAt { get; private set; }
+        public float PurgeReadyAt { get; private set; }
+
+        public void SetBreaches(List<CyberBreach> found)
+        {
+            breaches.Clear();
+            for (int i = 0; found != null && i < found.Count && breaches.Count < CyberRules.MaxBreaches; i++) breaches.Add(found[i]);
+        }
+
+        /// <summary>PURGE: <see cref="CyberRules.PurgeSeconds"/> later every enemy hold on our network is cut (the runtime evicts them from the holders' desks). Costs CR; one at a time, then a cooldown.</summary>
+        public CyberResult Purge(ulong op)
+        {
+            float now = ports.Now;
+            if (breaches.Count == 0) return new CyberResult(CyberOutcome.NothingToPurge);
+            if (PurgeEndsAt > now) return new CyberResult(CyberOutcome.PurgeCooling);
+            if (now < PurgeReadyAt) return new CyberResult(CyberOutcome.PurgeCooling, 0, 0, (int)Math.Ceiling(PurgeReadyAt - now));
+            CyberOutcome paid = ports.TrySpend(op, CyberRules.PurgeCost, out int detail);
+            if (paid != CyberOutcome.None) return new CyberResult(paid, 0, 0, detail);
+            PurgeEndsAt = now + CyberRules.PurgeSeconds;
+            PurgeReadyAt = PurgeEndsAt + CyberRules.PurgeCooldownSeconds;
+            return new CyberResult(CyberOutcome.PurgeStarted, 0, CyberRules.PurgeCost, (int)CyberRules.PurgeSeconds);
+        }
+
+        /// <summary>True once, when the running PURGE lands (the runtime then evicts every hold it still finds).</summary>
+        public bool TakePurgeDue(float now)
+        {
+            if (PurgeEndsAt <= 0f || now < PurgeEndsAt) return false;
+            PurgeEndsAt = 0f;
+            return true;
+        }
+
+        /// <summary>A victim's PURGE landed on a node this faction holds: every hold on it ends PURGED and its intrusion takes the trace kick.</summary>
+        public int Evict(int nodeId)
+        {
+            int n = Network.Evict(nodeId, CyberRules.PurgeTraceKick);
+            if (n > 0) Pump(ports.Now);
+            return n;
+        }
 
         // ---- Fog ---------------------------------------------------------------------------------
 
@@ -476,6 +543,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         public void Reset()
         {
             Network.Clear(); Effects.Clear(); visible.Clear(); trucks.Clear(); Ids.Clear(); Reveal.Clear(); Array.Clear(frozen, 0, frozen.Length);
+            breaches.Clear(); PurgeEndsAt = PurgeReadyAt = 0f;
         }
 
         private void RefreshTrucks() => Anchors.CopyTrucks(trucks);

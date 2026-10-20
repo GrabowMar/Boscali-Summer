@@ -95,7 +95,9 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 {
                     WeaponInfo info = s.WeaponInfo;
                     ws.Name = MenuText.Upper(!string.IsNullOrEmpty(info.shortName) ? info.shortName : info.weaponName, 14);
-                    ws.Ammo = s.Ammo;
+                    CargoStationRead.ReadAmmo(s, out ws.Ammo, out _);
+                    ws.Cargo = CargoStationRead.KindOf(s);
+                    if (CargoStationRead.UsesLandingZone(s)) w.CargoZoneCapable = true;
                     ws.Class = info.gun ? (s.HasTurret() ? StationClass.Turret : StationClass.Gun)
                         : info.bomb ? StationClass.Bomb
                         : info.missile ? (info.effectiveness.antiSurface > info.effectiveness.antiAir ? StationClass.Agm : StationClass.Missile) : StationClass.Other;
@@ -110,6 +112,19 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             BayDoor[] doors = BayTimer != null ? a.GetComponentsInChildren<BayDoor>(true) : Array.Empty<BayDoor>();
             w.HasBayDoors = doors.Length > 0;
             w.BayDoorsOpen = BayHeld(doors);
+            ILandingZone zone = Service<ILandingZone>();
+            w.CargoZoneAvailable = zone != null;
+            if (zone != null && zone.TryGetLocal(out GlobalPosition point))
+            {
+                w.CargoZoneSet = true;
+                GlobalPosition self = a.GlobalPosition();
+                float dx = point.x - self.x, dz = point.z - self.z;
+                float bearing = (Mathf.Atan2(dx, dz) * Mathf.Rad2Deg + 360f) % 360f;
+                w.CargoZoneLeg = bearing.ToString("000", System.Globalization.CultureInfo.InvariantCulture) + " DEG / " +
+                    (new Vector2(dx, dz).magnitude / 1000f).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " KM";
+            }
+            w.CargoFixAvailable = TryCargoGroundFix(out _, out string fixName);
+            w.CargoFixName = fixName;
         }
 
         private static void ReadDefence(MenuWorld w)
@@ -140,7 +155,12 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             w.RadarOn = a.radar != null && a.radar.activated;
             IDroneCommand drones = Service<IDroneCommand>();
             w.HasDrones = drones != null;
-            if (drones != null) { w.DronesStriking = drones.Striking; w.DronesCanStrike = drones.CanStrike; w.Drones = drones.Ready; }
+            if (drones != null)
+            {
+                w.DronesStriking = drones.Striking; w.DronesCanStrike = drones.CanStrike; w.Drones = drones.Ready;
+                for (int i = 0; i < drones.Linkable; i++) { w.DroneNames.Add(drones.Name(i)); w.DroneStates.Add(drones.State(i)); }
+                w.DroneLinked = drones.LinkedIndex; w.DroneHand = drones.HandFlying; w.DroneFeed = drones.FeedShown;
+            }
             ChaffDispenser chaff = ChaffDispenser.Instance;
             if (chaff != null && chaff.Fitted) { w.HasChaff = true; w.Chaff = chaff.Ammo; w.ChaffMax = chaff.MaxAmmo; w.ChaffLinked = chaff.Linked; }
         }
@@ -228,6 +248,10 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "defence/chaff": return () => ChaffDispenser.Instance?.Pop();
                 case "defence/chafflink": return () => { ChaffDispenser chaff = ChaffDispenser.Instance; if (chaff != null) chaff.Linked = !chaff.Linked; };
                 case "weapons/bay": return With(ToggleBayDoors);
+                case "weapons/cargo/next": return With(NextCargo);
+                case "weapons/cargo/setzone": return SetCargoZone;
+                case "weapons/cargo/clearzone": return () => Service<ILandingZone>()?.ClearLocal();
+                case "weapons/cargo/map": return OpenMap;
                 case "targets/threat": return With(LockNearestThreat);
                 case "targets/inbound": return With(TargetInbound);
                 case "targets/keep": return With(KeepNearest);
@@ -235,6 +259,11 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "targets/clear": return () => CombatHUD.i?.DeselectAll(true);
             }
             if (row.Id.StartsWith("weapons/select/st", StringComparison.Ordinal)) return With(a => SelectStation(a, index));
+            if (row.Id.StartsWith("weapons/cargo/st", StringComparison.Ordinal)) return With(a =>
+            {
+                if (a.weaponStations != null && index >= 0 && index < a.weaponStations.Count && CargoStationRead.KindOf(a.weaponStations[index]) != CargoKind.None)
+                    SelectStation(a, index);
+            });
             return null;
         }
 
@@ -271,6 +300,38 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             if (a.weaponManager == null || a.weaponStations == null || index < 0 || index >= a.weaponStations.Count) return;
             a.SetActiveStation((byte)index);
             CombatHUD.i?.ShowWeaponStation(a.weaponStations[index]);
+        }
+
+        private static void NextCargo(Aircraft a)
+        {
+            if (a.weaponManager == null || a.weaponStations == null || a.weaponStations.Count == 0) return;
+            int current = a.weaponStations.IndexOf(a.weaponManager.currentWeaponStation), count = a.weaponStations.Count;
+            for (int step = 1; step <= count; step++)
+            {
+                int index = (current + step) % count;
+                if (CargoStationRead.KindOf(a.weaponStations[index]) == CargoKind.None) continue;
+                SelectStation(a, index);
+                return;
+            }
+        }
+
+        /// <summary>A selected airborne contact is not a landing fix. Hostile ground fixes use the faction's known position, never a hidden live transform.</summary>
+        private static bool TryCargoGroundFix(out GlobalPosition point, out string name)
+        {
+            point = default; name = "";
+            CombatHUD hud = CombatHUD.i;
+            List<Unit> targets = hud != null ? hud.GetTargetList() : null;
+            if (targets == null || targets.Count == 0) return false;
+            Unit target = targets[0];
+            if (target == null || target.disabled || target is Aircraft || target is Missile || target is Ship) return false;
+            if (!GameManager.GetLocalHQ(out FactionHQ hq) || hq == null || !hq.TryGetKnownPosition(target, out point)) return false;
+            name = target.definition != null ? MenuText.Upper(target.definition.unitName, 25) : "GROUND FIX";
+            return true;
+        }
+
+        private static void SetCargoZone()
+        {
+            if (TryCargoGroundFix(out GlobalPosition point, out _)) Service<ILandingZone>()?.SetLocal(point);
         }
 
         /// <summary>Keeps only the selected target nearest the aircraft.</summary>

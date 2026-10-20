@@ -1,0 +1,515 @@
+{
+  "name": "ops-overwatch",
+  "_note": "Protocol 41 OVERWATCH success path and STARFALL visuals on Escalation. The player orbits at 7 km over friendly ground 28 km north of the centre: a pilot left level at 1500 m over the front is shot down within a minute, and a lost ownship closes the ORBIT window (and with it the SPACE feed). relocate (OpsAutomation, TEST ONLY) pins the SPACE focus on the enemy ground vehicle that moves nearest each bird and burns the RADAR bird over it through the ORBIT room's CONFIRM BURN verb; after the follow, relocate range 16000 moves the pin and the KINETIC bird 16 km from the pilot toward the mover (STARFALL must land inside the pilot's 30 km MaximumRangeMeters; the 55 deg orbit is ~3.5 km in radius; a KINETIC bird parked off the pin is pulled back onto it by the SPACE director) (no burn when one is already well inside the footprint); the run waits out the transfer (GeoBird.Slew 0.011 theatre widths/s, up to ~2 min). OVERWATCH then fires at a covered mover (MoverInFootprint) and the readouts compare the host's followed units with the client's SPACE contacts (followedSeen / followedMoving, followedLagM = contact to live unit, followedTrailM = how far a contact has moved since first seen) while the ORBIT window holds the feed; at t+95 every job has expired. STARFALL fires at the KINETIC footprint, Frame closes the window and puts the free camera side-on to the rod line (wide for the descent, close for the strikes; six captures 0.15-0.5 s apart for flicker). Weather is forced Clear: the Weather module owns the sky. Read the captures; the checks do not judge pictures.",
+  "mission": "Escalation",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 900,
+  "environment": {
+    "config": {
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "near": [
+        0,
+        28000
+      ],
+      "altitude": 7000,
+      "speed": 220,
+      "heading": 270
+    },
+    {
+      "op": "fly",
+      "id": "player",
+      "program": [
+        {
+          "orbit": {
+            "bank": 55,
+            "seconds": 1500
+          }
+        }
+      ]
+    },
+    {
+      "op": "atmosphere",
+      "time_of_day": 13,
+      "conditions": 0.1,
+      "cloud_height": 6000,
+      "wind_speed": 4,
+      "wind_heading": 70,
+      "wind_turbulence": 0,
+      "moon_phase": 14
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.ForceWeather",
+      "store": "wx",
+      "args": {
+        "regime": "Clear",
+        "conditions": 0,
+        "cloudHeight": 6000,
+        "seed": 7
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "readiness",
+      "args": {
+        "verb": "readiness",
+        "floor": 5
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Open",
+      "store": "fronts",
+      "args": {
+        "tab": 1
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "sync",
+      "args": {
+        "verb": "sync"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Window",
+      "store": "orbit_open",
+      "args": {
+        "front": 0
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "start",
+      "args": {}
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "burn_radar",
+      "args": {
+        "verb": "relocate",
+        "bird": 1
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "burning",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "ow_orbit_burn"
+    },
+    {
+      "op": "wait",
+      "seconds": 60
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "burn_60",
+      "args": {}
+    },
+    {
+      "op": "wait",
+      "seconds": 60
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "parked",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "ow_orbit_parked"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "overwatch",
+      "args": {
+        "verb": "perk",
+        "action": "overwatch"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "ow_t3",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "ow_orbit_t3"
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "ow_t23",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "ow_orbit_t23"
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "ow_t43",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "ow_orbit_t43"
+    },
+    {
+      "op": "wait",
+      "seconds": 14
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "ow_t57",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "ow_orbit_t57"
+    },
+    {
+      "op": "wait",
+      "seconds": 38
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "ow_t95",
+      "args": {}
+    },
+    {
+      "op": "capture",
+      "name": "ow_orbit_t95"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "burn_kinetic",
+      "args": {
+        "verb": "relocate",
+        "bird": 2,
+        "range": 16000
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 40
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "kinetic_parked",
+      "args": {}
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Verb",
+      "store": "starfall",
+      "args": {
+        "verb": "perk",
+        "action": "starfall"
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Frame",
+      "store": "frame_wide",
+      "args": {
+        "distance": 9000,
+        "height": 1200,
+        "look": 5000,
+        "fov": 70
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "capture",
+      "name": "sf_descent_3",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2.5
+    },
+    {
+      "op": "capture",
+      "name": "sf_descent_5",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Frame",
+      "store": "frame_close",
+      "args": {
+        "distance": 3200,
+        "height": 900,
+        "look": 100,
+        "fov": 55
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 2.4
+    },
+    {
+      "op": "capture",
+      "name": "sf_impact_a",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 0.15
+    },
+    {
+      "op": "capture",
+      "name": "sf_impact_b",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 0.15
+    },
+    {
+      "op": "capture",
+      "name": "sf_impact_c",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 0.15
+    },
+    {
+      "op": "capture",
+      "name": "sf_impact_d",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "capture",
+      "name": "sf_impact_e",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 0.15
+    },
+    {
+      "op": "capture",
+      "name": "sf_impact_f",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "capture",
+      "name": "sf_impact_12",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "capture",
+      "name": "sf_after_17",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 10
+    },
+    {
+      "op": "capture",
+      "name": "sf_after_27",
+      "hide_ui": true
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read",
+      "store": "after_starfall",
+      "args": {}
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "start.enemyMovers",
+      "min": 0.5
+    },
+    {
+      "check": "result_equals",
+      "path": "start.opsKnown",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "parked.bird1Burning",
+      "value": 0
+    },
+    {
+      "check": "result_above",
+      "path": "overwatch.request",
+      "min": 0.5
+    },
+    {
+      "check": "result_equals",
+      "path": "ow_t3.lastReplyAction",
+      "value": 44
+    },
+    {
+      "check": "result_equals",
+      "path": "ow_t3.lastReplyResult",
+      "value": 1
+    },
+    {
+      "check": "result_above",
+      "path": "ow_t3.lastReplyContacts",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "ow_t3.followed",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "ow_t3.followedSeen",
+      "min": 0.5
+    },
+    {
+      "check": "result_equals",
+      "path": "ow_t57.airborne",
+      "value": 1
+    },
+    {
+      "check": "result_above",
+      "path": "ow_t23.followedSeen",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "ow_t43.followedSeen",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "ow_t57.followedSeen",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "ow_t57.followedTrailM",
+      "min": 100
+    },
+    {
+      "check": "result_below",
+      "path": "ow_t57.followedLagM",
+      "max": 300
+    },
+    {
+      "check": "result_equals",
+      "path": "ow_t95.followed",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "kinetic_parked.bird2Burning",
+      "value": 0
+    },
+    {
+      "check": "result_above",
+      "path": "starfall.request",
+      "min": 0.5
+    },
+    {
+      "check": "result_equals",
+      "path": "after_starfall.lastReplyAction",
+      "value": 45
+    },
+    {
+      "check": "result_equals",
+      "path": "after_starfall.lastReplyResult",
+      "value": 1
+    },
+    {
+      "check": "result_above",
+      "path": "after_starfall.lastReplyContacts",
+      "min": 2.5
+    },
+    {
+      "check": "result_below",
+      "path": "after_starfall.lastReplyContacts",
+      "max": 5.5
+    }
+  ]
+}

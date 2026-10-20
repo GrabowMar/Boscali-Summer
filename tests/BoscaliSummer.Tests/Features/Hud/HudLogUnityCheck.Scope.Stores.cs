@@ -167,7 +167,7 @@ public static partial class HudLogUnityCheck
         if (x.HasIr) cm.SetValue(s.Fill(s.Domain("CmStation"), "Tag", "IR", "Ammo", x.Ir, "Max", x.IrMax, "Mask", (byte)1, "Selected", x.Active == 0), c++);
         if (x.HasRdr) cm.SetValue(s.Fill(s.Domain("CmStation"), "Tag", "RDR", "Ammo", x.Rdr, "Max", x.RdrMax, "Mask", (byte)2, "Selected", x.Active == 1), c++);
         if (x.HasJam) cm.SetValue(s.Fill(s.Domain("CmStation"), "Tag", "JAM", "Ammo", 1, "Max", 1, "Chargeable", true, "Mask", (byte)2, "Charge", x.JamCharge, "Active", x.JamOn,
-            "Icon", x.Pictures ? StandInId("weaponicon_radarJammer", 256, 256) : 0), c++);
+            "Selected", x.Active == 2, "Icon", x.Pictures ? StandInId("weaponicon_radarJammer", 256, 256) : 0), c++);
         count = c;
         return cm;
     }
@@ -518,7 +518,7 @@ public static partial class HudLogUnityCheck
                 StoresArtFills(v, 0, "weaponIcon_gatlingGun", art, tag);
                 Check(v.Art[1] == null, tag + ": a full magazine has no spent share");
                 Check(StoresTint(v.Art[0].color, StoresInk) && v.Art[0].color.a > 0.99f, tag + ": SAFE tints the art INK");
-                StoresArtFills(v, 2, "weaponicon_radarJammer", new Rect(v.Exp.x, v.Exp.y + 66f - 7f, 14f, 14f), tag);
+                StoresArtFills(v, 2, "weaponicon_radarJammer", new Rect(v.Exp.x + 10f, v.Exp.y + 66f - 7f, 14f, 14f), tag);      // where a count stands: the rows share their columns
                 Check(Mathf.Abs(v.Word("43").Label.color.r - StoresAmber.r) < 0.01f, tag + ": a charge at 8 % is amber");
                 Check(Mathf.Abs(v.Word("CHG +5/S").Ink.xMax - (v.Pwr.x + (isStack ? 196f : 180f))) < 3f, tag + ": the rate word ends at the inner width (WIDE 180, STACK 196 of 216): " + v.Word("CHG +5/S").Ink.xMax);
                 Check(Mathf.Abs(v.Exp.y - (isStack ? 124f : 70f)) < 0.01f, tag + ": EXPENDABLES sits where the geometry has it (WIDE y 70 with no cost row)");
@@ -564,19 +564,32 @@ public static partial class HudLogUnityCheck
             Check(Mathf.Abs(v.Art[0].uvRect.xMax - v.Art[1].uvRect.xMin) < 0.001f && Mathf.Abs(v.Art[0].uvRect.xMin) < 0.001f && Mathf.Abs(v.Art[1].uvRect.xMax - 1f) < 0.001f, tag + ": whole sprite, cut where the share ends");
             Check(StoresTint(v.Art[0].color, StoresBright) && StoresTint(v.Art[1].color, StoresInk) && Mathf.Abs(v.Art[1].color.a - 0.4f) < 0.01f, tag + ": the share left BRIGHT, the spent share dim INK");
         });
-        // An empty dispenser says EMPTY instead of its matrix, and the flares running low say LOW.
+        // An empty dispenser says EMPTY instead of its bar, and the flares running low say LOW.
         StoresBlockShot("empty-dispenser", hd, null, x => { x.Rdr = 0; x.Ir = 9; }, (v, tag) =>
         {
             StoresSays(v, tag, "EMPTY", "0", "9", "LOW", "FLR", "CHF");
             Color red = v.Word("EMPTY").Label.color;
             Check(red.r > 0.95f && red.g < 0.7f && red.b < 0.7f && red.r - red.g > 0.25f, tag + ": EMPTY is red (the theme's alert, #ffa094): " + red);
-            Check(Mathf.Abs(v.Word("EMPTY").Ink.xMin - (v.Exp.x + 68f)) < 1.5f, tag + ": EMPTY stands where the matrix would");
+            Check(Mathf.Abs(v.Word("EMPTY").Ink.xMin - (v.Exp.x + 68f)) < 1.5f, tag + ": EMPTY stands where the bar would");
         });
         // The THREAT page calls for chaff: DISPENSE, the call brackets, the capacitor draining, the jammer on.
         StoresBlockShot("dispense", hd, null, x => { x.Call = 2; x.Active = 1; x.Trt = true; x.Kj = 431f; x.Rate = -14f; x.JamOn = true; x.JamCharge = 0.7f; }, (v, tag) =>
         {
             StoresSays(v, tag, "DISPENSE", "LINK", "TRT AUTO", "DRN -14/S", "ON", "431");
-            Check(v.Word("DISPENSE").Ink.xMax <= v.Exp.xMax + 0.5f && v.Word("DISPENSE").Ink.xMin > v.Exp.x + 68f + 40f + 7f, tag + ": DISPENSE sits clear of the matrix, inside the block");
+            Check(v.Word("DISPENSE").Ink.xMax <= v.Exp.xMax + 0.5f && v.Word("DISPENSE").Ink.xMin > v.Exp.x + 68f + 40f + 7f, tag + ": DISPENSE sits clear of the bar, inside the block");
+        });
+        // The jammer is the selected countermeasure: its row, not a dispenser's, says SEL (the caret is drawn there too), and no other row says it.
+        StoresBlockShot("jammer-selected", hd, null, x => { x.Active = 2; x.JamCharge = 1f; }, (v, tag) =>
+        {
+            StoresSays(v, tag, "SEL", "JAM", "FLR", "CHF");
+            Check(Mathf.Abs(v.Word("SEL").Ink.center.y - (v.Exp.y + 66f)) < 2.5f, tag + ": SEL stands on the jammer's row (+66): " + v.Word("SEL").Ink.center.y);
+            StoresSaysNot(v, tag, "RDY");
+        });
+        // The flares selected: SEL on their row only.
+        StoresBlockShot("flares-selected", hd, null, x => { x.Active = 0; }, (v, tag) =>
+        {
+            StoresSays(v, tag, "SEL", "RDY");
+            Check(Mathf.Abs(v.Word("SEL").Ink.center.y - (v.Exp.y + 25f)) < 2.5f, tag + ": SEL stands on the flares' row (+25): " + v.Word("SEL").Ink.center.y);
         });
         // An airframe with no capacitor has no PWR BUS, and EXPENDABLES moves up into its place.
         StoresBlockShot("no-capacitor", hd, null, x => { x.Cap = false; }, (v, tag) =>

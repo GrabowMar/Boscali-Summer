@@ -17,7 +17,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly int[] lampOrder = new int[HudLamps.Count];
         private readonly float[] lampWidth = new float[HudLamps.Count], lampLeft = new float[HudLamps.Count], threatWidth = new float[HudThreats.Count], threatLeft = new float[HudThreats.Count];
         private readonly int[] threatOrder = new int[HudThreats.Count];
-        private readonly GaugeSpec[] pageGauges = new GaugeSpec[GaugeRow.Slots], registered = new GaugeSpec[16], shown = new GaugeSpec[GaugeRow.Slots];
+        private readonly GaugeSpec[] pageGauges = new GaugeSpec[GaugeRow.Slots], pageScratch = new GaugeSpec[GaugeRow.Slots], registered = new GaugeSpec[16], shown = new GaugeSpec[GaugeRow.Slots];
         private readonly float[] gaugeLabel = new float[GaugeRow.Slots], gaugeValue = new float[GaugeRow.Slots], gaugeSub = new float[GaugeRow.Slots], gaugeWidth = new float[GaugeRow.Slots], gaugeX = new float[GaugeRow.Slots];
         private readonly int[] gaugeRow = new int[GaugeRow.Slots];
         private int lampCount, gaugeCount, gaugeLines;
@@ -93,9 +93,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             // The gauge row's own switch (or the declutter level) is off: nothing is read for it and it takes no room.
             if (!allow.ShowGauges) { gaugeCount = gaugeLines = 0; return; }
-            int own = 0, reg = 0;
-            try { own = Math.Min(page.Gauges(pageGauges), GaugeRow.Slots); }
-            catch (Exception e) { ReportOnce(page, e); }
+            // The pages' own gauges first: every page on the board in slot order, then SYSTEMS (always on the board), up to the row's slots.
+            int own = 0, reg = 0, sources = Options.ScopeMode == BoardScopeMode.Off ? 0 : selectedCount;
+            for (int s = 0; s <= sources && own < GaugeRow.Slots; s++)
+            {
+                ScopePageBase p = s < sources ? selectedPages[s] : pages[(int)ScopePage.Systems];
+                int n = 0;
+                try { n = Math.Min(p.Gauges(pageScratch), GaugeRow.Slots); }
+                catch (Exception e) { ReportOnce(p, e); }
+                for (int k = 0; k < n && own < GaugeRow.Slots; k++) pageGauges[own++] = pageScratch[k];
+            }
             for (int i = 0; i < ScopeGauges.Count && reg < registered.Length; i++)
                 if (ScopeGauges.TryRead(i, out GaugeSpec spec)) registered[reg++] = spec;
             gaugeCount = GaugeRow.Merge(pageGauges, own, registered, reg, shown);

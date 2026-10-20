@@ -31,9 +31,14 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             }
         }
 
+        // The skybox's own horizon colour: vanilla writes it beside RenderSettings.fogColor (LevelInfo.UpdateTimeOfDayLighting), so the overcast grey
+        // never reached the horizon and a blue band showed between the hazed sea and the cloud deck (2026-10-18).
+        private static readonly int SkyFogId = Shader.PropertyToID("_FogColor");
+
         private bool applied;
         private Slot fog, ambient;
-        private ColorSlot fogColor, skyColor, equatorColor, groundColor;
+        private ColorSlot fogColor, skyColor, equatorColor, groundColor, skyFog;
+        private Material skyMaterial;
         private Slot sunSlot;
         private Light sunOwner;
 
@@ -57,11 +62,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         /// <param name="shade">0..1 how much cloud deck hangs overhead; dims and greys the air
         /// under overcast even when it is dry.</param>
+        /// <param name="sun">The game's sun; its elevation also turns the night fog grey (<see cref="OvercastLook.NightHaze"/>), dry or not.</param>
         internal void Apply(float rain, bool underwater, float shade = 0f, Light sun = null)
         {
             rain = Mathf.Clamp01(rain);
             shade = Mathf.Clamp01(shade);
-            if (underwater || (rain <= 0.001f && shade <= 0.001f)) { Restore(); return; }
+            float sunHeight = sun != null ? -sun.transform.forward.y : 1f;
+            if (underwater || (rain <= 0.001f && shade <= 0.001f && sunHeight >= 0f)) { Restore(); return; }
 
             fog.Track(RenderSettings.fogDensity, applied);
             ambient.Track(RenderSettings.ambientIntensity, applied);
@@ -69,6 +76,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             skyColor.Track(RenderSettings.ambientSkyColor, applied);
             equatorColor.Track(RenderSettings.ambientEquatorColor, applied);
             groundColor.Track(RenderSettings.ambientGroundColor, applied);
+            Material sky = RenderSettings.skybox;
+            if (sky != skyMaterial) skyMaterial = null;
+            if (sky != null && sky.HasProperty(SkyFogId))
+            {
+                skyFog.Track(sky.GetColor(SkyFogId), applied && skyMaterial != null);
+                skyMaterial = sky;
+            }
             if (sun != null) { sunOwner = sun; sunSlot.Track(sun.intensity, applied); }
 
             // Vanilla storm fog peaks near 0.0014; the underwater preset is 0.05. Never amplify the latter.
@@ -83,7 +97,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             // Cloud extinction belongs to the ray-marched volume. Applying it to global
             // fog as well erased gaps and local geometry as soon as the camera crossed an edge.
             ambient.Written = ambient.Base * dim;
-            fogColor.Written = ShadeTint(Tint(fogColor.Base, rain), shade);
+            // At night the fog colours turn grey too: vanilla's night fog is a saturated teal far brighter than its night sky, and the far
+            // sea (Boscali/Ocean fogs to it) and the distant deck seen from above glowed cyan along the horizon (2026-10-19).
+            fogColor.Written = NightGrey(ShadeTint(Tint(fogColor.Base, rain), shade), sunHeight, shade);
             skyColor.Written = Dim(skyColor.Base, dim);
             equatorColor.Written = Dim(equatorColor.Base, dim);
             groundColor.Written = Dim(groundColor.Base, dim);
@@ -94,6 +110,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             RenderSettings.ambientSkyColor = skyColor.Written;
             RenderSettings.ambientEquatorColor = equatorColor.Written;
             RenderSettings.ambientGroundColor = groundColor.Written;
+            if (skyMaterial != null)
+            {
+                skyFog.Written = NightGrey(ShadeTint(Tint(skyFog.Base, rain), shade), sunHeight, shade);
+                skyMaterial.SetColor(SkyFogId, skyFog.Written);
+            }
             CurrentSunScale = OvercastLook.SunScale(shade);
             if (sunOwner != null) { sunSlot.Written = sunSlot.Base * CurrentSunScale; sunOwner.intensity = sunSlot.Written; }
             applied = true;
@@ -114,6 +135,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (SameColor(skyColor.Written, RenderSettings.ambientSkyColor)) RenderSettings.ambientSkyColor = skyColor.Base;
             if (SameColor(equatorColor.Written, RenderSettings.ambientEquatorColor)) RenderSettings.ambientEquatorColor = equatorColor.Base;
             if (SameColor(groundColor.Written, RenderSettings.ambientGroundColor)) RenderSettings.ambientGroundColor = groundColor.Base;
+            if (skyMaterial != null && SameColor(skyFog.Written, skyMaterial.GetColor(SkyFogId))) skyMaterial.SetColor(SkyFogId, skyFog.Base);
+            skyMaterial = null;
         }
 
         private static Color Tint(Color c, float rain)
@@ -128,6 +151,12 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             float r = c.r, g = c.g, b = c.b;
             OvercastLook.Tint(shade, ref r, ref g, ref b);
             return new Color(r, g, b, c.a);
+        }
+
+        private static Color NightGrey(Color c, float sunHeight, float shade)
+        {
+            OvercastLook.NightHaze(sunHeight, shade, ref c.r, ref c.g, ref c.b);
+            return c;
         }
 
         private static Color Dim(Color c, float k) => new Color(c.r * k, c.g * k, c.b * k, c.a);

@@ -9,8 +9,8 @@ namespace Vanguard
     public static partial class VanguardBuilder
     {
         const string SentinelDescription = "Hovering air-defence sentry. Boosts for 3 s, flies to the designated point at 110 m/s, " +
-            "brakes 1.2 km out, folds out four rotors and holds 220 m above the ground there for 150 s. Its belly turret " +
-            "(20 mm, 300 rounds) shoots helicopters, drones, slow aircraft and missiles aimed at friendlies inside 1.2 km. " +
+            "brakes 1.2 km out, folds out four rotors and holds 220 m above the ground there for 210 s. Its belly turret " +
+            "(20 mm, 300 rounds) shoots helicopters, drones, slow aircraft and missiles aimed at friendlies inside 1.5 km. " +
             "DESIGNATE to move it. The turret cannot fire above +20 degrees; it folds and drops when dry.";
 
         // Joint / anchor names from the GLAIVE-2A part contract (design/vanguard-remake/MECHANICS.md).

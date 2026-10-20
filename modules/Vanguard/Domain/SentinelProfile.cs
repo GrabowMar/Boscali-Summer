@@ -17,7 +17,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const float MaxReach = 8000f;      // a far target is clamped so ingress + hover fit the 300 s lifetime
         public const float FallbackRange = 3000f; // no target: park this far ahead of the launch
         public const float HoverHeight = 220f;    // above the ground under the drone
-        public const float HoverSeconds = 150f;
+        public const float HoverSeconds = 210f;
         public const float SlideSpeed = 40f;      // a designation moves the park point at most this fast
         public const float ParkRange = 150f, ParkSpeed = 6f, ParkDwell = 1f;
 
@@ -26,7 +26,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const float ReachGain = .35f, MaxClosure = 40f, ClimbGain = .5f, MaxClimb = 40f, VertBrake = 3f;
         public const float AccelGain = .8f, MaxHorizAccel = 6f, MaxVertAccel = 6f;
 
-        public const float GunRange = 1200f, GunMinRange = 30f, GuardRadius = 1500f;
+        public const float GunRange = 1500f, GunMinRange = 30f, GuardRadius = 1500f;
         public const float SlowAircraft = 140f, MinAirAgl = 10f, MinClosing = 20f;
         public const float PitchMin = -90f, PitchMax = 20f; // belly turret: nothing above +20 deg (climb over it)
         public const float YawRate = 160f, PitchRate = 120f, AlignCos = .995f, SpinGate = .9f;

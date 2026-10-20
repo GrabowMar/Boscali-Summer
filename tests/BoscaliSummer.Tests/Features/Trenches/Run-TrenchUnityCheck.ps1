@@ -8,7 +8,7 @@ New-UnityCheckProject $PreviewDirectory '{"dependencies":{"com.unity.modules.ass
 Copy-Item -LiteralPath "$PSScriptRoot/TrenchUnityCheck.cs", "$PSScriptRoot/TrenchGameStubs.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/modules/Trenches/Visuals/TrenchMeshBuilder.cs", "$repo/modules/Trenches/Visuals/TrenchMaterialResolver.cs", "$repo/modules/Trenches/Visuals/TrenchVisualChunk.cs", "$repo/modules/Trenches/Visuals/TrenchNestVisual.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/modules/Trenches/Runtime/TrenchLine.cs", "$repo/modules/Trenches/Runtime/TrenchPlanner.cs", "$repo/modules/Trenches/Runtime/TrenchGarrison.cs", "$repo/modules/Trenches/Runtime/TrenchWorks.cs", "$repo/modules/Trenches/Domain/TrenchTraceMath.cs" -Destination "$PreviewDirectory/Assets/"
-Copy-Item -LiteralPath "$repo/Core/Contracts/ITerritoryIngress.cs" -Destination "$PreviewDirectory/Assets/"
+Copy-Item -LiteralPath "$repo/Core/Contracts/ITerritoryIngress.cs", "$repo/Core/Math/Scalar.cs" -Destination "$PreviewDirectory/Assets/"
 $process = Invoke-UnityCheck $Unity $PreviewDirectory 'TrenchUnityCheck.Run' -Flags '-batchmode'
 Write-Output "Results and render: $PreviewDirectory"
 if (Test-Path "$PreviewDirectory/result.txt") {

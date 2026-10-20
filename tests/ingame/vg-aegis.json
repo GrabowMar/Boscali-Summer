@@ -105,47 +105,25 @@
     },
     {
       "op": "mark",
-      "text": "auto defence: IR missile locks the lead -> AegisService launches a dart"
+      "text": "manual SNAP 1 at the bandit: nothing launches on its own (auto defence removed)"
     },
     {
       "op": "call",
       "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
       "args": {
-        "action": "threat",
-        "range": 3000,
-        "seeker": "IR",
-        "climb": 100
+        "action": "snap"
       },
-      "store": "threat1"
+      "store": "snap1"
     },
     {
       "op": "wait",
-      "seconds": 7
-    },
-    {
-      "op": "call",
-      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
-      "args": {
-        "action": "snap",
-        "press": 0
-      },
-      "store": "defence"
+      "seconds": 1
     },
     {
       "op": "mark",
-      "text": "second threat 6 km out, then SNAP at the bandit ~1.6 km ahead (2 darts left -> allowed)"
+      "text": "manual SNAP 2 at the bandit ~1.6 km ahead (2 darts left)"
     },
-    {
-      "op": "call",
-      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
-      "args": {
-        "action": "threat",
-        "range": 6000,
-        "seeker": "IR",
-        "climb": 100
-      },
-      "store": "threat2"
-    },
+
     {
       "op": "call",
       "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
@@ -168,14 +146,13 @@
     },
     {
       "op": "mark",
-      "text": "last dart + threat inbound -> reserved for the defence, no launch"
+      "text": "last dart is the pilot's call: SNAP fires it, nothing is held back"
     },
     {
       "op": "call",
       "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
       "args": {
-        "action": "snap",
-        "target": "none"
+        "action": "snap"
       },
       "store": "reserve"
     },
@@ -238,21 +215,6 @@
       "min": 1
     },
     {
-      "check": "result_above",
-      "path": "defence.aegis.defenceLaunch",
-      "min": 1
-    },
-    {
-      "check": "result_above",
-      "path": "defence.aegis.defenceContact",
-      "min": 1
-    },
-    {
-      "check": "result_above",
-      "path": "defence.threatsGone",
-      "min": 1
-    },
-    {
       "check": "result_below",
       "path": "snap.aegis.range",
       "max": 2500
@@ -274,13 +236,13 @@
     },
     {
       "check": "result_above",
-      "path": "reserve.aegis.reserved",
+      "path": "reserve.aegis.snapPress",
       "min": 1
     },
     {
-      "check": "result_above",
+      "check": "result_below",
       "path": "reserve.aegis.ammo",
-      "min": 1
+      "max": 0
     },
     {
       "check": "result_above",
@@ -303,19 +265,9 @@
       "min": 2
     },
     {
-      "check": "result_above",
-      "path": "last.aegis.defenceLaunch",
-      "min": 2
-    },
-    {
       "check": "result_below",
       "path": "last.aegis.ammo",
       "max": 0
-    },
-    {
-      "check": "result_above",
-      "path": "last.threatsGone",
-      "min": 2
     }
   ]
 }

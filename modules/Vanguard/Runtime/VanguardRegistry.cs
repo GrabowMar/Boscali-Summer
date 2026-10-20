@@ -48,7 +48,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private static void OnDisabled(Unit unit)
         {
             unit.onDisableUnit -= OnDisabled;
-            if (unit is Missile missile) Flights.Remove(missile);
+            if (unit is Missile missile) { Flights.Remove(missile); SteerOrders.Remove(missile); }
         }
     }
 
@@ -109,5 +109,43 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         public static void Clear() => Cues.Clear();
 
         private static bool Alive(Unit unit) => unit != null && !unit.disabled;
+    }
+
+    /// <summary>
+    /// Drone link orders, host-side (UAV terminal, UAV MFD and C-menu DRONE LINK via IDroneCommand -> VanguardNet). A steerable
+    /// flight with an order here flies it instead of its own job (VanguardFlight.Steer). One HAND drone per launcher: taking
+    /// another hands the stick over. An order drops with its drone, its launcher or the link (DroneLink.MaxRangeM).
+    /// AEGIS darts, ORCA and the ALE-X kite never get one (VanguardKeys.IsSteerable).
+    /// </summary>
+    internal static class SteerOrders
+    {
+        internal struct Order
+        {
+            public DroneMode Mode;
+            public GlobalPosition Point;
+        }
+
+        private static readonly Dictionary<Missile, Order> Orders = new Dictionary<Missile, Order>();
+        private static readonly List<Missile> Handed = new List<Missile>();
+
+        public static void Set(Missile drone, DroneMode mode, GlobalPosition point)
+        {
+            if (drone == null) return;
+            if (mode == DroneMode.Auto) { Orders.Remove(drone); return; }
+            if (mode == DroneMode.Hand)
+            {
+                Handed.Clear();
+                foreach (KeyValuePair<Missile, Order> pair in Orders)
+                    if (pair.Value.Mode == DroneMode.Hand && pair.Key != drone && (pair.Key == null || pair.Key.owner == drone.owner)) Handed.Add(pair.Key);
+                foreach (Missile other in Handed) Orders.Remove(other);
+            }
+            Orders[drone] = new Order { Mode = mode, Point = point };
+        }
+
+        public static bool TryGet(Missile drone, out Order order) => Orders.TryGetValue(drone, out order);
+
+        public static void Remove(Missile drone) => Orders.Remove(drone);
+
+        public static void Clear() => Orders.Clear();
     }
 }

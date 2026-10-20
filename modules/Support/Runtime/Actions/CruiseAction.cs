@@ -9,7 +9,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
     /// Cruise salvo: bounded offboard cruise missiles onto the mark. The seeker's native
     /// formation spacing separates same-faction missiles; the HQ registry counts the live
     /// cap. The first missile spawns synchronously so the reply carries its live time of
-    /// flight; the rest stagger out of the expiry watch.
+    /// flight; the rest stagger out of the expiry watch. The salvo is the setting times the front's POWER, rounded, 1 .. 8.
     /// </summary>
     internal sealed class CruiseAction : ISupportAction
     {
@@ -40,7 +40,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
                     return SupportResult.OutOfRange;
                 origin = player;
             }
-            int salvo = Mathf.Clamp(context.Settings.CruiseSalvo.Value, 1, 8);
+            int salvo = Domain.Fronts.PerkPower.Count(Mathf.Clamp(context.Settings.CruiseSalvo.Value, 1, 8), context.Power, 8);
             int live = CountLive(context.Owner);
             if (live + salvo > Mathf.Max(1, context.Settings.CruiseLiveCap.Value))
             {
@@ -72,7 +72,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
             context.Logger.LogInfo("[Support] Cruise salvo of " + salvo + " released by " +
                 definition.jsonKey + (tti >= 0f ? "; time of flight ~" + Mathf.RoundToInt(tti) + " s." : "."));
             context.Host.Run(Finish(context.Host, spawner, definition, context.Owner, guide, ground,
-                approach, lateral, salvo, unique, first, context.RequestId));
+                approach, lateral, salvo, unique, first, PlayerIdentity.Of(context.Player), context.RequestId));
             return SupportResult.Accepted;
         }
 
@@ -116,7 +116,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
         private static IEnumerator Finish(
             ISupportHost host, Spawner spawner, MissileDefinition definition, FactionHQ owner,
             string guide, Vector3 target, Vector3 approach, Vector3 lateral, int salvo,
-            string unique, Missile first, int requestId)
+            string unique, Missile first, ulong requesterId, int requestId)
         {
             try
             {
@@ -128,7 +128,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
                     if (spawner == null || owner == null) break;
                     missiles[i] = SpawnOne(spawner, definition, owner, guide, target, approach,
                         lateral, i, salvo, unique);
-                    if (missiles[i] != null) host.AddCruiseMissile(requestId, missiles[i]);
+                    if (missiles[i] != null) host.AddCruiseMissile(requesterId, requestId, missiles[i]);
                 }
                 float deadline = Time.time + 180f;
                 while (Time.time < deadline)

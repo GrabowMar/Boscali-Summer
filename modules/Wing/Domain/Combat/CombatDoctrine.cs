@@ -84,6 +84,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
             refusedAt = float.NegativeInfinity;
             Overridden = false;
         }
+
+        /// <summary>Nothing to judge (no fight, or an attack order's): the dwell starts afresh with the next fight.</summary>
+        public void Idle() => clock = 0f;
     }
 
     /// <summary>Spec M5 §6.4: the game's target score (<c>opportunity × (1 + threat) / range</c>, halved beyond 1.2 × the

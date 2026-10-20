@@ -108,6 +108,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private WeatherVolumeDressing flightClouds;
         private readonly HeatDistortionSorting heatHaze = new HeatDistortionSorting();
         private readonly LightningDirector lightning = new LightningDirector();
+        private readonly SkyPhenomena phenomena = new SkyPhenomena();
         private bool prewarmAttempted;
         private bool canopyShaderActive;
         private int canopyDrawnFrames;
@@ -328,6 +329,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             viewDensity = viewPrecipitation = viewCondensation = 0f;
             viewTransmission = 1f;
             lightning.Reset();
+            phenomena.Reset();
             if (rainRoot != null)
             {
                 rainSound?.Release();
@@ -748,6 +750,19 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             else atmosphere.Restore();
             UpdateLighting();
 
+            // Night sky (2026-10-18): aurora on clear nights (seeded per mission: about seven missions in ten get one), and sprites and
+            // jets that the lightning below fires over distant night storms.
+            bool skyPhenomena = settings.SkyPhenomenaEnabled.Value;
+            lightning.Phenomena = skyPhenomena ? phenomena : null;
+            if (skyPhenomena)
+            {
+                uint skySeed = unchecked((uint)missionSeed);
+                float auroraNight = WeatherMath.Hash01(skySeed, 77, 1) < 0.7f ? 0.55f + 0.45f * WeatherMath.Hash01(skySeed, 78, 1) : 0f;
+                float sunUp = LevelInfo.i != null && LevelInfo.i.sun != null ? -LevelInfo.i.sun.transform.forward.y : 1f;
+                phenomena.Tick(currentCam, sunUp, Mathf.Clamp01(1f - localWeather.SkyCover), auroraNight, skySeed, missionTime);
+            }
+            else phenomena.Reset();
+
             // Storms remain visible/audible from dry air; they do not depend on a rain emitter.
             if (settings.LightningEnabled.Value || settings.RainAudioEnabled.Value)
                 lightning.Tick(Field, missionTime, cloudPosition, currentCam,
@@ -964,6 +979,9 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 { "lightningFlash", lightning.FlashNow },
                 { "thunderQueued", lightning.QueuedThunder },
                 { "thunderVoices", lightning.ThunderVoices },
+                { "auroraLevel", phenomena.AuroraLevel },
+                { "auroraParticles", phenomena.AuroraParticles },
+                { "spritesFired", phenomena.SpritesFired },
                 { "rainAudioReady", rainSound != null && rainSound.ClipsReady ? 1 : 0 },
                 { "rainAudioRouted", rainSound != null && rainSound.IsRouted ? 1 : 0 },
                 { "rainAudioPlaying", rainSound != null && rainSound.IsPlaying ? 1 : 0 },

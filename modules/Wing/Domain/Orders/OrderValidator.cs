@@ -62,6 +62,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
                     float n = o.Number;
                     return n >= 0f && n <= (float)ReactionKind.Beam && n == (int)n ? null : "no such maneuver";
                 }
+                case OrderKind.ClearDoctrine:
+                    return o.Scope.Kind == ScopeKind.Members ? null : "select the aircraft";
                 case OrderKind.Eject:
                     if (o.Scope.Kind != ScopeKind.Members || o.Scope.Members.Length != 1) return "eject one wingman at a time";
                     if (o.Source != OrderSource.Player) return "only you can order an ejection";

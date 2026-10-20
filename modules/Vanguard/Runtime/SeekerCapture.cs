@@ -20,6 +20,14 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (decoy.rb != null) threat.SetProxyFuse(decoy.transform, decoy.rb);
         }
 
+        /// <summary>Flares: the seeker loses its target outright and the missile flies on unguided.</summary>
+        public static void Drop(Missile threat)
+        {
+            threat.SetTarget(null);
+            MissileSeeker seeker = threat.GetComponent<MissileSeeker>();
+            if (seeker != null) TargetUnit(seeker) = null;
+        }
+
         /// <summary>
         /// Chaff. An ARH seeker drops into the game's own lost-target state (ARHSeeker.Seek flies on, SlowChecks ends the
         /// missile); any other radar seeker switches to the decoy while it lives. False when neither was possible.

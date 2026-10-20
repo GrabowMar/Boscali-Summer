@@ -21,7 +21,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         // One reveal pass (one host tick): a unit is reported once however many jobs cover it, and the pass is bounded.
         private readonly HashSet<uint> pulsed = new HashSet<uint>();
-        private int passPulses, passRevealed;
+        private int passPulses, passRevealed, pulseCursor;
 
         private sealed partial class FactionSof
         {
@@ -90,12 +90,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private void Pulse(FactionSof f, float x, float z, float radius, bool includeBuildings)
         {
             List<Unit> all = UnitRegistry.allUnits;
-            if (all == null || all.Count > MaximumScanUnits) return;
+            if (all == null || all.Count == 0) return;
             float r2 = radius * radius;
             passPulses++;
-            for (int i = 0; i < all.Count && passRevealed < MaximumPulse; i++)
+            // A mission above MaximumScanUnits is read one rotating slice per pulse: a unit in an unread slice is revealed by a later pulse, never skipped for good.
+            int n = all.Count, span = Math.Min(n, MaximumScanUnits), start = n > span ? pulseCursor % n : 0;
+            if (n > span) pulseCursor = start + span;
+            for (int k = 0; k < span && passRevealed < MaximumPulse; k++)
             {
-                Unit unit = all[i];
+                Unit unit = all[(start + k) % n];
                 if (unit == null || unit.disabled || unit.NetworkHQ == null || unit.NetworkHQ == f.Owner || unit is Aircraft || unit is Missile) continue;
                 if (!(unit is GroundVehicle) && !(includeBuildings && unit is Building building && !(building.definition is BuildingDefinition def && def.buildingType == BuildingType.CIV))) continue;
                 GlobalPosition p = unit.transform.position.ToGlobalPosition();
@@ -175,6 +178,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     part.TakeDamage(0f, 0f, 0f, 0f, 100000f, default(PersistentID));
                     hit++;
                 }
+                // A DIRECT ACTION on a SAM or radar vehicle: it has no anchor-style critical part, so every part takes the same blow.
+                if (hit == 0 && unit is GroundVehicle)
+                    for (int i = 0; i < parts.Count && !unit.disabled; i++)
+                    {
+                        UnitPart part = parts[i];
+                        if (part == null || part.IsDetached()) continue;
+                        part.TakeDamage(0f, 0f, 0f, 0f, 100000f, default(PersistentID));
+                        hit++;
+                    }
                 if (hit == 0) return false;
                 Plugin.Logger?.LogInfo("[Support.Sof] " + f.Owner.name + " sabotaged " + sub + " " + unit.UniqueName + ".");
                 return true;

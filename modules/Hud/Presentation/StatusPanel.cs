@@ -38,6 +38,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private AvVector shellVector, pageVector, overlayVector, frameVector, storesVector, statusVector;
         private ScopeText shellText, pageText, overlayText, storesText, statusText;
         private ScopeCanvas shellCanvas, pageCanvas, overlayCanvas, frameCanvas, storesCanvas, statusCanvas;
+        private sealed class PageSurface
+        {
+            public RectTransform Scope, Body, Overlay, Frame;
+            public AvVector BodyVector, OverlayVector, FrameVector;
+            public ScopeCanvas BodyCanvas, OverlayCanvas, FrameCanvas;
+        }
+        private readonly PageSurface[] pageSurfaces = new PageSurface[ScopeLayout.MaxSlots];
         private TMP_FontAsset font;
         private Material fontMaterial;
         private Image nativeSafety;
@@ -146,6 +153,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             frameRect = Pinned(scopeRect, "Frame", false);
             frameVector = AvVector.Create(frameRect, "Strokes", FrameQuads);
             frameCanvas = new ScopeCanvas(frameVector.Buffer, null, "scope.frame");
+            pageSurfaces[0] = new PageSurface
+            {
+                Scope = scopeRect, Body = pageRect, Overlay = overlayRect, Frame = frameRect,
+                BodyVector = pageVector, OverlayVector = overlayVector, FrameVector = frameVector,
+                BodyCanvas = pageCanvas, OverlayCanvas = overlayCanvas, FrameCanvas = frameCanvas,
+            };
+            for (int i = 1; i < pageSurfaces.Length; i++) pageSurfaces[i] = BuildPageSurface(i);
 
             // STATUS: the aircraft's compact SYSTEMS strip under a warning page, so the RWR never takes the aircraft's state off the board. One masked surface: body, shelf and brackets.
             statusRect = Pinned(root, "Status", true);
@@ -154,6 +168,23 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             statusCanvas = new ScopeCanvas(statusVector.Buffer, statusText, "scope.status");
 
             BuildBoard();
+        }
+
+        private PageSurface BuildPageSurface(int slot)
+        {
+            var s = new PageSurface();
+            s.Scope = Pinned(root, "Scope" + (slot + 1), true);
+            s.Body = Pinned(s.Scope, "Page", true);
+            s.BodyVector = AvVector.Create(s.Body, "Strokes", PageQuads);
+            s.BodyCanvas = new ScopeCanvas(s.BodyVector.Buffer, new ScopeText(Holder(s.Body, "Words"), font, fontMaterial), "scope.page" + slot);
+            s.Overlay = Pinned(s.Scope, "Overlay", false);
+            s.OverlayVector = AvVector.Create(s.Overlay, "Strokes", OverlayQuads);
+            s.OverlayCanvas = new ScopeCanvas(s.OverlayVector.Buffer, new ScopeText(Holder(s.Overlay, "Words"), font, fontMaterial), "scope.overlay" + slot);
+            s.Frame = Pinned(s.Scope, "Frame", false);
+            s.FrameVector = AvVector.Create(s.Frame, "Strokes", FrameQuads);
+            s.FrameCanvas = new ScopeCanvas(s.FrameVector.Buffer, null, "scope.frame" + slot);
+            Show(s.Scope, false);
+            return s;
         }
 
         private static RectTransform Holder(RectTransform parent, string name)
@@ -216,7 +247,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             baseUnit = Mathf.Max(scale, ScopeLayout.MinScale) * pixel;
             unit = baseUnit * Mathf.Clamp(Options.Scale, BoardOptions.ScaleMin, BoardOptions.ScaleMax);
-            underNative = headerFault || (corner != null && corner.Uncovered(header.HasWeapon, header.HasCap));
+            // Restoring stores also restores native countermeasures, even on an airframe whose weapon/power boxes are inactive.
+            underNative = !allow.ShowStores || headerFault || (corner != null && corner.Uncovered(header.HasWeapon, header.HasCap));
         }
 
         /// <summary>
@@ -275,6 +307,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             shellVector = pageVector = overlayVector = frameVector = storesVector = statusVector = null;
             shellText = pageText = overlayText = storesText = statusText = null;
             shellCanvas = pageCanvas = overlayCanvas = frameCanvas = storesCanvas = statusCanvas = null;
+            Array.Clear(pageSurfaces, 0, pageSurfaces.Length);
             nativeSafety = null;
             board = null;
             StoreIcons.Clear();      // the baked pictures are this scene's

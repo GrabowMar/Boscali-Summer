@@ -31,7 +31,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
                 if (found < 0) return SupportResult.NoMarkTarget;
                 Unit unit = units[found];
                 context.Owner.UpdateLasedState(unit, true);
-                float duration = Mathf.Max(1f, context.Settings.JtacMarkDuration.Value * context.Quality);
+                float duration = Mathf.Max(1f, context.Settings.JtacMarkDuration.Value * context.Power);
                 context.Host.Run(UnlaseAfter(context.Host, context.Owner, unit, duration));
                 context.Host.ReportContacts(context.RequestId, 1);
                 try { Visuals.LaseFx.Play(unit, context.Owner, duration); }

@@ -29,7 +29,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     state = ours;
                     Redirected++;
                 }
-                wing.TraceSwitch(__instance, asked, state);
             }
             catch (System.Exception e)
             {
@@ -39,7 +38,12 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     faulted = true;
                     WingLog.Logger.LogError("[Native] state switch supervision failed (the game's switch goes ahead): " + e);
                 }
+                return;
             }
+            // Diagnostics only, on its own: in the guard above a throw here undid a redirect already recorded (the member then
+            // flew the game's taxi or combat state while our books said ground or approach, and was pruned as lost).
+            try { wing.TraceSwitch(__instance, asked, state); }
+            catch (System.Exception) { }
         }
     }
 }

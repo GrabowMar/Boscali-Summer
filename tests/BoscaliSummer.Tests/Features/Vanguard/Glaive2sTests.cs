@@ -49,16 +49,16 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.That(!GlaiveProfile.Burst(.5f) && GlaiveProfile.Burst(1.5f) && !GlaiveProfile.Burst(2.5f) &&
                 GlaiveProfile.Burst(4.2f) && !GlaiveProfile.Burst(5.5f), "1 s bursts every 3 s, from 1 s after orbit entry");
             float perStation = GlaiveProfile.Endurance / GlaiveProfile.BurstPeriod * GlaiveProfile.BurstLength / GlaiveProfile.ShotInterval;
-            TestAssert.That(Near(perStation, 250f, .5f) && perStation >= GlaiveProfile.Rounds,
-                "5 rounds a burst: 240 rounds last ~144 s of the 150 s on station");
+            TestAssert.That(Near(perStation, 350f, .5f) && perStation >= GlaiveProfile.Rounds,
+                "5 rounds a burst: 240 rounds run dry at ~144 s of the 210 s on station");
 
             TestAssert.That(GlaiveProfile.CanFire(570f, 340f, 90f, 1f) && !GlaiveProfile.CanFire(950f, 340f, 90f, 1f) &&
                 !GlaiveProfile.CanFire(570f, 10f, 90f, 1f) && !GlaiveProfile.CanFire(570f, 340f, 200f, 1f) &&
                 !GlaiveProfile.CanFire(570f, 340f, 90f, .99f) && !GlaiveProfile.CanFire(10f, 340f, 90f, 1f),
                 "gun gate: 20-900 m, target 30 m below, 45-150 m/s, barrel within 3.6 deg");
 
-            TestAssert.That(!GlaiveProfile.Retire(240, 10f) && GlaiveProfile.Retire(0, 10f) && GlaiveProfile.Retire(100, 150f),
-                "retire when dry or after 150 s on station");
+            TestAssert.That(!GlaiveProfile.Retire(240, 10f) && GlaiveProfile.Retire(0, 10f) && GlaiveProfile.Retire(100, GlaiveProfile.Endurance),
+                "retire when dry or after the endurance on station");
             TestAssert.That(GlaiveProfile.Crashing(30f, 6f) && !GlaiveProfile.Crashing(30f, 3f) && !GlaiveProfile.Crashing(100f, 60f),
                 "scuttle below 35 m AGL after launch clearance");
 

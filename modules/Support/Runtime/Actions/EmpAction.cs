@@ -25,20 +25,20 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
             SupportResult gate = SupportTargeting.ReserveStrike(context, definition,
                 "[Support] EMP shock is unavailable: no missile definition resolved.", out Vector3 ground);
             if (gate != SupportResult.Accepted) return gate;
-            float radius = Mathf.Min(context.Settings.EmpRadius.Value * context.Quality, SupportEffectPolicy.MaxEmpRadius);
-            float duration = CyberService.ExploitDuration(context.Owner, SupportEffectPolicy.EmpDuration * context.Quality, 60f); // EXPLOIT x1.5 while a node is held
+            float radius = Mathf.Min(context.Settings.EmpRadius.Value * context.Power, SupportEffectPolicy.MaxEmpRadius);
+            float duration = CyberService.ExploitDuration(context.Owner, SupportEffectPolicy.EmpDuration * context.Power, 60f); // EXPLOIT x1.5 while a node is held
             context.Logger.LogInfo("[Support] EMP airburst using " + definition.jsonKey +
                                    " at " + ground.y.ToString("F0") + " m AGL-local, burst +" +
                                    SupportEffectPolicy.EmpBurstAltitude.ToString("F0") + " m");
             // Bound to the ceiling the replicated name can carry, or peers fall back to the default visual.
             context.Host.Run(Discharge(context.Host, context.Player, context.Owner, definition, ground,
-                radius, duration, SupportEffectPolicy.EmpName(SupportNaming.Unique("Emp", context), radius)));
+                radius, duration, JamAmount * context.Power, SupportEffectPolicy.EmpName(SupportNaming.Unique("Emp", context), radius)));
             return SupportResult.Accepted;
         }
 
         private static IEnumerator Discharge(
             ISupportHost host, Player player, FactionHQ owner, MissileDefinition definition,
-            Vector3 target, float radius, float duration, string unique)
+            Vector3 target, float radius, float duration, float jamAmount, string unique)
         {
             Missile missile = null;
             GlobalPosition targetGlobal = target.ToGlobalPosition();
@@ -108,7 +108,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
                             unit.Jam(new Unit.JamEventArgs
                             {
                                 jammingUnit = player != null ? player.Aircraft : null,
-                                jamAmount = JamAmount
+                                jamAmount = jamAmount
                             });
 
                             if (unit is Aircraft ac && elapsed < 0.5f)

@@ -6,8 +6,14 @@ namespace BoscaliSummer.Core.Contracts
     /// <summary>How much the TAC BOARD shows: everything the switches allow, a leaner board, or only what a pilot in a fight needs.</summary>
     internal enum BoardDeclutter { Full, Lean, Minimal }
 
-    /// <summary>Whether the scope's information pages appear when they are relevant, or never.</summary>
-    internal enum BoardScopeMode { Auto, Off }
+    /// <summary>Manual page display, or no tactical pages. Auto is a legacy config spelling for Manual.</summary>
+    internal enum BoardScopeMode { Manual = 0, Off = 1, Auto = Manual }
+
+    /// <summary>
+    /// The information page selected for a TAC BOARD slot. Values match the HUD's page registry. <see cref="Systems"/> is not a slot choice (the board always shows SYSTEMS in a
+    /// block of its own); it stays in the list so the values, and saved configs, keep their meaning.
+    /// </summary>
+    internal enum BoardPage { Threat, Shot, MissileCam, Approach, Wing, Strike, Dock, Objective, Systems, Cargo }
 
     /// <summary>
     /// The TAC BOARD's options for a settings surface (the SET console, the C-key menu) to read and change without importing the Hud module. Client-local; the board
@@ -30,6 +36,15 @@ namespace BoscaliSummer.Core.Contracts
         float Shade { get; set; }
         BoardDeclutter Declutter { get; set; }
         BoardScopeMode ScopeMode { get; set; }
+        /// <summary>Full information pages shown, 1 to 4, at most two across and two down.</summary>
+        int PageCount { get; set; }
+        BoardPage Page1 { get; set; }
+        BoardPage Page2 { get; set; }
+        BoardPage Page3 { get; set; }
+        BoardPage Page4 { get; set; }
+        /// <summary>The stores, countermeasure and power section. Off restores the native panels.</summary>
+        bool ShowStores { get; set; }
+        // Legacy per-page switches are retained for config compatibility; manual slots do not consult them.
         bool PageThreat { get; set; }
         bool PageShot { get; set; }
         bool PageMissileCam { get; set; }
@@ -38,13 +53,13 @@ namespace BoscaliSummer.Core.Contracts
         bool PageStrike { get; set; }
         bool PageDock { get; set; }
         bool PageObjective { get; set; }
+        bool PageCargo { get; set; }
         bool PageSystems { get; set; }
         /// <summary>Seconds the radar-warning page keeps a contact after its last warning, 2 to 30.</summary>
         float ThreatHoldSeconds { get; set; }
-        /// <summary>Minimum seconds a page stays once it has appeared, 0 to 15.</summary>
+        /// <summary>Legacy automatic-page dwell setting; manual pages ignore it.</summary>
         float PageMinSeconds { get; set; }
         bool ShowLamps { get; set; }
-        bool ShowSystemsStrip { get; set; }
         bool ShowGauges { get; set; }
         bool ShowTicker { get; set; }
         /// <summary>The NAV DATA block in the bottom-right corner of the cockpit view: home base, selected target, fuel and the mission clock.</summary>

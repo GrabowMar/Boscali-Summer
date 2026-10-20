@@ -75,8 +75,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// <summary>The member to back off and reroute out of a deadlock, −1 when there is none.</summary>
         public int Victim { get; private set; } = -1;
 
-        /// <summary>The first runway usable for takeoff: prefer the end reached by its taxi roads or native entries,
-        /// then the end nearer the field centre. False when the field has none.</summary>
+        /// <summary>The first runway usable for takeoff: prefer the end reached by its taxi roads or native entries, then the
+        /// end with the shorter mean taxi route from the field's launch places (hangar exits, service points), then the end
+        /// nearer the field centre. False when the field has none.</summary>
         public static bool TryPickRunway(AirbaseSample field, out int index, out bool reverse)
         {
             for (int r = 0; r < field.Runways.Length; r++)
@@ -85,13 +86,40 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 if (!runway.Takeoff) continue;
                 index = r;
                 bool startAccess = HasTaxiAccess(field, runway, runway.Start), endAccess = HasTaxiAccess(field, runway, runway.End);
-                reverse = runway.Reversable && (startAccess != endAccess ? endAccess :
-                    (runway.End - field.Center).Horizontal.Length < (runway.Start - field.Center).Horizontal.Length);
+                reverse = runway.Reversable && (startAccess != endAccess ? endAccess : EndNearer(field, r));
                 return true;
             }
             index = -1;
             reverse = false;
             return false;
+        }
+
+        /// <summary>The far end (End) serves the launch places better: a shorter mean taxi route from them, as the game sends each
+        /// aircraft to its nearest threshold; the end nearer the field centre when none reach either (sweep 2026-10-18,
+        /// airbase_city: the centre picked the south end while its hangars stand at the north end, 2 km of taxi each).</summary>
+        private static bool EndNearer(AirbaseSample field, int r)
+        {
+            TaxiGraph g = TaxiGraph.Build(field);
+            float start = MeanRoute(field, g, g.HoldShort(r, false)), end = MeanRoute(field, g, g.HoldShort(r, true));
+            if (start < float.MaxValue || end < float.MaxValue) return end < start;
+            RunwaySample runway = field.Runways[r];
+            return (runway.End - field.Center).Horizontal.Length < (runway.Start - field.Center).Horizontal.Length;
+        }
+
+        private static float MeanRoute(AirbaseSample field, TaxiGraph g, int hold)
+        {
+            var nodes = new List<int>();
+            var edges = new List<int>();
+            float sum = 0f;
+            int n = 0;
+            for (int i = 0; i < field.Hangars.Length + field.ServicePoints.Length; i++)
+            {
+                int start = i < field.Hangars.Length ? g.HangarExit(i) : g.ServiceNode(i - field.Hangars.Length);
+                if (hold < 0 || !TaxiRouter.Route(g, start, hold, null, nodes, edges)) continue;
+                foreach (int e in edges) sum += g.EdgeLength(e);
+                n++;
+            }
+            return n > 0 ? sum / n : float.MaxValue;
         }
 
         private static bool HasTaxiAccess(AirbaseSample field, RunwaySample runway, Vec3 threshold)

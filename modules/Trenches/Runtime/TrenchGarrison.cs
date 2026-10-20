@@ -147,7 +147,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                     if (previousHealth[slot] >= 0)
                     {
                         previousHealth[slot] = -1;
-                        SuppressedUntil = now + TrenchTraceMath.ConstructionSuppressionSeconds;
+                        SuppressedUntil = Math.Max(SuppressedUntil, now + TrenchTraceMath.ConstructionSuppressionSeconds);
                         changed = true;
                     }
                     continue;
@@ -156,7 +156,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                 float health = Health(parts[slot]);
                 if (health < previousHealth[slot] - 0.01f)
                 {
-                    SuppressedUntil = now + TrenchTraceMath.ConstructionSuppressionSeconds;
+                    SuppressedUntil = Math.Max(SuppressedUntil, now + TrenchTraceMath.HitSuppressionSeconds);
                     changed = true;
                 }
                 previousHealth[slot] = health;

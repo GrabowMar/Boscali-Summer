@@ -28,6 +28,23 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
     }
 
+    /// <summary>Runway a type needs to lift off at full fuel, as Wing launches it by default, where that is known to exceed what the game
+    /// says (wing-taxi sweeps 2026-10-18/19). A fully fuelled SFB-81 (25 t of fuel; the game's own AI flies it at 40 %) does not rotate on its
+    /// wheels and rolls about 1.9 km to 93-95 m/s: from highwaystrip1/2, airstrip_city2 and desert1 (834-1306 m) it ran off the end. The
+    /// game's takeoffDistance cannot tell (1200 m for the SFB-81 and the KR-67 alike, and a KR-67 flies from 834 m). A known limit by the
+    /// user's ruling 2026-10-19: launch fuel stays at 100 %, and SUPPLY says so.</summary>
+    internal static class TakeoffRuns
+    {
+        public static float FullFuelMetres(string unitName) => unitName == "SFB-81 Darkreach" ? 1900f : 0f;
+
+        /// <summary>The runway is shorter than the type needs at full fuel (false when nothing is known of the type).</summary>
+        public static bool Short(string unitName, float runwayMetres)
+        {
+            float need = FullFuelMetres(unitName);
+            return need > 0f && runwayMetres > 0f && runwayMetres < need;
+        }
+    }
+
     /// <summary>One field's departures (spec M3 §3.4–3.5). Expected members gather at the hold-short; the group lines
     /// up once all have arrived (or <see cref="GatherTimeout"/> after the first), taking the runway lock (never while a
     /// native landing is pending or a foreign aircraft is on the runway, <see cref="RunwayBusy"/>). The group is the

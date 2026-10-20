@@ -53,10 +53,24 @@ static class Program
         Check(!index.ContainsWithin(0f,0f,8f),"Narrow firebreak test bridges a cleared strip");
         index.BuildFromPoints(new[]{new Vector2(6f,0)},32f);
         Check(index.ContainsWithin(0f,0f,8f),"Edge fuel sample rejects nearby trees");
+        // Crossing-fuel rule: destination fuel alone must not carry fire across a
+        // cleared shared edge, while fuel touching the edge anywhere along its
+        // length must. Mirrors the ForestManagerUnityCheck firebreak fixture.
+        var srcCell=FireFrontCell.FromKey(FireFrontCell.Locate(0f,0f));
+        long nKey=srcCell.Neighbours[0];
+        var dstSeed=FireFrontCell.Seed((int)(nKey>>32),(int)nKey);
+        var breakIndex=new ForestIndex();
+        breakIndex.BuildFromPoints(new[]{new Vector2(srcCell.Center.X,srcCell.Center.Z),new Vector2(dstSeed.X,dstSeed.Z)},32f);
+        Check(!ForestSpreadPolicy.HasCrossingFuel(breakIndex,srcCell,0),"Fire crossed a cleared shared edge on destination fuel alone");
+        var va=srcCell.Vertices[0]; var vb=srcCell.Vertices[1%srcCell.Count];
+        float qx=srcCell.Center.X+va.X+(vb.X-va.X)*0.25f;
+        float qz=srcCell.Center.Z+va.Z+(vb.Z-va.Z)*0.25f;
+        breakIndex.BuildFromPoints(new[]{new Vector2(srcCell.Center.X,srcCell.Center.Z),new Vector2(dstSeed.X,dstSeed.Z),new Vector2(qx,qz)},32f);
+        Check(ForestSpreadPolicy.HasCrossingFuel(breakIndex,srcCell,0),"Fuel touching the shared edge did not authorize the crossing");
         long bytes=GC.GetAllocatedBytesForCurrentThread(); float sum=0f;
         for(int n=0;n<10000;n++) for(int edge=0;edge<origin.Count;edge++) sum+=origin.EdgeScore(edge,6f,2f,n);
         Check(GC.GetAllocatedBytesForCurrentThread()==bytes,"Spread ranking allocates in the hot path");
         Check(float.IsFinite(sum),"Nonfinite spread ranking");
-        Console.WriteLine($"PASS: {checks} assertions; shared Voronoi edges, seed identity, no gaps/overlap, bounded geometry, wind ranking, fuel/firebreak queries and allocation-free ranking.");
+        Console.WriteLine($"PASS: {checks} assertions; shared Voronoi edges, seed identity, no gaps/overlap, bounded geometry, wind ranking, fuel/firebreak queries, crossing-fuel rule and allocation-free ranking.");
     }
 }

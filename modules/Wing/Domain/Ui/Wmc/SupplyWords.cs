@@ -93,6 +93,15 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public static string FieldDistance(float km) => N((int)Math.Round(km)) + " KM";
 
+        /// <summary>The dispatch card's caution when the launch field's runway is shorter than the airframe needs at full fuel (null: none;
+        /// <see cref="TakeoffRuns"/>).</summary>
+        public static string ShortRunway(string unitName, string code, float runwayMetres) =>
+            TakeoffRuns.Short(unitName, runwayMetres)
+                ? "SHORT RUNWAY · " + N((int)Math.Round(runwayMetres)) + " M HERE · A FULLY FUELLED " + code + " NEEDS ABOUT "
+                  + (TakeoffRuns.FullFuelMetres(unitName) / 1000f).ToString("0.0", CultureInfo.InvariantCulture)
+                  + " KM AND MAY NOT GET AIRBORNE · LESS FUEL OR A LONGER FIELD"
+                : null;
+
         /// <summary>An INBOUND strip's progress, 0..1: queued, spawning, taxiing, departing, then joining.</summary>
         public static float InboundProgress(InboundPhase p) => 0.1f + 0.2f * (int)p;
 

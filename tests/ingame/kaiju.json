@@ -1,0 +1,342 @@
+{
+  "name": "kaiju",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 300,
+  "environment": {
+    "config": {
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "map": [
+          15000,
+          -30000
+        ]
+      },
+      "altitude": 4000,
+      "speed": 220,
+      "heading": 0
+    },
+    {
+      "op": "spawn",
+      "id": "wingman",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "near": {
+          "id": "lead",
+          "offset": [
+            600,
+            0,
+            400
+          ]
+        }
+      },
+      "altitude": 4000,
+      "speed": 220,
+      "heading": 0
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "level": 400
+        }
+      ]
+    },
+    {
+      "op": "fly",
+      "id": "wingman",
+      "program": [
+        {
+          "level": 400
+        }
+      ]
+    },
+    {
+      "op": "record",
+      "ids": [
+        "lead",
+        "wingman"
+      ],
+      "hz": 2
+    },
+    {
+      "op": "observe",
+      "follow": "lead"
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Kaiju.KaijuAutomation.Step",
+      "args": {
+        "action": "summon"
+      },
+      "store": "summon"
+    },
+    {
+      "op": "camera",
+      "position": [
+        18500,
+        700,
+        -21500
+      ],
+      "heading": 315,
+      "pitch": 7,
+      "fov": 60
+    },
+    {
+      "op": "wait",
+      "seconds": 6
+    },
+    {
+      "op": "capture",
+      "name": "kaiju-rising",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Kaiju.KaijuAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s_rise"
+    },
+    {
+      "op": "wait",
+      "seconds": 8
+    },
+    {
+      "op": "capture",
+      "name": "kaiju-risen",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Kaiju.KaijuAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s_risen"
+    },
+    {
+      "op": "observe",
+      "follow": "lead"
+    },
+    {
+      "op": "wait",
+      "seconds": 15
+    },
+    {
+      "op": "capture",
+      "name": "kaiju-approach",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Kaiju.KaijuAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s_fight1"
+    },
+    {
+      "op": "wait",
+      "seconds": 15
+    },
+    {
+      "op": "capture",
+      "name": "kaiju-fight",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Kaiju.KaijuAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s_fight2"
+    },
+    {
+      "op": "camera",
+      "position": [
+        18200,
+        800,
+        -18000
+      ],
+      "heading": 318,
+      "pitch": 6,
+      "fov": 55
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Kaiju.KaijuAutomation.Step",
+      "args": {
+        "action": "force",
+        "what": "LaserCharge"
+      },
+      "store": "f_laser"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "capture",
+      "name": "kaiju-laser",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Kaiju.KaijuAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s_laser"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Kaiju.KaijuAutomation.Step",
+      "args": {
+        "action": "force",
+        "what": "Spike"
+      },
+      "store": "f_spike"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "capture",
+      "name": "kaiju-spikes",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Kaiju.KaijuAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s_spike"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Kaiju.KaijuAutomation.Step",
+      "args": {
+        "action": "hit",
+        "count": 12
+      },
+      "store": "hit12"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Kaiju.KaijuAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s_heart"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Kaiju.KaijuAutomation.Step",
+      "args": {
+        "action": "hit",
+        "index": 21
+      },
+      "store": "hitheart"
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Kaiju.KaijuAutomation.Step",
+      "args": {
+        "action": "status"
+      },
+      "store": "s_dead"
+    },
+    {
+      "op": "camera",
+      "position": [
+        18500,
+        700,
+        -21500
+      ],
+      "heading": 315,
+      "pitch": 7,
+      "fov": 60
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "capture",
+      "name": "kaiju-death",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Kaiju.KaijuAutomation.Step",
+      "args": {
+        "action": "dismiss"
+      },
+      "store": "gone"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "s_rise.spawned",
+      "min": 21
+    },
+    {
+      "check": "result_above",
+      "path": "s_heart.broken",
+      "min": 12
+    },
+    {
+      "check": "result_above",
+      "path": "s_dead.dying",
+      "min": 1
+    },
+    {
+      "check": "log_match",
+      "pattern": "Exception",
+      "max": 0
+    }
+  ]
+}

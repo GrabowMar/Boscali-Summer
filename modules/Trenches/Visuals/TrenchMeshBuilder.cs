@@ -292,11 +292,16 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
                 if (sinceStrand >= PostSpacing || i == path.Length - 1)
                 {
                     Vector3 side = Lateral(delta, Vector3.right);
+                    // Each strand is a flat cross (one blade level, one upright), so it reads
+                    // from a low pass and from overhead alike; a level ribbon alone was edge-on
+                    // to anyone standing near it.
                     for (int s = 0; s < strandHeights.Length; s++)
                     {
                         Vector3 above = Vector3.up * strandHeights[s];
                         AddBlade(vertices, uvs, triangles, strandAnchor + above, path[i] + above,
                             side * StrandThickness, u, strandV, arc * 0.34f);
+                        AddBlade(vertices, uvs, triangles, strandAnchor + above, path[i] + above,
+                            Vector3.up * StrandThickness, u, strandV, arc * 0.34f);
                     }
                     strandAnchor = path[i];
                     strandV = arc * 0.34f;

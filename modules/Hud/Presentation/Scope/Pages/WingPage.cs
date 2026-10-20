@@ -12,12 +12,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// diamonds at the formation offsets, each wingman's chevron at its REAL relative position with a thin tether to its slot (who is out of slot, by how much), wingmen past
     /// the rim clamped onto it with a range tag, engaging wingmen with a dashed ray to a target diamond on the rim, a missile guiding on a wingman with a line to it. Right: one
     /// row per wingman (state word, fuel and ammunition bars, a task line) and the order acknowledgements. Top-left: the order (FORM / ENGAGE) with a pictogram of the formation.
-    /// Feed: <see cref="WingBoardScope"/> (the Wing module's provider: the live wing on the host and solo, the snapshot mirror on a client). Live while the wing has something to
-    /// say: someone out of slot, fighting or defending (and for a few seconds after a hit, running dry or a turn for home). Events (hit, a missile on a wingman, winchester, an order acknowledged) go to the ticker once.
+    /// Feed: <see cref="WingBoardScope"/> (the Wing module's provider: the live wing on the host and solo, the snapshot mirror on a client). Shown whenever the
+    /// player has wingmen; the headline says what matters most (a hit, a defence, WINCH, ENGAGE, how many are out of slot, IN SLOT). Events (hit, a missile on a wingman, winchester, an order acknowledged) go to the ticker once.
     /// </summary>
     internal sealed class WingPage : ScopePageBase
     {
-        /// <summary>The page stays up this long after a hit, running dry or a turn for home.</summary>
+        /// <summary>A fresh hit reads DAMAGED on its row this long.</summary>
         private const float HoldSeconds = 8f;
         private const float RowX = 244f, RowW = 192f, AckY = 234f, InSlotFilledM = 40f;
         private const int Cap = 8, TrailLen = 6, LabelCap = 24, LabelChars = 28;
@@ -25,7 +25,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private WingBoardScope d;
         private bool live, primed;
         private AvUnits units;
-        private float now, lastSample = -1000f, flashUntil, flashFor = -1f, holdUntil;
+        private float now, lastSample = -1000f, flashUntil, flashFor = -1f;
         private readonly int[] seen = new int[Cap];
         private readonly WingState[] prev = new WingState[Cap];
         private readonly bool[] wasDamaged = new bool[Cap];
@@ -62,6 +62,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public override char Code => 'W';
 
+        public override string IdleWord => "NO WING";
+
+        public override string IdleHint => "NO WINGMEN FLYING WITH YOU";
+
         public override bool Fast => live;
 
         // ------------------------------------------------------------------------------------------------ poll
@@ -76,9 +80,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             primed = true;
             defenders = 0;
             for (int i = 0; i < d.Count && i < Cap; i++) if (d.Members[i].State == WingState.Defend) defenders++;
-            live = d.Engaged || WingBoardMath.NeedsAttention(d.Members, d.Count) || now < holdUntil;
-            if (live) UpdateHeadline();
-            return live;
+            // The pilot picked this page: a wing in formation is something to show (the headline says IN SLOT), not only a wing that needs attention.
+            live = true;
+            UpdateHeadline();
+            return true;
         }
 
         /// <summary>Events once: a wingman is hit, has a missile on it, runs dry, turns for home; an order is answered.</summary>
@@ -93,7 +98,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 if (same && m.Damaged && !wasDamaged[i])        // a fresh hit: worded DAMAGED for a few seconds, then an amber suffix on the row
                 {
                     env.Notice?.Invoke("wing", HudTone.Warning, who + " HIT", m.HasHull ? "HULL " + (int)Math.Round(m.Hull * 100f) + "%" : null);
-                    flashUntil = now + 1.5f; flashFor = m.Number; holdUntil = damagedUntil[i] = now + HoldSeconds;
+                    flashUntil = now + 1.5f; flashFor = m.Number; damagedUntil[i] = now + HoldSeconds;
                 }
                 wasDamaged[i] = m.Damaged;
                 if (same && prev[i] != m.State)
@@ -106,11 +111,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                             break;
                         case WingState.Winch:
                             env.Notice?.Invoke("wing", HudTone.Caution, who + " WINCHESTER", "NO AMMUNITION");
-                            flashUntil = now + 1.5f; flashFor = m.Number; holdUntil = now + HoldSeconds;
+                            flashUntil = now + 1.5f; flashFor = m.Number;
                             break;
                         case WingState.Rtb: case WingState.Refit:
                             env.Notice?.Invoke("wing", HudTone.Info, who + (m.State == WingState.Rtb ? " RTB" : " REFIT"), m.HasField ? m.Field : null);
-                            holdUntil = now + HoldSeconds;
                             break;
                     }
                 }

@@ -24,6 +24,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static Shader flightCloudCompositeShader;
         private static Shader sunShaftsShader;
         private static Shader sunDiscShader;
+        private static Shader skyGlowShader;
+        private static Shader oceanShader;
         private static bool attempted;
         private static bool prewarmed;
 
@@ -115,6 +117,20 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             return sunDiscShader;
         }
 
+        /// <summary>The additive night-sky particle glow (SkyPhenomena).</summary>
+        internal static Shader GetSkyGlowShader()
+        {
+            GetShader();
+            return skyGlowShader;
+        }
+
+        /// <summary>The wind- and storm-driven sea (OceanDressing).</summary>
+        internal static Shader GetOceanShader()
+        {
+            GetShader();
+            return oceanShader;
+        }
+
         internal static Shader GetShader()
         {
             if (shader != null) return shader;
@@ -149,6 +165,10 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                             sunShaftsShader = shaders[i];
                         if (shaders[i] != null && shaders[i].name == "Boscali/SunDisc" && shaders[i].isSupported)
                             sunDiscShader = shaders[i];
+                        if (shaders[i] != null && shaders[i].name == "Boscali/SkyGlow" && shaders[i].isSupported)
+                            skyGlowShader = shaders[i];
+                        if (shaders[i] != null && shaders[i].name == "Boscali/Ocean" && shaders[i].isSupported)
+                            oceanShader = shaders[i];
                     }
                 }
                 if (shader != null || terrainShader != null || updateShader != null ||

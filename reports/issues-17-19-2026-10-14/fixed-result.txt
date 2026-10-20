@@ -1,0 +1,1 @@
+PASS: #17 final-pose marker scale/heading, #18 live config and same-frame feed stop across board recreation, #19 independent native sets and WMC map selection. Production DLL; synthetic UI, no live flight or multiplayer.

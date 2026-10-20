@@ -61,6 +61,7 @@ Shader "Boscali/FlightCloudComposite"
                     max(LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv + float2(rimStep.x, 0.0))), LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv - float2(rimStep.x, 0.0)))),
                     max(LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv + float2(0.0, rimStep.y))), LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv - float2(0.0, rimStep.y)))));
                 bool rim = behind > depth * 1.5 + 50.0;
+                float ownDepth = depth;
                 if (rim) depth = behind;
                 // The 3x3 cloud texels around this pixel: a Gaussian over distance (which also
                 // melts the march's per-texel dither) times a depth match.
@@ -69,9 +70,13 @@ Shader "Boscali/FlightCloudComposite"
                 // Distant cloud is drawn soft: past 15-60 km the kernel widens to the whole 3x3 (about two texels of blur), which melts
                 // the far march's coarse steps that otherwise read as hard horizontal slices along the horizon.
                 float far = smoothstep(15000.0, 60000.0, min(depth, tex2Dlod(_CloudLowResDepth, float4((centre + 0.5) * _CloudLowResSize.zw, 0, 0)).r));
-                float spread = lerp(0.45, 0.15, far);
+                // 2026-10-18: near 0.45 -> 0.35, so the kernel spans the 2x2 block whose texels march the four quarters of a step (FlightCloud's stratified dither).
+                float spread = lerp(0.35, 0.15, far);
                 float4 c = 0.0;
-                float total = 0.0;
+                float total = 0.0, depthSum = 0.0;
+                // The tap nearest in depth, for a pixel no tap matches within 10 %, and the taps' depth range.
+                float4 nearest = 0.0;
+                float nearestDifference = 1e9, nearestDepth = depth, tapNear = 1e20, tapFar = 0.0;
                 [unroll]
                 for (int y = -1; y <= 1; y++)
                 {
@@ -96,10 +101,25 @@ Shader "Boscali/FlightCloudComposite"
                         float w = difference < 0.1 ? spatial / (0.02 + difference) : 0.0;
                         c += sample * w;
                         total += w;
+                        depthSum += min(texelDepth, pixelDepth) * w;
+                        if (difference < nearestDifference) { nearestDifference = difference; nearest = sample; nearestDepth = min(texelDepth, pixelDepth); }
+                        tapNear = min(tapNear, texelDepth);
+                        tapFar = max(tapFar, texelDepth);
                     }
                 }
+                // Near the horizon a grazing surface changes depth by more than 10 % from one row to the next (sea 72 km under sky at the
+                // 80 km far plane, 61 km a row lower), so the first sea row matched no tap, was discarded and drew the sea unhazed: thin bright
+                // segments along the horizon under storm decks (2026-10-19). Take the nearest tap where the pixel lies inside the taps' depth
+                // range (a surface running on through it); a silhouette in front of every tap (an aircraft, a mast) still rejects the cloud behind.
+                if (total <= 1e-5 && depth >= tapNear && depth <= tapFar) { c = nearest; total = 1.0; depthSum = nearestDepth; }
                 c /= max(1e-5, total);
-                if (rim) c *= 0.65;
+                // Only cloud behind the silhouette is thinned (2026-10-18): cloud in front of the ridge covers it whole. Thinned everywhere, every
+                // ridge hidden in cloud, or seen from inside it, showed through as a thin line.
+                if (rim)
+                {
+                    float cloudDepth = depthSum / max(1e-5, total);
+                    c *= lerp(0.65, 1.0, saturate((ownDepth - cloudDepth) / max(1.0, ownDepth * 0.1)));
+                }
                 if (c.a < 0.002) discard;
                 return c;
             }
@@ -334,7 +354,8 @@ Shader "Boscali/FlightCloudComposite"
                 // converge within a few frames. A fresh texel enters half as its own sample and half as the blend around it,
                 // at most a quarter per visit (distant cloud 3 %).
                 float entry = max(lerp(0.08 + 0.17 * freshVal.a, 0.03, farCache), motion);
-                return Resolved(lerp(carried, lerp(lerp(freshVal, smooth, 0.5), freshVal, rest), lerp(entry, 1.0, rest)), sceneDepth, cloudDepth);
+                // 2026-10-18: a moving fresh texel enters as 0.3 its own sample and 0.7 the stratified nine-sample blend (was half and half): its single sample is the grain.
+                return Resolved(lerp(carried, lerp(lerp(freshVal, smooth, 0.7), freshVal, rest), lerp(entry, 1.0, rest)), sceneDepth, cloudDepth);
             }
             ENDHLSL
         }

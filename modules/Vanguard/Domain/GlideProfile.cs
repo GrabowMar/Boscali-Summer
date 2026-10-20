@@ -20,7 +20,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
     }
 
     /// <summary>
-    /// HAWC-X "SKIP": boost to the glide ceiling, booster separation at burnout, two skips with a GLOW PHASE around each
+    /// HAWC-X "SKIP": boost to the glide ceiling, booster separation at burnout, three skips with a GLOW PHASE around each
     /// apex (and whenever it is fast and high), then a steep FINAL the pilot can shift onto a nearby designation.
     /// During the glow the sheath is lit, enemy detection skips the glider and destination changes are refused.
     /// </summary>
@@ -29,7 +29,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const float Ceiling = 24000f;
         public const float SkipAmplitude = 3000f;
         public const float SkipPeriod = 30f;
-        public const int Skips = 2;
+        public const int Skips = 3;
         public const float WeaveAmplitude = 2500f;
         public const float WeavePeriod = 23f;
         public const float BoostTime = 22f;       // motor burnout = booster separation
@@ -39,7 +39,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const float PlasmaSpeed = 2000f;
         public const float PlasmaOffSpeed = 1900f; // hysteresis: a glow already lit holds down to here (and 500 m lower)
         public const float PlasmaAltitude = 20000f;
-        public const float NudgeReach = 20000f;   // a designation this close to the current aim point retargets the final
+        public const float NudgeReach = 30000f;   // a designation this close to the current aim point retargets the final
 
         // Dive starts once the target is within ~1.2x the current altitude (a ~40 deg terminal dive).
         public static float TerminalRange(float altitude) => Mathf.Max(15000f, altitude * 1.2f);

@@ -1,9 +1,10 @@
 using System;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 
 namespace BoscaliSummer.Modules.Support.Runtime.Actions
 {
     /// <summary>
-    /// SAT CAMERA: the OPTICAL bird looks at the aim. The host reads the sky there, refuses at night or with no sky state (RADAR
+    /// SAT CAMERA: the OPTICAL bird looks at the aim. The window grows with the front's POWER and 15 % for every other own satellite that also covers the aim (<see cref="PerkPower.SatCameraRadius"/>). The host reads the sky there, refuses at night or with no sky state (RADAR
     /// stays usable), otherwise opens an OPTICAL reveal window sized by cloud and rain. What the camera shows is the world as it
     /// is; what it reveals (and what can be MARKed) is only what that window admits. Registered in <see cref="SupportCatalog"/> as
     /// SAT CAMERA (<see cref="SupportActionId.SatCamera"/>, id 32); its CALLS row and feed control drive it.
@@ -17,11 +18,11 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
             try
             {
                 if (context.SpaceTask == null || !context.SpaceTask.CanLaunch) return SupportResult.BirdNotReady;
-                int contacts = context.Host.OpenOpticalWindow(context.Owner, context.Target,
-                    context.Settings.OpticalSceneRadius.Value * context.Quality, out SupportResult refusal);
+                float radius = PerkPower.SatCameraRadius(context.Settings.OpticalSceneRadius.Value * context.Power, context.Host.BirdsCovering(context.Owner, context.Target));
+                int contacts = context.Host.OpenOpticalWindow(context.Owner, context.Target, radius, out SupportResult refusal);
                 if (contacts < 0) return refusal == SupportResult.Accepted ? SupportResult.SpawnFailed : refusal;
                 context.Host.ReportContacts(context.RequestId, contacts);
-                try { Visuals.AreaFx.Sweep(Visuals.AreaFx.At(context.Target), context.Settings.OpticalSceneRadius.Value * context.Quality, 6f, Visuals.AreaFx.OpticalTint, context.Owner); }
+                try { Visuals.AreaFx.Sweep(Visuals.AreaFx.At(context.Target), radius, 6f, Visuals.AreaFx.OpticalTint, context.Owner); }
                 catch (Exception e) { context.Logger.LogDebug("[Support] Optical sweep visual skipped: " + e.Message); }
                 return SupportResult.Accepted;
             }

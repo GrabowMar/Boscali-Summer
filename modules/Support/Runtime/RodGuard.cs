@@ -28,6 +28,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             estimateFor = null;
             Flight.Reset();
+            Said.Clear();
         }
 
         /// <summary>The resolved shell's motor facts for the launch log, so a live fixture can check the flight-time floor.</summary>
@@ -78,10 +79,29 @@ namespace BoscaliSummer.Modules.Support.Runtime
             foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
             {
                 if (hq == null || hq == owner || hq.GetPlayers(false).Count == 0) continue;
-                try { messages.RpcHQMessage(hq, text); told++; }
+                try { messages.RpcHQMessage(hq, text); Note(hq, text, true); told++; }
                 catch (System.Exception e) { Plugin.Logger?.LogWarning("[Support] Rod warning not delivered: " + e.Message); }
             }
             return told;
+        }
+
+        /// <summary>Tells one faction over the native HQ radio (vanilla clients hear and read it too). False when it has no player or there is no message manager.</summary>
+        public static bool Tell(FactionHQ hq, string text)
+        {
+            MessageManager messages = NetworkSceneSingleton<MessageManager>.i;
+            if (hq == null) return false;
+            if (messages == null || hq.GetPlayers(false).Count == 0) { Note(hq, text, false); return false; }
+            try { messages.RpcHQMessage(hq, text); Note(hq, text, true); return true; }
+            catch (System.Exception e) { Plugin.Logger?.LogWarning("[Support] HQ message not delivered: " + e.Message); return false; }
+        }
+
+        /// <summary>The last HQ radio lines this host sent ("faction|text|sent" or "|unheard" when nobody was there), newest last: what the sims check. Cleared with the scene.</summary>
+        internal static readonly System.Collections.Generic.List<string> Said = new System.Collections.Generic.List<string>(32);
+
+        private static void Note(FactionHQ hq, string text, bool sent)
+        {
+            if (Said.Count >= 32) Said.RemoveAt(0);
+            Said.Add(hq.name + "|" + text + "|" + (sent ? "sent" : "unheard"));
         }
 
         public static string InboundText(float leadSeconds) =>

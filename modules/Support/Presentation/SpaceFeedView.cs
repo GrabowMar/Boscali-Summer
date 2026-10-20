@@ -27,6 +27,25 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public string Title, Sub;
     }
 
+    /// <summary>One telemetry line of the station log: the mission clock it happened at, what happened, how serious.</summary>
+    internal struct FeedLogLine
+    {
+        public string Stamp, Text;
+        public AvState Tone;
+    }
+
+    /// <summary>The selected track as one reading, from the same entry its row and its bracket come from, so the three always agree.</summary>
+    internal struct FeedBriefView
+    {
+        public bool Has, Marked, FixedPoint, Moving;
+        public int Id;
+        public byte Percent;
+        public ProbableClass Class;
+        public string Title, Grid;
+        /// <summary>Seconds the host keeps this reveal (or MARK) alive.</summary>
+        public float Left;
+    }
+
     /// <summary>One constellation cell: the bird, its real state word and the tone of that word.</summary>
     internal struct FeedBirdView
     {
@@ -67,6 +86,15 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public string ConstellationMeta = "";
         public string Words = "";
         public AvState WordsTone = AvState.Inert;
+        /// <summary>Seconds since the look the picture shows was taken (-1 when it came from a faction reveal and no look was heard), and whether that is too old to trust.</summary>
+        public float ImageAge = -1f;
+        public bool ImageStale;
+        public FeedBriefView Brief;
+        /// <summary>The host acknowledged a TRANSMIT a moment ago: the package is on the TASKED board.</summary>
+        public bool Posted;
+        public const int MaxLog = 5;
+        /// <summary>Newest first: a line per real event (burn, look, MARK, TRANSMIT, uplink site change).</summary>
+        public readonly List<FeedLogLine> Log = new List<FeedLogLine>(MaxLog);
     }
 
     /// <summary>What the ORBIT room asks of the feed controller. Every method is a request: none spends or decides anything.</summary>

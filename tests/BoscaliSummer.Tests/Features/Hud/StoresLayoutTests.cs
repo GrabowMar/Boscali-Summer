@@ -42,13 +42,19 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.Near(StoresLayout.JamMarkX(full, true, w), full, "...and with room below (a cost row, or STACK) it rides the edge all the way");
         }
 
-        /// <summary>The jammer's row sits under the dispenser rows there are: flares only put it where the chaff row would be, no dispenser where the flares' row is (it sat 41 under the flares in game).</summary>
+        /// <summary>EXPENDABLES has a row per countermeasure in cycle order (the jammer one of them), three at most, and one bar column that leaves the longest state word room in both layouts.</summary>
         private static void JammerRow()
         {
-            TestAssert.Near(StoresLayout.JamRow(2), 66f, "Two dispensers: the jammer at +66");
-            TestAssert.Near(StoresLayout.JamRow(3), 66f, "...the block shows two at most");
-            TestAssert.Near(StoresLayout.JamRow(1), 46f, "Flares only: the jammer takes the second row, 20 under the first");
-            TestAssert.Near(StoresLayout.JamRow(0), 25f, "No dispenser: the jammer is the first row");
+            TestAssert.That(StoresLayout.RowY(0) == 25f && StoresLayout.RowY(1) == 46f && StoresLayout.RowY(2) == 66f, "Rows at 25, 46 and 66 under the block's top");
+            TestAssert.Eq(StoresLayout.Rows, 3, "Three rows: flares, chaff and the jammer each get one");
+            foreach (float w in new[] { ScopeLayout.SatW, ScopeLayout.StackHalfW })
+            {
+                float barRight = StoresLayout.BarX + StoresLayout.BarW(w), dispense = (float)System.Math.Ceiling(8 * 0.65f * StoresLayout.WordSize);
+                TestAssert.That(StoresLayout.BarW(w) >= StoresLayout.BarMinW, "The bar keeps a readable width in a block " + w + " wide");
+                TestAssert.That(w - dispense >= barRight + StoresLayout.StateClear - 0.5f, "DISPENSE still fits after the bar in a block " + w + " wide");
+            }
+            TestAssert.That(StoresLayout.CaretX + StoresLayout.CaretSize < StoresLayout.CountX + 2f, "The caret stands left of the count");
+            TestAssert.That(StoresLayout.CountX + StoresLayout.JamIcon < StoresLayout.JamWordX, "The jammer's picture stands where a count does, JAM after it");
         }
 
         /// <summary>WIDE's selected marker is bracketed no wider than its marker plus a few units, whatever the number of stations (the bracket is 3 short of the pitch).</summary>

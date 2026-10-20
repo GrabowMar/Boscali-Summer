@@ -38,10 +38,10 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
             {
                 if (context.SpaceTask == null || !context.SpaceTask.CanLaunch) return SupportResult.BirdNotReady;
                 int contacts = context.Host.OpenSpaceWindow(context.Owner, context.Target,
-                    context.Settings.SarSceneRadius.Value * context.Quality, BirdKind.Radar, 0f, SpaceRevealWindow.AnySpeed);
+                    context.Settings.SarSceneRadius.Value * context.Power, BirdKind.Radar, 0f, SpaceRevealWindow.AnySpeed);
                 if (contacts < 0) return SupportResult.SpawnFailed;
                 context.Host.ReportContacts(context.RequestId, contacts);
-                try { Visuals.AreaFx.Sweep(Visuals.AreaFx.At(context.Target), context.Settings.SarSceneRadius.Value * context.Quality, 6f, Visuals.AreaFx.ReconTint, context.Owner); }
+                try { Visuals.AreaFx.Sweep(Visuals.AreaFx.At(context.Target), context.Settings.SarSceneRadius.Value * context.Power, 6f, Visuals.AreaFx.ReconTint, context.Owner); }
                 catch (Exception e) { context.Logger.LogDebug("[Support] Recon sweep visual skipped: " + e.Message); }
                 return SupportResult.Accepted;
             }

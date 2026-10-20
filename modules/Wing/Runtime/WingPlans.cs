@@ -178,6 +178,10 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 facts[l] = Facts(w, l, out int alive);
                 int s = Runner.Current(l);
                 if (s < 0 || Runner.State(l, s) != StepState.Running || facts[l].TaskDone) continue;
+                // A step that ends at bingo, Winchester or its targets down is ending, though its task failed for that very reason
+                // (bingo home: NoWing). Blocked here first, CAP until BINGO then RTB stalled whenever the planner's NoWing beat this
+                // tick (in game, about every other run).
+                if (PlanRunner.Ended(Plan.Steps[l][s], facts[l], -1f)) continue;
                 // Review P2: a running step whose task failed (nobody left to fly it, bingo home) waits for SKIP with the reason; so
                 // does one whose aircraft are all gone.
                 if (TaskKind(Plan.Steps[l][s].Kind) && failedAt[l] >= sentAt[l] && sentAt[l] >= 0)
@@ -301,7 +305,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 if (m.Released || !m.Alive || (object)m.Aircraft == null || !laneIds[l].Contains(m.Aircraft.persistentID.Id)) continue;
                 alive++;
                 if (m.Bingo.Bingo) f.Bingo = true;
-                if (WingService.AmmoFraction(m.Aircraft) <= 0f) empty++;
+                if (w.AmmoFraction(m) <= 0f) empty++;
                 if (m.Recovery == null || m.Recovery.Phase < RecoveryPhase.Ground) flying++;
                 if (m.Recovery == null && !m.HasPendingRecovery && !m.OnGround) back++;
             }
@@ -327,15 +331,24 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         /// <summary>How near a step's point counts as on its area (at least; an area step's own radius when larger).</summary>
         public static float StationMetres = 3000f;
 
+        /// <summary>An orbiting lead flies its orbit radius from the point: within this many of them is on station too.</summary>
+        public static float OrbitMargin = 1.25f;
+
         /// <summary>A lane aircraft is within the step's area (review 2 [6]: a timed ORBIT, CAP or SWEEP counts from here).</summary>
         private bool OnStation(WingService w, int l, PlanStep step)
         {
             if (step.Points == null || step.Points.Length == 0) return false;
             Waypoint p = step.Points[0];
-            float r = System.Math.Max(StationMetres, step.Radius);
+            float area = step.Kind == PlanKind.Cap ? (step.Radius > 0f ? step.Radius : AreaGuard.CapRadius)
+                : step.Kind == PlanKind.Sweep ? (step.Radius > 0f ? step.Radius : AreaGuard.SweepRadius) : step.Radius;
             foreach (WingMember m in w.Members)
             {
                 if (m.Released || !m.Alive || (object)m.Aircraft == null || !laneIds[l].Contains(m.Aircraft.persistentID.Id)) continue;
+                // The task lead orbits at its task speed (CruiseFraction of cruise; an FS-20 flew a 6.5 km ring): inside 3 km a jet
+                // never was, so a timed ORBIT, CAP or SWEEP never started its clock. Not the member's own speed: inbound at 244 m/s
+                // (in game) that counted 21 km out as on station and the timed step ran out before the wing got there.
+                float r = System.Math.Max(System.Math.Max(StationMetres, area),
+                    OrbitMargin * TaskLead.OrbitRadius(WingPlanner.CruiseFraction * m.Profile.CruiseSpeed));
                 float dx = m.Last.Pos.X - p.X, dz = m.Last.Pos.Z - p.Z;
                 if (dx * dx + dz * dz <= r * r) return true;
             }

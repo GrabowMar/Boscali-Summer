@@ -4,5 +4,6 @@
     <Compile Include="../../Core/Math/Deterministic.cs" Link="Deterministic.cs" />
     <Compile Include="../../modules/FireAndDestruction/Domain/FireFrontCell.cs" Link="FireFrontCell.cs" />
     <Compile Include="../../modules/FireAndDestruction/Runtime/ForestIndex.cs" Link="ForestIndex.cs" />
+    <Compile Include="../../modules/FireAndDestruction/Runtime/ForestSpreadPolicy.cs" Link="ForestSpreadPolicy.cs" />
   </ItemGroup>
 </Project>

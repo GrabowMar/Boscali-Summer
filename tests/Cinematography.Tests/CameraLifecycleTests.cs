@@ -87,5 +87,38 @@ static class CameraLifecycleTests
         camera.SwitchState(state); state.UpdateState(camera);
         check(fault == "CAMERA PATH BLOCKED", "obstruction not rejected");
         state.RequestStop(); camera.SwitchState(camera.freeState);
+
+        // The native camera uses velocity for real-time movement/audio, independently of the shot playhead.
+        camera = new CameraStateManager();
+        plan.options = new ShotOptions { playbackRate = .5f };
+        clock = 0; Time.unscaledTime = 1000;
+        state = new CinematicCameraState(camera, plan, () => clock, _ => { }, () => true, _ => true,
+            _ => { }, () => { });
+        camera.SwitchState(state); state.UpdateState(camera);
+        check(camera.cameraVelocity.sqrMagnitude == 0, "first camera placement has no teleport velocity");
+        clock = 1; Time.unscaledTime = 1001; state.UpdateState(camera);
+        check(Math.Abs(camera.cameraVelocity.x - 25) < .001, "half-rate path reports metres per real second");
+        Datum.offset = new Vector3(1000, 0, 0);
+        clock = 2; Time.unscaledTime = 1002; state.UpdateState(camera);
+        check(Math.Abs(camera.cameraVelocity.x - 25) < .001 && camera.transform.position.x == -850,
+            "origin shifts do not create camera velocity spikes");
+        state.ReturnToFree(camera); Datum.offset = Vector3.zero;
+
+        var actorPosition = new System.Numerics.Vector3(100, 50, 0);
+        var follow = ShotRigs.Follow("velocity-follow", "m", "s", "actor", new System.Numerics.Vector3(0, 10, -20), 4);
+        clock = 10; Time.unscaledTime = 2000;
+        state = new CinematicCameraState(camera, follow, () => clock, _ => { }, () => true, _ => true,
+            _ => { }, () => { }, () => new ShotPose(actorPosition, System.Numerics.Quaternion.Identity, 45));
+        camera.SwitchState(state); state.UpdateState(camera); state.ManualPaused = true;
+        actorPosition.X = 130; clock = 11; Time.unscaledTime = 2001; state.UpdateState(camera);
+        check(Math.Abs(camera.cameraVelocity.x - 30) < .001, "held follow camera reports moving actor velocity");
+        check(state.Seek(3), "follow camera accepts explicit scrub");
+        actorPosition.X = 160; Time.unscaledTime = 2002; state.UpdateState(camera);
+        check(camera.cameraVelocity.sqrMagnitude == 0, "explicit seek never reports teleport velocity");
+        actorPosition.X = 170; state.UpdateState(camera);
+        check(camera.cameraVelocity.sqrMagnitude == 0, "two evaluations in one real frame have zero velocity");
+        actorPosition.X = 190; Time.unscaledTime = 2003; state.UpdateState(camera);
+        check(Math.Abs(camera.cameraVelocity.x - 20) < .001, "velocity resumes from the last evaluated pose after seeking");
+        state.ReturnToFree(camera);
     }
 }

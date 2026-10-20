@@ -20,7 +20,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public void Receive(T data)
         {
             if (data == null || data.Protocol != SupportNet.ProtocolVersion) return;
-            mirror.Apply(data, SupportNet.ProtocolVersion, SupportManager.MissionNow());
+            mirror.Apply(data, SupportNet.ProtocolVersion, SupportManager.MissionNow(), SupportManager.LocalFactionWire()); // the local faction is read at this moment, never remembered across a switch
         }
 
         public void Want(bool on)

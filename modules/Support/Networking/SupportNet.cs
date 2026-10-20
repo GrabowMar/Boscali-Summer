@@ -122,8 +122,17 @@ namespace BoscaliSummer.Modules.Support.Networking
         /// SpaceReply. OperationFund, plan and cancel are refused by the host (the programmes replace the OPERATIONS bars).
         /// Protocol 39 (GEO) makes every satellite a station-keeping GeoBird: one SpaceCommand kind (RelocateBird: a bird and a packed map point; the host judges fuel, burn state and distance and answers with a front verdict byte),
         /// and the OpsStateMessage carries each own and enemy bird's from / to point, burn start and fuel (11 bytes a bird). RECON PASS, SAT CAMERA and ORBITAL ROD are refused outside their bird's footprint.
+        /// Protocol 40 binds every faction state to its intended faction and host scene: the SPACE, CYBER, SOF, OPS and FRONTS messages carry a stable wire faction identity (FNV-1a of the faction name, never a Unity
+        /// instance id) and the host's scene epoch right after the protocol byte (or flag byte), and a client mirror refuses a message of another faction or of an earlier scene before it touches rows, clocks or
+        /// sequence floors. The SOF team row also names the operator commanding the team (empty = OVERLORD's pool) and whether that is the viewer, and the OpsStateMessage carries the faction's own uplink sites
+        /// (slot, ground point, standing / destroyed / rebuilding). The front log gains a FAILED code for a finished programme whose effect was refused.
+        /// Protocol 41 adds four perks and POWER: action ids 44..47 (OVERWATCH, STARFALL, SIPHON, DIRECT ACTION), result bytes 137..140 (no movers, nothing to siphon, no ready team, no high-value target) and the front log codes
+        /// SIPHON and SIPHONED (11, 12). No message layout changed; the perk power is computed from the superiority the front snapshot already carries.
+        /// Protocol 42 makes the rooms two-sided: two SpaceCommand kinds (CyberPurge, SofSweep; no payload, the host derives the faction and every target), CYBER outcomes 20..22 and IntrusionEnd PURGED,
+        /// the CyberStateMessage carries the enemy holds on the faction's own network (kind and point) and its PURGE clock, and a held node row says the victim is purging it; SOF outcomes 23..25,
+        /// the SofStateMessage carries its SWEEP clock, each enemy row says whether it was detected near the faction's own sites and whether a QRF hunts it, and an own team row says it is hunted.
         /// </summary>
-        internal const byte ProtocolVersion = 39;
+        internal const byte ProtocolVersion = 42;
 
         private const float QueryInterval = 0.4f;
         private const int MaximumQueries = 64;

@@ -22,6 +22,21 @@ namespace BoscaliSummer.Modules.Cinematography.Domain
             new ShotPlan { id=id,mission=mission,scene=scene,anchorId=actor,duration=duration,
                 options=new ShotOptions { lookAtTarget=true }, keys=new[] { Key(offset,Quaternion.Identity,0) } };
 
+        internal static ShotPlan Track(string id,string mission,string scene,string actor,ShotPose vantage,float duration) =>
+            new ShotPlan { id=id,mission=mission,scene=scene,anchorId=actor,duration=duration,
+                options=new ShotOptions { lookAtTarget=true,worldSpacePath=true },
+                keys=new[] { new ShotKey { x=vantage.Position.X,y=vantage.Position.Y,z=vantage.Position.Z,
+                    qX=vantage.Rotation.X,qY=vantage.Rotation.Y,qZ=vantage.Rotation.Z,qW=vantage.Rotation.W,fov=vantage.Fov } } };
+
+        internal static ShotPlan Flyby(string id,string mission,string scene,string actor,ShotPose subject,Vector3 offset,float duration)
+        {
+            // Place once in the actor's heading frame, then pan from that fixed global vantage.
+            var placement=Follow(id,mission,scene,actor,offset,duration);
+            placement.options.headingOnlyAnchor=true;
+            ShotPose vantage=placement.SamplePresentation(0,subject);
+            return Track(id,mission,scene,actor,new ShotPose(vantage.Position,vantage.Rotation,35),duration);
+        }
+
         internal static ShotPlan Orbit(string id,string mission,string scene,Vector3 center,float radius,float height,float duration,float from,float to)
         {
             var shot = new ShotPlan { id=id,mission=mission,scene=scene,duration=duration,spline=true,

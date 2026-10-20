@@ -65,7 +65,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
         ReconTeam = 40,
         SabotageStrike = 41,
         RadarBlind = 42,
-        SamNetDown = 43
+        SamNetDown = 43,
+        /// <summary>Protocol 41 perks (CALL rows). Appended after the highest id (43); never reuse retired ids.</summary>
+        Overwatch = 44,
+        Starfall = 45,
+        Siphon = 46,
+        DirectAction = 47
     }
 
     internal enum SupportResult : byte
@@ -211,7 +216,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>OPS FRONTS S0: SABOTAGE STRIKE found no enemy anchor near the aim.</summary>
         NoAnchor = 135,
         /// <summary>OPS FRONTS S0: the front readiness is below the perk rung.</summary>
-        NeedsReadiness = 136
+        NeedsReadiness = 136,
+        /// <summary>OVERWATCH found no moving enemy ground unit near the aim.</summary>
+        NoMovers = 137,
+        /// <summary>SIPHON: the strongest enemy's front budgets hold less than the minimum worth taking.</summary>
+        NothingToSiphon = 138,
+        /// <summary>DIRECT ACTION: no ready team the pilot may order.</summary>
+        NoReadyTeam = 139,
+        /// <summary>DIRECT ACTION: no revealed SAM, radar or anchor near the aim.</summary>
+        NoHighValue = 140
     }
 
     /// <summary>

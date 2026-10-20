@@ -3,6 +3,7 @@ using BepInEx.Configuration;
 using BepInEx.Logging;
 using BoscaliSummer.Modules.Support.Configuration;
 using NuclearOption.Networking;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Space;
 
 namespace BoscaliSummer.Modules.Support.Runtime
@@ -48,19 +49,38 @@ namespace BoscaliSummer.Modules.Support.Runtime
         void TrackCruiseStrike(int requestId, ulong requesterId, FactionHQ owner, GlobalPosition target, Missile first);
 
         /// <summary>Appends a later salvo missile to its strike record.</summary>
-        void AddCruiseMissile(int requestId, Missile missile);
+        void AddCruiseMissile(ulong requesterId, int requestId, Missile missile);
 
         /// <summary>
         /// Starts a CYBER package effect (RADAR BLIND = JAM RADAR, SAM NET DOWN) at the point for the faction, against every other faction.
-        /// <paramref name="quality"/> scales its radius and duration. False when the faction has no CYBER desk or its effect book is full.
+        /// <paramref name="power"/> scales its radius and duration and deepens a jam; <paramref name="durationBonus"/> (1 = none) is the room bonus on the duration alone.
+        /// False when the faction has no CYBER desk or its effect book is full.
         /// </summary>
-        bool StartCyberPerk(FactionHQ owner, SupportActionId package, GlobalPosition target, float quality);
+        bool StartCyberPerk(FactionHQ owner, SupportActionId package, GlobalPosition target, float power, float durationBonus = 1f);
 
         /// <summary>RECON TEAM: a reveal of enemy ground units around the point. NoCamp unless the faction has a live camp.</summary>
-        SupportResult StartSofRecon(FactionHQ owner, GlobalPosition target, float quality);
+        SupportResult StartSofRecon(FactionHQ owner, GlobalPosition target, float power);
 
-        /// <summary>SABOTAGE STRIKE: the nearest enemy anchor within 1 km of the point goes down. NoCamp without a live camp, NoAnchor with no target.</summary>
-        SupportResult StartSofSabotage(FactionHQ owner, GlobalPosition target);
+        /// <summary>
+        /// SABOTAGE STRIKE: the nearest enemy anchor within 1 km of the point is attacked; the team's odds (<paramref name="power"/>, live camps) decide whether it goes down. NoCamp without a live camp,
+        /// NoAnchor with no target. <paramref name="succeeded"/> says how the roll went.
+        /// </summary>
+        SupportResult StartSofSabotage(FactionHQ owner, GlobalPosition target, float power, out bool succeeded);
+
+        /// <summary>The faction's own counts on every front as the host's 5 s world read left them (empty when unknown or on a client).</summary>
+        FrontSides Facts(FactionHQ owner);
+
+        /// <summary>How many of the faction's own satellites are up and cover the point (0 .. 3).</summary>
+        int BirdsCovering(FactionHQ owner, GlobalPosition at);
+
+        /// <summary>OVERWATCH: follows the moving enemy ground units nearest the point on the faction's map. NoMovers when none moves within the radius. <paramref name="followed"/> is how many are kept.</summary>
+        SupportResult StartOverwatch(FactionHQ owner, GlobalPosition at, float radius, int units, float seconds, out int followed);
+
+        /// <summary>SIPHON: moves funds from the strongest enemy's front budgets into the faction's CYBER budget. NothingToSiphon below the minimum. <paramref name="taken"/> is the amount moved.</summary>
+        SupportResult StartSiphon(FactionHQ owner, float power, out int taken);
+
+        /// <summary>DIRECT ACTION: a ready team (the pilot's own, or OVERLORD's) raids the revealed SAM, radar or anchor nearest the point. NoReadyTeam / NoHighValue when it cannot.</summary>
+        SupportResult StartDirectAction(Player pilot, GlobalPosition at, float power);
     }
 
     internal readonly struct SupportContext
@@ -73,16 +93,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public readonly SpaceActionTransaction SpaceTask;
         /// <summary>Set only for a claimed TASKED call: the action must report its physical launch to this job.</summary>
         public readonly TaskedLaunchJob Tasked;
-        /// <summary>The perk's front quality (<see cref="IFrontReadiness.Quality"/>): multiplies a radius or duration.</summary>
-        public readonly float Quality;
+        /// <summary>The perk's front POWER (<see cref="IFrontReadiness.Power"/>, 0.6 .. 1.5): scales radius, duration, strikes, damage and odds.</summary>
+        public readonly float Power;
         /// <summary>The aim was snapped to a fresh own-faction MARK: the strike uses the tight optical/SAR disk, not the standard CEP.</summary>
         public readonly bool MarkSnapped, MarkSar;
 
         public SupportContext(Player player, GlobalPosition target, int requestId, ISupportHost host,
-            SpaceActionTransaction spaceTask = null, TaskedLaunchJob tasked = null, float quality = 1f, bool markSnapped = false, bool markSar = false)
+            SpaceActionTransaction spaceTask = null, TaskedLaunchJob tasked = null, float power = 1f, bool markSnapped = false, bool markSar = false)
         {
             MarkSnapped = markSnapped; MarkSar = markSar;
-            Quality = float.IsNaN(quality) || float.IsInfinity(quality) || quality <= 0f ? 1f : quality;
+            Power = float.IsNaN(power) || float.IsInfinity(power) || power <= 0f ? 1f : power;
             Player = player;
             Owner = player == null ? null : player.HQ;
             Target = target;

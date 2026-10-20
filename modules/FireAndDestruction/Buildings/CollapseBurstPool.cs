@@ -38,6 +38,7 @@ namespace BoscaliSummer.Fire
         private void Emit(GlobalPosition position, Vector3 normal, Vector2 footprint, bool collapse)
         {
             if (GameManager.IsHeadless || !EnsureAssets()) return;
+            if (collapse) ParticleFx.Spawn("fx-collapse-dust", position.ToLocalPosition(), Quaternion.identity, Mathf.Clamp(footprint.magnitude / 40f, 0.5f, 3f));
             if (!depthLease) depthLease = DestructionAssets.AcquireDepth();
             Burst burst = null;
             foreach (Burst candidate in bursts) if (!candidate.Root.activeSelf) { burst = candidate; break; }

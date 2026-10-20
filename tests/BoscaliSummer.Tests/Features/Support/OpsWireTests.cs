@@ -10,6 +10,9 @@ namespace BoscaliSummer.Tests.Features.Support
     internal static class OpsWireTests
     {
         private const byte P = 36;
+        /// <summary>The local faction on the wire in these tests and the host scene epoch the fixture state was built in.</summary>
+        private const uint Us = 0xB05CA11Eu;
+        private const ushort E = 3;
 
         private sealed class BufW : ISpaceWriter
         {
@@ -40,6 +43,7 @@ namespace BoscaliSummer.Tests.Features.Support
             Commands();
             State();
             Mirror();
+            Identity();
             Subscriptions();
             Notices();
             Words();
@@ -76,8 +80,10 @@ namespace BoscaliSummer.Tests.Features.Support
 
         private static OpsStateData Full()
         {
-            var s = new OpsStateData { Protocol = P, Active = true, CyberOps = true, SofOps = true, Seq = 9, Now = 500f, BirdsDown = 0b101 };
+            var s = new OpsStateData { Protocol = P, Faction = Us, Epoch = E, Active = true, CyberOps = true, SofOps = true, Seq = 9, Now = 500f, BirdsDown = 0b101 };
             s.EnemyBirdsDown = 0b010; s.BirdPercent[0] = 40; s.BirdPercent[2] = 77;
+            s.Sites.Add(new OpsSiteRow { Slot = 0, State = SiteState.Up, X = 1500.5f, Z = -2500f });
+            s.Sites.Add(new OpsSiteRow { Slot = 1, State = SiteState.Rebuilding, X = -7000f, Z = 3200.2f });
             s.Geo[1] = new GeoBird(0.30f, 0.60f, 0.70f, 0.40f, 480f, 62f); s.Geo[4] = new GeoBird(0.80f, 0.20f, 55f);
             s.Rows.Add(new OpsRow { Domain = OpDomain.Cyber, Kind = OpKind.Asat, State = OpState.Execute, HasTarget = true, Percent = 100, WorkPercent = 31, Goal = 940, TargetId = 1, MyCr = 275, X = 1200.5f, Z = -800f, EndsAt = 548f });
             s.Rows.Add(new OpsRow { Domain = OpDomain.Sof, Kind = OpKind.Fob, State = OpState.Funding, Paused = true, HasTarget = true, Percent = 62, WorkPercent = 12, Goal = 625, TargetId = 3, MyCr = 100, X = -3000f, Z = 4000.2f, EndsAt = 0f });
@@ -117,9 +123,23 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.That(r.Log[2].Seq == 130 && r.Log[2].Domain == WatchDomain.Ops && r.Log[2].Code == WatchCode.OpFund, "a sequence over 127 survives the varint");
             TestAssert.Eq(WatchWords.Line(r.Log[1]), "OVERLORD · SABOTAGE EW TRUCK — B-1, ODDS 65 %", "the console words come from the mirrored row alone");
             TestAssert.Eq(r.Flights.Count, 1, "flights"); TestAssert.That(r.Flights[0].Id == 3 && r.Flights[0].Seconds == 60 && Math.Abs(r.Flights[0].EndsAt - 560f) < 0.2f, "flight");
+            TestAssert.That(r.Faction == Us && r.Epoch == E, "the faction identity and the scene epoch survive the wire");
+            TestAssert.Eq(r.Sites.Count, 2, "uplink sites");
+            TestAssert.That(r.Sites[0].Slot == 0 && r.Sites[0].State == SiteState.Up && Math.Abs(r.Sites[0].X - 1500.5f) < 0.11f && Math.Abs(r.Sites[0].Z + 2500f) < 0.11f, "site 0");
+            TestAssert.That(r.Sites[1].Slot == 1 && r.Sites[1].State == SiteState.Rebuilding && Math.Abs(r.Sites[1].X + 7000f) < 0.11f && Math.Abs(r.Sites[1].Z - 3200.2f) < 0.11f, "site 1 is being rebuilt");
+            OpsStateData siteDown = Full();
+            siteDown.Sites[1] = new OpsSiteRow { Slot = 1, State = SiteState.Down, X = -7000f, Z = 3200.2f };
+            TestAssert.That(!Full().SameAs(siteDown) && Full().SameAs(Full()), "a site state change is a change");
+            byte[] badSite = Sta(Full());
+            badSite[badSite.Length - 28] = 0x06; // the first site's state bits (value 3 = no such state): its 7 bytes sit before the second site (7), the log count (1) and the three log rows (13)
+            TestAssert.Eq(OpsWire.ReadState(new BufR(badSite), P).Protocol, (byte)0, "a site state above REBUILDING is refused");
             TestAssert.That(r.TryRow(OpDomain.Sof, out OpsRow sof) && sof.Kind == OpKind.Fob && !new OpsStateData().TryRow(OpDomain.Cyber, out _), "TryRow finds a domain");
 
-            var idle = new OpsStateData { Protocol = P, Active = false, Seq = 2, Now = 10f };
+            OpsStateData noFaction = Full(); noFaction.Faction = 0;
+            OpsStateData noEpoch = Full(); noEpoch.Epoch = 0;
+            TestAssert.That(OpsWire.ReadState(new BufR(Sta(noFaction)), P).Protocol == 0 && OpsWire.ReadState(new BufR(Sta(noEpoch)), P).Protocol == 0, "a state naming no faction or no scene is inert");
+
+            var idle = new OpsStateData { Protocol = P, Faction = Us, Epoch = E, Active = false, Seq = 2, Now = 10f };
             OpsStateData ri = OpsWire.ReadState(new BufR(Sta(idle)), P);
             TestAssert.That(ri.Protocol == P && !ri.Active && ri.Rows.Count == 0 && ri.Log.Count == 0, "an inactive state is a header and an empty log");
             idle.Log.Add(new WatchLogRow { Seq = 7, Domain = WatchDomain.Sof, Code = WatchCode.SofExfil, A = 1, B = 44 });
@@ -132,8 +152,8 @@ namespace BoscaliSummer.Tests.Features.Support
             for (int n = 0; n < bytes.Length; n++)
                 TestAssert.That(OpsWire.ReadState(new BufR(bytes, n), P).Protocol == 0 || n < 1, "truncation at " + n + " is inert");
             // Out-of-range bytes: a bird mask above 7, a kind 3 ping 0, a row count of 3.
-            byte[] bad = (byte[])bytes.Clone(); // header: P, flags, seq (1 byte), now (4) => the bird mask is byte 7
-            bad[7] = 0x40;
+            byte[] bad = (byte[])bytes.Clone(); // header: P, flags, identity (6), seq (1 byte), now (4) => the bird mask is byte 13
+            bad[7 + FactionIdentity.Bytes] = 0x40;
             TestAssert.Eq(OpsWire.ReadState(new BufR(bad), P).Protocol, (byte)0, "a bird mask above 63 (own 3 bits + enemy 3 bits) is refused");
             // A log row with a domain or a code that does not exist is refused whole, never guessed at.
             byte[] logBytes = Sta(s);
@@ -156,21 +176,64 @@ namespace BoscaliSummer.Tests.Features.Support
             var mirror = new OpsMirror();
             TestAssert.That(mirror.BirdUp(BirdKind.Optical), "an unknown mirror says every bird is up");
             OpsStateData s = Full();
-            TestAssert.That(mirror.Apply(s, P, 520f), "a first state applies");
+            TestAssert.That(mirror.Apply(s, P, 520f, Us), "a first state applies");
+            TestAssert.That(mirror.Sites.Count == 2 && mirror.Sites[1].State == SiteState.Rebuilding && new OpsMirror().Sites.Count == 0, "the client reads its own uplink sites from the mirror");
             TestAssert.Eq(mirror.State.Now, 520f, "re-based onto the client clock");
             TestAssert.That(Math.Abs(mirror.State.Rows[0].EndsAt - 568f) < 0.01f && Math.Abs(mirror.State.Pings[0].Until - 580f) < 0.01f && Math.Abs(mirror.State.Flights[0].EndsAt - 580f) < 0.01f, "deadlines shift by the clock offset");
             TestAssert.That(!mirror.BirdUp(BirdKind.Optical) && mirror.BirdUp(BirdKind.Radar) && !mirror.BirdUp(BirdKind.Kinetic), "dead birds read from the mask");
             TestAssert.That(mirror.State.Log.Count == 3 && mirror.State.Log[2].Seq == 130, "the log rides the mirror");
-            TestAssert.That(!mirror.Apply(s, P, 521f), "the same sequence is dropped");
+            TestAssert.That(!mirror.Apply(s, P, 521f, Us), "the same sequence is dropped");
             s.Seq = 8;
-            TestAssert.That(!mirror.Apply(s, P, 521f), "an older sequence is dropped");
+            TestAssert.That(!mirror.Apply(s, P, 521f, Us), "an older sequence is dropped");
             s.Seq = 10; s.Protocol = 34;
-            TestAssert.That(!mirror.Apply(s, P, 521f), "a foreign protocol is dropped");
+            TestAssert.That(!mirror.Apply(s, P, 521f, Us), "a foreign protocol is dropped");
             s.Protocol = P;
             while (s.Rows.Count < 3) s.Rows.Add(default);
-            TestAssert.That(!mirror.Apply(s, P, 521f), "an oversized list is dropped");
+            TestAssert.That(!mirror.Apply(s, P, 521f, Us), "an oversized list is dropped");
             mirror.ResetLink();
             TestAssert.That(!mirror.Known && mirror.Floor == 0, "a new link starts over");
+        }
+
+        /// <summary>OPS-04: a state is bound to the faction and the host scene it was built for, whatever sequence it carries.</summary>
+        private static void Identity()
+        {
+            TestAssert.That(FactionIdentity.Of("BOSCALI") == FactionIdentity.Of("BOSCALI") && FactionIdentity.Of("BOSCALI") != FactionIdentity.Of("PRIMEVA"), "the identity comes from the name alone, the same on every peer");
+            TestAssert.That(FactionIdentity.Of("BOSCALI") != 0u && FactionIdentity.Of("") != 0u && FactionIdentity.Of(null) != 0u, "and is never 0");
+
+            var mirror = new OpsMirror();
+            TestAssert.That(!mirror.Apply(Full(), P, 520f, 0u), "a client that has not resolved its faction accepts nothing");
+            TestAssert.That(!mirror.Apply(Full(), P, 520f, Us + 1), "a state built for another faction never applies");
+            TestAssert.That(!mirror.Known && mirror.Floor == 0 && mirror.Epoch == 0, "and leaves no floor or epoch behind");
+            TestAssert.That(mirror.Apply(Full(), P, 520f, Us) && mirror.Epoch == E, "the faction's own state applies and adopts its scene");
+
+            // The player switches faction: the old view is reset, and an old-faction snapshot sent before the switch (newer than anything applied) arrives after it.
+            mirror.Reset();
+            OpsStateData old = Full(); old.Seq = 50;
+            TestAssert.That(!mirror.Apply(old, P, 521f, Us + 1), "an old-faction snapshot with a higher sequence is refused after the switch");
+            TestAssert.That(!mirror.Known && mirror.State.Rows.Count == 0 && mirror.State.Sites.Count == 0, "no old row, bar or site appears");
+            OpsStateData fresh = Full(); fresh.Faction = Us + 1; fresh.Seq = 51;
+            TestAssert.That(mirror.Apply(fresh, P, 522f, Us + 1) && mirror.Known && mirror.Seq == 51, "the new faction's state applies");
+
+            // Host scenes: an earlier one never comes back, a later one may restart the sequence.
+            var m = new OpsMirror();
+            OpsStateData scene = Full(); scene.Seq = 40;
+            TestAssert.That(m.Apply(scene, P, 520f, Us), "scene 3 applies");
+            scene = Full(); scene.Epoch = E - 1; scene.Seq = 99;
+            TestAssert.That(!m.Apply(scene, P, 521f, Us), "an earlier scene with a higher sequence is refused");
+            scene = Full(); scene.Epoch = E + 1; scene.Seq = 1;
+            TestAssert.That(m.Apply(scene, P, 522f, Us) && m.Epoch == E + 1 && m.Floor == 1, "a later scene applies and restarts the sequence");
+            scene = Full(); scene.Epoch = E; scene.Seq = 100;
+            TestAssert.That(!m.Apply(scene, P, 523f, Us), "and the scene before it is over");
+            m.ResetLink();
+            TestAssert.That(m.Epoch == 0 && m.Apply(Full(), P, 524f, Us), "a new link adopts whatever scene the host is in");
+
+            var wrap = new OpsMirror();
+            OpsStateData top = Full(); top.Epoch = 65535; top.Seq = 5;
+            TestAssert.That(wrap.Apply(top, P, 520f, Us), "epoch 65535 applies");
+            OpsStateData around = Full(); around.Epoch = 1; around.Seq = 1;
+            TestAssert.That(wrap.Apply(around, P, 521f, Us), "epoch 1 follows it (the serial wraps)");
+            around = Full(); around.Epoch = 65534; around.Seq = 9;
+            TestAssert.That(!wrap.Apply(around, P, 522f, Us), "and 65534 is long past");
         }
 
         private static void Subscriptions()
@@ -179,6 +242,11 @@ namespace BoscaliSummer.Tests.Features.Support
             OpsStateData s = Full();
             OpsStateData first = subs.Next(7, 1, s, 500f, 10f);
             TestAssert.That(first != null && first.Seq == 1, "a new member gets a full state");
+            TestAssert.That(first.Faction == 1u && first.Epoch == subs.Epoch, "stamped with the member's faction and the host's scene epoch");
+            subs.Epoch = (ushort)(subs.Epoch + 1);
+            OpsStateData scene = subs.Next(7, 1, Full(), 500.5f, 10.1f);
+            TestAssert.That(scene != null && scene.Epoch == subs.Epoch && scene.Seq == 2, "a new scene epoch forces a fresh full state at once");
+            TestAssert.That(subs.Next(7, 0, Full(), 501f, 14f) == null, "a faction identity of 0 is never sent");
             TestAssert.That(subs.Next(7, 1, Full(), 501f, 10.5f) == null, "nothing changed: nothing sent");
             OpsStateData changed = Full(); changed.Rows[0] = new OpsRow { Domain = OpDomain.Cyber, Kind = OpKind.Asat, State = OpState.Done, Percent = 100, Goal = 940 };
             TestAssert.That(subs.Next(7, 1, changed, 502f, 11f) == null, "a change inside the two second gap waits");

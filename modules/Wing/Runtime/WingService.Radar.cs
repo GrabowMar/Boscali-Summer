@@ -46,9 +46,16 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         {
             if (w == null || w.WeaponInfo == null) return false;
             WeaponInfo i = w.WeaponInfo;
+            return WeaponsFilter.AllowsStation(d.Weapons, StoreOf(i), Sarh(i), RadarDiscipline.Wanted(d.Radar, engaged));
+        }
+
+        /// <summary>A weapon's store class (cached per weapon; none: Other).</summary>
+        private static StoreClass StoreOf(WeaponInfo i)
+        {
+            if (i == null) return StoreClass.Other;
             if (!storeClass.TryGetValue(i, out StoreClass c))
                 storeClass[i] = c = StoreClasses.Of(i.gun, i.jammer, i.missile, i.bomb || i.glideBomb, i.effectiveness.antiAir, i.effectiveness.antiSurface);
-            return WeaponsFilter.AllowsStation(d.Weapons, c, Sarh(i), RadarDiscipline.Wanted(d.Radar, engaged));
+            return c;
         }
 
         /// <summary>A radar-guided missile: its prefab carries the SARH seeker (cached per weapon).</summary>

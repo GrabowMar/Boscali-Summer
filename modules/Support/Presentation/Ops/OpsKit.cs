@@ -16,8 +16,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Ops
                 try { return map.gridLabels.GetGridPosition(new GlobalPosition(x, 0f, z)).ToUpperInvariant(); }
                 catch (Exception) { /* fall back to kilometres */ }
             }
-            return TheaterGrid.Kilometres(x, z);
+            return FallbackGrid(x, z);
         }
+
+        /// <summary>Answers when the map has no grid labels (kilometres). The offline renders swap in a letter-and-digit grid so fixture text is as short as the game's.</summary>
+        internal static Func<float, float, string> FallbackGrid = (x, z) => TheaterGrid.Kilometres(x, z);
 
         public static AvControl.Spec Spec(string label, Action click, AvButtonStyle style = AvButtonStyle.Default, AvIcon icon = AvIcon.None) =>
             new AvControl.Spec(label, click, style, icon);

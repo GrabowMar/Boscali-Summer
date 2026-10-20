@@ -113,13 +113,19 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             new CounterPressure(enemySpaceLeads ? SofExposureFactor : 1f, enemyCyberLeads ? SpaceCooldownFactor : 1f, enemySofLeads ? CyberTraceFactor : 1f);
     }
 
-    /// <summary>What a faction with no humans queues by itself when its front has nothing building (the AI faction raises its fronts without a pilot).</summary>
+    /// <summary>
+    /// What a faction with no humans queues by itself when its front has nothing building (the AI faction raises its fronts without a pilot). <paramref name="asatReady"/> (the host's call: CYBER
+    /// readiness 3, an enemy bird up, spacing since the last one) lets SPACE build an ASAT, so an AI faction hits back in orbit too.
+    /// </summary>
     internal static class FrontAi
     {
-        public static ProgrammeId? Next(Front front, int readiness, in FrontWorld w, bool samKnown)
+        public static ProgrammeId? Next(Front front, int readiness, in FrontWorld w, bool samKnown, bool asatReady = false)
         {
             switch (front)
             {
+                case Front.Space:
+                    if (asatReady) return ProgrammeId.Asat;
+                    break;
                 case Front.Cyber:
                     if (samKnown && readiness >= 3) return ProgrammeId.ZeroDay;
                     break;

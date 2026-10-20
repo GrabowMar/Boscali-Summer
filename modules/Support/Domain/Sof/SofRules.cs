@@ -27,6 +27,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public const float RaiseSeconds = 90f, SpeedMetresPerSecond = 35000f / 3600f, PushSpeedFactor = 1.5f, PushExposureFactor = 1.5f;
         public const float ExposureRadius = 1000f, CoverRadius = 2000f, ExposurePerEnemyPerSecond = 0.5f, BirdStareFactor = 1.25f, ExposureDecayPerSecond = 0.75f, HoldDecayFactor = 2f;
         public const float PinExposure = 100f, UnpinExposure = 60f, PinnedLostSeconds = 120f, CoverExtendSeconds = 60f, CoverKillRelief = 25f, LostExposure = 90f;
+        /// <summary>
+        /// SWEEP (protocol 42): an enemy team within 3 km of one of our sites, or one already in contact (exposure 50 % or more), is detected; a SWEEP costs 4 CR, the QRF reaches every detected
+        /// team 30 s later and hunts it for 60 s as 5 more enemies around it (enough to pin a team that was alone; the hunt then ends and a lone team recovers), then 120 s of refit.
+        /// </summary>
+        public const int SweepCost = 4, HuntExposers = 5, MaxHostiles = 4;
+        public const float SweepSeconds = 30f, SweepCooldownSeconds = 120f, HuntSeconds = 60f, DetectMetres = 3000f, DetectExposure = 50f;
         public const float WoundedSeconds = 60f, LaseMaxSeconds = 300f, MaxAdvanceSeconds = 5f, ArrivalMetres = 40f;
         public const float ReconRadius = 2000f, ReconRevealSeconds = 300f, TapSeconds = 600f, ExploitDurationFactor = 1.5f, ExploitCostFactor = 0.75f;
         public const float HeldSeconds = 600f, HeldObserveRadius = 3000f, HeldRetakeSeconds = 60f, HeldRevealPulseSeconds = 20f;

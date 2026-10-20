@@ -9,7 +9,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
     internal static class AnchorRules
     {
         public const float DamagedHealth = 0.5f, GraceSeconds = 120f;
-        public const float EwReach = 18000f, DamagedReachFactor = 0.6f;
+        // 32 km: trucks sit by their own airbases and players cannot drive them; the 2026-10-19 Escalation sim had the nearest
+        // enemy node 22-30 km out, so the old 18 km left CYBER with no first hop for humans and the director alike.
+        public const float EwReach = 32000f, DamagedReachFactor = 0.6f;
         public const float RebuildTruck = 100f, RebuildDataCenter = 300f, TimerPerMinute = 40f;
         public const float TraceLockSeconds = 90f, TraceRevealSeconds = 120f;
         public const int MaxTrucks = 2, MaxDataCenters = 2;

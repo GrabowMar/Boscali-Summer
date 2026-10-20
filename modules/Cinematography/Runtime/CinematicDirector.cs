@@ -191,7 +191,7 @@ namespace BoscaliSummer.Modules.Cinematography.Runtime
             clearance.Reset();
             for (int i = 0; i <= 64; i++)
             {
-                ShotPose pose = Plan.SamplePresentation(Plan.duration * i / 64,actorPose());
+                ShotPose pose = Plan.SamplePresentation(Plan.duration * i / 64,actorPose(),camera.mainCamera.aspect);
                 var p = new GlobalPosition(pose.Position.X, pose.Position.Y, pose.Position.Z);
                 if (!PathClear(p.ToLocalPosition())) { clearance.Reset(); Message = "CAMERA PATH BLOCKED"; return false; }
             }
@@ -348,7 +348,7 @@ namespace BoscaliSummer.Modules.Cinematography.Runtime
                 case "scripts": settings.EnableScriptInbox.Value=!settings.EnableScriptInbox.Value;Message=settings.EnableScriptInbox.Value?"SCRIPT INBOX ENABLED":"SCRIPT INBOX DISABLED";break;
                 case "rollLeft": o.rollDegrees=Mathf.Clamp(o.rollDegrees-5,-20,20);break;
                 case "rollRight": o.rollDegrees=Mathf.Clamp(o.rollDegrees+5,-20,20);break;
-                case "anchor": o.stabilizeAnchor=!o.stabilizeAnchor;break;
+                case "anchor": o.stabilizeAnchor=!o.stabilizeAnchor;if(o.stabilizeAnchor) o.headingOnlyAnchor=false;break;
             }
             Revision++;
         }

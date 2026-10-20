@@ -108,14 +108,24 @@ namespace BoscaliSummer.Modules.Cinematography.Domain
 
         private static ShotPose Pose(ShotKey key) => new ShotPose(key.Position, Quaternion.Normalize(key.Rotation), key.fov);
         private static bool anchorIdInvalid(string id) => id!=null && (string.IsNullOrWhiteSpace(id)||id.Length>256);
-        internal ShotPose SamplePresentation(float seconds,ShotPose? anchor=null)
+        internal ShotPose SamplePresentation(float seconds,ShotPose? anchor=null,float aspect=16f/9)
         {
             if(anchor.HasValue && options?.stabilizeAnchor==true)
                 anchor=new ShotPose(anchor.Value.Position,Quaternion.Identity,anchor.Value.Fov);
+            else if(anchor.HasValue && options?.headingOnlyAnchor==true)
+            {
+                Vector3 forward=Vector3.Transform(Vector3.UnitZ,anchor.Value.Rotation);forward.Y=0;
+                if(forward.LengthSquared()<.000001f)
+                {
+                    Vector3 right=Vector3.Transform(Vector3.UnitX,anchor.Value.Rotation);
+                    forward=new Vector3(-right.Z,0,right.X);
+                }
+                anchor=new ShotPose(anchor.Value.Position,ShotOptions.Look(forward),anchor.Value.Fov);
+            }
             ShotPose pose=Sample(seconds);
-            if(anchor.HasValue) pose=new ShotPose(anchor.Value.Position+Vector3.Transform(pose.Position,anchor.Value.Rotation),
+            if(anchor.HasValue && options?.worldSpacePath!=true) pose=new ShotPose(anchor.Value.Position+Vector3.Transform(pose.Position,anchor.Value.Rotation),
                 Quaternion.Normalize(anchor.Value.Rotation*pose.Rotation),pose.Fov);
-            return options==null?pose:options.Apply(pose,seconds,anchor);
+            return options==null?pose:options.Apply(pose,seconds,anchor,aspect);
         }
     }
 }

@@ -56,21 +56,32 @@ namespace Vanguard
 
         static bool Detail(MeshFilter filter) => LodLevel(filter.name) == 0;
 
-        // Highest LOD0 vertex of the visual within Strip of the slot's centreline: the surface that meets the rail, not a
-        // fin or wingtip beside it. Its bounding top when no vertex lies in the strip.
+        // The visual's back as the rail sees it: LOD0 surface heights sampled down the centreline (and Strip either side) over
+        // the slot's length, taken at TopPercentile. The highest point would be a T-tail, rotor or mast standing above the body,
+        // and the body then hung a hand's width under the rail (GLAIVE-2S); thin fins and lugs poke into the rail instead.
+        // Its bounding top when no ray finds the surface.
+        const float TopPercentile = .8f;
         static float TopUnderRail(Transform frame, GameObject visual, Bounds slot, Bounds store)
         {
-            float top = float.NegativeInfinity;
-            foreach (var filter in visual.GetComponentsInChildren<MeshFilter>(true))
-            {
-                if (!Detail(filter) || !filter.GetComponent<MeshRenderer>().enabled) continue;
-                foreach (Vector3 vertex in filter.sharedMesh.vertices)
+            var colliders = visual.GetComponentsInChildren<MeshFilter>(true)
+                .Where(f => Detail(f) && f.GetComponent<MeshRenderer>().enabled)
+                .Select(f => { var c = f.gameObject.AddComponent<MeshCollider>(); c.sharedMesh = f.sharedMesh; return c; }).ToList();
+            Physics.SyncTransforms();
+            var tops = new System.Collections.Generic.List<float>();
+            float z0 = Mathf.Max(slot.min.z, store.min.z), z1 = Mathf.Min(slot.max.z, store.max.z);
+            for (float z = z0; z <= z1; z += .02f)
+                foreach (float dx in new[] { -Strip, 0f, Strip })
                 {
-                    Vector3 p = frame.InverseTransformPoint(filter.transform.TransformPoint(vertex));
-                    if (Mathf.Abs(p.x - store.center.x) <= Strip && Mathf.Abs(p.z - store.center.z) <= slot.extents.z) top = Mathf.Max(top, p.y);
+                    var ray = new Ray(frame.TransformPoint(new Vector3(store.center.x + dx, store.max.y + 1f, z)), -frame.up);
+                    float best = float.NegativeInfinity;
+                    foreach (var c in colliders)
+                        if (c.Raycast(ray, out RaycastHit hit, 10f)) best = Mathf.Max(best, frame.InverseTransformPoint(hit.point).y);
+                    if (!float.IsNegativeInfinity(best)) tops.Add(best);
                 }
-            }
-            return float.IsNegativeInfinity(top) ? store.max.y : top;
+            foreach (var c in colliders) UnityEngine.Object.DestroyImmediate(c);
+            if (tops.Count == 0) return store.max.y;
+            tops.Sort();
+            return tops[Mathf.Min(tops.Count - 1, (int)(tops.Count * TopPercentile))];
         }
 
         // Hangs a carried visual in the donor store's slot, in its parent station's frame: top on the rail (where the donor's

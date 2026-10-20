@@ -170,6 +170,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         public Vector2 P(float u, float v) => View.P(u, v);
 
+        /// <summary>Map point (u, v) in screen pixels: where a click must land to hit it (the in-game GUI check aims with it).</summary>
+        public Vector2 Screen(float u, float v)
+        {
+            Vector2 p = View.P(u, v);
+            Rect r = box.rect;
+            return RectTransformUtility.WorldToScreenPoint(null, box.TransformPoint(new Vector3(r.xMin + p.x, r.yMax - p.y, 0f)));
+        }
+
         /// <summary>A marker the operator can see: inside the plate and not under an overlay card.</summary>
         public bool Shown(Vector2 p, float pad = 12f) => View.Visible(p, pad) && !Labels.Blocked(new Rect(p.x - 8f, p.y - 8f, 16f, 16f));
 
@@ -309,15 +317,15 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             bool inMini = miniRect.Contains(p);
             bool changed = false;
             Hover(inPlate ? v.UV(p) : (Vector2?)null);
-            if (inMini && Input.GetMouseButton(0))
+            if (inMini && FrontPointer.Held(0))
             {
                 Vector2 uv = new Vector2((p.x - miniRect.x) / miniRect.width, (p.y - miniRect.y) / miniRect.height);
                 v.CenterOn(uv);
                 return true;
             }
-            float wheel = Input.mouseScrollDelta.y;
+            float wheel = FrontPointer.Wheel;
             if (inPlate && Mathf.Abs(wheel) > 0.01f) changed |= v.ZoomAt(p, wheel > 0f ? 1 : -1);
-            bool down = Input.GetMouseButton(1) || Input.GetMouseButton(2);
+            bool down = FrontPointer.Held(1) || FrontPointer.Held(2);
             if (down && (dragging || inPlate))
             {
                 if (dragging && (p - lastBox).sqrMagnitude > 0.25f) { v.Pan(p - lastBox); changed = true; }
@@ -490,6 +498,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             {
                 new Vector2(off, -lh - 2f), new Vector2(off, 4f), new Vector2(-off - lw, -lh - 2f), new Vector2(-off - lw, 4f),
                 new Vector2(-lw * 0.5f, -lh - off), new Vector2(-lw * 0.5f, off), new Vector2(off, -lh * 0.5f), new Vector2(-off - lw, -lh * 0.5f),
+                // A crowded map: further out, a label's height above or below the first spots, before giving up and overlapping.
+                new Vector2(off, -2f * lh - 4f), new Vector2(off, lh + 6f), new Vector2(-off - lw, -2f * lh - 4f), new Vector2(-off - lw, lh + 6f),
+                new Vector2(-lw * 0.5f, -2f * lh - off), new Vector2(-lw * 0.5f, lh + off + 4f),
             };
             Rect best = default;
             bool found = false;

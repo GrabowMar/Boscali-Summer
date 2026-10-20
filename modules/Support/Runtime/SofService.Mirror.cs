@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
@@ -12,19 +13,38 @@ namespace BoscaliSummer.Modules.Support.Runtime
     /// <summary>The faction-only view and the host verbs of <see cref="SofService"/>. Everything a client may learn is derived here from the host's own desk, never read from a client.</summary>
     internal sealed partial class SofService
     {
+        private sealed partial class FactionSof
+        {
+            /// <summary>Callsigns of the operators who command a team, so a poll does not look each one up again (a name is kept once found).</summary>
+            public readonly Dictionary<ulong, string> Labels = new Dictionary<ulong, string>();
+        }
+
+        /// <summary>The operator commanding a team as the mirror words it: their callsign, empty while OVERLORD's pool holds it (or the operator is no longer in the faction).</summary>
+        private string ControllerOf(FactionSof f, ulong raiser)
+        {
+            if (raiser == SpaceContacts.WatchOfficerId || raiser == PlayerIdentity.None) return "";
+            if (f.Labels.TryGetValue(raiser, out string known)) return known;
+            string label = SpaceWire.Clean(manager.PlayerLabel(f.Owner, raiser), SofWire.MaxController);
+            if (label.Length > 0 && f.Labels.Count < SpaceContacts.MaxPlayers) f.Labels[raiser] = label;
+            return label;
+        }
+
         /// <summary>
         /// Fills the viewer's faction view (always the full state). False when the faction has no SOF (<c>Active</c> stays false). Own teams, camps, revealed targets,
         /// held buildings and, only where this faction's SPACE bird is looking (the Overwatch window), an enemy team's position.
         /// </summary>
         internal bool FillState(Player viewer, SofStateData into)
         {
-            into.Active = false; into.TeamCap = 0; into.TapIntrusions = 0; into.TapUntil = 0f;
+            into.Active = false; into.TeamCap = 0; into.TapIntrusions = 0; into.TapUntil = 0f; into.SweepEndsAt = into.SweepReadyAt = 0f;
             into.Camps.Clear(); into.Teams.Clear(); into.Targets.Clear(); into.Held.Clear(); into.Enemies.Clear(); into.Events.Clear();
             if (viewer == null || viewer.HQ == null || manager?.Settings == null || !manager.Settings.SofEnabled.Value || !factions.TryGetValue(viewer.HQ, out FactionSof f)) return false;
             float now = SupportManager.MissionNow();
             SofDesk desk = f.Desk;
             into.Active = true;
+            ulong viewerId = PlayerIdentity.Of(viewer);
             into.TeamCap = (byte)Math.Min(SofRules.MaxTeams, SofRules.TeamCap(manager.HumanCount(viewer.HQ), f.FobUntil > now));
+            into.SweepEndsAt = desk.SweepEndsAt > now ? desk.SweepEndsAt : 0f;
+            into.SweepReadyAt = desk.SweepReadyAt > now ? desk.SweepReadyAt : 0f;
             foreach (CampSlot slot in f.Slots)
             {
                 if (into.Camps.Count >= SofWire.MaxCamps || !f.Camps.TryPosition(slot.Index, out float x, out float z)) continue;
@@ -39,7 +59,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 into.Teams.Add(new SofTeamRow
                 {
                     Slot = (byte)t.Slot, State = t.State, Insert = t.Insert, Push = t.PushOn, Hold = t.HoldOn, Wounded = t.Wounded, LiftWaiting = t.LiftWaiting, Carried = t.Carried,
-                    Lasing = t.LaseActive, HasDest = t.HasDest, Exploit = t.Exploit, X = t.X, Z = t.Z, DestX = t.DestX, DestZ = t.DestZ, TargetX = t.TargetX, TargetZ = t.TargetZ,
+                    Lasing = t.LaseActive, HasDest = t.HasDest, Exploit = t.Exploit, Mine = viewerId != PlayerIdentity.None && t.Raiser == viewerId, Hunted = t.HuntedUntil > now, Controller = ControllerOf(f, t.Raiser),
+                    X = t.X, Z = t.Z, DestX = t.DestX, DestZ = t.DestZ, TargetX = t.TargetX, TargetZ = t.TargetZ,
                     Exposure = (byte)Mathf.Clamp(Mathf.RoundToInt(t.Exposure), 0, 100), Ammo = (byte)Mathf.Clamp(Mathf.RoundToInt(t.Ammo), 0, 100),
                     Odds = (byte)Mathf.Clamp(t.Odds, 0, 100), Mission = t.Mission, TargetId = t.TargetId, EndsAt = ends
                 });
@@ -54,7 +75,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (into.Held.Count >= SofWire.MaxHeld) break;
                 into.Held.Add(new SofHeldRow { Id = h.Id, X = h.X, Z = h.Z, Until = h.Until });
             }
-            FillEnemies(viewer.HQ, now, into);
+            FillEnemies(viewer.HQ, f, now, into);
             if (f.TapUntil > now)
             {
                 into.TapUntil = f.TapUntil;
@@ -68,9 +89,17 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return true;
         }
 
-        /// <summary>Another faction's team is listed only where the viewer's own SPACE bird is looking (a live reveal window covers it), and only as a position.</summary>
-        private void FillEnemies(FactionHQ viewer, float now, SofStateData into)
+        /// <summary>
+        /// Another faction's team is listed when the viewer detected it near its own sites (it can be swept; protocol 42), or where the viewer's own SPACE bird is looking (a live reveal window
+        /// covers it), and only as a position.
+        /// </summary>
+        private void FillEnemies(FactionHQ viewer, FactionSof mine, float now, SofStateData into)
         {
+            foreach (SofHostile h in mine.Desk.Hostiles)
+            {
+                if (into.Enemies.Count >= SofWire.MaxEnemies) return;
+                into.Enemies.Add(new SofEnemyRow { X = h.X, Z = h.Z, Near = true, Hunted = h.Hunted });
+            }
             SpaceObservations obs = space != null ? space.ObservationsFor(viewer) : null;
             if (obs == null) return;
             foreach (var pair in factions)
@@ -80,9 +109,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 {
                     if (!t.Active || t.Carried || (t.State != TeamState.Moving && t.State != TeamState.OnSite && t.State != TeamState.Pinned && t.State != TeamState.Returning)) continue;
                     if (into.Enemies.Count >= SofWire.MaxEnemies) return;
-                    if (obs.Covers(t.X, t.Z, now)) into.Enemies.Add(new SofEnemyRow { X = t.X, Z = t.Z });
+                    if (obs.Covers(t.X, t.Z, now) && !Detected(mine, pair.Value.Key, t.Slot)) into.Enemies.Add(new SofEnemyRow { X = t.X, Z = t.Z });
                 }
             }
+        }
+
+        private static bool Detected(FactionSof mine, int key, int slot)
+        {
+            foreach (SofHostile h in mine.Desk.Hostiles) if (h.Attacker == key && h.Slot == slot) return true;
+            return false;
         }
 
         /// <summary>
@@ -97,6 +132,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (op == PlayerIdentity.None) return new SofResult(SofOutcome.Unavailable);
             switch (command.Kind)
             {
+                case SpaceCommandKind.SofSweep:
+                    return f.Desk.Sweep(op);
                 case SpaceCommandKind.SofRaise:
                     return new SofResult(SofOutcome.TrainOnly); // teams come from the TRAIN TEAM programme (OPS FRONTS S2)
                 case SpaceCommandKind.SofOrder:

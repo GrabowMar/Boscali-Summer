@@ -24,7 +24,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>FRONT verbs (protocol 38). FrontDirective Target = front | directive &lt;&lt; 2; FrontPriority Ids = { space, cyber, sof } weights; FrontFocus Ids = { front | clear &lt;&lt; 2, packed point }; FrontQueue Target = front | programme &lt;&lt; 2; FrontDonate Ids = { front | programme &lt;&lt; 2, allocation }. FrontSync asks for a fresh FRONT state.</summary>
         FrontDirective = 20, FrontPriority = 21, FrontFocus = 22, FrontQueue = 23, FrontDonate = 24, FrontSync = 25,
         /// <summary>GEO verb (protocol 39). RelocateBird Ids = { bird 0..2, packed map point (<see cref="GeoSpace.Pack"/>) }; the host judges fuel, burn state and distance.</summary>
-        RelocateBird = 26
+        RelocateBird = 26,
+        /// <summary>Defence verbs (protocol 42). Both carry nothing (Target 0): CyberPurge evicts every enemy hold on the faction's own network after a countdown; SofSweep sends a QRF against every hostile team detected near the faction's sites.</summary>
+        CyberPurge = 27, SofSweep = 28
     }
 
     /// <summary>What the feed may say about a contact before its MARK verdict. Never the truth: see <see cref="SpaceProbable"/>.</summary>
@@ -69,9 +71,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         public bool IsOpsVerb => Kind >= SpaceCommandKind.OpFund && Kind <= SpaceCommandKind.OpCancel;
 
-        public bool IsSofVerb => Kind >= SpaceCommandKind.SofRaise && Kind <= SpaceCommandKind.SofDivert;
+        public bool IsSofVerb => (Kind >= SpaceCommandKind.SofRaise && Kind <= SpaceCommandKind.SofDivert) || Kind == SpaceCommandKind.SofSweep;
 
-        public bool IsCyberVerb => Kind == SpaceCommandKind.CyberHop || Kind == SpaceCommandKind.CyberBurn || Kind == SpaceCommandKind.CyberDrop;
+        public bool IsCyberVerb => Kind == SpaceCommandKind.CyberHop || Kind == SpaceCommandKind.CyberBurn || Kind == SpaceCommandKind.CyberDrop || Kind == SpaceCommandKind.CyberPurge;
 
         /// <summary>Stable digest of what the request asks for. A replayed request id with another payload is refused.</summary>
         public int Fingerprint()
@@ -195,6 +197,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     internal sealed class SpaceStateData
     {
         public byte Protocol;
+        /// <summary>The stable wire identity of the faction this message was built for and the host's scene epoch (see <see cref="FactionIdentity"/>); on every full and delta.</summary>
+        public uint Faction;
+        public ushort Epoch;
         public bool Full, Active, Feed;
         public int Generation;
         public float Now;
@@ -262,6 +267,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 case SpaceCommandKind.CyberHop:
                 case SpaceCommandKind.CyberBurn:
                 case SpaceCommandKind.CyberDrop:
+                case SpaceCommandKind.CyberPurge:
+                case SpaceCommandKind.SofSweep:
                 case SpaceCommandKind.SofOrder:
                 case SpaceCommandKind.OpFund:
                 case SpaceCommandKind.OpCancel:
@@ -289,7 +296,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             if (!r.TryReadByte(out byte version)) return default;
             if (version != protocol) return new SpaceCommand(version, SpaceCommandKind.None, 0);
-            if (!r.TryReadByte(out byte kindByte) || kindByte < (byte)SpaceCommandKind.OpenFeed || kindByte > (byte)SpaceCommandKind.RelocateBird ||
+            if (!r.TryReadByte(out byte kindByte) || kindByte < (byte)SpaceCommandKind.OpenFeed || kindByte > (byte)SpaceCommandKind.SofSweep ||
                 !ReadInt(r, out int request)) return default;
             var kind = (SpaceCommandKind)kindByte;
             switch (kind)
@@ -299,6 +306,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 case SpaceCommandKind.CyberHop:
                 case SpaceCommandKind.CyberBurn:
                 case SpaceCommandKind.CyberDrop:
+                case SpaceCommandKind.CyberPurge:
+                case SpaceCommandKind.SofSweep:
                 case SpaceCommandKind.SofOrder:
                 case SpaceCommandKind.OpFund:
                 case SpaceCommandKind.OpCancel:
@@ -346,11 +355,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 kindByte != (byte)SpaceCommandKind.ClaimTasked && (kindByte < (byte)SpaceCommandKind.CyberHop || kindByte > (byte)SpaceCommandKind.CyberDrop) &&
                 (kindByte < (byte)SpaceCommandKind.SofRaise || kindByte > (byte)SpaceCommandKind.SofDivert) &&
                 (kindByte < (byte)SpaceCommandKind.OpFund || kindByte > (byte)SpaceCommandKind.OpCancel) &&
-                (kindByte < (byte)SpaceCommandKind.FrontDirective || kindByte > (byte)SpaceCommandKind.FrontDonate) && kindByte != (byte)SpaceCommandKind.RelocateBird) || !ReadInt(r, out int request) ||
+                (kindByte < (byte)SpaceCommandKind.FrontDirective || kindByte > (byte)SpaceCommandKind.FrontDonate) && kindByte != (byte)SpaceCommandKind.RelocateBird &&
+                kindByte != (byte)SpaceCommandKind.CyberPurge && kindByte != (byte)SpaceCommandKind.SofSweep) || !ReadInt(r, out int request) ||
                 !r.TryReadByte(out byte outcome) || !r.TryReadByte(out byte replay) || replay > 1 ||
                 !ReadInt(r, out int call) || !ReadInt(r, out int charged) || !ReadInt(r, out int detail) ||
                 !ReadText(r, SpaceReply.MaxClaimant, out string claimant)) return default;
             int max = kindByte == (byte)SpaceCommandKind.Mark ? (int)MarkVerdict.Capacity :
+                kindByte == (byte)SpaceCommandKind.CyberPurge ? (int)CyberWords.MaxOutcome :
+                kindByte == (byte)SpaceCommandKind.SofSweep ? (int)SofOutcomeWords.MaxOutcome :
                 kindByte >= (byte)SpaceCommandKind.FrontDirective ? (int)FrontWords.MaxOutcome :
                 kindByte >= (byte)SpaceCommandKind.OpFund ? (int)OpsWords.MaxOutcome :
                 kindByte >= (byte)SpaceCommandKind.SofRaise ? (int)SofOutcomeWords.MaxOutcome :
@@ -365,6 +377,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             w.WriteByte(s.Protocol);
             w.WriteByte((byte)((s.Full ? FlagFull : 0) | (s.Active ? FlagActive : 0) | (s.Feed ? FlagFeed : 0)));
+            FactionIdentity.Write(w, s.Faction, s.Epoch);
             WriteVar(w, (uint)Math.Max(0, s.Generation));
             WriteFloat(w, s.Now);
             w.WriteByte((byte)s.Family);
@@ -435,7 +448,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (!r.TryReadByte(out byte version)) return Bad();
             if (version != protocol) return new SpaceStateData { Protocol = version };
             var s = new SpaceStateData { Protocol = version };
-            if (!r.TryReadByte(out byte flags) || (flags & ~(FlagFull | FlagActive | FlagFeed)) != 0 ||
+            if (!r.TryReadByte(out byte flags) || (flags & ~(FlagFull | FlagActive | FlagFeed)) != 0 || !FactionIdentity.Read(r, out uint faction, out ushort epoch) ||
                 !ReadInt(r, out int generation) || !ReadFloat(r, out float now) || !SpaceRules.MissionTime(now) ||
                 !r.TryReadByte(out byte family) || family > (byte)SpaceFamilyState.Dark ||
                 !r.TryReadByte(out s.UplinksLive) || !r.TryReadByte(out s.UplinksTotal) || s.UplinksTotal > 2 || s.UplinksLive > s.UplinksTotal ||
@@ -453,7 +466,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (!ReadInt(r, out int radarReady) || !ReadText(r, MaxIntent, out string intent)) return Bad();
             s.RadarReadyAt = radarReady == RadarUnavailable ? RadarUnavailable : Math.Min(radarReady, MaxDeadline); s.Intent = intent;
             s.Full = (flags & FlagFull) != 0; s.Active = (flags & FlagActive) != 0; s.Feed = (flags & FlagFeed) != 0;
-            s.Generation = generation; s.Now = now; s.Family = (SpaceFamilyState)family; s.Gate = (TaskedOutcome)gate; s.GateDetail = gateDetail;
+            s.Faction = faction; s.Epoch = epoch; s.Generation = generation; s.Now = now; s.Family = (SpaceFamilyState)family; s.Gate = (TaskedOutcome)gate; s.GateDetail = gateDetail;
             if (!s.Active || !s.Feed) return s;
 
             if (!r.TryReadByte(out byte n) || n > MaxContacts || r.Remaining < n * MinContactBytes) return Bad();

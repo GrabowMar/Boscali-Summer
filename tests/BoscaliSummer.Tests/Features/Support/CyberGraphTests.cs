@@ -150,8 +150,8 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.Eq(AnchorRules.Of(0.5f, false), AnchorHealth.Damaged, "half health is damaged");
             TestAssert.Eq(AnchorRules.Of(0.9f, true), AnchorHealth.Down, "down wins");
             TestAssert.Eq(AnchorRules.Of(float.NaN, false), AnchorHealth.Down, "NaN health reads down");
-            Near(AnchorRules.Reach(AnchorHealth.Live), 18000f, "live reach");
-            Near(AnchorRules.Reach(AnchorHealth.Damaged), 10800f, "damaged reach is -40 %");
+            Near(AnchorRules.Reach(AnchorHealth.Live), 32000f, "live reach");
+            Near(AnchorRules.Reach(AnchorHealth.Damaged), 19200f, "damaged reach is -40 %");
             Near(AnchorRules.Reach(AnchorHealth.Down), 0f, "down reach");
             Near(AnchorRules.RebuildGoal(AnchorKind.EwTruck), 100f, "truck rebuild");
             Near(AnchorRules.RebuildGoal(AnchorKind.DataCenter), 300f, "data center rebuild");

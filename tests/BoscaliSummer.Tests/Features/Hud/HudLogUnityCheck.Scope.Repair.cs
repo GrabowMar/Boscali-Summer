@@ -73,7 +73,7 @@ public static partial class HudLogUnityCheck
     {
         var size = new Vector2(1920, 1080);
         var notices = new int[1];
-        // PAGE MIN STAY: THREAT is up at 6 s, its feed is gone at 11 s. With no minimum the scope is SYSTEMS again; with 10 s it holds the page it was showing.
+        // Legacy dwell values cannot change the pilot's manual page after its feed ends.
         foreach (float minStay in new[] { 0f, 10f })
         {
             object status = OptionBoard(size, "threat", 6f, PilotOptions("PageMinSeconds", minStay), notices, out Canvas canvas, out object frame);
@@ -81,7 +81,7 @@ public static partial class HudLogUnityCheck
             ScopeReset();
             Set(frame, "Now", 11f);
             Call(status, "Present", frame);
-            string expected = minStay > 5f ? "THREAT" : "SYSTEMS";
+            string expected = "THREAT";
             Check(PageTitle(status) == expected, "min stay " + minStay + ": five seconds after its feed went the scope shows " + expected + ": " + PageTitle(status));
             Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
         }

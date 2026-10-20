@@ -21,14 +21,22 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         public DonateResult(DonateStatus status, float accepted) { Status = status; Accepted = accepted; }
     }
 
-    internal enum FrontLogCode : byte { Queued = 1, Started = 2, Done = 3, Directive = 4, Priority = 5, Focus = 6, Rebuild = 7, Counter = 8, Effect = 9 }
+    /// <summary>
+    /// Wire values: append only. <see cref="Failed"/> (A = the programme, B = a <see cref="FrontOutcome"/> naming why) is written when the owning adapter refused a finished programme's effect.
+    /// <see cref="Siphon"/> (A = funds taken) is the caster's CYBER line, <see cref="Siphoned"/> (A = funds lost) the line on the front the enemy drained.
+    /// </summary>
+    internal enum FrontLogCode : byte { Queued = 1, Started = 2, Done = 3, Directive = 4, Priority = 5, Focus = 6, Rebuild = 7, Counter = 8, Effect = 9, Failed = 10, Siphon = 11, Siphoned = 12 }
 
-    internal struct FrontEvent
+    /// <summary>A finished programme waiting for its owner to apply the effect; <see cref="FrontBook.Settle"/> answers it exactly once.</summary>
+    internal sealed class FrontEvent
     {
         public Front Front;
         public ProgrammeId Id;
         /// <summary>For READINESS: the new level.</summary>
         public int Rung;
+        /// <summary>What the programme captured while it was funded (its cost when it was queued): the exact amount a refused effect gives back.</summary>
+        public float Cost;
+        public bool Settled;
     }
 
     internal sealed class FrontProgrammeEntry
@@ -138,7 +146,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                 case ProgrammeId.DataCenter: if (w.DataCenters >= w.DataCenterMax) return FrontOutcome.DataCentersMax; break;
                 case ProgrammeId.EwTruck: if (w.Trucks >= w.TruckMax) return FrontOutcome.TrucksMax; break;
                 case ProgrammeId.TrainTeam: if (w.Teams >= FrontRules.TeamCap) return FrontOutcome.TeamCap; break;
-                case ProgrammeId.Camp: if (w.Camps >= w.CampMax) return FrontOutcome.CampsMax; break;
+                case ProgrammeId.Camp: if (w.CampMax <= 0) return FrontOutcome.NoSite; if (w.Camps >= w.CampMax) return FrontOutcome.CampsMax; break;
                 case ProgrammeId.Fob: if (!w.HasHeldBuilding) return FrontOutcome.NoHeldBuilding; break;
             }
             return FrontOutcome.None;
@@ -186,7 +194,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
 
         // ---- Time -----------------------------------------------------------------------------
 
-        /// <summary>Pays the heads, starts funded builds, completes finished ones. Each completion is returned for the host to turn into its world effect.</summary>
+        /// <summary>
+        /// Pays the heads, starts funded builds, completes finished ones. Each completion is returned for the host to turn into its world effect, and the host answers each with
+        /// <see cref="Settle"/>; the DONE line waits for that answer (READINESS has no adapter, so its line is written here).
+        /// </summary>
         public List<FrontEvent> Tick(float now, in FrontWorld world)
         {
             var events = new List<FrontEvent>();
@@ -198,14 +209,27 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                 {
                     FrontProgrammeEntry done = s.Queue[0];
                     s.Queue.RemoveAt(0);
-                    var ev = new FrontEvent { Front = (Front)i, Id = done.Id };
-                    if (done.Id == ProgrammeId.Readiness) { AddReadiness((Front)i, 1); ev.Rung = s.Readiness; }
-                    AddLog(s, FrontLogCode.Done, (int)done.Id, ev.Rung, now);
+                    var ev = new FrontEvent { Front = (Front)i, Id = done.Id, Cost = done.Cost };
+                    if (done.Id == ProgrammeId.Readiness) { AddReadiness((Front)i, 1); ev.Rung = s.Readiness; ev.Settled = true; AddLog(s, FrontLogCode.Done, (int)done.Id, ev.Rung, now); }
                     events.Add(ev);
                     Advance(now);
                 }
             }
             return events;
+        }
+
+        /// <summary>
+        /// The owning adapter answered a finished programme. <see cref="FrontOutcome.None"/>: it accepted the effect, DONE is logged. Anything else is why it refused it: a FAILED line is logged and
+        /// the cost the programme captured goes back to the front's budget. Once per event: a second answer changes nothing.
+        /// </summary>
+        public void Settle(FrontEvent e, FrontOutcome failure, float now)
+        {
+            if (e == null || e.Settled) return;
+            e.Settled = true;
+            FrontSide s = sides[(int)e.Front];
+            if (failure == FrontOutcome.None) { AddLog(s, FrontLogCode.Done, (int)e.Id, e.Rung, now); return; }
+            s.Budget += e.Cost;
+            AddLog(s, FrontLogCode.Failed, (int)e.Id, (int)failure, now);
         }
 
         private void Advance(float now)
@@ -309,7 +333,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                 foreach (FrontProgrammeEntry e in s.Queue)
                     r.Queue.Add(new FrontQueueRow
                     {
-                        Id = e.Id, Percent = (byte)Math.Max(0, Math.Min(100, Math.Round(e.Funded / e.Cost * 100f))),
+                        // 100 means paid in full (the build is, or is about to be, running): a bar 99.6 % funded must not round up into BUILDING, or the card claims a build the host has not started.
+                        Id = e.Id, Percent = (byte)(e.Started || e.Remaining <= 0.0001f ? 100 : Math.Max(0, Math.Min(99, Math.Floor(e.Funded / e.Cost * 100f)))),
                         BuildLeft = (ushort)Math.Max(0, Math.Min(ushort.MaxValue, Math.Round(e.Started ? e.BuildEnd - now : e.Build)))
                     });
                 r.Log.AddRange(s.Log);

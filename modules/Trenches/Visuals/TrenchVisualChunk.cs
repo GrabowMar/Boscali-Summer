@@ -67,9 +67,19 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
             public TrenchMeshBuilder.EdgeJob Mesh;
         }
 
-        public float Lod0Distance = 250f;
-        public float Lod1Distance = 1200f;
-        public float Lod2Distance = 3500f;
+        public float Lod0Distance = 600f;
+        public float Lod1Distance = 2640f;
+        public float Lod2Distance = 12000f;
+
+        /// <summary>
+        /// Multiplies the shared earthwork palette on this position's renderers (a property block, so the
+        /// material stays shared): the manager sets it from the map's own terrain colour, so turned earth
+        /// on red desert reads red and on grey steppe grey instead of one brown everywhere.
+        /// </summary>
+        public Color EarthTint = Color.white;
+        private static MaterialPropertyBlock tintBlock;
+        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        private static readonly int ColorId = Shader.PropertyToID("_Color");
 
         private int currentLod = -1;
         private float nextLodCheckTime;
@@ -167,6 +177,7 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
                 {
                     building = false;
                     stagedFirePath = null;
+                    ApplyTint();
                     currentLod = -1;
                     UpdateLod(true);
                     return;
@@ -580,9 +591,17 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
             Camera cam = ViewCamera();
             if (cam == null) return;
 
+            // Measured to the nearest station, not the centre: a position runs up to 2.4km, so a
+            // camera standing on one end sat 1.2km from the centre and saw the mid LOD (no bays,
+            // wire, cover or saps) at its feet. The global-to-local shift is one translation.
             Vector3 center = WorldCenter;
-            Vector3 centerLocal = new GlobalPosition(center.x, center.y, center.z).ToLocalPosition();
-            float dist = Vector3.Distance(cam.transform.position, centerLocal);
+            Vector3 camGlobal = cam.transform.position + center -
+                new GlobalPosition(center.x, center.y, center.z).ToLocalPosition();
+            float nearestSq = NearestSq(line?.Curve, camGlobal, float.MaxValue);
+            nearestSq = NearestSq(line?.Support, camGlobal, nearestSq);
+            nearestSq = NearestSq(line?.Redoubt, camGlobal, nearestSq);
+            if (nearestSq == float.MaxValue) nearestSq = (camGlobal - center).sqrMagnitude;
+            float dist = Mathf.Sqrt(nearestSq);
             CameraDistance = dist;
 
             int newLod;
@@ -598,6 +617,28 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
             if (lod1Root != null) lod1Root.SetActive(currentLod == 1);
             if (lod2Root != null) lod2Root.SetActive(currentLod == 2);
 
+        }
+
+        private void ApplyTint()
+        {
+            if (EarthTint == Color.white) return;
+            if (tintBlock == null) tintBlock = new MaterialPropertyBlock();
+            Material earth = TrenchMaterialResolver.GetEarthBermMaterial();
+            tintBlock.SetColor(BaseColorId, EarthTint);
+            tintBlock.SetColor(ColorId, EarthTint);
+            foreach (MeshRenderer renderer in GetComponentsInChildren<MeshRenderer>(true))
+                if (renderer.sharedMaterial == earth) renderer.SetPropertyBlock(tintBlock);
+        }
+
+        private static float NearestSq(Vector3[] points, Vector3 from, float best)
+        {
+            if (points == null) return best;
+            for (int i = 0; i < points.Length; i++)
+            {
+                float sq = (points[i] - from).sqrMagnitude;
+                if (sq < best) best = sq;
+            }
+            return best;
         }
 
         private void ClearMeshes()

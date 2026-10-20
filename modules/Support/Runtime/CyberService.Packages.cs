@@ -35,14 +35,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         /// <summary>
         /// RADAR BLIND / SAM NET DOWN (OPS FRONTS S0): the package effect (JAM RADAR / SAM NET DOWN) at the aim, against every other faction, for the package seconds
-        /// and radius times the CYBER front <paramref name="quality"/>. False when the faction has no CYBER desk or its effect book is full.
+        /// and radius times the CYBER front <paramref name="power"/> (a jam also deepens with it), the length again times the room's <paramref name="durationBonus"/>. False when the faction has no CYBER desk or its effect book is full.
         /// </summary>
-        internal bool StartPerkEffect(FactionHQ owner, SupportActionId package, GlobalPosition at, float quality)
+        internal bool StartPerkEffect(FactionHQ owner, SupportActionId package, GlobalPosition at, float power, float durationBonus = 1f)
         {
             if (!GameAccess.IsServer() || owner == null || !factions.TryGetValue(owner, out FactionCyber f) || !CyberPackages.TryOfAction(package, out PackageDef def)) return false;
             bool exploit = CyberRules.Exploit(def.Node);
             int id = -(1 + (perkEffectSerial++ & 0x3FFFFFFF)); // negative: never collides with a TASKED call id
-            CyberEffect e = CyberPackages.Package(def, id, (float)at.x, (float)at.z, f.Key, exploit, SupportManager.MissionNow(), quality);
+            CyberEffect e = CyberPackages.Package(def, id, (float)at.x, (float)at.z, f.Key, exploit, SupportManager.MissionNow(), power, durationBonus);
             if (!f.Desk.Effects.Add(e)) return false;
             BlocksLive = true;
             Plugin.Logger?.LogInfo("[Support.Cyber] " + def.Label + " perk at " + ((float)at.x).ToString("0") + "," + ((float)at.z).ToString("0") + " for " + ((int)(e.Until - SupportManager.MissionNow())) + " s.");

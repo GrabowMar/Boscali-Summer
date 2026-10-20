@@ -12,12 +12,38 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public const float EmpBurstAltitude = 30000f;
         public const float MaxEmpRadius = 90000f;
 
-        public static float RodDamage(float distance)
+        public static float RodDamage(float distance) => RodDamage(distance, 1f, 1f);
+
+        /// <summary>
+        /// A rod's blast damage at <paramref name="distance"/>: the core and the reach shrink with <paramref name="radiusScale"/> (STARFALL's rods are about 35 %), the damage itself scales with
+        /// <paramref name="damageScale"/> (the front's POWER on an ORBITAL ROD).
+        /// </summary>
+        public static float RodDamage(float distance, float damageScale, float radiusScale)
         {
-            if (float.IsNaN(distance) || distance < 0f || distance >= RodBlastRadius) return 0f;
-            if (distance <= RodCoreRadius) return 12000f;
-            float falloff = (RodBlastRadius - distance) / (RodBlastRadius - RodCoreRadius);
-            return 12000f * falloff * falloff * falloff;
+            float reach = RodBlastRadius * radiusScale, core = RodCoreRadius * radiusScale;
+            if (float.IsNaN(distance) || distance < 0f || distance >= reach) return 0f;
+            if (distance <= core) return 12000f * damageScale;
+            float falloff = (reach - distance) / (reach - core);
+            return 12000f * damageScale * falloff * falloff * falloff;
+        }
+
+        /// <summary>
+        /// A rod's damage and blast-radius scales ride in the delivery missile's replicated name (<c>:k=damage%,radius%</c>), like the EMP radius, so the host's blast and every peer's picture agree.
+        /// The radius scale never goes above 1: the friendly stand-off is judged against the full 420 m blast.
+        /// </summary>
+        public static string RodName(string name, float damageScale, float radiusScale) =>
+            name + ":k=" + Math.Round(damageScale * 100f).ToString(CultureInfo.InvariantCulture) + "," + Math.Round(radiusScale * 100f).ToString(CultureInfo.InvariantCulture);
+
+        /// <summary>Reads <see cref="RodName"/>: damage 30 .. 150 %, radius 30 .. 100 %; a name without it (or an unreadable one) is a plain rod, 1 and 1.</summary>
+        public static void RodScales(string name, out float damage, out float radius)
+        {
+            damage = 1f; radius = 1f;
+            int index = name == null ? -1 : name.LastIndexOf(":k=", StringComparison.Ordinal);
+            if (index < 0) return;
+            string[] parts = name.Substring(index + 3).Split(',');
+            if (parts.Length != 2) return;
+            if (int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int d) && d >= 30 && d <= 150) damage = d / 100f;
+            if (int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int r) && r >= 30 && r <= 100) radius = r / 100f;
         }
 
         public static string EmpName(string name, float radius) =>

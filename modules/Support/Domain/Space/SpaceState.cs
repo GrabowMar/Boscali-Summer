@@ -50,6 +50,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         }
 
         public int UplinkCount => health.Length;
+        /// <summary>The host's last reading of one uplink site: destroyed (or out of range of the list).</summary>
+        public bool UplinkDown(int index) => index < 0 || index >= down.Length || down[index];
         public int Generation { get; private set; } = 1;
         public int LiveUplinkCount
         {

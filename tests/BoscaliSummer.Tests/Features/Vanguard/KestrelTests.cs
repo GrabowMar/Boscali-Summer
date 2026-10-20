@@ -19,10 +19,10 @@ namespace BoscaliSummer.Tests.Features.Vanguard
 
             TestAssert.That(KestrelProfile.CruiseSpeed == 80f && KestrelProfile.OrbitRadius == 800f && KestrelProfile.OrbitHeight == 1000f &&
                 KestrelProfile.MinAgl == 300f, "80 m/s, 800 m circle, 1000 m above the target, 300 m terrain floor");
-            TestAssert.That(KestrelProfile.StationSeconds == 300f && KestrelProfile.HardCap == 900f && KestrelProfile.ClearSeconds == 2.5f,
-                "300 s on station, 900 s hard cap, 2.5 s to clear the hold");
-            TestAssert.That(KestrelProfile.SpotRadius == 5000f && KestrelProfile.SpotInterval == 2f && KestrelProfile.SpotCap == 48,
-                "spot 5 km around the centre every 2 s, 48 units a pass");
+            TestAssert.That(KestrelProfile.StationSeconds == 420f && KestrelProfile.HardCap == 900f && KestrelProfile.ClearSeconds == 2.5f,
+                "420 s on station, 900 s hard cap, 2.5 s to clear the hold");
+            TestAssert.That(KestrelProfile.SpotRadius == 6500f && KestrelProfile.SpotInterval == 2f && KestrelProfile.SpotCap == 48,
+                "spot 6.5 km around the centre every 2 s, 48 units a pass");
 
             // Orbit guidance is GLAIVE's, scaled: pure tangent on the 800 m circle, centre on PORT, radial correction either side.
             Vector3 onCircle = KestrelProfile.OrbitOffset(Vector3.right * 800f, Vector3.forward);
@@ -45,24 +45,24 @@ namespace BoscaliSummer.Tests.Features.Vanguard
 
             TestAssert.That(KestrelProfile.Next(KestrelPhase.Transit, false, 0f, 10f) == KestrelPhase.Transit &&
                 KestrelProfile.Next(KestrelPhase.Transit, true, 0f, 10f) == KestrelPhase.Station, "transit until the orbit is captured");
-            TestAssert.That(KestrelProfile.Next(KestrelPhase.Station, false, 299f, 400f) == KestrelPhase.Station &&
-                KestrelProfile.Next(KestrelPhase.Station, true, 300f, 400f) == KestrelPhase.Depart, "300 s on station, counted from orbit entry");
+            TestAssert.That(KestrelProfile.Next(KestrelPhase.Station, false, 419f, 400f) == KestrelPhase.Station &&
+                KestrelProfile.Next(KestrelPhase.Station, true, 420f, 400f) == KestrelPhase.Depart, "420 s on station, counted from orbit entry");
             TestAssert.That(KestrelProfile.Next(KestrelPhase.Transit, false, 0f, 892f) == KestrelPhase.Depart &&
                 KestrelProfile.Next(KestrelPhase.Station, false, 10f, 891f) == KestrelPhase.Station &&
                 KestrelProfile.Next(KestrelPhase.Station, false, 10f, 892f) == KestrelPhase.Depart,
                 "hard cap: the 8 s departure starts at 892 s whatever the phase, so the glider is gone by 900 s");
             TestAssert.That(KestrelProfile.Next(KestrelPhase.Depart, true, 0f, 10f) == KestrelPhase.Depart, "departure is final");
 
-            TestAssert.Near(KestrelProfile.StationLeft(KestrelPhase.Transit, 0f, 100f), 300f, "the station clock waits for the orbit");
-            TestAssert.Near(KestrelProfile.StationLeft(KestrelPhase.Station, 120f, 400f), 180f, "station clock runs down");
+            TestAssert.Near(KestrelProfile.StationLeft(KestrelPhase.Transit, 0f, 100f), 420f, "the station clock waits for the orbit");
+            TestAssert.Near(KestrelProfile.StationLeft(KestrelPhase.Station, 120f, 400f), 300f, "station clock runs down");
             TestAssert.Near(KestrelProfile.StationLeft(KestrelPhase.Station, 10f, 800f), 92f, "a late arrival is cut short by the hard cap");
             TestAssert.That(KestrelProfile.StationLeft(KestrelPhase.Depart, 10f, 400f) == 0f && KestrelProfile.StationLeft(KestrelPhase.Transit, 0f, 895f) == 0f,
                 "nothing left once departing or past the cap");
             float fullStationReach = (KestrelProfile.HardCap - KestrelProfile.DepartSeconds - KestrelProfile.StationSeconds) * KestrelProfile.CruiseSpeed;
-            TestAssert.Near(fullStationReach, 47360f, "a target inside 47 km still gets the full 300 s");
+            TestAssert.Near(fullStationReach, 37760f, "a target inside 37 km still gets the full 420 s");
 
-            TestAssert.That(KestrelProfile.MaySpot(4000f, true, false) && KestrelProfile.MaySpot(5000f, false, true), "ground vehicles and ships inside 5 km are spotted");
-            TestAssert.That(!KestrelProfile.MaySpot(5001f, true, false) && !KestrelProfile.MaySpot(100f, false, false),
+            TestAssert.That(KestrelProfile.MaySpot(4000f, true, false) && KestrelProfile.MaySpot(6500f, false, true), "ground vehicles and ships inside 6.5 km are spotted");
+            TestAssert.That(!KestrelProfile.MaySpot(6501f, true, false) && !KestrelProfile.MaySpot(100f, false, false),
                 "nothing beyond 5 km; never aircraft, missiles or buildings");
 
             var ranges = new List<float> { 500f, 120f, 900f };
@@ -76,7 +76,7 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.Eq(KestrelProfile.HudText(KestrelPhase.Station, 4.2f), "KESTREL ON STATION 0:05", "HUD clock rounds up to whole seconds");
             TestAssert.That(ReferenceEquals(KestrelProfile.HudText(KestrelPhase.Station, 271.2f), KestrelProfile.HudText(KestrelPhase.Station, 272f)),
                 "station text is one cached string per second (the HUD asks at 5 Hz)");
-            TestAssert.Eq(KestrelProfile.HudText(KestrelPhase.Station, 9999f), "KESTREL ON STATION 5:00", "HUD clock is clamped to the station time");
+            TestAssert.Eq(KestrelProfile.HudText(KestrelPhase.Station, 9999f), "KESTREL ON STATION 7:00", "HUD clock is clamped to the station time");
             TestAssert.Eq(KestrelProfile.HudText(KestrelPhase.Depart, 0f), "KESTREL OFF STATION", "HUD departing");
             TestAssert.Eq(KestrelProfile.HudDetail(12, null), "SPOT 12", "HUD detail without a mark");
             TestAssert.Eq(KestrelProfile.HudDetail(3, "Hlt-L"), "SPOT 3  LASE HLT-L", "HUD detail names the lased target");

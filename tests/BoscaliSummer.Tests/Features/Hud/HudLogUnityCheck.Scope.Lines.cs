@@ -22,8 +22,8 @@ public static partial class HudLogUnityCheck
         LinesShot("lean-threat", hd, "threat", 6f, PilotOptions("Declutter", Declutter("Lean")), null, (status, tag) =>
         {
             List<string> words = BoardWords(status);
-            foreach (string w in new[] { "FA", "RDR", "LOCK", "9 S" }) Check(words.Contains(w), tag + ": " + w + " is drawn (a lit lamp, the headline)");
-            foreach (string w in new[] { "GEAR", "HOVR", "NVG", "SAFE", "ENG", "SPKE", "THREAT", "ACE HUNT" }) Check(!words.Contains(w), tag + ": " + w + " is not drawn (an unlit lamp, the title, the gauge line)");
+            foreach (string w in new[] { "FA", "RDR", "LOCK", "9 S", "THREAT" }) Check(words.Contains(w), tag + ": " + w + " is drawn (a lit lamp, headline or selected context name)");
+            foreach (string w in new[] { "GEAR", "HOVR", "NVG", "SAFE", "ENG", "SPKE", "ACE HUNT" }) Check(!words.Contains(w), tag + ": " + w + " is not drawn (an unlit lamp or gauge)");
             Check(((NOAvionics.AvVector)Field(status, "frameVector")).Buffer.Count > 0, tag + ": the page keeps its four brackets");
             Check(WordInk(status, "FA", out Rect fa) && Mathf.Abs(fa.x - (LampsLeft(status) + 7f)) < 3f, tag + ": the first lit lamp starts at the lamp line's left end, packed: " + fa.x);
         });
@@ -31,7 +31,8 @@ public static partial class HudLogUnityCheck
         {
             List<string> words = BoardWords(status);
             Check(words.Contains("LOCK") && words.Exists(w => w.StartsWith("MSL")) && words.Contains("9 S"), tag + ": the threat lamps and the headline are drawn");
-            foreach (string w in new[] { "GEAR", "FA", "RDR", "HOVR", "SAFE", "SPKE", "THREAT" }) Check(!words.Contains(w), tag + ": " + w + " is not drawn");
+            foreach (string w in new[] { "GEAR", "FA", "RDR", "HOVR", "SAFE", "SPKE" }) Check(!words.Contains(w), tag + ": " + w + " is not drawn");
+            Check(words.Contains("THREAT"), tag + ": Minimal retains the manually selected context name");
             Check(WordInk(status, "LOCK", out Rect lk) && lk.xMax > LampsLeft(status) + 300f, tag + ": the threat lamps sit against the right end: " + lk.xMax);
         });
         LinesShot("gauges-threat", hd, "threat", 6f, PilotOptions(), null, (status, tag) =>
@@ -76,8 +77,9 @@ public static partial class HudLogUnityCheck
         {
             List<string> words = BoardWords(status);
             Check(words.Contains("LOCK") && words.Contains("MSL 2"), tag + ": the lock and the missile lamps are drawn");
-            foreach (string w in new[] { "GEAR", "FA", "RDR", "SPKE", "SYSTEMS" }) Check(!words.Contains(w), tag + ": " + w + " is not drawn");
-            Check(!Shown(status, "scopeRect"), tag + ": Minimal draws no cruise strip");
+            foreach (string w in new[] { "GEAR", "FA", "RDR", "SPKE" }) Check(!words.Contains(w), tag + ": " + w + " is not drawn");
+            Check(words.Contains("SYSTEMS"), tag + ": Minimal retains the manually selected SYSTEMS title");
+            Check(Shown(status, "scopeRect"), tag + ": Minimal keeps the manually selected SYSTEMS page");
             Check(WordInk(status, "MSL 2", out Rect m) && Mathf.Abs(m.xMax - (LampsLeft(status) + 440f)) < 2.5f, tag + ": the last threat lamp ends at the line's right end: " + m.xMax);
         });
         LinesShot("shot-timeline", hd, "shot", 6f, PilotOptions(), null, (status, tag) =>
@@ -113,7 +115,7 @@ public static partial class HudLogUnityCheck
     private static void LinesShot(string name, Vector2 size, string page, float t, object options, Action<ScopeScene> more, Action<object, string> judge)
     {
         MakeBoard(size, t, out Canvas canvas, out object status, out object frame);
-        Set(status, "Options", options);
+        SelectFixturePage(status, options, page);
         foreach (float before in PreRoll(page, t))
         {
             var rehearsal = new ScopeScene(before, size, frame);

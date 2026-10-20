@@ -700,19 +700,19 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             Hat(r, 1, 0); Hat(r, 0, -1); Hat(r, 1, 0); r.PadY(false);
             TestAssert.That(r.Log.Count == 1 && r.C.Open, "hat: releasing the button runs the aimed row");
 
-            // a switch list is worked through: releasing on a switch keeps it up, the stick aims the next, a press flips it, centre + press closes
+            // A manual page list stays open after a pick; another pick and centre + press still work.
             r = Rig();
             r.PadY(true); r.Adv(0.2f);
-            Dwell(r, 1); Dwell(r, 3);
-            TestAssert.That(r.Cat == "hud" && r.C.Sub != null && r.C.Sub.Id == "hud/pages" && r.C.Wheel, "pad: HUD, then SCOPE PAGES, each entered by a held stick");
-            Aim(r, 1); r.PadY(false);
-            TestAssert.That(r.Ran("hud/pages/threat") && r.C.Open && r.C.Mode == MenuMode.Latched && r.C.Sub != null, "pad: releasing on a switch in a list flips it and keeps the list");
+            Dwell(r, 1); Dwell(r, 1);
+            TestAssert.That(r.Cat == "hud" && r.C.Sub != null && r.C.Sub.Id == "hud/page1" && r.C.Wheel, "pad: HUD, then PAGE 1, each entered by a held stick");
+            Aim(r, 0); r.PadY(false);
+            TestAssert.That(r.Ran("hud/page1/threat") && r.C.Open && r.C.Mode == MenuMode.Latched && r.C.Sub != null, "pad: releasing on a page picks it and keeps the list");
             r.Stick(0f, 0f);
             TestAssert.That(r.C.WheelAim == -1 && MenuHint.Parts(r.C).Back == "CENTRE + PRESS · CLOSE", "pad: latched, the centred stick aims nothing and the hint says how to leave");
-            Aim(r, 2);
-            MenuInput press = MenuInput.Idle(r.Time); press.CanOpen = true; press.CHeld = true; press.FromPad = true; press.Press = true; press.PressSource = PressSource.Pad; press.PadAHeld = true; press.StickX = (float)Math.Sin(90 * Math.PI / 180.0);
+            Aim(r, 1);
+            MenuInput press = MenuInput.Idle(r.Time); press.CanOpen = true; press.CHeld = true; press.FromPad = true; press.Press = true; press.PressSource = PressSource.Pad; press.PadAHeld = true; press.StickX = (float)Math.Sin(54 * Math.PI / 180.0); press.StickY = (float)Math.Cos(54 * Math.PI / 180.0);
             r.CHeld = true; r.PadAHeld = true; r.Send(press);
-            TestAssert.That(r.Ran("hud/pages/shot") && r.C.Open, "pad: latched, a press on the aimed switch flips it");
+            TestAssert.That(r.Ran("hud/page1/shot") && r.C.Open, "pad: latched, a press selects another manual page");
             r.PadY(false); r.Stick(0f, 0f);
             press = MenuInput.Idle(r.Time); press.CanOpen = true; press.CHeld = true; press.FromPad = true; press.Press = true; press.PressSource = PressSource.Pad; press.PadAHeld = true;
             r.CHeld = true; r.Send(press);

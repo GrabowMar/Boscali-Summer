@@ -33,6 +33,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public float Precision = 1f, Aggression = 0.5f, Clearance = 60f;
         /// <summary>Spec M5 §11: EarlyWarning (seconds off the missile reaction) and BreakTurn (instant inside this range).</summary>
         public float ReactionDelta, BreakRange;
+        /// <summary>How the doctrine meets <see cref="Threat"/>, set with it: MSL GUARD OFF, and RESPONSE PRESS with the
+        /// member's own radar-guided missile in flight (<see cref="MissileDefence.HoldsCourse"/>).</summary>
+        public bool GuardOff, Pressing;
         public bool AfterburnerAllowed = true;
         public FlightIntent LastIntent;
         public GuidanceCommand LastGuidance;
@@ -59,7 +62,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
         {
             SlotTarget slot = frame.Slots[Slot];
             LeaderEstimate leader = frame.Leader;
-            float usable = AfterburnerAllowed && p.HasAfterburner ? p.MaxSpeed : p.MilSpeed;
+            // A helicopter's guidance holds it to cruise (the frame's capability says the same); its MilSpeed is its top speed,
+            // which made the planner see a quick catch-up that never came and never call "falling behind".
+            float usable = p.Class == AirframeClass.Rotary ? p.CruiseSpeed : AfterburnerAllowed && p.HasAfterburner ? p.MaxSpeed : p.MilSpeed;
             Rejoin.LaneStepM = Math.Max(RejoinPlanner.LaneStep,
                 CollisionBias.RadiusFor(p.MaxRadius, frame.Spacing) + RejoinPlanner.LaneClearance);
             LastRejoin = Rejoin.Step(s, slot, leader, Slot + 1, frame.Spacing, usable, frame.StaggerClear[Slot], dt, frame.Stack);
@@ -73,7 +78,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 : basis == BehaviourId.Trail && frame.TrailValid[Slot] ? frame.TrailRef[Slot]
                 : basis == BehaviourId.HoldOverhead ? new RefState(HoldCenter(leader), leader.Vel, Vec3.Zero)
                 : LastRejoin.Ref;
-            LastDefence = Defence.Step(Threat, s, home, Precision, dt, ReactionDelta, BreakRange);
+            LastDefence = Defence.Step(Threat, s, home, Precision, dt, ReactionDelta, BreakRange, GuardOff, Pressing);
             if (LastDefence.Active != (Mind.Current == BehaviourId.Defend))
             {
                 BehaviourId was = Mind.Current;
@@ -147,11 +152,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             // Evading at full effort, as the game's evasion does (aimEffort 1); a maneuver too.
             float aggression = Mind.Current == BehaviourId.Defend ? MissileDefence.DefendAggression
                 : Mind.Current == BehaviourId.React ? ReactionManeuver.Aggression : Aggression;
-            // The throttle override is a fixed wing's (a helicopter's throttle is its collective: review M5c C1); idle only
-            // when safe. The tick it stops, the loops pick up from the throttle it held (review M5c I4).
-            bool fixedWing = Pipeline is FixedWingPipeline || (Pipeline is TiltwingPipeline tw && tw.Mode == TiltwingMode.Plane);
-            bool idle = LastDefence.Idle && s.Tas >= MissileDefence.IdleMinSpeedFactor * p.MinimumSpeed(1f) && !Pipeline.GcasActive;
-            bool overriding = fixedWing && Mind.Current == BehaviourId.Defend && (idle || LastDefence.Full);
+            bool overriding = DefenceThrottle(Mind.Current == BehaviourId.Defend, s, p, out bool idle);
             if ((overrideWas && !overriding) || trackPending) Pipeline.Track(s, LastOutput, p);
             overrideWas = overriding;
             trackPending = false;
@@ -196,20 +197,49 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
 
         /// <summary>Flies an intent of its own (the recovery approach) through this member's pipeline, with its own terrain
-        /// floor and the wing's collision bias.</summary>
+        /// floor and the wing's collision bias. Survive first here too: a missile guiding on the member is defended against
+        /// with the approach as home (the recovery owns the member, so the mind does not change).</summary>
         public ControlOutput FlyIntent(in FlightIntent intent, WingFrame frame, in AircraftState s, AirframeProfile p, float dt)
         {
-            if (trackPending) Pipeline.Track(s, LastOutput, p);
+            LastDefence = Defence.Step(Threat, s, intent.Ref, Precision, dt, ReactionDelta, BreakRange, GuardOff, Pressing);
+            FlightIntent fly = intent;
+            if (LastDefence.Active)
+            {
+                fly.Ref = LastDefence.Ref;
+                // The formation's Defend limits: the approach's cruise cap would hold a notch to cruise.
+                fly.Limits = new SpeedLimits(p.MinimumSpeed(1f), p.MaxSpeed, AfterburnerAllowed, true);
+                fly.Aggression = MissileDefence.DefendAggression;
+                fly.HasHeading = false;
+            }
+            bool overriding = DefenceThrottle(LastDefence.Active, s, p, out bool idle);
+            if ((overrideWas && !overriding) || trackPending) Pipeline.Track(s, LastOutput, p);
+            overrideWas = overriding;
             trackPending = false;
-            LastIntent = intent;
-            GuidanceCommand guidance = LastGuidance = Pipeline.Guide(intent, s, p);
+            LastIntent = fly;
+            GuidanceCommand guidance = LastGuidance = Pipeline.Guide(fly, s, p);
             bool near = frame.HasNearFloor[Slot];
             var ctx = new LimitContext
             {
                 FloorY = near ? frame.NearFloorY[Slot] : float.NaN, NearFloorY = frame.NearFloorY[Slot], HasNearFloor = near,
-                Clearance = Clearance, Aggression = intent.Aggression, CollisionBias = frame.Bias[Slot],
+                Clearance = Clearance, Aggression = fly.Aggression, CollisionBias = frame.Bias[Slot],
             };
-            return LastOutput = Pipeline.Step(guidance, s, ctx, p, dt);
+            LastOutput = Pipeline.Step(guidance, s, ctx, p, dt);
+            if (overriding)
+            {
+                LastOutput.Throttle = idle ? 0f : 1f;
+                LastOutput.Airbrake = false;
+            }
+            return LastOutput;
+        }
+
+        /// <summary>Whether the defence holds the throttle (idle or full) while <paramref name="defending"/>: a fixed wing's
+        /// only (a helicopter's throttle is its collective: review M5c C1), idle only when safe. The tick it stops, the loops
+        /// pick up from the throttle it held (review M5c I4).</summary>
+        private bool DefenceThrottle(bool defending, in AircraftState s, AirframeProfile p, out bool idle)
+        {
+            bool fixedWing = Pipeline is FixedWingPipeline || (Pipeline is TiltwingPipeline tw && tw.Mode == TiltwingMode.Plane);
+            idle = LastDefence.Idle && s.Tas >= MissileDefence.IdleMinSpeedFactor * p.MinimumSpeed(1f) && !Pipeline.GcasActive;
+            return fixedWing && defending && (idle || LastDefence.Full);
         }
 
         /// <summary>The member leaves formation flight (recovery, combat, release, settle) mid-defence or mid-maneuver: both

@@ -10,6 +10,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public bool Everyone;
         /// <summary>Members were moved into <see cref="Element"/> to carry this order.</summary>
         public bool Detached;
+        /// <summary>With <see cref="Detached"/>: the element the first selected member came from (the new one starts with its
+        /// shape and doctrine).</summary>
+        public int From;
         public string Reason;
     }
 
@@ -127,6 +130,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 if (Count(e) == 0) free = e;
             if (free < 0) return Refuse("all four elements are in use");
             names[free] = null;   // a reused letter starts without the last element's name
+            int from = of[picked[0]];
             foreach (uint id in picked)
             {
                 int was = of[id];
@@ -134,7 +138,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 of[id] = free;
                 if (was > 0 && Count(was) == 0) names[was] = null;
             }
-            return new ScopeTarget { Element = free, Detached = true };
+            return new ScopeTarget { Element = free, Detached = true, From = from };
         }
 
         public void Merge(int e)

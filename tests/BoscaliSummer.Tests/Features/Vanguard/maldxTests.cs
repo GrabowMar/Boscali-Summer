@@ -9,7 +9,7 @@ namespace BoscaliSummer.Tests.Features.Vanguard
     {
         public static void Run()
         {
-            TestAssert.Near(MaldxRules.Lifetime, 300f, "bait lives five minutes");
+            TestAssert.Near(MaldxRules.Lifetime, 420f, "bait lives seven minutes");
             TestAssert.Near(MaldxRules.CruiseAltitude(800f, 0f), 1500f, "low launch climbs to the 1500 m floor");
             TestAssert.Near(MaldxRules.CruiseAltitude(6000f, 0f), 6000f, "high launch keeps its altitude");
             TestAssert.Near(MaldxRules.CruiseAltitude(800f, 1400f), 1900f, "high ground lifts the floor to terrain + 500 m");
@@ -51,12 +51,12 @@ namespace BoscaliSummer.Tests.Features.Vanguard
 
             var sight = new Vector3(10000f, 0f, 0f); // seeker at the origin, target 10 km east
             TestAssert.That(MaldxRules.Screens(new Vector3(5000f, 0f, 500f), sight), "a cloud 500 m off the line of sight blinds the seeker");
-            TestAssert.That(!MaldxRules.Screens(new Vector3(5000f, 0f, 700f), sight), "700 m off the line: clear");
+            TestAssert.That(!MaldxRules.Screens(new Vector3(5000f, 0f, 800f), sight), "800 m off the line: clear");
             TestAssert.That(MaldxRules.Screens(new Vector3(10400f, 300f, 0f), sight), "a target inside a cloud is covered");
-            TestAssert.That(!MaldxRules.Screens(new Vector3(-700f, 0f, 0f), sight) && !MaldxRules.Screens(new Vector3(10700f, 0f, 0f), sight),
+            TestAssert.That(!MaldxRules.Screens(new Vector3(-800f, 0f, 0f), sight) && !MaldxRules.Screens(new Vector3(10800f, 0f, 0f), sight),
                 "a cloud behind the seeker or beyond the target does nothing");
             TestAssert.That(MaldxRules.Screens(new Vector3(0f, 0f, 500f), Vector3.zero), "seeker on top of its target: plain distance");
-            TestAssert.That(MaldxRules.ChaffSpacing < MaldxRules.ChaffRadius, "clouds overlap into a corridor");
+            TestAssert.That(MaldxRules.ChaffSpacing < MaldxRules.ChaffRadius && MaldxRules.ChaffRadius == 750f, "clouds overlap into a wide corridor");
         }
     }
 }

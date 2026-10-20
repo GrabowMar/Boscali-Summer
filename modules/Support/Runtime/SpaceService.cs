@@ -4,6 +4,8 @@ using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Services;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
+using BoscaliSummer.Modules.Support.Domain.Ops;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Runtime.Actions;
 using NuclearOption.Networking;
@@ -20,6 +22,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public SpaceState State;
             public Unit[] Links;
             public float[] Baseline;
+            /// <summary>Where each site was raised, in world metres: a destroyed site keeps its place on the ORBIT room.</summary>
+            public float[] SiteX, SiteZ;
             public IReadOnlyList<Unit> View;
             public SpaceObservations Observations;
             public TaskedDesk Tasked;
@@ -116,6 +120,30 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal IReadOnlyList<Unit> UplinksFor(FactionHQ owner) =>
             owner != null && factions.TryGetValue(owner, out FactionSpace faction) ? faction.View : Array.Empty<Unit>();
 
+        private static void Locate(FactionSpace faction, int slot)
+        {
+            Unit site = faction.Links[slot];
+            if (site == null) return;
+            GlobalPosition at = site.transform.position.ToGlobalPosition();
+            faction.SiteX[slot] = (float)at.x; faction.SiteZ[slot] = (float)at.z;
+        }
+
+        /// <summary>
+        /// Host: the faction's own uplink sites for the OPERATIONS mirror, read from the 1 Hz state the tick keeps (never a re-sample): the place each was raised, and whether it stands, is
+        /// destroyed, or is destroyed with the UPLINK SITE programme queued or building. Enemy sites are never listed here (a revealed one is a CYBER node).
+        /// </summary>
+        internal void CopySites(FactionHQ owner, List<OpsSiteRow> into)
+        {
+            if (owner == null || !factions.TryGetValue(owner, out FactionSpace faction)) return;
+            bool rebuilding = manager != null && manager.Fronts != null && manager.Fronts.HasProgramme(owner, ProgrammeId.UplinkSite);
+            for (int i = 0; i < faction.Links.Length && into.Count < OpsWire.MaxSites; i++)
+            {
+                bool down = faction.State.UplinkDown(i);
+                into.Add(new OpsSiteRow { Slot = (byte)i, State = !down ? SiteState.Up : rebuilding ? SiteState.Rebuilding : SiteState.Down, X = faction.SiteX[i], Z = faction.SiteZ[i] });
+                if (down) rebuilding = false; // one programme raises one site: the first dead one (TryRebuildUplink); a second dead site is only destroyed
+            }
+        }
+
         // ---- OPS FRONTS programme effects (host) ----------------------------------------------------
 
         /// <summary>LAUNCH SATELLITE finished: the lowest dead bird is on station. False (nothing changed) when none is down.</summary>
@@ -147,6 +175,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     !spawner.TryCreate(owner, slot, spot.Anchor, spot.Parent, out Unit made)) continue;
                 faction.Links[slot] = made;
                 faction.Baseline[slot] = UplinkSpawner.Health(made);
+                Locate(faction, slot);
                 Plugin.Logger?.LogInfo("[Support.Space] " + owner.name + " uplink " + slot + " raised again by its programme.");
                 return true;
             }
@@ -237,6 +266,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal int OpenWindow(FactionHQ owner, GlobalPosition point, float radius, BirdKind source,
             float minimumSpeed, float maximumSpeed) =>
             ObservationsFor(owner)?.Open(point, radius, source, minimumSpeed, maximumSpeed) ?? -1;
+
+        /// <summary>OVERWATCH: the faction's RADAR bird follows the moving enemy ground units nearest the aim. NoMovers when none moves within the radius.</summary>
+        internal SupportResult Overwatch(FactionHQ owner, GlobalPosition at, float radius, int units, float seconds, out int followed)
+        {
+            followed = 0;
+            SpaceObservations observations = ObservationsFor(owner);
+            if (observations == null) return SupportResult.CapabilityUnavailable;
+            followed = observations.Follow(at, radius, units, seconds);
+            return followed > 0 ? SupportResult.Accepted : SupportResult.NoMovers;
+        }
 
         /// <summary>
         /// The host side of the optical camera task: read the sky at the aim, refuse with words at night or when the sky is unknown,
@@ -601,7 +640,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             var baseline = new float[array.Length];
             for (int i = 0; i < array.Length; i++) baseline[i] = UplinkSpawner.Health(array[i]);
             faction = new FactionSpace { State = new SpaceState(array.Length), Links = array, Baseline = baseline,
-                View = Array.AsReadOnly(array), Observations = new SpaceObservations(owner) };
+                SiteX = new float[array.Length], SiteZ = new float[array.Length], View = Array.AsReadOnly(array), Observations = new SpaceObservations(owner) };
+            for (int i = 0; i < array.Length; i++) Locate(faction, i);
             faction.Tasked = manager?.CreateTaskedDesk(this, owner, faction.Observations);
             SeedGeo(owner, faction.State);
             if (owner == null || factions.ContainsKey(owner)) yield break;

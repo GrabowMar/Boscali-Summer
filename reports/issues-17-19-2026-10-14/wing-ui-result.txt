@@ -1,0 +1,1 @@
+PASS: 115 production Wing/Radio captures at 896/596/420; 19044 layout, text and flight-input-isolation assertions; 0 failures. Synthetic display data; no game launch, audio, host/client, native radial or adapter acceptance.

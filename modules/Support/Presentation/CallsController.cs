@@ -32,7 +32,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private int claimRequest, claimPost;      // the one TASKED claim in flight (SPACE request id), 0 when none
         private float claimStartedAt;
         private bool steering;                    // a cruise-leg map pick is armed (the pick itself lives in the manager)
-        private bool cruiseClearAwaited;          // the STEER press in flight was a route clear, not a leg
+        private bool cruiseClearAwaited;          // the cruise verb in flight was a route clear, not a leg
         private SupportActionId? pendingAction;   // the CALL in flight, for its perk row's PENDING paint
         private SupportManager manager;
         private SupportSettings settings;
@@ -149,7 +149,22 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (TryPod(out GlobalPosition pod)) { Fire(id, pod, now); return; }
             if (mapAim.HasValue) { Fire(id, mapAim.Value, now); return; }
             if (TryTeamAim(out GlobalPosition team)) { Fire(id, team, now); return; }
+            // A perk the host answers without an aim (SIPHON) fires at the pilot's own position when nothing is designated.
+            if (!CallSheet.NeedsAim(id) && GameManager.GetLocalAircraft(out Aircraft self) && self != null) { Fire(id, self.GlobalPosition(), now); return; }
             Say(CallWords.Refusal(CallRefusal.NoAim), AvUiCue.Caution);
+        }
+
+        /// <summary>An ARM-labelled control: arms this perk and never fires. A no-op when it is already armed, so a stale ARM widget cannot become a FIRE.</summary>
+        public void Arm(SupportActionId id)
+        {
+            if (arm.Armed != id) Press(id);
+        }
+
+        /// <summary>A FIRE-labelled control: fires only the perk armed right now. Any other (or no) armed perk is refused and nothing changes.</summary>
+        public void FireArmed(SupportActionId id)
+        {
+            if (arm.Armed != id) { Say("NEGATIVE: " + Label(id) + " NOT ARMED — ARM IT FIRST", AvUiCue.Caution); return; }
+            Press(id);
         }
 
         public void Disarm()
@@ -204,7 +219,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             return true;
         }
 
-        /// <summary>First press arms exactly this post; the next press on it (same mirror and call generation) sends the claim.</summary>
+        /// <summary>First press arms exactly this post locally (nothing is claimed yet); the next press on it (same mirror and call generation) sends the host's claim-and-launch.</summary>
         public void PressTasked(int postId)
         {
             if (manager == null) return;
@@ -234,6 +249,19 @@ namespace BoscaliSummer.Modules.Support.Presentation
             AnswerTasked(id, TaskedReceiptState.Pending, TaskedReceipts.Words(TaskedReceiptState.Pending, TaskedOutcome.Queued, 0));
         }
 
+        /// <summary>An ARM-labelled TASKED control: arms exactly this post and never sends the claim. A no-op when it is already armed.</summary>
+        public void ArmTasked(int postId)
+        {
+            if (tasked.PostId != postId) PressTasked(postId);
+        }
+
+        /// <summary>A FIRE-labelled TASKED control: sends the claim only for the exact post armed right now; anything else is refused and nothing changes.</summary>
+        public void FireTasked(int postId)
+        {
+            if (postId == 0 || tasked.PostId != postId) { Say("NEGATIVE: THAT POST IS NOT ARMED — ARM IT FIRST", AvUiCue.Caution); return; }
+            PressTasked(postId);
+        }
+
         /// <summary>The receipt of the claim: PENDING and LAUNCHING are not SHOT; only the physical launch is.</summary>
         internal void AnswerTasked(int requestId, TaskedReceiptState state, string words)
         {
@@ -250,21 +278,21 @@ namespace BoscaliSummer.Modules.Support.Presentation
             bool cleared = cruiseClearAwaited;
             cruiseClearAwaited = false;
             if (result == SupportResult.Accepted)
-                Say(cleared ? "CRUISE ROUTE CLEARED \u00B7 FLYING DIRECT" : "LEG CONFIRMED \u00B7 " + legs + " SET \u00B7 STEER FOR ANOTHER LEG", AvUiCue.Confirm);
+                Say(cleared ? "CRUISE ROUTE CLEARED \u00B7 FLYING DIRECT" : "LEG CONFIRMED \u00B7 " + legs + " SET \u00B7 ADD LEG FOR ANOTHER", AvUiCue.Confirm);
             else
-                Say("NEGATIVE: CRUISE " + (cleared ? "CLEAR" : "LEG") + " REFUSED \u2014 CHECK THE ROUTE AND STEER AGAIN", AvUiCue.Caution);
+                Say("NEGATIVE: CRUISE " + (cleared ? "CLEAR" : "LEG") + " REFUSED \u2014 CHECK THE ROUTE AND TRY AGAIN", AvUiCue.Caution);
         }
 
         private void OnSpaceReply(SpaceReply reply)
         {
-            if (reply.Kind >= SpaceCommandKind.CyberHop && reply.Kind <= SpaceCommandKind.CyberDrop)
+            if ((reply.Kind >= SpaceCommandKind.CyberHop && reply.Kind <= SpaceCommandKind.CyberDrop) || reply.Kind == SpaceCommandKind.CyberPurge)
             {
                 // A CYBER verdict (HOP / BURN / DROP): its words reach the console and the NET footer; a refusal also cautions.
                 CyberResult verdict = new CyberResult(reply.CyberVerdict, reply.CallId, reply.Charged, reply.Detail);
                 Say((reply.Replayed ? "EARLIER · " : "") + verdict.Words, verdict.Ok ? AvUiCue.Confirm : AvUiCue.Caution);
                 return;
             }
-            if (reply.Kind >= SpaceCommandKind.SofRaise && reply.Kind <= SpaceCommandKind.SofDivert)
+            if ((reply.Kind >= SpaceCommandKind.SofRaise && reply.Kind <= SpaceCommandKind.SofDivert) || reply.Kind == SpaceCommandKind.SofSweep)
             {
                 // A SOF verdict (RAISE / ORDER / MISSION / DIVERT): its words reach the console and the SOF footer; a refusal also cautions.
                 var verdict = new SofResult(reply.SofVerdict, reply.CallId, reply.Charged, reply.Detail);
@@ -297,20 +325,37 @@ namespace BoscaliSummer.Modules.Support.Presentation
         }
 
         /// <summary>
-        /// Steers the pilot's flying cruise: first press arms one map leg, the right-click sends it, STEER again while
-        /// armed clears the whole route instead. One leg per press, so the map gesture is never re-armed under the pilot.
+        /// The old single STEER control, kept for automation and hotkeys: <see cref="AddLeg"/> when no pick is armed, <see cref="ClearRoute"/> while one is.
+        /// The OPS page uses the three distinct intents (ADD LEG, CANCEL PICK, CLEAR ROUTE). One leg per press, so the map gesture is never re-armed under the pilot.
         /// </summary>
         public void SteerCruise()
         {
+            if (steering) ClearRoute();
+            else AddLeg();
+        }
+
+        /// <summary>CLEAR ROUTE: asks the host to drop every confirmed leg of the flying cruise (a pick in progress is cancelled first). The verdict arrives in <see cref="OnCruiseReply"/>.</summary>
+        public void ClearRoute()
+        {
             if (manager == null) return;
-            if (steering)
-            {
-                steering = false;
-                manager.Disarm();
-                cruiseClearAwaited = true;
-                Say(manager.ClearCruiseLegs() ? "CLEAR SENT · STAND BY FOR THE HOST" : "STEER OFF", AvUiCue.Release);
-                return;
-            }
+            if (steering) { steering = false; manager.Disarm(); }
+            cruiseClearAwaited = manager.ClearCruiseLegs(); // only a clear that was really sent can be answered as one
+            Say(cruiseClearAwaited ? "CLEAR SENT · STAND BY FOR THE HOST" : "NEGATIVE: NO CRUISE ROUTE TO CLEAR", cruiseClearAwaited ? AvUiCue.Release : AvUiCue.Caution);
+        }
+
+        /// <summary>CANCEL PICK: drops the armed leg pick and keeps the confirmed route. A no-op when no pick is armed.</summary>
+        public void CancelPick()
+        {
+            if (!steering) return;
+            steering = false;
+            manager?.Disarm();
+            Say("PICK CANCELLED · ROUTE KEPT", AvUiCue.Release);
+        }
+
+        /// <summary>ADD LEG: arms one map pick for the next leg of the flying cruise; the right-click sends it. A no-op while a pick is already armed.</summary>
+        public void AddLeg()
+        {
+            if (manager == null || steering) return;
             if (!manager.TryFlyingCruise(out int id, out int legs)) { Say("NEGATIVE: NO CRUISE IN FLIGHT \u2014 FIRE CRUISE FIRST", AvUiCue.Caution); return; }
             if (legs >= StrikeBallistics.MaxLegs) { Say("NEGATIVE: ROUTE FULL \u2014 " + StrikeBallistics.MaxLegs + " LEGS ALREADY SET", AvUiCue.Caution); return; }
             arm.Clear(); tasked.Clear();
@@ -323,7 +368,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 Say("LEG SENT \u00B7 STAND BY FOR THE HOST", AvUiCue.Engage);
             });
             if (!ok) { steering = false; Say(CallWords.Refusal(CallRefusal.Unavailable), AvUiCue.Caution); return; }
-            Say("STEER CRUISE \u00B7 RIGHT-CLICK MAP FOR THE LEG \u00B7 STEER AGAIN CLEARS THE ROUTE", AvUiCue.Engage);
+            Say("ADD LEG \u00B7 RIGHT-CLICK THE MAP FOR THE LEG \u00B7 CANCEL PICK KEEPS THE ROUTE", AvUiCue.Engage);
         }
 
         private void Fire(SupportActionId id, GlobalPosition target, float now)

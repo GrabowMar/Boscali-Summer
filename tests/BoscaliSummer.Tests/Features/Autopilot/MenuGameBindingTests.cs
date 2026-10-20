@@ -11,7 +11,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
     /// </summary>
     internal static class MenuGameBindingTests
     {
-        private static readonly string[] Prefixes = { "weapons/select/st", "comms/c", "support/perks/", "support/pit/station/", "targets/filters/", "wing/shape/", "hud/pages/", "hud/parts/", "cockpit/feel/" };
+        private static readonly string[] Prefixes = { "weapons/select/st", "weapons/cargo/st", "comms/c", "support/perks/", "support/pit/station/", "targets/filters/", "wing/shape/", "hud/page1/", "hud/page2/", "hud/page3/", "hud/page4/", "hud/parts/", "cockpit/feel/" };
 
         public static void Run()
         {
@@ -26,7 +26,6 @@ namespace BoscaliSummer.Tests.Features.Autopilot
                     if (row.Kind != MenuKind.Submenu) runnable.Add(row.Id);
             TestAssert.That(runnable.Count > 40, "the fixtures cover the whole catalog (" + runnable.Count + " runnable rows)");
             // a switch row is bound through a table keyed by its slug: every slug the catalog lists must be a key there
-            foreach (MenuSwitch s in MenuCatalog.BoardPages) TestAssert.That(source.Contains("[\"pages/" + s.Slug + "\"]"), "MenuGame has no option behind the scope page " + s.Slug);
             foreach (MenuSwitch s in MenuCatalog.BoardParts) TestAssert.That(source.Contains("[\"parts/" + s.Slug + "\"]"), "MenuGame has no option behind the board part " + s.Slug);
             foreach (MenuSwitch s in MenuCatalog.FeelSwitches) TestAssert.That(source.Contains("[\"" + s.Slug + "\"]"), "MenuGame has no option behind the cabin effect " + s.Slug);
             foreach (string id in runnable)

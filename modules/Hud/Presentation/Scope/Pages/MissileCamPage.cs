@@ -44,6 +44,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public override char Code => 'M';
 
+        public override string IdleWord => "NO MISSILE";
+
+        public override string IdleHint => "FIRE ONE TO FOLLOW ITS SEEKER";
+
         public override bool Fast => live;
 
         // ------------------------------------------------------------------------------------------------ poll

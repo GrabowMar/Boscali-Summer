@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Fx;
 using HarmonyLib;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -32,7 +33,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             {
                 // The game ships without URP's built-in grain textures: any preset lookup NREs in PostProcessPass.SetupGrain every frame and smears the screen.
                 g.type.value = FilmGrainLookup.Custom;
-                g.texture.value = Noise();
+                g.texture.value = FeedCamera.Noise();
                 g.intensity.value = 0.55f;
                 g.response.value = 0.55f;
             });
@@ -48,22 +49,6 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 b.scatter.value = 0.55f;
             });
             Set(profile.TryGet(out ChromaticAberration ca) ? ca : profile.Add<ChromaticAberration>(true), c => c.intensity.value = 0.3f);
-        }
-
-        private static Texture2D noise;
-
-        /// <summary>A 128 px grey noise tile for the Custom grain lookup, built once (the missile feed shares it).</summary>
-        internal static Texture2D Noise()
-        {
-            if (noise != null) return noise;
-            const int size = 128;
-            noise = new Texture2D(size, size, TextureFormat.R8, false, true) { name = "BoscaliSummer.Grain", wrapMode = TextureWrapMode.Repeat };
-            var bytes = new byte[size * size];
-            var rng = new System.Random(1);
-            rng.NextBytes(bytes);
-            noise.LoadRawTextureData(bytes);
-            noise.Apply(false, true);
-            return noise;
         }
 
         private static void Set<T>(T component, System.Action<T> write) where T : VolumeComponent

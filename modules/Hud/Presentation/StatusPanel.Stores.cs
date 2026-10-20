@@ -148,7 +148,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             CornersFrame(root != null && hasBoard && !stale, false);
             if (corner == null) return;
             CombatHUD hud = SceneSingleton<CombatHUD>.i;
-            bool alive = root != null && hasBoard && !stale && !headerFault && root.gameObject.activeInHierarchy;
+            bool alive = Options.Enabled && Options.ShowStores && root != null && hasBoard && !stale && !headerFault && root.gameObject.activeInHierarchy;
             bool hudUp = hud != null && hud.iconLayer != null && hud.iconLayer.gameObject.activeInHierarchy, batch = Application.isBatchMode;
             corner.Apply(NativeTakeover.Hide(alive, true, hudUp, batch, header.WeaponDrawn), NativeTakeover.Hide(alive, true, hudUp, batch, header.CmDrawn), NativeTakeover.Hide(alive, true, hudUp, batch, header.CapDrawn));
         }

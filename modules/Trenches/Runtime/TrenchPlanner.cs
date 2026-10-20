@@ -130,7 +130,16 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             // spacing to traceLength / MaximumCurvePoints to fit the station buffer — about
             // 150m on a real fifty-kilometre front — so a "curve" degenerated into a handful
             // of straight slabs and the minimum run collapsed to a single station.
-            if (windowStartStation < 0 || windowStartStation >= pointCount - 2) windowStartStation = 0;
+            // A start past the last segment is the trace's end, never window 0 again: replanning
+            // the head came back with a next station behind the cursor, so the scan skipped to the
+            // next trace and the tail it was meant to try was lost. A one-segment tail still plans.
+            if (windowStartStation < 0) windowStartStation = 0;
+            if (windowStartStation >= pointCount - 1)
+            {
+                job.Refusal = TrenchRefusal.NoStations;
+                job.NextStation = 0;
+                yield break;
+            }
             int first = windowStartStation;
             bool closed = TrenchTraceMath.IsClosed(traceX, traceZ, pointCount);
             int usable = closed ? pointCount - 1 : pointCount;
@@ -215,8 +224,12 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                 Anchors = SampleAnchors(curve, AnchorSpacing)
             };
             int faction = owner.GetInstanceID();
+            // Nests stand in ditch that is already dug, so they answer to the floor a dug line
+            // survives at, not the dig floor: on a hot front the field drifts below -0.25 and
+            // every reinforcement failed "outside the position", leaving Saps lines at two guns.
             built.Validator = p => TrenchTerrain.TryGround(p, out _) &&
-                Diggable(territory, faction, p) && WithinCorridor(built, p);
+                territory.TryGetHoldStrength(faction, p.x, p.z, out float hold) &&
+                TrenchTraceMath.HoldsOwnSide(hold) && WithinCorridor(built, p);
             job.Line = built;
             job.Planned = true;
         }
@@ -564,7 +577,9 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                 if (!Diggable(territory, faction, head)) continue;
                 if (TrenchTraceMath.NearAirfield(head.x, head.z, airfieldX, airfieldZ, airfieldCount)) continue;
                 Vector3 mid = anchor + forward * (TrenchTraceMath.SapDepth * 0.5f);
-                Vector3 midGround = TrenchTerrain.TryGround(mid, out Vector3 sampled) ? sampled : mid;
+                // A refused midpoint drops the sap, as a link does: the wire carries plan view only,
+                // so a client whose probe refuses the same ground had nothing to put there but y=0.
+                if (!TrenchTerrain.TryGround(mid, out Vector3 midGround)) continue;
                 spurs.Add(new[] { anchor, midGround, head });
             }
             if (spurs.Count == 0) return false;

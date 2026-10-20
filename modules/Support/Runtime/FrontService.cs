@@ -44,7 +44,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public CounterPressure Pressure = CounterPressure.None;
             public FrontStateData Cache;
             public float CacheAt = float.NegativeInfinity;
+            /// <summary>An AI faction queues its next ASAT no sooner than this (one every <see cref="AiAsatSpacingSeconds"/>).</summary>
+            public float NextAiAsat;
         }
+
+        private const float AiAsatSpacingSeconds = 1200f;
 
         private readonly Dictionary<FactionHQ, FactionFront> factions = new Dictionary<FactionHQ, FactionFront>();
         private readonly List<FactionFront> order = new List<FactionFront>(MaximumFactions);
@@ -105,12 +109,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return IsLocalFaction(hq) ? manager.FrontMirror.Readiness(front) : FrontRules.MaxReadiness;
         }
 
-        public float Quality(FactionHQ hq, Front front)
+        public float Power(FactionHQ hq, Front front)
         {
             if (hq == null) return 1f;
-            if (GameAccess.IsServer()) return factions.TryGetValue(hq, out FactionFront f) ? FrontSuperiority.Quality(f.Book.Side(front).Superiority) : 1f;
-            return IsLocalFaction(hq) ? manager.FrontMirror.Quality(front) : 1f;
+            if (GameAccess.IsServer()) return factions.TryGetValue(hq, out FactionFront f) ? FrontSuperiority.Power(f.Book.Side(front).Superiority) : 1f;
+            return IsLocalFaction(hq) ? manager.FrontMirror.Power(front) : 1f;
         }
+
+        /// <summary>Host: the faction's own counts from the last 5 s world read. Empty before the first read or for a client.</summary>
+        public FrontSides Facts(FactionHQ hq) => GameAccess.IsServer() && hq != null && factions.TryGetValue(hq, out FactionFront f) ? f.Own : default;
 
         private static bool IsLocalFaction(FactionHQ hq) => GameManager.GetLocalPlayer<Player>(out Player local) && local != null && ReferenceEquals(local.HQ, hq);
 
@@ -273,6 +280,18 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         // ---- AI factions -----------------------------------------------------------------------------
 
+        private bool EnemyBirdUp(FactionHQ owner)
+        {
+            var hqs = FactionRegistry.GetAllHQs();
+            if (hqs == null || space == null) return false;
+            foreach (FactionHQ hq in hqs)
+            {
+                if (hq == null || hq == owner || !space.TryGetStateCoarse(hq, out SpaceState s)) continue;
+                for (int b = 0; b < SpaceRules.BirdCount; b++) if (s.HasBird((BirdKind)b)) return true;
+            }
+            return false;
+        }
+
         /// <summary>A faction with no humans raises its fronts itself: when a front has nothing building it queues the next programme of its doctrine (READINESS, a team, a ZERO-DAY, a FOB).</summary>
         private void AiQueue(FactionFront f, float now)
         {
@@ -281,46 +300,61 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 var front = (Front)i;
                 if (f.Book.Side(front).Queue.Count > 0) continue;
                 bool sam = front == Front.Cyber && cyber != null && cyber.TryBestSamNode(f.Owner, out _);
-                ProgrammeId? next = FrontAi.Next(front, f.Book.Readiness(front), f.World, sam);
-                if (next.HasValue) f.Book.Queue(front, next.Value, f.World, now, out _);
+                bool asat = front == Front.Space && now >= f.NextAiAsat && f.Book.Readiness(Front.Cyber) >= FrontRules.AsatCyberReadiness && EnemyBirdUp(f.Owner);
+                ProgrammeId? next = FrontAi.Next(front, f.Book.Readiness(front), f.World, sam, asat);
+                if (!next.HasValue) continue;
+                f.Book.Queue(front, next.Value, f.World, now, out _);
+                if (next.Value == ProgrammeId.Asat) f.NextAiAsat = now + AiAsatSpacingSeconds;
             }
         }
 
         // ---- Programme effects ----------------------------------------------------------------------
 
-        private void Apply(FactionFront f, in FrontEvent e, float now)
+        /// <summary>
+        /// A finished programme meets its owning adapter. DONE is logged only when the adapter accepted the effect; when it refused (the world no longer needs it: the anchor was rebuilt another
+        /// way, the camp is down, no legal ground), a FAILED line names why and the cost the programme captured at queue time goes back to the front's budget, once (<see cref="FrontBook.Settle"/>).
+        /// </summary>
+        private void Apply(FactionFront f, FrontEvent e, float now)
         {
             FactionHQ owner = f.Owner;
             bool ok = true;
             string why = "nothing to do";
-            switch (e.Id)
+            FrontOutcome failure = FrontOutcome.Unavailable; // what the log names if the adapter refuses
+            BirdKind bird = BirdKind.Optical;
+            try
             {
-                case ProgrammeId.Readiness: break;
-                case ProgrammeId.LaunchSatellite:
+                switch (e.Id)
                 {
-                    BirdKind bird = BirdKind.Optical;
-                    ok = space != null && space.TryLaunchBird(owner, out bird);
-                    if (ok) f.Book.NoteLog(Front.Space, FrontLogCode.Effect, (int)e.Id, (int)bird, now);
-                    break;
+                    case ProgrammeId.Readiness: break;
+                    case ProgrammeId.LaunchSatellite: ok = space != null && space.TryLaunchBird(owner, out bird); failure = FrontOutcome.BirdsUp; break;
+                    case ProgrammeId.UplinkSite: ok = space != null && space.TryRebuildUplink(owner); failure = f.World.Uplinks >= f.World.UplinkMax ? FrontOutcome.UplinksMax : FrontOutcome.NoSite; break;
+                    case ProgrammeId.DataCenter: ok = cyber != null && cyber.CompleteRebuild(owner, AnchorKind.DataCenter); failure = FrontOutcome.DataCentersMax; break;
+                    case ProgrammeId.EwTruck: ok = cyber != null && cyber.CompleteRebuild(owner, AnchorKind.EwTruck); failure = FrontOutcome.TrucksMax; break;
+                    case ProgrammeId.Camp: ok = sof != null && sof.CompleteCampRebuild(owner); failure = f.World.Camps >= f.World.CampMax ? FrontOutcome.CampsMax : FrontOutcome.NoSite; break;
+                    case ProgrammeId.TrainTeam:
+                        SofResult r = sof != null ? sof.TrainTeam(owner) : new SofResult(SofOutcome.Unavailable);
+                        ok = r.Ok; why = r.Words;
+                        failure = r.Outcome == SofOutcome.TeamCap ? FrontOutcome.TeamCap : r.Outcome == SofOutcome.NoCamp || r.Outcome == SofOutcome.CampDown ? FrontOutcome.NoSite : FrontOutcome.Unavailable;
+                        break;
+                    case ProgrammeId.ZeroDay: ok = ops != null && ops.RunProgramme(owner, e.Id); failure = FrontOutcome.NoSamNet; break;
+                    case ProgrammeId.Fob: ok = ops != null && ops.RunProgramme(owner, e.Id); failure = FrontOutcome.NoHeldBuilding; break;
+                    case ProgrammeId.Asat: ok = ops != null && ops.RunProgramme(owner, e.Id); break;
                 }
-                case ProgrammeId.UplinkSite: ok = space != null && space.TryRebuildUplink(owner); break;
-                case ProgrammeId.DataCenter: ok = cyber != null && cyber.CompleteRebuild(owner, AnchorKind.DataCenter); break;
-                case ProgrammeId.EwTruck: ok = cyber != null && cyber.CompleteRebuild(owner, AnchorKind.EwTruck); break;
-                case ProgrammeId.Camp: ok = sof != null && sof.CompleteCampRebuild(owner); break;
-                case ProgrammeId.TrainTeam:
-                    SofResult r = sof != null ? sof.TrainTeam(owner) : new SofResult(SofOutcome.Unavailable);
-                    ok = r.Ok; why = r.Words;
-                    break;
-                case ProgrammeId.ZeroDay:
-                case ProgrammeId.Asat:
-                case ProgrammeId.Fob:
-                    ok = ops != null && ops.RunProgramme(owner, e.Id);
-                    break;
             }
-            if (ok) { Plugin.Logger?.LogInfo("[Support.Fronts] " + owner.name + " " + FrontRules.Name(e.Front) + " " + FrontWords.Programme(e.Id, e.Rung) + " complete."); return; }
-            // The world no longer needs it (the anchor was rebuilt another way, the camp is down): the funds come back to the front's budget.
-            if (e.Id != ProgrammeId.Readiness) f.Book.Side(e.Front).Budget += FrontRules.Cost(e.Id, 1, f.Book.CostScale);
-            Plugin.Logger?.LogInfo("[Support.Fronts] " + owner.name + " " + FrontRules.Name(e.Front) + " " + FrontWords.Programme(e.Id) + " had no effect (" + why + "); funds returned.");
+            catch (Exception ex)
+            {
+                // An adapter that throws must not swallow the programme: it is refused like any other failure and the rest of the faction's completions still run.
+                ok = false; why = ex.Message; failure = FrontOutcome.Unavailable;
+                Plugin.Logger?.LogWarning("[Support.Fronts] " + owner.name + " " + FrontWords.Programme(e.Id) + " effect threw: " + ex.Message);
+            }
+            f.Book.Settle(e, ok ? FrontOutcome.None : failure, now);
+            if (ok)
+            {
+                if (e.Id == ProgrammeId.LaunchSatellite) f.Book.NoteLog(Front.Space, FrontLogCode.Effect, (int)e.Id, (int)bird, now);
+                Plugin.Logger?.LogInfo("[Support.Fronts] " + owner.name + " " + FrontRules.Name(e.Front) + " " + FrontWords.Programme(e.Id, e.Rung) + " complete.");
+                return;
+            }
+            Plugin.Logger?.LogInfo("[Support.Fronts] " + owner.name + " " + FrontRules.Name(e.Front) + " " + FrontWords.Programme(e.Id) + " had no effect (" + why + "); " + (int)e.Cost + " returned to the front budget.");
         }
 
         // ---- Superiority and the counter triangle ----------------------------------------------------
@@ -367,6 +401,45 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (sof != null && sof.TryDesk(x.Owner, out SofDesk sd)) sd.ExposureScale = 1f;
                 if (cyber != null && cyber.TryDesk(x.Owner, out CyberDesk cd)) cd.CounterTrace = 1f;
             }
+        }
+
+        // ---- SIPHON ---------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// SIPHON (CYBER R3, host only): funds move from the strongest enemy on the CYBER front into the caster's CYBER budget. The ask is (40 + 15 per enemy node the caster holds) x power, capped by what that enemy has in all
+        /// its front budgets and taken from its richest first (<see cref="Domain.Fronts.Siphon"/>). Both factions get a log line. NothingToSiphon below 10 funds.
+        /// </summary>
+        internal SupportResult Siphon(FactionHQ owner, float power, out int taken)
+        {
+            taken = 0;
+            if (!GameAccess.IsServer() || owner == null || !Running || !factions.TryGetValue(owner, out FactionFront caster)) return SupportResult.NothingToSiphon;
+            FactionFront foe = null;
+            float best = float.NegativeInfinity;
+            foreach (FactionFront b in order)
+            {
+                if (b == caster || b.Owner == null) continue;
+                float strength = FrontSuperiority.Strength(Front.Cyber, b.Own);
+                if (strength > best) { best = strength; foe = b; }
+            }
+            if (foe == null) return SupportResult.NothingToSiphon;
+            var budgets = new float[FrontRules.FrontCount];
+            var takes = new float[FrontRules.FrontCount];
+            for (int i = 0; i < budgets.Length; i++) budgets[i] = Domain.Fronts.Siphon.Available(foe.Book.Side((Front)i)); // unspent budget + unstarted funding bars
+            float total = Domain.Fronts.Siphon.Plan(Domain.Fronts.Siphon.Wanted(caster.Own.HeldEnemyNodes, power), budgets, takes);
+            if (total <= 0f) return SupportResult.NothingToSiphon;
+            float now = SupportManager.MissionNow();
+            for (int i = 0; i < takes.Length; i++)
+            {
+                if (takes[i] <= 0f) continue;
+                Domain.Fronts.Siphon.Drain(foe.Book.Side((Front)i), takes[i]);
+                foe.Book.NoteLog((Front)i, FrontLogCode.Siphoned, (int)takes[i], 0, now);
+            }
+            caster.Book.Side(Front.Cyber).Budget += total;
+            caster.Book.NoteLog(Front.Cyber, FrontLogCode.Siphon, (int)total, 0, now);
+            caster.CacheAt = foe.CacheAt = float.NegativeInfinity; // both factions' next snapshot carries the new budgets and the log lines
+            taken = (int)total;
+            Plugin.Logger?.LogInfo("[Support.Fronts] " + owner.name + " SIPHON took " + taken + " funds from " + foe.Owner.name + ".");
+            return SupportResult.Accepted;
         }
 
         // ---- Commands -----------------------------------------------------------------------------------

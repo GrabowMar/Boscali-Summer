@@ -64,6 +64,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public override char Code => 'D';
 
+        public override string IdleWord => "NO TANKER";
+
+        public override string IdleHint => "NO SKYWELL TANKER TO DOCK WITH";
+
         public override bool Fast => live;
 
         public override bool HasStrip => live;

@@ -14,7 +14,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
     /// </summary>
     internal sealed class SupportCatalog
     {
-        private readonly List<SupportActionDefinition> actions = new List<SupportActionDefinition>(10);
+        private readonly List<SupportActionDefinition> actions = new List<SupportActionDefinition>(20);
 
         public SupportCatalog(
             SupportSettings settings, IZoneFortificationService fortifications)
@@ -35,6 +35,27 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 "OPTICAL bird images the mark in daylight and reveals ground units in its window through a live uplink.",
                 SupportCapabilities.Recon, settings.SatCameraEnabled, new SatelliteCameraAction(),
                 SpaceBirdRequirement.Optical, BirdTask.Camera, SpaceRevealWindow.BirdBusySeconds));
+
+            actions.Add(new SupportActionDefinition(
+                SupportActionId.Overwatch, "OVERWATCH",
+                "RADAR bird finds the moving enemy ground units nearest the aim (3 km x power) and follows up to 4 x power of them on the map for 60 s x power.",
+                SupportCapabilities.Recon, settings.ReconEnabled, new OverwatchAction(), SpaceBirdRequirement.Radar));
+
+            actions.Add(new SupportActionDefinition(
+                SupportActionId.Starfall, "STARFALL",
+                "KINETIC bird walks 3 to 5 small rods, 300 m apart, along the line from your aircraft through the aim.",
+                SupportCapabilities.Artillery, settings.ArtilleryEnabled, new StarfallAction(),
+                SpaceBirdRequirement.Kinetic, BirdTask.Rod, 14f, true));
+
+            actions.Add(new SupportActionDefinition(
+                SupportActionId.Siphon, "SIPHON",
+                "CYBER takes funds from the strongest enemy's front budgets into yours: 40 + 15 per enemy node you hold, x power. The aim is ignored.",
+                SupportCapabilities.Emp, settings.CyberEnabled, new SiphonAction()));
+
+            actions.Add(new SupportActionDefinition(
+                SupportActionId.DirectAction, "DIRECT ACTION",
+                "A ready SOF team raids the revealed SAM, radar or enemy anchor nearest the aim (2 km) for 45 s / power; the roll destroys it or wounds the team.",
+                SupportCapabilities.Artillery, settings.SofEnabled, new RaidAction()));
 
             if (fortifications != null)
                 actions.Add(new SupportActionDefinition(

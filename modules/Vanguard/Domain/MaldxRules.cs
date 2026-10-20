@@ -6,7 +6,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
     /// <summary>MALD-X BAIT: cruise, orbit and exposure numbers (design/vanguard-remake/MECHANICS.md).</summary>
     internal static class MaldxRules
     {
-        public const float Lifetime = 300f;
+        public const float Lifetime = 420f;
         public const float CruiseSpeed = 230f;
         public const float MinCruiseAltitude = 1500f;
         public const float MinClearance = 500f;   // over high ground the cruise floor lifts to terrain + this
@@ -21,7 +21,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         // CHAFF: the bait seeds one cloud every ChaffSpacing metres flown; each hangs ChaffSeconds and blinds one missile.
         public const float ChaffSpacing = 300f;
         public const float ChaffSeconds = 60f;
-        public const float ChaffRadius = 600f;
+        public const float ChaffRadius = 750f;
         public const float ChaffInterval = 0.5f;
 
         /// <summary>

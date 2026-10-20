@@ -23,9 +23,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     /// </summary>
     internal sealed class OpsFrontWindow : MonoBehaviour
     {
-        public const float WindowWidth = 1760f, WindowHeight = 1000f;
+        public const float WindowWidth = 1760f, WindowHeight = 1040f; // AvWindow caps at 1040: the shared footer is taller than the 30 this window used to force
         private const int SortOrder = 30006;
-        private const float TitleH = 30f, StripH = 18f, Pad = 10f, FooterH = 30f, Gap = 8f, HeroW = 1170f;
+        private const float TitleH = 30f, StripH = 18f, Pad = 10f, FooterH = AvGridTokens.Footer, Gap = 8f, HeroW = 1170f;
 
         private IFrontActions actions;
         private AvWindow window;
@@ -35,12 +35,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private readonly IFrontRoom[] rooms = new IFrontRoom[FrontRules.FrontCount];
         private readonly RectTransform[] roomRoots = new RectTransform[FrontRules.FrontCount];
         private readonly AvControl[] tabs = new AvControl[FrontRules.FrontCount];
-        private TMP_Text titleText, stripLeft, stripMid, stripRight;
+        private TMP_Text titleText, headRight, stripLeft, stripMid, stripRight;
         private Image stripBack;
         private readonly FeedInputLease lease = new FeedInputLease();
         private readonly List<AvHit> hits = new List<AvHit>(160);
         private AvHit hovered;
-        private bool ownsCursorFlag, mouseDisabledByUs, pauseTouched, pauseWas, closing;
+        private bool ownsCursorFlag, mouseDisabledByUs, pauseTouched, pauseWas, closing, suspending;
         private float nextHits;
         private FrontRoomView lastView;
 
@@ -71,13 +71,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             window = AvWindow.Build(uiRoot, "OpsFront", "OPS · SPACE FRONT", WindowWidth, WindowHeight, SortOrder);
             window.Closed += OnWindowClosed;
             window.CloseControl.Help = "Close the window (Esc). Keyboard and joystick stay live; the mouse drives the window.";
-            window.Footer.Place(new AvSlot(0f, WindowHeight - FooterH, WindowWidth, FooterH));
             window.Footer.Set("Keyboard and joystick stay live; the mouse drives this window. It closes with Esc.", AvState.Inert);
             titleText = window.Root.Find("Title").GetComponent<TMP_Text>();
             RectTransform r = window.Root;
 
             // The body is opaque: the CAP panel behind the popup must not ghost through the gaps between the plates.
-            FrontKit.Solid(r, "Body", 0f, TitleH, WindowWidth, WindowHeight - TitleH, AvInk.Ground.WithAlpha(0.98f)).transform.SetAsFirstSibling();
+            FrontKit.Solid(r, "Body", 0f, TitleH, WindowWidth, WindowHeight - TitleH - FooterH, AvInk.Ground.WithAlpha(0.98f)).transform.SetAsFirstSibling();
 
             // Classification strip.
             float sy = TitleH + 2f;
@@ -86,11 +85,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             stripMid = FrontKit.Mono(r, "StripMid", WindowWidth * 0.5f - 400f, sy, 800f, StripH, 11.5f, TextAlignmentOptions.Midline, true, 4f);
             stripRight = FrontKit.Mono(r, "StripRight", WindowWidth - Pad - 428f, sy, 420f, StripH, 11f, TextAlignmentOptions.MidlineRight, true, 1.5f);
 
-            // Front switch in the title bar.
-            string[] names = { "ORBIT", "NETWORK", "SHADOW" };
+            // Front switch in the title bar: the domain and its room, so the two names stay connected.
+            string[] names = { "SPACE · ORBIT", "CYBER · NETWORK", "SOF · SHADOW" };
             string[] help = { "The SPACE front's room: satellites, ground tracks and the live camera.",
-                "The CYBER front's room: the enemy node graph, your intrusion's trace and its terminal.", "The SOF front's room: teams, camps and the infiltration map." };
-            float tw = 150f, tabX = (WindowWidth - (3f * tw + 12f)) * 0.5f;
+                "The CYBER front's room: the enemy node graph, your intrusion's trace, a node inspector, node list and session log.", "The SOF front's room: teams, camps and the infiltration map." };
+            float tw = 150f, tabX = (WindowWidth - (3f * tw + 12f)) * 0.5f, tabEnd = tabX + 3f * tw + 12f;
+            // The front's callsign header sits right of the switch: net callsign, readiness rung and superiority band.
+            headRight = FrontKit.Mono(r, "HeadRight", tabEnd + 16f, 0f, WindowWidth - 44f - tabEnd - 16f, TitleH, 11f, TextAlignmentOptions.MidlineRight, true, 1f);
             for (int i = 0; i < 3; i++)
             {
                 int slot = i;
@@ -137,10 +138,19 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         private void Restyle()
         {
-            stripBack.color = C2Kit.SlabFill(AvState.Caution);
-            Color ink = C2Kit.SlabInk;
+            headRight.color = AvInk.Dim;
+            Mark(lastView != null ? lastView.Front : Front.Space);
+        }
+
+        /// <summary>Each compartment flies its own banner colour: ORBIT top secret orange, NETWORK TS/SCI yellow, SHADOW secret red.</summary>
+        private void Mark(Front f)
+        {
+            stripBack.color = f == Front.Space ? RoomInk.Rgb(0xFF8C1A) : f == Front.Cyber ? RoomInk.Rgb(0xFFD21F) : RoomInk.Rgb(0xC8102E);
+            Color ink = f == Front.Sof ? Color.white : RoomInk.Rgb(0x0B0B0B);
             stripLeft.color = ink; stripMid.color = ink; stripRight.color = ink;
         }
+
+        private static string Caveat(Front f) => f == Front.Space ? "TOP SECRET // SI-TK" : f == Front.Cyber ? "TOP SECRET // SCI" : "SECRET // NOFORN";
 
         // ---- Paint / open / close ------------------------------------------------------------------------------------
 
@@ -150,10 +160,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             lastView = v;
             string name = FrontRules.Name(v.Front);
             AvText.Set(titleText, "OPS · " + name + " FRONT");
-            string cls = string.IsNullOrEmpty(v.Classification) ? "SECRET // " + (v.Faction ?? "").ToUpperInvariant() + " EYES ONLY // " + Command(v.Front) : v.Classification;
+            string cls = string.IsNullOrEmpty(v.Classification) ? Caveat(v.Front) + " // " + (v.Faction ?? "").ToUpperInvariant() + " EYES ONLY // " + Command(v.Front) : v.Classification;
             AvText.Set(stripMid, cls);
-            AvText.Set(stripLeft, "OPERATOR " + (v.Callsign ?? ""));
-            AvText.Set(stripRight, v.Dtg ?? "");
+            Mark(v.Front);
+            AvText.Set(stripLeft, C2Kit.FitTo(stripLeft, "OPERATOR " + (v.Callsign ?? "") + " · COMPARTMENT " + Room(v.Front), stripLeft.rectTransform.rect.width));
+            AvText.Set(stripRight, C2Kit.FitTo(stripRight, "DTG " + (v.Dtg ?? "") + " · " + Feed(v.FeedAge), stripRight.rectTransform.rect.width));
+            AvText.Set(headRight, C2Kit.FitTo(headRight, "NET " + FrontWords.Callsign(v.Front) + " · " + FrontRail.Headline(v), headRight.rectTransform.rect.width));
             for (int i = 0; i < tabs.Length; i++) tabs[i].Latched = i == (int)v.Front;
             rail.Paint(v);
             for (int i = 0; i < roomRoots.Length; i++) roomRoots[i].gameObject.SetActive(i == (int)v.Front);
@@ -161,6 +173,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         }
 
         private static string Command(Front f) => f == Front.Space ? "ORBITAL COMMAND" : f == Front.Cyber ? "CYBER COMMAND" : "SPECIAL OPERATIONS COMMAND";
+
+        private static string Room(Front f) => f == Front.Space ? "ORBIT" : f == Front.Cyber ? "NETWORK" : "SHADOW";
+
+        /// <summary>How long ago the host's last front snapshot arrived. Snapshots are change-only, so this is an age, never a staleness verdict.</summary>
+        private static string Feed(float age) => age < 0f ? "NO HOST FEED YET" : age < 1f ? "HOST UPDATE NOW" : "HOST UPDATE " + FrontKit.Clock(age) + " AGO";
 
         /// <summary>Opens the window and takes the pointer. False when it could not.</summary>
         internal bool Open(FrontRoomView view)
@@ -199,12 +216,24 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             window.Hide(); // raises Closed -> OnWindowClosed hands the input back
         }
 
+        /// <summary>Hides the window and hands its input holds back without telling the owner it closed (a map pick runs behind it); <see cref="Open"/> brings it back.</summary>
+        internal void Suspend()
+        {
+            if (!IsOpen || closing) return;
+            suspending = true;
+            Close();
+        }
+
+        /// <summary>Who holds the faction-wide funding-share lock and until when (host mission seconds); the rail disables the share buttons for everyone else.</summary>
+        internal void PriorityLock(string by, float until) => rail.PriorityLock(by, until);
+
         private void OnWindowClosed()
         {
             if (backdrop != null) backdrop.SetActive(false);
             WindowPointer.Hover(ref hovered, null);
             GiveBackInput();
             closing = false;
+            if (suspending) { suspending = false; return; }
             Closed?.Invoke();
         }
 
@@ -237,8 +266,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (!IsOpen) return;
             try
             {
-                if (Input.GetKeyDown(KeyCode.Escape)) { Close(); return; }
-                Vector2 mouse = Input.mousePosition;
+                if (FrontPointer.Escape)
+                {
+                    IFrontRoom active = lastView != null ? rooms[(int)lastView.Front] : null;
+                    if (active != null && active.CancelMode()) { active.Paint(lastView); return; } // a relocation proposal ends first
+                    Close();
+                    return;
+                }
+                Vector2 mouse = FrontPointer.Position;
                 // No idle close: a pilot flying on the stick (Rewired, not Input) touches nothing for minutes; only Esc, X, death or a faction change closes.
 
                 // With the Rewired mouse off (by us, or already) the event system hears nothing: hit-test our own controls.
@@ -272,7 +307,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     RectTransformUtility.RectangleContainsScreenPoint((RectTransform)h.transform, mouse, null)) { under = h; break; }
             }
             WindowPointer.Hover(ref hovered, under);
-            if (under != null && Input.GetMouseButtonDown(0)) ((IPointerClickHandler)under).OnPointerClick(WindowPointer.Data());
+            if (under != null && FrontPointer.Down(0)) ((IPointerClickHandler)under).OnPointerClick(WindowPointer.Data());
         }
 
         // ---- Input ownership -------------------------------------------------------------------------------------------

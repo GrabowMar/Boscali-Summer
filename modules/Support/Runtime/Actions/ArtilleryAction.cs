@@ -1,5 +1,6 @@
 using System.Collections;
 using BepInEx.Logging;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using UnityEngine;
 
@@ -10,7 +11,8 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
     /// The shot uses the verified low-yield vanilla missile seam. A free-aimed (STANDARD) rod lands within a 120 m CEP of the
     /// pick; a claimed TASKED rod lands on its confirmed MARK (25 m, SAR-only 30 m). Both refuse to land near a friendly player.
     /// A TASKED rod warns the target faction at least 15 s before impact: it waits out max(0, 15 - flight) in a short
-    /// host dwell, then revalidates and releases.
+    /// host dwell, then revalidates and releases. The front's POWER is the rod's damage (x0.6 .. x1.5, carried in its replicated name); the blast radius stays at the stand-off the guard clears.
+    /// STARFALL walks a line of smaller rods through the same <see cref="Shot"/> and <see cref="Release"/>.
     /// </summary>
     internal sealed class ArtilleryAction : ISupportAction
     {
@@ -19,7 +21,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
         public float BaseCost(in SupportContext context) => 1f; // availability flag; the allocation price is CallSheet x CallPricing
 
         /// <summary>Everything one launch needs, copied out of the context so a delayed launch can outlive the call.</summary>
-        private sealed class Shot
+        internal sealed class Shot
         {
             public ISupportHost Host;
             public ManualLogSource Logger;
@@ -31,6 +33,12 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
             public string Name, Guide;
             public int Scene;
             public bool Warned;
+            /// <summary>STARFALL's later rods: the bird task was already committed by the first rod, so this one needs no receipt of its own.</summary>
+            public bool Continuation;
+            /// <summary>STARFALL's rods share one Strike slot that the line's own driver releases; the shot never releases it.</summary>
+            public bool SharedPool;
+            /// <summary>The live missile once <see cref="Release"/> launched it.</summary>
+            public Missile Launched;
             private bool released;
 
             /// <summary>Releases the host's Strike pool slot exactly once, and only inside the scene that took it.</summary>
@@ -38,7 +46,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
             {
                 if (released) return;
                 released = true;
-                if (Host.SceneGeneration == Scene) Host.Release(Owner, SupportPool.Strike);
+                if (!SharedPool && Host.SceneGeneration == Scene) Host.Release(Owner, SupportPool.Strike);
             }
         }
 
@@ -90,7 +98,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
             bool poolOwned = true; // until a launch or a dwell takes over releasing the slot
             try
             {
-                shot.Name = SupportNaming.Unique("Rod", context) + ":0";
+                shot.Name = SupportEffectPolicy.RodName(SupportNaming.Unique("Rod", context) + ":0", PerkPower.Damage(context.Power), 1f);
                 shot.Guide = context.Player?.Aircraft != null ? context.Player.Aircraft.UniqueName : string.Empty;
                 // The friendly standoff is judged on the sampled impact by every TASKED launch gate (CanLaunch, WhyNot, ReportSpawn).
                 if (tasked != null && !tasked.SetImpact(impactPoint.x, impactPoint.z)) return SupportResult.InvalidTarget;
@@ -125,6 +133,11 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
                         return SupportResult.Accepted;
                     }
                 }
+                else
+                {
+                    // A perk rod has no dwell: its warning goes out with the launch, one flight time ahead (two-sided rule: every rod is announced to its targets).
+                    shot.Warned = RodGuard.Warn(context.Owner, RodGuard.InboundText(RodGuard.Flight.Seconds)) > 0;
+                }
                 poolOwned = false;
                 SupportResult result = Release(shot);
                 return result == SupportResult.Accepted ? result : CancelWarned(shot, result);
@@ -154,7 +167,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
         /// The physical launch: every gate is checked again immediately before the native spawn, and nothing but a refused or
         /// absent spawn can leave the pool slot held. Owns the pool slot from here on.
         /// </summary>
-        private static SupportResult Release(Shot shot)
+        internal static SupportResult Release(Shot shot)
         {
             Missile missile = null;
             bool launched = false;
@@ -163,7 +176,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
             {
                 if (spawner == null) return SupportResult.CapabilityUnavailable;
                 if (shot.Host.SceneGeneration != shot.Scene) return SupportResult.SpawnFailed;
-                if (shot.SpaceTask == null || !shot.SpaceTask.CanLaunch) return SupportResult.UplinkDown;
+                if (!shot.Continuation && (shot.SpaceTask == null || !shot.SpaceTask.CanLaunch)) return SupportResult.UplinkDown;
                 if (shot.Tasked != null && !shot.Tasked.CanLaunch) return TaskedRefusal(shot.Tasked);
                 if (RodGuard.FriendlyNear(shot.Owner, shot.Impact))
                 {
@@ -186,8 +199,9 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
                 // The receipt is the only thing that makes this a launch. A refused receipt deletes the spawn below.
                 // TASKED settles the board, escrow and bird together; a direct rod commits the bird alone.
                 if (shot.Tasked != null) { if (!shot.Tasked.ReportSpawn()) return SupportResult.SpawnFailed; }
-                else if (!shot.SpaceTask.ReportPhysicalLaunch()) return SupportResult.UplinkDown;
+                else if (!shot.Continuation && !shot.SpaceTask.ReportPhysicalLaunch()) return SupportResult.UplinkDown;
                 launched = true;
+                shot.Launched = missile;
                 shot.Logger.LogInfo("[Support] Rod launched: " + RodGuard.Describe(shot.Definition) + "; flight estimate " +
                     RodGuard.Flight.Seconds.ToString("0.0") + " s from " + RodGuard.Flight.Count + " measured.");
                 // After the receipt, cosmetic failures cannot refund an already-live physical weapon.

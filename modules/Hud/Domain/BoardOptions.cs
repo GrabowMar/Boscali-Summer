@@ -11,18 +11,15 @@ namespace BoscaliSummer.Modules.Hud.Domain
     {
         /// <summary>The pages that may appear, one <see cref="CuePriority.Bit"/> each: empty with the scope off.</summary>
         public ushort Pages;
-        /// <summary>The pages that may speak (post ticker notices, call for a dispenser): <see cref="Pages"/> without the scope mode, because Off hides the scope, not the warnings.</summary>
+        /// <summary>All registered pages may post notices or call for a dispenser, independently of the visible slots.</summary>
         public ushort Voiced;
+        public bool ShowStores;
         public bool ShowLamps;
         /// <summary>Unlit lamps are drawn (as dim outlines). False: only a lamp that is lit shows.</summary>
         public bool DarkLamps;
         /// <summary>Of the lamps only the threat ones: LOCK, SPKE and MSL.</summary>
         public bool ThreatLampsOnly;
-        /// <summary>The compact SYSTEMS strip may show: its own switch AND the SYSTEMS page's (the strip is that page in its cruise form).</summary>
-        public bool ShowSystemsStrip;
-        /// <summary>The compact SYSTEMS strip shows only while something is in a caution or warning state.</summary>
-        public bool SystemsStripOnlyWhenNotNominal;
-        /// <summary>SYSTEMS shows only in its critical form (a fire, an engine out, BINGO, lost structure).</summary>
+        /// <summary>SYSTEMS notices speak only in their critical form (Minimal). The SYSTEMS block itself always shows.</summary>
         public bool SystemsCriticalOnly;
         public bool ShowGauges;
         public bool ShowTicker;
@@ -31,18 +28,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>Decorative captions and shelves are drawn (the painters' <c>ScopeCanvas.Furniture</c> flag; brackets, ticks and markers stay at every level).</summary>
         public bool Furniture;
 
-        /// <summary>A page counts as live for the scope: it has live content, and it is not SYSTEMS at Minimal without something critical (that level keeps only the critical form of SYSTEMS: no pip, no selection for a caution).</summary>
-        public readonly bool Counts(ScopePage page, bool live, bool critical) => live && (page != ScopePage.Systems || !SystemsCriticalOnly || critical);
-
         /// <summary>A page may post a notice of <paramref name="tone"/> to the ticker: SYSTEMS at Minimal only its warnings (a fire, an engine out, BINGO), its cautions stay quiet.</summary>
         public readonly bool Posts(ScopePage page, HudTone tone) => page != ScopePage.Systems || !SystemsCriticalOnly || tone == HudTone.Warning;
-
-        /// <summary>
-        /// Whether the compact SYSTEMS strip, the scope's cruise form, shows right now: its switch, and under Lean only while something is not nominal (a caution or a warning), under
-        /// Minimal only while that is critical (<see cref="SystemsCriticalOnly"/>). When it does not, the scope takes no room in cruise.
-        /// </summary>
-        public readonly bool SystemsStripShows(bool notNominal, bool critical) =>
-            ShowSystemsStrip && (SystemsCriticalOnly ? critical : !SystemsStripOnlyWhenNotNominal || notNominal);
     }
 
     /// <summary>
@@ -64,23 +51,26 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public float Scale, OffsetX, OffsetY, Opacity, Shade;
         public BoardDeclutter Declutter;
         public BoardScopeMode ScopeMode;
-        public bool PageThreat, PageShot, PageMissileCam, PageApproach, PageWing, PageStrike, PageDock, PageObjective, PageSystems;
+        /// <summary>Page slots: a 2 x 2 grid at most (<see cref="ScopeLayout.Columns"/>).</summary>
+        public const int MaxPages = 4;
+        public int PageCount;
+        /// <summary>The slot choices. Never <see cref="BoardPage.Systems"/>: SYSTEMS is the board's own always-on block, not a page choice (<see cref="Sanitize"/>).</summary>
+        public BoardPage Page1, Page2, Page3, Page4;
+        public bool ShowStores;
+        public bool PageThreat, PageShot, PageMissileCam, PageApproach, PageWing, PageStrike, PageDock, PageObjective, PageSystems, PageCargo;
         public float ThreatHoldSeconds, PageMinSeconds;
-        public bool ShowLamps, ShowSystemsStrip, ShowGauges, ShowTicker, ShowNavData;
+        public bool ShowLamps, ShowGauges, ShowTicker, ShowNavData;
         public bool Sway, Corners;
-
-        /// <summary>The pages Minimal keeps: THREAT, MISSILE CAM, SHOT, APPROACH and SYSTEMS (in its critical form).</summary>
-        private static readonly ushort MinimalPages = (ushort)(CuePriority.Bit(ScopePage.Threat) | CuePriority.Bit(ScopePage.MissileCam) |
-            CuePriority.Bit(ScopePage.Shot) | CuePriority.Bit(ScopePage.Approach) | CuePriority.Bit(ScopePage.Systems));
 
         /// <summary>What a pilot gets who has touched nothing. (A zeroed struct is NOT this: it has the board off.)</summary>
         public static BoardOptions Default => new BoardOptions
         {
             Enabled = true, Layout = BoardLayout.Wide, Scale = 0.85f, OffsetX = 0f, OffsetY = 0f, Opacity = 1f, Shade = 0.45f,
-            Declutter = BoardDeclutter.Full, ScopeMode = BoardScopeMode.Auto,
-            PageThreat = true, PageShot = true, PageMissileCam = true, PageApproach = true, PageWing = true, PageStrike = true, PageDock = true, PageObjective = true, PageSystems = true,
+            Declutter = BoardDeclutter.Full, ScopeMode = BoardScopeMode.Manual,
+            PageCount = 1, Page1 = BoardPage.Threat, Page2 = BoardPage.Shot, Page3 = BoardPage.Wing, Page4 = BoardPage.Objective, ShowStores = true,
+            PageThreat = true, PageShot = true, PageMissileCam = true, PageApproach = true, PageWing = true, PageStrike = true, PageDock = true, PageObjective = true, PageSystems = true, PageCargo = true,
             ThreatHoldSeconds = 6f, PageMinSeconds = 3f,
-            ShowLamps = true, ShowSystemsStrip = true, ShowGauges = true, ShowTicker = true, ShowNavData = true,
+            ShowLamps = true, ShowGauges = true, ShowTicker = true, ShowNavData = true,
             Sway = true, Corners = true,
         };
 
@@ -98,38 +88,64 @@ namespace BoscaliSummer.Modules.Hud.Domain
             if ((uint)Layout > (uint)BoardLayout.Stack) Layout = d.Layout;
             if ((uint)Declutter > (uint)BoardDeclutter.Minimal) Declutter = d.Declutter;
             if ((uint)ScopeMode > (uint)BoardScopeMode.Off) ScopeMode = d.ScopeMode;
+            PageCount = System.Math.Clamp(PageCount, 1, MaxPages);
+            // Every slot names a real page that is not SYSTEMS (an old config may hold it), and no page twice: a hand-edited duplicate must not paint the same stateful page
+            // twice in one frame, and a hidden slot must not turn into one when the count goes up.
+            Page1 = Fix(Page1, d.Page1, 0);
+            Page2 = Fix(Page2, d.Page2, 1);
+            Page3 = Fix(Page3, d.Page3, 2);
+            Page4 = Fix(Page4, d.Page4, 3);
+        }
+
+        private readonly BoardPage SlotChoice(int slot) => slot == 0 ? Page1 : slot == 1 ? Page2 : slot == 2 ? Page3 : Page4;
+
+        /// <summary>Slot <paramref name="slot"/>'s page kept if it is valid and not in an earlier slot, else <paramref name="fallback"/> if that is free, else the first free page.</summary>
+        private readonly BoardPage Fix(BoardPage page, BoardPage fallback, int slot)
+        {
+            if (Choosable(page) && !Earlier(page, slot)) return page;
+            if (!Earlier(fallback, slot)) return fallback;
+            for (BoardPage candidate = BoardPage.Threat; candidate <= BoardPage.Cargo; candidate++)
+                if (Choosable(candidate) && !Earlier(candidate, slot)) return candidate;
+            return fallback;
+        }
+
+        private readonly bool Earlier(BoardPage page, int slot)
+        {
+            for (int i = 0; i < slot; i++) if (SlotChoice(i) == page) return true;
+            return false;
+        }
+
+        /// <summary>A page a slot may hold: a registered page that is not SYSTEMS.</summary>
+        public static bool Choosable(BoardPage page) => (uint)page <= (uint)BoardPage.Cargo && page != BoardPage.Systems;
+
+        /// <summary>A persisted slot choice, independent of feed activity, declutter and retired page switches.</summary>
+        public readonly ScopePage PageAt(int slot) => (ScopePage)SlotChoice(slot);
+
+        public readonly ushort SelectedPages()
+        {
+            ushort mask = 0;
+            for (int i = 0; i < PageCount; i++) mask |= CuePriority.Bit(PageAt(i));
+            return mask;
         }
 
         private static float Fit(float value, float min, float max, float fallback) =>
             float.IsNaN(value) ? fallback : value < min ? min : value > max ? max : value;
 
-        /// <summary>The pages the nine page switches allow, one <see cref="CuePriority.Bit"/> each. Says nothing about the scope mode or the declutter level.</summary>
-        public readonly ushort PageMask() => (ushort)(
-            (PageThreat ? CuePriority.Bit(ScopePage.Threat) : 0) | (PageShot ? CuePriority.Bit(ScopePage.Shot) : 0) |
-            (PageMissileCam ? CuePriority.Bit(ScopePage.MissileCam) : 0) | (PageApproach ? CuePriority.Bit(ScopePage.Approach) : 0) |
-            (PageWing ? CuePriority.Bit(ScopePage.Wing) : 0) | (PageStrike ? CuePriority.Bit(ScopePage.Strike) : 0) |
-            (PageDock ? CuePriority.Bit(ScopePage.Dock) : 0) | (PageObjective ? CuePriority.Bit(ScopePage.Objective) : 0) |
-            (PageSystems ? CuePriority.Bit(ScopePage.Systems) : 0));
-
         /// <summary>
-        /// The switches with the declutter level applied. Full: everything the switches allow. Lean: no gauge row, no unlit lamps, no decorative captions (NAV DATA keeps its rows, not its shelf), and the compact SYSTEMS
-        /// strip only while something is not nominal. Minimal: as Lean, no NAV DATA, and of the lamps only LOCK / SPKE / MSL, of the pages only THREAT, MISSILE CAM, SHOT, APPROACH and the
-        /// critical form of SYSTEMS. The scope mode Off leaves no pages at all (but <see cref="BoardEffective.Voiced"/> keeps the ones the switches allow).
+        /// The major sections with declutter applied to their detail. Manual page choices are always respected;
+        /// Off hides the tactical pages while every feed keeps reporting alerts.
         /// </summary>
         public readonly BoardEffective Effective()
         {
             bool full = Declutter == BoardDeclutter.Full, minimal = Declutter == BoardDeclutter.Minimal;
-            ushort voiced = PageMask();
-            if (minimal) voiced &= MinimalPages;
             return new BoardEffective
             {
-                Pages = ScopeMode == BoardScopeMode.Off ? (ushort)0 : voiced,
-                Voiced = voiced,
+                Pages = ScopeMode == BoardScopeMode.Off ? (ushort)0 : SelectedPages(),
+                Voiced = (ushort)((1 << CuePriority.PageCount) - 1),
+                ShowStores = ShowStores,
                 ShowLamps = ShowLamps,
                 DarkLamps = full,
                 ThreatLampsOnly = minimal,
-                ShowSystemsStrip = ShowSystemsStrip && CuePriority.Has(voiced, ScopePage.Systems),
-                SystemsStripOnlyWhenNotNominal = !full,
                 SystemsCriticalOnly = minimal,
                 ShowGauges = ShowGauges && full,
                 ShowTicker = ShowTicker,

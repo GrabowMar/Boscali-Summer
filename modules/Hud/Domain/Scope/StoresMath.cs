@@ -214,30 +214,16 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         // ---- EXPENDABLES (LAYOUT.md 3.3)
 
-        /// <summary>A dispenser's state word on its row: DISPENSE while the THREAT page calls for it, FIRING for rounds just gone, LOW amber; none otherwise (EMPTY takes the matrix's place, a selection is the row's marker).</summary>
-        public static string StateWord(CmCellState s) => s == CmCellState.Dispense ? "DISPENSE" : s == CmCellState.Firing ? "FIRING" : s == CmCellState.Low ? "LOW" : null;
+        /// <summary>A dispenser's state word on its row: DISPENSE while the THREAT page calls for it, FIRING for rounds just gone, LOW amber, SEL on the selected row; none otherwise (EMPTY takes the bar's place).</summary>
+        public static string StateWord(CmCellState s) =>
+            s == CmCellState.Dispense ? "DISPENSE" : s == CmCellState.Firing ? "FIRING" : s == CmCellState.Low ? "LOW" : s == CmCellState.Selected ? "SEL" : null;
 
-        /// <summary>A dispenser's count: BRIGHT, amber at a quarter or less, red at none.</summary>
-        public static ScopeTone CountTone(CmLevel l) => l == CmLevel.Empty ? ScopeTone.Red : l == CmLevel.Low ? ScopeTone.Amber : ScopeTone.Hi;
+        /// <summary>A dispenser's count: amber at a quarter or less, red at none; else BRIGHT on the selected row and INK on the others.</summary>
+        public static ScopeTone CountTone(CmLevel l, bool selected) => l == CmLevel.Empty ? ScopeTone.Red : l == CmLevel.Low ? ScopeTone.Amber : selected ? ScopeTone.Hi : ScopeTone.Ink;
 
-        /// <summary>The distance between two dots of a matrix, across and down.</summary>
-        public const float MatrixPitch = 4f;
-
-        /// <summary>
-        /// A dispenser's dot matrix: up to three rows (one per 12 rounds of its full load), as many columns as the rounds need, but never more than fit <paramref name="room"/> units at <see cref="MatrixPitch"/>;
-        /// a load too big for that makes one dot stand for <paramref name="perDot"/> rounds. Filled column by column from the left.
-        /// </summary>
-        public static void Matrix(int rounds, float room, out int rows, out int cols, out int perDot)
-        {
-            rounds = Math.Max(1, rounds);
-            rows = Math.Min(3, Math.Max(1, (rounds + 11) / 12));
-            int fit = Math.Max(1, (int)(room / MatrixPitch));
-            perDot = 1;
-            cols = (rounds + rows - 1) / rows;
-            if (cols <= fit) return;
-            perDot = (rounds + rows * fit - 1) / (rows * fit);
-            cols = ((rounds + perDot - 1) / perDot + rows - 1) / rows;
-        }
+        /// <summary>The share of a station's bar that is lit: rounds over the full load (a load the game gives no full size for reads full while any is left), a jammer's charge.</summary>
+        public static float BarShare(in CmStation c) =>
+            c.Chargeable ? Math.Max(0f, Math.Min(1f, c.Charge)) : c.Max > 0 ? Math.Max(0f, Math.Min(1f, c.Ammo / (float)c.Max)) : c.Ammo > 0 ? 1f : 0f;
 
         /// <summary>The capacitor's word: DRN while it drains, CHG while it charges (each with the measured rate), FULL or HOLD when it is steady.</summary>
         public static CapWord CapWordOf(float rateKjS, float fraction) =>

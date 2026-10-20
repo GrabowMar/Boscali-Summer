@@ -153,11 +153,17 @@ namespace BoscaliSummer.Modules.Trenches.Networking
 
         private IEnumerator SendLateJoinSnapshot(INetworkPlayer player)
         {
-            // Authentication normally precedes the client's mission scene. Two bounded
-            // resends make the snapshot survive that transition without periodic traffic.
+            // Authentication normally precedes the client's mission scene, and the client drops
+            // geometry until its mission runs. Bounded resends out to 45s cover a slow load
+            // (positions live all session, so a missed snapshot was a missing line for good);
+            // a client that already holds a line ignores the repeat.
             yield return new WaitForSecondsRealtime(3f);
             SendSnapshot(player);
             yield return new WaitForSecondsRealtime(6f);
+            SendSnapshot(player);
+            yield return new WaitForSecondsRealtime(11f);
+            SendSnapshot(player);
+            yield return new WaitForSecondsRealtime(25f);
             SendSnapshot(player);
         }
 

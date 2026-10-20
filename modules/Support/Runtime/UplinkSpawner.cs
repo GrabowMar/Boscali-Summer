@@ -206,7 +206,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             // Native aircraft origins keep parking/spawn approaches clear, including unattached field origins.
             List<Unit> units = UnitRegistry.allUnits;
-            if (units != null && units.Count > 4096) return false;
             if (units != null)
                 for (int i = 0; i < units.Count && i < 4096; i++)
                     if (units[i] is Aircraft aircraft && HorizontalSquared(local, aircraft.startPosition.ToLocalPosition()) < exclusion * exclusion)

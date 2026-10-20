@@ -106,6 +106,28 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             }
             for (int s = 0; s < stationCount; s++)
                 stations[s].Tag = HudCm.TagOf(stations[s].Mask, stations[s].Chargeable, names[s]);
+            InCycleOrder(aircraft);
+        }
+
+        private readonly string[] cycle = new string[8];
+        private readonly int[] rank = new int[HudCm.MaxStations], order = new int[HudCm.MaxStations], moved = new int[HudCm.MaxStations];
+        private readonly CmStation[] sorted = new CmStation[HudCm.MaxStations];
+        private readonly string[] sortedNames = new string[HudCm.MaxStations];
+
+        /// <summary>The stations in the order the game's Next Countermeasure steps through them, so the board's rows read top to bottom as the key cycles (the scan found them by name).</summary>
+        private void InCycleOrder(Aircraft aircraft)
+        {
+            int known = BoscaliSummer.Core.Game.AircraftReadout.CountermeasureOrder(aircraft, cycle);
+            for (int s = 0; s < stationCount; s++) rank[s] = HudCm.CycleRank(names[s], cycle, known);
+            HudCm.CycleOrder(rank, stationCount, order);
+            for (int k = 0; k < stationCount; k++)
+            {
+                sorted[k] = stations[order[k]];
+                sortedNames[k] = names[order[k]];
+                moved[order[k]] = k;
+            }
+            for (int k = 0; k < stationCount; k++) { stations[k] = sorted[k]; names[k] = sortedNames[k]; }
+            for (int i = 0; i < parts.Length; i++) if (partStation[i] >= 0) partStation[i] = moved[partStation[i]];
         }
 
         /// <summary>The full load: the ejectors remember theirs; a jammer is one charge; anything else is unknown (0).</summary>

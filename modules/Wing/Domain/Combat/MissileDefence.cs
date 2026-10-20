@@ -44,6 +44,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public static float IdleMinSpeedFactor = 1.3f;
         /// <summary>Another missile replaces the one defended against only when this much closer (review M5c I2).</summary>
         public static float SwitchCloserFraction = 0.8f;
+        /// <summary>RESPONSE PRESS holds course against a radar missile only while its impact is further off than this.</summary>
+        public static float PressBreakSeconds = 3f;
 
         private float seen, clear;
         private int lastId;
@@ -67,10 +69,18 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public static float ReactionFor(float precision) => MaxReaction - (MaxReaction - MinReaction) * Scalar.Clamp01(precision);
 
+        /// <summary>The member holds its course (home) with countermeasures only, no break: MSL GUARD OFF against any missile;
+        /// RESPONSE PRESS against a radar missile while its own radar-guided missile flies, until impact is
+        /// <see cref="PressBreakSeconds"/> away.</summary>
+        public static bool HoldsCourse(bool guardOff, bool pressing, WingMissileSeeker seeker, float impactSeconds) =>
+            guardOff || pressing && seeker == WingMissileSeeker.Radar && impactSeconds > PressBreakSeconds;
+
         /// <param name="reactionDelta">EarlyWarning: seconds off the reaction (never below 0).</param>
         /// <param name="breakRange">BreakTurn: a missile inside this range is reacted to at once (0: none).</param>
+        /// <param name="guardOff">MSL GUARD OFF (<see cref="HoldsCourse"/>).</param>
+        /// <param name="pressing">RESPONSE PRESS with the member's own radar-guided missile in flight.</param>
         public DefenceCommand Step(in MissileThreat t, in AircraftState s, in RefState home, float precision, float dt,
-            float reactionDelta = 0f, float breakRange = 0f)
+            float reactionDelta = 0f, float breakRange = 0f, bool guardOff = false, bool pressing = false)
         {
             if (!t.Present)
             {
@@ -98,6 +108,12 @@ namespace BoscaliSummer.Modules.Wing.Domain
             float range = Math.Max(los.Length, 1f);
             float closing = Math.Max(Vec3.Dot(los / range, t.Vel - s.Vel), 1f);
             float impact = range / closing;
+            if (HoldsCourse(guardOff, pressing, t.Seeker, impact))
+                return new DefenceCommand
+                {
+                    Active = true, Ref = home, ImpactSeconds = impact,
+                    Countermeasures = t.Seeker == WingMissileSeeker.Infrared || impact < ChaffImpactSeconds,
+                };
             if (t.Seeker == WingMissileSeeker.Infrared)
                 return new DefenceCommand { Active = true, Idle = true, Countermeasures = true, Ref = home, ImpactSeconds = impact };
 

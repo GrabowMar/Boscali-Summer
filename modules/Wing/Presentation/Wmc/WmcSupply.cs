@@ -181,9 +181,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 string line = ShopRules.DispatchLine(pilot != null ? WmcText.Cut(pilot.Callsign, PilotPick.CallsignChars) : null, fitWord,
                     WingRequisition.FuelPercent, field != null ? BaseName.Short(WingRequisition.NameOf(field)) : null);
                 blocker = ShopRules.Blocker(quote, wing, air);
-                string level = blocker != null ? "warn" : quote.OverLimit ? "info" : "ok";
+                // A known take-off limit, not a block: the requisition still goes (the user's ruling 2026-10-19).
+                string runway = field != null
+                    ? SupplyWords.ShortRunway(selected.unitName, SupplyWords.Code(selected.code, selected.unitName), WingRequisition.RunwayOf(field))
+                    : null;
+                string level = blocker != null || runway != null ? "warn" : quote.OverLimit ? "info" : "ok";
                 dispatch.Set(word, WmcState.Of(cls), selected.unitName + " · " + Credits.Price(quote.Price), IconFactory.Aircraft(selected), line,
-                    blocker ?? (quote.OverLimit ? ShopRules.OverLimitNote(wing) : null), level);
+                    blocker ?? runway ?? (quote.OverLimit ? ShopRules.OverLimitNote(wing) : null), level);
                 dispatch.SetMeta(client ? "THE HOST REQUISITIONS"
                     : SupplyWords.NextCall(wing.Sandbox, quote.Price, wing.Funds, wing.Members, wing.Pending, wing.MaxMembers, air.FactionStock + air.Held));
             }

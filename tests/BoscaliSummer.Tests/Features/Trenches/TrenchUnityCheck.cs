@@ -84,6 +84,16 @@ public static class TrenchUnityCheck
 
     private static void Check(bool value, string message) { if (!value) throw new Exception(message); }
 
+    /// <summary>The planner's job run to completion in one call, as the old synchronous entry point did.</summary>
+    private static bool TryPlanWindow(int id, string name, FactionHQ owner, float pressure, FrontlineTracePoint[] points,
+        int offset, int count, int start, ITerritoryIngress territory, out TrenchLine line, out int next, out TrenchRefusal refusal)
+    {
+        TrenchPlanner.PlanJob job = TrenchPlanner.BeginPlanWindow(id, name, owner, pressure, points, offset, count, start, territory);
+        TrenchPlanner.StepPlan(job, double.MaxValue);
+        line = job.Line; next = job.NextStation; refusal = job.Refusal;
+        return job.Planned;
+    }
+
     private static void CheckMeshWindingAndConformance()
     {
         foreach (Vector3 heading in new[] { Vector3.forward, Vector3.back, Vector3.left, Vector3.right })
@@ -230,7 +240,7 @@ public static class TrenchUnityCheck
         for (int i = 0; i < 3; i++) trace[i] = new FrontlineTracePoint(0f, -600f + i * 600f);
 
         var owner = new GameObject("HQ").AddComponent<FactionHQ>();
-        Check(TrenchPlanner.TryPlanWindow(1, "Check_Front", owner, 0.8f, trace, 0, trace.Length, 0,
+        Check(TryPlanWindow(1, "Check_Front", owner, 0.8f, trace, 0, trace.Length, 0,
             front, out TrenchLine line, out int next, out _), "A front trace plans a position");
         Check(line.Curve.Length >= 100, "A 1.2km front yields a real curve");
         Check(next == 0, "One window spans the whole short trace");
@@ -246,7 +256,7 @@ public static class TrenchUnityCheck
         var longTrace = new FrontlineTracePoint[60];
         for (int i = 0; i < longTrace.Length; i++)
             longTrace[i] = new FrontlineTracePoint(0f, -30000f + i * 1000f);
-        Check(TrenchPlanner.TryPlanWindow(4, "Long_Front", owner, 0.8f, longTrace, 0, longTrace.Length, 0,
+        Check(TryPlanWindow(4, "Long_Front", owner, 0.8f, longTrace, 0, longTrace.Length, 0,
             front, out TrenchLine longLine, out int longNext, out _), "A long front plans a position");
         Check(longLine.Curve.Length >= 190,
             "A two-kilometre window of a long front keeps the ten-metre curve stations, not eight slabs");
@@ -266,7 +276,7 @@ public static class TrenchUnityCheck
         // stretch of trace, never offset along it by the window start's raw station index
         // (the resampled buffer is window-local, so mixing the two shifts the position and
         // reads stale stations past the window's end).
-        Check(TrenchPlanner.TryPlanWindow(5, "Second_Window", owner, 0.8f, longTrace, 0,
+        Check(TryPlanWindow(5, "Second_Window", owner, 0.8f, longTrace, 0,
             longTrace.Length, longNext, front, out TrenchLine secondLine, out _, out TrenchRefusal secondRefusal),
             "The second window of a long front plans a position: " + secondRefusal);
         Check(Vector3.Distance(secondLine.Base[0],
@@ -277,17 +287,17 @@ public static class TrenchUnityCheck
         // leaves salients whose own side reads contested or slightly hostile. Ground on the
         // faction's own side still trenches; only deep enemy ground refuses.
         var cell = new CellFront();
-        Check(TrenchPlanner.TryPlanWindow(6, "Cell_Front", owner, 0.5f, trace, 0, trace.Length, 0,
+        Check(TryPlanWindow(6, "Cell_Front", owner, 0.5f, trace, 0, trace.Length, 0,
             cell, out TrenchLine cellLine, out _, out TrenchRefusal cellRefusal),
             "Contested ground on the faction's own side of the trace must entrench: " + cellRefusal);
         Check(cellLine.Curve.Length >= 100, "A contested-band position is still a real curve");
 
         // A trace too short to be a position is refused, and so is ground the owner lacks.
         var stub = new[] { new FrontlineTracePoint(0f, 0f), new FrontlineTracePoint(0f, 40f) };
-        Check(!TrenchPlanner.TryPlanWindow(2, "Stub", owner, 0f, stub, 0, 2, 0, front, out _, out _, out _),
+        Check(!TryPlanWindow(2, "Stub", owner, 0f, stub, 0, 2, 0, front, out _, out _, out _),
             "A stub trace refuses a position");
         front.BoundaryX = -10000f;
-        Check(!TrenchPlanner.TryPlanWindow(3, "Enemy", owner, 0f, trace, 0, trace.Length, 0, front, out _, out _, out _),
+        Check(!TryPlanWindow(3, "Enemy", owner, 0f, trace, 0, trace.Length, 0, front, out _, out _, out _),
             "Ground the faction does not hold is never entrenched");
         front.BoundaryX = 0f;
 
@@ -342,7 +352,7 @@ public static class TrenchUnityCheck
         var trace = new FrontlineTracePoint[3];
         for (int i = 0; i < 3; i++) trace[i] = new FrontlineTracePoint(0f, -600f + i * 600f);
         var owner = new GameObject("HQ").AddComponent<FactionHQ>();
-        Check(TrenchPlanner.TryPlanWindow(1, "Check_Front", owner, 0.8f, trace, 0, trace.Length, 0,
+        Check(TryPlanWindow(1, "Check_Front", owner, 0.8f, trace, 0, trace.Length, 0,
             front, out TrenchLine line, out _, out _), "A front trace plans a position");
 
         Encyclopedia.i = new Encyclopedia();
@@ -380,9 +390,13 @@ public static class TrenchUnityCheck
             garrison.Alive);
 
         spawner.Spawned[0].GetComponent<UnitPart>().hitPoints = 70;
-        Check(garrison.Poll(10f) && garrison.SuppressedUntil == 70f, "A hit must stop construction for sixty seconds");
+        Check(garrison.Poll(10f) && garrison.SuppressedUntil == 30f,
+            "A hit that kills nothing pauses construction for twenty seconds, got " + garrison.SuppressedUntil);
         spawner.Spawned[0].disabled = true;
-        garrison.Poll(11f); garrison.Reinforce();
+        garrison.Poll(11f);
+        Check(garrison.SuppressedUntil == 71f, "A lost defender pauses construction for sixty seconds, got " +
+            garrison.SuppressedUntil);
+        garrison.Reinforce();
         Check(spawner.Spawned.Count == 8 && garrison.Alive == 7, "A destroyed slot must never respawn");
         foreach (var unit in spawner.Spawned) unit.disabled = true;
         garrison.Poll(12f); garrison.Reinforce();
@@ -445,7 +459,7 @@ public static class TrenchUnityCheck
         var trace = new FrontlineTracePoint[3];
         for (int i = 0; i < 3; i++) trace[i] = new FrontlineTracePoint(0f, -600f + i * 600f);
         var owner = new GameObject("HQ").AddComponent<FactionHQ>();
-        Check(TrenchPlanner.TryPlanWindow(1, "Fallback_Front", owner, 0.8f, trace, 0, trace.Length, 0,
+        Check(TryPlanWindow(1, "Fallback_Front", owner, 0.8f, trace, 0, trace.Length, 0,
             front, out TrenchLine line, out _, out _), "A front trace plans a position for the fallback check");
 
         var encyclopedia = new Encyclopedia();
@@ -498,7 +512,7 @@ public static class TrenchUnityCheck
         var trace = new FrontlineTracePoint[3];
         for (int i = 0; i < 3; i++) trace[i] = new FrontlineTracePoint(0f, -600f + i * 600f);
         var owner = new GameObject("HQ").AddComponent<FactionHQ>();
-        Check(TrenchPlanner.TryPlanWindow(1, "Bay_Front", owner, 0.8f, trace, 0, trace.Length, 0,
+        Check(TryPlanWindow(1, "Bay_Front", owner, 0.8f, trace, 0, trace.Length, 0,
             front, out TrenchLine line, out _, out _), "A front trace plans a position for the bay placement check");
 
         var encyclopedia = new Encyclopedia();
@@ -634,7 +648,7 @@ public static class TrenchUnityCheck
         var trace = new FrontlineTracePoint[3];
         for (int i = 0; i < 3; i++) trace[i] = new FrontlineTracePoint(0f, -600f + i * 600f);
         var owner = new GameObject("HQ").AddComponent<FactionHQ>();
-        Check(TrenchPlanner.TryPlanWindow(1, "Works_Front", owner, 0.8f, trace, 0, trace.Length, 0,
+        Check(TryPlanWindow(1, "Works_Front", owner, 0.8f, trace, 0, trace.Length, 0,
             front, out TrenchLine line, out _, out _), "A front trace plans a position for the works check");
 
         var encyclopedia = new Encyclopedia();
@@ -729,7 +743,7 @@ public static class TrenchUnityCheck
         var trace = new FrontlineTracePoint[3];
         for (int i = 0; i < 3; i++) trace[i] = new FrontlineTracePoint(0f, -600f + i * 600f);
         var owner = new GameObject("HQ").AddComponent<FactionHQ>();
-        Check(TrenchPlanner.TryPlanWindow(1, "Lod_Front", owner, 0.8f, trace, 0, trace.Length, 0,
+        Check(TryPlanWindow(1, "Lod_Front", owner, 0.8f, trace, 0, trace.Length, 0,
             front, out TrenchLine line, out _, out _), "A front trace plans a position for the LOD check");
 
         var cameraGo = new GameObject("LodCamera");
@@ -754,6 +768,16 @@ public static class TrenchUnityCheck
             "LOD distance must be measured in one frame; a camera on the earthwork read " +
             chunk.CameraDistance + "m against Lod0Distance " + chunk.Lod0Distance);
         Check(chunk.ActiveLod == 0, "A camera on the earthwork must select LOD0, got " + chunk.ActiveLod);
+        // A position is over a kilometre long: standing on its last station, far from its centre,
+        // is still standing on the earthwork.
+        Vector3 end = line.Curve[line.Curve.Length - 1];
+        camera.transform.position = new GlobalPosition(end + Vector3.up * 2f).ToLocalPosition();
+        chunk.Rebuild();
+        chunk.CompleteBuild();
+        Check(chunk.ActiveLod == 0 && chunk.CameraDistance < 10f,
+            "A camera at the end of the line must select LOD0, got LOD" + chunk.ActiveLod + " at " +
+            chunk.CameraDistance + "m (centre " + Vector3.Distance(end, chunk.WorldCenter) + "m away)");
+        camera.transform.position = new GlobalPosition(chunk.WorldCenter).ToLocalPosition();
 
         NetworkSceneSingleton<Spawner>.i = new Spawner { IsServer = true };
         camera.transform.position += Vector3.up * 13000f;
@@ -815,7 +839,7 @@ public static class TrenchUnityCheck
         var trace = new FrontlineTracePoint[3];
         for (int i = 0; i < 3; i++) trace[i] = new FrontlineTracePoint(0f, -600f + i * 600f);
         var owner = new GameObject("HQ").AddComponent<FactionHQ>();
-        Check(TrenchPlanner.TryPlanWindow(1, "Render_Front", owner, 0.8f, trace, 0, trace.Length, 0,
+        Check(TryPlanWindow(1, "Render_Front", owner, 0.8f, trace, 0, trace.Length, 0,
             front, out TrenchLine line, out _, out _), "Render trace plans a position");
         var chunk = new GameObject("Chunk").AddComponent<TrenchVisualChunk>();
         chunk.Lod0Distance = 600f;

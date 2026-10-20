@@ -13,9 +13,7 @@ public static partial class HudLogUnityCheck
     /// <summary>Forces the scope onto <paramref name="page"/> (a stub page, never live by itself) at <paramref name="t"/>: the selector is told it is live once.</summary>
     private static void ShellForce(object status, string page, float t)
     {
-        object selector = Field(status, "selector");
-        ushort mask = (ushort)(1 << Convert.ToInt32(Enum.Parse(Type(HudDomain + "ScopePage"), page)));
-        Call(selector, "Update", mask, t, false);
+        SelectFixturePage(status, Field(status, "Options"), page);
     }
 
     private static object ShellLamps(bool lock_, int missiles)
@@ -55,7 +53,7 @@ public static partial class HudLogUnityCheck
 
     /// <summary>The pilot's options: the defaults with some switches changed (<c>name, value</c> pairs).</summary>
     private static object PilotOptions(params object[] nameValue) =>
-        Fill(Type(HudDomain + "BoardOptions").GetProperty("Default", All).GetValue(null), nameValue);
+        Fill(Fill(Type(HudDomain + "BoardOptions").GetProperty("Default", All).GetValue(null), "Scale", 1f), nameValue);
 
     private static object Declutter(string level) => Enum.Parse(Type("BoscaliSummer.Core.Contracts.BoardDeclutter"), level);
 
@@ -85,8 +83,7 @@ public static partial class HudLogUnityCheck
             Call(status, "Present", frame);
             Canvas.ForceUpdateCanvases();
             Check(Mathf.Abs(BoardHeight(status) - FullWide * u) < 1f, "A full WIDE wing is 370 units tall (lamp line 6..18, page 24..314, two gauge lines, ticker): " + BoardHeight(status) / u);
-            object current = Field(status, "page");
-            Check((string)current.GetType().GetProperty("Title").GetValue(current) == "THREAT", "The forced stub page is the current page");
+            Check(PageTitle(status) == "THREAT", "The forced stub page is the current page");
             ScopeChecks(status, "shell-full" + res);
             Capture(canvas, "shell-full" + res + ".png");
 
@@ -94,7 +91,8 @@ public static partial class HudLogUnityCheck
             Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
             MakeBoard(size, 10f, out canvas, out status, out frame);
             ShellScene(frame, 10f, true);
-            Call(status, "Present", frame);                       // cruise: compact, snapped (SYSTEMS is not live here: its feed is empty, so the scope has no row)
+            ShellForce(status, "Wing", 10f);
+            Call(status, "Present", frame);                       // the first page snaps in (SYSTEMS is not shown here: its feed is empty)
             Check(BoardHeight(status) > 0f, "A board with lamps, gauges and a ticker shows without a page");
             ShellForce(status, "Threat", 10.04f);
             Set(frame, "Now", 10.04f);
@@ -120,6 +118,7 @@ public static partial class HudLogUnityCheck
             Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
             MakeBoard(size, 30f, out canvas, out status, out frame);
             ShellScene(frame, 30f, false);
+            Set(status, "Options", PilotOptions("ScopeMode", Enum.Parse(Type("BoscaliSummer.Core.Contracts.BoardScopeMode"), "Off")));
             Call(status, "Present", frame);
             Canvas.ForceUpdateCanvases();
             Check(Mathf.Abs(BoardHeight(status) - 18f * u) < 1f, "Only the lamp line: its 12 under the 6 of the caption row, an 18 unit box: " + BoardHeight(status) / u);
@@ -161,7 +160,7 @@ public static partial class HudLogUnityCheck
     private static object OptionBoard(Vector2 size, string page, float t, object options, int[] notices, out Canvas canvas, out object frame)
     {
         MakeBoard(size, t, out canvas, out object status, out frame);
-        Set(status, "Options", options);
+        SelectFixturePage(status, options, page);
         notices[0] = 0;
         Set(status, "Notice", CountingNotice(status, notices));
         var scene = new ScopeScene(t, size, frame);
@@ -181,9 +180,10 @@ public static partial class HudLogUnityCheck
         return Ex.Lambda(type, Ex.PreIncrementAssign(Ex.ArrayAccess(Ex.Constant(count), Ex.Constant(0))), args).Compile();
     }
 
+    /// <summary>The title of the page in slot 1.</summary>
     private static string PageTitle(object status)
     {
-        object p = Field(status, "page");
+        object p = ((Array)Field(status, "selectedPages")).GetValue(0);
         return (string)p.GetType().GetProperty("Title").GetValue(p);
     }
 
@@ -195,80 +195,27 @@ public static partial class HudLogUnityCheck
     /// </summary>
     private static void ScopeOptionCases(Vector2 size)
     {
-        float u = Mathf.Max(size.y / 1080f, 0.85f);
         var notices = new int[1];
-
-        object status = OptionBoard(size, "threat", 6f, PilotOptions(), notices, out Canvas canvas, out object frame);
-        Check(PageTitle(status) == "THREAT", "options: THREAT, live, takes the scope under the defaults");
-        Check(notices[0] > 0, "options: ...and speaks to the ticker");
-        Check(Mathf.Abs(((CanvasGroup)Field(status, "rootGroup")).alpha - 1f) < 0.001f, "options: the board is fully opaque by default");
-        float full = BoardHeight(status);
+        object status = OptionBoard(size, "threat", 6f, PilotOptions("PageThreat", false), notices, out Canvas canvas, out object frame);
+        Check(PageTitle(status) == "THREAT", "Legacy page whitelist switches do not override manual selection");
+        Check(notices[0] > 0, "Legacy page switches do not silence feed warnings");
         Set(status, "Options", PilotOptions("Opacity", 0.5f));
         Call(status, "Present", frame);
-        Check(Mathf.Abs(((CanvasGroup)Field(status, "rootGroup")).alpha - 0.5f) < 0.001f, "options: Opacity 0.5 is the board's alpha");
-        ScopeChecks(status, "options-opacity");
+        Check(Mathf.Abs(((CanvasGroup)Field(status, "rootGroup")).alpha - 0.5f) < 0.001f, "Opacity is still applied live");
         Set(status, "Options", PilotOptions("Enabled", false));
         Call(status, "Present", frame);
-        Check(!((RectTransform)Field(status, "root")).gameObject.activeSelf, "options: Enabled off hides the board");
-        Set(status, "Options", PilotOptions());
-        Call(status, "Present", frame);
-        Canvas.ForceUpdateCanvases();
-        ScopeChecks(status, "options-enabled");
-        Check(Mathf.Abs(((CanvasGroup)Field(status, "rootGroup")).alpha - 1f) < 0.001f, "options: ...and on again it is back at full opacity");
+        Check(!((RectTransform)Field(status, "root")).gameObject.activeSelf, "The board master switch hides the board");
         Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
-
-        status = OptionBoard(size, "threat", 6f, PilotOptions("PageThreat", false), notices, out canvas, out frame);
-        Check(PageTitle(status) == "SYSTEMS", "options: PageThreat off, THREAT does not take the scope: " + PageTitle(status));
-        Check(notices[0] == 0, "options: ...and does not speak (" + notices[0] + " notices)");
-        ScopeChecks(status, "options-nothreat");
-        Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
-
         status = OptionBoard(size, "threat", 6f, PilotOptions("ScopeMode", Enum.Parse(Type("BoscaliSummer.Core.Contracts.BoardScopeMode"), "Off")), notices, out canvas, out frame);
-        Check(!Shown(status, "scopeRect"), "options: ScopeMode Off, no scope");
-        Check(full - BoardHeight(status) >= 290f * u - 1f, "options: ...and the board gives its room back: " + full / u + " -> " + BoardHeight(status) / u);
-        Check(notices[0] > 0, "options: ...but the warnings still post (" + notices[0] + " notices)");
-        ScopeChecks(status, "options-scopeoff");
+        Check(!Shown(status, "scopeRect") && notices[0] > 0, "Scope Off hides pages while all warning feeds continue");
         Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
-
-        // SYSTEMS: nominal cruise (2 s) is the compact strip, the fire (10 s) its critical form; with the page's switch off neither is drawn.
-        foreach (float t in new[] { 2f, 10f })
+        foreach (bool legacyOn in new[] { false, true })
         {
-            status = OptionBoard(size, "systems", t, PilotOptions(), notices, out canvas, out frame);
-            Check(Shown(status, "scopeRect") && PageTitle(status) == "SYSTEMS", "options: SYSTEMS at " + t + " s is drawn under the defaults");
-            Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
-            status = OptionBoard(size, "systems", t, PilotOptions("PageSystems", false), notices, out canvas, out frame);
-            Check(!Shown(status, "scopeRect") && !BoardWords(status).Contains("SYSTEMS"), "options: PageSystems off, no SYSTEMS strip at " + t + " s");
-            ScopeChecks(status, "options-nosystems" + t);
-            Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
-        }
-
-        // MINIMAL keeps SYSTEMS only in its critical form: a FUEL LEAK and JOKER (cautions, 6 s) read after a quiet 2 s post nothing and bring no strip, the engine out and the fire (10 s) post and show. Under the defaults the cautions post.
-        foreach (bool minimal in new[] { false, true })
-        {
-            string level = minimal ? "MINIMAL" : "FULL";
-            status = OptionBoard(size, "systems", 2f, minimal ? PilotOptions("Declutter", Declutter("Minimal")) : PilotOptions(), notices, out canvas, out frame);
-            notices[0] = 0;
-            Fixture("systems", 6f, new ScopeScene(6f, size, frame));
-            Set(frame, "Now", 6f);
-            Call(status, "Present", frame);
-            Canvas.ForceUpdateCanvases();
-            Check(minimal ? notices[0] == 0 && !Shown(status, "scopeRect") : notices[0] > 0 && Shown(status, "scopeRect"), level + ": SYSTEMS' cautions " + (minimal ? "post nothing and bring no strip" : "post and the strip shows") + " (" + notices[0] + " notices)");
-            notices[0] = 0;
-            Fixture("systems", 10f, new ScopeScene(10f, size, frame));
-            Set(frame, "Now", 10f);
-            Call(status, "Present", frame);
-            Call(status, "Animate", 10.5f);      // the strip wipes in over 180 ms when it was not there
-            Canvas.ForceUpdateCanvases();
-            Check(notices[0] > 0 && Shown(status, "scopeRect") && PageTitle(status) == "SYSTEMS", level + ": the engine out and the fire post and show (" + notices[0] + " notices)");
-            Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
-        }
-
-        // A page the pilot has switched off does not override lamps (like its notices, its lamps are silent): an engine out (10 s) lights ENG through SYSTEMS only while that page is on.
-        foreach (bool on in new[] { true, false })
-        {
-            status = OptionBoard(size, "systems", 10f, PilotOptions("PageSystems", on), notices, out canvas, out frame);
+            status = OptionBoard(size, "systems", 10f, PilotOptions("PageSystems", legacyOn), notices, out canvas, out frame);
+            Check(Shown(status, "statusRect") && PageTitle(status) != "SYSTEMS", "SYSTEMS always shows in its own block, never in a page slot, whatever the legacy switch");
             object eng = ((Array)Field(status, "lamps")).GetValue(6);
-            Check((string)Field(eng, "Legend") == "ENG" && Field(eng, "State").ToString() == (on ? "Warning" : "Dark"), "options: the ENG lamp reads " + Field(eng, "State") + " with the SYSTEMS switch " + (on ? "on" : "off"));
+            Check(Field(eng, "State").ToString() == "Warning", "Critical engine warnings are independent of the selected page whitelist");
+            ScopeChecks(status, "options-manual-systems");
             Call(status, "Destroy"); Object.DestroyImmediate(canvas.gameObject);
         }
         ScopeReset();

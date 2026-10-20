@@ -63,10 +63,16 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return true;
         }
 
-        public void Forget(uint id)
+        /// <summary>Whether aircraft <paramref name="id"/> flies anything of its own (a profile, or any override).</summary>
+        public bool Has(uint id) => Find(id) >= 0;
+
+        /// <summary>Aircraft <paramref name="id"/> flies its element's doctrine again; false when it had nothing of its own.</summary>
+        public bool Forget(uint id)
         {
             int i = Find(id);
-            if (i >= 0) slots[i] = default(Slot);
+            if (i < 0) return false;
+            slots[i] = default(Slot);
+            return true;
         }
 
         public void Clear()

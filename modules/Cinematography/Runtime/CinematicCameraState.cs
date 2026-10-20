@@ -22,8 +22,8 @@ namespace BoscaliSummer.Modules.Cinematography.Runtime
         private readonly Vector3 baselineVelocity;
         private float previousClock, elapsed;
         private ShotPose lastPose;
-        private float lastTime;
-        private bool wrote, stopping, terminal, finalFrame;
+        private float lastRealtime;
+        private bool wrote, stopping, terminal, finalFrame, seekDiscontinuity;
         private Vector3 writtenVelocity;
         internal bool OwnsCamera { get; private set; }
         internal bool ManualPaused { get; set; }
@@ -31,7 +31,7 @@ namespace BoscaliSummer.Modules.Cinematography.Runtime
         {
             if(!OwnsCamera || terminal || !ShotPlan.Finite(seconds) || seconds<0 || seconds>plan.duration) return false;
             float now=clock();if(!ShotPlan.Finite(now)) return false;
-            elapsed=seconds;previousClock=now;finalFrame=false;return true;
+            elapsed=seconds;previousClock=now;finalFrame=false;seekDiscontinuity=true;return true;
         }
 
         internal CinematicCameraState(CameraStateManager cam, ShotPlan shot, Func<float> missionClock,
@@ -103,19 +103,22 @@ namespace BoscaliSummer.Modules.Cinematography.Runtime
                 if (finalFrame && !paused) { terminal = true; complete(); return; }
                 ShotPose? actor=anchor?.Invoke();
                 if(plan.anchorId!=null && !actor.HasValue) { Fail("ANCHOR LOST");return; }
-                ShotPose pose = plan.SamplePresentation(time,actor);
+                ShotPose pose = plan.SamplePresentation(time,actor,cam.mainCamera.aspect);
                 Vector3 position = new GlobalPosition(pose.Position.X, pose.Position.Y, pose.Position.Z).ToLocalPosition();
                 if (!clear(position)) { Fail("CAMERA PATH BLOCKED"); return; }
-                if (wrote && time > lastTime)
+                float realtime = Time.unscaledTime;
+                // Native camera velocity is metres per real second (free-camera integration and wind audio).
+                // Derive from global positions so rate changes, held moving anchors and origin shifts stay correct.
+                if (wrote && !seekDiscontinuity && ShotPlan.Finite(realtime) && realtime > lastRealtime)
                 {
-                    var velocity = (pose.Position - lastPose.Position) / (time - lastTime);
+                    var velocity = (pose.Position - lastPose.Position) / (realtime - lastRealtime);
                     writtenVelocity = new Vector3(velocity.X, velocity.Y, velocity.Z);
                 }
                 else writtenVelocity = Vector3.zero;
                 cam.cameraVelocity = writtenVelocity;
                 cam.transform.SetPositionAndRotation(position, Rotation(pose));
                 cam.desiredFOV = cam.mainCamera.fieldOfView = pose.Fov;
-                lastPose = pose; lastTime = time; wrote = true;
+                lastPose = pose; lastRealtime = realtime; wrote = true;seekDiscontinuity=false;
                 finalFrame = time >= plan.duration;
                 frame(Math.Min(time, plan.duration));
             }

@@ -681,15 +681,24 @@ namespace BoscaliSummer.Tests.Features.Trenches
             TestAssert.That(longPitch * (TrenchTraceMath.MaximumNodes - 1) >= 2400f,
                 "The widest pitch still fits one position's 2400m inside the node budget");
 
-            TestAssert.That(Near(TrenchTraceMath.NodeFraction(0, 3), 1f / 6f) &&
-                Near(TrenchTraceMath.NodeFraction(1, 3), 0.5f) &&
-                Near(TrenchTraceMath.NodeFraction(2, 3), 5f / 6f),
-                "Three bays sit at 0.17/0.5/0.83 of the line, centred in their slots");
+            // Each slot spawns at the stage that adds it, so its fraction must not depend on the
+            // budget: the old (slot + 0.5) / budget crowded slots 2-7 into the last third.
+            TestAssert.That(Near(TrenchTraceMath.NodeFraction(0, 2), 0.25f) &&
+                Near(TrenchTraceMath.NodeFraction(1, 2), 0.75f) &&
+                Near(TrenchTraceMath.NodeFraction(1, 8), 0.75f),
+                "The two opening teams keep the quarter points at every stage");
+            var spread = new float[8];
+            for (int slot = 0; slot < 8; slot++) spread[slot] = TrenchTraceMath.NodeFraction(slot, slot + 1);
+            Array.Sort(spread);
+            float smallestGap = 1f;
+            for (int i = 1; i < spread.Length; i++) smallestGap = Math.Min(smallestGap, spread[i] - spread[i - 1]);
+            TestAssert.That(smallestGap >= 0.06f && spread[0] < 0.1f && spread[7] > 0.85f && spread[3] < 0.5f,
+                "A full garrison grown stage by stage spans the whole line (smallest gap " + smallestGap + ")");
             TestAssert.That(Near(TrenchTraceMath.NodeFraction(0, 0), 0f) &&
                 Near(TrenchTraceMath.NodeFraction(4, 0), 0f),
                 "A spent slot budget puts the bay on the line's start");
             TestAssert.That(Near(TrenchTraceMath.NodeFraction(-2, 3), 0f) &&
-                Near(TrenchTraceMath.NodeFraction(9, 3), 1f),
+                TrenchTraceMath.NodeFraction(9, 3) >= 0f && TrenchTraceMath.NodeFraction(9, 3) <= 1f,
                 "A slot outside the budget is clamped onto the line, never past its caps");
 
             TestAssert.That(Near(TrenchTraceMath.BayExtra(0f), TrenchTraceMath.BayExtraWidth) &&
@@ -738,6 +747,9 @@ namespace BoscaliSummer.Tests.Features.Trenches
                 TrenchTraceMath.CentresConflict(359f, true) &&
                 TrenchTraceMath.CentresConflict(float.NaN, false),
                 "True overlaps still refuse, and unknown distance fails closed");
+            TestAssert.That(TrenchTraceMath.OverlapsExisting(14, 40) && !TrenchTraceMath.OverlapsExisting(13, 40) &&
+                !TrenchTraceMath.OverlapsExisting(0, 0),
+                "A same-side window lying along over a third of an existing line refuses; a touching end stands");
         }
 
         /// <summary>

@@ -1,5 +1,6 @@
 {
   "name": "ops-effects",
+  "_note": "OPS support-effect visuals on Free Flight. The Weather module owns the sky, so the plain atmosphere op is not enough: ForceWeather pins Clear or low cloud hides the effects. Camera poses are global metres; the target is the map point (-10000, 0). Rod: wide camera for the descent line, a closer one for the strike. EMP: the shell is a faint additive ring, so it is also shot at night. Read the captures, the run only checks that nothing errored.",
   "mods": [
     "boscalisummer"
   ],
@@ -36,6 +37,17 @@
       "moon_phase": 14
     },
     {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.ForceWeather",
+      "args": {
+        "regime": "Clear",
+        "conditions": 0,
+        "cloudHeight": 6000,
+        "seed": 7
+      },
+      "store": "wx"
+    },
+    {
       "op": "wait",
       "seconds": 8
     },
@@ -43,12 +55,12 @@
       "op": "camera",
       "position": [
         -10000,
-        2600,
-        -4500
+        3000,
+        -9000
       ],
       "heading": 0,
-      "pitch": 19,
-      "fov": 62
+      "pitch": -8,
+      "fov": 70
     },
     {
       "op": "wait",
@@ -66,7 +78,7 @@
     },
     {
       "op": "wait",
-      "seconds": 1.2
+      "seconds": 0.8
     },
     {
       "op": "capture",
@@ -75,7 +87,16 @@
     },
     {
       "op": "wait",
-      "seconds": 2.6
+      "seconds": 0.9
+    },
+    {
+      "op": "capture",
+      "name": "fx-day-rod-descent2",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 1.7
     },
     {
       "op": "capture",
@@ -83,8 +104,19 @@
       "hide_ui": true
     },
     {
+      "op": "camera",
+      "position": [
+        -10000,
+        2000,
+        -4000
+      ],
+      "heading": 0,
+      "pitch": 12,
+      "fov": 60
+    },
+    {
       "op": "wait",
-      "seconds": 2.5
+      "seconds": 1.5
     },
     {
       "op": "capture",
@@ -93,7 +125,7 @@
     },
     {
       "op": "wait",
-      "seconds": 6
+      "seconds": 5
     },
     {
       "op": "capture",
@@ -111,7 +143,7 @@
     },
     {
       "op": "wait",
-      "seconds": 25
+      "seconds": 30
     },
     {
       "op": "camera",
@@ -155,11 +187,69 @@
     },
     {
       "op": "wait",
+      "seconds": 8
+    },
+    {
+      "op": "atmosphere",
+      "time_of_day": 23,
+      "conditions": 0.1,
+      "cloud_height": 6000,
+      "wind_speed": 4,
+      "wind_heading": 70,
+      "wind_turbulence": 0,
+      "moon_phase": 14
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.ForceWeather",
+      "args": {
+        "regime": "Clear",
+        "conditions": 0,
+        "cloudHeight": 6000,
+        "seed": 7
+      },
+      "store": "wx_night"
+    },
+    {
+      "op": "wait",
+      "seconds": 6
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+      "args": {
+        "fx": "emp",
+        "x": -10000,
+        "z": 0,
+        "radius": 12000
+      },
+      "store": "fx_emp_night"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.35
+    },
+    {
+      "op": "capture",
+      "name": "fx-night-emp-flash",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 1.6
+    },
+    {
+      "op": "capture",
+      "name": "fx-night-emp-shell",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
       "seconds": 3
     },
     {
       "op": "capture",
-      "name": "fx-day-emp-late",
+      "name": "fx-night-emp-late",
       "hide_ui": true
     },
     {
@@ -170,12 +260,70 @@
       "op": "camera",
       "position": [
         -10000,
-        2600,
-        -4500
+        2400,
+        -2800
       ],
       "heading": 0,
-      "pitch": 19,
+      "pitch": 12,
       "fov": 62
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Support.Visuals.OpsFxDemo.Fire",
+      "args": {
+        "fx": "flare",
+        "x": -10000,
+        "z": 0,
+        "radius": 3500
+      },
+      "store": "fx_flare_night"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "capture",
+      "name": "fx-night-flare-3",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 6
+    },
+    {
+      "op": "capture",
+      "name": "fx-night-flare-9",
+      "hide_ui": true
+    },
+    {
+      "op": "wait",
+      "seconds": 12
+    },
+    {
+      "op": "atmosphere",
+      "time_of_day": 13,
+      "conditions": 0.1,
+      "cloud_height": 6000,
+      "wind_speed": 4,
+      "wind_heading": 70,
+      "wind_turbulence": 0,
+      "moon_phase": 14
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.ForceWeather",
+      "args": {
+        "regime": "Clear",
+        "conditions": 0,
+        "cloudHeight": 6000,
+        "seed": 7
+      },
+      "store": "wx_day"
+    },
+    {
+      "op": "wait",
+      "seconds": 6
     },
     {
       "op": "call",
@@ -190,29 +338,20 @@
     },
     {
       "op": "wait",
-      "seconds": 2
+      "seconds": 3
     },
     {
       "op": "capture",
-      "name": "fx-day-flare-2",
+      "name": "fx-day-flare-3",
       "hide_ui": true
     },
     {
       "op": "wait",
-      "seconds": 4
+      "seconds": 6
     },
     {
       "op": "capture",
-      "name": "fx-day-flare-6",
-      "hide_ui": true
-    },
-    {
-      "op": "wait",
-      "seconds": 7
-    },
-    {
-      "op": "capture",
-      "name": "fx-day-flare-13",
+      "name": "fx-day-flare-9",
       "hide_ui": true
     },
     {

@@ -183,7 +183,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (d == null || SpaceWire.StateSize(d) <= SpaceWire.StateBudget || (d.Posts.Count == 0 && d.RemovedPosts.Count == 0)) return d;
             var follow = new SpaceStateData
             {
-                Protocol = d.Protocol, Full = false, Active = d.Active, Feed = d.Feed, Generation = d.Generation, Now = d.Now,
+                Protocol = d.Protocol, Faction = d.Faction, Epoch = d.Epoch, Full = false, Active = d.Active, Feed = d.Feed, Generation = d.Generation, Now = d.Now,
                 Family = d.Family, UplinksLive = d.UplinksLive, UplinksTotal = d.UplinksTotal, LiveMarks = d.LiveMarks, Gate = d.Gate, GateDetail = d.GateDetail,
                 NewestPost = d.NewestPost, NewestAction = d.NewestAction, NewestTargets = d.NewestTargets, NewestWatchOfficer = d.NewestWatchOfficer,
                 NewestOwn = d.NewestOwn, NewestMaker = d.NewestMaker, RadarReadyAt = d.RadarReadyAt, Intent = d.Intent
@@ -219,6 +219,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// faction (or scene) can never be accepted afterwards; only a new link clears it (<see cref="ResetLink"/>).
         /// </summary>
         public int Floor { get; private set; }
+        /// <summary>The newest host scene epoch applied on this link (0 = none); kept by <see cref="Reset"/> like <see cref="Floor"/>, cleared by a new link.</summary>
+        public ushort Epoch { get; private set; }
         /// <summary>A delta arrived that the mirror cannot place: ask the host for a fresh full.</summary>
         public bool NeedsFull { get; private set; }
         /// <summary>The headline (family, uplinks) has been heard from the host at least once since the last reset.</summary>
@@ -233,18 +235,20 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>A new connection (possibly a new host process whose generations restart): forget everything.</summary>
         public void ResetLink()
         {
-            Reset(); Floor = 0;
+            Reset(); Floor = 0; Epoch = 0;
         }
 
-        public bool Apply(SpaceStateData d, byte protocol, float clientNow)
+        /// <param name="faction">The client's own faction on the wire (<see cref="FactionIdentity.Of"/>), resolved by the caller at the moment of the call; 0 refuses everything. A full or delta built for another faction, or for an earlier host scene, never applies; a refused full while the mirror is still empty asks for a fresh one (the host sends on change only, so it would not resend by itself).</param>
+        public bool Apply(SpaceStateData d, byte protocol, float clientNow, uint faction)
         {
             if (d == null || d.Protocol != protocol || d.Generation <= 0 || !SpaceRules.MissionTime(clientNow)) return false;
+            if (!LinkIdentity.Admits(d.Faction, d.Epoch, faction, Epoch)) { if (d.Full && !hasFull) NeedsFull = true; return false; }
             if (d.Full)
             {
                 if (d.Generation <= Floor) return false; // an older subscription, faction or scene can never restore state
                 var fresh = new SpaceFeedState();
                 if (!Merge(fresh, d, clientNow, true)) return false;
-                State = fresh; Generation = d.Generation; Floor = d.Generation; hasFull = true; NeedsFull = false;
+                State = fresh; Generation = d.Generation; Floor = d.Generation; Epoch = d.Epoch; hasFull = true; NeedsFull = false;
                 return true;
             }
             if (!hasFull)
@@ -257,7 +261,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (d.Generation != Generation) { if (d.Generation > Floor) NeedsFull = true; return false; }
             SpaceFeedState merged = State.Clone();
             if (!Merge(merged, d, clientNow, false)) { NeedsFull = true; return false; }
-            State = merged;
+            State = merged; Epoch = d.Epoch;
             return true;
         }
 
@@ -311,7 +315,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         private sealed class Sub
         {
-            public int Faction = int.MinValue, Generation;
+            public int Faction, Generation;
+            public ushort Epoch;
             public bool Feed, NeedFull = true, Seen;
             public float FeedUntil, NextAt;
             public SpaceFeedState Last;
@@ -327,6 +332,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public int Count => subs.Count;
         /// <summary>Last generation handed out. Never decreases, not even across a scene reset.</summary>
         public int Generation => generation;
+        /// <summary>The host's scene epoch, set by the owner before every poll; it is stamped on every message and a member's first message after it moves is a fresh full one.</summary>
+        public ushort Epoch { get; set; } = 1;
 
         /// <summary>Creates the member's record when absent. True only when it was newly created (a fresh join).</summary>
         public bool Ensure(ulong player)
@@ -398,7 +405,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public SpaceStateData Next(ulong player, int faction, SpaceFeedState current, float now, float wall = float.NaN)
         {
             if (float.IsNaN(wall)) wall = now;
-            if (player == 0 || current == null || !SpaceRules.MissionTime(now) || !SpaceRules.MissionTime(wall)) return null;
+            if (player == 0 || faction == 0 || current == null || !SpaceRules.MissionTime(now) || !SpaceRules.MissionTime(wall)) return null;
             if (!subs.TryGetValue(player, out Sub s))
             {
                 if (subs.Count >= MaxSubscribers) return null;
@@ -406,7 +413,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             }
             s.Seen = true;
             if (s.Feed && wall >= s.FeedUntil) { s.Feed = false; s.NeedFull = true; }
-            if (s.Faction != faction) { s.Faction = faction; s.NeedFull = true; s.Last = null; }
+            if (s.Faction != faction || s.Epoch != Epoch) { s.Faction = faction; s.Epoch = Epoch; s.NeedFull = true; s.Last = null; }
             if (!s.NeedFull && wall < s.NextAt) return null;
             if (current.Feed && !s.Feed)
             {
@@ -418,11 +425,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             {
                 if (generation == int.MaxValue) return null;
                 SpaceStateData full = SpaceMirror.Diff(null, current, protocol, s.Generation = ++generation, now, true);
+                full.Faction = unchecked((uint)faction); full.Epoch = Epoch;
                 s.Last = SpaceMirror.Advance(null, current, full); s.NeedFull = false;
                 return SpaceMirror.Split(full);
             }
             SpaceStateData delta = SpaceMirror.Diff(s.Last, current, protocol, s.Generation, now, false);
             if (SpaceMirror.Quiet(s.Last, current, delta)) return null;
+            delta.Faction = unchecked((uint)faction); delta.Epoch = Epoch;
             s.Last = SpaceMirror.Advance(s.Last, current, delta);
             return SpaceMirror.Split(delta);
         }

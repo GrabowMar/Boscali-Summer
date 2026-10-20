@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Hud.Domain;
 using BoscaliSummer.Modules.Hud.Presentation;
 using HarmonyLib;
@@ -68,9 +69,10 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                     AntiAir = info.effectiveness.antiAir, AntiSurface = info.effectiveness.antiSurface,
                 };
                 StoreClass cls = StoresMath.ClassOf(flags);
+                CargoStationRead.ReadAmmo(s, out int ammo, out int max);
                 var q = new StoreStation
                 {
-                    Class = cls, Name = NameOf(count, s, info), Ammo = s.Ammo, Max = Mathf.Max(s.FullAmmo, s.Ammo), Slot = cls == StoreClass.Gun ? 0 : ++slot,
+                    Class = cls, Name = NameOf(count, s, info), Ammo = ammo, Max = max, Slot = cls == StoreClass.Gun ? 0 : ++slot,
                     Reloading = s.Reloading, ReloadElapsed = float.NaN, ReloadLeftS = float.NaN, FiredAgeS = level - s.LastFiredTime, Icon = icons[count],
                 };
                 if (s.Reloading) Reload(s, ref q);

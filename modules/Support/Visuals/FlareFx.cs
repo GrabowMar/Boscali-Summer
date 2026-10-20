@@ -46,6 +46,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         // Not "Start": Unity treats that name as its own message and rejects one that takes a parameter.
         public void Launch(Vector3 at)
         {
+            BoscaliSummer.Core.Fx.ParticleFx.Spawn("fx-flare-burst", at, Quaternion.identity);
             if (heads == null)
             {
                 pop = CineFx.Layer(transform, "Mortar pop", CineFx.Glow, 16);

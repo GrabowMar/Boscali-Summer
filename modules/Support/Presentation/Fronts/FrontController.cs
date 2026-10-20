@@ -38,13 +38,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private int lastFaction, selectedNode, selectedTeam = -1, selectedTarget;
         private int pendingRequest;
         private float pendingAtWall, failedUntil;
-        private bool refreshFaulted;
+        private bool refreshFaulted, suspended;
         private Front pendingFront;
+        private SpaceCommandKind pendingKind;
         private string words = "";
         private AvState wordsTone = AvState.Inert;
         private readonly bool[] hasBird = new bool[3];
 
-        public bool IsOpen => open && window != null && window.IsOpen;
+        public bool IsOpen => open && (suspended || (window != null && window.IsOpen));
         public Front Current => current;
         /// <summary>The last front verdict in words (the footer shows it for a few seconds).</summary>
         public string LastWords => words;
@@ -69,7 +70,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public void ResetForScene()
         {
             Shut();
-            selectedNode = 0; selectedTeam = -1; selectedTarget = 0;
+            ClearSelections();
             pendingRequest = 0;
             failedUntil = 0f; refreshFaulted = false;
             words = "";
@@ -94,8 +95,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 window.Closed += OnClosed;
             }
             current = front;
-            selectedNode = 0; selectedTeam = -1; selectedTarget = 0;
-            lastFaction = CurrentFaction();
+            int faction = CurrentFaction();
+            if (faction != lastFaction) ClearSelections(); // another faction's ids mean something else; the same faction keeps its picks across opens and room switches
+            lastFaction = faction;
             WantFeeds(true);
             feed?.SetVisible(front == Front.Space);
             Build();
@@ -106,10 +108,15 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             return true;
         }
 
-        public void Close() => window?.Close();
+        public void Close()
+        {
+            if (suspended) { suspended = false; manager?.Disarm(); OnClosed(); return; } // hidden for a map pick: there is no window to hide, but the pick must not outlive the room
+            window?.Close();
+        }
 
         private void Shut()
         {
+            suspended = false;
             if (window != null && window.IsOpen) window.Close();
             open = false;
             feed?.SetVisible(false);
@@ -118,7 +125,19 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private void OnClosed()
         {
             open = false;
+            suspended = false;
             feed?.SetVisible(false);
+        }
+
+        /// <summary>Picks belong to one faction and one scene: either changing drops them all (a vanished id is cleared by the views, nothing else).</summary>
+        private void ClearSelections()
+        {
+            selectedNode = 0; selectedTeam = -1; selectedTarget = 0;
+            ShadowRoomView sof = view.Shadow;
+            sof.HasDraft = false; sof.DraftMission = MissionKind.None; sof.Reason = "";
+            sof.History.Clear(); sof.LastSeq = 0;
+            NetworkRoomView net = view.Network;
+            net.History.Clear(); net.LastSeq = 0; // another faction's (or scene's) session log must not be prefixed to the new one's
         }
 
         // ---- Frame ------------------------------------------------------------------------------------------------------
@@ -131,7 +150,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (manager == null) return;
             WantFeeds(open);
             if (!open) return;
-            if (window == null || !window.IsOpen) { OnClosed(); return; }
+            if (!suspended && (window == null || !window.IsOpen)) { OnClosed(); return; }
             try
             {
                 // A probe or faction read can blink for a frame (respawn handover, ownship swap): only a stretch of bad reads is a real death, despawn or faction change.
@@ -143,6 +162,15 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     if (Time.unscaledTime - badSince >= BadGraceSeconds) { badSince = -1f; Close(); return; }
                 }
                 if (pendingRequest != 0 && Time.unscaledTime - pendingAtWall > 6f) { pendingRequest = 0; Say("NEGATIVE: NO ANSWER \u2014 PRESS AGAIN", AvState.Danger); }
+                if (suspended)
+                {
+                    if (manager.LocalPickArmed) return; // the pick is still on the map
+                    suspended = false; // picked or cancelled (Esc): the same room comes back
+                    Build();
+                    if (!window.Open(view)) { OnClosed(); return; }
+                    nextRefresh = Time.unscaledTime + Refresh;
+                    return;
+                }
                 if (Time.unscaledTime < failedUntil || Time.unscaledTime < nextRefresh) return;
                 nextRefresh = Time.unscaledTime + Refresh;
                 Build();
@@ -181,6 +209,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             FrontInputs c = Inputs(now);
             FrontMirror fm = manager.FrontMirror;
             FrontViews.Common(view, current, fm.State, fm.Known, c);
+            window?.PriorityLock(fm.Known ? fm.State.PriorityBy : "", fm.Known ? fm.State.PriorityLockUntil : 0f);
             switch (current)
             {
                 case Front.Space:
@@ -189,12 +218,17 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     break;
                 case Front.Cyber:
                     FrontViews.Network(view.Network, manager.CyberMirror.State, manager.CyberMirror.Known, c.Frame, selectedNode, now);
-                    selectedNode = view.Network.SelectedId > 0 ? view.Network.SelectedId : 0;
+                    if (view.Network.Active) selectedNode = view.Network.SelectedId; // a blink with no snapshot keeps the pick
+                    if (pendingRequest != 0 && ((pendingKind >= SpaceCommandKind.CyberHop && pendingKind <= SpaceCommandKind.CyberDrop) || pendingKind == SpaceCommandKind.CyberPurge))
+                    {
+                        // A sent verb waits for its receipt: say so on the session line (the receipt words land in the footer).
+                        view.Network.Next = (pendingKind == SpaceCommandKind.CyberHop ? "HOP" : pendingKind == SpaceCommandKind.CyberBurn ? "BURN" : pendingKind == SpaceCommandKind.CyberPurge ? "PURGE" : "DROP") + " PENDING · " + Mathf.Max(0, (int)(Time.unscaledTime - pendingAtWall)) + " S · WAITING FOR THE HOST";
+                        view.Network.NextTone = AvState.Info;
+                    }
                     break;
                 default:
                     FrontViews.Shadow(view.Shadow, manager.SofMirror.State, manager.SofMirror.Known, manager.CyberMirror.Known ? manager.CyberMirror.State : null, c.Frame, selectedTeam, selectedTarget, now);
-                    selectedTeam = view.Shadow.SelectedSlot;
-                    selectedTarget = view.Shadow.SelectedTargetId;
+                    if (view.Shadow.Active) { selectedTeam = view.Shadow.SelectedSlot; selectedTarget = view.Shadow.SelectedTargetId; }
                     break;
             }
         }
@@ -278,8 +312,16 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         private void OnReply(SpaceReply reply)
         {
-            if ((reply.Kind < SpaceCommandKind.FrontDirective || reply.Kind > SpaceCommandKind.FrontDonate) && reply.Kind != SpaceCommandKind.RelocateBird) return;
             if (pendingRequest == 0 || reply.RequestId != pendingRequest) return;
+            if (pendingKind != SpaceCommandKind.None)
+            {
+                // A CYBER or SOF verb: CallsController words the verdict (it is never a FrontOutcome); here the receipt only releases the gate, for the matching kind and id.
+                if (reply.Kind != pendingKind) return;
+                pendingRequest = 0;
+                nextRefresh = 0f;
+                return;
+            }
+            if ((reply.Kind < SpaceCommandKind.FrontDirective || reply.Kind > SpaceCommandKind.FrontDonate) && reply.Kind != SpaceCommandKind.RelocateBird) return;
             pendingRequest = 0;
             var code = (FrontOutcome)reply.Outcome;
             words = (reply.Replayed ? "EARLIER · " : "") + FrontWords.Outcome(code, pendingFront, reply.Detail, reply.Claimant, reply.Charged);
@@ -289,10 +331,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             nextRefresh = 0f; // the mirror usually follows in the same frame: repaint at once
         }
 
-        private bool Sent(Front front, int request, string refusal)
+        /// <param name="kind">The CYBER or SOF command whose receipt releases the gate; None for a front verb (worded here).</param>
+        private bool Sent(Front front, int request, string refusal, SpaceCommandKind kind = SpaceCommandKind.None)
         {
             if (pendingRequest != 0) { Say("NEGATIVE: WAITING FOR THE HOST", AvState.Danger); return false; }
-            if (request > 0) { pendingRequest = request; pendingFront = front; pendingAtWall = Time.unscaledTime; return true; }
+            if (request > 0) { pendingRequest = request; pendingFront = front; pendingKind = kind; pendingAtWall = Time.unscaledTime; return true; }
             Say("NEGATIVE: " + refusal, AvState.Danger);
             return false;
         }
@@ -344,7 +387,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 if (!manager.FrontMirror.Known) return;
                 Sent(front, manager.FrontSetFocus(front, (float)point.x, (float)point.z), "NO HOST LINK");
             });
-            if (armed) Say("RIGHT-CLICK THE MAP TO PIN THE " + FrontRules.Name(front) + " FRONT'S FOCUS", AvState.Caution);
+            if (armed)
+            {
+                suspended = true; // the room covers the map: hide it and hand the pointer back; Update reopens the same room on the pick or its Esc
+                window.Suspend();
+            }
             else Say("NEGATIVE: MAP INPUT BUSY, DISARM THE ARMED CALL FIRST", AvState.Danger);
         }
 
@@ -364,7 +411,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         {
             if (front == current) return;
             current = front;
-            selectedNode = 0; selectedTeam = -1; selectedTarget = 0;
             feed?.SetVisible(front == Front.Space);
             WantFeeds(true);
             nextRefresh = 0f;
@@ -373,11 +419,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         // ---- IFrontActions: NETWORK -------------------------------------------------------------------------------------
 
-        public void SelectNode(int nodeId) { selectedNode = selectedNode == nodeId ? 0 : nodeId; nextRefresh = 0f; }
+        public void SelectNode(int nodeId) { selectedNode = selectedNode == nodeId ? FrontViews.Gone : nodeId; nextRefresh = 0f; }
 
-        public void Hop(int nodeId) { if (nodeId > 0 && Gate()) Sent(Front.Cyber, manager.CyberHop(nodeId), "NO HOST LINK"); }
-        public void Burn(int nodeId) { if (nodeId > 0 && Gate()) Sent(Front.Cyber, manager.CyberBurn(nodeId), "NO HOST LINK"); }
-        public void Drop(int nodeId) { if (nodeId > 0 && Gate()) Sent(Front.Cyber, manager.CyberDrop(nodeId), "NO HOST LINK"); }
+        public void Hop(int nodeId) { if (nodeId > 0 && Gate()) Sent(Front.Cyber, manager.CyberHop(nodeId), "NO HOST LINK", SpaceCommandKind.CyberHop); }
+        public void Burn(int nodeId) { if (nodeId > 0 && Gate()) Sent(Front.Cyber, manager.CyberBurn(nodeId), "NO HOST LINK", SpaceCommandKind.CyberBurn); }
+        public void Drop(int nodeId) { if (nodeId > 0 && Gate()) Sent(Front.Cyber, manager.CyberDrop(nodeId), "NO HOST LINK", SpaceCommandKind.CyberDrop); }
+        public void Purge() { if (Gate()) Sent(Front.Cyber, manager.CyberPurge(), "NO HOST LINK", SpaceCommandKind.CyberPurge); }
+        public void Sweep() { if (Gate()) Sent(Front.Sof, manager.SofSweep(), "NO HOST LINK", SpaceCommandKind.SofSweep); }
 
         // ---- IFrontActions: SHADOW --------------------------------------------------------------------------------------
 
@@ -387,26 +435,44 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         public void TeamOrder(int slot, int verb)
         {
-            if (slot < 0 || verb < 0 || verb > 3 || !Gate()) return;
+            if (slot < 0 || verb < 0 || verb > 3 || !Gate() || !TeamOk(slot)) return;
             TeamVerb v = verb == 0 ? TeamVerb.Push : verb == 1 ? TeamVerb.Hold : verb == 2 ? TeamVerb.Exfil : TeamVerb.Lift;
-            Sent(Front.Sof, manager.SofOrder(slot, v), "NO HOST LINK");
+            Sent(Front.Sof, manager.SofOrder(slot, v), "NO HOST LINK", SpaceCommandKind.SofOrder);
         }
 
         public void TeamMission(int slot, int missionKind, int targetId)
         {
-            if (slot < 0 || !Gate()) return;
+            if (slot < 0 || !Gate() || !TeamOk(slot)) return;
             var kind = (MissionKind)missionKind;
             SofStateData s = manager.SofMirror.State;
             SofTargetRow target = default;
             bool have = targetId > 0 && s.Targets.Exists(t => t.Id == targetId) && TryTarget(s, targetId, out target);
+            bool sent;
             if (kind == MissionKind.Recon)
             {
-                if (!have) { Say("NEGATIVE: PICK A TARGET FIRST", AvState.Danger); return; }
-                Sent(Front.Sof, manager.SofMission(slot, kind, 0, target.X, target.Z), "NO HOST LINK");
-                return;
+                // RECON also takes a ground point (the draft click on the SHADOW map), carried in the target slot as FrontViews.PointId.
+                if (FrontViews.TryPoint(targetId, out float px, out float pz)) sent = Sent(Front.Sof, manager.SofMission(slot, kind, 0, px, pz), "NO HOST LINK", SpaceCommandKind.SofMission);
+                else if (!have) { Say("NEGATIVE: PICK A TARGET OR CLICK A MAP POINT FIRST", AvState.Danger); return; }
+                else sent = Sent(Front.Sof, manager.SofMission(slot, kind, 0, target.X, target.Z), "NO HOST LINK", SpaceCommandKind.SofMission);
             }
-            if (!have) { Say("NEGATIVE: PICK A TARGET FIRST", AvState.Danger); return; }
-            Sent(Front.Sof, manager.SofMission(slot, kind, targetId, 0f, 0f), "NO HOST LINK");
+            else if (!have) { Say("NEGATIVE: PICK A TARGET FIRST", AvState.Danger); return; }
+            else sent = Sent(Front.Sof, manager.SofMission(slot, kind, targetId, 0f, 0f), "NO HOST LINK", SpaceCommandKind.SofMission);
+            if (sent) { view.Shadow.HasDraft = false; view.Shadow.DraftMission = MissionKind.None; } // one press, one order; a refused press keeps the reviewed draft
+        }
+
+        /// <summary>An order names a team that must still be on the roster and not be commanded by another operator; a press never reaches a different team, and a vanished one drops the draft.</summary>
+        private bool TeamOk(int slot)
+        {
+            foreach (SofTeamRow t in manager.SofMirror.State.Teams)
+            {
+                if (t.Slot != slot) continue;
+                if (t.Mine || string.IsNullOrEmpty(t.Controller)) return true;
+                Say("NEGATIVE: " + SofRules.Callsign(slot) + " IS COMMANDED BY " + t.Controller, AvState.Danger);
+                return false;
+            }
+            view.Shadow.DraftMission = MissionKind.None;
+            Say("NEGATIVE: " + SofRules.Callsign(slot) + " IS NOT ON THE ROSTER", AvState.Danger);
+            return false;
         }
 
         private static bool TryTarget(SofStateData s, int id, out SofTargetRow row)

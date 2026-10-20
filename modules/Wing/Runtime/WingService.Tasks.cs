@@ -52,6 +52,11 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             return r;
         }
 
+        /// <summary>Why the whole wing could not take <paramref name="task"/> (null: it could): a wing-wide order checks this
+        /// before it merges every element into A.</summary>
+        public string TaskRefusal(WingTask task) =>
+            task == null || task.Kind == TaskKind.Form ? null : WingPlanner.Validate(task, Snapshot(-1));
+
         /// <summary>SKIP: element <paramref name="e"/>'s route moves on to its next point now (spec WMC program §4).</summary>
         public bool SkipLeg(int e) => PlannerOf(e).Skip(Snapshot(e), missionTime, Events);
 
@@ -93,7 +98,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             return new AnchorSample { Pos = p.GlobalPosition().ToVec3(), Vel = p.rb != null ? p.rb.velocity.ToVec3() : Vec3.Zero, Present = true };
         }
 
-        /// <summary>What the planner sees: members (those recovering apart), the anchor, the airborne members' mean
+        /// <summary>What the planner sees (element -1: the whole wing): members (those recovering apart), the anchor, the airborne members' mean
         /// position and velocity (all members' while none is airborne), the slowest cruise and highest loaded minimum of
         /// the members that are not recovering, the wing's floor and the map's size. Allocation-free.</summary>
         private WingSnapshot Snapshot(int element)
@@ -103,7 +108,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             int airborne = 0;
             foreach (WingMember m in Members)
             {
-                if (m.Released || ElementOf(m) != element) continue;
+                if (m.Released || (element >= 0 && ElementOf(m) != element)) continue;
                 s.Members++;
                 if (m.Recovery != null)
                 {

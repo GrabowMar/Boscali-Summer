@@ -6,7 +6,8 @@ using BoscaliSummer.Modules.Wing.Domain;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     // SUPPLY step ④ LAUNCH BASE: NEAREST or ANY FIELD in the header, and the friendly fields a page at a time (only the ON button
-    // toggles one): a dot in the field's state colour, its name, its distance, READY / APRON / NO JETS and ON / OFF.
+    // toggles one): a dot in the field's state colour, its name, its distance, READY / APRON / NO JETS / SHORT (runway too short for the
+    // airframe at full fuel) and ON / OFF.
     internal sealed partial class WmcSupply
     {
         private AvControl nearest, anyField;
@@ -96,7 +97,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
             bool isOn = WingRequisition.IsOn(f), picked = ReferenceEquals(f, field);
             string status = selected == null ? (isOn ? "ON" : "OFF") : WingRequisition.Status(f, selected);
-            AvState state = status == "READY" ? AvState.Ready : status == "NO JETS" || status == "OFF" ? AvState.Caution : isOn ? AvState.Info : AvState.Inert;
+            AvState state = status == "READY" ? AvState.Ready : status == "NO JETS" || status == "OFF" || status == "SHORT" ? AvState.Caution
+                : isOn ? AvState.Info : AvState.Inert;
             string km = caller != null ? SupplyWords.FieldDistance((f.transform.position - caller.transform.position).magnitude / 1000f) : "";
             string sub = (km.Length > 0 ? km : "") + (picked ? (km.Length > 0 ? " · " : "") + "LAUNCH FIELD" : "");
             baseList.Set(slot, "●", state, BaseName.Short(WingRequisition.NameOf(f), 40), sub, -1f, AvStates.Glyph(state) + status, state,

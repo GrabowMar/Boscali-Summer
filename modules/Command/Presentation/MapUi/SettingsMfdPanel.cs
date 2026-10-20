@@ -22,7 +22,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     internal sealed partial class SettingsMfdPanel : MonoBehaviour, ISceneService
     {
         // Page indices are per console (each console has its own ticker and page set).
-        private const int CDisplay = 0, CMap = 1, CCockpit = 2, CImmersion = 3, CPerf = 4;
+        // CExtra exists only when a module provides ISetExtras (Modes.cs); ClientPageNames stays the five built-in pages.
+        private const int CDisplay = 0, CMap = 1, CCockpit = 2, CImmersion = 3, CPerf = 4, CExtra = 5;
         private const int SWorld = 0, SForces = 1, SEffects = 2, STasking = 3;
 
         private static readonly string[] ClientPageNames =

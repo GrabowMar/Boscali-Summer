@@ -1,0 +1,10 @@
+FAIL: System.Exception: Marker: System.Exception: #17 WingCommand_MembershipRing frame 0 axes (0.33, 0.00)/(0.00, 0.23) after final fitting
+  at IssueRegressionUnityCheck.Marker () [0x005e2] in C:\Users\marci\AppData\Local\Temp\BoscaliIssues17-19-unfixed-20261014\Assets\Harness\IssueRegressionUnityCheck.cs:102 
+  at IssueRegressionUnityCheck.Run () [0x0006a] in C:\Users\marci\AppData\Local\Temp\BoscaliIssues17-19-unfixed-20261014\Assets\Harness\IssueRegressionUnityCheck.cs:37 
+Loadout: System.Exception: #19 native symmetric sets remain separate editor stations
+  at IssueRegressionUnityCheck.Loadout () [0x003fb] in C:\Users\marci\AppData\Local\Temp\BoscaliIssues17-19-unfixed-20261014\Assets\Harness\IssueRegressionUnityCheck.cs:139 
+  at IssueRegressionUnityCheck.Run () [0x0006a] in C:\Users\marci\AppData\Local\Temp\BoscaliIssues17-19-unfixed-20261014\Assets\Harness\IssueRegressionUnityCheck.cs:37 
+MissileSwitch: System.Exception: #18 live OFF clears the feed and disables the camera before telemetry throttling
+  at IssueRegressionUnityCheck.MissileSwitch () [0x0027a] in C:\Users\marci\AppData\Local\Temp\BoscaliIssues17-19-unfixed-20261014\Assets\Harness\IssueRegressionUnityCheck.cs:175 
+  at IssueRegressionUnityCheck.Run () [0x0006a] in C:\Users\marci\AppData\Local\Temp\BoscaliIssues17-19-unfixed-20261014\Assets\Harness\IssueRegressionUnityCheck.cs:37 
+  at IssueRegressionUnityCheck.Run () [0x000b2] in C:\Users\marci\AppData\Local\Temp\BoscaliIssues17-19-unfixed-20261014\Assets\Harness\IssueRegressionUnityCheck.cs:38 

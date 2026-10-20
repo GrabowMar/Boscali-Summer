@@ -39,11 +39,13 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         /// <summary>The radial Engage asks first (spec M5 §6.3): false while outnumbered, unless this is the second press
         /// within the confirmation window.</summary>
-        public bool MayEngage(out int hostiles, out int members) => Odds(out hostiles, out members, true);
+        public bool MayEngage(out int hostiles, out int members, Func<WingMember, bool> who = null) => Odds(out hostiles, out members, true, who);
 
-        /// <summary>The wing's odds: flying members and hostile air threats around them; <paramref name="order"/> asks as the player's
-        /// ENGAGE does (a refusal, then a confirming second press), otherwise only whether the odds hold the wing back.</summary>
-        private bool Odds(out int hostiles, out int members, bool order)
+        /// <summary>The odds of the members <paramref name="who"/> names (all for null): flying members and hostile air threats around
+        /// them; <paramref name="order"/> asks as the player's ENGAGE does (a refusal, then a confirming second press), otherwise only
+        /// whether the odds hold them back. Only those who would fight count: the fall-back judge counts the engaged, so a gate that
+        /// counted the whole wing let one member in that the judge took back 5 s later.</summary>
+        private bool Odds(out int hostiles, out int members, bool order, Func<WingMember, bool> who = null)
         {
             hostiles = 0;
             members = 0;
@@ -51,7 +53,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             Aircraft any = null;
             foreach (WingMember m in Members)
             {
-                if (m.Released || m.OnGround || m.Recovery != null || !m.Alive) continue;
+                if (m.Released || m.OnGround || m.Recovery != null || !m.Alive || (who != null && !who(m))) continue;
                 members++;
                 sum += m.Aircraft.GlobalPosition().ToVec3();
                 any = m.Aircraft;
@@ -247,11 +249,16 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             }
             if (engaged == 0)
             {
-                // The override lasts one engagement.
+                // The override lasts one engagement; the dwell too (a fight that ended 4 s outnumbered made the next fall back after 1 s).
                 if (judge.Overridden) judge.Reset();
+                else judge.Idle();
                 return;
             }
-            if (Attacking) return;
+            if (Attacking)
+            {
+                judge.Idle();
+                return;
+            }
             LastHostiles = CountHostiles(any, sum / engaged);
             if (!judge.Update(LastHostiles, engaged, FallBackRatio, step)) return;
             foreach (WingMember m in Members)
@@ -313,6 +320,34 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 Present = true, Id = m.ThreatSerial, Pos = missile.GlobalPosition().ToVec3(), Seeker = m.ThreatSeeker,
                 Vel = missile.rb != null ? missile.rb.velocity.ToVec3() : Vec3.Zero,
             };
+        }
+
+        /// <summary>Before the member's flight step: the missile guiding on it and how its doctrine meets it (MSL GUARD OFF
+        /// holds course; RESPONSE PRESS holds against a radar missile while its own radar-guided missile flies).</summary>
+        private void SenseThreat(WingMember m)
+        {
+            FormationPilot brain = m.Brain;
+            brain.Threat = ReadThreat(m);
+            brain.GuardOff = brain.Pressing = false;
+            if (!brain.Threat.Present) return;
+            WingDoctrine d = DoctrineFor(m);
+            brain.GuardOff = d.Guard == MissileGuard.Off;
+            brain.Pressing = d.Response == MissileResponse.Press && GuidingOwnMissile(m.Aircraft);
+        }
+
+        private static readonly HarmonyLib.AccessTools.FieldRef<Radar, List<Missile>> GuidedMissiles =
+            HarmonyLib.AccessTools.FieldRefAccess<Radar, List<Missile>>("guidedMissiles");
+
+        /// <summary>A radar-guided missile of the aircraft's own still guides on its radar (the game's SARH seeker lists itself
+        /// on the launcher's radar until it is disabled).</summary>
+        private static bool GuidingOwnMissile(Aircraft a)
+        {
+            if (!(a.radar is Radar radar) || radar == null) return false;
+            List<Missile> guided = GuidedMissiles(radar);
+            if (guided == null) return false;
+            foreach (Missile x in guided)
+                if (x != null && !x.disabled) return true;
+            return false;
         }
 
         /// <summary>The member leaves formation flight mid-defence: defence forgotten, trigger off (review M5c I3).</summary>
@@ -532,13 +567,12 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     guardFighting[e] = false;
                     continue;
                 }
-                // Review A1: not while the wing is outnumbered (the fall-back held half a second).
-                if (!Odds(out _, out _, false)) continue;
+                // Review A1: not while the element is outnumbered (the fall-back held half a second).
+                if (!Odds(out _, out _, false, m => ElementOf(m) == element)) continue;
                 // EngageAll, not Engage: an ATTACK order another element flies stays.
-                // Not a member the supervisor would take straight back (no ammunition, bingo, beyond the area's leash), nor one it just
-                // took back: engaged every half second, its missile defence never started (review A1).
+                // Not a member the supervisor would take straight back (beyond the area's leash; EngageAll skips the dry and the bingo),
+                // nor one it just took back: engaged every half second, its missile defence never started (review A1).
                 int n = EngageAll(m => ElementOf(m) == element && !m.Engaged && DoctrineFor(m).Targets != TargetPolicy.Hold
-                    && AmmoFraction(m.Aircraft) > 0f && !m.Bingo.Bingo
                     && AreaGuard.MayEngage(area, Horizontal(m.Last.Pos, area.Center), missionTime - m.TakenBackAt));
                 if (n > 0 && !guardFighting[e])
                     WingLog.Logger.LogInfo($"[Wing] element {ElementRoster.Letter(e)} {AreaGuard.Word(area)}: {threat.unitName} inside the area, {n} engaging");
@@ -563,6 +597,9 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             {
                 if (m.Released || m.OnGround || m.Recovery != null || m.Settle != null || !m.Alive) continue;
                 if (who != null && !who(m)) continue;
+                // Not one that would be back within seconds, the engage acked and the radio busy for nothing (and a CAP's every
+                // 20 s): the supervisor takes back the dry and the bingo, the game's combat state leaves at its fuel floor.
+                if (!m.Engaged && Unready(m) != null) continue;
                 m.AssignedTarget = null;
                 m.Pilot.SetPrimaryTarget(null);
                 if (m.Engaged)
@@ -598,11 +635,20 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             {
                 if (m.Released || !m.Alive || (who != null && !who(m))) continue;
                 string s = m.OnGround ? "on the ground" : m.Recovery != null ? "going home" : m.Settle != null ? "landing at its point"
-                    : "cannot enter combat";
+                    : Unready(m) ?? "cannot enter combat";
                 why = (why == null ? "" : why + ", ") + "#" + m.Number + " " + s;
             }
             return why ?? "no wingman in the scope";
         }
+
+        /// <summary>The game's combat state leaves for landing at or below this fuel (PilotBaseState.FuelChecker.HasEnoughFuel).</summary>
+        public static float NativeCombatFuel = 0.2f;
+
+        /// <summary>Why <paramref name="m"/> would leave a fight as soon as it entered (null: ready).</summary>
+        private string Unready(WingMember m) =>
+            m.Bingo.Bingo || m.Aircraft.GetFuelLevel() <= NativeCombatFuel ? "low on fuel"
+            : AmmoFraction(m) <= 0f ? "out of munitions"
+            : null;
 
         public static float ReallocateSeconds = 1f;
         // A3 (spec WMC rebuild §AI R8): up to one attack order per element at once, each over the members it claimed (AttackClaims:
@@ -834,27 +880,32 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             m.Pilot != null && m.Pilot.currentState != null &&
             (ReferenceEquals(m.Pilot.currentState, m.Pilot.AICombatState) || ReferenceEquals(m.Pilot.currentState, m.Pilot.AIHeloCombatState));
 
+        /// <summary>What element <paramref name="e"/> fights and covers round: its own task lead (a detached element can be
+        /// far from A: leashed to A's anchor, its fight was taken back the tick it started), else A's task lead, anchor or
+        /// player.</summary>
+        private AnchorSample AnchorOf(int e)
+        {
+            WingPlanner p = e > 0 && e < ElementRoster.MaxElements ? planners[e] : null;
+            if (p != null && p.Active) return p.Sample();
+            return Planner.Active ? Planner.Sample() : AnchorNow();
+        }
+
         /// <summary>Every tick: an engaged member at bingo, Winchester, or beyond the leash is taken back (bingo then goes
         /// home).</summary>
         private void SuperviseCombat(float dt)
         {
-            AnchorSample anchor = default;
-            bool sampled = false;
             GuardAreas(dt);
             StepJammers();
             foreach (WingMember m in Members)
             {
                 if (!m.Engaged || m.Released || !m.Alive || !InNativeCombat(m)) continue;
-                if (!sampled)
-                {
-                    anchor = Planner.Active ? Planner.Sample() : AnchorNow();
-                    sampled = true;
-                }
                 // The sensor is not read here: a second read in a tick would zero its derived acceleration.
                 bool bingo = BingoNow(m, dt);
                 Vec3 at = m.Aircraft.GlobalPosition().ToVec3();
-                // A CAP or SWEEP element fights round its area, not round the wing's anchor (A1).
-                WingTask area = GuardedTask(ElementOf(m));
+                // A CAP or SWEEP element fights round its area, any other round its own lead (A1).
+                int e = ElementOf(m);
+                WingTask area = GuardedTask(e);
+                AnchorSample anchor = area == null ? AnchorOf(e) : default;
                 float leash = AreaGuard.Leash(area);
                 var s = new CombatSituation
                 {
@@ -917,6 +968,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         /// <summary>Back into our state (it tracks the aircraft bumplessly) and rejoining.</summary>
         private void TakeBack(WingMember m, TransitionReason reason)
         {
+            // Released this tick (it leaves at the next prune): switched back into our state, nobody would fly it.
+            if (m.Released) return;
             Disengaged(m, reason);
             if (m.Pilot != null && !m.Pilot.dead && !ReferenceEquals(m.Pilot.currentState, m.State)) m.Pilot.SwitchState(m.State);
         }
@@ -942,6 +995,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             // 1.0 (review minor): every take-back leaves its attack set, not only the player's ENGAGE / BREAK.
             if ((object)a != null) claims.Release(a.persistentID.Id);
             m.Pilot?.SetPrimaryTarget(null);
+            // The game's combat state re-chose the countermeasure station for its own alerts: the next missile chooses again.
+            m.ThreatSeekerType = null;
             // The fight's own Winchester already told the wing: the formation sample must not say it again.
             if (reason == TransitionReason.Winchester) m.Winchester.Latched = true;
             m.Brain.FormUp(missionTime, Events);

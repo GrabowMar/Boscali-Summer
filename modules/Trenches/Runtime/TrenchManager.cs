@@ -33,6 +33,9 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         // (see the note above; the old 250m cross-faction floor is gone on purpose)
         private const int MaximumFactions = 8;
         private const int RefusalReportAttempts = 15;
+        // An exhausted front rescans from its hottest trace after this long: the front moves and
+        // positions retire, so a one-pass scan left the theater empty for the rest of the session.
+        private const float RescanSeconds = 90f;
         private const float RefusalReportSeconds = 60f;
 
         private TrenchesSettings settings;
@@ -62,6 +65,8 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         private readonly int[] factionTrace = new int[MaximumFactions];
         private readonly int[] factionWindow = new int[MaximumFactions];
         private readonly int[] factionLastOrdered = new int[MaximumFactions];
+        private readonly float[] factionExhaustedAt = new float[MaximumFactions];
+        private float nextOverlapLog;
         private readonly int[] factionIds = new int[MaximumFactions];
         private readonly float[] airfieldX = new float[TrenchTraceMath.MaximumAirfields];
         private readonly float[] airfieldZ = new float[TrenchTraceMath.MaximumAirfields];
@@ -118,6 +123,8 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             Vector3[][] links, Vector3[][] spurs)
         {
             if (GameAccess.IsServer() || !BoscaliMission.FortificationsAllowed) return;
+            if (clientLines.TryGetValue(id, out TrenchLine held) && SameGeometry(held, stage, curve, support, redoubt, links, spurs))
+                return;   // a late-join resend of a line already carved: no rebuild
             // Threat vectors stay unit XZ: only ditch traces snap height to local terrain.
             SnapHeights(curve);
             SnapHeights(support);
@@ -142,6 +149,22 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             else
                 visualChunks[id] = CreateVisualChunk(line);
             OnLinesChanged?.Invoke();
+        }
+
+        private static bool SameGeometry(TrenchLine held, TrenchStage stage, Vector3[] curve, Vector3[] support,
+            Vector3[] redoubt, Vector3[][] links, Vector3[][] spurs)
+        {
+            static int Len<T>(T[] a) => a?.Length ?? 0;
+            static bool SameXZ(Vector3[] a, Vector3[] b)
+            {
+                if (Len(a) != Len(b)) return false;
+                if (a == null || a.Length == 0) return true;
+                Vector3 a0 = a[0], b0 = b[0], a1 = a[a.Length - 1], b1 = b[b.Length - 1];
+                return Mathf.Abs(a0.x - b0.x) < 0.01f && Mathf.Abs(a0.z - b0.z) < 0.01f &&
+                    Mathf.Abs(a1.x - b1.x) < 0.01f && Mathf.Abs(a1.z - b1.z) < 0.01f;
+            }
+            return held.Stage == stage && SameXZ(held.Curve, curve) && SameXZ(held.Support, support) &&
+                SameXZ(held.Redoubt, redoubt) && Len(held.Links) == Len(links) && Len(held.Spurs) == Len(spurs);
         }
 
         /// <summary>Client-side: a transition arrives; restate the line and its map marks.</summary>
@@ -172,12 +195,25 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             OnLinesChanged?.Invoke();
         }
 
+        /// <summary>
+        /// Lays a plan-view trace from the wire on this peer's terrain. A point whose probe refuses
+        /// (steep or wet ground) takes the height between its snapped neighbours instead of the
+        /// wire's y=0, which spiked the ditch down to sea level.
+        /// </summary>
         private static void SnapHeights(Vector3[] trace)
         {
             if (trace == null) return;
+            int last = -1;   // index of the last snapped point
             for (int i = 0; i < trace.Length; i++)
-                if (TrenchTerrain.TryGround(trace[i].x, trace[i].z, out Vector3 ground))
-                    trace[i].y = ground.y;
+            {
+                if (!TrenchTerrain.TryGround(trace[i].x, trace[i].z, out Vector3 ground)) continue;
+                trace[i].y = ground.y;
+                for (int gap = last + 1; gap < i; gap++)
+                    trace[gap].y = last < 0 ? ground.y : Mathf.Lerp(trace[last].y, ground.y, (gap - last) / (float)(i - last));
+                last = i;
+            }
+            if (last >= 0)
+                for (int gap = last + 1; gap < trace.Length; gap++) trace[gap].y = trace[last].y;
         }
 
         private static void SnapHeights(Vector3[][] traces)
@@ -234,6 +270,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             Array.Clear(factionWindow, 0, factionWindow.Length);
             Array.Clear(factionIds, 0, factionIds.Length);
             Array.Fill(factionLastOrdered, -1);
+            Array.Fill(factionExhaustedAt, -1f);
             nextTraceRefresh = 0f;
             nextBuildAttempt = 0f;
             nextSimulationTick = 0f;
@@ -328,6 +365,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                     factionTrace[slot] = 0;
                     factionWindow[slot] = 0;
                     factionLastOrdered[slot] = -1;
+                    factionExhaustedAt[slot] = -1f;
                 }
                 factionCount++;
             }
@@ -370,8 +408,8 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         /// <summary>
         /// Restores this faction's cursor onto freshly copied traces. The saved window only
         /// survives on the same ordered trace, or a position would be fitted to the wrong
-        /// ground after a pressure reorder; an exhausted front stays exhausted until the
-        /// front grows new traces.
+        /// ground after a pressure reorder; an exhausted front waits RescanSeconds, then
+        /// walks again from its hottest trace.
         /// </summary>
         private void RestoreCursor()
         {
@@ -383,10 +421,22 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             int savedTrace = factionTrace[factionIndex];
             if (savedTrace >= traceCount)
             {
-                traceIndex = traceCount;
-                windowStart = 0;
-                return;
+                float since = factionExhaustedAt[factionIndex];
+                if (since < 0f) factionExhaustedAt[factionIndex] = since = Time.unscaledTime;
+                if (Time.unscaledTime - since < RescanSeconds)
+                {
+                    traceIndex = traceCount;
+                    windowStart = 0;
+                    return;
+                }
+                // Held stretches refuse again on spacing; lost and moved ones dig anew.
+                Plugin.Logger?.LogInfo($"[TRENCHES] Front for {factions[factionIndex]?.name} walked to its end " +
+                    $"{RescanSeconds:0}s ago: rescanning from its hottest trace ({lines.Count} positions standing).");
+                savedTrace = 0;
+                factionWindow[factionIndex] = 0;
+                factionLastOrdered[factionIndex] = -1;
             }
+            factionExhaustedAt[factionIndex] = -1f;
             traceIndex = Math.Max(0, savedTrace);
             // The scan walks the traces hottest first, so the cursor can land on a different
             // stretch of front after a refresh: the saved window only survives when it is
@@ -552,8 +602,39 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                 float dx = existing.Center.x - candidate.Center.x;
                 float dz = existing.Center.z - candidate.Center.z;
                 if (dx * dx + dz * dz < spacing * spacing) return false;
+                if (existing.OwnerHq == candidate.OwnerHq && OverlapsAlong(candidate, existing))
+                {
+                    if (Time.unscaledTime >= nextOverlapLog)
+                    {
+                        nextOverlapLog = Time.unscaledTime + 30f;
+                        Plugin.Logger?.LogInfo($"[TRENCHES] '{candidate.Name}' refused: it lies along '{existing.Name}'.");
+                    }
+                    return false;
+                }
             }
             return true;
+        }
+
+        private static bool OverlapsAlong(TrenchLine candidate, TrenchLine existing)
+        {
+            Vector3[] anchors = candidate.Anchors;
+            Vector3[] curve = existing.Curve;
+            if (anchors == null || curve == null || anchors.Length == 0) return false;
+            float radiusSq = TrenchTraceMath.OverlapRadius * TrenchTraceMath.OverlapRadius;
+            float reach = existing.Radius + TrenchTraceMath.OverlapRadius;
+            int near = 0;
+            for (int a = 0; a < anchors.Length; a++)
+            {
+                Vector3 p = anchors[a];
+                float cx = p.x - existing.Center.x, cz = p.z - existing.Center.z;
+                if (cx * cx + cz * cz > reach * reach) continue;   // outside the line's circle: no station can be near
+                for (int s = 0; s < curve.Length; s++)
+                {
+                    float dx = curve[s].x - p.x, dz = curve[s].z - p.z;
+                    if (dx * dx + dz * dz <= radiusSq) { near++; break; }
+                }
+            }
+            return TrenchTraceMath.OverlapsExisting(near, anchors.Length);
         }
 
         /// <summary>One frame of the commit in flight; the position joins the theater when its last stage is done, or is rolled back.</summary>
@@ -635,11 +716,41 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             chunk.Lod2Distance = settings != null ? settings.LODDistanceFar.Value : 12000f;
             chunk.Lod0Distance = settings != null ? settings.LODDistanceNear.Value : 600f;
             chunk.Lod1Distance = Mathf.Max(chunk.Lod0Distance * 2f, chunk.Lod2Distance * 0.22f);
+            chunk.EarthTint = EarthTintFor(line);
 
             try { chunk.Initialize(line); }
             catch { Destroy(go); throw; }
             Plugin.Logger?.LogInfo($"[TRENCHES] World chunk {line.Id}: {chunk.MeshCount} meshes, center={chunk.WorldCenter}, camera distance={chunk.CameraDistance:0}m, lod={chunk.ActiveLod} (near {chunk.Lod0Distance:0}/{chunk.Lod1Distance:0}/{chunk.Lod2Distance:0}m), material={chunk.EarthMaterial}.");
             return chunk;
+        }
+
+        /// <summary>
+        /// The map's own terrain colour along the line (the sampler vanilla's emplacement rings tint
+        /// from), as a half-strength multiplier over the earthwork palette's mean, so the spoil keeps its
+        /// turned-earth read but takes the local hue. White when the map gives no colour.
+        /// </summary>
+        private static Color EarthTintFor(TrenchLine line)
+        {
+            LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
+            if (level == null || line?.Curve == null || line.Curve.Length == 0) return Color.white;
+            Vector3[] curve = line.Curve;
+            Color sum = Color.clear;
+            int count = 0;
+            for (int i = 0; i < 5; i++)
+            {
+                Vector3 p = curve[i * (curve.Length - 1) / 4];
+                if (!level.TryGetTerrainColorAtCoordinate(new GlobalPosition(p.x, p.y, p.z), out Color c)) continue;
+                sum += c;
+                count++;
+            }
+            if (count == 0) return Color.white;
+            Color ground = sum / count;
+            var paletteMean = new Color(0.50f, 0.40f, 0.26f);
+            Color tint = new Color(
+                Mathf.Clamp(ground.r / paletteMean.r, 0.65f, 1.35f),
+                Mathf.Clamp(ground.g / paletteMean.g, 0.65f, 1.35f),
+                Mathf.Clamp(ground.b / paletteMean.b, 0.65f, 1.35f), 1f);
+            return Color.Lerp(Color.white, tint, 0.5f);
         }
 
         private void TickSimulation(float now)
@@ -662,8 +773,16 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                 line.Suppressed = suppressed;
 
                 // The field's verdict is hysteretic: one hostile sample never ends a line.
-                if (StillOwned(line)) line.HostileSince = -1f;
-                else if (line.HostileSince < 0f) line.HostileSince = now;
+                if (StillOwned(line))
+                {
+                    line.HostileSince = -1f;
+                    if (line.OwnedSince < 0f) line.OwnedSince = now;
+                }
+                else
+                {
+                    line.OwnedSince = -1f;
+                    if (line.HostileSince < 0f) line.HostileSince = now;
+                }
 
                 if (!line.Overrun && garrison.Overrun)
                 {
@@ -681,6 +800,16 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                     line.RetireAt = now + RetireSeconds;
                     changed = true;
                     Plugin.Logger?.LogInfo($"[TRENCHES] '{line.Name}' cut off: the front moved past it; growth stopped, {line.DefenderCount} defenders fight on without relief.");
+                }
+                else if (line.Overrun && !garrison.Overrun && garrison.Alive > 0 && line.OwnedSince >= 0f &&
+                    now - line.OwnedSince >= TrenchTraceMath.AbandonSeconds)
+                {
+                    // Relieved: the front swung back over a cut-off line whose nests held. It digs
+                    // and shells again; nothing respawns, the surviving slots simply carry on. A
+                    // cut-off line held its quota slot and 360m of spacing forever otherwise.
+                    line.Overrun = false;
+                    changed = true;
+                    Plugin.Logger?.LogInfo($"[TRENCHES] '{line.Name}' relieved: the front is back over it; {line.DefenderCount} defenders resume.");
                 }
                 if (line.Overrun && previousDefenders > 0 && line.DefenderCount == 0)
                     line.RetireAt = now + RetireSeconds;
@@ -768,7 +897,9 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             reinforceBegun = false;
             garrison.Poll(Time.time);
             line.DefenderCount = garrison.Alive;
-            Plugin.Logger?.LogInfo($"[TRENCHES] '{line.Name}': {line.Stage}, {line.DefenderCount} defenders, {line.Curve.Length} curve stations/{line.Anchors.Length} anchors, suppressed={line.Suppressed}, overrun={line.Overrun}.");
+            int desired = Math.Min(TrenchTraceMath.DefenderBudget(line.Stage), TrenchTraceMath.MaxDefendersForPressure(line.Pressure));
+            string shortfall = line.DefenderCount < desired ? $" (of {desired}; last refusal: {garrison.LastFailure})" : "";
+            Plugin.Logger?.LogInfo($"[TRENCHES] '{line.Name}': {line.Stage}, {line.DefenderCount} defenders{shortfall}, {line.Curve.Length} curve stations/{line.Anchors.Length} anchors, suppressed={line.Suppressed}, overrun={line.Overrun}.");
             TrenchNet.BroadcastState(line);
             OnLinesChanged?.Invoke();
         }
@@ -870,9 +1001,21 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             // The line sits inside the contested band, where only the signed control field
             // separates the sides. A line the enemy has pushed past is neutralized; existing
             // defenders must not erase their own position while pressure advances the border.
-            return line.OwnerHq != null &&
-                territory.TryGetHoldStrength(line.OwnerHq.GetInstanceID(), line.Center.x, line.Center.z,
-                    out float hold) && TrenchTraceMath.HoldsOwnSide(hold);
+            // Read at five stations along the ditch, not the centroid: a curved line's centroid
+            // (a ring round a pocket) lies off the ditch, often inside the enemy's cells.
+            if (line.OwnerHq == null) return false;
+            Vector3[] curve = line.Curve;
+            if (curve == null || curve.Length == 0)
+                return territory.TryGetHoldStrength(line.OwnerHq.GetInstanceID(), line.Center.x, line.Center.z,
+                    out float centre) && TrenchTraceMath.HoldsOwnSide(centre);
+            int id = line.OwnerHq.GetInstanceID();
+            int own = 0;
+            for (int i = 0; i < 5; i++)
+            {
+                Vector3 p = curve[i * (curve.Length - 1) / 4];
+                if (territory.TryGetHoldStrength(id, p.x, p.z, out float hold) && TrenchTraceMath.HoldsOwnSide(hold)) own++;
+            }
+            return own >= 3;
         }
     }
 }

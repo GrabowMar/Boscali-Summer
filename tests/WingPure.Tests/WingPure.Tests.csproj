@@ -28,6 +28,10 @@
     <Compile Include="..\..\modules\Wing\Domain\Guidance\FlightIntent.cs" Link="Ground\FlightIntent.cs" />
     <Compile Include="..\..\modules\Wing\Domain\Limits\BindingReport.cs" Link="Ground\BindingReport.cs" />
     <Compile Include="..\..\modules\Wing\Domain\Ai\WingEvents.cs" Link="Ground\WingEvents.cs" />
+    <!-- The member's behaviour graph (WingMindTests). -->
+    <Compile Include="..\..\Core\Math\Filters.cs" Link="Ai\Filters.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Ai\PilotMind.cs" Link="Ai\PilotMind.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Ai\RolePolicy.cs" Link="Ai\RolePolicy.cs" />
     <Compile Include="..\..\modules\Wing\Domain\Ground\AirbaseSample.cs" Link="Ground\AirbaseSample.cs" />
     <Compile Include="..\..\modules\Wing\Domain\Ground\TaxiGraph.cs" Link="Ground\TaxiGraph.cs" />
     <Compile Include="..\..\modules\Wing\Domain\Ground\TaxiReservations.cs" Link="Ground\TaxiReservations.cs" />
@@ -38,6 +42,18 @@
     <Compile Include="..\..\modules\Wing\Domain\Ground\StuckWatchdog.cs" Link="Ground\StuckWatchdog.cs" />
     <Compile Include="..\..\modules\Wing\Domain\Ground\ServiceSpots.cs" Link="Ground\ServiceSpots.cs" />
     <Compile Include="..\..\modules\Wing\Domain\Ground\FieldBounds.cs" Link="Ground\FieldBounds.cs" />
+    <!-- Orders and doctrine (WingOrderDoctrineTests). -->
+    <Compile Include="..\..\modules\Wing\Domain\Ai\WingDoctrine.cs" Link="Orders\WingDoctrine.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Orders\CallSpec.cs" Link="Orders\CallSpec.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Orders\WingOrder.cs" Link="Orders\WingOrder.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Orders\ElementRoster.cs" Link="Orders\ElementRoster.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Orders\ElementSettings.cs" Link="Orders\ElementSettings.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Orders\MemberDoctrines.cs" Link="Orders\MemberDoctrines.cs" />
+    <!-- Missile defence and the doctrine axes that shape it (DefenceDoctrineTests). -->
+    <Compile Include="..\..\modules\Wing\Domain\Combat\MissileDefence.cs" Link="Combat\MissileDefence.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Flight\RadarDefenceGeometry.cs" Link="Combat\RadarDefenceGeometry.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Ai\WingDoctrineRules.cs" Link="Combat\WingDoctrineRules.cs" />
+    <Compile Include="..\..\modules\Wing\Domain\Ai\WingTuning.cs" Link="Combat\WingTuning.cs" />
     <Content Include="..\ingame\airbases.json" Link="airbases.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Fixtures\Airports\boscali-north-hangars.json" Link="boscali-north-hangars.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Fixtures\Airports\archipelago-airbases.json" Link="archipelago-airbases.json" CopyToOutputDirectory="PreserveNewest" />

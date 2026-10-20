@@ -18,9 +18,9 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
             try
             {
                 int contacts = ReconAction.Reveal(context.Owner, context.Target,
-                    context.Settings.ElintRadius.Value * context.Quality, context.Logger, RevealFilter.Emitters);
+                    context.Settings.ElintRadius.Value * context.Power, context.Logger, RevealFilter.Emitters);
                 context.Host.ReportContacts(context.RequestId, contacts);
-                try { Visuals.AreaFx.Pulse(Visuals.AreaFx.At(context.Target), context.Settings.ElintRadius.Value * context.Quality, context.Owner); }
+                try { Visuals.AreaFx.Pulse(Visuals.AreaFx.At(context.Target), context.Settings.ElintRadius.Value * context.Power, context.Owner); }
                 catch (Exception e) { context.Logger.LogDebug("[Support] ELINT pulse visual skipped: " + e.Message); }
                 return SupportResult.Accepted;
             }

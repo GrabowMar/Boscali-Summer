@@ -12,6 +12,33 @@ namespace BoscaliSummer.Tests.Features.Weather
             ShadeIsContinuousAcrossTheDeckTop();
             SunAndTintFollowTheShade();
             RealSkiesShadeAsTheirCoverSays();
+            NightHazeGreysOnlyAfterSunset();
+        }
+
+        /// <summary>The cloud haze keeps vanilla's fog colour by day (HDR included), turns grey at night (the teal night fog drew a cyan band), and its darkening never stacks on a deck's shade.</summary>
+        private static void NightHazeGreysOnlyAfterSunset()
+        {
+            float[] Haze(float height, float shade, float r, float g, float b)
+            {
+                OvercastLook.NightHaze(height, shade, ref r, ref g, ref b);
+                return new[] { r, g, b };
+            }
+            // Vanilla's fog colours, live 2026-10-19: 13 km by day (HDR) and 00:30 (blue six times the red).
+            float[] day = Haze(0.01f, 0f, 0.776f, 1.325f, 1.6f);
+            TestAssert.That(day[0] == 0.776f && day[1] == 1.325f && day[2] == 1.6f, "the sun up leaves the haze alone, HDR unclipped");
+            float[] night = Haze(-0.5f, 0f, 0.021f, 0.096f, 0.129f);
+            TestAssert.That(Math.Abs(night[0] - night[2]) < 1e-6f && night[1] < 0.096f * (1f - OvercastLook.TintDark) + 1e-3f, "night haze is grey and darkened (" + night[0] + ", " + night[1] + ", " + night[2] + ")");
+            float[] shaded = Haze(-0.5f, 1f, 0.05f, 0.05f, 0.05f);
+            TestAssert.That(Math.Abs(shaded[0] - 0.05f) < 1e-6f, "under a full shade the fog is not darkened twice");
+            float[] bad = Haze(float.NaN, 0f, 0.1f, 0.2f, 0.3f);
+            TestAssert.That(bad[2] == 0.3f, "non-finite inputs leave the haze alone");
+            float last = 0.129f;
+            for (float h = 0.05f; h >= -0.2f; h -= 0.005f)
+            {
+                float blue = Haze(h, 0f, 0.021f, 0.096f, 0.129f)[2];
+                TestAssert.That(blue <= last + 1e-6f && last - blue < 0.01f, "the night haze builds smoothly as the sun sets (height " + h + ")");
+                last = blue;
+            }
         }
 
         private static void ShadeIsMonotoneAndBounded()

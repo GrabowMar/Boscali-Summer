@@ -1,93 +1,128 @@
 {
-  "captured_date": "2026-10-12",
+  "captured_date": "2026-10-12 (flight and command runs), 2026-10-20 (epic run)",
   "timezone": "Europe/Warsaw",
   "tool": "nomodkit sim run",
-  "mission": "Free Flight (flight run), Escalation (command run)",
+  "mission": "Free Flight (flight and epic runs), Escalation (command run)",
   "mode": "scripted single-player development capture",
   "game_version_target": "0.34.2",
   "mod_version": "0.2.0",
   "mod_dll_sha256": "4f8b22aceec07a9fedb1f6ce67706bb0e1a799a3aeec08d6ee0597df7f9745c7",
   "capture_result": "status ok on every run; eleven captures visually inspected",
-  "staging": "Flight run: player seated in an FS-20 Vortex with two scripted FS-20s ahead, scripted level flight, library skies pinned through the weather console path, exterior and cockpit views, the weather console and an inert line-up of the VANGUARD models. Command run: player orbiting at 9000 m over a running Escalation war with the STR and OPS consoles opened. Existing development settings and other installed plugins retained.",
+  "staging": "Flight run: player seated in an FS-20 Vortex with two scripted FS-20s ahead, scripted level flight, library skies pinned through the weather console path, exterior and cockpit views, the weather console and an inert line-up of the VANGUARD models. Command run: player orbiting at 9000 m over a running Escalation war with the STR and OPS consoles opened. Existing development settings and other installed plugins retained. Epic run (scenario-epic.json, 2026-10-20): spectator camera with the mod's Cinematography rigs (follow and orbit) over AI-flown FS-20s off the north coast and at sea, golden hour 17:27-17:42 against an 18:00 sunset, library skies 18 (altocumulus over cumulus), 32 (sea of cloud) and 17 (isolated cumulonimbus with the supercell and distant Cb set-pieces); clouds at full resolution with the temporal update off (CloudHalfResolution and CloudTemporalUpdate false).",
   "image_processing": "None. Original PNG captures copied without editing.",
-  "limitations": "Short capture runs only. Not a performance benchmark, gameplay acceptance test or multiplayer test. The flight run was made twice; coast.png comes from the first pass (same scenario before the wingmen were moved ahead of the camera), every other flight image from the second. The DLL is the development build installed that day, not the 0.2.0 release package. Terrain and aircraft include native Nuclear Option assets. Development settings and support allocation are not representative of balanced gameplay.",
+  "limitations": "Short capture runs only. Not a performance benchmark, gameplay acceptance test or multiplayer test. The flight run was made twice; coast.png comes from the first pass (same scenario before the wingmen were moved ahead of the camera), every other flight image from the second. The DLL is the development build installed that day, not the 0.2.0 release package. Terrain and aircraft include native Nuclear Option assets. Development settings and support allocation are not representative of balanced gameplay. The epic run used a development build of the main working tree from 2026-10-19 (uncommitted work included, among it the ocean and sun passes) in a private game copy; its night shot did not complete.",
   "files": [
-    {
-      "file": "formation.png",
-      "sha256": "fa02498837faf7d4df3c6712bc05c7bf2cd223e892d8b90bd17c1dda27e25ee6",
-      "width": 1920,
-      "height": 1080,
-      "run": "flight"
-    },
     {
       "file": "cockpit.png",
       "sha256": "87794e0168b92b15e0aab99cd6cc2a24298ed521b7f56a55e6acb1eafc630d4f",
       "width": 1920,
       "height": 1080,
-      "run": "flight"
+      "run": "flight",
+      "captured_date": "2026-10-12"
     },
     {
       "file": "cockpit-storm.png",
       "sha256": "f5b73560c7c4fd36de566864edf41828c1321e0338051200959fd1ba23f711d5",
       "width": 1920,
       "height": 1080,
-      "run": "flight"
-    },
-    {
-      "file": "coast.png",
-      "sha256": "1fb1526ee45ed13edf0871f979855116493c39103d96d857e2787139e7c6651d",
-      "width": 1920,
-      "height": 1080,
-      "run": "flight"
+      "run": "flight",
+      "captured_date": "2026-10-12"
     },
     {
       "file": "weather-console.png",
       "sha256": "0b8e8e2b9b854a2cc943304cbb8bbbf5b982f862490b456684b5c3514514258f",
       "width": 1920,
       "height": 1080,
-      "run": "flight"
+      "run": "flight",
+      "captured_date": "2026-10-12"
     },
     {
       "file": "vanguard.png",
       "sha256": "65a04464a4bcf688e29a3afd468b5ff4f03444f07c00162c5871b65171b3c5f9",
       "width": 1920,
       "height": 1080,
-      "run": "flight"
+      "run": "flight",
+      "captured_date": "2026-10-12"
     },
     {
       "file": "command.png",
       "sha256": "421257d532eaca7c7d65501b92ed864443ff73295f7d5279818c0bbbca04d9ef",
       "width": 1920,
       "height": 1080,
-      "run": "command"
+      "run": "command",
+      "captured_date": "2026-10-12"
     },
     {
       "file": "sitrep.png",
       "sha256": "d6f2c67e96100a7c77540ebe4e89fd28670c9803fe77c097d697080cfc77eb65",
       "width": 1920,
       "height": 1080,
-      "run": "command"
+      "run": "command",
+      "captured_date": "2026-10-12"
     },
     {
       "file": "support.png",
       "sha256": "b0aea8c1360b01485c70f3ec8ef360260d7afef20dd4930267d8bcde32891ad8",
       "width": 1920,
       "height": 1080,
-      "run": "command"
+      "run": "command",
+      "captured_date": "2026-10-12"
     },
     {
       "file": "support-space.png",
       "sha256": "26b176ed7f1059d27c40de5d7c9ec8bdb143d6bb6fd51b63e53412d9c49c8574",
       "width": 1920,
       "height": 1080,
-      "run": "command"
+      "run": "command",
+      "captured_date": "2026-10-12"
     },
     {
       "file": "support-cyber.png",
       "sha256": "024f2a070c63d53bc0fb31e10e28dfa922510d00b74de58ca11ebbdd1e88b3f8",
       "width": 1920,
       "height": 1080,
-      "run": "command"
+      "run": "command",
+      "captured_date": "2026-10-12"
+    },
+    {
+      "file": "hero.png",
+      "sha256": "646d1bb4c142132fc28a2daf8ffab4920ed7cf6e8f24896a1f61af30ca1dde5a",
+      "width": 1920,
+      "height": 1080,
+      "run": "epic",
+      "captured_date": "2026-10-20"
+    },
+    {
+      "file": "storm.png",
+      "sha256": "802d18ab47e77d3c1c07dde0f4a361640d33b24f6ffcad4345488108a22c5ceb",
+      "width": 1920,
+      "height": 1080,
+      "run": "epic",
+      "captured_date": "2026-10-20"
+    },
+    {
+      "file": "cloud-sea.png",
+      "sha256": "5b7e37930737225dedc688daaeeb79dc6d2b3d967b5970c02dcd5514a8cfe0f3",
+      "width": 1920,
+      "height": 1080,
+      "run": "epic",
+      "captured_date": "2026-10-20"
+    },
+    {
+      "file": "sea-skim.png",
+      "sha256": "047355c0f1811aea0e7cff2e1360d20fc8d9c3591c3bdeb8f11192ee24ac62e1",
+      "width": 1920,
+      "height": 1080,
+      "run": "epic",
+      "captured_date": "2026-10-20"
+    },
+    {
+      "file": "low-pass.png",
+      "sha256": "2b75a2bb36723959e175c488c41c996ca671879d8a998dbe01b8d0bb7e7e8256",
+      "width": 1920,
+      "height": 1080,
+      "run": "epic",
+      "captured_date": "2026-10-20"
     }
   ]
 }

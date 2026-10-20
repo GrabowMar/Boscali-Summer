@@ -15,6 +15,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
         Maneuver,
         // Bezel v2 A2: the scope's jammers on for a minute, or off when any of them jams (a toggle).
         Ecm,
+        // WMC rebuild R3: the named aircraft's own doctrine goes; they fly their element's again (OPTIONS' CLEAR).
+        ClearDoctrine,
     }
 
     internal enum ScopeKind : byte { Wing, Element, Members }

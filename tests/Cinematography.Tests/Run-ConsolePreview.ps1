@@ -9,10 +9,12 @@ Get-ChildItem -LiteralPath "$repo/AvionicsUi", "$repo/AvionicsUi/Pure", "$repo/A
 Get-ChildItem -LiteralPath "$repo/AvionicsUi" -Filter '*.avss' | Copy-Item -Destination "$PreviewDirectory/NOAvionics/"
 Copy-Item -LiteralPath "$repo/AvionicsUi/Assets/avionics-ui.bundle" -Destination $PreviewDirectory
 Get-ChildItem -LiteralPath "$repo/modules/Cinematography/Domain" -Filter '*.cs' | Copy-Item -Destination "$PreviewDirectory/Assets/"
-Copy-Item -LiteralPath "$repo/modules/Cinematography/Presentation/CinematicConsole.cs", "$repo/modules/Cinematography/Presentation/CinematicOverlay.cs", "$repo/modules/Cinematography/Runtime/CameraPathClearance.cs", "$PSScriptRoot/ConsolePreview.cs" -Destination "$PreviewDirectory/Assets/"
+Copy-Item -LiteralPath "$repo/modules/Cinematography/Presentation/CinematicConsole.cs", "$repo/modules/Cinematography/Presentation/CinematicOverlay.cs", "$repo/modules/Cinematography/Runtime/CameraPathClearance.cs", "$PSScriptRoot/ConsolePreview.cs", "$PSScriptRoot/CameraRigPreview.cs" -Destination "$PreviewDirectory/Assets/"
+Copy-Item -LiteralPath "$repo/Core/Ui/WindowPointer.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$PSScriptRoot/PreviewDirector.cs" -Destination "$PreviewDirectory/Assets/CinematicDirector.cs"
 Copy-GameDlls "$PreviewDirectory/Assets/" -ManagedExclude $UnityCheckFilter.ManagedWide -BepInExMatch $UnityCheckFilter.BepInEx
-$process = Invoke-UnityCheck $Unity $PreviewDirectory 'CinematicConsolePreview.Run' -Flags '-batchmode' -TimeoutSeconds 180
+$process = Invoke-UnityCheck $Unity $PreviewDirectory 'CinematicConsolePreview.Run' -TimeoutSeconds 180
 Show-UnityCheckResult $PreviewDirectory
 Assert-UnityResult $PreviewDirectory $process -ExitMessage 'Cinematic console preview failed.'
 Write-Output "Offline editor renders: $PreviewDirectory/renders/console-camera.png, console-effects.png, console-edit.png, cinematic-overlay.png, cinematic-fade.png"
+Write-Output "Offline camera renders: $PreviewDirectory/renders/camera-heading-chase.png, camera-track-thirds-landscape.png, camera-track-thirds-portrait.png"

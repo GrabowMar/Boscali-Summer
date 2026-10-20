@@ -27,6 +27,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>DROP one held node, or the whole intrusion when <paramref name="nodeId"/> is 0.</summary>
         internal int CyberDrop(int nodeId) => SendCyber(SpaceCommandKind.CyberDrop, nodeId);
 
+        /// <summary>PURGE: evict every enemy hold on our own network after the countdown. Carries nothing.</summary>
+        internal int CyberPurge() => SendSpace(SpaceCommandKind.CyberPurge, 0, null);
+
         private int SendCyber(SpaceCommandKind kind, int nodeId) => nodeId < 0 ? 0 : SendSpace(kind, nodeId, null);
     }
 }

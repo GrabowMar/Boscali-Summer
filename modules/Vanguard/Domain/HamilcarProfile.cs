@@ -51,7 +51,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const float DeployStart = 0.4f, DeployEnd = 1.6f; // wing unfold, seconds after release
         public const float UnloadSeconds = 3.2f;  // stop -> live unit
         public const float RollOff = 6f;          // cradle centre -> live-unit spawn point, straight ahead
-        public const float HuskSeconds = 60f;     // empty shell lifetime after unload
+        public const float HuskSeconds = 180f;     // empty shell lifetime after unload
         public const float RestHeight = 0.03f;    // model origin above the ground at rest (the origin is the bottom of the keel strip)
 
         public const float SlideDistance = TouchSpeed * TouchSpeed / (2f * SlideDecel); // 48.2 m

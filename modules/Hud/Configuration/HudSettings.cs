@@ -20,6 +20,12 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         public ConfigEntry<float> Shade { get; }
         public ConfigEntry<BoardDeclutter> Declutter { get; }
         public ConfigEntry<BoardScopeMode> ScopeMode { get; }
+        public ConfigEntry<int> PageCount { get; }
+        public ConfigEntry<BoardPage> Page1 { get; }
+        public ConfigEntry<BoardPage> Page2 { get; }
+        public ConfigEntry<BoardPage> Page3 { get; }
+        public ConfigEntry<BoardPage> Page4 { get; }
+        public ConfigEntry<bool> ShowStores { get; }
         public ConfigEntry<bool> PageThreat { get; }
         public ConfigEntry<bool> PageShot { get; }
         public ConfigEntry<bool> PageMissileCam { get; }
@@ -28,11 +34,11 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         public ConfigEntry<bool> PageStrike { get; }
         public ConfigEntry<bool> PageDock { get; }
         public ConfigEntry<bool> PageObjective { get; }
+        public ConfigEntry<bool> PageCargo { get; }
         public ConfigEntry<bool> PageSystems { get; }
         public ConfigEntry<float> ThreatHoldSeconds { get; }
         public ConfigEntry<float> PageMinSeconds { get; }
         public ConfigEntry<bool> ShowLamps { get; }
-        public ConfigEntry<bool> ShowSystemsStrip { get; }
         public ConfigEntry<bool> ShowGauges { get; }
         public ConfigEntry<bool> ShowTicker { get; }
         public ConfigEntry<bool> ShowNavData { get; }
@@ -80,42 +86,52 @@ namespace BoscaliSummer.Modules.Hud.Configuration
                     new AcceptableValueRange<float>(0f, 1f)));
 
             Declutter = config.Bind(section, "Declutter", d.Declutter,
-                "How much the board shows: Full is everything the switches allow, Lean drops the gauge row, dark lamps and captions and shows the cruise systems strip only while something is wrong, Minimal keeps only the lock, spike and missile lamps and the pages that matter in a fight (the strip only in a fire, engine out, bingo or lost structure)." + live);
+                "Full shows all enabled detail; Lean drops gauges, dark lamps and decoration; Minimal keeps threat lamps and critical supplementary status. Manual pages and their titles remain available at every level." + live);
 
             ScopeMode = config.Bind(section, "ScopeMode", d.ScopeMode,
-                "Auto shows an information page when it is relevant; Off shows no pages at all." + live);
+                "Manual keeps the pages chosen for each slot; Off hides the tactical pages. Legacy Auto also means Manual." + live);
+            PageCount = config.Bind(section, "PageCount", d.PageCount,
+                new ConfigDescription("Full information pages shown, at most two across and two down (Wide puts two side by side, Stack one above the other). Each slot is selected manually; SYSTEMS always shows on its own." + live,
+                    new AcceptableValueRange<int>(1, BoardOptions.MaxPages)));
+            const string slot = " SYSTEMS is not a choice: it always shows in its own block.";
+            Page1 = config.Bind(section, "Page1", d.Page1, "Information page in the first slot; events never replace it." + slot + live);
+            Page2 = config.Bind(section, "Page2", d.Page2, "Information page in the second slot (PageCount at least 2)." + slot + live);
+            Page3 = config.Bind(section, "Page3", d.Page3, "Information page in the third slot (PageCount at least 3)." + slot + live);
+            Page4 = config.Bind(section, "Page4", d.Page4, "Information page in the fourth slot (PageCount 4)." + slot + live);
+            ShowStores = config.Bind(section, "ShowStores", d.ShowStores,
+                "Show stores, countermeasures and power. Off gives back the game's native panels." + live);
 
             PageThreat = config.Bind(section, "PageThreat", d.PageThreat,
-                "Show the radar-warning page when something is locking, painting or launching at you." + live);
+                "Legacy page whitelist. Ignored by manual page slots.");
             PageShot = config.Bind(section, "PageShot", d.PageShot,
-                "Show the shot page that follows your own missiles and bombs from launch to result." + live);
+                "Legacy page whitelist. Ignored by manual page slots.");
             PageMissileCam = config.Bind(section, "PageMissileCam", d.PageMissileCam,
-                "Show the missile-camera page while the camera rides one of your own missiles." + live);
+                "Legacy page whitelist. Ignored by manual page slots.");
             PageApproach = config.Bind(section, "PageApproach", d.PageApproach,
-                "Show the approach page: the runway funnel for an ILS or autoland approach." + live);
+                "Legacy page whitelist. Ignored by manual page slots.");
             PageWing = config.Bind(section, "PageWing", d.PageWing,
-                "Show the wing page: your wingmen's formation, fuel, ammunition and orders." + live);
+                "Legacy page whitelist. Ignored by manual page slots.");
             PageStrike = config.Bind(section, "PageStrike", d.PageStrike,
-                "Show the strike page: your own strikes in the air, recon windows and cyber intrusions." + live);
+                "Legacy page whitelist. Ignored by manual page slots.");
             PageDock = config.Bind(section, "PageDock", d.PageDock,
-                "Show the dock page while you hook up to a SKYWELL tanker." + live);
+                "Legacy page whitelist. Ignored by manual page slots.");
             PageObjective = config.Bind(section, "PageObjective", d.PageObjective,
-                "Show the objective page for your selected contract: its zone, deadline and air defences." + live);
+                "Legacy page whitelist. Ignored by manual page slots.");
             PageSystems = config.Bind(section, "PageSystems", d.PageSystems,
-                "Show the systems page; it is also the cruise strip and the home of fire, engine, fuel and structure warnings." + live);
+                "Legacy page whitelist. Ignored by manual page slots.");
+            PageCargo = config.Bind(section, "PageCargo", d.PageCargo,
+                "Legacy page whitelist. Ignored by manual page slots.");
 
             ThreatHoldSeconds = config.Bind(section, "ThreatHoldSeconds", d.ThreatHoldSeconds,
                 new ConfigDescription("How many seconds the radar-warning page keeps a contact after its last warning." + live,
                     new AcceptableValueRange<float>(BoardOptions.HoldMin, BoardOptions.HoldMax)));
 
             PageMinSeconds = config.Bind(section, "PageMinSeconds", d.PageMinSeconds,
-                new ConfigDescription("Minimum seconds a page holds the board's page area once it has appeared; the SYSTEMS page is exempt." + live,
+                new ConfigDescription("Legacy automatic-page dwell setting. Ignored: pages now stay manually selected.",
                     new AcceptableValueRange<float>(0f, BoardOptions.DwellMax)));
 
             ShowLamps = config.Bind(section, "ShowLamps", d.ShowLamps,
                 "Show the lamp row: the aircraft's switch states and the threat lamps." + live);
-            ShowSystemsStrip = config.Bind(section, "ShowSystemsStrip", d.ShowSystemsStrip,
-                "Show the compact systems strip the page area falls back to in cruise; it needs the SYSTEMS page and ScopeMode Auto." + live);
             ShowGauges = config.Bind(section, "ShowGauges", d.ShowGauges,
                 "Show the gauge row under the board's page area." + live);
             ShowTicker = config.Bind(section, "ShowTicker", d.ShowTicker,
@@ -128,6 +144,14 @@ namespace BoscaliSummer.Modules.Hud.Configuration
 
             Corners = config.Bind(section, "Corners", d.Corners,
                 "Restyle the kill feed and the map frame in the board's look: the feed becomes the mod's own event log (DL EVT LOG), drawn while you are not typing in the chat; off leaves the game's own feed and map as they are. It stays when the board is switched off." + live);
+
+            // Keep settings surfaces and the renderer in agreement after an invalid hand-edited page configuration.
+            BoardOptions saved = d;
+            Snapshot(ref saved);
+            Page1.Value = saved.Page1;
+            Page2.Value = saved.Page2;
+            Page3.Value = saved.Page3;
+            Page4.Value = saved.Page4;
         }
 
         /// <summary>Fill <paramref name="into"/> from the config entries, kept inside their ranges. Reads fields only: it allocates nothing.</summary>
@@ -142,6 +166,12 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             into.Shade = Shade.Value;
             into.Declutter = Declutter.Value;
             into.ScopeMode = ScopeMode.Value;
+            into.PageCount = PageCount.Value;
+            into.Page1 = Page1.Value;
+            into.Page2 = Page2.Value;
+            into.Page3 = Page3.Value;
+            into.Page4 = Page4.Value;
+            into.ShowStores = ShowStores.Value;
             into.PageThreat = PageThreat.Value;
             into.PageShot = PageShot.Value;
             into.PageMissileCam = PageMissileCam.Value;
@@ -150,11 +180,11 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             into.PageStrike = PageStrike.Value;
             into.PageDock = PageDock.Value;
             into.PageObjective = PageObjective.Value;
+            into.PageCargo = PageCargo.Value;
             into.PageSystems = PageSystems.Value;
             into.ThreatHoldSeconds = ThreatHoldSeconds.Value;
             into.PageMinSeconds = PageMinSeconds.Value;
             into.ShowLamps = ShowLamps.Value;
-            into.ShowSystemsStrip = ShowSystemsStrip.Value;
             into.ShowGauges = ShowGauges.Value;
             into.ShowTicker = ShowTicker.Value;
             into.ShowNavData = ShowNavData.Value;
@@ -173,6 +203,12 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         float ITacBoardSettings.Shade { get => Shade.Value; set => Shade.Value = value; }
         BoardDeclutter ITacBoardSettings.Declutter { get => Declutter.Value; set => Declutter.Value = value; }
         BoardScopeMode ITacBoardSettings.ScopeMode { get => ScopeMode.Value; set => ScopeMode.Value = value; }
+        int ITacBoardSettings.PageCount { get => PageCount.Value; set => PageCount.Value = value; }
+        BoardPage ITacBoardSettings.Page1 { get => Page1.Value; set => Page1.Value = value; }
+        BoardPage ITacBoardSettings.Page2 { get => Page2.Value; set => Page2.Value = value; }
+        BoardPage ITacBoardSettings.Page3 { get => Page3.Value; set => Page3.Value = value; }
+        BoardPage ITacBoardSettings.Page4 { get => Page4.Value; set => Page4.Value = value; }
+        bool ITacBoardSettings.ShowStores { get => ShowStores.Value; set => ShowStores.Value = value; }
         bool ITacBoardSettings.PageThreat { get => PageThreat.Value; set => PageThreat.Value = value; }
         bool ITacBoardSettings.PageShot { get => PageShot.Value; set => PageShot.Value = value; }
         bool ITacBoardSettings.PageMissileCam { get => PageMissileCam.Value; set => PageMissileCam.Value = value; }
@@ -181,11 +217,11 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         bool ITacBoardSettings.PageStrike { get => PageStrike.Value; set => PageStrike.Value = value; }
         bool ITacBoardSettings.PageDock { get => PageDock.Value; set => PageDock.Value = value; }
         bool ITacBoardSettings.PageObjective { get => PageObjective.Value; set => PageObjective.Value = value; }
+        bool ITacBoardSettings.PageCargo { get => PageCargo.Value; set => PageCargo.Value = value; }
         bool ITacBoardSettings.PageSystems { get => PageSystems.Value; set => PageSystems.Value = value; }
         float ITacBoardSettings.ThreatHoldSeconds { get => ThreatHoldSeconds.Value; set => ThreatHoldSeconds.Value = value; }
         float ITacBoardSettings.PageMinSeconds { get => PageMinSeconds.Value; set => PageMinSeconds.Value = value; }
         bool ITacBoardSettings.ShowLamps { get => ShowLamps.Value; set => ShowLamps.Value = value; }
-        bool ITacBoardSettings.ShowSystemsStrip { get => ShowSystemsStrip.Value; set => ShowSystemsStrip.Value = value; }
         bool ITacBoardSettings.ShowGauges { get => ShowGauges.Value; set => ShowGauges.Value = value; }
         bool ITacBoardSettings.ShowTicker { get => ShowTicker.Value; set => ShowTicker.Value = value; }
         bool ITacBoardSettings.ShowNavData { get => ShowNavData.Value; set => ShowNavData.Value = value; }
@@ -197,9 +233,9 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         {
             ConfigEntryBase[] all =
             {
-                Enabled, Layout, Scale, OffsetX, OffsetY, Opacity, Shade, Declutter, ScopeMode,
-                PageThreat, PageShot, PageMissileCam, PageApproach, PageWing, PageStrike, PageDock, PageObjective, PageSystems,
-                ThreatHoldSeconds, PageMinSeconds, ShowLamps, ShowSystemsStrip, ShowGauges, ShowTicker, ShowNavData, Sway, Corners,
+                Enabled, Layout, Scale, OffsetX, OffsetY, Opacity, Shade, Declutter, ScopeMode, PageCount, Page1, Page2, Page3, Page4, ShowStores,
+                PageThreat, PageShot, PageMissileCam, PageApproach, PageWing, PageStrike, PageDock, PageObjective, PageSystems, PageCargo,
+                ThreatHoldSeconds, PageMinSeconds, ShowLamps, ShowGauges, ShowTicker, ShowNavData, Sway, Corners,
             };
             ConfigFile file = Enabled.ConfigFile;
             bool save = file.SaveOnConfigSet;

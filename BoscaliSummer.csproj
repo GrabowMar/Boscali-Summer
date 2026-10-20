@@ -198,6 +198,17 @@
     <EmbeddedResource Include="modules\FireAndDestruction\Assets\structure.bundle" Condition="Exists('modules\FireAndDestruction\Assets\structure.bundle')">
       <LogicalName>BoscaliSummer.Destruction.structure.bundle</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Core\Fx\Assets\particles.bundle" Condition="Exists('Core\Fx\Assets\particles.bundle')">
+      <LogicalName>BoscaliSummer.Fx.particles.bundle</LogicalName>
+    </EmbeddedResource>
+    <!-- Built by tools/Compile-KaijuAssets.ps1. Optional: without it the Kaiju summon reports the bundle missing. -->
+    <EmbeddedResource Include="modules\Kaiju\Assets\kaiju.bundle" Condition="Exists('modules\Kaiju\Assets\kaiju.bundle')">
+      <LogicalName>BoscaliSummer.Kaiju.kaiju.bundle</LogicalName>
+    </EmbeddedResource>
+    <!-- Built by tools/Compile-SpooktoberAssets.ps1. Optional: without it the rad look is embers only. -->
+    <EmbeddedResource Include="modules\Spooktober\Assets\spooktober.bundle" Condition="Exists('modules\Spooktober\Assets\spooktober.bundle')">
+      <LogicalName>BoscaliSummer.Spooktober.spooktober.bundle</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="modules\Weather\Assets\weatherrain.bundle" Condition="Exists('modules\Weather\Assets\weatherrain.bundle')">
       <LogicalName>BoscaliSummer.Weather.weatherrain.bundle</LogicalName>
     </EmbeddedResource>

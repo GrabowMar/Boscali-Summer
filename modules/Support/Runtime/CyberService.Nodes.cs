@@ -68,7 +68,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 !manager.Settings.CyberEnabled.Value || !factions.TryGetValue(player.HQ, out FactionCyber f)) return new CyberResult(CyberOutcome.Unavailable);
             ulong op = PlayerIdentity.Of(player);
             if (op == PlayerIdentity.None) return new CyberResult(CyberOutcome.Unavailable);
-            return verb == CyberVerb.Hop ? f.Desk.Hop(op, target) : verb == CyberVerb.Burn ? f.Desk.Burn(op, target) : f.Desk.Drop(op, target);
+            return verb == CyberVerb.Hop ? f.Desk.Hop(op, target) : verb == CyberVerb.Burn ? f.Desk.Burn(op, target) : verb == CyberVerb.Purge ? f.Desk.Purge(op) : f.Desk.Drop(op, target);
         }
     }
 }

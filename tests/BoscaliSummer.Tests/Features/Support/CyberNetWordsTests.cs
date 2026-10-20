@@ -30,9 +30,9 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.Eq(CyberNetWords.TraceTone(80), 2, "trace tone red");
 
             var truck = new CyberAnchorRow { Kind = AnchorKind.EwTruck, Health = AnchorHealth.Live };
-            TestAssert.Eq(CyberNetWords.AnchorLine(truck, 0, 100f), "EW TRUCK 1 · LIVE · REACH 18 KM", "live truck");
+            TestAssert.Eq(CyberNetWords.AnchorLine(truck, 0, 100f), "EW TRUCK 1 · LIVE · REACH 32 KM", "live truck");
             truck.Health = AnchorHealth.Damaged; truck.LockUntil = 160f;
-            TestAssert.Eq(CyberNetWords.AnchorLine(truck, 1, 100f), "EW TRUCK 2 · DAMAGED · REACH 11 KM · TRACED 1:00", "damaged and traced truck (10.8 km rounds to 11)");
+            TestAssert.Eq(CyberNetWords.AnchorLine(truck, 1, 100f), "EW TRUCK 2 · DAMAGED · REACH 19 KM · TRACED 1:00", "damaged and traced truck (19.2 km rounds to 19)");
             truck.Health = AnchorHealth.Down; truck.Rebuild = 45;
             TestAssert.Eq(CyberNetWords.AnchorLine(truck, 0, 0f), "EW TRUCK 1 · DOWN · RESTORE 45 %", "down truck");
             var dc = new CyberAnchorRow { Kind = AnchorKind.DataCenter, Health = AnchorHealth.Live };

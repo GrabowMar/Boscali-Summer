@@ -35,6 +35,8 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         public float DugAt { get; set; }
         /// <summary>Scene time the centre first read deep enemy ground, or -1 while it reads own side.</summary>
         public float HostileSince { get; set; } = -1f;
+        /// <summary>Scene time the line last started reading its own side again, or -1 while it reads hostile.</summary>
+        public float OwnedSince { get; set; } = -1f;
         /// <summary>Consecutive refusals of the belt trace the current stage adds.</summary>
         public int BeltRefusals { get; set; }
 

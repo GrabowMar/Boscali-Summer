@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Support.Domain.Calls;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Runtime;
 using UnityEngine;
 
@@ -32,7 +33,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 CallTile t = CallsView.Tile(row, manager.Quote(row.Id), manager.LockReason(row.Id), manager.LocalAllocation,
                     cooldown, calls.Armed == row.Id, false, !manager.Online);
                 if (t.State != CallState.Ready && t.State != CallState.Armed && t.State != CallState.Cooldown) continue;
-                ready.Add(t); fronts.Add(row.FrontWord); cooldowns.Add(t.State == CallState.Cooldown ? (int)Math.Ceiling(cooldown) : 0); totals.Add(CallSheet.Cooldown(row.Rung));
+                ready.Add(t); fronts.Add(row.FrontWord); cooldowns.Add(t.State == CallState.Cooldown ? (int)Math.Ceiling(cooldown) : 0); totals.Add(PerkPower.Cooldown(CallSheet.Cooldown(row.Rung), manager.FrontMirror.Power(row.Front))); // the length the host applies: shortened while the front is ahead
             }
             while (ready.Count > IOpsPerks.MaxPerks)
             {
@@ -58,7 +59,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         public int PerkCooldown(int index) => index >= 0 && index < Ready().Count ? cooldowns[index] : 0;
 
-        /// <summary>The whole cooldown of the perk in seconds (its rung's: the perk ring's denominator on the TAC BOARD).</summary>
+        /// <summary>The whole cooldown of the perk in seconds (its rung's, divided by the front's power while it is ahead: the perk ring's denominator on the TAC BOARD).</summary>
         public float PerkTotal(int index) => index >= 0 && index < Ready().Count ? totals[index] : 0f;
 
         public void PerkPress(int index)

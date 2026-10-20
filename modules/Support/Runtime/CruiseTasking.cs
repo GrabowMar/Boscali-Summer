@@ -45,7 +45,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private static readonly FieldInfo TopAttackAmountField =
             typeof(TopAttack).GetField("Amount");
 
-        private readonly Dictionary<int, Strike> strikes = new Dictionary<int, Strike>();
+        // Request ids are client-local: a job is its requester plus that id. MaxStrikes is small, so a list scan is enough.
+        private readonly List<Strike> strikes = new List<Strike>(MaxStrikes);
         private readonly Action<IEnumerator> run;
         private readonly Action<Strike, SupportResult> changed;
 
@@ -59,31 +60,37 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         public void Clear() => strikes.Clear();
 
-        public Strike Find(int requestId)
+        /// <summary>The requester's own job; another pilot's job with the same request id is never returned.</summary>
+        public Strike Find(ulong requesterId, int requestId)
         {
-            strikes.TryGetValue(requestId, out Strike strike);
-            return strike;
+            for (int i = 0; i < strikes.Count; i++)
+                if (strikes[i].RequesterId == requesterId && strikes[i].RequestId == requestId) return strikes[i];
+            return null;
         }
 
-        /// <summary>Records a fresh salvo; null when the board is full (the strike flies direct).</summary>
+        /// <summary>Records a fresh salvo; null when the board is full of live salvos (the strike flies direct).</summary>
         public Strike Track(int requestId, ulong requesterId, FactionHQ owner, GlobalPosition target, Missile first)
         {
             if (first == null) return null;
-            if (!strikes.TryGetValue(requestId, out Strike strike))
+            Strike strike = Find(requesterId, requestId);
+            if (strike == null)
             {
+                // A salvo with no live missile is finished (its driver has already stopped): free the slot so the cap bounds active work.
+                strikes.RemoveAll(spent => !FirstMissile(spent, out _));
                 if (strikes.Count >= MaxStrikes) return null;
                 strike = new Strike { RequestId = requestId, RequesterId = requesterId, Owner = owner, Target = target };
-                strikes[requestId] = strike;
+                strikes.Add(strike);
             }
             if (!strike.Missiles.Contains(first) && strike.Missiles.Count < 8) strike.Missiles.Add(first);
             if (strike.TerminalRange <= 0f) ReadSeeker(strike, first);
             return strike;
         }
 
-        public void AddMissile(int requestId, Missile missile)
+        public void AddMissile(ulong requesterId, int requestId, Missile missile)
         {
             if (missile == null) return;
-            if (!strikes.TryGetValue(requestId, out Strike strike)) return;
+            Strike strike = Find(requesterId, requestId);
+            if (strike == null) return;
             if (!strike.Missiles.Contains(missile) && strike.Missiles.Count < 8) strike.Missiles.Add(missile);
         }
 

@@ -70,8 +70,8 @@ namespace BoscaliSummer.Tests.Features.Vanguard
 
         private static void Layers()
         {
-            TestAssert.That(AlexKite.Deflects("ARH", 5999f) && AlexKite.Deflects("SARH", 6000f) && !AlexKite.Deflects("ARH", 6001f) &&
-                !AlexKite.Deflects("IR", 1000f), "DEFLECT: radar missiles inside 6 km only");
+            TestAssert.That(AlexKite.Deflects("ARH", 7999f) && AlexKite.Deflects("SARH", 8000f) && !AlexKite.Deflects("ARH", 8001f) &&
+                !AlexKite.Deflects("IR", 1000f), "DEFLECT: radar missiles inside 8 km only");
             TestAssert.That((AlexKite.DeflectShift(new Vector3(0f, 0f, -250f)) - new Vector3(0f, 0f, -100f)).magnitude < 1e-3f,
                 "DEFLECT pulls the aimpoint 40 % of the way to a decoy 250 m astern: 100 m off the host");
             TestAssert.That(Mathf.Abs(AlexKite.SuppressRefund(0.02f) - 0.02f / 3f) < 1e-6f, "SUPPRESS gives back a third of every tick");
@@ -96,7 +96,7 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.Near(AlexKite.FreeSpeedFactor(60f), 0.3f, "it never slows below the floor");
             TestAssert.That(!AlexKite.AiCuts(0, 99f) && !AlexKite.AiCuts(1, 0.9f) && AlexKite.AiCuts(1, 1f) && AlexKite.AiCuts(3, 9f),
                 "an AI host cuts 1 s after the kite first holds a missile");
-            TestAssert.That(AlexKite.AiDeploys(10000f) && !AlexKite.AiDeploys(10001f) && AlexKite.AiDeploys(0f) && !AlexKite.AiDeploys(TowedTrail.NoThreat),
+            TestAssert.That(AlexKite.AiDeploys(14000f) && !AlexKite.AiDeploys(14001f) && AlexKite.AiDeploys(0f) && !AlexKite.AiDeploys(TowedTrail.NoThreat),
                 "an AI host with a pod deploys for a radar missile inside 10 km");
             // Two seconds after the cut the dragged missile follows a decoy that is 100+ m behind and slowing.
             Vector3 hostVelocity = new Vector3(0f, 0f, 220f);

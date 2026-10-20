@@ -38,6 +38,17 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         public OpKind Op;
     }
 
+    /// <summary>An uplink site of the viewer's own faction: standing, destroyed, or destroyed with the UPLINK SITE programme queued or building.</summary>
+    internal enum SiteState : byte { Up, Down, Rebuilding }
+
+    /// <summary>One of the faction's own uplink sites (at most two): its slot, its last known ground point in world metres and how it stands.</summary>
+    internal struct OpsSiteRow
+    {
+        public byte Slot;
+        public SiteState State;
+        public float X, Z;
+    }
+
     /// <summary>An ASAT in its scripted ascent, visible to every faction (a smoke column and a rising light): the launch point and the seconds it has left.</summary>
     internal struct OpsFlightRow
     {
@@ -64,15 +75,17 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         public readonly List<OpsPingRow> Pings = new List<OpsPingRow>();
         public readonly List<OpsEventRow> Events = new List<OpsEventRow>();
         public readonly List<OpsFlightRow> Flights = new List<OpsFlightRow>();
+        /// <summary>The viewer's own uplink sites (the ORBIT room marks them); never another faction's: a revealed enemy site is a CYBER node of kind Uplink.</summary>
+        public readonly List<OpsSiteRow> Sites = new List<OpsSiteRow>();
         /// <summary>The last OVERLORD actions of the viewer's own faction (a reason code and two arguments each): the console reads them. Never another faction's.</summary>
         public readonly List<WatchLogRow> Log = new List<WatchLogRow>();
 
         public override OpsStateData Clone()
         {
-            var c = new OpsStateData { Protocol = Protocol, Active = Active, CyberOps = CyberOps, SofOps = SofOps, Seq = Seq, Now = Now, BirdsDown = BirdsDown, EnemyBirdsDown = EnemyBirdsDown };
+            var c = new OpsStateData { Protocol = Protocol, Faction = Faction, Epoch = Epoch, Active = Active, CyberOps = CyberOps, SofOps = SofOps, Seq = Seq, Now = Now, BirdsDown = BirdsDown, EnemyBirdsDown = EnemyBirdsDown };
             Array.Copy(BirdPercent, c.BirdPercent, BirdPercent.Length);
             Array.Copy(Geo, c.Geo, Geo.Length);
-            c.Rows.AddRange(Rows); c.Pings.AddRange(Pings); c.Events.AddRange(Events); c.Flights.AddRange(Flights); c.Log.AddRange(Log);
+            c.Rows.AddRange(Rows); c.Pings.AddRange(Pings); c.Events.AddRange(Events); c.Flights.AddRange(Flights); c.Sites.AddRange(Sites); c.Log.AddRange(Log);
             return c;
         }
 
@@ -86,7 +99,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         public override bool SameAs(OpsStateData o)
         {
             if (o == null || Active != o.Active || CyberOps != o.CyberOps || SofOps != o.SofOps || BirdsDown != o.BirdsDown || EnemyBirdsDown != o.EnemyBirdsDown ||
-                Rows.Count != o.Rows.Count || Pings.Count != o.Pings.Count || Events.Count != o.Events.Count || Flights.Count != o.Flights.Count || Log.Count != o.Log.Count) return false;
+                Rows.Count != o.Rows.Count || Pings.Count != o.Pings.Count || Events.Count != o.Events.Count || Flights.Count != o.Flights.Count || Sites.Count != o.Sites.Count || Log.Count != o.Log.Count) return false;
             for (int i = 0; i < BirdPercent.Length; i++) if (BirdPercent[i] != o.BirdPercent[i]) return false;
             for (int i = 0; i < Geo.Length; i++) if (!OpsWire.SameGeo(Geo[i], o.Geo[i])) return false;
             for (int i = 0; i < Rows.Count; i++)
@@ -103,6 +116,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             for (int i = 0; i < Flights.Count; i++)
                 if (Flights[i].Id != o.Flights[i].Id || !SpaceMirror.SamePoint(Flights[i].X, o.Flights[i].X) || !SpaceMirror.SamePoint(Flights[i].Z, o.Flights[i].Z) ||
                     !SpaceMirror.SameExpiry(Flights[i].EndsAt, o.Flights[i].EndsAt)) return false;
+            for (int i = 0; i < Sites.Count; i++)
+                if (Sites[i].Slot != o.Sites[i].Slot || Sites[i].State != o.Sites[i].State || !SpaceMirror.SamePoint(Sites[i].X, o.Sites[i].X) || !SpaceMirror.SamePoint(Sites[i].Z, o.Sites[i].Z)) return false;
             return true;
         }
     }
@@ -110,8 +125,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
     /// <summary>Engine-free OPERATIONS state codec (protocol 36). Every reader returns an inert value (Protocol 0 or the foreign byte alone) instead of throwing.</summary>
     internal static class OpsWire
     {
-        public const int MaxRows = OpsDesk.Slots, MaxPings = 4, MaxEvents = 8, MaxFlights = 1, MaxName = 12, MaxLog = WatchLogRing.Capacity;
-        private const int MinRowBytes = 10, MinPingBytes = 5, MinEventBytes = 2, MinFlightBytes = 8, MinLogBytes = 4;
+        public const int MaxRows = OpsDesk.Slots, MaxPings = 4, MaxEvents = 8, MaxFlights = 1, MaxSites = 2, MaxName = 12, MaxLog = WatchLogRing.Capacity;
+        private const int MinRowBytes = 10, MinPingBytes = 5, MinEventBytes = 2, MinFlightBytes = 8, MinSiteBytes = 7, MinLogBytes = 4;
         private const byte FlagActive = 1, FlagCyber = 2, FlagSof = 4;
         public const int GeoCount = SpaceRules.BirdCount * 2;
         private const int GeoBytes = 11;
@@ -145,8 +160,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         {
             w.WriteByte(s.Protocol);
             w.WriteByte((byte)((s.Active ? FlagActive : 0) | (s.CyberOps ? FlagCyber : 0) | (s.SofOps ? FlagSof : 0)));
-            SpaceWire.WriteVar(w, (uint)Math.Max(0, s.Seq));
-            SpaceWire.WriteFloat(w, s.Now);
+            s.WriteHeader(w);
             if (!s.Active) { WriteLog(w, s); return; } // OVERLORD's log still reaches the faction console when OPERATIONS is off
             w.WriteByte((byte)((s.BirdsDown & 7) | ((s.EnemyBirdsDown & 7) << 3)));
             for (int i = 0; i < s.BirdPercent.Length; i++) w.WriteByte(s.BirdPercent[i]);
@@ -192,6 +206,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
                 SpaceWire.WriteExpiry(w, f.EndsAt, s.Now);
                 w.WriteByte(f.Seconds);
             }
+            n = Math.Min(s.Sites.Count, MaxSites);
+            w.WriteByte((byte)n);
+            for (int i = 0; i < n; i++)
+            {
+                OpsSiteRow site = s.Sites[i];
+                w.WriteByte((byte)((site.Slot & 1) | ((int)site.State << 1)));
+                SpaceWire.WriteCoordinate(w, site.X); SpaceWire.WriteCoordinate(w, site.Z);
+            }
             WriteLog(w, s);
         }
 
@@ -214,7 +236,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             for (int i = 0; i < n; i++)
             {
                 if (!SpaceWire.ReadInt(r, out int lseq) || lseq <= 0 || !r.TryReadByte(out byte bits) || (bits & 3) > (int)WatchDomain.Ops ||
-                    (bits >> 2) < (int)WatchCode.CyberHop || (bits >> 2) > (int)WatchCode.OpFund || !r.TryReadByte(out byte a) || !r.TryReadByte(out byte b)) return false;
+                    (bits >> 2) < (int)WatchCode.CyberHop || (bits >> 2) > (int)WatchCode.SofSweep || !r.TryReadByte(out byte a) || !r.TryReadByte(out byte b)) return false;
                 s.Log.Add(new WatchLogRow { Seq = lseq, Domain = (WatchDomain)(bits & 3), Code = (WatchCode)(bits >> 2), A = a, B = b });
             }
             return true;
@@ -225,9 +247,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             if (!r.TryReadByte(out byte version)) return Bad();
             if (version != protocol) return new OpsStateData { Protocol = version };
             var s = new OpsStateData { Protocol = version };
-            if (!r.TryReadByte(out byte flags) || (flags & ~(FlagActive | FlagCyber | FlagSof)) != 0 || !SpaceWire.ReadInt(r, out int seq) ||
-                !SpaceWire.ReadFloat(r, out float now) || !SpaceRules.MissionTime(now)) return Bad();
-            s.Active = (flags & FlagActive) != 0; s.CyberOps = (flags & FlagCyber) != 0; s.SofOps = (flags & FlagSof) != 0; s.Seq = seq; s.Now = now;
+            if (!r.TryReadByte(out byte flags) || (flags & ~(FlagActive | FlagCyber | FlagSof)) != 0 || !s.ReadHeader(r)) return Bad();
+            float now = s.Now;
+            s.Active = (flags & FlagActive) != 0; s.CyberOps = (flags & FlagCyber) != 0; s.SofOps = (flags & FlagSof) != 0;
             if (!s.Active) return ReadLog(r, s) ? s : Bad();
             if (!r.TryReadByte(out byte birds) || (birds & ~63) != 0) return Bad();
             s.BirdsDown = (byte)(birds & 7); s.EnemyBirdsDown = (byte)(birds >> 3);
@@ -268,6 +290,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
                     !SpaceWire.ReadExpiry(r, now, out float ends) || !r.TryReadByte(out byte seconds)) return Bad();
                 s.Flights.Add(new OpsFlightRow { Id = id, X = x, Z = z, EndsAt = ends <= now ? 0f : ends, Seconds = seconds });
             }
+            if (!r.TryReadByte(out n) || n > MaxSites || r.Remaining < n * MinSiteBytes) return Bad();
+            for (int i = 0; i < n; i++)
+            {
+                if (!r.TryReadByte(out byte bits) || (bits >> 1) > (int)SiteState.Rebuilding || !SpaceWire.ReadCoordinate(r, out float x) || !SpaceWire.ReadCoordinate(r, out float z)) return Bad();
+                s.Sites.Add(new OpsSiteRow { Slot = (byte)(bits & 1), State = (SiteState)(bits >> 1), X = x, Z = z });
+            }
             return ReadLog(r, s) ? s : Bad();
         }
 
@@ -285,7 +313,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
     internal sealed class OpsMirror : FactionMirror<OpsStateData>
     {
         protected override bool Bounds(OpsStateData d) =>
-            d.Rows.Count <= OpsWire.MaxRows && d.Pings.Count <= OpsWire.MaxPings && d.Events.Count <= OpsWire.MaxEvents && d.Flights.Count <= OpsWire.MaxFlights && d.Log.Count <= OpsWire.MaxLog;
+            d.Rows.Count <= OpsWire.MaxRows && d.Pings.Count <= OpsWire.MaxPings && d.Events.Count <= OpsWire.MaxEvents && d.Flights.Count <= OpsWire.MaxFlights &&
+            d.Sites.Count <= OpsWire.MaxSites && d.Log.Count <= OpsWire.MaxLog;
 
         protected override OpsStateData Shift(OpsStateData d, float offset, float clientNow)
         {
@@ -297,6 +326,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             for (int i = 0; i < copy.Geo.Length; i++) { GeoBird g = copy.Geo[i]; copy.Geo[i] = new GeoBird(g.FromU, g.FromV, g.ToU, g.ToV, g.DepartAt + offset, g.Fuel); }
             return copy;
         }
+
+        /// <summary>The viewer's own uplink sites as the host last told it (at most two; empty until a state arrives). A revealed enemy site is a CYBER node of kind Uplink, not a row here.</summary>
+        public IReadOnlyList<OpsSiteRow> Sites => Known && State.Active ? (IReadOnlyList<OpsSiteRow>)State.Sites : Array.Empty<OpsSiteRow>();
 
         /// <summary>The client's own view of a satellite: false while an ASAT strike has it dead. Unknown mirror = alive.</summary>
         public bool BirdUp(BirdKind bird) => !Known || !State.Active || (byte)bird >= SpaceRules.BirdCount || (State.BirdsDown & (1 << (byte)bird)) == 0;

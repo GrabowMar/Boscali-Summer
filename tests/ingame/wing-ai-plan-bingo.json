@@ -1,0 +1,224 @@
+{
+  "name": "wing-ai-plan-bingo",
+  "_notes": "Wing AI fix 2026-10-19 (OrderExecutor.Recover): one wingman, plan lane A = CAP on the south coast (0, -38 km) until BINGO, then RTB. Bingo is forced on station (BingoMonitor.ReserveFraction 1.5): the bingo rule sends the wingman home first, so the RTB step's RecoverAll finds nobody to send. Before the fix that was a refusal and the lane blocked ('No wingman can go'). The plan tick is slowed to 3 s so the planner always fails its task (NoWing: nobody left on CAP) before the plan sees BINGO: that race blocked the lane 'its task failed' about every other run until WingPlans.Tick let a step whose end rule holds end.",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 600,
+  "environment": {
+    "config": {
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
+        }
+      },
+      "boscalisummer": {
+        "Trenches": {
+          "Enabled": false
+        },
+        "TheaterOps": {
+          "Enabled": false
+        },
+        "Events": {
+          "Enabled": false
+        },
+        "Garrisons": {
+          "Enabled": false
+        },
+        "DynamicOperations": {
+          "Enabled": false
+        },
+        "Debug": {
+          "WingVerboseLogging": true
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "spawn",
+      "id": "lead",
+      "type": "FS-20 Vortex",
+      "faction": "Boscali",
+      "at": {
+        "map": [
+          10000,
+          -45000
+        ]
+      },
+      "altitude": 7000,
+      "speed": 220,
+      "heading": 90
+    },
+    {
+      "op": "record",
+      "ids": [
+        "*"
+      ],
+      "hz": 2
+    },
+    {
+      "op": "fly",
+      "id": "lead",
+      "program": [
+        {
+          "orbit": {
+            "bank": 20,
+            "seconds": 3000
+          }
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Call",
+      "store": "call",
+      "args": {
+        "lead": "lead",
+        "count": 1
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 25
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.Automation.Members",
+      "store": "members"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "formed"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Plan",
+      "store": "plan",
+      "args": {
+        "name": "CAPBINGO",
+        "steps": [
+          {
+            "lane": 0,
+            "kind": "Cap",
+            "x": 0,
+            "z": -38000,
+            "end": "Bingo"
+          },
+          {
+            "lane": 0,
+            "kind": "Rtb"
+          }
+        ]
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 200
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "on_cap"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Tune",
+      "store": "tune",
+      "args": {
+        "bingoReserve": 1.5,
+        "planTick": 3
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 10
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "b10"
+    },
+    {
+      "op": "wait",
+      "seconds": 10
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "b20"
+    },
+    {
+      "op": "wait",
+      "seconds": 10
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "b30"
+    },
+    {
+      "op": "wait",
+      "seconds": 10
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Wing.Runtime.WingAiProof.Read",
+      "store": "b40"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "alive",
+      "ids": [
+        "lead"
+      ]
+    },
+    {
+      "check": "log_match",
+      "pattern": "\\[Wing\\] tick step \\d+ failed",
+      "max": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "plan.ok",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "on_cap.plan.steps.A1.state",
+      "value": "Running"
+    },
+    {
+      "check": "result_above",
+      "path": "b10.bingo",
+      "min": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "b40.plan.steps.A1.state",
+      "value": "Done"
+    },
+    {
+      "check": "log_match",
+      "pattern": "\\[Plan\\] A2 Rtb: 1 already going home",
+      "min": 1
+    },
+    {
+      "check": "log_match",
+      "pattern": "\\[Plan\\] A\\d blocked",
+      "max": 0
+    }
+  ]
+}

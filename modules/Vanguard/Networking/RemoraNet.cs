@@ -16,13 +16,13 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
     {
         public byte Protocol;
         public uint Drone, Launcher;
-        public byte Fired, Phase;
+        public byte Fired, Phase, Flares;
     }
 
-    /// <summary>Server-to-client REMORA presentation (empty rails, launcher HUD). Sent on change, resent every 2 s.</summary>
+    /// <summary>Server-to-client REMORA presentation (empty rails, flares, launcher HUD). Sent on change, resent every 2 s.</summary>
     internal sealed class RemoraNet : MonoBehaviour, ISceneService
     {
-        internal const byte ProtocolVersion = 1;
+        internal const byte ProtocolVersion = 2;
         private const float ResendInterval = 2f;
         private HandlerSlot slot;
         private HandlerSlot ClientHandlers => slot ??= HandlerSlot.Of<RemoraState>(Receive);
@@ -39,6 +39,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
                     w.WritePackedUInt32(v.Launcher);
                     w.WriteByte(v.Fired);
                     w.WriteByte(v.Phase);
+                    w.WriteByte(v.Flares);
                 }),
                 (Func<NetworkReader, RemoraState>)(r =>
                 {
@@ -47,7 +48,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
                     return new RemoraState
                     {
                         Protocol = protocol, Drone = r.ReadPackedUInt32(), Launcher = r.ReadPackedUInt32(),
-                        Fired = r.ReadByte(), Phase = r.ReadByte(),
+                        Fired = r.ReadByte(), Phase = r.ReadByte(), Flares = r.ReadByte(),
                     };
                 }));
             RemoraBoard.Changed = Broadcast;
@@ -74,16 +75,18 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             server.SendToAll(new RemoraState
             {
                 Protocol = ProtocolVersion, Drone = view.Drone, Launcher = view.Launcher,
-                Fired = view.Fired, Phase = (byte)view.Phase,
+                Fired = view.Fired, Phase = (byte)view.Phase, Flares = view.Flares,
             }, authenticatedOnly: true, excludeLocalPlayer: true);
         }
 
         private void Receive(INetworkPlayer sender, RemoraState state)
         {
-            if (state.Protocol != ProtocolVersion || GameAccess.IsServer() || state.Fired > 3 || state.Phase > (byte)RemoraPhase.Ram) return;
+            if (state.Protocol != ProtocolVersion || GameAccess.IsServer() || state.Fired > 3 || state.Phase > (byte)RemoraPhase.Ram ||
+                state.Flares > RemoraArcher.FlareBursts) return;
             RemoraBoard.Views[state.Drone] = new RemoraView
             {
                 Drone = state.Drone, Launcher = state.Launcher, Fired = state.Fired, Phase = (RemoraPhase)state.Phase,
+                Flares = state.Flares,
             };
         }
 

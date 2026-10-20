@@ -13,13 +13,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         TrucksMax = 16, TeamCap = 17, CampsMax = 18, NoHeldBuilding = 19, NoSamNet = 20, NotQueued = 21, BadAmount = 22, LowAllocation = 23,
         NoDonations = 24, Locked = 25, BadPosture = 26, BadWeights = 27, Offline = 28, Unavailable = 29, RateLimited = 30, BadFront = 31,
         /// <summary>GEO burn verdicts (Detail = seconds of burn, Charged = fuel percent spent; for NoFuel Detail = percent needed).</summary>
-        Relocated = 32, NoFuel = 33, Burning = 34, NoMove = 35, BirdLost = 36
+        Relocated = 32, NoFuel = 33, Burning = 34, NoMove = 35, BirdLost = 36, NoSite = 37
     }
 
     /// <summary>Every front sentence, built from a few bytes on the client (radio style, upper case). Pure.</summary>
     internal static class FrontWords
     {
-        public const byte MaxOutcome = (byte)FrontOutcome.BirdLost;
+        public const byte MaxOutcome = (byte)FrontOutcome.NoSite;
 
         public static bool Good(FrontOutcome o) => (o >= FrontOutcome.Ok && o <= FrontOutcome.FocusCleared) || o == FrontOutcome.Relocated;
 
@@ -45,6 +45,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                 case FrontOutcome.CampsMax: return "CAMPS AT MAX";
                 case FrontOutcome.NoHeldBuilding: return "HOLD A BUILDING FIRST";
                 case FrontOutcome.NoSamNet: return "NO SAM NET REVEALED YET, SWEEP FOR ONE";
+                case FrontOutcome.NoSite: return "NO LEGAL SITE YET · HOLD AN AIRBASE";
                 default: return "";
             }
         }
@@ -58,7 +59,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             {
                 case FrontOutcome.Ok: return "DONE";
                 case FrontOutcome.Queued: return "PROGRAMME QUEUED";
-                case FrontOutcome.Donated: return "FUNDED " + amount + " ALLOCATION";
+                case FrontOutcome.Donated: return "FUNDED " + amount + " AP → " + (int)Math.Round(amount * FrontRules.DonateRate) + " FUNDS";
                 case FrontOutcome.DirectiveSet: return FrontRules.Name(front) + " POSTURE SET";
                 case FrontOutcome.PrioritySet: return "FUNDING PRIORITY SET";
                 case FrontOutcome.FocusSet: return "FOCUS PIN SET";
@@ -105,6 +106,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                     return call + (id == ProgrammeId.Readiness ? "READINESS UP, NOW " + row.B
                         : id == ProgrammeId.LaunchSatellite ? "SATELLITE LAUNCHED" : Programme(id) + " COMPLETE");
                 case FrontLogCode.Effect: return call + "SATELLITE ON STATION · " + Bird(row.B);
+                case FrontLogCode.Failed:
+                    string cause = Refusal((FrontOutcome)(byte)row.B, f);
+                    return call + Programme(id) + " FAILED · " + (cause.Length > 0 ? cause : "NOTHING TO DO") + " · FUNDS RETURNED";
                 case FrontLogCode.Directive:
                     return FrontRules.Name(f) + " POSTURE " + FrontRules.Name((FrontDirective)Math.Max(0, Math.Min(6, (int)row.A))) +
                         (string.IsNullOrEmpty(directiveBy) ? "" : " BY " + directiveBy);
@@ -114,6 +118,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                 case FrontLogCode.Rebuild: return call + Anchor(id) + " LOST, REBUILD QUEUED";
                 case FrontLogCode.Counter:
                     return call + (row.A != 0 ? "COUNTER PRESSURE ACTIVE · " + CounterEffect(f) : "COUNTER PRESSURE LAPSED");
+                case FrontLogCode.Siphon: return call + "SIPHON · +" + Math.Max(0, (int)row.A) + " FUNDS TAKEN FROM THE ENEMY BUDGETS";
+                case FrontLogCode.Siphoned: return call + "SIPHONED · -" + Math.Max(0, (int)row.A) + " FUNDS TAKEN BY THE ENEMY";
                 default: return "";
             }
         }

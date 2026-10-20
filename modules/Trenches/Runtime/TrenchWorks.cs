@@ -148,7 +148,8 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                 UnitDefinition piece = pieces[i % pieces.Count];
                 Scenery scenery = spawner.SpawnScenery(piece.unitPrefab, new GlobalPosition(ground),
                     Quaternion.LookRotation(forward), Prefix + position.Id + ":B" + i);
-                if (scenery != null) { structures[i] = scenery; spawnsLeft--; }
+                // Placed once: a destroyed piece reads null again, and re-placing it was a free heal.
+                if (scenery != null) { structures[i] = scenery; structureFound[i] = false; spawnsLeft--; }
             }
         }
 

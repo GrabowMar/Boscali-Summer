@@ -39,8 +39,8 @@ namespace BoscaliSummer.Tests.Features.Vanguard
             TestAssert.That(HamilcarProfile.TouchSink == 1.5f && HamilcarProfile.SlideDecel == 12f && HamilcarProfile.MaxAccel == 25f && HamilcarProfile.MaxTurnRate == 12f,
                 "touch sink 1.5 m/s, slide 12 m/s2, servo 25 m/s2, turn 12 deg/s");
             TestAssert.That(HamilcarProfile.DeployStart == 0.4f && HamilcarProfile.DeployEnd == 1.6f, "wing unfold 0.4..1.6 s after release");
-            TestAssert.That(HamilcarProfile.UnloadSeconds == 3.2f && HamilcarProfile.RollOff == 6f && HamilcarProfile.HuskSeconds == 60f && HamilcarProfile.RestHeight == 0.03f,
-                "unload 3.2 s, roll-off 6 m, husk 60 s, rest height 3 cm");
+            TestAssert.That(HamilcarProfile.UnloadSeconds == 3.2f && HamilcarProfile.RollOff == 6f && HamilcarProfile.HuskSeconds == 180f && HamilcarProfile.RestHeight == 0.03f,
+                "unload 3.2 s, roll-off 6 m, husk 180 s, rest height 3 cm");
             TestAssert.Near(HamilcarProfile.SlideDistance, 48.17f, "slide distance 34^2 / (2 x 12)");
             TestAssert.Near(HamilcarProfile.SlideSeconds, 2.83f, "slide time 34 / 12");
             TestAssert.That(HamilcarProfile.PropRpm == 1500f && HamilcarProfile.PropSpinUp == 1f, "propeller 1500 rpm, up to speed in 1 s");

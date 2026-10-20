@@ -100,6 +100,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
             ground = point;
             if (Physics.Raycast(point, Vector3.down, out RaycastHit hit, 60000f, PhysicsLayers.StaticsMask)) ground = hit.point; else ground.y = Datum.LocalSeaY;
             foreach (var ps in new[] { star, airglow, shell, groundRing, sparks, puffs }) { ps.Clear(); ps.Play(); }
+            BoscaliSummer.Core.Fx.ParticleFx.Spawn("ops-emp-burst", point, Quaternion.identity, Mathf.Clamp(radius / 150f, 0.5f, 4f));
             for (int i = 0; i < FlickerLights; i++) { flickers[i].enabled = false; flickerUntil[i] = 0f; }
             transform.localPosition = Vector3.zero;
 

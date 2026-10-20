@@ -2,7 +2,10 @@ using System;
 
 namespace BoscaliSummer.Modules.Support.Runtime.Actions
 {
-    /// <summary>SABOTAGE STRIKE: the SOF SABOTAGE effect on the nearest enemy anchor within 1 km of the aim. It needs a live camp.</summary>
+    /// <summary>
+    /// SABOTAGE STRIKE: the SOF SABOTAGE effect on the nearest enemy anchor within 1 km of the aim. It needs a live camp. The team's odds are 70 % x the front's POWER, +5 % per live own camp (at most +15 %), 20 % .. 95 %;
+    /// the reply's contact count says how the roll went (1 = the anchor is down).
+    /// </summary>
     internal sealed class SabotageStrikeAction : ISupportAction
     {
         public float BaseCost(in SupportContext context) => 1f; // availability flag; the allocation price is CallSheet x CallPricing
@@ -13,8 +16,9 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
             {
                 var before = new System.Collections.Generic.List<Unit>(4);
                 Visuals.StagedBlastFx.DownAnchors(context.Owner, context.Target, before);
-                SupportResult result = context.Host.StartSofSabotage(context.Owner, context.Target);
-                if (result == SupportResult.Accepted)
+                SupportResult result = context.Host.StartSofSabotage(context.Owner, context.Target, context.Power, out bool succeeded);
+                if (result == SupportResult.Accepted) context.Host.ReportContacts(context.RequestId, succeeded ? 1 : 0);
+                if (result == SupportResult.Accepted && succeeded)
                     try { Visuals.StagedBlastFx.PlayOnNewlyDown(context.Owner, context.Target, before); }
                     catch (Exception e) { context.Logger.LogDebug("[Support] Sabotage visual skipped: " + e.Message); }
                 return result;

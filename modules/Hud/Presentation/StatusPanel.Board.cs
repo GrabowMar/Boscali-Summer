@@ -14,15 +14,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     {
         private const float FlashHz = 3f;
         private ScopePageBase[] pages;
-        private readonly ScopeSelector selector = new ScopeSelector();
-        private ScopePageBase page;
+        /// <summary>The pages in the pilot's slots (the first <see cref="selectedCount"/>), and what each page's last <see cref="ScopePageBase.Poll"/> said: it has something to draw.</summary>
+        private readonly ScopePageBase[] selectedPages = new ScopePageBase[ScopeLayout.MaxSlots];
+        private readonly bool[] pageLive = new bool[CuePriority.PageCount];
+        private int selectedCount;
         private readonly System.Collections.Generic.HashSet<int> failed = new System.Collections.Generic.HashSet<int>();
         private BoardFrame board;
         private int lastPhase = -1;
         /// <summary>What the pilot's options and declutter level allow, as of the last <see cref="Present"/> (see <see cref="BoardOptions.Effective"/>).</summary>
         private BoardEffective allow;
-        /// <summary>The compact SYSTEMS strip may show.</summary>
-        private bool systemsStrip;
         private bool hasBoard;
         /// <summary>When the last <see cref="Present"/> finished (<c>Time.unscaledTime</c>).</summary>
         private float presentedAt;
@@ -43,8 +43,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void BuildBoard()
         {
             pages = ScopePages.Create();
-            page = pages[(int)ScopePage.Systems];
-            selector.Reset();
+            selectedCount = 1;
+            selectedPages[0] = pages[(int)ScopePage.Threat];
+            Array.Clear(pageLive, 0, pageLive.Length);
             transition.Reset();
             lampChange.Reset();
             lastPhase = -1;
@@ -54,7 +55,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void DestroyBoard()
         {
             pages = null;
-            page = null;
+            Array.Clear(selectedPages, 0, selectedPages.Length);
             hasBoard = false;
             headerFault = false;
             tickerWords = tickerSourceText = null;
@@ -72,7 +73,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private static Rgba ToRgba(Color c) => new Rgba(c.r, c.g, c.b, 1f);
 
         /// <summary>
-        /// The 10 Hz refresh: lamps, every page's data (<see cref="ScopePageBase.Poll"/>), the page selection, the gauge row and the ticker, then a
+        /// The 10 Hz refresh: lamps, every page's data (<see cref="ScopePageBase.Poll"/>), the pilot's page slots, the gauge row and the ticker, then a
         /// full repaint. <see cref="Animate"/> carries it between ticks.
         /// </summary>
         public void Present(BoardFrame frame)
@@ -104,24 +105,30 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             HudThreats.Fill(frame.Threat, threatLamps);
 
             MeasurePixel();
-            // The page switches. A page that is switched off (or that the declutter level drops) is still polled, other code reads its state, but it is never live, so it never takes the
-            // scope, and it is silent: no ticker notices (its environment has no Notice) and no dispenser call in the stores header. The scope mode Off hides the scope, not the warnings.
+            // Every feed remains polled for notices, warning lamps and dispenser calls. The pilot's selected pages never follow the live mask.
             allow = Options.Effective();
             var voiced = new ScopeEnv(now, frame.Units, Notice);
             var silent = new ScopeEnv(now, frame.Units, null);
             if (systemsNotice == null) systemsNotice = NoticeFromSystems;
             var systemsEnv = new ScopeEnv(now, frame.Units, systemsNotice);      // SYSTEMS at Minimal speaks only in its critical form
-            ushort live = 0;
             for (int i = 0; i < pages.Length; i++)
             {
                 var id = (ScopePage)i;
                 ScopeEnv env = !CuePriority.Has(allow.Voiced, id) ? silent : id == ScopePage.Systems ? systemsEnv : voiced;
-                if (allow.Counts(id, PollPage(pages[i], env), pages[i].Critical)) live |= CuePriority.Bit(id);
+                pageLive[i] = PollPage(pages[i], env);
             }
-            bool notNominal = CuePriority.Has(live, ScopePage.Systems);      // before the mask: the strip's rule is about the aircraft's state, not about a page switch
-            selector.Select(live, allow, Options.PageMinSeconds, now, pages[(int)ScopePage.Systems].Critical);
-            page = pages[(int)selector.Page];
-            systemsStrip = allow.SystemsStripShows(notNominal, pages[(int)ScopePage.Systems].Critical);
+            selectedCount = Math.Max(1, Math.Min(ScopeLayout.MaxSlots, Options.PageCount));
+            ushort selected = 0;
+            for (int i = 0; i < selectedCount; i++)
+            {
+                ScopePage id = Options.PageAt(i);
+                // Sanitize keeps the slots distinct and off SYSTEMS (its own block); options written past it still never paint a page twice in one frame.
+                if (id == ScopePage.Systems || (uint)id >= (uint)pages.Length || CuePriority.Has(selected, id))
+                    for (int candidate = 0; candidate < pages.Length; candidate++)
+                        if (candidate != (int)ScopePage.Systems && !CuePriority.Has(selected, (ScopePage)candidate)) { id = (ScopePage)candidate; break; }
+                selectedPages[i] = pages[(int)id];
+                selected |= CuePriority.Bit(id);
+            }
             PollStores();
             MeasureScreen();      // after the header's read: where the board goes depends on what the header stands in for
 
@@ -224,7 +231,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             now = clock;
             int phase = (int)(clock * FlashHz * 2f);
             bool flashChanged = beat && phase != lastPhase;
-            if (!flashChanged && !transition.Running && !page.Fast) return;
+            bool fast = pages[(int)ScopePage.Systems].Fast;
+            for (int i = 0; i < selectedCount; i++) fast |= selectedPages[i].Fast;
+            if (!flashChanged && !transition.Running && !fast) return;
             Repaint(flashChanged || transition.Running);
         }
 
@@ -232,21 +241,28 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private void Repaint(bool shellToo)
         {
-            bool compact = selector.Compact;
-            bool strip = !compact && page.HasStrip;
-            // The scope mode Off shows no page at all, nor does a compact SYSTEMS strip the pilot's switch or the declutter level keeps away: the block has no height and the layout drops it;
-            // the lamps, gauges and ticker stay. A block that is switched off (or has nothing live) is no block either: it is not drawn and takes no room.
-            bool scopeOn = Options.ScopeMode != BoardScopeMode.Off && page.Ready && (!compact || systemsStrip);
-            float target = scopeOn ? (compact ? ScopeLayout.Compact : ScopeLayout.Full) : 0f;
-            transition.Update((int)selector.Page * 2 + (compact ? 1 : 0), target, now);
-            // A warning page (the RWR above all) does not take the aircraft's state away: SYSTEMS' compact strip stays under it as STATUS, by the strip's own rule.
-            bool statusOn = scopeOn && !compact && systemsStrip && pages[(int)ScopePage.Systems].Ready;
+            bool scopeOn = Options.ScopeMode != BoardScopeMode.Off;
+            // A change of the slots (or their count) wipes the pages in; they are all full pages, so the height only moves when the pages come or go.
+            int signature = 0;
+            if (scopeOn)
+            {
+                signature = selectedCount;
+                for (int i = 0; i < selectedCount; i++) signature = signature * 11 + (int)selectedPages[i].Id + 1;
+            }
+            float target = scopeOn ? ScopeLayout.Full : 0f;
+            transition.Update(signature, target, now);
+            // SYSTEMS is the board's own block, not a page: there while there is an aircraft to read, whatever the slots, the switches or the declutter level.
+            ScopePageBase systems = pages[(int)ScopePage.Systems];
             var blocks = new BoardBlocks
             {
-                Layout = Options.Layout, Hero = header.HasWeapon, Pwr = header.HasCap, PwrCost = header.HasCost, Exp = header.HasCm, NoShelves = !allow.Furniture, Lamps = lampRow, PageH = transition.Height,
-                StatusH = statusOn ? ScopeLayout.Compact : 0f, GaugeLines = gaugeLines, Ticker = allow.ShowTicker && board.HasTicker,
+                Layout = Options.Layout, Hero = header.HasWeapon, Pwr = header.HasCap, PwrCost = header.HasCost, Exp = header.HasCm, StoresHidden = !allow.ShowStores, NoShelves = !allow.Furniture, Lamps = lampRow, PageH = transition.Height, PageCount = selectedCount,
+                StatusH = systems.Ready ? ScopeLayout.Compact : 0f, GaugeLines = gaugeLines, Ticker = allow.ShowTicker && board.HasTicker,
             };
             BoardGeometry geo = ScopeLayout.Compute(blocks);
+            // Where the wipe is heading: the size, the anchor and the shade go by it, so pages coming in never pump the scale or move the box.
+            BoardBlocks settled = blocks;
+            settled.PageH = target;
+            BoardGeometry end = ScopeLayout.Compute(settled);
             if (geo.Height <= 0f)
             {
                 ClearHeader();
@@ -256,32 +272,34 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             Show(root, true);
 
-            // The box's top-right corner on the device pixel grid (position and size in whole pixels), so every edge drawn inside it can be too. The screen holds the box by its CRUISE height (the compact page, nothing
-            // under it): a page, a gauge line or a notice coming and going never moves the page's rectangle.
-            BoardBlocks cruise = blocks;
-            cruise.PageH = ScopeLayout.Compact;
-            cruise.StatusH = 0f;
-            cruise.GaugeLines = 0;
-            cruise.Ticker = false;
-            PlaceBoard(geo, ScopeLayout.Compute(cruise).Height, out float fromTop);
+            // The pilot's size unless the whole board would not fit the screen at it (four pages at a large size on a small screen): then as big as fits.
+            float availableHeight = screenH - (underNative ? Math.Max(0f, screenTop - dock.rect.yMin) : 0f);
+            float requestedUnit = baseUnit * Mathf.Clamp(Options.Scale, BoardOptions.ScaleMin, BoardOptions.ScaleMax);
+            unit = ScopeLayout.FitUnit(requestedUnit, pixel, screenW, availableHeight, end.Width, end.Height);
+
+            // The box's top-right corner on the device pixel grid, so every edge drawn inside it can be too.
+            PlaceBoard(end, end.Height, out float fromTop);
             rootBase = new Vector2(OnGrid(cornerX - dock.rect.xMin, phaseX), OnGrid(cornerY - dock.rect.yMin, phaseY));
             Vector2 rootPosition = rootBase + swayShift;
             if (root.anchoredPosition != rootPosition) root.anchoredPosition = rootPosition;
             Vector2 rootSize = new Vector2(Whole(geo.Width * unit), Whole(geo.Height * unit));
             if (root.sizeDelta != rootSize) root.sizeDelta = rootSize;
             BoardBox = ScopeLayout.Box(screenW, screenH, boxFromRight, fromTop, rootSize.x, rootSize.y);
-            blocks.PageH = target;      // the shade goes where the page is going: its field is baked once for a page change, not on every frame of the wipe
-            PaintShade(ScopeLayout.Compute(blocks), fromTop);
+            PaintShade(end, fromTop);      // baked once for a page change, not on every frame of the wipe
 
             ScopePalette pal = Palette();
             lastPhase = (int)(now * FlashHz * 2f);
             bool flashOn = lastPhase % 2 == 0;      // FlashHz full cycles a second: on for half of each (LAYOUT.md 3.4, 10: 3 Hz)
-            if (geo.Page.Present) PaintPage(pal, geo, compact, strip, flashOn);
-            else { Show(scopeRect, false); scopeBeat = false; }
+            if (geo.Page.Present) PaintPages(pal, geo, flashOn);
+            else
+            {
+                for (int i = 0; i < pageSurfaces.Length; i++) Show(pageSurfaces[i].Scope, false);
+                scopeBeat = false;
+            }
             if (!geo.Status.Present) Show(statusRect, false);
+            else if (shellToo || systems.Fast) PaintStatus(pal, geo, flashOn);
             if (shellToo)
             {
-                if (geo.Status.Present) PaintStatus(pal, geo, flashOn);
                 PaintWing(pal, geo, flashOn);
                 PaintStores(pal, geo, flashOn);
             }

@@ -25,21 +25,26 @@ namespace BoscaliSummer.Modules.Support.Visuals
 
         public static void Track(Missile missile)
         {
-            if (missile == null || GameManager.IsHeadless || trails.Count >= 4) return;
+            if (missile == null || GameManager.IsHeadless || trails.Count >= 6) return;
             if (missile.GetComponent<KineticRodDescentEffect>() != null) return;
             missile.gameObject.AddComponent<KineticRodDescentEffect>().Initialize();
         }
 
-        public static void TriggerImpact(Vector3 impactPosition)
+        /// <summary><paramref name="scale"/> below 1 is a STARFALL rod: a smaller, shorter strike, and up to six of them may be alive at once next to two full ones.</summary>
+        public static void TriggerImpact(Vector3 impactPosition, float scale = 1f)
         {
-            if (GameManager.IsHeadless || impacts.Count >= 2) return;
+            if (GameManager.IsHeadless) return;
+            bool small = scale < 0.95f;
+            int big = 0;
+            for (int i = 0; i < impacts.Count; i++) if (!impacts[i].Small) big++;
+            if (small ? impacts.Count - big >= 6 : big >= 2) return;
             RodImpactFx fx;
             if (FreeImpacts.Count > 0) fx = FreeImpacts.Pop();
             else { var go = new GameObject("BoscaliSummer.RodImpact"); fx = go.AddComponent<RodImpactFx>(); }
             fx.transform.SetParent(Datum.origin, false);
             fx.gameObject.SetActive(true);
             impacts.Add(fx);
-            fx.Begin(impactPosition);
+            fx.Begin(impactPosition, small ? Mathf.Max(0.3f, scale) : 1f);
         }
 
         internal static void Release(RodImpactFx fx) => SupportParticles.Recycle(impacts, FreeImpacts, fx);
@@ -127,8 +132,10 @@ namespace BoscaliSummer.Modules.Support.Visuals
     /// <summary>The descent trail: plasma head and wake, spall sparks, and the vapour contrail that stays behind after the rod is gone.</summary>
     internal sealed class RodTrailFx : MonoBehaviour
     {
+        // 9500 / 11 = 864 contrail puffs, inside the layer's 900; a 2300 m/s rod keeps ~72 glows of 1.4 s alive, inside 120
+        private const float ContrailStep = 11f, ContrailTop = 9500f, VapourStep = 45f;
         private ParticleSystem head, plasma, sparks, contrail, vapour;
-        private float endAt;
+        private float endAt, contrailDue, vapourDue;
         private bool ending;
 
         public void Begin()
@@ -149,7 +156,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 vapour = CineFx.Layer(transform, "Rod vapour glow", CineFx.Glow, 120);
                 CineFx.Tint(vapour, CineFx.Fade(0.1f, 0.4f, 0.35f));
             }
-            ending = false;
+            ending = false; contrailDue = vapourDue = 0f;
             head.Clear(); plasma.Clear(); sparks.Clear(); contrail.Clear(); vapour.Clear();
             head.Play(); plasma.Play(); sparks.Play(); contrail.Play(); vapour.Play();
             CineFx.Drift(contrail, CineFx.Wind() * 0.5f);
@@ -187,7 +194,11 @@ namespace BoscaliSummer.Modules.Support.Visuals
                     velocity = Random.onUnitSphere * Random.Range(40f, 140f) - dir * Random.Range(40f, 160f),
                     startSize = Random.Range(1.2f, 3.2f), startLifetime = Random.Range(0.4f, 1f)
                 }, 1);
-            int c = Mathf.Clamp((int)(len / 28f), 1, 14);
+            // The contrail forms in the thick air: one puff every ContrailStep metres below ContrailTop, the distance carried from frame to frame, so it is a continuous
+            // line at any frame rate (one puff per 28 m frame step left 9-15 m puffs 40+ m apart, a bead chain) and the whole column fits the layer's 900 puffs.
+            if (to.y - Datum.LocalSeaY < ContrailTop) contrailDue += len;
+            int c = Mathf.Min(48, (int)(contrailDue / ContrailStep));
+            contrailDue = Mathf.Min(contrailDue - c * ContrailStep, ContrailStep);
             float shade = Mathf.Lerp(0.45f, 1f, day);
             for (int i = 0; i < c; i++)
             {
@@ -199,8 +210,12 @@ namespace BoscaliSummer.Modules.Support.Visuals
                     startColor = new Color(shade, shade, shade, 1f)
                 }, 1);
             }
-            if (Random.value < 0.4f)
-                vapour.Emit(new ParticleSystem.EmitParams { position = CineFx.ToSim(to - dir * 40f), startSize = 120f, startLifetime = 1.4f, startColor = new Color(1f, 0.55f, 0.2f, 0.5f) }, 1);
+            // the hot wake glow, one every VapourStep metres (a 40 % chance per frame strung 120 m blobs along the line like beads)
+            vapourDue += len;
+            int v = Mathf.Min(4, (int)(vapourDue / VapourStep));
+            vapourDue = Mathf.Min(vapourDue - v * VapourStep, VapourStep);
+            for (int i = 0; i < v; i++)
+                vapour.Emit(new ParticleSystem.EmitParams { position = CineFx.ToSim(Vector3.Lerp(from, to, (i + 1f) / v) - dir * 40f), startSize = 120f, startLifetime = 1.4f, startColor = new Color(1f, 0.55f, 0.2f, 0.5f) }, 1);
         }
 
         private void Update()
@@ -223,50 +238,58 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private Vector3 ground;
         private float born, nextStem, nextCrater, shakeAt, shakeStrength;
         private bool capDone;
-        private float day;
+        private float day, scale = 1f, life = Life;
 
-        public void Begin(Vector3 point)
+        /// <summary>A STARFALL rod's strike: smaller particles and fewer of them, none of the long smoke column.</summary>
+        public bool Small => scale < 0.95f;
+
+        public void Begin(Vector3 point, float s = 1f)
         {
             Build();
+            scale = s;
+            bool small = Small;
+            life = small ? 16f : Life;
+            int N(int n) => small ? Mathf.Max(4, Mathf.RoundToInt(n * s)) : n;
             ground = point;
             if (Physics.Linecast(point + Vector3.up * 200f, point - Vector3.up * 400f, out RaycastHit hit, PhysicsLayers.StaticsMask)) ground = hit.point;
+            if (!small) BoscaliSummer.Core.Fx.ParticleFx.Spawn("ops-rod-impact", ground, Quaternion.identity); // authored debris/skirt/embers on top
             transform.localPosition = Vector3.zero;
-            born = Time.time; nextStem = 0f; nextCrater = 0f; capDone = false;
+            born = Time.time; nextStem = small ? float.MaxValue : 0f; nextCrater = small ? float.MaxValue : 0f; capDone = small;
             day = CineFx.Day01();
             Vector3 wind = CineFx.Wind();
             foreach (var ps in new[] { flash, fireGlow, fireBody, skirt, lift, haze, rings, ringsAdd, embers, chunks, stem, cap, crater }) { ps.Clear(); ps.Play(); }
             CineFx.Drift(stem, wind * 0.7f); CineFx.Drift(cap, wind * 1.6f); CineFx.Drift(haze, wind * 0.5f); CineFx.Drift(lift, wind * 0.4f);
 
-            try { SceneSingleton<BlastManager>.i?.AddBlast(ground.ToGlobalPosition(), 70f); } catch (System.Exception) { }
+            try { SceneSingleton<BlastManager>.i?.AddBlast(ground.ToGlobalPosition(), 70f * s); } catch (System.Exception) { }
 
             float shade = Mathf.Lerp(0.38f, 1f, day);
             // 1. the flash: a white-out, then a hot after-image
-            Burst(flash, ground + Vector3.up * 14f, 1400f, 0.22f, new Color(1f, 1f, 1f, 1f));
-            Burst(flash, ground + Vector3.up * 20f, 520f, 0.7f, new Color(1f, 0.92f, 0.78f, 1f));
-            Burst(flash, ground + Vector3.up * 60f, 900f, 1.2f, new Color(1f, 0.6f, 0.25f, 0.55f));
+            Burst(flash, ground + Vector3.up * 14f * s, 1400f * s, 0.22f, new Color(1f, 1f, 1f, 1f));
+            Burst(flash, ground + Vector3.up * 20f * s, 520f * s, 0.7f, new Color(1f, 0.92f, 0.78f, 1f));
+            Burst(flash, ground + Vector3.up * 60f * s, 900f * s, small ? 0.6f : 1.2f, new Color(1f, 0.6f, 0.25f, 0.55f));
             // 2. the dome burst: an additive hot core under a roiling fireball that cools to smoke
-            for (int i = 0; i < 70; i++)
+            for (int i = 0; i < N(70); i++)
             {
                 Vector3 dir = HalfSphere(0.2f);
-                float sp = Random.Range(25f, 120f);
-                fireGlow.Emit(new ParticleSystem.EmitParams { position = CineFx.ToSim(ground + dir * 10f + Vector3.up * 8f), velocity = dir * sp, startSize = Random.Range(60f, 140f), startLifetime = Random.Range(1.4f, 3f), rotation = Random.Range(0f, 360f) }, 1);
+                float sp = Random.Range(25f, 120f) * s;
+                fireGlow.Emit(new ParticleSystem.EmitParams { position = CineFx.ToSim(ground + dir * 10f * s + Vector3.up * 8f * s), velocity = dir * sp, startSize = Random.Range(60f, 140f) * s, startLifetime = Random.Range(1.4f, 3f), rotation = Random.Range(0f, 360f) }, 1);
             }
-            for (int i = 0; i < 60; i++)
+            for (int i = 0; i < N(60); i++)
             {
                 Vector3 dir = HalfSphere(0.25f);
-                fireBody.Emit(new ParticleSystem.EmitParams { position = CineFx.ToSim(ground + dir * 14f + Vector3.up * 8f), velocity = dir * Random.Range(20f, 95f), startSize = Random.Range(90f, 190f), startLifetime = Random.Range(4f, 7.5f), rotation = Random.Range(0f, 360f), startColor = new Color(shade, shade, shade, 1f) }, 1);
+                fireBody.Emit(new ParticleSystem.EmitParams { position = CineFx.ToSim(ground + dir * 14f * s + Vector3.up * 8f * s), velocity = dir * Random.Range(20f, 95f) * s, startSize = Random.Range(90f, 190f) * s, startLifetime = Random.Range(4f, small ? 5f : 7.5f), rotation = Random.Range(0f, 360f), startColor = new Color(shade, shade, shade, 1f) }, 1);
             }
             // 3. the shock skirt: a dust wall running along the ground, and the lifted debris behind it
-            for (int i = 0; i < 170; i++)
+            for (int i = 0; i < N(170); i++)
             {
                 float a = Random.value * Mathf.PI * 2f;
                 var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
-                float sp = Random.Range(120f, 240f);
+                float sp = Random.Range(120f, 240f) * s;
                 Color dust = Color.Lerp(new Color(0.55f, 0.46f, 0.35f), new Color(0.4f, 0.37f, 0.33f), Random.value) * shade;
                 dust.a = 1f;
-                skirt.Emit(new ParticleSystem.EmitParams { position = CineFx.ToSim(ground + dir * Random.Range(6f, 30f) + Vector3.up * Random.Range(3f, 25f)), velocity = dir * sp + Vector3.up * Random.Range(2f, 14f), startSize = Random.Range(70f, 130f), startLifetime = Random.Range(8f, 13f), rotation = Random.Range(0f, 360f), startColor = dust }, 1);
+                skirt.Emit(new ParticleSystem.EmitParams { position = CineFx.ToSim(ground + dir * Random.Range(6f, 30f) * s + Vector3.up * Random.Range(3f, 25f) * s), velocity = dir * sp + Vector3.up * Random.Range(2f, 14f) * s, startSize = Random.Range(70f, 130f) * s, startLifetime = Random.Range(small ? 4f : 8f, small ? 6f : 13f), rotation = Random.Range(0f, 360f), startColor = dust }, 1);
             }
-            for (int i = 0; i < 90; i++)
+            for (int i = 0; i < (small ? 0 : 90); i++)
             {
                 float a = Random.value * Mathf.PI * 2f;
                 var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
@@ -274,31 +297,31 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 dust.a = 1f;
                 lift.Emit(new ParticleSystem.EmitParams { position = CineFx.ToSim(ground + dir * Random.Range(10f, 60f) + Vector3.up * 10f), velocity = dir * Random.Range(40f, 110f) + Vector3.up * Random.Range(30f, 75f), startSize = Random.Range(60f, 120f), startLifetime = Random.Range(12f, 20f), rotation = Random.Range(0f, 360f), startColor = dust }, 1);
             }
-            for (int i = 0; i < 36; i++)
+            for (int i = 0; i < (small ? 0 : 36); i++)
             {
                 float a = Random.value * Mathf.PI * 2f;
                 haze.Emit(new ParticleSystem.EmitParams { position = CineFx.ToSim(ground + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * Random.Range(0f, 350f) + Vector3.up * Random.Range(8f, 40f)), velocity = Random.insideUnitSphere * 3f, startSize = Random.Range(260f, 420f), startLifetime = Random.Range(40f, 60f), rotation = Random.Range(0f, 360f), startColor = new Color(shade * 0.62f, shade * 0.56f, shade * 0.5f, 1f) }, 1);
             }
             // 4. the pressure ring and the condensation ring that races it
-            Ring(0.0f, 2700f, 3.8f, new Color(0.9f, 0.82f, 0.7f, 0.5f), CineFx.RingAlpha);
-            Ring(0.12f, 3400f, 4.6f, new Color(0.95f, 0.97f, 1f, 0.55f), CineFx.RingAdd);
+            Ring(0.0f, 2700f * s, 3.8f, new Color(0.9f, 0.82f, 0.7f, 0.5f), CineFx.RingAlpha);
+            if (!small) Ring(0.12f, 3400f, 4.6f, new Color(0.95f, 0.97f, 1f, 0.55f), CineFx.RingAdd);
             // 5. ejecta: stretched embers on ballistic arcs and dark chunks
-            for (int i = 0; i < 130; i++)
+            for (int i = 0; i < N(130); i++)
             {
                 Vector3 dir = HalfSphere(0.35f);
-                embers.Emit(new ParticleSystem.EmitParams { position = CineFx.ToSim(ground + Vector3.up * 8f), velocity = dir * Random.Range(70f, 260f), startSize = Random.Range(1.6f, 4.5f), startLifetime = Random.Range(3f, 6.5f) }, 1);
+                embers.Emit(new ParticleSystem.EmitParams { position = CineFx.ToSim(ground + Vector3.up * 8f), velocity = dir * Random.Range(70f, 260f) * s, startSize = Random.Range(1.6f, 4.5f), startLifetime = Random.Range(3f, 6.5f) }, 1);
             }
-            for (int i = 0; i < 50; i++)
+            for (int i = 0; i < N(50); i++)
             {
                 Vector3 dir = HalfSphere(0.5f);
-                chunks.Emit(new ParticleSystem.EmitParams { position = CineFx.ToSim(ground + Vector3.up * 8f), velocity = dir * Random.Range(50f, 190f), startSize = Random.Range(5f, 12f), startLifetime = Random.Range(3f, 6f), rotation = Random.Range(0f, 360f), startColor = new Color(0.1f, 0.09f, 0.08f, 1f) }, 1);
+                chunks.Emit(new ParticleSystem.EmitParams { position = CineFx.ToSim(ground + Vector3.up * 8f), velocity = dir * Random.Range(50f, 190f) * s, startSize = Random.Range(5f, 12f) * s, startLifetime = Random.Range(3f, 6f), rotation = Random.Range(0f, 360f), startColor = new Color(0.1f, 0.09f, 0.08f, 1f) }, 1);
             }
             // 6. lights, sound, ground shake
             flashLight.enabled = true; glowLight.enabled = true;
             flashLight.transform.position = ground + Vector3.up * 30f;
             glowLight.transform.position = ground + Vector3.up * 60f;
             float dist = CineFx.CameraDistance(ground);
-            shakeAt = Mathf.Min(dist / 1800f, 4f); shakeStrength = 1f;
+            shakeAt = Mathf.Min(dist / 1800f, 4f); shakeStrength = s;
             if (boom == null) boom = BuildBoom();
             audioSource.clip = boom; audioSource.transform.position = ground;
             audioSource.PlayDelayed(Mathf.Clamp(dist / 700f, 0f, 7f));
@@ -364,7 +387,10 @@ namespace BoscaliSummer.Modules.Support.Visuals
 
             flashLight = MakeLight("Flash light", new Color(1f, 0.96f, 0.9f), 6000f);
             glowLight = MakeLight("Fire glow light", new Color(1f, 0.5f, 0.18f), 1800f);
-            audioSource = CineFx.Speaker(gameObject, null, 1500f, 90000f, 1f);
+            // its own child: Begin moves the speaker to the strike, and on the root it carried every particle (emitted in origin space) off by the strike's map coordinates
+            var boomAt = new GameObject("Boom audio");
+            boomAt.transform.SetParent(transform, false);
+            audioSource = CineFx.Speaker(boomAt, null, 1500f, 90000f, 1f);
         }
 
         private Light MakeLight(string name, Color color, float range)
@@ -379,17 +405,17 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private void Update()
         {
             float age = Time.time - born;
-            if (age >= Life) { KineticRodStrikeVisuals.Release(this); return; }
-            flashLight.intensity = 500f * Mathf.Exp(-age * 7f);
+            if (age >= life) { KineticRodStrikeVisuals.Release(this); return; }
+            flashLight.intensity = 500f * scale * Mathf.Exp(-age * 7f);
             if (flashLight.intensity < 0.5f) flashLight.enabled = false;
-            float glowFade = Mathf.Clamp01(1f - age / 42f);
-            glowLight.intensity = 55f * glowFade * glowFade * (0.85f + 0.15f * Mathf.Sin(age * 23f) * Random.value);
+            float glowFade = Mathf.Clamp01(1f - age / (Small ? 8f : 42f));
+            glowLight.intensity = 55f * scale * glowFade * glowFade * (0.85f + 0.15f * Mathf.Sin(age * 23f) * Random.value);
             if (glowLight.intensity < 0.2f) glowLight.enabled = false;
 
             if (shakeStrength > 0f && age >= shakeAt)
             {
                 float k = (age - shakeAt) / 3f;
-                if (k < 1f) CineFx.Shake(ground, 40000f, (1f - k) * (1f - k));
+                if (k < 1f) CineFx.Shake(ground, 40000f, (1f - k) * (1f - k) * shakeStrength); // a STARFALL rod shakes at its own scale
                 else shakeStrength = 0f;
             }
             float shade = Mathf.Lerp(0.38f, 1f, day);

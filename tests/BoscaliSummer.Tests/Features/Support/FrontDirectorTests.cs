@@ -9,6 +9,7 @@ namespace BoscaliSummer.Tests.Features.Support
     internal static class FrontDirectorTests
     {
         private const byte P = 38;
+        private const uint Us = 0xF20A7A11u;
 
         private sealed class BufW : ISpaceWriter
         {
@@ -76,7 +77,7 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.Eq(RoundTrip(new SpaceCommand(P, SpaceCommandKind.FrontPriority, 7, 0, new[] { 1, 2 })).Protocol, (byte)0, "two weights are refused");
             TestAssert.Eq(RoundTrip(new SpaceCommand(P, SpaceCommandKind.FrontPriority, 7, 0, new[] { 1, 2, 3, 4 })).Protocol, (byte)0, "four weights are refused");
             TestAssert.Eq(RoundTrip(new SpaceCommand(P, SpaceCommandKind.FrontDonate, 9, 0, new[] { 1, 2, 3 })).Protocol, (byte)0, "a donation of three ints is refused");
-            TestAssert.Eq(RoundTrip(new SpaceCommand(P, (SpaceCommandKind)27, 9, 0)).Protocol, (byte)0, "the kind after RelocateBird is unknown");
+            TestAssert.Eq(RoundTrip(new SpaceCommand(P, (SpaceCommandKind)29, 9, 0)).Protocol, (byte)0, "the kind after SofSweep is unknown");
             TestAssert.That(new SpaceCommand(P, SpaceCommandKind.FrontDirective, 1, 3).Fingerprint() != new SpaceCommand(P, SpaceCommandKind.FrontDirective, 1, 4).Fingerprint(), "a changed payload changes the fingerprint (replay refused)");
         }
 
@@ -119,16 +120,18 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.Eq(Line(Front.Sof, FrontLogCode.Counter, 1, 0), "SHADOW · COUNTER PRESSURE ACTIVE · ENEMY CYBER TRACE +30 %", "sof counter");
             TestAssert.Eq(Line(Front.Sof, FrontLogCode.Counter, 0, 0), "SHADOW · COUNTER PRESSURE LAPSED", "counter off");
             TestAssert.Eq(Line(Front.Space, FrontLogCode.Priority, 50, 30), "FUNDING SPACE 50 · CYBER 30 · SOF 20", "priority line");
+            TestAssert.Eq(Line(Front.Space, FrontLogCode.Failed, (int)ProgrammeId.UplinkSite, (int)FrontOutcome.UplinksMax), "DARKSTAR · UPLINK SITE FAILED · UPLINKS AT MAX · FUNDS RETURNED", "a refused effect says why and that the money is back");
+            TestAssert.Eq(Line(Front.Cyber, FrontLogCode.Failed, (int)ProgrammeId.Asat, (int)FrontOutcome.Unavailable), "HEXWARD · ASAT FAILED · NOTHING TO DO · FUNDS RETURNED", "and a reason the words do not know still reads");
             TestAssert.Eq(Line(Front.Space, (FrontLogCode)99, 0, 0), "", "an unknown code says nothing");
             TestAssert.Eq(Line(Front.Sof, FrontLogCode.Done, 200, 0).Length > 0, true, "a bad programme id is clamped, never throws");
 
-            foreach (FrontLogCode code in new[] { FrontLogCode.Queued, FrontLogCode.Started, FrontLogCode.Done, FrontLogCode.Directive, FrontLogCode.Priority, FrontLogCode.Focus, FrontLogCode.Rebuild, FrontLogCode.Counter, FrontLogCode.Effect })
+            foreach (FrontLogCode code in new[] { FrontLogCode.Queued, FrontLogCode.Started, FrontLogCode.Done, FrontLogCode.Directive, FrontLogCode.Priority, FrontLogCode.Focus, FrontLogCode.Rebuild, FrontLogCode.Counter, FrontLogCode.Effect, FrontLogCode.Failed })
                 for (int f = 0; f < 3; f++) TestAssert.That(Line((Front)f, code, 1, 1).Length > 0, code + " has words on front " + f);
 
             // Every outcome has a sentence.
             for (byte o = 1; o <= FrontWords.MaxOutcome; o++) TestAssert.That(FrontWords.Outcome((FrontOutcome)o, Front.Space, 5, "A", 4).Length > 0, "outcome " + o + " has words");
             TestAssert.Eq(FrontWords.Outcome(FrontOutcome.LowAllocation, Front.Sof, 25), "NEEDS 25 ALLOCATION", "low allocation names the need");
-            TestAssert.Eq(FrontWords.Outcome(FrontOutcome.Donated, Front.Sof, 0, "", 40), "FUNDED 40 ALLOCATION", "donation words");
+            TestAssert.Eq(FrontWords.Outcome(FrontOutcome.Donated, Front.Sof, 0, "", 40), "FUNDED 40 AP → 120 FUNDS", "the donation receipt names both accepted sides");
         }
 
         private static void Codes()
@@ -212,22 +215,24 @@ namespace BoscaliSummer.Tests.Features.Support
 
         private static void Mirror()
         {
-            var d = new FrontStateData { Protocol = P, Seq = 1, Now = 100f, PriorityLockUntil = 130f, PriorityBy = "A" };
+            var d = new FrontStateData { Protocol = P, Faction = Us, Epoch = 2, Seq = 1, Now = 100f, PriorityLockUntil = 130f, PriorityBy = "A" };
             d.Fronts[1].DirectiveLockUntil = 150f; d.Fronts[1].DirectiveBy = "VIPER-2"; d.Fronts[1].Readiness = 3; d.Fronts[1].Superiority = 50;
             d.Fronts[0].Log.Add(new FrontLogRow { Code = (byte)FrontLogCode.Done, A = 1, Time = 90f });
             var mirror = new FrontMirror();
             TestAssert.Eq(mirror.Readiness(Front.Cyber), 5, "an unknown mirror opens everything (the host still enforces)");
-            TestAssert.Near(mirror.Quality(Front.Cyber), 1f, "and is neutral");
-            TestAssert.That(mirror.Apply(d, P, 400f), "a snapshot applies");
+            TestAssert.Near(mirror.Power(Front.Cyber), 1f, "and is neutral");
+            TestAssert.That(!mirror.Apply(d, P, 400f, Us + 1), "a snapshot of another faction is refused");
+            TestAssert.That(mirror.Apply(d, P, 400f, Us), "a snapshot applies");
             TestAssert.Eq(mirror.Readiness(Front.Cyber), 3, "readiness is read from the mirror");
-            TestAssert.Near(mirror.Quality(Front.Cyber), 1.125f, "quality from superiority +50");
+            TestAssert.Near(mirror.Power(Front.Cyber), 1.2917f, "power from superiority +50: 1.25 + 0.25 x 10 / 60");
+            TestAssert.Eq(mirror.Superiority(Front.Cyber), 50, "and the superiority itself");
             TestAssert.Near(mirror.State.Fronts[1].DirectiveLockUntil, 450f, "the lock moves onto the client's clock");
             TestAssert.Near(mirror.State.PriorityLockUntil, 430f, "so does the priority lock");
             TestAssert.Near(mirror.State.Fronts[0].Log[0].Time, 390f, "and a log row's time");
-            TestAssert.That(!mirror.Apply(d, P, 401f), "a replayed sequence is refused");
+            TestAssert.That(!mirror.Apply(d, P, 401f, Us), "a replayed sequence is refused");
             d.Seq = 2;
             d.Fronts[0].Queue.AddRange(new FrontQueueRow[5]);
-            TestAssert.That(!mirror.Apply(d, P, 402f), "a queue over the codec's bound is refused");
+            TestAssert.That(!mirror.Apply(d, P, 402f, Us), "a queue over the codec's bound is refused");
         }
 
         private static void Mapping()

@@ -119,6 +119,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
                 case "SAM NET DOWN": return "SAM NET";
                 case "RECON TEAM": return "TEAM";
                 case "SABOTAGE STRIKE": return "SABOTAGE";
+                case "DIRECT ACTION": return "DIRECT";
                 default: return string.IsNullOrEmpty(label) ? "" : label.Length <= 9 ? label : label.Substring(0, 9);
             }
         }

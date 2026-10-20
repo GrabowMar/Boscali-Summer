@@ -6,12 +6,13 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Vanguard.Runtime
 {
-    /// <summary>What every peer knows about one REMORA: rounds gone (bit 0 = MissileL, bit 1 = MissileR) and phase.</summary>
+    /// <summary>What every peer knows about one REMORA: rounds gone (bit 0 = MissileL, bit 1 = MissileR), phase, flares left.</summary>
     internal struct RemoraView
     {
         public uint Drone, Launcher;
         public byte Fired;
         public RemoraPhase Phase;
+        public byte Flares;
     }
 
     /// <summary>Host writes, RemoraNet mirrors to clients; RemoraVisuals and RemoraHud read. Pruned by RemoraHud.</summary>
@@ -29,8 +30,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
     /// <summary>
     /// REMORA "ARCHER" (role Drone), host only: escort slot -> on the launcher's designation turn in and fire the two
-    /// mini-AAMs (vanilla AAM-29 Scythe rounds, owner = launcher for kill credit) -> back to escort; a fresh designation
-    /// with no rounds left rams the target with the armed 60 kg warhead.
+    /// mini-AAMs (vanilla AAM-29 Scythe rounds, owner = launcher for kill credit) at aircraft or missiles, or dive the
+    /// armed 60 kg warhead onto a designated ground unit as a guided bomb -> back to escort. Undesignated, it guards
+    /// the launcher: inbound missiles inside <see cref="RemoraArcher.DefendRange"/> are engaged the same way, and IR
+    /// seekers close to either airframe draw a flare burst.
     /// </summary>
     internal sealed partial class VanguardFlight
     {
@@ -47,6 +50,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private Unit ramWatched;
         private bool ramHoming;
         private bool ramDeathWatched, ramFused;
+        private int flareBursts = RemoraArcher.FlareBursts;
+        private float lastFlarePop = -99f;
 
         public int Slot => slot;
 
@@ -54,9 +59,16 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         {
             Unit cued = DroneOrders.StrikeTarget(launcher, out int cue);
             // AI launchers lend their own air target only, and only when it is near them.
-            if (cued != null && cue == 0 && (!(cued is Aircraft) ||
+            if (cued != null && cue == 0 && (!(cued is Aircraft || cued is Missile) ||
                 FastMath.Distance(launcher.GlobalPosition(), cued.GlobalPosition()) > RemoraArcher.AiLeash)) cued = null;
-            RemoraPhase phase = RemoraArcher.Decide(cued != null, cued is Aircraft, RemoraArcher.Left(archerFired),
+            // No designation: guard the launcher against whatever is already homing on it.
+            bool defence = false;
+            if (cued == null && RemoraArcher.Left(archerFired) > 0)
+            {
+                Missile threat = NearestThreat(pos);
+                if (threat != null) { cued = threat; defence = true; }
+            }
+            RemoraPhase phase = RemoraArcher.Decide(cued != null, cued is Aircraft || cued is Missile, RemoraArcher.Left(archerFired),
                 cued == volleyTarget && cue == volleyCue);
             if (phase != archerPhase || !archerPublished) EnterPhase(phase, cued);
             if (phase != RemoraPhase.Escort)
@@ -66,7 +78,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 GlobalPosition aim = TargetPosition(out Vector3 vel);
                 missile.SetThrottle(1f);
                 if (!ramHoming) missile.SetAimpoint(aim, vel);
-                if (phase == RemoraPhase.Engage) TryArcherShot(aim - pos, cue);
+                if (phase == RemoraPhase.Engage) TryArcherShot(aim - pos, defence ? -1 : cue);
                 return;
             }
             if (launcher == null || launcher.disabled)
@@ -83,6 +95,23 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             missile.SetThrottle(Mathf.Clamp01(0.55f + along / 300f));
             // Chase a point 1.5 s ahead of the slot so the drone flies alongside, not into it.
             missile.SetAimpoint(slotPos + leadVel * 1.5f, leadVel);
+        }
+
+        // Nearest hostile missile homing on the launcher, inside the drone's defence envelope.
+        private Missile NearestThreat(GlobalPosition pos)
+        {
+            if (launcher == null || launcher.disabled) return null;
+            ThreatScan.Inbound(launcher, inbound);
+            Missile best = null;
+            float bestRange = RemoraArcher.DefendRange;
+            for (int i = 0; i < inbound.Count; i++)
+            {
+                Missile threat = inbound[i];
+                if (threat.NetworkHQ == missile.NetworkHQ) continue;
+                float range = FastMath.Distance(threat.GlobalPosition(), pos);
+                if (range <= bestRange) { best = threat; bestRange = range; }
+            }
+            return best;
         }
 
         private void EnterPhase(RemoraPhase phase, Unit cued)
@@ -113,7 +142,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                             VanguardStats.Bump("remora.ramHits");
                     };
                 }
-                Plugin.Logger?.LogInfo("[Vanguard] REMORA ram on " + (cued != null ? cued.unitName : "?"));
+                Plugin.Logger?.LogInfo("[Vanguard] REMORA guided bomb on " + (cued != null ? cued.unitName : "?"));
             }
             archerPhase = phase;
             PublishArcher();
@@ -127,7 +156,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             float range = toTarget.magnitude, offNose = Vector3.Angle(missile.transform.forward, toTarget);
             // Sim diagnostic: the drone is in range and cone but the faction has no track on the target yet.
             if (RemoraArcher.HoldsForTrack(range, offNose, left, tracked)) VanguardStats.Bump("remora.holdNoTrack");
-            if (!RemoraArcher.CanFire(range, offNose, now - archerLastShot, left, tracked) || launcher == null || launcher.disabled) return;
+            // Defence shots at inbound missiles leave on the wide cone: the round turns onto the intercept itself.
+            float cone = target is Missile ? RemoraArcher.DefenceCone : RemoraArcher.FireCone;
+            if (!RemoraArcher.CanFire(range, offNose, now - archerLastShot, left, tracked, cone) || launcher == null || launcher.disabled) return;
             int pylon = RemoraArcher.NextPylon(archerFired);
             MissileDefinition round = ArcherRound();
             Spawner spawner = NetworkSceneSingleton<Spawner>.i;
@@ -148,6 +179,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             volleyTarget = target;
             volleyCue = cue;
             VanguardStats.Bump("remora.fired");
+            if (target is Missile) VanguardStats.Bump("remora.defence");
             Plugin.Logger?.LogInfo("[Vanguard] REMORA ARCHER round " + (pylon == 0 ? "L" : "R") + " at " + target.unitName +
                 " " + (toTarget.magnitude / 1000f).ToString("F1") + " km");
             if (aam != null)
@@ -162,7 +194,54 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             PublishArcher();
         }
 
-        // Every physics tick while ramming: the 5 Hz plan would step straight past a fighter-sized target.
+        // Flares: an IR missile closing on the drone or its launcher inside the basket spends one burst; each
+        // missile in the basket then rolls to drop its lock and fly on unguided (SeekerCapture.Drop).
+        private void PopFlares()
+        {
+            if (flareBursts <= 0) return;
+            float now = Time.timeSinceLevelLoad;
+            if (now - lastFlarePop < RemoraArcher.FlareInterval) return;
+            if (!FlareThreat(missile) && !FlareThreat(launcher)) return;
+            flareBursts--;
+            lastFlarePop = now;
+            DropIrAround(missile);
+            DropIrAround(launcher);
+            VanguardStats.Bump("remora.flares");
+            PublishArcher();
+        }
+
+        private bool FlareThreat(Unit host)
+        {
+            if (host == null || host.disabled) return false;
+            ThreatScan.Inbound(host, inbound);
+            Vector3 selfVel = missile.rb != null ? missile.rb.velocity : Vector3.zero;
+            for (int i = 0; i < inbound.Count; i++)
+            {
+                Missile threat = inbound[i];
+                if (threat.NetworkHQ == missile.NetworkHQ || threat.GetSeekerType() != "IR") continue;
+                Vector3 to = missile.GlobalPosition() - threat.GlobalPosition();
+                float range = to.magnitude;
+                float closing = range > 0.01f && threat.rb != null
+                    ? Vector3.Dot(threat.rb.velocity - selfVel, to / range) : 0f;
+                if (RemoraArcher.ShouldFlare(range, closing, flareBursts, RemoraArcher.FlareInterval)) return true;
+            }
+            return false;
+        }
+
+        private void DropIrAround(Unit host)
+        {
+            if (host == null || host.disabled) return;
+            ThreatScan.Inbound(host, inbound);
+            for (int i = 0; i < inbound.Count; i++)
+            {
+                Missile threat = inbound[i];
+                if (threat.NetworkHQ == missile.NetworkHQ || threat.GetSeekerType() != "IR") continue;
+                if (FastMath.Distance(threat.GlobalPosition(), missile.GlobalPosition()) > RemoraArcher.FlareRange) continue;
+                if (UnityEngine.Random.value < RemoraArcher.FlareChance) SeekerCapture.Drop(threat);
+            }
+        }
+
+        // Every physics tick while bombing: the 5 Hz plan would step straight past a vehicle-sized target.
         private void RamFuse()
         {
             ramHoming = false;
@@ -176,7 +255,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             // pass used to miss by ~14 m), so close in the drone flies a collision course on the target itself.
             ramHoming = dist < RemoraArcher.RamHoming && closing > 1f;
             if (ramHoming) missile.SetAimpoint(target.GlobalPosition() + targetVel * (dist / closing), targetVel);
-            // Sim readout: closest approach of the ram in metres (a miss by 20 m and one by 2 km read the same otherwise).
+            // Sim readout: closest approach of the bomb in metres (a miss by 20 m and one by 2 km read the same otherwise).
             if (!VanguardStats.Counters.TryGetValue("remora.ramMin", out int best) || dist < best) VanguardStats.Counters["remora.ramMin"] = (int)dist;
             if (dist > RemoraArcher.FuseRadius(closing, Time.fixedDeltaTime)) return;
             ramFused = true;
@@ -193,6 +272,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 Launcher = launcher != null ? launcher.persistentID.Id : 0u,
                 Fired = (byte)archerFired,
                 Phase = archerPhase,
+                Flares = (byte)flareBursts,
             });
         }
 

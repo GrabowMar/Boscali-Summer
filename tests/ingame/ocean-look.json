@@ -1,0 +1,20 @@
+{
+  "name": "ocean-look",
+  "mods": ["boscalisummer"],
+  "timeout_s": 2400,
+  "timescale": 1,
+  "_note": "Ocean look hold (2026-10-19): open sea north of the island, a jet passing level at 14 m (spray and wash) followed by the orbit camera, the player at 300 m. The sea state is driven from outside by bridge (OceanDressing.ForcedWind, WeatherAutomation scenarios), views and time of day too; 35 minutes.",
+  "ops": [
+    {"op": "atmosphere", "time_of_day": 14, "conditions": 0.2, "cloud_height": 2500, "wind_speed": 8, "wind_heading": 60, "wind_turbulence": 0.1, "moon_phase": 14},
+    {"op": "seat", "id": "player", "aircraft": "FS-20 Vortex", "near": [0, 130000], "altitude": 300, "speed": 200, "heading": 0, "view": "cockpit", "timeout": 30},
+    {"op": "fly", "id": "player", "program": [{"level": 2100}]},
+    {"op": "spawn", "id": "skimmer", "type": "FS-20 Vortex", "at": {"near": {"id": "player", "offset": [300, -282, 1800]}}, "altitude": 14, "speed": 230, "heading": 0},
+    {"op": "fly", "id": "skimmer", "program": [{"level": 2100}]},
+    {"op": "call", "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.View", "args": {"view": "orbit", "follow": "skimmer"}},
+    {"op": "wait", "seconds": 2100},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"}
+  ]
+}

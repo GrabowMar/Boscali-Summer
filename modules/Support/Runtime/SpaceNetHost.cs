@@ -222,6 +222,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 {
                     scratch.Protocol = SupportNet.ProtocolVersion;
                     fill(player, scratch);
+                    Subs.Epoch = host.manager.SceneEpoch;
                     T next = Subs.Next(id, host.manager.FactionKeyOf(player.HQ), scratch, now, wall);
                     if (next != null) send(player, next);
                 }
@@ -248,6 +249,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             {
                 bool feeding = subs.IsFeeding(id, wall);
                 space.FillFeed(player, feeding, scratch, reveals, marks, posts); // fills a not-Active, rowless view when the faction has no SPACE
+                subs.Epoch = manager.SceneEpoch;
                 SpaceStateData message = subs.Next(id, manager.FactionKeyOf(player.HQ), scratch, now, wall);
                 // A message that did not fit one writer buffer carries its TASKED rows in a follow-up, sent right after.
                 for (SpaceStateData part = message; part != null; part = part.Follow) net.SendSpaceState(player, part);
@@ -312,7 +314,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         // ---- CYBER ---------------------------------------------------------------------
 
         public CyberResult Cyber(ulong player, SpaceCommandKind kind, int target) =>
-            Is(player) ? manager.RunCyberVerb(current, kind == SpaceCommandKind.CyberHop ? CyberVerb.Hop : kind == SpaceCommandKind.CyberBurn ? CyberVerb.Burn : CyberVerb.Drop, target)
+            Is(player) ? manager.RunCyberVerb(current, kind == SpaceCommandKind.CyberHop ? CyberVerb.Hop : kind == SpaceCommandKind.CyberBurn ? CyberVerb.Burn :
+                kind == SpaceCommandKind.CyberPurge ? CyberVerb.Purge : CyberVerb.Drop, target)
                 : new CyberResult(CyberOutcome.Unavailable);
 
         // ---- SOF -----------------------------------------------------------------------

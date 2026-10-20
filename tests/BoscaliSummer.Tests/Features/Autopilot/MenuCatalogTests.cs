@@ -27,22 +27,73 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TacBoardOffKeepsItsRows();
             PitKeepsStationIdentityWhileTheListShrinks();
             HudSwitchesAndCabin();
+            CargoBranchFollowsFittedLoadsAndFixes();
+            DroneLinkFollowsTheLinkedDrone();
+        }
+
+        private static void CargoBranchFollowsFittedLoadsAndFixes()
+        {
+            TestAssert.That(MenuCatalog.Build(MenuWorlds.Default()).Row("weapons/cargo") == null, "an aircraft without delivery stores has no cargo branch");
+            MenuWorld w = MenuWorlds.Cargo();
+            MenuModel model = MenuCatalog.Build(w);
+            MenuRow branch = model.Row("weapons/cargo"), troops = model.Row("weapons/cargo/st2");
+            TestAssert.That(branch.Kind == MenuKind.Submenu && branch.Label == "CARGO / AIRDROP", "cargo remains inside WEAPONS");
+            TestAssert.That(model.Row("weapons/cargo/st1") == null && troops.Index == 1 && troops.Selected, "cargo picks preserve native station indices and exclude the gun");
+            TestAssert.That(troops.State.Contains("32") && troops.Desc.Contains("NORMAL FIRE"), "passenger counts stay passengers and the normal weapon trigger releases them");
+            TestAssert.That(model.Row("weapons/cargo/st4").Hatched && !model.Row("weapons/cargo/st4").IsBlocked, "a spent load stays selectable and clearly empty");
+            TestAssert.That(!model.Row("weapons/cargo/setzone").IsBlocked && model.Row("weapons/cargo/setzone").State == "FIX: SUPPLY DEPOT", "a known designated ground fix enables the zone action");
+            TestAssert.That(model.Row("weapons/cargo/clearzone").State == "DZ: 054 DEG / 4.2 KM", "the zone control reports its bearing and range");
+            w.CargoFixAvailable = w.CargoZoneSet = false;
+            w.Stations[1].Ammo = 0;
+            model.Reconcile(MenuCatalog.Build(w));
+            TestAssert.That(model.Row("weapons/cargo/setzone").Blocked == "DESIGNATE A GROUND TARGET" && model.Row("weapons/cargo/clearzone").Blocked == "NO DROP ZONE SET", "missing fixes block actions in place");
+            TestAssert.That(model.Row("weapons/cargo/st2").Index == 1 && model.Row("weapons/cargo/st2").Hatched, "a drop refreshes the same passenger row");
+            w.CargoZoneCapable = false;
+            MenuModel nativeCargo = MenuCatalog.Build(w);
+            TestAssert.That(nativeCargo.Row("weapons/cargo") != null && nativeCargo.Row("weapons/cargo/setzone") == null && nativeCargo.Row("weapons/cargo/map") == null, "native cargo and recon gliders do not promise standing-zone guidance");
+            foreach (MenuRow row in branch.Children)
+                TestAssert.That(!row.Id.Contains("fire") && !row.Id.Contains("release"), "cargo context never bypasses the native fire controls");
         }
 
         private static void HudSwitchesAndCabin()
         {
             MenuModel m = MenuCatalog.Build(MenuWorlds.Default());
-            MenuRow pages = m.Row("hud/pages");
-            TestAssert.That(pages.Kind == MenuKind.Submenu && pages.Children.Count == MenuCatalog.BoardPages.Length + 1 && pages.Children[0].Id == "hud/pages/auto", "SCOPE PAGES lists the auto switch, then one row per page");
-            TestAssert.Eq(pages.State, "8 OF 9 ON", "and counts the pages that are on");
-            MenuRow dock = m.Row("hud/pages/dock"), threat = m.Row("hud/pages/threat");
-            TestAssert.That(!dock.IsOn && dock.Label == "SHOW DOCK PAGE" && dock.State == "DOCK PAGE: OFF", "a page that is off offers SHOW");
-            TestAssert.That(threat.IsOn && threat.Label == "HIDE THREAT PAGE" && threat.State == "THREAT PAGE: ON" && threat.Checkbox, "a page that is on offers HIDE, with a checkbox");
-            TestAssert.That(m.Row("hud/parts/sway").Label == "DISABLE VISOR SWAY" && m.Row("hud/parts").State == "7 OF 7 ON", "a behaviour reads ENABLE / DISABLE");
+            MenuRow pages = m.Row("hud/page1");
+            TestAssert.That(pages.Kind == MenuKind.Submenu && pages.Children.Count == MenuCatalog.BoardPages.Length - 1 && pages.State == "PAGE 1: THREAT", "the first page slot lists manual choices and names its current page");
+            TestAssert.That(m.Row("hud/page1/systems") == null, "SYSTEMS is no page choice: the board always shows it");
+            TestAssert.That(m.Row("hud/pages") == null && m.Row("hud/pages/auto") == null, "automatic page controls and the whitelist are gone");
+            MenuRow dock = m.Row("hud/page1/dock"), threat = m.Row("hud/page1/threat");
+            TestAssert.That(dock.Kind == MenuKind.Picker && !dock.Selected && MenuHint.RowLabel(dock) == "SELECT DOCK", "a page is selected, never enabled as an automatic candidate");
+            TestAssert.That(threat.Selected && threat.State == "PAGE 1: SELECTED" && threat.Index == (int)BoardPage.Threat, "the current page is selected and bound by its enum value");
+            TestAssert.That(m.Row("hud/page1/cargo").Index == (int)BoardPage.Cargo, "a choice past the skipped SYSTEMS keeps its enum value");
+            TestAssert.That(m.Row("hud/page2").Blocked == "INCREASE PAGE COUNT" && m.Row("hud/page3").IsBlocked && m.Row("hud/page4").IsBlocked, "inactive slots stay visible and explain how to enable them");
+            TestAssert.That(m.Row("hud/sway").Label == "DISABLE VISOR SWAY" && m.Row("hud/parts").State == "6 OF 6 ON", "sway is a display behaviour; Board Parts has six major elements");
+            TestAssert.That(m.Row("hud/display").Children.Count == 6 && m.Row("hud/count").State == "PAGE COUNT: 1" && m.Row("hud/count").NextValue == "2", "display options include one to four simultaneous pages");
+            foreach (string slug in new[] { "lamps", "strip", "gauges", "ticker", "sway" })
+                TestAssert.That(m.Row("hud/parts/" + slug) == null, "no granular board part " + slug);
             TestAssert.That(m.Row("hud/shade").State == "SHADE: MED" && m.Row("hud/shade").Label == "SET SHADE HIGH" && m.Row("hud/size").State == "BOARD SIZE: NORMAL", "the shade and size cycles show where they stand");
             TestAssert.That(m.Row("hud/reset").NeedsHold, "resetting the visor needs the hold");
-            MenuWorld auto = MenuWorlds.Default(); auto.BoardScopeAuto = false;
-            TestAssert.That(MenuCatalog.Build(auto).Row("hud/pages").State == "AUTO PAGES: OFF" && MenuCatalog.Build(auto).Row("hud/pages/auto").Label == "ENABLE AUTO PAGES", "auto pages off is said on the row that leads there");
+            MenuWorld three = MenuWorlds.ThreeBoardPages();
+            MenuModel multi = MenuCatalog.Build(three);
+            TestAssert.That(!multi.Row("hud/page2").IsBlocked && !multi.Row("hud/page3").IsBlocked && multi.Row("hud/page4").IsBlocked && multi.Row("hud/page2/shot").Selected && multi.Row("hud/page3/wing").Selected,
+                "three pages expose their three manual slot choices");
+            TestAssert.That(multi.Row("hud/count").NextValue == "4", "three pages step on to four");
+            MenuWorld four = MenuWorlds.ThreeBoardPages();
+            four.BoardPageCount = 4;
+            MenuModel grid = MenuCatalog.Build(four);
+            TestAssert.That(!grid.Row("hud/page4").IsBlocked && grid.Row("hud/page4/objective").Selected && grid.Row("hud/count").NextValue == "1", "four pages fill the 2 x 2 grid and cycle back to one");
+            three.BoardPagesOn = false;
+            TestAssert.That(MenuCatalog.Build(three).Row("hud/page1").Blocked == "TACTICAL PAGES: OFF", "the major tactical-pages switch gates the whole page area");
+            MenuModel livePages = MenuCatalog.Build(MenuWorlds.Default());
+            livePages.Reconcile(multi);
+            TestAssert.That(!livePages.Row("hud/page3").IsBlocked && !livePages.Row("hud/page3").Gone, "increasing page count frees the existing third slot in place");
+            three = MenuWorlds.ThreeBoardPages(); three.BoardPage1 = BoardPage.Cargo;
+            livePages.Reconcile(MenuCatalog.Build(three));
+            TestAssert.That(livePages.Row("hud/page1/cargo").Selected && !livePages.Row("hud/page1/threat").Selected, "manual page changes refresh the selected picker in place");
+            TestAssert.Eq(MenuCatalog.BoardPages.Length, Enum.GetValues(typeof(BoardPage)).Length, "one manual choice per board page");
+            string[] pageNames = Enum.GetNames(typeof(BoardPage));
+            for (int i = 0; i < pageNames.Length; i++)
+                TestAssert.Eq(MenuCatalog.BoardPages[i].Slug.Replace("-", ""), pageNames[i].ToLowerInvariant(), "page choice enum binding " + i);
             MenuModel off = MenuCatalog.Build(MenuWorlds.BoardOff());
             TestAssert.That(off.Row("hud/shade").Blocked == "TAC BOARD: OFF" && off.Row("hud/size").Blocked == "TAC BOARD: OFF" && !off.Row("hud/parts/corners").IsBlocked, "a hidden board dims its look rows; the corner restyle is its own switch");
             TestAssert.That(MenuCatalog.Nearest(MenuCatalog.ShadeSteps, 0.6f) == 2 && MenuCatalog.Nearest(MenuCatalog.SizeSteps, 1.4f) == 2 && MenuCatalog.Nearest(MenuCatalog.GhostSteps, 0f) == 0, "a free value lands on its nearest step");
@@ -353,6 +404,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.Eq(cm.Desc, "IR FLARES → RADAR JAMMER", "the hub shows the switch");
             TestAssert.Eq(cm.ToastText(), "COUNTERMEASURE: RADAR JAMMER", "the toast names the new one");
             TestAssert.Eq(m.Row("defence/drones").State, "DRONES: 2 READY", "the drone count");
+            TestAssert.That(m.Row("defence/steer") == null, "the all-at-once steer row left DEFENCE for WEAPONS > DRONE LINK");
             TestAssert.Eq(m.Category("defence").Badge, "FLR 48", "flares in the first station: the flare count");
             m = MenuCatalog.Build(MenuWorlds.Jammer());
             TestAssert.That(m.Category("defence").Badge == "JAMMER" && m.Category("defence").BadgeShow, "another countermeasure active: the badge names it");
@@ -362,6 +414,31 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.That(MenuCatalog.Build(w).Row("defence/cm") == null, "one countermeasure: nothing to switch to");
             w.Drones = 0;
             TestAssert.Eq(MenuCatalog.Build(w).Row("defence/drones").State, "DRONES: NONE READY", "no drone aloft");
+        }
+
+        private static void DroneLinkFollowsTheLinkedDrone()
+        {
+            MenuWorld w = MenuWorlds.Default();
+            TestAssert.That(MenuCatalog.Build(w).Row("weapons/drones") == null, "no linkable drone aloft: no DRONE LINK branch");
+            w.DroneNames.AddRange(new[] { "REMORA 1", "GLAIVE-2S 1", "KESTREL 1" });
+            w.DroneStates.AddRange(new[] { "AUTO · 2.1 KM", "HAND · 6.0 KM", "WPT · 14.2 KM" });
+            w.DroneLinked = 1; w.DroneHand = true;
+            MenuModel m = MenuCatalog.Build(w);
+            TestAssert.Eq(m.Row("weapons/drones").State, "HAND: GLAIVE-2S 1", "the branch names the hand-flown drone");
+            TestAssert.Eq(m.Row("weapons/drones/hand").Label, "RELEASE CONTROL", "hand-flown: the toggle gives it back");
+            TestAssert.Eq(m.Row("weapons/drones/next").State, "NEXT: KESTREL 1", "NEXT names where the link goes");
+            TestAssert.Eq(m.Row("weapons/drones/prev").State, "PREV: REMORA 1", "PREV wraps the other way");
+            TestAssert.That(m.Row("weapons/drones/next").Desc.Contains("STICK"), "hand-flying: NEXT says the stick goes with the link");
+            TestAssert.That(m.Row("weapons/drones/pick/d2") != null && m.Row("weapons/drones/pick/d2").Index == 1, "the pick list keeps roster indices");
+            w.DroneLinked = 2; w.DroneHand = false;
+            m = MenuCatalog.Build(w);
+            TestAssert.Eq(m.Row("weapons/drones/hand").Label, "TAKE CONTROL", "on task: the toggle takes control");
+            TestAssert.Eq(m.Row("weapons/drones/next").State, "NEXT: REMORA 1", "NEXT wraps past the last drone");
+            w.DroneNames.RemoveRange(1, 2); w.DroneStates.RemoveRange(1, 2); w.DroneLinked = -1;
+            m = MenuCatalog.Build(w);
+            TestAssert.That(m.Row("weapons/drones/next") == null && m.Row("weapons/drones/pick") == null, "one drone: nothing to cycle or pick");
+            TestAssert.Eq(m.Row("weapons/drones/hand").State, "LINK: REMORA 1", "nothing linked yet: TAKE CONTROL links the first drone");
+            TestAssert.That(m.Row("weapons/drones/terminal") != null && m.Row("weapons/drones/feed") != null, "terminal and feed rows are always there");
         }
 
         private static void ViewRowsKeepTheirPlace()
@@ -386,7 +463,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
         private static void TacBoardRowsFollowTheOptions()
         {
             MenuModel m = MenuCatalog.Build(MenuWorlds.Default());
-            TestAssert.Eq(string.Join(" ", m.Category("hud").Rows.ConvertAll(r => r.Id)), "hud/board hud/declutter hud/layout hud/pages hud/parts hud/shade hud/size hud/reset",
+            TestAssert.Eq(string.Join(" ", m.Category("hud").Rows.ConvertAll(r => r.Id)), "hud/board hud/page1 hud/page2 hud/page3 hud/page4 hud/display hud/parts hud/reset",
                 "the HUD category holds every visor switch, the master toggle first");
             TestAssert.Eq(string.Join(" ", m.Category("view").Rows.ConvertAll(r => r.Id)), "view/cam view/map view/mslview view/nvg view/holo view/ghost", "VIEW is what you look through: no board rows");
 

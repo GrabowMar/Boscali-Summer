@@ -23,6 +23,9 @@ namespace BoscaliSummer.Modules.Weather.Configuration
         public ConfigEntry<bool> RainAudioEnabled { get; }
         public ConfigEntry<bool> CinematicCloudsEnabled { get; }
         public ConfigEntry<bool> SunShaftsEnabled { get; }
+        public ConfigEntry<bool> SkyPhenomenaEnabled { get; }
+        public ConfigEntry<bool> OceanWavesEnabled { get; }
+        public ConfigEntry<bool> SeaSprayEnabled { get; }
         public ConfigEntry<bool> CloudHalfResolution { get; }
         public ConfigEntry<bool> CloudTemporalUpdate { get; }
         public ConfigEntry<float> RainDensity { get; }
@@ -98,6 +101,17 @@ namespace BoscaliSummer.Modules.Weather.Configuration
             SunShaftsEnabled = config.Bind(section, "SunShaftsEnabled", true,
                 "Beams of light around the sun, cut by clouds, terrain and aircraft. " +
                 "A quarter-resolution pass, drawn only while the sun is in or near the view; applies now.");
+
+            SkyPhenomenaEnabled = config.Bind(section, "SkyPhenomenaEnabled", true,
+                "Aurora curtains on clear nights, and red sprites and blue jets above distant night storms. " +
+                "Two small particle systems, built only at night; applies now.");
+
+            OceanWavesEnabled = config.Bind(section, "OceanWavesEnabled", true,
+                "Waves on the game's sea that follow the wind and build under storms: swell, whitecaps, gale streaks and surf. " +
+                "Off restores the game's own water. Client-local; applies now.");
+
+            SeaSprayEnabled = config.Bind(section, "SeaSprayEnabled", true,
+                "Spray thrown up behind aircraft flying low and fast over water. Client-local; applies now.");
 
             CloudHalfResolution = config.Bind(section, "CloudHalfResolution", true,
                 "March the volumetric clouds at half resolution and upsample them along scene depth " +

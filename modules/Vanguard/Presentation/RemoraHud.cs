@@ -10,7 +10,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
 {
     /// <summary>
     /// The launcher's REMORA line on channel vg.remora (4 Hz): "ARCHER 2/2 READY", "ARCHER ENGAGING 1/2",
-    /// "REMORA WINCHESTER — RAMMING", plus "ARCHER AWAY" notices. Also drops dead drones from RemoraBoard on every peer.
+    /// "REMORA GUIDED BOMB — INBOUND", plus "ARCHER AWAY" notices. The designation picks the role: air hunts, ground bombs. Also drops dead drones from RemoraBoard on every peer.
     /// </summary>
     internal sealed class RemoraHud : MonoBehaviour, ISceneService
     {
@@ -42,7 +42,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 Drop();
                 return;
             }
-            int ready = 0, capacity = 0;
+            int ready = 0, capacity = 0, flares = 0;
             RemoraPhase worst = RemoraPhase.Escort;
             foreach (RemoraView view in RemoraBoard.Views.Values)
             {
@@ -50,12 +50,13 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 int left = RemoraArcher.Left(view.Fired);
                 ready += left;
                 capacity += RemoraArcher.Rounds;
+                flares += view.Flares;
                 if (view.Phase > worst) worst = view.Phase;
                 if (seen.TryGetValue(view.Drone, out RemoraView before))
                 {
                     if (view.Fired != before.Fired) board.Notice(Channel, HudTone.Info, "ARCHER AWAY", left + " LEFT ON THIS DRONE");
                     if (view.Phase == RemoraPhase.Ram && before.Phase != RemoraPhase.Ram)
-                        board.Notice(Channel, HudTone.Warning, "REMORA WINCHESTER — RAMMING");
+                        board.Notice(Channel, HudTone.Warning, "REMORA GUIDED BOMB — INBOUND");
                 }
                 seen[view.Drone] = view;
             }
@@ -66,9 +67,9 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             }
             line ??= VanguardHudFeeds.Acquire(board, Owner, Channel, "archer");
             HudTone tone = worst == RemoraPhase.Ram ? HudTone.Warning : worst == RemoraPhase.Engage ? HudTone.Caution : HudTone.Info;
-            string detail = worst == RemoraPhase.Ram ? "DRONE ON COLLISION COURSE"
+            string detail = worst == RemoraPhase.Ram ? "GUIDED BOMB — WARHEAD ARMED"
                 : worst == RemoraPhase.Engage ? "CLOSING TO 12 KM"
-                : ready > 0 ? "DESIGNATE TO FIRE" : "DESIGNATE TO RAM";
+                : ready > 0 ? "AIR HUNTS - GROUND BOMBS - FLARES " + flares : "DESIGNATE TO RAM";
             line?.Set(tone, RemoraArcher.Status(ready, capacity, worst), detail, ready / (float)capacity);
         }
 
