@@ -66,7 +66,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private TMP_Text dosTitle, dosHandle, dosStamp, dosNext, bannerA, bannerB;
         private readonly TMP_Text[] dosKey = new TMP_Text[DosRows], dosVal = new TMP_Text[DosRows];
         private readonly float[] dosTop = new float[DosRows], dosHigh = new float[DosRows];
-        private float inspW;
         private AvControl hop, burn, drop, purge;
         private string hopHelpShown, poorNote;
         private int poorCost = -1, poorHave = -1;
@@ -82,7 +81,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private static readonly Dictionary<string, string> PermInk = new Dictionary<string, string>(8);
 
         // Session log.
-        private Image logWell;
         private readonly TMP_Text[] logStamp = new TMP_Text[LogRows], logText = new TMP_Text[LogRows];
         private TMP_Text logPrompt;
         private float logTextW, logW;
@@ -250,7 +248,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             dosStamp = FrontKit.Mono(b, "DosStamp", w - 136f, 31f, 126f, 30f, 12f, TextAlignmentOptions.Midline, true, 1f);
             bannerA = FrontKit.Mono(b, "BannerA", 20f, 72f, w - 32f, 14f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
             bannerB = FrontKit.Mono(b, "BannerB", 20f, 86f, w - 32f, 14f, 10.5f, TextAlignmentOptions.MidlineLeft);
-            inspW = w;
             string[] keys = { "owner", "reach", "ports", "holding", "hop", "burn", "drop" };
             for (int i = 0; i < DosRows; i++)
             {
@@ -327,7 +324,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             logW = w;
             logTextW = w - 12f - 40f - 8f;
             RectTransform b = log.Rect;
-            logWell = FrontKit.Solid(b, "Well", 8f, 26f, w - 16f, h - 34f, Glass.WithAlpha(0.8f));
+            FrontKit.Solid(b, "Well", 8f, 26f, w - 16f, h - 34f, Glass.WithAlpha(0.8f));
             logGlyph = FrontVector.Add(b, "Glyph");
             AvLay.Place(logGlyph.rectTransform, 0f, 0f, w, h);
             for (int i = 0; i < LogRows; i++)

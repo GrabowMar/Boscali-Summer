@@ -10,12 +10,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     /// </summary>
     internal static class FrontPointer
     {
+#pragma warning disable CS0649 // a public release strips the dev-only writers below; the readers stay
         private struct Frame { public Vector2 Pos; public int Held; public float Wheel; public bool Esc; public float Gap; }
 
         private static readonly Queue<Frame> script = new Queue<Frame>(64);
         private static Frame cur, prev;
         private static int frame = -1;
         private static bool scripted;
+#pragma warning restore CS0649
         private static float steppedAt;
 
         public static Vector2 Position { get { Step(); return scripted ? cur.Pos : (Vector2)Input.mousePosition; } }

@@ -51,7 +51,9 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private bool feedShown, feedLive;
         private int zoom;
         private DroneTerminalWindow terminal;
+#pragma warning disable CS0649 // set only by the dev-build test seam
         private Texture testFeed;
+#pragma warning restore CS0649
         private Missile lensOn;
         private Quaternion lens = Quaternion.identity;
         private float nextSpi;

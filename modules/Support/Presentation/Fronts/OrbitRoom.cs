@@ -67,7 +67,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         // The selected bird's inspector. Selecting is local; RELOCATE enters a local mode, a click on the map proposes the new parked point,
         // CONFIRM BURN sends the one RelocateBird request and CANCEL spends nothing.
         private int selKind = -1;
-        private bool relocating, hasPending, hintMode;
+        private bool relocating, hasPending;
         private Vector2 pending;
         private FrontRoomView last;
         private Rect fuelRect;
@@ -274,7 +274,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             relocBtn.Rect.gameObject.SetActive(on && !mode);
             burnBtn.Rect.gameObject.SetActive(on && mode);
             cancelBtn.Rect.gameObject.SetActive(on && mode);
-            hintMode = mode;
         }
 
         /// <summary>The selection or the relocation changed: the map, the poll and the inspector all show it.</summary>

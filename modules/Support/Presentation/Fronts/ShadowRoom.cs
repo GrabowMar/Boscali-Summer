@@ -62,7 +62,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         // Roster.
         private const float StripY = 28f, CardsTop = 62f, OrdersH = 14f + 3f * 15f, LineH = 15f;
-        private Image warnBack, warnRail, warnPlate;
+        private Image warnRail, warnPlate;
         private TMP_Text warnText, logHead, orderHead;
         private AvControl warnButton;
         private readonly Card[] cards = new Card[MaxTeams];
@@ -548,7 +548,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             roster = new FrontBox(hero, skin, "Roster", x, y, w, h, "TEAM ROSTER", AvIcon.UsersGroup, FrontLook.Folder).Tagged("FILE 07-A");
             RectTransform b = roster.Rect;
             // The alert slip: a card with a margin rail in the state's colour.
-            warnBack = FrontKit.Solid(b, "WarnBack", 8f, StripY, w - 16f, 28f, Paper.Card);
+            FrontKit.Solid(b, "WarnBack", 8f, StripY, w - 16f, 28f, Paper.Card);
             warnRail = FrontKit.Solid(b, "WarnRail", 8f, StripY, 4f, 28f, Color.clear);
             warnText = FrontKit.Mono(b, "WarnText", 20f, StripY, w - 38f, 28f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
             warnPlate = FrontKit.Solid(b, "WarnPlate", w - 129f, StripY + 1f, 114f, 26f, Paper.Hole);   // a dark plate under the button: the kit's translucent tints would wash out on a card
