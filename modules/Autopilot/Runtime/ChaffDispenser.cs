@@ -78,6 +78,9 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         public int Ammo => ejector != null ? ejector.ammo : 0;
         public int MaxAmmo => load;
 
+        /// <summary>Radar missiles a bundle has broken the lock of since the game started (the chaff scenario reads it).</summary>
+        public static int Seduced { get; private set; }
+
         /// <summary>Chaff is the pilot's selected countermeasure: the countermeasure button dispenses it.</summary>
         public bool Selected { get; private set; }
 
@@ -175,6 +178,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             if (!ChaffRules.ShouldRun(now < salvoUntil || chosen, Linked, held, held && RadarMissileInbound(aircraft), ejector.ammo) || now < nextFire) return;
             nextFire = now + ChaffRules.Interval;
             ejector.Fire();
+            Seduce(aircraft);
             aircraft.RequestRearm();      // what the game does for every flare it fires: the rearm that follows refills the dispenser too
             // Fire() wrote the chaff count into the native countermeasure readout; put the pilot's selected one back
             CountermeasureManager manager = aircraft.countermeasureManager;
@@ -196,6 +200,42 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 if (known[i] != null && !known[i].disabled && ChaffRules.IsRadarSeeker(known[i].GetSeekerType())) return true;
             return false;
         }
+
+        /// <summary>
+        /// One ejection's roll against every radar missile tracking the aircraft (<see cref="ChaffRules.SeduceChance"/>). A seduced missile
+        /// loses its target the way the game's own lost lock does: the target cleared, so an ARH flies on straight and self-destructs (its slow
+        /// check), and an armed SARH detonates at once (its Seek with no target). Runs where the missiles are simulated (the dispenser is fitted only there).
+        /// </summary>
+        private static void Seduce(Aircraft aircraft)
+        {
+            if (MissileSeekerField == null || SeekerTarget == null) return;
+            MissileWarning warning = aircraft.GetMissileWarningSystem();
+            List<Missile> known = warning != null ? warning.knownMissiles : null;
+            Vector3 track = aircraft.rb != null ? aircraft.rb.velocity.normalized : aircraft.transform.forward;
+            for (int i = 0; known != null && i < known.Count; i++)
+            {
+                Missile m = known[i];
+                if (m == null || m.disabled || m.targetID != aircraft.persistentID || !ChaffRules.IsRadarSeeker(m.GetSeekerType())) continue;
+                Vector3 los = aircraft.transform.position - m.transform.position;
+                float beam = 1f - Mathf.Abs(Vector3.Dot(los.normalized, track));
+                if (UnityEngine.Random.value >= ChaffRules.SeduceChance(los.magnitude, beam)) continue;
+                try
+                {
+                    var seeker = MissileSeekerField.GetValue(m) as MissileSeeker;
+                    if (seeker is SARHSeeker) SarhTransform?.SetValue(seeker, null);   // SARH: no track to come back to
+                    SeekerTarget.SetValue(seeker, null);
+                    m.SetTarget(null);
+                    m.SetProxyFuse(null, null);
+                    Seduced++;
+                    Plugin.Logger?.LogInfo("Chaff: " + m.GetSeekerType() + " missile seduced at " + Mathf.RoundToInt(los.magnitude) + " m, beam " + beam.ToString("F2"));
+                }
+                catch (Exception e) { Plugin.Logger?.LogDebug("Chaff: seduction failed (" + e.Message + ")"); }
+            }
+        }
+
+        private static readonly FieldInfo MissileSeekerField = AccessTools.Field(typeof(Missile), "seeker");
+        private static readonly FieldInfo SeekerTarget = AccessTools.Field(typeof(MissileSeeker), "targetUnit");
+        private static readonly FieldInfo SarhTransform = AccessTools.Field(typeof(SARHSeeker), "targetTransform");
 
         /// <summary>Refill with the rest of the aircraft (the dispenser is not in the game's own rearm list).</summary>
         private void Service(Aircraft aircraft)

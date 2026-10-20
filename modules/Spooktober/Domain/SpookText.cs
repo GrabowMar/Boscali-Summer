@@ -6,7 +6,7 @@ namespace BoscaliSummer.Modules.Spooktober.Domain
     internal static class SpookText
     {
         /// <summary>
-        /// Airs once, a few seconds after the first spawn, and is kept as LAST INTERCEPT on PILOT. It reads the SIGNAL answer
+        /// Airs once, 3 to 8 minutes after the first spawn, and is kept as LAST INTERCEPT on PILOT. It reads the SIGNAL answer
         /// (131.0) backwards: zero, one, three, one.
         /// </summary>
         public const string Transmission =

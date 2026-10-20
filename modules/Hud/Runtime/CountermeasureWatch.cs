@@ -22,7 +22,8 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         private static readonly Comparison<Countermeasure> ByName = (a, b) =>
             a == null || b == null ? (a == null ? (b == null ? 0 : 1) : -1) : string.CompareOrdinal(a.displayName, b.displayName);
 
-        private static readonly AccessTools.FieldRef<RadarJammer, float> JamIntensity = NativeRefs.Field<RadarJammer, float>("jammingIntensity");
+        // jamIntensityPrev is what Fire() last pushed into the aircraft's ECM, zeroed by Update() 0.1 s after the last pulse; jammingIntensity is the serialized maximum (always > 0, the old always-ON bug).
+        private static readonly AccessTools.FieldRef<RadarJammer, float> JamIntensity = NativeRefs.Field<RadarJammer, float>("jamIntensityPrev");
         /// <summary>A jammer is jamming while its intensity is above this.</summary>
         private const float JamOn = 0.01f;
 

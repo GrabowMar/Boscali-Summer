@@ -975,6 +975,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 { "cloudTargetHeight", flightClouds?.TargetHeight ?? 0 },
                 { "cloudTargetBytes", flightClouds?.TargetBytes ?? 0L },
                 { "probeFaces", Visuals.CloudProbePass.FacesDrawn },
+                { "feedCloudFrames", Visuals.CloudProbePass.FeedFramesDrawn },
                 { "lightningStrikes", lightning.Strikes },
                 { "lightningFlash", lightning.FlashNow },
                 { "thunderQueued", lightning.QueuedThunder },

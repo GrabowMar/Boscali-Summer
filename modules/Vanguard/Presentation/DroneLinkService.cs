@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
     [DefaultExecutionOrder(100)] // the lens is placed in LateUpdate, after the floating-origin shift (CameraStateManager, order 2)
     internal sealed class DroneLinkService : MonoBehaviour, ISceneService, IDroneCommand
     {
-        private const float RefreshInterval = 0.2f, WantedFor = 0.5f, LostHold = 1.6f, LensPitchDeg = 10f;
+        private const float RefreshInterval = 0.2f, WantedFor = 0.5f, LostHold = 1.6f, SlewDegPerSec = 120f, SpiInterval = 0.2f;
         private static readonly float[] ZoomFov = { 50f, 20f, 8f };
         private static readonly string[] ZoomWords = { "1X", "3X", "7X" };
 
@@ -52,6 +52,9 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private int zoom;
         private DroneTerminalWindow terminal;
         private Texture testFeed;
+        private Missile lensOn;
+        private Quaternion lens = Quaternion.identity;
+        private float nextSpi;
 
 #if !PUBLIC_RELEASE
         /// <summary>Offline render seam (DroneLinkUnityCheck): a fixed roster, link, own position and picture; no game, no refresh.</summary>
@@ -66,6 +69,14 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             SelfPosition = self;
             SelfHeading = heading;
             nextRefresh = float.MaxValue;
+            DroneView v = Linked;
+            Tracking = v != null && v.Mode == DroneMode.Auto;
+            LensWord = v == null ? "STARE" : v.Mode == DroneMode.Hand ? "FWD" : v.Mode == DroneMode.Waypoint ? "POINT" : "TRK";
+            LensElevation = v != null && v.Mode == DroneMode.Hand ? -DroneLink.ForwardDeg : -31f;
+            LensAzimuth = Tracking ? 14f : 0f;
+            HasSpi = v != null;
+            SpiSlantM = v != null && v.Mode == DroneMode.Hand ? 21400f : 6200f;
+            SpiGlobal = v != null ? v.Position + new Vector3(3100f, -v.Position.y + 140f, 4400f) : Vector3.zero;
             Log.Clear();
             Note("LINKED " + (linkedIndex >= 0 ? drones[linkedIndex].Callsign : "—"));
         }
@@ -96,6 +107,58 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         /// <summary>Recent link events, newest last ("19:42 REMORA 2 · HAND"), at most <see cref="LogLines"/>.</summary>
         public readonly List<string> Log = new List<string>(LogLines + 1);
         public const int LogLines = 12;
+
+        /// <summary>The pilot's live designation (DESIGNATE), which the feed tracks and boxes; null without one.</summary>
+        public Unit Mark => net != null ? net.Designated : null;
+        /// <summary>The sensor ball is slewed onto <see cref="Mark"/> (the linked drone is on its own job and a designation is live).</summary>
+        public bool Tracking { get; private set; }
+        /// <summary>Where the ball points: TRK (the designation), FWD (hand-flown: ahead), POINT (the waypoint), STARE (down ahead).</summary>
+        public string LensWord { get; private set; } = "STARE";
+        /// <summary>Degrees: the ball's elevation (down is negative) and its azimuth off the drone's nose (right is positive).</summary>
+        public float LensElevation { get; private set; } = -DroneLink.StareDeg;
+        public float LensAzimuth { get; private set; }
+        /// <summary>The lens's vertical field of view in degrees (the zoom step).</summary>
+        public float FieldOfView => ZoomFov[zoom];
+        /// <summary>Sensor point of interest, 5 Hz: where the boresight meets the ground (or the tracked unit), its slant range and global place.</summary>
+        public bool HasSpi { get; private set; }
+        public float SpiSlantM { get; private set; }
+        public Vector3 SpiGlobal { get; private set; }
+        /// <summary>The video frame counter the feed prints.</summary>
+        public int FrameNumber => Mathf.FloorToInt(Time.unscaledTime * feed.Fps);
+        /// <summary>The local aircraft (the feed marks it OWN when the lens sees it).</summary>
+        public Aircraft Own => owner;
+
+        /// <summary>Where a world point (local space) falls in the feed picture, 0..1 from the bottom left; false behind the lens.</summary>
+        public bool Project(Vector3 world, out Vector2 viewport) => feed.Project(world, out viewport);
+
+        /// <summary>The designation's place in the picture, its name and range from the linked drone; false when it is not in view.</summary>
+        public bool MarkInView(out Vector2 viewport, out string name, out float rangeM)
+        {
+            viewport = default;
+            name = "";
+            rangeM = 0f;
+#if !PUBLIC_RELEASE
+            if (testFeed != null && Linked != null) { viewport = new Vector2(0.6f, 0.42f); name = "ZSU-23-4"; rangeM = SpiSlantM; return Tracking; }
+#endif
+            Unit mark = Mark;
+            DroneView v = Linked;
+            if (mark == null || v == null || v.Missile == null || !Project(mark.transform.position, out viewport)) return false;
+            name = mark.unitName;
+            rangeM = Vector3.Distance(mark.transform.position, v.Missile.transform.position);
+            return viewport.x > 0f && viewport.x < 1f && viewport.y > 0f && viewport.y < 1f;
+        }
+
+        /// <summary>The linked REMORA's rounds, flares and phase (every peer has them); false for any other drone.</summary>
+        public bool Stores(out RemoraView view)
+        {
+            view = default;
+            DroneView v = Linked;
+            if (v == null || v.Role != VanguardRole.Drone) return false;
+#if !PUBLIC_RELEASE
+            if (testFeed != null) { view = new RemoraView { Fired = 1, Flares = 4, Phase = RemoraPhase.Escort }; return true; }
+#endif
+            return v.Missile != null && RemoraBoard.Views.TryGetValue(v.Missile.persistentID.Id, out view);
+        }
 
         private void Note(string text)
         {
@@ -233,6 +296,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             LinkedIndex = -1;
             feedShown = feedLive = false;
             lostAt = switchedAt = -9f;
+            lensOn = null;
+            HasSpi = Tracking = false;
             Log.Clear();
         }
 
@@ -251,12 +316,60 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             feedLive = v != null && v.Missile != null && !v.Missile.disabled && (Time.unscaledTime < wantedUntil || feedShown || HandFlying);
             if (!feedLive) { feed.Idle(); return; }
             Transform t = v.Missile.transform;
+            // A stabilised sensor ball under the nose: it slews (a new link snaps), never rolls with the drone.
+            Vector3 at = t.position + t.forward * (v.Missile.maxRadius + 0.6f) - t.up * 0.3f;
+            Quaternion want = Aim(v, t, at);
+            lens = v.Missile != lensOn ? want : Quaternion.RotateTowards(lens, want, SlewDegPerSec * Time.deltaTime);
+            lensOn = v.Missile;
+            Vector3 look = lens * Vector3.forward;
+            LensElevation = Mathf.Asin(Mathf.Clamp(look.y, -1f, 1f)) * Mathf.Rad2Deg;
+            LensAzimuth = Mathf.DeltaAngle(DroneLink.Bearing(Vector3.zero, t.forward), DroneLink.Bearing(Vector3.zero, look));
+            feed.FieldOfView = ZoomFov[zoom];
+            feedLive = feed.Shoot(at, lens, Time.unscaledTime);
+            if (Time.unscaledTime >= nextSpi) { nextSpi = Time.unscaledTime + SpiInterval; Spi(at, look); }
+        }
+
+        // HAND looks ahead (the pilot steers by the picture), WPT stares at the waypoint, a live designation is tracked on the drone's
+        // own job, else a stare down ahead.
+        private Quaternion Aim(DroneView v, Transform t, Vector3 at)
+        {
             Vector3 flat = new Vector3(t.forward.x, 0f, t.forward.z);
             if (flat.sqrMagnitude < 1e-4f) flat = Vector3.forward;
-            // A stabilised sensor ball under the nose: the drone's heading, a little nose-down, never its roll.
-            Quaternion lens = Quaternion.LookRotation(flat.normalized) * Quaternion.Euler(LensPitchDeg, 0f, 0f);
-            feed.FieldOfView = ZoomFov[zoom];
-            feedLive = feed.Shoot(t.position + t.forward * (v.Missile.maxRadius + 0.6f) - t.up * 0.3f, lens, Time.unscaledTime);
+            Quaternion ahead = Quaternion.LookRotation(flat.normalized);
+            Tracking = false;
+            if (v.Mode == DroneMode.Hand) { LensWord = "FWD"; return ahead * Quaternion.Euler(DroneLink.ForwardDeg, 0f, 0f); }
+            Unit mark = Mark;
+            Vector3 to = Vector3.zero;
+            if (v.Mode == DroneMode.Waypoint)
+            {
+                Vector3 point = new GlobalPosition(v.Point).ToLocalPosition();
+                point.y = Datum.LocalSeaY;      // the point carries the orbit height; the ball looks at the ground under it
+                to = point - at;
+            }
+            else if (mark != null) to = mark.transform.position - at;
+            if (to.sqrMagnitude > 1f && to.sqrMagnitude < DroneLink.MaxRangeM * DroneLink.MaxRangeM)
+            {
+                Tracking = v.Mode == DroneMode.Auto;
+                LensWord = Tracking ? "TRK" : "POINT";
+                return Quaternion.LookRotation(to);
+            }
+            LensWord = "STARE";
+            return ahead * Quaternion.Euler(DroneLink.StareDeg, 0f, 0f);
+        }
+
+        // The sensor point of interest: the tracked unit, else the first terrain or the sea along the boresight.
+        private void Spi(Vector3 at, Vector3 look)
+        {
+            Unit mark = Tracking ? Mark : null;
+            Vector3 hit;
+            float sea = look.y < -0.01f ? (at.y - Datum.LocalSeaY) / -look.y : float.MaxValue;
+            if (mark != null) hit = mark.transform.position;
+            else if (Physics.Raycast(at, look, out RaycastHit ray, DroneLink.MaxRangeM, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore)) hit = ray.point;
+            else if (sea < DroneLink.MaxRangeM) hit = at + look * sea;
+            else { HasSpi = false; return; }
+            HasSpi = true;
+            SpiSlantM = Vector3.Distance(at, hit);
+            SpiGlobal = hit.ToGlobalPosition().AsVector3();
         }
 
         private void Refresh()
@@ -295,10 +408,10 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                     v.SampledAt = -1f;
                     v.SpeedMs = 0f;
                 }
-                if (v.SampledAt > 0f && now - v.SampledAt > 0.05f)
-                    v.SpeedMs = Mathf.Lerp(v.SpeedMs, Vector3.Distance(pos, v.Position) / (now - v.SampledAt), 0.5f);
-                v.Position = pos;
-                v.SampledAt = now;
+                // Game time: paused, the drone stands still and its speed must not decay to zero on the clock.
+                if (v.SampledAt > 0f && Time.time - v.SampledAt > 0.05f)
+                    v.SpeedMs = Mathf.Lerp(v.SpeedMs, Vector3.Distance(pos, v.Position) / (Time.time - v.SampledAt), 0.5f);
+                if (v.SampledAt <= 0f || Time.time - v.SampledAt > 0.05f) { v.SampledAt = Time.time; v.Position = pos; }
                 v.AltM = pos.y;
                 Vector3 fwd = e.Missile.transform.forward;
                 v.HeadingDeg = DroneLink.Bearing(Vector3.zero, fwd);

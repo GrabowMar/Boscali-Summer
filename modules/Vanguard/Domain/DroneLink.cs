@@ -13,6 +13,8 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
     {
         public const float FullRangeM = 12000f, MaxRangeM = 40000f;
         public const float OrbitRadiusM = 1200f, HandLookaheadM = 3000f, FloorAglM = 150f;
+        /// <summary>Sensor ball depression in degrees: hand-flown it looks just under the horizon, on its own job it stares down ahead.</summary>
+        public const float ForwardDeg = 8f, StareDeg = 25f;
         private const float OrbitLeadDeg = 40f;
         private static readonly float[] PlotSteps = { 5f, 10f, 20f, 40f };
 
@@ -117,6 +119,21 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
             foreach (float step in PlotSteps) if (farthestKm * 1.15f <= step) return step;
             return PlotSteps[PlotSteps.Length - 1];
         }
+
+        /// <summary>
+        /// Where the horizon sits in the feed, in half-heights above the centre (negative = below), for a stabilised lens at
+        /// <paramref name="elevationDeg"/> (down negative) with a vertical field of view of <paramref name="fovDeg"/>.
+        /// </summary>
+        public static float HorizonLift(float elevationDeg, float fovDeg) =>
+            Mathf.Tan(-elevationDeg * Mathf.Deg2Rad) / Mathf.Tan(Mathf.Max(fovDeg, 0.1f) * 0.5f * Mathf.Deg2Rad);
+
+        /// <summary>A ten-metre grid reference inside the 100 km square ("0412 7731"): global x east, z north, wrapped.</summary>
+        public static string Grid(float x, float z) => Digits(x) + " " + Digits(z);
+
+        private static string Digits(float metres) => (((int)Mathf.Floor(metres / 10f) % 10000 + 10000) % 10000).ToString("0000");
+
+        /// <summary>Link latency the feed prints, ms: 40 on a full link, rising to 600 at its edge.</summary>
+        public static int LatencyMs(float quality) => Mathf.RoundToInt(40f + (1f - Mathf.Clamp01(quality)) * 560f);
 
         public static string Clock(float seconds)
         {

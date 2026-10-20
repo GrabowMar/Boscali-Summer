@@ -38,6 +38,7 @@ namespace BoscaliSummer.Modules.Kaiju.Runtime
             settings.Summon = Summon;
             settings.Dismiss = Dismiss;
             settings.Defeated += OnDefeated;
+            KaijuBody.SpotScaleSetting = () => settings.WeakSpotScale.Value;
             Instance = this;
         }
 

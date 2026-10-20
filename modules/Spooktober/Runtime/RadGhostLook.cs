@@ -8,37 +8,20 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
 {
     /// <summary>
     /// The rad-ghost look (spec §5): every mesh renderer under a target wears one Boscali/RadGhost material instance (the
-    /// world shows through a fire-ramp glow) and the largest one sheds embers that drift up. Local to this peer, no network.
+    /// world shows through a spectral blue glow) and the largest one sheds embers that drift up. Local to this peer, no network.
     /// <see cref="Handle.Remove"/> puts the original shared materials back. Without the shader it is embers only.
     /// </summary>
     internal static class RadGhostLook
     {
-        /// <summary>One kind of target: shader noise, scanlines, shimmer, far glow and ember scale in metres, and the renderers
-        /// that keep their own look (<see cref="Skip"/>, may be null).</summary>
+        /// <summary>One kind of target: shader noise, scanlines, shimmer, far glow and ember scale in metres.</summary>
         internal sealed class Profile
         {
             public float NoiseScale, ScanDensity, ShimmerCm, FarDistance, EmberRate, EmberScale;
-            public Predicate<Renderer> Skip;
 
             /// <summary>A fighter: 2 m heat cells, a scanline every 0.5 m, embers 0.15-0.4 m rising 0.4-1.2 m/s. Still see-through at
-            /// 1.5 km (far glow 14 %; at 2000 m it was a solid orange cut-out there), a solid fire silhouette from about 3 km.</summary>
+            /// 1.5 km (far glow 14 %; at 2000 m it was a solid blue cut-out there), a solid blue silhouette from about 3 km.</summary>
             public static readonly Profile Aircraft = new Profile
                 { NoiseScale = 0.5f, ScanDensity = 2f, ShimmerCm = 4f, FarDistance = 4000f, EmberRate = 400f, EmberScale = 1f };
-            /// <summary>The 15x kaiju (~900 m tall): 50 m heat cells, a scanline every 20 m, embers 40x larger and faster. Its
-            /// weak spots keep their own glow.</summary>
-            public static readonly Profile Kaiju = new Profile
-                { NoiseScale = 0.02f, ScanDensity = 0.05f, ShimmerCm = 150f, FarDistance = 60000f, EmberRate = 3000f, EmberScale = 40f,
-                  Skip = KaijuOwnGlow };
-
-            /// <summary>The eye meshes (EyeOuter, EyeInner: the eye weak spots, KaijuAssetsBuilder) and the KaijuBlister that
-            /// KaijuBody.Init parents to a bone for every other weak spot, the heart included.</summary>
-            private static bool KaijuOwnGlow(Renderer r)
-            {
-                if (r.name.StartsWith("Eye", StringComparison.Ordinal)) return true;
-                for (Transform t = r.transform; t != null; t = t.parent)
-                    if (t.name.StartsWith("KaijuBlister", StringComparison.Ordinal)) return true;
-                return false;
-            }
         }
 
         /// <summary>One target wearing the look.</summary>
@@ -57,7 +40,6 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
 
             internal Handle(GameObject root, Profile profile)
             {
-                Predicate<Renderer> skip = profile.Skip;
                 Root = root;
                 rate = profile.EmberRate;
                 Shader shader = SpookAssets.RadGhost;
@@ -73,9 +55,10 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
                 float best = -1f;
                 foreach (Renderer r in RenderersOf(root))
                 {
-                    if (!(r is MeshRenderer || r is SkinnedMeshRenderer) || (skip != null && skip(r))) continue;
+                    if (!(r is MeshRenderer || r is SkinnedMeshRenderer)) continue;
                     float size = r.bounds.size.sqrMagnitude;
-                    if (size > best && MeshOf(r) != null) { best = size; largest = r; } // no mesh: draws nothing, sheds nothing
+                    // No mesh, or hidden (the FS-20's inactive debugArrowRed won the size test: embers parked under it never showed).
+                    if (size > best && r.gameObject.activeInHierarchy && MeshOf(r) != null) { best = size; largest = r; }
                     if (material == null) continue;
                     Material[] own = r.sharedMaterials;
                     var ghost = new Material[own.Length];
@@ -124,7 +107,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         private static Gradient emberColour;
 
         /// <summary>
-        /// Put the look on every mesh renderer under <paramref name="root"/> except the profile's <see cref="Profile.Skip"/>.
+        /// Put the look on every mesh renderer under <paramref name="root"/>.
         /// Idempotent: a root already wearing it keeps its handle (and profile) and takes the new strength.
         /// </summary>
         public static Handle Apply(GameObject root, Profile profile, float strength = 1f)
@@ -230,7 +213,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             return ps;
         }
 
-        /// <summary>Additive embers: 0.8-1.6 s, orange to yellow to red to nothing, drifting up with a little noise. Sizes and
+        /// <summary>Additive embers: 0.8-1.6 s, blue to cyan to deep blue to nothing, drifting up with a little noise. Sizes and
         /// speeds are world metres times <paramref name="scale"/>, whatever the parent's scale.</summary>
         private static ParticleSystem NewEmbers(string name, Transform parent, float scale, int max)
         {
@@ -294,8 +277,8 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
                 if (emberColour != null) return emberColour;
                 emberColour = new Gradient();
                 emberColour.SetKeys(
-                    new[] { new GradientColorKey(new Color(1f, 0.51f, 0f), 0f), new GradientColorKey(new Color(1f, 0.88f, 0.25f), 0.3f),
-                        new GradientColorKey(new Color(1f, 0.12f, 0f), 0.75f) },
+                    new[] { new GradientColorKey(new Color(0.15f, 0.45f, 1f), 0f), new GradientColorKey(new Color(0.5f, 0.95f, 1f), 0.3f),
+                        new GradientColorKey(new Color(0.1f, 0.25f, 1f), 0.75f) },
                     new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.08f), new GradientAlphaKey(0.7f, 0.6f),
                         new GradientAlphaKey(0f, 1f) });
                 return emberColour;

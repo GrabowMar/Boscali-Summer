@@ -1,6 +1,6 @@
 {
   "name": "spooktober",
-  "_note": "Spooktober end to end (Task 11) with the rad look captures (Task 10b). Over open sea east of the island: fresh progress, the transmission airs on the seat's spawn edge, all puzzles solved (unlocked), the kaiju summoned (captures at 6 and 2.5 km, frame time near it) and killed through KaijuAutomation (chain 1), the FALLEN ACE spawned in complex physics (every renderer, parts apart from the root included, wears the look; captures at 600 m and 1.5 km), three lethal wounds (chain 2, the look gone with it), [REDACTED], dismiss, then a relaunch: progress read back, no transmission. Ends with reset (the progress entry is real).",
+  "_note": "Spooktober end to end (Task 11) with the rad look captures (Task 10b). Over open sea east of the island: fresh progress, the transmission is forced with the air action, all puzzles solved (unlocked), the kaiju summoned (captures at 6 and 2.5 km, frame time near it) and killed through KaijuAutomation (chain 1), the FALLEN ACE spawned in complex physics (every renderer, parts apart from the root included, wears the look; captures at 600 m and 1.5 km), three lethal wounds (chain 2, the look gone with it), [REDACTED], dismiss, then a relaunch: progress read back, no transmission. Ends with reset (the progress entry is real).",
   "mods": [
     "boscalisummer"
   ],
@@ -55,11 +55,18 @@
     },
     {
       "op": "mark",
-      "text": "first launch: the transmission airs 6 s after the seat's spawn edge"
+      "text": "first launch: the transmission (natural airing is 3-8 min after the spawn edge) is forced with the air action"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Spooktober.SpooktoberAutomation.Step",
+      "args": {
+        "action": "air"
+      }
     },
     {
       "op": "wait",
-      "seconds": 9
+      "seconds": 4
     },
     {
       "op": "call",
@@ -625,29 +632,14 @@
       "value": 4
     },
     {
-      "check": "result_above",
-      "path": "k_rad.kaiju_skin",
-      "min": 1
-    },
-    {
-      "check": "result_above",
-      "path": "k_rad.kaiju_spots_own",
-      "min": 3
-    },
-    {
       "check": "result_equals",
-      "path": "k_rad.kaiju_spots_worn",
+      "path": "k_rad.kaiju_worn",
       "value": 0
     },
     {
-      "check": "result_above",
+      "check": "result_equals",
       "path": "k_rad.embers",
-      "min": 1
-    },
-    {
-      "check": "result_above",
-      "path": "k_rad.sparks",
-      "min": 1
+      "value": 0
     },
     {
       "check": "result_above",
@@ -681,7 +673,7 @@
     },
     {
       "check": "result_equals",
-      "path": "a_rad.kaiju_skin",
+      "path": "a_rad.kaiju_worn",
       "value": 0
     },
     {

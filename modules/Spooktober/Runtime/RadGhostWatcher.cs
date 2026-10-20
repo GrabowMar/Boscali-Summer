@@ -1,17 +1,14 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Core.Services;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Spooktober.Runtime
 {
     /// <summary>
     /// Keeps the rad look on the Spooktober targets, four times a second (a spawn shows opaque for at most 0.25 s) on every
-    /// peer (local, no network): the kaiju's skin whenever
-    /// Spooktober is installed (spec §5) and whatever <see cref="ExtraTargets"/> yields, at aircraft scale. A target that goes
-    /// away or drops out of the list loses the look; a scene reset drops them all.
+    /// peer (local, no network): whatever <see cref="ExtraTargets"/> yields (the FALLEN ACE only; the kaiju looks normal, user
+    /// ruling 2026-10-20). A target that goes away or drops out of the list loses the look; a scene reset drops them all.
     /// </summary>
     internal sealed class RadGhostWatcher : MonoBehaviour, ISceneService
     {
@@ -29,10 +26,6 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             next = Time.unscaledTime + 0.25f;
 
             kept.Clear();
-            GameObject body = ModuleServices.TryGet(out IKaijuBoss boss) ? boss.Body : null;
-            // Only the skin under "Model"; Profile.Kaiju leaves the weak spots (eyes, blisters, heart) their own glow.
-            Transform model = body != null ? body.transform.Find("Model") : null;
-            if (model != null) Wear(model.gameObject, RadGhostLook.Profile.Kaiju);
             IEnumerable<GameObject> extra = ExtraTargets?.Invoke();
             if (extra != null)
                 foreach (GameObject go in extra)

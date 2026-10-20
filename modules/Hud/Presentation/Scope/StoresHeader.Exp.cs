@@ -40,9 +40,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 ArtKind kind = StoreIcons.Pick(c.Icon, out ArtBounds ink, out float width, out float height);
                 float iconX = x + StoresLayout.CountX;
                 ArtPlace place = kind != ArtKind.None ? StoreArt.Fit(ink, width, height, iconX, cy - StoresLayout.JamIcon / 2f, StoresLayout.JamIcon, StoresLayout.JamIcon) : default;
-                if (place.W > 0f) Art[JamArt] = new ArtSlot(c.Icon, place, c.Active || selected ? Hi : Dim, 1f, kind == ArtKind.Mask);
-                else JamGlyph(g, iconX + StoresLayout.JamIcon / 2f, cy, c.Active || selected ? Hi : Dim);
-                g.Text("JAM", x + StoresLayout.JamWordX, cy, c.Active ? Hi : words, StoresLayout.WordSize, ScopeAlign.Left, selected || c.Active);
+                if (place.W > 0f) Art[JamArt] = new ArtSlot(c.Icon, place, words, 1f, kind == ArtKind.Mask);
+                else JamGlyph(g, iconX + StoresLayout.JamIcon / 2f, cy, words);
+                g.Text("JAM", x + StoresLayout.JamWordX, cy, words, StoresLayout.WordSize, ScopeAlign.Left, selected || call);
+            }
+            else if (c.Tag == "IR" || c.Tag == "RDR")
+            {
+                // Flares and chaff: our own picture where the jammer's stands (the game's chaff borrows the flare picture), the count where JAM is.
+                float gx = x + StoresLayout.CountX + StoresLayout.JamIcon / 2f;
+                if (c.Tag == "IR") FlareGlyph(g, gx, cy, words); else ChaffGlyph(g, gx, cy, words);
+                g.Text(ScopeStr.Int(c.Ammo), x + StoresLayout.JamWordX, cy, StoresMath.CountTone(level, selected), StoresLayout.CountSize, ScopeAlign.Left, true);
             }
             else
             {
@@ -85,6 +92,28 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Line(cx + 1f, cy - 4f, cx - 3f, cy + 1f, tone);
             g.Line(cx - 3f, cy + 1f, cx + 2f, cy, tone);
             g.Line(cx + 2f, cy, cx - 1f, cy + 4f, tone);
+        }
+
+        /// <summary>A flare: a burning pellet low right, its smoke trail curling up behind it.</summary>
+        private static void FlareGlyph(ScopeCanvas g, float cx, float cy, ScopeTone tone)
+        {
+            g.Ring(cx + 3f, cy + 3f, 2.5f, tone, 1f, 1f, tone, 1f);
+            g.Line(cx + 1f, cy + 1f, cx - 2f, cy - 2f, tone);
+            g.Line(cx - 2f, cy - 2f, cx - 3f, cy - 6f, tone, 0.7f);
+            g.Line(cx + 3f, cy, cx + 1f, cy - 3f, tone, 0.6f);
+            g.Line(cx + 1f, cy - 3f, cx + 2f, cy - 6f, tone, 0.4f);
+        }
+
+        /// <summary>Chaff: a cloud of short foil strips at odd angles.</summary>
+        private static void ChaffGlyph(ScopeCanvas g, float cx, float cy, ScopeTone tone)
+        {
+            g.Line(cx - 6f, cy - 4f, cx - 3f, cy - 5f, tone);
+            g.Line(cx, cy - 6f, cx + 2f, cy - 3f, tone);
+            g.Line(cx + 4f, cy - 4f, cx + 6f, cy - 6f, tone);
+            g.Line(cx - 5f, cy + 1f, cx - 2f, cy - 1f, tone);
+            g.Line(cx + 1f, cy, cx + 5f, cy + 1f, tone);
+            g.Line(cx - 3f, cy + 5f, cx - 1f, cy + 3f, tone);
+            g.Line(cx + 2f, cy + 4f, cx + 5f, cy + 6f, tone);
         }
     }
 }

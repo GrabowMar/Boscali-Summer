@@ -1,4 +1,5 @@
 using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Vanguard.Domain;
 using NOAvionics;
 using TMPro;
@@ -8,13 +9,14 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Vanguard.Presentation
 {
     /// <summary>
-    /// The drone feed card on the HUD (bottom right): the linked drone's video and symbology while it is hand-flown, or whenever the
+    /// The drone feed card on the HUD (bottom right, the bottom of the feed column: the HUD's target and missile cards stack on it through
+    /// <see cref="FeedCorner"/>; lifted over NAV DATA in the cockpit): the linked drone's video and symbology while it is hand-flown, or whenever the
     /// pilot switched HUD FEED on, with the way to switch drones printed under it. It stands down while the UAV terminal is open or the
     /// map is maximised (the UAV MFD shows the feed there). Client-local, never takes input.
     /// </summary>
     internal sealed class DroneFeedHud : MonoBehaviour, ISceneService
     {
-        private const float CardW = 432f, HeadH = 22f, HintH = 20f, Margin = 24f, Lift = 132f;
+        private const float CardW = 360f, HeadH = 22f, HintH = 20f, Margin = 24f, Lift = 132f;      // 360: the column (FeedCorner) clears the ALT box at 1080p
         private const int SortOrder = 120;
 
         private DroneLinkService link;
@@ -25,11 +27,13 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private DroneFeedView feed;
         private float lostFlashUntil;
         private bool wasLost;
+        private readonly Vector3[] corners = new Vector3[4];
 
         public void Configure(DroneLinkService service) => link = service;
 
         public void ResetForScene()
         {
+            FeedCorner.Uav = default;
             if (root != null) Destroy(root);
             root = null;
             feed = null;
@@ -48,11 +52,19 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 (link.Linked != null || lost) && (link.HandFlying || link.FeedShown || lost);
             if (!show)
             {
+                FeedCorner.Uav = default;
                 if (root != null && root.activeSelf) root.SetActive(false);
                 return;
             }
             if (root == null) Build();
             if (!root.activeSelf) root.SetActive(true);
+            // The bottom of the feed column: over NAV DATA in the cockpit, on the margin in the outside views (the HUD's target and
+            // missile cards stack on this card, FeedCorner).
+            CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
+            float lift = cameras != null && cameras.currentState == cameras.cockpitState ? Lift : Margin;
+            if (card.anchoredPosition.y != lift) card.anchoredPosition = new Vector2(-Margin, lift);
+            card.GetWorldCorners(corners);
+            FeedCorner.Uav = new Rect(corners[0].x, corners[0].y, corners[2].x - corners[0].x, corners[2].y - corners[0].y);
             feed.Paint(link);
             DroneView v = link.Linked;
             AvState tone = lost || (v != null && v.Quality <= 0f) ? AvState.Danger : v != null && v.Mode == DroneMode.Hand ? AvState.Caution : AvState.Info;
@@ -87,7 +99,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             AvText.Fit(head, false);
             head.raycastTarget = false;
             AvLay.Place(head, 10f, 2f, CardW - 12f, HeadH);
-            feed = new DroneFeedView(card, "Feed", 12f);
+            feed = new DroneFeedView(card, "Feed", 11f);
             feed.Place(new AvSlot(4f, HeadH + 2f, CardW, feedH));
             hint = AvText.Make(card, "Hint", AvTextRole.Micro, "");
             hint.color = AvInk.Dim;

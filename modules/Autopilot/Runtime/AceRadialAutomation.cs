@@ -92,6 +92,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 { "bundles", UnityEngine.Object.FindObjectsOfType<RadarChaff>().Length },
                 { "heard", chaffHeard },
                 { "dazzled", chaffDazzled },
+                { "seduced", ChaffDispenser.Seduced },
                 { "threatsGone", threatsGone },
                 { "miss", threatMiss },
             };

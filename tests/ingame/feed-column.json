@@ -1,0 +1,74 @@
+{
+  "name": "feed-column",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 300,
+  "environment": {
+    "config": {
+      "com.marci.boscalisummer": {
+        "Mission": {
+          "AskAtStart": false
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "aircraft": "FS-20 Vortex",
+      "near": [48000, -8000],
+      "altitude": 4000,
+      "speed": 220,
+      "heading": 0,
+      "view": "orbit"
+    },
+    {
+      "op": "spawn",
+      "id": "bandit",
+      "type": "FS-20 Vortex",
+      "faction": "Primeva",
+      "at": { "map": [48000, 0] },
+      "altitude": 4000,
+      "speed": 200,
+      "heading": 180
+    },
+    { "op": "wait", "seconds": 6 },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": { "action": "launch", "key": "VG_Remora", "seated": 1 },
+      "store": "launch"
+    },
+    { "op": "wait", "seconds": 3 },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": { "action": "link", "do": "feed", "seated": 1 },
+      "store": "feed"
+    },
+    { "op": "call", "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Gun", "args": { "range": 15000 }, "store": "gun1" },
+    { "op": "wait", "seconds": 1 },
+    { "op": "call", "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Gun", "args": { "range": 15000 }, "store": "gun2" },
+    { "op": "wait", "seconds": 1 },
+    { "op": "call", "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Fire", "args": {}, "store": "fire" },
+    { "op": "wait", "seconds": 1.5 },
+    { "op": "capture", "name": "column-orbit", "hide_ui": false },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": { "action": "link", "seated": 1 },
+      "store": "status"
+    },
+    { "op": "call", "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.View", "args": { "view": "cockpit" } },
+    { "op": "wait", "seconds": 1.5 },
+    { "op": "capture", "name": "column-cockpit", "hide_ui": false },
+    { "op": "end" }
+  ],
+  "checks": [
+    { "check": "status_ok" },
+    { "check": "result_above", "path": "status.feed", "min": 0.5 },
+    { "check": "log_match", "pattern": "BoscaliSummer.*Exception", "max": 0 }
+  ]
+}

@@ -266,7 +266,11 @@ foreach ((string typeName, string methodName) in targets)
     ("ARHSeeker", "maxTrackingAngle"),
     ("ARHSeeker", "terminalRange"),
     ("SARHSeeker", "seekerAngle"),
-    ("CountermeasureManager", "countermeasureStations")
+    ("CountermeasureManager", "countermeasureStations"),
+    // Chaff seduction (ChaffDispenser.Seduce): the seeker and its target, cleared when a bundle breaks the lock.
+    ("Missile", "seeker"),
+    ("MissileSeeker", "targetUnit"),
+    ("SARHSeeker", "targetTransform")
 };
 
 foreach ((string typeName, string fieldName) in fields)
@@ -340,7 +344,8 @@ foreach ((string typeName, string fieldName) in fields)
     ("FuelTank", "ruptured", "System.Boolean"),
     ("FuelTank", "onFire", "System.Boolean"),
     // TAC BOARD SYSTEMS page: the jammer's "jamming now" (CountermeasureWatch).
-    ("RadarJammer", "jammingIntensity", "System.Single"),
+    ("RadarJammer", "jamIntensityPrev", "System.Single"),
+    ("RadarJammer", "jammingIntensity", "System.Single"),   // Wing survival perk doubles it
     ("Aircraft", "engineStates", "System.Collections.Generic.List`1<IEngine>"),
     ("Aircraft", "partDamageTracker", "PartDamageTracker"),
     ("AircraftParameters", "aircraftGLimit", "System.Single"),

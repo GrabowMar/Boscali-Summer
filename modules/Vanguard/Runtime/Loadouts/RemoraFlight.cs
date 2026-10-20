@@ -76,7 +76,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 target = cued;
                 if (phase == RemoraPhase.Ram) missile.SetTarget(cued);
                 GlobalPosition aim = TargetPosition(out Vector3 vel);
-                missile.SetThrottle(1f);
+                missile.SetThrottle(RemoraArcher.Boost);
                 if (!ramHoming) missile.SetAimpoint(aim, vel);
                 if (phase == RemoraPhase.Engage) TryArcherShot(aim - pos, defence ? -1 : cue);
                 return;
@@ -90,9 +90,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             Vector3 leadVel = launcher.rb != null ? launcher.rb.velocity : lt.forward * 200f;
             GlobalPosition slotPos = launcher.GlobalPosition() +
                 FormationSlot.World(Vector3.zero, lt.forward, lt.right, lt.up, slot);
-            // Throttle on along-track error: ahead of the slot -> ease off, behind -> push.
+            // Throttle on along-track error: ahead of the slot -> ease off, behind -> push (up to the boost, so it keeps up in afterburner).
             float along = Vector3.Dot(slotPos - pos, lt.forward);
-            missile.SetThrottle(Mathf.Clamp01(0.55f + along / 300f));
+            missile.SetThrottle(Mathf.Clamp(0.55f + along / 300f, 0f, RemoraArcher.Boost));
             // Chase a point 1.5 s ahead of the slot so the drone flies alongside, not into it.
             missile.SetAimpoint(slotPos + leadVel * 1.5f, leadVel);
         }

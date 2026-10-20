@@ -39,6 +39,17 @@
     },
     {
       "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.ForceWeather",
+      "store": "sky",
+      "args": {
+        "regime": "Broken",
+        "conditions": 0.9,
+        "cloudHeight": 2200,
+        "seed": 91
+      }
+    },
+    {
+      "op": "call",
       "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
       "args": {
         "action": "launch",
@@ -269,6 +280,12 @@
       "store": "mfd"
     },
     {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Readout",
+      "args": {},
+      "store": "wx"
+    },
+    {
       "op": "capture",
       "name": "dl-mfd",
       "hide_ui": false
@@ -368,6 +385,26 @@
       "check": "result_above",
       "path": "mfd.mfd",
       "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "handTurn.speed",
+      "min": 330
+    },
+    {
+      "check": "result_above",
+      "path": "handTurn.spiKm",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "wpt.lensEl",
+      "min": -89
+    },
+    {
+      "check": "result_above",
+      "path": "wx.feedCloudFrames",
+      "min": 10
     },
     {
       "check": "log_match",

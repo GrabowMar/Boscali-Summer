@@ -159,14 +159,14 @@ public static class DroneLinkUnityCheck
         var canvasObject = new GameObject("CardPreview", typeof(RectTransform), typeof(Canvas));
         canvasObject.GetComponent<Canvas>().renderMode = RenderMode.WorldSpace;
         var root = (RectTransform)canvasObject.transform;
-        root.sizeDelta = new Vector2(440f, 248f);
-        var feed = new DroneFeedView(root, "Feed", 12f);
-        feed.Place(new AvSlot(4f, 2f, 432f, 243f));
+        root.sizeDelta = new Vector2(368f, 210f);
+        var feed = new DroneFeedView(root, "Feed", 11f);
+        feed.Place(new AvSlot(4f, 2f, 360f, 203f));
         feed.Paint(link);
         Canvas.ForceUpdateCanvases();
         foreach (TMP_Text t in root.GetComponentsInChildren<TMP_Text>(true)) t.ForceMeshUpdate();
         Gate(root, "card " + name);
-        Capture(880, 496, 124f, "card-" + name);
+        Capture(736, 420, 105f, "card-" + name);
         Object.DestroyImmediate(canvasObject);
         Object.DestroyImmediate(link.gameObject);
     }

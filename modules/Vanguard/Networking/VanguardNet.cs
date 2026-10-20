@@ -47,6 +47,9 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
 
         public bool CanStrike => LocalTarget(out _, out _);
 
+        /// <summary>The local pilot's live designation (what the drones work on), else null: the UAV feed tracks and boxes it.</summary>
+        public Unit Designated => Striking ? designated : null;
+
         private void Awake()
         {
             MirageSerializers.Strict.Install<VanguardDroneOrder>(

@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Fx;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -9,6 +10,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
     /// Clouds in the game's reflection probe, so water and airframes reflect them. The game re-renders its one probe every five seconds; this pass draws the cloud march
     /// onto each face as it is rendered (the shader's CloudProbe pass, at half the step count, one sample per texel). Nothing runs on the frames in between.
     /// It marches with a copy of the cloud material, so the main camera's march and its temporal state are untouched.
+    /// Since 2026-10-20 it also draws into the video-feed lenses (<see cref="FeedCamera.IsLens"/>: the drone link and the missile feed), which
+    /// otherwise showed a cloudless sky: the same one-pass march at half steps, only on the frames a feed renders (15-20 Hz, at most 480x270).
     /// </summary>
     internal sealed class CloudProbePass : ScriptableRenderPass, IDisposable
     {
@@ -26,6 +29,10 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         /// <summary>Faces drawn since the pass was made (sims read it to prove the probe got its clouds).</summary>
         internal static int FacesDrawn { get; private set; }
+        /// <summary>Feed-lens frames drawn since the pass was made (sims read it to prove a feed got its clouds).</summary>
+        internal static int FeedFramesDrawn { get; private set; }
+
+        private static bool Wanted(Camera camera) => camera.cameraType == CameraType.Reflection || FeedCamera.IsLens(camera);
 
         internal CloudProbePass()
         {
@@ -46,7 +53,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         private void OnBeginCamera(ScriptableRenderContext context, Camera rendering)
         {
-            if (source == null || rendering == null || rendering.cameraType != CameraType.Reflection) return;
+            if (source == null || rendering == null || !Wanted(rendering)) return;
             if (probe == null || probe.shader != source.shader)
             {
                 if (probe != null) UnityEngine.Object.Destroy(probe);
@@ -61,7 +68,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
             Camera camera = renderingData.cameraData.camera;
-            if (source == null || probe == null || passIndex < 0 || camera.cameraType != CameraType.Reflection) return;
+            if (source == null || probe == null || passIndex < 0 || !Wanted(camera)) return;
             if (copiedFrame != Time.frameCount)
             {
                 copiedFrame = Time.frameCount;
@@ -82,7 +89,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 cmd.SetGlobalVector(CameraPosId, inverseView.GetColumn(3));
                 cmd.DrawProcedural(Matrix4x4.identity, probe, passIndex, MeshTopology.Triangles, 3);
                 context.ExecuteCommandBuffer(cmd);
-                FacesDrawn++;
+                if (camera.cameraType == CameraType.Reflection) FacesDrawn++;
+                else FeedFramesDrawn++;
             }
             finally { CommandBufferPool.Release(cmd); }
         }

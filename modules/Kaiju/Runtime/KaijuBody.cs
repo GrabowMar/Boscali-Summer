@@ -63,6 +63,7 @@ namespace BoscaliSummer.Modules.Kaiju.Runtime
         {
             GameObject prefab = KaijuAssets.Body;
             if (prefab == null || Datum.origin == null) return null;
+            spotScale = SpotScaleSetting?.Invoke() ?? 1f;
             GameObject go = Instantiate(prefab, Datum.origin, false);
             go.name = "KAIJU";
             go.transform.localScale = Vector3.one * KaijuRules.Scale;
@@ -78,7 +79,10 @@ namespace BoscaliSummer.Modules.Kaiju.Runtime
         public Vector3 SpotWorld(int i) => bones[KaijuRig.Spots[i].Bone].TransformPoint(offsets[i]);
         /// <summary>Hitbox radius in metres: the blister's size plus 20 m, so a missile that bursts on the hide right beside a
         /// weak spot still counts (tests/ingame/kaiju-tune.json: eye and knee shots burst 7-26 m short on the hull).</summary>
-        public static float HitboxRadius(int i) => KaijuRig.Spots[i].Radius * KaijuRules.Scale + 20f;
+        public static float HitboxRadius(int i) => KaijuRig.Spots[i].Radius * KaijuRules.Scale * spotScale + 20f;
+        /// <summary>[Kaiju] WeakSpotScale, set by the director; read once per spawn so blister and hitbox always match.</summary>
+        public static Func<float> SpotScaleSetting;
+        private static float spotScale = 1f;
         public bool Owns(Collider c) => c != null && own.Contains(c);
         public bool Alive(int i) => Nodes[i] != null && !Nodes[i].disabled;
         /// <summary>Spawned and since destroyed; the game deletes a dead building a moment later, so null counts.</summary>
@@ -117,7 +121,7 @@ namespace BoscaliSummer.Modules.Kaiju.Runtime
                 Transform blister = Instantiate(KaijuAssets.Blister, bone, false).transform;
                 blister.position = world;
                 blister.rotation = Quaternion.LookRotation(world - bone.position);
-                blister.localScale = Vector3.one * (spots[i].Radius * 2f * KaijuRules.Scale / bone.lossyScale.x);
+                blister.localScale = Vector3.one * (spots[i].Radius * 2f * KaijuRules.Scale * spotScale / bone.lossyScale.x);
                 blisters[i] = blister.GetComponentInChildren<Renderer>();
             }
 

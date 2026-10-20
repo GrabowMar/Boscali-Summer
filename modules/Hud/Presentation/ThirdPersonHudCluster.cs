@@ -238,7 +238,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
                 // Live percentage under the track, wider than the bar itself.
                 barLabel = Label(track, "BarLabel", TextAlignmentOptions.Top, 12f,
-                    new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-35f, -18f), new Vector2(35f, -2f));
+                    new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                    new Vector2(-ThirdPersonHudLayout.BarLabelHalfWidth, -ThirdPersonHudLayout.BarLabelDrop), new Vector2(ThirdPersonHudLayout.BarLabelHalfWidth, -2f));
             }
 
             return new Box
@@ -437,13 +438,25 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 WriteAoa(overG ? float.NaN : f.AoaDeg);   // the 106 px caption row holds OVER-G or the AoA beside SPD, not both
                 WriteClimb(f.ClimbMps, units);
             }
-            // The missile card sits on the target card when there is one, in its place when there is not (unless told to stay up).
-            bool raised = missileRaised || cameraTexture != null;
-            PaintSymbols(screenW, screenH, ink, spdLit, altLit, fuelColor, cameraTexture != null, pullUpFlash,
-                f.BankDeg, f.SlipDeg, active, missileFeed == null ? 0 : raised ? 2 : 1);
+            // The feed column: the UAV card (VANGUARD's, FeedCorner) at the bottom, the target card on it, the missile card on top.
+            RectF uav = UavCard(screenW, screenH);
+            RectF targetRect = ThirdPersonHudLayout.TargetCard(screenW, screenH, true, uav);
+            RectF missileRect = ThirdPersonHudLayout.MissileCard(screenW, screenH, cameraTexture != null, missileRaised, uav, avoid,
+                active ? ThirdPersonHudLayout.AltitudeBlock(screenW, screenH, avoid) : default);
+            PaintSymbols(screenW, screenH, ink, spdLit, altLit, fuelColor, cameraTexture != null ? targetRect : default, pullUpFlash,
+                f.BankDeg, f.SlipDeg, active, missileFeed != null ? missileRect : default);
 
-            PresentTargetCard(cameraTexture, cameraCode, rangeM, closureMps, screenW, screenH, ink, units);
-            PresentMissileCard(ThirdPersonHudLayout.MissileCard(screenW, screenH, raised), ink, units);
+            PresentTargetCard(cameraTexture, cameraCode, rangeM, closureMps, targetRect, ink, units);
+            PresentMissileCard(missileRect, ink, units);
+        }
+
+        /// <summary>The UAV card's box (<see cref="FeedCorner.Uav"/>, screen pixels on its own canvas) in the layout's units; no size while it is down.</summary>
+        private static RectF UavCard(float screenW, float screenH)
+        {
+            Rect px = FeedCorner.Uav;
+            if (px.width <= 0f || px.height <= 0f || Screen.width <= 0 || Screen.height <= 0) return default;
+            float kx = screenW / Screen.width, ky = screenH / Screen.height;
+            return new RectF((px.center.x - Screen.width * 0.5f) * kx, (px.center.y - Screen.height * 0.5f) * ky, px.width * kx, px.height * ky);
         }
 
         private static Color WithAlpha(Color c, float a) => new Color(c.r, c.g, c.b, a);
@@ -473,12 +486,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>Brackets round each box, tick scales for the bars, the card's outline and its tag box.
         /// Rebuilt only when the layout or a lit state changes.</summary>
+        /// <param name="targetCard">The target card's box, no size while it is down; <paramref name="missileCard"/> the same for the missile card.</param>
         private void PaintSymbols(float screenW, float screenH, Color ink, Color? spdLit, Color? altLit, Color fuel,
-            bool cardShown, bool flash, float bankDeg, float slipDeg, bool flight, int missileSlot)
+            RectF targetCard, bool flash, float bankDeg, float slipDeg, bool flight, RectF missileCard)
         {
             // Bank in 2 degree steps and slip in whole degrees: finer motion is not visible and would rebuild the mesh every tick in a turn.
             int key = (int)screenW * 7919 + (int)screenH * 31 + (int)(lastScale * 100f) * 977 + Code(spdLit) * 5 + Code(altLit) * 3 + Code(fuel) + Code(ink) * 17 +
-                (cardShown ? 11 : 0) + (flash ? 13 : 0) + (flight ? 19 : 0) + missileSlot * 23 + Mathf.RoundToInt(bankDeg / 2f) * 104729 + Mathf.RoundToInt(slipDeg) * 7 +
+                Mathf.RoundToInt(targetCard.CenterY + targetCard.Height) * 11 + (flash ? 13 : 0) + (flight ? 19 : 0) +
+                Mathf.RoundToInt(missileCard.CenterX * 3f + missileCard.CenterY + missileCard.Height) * 23 + Mathf.RoundToInt(bankDeg / 2f) * 104729 + Mathf.RoundToInt(slipDeg) * 7 +
                 Mathf.RoundToInt(avoid.CenterX) * 15485863 + Mathf.RoundToInt(avoid.CenterY) * 32452843 + Mathf.RoundToInt(avoid.Width) * 49979687 + Mathf.RoundToInt(avoid.Height) * 67867967;
             if (key == lastSymbols) return;
             lastSymbols = key;
@@ -497,8 +512,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 BankAndSlip(b, ThirdPersonHudLayout.HeadingBox(screenW, screenH, avoid), bankDeg, slipDeg, ink.ToRgba());
             }
             Rgba line = ink.ToRgba().WithAlpha(0.9f);
-            if (cardShown) CardFrame(b, ThirdPersonHudLayout.TargetCard(screenW, screenH, true), line);
-            if (missileSlot > 0) CardFrame(b, ThirdPersonHudLayout.MissileCard(screenW, screenH, missileSlot == 2), line);
+            if (targetCard.Height > 0f) CardFrame(b, targetCard, line);
+            if (missileCard.Height > 0f) CardFrame(b, missileCard, line);
             BufferGuard.Check(b, "third-person cluster");
             symbols.Commit();
         }
@@ -706,9 +721,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         private void PresentTargetCard(Texture cameraTexture, string code, float rangeM, float closureMps,
-            float screenW, float screenH, Color ink, AvUnits units)
+            RectF rect, Color ink, AvUnits units)
         {
-            if (!PresentCard(ref card, ThirdPersonHudLayout.TargetCard(screenW, screenH, true), cameraTexture, code, rangeM, ink, units)) return;
+            if (!PresentCard(ref card, rect, cameraTexture, code, rangeM, ink, units)) return;
 
             // Closing reads in ink, opening dimmer; under 5 m/s either way is "steady".
             float closureKey = float.IsFinite(closureMps) ? Mathf.Round(AvUnitTable.Speed(closureMps, units) / 5f) : float.NaN;

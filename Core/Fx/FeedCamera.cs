@@ -44,6 +44,11 @@ namespace BoscaliSummer.Core.Fx
 
         private bool Hdr => look != FeedLook.Seeker;
 
+        private static readonly System.Collections.Generic.HashSet<Camera> Lenses = new System.Collections.Generic.HashSet<Camera>();
+
+        /// <summary>The camera is a feed lens: the weather's CloudProbePass marches the mod's clouds into it (they draw on the main camera only).</summary>
+        internal static bool IsLens(Camera camera) => Lenses.Contains(camera);
+
         public FeedCamera(string name, int width, int height, FeedLook look, bool pointFilter)
         {
             this.name = name;
@@ -83,6 +88,16 @@ namespace BoscaliSummer.Core.Fx
             return true;
         }
 
+        /// <summary>Where a world point (local space) falls in the picture, 0..1 from the bottom left; false when behind the lens or no camera yet.</summary>
+        public bool Project(Vector3 world, out Vector2 viewport)
+        {
+            viewport = default;
+            if (cam == null) return false;
+            Vector3 p = cam.WorldToViewportPoint(world);
+            viewport = new Vector2(p.x, p.y);
+            return p.z > 0f;
+        }
+
         /// <summary>No picture wanted this frame: the camera stays off and the last picture is kept.</summary>
         public void Idle()
         {
@@ -119,6 +134,7 @@ namespace BoscaliSummer.Core.Fx
             cam = new GameObject(name + "Camera", typeof(Camera)).GetComponent<Camera>();
             cam.CopyFrom(main);
             cam.enabled = false;
+            Lenses.Add(cam);
             cam.targetTexture = picture;
             cam.ResetAspect();
             cam.fieldOfView = FieldOfView;
@@ -169,6 +185,7 @@ namespace BoscaliSummer.Core.Fx
         /// <summary>Drops the camera and its picture (scene reset, feed off). Idempotent.</summary>
         public void Release()
         {
+            Lenses.Remove(cam);      // also once a scene change has already destroyed it
             if (cam != null) Object.Destroy(cam.gameObject);
             cam = null;
             stack?.Dispose();

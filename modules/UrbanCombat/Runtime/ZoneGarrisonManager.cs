@@ -465,6 +465,8 @@ namespace BoscaliSummer.Garrisons
         }
 
         private readonly List<PendingCapture> pending = new List<PendingCapture>();
+        /// <summary>Game-start air defence: one zone a frame, so the spawns do not land in one hitch.</summary>
+        private readonly Queue<Airbase> airDefenseQueue = new Queue<Airbase>();
         private readonly Queue<CaptureJob> captureJobs = new Queue<CaptureJob>();
         private const int MaxCaptureJobs = 16;
         private const int RoofTriesPerFrame = 6;
@@ -523,6 +525,7 @@ namespace BoscaliSummer.Garrisons
         public void ResetForScene()
         {
             pending.Clear();
+            airDefenseQueue.Clear();
             captureJobs.Clear();
             barrenZones.Clear();
             shellStates.Clear();
@@ -595,8 +598,15 @@ namespace BoscaliSummer.Garrisons
                     {
                         if (airbase == null || !airbase.gameObject.scene.IsValid() || airbase.AttachedAirbase) continue;
                         ScheduleCapture(airbase, airbase.CurrentHQ);
+                        if (airbase.CurrentHQ != null && Urban.AirDefenseCampsPerZone.Value > 0) airDefenseQueue.Enqueue(airbase);
                     }
                 }
+            }
+            if (airDefenseQueue.Count > 0)
+            {
+                Airbase zone = airDefenseQueue.Dequeue();
+                if (zone != null && zone.CurrentHQ != null)
+                    InfantryEncampmentBuilder.SeedAirDefense(zone, zone.CurrentHQ, Urban.AirDefenseCampsPerZone.Value);
             }
             for (int i = 0; i < pending.Count; i++)
             {

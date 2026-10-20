@@ -26,6 +26,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private DroneFeedView feed;
         private AvList list;
         private AvControl open, hand, next;
+        private AvMetric mAlt, mSpd, mLink, mSpi;
         private float nextRefresh;
 
         /// <summary>The scene's panel (the sim hook presses its bezel).</summary>
@@ -47,6 +48,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             chips = null;
             feed = null;
             list = null;
+            mAlt = mSpd = mLink = mSpi = null;
             nextRefresh = 0f;
         }
 
@@ -94,6 +96,12 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             open.Help = "Open the UAV terminal: every drone on the link, the live feed, the tactical plot and waypoints.";
             hand.Help = "Fly the linked drone by hand: it goes the way your nose points.";
             next.Help = "Link the next drone; while you hand-fly, the stick goes with the link.";
+            page.Section(AvIcon.Gauge, "TELEMETRY", "LINKED DRONE");
+            mAlt = new AvMetric(page.Content, "ALT");
+            mSpd = new AvMetric(page.Content, "SPD");
+            mLink = new AvMetric(page.Content, "LINK", AvGaugeShape.Segments);
+            mSpi = new AvMetric(page.Content, "SPI");
+            page.Row(mAlt, mSpd, mLink, mSpi);
             page.Section(AvIcon.Drone, "ASSETS ON LINK", "CLICK TO LINK");
             list = page.Add(new AvList(page.Content, console.Ticker, 5, BindRow) { RowClicked = i => { link.Link(i); Refresh(); } });
             console.Orders(0,
@@ -114,6 +122,21 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 v == null ? AvState.Inert : v.Mode == DroneMode.Hand ? AvState.Caution : AvState.Ready);
             chips[2].Set(link.Count + " ON NET", link.Count > 0 ? AvState.Ready : AvState.Inert);
             list.SetCount(link.Count);
+            if (v != null)
+            {
+                mAlt.Set(AvNum.Fixed(v.AltM, 0), "M", Mathf.Clamp01(v.AltM / 10000f));
+                mSpd.Set(AvNum.Fixed(v.SpeedMs * 1.944f, 0), "KT", Mathf.Clamp01(v.SpeedMs / 400f));
+                mLink.Set(AvNum.Fixed(v.Quality * 100f, 0), "%", v.Quality, v.Quality <= 0f ? AvState.Danger : v.Quality < 0.5f ? AvState.Caution : AvState.Ready);
+                mSpi.Set(link.HasSpi ? AvNum.Fixed(link.SpiSlantM / 1000f, 1) : "—", "KM", link.HasSpi ? Mathf.Clamp01(link.SpiSlantM / DroneLink.MaxRangeM) : 0f,
+                    link.Tracking ? AvState.Caution : AvState.Ready);
+            }
+            else
+            {
+                mAlt.Set("—", "M", 0f, AvState.Inert);
+                mSpd.Set("—", "KT", 0f, AvState.Inert);
+                mLink.Set("—", "%", 0f, AvState.Inert);
+                mSpi.Set("—", "KM", 0f, AvState.Inert);
+            }
             hand.Label = v != null && v.Mode == DroneMode.Hand ? "RELEASE" : "TAKE CONTROL";
             hand.Latched = v != null && v.Mode == DroneMode.Hand;
             hand.Interactable = link.Count > 0;

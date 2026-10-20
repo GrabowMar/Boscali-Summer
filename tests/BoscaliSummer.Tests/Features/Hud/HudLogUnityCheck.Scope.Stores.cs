@@ -512,7 +512,7 @@ public static partial class HudLogUnityCheck
             // The cruise of the prototype: the gun SAFE, 500 of 500, the capacitor charging at 43 kJ, 72 flares and 30 chaff, the jammer ready.
             StoresBlockShot("cruise" + at.suffix, at.size, at.options, StoresCruise, (v, tag) =>
             {
-                StoresSays(v, tag, "STORES MGMT", "HMD SYM  ", "DCL 0", "500", "/500", "SAFE", "LINK", "20MM ROTARY CANNON", "GUN", "PWR BUS", "43", "KJ", "CHG +5/S", "EXPENDABLES", "72", "FLR", "30", "CHF", "JAM", "RDY", "G", "1", "2", "3", "4", "5", "6", "7");
+                StoresSays(v, tag, "STORES MGMT", "HMD SYM  ", "DCL 0", "500", "/500", "SAFE", "LINK", "20MM ROTARY CANNON", "GUN", "PWR BUS", "43", "KJ", "CHG +5/S", "EXPENDABLES", "72", "30", "JAM", "RDY", "G", "1", "2", "3", "4", "5", "6", "7");
                 StoresSaysNot(v, tag, "TRT AUTO", "ARMED", "EMPTY");
                 Rect art = isStack ? new Rect(v.Hero.x + 240f, v.Hero.y + 18f, 200f, 56f) : new Rect(v.Hero.x, v.Hero.y + 76f, 272f, 56f);
                 StoresArtFills(v, 0, "weaponIcon_gatlingGun", art, tag);
@@ -567,7 +567,7 @@ public static partial class HudLogUnityCheck
         // An empty dispenser says EMPTY instead of its bar, and the flares running low say LOW.
         StoresBlockShot("empty-dispenser", hd, null, x => { x.Rdr = 0; x.Ir = 9; }, (v, tag) =>
         {
-            StoresSays(v, tag, "EMPTY", "0", "9", "LOW", "FLR", "CHF");
+            StoresSays(v, tag, "EMPTY", "0", "9", "LOW");
             Color red = v.Word("EMPTY").Label.color;
             Check(red.r > 0.95f && red.g < 0.7f && red.b < 0.7f && red.r - red.g > 0.25f, tag + ": EMPTY is red (the theme's alert, #ffa094): " + red);
             Check(Mathf.Abs(v.Word("EMPTY").Ink.xMin - (v.Exp.x + 68f)) < 1.5f, tag + ": EMPTY stands where the bar would");
@@ -581,7 +581,7 @@ public static partial class HudLogUnityCheck
         // The jammer is the selected countermeasure: its row, not a dispenser's, says SEL (the caret is drawn there too), and no other row says it.
         StoresBlockShot("jammer-selected", hd, null, x => { x.Active = 2; x.JamCharge = 1f; }, (v, tag) =>
         {
-            StoresSays(v, tag, "SEL", "JAM", "FLR", "CHF");
+            StoresSays(v, tag, "SEL", "JAM");
             Check(Mathf.Abs(v.Word("SEL").Ink.center.y - (v.Exp.y + 66f)) < 2.5f, tag + ": SEL stands on the jammer's row (+66): " + v.Word("SEL").Ink.center.y);
             StoresSaysNot(v, tag, "RDY");
         });
@@ -650,9 +650,9 @@ public static partial class HudLogUnityCheck
         // Flares only, the jammer on and the capacitor full (seen in game): the jammer's row follows the flares' row instead of sitting 41 under it, and the jammer marker at the end of the cell row stays clear of the shelf stub below.
         StoresBlockShot("one-dispenser", hd, null, x => { x.HasRdr = false; x.JamOn = true; x.Kj = 500f; }, (v, tag) =>
         {
-            StoresSays(v, tag, "FLR", "JAM", "ON", "FULL");
+            StoresSays(v, tag, "72", "JAM", "ON", "FULL");
             StoresSaysNot(v, tag, "CHF");
-            float gap = v.Word("JAM").Ink.center.y - v.Word("FLR").Ink.center.y;
+            float gap = v.Word("JAM").Ink.center.y - v.Word("72").Ink.center.y;
             Check(Mathf.Abs(gap - 21f) < 3f, tag + ": the jammer's row is 21 under the flares', not 41: " + gap);
             Check(Mathf.Abs(v.Word("JAM").Ink.center.y - (v.Exp.y + 46f)) < 2.5f, tag + ": JAM sits at +46: " + v.Word("JAM").Ink.center.y);
         });
@@ -660,7 +660,7 @@ public static partial class HudLogUnityCheck
         // LEAN: no captions, no shelves, DCL 1 where the arm word's row has room, and EXPENDABLES pulled up under the cells.
         StoresBlockShot("lean", hd, PilotOptions("Declutter", Declutter("Lean")), StoresCruise, (v, tag) =>
         {
-            StoresSays(v, tag, "500", "/500", "SAFE", "LINK", "DCL 1", "43", "72", "FLR", "30", "CHF", "JAM", "RDY");
+            StoresSays(v, tag, "500", "/500", "SAFE", "LINK", "DCL 1", "43", "72", "30", "JAM", "RDY");
             StoresSaysNot(v, tag, "STORES MGMT", "HMD SYM  ", "PWR BUS", "EXPENDABLES", "DCL 0");
             Check(Mathf.Abs(v.Exp.y - 70f) < 0.01f && Mathf.Abs(v.Exp.height - 53f) < 0.01f, tag + ": EXPENDABLES is 19 shorter with no shelf row: " + v.Exp);
             Check(Mathf.Abs(v.Word("72").Ink.center.y - (v.Exp.y + 6f)) < 2.5f, tag + ": its first row starts at the top of the block, " + v.Word("72").Ink.center.y);

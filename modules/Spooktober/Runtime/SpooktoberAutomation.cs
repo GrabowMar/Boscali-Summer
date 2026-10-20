@@ -191,11 +191,11 @@ namespace BoscaliSummer.Spooktober
         // ---- rad look (Task 10b) -------------------------------------------------------------------------------------------------
 
         /// <summary>The look's evidence. The ace: its mesh renderers (root and the parts complex physics unparented) wearing
-        /// Boscali/RadGhost, how many of those sit outside the root, and any left bare. The kaiju: skin wearing it, weak spots (eyes,
-        /// blisters) keeping their own glow. Every renderer in the scene still wearing it, and the live ember systems.</summary>
+        /// Boscali/RadGhost, how many of those sit outside the root, and any left bare. The kaiju: renderers wearing it (must be 0, it
+        /// looks normal). Every renderer in the scene still wearing it, and the live ember systems.</summary>
         private static Dictionary<string, object> Rad(string action)
         {
-            int aceWorn = 0, aceApart = 0, aceBare = 0, skin = 0, spotsOwn = 0, spotsWorn = 0, anywhere = 0, embers = 0, sparks = 0;
+            int aceWorn = 0, aceApart = 0, aceBare = 0, kaijuWorn = 0, anywhere = 0, embers = 0, sparks = 0;
             Aircraft ace = FallenAce.Current;
             if (ace != null)
                 foreach (Renderer r in RadGhostLook.RenderersOf(ace.gameObject))
@@ -211,12 +211,7 @@ namespace BoscaliSummer.Spooktober
             Transform model = ModuleServices.TryGet(out IKaijuBoss boss) && boss.Body != null ? boss.Body.transform.Find("Model") : null;
             if (model != null)
                 foreach (Renderer r in model.GetComponentsInChildren<Renderer>(true))
-                {
-                    if (!(r is MeshRenderer || r is SkinnedMeshRenderer)) continue;
-                    if (!RadGhostLook.Profile.Kaiju.Skip(r)) skin += Ghosted(r) ? 1 : 0;
-                    else if (Ghosted(r)) spotsWorn++;
-                    else spotsOwn++;
-                }
+                    if (Ghosted(r)) kaijuWorn++; // the kaiju looks normal: always 0
             foreach (Renderer r in UnityEngine.Object.FindObjectsOfType<Renderer>())
                 if (Ghosted(r)) anywhere++;
             foreach (ParticleSystem ps in UnityEngine.Object.FindObjectsOfType<ParticleSystem>())
@@ -229,9 +224,7 @@ namespace BoscaliSummer.Spooktober
             result["ace_worn"] = aceWorn;
             result["ace_apart"] = aceApart;
             result["ace_bare"] = aceBare;
-            result["kaiju_skin"] = skin;
-            result["kaiju_spots_own"] = spotsOwn;
-            result["kaiju_spots_worn"] = spotsWorn;
+            result["kaiju_worn"] = kaijuWorn;
             result["worn_anywhere"] = anywhere;
             result["embers"] = embers;
             result["sparks"] = sparks;

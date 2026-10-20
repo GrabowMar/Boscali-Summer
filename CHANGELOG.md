@@ -19,14 +19,14 @@
   ground or sea 12 km ahead and marches on the nearest airbase, crushing what it steps on. It throws volleys of
   heat-seeking spikes off its back (flares and hard turns work), sweeps a mouth beam that aims where you were a
   second ago (cross it, don't run from it), and claws anything that flies within reach of its arms. Its body
-  looks see-through while Spooktober is on. 21 glowing weak spots are lockable targets: break the throat and the beam is gone, the eyes and it aims
+  looks the same with or without Spooktober. 21 glowing weak spots (F1 › Kaiju › WeakSpotScale, default 0.6 of the original size) are lockable targets: break the throat and the beam is gone, the eyes and it aims
   worse, the spine sacs and fewer spikes fly, the wrists and that arm stops swiping, the knees and it crawls. Break
   twelve and its heart opens; kill the heart and it collapses.
 - **SPOOKTOBER** (seasonal, its own module, switch it off in F1): a few seconds after you spawn, something breaks in on
   the radio. It tells you to leave the puzzles hidden in SET alone; solve them anyway and a secret menu answers with a
   chain of bosses: the KAIJU, then a FALLEN ACE (a gun-only ghost fighter on its own side that comes back twice;
-  single player or a host without clients for now), then something [REDACTED]. Both bosses glow see-through and shed
-  embers, and the kaiju's weak spots still burn through.
+  single player or a host without clients for now), then something [REDACTED]. The ace glows see-through in spectral blue and sheds
+  embers; the kaiju keeps its own look.
 - **A living sea**: the ocean now has real waves that follow the wind and build under storms:
   long swell on a calm day, choppy wave rows and whitecaps in a fresh breeze, steep grey seas,
   foam streaks and breaking crests in a gale, and surf along the shallows. The sea picks up the
@@ -58,6 +58,12 @@
   over. In flight the same controls live under C › WEAPONS › DRONE LINK, the linked drone's feed rides on a HUD card
   (EO or white-hot IR, zoom, analogue static that thickens with range, a signal-lost freeze), and a new UAV screen on the
   MFD shows the feed and the roster. The link reaches 40 km; past that the drone goes back to its own job.
+  The feed is a proper sensor ball: hand-flown it looks ahead, on its own job it stares down, on a waypoint it watches
+  the point and with a DESIGNATE it tracks and boxes the target. Its overlay carries heading, altitude and speed tapes,
+  the horizon, a gimbal box, the sensor point's slant range and grid, REMORA rounds and flares, link latency and a frame
+  counter; clouds and rain shafts now show in the drone and missile feeds. The UAV MFD adds a TELEMETRY row.
+- **Faster REMORA**: the escort drone has twice the thrust, so it keeps up with you in afterburner and runs its
+  targets down sooner.
 - **Wing taxi fix**: a wingman that rolls just past its hold-short or stand now stops there and
   carries on, instead of circling back for the exact spot and getting stuck off the pavement
   (seen at highway strips, where wingmen could not reach the runway). A wingman leaving a hangar

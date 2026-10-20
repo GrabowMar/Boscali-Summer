@@ -34,6 +34,13 @@ namespace BoscaliSummer.Tests.Features.Vanguard
                 "the plot holds the farthest drone with a margin, capped at the link limit");
             TestAssert.That(DroneLink.Callsign(VanguardRole.Gunship, 2) == "GLAIVE-2S 2" && DroneLink.Job(VanguardRole.Drone) == "ARCHER" &&
                 DroneLink.Clock(125f) == "02:05", "callsigns, jobs and the clock");
+
+            TestAssert.That(DroneLink.HorizonLift(0f, 50f) == 0f && Mathf.Abs(DroneLink.HorizonLift(-25f, 50f) - 1f) < 1e-4f &&
+                DroneLink.HorizonLift(-40f, 50f) > 1f && DroneLink.HorizonLift(10f, 50f) < 0f,
+                "horizon: centred on a level lens, at the top edge with the lens down half the view, off screen past it, below on a lens up");
+            TestAssert.That(DroneLink.Grid(4127f, 77319f) == "0412 7731" && DroneLink.Grid(-15f, 100005f) == "9998 0000",
+                "grid: ten-metre digits in the 100 km square, wrapped below zero");
+            TestAssert.That(DroneLink.LatencyMs(1f) == 40 && DroneLink.LatencyMs(0f) == 600, "latency: 40 ms on a full link, 600 at its edge");
         }
     }
 }

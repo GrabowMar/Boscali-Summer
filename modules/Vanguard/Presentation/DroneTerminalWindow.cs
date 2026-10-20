@@ -37,7 +37,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private AvVector plotInk;
         private readonly TMP_Text[] markerLabels = new TMP_Text[Markers];
         private readonly TMP_Text[] ringLabels = new TMP_Text[3];
-        private readonly Vector2[] markerAt = new Vector2[Markers];
+        private readonly Vector2[] markerAt = new Vector2[Markers], labelAt = new Vector2[Markers];
         private float plotScale = 1f, nextPaint;
         private Vector3 plotCentre;
         private readonly StringBuilder text = new StringBuilder(512);
@@ -396,7 +396,12 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 if (!label.gameObject.activeSelf) label.gameObject.SetActive(true);
                 AvText.Set(label, v.Callsign);
                 label.color = linked ? AvInk.Select : AvInk.Ink;
-                AvLay.Place(label, p.x + 9f, ph - p.y - 7f, 110f, 14f);
+                // Drones flying together used to print their callsigns on top of each other: step a label down past the ones placed.
+                Vector2 at = new Vector2(p.x + 9f, ph - p.y - 7f);
+                for (int k = 0; k < shown; k++)
+                    if (Mathf.Abs(labelAt[k].x - at.x) < 110f && Mathf.Abs(labelAt[k].y - at.y) < 14f) { at.y = labelAt[k].y + 14f; k = -1; }
+                labelAt[shown] = at;
+                AvLay.Place(label, at.x, at.y, 110f, 14f);
             }
             for (int i = shown; i < Markers; i++) if (markerLabels[i].gameObject.activeSelf) markerLabels[i].gameObject.SetActive(false);
             plotInk.Commit();
@@ -436,7 +441,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             Paint();
         }
 
-        private static string Signed(float metres) => (metres >= 0f ? "+" : "-") + AvNum.Fixed(Mathf.Abs(metres) / 1000f, 1);
+        private static string Signed(float metres) => (metres > -50f ? "+" : "-") + AvNum.Fixed(Mathf.Abs(metres) / 1000f, 1);      // under 50 m rounds to 0.0: no "-0.0"
 
         private void PlaceList()
         {

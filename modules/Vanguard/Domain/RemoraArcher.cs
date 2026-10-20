@@ -32,6 +32,10 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const float FlareClosing = 80f;  // m/s: slower is geometry, not a shot
         public const float FlareChance = 0.65f; // per IR missile per burst: it drops the lock and flies on unguided
         public const float FlareInterval = 1f;  // s between bursts
+        // Top throttle (2026-10-20, user: "make remoras faster"). The game's missile throttle is a plain thrust multiplier
+        // (Missile.Motor.Thrust), so 2 = twice the bundle's 4200 N, ~1.4x the top speed, with no bundle rebuild and none of the
+        // radar visibility a bigger rated motor would add (visibility follows the rated thrust, not the throttle).
+        public const float Boost = 2f;
 
         public static int Left(int firedMask) => Rounds - ((firedMask & 1) + ((firedMask >> 1) & 1));
 

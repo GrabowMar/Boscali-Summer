@@ -1,5 +1,5 @@
 // Spooktober rad ghost: a see-through, glowing redraw of a unit (the kaiju, the FALLEN ACE). Premultiplied glass (additive with
-// _DstBlend = One), no depth write: the world shows through the body, a fresnel rim in the fire ramp outlines it, value-noise heat crawls up it, faint scanlines
+// _DstBlend = One), no depth write: the world shows through the body, a fresnel rim in the spectral blue ramp outlines it, value-noise heat crawls up it, faint scanlines
 // roll up and the surface shimmers. Noise and scanlines run in pivot-relative world metres (the object's rotation and
 // scale, not its position), so a floating-origin shift never jumps the pattern and it rides the body.
 // Plain CG, no pipeline includes (same recipe as NvgHeat): URP draws an untagged pass as SRPDefaultUnlit. No
@@ -58,13 +58,13 @@ Shader "Boscali/RadGhost"
                                  lerp(Hash(i + float3(0, 1, 1)), Hash(i + 1.0), f.x), f.y), f.z);
             }
 
-            // Fire ramp: black, orange, yellow, hot red-orange, dim red (HDR, so bloom picks the rim up).
+            // Spectral ramp: black, deep blue, cyan, hot cyan-white, dim blue (HDR, so bloom picks the rim up).
             float3 Ramp(float h)
             {
-                float3 c = lerp(0.0, float3(1.0, 0.51, 0.0), saturate(h / 0.25));
-                c = lerp(c, float3(1.5, 0.88, 0.0), saturate((h - 0.25) / 0.25));
-                c = lerp(c, float3(3.9, 0.11, 0.0), saturate((h - 0.5) / 0.3));
-                return lerp(c, float3(2.1, 0.22, 0.0), saturate((h - 0.8) / 0.2));
+                float3 c = lerp(0.0, float3(0.05, 0.2, 1.0), saturate(h / 0.25));
+                c = lerp(c, float3(0.3, 0.85, 1.5), saturate((h - 0.25) / 0.25));
+                c = lerp(c, float3(1.2, 2.4, 3.6), saturate((h - 0.5) / 0.3));
+                return lerp(c, float3(0.2, 0.5, 2.0), saturate((h - 0.8) / 0.2));
             }
 
             // normalize() of a zero vector (degenerate normal, camera on the vertex) is NaN, and NaN poisons bloom.

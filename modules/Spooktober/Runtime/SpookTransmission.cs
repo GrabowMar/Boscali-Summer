@@ -12,13 +12,14 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Spooktober.Runtime
 {
     /// <summary>
-    /// The mystery transmission. A few seconds after the local player first has an aircraft, static breaks in on the radio, a squelch
-    /// closes it and one glitched line airs on the COMMS feed. Local to each peer (nothing is sent), once per game launch, and never
+    /// The mystery transmission, meant to read as a stray signal overheard. 3 to 8 minutes after the local player first has an aircraft
+    /// (the next time they are flying if they have none then) a short quiet burst of static breaks in on the radio and one heavily
+    /// glitched line airs on the COMMS feed. Local to each peer (nothing is sent), once per game launch, and never
     /// again once the menu is unlocked. The words are kept as LAST INTERCEPT on PILOT (<see cref="SpookProgress.HeardIntercept"/>).
     /// </summary>
     internal sealed class SpookTransmission : MonoBehaviour, ISceneService
     {
-        private const float DelaySeconds = 6f, StaticSeconds = 1.2f;
+        private const float MinDelaySeconds = 180f, MaxDelaySeconds = 480f, StaticSeconds = 0.5f, StaticVolume = 0.3f;
 
         public static SpookTransmission Instance { get; private set; }
 
@@ -27,13 +28,15 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
 
 #if !PUBLIC_RELEASE
         /// <summary>Sim seam (SpooktoberAutomation "relaunch"): as if the game were restarted, so the transmission may air again.</summary>
-        internal static void ResetLaunchForSim() => AiredThisLaunch = false;
+        internal static void ResetLaunchForSim() { AiredThisLaunch = false; dueAt = -1f; }
 #endif
+
+        /// <summary>When the line is due (Time.time), drawn at the launch's first spawn edge; static so scene loads keep it. -1 = not drawn yet.</summary>
+        private static float dueAt = -1f;
 
         private ManualLogSource log;
         private AudioSource source;
-        private bool hadAircraft, airing, warnedNoRadio;
-        private float airAt = -1f;
+        private bool airing, warnedNoRadio;
 
         public void Configure(ManualLogSource logger)
         {
@@ -46,8 +49,6 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             StopAllCoroutines();
             if (source != null) source.Stop();
             airing = false;
-            hadAircraft = false;
-            airAt = -1f;
         }
 
         private void OnDestroy()
@@ -59,14 +60,11 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         private void Update()
         {
             if (AiredThisLaunch) return;
-            // Same rising edge as ScenarioHost: the first frame the local pilot has a live aircraft.
             bool flying = GameManager.GetLocalAircraft(out Aircraft own) && own != null && !own.disabled;
-            if (!flying) airAt = -1f;
-            else if (!hadAircraft) airAt = Time.time + DelaySeconds;
-            hadAircraft = flying;
-            if (airAt < 0f || Time.time < airAt) return;
-            airAt = -1f;
-            if (!SpookStore.Current.Unlocked) Air();
+            if (!flying) return;
+            // First spawn edge of the launch starts the clock; once due, it airs the next frame the pilot is flying.
+            if (dueAt < 0f) dueAt = Time.time + UnityEngine.Random.Range(MinDelaySeconds, MaxDelaySeconds);
+            if (Time.time >= dueAt && !SpookStore.Current.Unlocked) Air();
         }
 
         /// <summary>
@@ -94,7 +92,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
                 else if (source != null) source.Stop(); // no tail clip: the looping static must not run on
                 if (ModuleServices.TryGet(out IChatter chatter))
                     chatter.Say(chatter.Station(ChatterNet.Enemy, SpookText.Glitch("???", seed, 0.5f)), "spook:intercept",
-                        SpookText.Glitch(SpookText.Transmission, seed, 0.12f), ChatterPriority.Emergency);
+                        SpookText.Glitch(SpookText.Transmission, seed, 0.3f), ChatterPriority.Status); // Status, not Ambient: Essential radio drops Ambient and the clue would be lost; Status never cuts traffic on air
                 else if (!warnedNoRadio)
                 {
                     warnedNoRadio = true;
@@ -120,7 +118,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
                     source = gameObject.AddComponent<AudioSource>();
                     source.playOnAwake = false;
                     source.spatialBlend = 0f;
-                    source.volume = 0.75f;
+                    source.volume = StaticVolume;
                 }
                 source.outputAudioMixerGroup = sound.InterfaceMixer;
                 source.Stop();
