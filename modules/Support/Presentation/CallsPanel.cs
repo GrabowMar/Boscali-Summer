@@ -295,20 +295,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
             nextRefresh = 0f;
         }
 
-        /// <summary>Hand-off for other surfaces (USE PERKS): opens the PERKS tab with this perk shown in the strip. Arms and spends nothing.</summary>
-        internal void ShowPerk(SupportActionId id)
-        {
-            InspectPerk(id);
-            SelectTab(OpsTab.Perks);
-        }
-
-        /// <summary>Hand-off for other surfaces (VIEW POST): opens the TASKED tab with this post shown in the strip; the strip says so when it has expired. Never arms it.</summary>
-        internal void ShowPost(int postId)
-        {
-            InspectPost(postId);
-            SelectTab(OpsTab.Tasked);
-        }
-
         private ConfigEntry<KeyboardShortcut> FavouriteKey(int slot)
         {
             SupportSettings s = manager?.Settings;

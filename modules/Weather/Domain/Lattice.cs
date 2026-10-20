@@ -56,14 +56,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public readonly int CandidateBound;
 
         public bool IsValid => Tape.IsValid;
-
-        /// <summary>The tape row at a tape-frame point and the low genus of the keyframe it lies in.</summary>
-        public SkyParams RowAt(float qx, float qz, out LowGenus genus)
-        {
-            float s = Frame.STape(qx, qz);
-            genus = Tape.GenusAt(s);
-            return Tape.At(s);
-        }
     }
 
     internal static class LatticeHash
@@ -113,9 +105,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public static float Unit(uint salt, int gx, int gz, int k, int slot) => UnitIn(CellPrefix(salt, gx, gz), k, slot);
 
         public static float UnitIn(uint prefix, int k, int slot) => (HashIn(prefix, k, slot) >> 8) * (1f / 16777216f);
-
-        public static float Range(uint salt, int gx, int gz, int k, int slot, float min, float max) =>
-            min + (max - min) * Unit(salt, gx, gz, k, slot);
 
         public static float RangeIn(uint prefix, int k, int slot, float min, float max) =>
             min + (max - min) * UnitIn(prefix, k, slot);

@@ -99,7 +99,6 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         public string LostName { get; private set; } = "";
         /// <summary>Seconds since the link moved to another drone (the views' static burst).</summary>
         public float SinceSwitch => Time.unscaledTime - switchedAt;
-        public FeedLook Look => feed.Look;
         public string ZoomWord => ZoomWords[zoom];
         public bool TerminalOpen => terminal != null && terminal.IsOpen;
         public bool HasAircraft => owner != null || testFeed != null;

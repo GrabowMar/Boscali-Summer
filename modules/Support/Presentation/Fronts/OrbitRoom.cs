@@ -27,10 +27,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     {
         private const float TopH = 502f, Gap = 8f, MapW = 880f, PX = 886f, PW = 278f;
         private const float BarH = 100f, DragSlop = 6f, LegendX = 14f;
-        private const float CamW = 470f, TrackW = 320f, ChainY = 328f, PicX = 8f, PicY = 60f, LampW = 59f;
+        private const float CamW = 470f, TrackW = 320f, ChainY = 328f, PicX = 8f, PicY = 60f;
         // The console column (box pixels): MET plate, three poll rows, the hostile tally, the inspector, the uplink sites.
         private const float FdY = 28f, FdH = 40f, RowsY = 72f, RowH = 48f, RowStep = 50f, HostY = 226f, HostH = 30f, InspY = 262f, SiteHeadY = 366f, SiteY0 = 384f;
-        private const float CardH = 48f, SiteH = 30f, ChipH = 20f;
+        private const float SiteH = 30f, ChipH = 20f;
         private const int GridCols = 10, GridRows = 8, MaxBirdLabels = 8, MaxSiteLabels = 6, TrackRows = SpaceFeedRules.ContactsPerPage;
         private static readonly BirdKind[] Kinds = { BirdKind.Optical, BirdKind.Radar, BirdKind.Kinetic };
         private static readonly string[] KindTag = { "OPT", "RDR", "KIN" };

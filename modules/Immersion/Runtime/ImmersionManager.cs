@@ -198,18 +198,6 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             set { if (settings != null) settings.HelmetVisorEnabled.Value = value; }
         }
 
-        public float HelmetCurvature
-        {
-            get => settings != null ? settings.HelmetCurvature.Value : .55f;
-            set { if (settings != null) settings.HelmetCurvature.Value = Mathf.Clamp01(value); }
-        }
-
-        public float HelmetReflection
-        {
-            get => settings != null ? settings.HelmetReflection.Value : 1f;
-            set { if (settings != null) settings.HelmetReflection.Value = Mathf.Clamp01(value); }
-        }
-
         public bool MachBuffetEnabled
         {
             get => settings != null && settings.MachBuffetEnabled.Value;

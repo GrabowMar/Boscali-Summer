@@ -89,8 +89,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private bool anchored, headed;
         private float seaWind = -1f, baseDeg, swellDeg, nextShips, nextLight, renderTime, probeMips;
         private int calmCount;
-
-        internal float SeaWind => seaWind;
         internal float WaveHeight { get; private set; }
 
         public string EffectId => "ocean";

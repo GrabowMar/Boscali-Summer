@@ -38,7 +38,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private const float FlashSeconds = 2f, FireFlash = 3f, DripCount = 6f;
 
         private SystemsScope d;
-        private bool ready, primed, abnormal, fast, critical;
+        private bool ready, primed, abnormal, fast;
         private float now;
         private readonly Lamp[] rows = new Lamp[HudDamage.MaxLamps];
         private int rowCount;
@@ -66,15 +66,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public override bool Fast => fast;
 
-        public override bool Critical => critical;
-
         // ------------------------------------------------------------------------------------------------ poll
 
         public override bool Poll(in ScopeEnv env)
         {
             now = env.Now;
             ready = ScopeFeeds.TryRead(out d) && d.Fuel.Valid;
-            if (!ready) { primed = false; fast = abnormal = critical = gaugeLive = false; gaugeAt = float.NegativeInfinity; return false; }
+            if (!ready) { primed = false; fast = abnormal = gaugeLive = false; gaugeAt = float.NegativeInfinity; return false; }
             gaugeLive = SystemsMath.GaugeLive(d.G, now, ref gaugeAt);
 
             if (!primed || !SystemsMath.SameDamage(rowsFor, d.Damage))
@@ -99,7 +97,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             primed = true;
 
             abnormal = h != SystemsHeadline.Nominal;
-            critical = SystemsMath.HeadlineTone(h, d.Damage) == Red;      // fire, an engine out, BINGO, lost structure
             fast = (d.Damage.Flags & (DamageFlags.Fire | DamageFlags.FuelLeak)) != 0 || now < hitAt + 1f || h == SystemsHeadline.Fire || h == SystemsHeadline.Bingo ||
                    (abnormal && now < headlineAt + FlashSeconds);
             return abnormal;

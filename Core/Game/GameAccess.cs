@@ -31,14 +31,6 @@ namespace BoscaliSummer.Core.Game
         private static AccessTools.FieldRef<NightVision, float> nvGainMinRef, nvGainMaxRef;
         private static AccessTools.FieldRef<Unit, List<IRSource>> irSourcesRef;
         private static AccessTools.FieldRef<RadialMenuMain, RadialMenuAction[]> radialActionsRef;
-        private static AccessTools.FieldRef<RadialMenuMain, Aircraft> radialAircraftRef;
-        private static Action<RadialMenuMain> radialSetupMain;
-        private static FieldInfo radialActionTypeField;
-        private static FieldInfo radialIconSpriteField;
-        private static FieldInfo radialBackgroundSpriteField;
-        private static FieldInfo radialBgInactiveField;
-        private static FieldInfo radialBgActiveField;
-        private static FieldInfo radialIconImageField;
 
         public static bool MapBuildingHitPointsAvailable { get; private set; }
         public static bool MapBuildingSetBuildingsAvailable { get; private set; }
@@ -196,10 +188,6 @@ namespace BoscaliSummer.Core.Game
             try
             {
                 radialActionsRef = FieldRef<RadialMenuMain, RadialMenuAction[]>("actionsMain");
-                radialAircraftRef = FieldRef<RadialMenuMain, Aircraft>("aircraft");
-                MethodInfo setupMain = AccessTools.Method(typeof(RadialMenuMain), "SetupMain") ??
-                    throw new MissingMethodException(typeof(RadialMenuMain).FullName, "SetupMain");
-                radialSetupMain = AccessTools.MethodDelegate<Action<RadialMenuMain>>(setupMain);
                 RadialAvailable = true;
                 RadialUnavailableReason = null;
             }
@@ -212,12 +200,9 @@ namespace BoscaliSummer.Core.Game
 
             try
             {
-                radialActionTypeField = RequireField(typeof(RadialMenuAction), "actionType");
-                radialIconSpriteField = RequireField(typeof(RadialMenuAction), "iconSprite");
-                radialBackgroundSpriteField = RequireField(typeof(RadialMenuAction), "backgroundSprite");
-                radialBgInactiveField = RequireField(typeof(RadialMenuAction), "backgroundColorInactive");
-                radialBgActiveField = RequireField(typeof(RadialMenuAction), "backgroundColorActive");
-                radialIconImageField = RequireField(typeof(RadialMenuAction), "iconImage");
+                // Only checked: the wedge fields Wing's native wheel relies on still exist in this game build.
+                foreach (string name in new[] { "actionType", "iconSprite", "backgroundSprite", "backgroundColorInactive", "backgroundColorActive", "iconImage" })
+                    RequireField(typeof(RadialMenuAction), name);
                 RadialActionAvailable = true;
                 RadialActionUnavailableReason = null;
             }
@@ -283,43 +268,6 @@ namespace BoscaliSummer.Core.Game
         }
 
         public static RadialMenuAction[] GetRadialActions(RadialMenuMain menu) => radialActionsRef == null || menu == null ? null : radialActionsRef(menu);
-        public static void SetRadialActions(RadialMenuMain menu, RadialMenuAction[] value){ if (radialActionsRef != null && menu != null) radialActionsRef(menu) = value; }
-        public static Aircraft GetRadialAircraft(RadialMenuMain menu) => radialAircraftRef == null || menu == null ? null : radialAircraftRef(menu);
-        public static void InvokeRadialSetupMain(RadialMenuMain menu){ if (radialSetupMain != null && menu != null) radialSetupMain(menu); }
-
-        /// <summary>Wedge appearance reads and writes. Each fails closed on its own field
-        /// so one missing member blanks one copy, never the entry.</summary>
-        public static RadialMenuAction.ActionType GetRadialActionType(RadialMenuAction action) =>
-            radialActionTypeField == null || action == null ? default :
-            (RadialMenuAction.ActionType)radialActionTypeField.GetValue(action);
-
-        public static void SetRadialActionType(RadialMenuAction action, RadialMenuAction.ActionType type)
-        {
-            radialActionTypeField?.SetValue(action, type);
-        }
-
-        public static void SetRadialIconSprite(RadialMenuAction action, Sprite sprite)
-        {
-            radialIconSpriteField?.SetValue(action, sprite);
-        }
-
-        public static Image GetRadialIconImage(RadialMenuAction action) =>
-            radialIconImageField == null || action == null ? null : radialIconImageField.GetValue(action) as Image;
-
-        /// <summary>Copy native wedge sprites and colours; newly created actions otherwise
-        /// have null sprites and transparent colours. The action type is the caller's.</summary>
-        public static void CopyRadialAppearance(RadialMenuAction target, RadialMenuAction template)
-        {
-            if (target == null || template == null) return;
-            if (radialIconSpriteField != null)
-                radialIconSpriteField.SetValue(target, radialIconSpriteField.GetValue(template));
-            if (radialBackgroundSpriteField != null)
-                radialBackgroundSpriteField.SetValue(target, radialBackgroundSpriteField.GetValue(template));
-            if (radialBgInactiveField != null)
-                radialBgInactiveField.SetValue(target, radialBgInactiveField.GetValue(template));
-            if (radialBgActiveField != null)
-                radialBgActiveField.SetValue(target, radialBgActiveField.GetValue(template));
-        }
 
         /// <summary>
         /// The prefab-assigned first-person cockpit renderers (toggled by

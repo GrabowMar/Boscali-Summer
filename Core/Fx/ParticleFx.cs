@@ -43,8 +43,6 @@ namespace BoscaliSummer.Core.Fx
             return go;
         }
 
-        public static bool Has(string id) => Prefab(id) != null;
-
         private static GameObject Prefab(string id)
         {
             if (prefabs.TryGetValue(id, out GameObject found)) return found;

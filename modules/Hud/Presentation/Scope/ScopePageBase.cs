@@ -94,9 +94,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>Repaint every frame (something moves or pulses) instead of at 10 Hz.</summary>
         public virtual bool Fast => false;
 
-        /// <summary>A critical state (fire, engine out, BINGO) that keeps supplementary aircraft status visible even at Minimal. Only SYSTEMS uses it.</summary>
-        public virtual bool Critical => false;
-
         /// <summary>The headline figure (read after <see cref="Poll"/>). Default: none.</summary>
         public virtual ScopeHeadline Headline() => default;
 

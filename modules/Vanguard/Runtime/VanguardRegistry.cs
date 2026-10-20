@@ -25,14 +25,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             return FormationSlot.FirstFree(used);
         }
 
-        public static int DroneCount(Unit launcher)
-        {
-            int count = 0;
-            foreach (VanguardFlight flight in Flights.Values)
-                if (flight.Role == VanguardRole.Drone && flight.Launcher == launcher) count++;
-            return count;
-        }
-
         // ALE-X: one decoy on the fiber per aircraft. A new deployment cuts the old one loose (it flies on, see CutKite).
         public static void CutTowed(Unit launcher)
         {

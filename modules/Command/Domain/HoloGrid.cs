@@ -360,8 +360,6 @@ namespace BoscaliSummer.Modules.Command.Domain
             }
         }
 
-        private static float Smooth(float t) => Scalar.SmoothStep(0f, 1f, t);
-
         /// <summary>
         /// How strongly a grid line is drawn, as a share of full: lines running across the view (perpendicular to the way the camera looks) at full strength, lines running away from the viewer at
         /// <see cref="AwayStrength"/>, by the sine of the angle between them in between, so ridges read as stacked profiles. Both are bearings on the ground in degrees (0 north, 90 east); a line has no sense, so 180 degrees apart is the same.

@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings>
+    <!-- StageShot's fields are set by ScenarioHost in the mod, which this harness does not link. -->
+    <NoWarn>$(NoWarn);CS0649</NoWarn></PropertyGroup>
   <ItemGroup>
     <Compile Include="../../modules/Cinematography/Domain/*.cs" Link="Domain/%(Filename)%(Extension)" />
     <Compile Include="../../modules/Cinematography/ShotStore.cs" Link="ShotStore.cs" />

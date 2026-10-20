@@ -40,7 +40,6 @@ namespace BoscaliSummer.Core.Contracts
     /// </summary>
     internal interface ICinematicStage
     {
-        bool Playing { get; }
 
         /// <summary>
         /// Plays <paramref name="shots"/> in order. <paramref name="onShot"/> hears the index of each shot as it starts (a shot whose path is blocked or whose
