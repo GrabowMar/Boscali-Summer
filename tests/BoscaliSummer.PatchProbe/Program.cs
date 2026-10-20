@@ -2060,7 +2060,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 {
     const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance;
     Type net = plugin.GetType("BoscaliSummer.Modules.Support.Networking.SupportNet", true)!;
-    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 41)
+    if ((byte)net.GetField("ProtocolVersion", flags)!.GetRawConstantValue()! != 42)
         throw new InvalidOperationException("Support protocol differs from the operations contract");
     net.GetMethod("InstallSerializers", flags)!.Invoke(null, null);
 
@@ -2121,13 +2121,13 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 
     Type requestType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.SupportRequestMessage", true)!;
     object request = Activator.CreateInstance(requestType)!;
-    Set(request, "Protocol", (byte)41); Set(request, "RequestId", 7123); Set(request, "Action", (byte)6);
+    Set(request, "Protocol", (byte)42); Set(request, "RequestId", 7123); Set(request, "Action", (byte)6);
     Set(request, "X", 1234.5f); Set(request, "Y", 2345.5f); Set(request, "Z", -3456.5f);
     Roundtrip(requestType, request, "request");
 
     Type resultType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.SupportResultMessage", true)!;
     object resultMessage = Activator.CreateInstance(resultType)!;
-    Set(resultMessage, "Protocol", (byte)41); Set(resultMessage, "RequestId", 7123);
+    Set(resultMessage, "Protocol", (byte)42); Set(resultMessage, "RequestId", 7123);
     Set(resultMessage, "Action", (byte)4); Set(resultMessage, "Result", (byte)1);
     Set(resultMessage, "CooldownSeconds", 30f); Set(resultMessage, "Radius", 6000f);
     Set(resultMessage, "Duration", 10f); Set(resultMessage, "Contacts", 48);
@@ -2149,7 +2149,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 
     Type waypointType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.CruiseWaypointMessage", true)!;
     object waypoint = Activator.CreateInstance(waypointType)!;
-    Set(waypoint, "Protocol", (byte)41); Set(waypoint, "RequestId", 913);
+    Set(waypoint, "Protocol", (byte)42); Set(waypoint, "RequestId", 913);
     Set(waypoint, "X", 1234.5f); Set(waypoint, "Z", -3456.5f); Set(waypoint, "Clear", true);
     object waypointBack = Roundtrip(waypointType, waypoint, "cruise waypoint");
     if ((int)Get(waypointBack, "RequestId") != 913 || !(bool)Get(waypointBack, "Clear"))
@@ -2159,7 +2159,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
 
     Type legsType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.CruiseLegsMessage", true)!;
     object legs = Activator.CreateInstance(legsType)!;
-    Set(legs, "Protocol", (byte)41); Set(legs, "RequestId", 913); Set(legs, "OwnerId", 0x123456789ABCDEF0UL);
+    Set(legs, "Protocol", (byte)42); Set(legs, "RequestId", 913); Set(legs, "OwnerId", 0x123456789ABCDEF0UL);
     Set(legs, "Result", (byte)1); Set(legs, "FactionName", "BOSCALI"); Set(legs, "LegCount", (byte)2);
     Set(legs, "X", new float[] { 1000f, 2000f, 0f, 0f, 0f, 0f });
     Set(legs, "Z", new float[] { -1000f, -2000f, 0f, 0f, 0f, 0f });
@@ -2175,7 +2175,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
     Type cyberType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.CyberStateMessage", true)!;
     Type cyberDataType = plugin.GetType("BoscaliSummer.Modules.Support.Domain.Cyber.CyberStateData", true)!;
     object cyberData = Activator.CreateInstance(cyberDataType)!;
-    Set(cyberData, "Protocol", (byte)41); Set(cyberData, "Active", true); Set(cyberData, "Seq", 7);
+    Set(cyberData, "Protocol", (byte)42); Set(cyberData, "Active", true); Set(cyberData, "Seq", 7);
     Set(cyberData, "Now", 12.5f); Set(cyberData, "IntrusionCap", (byte)2); Set(cyberData, "HeldTotal", (byte)1);
     object cyberMessage = Activator.CreateInstance(cyberType)!;
     Set(cyberMessage, "Data", cyberData);
@@ -2184,7 +2184,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
     Stamp(cyberData);
     object cyberBack = Get(Decode(cyberType, Encode(cyberType, cyberMessage)), "Data");
     CheckStamp(cyberBack, "CYBER state");
-    if ((byte)Get(cyberBack, "Protocol") != 41 || (int)Get(cyberBack, "Seq") != 7 || !(bool)Get(cyberBack, "Active") ||
+    if ((byte)Get(cyberBack, "Protocol") != 42 || (int)Get(cyberBack, "Seq") != 7 || !(bool)Get(cyberBack, "Active") ||
         Math.Abs((float)Get(cyberBack, "Now") - 12.5f) > 0.001f || (byte)Get(cyberBack, "IntrusionCap") != 2 || (byte)Get(cyberBack, "HeldTotal") != 1)
         throw new InvalidOperationException("CYBER state roundtrip failed");
     object cyberForeign = Get(Decode(cyberType, new byte[] { 27 }), "Data");
@@ -2197,14 +2197,14 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
     Type sofType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.SofStateMessage", true)!;
     Type sofDataType = plugin.GetType("BoscaliSummer.Modules.Support.Domain.Sof.SofStateData", true)!;
     object sofData = Activator.CreateInstance(sofDataType)!;
-    Set(sofData, "Protocol", (byte)41); Set(sofData, "Active", true); Set(sofData, "Seq", 9);
+    Set(sofData, "Protocol", (byte)42); Set(sofData, "Active", true); Set(sofData, "Seq", 9);
     Set(sofData, "Now", 20.5f); Set(sofData, "TeamCap", (byte)3); Set(sofData, "TapIntrusions", (byte)2);
     object sofMessage = Activator.CreateInstance(sofType)!;
     Set(sofMessage, "Data", sofData);
     Stamp(sofData);
     object sofBack = Get(Decode(sofType, Encode(sofType, sofMessage)), "Data");
     CheckStamp(sofBack, "SOF state");
-    if ((byte)Get(sofBack, "Protocol") != 41 || (int)Get(sofBack, "Seq") != 9 || !(bool)Get(sofBack, "Active") ||
+    if ((byte)Get(sofBack, "Protocol") != 42 || (int)Get(sofBack, "Seq") != 9 || !(bool)Get(sofBack, "Active") ||
         Math.Abs((float)Get(sofBack, "Now") - 20.5f) > 0.001f || (byte)Get(sofBack, "TeamCap") != 3 || (byte)Get(sofBack, "TapIntrusions") != 2)
         throw new InvalidOperationException("SOF state roundtrip failed");
     object sofForeign = Get(Decode(sofType, new byte[] { 33 }), "Data");
@@ -2216,14 +2216,14 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
     Type opsType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.OpsStateMessage", true)!;
     Type opsDataType = plugin.GetType("BoscaliSummer.Modules.Support.Domain.Ops.OpsStateData", true)!;
     object opsData = Activator.CreateInstance(opsDataType)!;
-    Set(opsData, "Protocol", (byte)41); Set(opsData, "Active", true); Set(opsData, "CyberOps", true); Set(opsData, "Seq", 11);
+    Set(opsData, "Protocol", (byte)42); Set(opsData, "Active", true); Set(opsData, "CyberOps", true); Set(opsData, "Seq", 11);
     Set(opsData, "Now", 30.5f); Set(opsData, "BirdsDown", (byte)5);
     object opsMessage = Activator.CreateInstance(opsType)!;
     Set(opsMessage, "Data", opsData);
     Stamp(opsData);
     object opsBack = Get(Decode(opsType, Encode(opsType, opsMessage)), "Data");
     CheckStamp(opsBack, "OPERATIONS state");
-    if ((byte)Get(opsBack, "Protocol") != 41 || (int)Get(opsBack, "Seq") != 11 || !(bool)Get(opsBack, "Active") || !(bool)Get(opsBack, "CyberOps") ||
+    if ((byte)Get(opsBack, "Protocol") != 42 || (int)Get(opsBack, "Seq") != 11 || !(bool)Get(opsBack, "Active") || !(bool)Get(opsBack, "CyberOps") ||
         Math.Abs((float)Get(opsBack, "Now") - 30.5f) > 0.001f || (byte)Get(opsBack, "BirdsDown") != 5)
         throw new InvalidOperationException("OPERATIONS state roundtrip failed");
     object opsForeign = Get(Decode(opsType, new byte[] { 34 }), "Data");
@@ -2235,7 +2235,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
     Type frontType = plugin.GetType("BoscaliSummer.Modules.Support.Networking.FrontStateMessage", true)!;
     Type frontDataType = plugin.GetType("BoscaliSummer.Modules.Support.Domain.Fronts.FrontStateData", true)!;
     object frontData = Activator.CreateInstance(frontDataType)!;
-    Set(frontData, "Protocol", (byte)41); Set(frontData, "Seq", 13); Set(frontData, "Now", 41.5f); Set(frontData, "PriorityBy", "VIPER-2");
+    Set(frontData, "Protocol", (byte)42); Set(frontData, "Seq", 13); Set(frontData, "Now", 41.5f); Set(frontData, "PriorityBy", "VIPER-2");
     // The reader rejects a directive the front does not offer; a default row is Recon, which CYBER lacks.
     Type directiveType = plugin.GetType("BoscaliSummer.Modules.Support.Domain.Fronts.FrontDirective", true)!;
     Set(((Array)Get(frontData, "Fronts")).GetValue(1)!, "Directive", Enum.ToObject(directiveType, (byte)2));
@@ -2244,7 +2244,7 @@ static void ProbeSupportSerialization(Assembly plugin, Assembly mirage)
     Stamp(frontData);
     object frontBack = Get(Decode(frontType, Encode(frontType, frontMessage)), "Data");
     CheckStamp(frontBack, "FRONT state");
-    if ((byte)Get(frontBack, "Protocol") != 41 || (int)Get(frontBack, "Seq") != 13 || Math.Abs((float)Get(frontBack, "Now") - 41.5f) > 0.001f)
+    if ((byte)Get(frontBack, "Protocol") != 42 || (int)Get(frontBack, "Seq") != 13 || Math.Abs((float)Get(frontBack, "Now") - 41.5f) > 0.001f)
         throw new InvalidOperationException("FRONT state roundtrip failed");
     object frontForeign = Get(Decode(frontType, new byte[] { 37 }), "Data");
     if ((byte)Get(frontForeign, "Protocol") != 37)
@@ -2476,12 +2476,20 @@ static void ProbeTacBoardConfig(Assembly plugin)
     try
     {
         object[] defaults = Values(Activator.CreateInstance(settingsType, Activator.CreateInstance(configFile, baseline, true))!);
+        // the slots may not repeat a page, never hold SYSTEMS and each moves alone too, so a slot's pick must differ from every default page (else Sanitize swaps the default's owner): counted back from the last        object PickPage(PropertyInfo option)        {            object[] pages = Enum.GetValues(option.PropertyType).Cast<object>().Where(page => page.ToString() != "Systems" && !defaults.Contains(page)).ToArray();            return pages[pages.Length - (option.Name[option.Name.Length - 1] - (char)48)];        }
+        object PickPage(PropertyInfo option)
+        {
+            object[] pages = Enum.GetValues(option.PropertyType).Cast<object>().Where(page => page.ToString() != "Systems" && !defaults.Contains(page)).ToArray();
+            return pages[pages.Length - (option.Name[option.Name.Length - 1] - (char)48)];
+        }
         object file = Activator.CreateInstance(configFile, path, true)!;
         object settings = Activator.CreateInstance(settingsType, file)!;
         foreach (PropertyInfo option in options)
             option.SetValue(settings, option.PropertyType == typeof(bool) ? !(bool)option.GetValue(settings)!
                 : option.PropertyType == typeof(float) ? 0.5f
-                : Enum.ToObject(option.PropertyType, Enum.GetValues(option.PropertyType).Length - 1));
+                : option.PropertyType == typeof(int) ? 2
+                : option.PropertyType.Name == "BoardPage" ? PickPage(option)
+                : Enum.ToObject(option.PropertyType, Enum.GetValues(option.PropertyType).Cast<object>().Max(Convert.ToInt32))); // the highest defined value, not the name count: BoardScopeMode.Auto aliases Manual
         object[] changed = Values(settings);
         for (int i = 0; i < options.Length; i++)
             if (Equals(changed[i], defaults[i])) throw new InvalidOperationException("TAC BOARD probe could not move " + options[i].Name + " off its default");

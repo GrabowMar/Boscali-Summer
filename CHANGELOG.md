@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.5 — update
+## 0.2.6 — spooky update
 
 - **OPS works both ways**: every OPS room now lets you see and answer what the enemy does to you.
   CYBER: when an enemy holds one of our radars, SAM nets, relays, uplinks or data centers, HQ calls it
@@ -15,18 +15,7 @@
   and AI factions defend with the same tools, and AI factions now build ASATs.
   Needs everyone on the same version (protocol 42).
 
-- **KAIJU**: the host can summon a mountain-sized monster (F1 › Kaiju › SUMMON KAIJU) that rises out of the
-  ground or sea 12 km ahead and marches on the nearest airbase, crushing what it steps on. It throws volleys of
-  heat-seeking spikes off its back (flares and hard turns work), sweeps a mouth beam that aims where you were a
-  second ago (cross it, don't run from it), and claws anything that flies within reach of its arms. Its body
-  looks the same with or without Spooktober. 21 glowing weak spots (F1 › Kaiju › WeakSpotScale, default 0.6 of the original size) are lockable targets: break the throat and the beam is gone, the eyes and it aims
-  worse, the spine sacs and fewer spikes fly, the wrists and that arm stops swiping, the knees and it crawls. Break
-  twelve and its heart opens; kill the heart and it collapses.
-- **SPOOKTOBER** (seasonal, its own module, switch it off in F1): a few seconds after you spawn, something breaks in on
-  the radio. It tells you to leave the puzzles hidden in SET alone; solve them anyway and a secret menu answers with a
-  chain of bosses: the KAIJU, then a FALLEN ACE (a gun-only ghost fighter on its own side that comes back twice;
-  single player or a host without clients for now), then something [REDACTED]. The ace glows see-through in spectral blue and sheds
-  embers; the kaiju keeps its own look.
+- **Something is on the air this season.** We are not saying more. Happy Spooktober.
 - **A living sea**: the ocean now has real waves that follow the wind and build under storms:
   long swell on a calm day, choppy wave rows and whitecaps in a fresh breeze, steep grey seas,
   foam streaks and breaking crests in a gale, and surf along the shallows. The sea picks up the
@@ -97,6 +86,8 @@
   messages clear. Scripted readouts pause with the mission and clear when it ends.
   A single barely visible shadow now backs the whole left column; brighter log copy and
   slightly larger COMMS text replace the separate dark clouds behind each section.
+
+## 0.2.5 — update
 
 - **Near-future helmet display**: the cockpit visor is a curved HMD glass with an electrochromic sun
   tint, breath fog, a faint coating that shifts hue toward the rim, and hairline scratches drawn at
