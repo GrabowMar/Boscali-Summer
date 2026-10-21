@@ -23,8 +23,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public bool SystemsCriticalOnly;
         public bool ShowGauges;
         public bool ShowTicker;
-        /// <summary>The NAV DATA block (bottom right, cockpit view) may show: its switch, and not at Minimal. Its caption shelf follows <see cref="Furniture"/>.</summary>
-        public bool ShowNavData;
         /// <summary>Decorative captions and shelves are drawn (the painters' <c>ScopeCanvas.Furniture</c> flag; brackets, ticks and markers stay at every level).</summary>
         public bool Furniture;
 
@@ -59,7 +57,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public bool ShowStores;
         public bool PageThreat, PageShot, PageMissileCam, PageApproach, PageWing, PageStrike, PageDock, PageObjective, PageSystems, PageCargo;
         public float ThreatHoldSeconds, PageMinSeconds;
-        public bool ShowLamps, ShowGauges, ShowTicker, ShowNavData;
+        public bool ShowLamps, ShowGauges, ShowTicker;
         public bool Sway, Corners;
 
         /// <summary>What a pilot gets who has touched nothing. (A zeroed struct is NOT this: it has the board off.)</summary>
@@ -70,7 +68,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             PageCount = 1, Page1 = BoardPage.Threat, Page2 = BoardPage.Shot, Page3 = BoardPage.Wing, Page4 = BoardPage.Objective, ShowStores = true,
             PageThreat = true, PageShot = true, PageMissileCam = true, PageApproach = true, PageWing = true, PageStrike = true, PageDock = true, PageObjective = true, PageSystems = true, PageCargo = true,
             ThreatHoldSeconds = 6f, PageMinSeconds = 3f,
-            ShowLamps = true, ShowGauges = true, ShowTicker = true, ShowNavData = true,
+            ShowLamps = true, ShowGauges = true, ShowTicker = true,
             Sway = true, Corners = true,
         };
 
@@ -149,7 +147,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 SystemsCriticalOnly = minimal,
                 ShowGauges = ShowGauges && full,
                 ShowTicker = ShowTicker,
-                ShowNavData = ShowNavData && !minimal,
                 Furniture = full,
             };
         }

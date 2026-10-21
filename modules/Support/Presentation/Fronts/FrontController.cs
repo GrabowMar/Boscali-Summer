@@ -24,7 +24,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     internal sealed class FrontController : MonoBehaviour, ISceneService, IFrontActions
     {
         private const float Refresh = 0.2f, PressGap = 0.35f, WordsHold = 8f;
-        private const string Resting = "Keyboard and joystick stay live; the mouse drives this window. It closes with Esc or after a minute without input.";
+        private const string Resting = "Keyboard and joystick stay live; the mouse drives this window. It closes with Esc.";
 
         private SupportManager manager;
         private CallsController calls;
@@ -98,10 +98,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             int faction = CurrentFaction();
             if (faction != lastFaction) ClearSelections(); // another faction's ids mean something else; the same faction keeps its picks across opens and room switches
             lastFaction = faction;
+            // The room covers the map but the manager still reads right-clicks there: an armed perk or post must not fire from inside the room.
+            if (calls != null && (calls.Armed != null || calls.TaskedArmedId != 0 || calls.SteeringCruise)) calls.Disarm();
             WantFeeds(true);
             feed?.SetVisible(front == Front.Space);
-            Build();
-            if (!window.Open(view)) { feed?.SetVisible(false); WantFeeds(false); Say("NEGATIVE: WINDOW COULD NOT OPEN", AvState.Danger); return false; }
+            bool shown;
+            try { Build(); shown = window.Open(view); }
+            catch (System.Exception e) { Plugin.Logger?.LogError("OPS front window build failed: " + e); shown = false; }
+            if (!shown) { feed?.SetVisible(false); WantFeeds(false); Say("NEGATIVE: WINDOW COULD NOT OPEN", AvState.Danger); return false; }
             open = true;
             badSince = -1f;
             nextRefresh = Time.unscaledTime + Refresh;
@@ -350,7 +354,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private bool Gate()
         {
             if (pendingRequest != 0) { Say("NEGATIVE: WAITING FOR THE HOST", AvState.Danger); return false; }
-            if (Time.unscaledTime < nextPress) return false;
+            if (Time.unscaledTime < nextPress) { Say("STAND BY · ONE PRESS AT A TIME", AvState.Info); return false; } // never a silent drop
             nextPress = Time.unscaledTime + PressGap;
             return manager != null;
         }

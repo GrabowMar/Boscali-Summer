@@ -402,7 +402,7 @@ public static class SettingsUnityCheck
     {
         foreach (string group in new[] { "TAC BOARD", "TAC BOARD PAGES", "TAC BOARD PARTS", "TAC BOARD EXTRAS" })
             Check(content.Find("Section " + group) != null, "COCKPIT carries the " + group + " section");
-        foreach (string toggle in new[] { "TAC BOARD", "STORES AND POWER", "TACTICAL PAGES", "LAMPS AND GAUGES", "NOTICES", "NAV DATA", "FEED AND MAP", "VISOR SWAY" })
+        foreach (string toggle in new[] { "TAC BOARD", "STORES AND POWER", "TACTICAL PAGES", "LAMPS AND GAUGES", "NOTICES", "FEED AND MAP", "VISOR SWAY" })
             Check(content.Find("Cell " + toggle) != null, "TAC BOARD switch " + toggle + " exists");
         foreach (string retired in new[] { "RADAR WARNING", "SHOT", "MISSILE CAM", "APPROACH", "WING", "STRIKE", "DOCK", "OBJECTIVE", "SYSTEMS", "CARGO", "LAMPS", "SYSTEMS STRIP", "GAUGES", "PAGE MIN STAY" })
             Check(content.Find("Cell " + retired) == null, "Retired granular TAC BOARD control " + retired + " stays removed");
@@ -436,7 +436,7 @@ public static class SettingsUnityCheck
         scroll.verticalNormalizedPosition = 1f;
 
         // Every major switch flips only its group and flips it back. TAC BOARD goes last so the options remain live.
-        string[] cells = { "TAC BOARD", "STORES AND POWER", "TACTICAL PAGES", "LAMPS AND GAUGES", "NOTICES", "NAV DATA", "FEED AND MAP", "VISOR SWAY" };
+        string[] cells = { "TAC BOARD", "STORES AND POWER", "TACTICAL PAGES", "LAMPS AND GAUGES", "NOTICES", "FEED AND MAP", "VISOR SWAY" };
         for (int n = 1; n <= cells.Length; n++)
         {
             int at = n % cells.Length;      // TAC BOARD last: with the board off the others are inert
@@ -1073,7 +1073,6 @@ public static class SettingsUnityCheck
         public bool ShowLamps { get; set; }
         public bool ShowGauges { get; set; }
         public bool ShowTicker { get; set; }
-        public bool ShowNavData { get; set; }
         public bool Sway { get; set; }
         public bool Corners { get; set; }
 
@@ -1082,7 +1081,7 @@ public static class SettingsUnityCheck
         /// <summary>The master, six major parts and sway in their control order.</summary>
         public string Switches()
         {
-            bool[] all = { Enabled, ShowStores, ScopeMode != BoardScopeMode.Off, ShowLamps || ShowGauges, ShowTicker, ShowNavData, Corners, Sway };
+            bool[] all = { Enabled, ShowStores, ScopeMode != BoardScopeMode.Off, ShowLamps || ShowGauges, ShowTicker, Corners, Sway };
             var text = new System.Text.StringBuilder();
             foreach (bool b in all) text.Append(b ? '1' : '0');
             return text.ToString();
@@ -1095,7 +1094,7 @@ public static class SettingsUnityCheck
             PageCount = 1; Page1 = BoardPage.Threat; Page2 = BoardPage.Shot; Page3 = BoardPage.Wing; Page4 = BoardPage.Objective;
             PageThreat = PageShot = PageMissileCam = PageApproach = PageWing = PageStrike = PageDock = PageObjective = PageCargo = PageSystems = true;
             ThreatHoldSeconds = 6f; PageMinSeconds = 3f;
-            ShowStores = ShowLamps = ShowGauges = ShowTicker = ShowNavData = true;
+            ShowStores = ShowLamps = ShowGauges = ShowTicker = true;
             Sway = Corners = true;
         }
 
@@ -1107,7 +1106,7 @@ public static class SettingsUnityCheck
                    PageCount == fresh.PageCount && Page1 == fresh.Page1 && Page2 == fresh.Page2 && Page3 == fresh.Page3 && Page4 == fresh.Page4 &&
                    PageThreat && PageShot && PageMissileCam && PageApproach && PageWing && PageStrike && PageDock && PageObjective && PageCargo && PageSystems &&
                    ThreatHoldSeconds == fresh.ThreatHoldSeconds && PageMinSeconds == fresh.PageMinSeconds &&
-                   ShowStores && ShowLamps && ShowGauges && ShowTicker && ShowNavData && Sway && Corners;
+                   ShowStores && ShowLamps && ShowGauges && ShowTicker && Sway && Corners;
         }
     }
 

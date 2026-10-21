@@ -2,12 +2,18 @@ using BoscaliSummer.Modules.Support.Runtime;
 
 namespace BoscaliSummer.Modules.Support.Domain.Calls
 {
-    internal enum ArmStep : byte { Armed, Fire }
+    internal enum ArmStep : byte { Armed, Fire, Bounce }
 
-    /// <summary>Core §5.3: first press arms, second press on the same CALL within 8 s fires.</summary>
+    /// <summary>
+    /// Core §5.3: first press arms, a second press on the same CALL within <see cref="ArmSeconds"/> fires. The arm stays until the caller
+    /// clears it after a send, so a fire step that cannot go (no aim, no link) leaves the perk armed and its map pick usable.
+    /// </summary>
     internal sealed class ArmState
     {
-        public const float ArmSeconds = 8f;
+        /// <summary>Long enough to open the map and find the spot (8 s ran out mid-pick).</summary>
+        public const float ArmSeconds = 30f;
+        /// <summary>A second press sooner than this is the same click bouncing (a double-click), not a FIRE.</summary>
+        public const float MinFireGap = 0.4f;
 
         private float armedAt;
 
@@ -15,11 +21,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
 
         public ArmStep Press(SupportActionId id, float now)
         {
-            if (Armed == id && now - armedAt <= ArmSeconds)
-            {
-                Armed = null;
-                return ArmStep.Fire;
-            }
+            if (Armed == id && now - armedAt < MinFireGap) return ArmStep.Bounce;
+            if (Armed == id && now - armedAt <= ArmSeconds) return ArmStep.Fire;
             Armed = id;
             armedAt = now;
             return ArmStep.Armed;

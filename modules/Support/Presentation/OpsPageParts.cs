@@ -302,7 +302,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 FrontKit.Set(dirValue, c.Known ? c.Directive : "—", AvInk.Ink);
                 bool has = !string.IsNullOrEmpty(c.Event);
                 FrontKit.Set(eventAge, has ? c.EventAge : "", AvInk.Dim);
-                FrontKit.Set(eventLine, has ? C2Kit.FitTo(eventLine, c.Event, eventLine.rectTransform.rect.width) : c.Known ? "NO EVENTS LOGGED YET" : "", AvInk.Dim); // a long refusal line is cut at the card edge; the rail's log has it whole
+                FrontKit.Set(eventLine, has ? FrontKit.Fit(eventLine, c.Event, 10.5f) : c.Known ? "NO EVENTS LOGGED YET" : "", AvInk.Dim); // steps to 10 px before it is cut; the rail's log has it whole
             }
         }
     }

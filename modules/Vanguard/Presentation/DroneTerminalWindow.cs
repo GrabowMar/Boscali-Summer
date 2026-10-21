@@ -66,6 +66,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private void Build(Transform uiRoot)
         {
             window = AvWindow.Build(uiRoot, "UavTerminal", "UAV TERMINAL · VANGUARD DATA LINK", W, H, SortOrder);
+            // Solid: the window's blur/frost layer drew over the body plate and the HUD and MFDs behind showed through as ghosts.
+            window.Opaque = true;
             window.Closed += OnClosed;
             window.CloseControl.Help = "Close the terminal (Esc). Stick and keyboard keep flying the aircraft; the mouse drives this window.";
             window.Footer.Set("Stick and keyboard keep flying your aircraft; the mouse drives the terminal. Esc closes it.", AvState.Inert);
@@ -99,9 +101,16 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             float feedH = Mathf.Round(HeroW * 9f / 16f);
             feed = new DroneFeedView(r, "Feed", 15f);
             feed.Place(new AvSlot(hx, top, HeroW, feedH));
+            // Click-to-steer: click the picture and the drone turns there (above or below the cross climbs or dives); the wheel trims height.
+            Image pad = AvLay.Solid(feed.Rect, "SteerPad", Color.clear);
+            AvLay.Fill(pad.rectTransform);
+            pad.raycastTarget = true;
+            SteerPad steer = pad.gameObject.AddComponent<SteerPad>();
+            steer.Click = FeedClick;
+            steer.Wheel = d => { link.Climb(d > 0f ? 150f : -150f); Paint(); };
             float cy = top + feedH + 8f, cellW = HeroW / 5f;
             cardHead = Head(r, "CardHead", hx, cy, HeroW);
-            string[] names = { "TYPE", "JOB", "ORDER", "LINK", "TIME ALOFT", "ALTITUDE", "SPEED", "HEADING", "RANGE / BRG", "WAYPOINT", "TASK", "SYSTEMS", "POSITION" };
+            string[] names = { "TYPE", "JOB", "ORDER", "LINK", "TIME ALOFT", "ALTITUDE", "SPEED", "HEADING", "RANGE / BRG", "COMMAND", "TASK", "SYSTEMS", "POSITION" };
             for (int i = 0; i < keys.Length; i++)
             {
                 // Row three: TASK spans three cells, then SYSTEMS and POSITION.
@@ -139,7 +148,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 ringLabels[i].raycastTarget = false;
             }
             float py = top + HeadH + 4f + PlotSize + 4f;
-            plotHint = AvText.Make(r, "PlotHint", AvTextRole.Micro, "CLICK A MARKER TO LINK IT · CLICK GROUND TO SEND THE LINKED DRONE", TextAlignmentOptions.TopLeft, true);
+            plotHint = AvText.Make(r, "PlotHint", AvTextRole.Micro, "CLICK A MARKER TO LINK IT · CLICK OPEN GROUND TO SEND THE LINKED DRONE THERE", TextAlignmentOptions.TopLeft, true);
             AvLay.Place(plotHint, rx, py, rw, 30f);
             logHead = Head(r, "LogHead", rx, py + 34f, rw);
             log = AvText.Make(r, "Log", AvTextRole.DataSmall, "", TextAlignmentOptions.TopLeft, true);
@@ -149,7 +158,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             float by = H - FooterH - BarH - 2f, bw = (W - 2f * Pad - 6f * 8f) / 7f;
             prev = Button(r, 0, by, bw, "PREV", AvIcon.ChevronLeft, () => link.Cycle(-1), "Link the previous drone. While you hand-fly, the stick goes with the link.");
             next = Button(r, 1, by, bw, "NEXT", AvIcon.ChevronRight, () => link.Cycle(1), "Link the next drone. While you hand-fly, the stick goes with the link.");
-            hand = Button(r, 2, by, bw, "TAKE CONTROL", AvIcon.Drone, link.ToggleHand, "Fly the linked drone by hand: it goes the way your nose points. Your own aircraft stays on your stick.");
+            hand = Button(r, 2, by, bw, "TAKE CONTROL", AvIcon.Drone, link.ToggleHand, "Hand-fly the linked drone: it holds its course and height until you click the feed to steer it (the wheel trims height). Your own aircraft stays on your stick.");
             auto = Button(r, 3, by, bw, "BACK ON TASK", AvIcon.Refresh, link.Release, "Clear the hand control or waypoint: the drone goes back to its own job.");
             look = Button(r, 4, by, bw, "SENSOR", AvIcon.Eye, link.ToggleLook, "Switch the sensor between the daylight camera (EO) and white-hot infrared (IR).");
             zoom = Button(r, 5, by, bw, "ZOOM", AvIcon.Focus2, link.CycleZoom, "Step the camera zoom: 1X, 3X, 7X.");
@@ -324,7 +333,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             AvText.Set(values[6], AvNum.Fixed(v.SpeedMs * 1.944f, 0) + " KT");
             AvText.Set(values[7], Deg(v.HeadingDeg));
             AvText.Set(values[8], AvNum.Fixed(v.RangeM / 1000f, 1) + " KM / " + Deg(v.BearingDeg));
-            AvText.Set(values[9], v.Mode == DroneMode.Waypoint ? AvNum.Fixed(Flat(v.Position, v.Point) / 1000f, 1) + " KM OUT" : "—");
+            AvText.Set(values[9], v.Mode == DroneMode.Waypoint ? AvNum.Fixed(Flat(v.Position, v.Point) / 1000f, 1) + " KM OUT"
+                : v.Mode == DroneMode.Hand ? "CRS " + Deg(v.Point.x) + " · " + AvNum.Fixed(v.Point.y, 0) + " M" : "—");
             AvText.Set(values[10], DroneLink.Task(v.Role));
             AvText.Set(values[11], v.Mode == DroneMode.Auto ? "ON TASK" : v.Role == VanguardRole.Drone ? "HOLD · RAM FUSE LIVE" : "AUTO HOLD");
             Vector3 d = v.Position - link.SelfPosition;
@@ -333,10 +343,10 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             values[2].color = AvInk.State(v.Mode == DroneMode.Hand ? AvState.Caution : v.Mode == DroneMode.Waypoint ? AvState.Info : AvState.Ready);
             values[3].color = AvInk.State(v.Quality <= 0f ? AvState.Danger : v.Quality < 0.5f ? AvState.Caution : AvState.Ready);
             AvText.Set(orders, v.Mode == DroneMode.Hand
-                ? "HAND CONTROL: the drone flies the way your nose points. Turn and pitch your own aircraft to steer it; its systems hold until you release it."
+                ? "HAND CONTROL: CLICK THE FEED to steer (the drone turns to where you click; above or below the cross climbs or dives), MOUSE WHEEL trims height. It holds that course until you change it; its systems hold until you release it."
                 : v.Mode == DroneMode.Waypoint
                     ? "WAYPOINT: the drone flies to the plot point and circles it at " + AvNum.Fixed(DroneLink.OrbitRadiusM / 1000f, 1) + " KM. BACK ON TASK resumes its own job."
-                    : "ON TASK: the drone flies its own job. TAKE CONTROL to hand-fly it, or click the plot to send it somewhere.");
+                    : "ON TASK: the drone flies its own job. Click the feed to take it by hand and steer it there, or click the plot to send it to a point.");
         }
 
         // ---- tactical plot -----------------------------------------------------------------------------------------------
@@ -383,6 +393,11 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                     AvStrokes.DashedLine(b, p.x, p.y, w.x, w.y, 4f, 3f, 1f, tone);
                     AvStrokes.Cross(b, w.x, w.y, 5f, 1.4f, tone);
                     AvStrokes.Ring(b, w.x, w.y, Mathf.Max(3f, DroneLink.OrbitRadiusM * plotScale), 32, 1f, tone);
+                }
+                if (v.Mode == DroneMode.Hand)
+                {
+                    float cr = v.Point.x * Mathf.Deg2Rad; // the commanded course, ahead of the heading stub
+                    AvStrokes.DashedLine(b, p.x, p.y, p.x + Mathf.Sin(cr) * 44f, p.y + Mathf.Cos(cr) * 44f, 4f, 3f, 1f, tone);
                 }
                 float rad = v.HeadingDeg * Mathf.Deg2Rad;
                 AvStrokes.Line(b, p.x, p.y, p.x + Mathf.Sin(rad) * 12f, p.y + Mathf.Cos(rad) * 12f, 1.2f, tone);
@@ -439,6 +454,25 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             else if (link.Linked != null && plotScale > 0f)
                 link.SendTo(new Vector3(plotCentre.x + (p.x - PlotSize * 0.5f) / plotScale, 0f, plotCentre.z + (p.y - PlotSize * 0.5f) / plotScale));
             Paint();
+        }
+
+        private void FeedClick(PointerEventData e)
+        {
+            if (e.button != PointerEventData.InputButton.Left) return;
+            RectTransform rt = feed.Rect;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(rt, e.position, null, out Vector2 local)) return;
+            Rect box = rt.rect;
+            link.SteerAt(new Vector2((local.x - box.xMin) / box.width, (local.y - box.yMin) / box.height));
+            Paint();
+        }
+
+        /// <summary>The feed's click and wheel (AvHit has no wheel).</summary>
+        private sealed class SteerPad : MonoBehaviour, IPointerClickHandler, IScrollHandler
+        {
+            public Action<PointerEventData> Click;
+            public Action<float> Wheel;
+            public void OnPointerClick(PointerEventData e) => Click?.Invoke(e);
+            public void OnScroll(PointerEventData e) { if (e.scrollDelta.y != 0f) Wheel?.Invoke(e.scrollDelta.y); }
         }
 
         private static string Signed(float metres) => (metres > -50f ? "+" : "-") + AvNum.Fixed(Mathf.Abs(metres) / 1000f, 1);      // under 50 m rounds to 0.0: no "-0.0"

@@ -121,8 +121,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
             lockLine = FrontKit.Mono(d, "Lock", 10f, 62f, w * 0.5f, 18f, 11f, TextAlignmentOptions.MidlineLeft);
             focusLine = FrontKit.Mono(d, "Focus", w * 0.5f, 62f, w * 0.5f - 118f, 18f, 11f, TextAlignmentOptions.MidlineRight);
-            focusButton = Button(d, "PIN FOCUS", w - 108f, 60f, 98f, 22f, () => actions.SetFocus(front), AvButtonStyle.Quiet);
-            focusButton.Help = "Pin the director's attention to the last map click (one pin per front).";
+            focusButton = Button(d, "PICK FOCUS", w - 108f, 60f, 98f, 22f, () => actions.SetFocus(front), AvButtonStyle.Quiet);
+            focusButton.Help = "Pick a point for the director to work around: this window hides, right-click the map (Esc cancels). One pin per front.";
             postureLine = FrontKit.Mono(d, "Posture", 10f, 84f, w - 20f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
             Rule(d, 10f, 104f, w - 20f, 1f);
             keyList.Add(Key(d, "FUNDING SPLIT · FACTION-WIDE", 10f, 108f, w * 0.5f - 10f, 14f));
@@ -358,7 +358,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 }
                 FrontLogLine l = v.Log[li];
                 FrontKit.Set(logStamp[i], l.Stamp, AvInk.Dim);
-                FrontKit.Set(logText[i], C2Kit.FitTo(logText[i], l.Text, logText[i].rectTransform.rect.width), FrontKit.Tone(l.Tone == AvState.Inert ? AvState.Info : l.Tone));
+                FrontKit.Set(logText[i], FrontKit.Fit(logText[i], l.Text, 11f), FrontKit.Tone(l.Tone == AvState.Inert ? AvState.Info : l.Tone));
                 FrontKit.Set(logAgo[i], l.Ago < 1f ? "NOW" : FrontKit.Clock(l.Ago) + " AGO", AvInk.Dim);
             }
             status.SetMeta(FrontRules.Name(front) + " FRONT", AvInk.Dim);
@@ -660,8 +660,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 AvLay.Place(root, x, y, width, height);
                 chip = FrontKit.Panel(root, "Chip", 0f, 1f, 28f, height - 2f, 3f, 0f);
                 rung = FrontKit.Mono(root, "Rung", 0f, 1f, 28f, height - 2f, 11f, TextAlignmentOptions.Midline, true);
-                name = FrontKit.Mono(root, "Name", 36f, 0f, 150f, height, 11.5f, TextAlignmentOptions.MidlineLeft, true);
-                effect = FrontKit.Mono(root, "Effect", 190f, 0f, width - 190f - 138f, height, 10.5f, TextAlignmentOptions.MidlineLeft);
+                name = FrontKit.Mono(root, "Name", 36f, 0f, 128f, height, 11.5f, TextAlignmentOptions.MidlineLeft, true);
+                effect = FrontKit.Mono(root, "Effect", 168f, 0f, width - 168f - 138f, height, 10.5f, TextAlignmentOptions.MidlineLeft);
                 state = FrontKit.Mono(root, "State", width - 134f, 0f, 134f, height, 10.5f, TextAlignmentOptions.MidlineRight, true);
                 skin.Add(Restyle);
             }
@@ -677,8 +677,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 AvLay.Place(root, x, y, width, height);
                 AvLay.Place(chip.rectTransform, 0f, 1f, 28f, height - 2f);
                 AvLay.Place(rung.rectTransform, 0f, 1f, 28f, height - 2f);
-                AvLay.Place(name.rectTransform, 36f, 0f, 150f, height);
-                AvLay.Place(effect.rectTransform, 190f, 0f, width - 190f - 138f, height);
+                AvLay.Place(name.rectTransform, 36f, 0f, 128f, height);
+                AvLay.Place(effect.rectTransform, 168f, 0f, width - 168f - 138f, height);
                 AvLay.Place(state.rectTransform, width - 134f, 0f, 134f, height);
                 AvText.Size(rung, dense ? 10f : 11f); AvText.Size(name, dense ? 10.5f : 11.5f); AvText.Size(effect, dense ? 10f : 10.5f); AvText.Size(state, dense ? 10f : 10.5f);
             }

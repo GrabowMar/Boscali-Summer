@@ -1,0 +1,266 @@
+# Boscali Summer, chapter 1: Twelve Miles Out.
+# Coup morning in the Ignus archipelago. The pilot flies for Halyard Risk Group, a private security firm, and keeps a client's three
+# freighters afloat outside the twelve-mile line while the Boscali Republic falls apart behind them. Republic (BDF) and PALA forces are at
+# peace with the firm and fight each other; the pirates are the only enemy. Design: docs/superpowers/specs/2026-10-20-boscali-summer-campaign-remake-design.md.
+# The format is documented in docs/SCENARIOS.md. The screen clips (tmo-screen-*.webm) are rendered by tools/MotionScreens.
+
+scenario twelve-miles-out
+title "Twelve Miles Out"
+base "Free Flight - Ignus Archipelago"
+group "Boscali Summer"
+campaign boscali-summer 1
+# The coup is staged by this script: nothing else may start fights, raise nests on the airfields or drop events into it.
+without events theater-ops air-survival strategic-command dynamic-operations support high-command squad progression kaiju spooktober urban-combat trenches
+
+about
+| 12 June 2034, Ignus archipelago. At two this morning PALA took Agrapol. By dawn the Boscali Republic's navy is running for open
+| water and nobody in the capital answers the phone.
+|
+| None of that is your war. You fly for Halyard Risk Group, and Halyard has one contract this morning: three Calder Lines freighters
+| holding beyond the twelve-mile limit, a hundred people aboard, and no navy left to look after them. Find the convoy and keep it afloat.
+|
+| Republic and PALA forces are neutral: they will not fire on you, and you are not paid to fire on them. Only pirates show as targets.
+| The convoy's flagship, the Calder Spirit, must survive.
+
+# ------------------------------------------------------------------------------------------------ the world
+time 6
+weather 0.2
+ending 18
+gamemusic off
+# Nobody joins the regular sides; the pilot is enlisted into the firm by the story.
+lock bdf
+lock pala
+# The coup goes on all around, and none of it is aimed at the firm or the pirates.
+peace pmc bdf pala
+peace pirates bdf pala
+begin find_convoy stage_convoy stage_coup stage_strike stage_two spirit_lost grace_lost vale_lost two_down constance_lost
+
+# Feldspar International Airport. A PALA column comes up the airport road; what is left of the Republic's garrison holds the apron with
+# trucks and carriers. It is not a fair fight, and it is not meant to look like one.
+unit coup_1       new vehicle MBT1             side=pala at 760 9.3 3828 heading=60 skill=0.7 to=1160,4070
+unit coup_2       new vehicle MBT1             side=pala at 734 9.4 3813 heading=60 skill=0.7 to=1120,4120
+unit coup_3       new vehicle MBT1             side=pala at 708 9.4 3798 heading=60 skill=0.7 to=1080,4040
+unit coup_4       new vehicle Linebreaker_IFV  side=pala at 682 9.5 3783 heading=60 skill=0.7 to=1040,4000
+unit coup_5       new vehicle Linebreaker_IFV  side=pala at 656 9.5 3768 heading=60 skill=0.7 to=1000,3980
+unit hold_1       new vehicle AFV8_APC         side=bdf  at 1040 9.2 4290 heading=235 skill=0.15
+unit hold_2       new vehicle AFV8_IFV         side=bdf  at 995 8.6 4335 heading=235 skill=0.15
+unit hold_3       new vehicle HLT-M            side=bdf  at 1095 8.7 4240 heading=235 skill=0.15
+unit hold_4       new vehicle HLT-T            side=bdf  at 945 7.8 4405 heading=235 skill=0.15
+unit hold_5       new vehicle HLT-T            side=bdf  at 905 7.8 4455 heading=235 skill=0.15
+unit gunship_1    new aircraft AttackHelo1 side=pala at 260 150 3300 heading=30 speed=50 skill=0.7 loadout=turret_30mmHE_750+AGM1_quad_internal+RocketPod1_triple+IRMS1_double+IRMS1_double
+unit gunship_2    new aircraft AttackHelo1 side=pala at 120 170 3180 heading=30 speed=50 skill=0.7 loadout=turret_30mmHE_750+AGM1_quad_internal+RocketPod1_triple+IRMS1_double+IRMS1_double
+# What is left of the Republic's air arm, getting out of Feldspar with whatever flies.
+unit flee_1       new aircraft trainer side=bdf at 1650 350 4750 heading=75 speed=120 skill=0.3 loadout=gunpod_25mm_trainer+gunpod_20mm++AAM1_single+TailHook_Trainer
+unit flee_2       new aircraft trainer side=bdf at 1480 380 4600 heading=75 speed=120 skill=0.3 loadout=gunpod_25mm_trainer+gunpod_20mm++AAM1_single+TailHook_Trainer
+unit evac_helo    new aircraft UtilityHelo1 side=bdf at 950 90 4750 heading=20 speed=50 skill=0.3 loadout=+++FuelContainer2x1+++
+
+# The Republic's home squadron, out of Agrapol harbour and running north-east for anywhere else. Half-crewed: slow to see, slow to shoot.
+unit bdf_constance new ship Frigate1    side=bdf at -500 6.3 7200  heading=50 skill=0.1 to=26000,30000
+unit bdf_halberd   new ship Corvette1   side=bdf at -950 7.8 6750  heading=50 skill=0.1 to=25500,29500
+unit bdf_p31       new ship PatrolBoat1 side=bdf at -150 2.8 6650  heading=50 skill=0.1 to=26400,29300
+unit bdf_p34       new ship PatrolBoat1 side=bdf at -1350 2.8 7350 heading=50 skill=0.1 to=25200,30300
+# PALA's strike package sent after it: attack aircraft low, strike fighters with anti-ship missiles from further out.
+unit strike_1     new aircraft CAS1 side=pala at -4200 600 3900 heading=45 speed=130 skill=0.7 loadout=gun_ammo_35mm_720+gun_57mm_pod++AGM1_triple+Rocket2_4Podx3+bomb_250_triple+AAM3_double+AGM1_double
+unit strike_2     new aircraft CAS1 side=pala at -4500 650 3600 heading=45 speed=130 skill=0.7 loadout=gun_ammo_35mm_720+gun_57mm_pod++AGM1_triple+Rocket2_4Podx3+bomb_250_triple+AAM3_double+AGM1_double
+unit lancer_1     new aircraft Multirole1 side=pala at -12000 2400 1500 heading=45 speed=220 skill=0.7 loadout=autocannon_27mm_internal+AGM_heavy_internalx2+AAM2_triple_internal+AAM3_single_internal+AShM1_single+AShM1_single+TailHook_Multirole1
+unit lancer_2     new aircraft Multirole1 side=pala at -12400 2500 1100 heading=45 speed=220 skill=0.7 loadout=autocannon_27mm_internal+AGM_heavy_internalx2+AAM2_triple_internal+AAM3_single_internal+AShM1_single+AShM1_single+TailHook_Multirole1
+
+# The client: three Calder Lines feeders beyond the line, making for open water. In from the twentieth second, for the cutscene.
+unit calder_spirit new ship BS_ContainerFeeder side=pmc at 6000 6.0 27000 heading=74 skill=0.5 to=32000,34500
+unit calder_grace  new ship BS_ContainerFeeder side=pmc at 5400 6.0 26600 heading=74 skill=0.5 to=31400,34100
+unit calder_vale   new ship BS_ContainerFeeder side=pmc at 6400 6.0 26450 heading=74 skill=0.5 to=32400,33950
+# Summer Two, the wingman. He takes off with the pilot.
+unit summer_two    new aircraft CAS1 side=pmc at 9300 1150 8250 heading=354 speed=150 skill=1 loadout=gun_ammo_35mm_720+gun_30mm_rotary_pod++gunpod_20mm+Rocket2_4Podx3+bomb_250_triple+AAM3_double+AGM1_double
+
+# The pirates. Fast boats first, then a Republic corvette whose crew has stopped waiting for its wages, then whatever money buys in the air.
+unit boat_1       new ship PatrolBoat1 side=pirates at 12600 2.8 31600 heading=235 skill=0.5 to=8600,28800
+unit boat_2       new ship PatrolBoat1 side=pirates at 13000 2.8 31200 heading=235 skill=0.5 to=8900,28400
+unit boat_3       new ship PatrolBoat1 side=pirates at 11800 2.8 22200 heading=330 skill=0.5 to=8700,27100
+unit boat_4       new ship PatrolBoat1 side=pirates at 12300 2.8 22000 heading=330 skill=0.5 to=9100,26900
+unit ardent       new ship Corvette1   side=pirates at 15500 7.8 21500 heading=320 skill=0.5 to=11000,29000
+unit raider_1     new aircraft COIN side=pirates at -4000 450 34500 heading=110 speed=95 skill=0.55 loadout=12.7mm_internal+turret_20mm_rotary+gunpod_20mm+AAM3_single+AGM1_single+AGM1_single
+unit raider_2     new aircraft COIN side=pirates at -4300 500 34000 heading=110 speed=95 skill=0.55 loadout=12.7mm_internal+turret_20mm_rotary+gunpod_20mm+AAM3_single+AGM1_single+AGM1_single
+unit raider_helo  new aircraft AttackHelo1 side=pirates at -3500 140 33600 heading=110 speed=50 skill=0.5 loadout=turret_30mmHE_750+AGM1_quad_internal+RocketPod1_triple+IRMS1_double+IRMS1_double
+
+# Staging, timed to the intro: the coup rolls onto the airport a few seconds before the news picks it up, the strike goes in as the squadron
+# clears the harbour, the feeders are in for their shots (an addon ship type is ready a few seconds after the mission is), Summer Two takes
+# off with the pilot.
+objective stage_convoy wait 20
+  then spawn calder_spirit calder_grace calder_vale
+objective stage_coup wait 52
+  then spawn coup_1 coup_2 coup_3 coup_4 coup_5 hold_1 hold_2 hold_3 hold_4 hold_5 gunship_1 gunship_2 flee_1 flee_2 evac_helo
+objective stage_strike wait 44
+  then spawn strike_1 strike_2 lancer_1 lancer_2
+objective stage_two wait 135
+  then spawn summer_two
+
+# The contract.
+objective find_convoy pmc "Find the Calder convoy" reach 7000 400 27500 range=5000
+  then spawn boat_1 boat_2 boat_3 boat_4
+  then start boats boats_clock
+objective boats pmc "Sink the boarding boats" destroy boat_1 boat_2 boat_3 boat_4
+  then stop boats_clock
+  then spawn ardent
+  then start ardent_wave ardent_clock
+objective boats_clock wait 540
+  then finish boats
+objective ardent_wave pmc "Stop the corvette Ardent" destroy ardent
+  then stop ardent_clock
+  then spawn raider_1 raider_2 raider_helo
+  then start air_wave air_clock
+objective ardent_clock wait 600
+  then finish ardent_wave
+objective air_wave pmc "Break the air attack" destroy raider_1 raider_2 raider_helo
+  then stop air_clock
+  then start convoy_clear
+objective air_clock wait 600
+  then finish air_wave
+objective convoy_clear pmc wait 25
+  then victory 18
+# Lose the flagship and the client's board has lost the morning.
+objective spirit_lost pirates destroy calder_spirit
+  then victory 12
+# Things worth a word on the radio.
+objective grace_lost destroy calder_grace
+objective vale_lost destroy calder_vale
+objective two_down destroy summer_two
+objective constance_lost destroy bdf_constance
+
+# ------------------------------------------------------------------------------------------------ the story
+cast ledger    command "LEDGER"                "Halyard Risk Group, operations"
+cast two       wing    "SUMMER TWO"            "Your wingman"
+cast spirit    tower   "CALDER SPIRIT"         "Convoy master, Calder Lines"
+cast viper     awacs   "VIPER LEAD"            "PALA gunships"
+cast authority awacs   "PROVISIONAL AUTHORITY" "PALA, on every frequency"
+cast constance awacs   "BRS CONSTANCE"         "Republic Navy frigate, on Guard"
+cast p31       awacs   "PATROL BOAT P-31"      "Republic Navy, on Guard"
+cast skiff     enemy   "UNKNOWN"               "Open channel"
+cast ardent    enemy   "ARDENT"                "Corvette, Republic Navy"
+
+picture scrap    poster scrap_drive
+picture contract poster merchant_fleet_charter
+
+# Live shots.
+shot dawn     fly 900 260 4300 to -700 230 3950 look -5000 120 2650 seconds=10.5 fov=34
+shot herald   orbit at -4800 40 2650 radius=3000 height=850 from=20 to=30 seconds=6
+shot tv       orbit at 780 9 3840 radius=420 height=180 from=205 to=222 seconds=6 fov=22 shake=0.12
+shot column   orbit at 1000 9 4150 radius=300 height=110 from=30 to=50 seconds=5 fov=28 shake=0.15
+shot apron    orbit unit coup_1 radius=30 height=2.5 from=150 to=165 seconds=4 fov=58 shake=0.65 roll=4
+shot flight   orbit unit bdf_constance radius=520 height=160 from=200 to=230 seconds=8 fov=30 shake=0.12
+shot limit    orbit at 4000 300 11800 radius=6000 height=2500 from=170 to=180 seconds=7.6
+shot convoy   orbit unit calder_spirit radius=40 height=520 from=0 to=12 seconds=5 fov=30
+shot contract orbit unit calder_grace radius=380 height=70 from=100 to=125 seconds=7.4
+shot chapter  chase unit calder_spirit back=-260 up=26 right=140 seconds=7 fov=40
+# Under the screen clips: a high, slow orbit over open sea that nothing can block. The board covers it; the length is the clip's.
+shot markets  orbit at 5000 0 18000 radius=600 height=3000 from=0 to=8 seconds=8.8
+shot debt     orbit at 5000 0 18000 radius=600 height=3000 from=8 to=16 seconds=8.2
+shot unpaid   orbit at 5000 0 18000 radius=600 height=3000 from=16 to=24 seconds=7.4
+shot blackout orbit at 5000 0 18000 radius=600 height=3000 from=24 to=32 seconds=6
+shot riots    orbit at 5000 0 18000 radius=600 height=3000 from=32 to=40 seconds=7
+shot signal   orbit at 5000 0 18000 radius=600 height=3000 from=40 to=48 seconds=7.6
+shot exodus   orbit at 5000 0 18000 radius=600 height=3000 from=48 to=56 seconds=7.2
+
+# The world, told once, by the man who prices it. Visual thesis: the Republic is a balance sheet going to zero, and the camera goes from the
+# capital to the one thing out at sea that still has an owner. Three movements: the slow ruin (abstract screens between the city and the
+# papers), the night itself (news footage: the Republic's own channel, then foreign phones), and the line at sea (map, satellite, contract).
+beat intro when start
+  music "synthetic-warfront.mp3" loop
+  cut dawn     "Boscali Summer" "The Boscali Republic. Nine hundred islands, fifty-two million people, and the finest deep-water ports in the southern ocean." board=title date="IGNUS ARCHIPELAGO  /  12 JUNE 2034" voice=tmo-n-01-dawn.mp3 sfx="sfx-drone.mp3@0,sfx-title-hit.mp3@0.6"
+  cut markets  "In March the Boscali exchange lost a third of its value in a week. Nobody in Agrapol could say where the money went." board=screen clip=tmo-screen-markets.webm voice=tmo-n-02-markets.mp3 sfx="sfx-glitch.mp3@0,sfx-ticker.mp3@0.3,sfx-crash-boom.mp3@4.45,sfx-stamp.mp3@5.85"
+  cut debt     "On paper, a democracy. On the balance sheet, a fourteen-billion-dollar overdraft with a flag on it." board=screen clip=tmo-screen-debt.webm voice=tmo-n-03-debt.mp3 sfx="sfx-counter.mp3@0.2,sfx-glitch.mp3@2.95,sfx-alert-tone.mp3@5.1,sfx-stamp.mp3@7.15"
+  cut herald   "The banks stopped lending. Then the government stopped paying." board=paper photo=scrap masthead="The Agrapol Herald" date="Thursday, 11 June 2034" edition="Late edition  /  4 pages (paper shortage)" headline="Pay day postponed again" sub="Treasury: soldiers' wages 'within weeks'. Fourth blackout this week as grid misses its fuel payment" body="Finance Minister Aurel Danes told a half-empty parliament that the Republic 'cannot borrow what nobody will lend'. Two Navy frigates, laid up since 2031, were sold to a Singapore breaker for less than their last refit cost. Outer-island garrisons report desertions. PALA's General Vasko Ferrant called the government 'a receivership with a flag'." voice=tmo-n-04-herald.mp3 sfx="sfx-whoosh.mp3@0,sfx-paper.mp3@0.3"
+  cut unpaid   "The army had not been paid since March. Nobody asked what an unpaid army does next." board=screen clip=tmo-screen-unpaid.webm voice=tmo-n-05-unpaid.mp3 sfx="sfx-stamp.mp3@1.65,sfx-stamp.mp3@2.55,sfx-stamp.mp3@3.25,sfx-stamp.mp3@3.95,sfx-stamp.mp3@4.65,sfx-stamp.mp3@5.3,sfx-title-hit.mp3@5.68"
+  cut blackout "The lights went out most nights. Then they stopped coming back on." board=screen clip=tmo-screen-blackout.webm voice=tmo-n-06-blackout.mp3 sfx="sfx-glitch.mp3@0.95,sfx-power-down.mp3@2.3"
+  cut riots    "By June there were riots in every port, and the police had stopped coming to them." board=screen clip=tmo-screen-riots.webm voice=tmo-n-07-riots.mp3 sfx="sfx-riot.mp3@0,sfx-explosion-far.mp3@1.6,sfx-explosion-far.mp3@3.95"
+  cut signal   "At two this morning the state broadcaster went off the air. When it came back, it had new owners." board=screen clip=tmo-screen-signal.webm voice=tmo-n-08-signal.mp3 sfx="sfx-tv-static.mp3@1.15,sfx-glitch.mp3@4.7,sfx-alert-tone.mp3@5.3"
+  cut tv       "PALA, the generals' party, had been waiting for exactly this." board=news channel=brn tag="Live from BRN Sky 1" clock="AGRAPOL 02:14" headline="Armoured units at Feldspar International" sub="Ministry of Defence: 'a routine exercise'. Phone lines to the General Staff are down" ticker="Blackout across the northern districts | Navy: all ships to remain in port | Banks closed until Monday | Fuel rationed to 20 litres a car" voice=tmo-n-09-tv.mp3 sfx="sfx-glitch.mp3@0,sfx-battle-far.mp3@0,sfx-helicopter.mp3@0.2"
+  cut column   "PALA, the generals' party, had been waiting for exactly this." board=news channel=iwn tag="Unverified footage" kicker="Agrapol" clock="02:51" headline="Coup under way in the Boscali Republic" sub="PALA armour fires on Republic positions at the capital's airport" ticker="State broadcaster BRN off the air | Curfew announced by 'Provisional Authority' | Republic President's whereabouts unknown" sfx="sfx-helicopter.mp3@0,sfx-battle-far.mp3@0.5"
+  cut apron    "PALA, the generals' party, had been waiting for exactly this." board=news channel=iwn tag="Raw footage  /  Feldspar International" kicker="Agrapol" clock="03:07" headline="Coup under way in the Boscali Republic" sub="PALA armour fires on Republic positions at the capital's airport" ticker="State broadcaster BRN off the air | Curfew announced by 'Provisional Authority' | Republic President's whereabouts unknown" sfx="sfx-explosion-far.mp3@0.4,sfx-battle-far.mp3@0"
+  cut flight   "By six, the Republic's navy was running for open water, and nobody in the capital was answering the phone." board=news channel=iwn tag="IWN helicopter  /  north of Agrapol" kicker="Agrapol" clock="05:56" headline="Republic navy flees the capital" sub="Frigate Constance and escorts leave harbour under air attack" ticker="PALA: 'order restored in the capital' | UN Security Council to meet | Shipping insurers suspend Ignus cover | Oil up 9%" voice=tmo-n-10-flight.mp3 sfx="sfx-helicopter.mp3@0,sfx-explosion-far.mp3@2.6"
+  cut exodus   "Ships went out with half their crews. Some of them did not make it past the breakwater." board=screen clip=tmo-screen-exodus.webm voice=tmo-n-11-exodus.mp3 sfx="sfx-ship-horn.mp3@0.2,sfx-sonar.mp3@1.2,sfx-explosion-far.mp3@2.4,sfx-explosion-far.mp3@3.45,sfx-explosion-far.mp3@4.7"
+  cut limit    "Twelve nautical miles out, the Republic ends. Past that line, the sea belongs to nobody." board=map area="4000 11800 44000" headline="Ignus Sound  /  0600" date="12 June 2034  /  coup, day one" front="-16000 19500 0 19300 14000 19300 26000 19000" arrows="-9000 1500 -6500 3200 -4800 3800; 3000 1800 2000 3500 1200 4200; -2000 6000 3000 8800 7000 11000" retreat="-500 7200 6000 12500 13000 17000 20000 21000" labels="AGRAPOL@-5500 2600; FELDSPAR@1200 4300; 12 NM LIMIT@15000 20300; CALDER CONVOY@6000 21000" legend="- - 12 NM LIMIT      RED: PALA      BLUE: REPUBLIC NAVY" voice=tmo-n-12-limit.mp3 sfx="sfx-whoosh.mp3@0,sfx-typewriter.mp3@0.5,sfx-sonar.mp3@3.2"
+  cut convoy   "And anything that belongs to nobody, somebody will take." board=sat header="KH-11 pass 0547Z  /  orbit 18 902  /  GSD 0.4 m" date="Ignus Sound  /  12 Jun 2034" marks="calder_spirit:MV CALDER SPIRIT, calder_grace:MV CALDER GRACE, calder_vale:MV CALDER VALE" voice=tmo-n-13-convoy.mp3 sfx="sfx-glitch.mp3@0,sfx-sonar.mp3@0.6"
+  cut contract "Calder Lines has three ships out there and no navy left to look after them. So they called us." board=dossier photo=contract company="Halyard Risk Group" date="Ops desk, Opal Station  /  12 Jun 2034  0520" heading="Tasking 0417: Calder Lines escort" body="Client: Calder & Vane Shipping. Assets: MV Calder Spirit, MV Calder Grace, MV Calder Vale, beyond the 12 nm limit north of Agrapol. 100 souls aboard. Task: escort to open water. Threat: piracy. State forces (Republic, PALA): not to be engaged; not covered. Rate: USD 14,000 per flight hour. Losses: deducted." mark="Accepted" note="Summer flight, two A-19s" voice=tmo-n-14-contract.mp3 sfx="sfx-paper.mp3@0.1,sfx-typewriter.mp3@0.4,sfx-stamp.mp3@1.4"
+  cut chapter  "Twelve Miles Out" "Halyard Risk Group. We are not in this war. We just work in it." board=chapter number="Chapter one" voice=tmo-n-15-chapter.mp3 sfx="sfx-title-hit.mp3@0.2,sfx-ship-horn.mp3@1.8"
+  dip
+  enlist pmc
+  seat "A-19 Brawler" at 9000 1100 8500 heading=354 speed=150
+
+beat brief when join
+  say ledger "Summer Lead, Ledger. Good morning, and welcome to the end of the Boscali Republic. PALA has the capital, the airport and the television. None of that is billable." voice=tmo-ledger-01.mp3
+  hint "Fly north to the Calder convoy"
+  say ledger "What is billable: three Calder Lines feeders, holding north of the twelve-mile line. Find them and keep them afloat." voice=tmo-ledger-02.mp3
+  hint "Republic and PALA forces are neutral"
+  say ledger "House rules. We are not at war with anybody in a uniform, and nobody in a uniform is at war with us. Keep it that way. Weapons go on people who shoot at the client." voice=tmo-ledger-03.mp3
+  hint "Only pirates show up as targets"
+  music stop
+
+beat viper when time 175 side=pmc
+  say viper "Unidentified A-19 north of Feldspar, this is Viper Lead, Provisional Authority. You are inside a military operation. State your business." voice=tmo-viper-01.mp3
+  say two "Viper, Summer Two. Civilian contractor, merchant escort, outbound past the limit. We're not part of this." voice=tmo-two-01.mp3
+  say viper "Then stay out of it, Summer. Viper out." voice=tmo-viper-02.mp3
+
+beat mayday when time 215 side=pmc
+  say constance "Any station, any station, this is Republic frigate Constance. We are under air attack north of Agrapol. Request assistance. Any station." voice=tmo-constance-01.mp3
+  say ledger "Not a station we answer to. Eyes north, Summer." voice=tmo-ledger-04.mp3
+
+beat authority when time 265 side=pmc
+  say authority "All Republic vessels and aircraft. This is the Provisional Authority of the Boscali Republic. Return to port, strike your colours, and you will not be harmed." voice=tmo-authority-01.mp3
+
+beat constance-sunk when done constance_lost side=pmc
+  say p31 "Constance is hit! She's burning, she's going down. Any station, there are men in the water!" voice=tmo-p31-01.mp3
+  say ledger "Her missiles were sold in March to pay the electricity bill. She never had a chance." voice=tmo-ledger-05.mp3
+
+beat found when done find_convoy
+  say spirit "Summer flight, Calder Spirit. Very glad to see you. Three ships, forty crew and sixty company staff off the Agrapol office. Our navy escort left at four, without a word." voice=tmo-spirit-01.mp3
+  say spirit "We've got small fast contacts closing, east and south-east. No transponders, and they're not answering." voice=tmo-spirit-02.mp3
+  say skiff "Calder ships. Cut your engines and nobody needs to swim. This is a business, captain. Let's be businesslike." voice=tmo-skiff-01.mp3
+  hint "Sink the boats before they board"
+  say ledger "There's the welcome committee. Sink them before they get alongside. The client pays for the ships, not the paint." voice=tmo-ledger-06.mp3
+  hint "Boats: rockets and gun, save the AGMs"
+
+beat boats-down when done boats
+  say spirit "Boats are burning. Thank you, Summer. Wait one. One of the navy ships has turned toward us. Corvette. She's the Ardent." voice=tmo-spirit-03.mp3
+  say ardent "Calder Spirit, this is the Republic corvette Ardent. My crew has not been paid in fourteen weeks, and you are carrying eighty containers. Heave to, and prepare to be boarded." voice=tmo-ardent-01.mp3
+  flag ardent-hailed
+
+# Summer Two speaks up only if he is still flying.
+beat two-warship when flag ardent-hailed unless=two-gone
+  say two "Lead, Two. That's a warship. She's got missiles." voice=tmo-two-02.mp3
+
+beat ardent-orders when flag ardent-hailed
+  hint "Ardent has SAMs: stay low and fast"
+  say ledger "She's got a crew that wants its wages and a flag nobody is paying for. Pirate is a job description, Summer. Sink her." voice=tmo-ledger-07.mp3
+  hint "AGMs from outside her guns, flares"
+
+beat ardent-down when done ardent_wave
+  say spirit "Ardent is on fire! Her crew are going over the side. Summer, radar has aircraft, low, from the north-west." voice=tmo-spirit-04.mp3
+  say ledger "Somebody has been investing. Two light attack aircraft and a gunship. Keep them off the Spirit." voice=tmo-ledger-08.mp3
+  hint "Pirate aircraft inbound from the NW"
+
+beat clear when done air_wave
+  say spirit "Scope's clear, Summer. We're making turns for open water. Whatever they're paying you, it isn't enough." voice=tmo-spirit-05.mp3
+  say ledger "It's exactly enough. I wrote the contract. Summer flight, the convoy is clear. Invoice is out." voice=tmo-ledger-09.mp3
+  say ledger "One more thing. The Provisional Authority just called the office. So did what's left of the Republic. Come home, Summer. We have a bidding war." voice=tmo-ledger-10.mp3
+  remember twelve-miles-out
+  finish
+  card "Chapter complete" "Halyard Risk Group thanks you for your service. Losses will be deducted."
+
+beat lost when done spirit_lost
+  say spirit "Mayday, mayday, Calder Spirit. We are on fire and taking water. Abandoning ship." voice=tmo-spirit-06.mp3
+  say ledger "That was the client's flagship, sixty staff and our contract. Come home, Summer flight. Somebody will want to talk about this." voice=tmo-ledger-11.mp3
+
+beat grace-sunk when done grace_lost unless=chapter-decided
+  say ledger "Calder Grace is gone. Hull and cargo, eleven million. That comes off somebody's bonus. Keep the other two alive." voice=tmo-ledger-12.mp3
+
+beat vale-sunk when done vale_lost unless=chapter-decided
+  say ledger "Calder Vale is down. The client is counting, Summer, and so am I." voice=tmo-ledger-13.mp3
+
+beat two-lost when done two_down
+  flag two-gone
+  say ledger "Summer Two is down. His beacon is up; the client's lifeboat will fetch him. You're on your own." voice=tmo-ledger-14.mp3
+
+beat decided when done air_wave
+  flag chapter-decided
+beat decided-lost when done spirit_lost
+  flag chapter-decided

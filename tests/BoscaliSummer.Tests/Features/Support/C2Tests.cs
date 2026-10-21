@@ -124,8 +124,6 @@ namespace BoscaliSummer.Tests.Features.Support
             TestAssert.Eq(C2Cap.Slab(false, true, ""), "WAIT", "slab pending");
             TestAssert.Eq(C2Cap.Slab(false, false, "NEGATIVE: NO AIM — DESIGNATE OR RIGHT-CLICK MAP"), "NEG", "slab refusal");
             TestAssert.Eq(C2Cap.Slab(false, false, ""), "READY", "slab ready");
-            TestAssert.Eq(C2Cap.FooterWords(""), "HOTLINE OPEN · PRESS A PERK TO ARM", "footer plain");
-            TestAssert.Eq(C2Cap.FooterWords("SHOT · RADAR"), "SHOT · RADAR", "footer words win");
             TestAssert.Eq(C2Cap.Delta(0), "NO CHANGE", "delta none");
             TestAssert.Eq(C2Cap.Delta(9), "+9 ALLOC", "delta up");
             TestAssert.Eq(C2Cap.Delta(-140), "-140 ALLOC", "delta down");

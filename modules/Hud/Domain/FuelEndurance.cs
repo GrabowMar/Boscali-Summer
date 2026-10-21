@@ -111,7 +111,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public float FieldM;
         /// <summary>Bearing of the nearest field off the nose, degrees clockwise (0 = dead ahead); meaningful with <see cref="Field"/>.</summary>
         public float FieldRelDeg;
-        /// <summary>Compass bearing to the nearest field, degrees clockwise from north (the NAV DATA block's HOME row); meaningful with <see cref="Field"/>.</summary>
+        /// <summary>Compass bearing to the nearest field, degrees clockwise from north; meaningful with <see cref="Field"/>.</summary>
         public float FieldBearingDeg;
         /// <summary>The BINGO level (fuel needed to reach the field plus the reserve, 0..1); <see cref="HasNeed"/> false: no field or no burn rate yet, so no BINGO / JOKER marks.</summary>
         public bool HasNeed;

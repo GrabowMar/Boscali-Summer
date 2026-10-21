@@ -51,6 +51,27 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             Set(profile.TryGet(out ChromaticAberration ca) ? ca : profile.Add<ChromaticAberration>(true), c => c.intensity.value = 0.3f);
         }
 
+        private static readonly AccessTools.FieldRef<TargetCam, TargetScreenUI> ScreenUiRef = Field<TargetCam, TargetScreenUI>("targetScreenUI");
+        private static readonly AccessTools.FieldRef<TargetScreenUI, Canvas> CanvasRef = Field<TargetScreenUI, Canvas>("displayCanvas");
+
+        private static AccessTools.FieldRef<TOwner, T> Field<TOwner, T>(string name) where TOwner : class
+        {
+            try { return AccessTools.FieldRefAccess<TOwner, T>(name); }
+            catch (System.Exception) { return null; }
+        }
+
+        /// <summary>
+        /// Vanilla's target-screen text (name, RNG/ALT/SPD, GRID, MODE, Mag) is drawn by a UI camera into the same picture the third-person TGT card
+        /// shows, under the card's own header: off while the card is up (outside the cockpit nobody sees the tac screen), back on otherwise.
+        /// </summary>
+        public static void SetOverlay(TargetCam cam, bool shown)
+        {
+            if (cam == null || ScreenUiRef == null || CanvasRef == null) return;
+            TargetScreenUI ui = ScreenUiRef(cam);
+            Canvas canvas = ui != null ? CanvasRef(ui) : null;
+            if (canvas != null && canvas.enabled != shown) canvas.enabled = shown;
+        }
+
         private static void Set<T>(T component, System.Action<T> write) where T : VolumeComponent
         {
             component.active = true;

@@ -4,15 +4,18 @@ using System.Collections.Generic;
 namespace BoscaliSummer.Core.Scenario
 {
     /// <summary>Which side a statement is for. <see cref="Any"/>: both, or the side does not matter.</summary>
-    internal enum ScenarioSide : byte { Any, Bdf, Pala, Pmc }
+    internal enum ScenarioSide : byte { Any, Bdf, Pala, Pmc, Pirates }
 
-    /// <summary>The faction name a side has in mission files. PMC is the third side added by the Pmc module, hostile to both others.</summary>
+    /// <summary>
+    /// The faction name a side has in mission files. PMC and Pirates are the sides the Pmc module adds; every side is hostile to every other unless a
+    /// script's <c>peace</c> says otherwise.
+    /// </summary>
     internal static class SideNames
     {
-        public const string Bdf = "Boscali", Pala = "Primeva", Pmc = "PMC";
+        public const string Bdf = "Boscali", Pala = "Primeva", Pmc = "PMC", Pirates = "Pirates";
 
         public static string Of(ScenarioSide side) =>
-            side == ScenarioSide.Bdf ? Bdf : side == ScenarioSide.Pala ? Pala : side == ScenarioSide.Pmc ? Pmc : "";
+            side == ScenarioSide.Bdf ? Bdf : side == ScenarioSide.Pala ? Pala : side == ScenarioSide.Pmc ? Pmc : side == ScenarioSide.Pirates ? Pirates : "";
     }
 
     /// <summary>Somebody who speaks in the script: a callsign on one of the radio nets.</summary>
@@ -139,6 +142,8 @@ namespace BoscaliSummer.Core.Scenario
         public Dictionary<string, string> Words;
         /// <summary>A cut's narration: an .mp3 or .ogg spoken as the shot starts.</summary>
         public string Voice;
+        /// <summary>A cut's sound effects: <c>file.mp3@seconds</c> entries split by ',', each played that long after the shot starts.</summary>
+        public string Sfx;
         public float Seconds;
         /// <summary>Where a <c>seat</c> puts the pilot: a point, a compass heading and a speed in metres a second.</summary>
         public float X, Y, Z, Heading, Speed;
@@ -156,7 +161,7 @@ namespace BoscaliSummer.Core.Scenario
         public CutFx Fx;
         public string Board;
         public Dictionary<string, string> Words;
-        public string Voice;
+        public string Voice, Sfx;
 
         /// <summary>One of the board's words, or <paramref name="otherwise"/>.</summary>
         public string Word(string key, string otherwise = null) => Words != null && Words.TryGetValue(key, out string value) ? value : otherwise;
@@ -193,19 +198,22 @@ namespace BoscaliSummer.Core.Scenario
         /// <summary>The side a PMC mission works for. Parsed only: v1 keeps PMC hostile to everybody.</summary>
         public ScenarioSide Contract;
 
+        /// <summary>Pairs of sides at peace (<c>peace pmc bdf pala</c>): neither ever sights the other, so neither shoots. Every other pair is at war.</summary>
+        public readonly List<KeyValuePair<ScenarioSide, ScenarioSide>> Peace = new List<KeyValuePair<ScenarioSide, ScenarioSide>>();
+
         /// <summary>True when any statement puts somebody on the PMC side; the mission then needs a PMC faction.</summary>
-        public bool UsesPmc
+        public bool UsesPmc => Uses(ScenarioSide.Pmc);
+
+        /// <summary>True when any statement puts somebody on <paramref name="side"/>; for PMC and Pirates the mission then needs that faction.</summary>
+        public bool Uses(ScenarioSide side)
         {
-            get
-            {
-                if (Locked.Contains(ScenarioSide.Pmc)) return true;
-                foreach (ScenarioUnit unit in Units) if (unit.Side == ScenarioSide.Pmc) return true;
-                foreach (ScenarioObjective objective in Objectives) if (objective.Side == ScenarioSide.Pmc) return true;
-                foreach (ScenarioBeat beat in Beats)
-                    foreach (ScenarioAction action in beat.Actions)
-                        if (action.Kind == ActionKind.Enlist && action.Name == "pmc") return true;
-                return false;
-            }
+            if (Locked.Contains(side)) return true;
+            foreach (ScenarioUnit unit in Units) if (unit.Side == side) return true;
+            foreach (ScenarioObjective objective in Objectives) if (objective.Side == side) return true;
+            foreach (ScenarioBeat beat in Beats)
+                foreach (ScenarioAction action in beat.Actions)
+                    if (action.Kind == ActionKind.Enlist && ScenarioParser.Side(action.Name, out ScenarioSide enlisted) && enlisted == side) return true;
+            return false;
         }
         public readonly Dictionary<string, ScenarioCast> Cast = new Dictionary<string, ScenarioCast>(StringComparer.Ordinal);
         public readonly Dictionary<string, ScenarioShot> Shots = new Dictionary<string, ScenarioShot>(StringComparer.Ordinal);

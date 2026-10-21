@@ -67,7 +67,7 @@ namespace BoscaliSummer.Tests.Features.Autopilot
             TestAssert.That(threat.Selected && threat.State == "PAGE 1: SELECTED" && threat.Index == (int)BoardPage.Threat, "the current page is selected and bound by its enum value");
             TestAssert.That(m.Row("hud/page1/cargo").Index == (int)BoardPage.Cargo, "a choice past the skipped SYSTEMS keeps its enum value");
             TestAssert.That(m.Row("hud/page2").Blocked == "INCREASE PAGE COUNT" && m.Row("hud/page3").IsBlocked && m.Row("hud/page4").IsBlocked, "inactive slots stay visible and explain how to enable them");
-            TestAssert.That(m.Row("hud/sway").Label == "DISABLE VISOR SWAY" && m.Row("hud/parts").State == "6 OF 6 ON", "sway is a display behaviour; Board Parts has six major elements");
+            TestAssert.That(m.Row("hud/sway").Label == "DISABLE VISOR SWAY" && m.Row("hud/parts").State == "5 OF 5 ON", "sway is a display behaviour; Board Parts has five major elements");
             TestAssert.That(m.Row("hud/display").Children.Count == 6 && m.Row("hud/count").State == "PAGE COUNT: 1" && m.Row("hud/count").NextValue == "2", "display options include one to four simultaneous pages");
             foreach (string slug in new[] { "lamps", "strip", "gauges", "ticker", "sway" })
                 TestAssert.That(m.Row("hud/parts/" + slug) == null, "no granular board part " + slug);

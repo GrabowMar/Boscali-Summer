@@ -152,8 +152,21 @@ namespace BoscaliSummer.Core.Scenario
                 case "begin": def.Begin.AddRange(row.Rest()); return def.Begin.Count > 0 ? null : "begin needs objective names";
                 case "about": inAbout = true; return null;
                 case "lock":
-                    if (!Side(row.Next(), out ScenarioSide locked) || locked == ScenarioSide.Any) return "lock needs a side: bdf, pala or pmc";
+                    if (!Side(row.Next(), out ScenarioSide locked) || locked == ScenarioSide.Any) return "lock needs a side: bdf, pala, pmc or pirates";
                     def.Locked.Add(locked);
+                    return null;
+                case "peace":
+                    if (!Side(row.Next(), out ScenarioSide one) || one == ScenarioSide.Any || !row.More)
+                        return "peace needs a side and the sides it is at peace with: peace pmc bdf pala";
+                    // A line with a mistake is left out whole.
+                    var pairs = new List<KeyValuePair<ScenarioSide, ScenarioSide>>();
+                    while (row.More)
+                    {
+                        if (!Side(row.Next(), out ScenarioSide other) || other == ScenarioSide.Any || other == one)
+                            return "peace names sides (bdf, pala, pmc, pirates), each other than the first";
+                        pairs.Add(new KeyValuePair<ScenarioSide, ScenarioSide>(one, other));
+                    }
+                    def.Peace.AddRange(pairs);
                     return null;
                 case "contract":
                     if (!Side(row.Next(), out def.Contract) || def.Contract == ScenarioSide.Any || def.Contract == ScenarioSide.Pmc)
@@ -234,8 +247,8 @@ namespace BoscaliSummer.Core.Scenario
                 return "unit needs 'at <x> <height> <z>'";
             if (!row.Opt("heading", ref unit.Heading) || !row.Opt("speed", ref unit.Speed)) return "heading and speed are numbers";
             string side = row.Opt("side");
-            if (side != null && !Side(side, out unit.Side)) return "side is bdf, pala or pmc";
-            if (unit.Kind != null && unit.Side == ScenarioSide.Any) return "a new unit needs side=bdf, side=pala or side=pmc";
+            if (side != null && !Side(side, out unit.Side)) return "side is bdf, pala, pmc or pirates";
+            if (unit.Kind != null && unit.Side == ScenarioSide.Any) return "a new unit needs a side: side=bdf, pala, pmc or pirates";
             string loadout = row.Opt("loadout");
             if (loadout != null) unit.Loadout = loadout.Split('+');
             string sail = row.Opt("to");
@@ -335,13 +348,13 @@ namespace BoscaliSummer.Core.Scenario
             return null;
         }
 
-        private static readonly string[] BoardNames = { "feed", "clean", "title", "news", "paper", "map", "sat", "dossier", "chapter" };
+        private static readonly string[] BoardNames = { "feed", "clean", "title", "news", "paper", "map", "sat", "dossier", "chapter", "screen" };
 
         /// <summary>The words a cut may give its board; each board reads the ones it uses (docs/SCENARIOS.md).</summary>
         private static readonly string[] BoardWords =
         {
             "channel", "kicker", "headline", "sub", "ticker", "tag", "clock", "date", "masthead", "edition", "body", "number", "company", "heading",
-            "mark", "note", "area", "arrows", "retreat", "front", "labels", "marks", "header", "legend",
+            "mark", "note", "area", "arrows", "retreat", "front", "labels", "marks", "header", "legend", "clip",
         };
 
         private static readonly string[] EffectNames = { "glitch", "strike", "lock", "lost", "alert", "warm", "cold", "night" };
@@ -461,8 +474,12 @@ namespace BoscaliSummer.Core.Scenario
                     if (fx != null && !Effects(fx, out action.Fx)) return "fx is a list of: " + string.Join(", ", EffectNames);
                     action.Voice = row.Opt("voice");
                     if (action.Voice != null && !IsFileName(action.Voice)) return "voice needs a file name (an .mp3 or .ogg beside the script)";
+                    action.Sfx = row.Opt("sfx");
+                    if (action.Sfx != null && !EffectList(action.Sfx)) return "sfx is a list of file.mp3@seconds, split by ','";
                     action.Board = row.Opt("board");
                     if (action.Board != null && Array.IndexOf(BoardNames, action.Board) < 0) return "board is one of: " + string.Join(", ", BoardNames);
+                    string clipName = row.Opts.TryGetValue("clip", out string named) ? named : null;
+                    if (action.Board == "screen" && !IsFileName(clipName)) return "a screen board needs clip=<a .webm (VP8) beside the script>";
                     foreach (string key in BoardWords)
                     {
                         string word = row.Opt(key);
@@ -484,6 +501,8 @@ namespace BoscaliSummer.Core.Scenario
                     action.Name = row.Next();
                     if (string.IsNullOrEmpty(action.Name)) return "say needs a speaker from the cast";
                     if (!row.Quoted(out action.Text) || !Words(action.Text)) return "say needs \"words\", up to " + MaxTextChars + " characters";
+                    action.Voice = row.Opt("voice");
+                    if (action.Voice != null && !IsFileName(action.Voice)) return "voice needs a file name (an .mp3 or .ogg beside the script)";
                     break;
                 case "hint":
                     action.Kind = ActionKind.Hint;
@@ -509,7 +528,8 @@ namespace BoscaliSummer.Core.Scenario
                 case "enlist":
                     action.Kind = ActionKind.Enlist;
                     action.Name = (row.Next() ?? "").ToLowerInvariant();
-                    if (!Side(action.Name, out ScenarioSide enlisted) || enlisted == ScenarioSide.Any) return "enlist needs a side: bdf, pala or pmc";
+                    if (!Side(action.Name, out ScenarioSide enlisted) || enlisted == ScenarioSide.Any || enlisted == ScenarioSide.Pirates)
+                        return "enlist needs a side: bdf, pala or pmc";
                     break;
                 case "sky":
                     action.Kind = ActionKind.Sky;
@@ -524,6 +544,8 @@ namespace BoscaliSummer.Core.Scenario
                     action.Name = row.Next();
                     if (!IsFileName(action.Name)) return "music needs a file name (an .mp3 or .ogg beside the script), or 'stop'";
                     if (!row.Opt("volume", ref action.Seconds) || action.Seconds < 0f || action.Seconds > 1f) return "volume is 0 to 1";
+                    // loop: the track starts again until 'music stop', for a cutscene longer than it.
+                    if (row.Word("loop")) action.Text = "loop";
                     break;
                 case "clock":
                     action.Kind = ActionKind.Clock;
@@ -569,6 +591,19 @@ namespace BoscaliSummer.Core.Scenario
             }
         }
 
+        /// <summary>Sound effects of a cut, <c>file.mp3@seconds, other.mp3@2.5</c>: each a file name and a time from 0 to 120 seconds into the shot.</summary>
+        public static bool EffectList(string list)
+        {
+            string[] entries = (list ?? "").Split(',');
+            if (entries.Length == 0 || entries.Length > 24) return false;
+            foreach (string entry in entries)
+            {
+                int at = entry.LastIndexOf('@');
+                if (at <= 0 || !IsFileName(entry.Substring(0, at).Trim()) || !Float(entry.Substring(at + 1).Trim(), out float seconds) || seconds < 0f || seconds > 120f) return false;
+            }
+            return true;
+        }
+
         /// <summary>A plain file or picture name: no folders, nothing that climbs out of one.</summary>
         private static bool IsFileName(string name)
         {
@@ -593,6 +628,7 @@ namespace BoscaliSummer.Core.Scenario
                 case "bdf": case "boscali": side = ScenarioSide.Bdf; return true;
                 case "pala": case "primeva": side = ScenarioSide.Pala; return true;
                 case "pmc": side = ScenarioSide.Pmc; return true;
+                case "pirates": case "pirate": side = ScenarioSide.Pirates; return true;
                 case "both": case "any": return true;
                 default: return false;
             }

@@ -74,7 +74,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             ["parts/pages"] = new Flag<ITacBoardSettings>(b => b.ScopeMode != BoardScopeMode.Off, (b, v) => b.ScopeMode = v ? BoardScopeMode.Manual : BoardScopeMode.Off),
             ["parts/status"] = new Flag<ITacBoardSettings>(b => b.ShowLamps || b.ShowGauges, (b, v) => b.ShowLamps = b.ShowGauges = v),
             ["parts/notices"] = new Flag<ITacBoardSettings>(b => b.ShowTicker, (b, v) => b.ShowTicker = v),
-            ["parts/navdata"] = new Flag<ITacBoardSettings>(b => b.ShowNavData, (b, v) => b.ShowNavData = v),
             ["parts/corners"] = new Flag<ITacBoardSettings>(b => b.Corners, (b, v) => b.Corners = v),
         };
 
@@ -239,6 +238,9 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "hud/reset": return OnBoard(board => board.ResetToDefaults());
                 case "defence/drones": return StrikeOrScreen;
                 case "weapons/drones/hand": return () => Service<IDroneCommand>()?.ToggleHand();
+                case "weapons/drones/nose": return () => Service<IDroneCommand>()?.MatchNose();
+                case "weapons/drones/left": return () => Service<IDroneCommand>()?.Turn(-45f);
+                case "weapons/drones/right": return () => Service<IDroneCommand>()?.Turn(45f);
                 case "weapons/drones/next": return () => Service<IDroneCommand>()?.Cycle(1);
                 case "weapons/drones/prev": return () => Service<IDroneCommand>()?.Cycle(-1);
                 case "weapons/drones/feed": return () => Service<IDroneCommand>()?.ToggleFeed();

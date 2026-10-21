@@ -52,11 +52,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         public void Hide() { if (root.gameObject.activeSelf) root.gameObject.SetActive(false); }
 
-        public void Paint(in FeedBracketView b, float x, float y)
+        public void Paint(in FeedBracketView b, float x, float y, float pictureW)
         {
             if (!root.gameObject.activeSelf) root.gameObject.SetActive(true);
             id = b.Id; selected = b.Selected; marked = b.Marked; cls = b.Class;
             AvLay.Place(root, x - Hit * 0.5f, y - Hit * 0.5f, Hit, Hit);
+            // The name stays centred under its bracket but slides inside the picture near an edge instead of being clipped by the mask.
+            float lw = Hit + 60f, left = x - Hit * 0.5f;
+            AvLay.Place(label.rectTransform, Mathf.Clamp(-30f, 2f - left, Mathf.Max(2f - left, pictureW - 2f - lw - left)), Hit - 6f, lw, 14f);
             AvText.Set(label, b.Label);
             Restyle();
         }
@@ -132,7 +135,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             {
                 FeedBracketView b = v.Brackets[i];
                 if (!SpaceFeedRules.CropPoint(b.U, b.V, u0, v0, uw, vh, out float ax, out float ay)) continue;
-                brackets[shown++].Paint(b, ax * area.width, (1f - ay) * area.height);
+                brackets[shown++].Paint(b, ax * area.width, (1f - ay) * area.height, area.width);
             }
             for (int i = shown; i < brackets.Length; i++) brackets[i].Hide();
         }

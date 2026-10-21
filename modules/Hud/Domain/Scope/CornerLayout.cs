@@ -91,40 +91,5 @@ namespace BoscaliSummer.Modules.Hud.Domain
             }
             return n;
         }
-
-        // ---- NAV DATA (bottom right): the block's box from the screen's size in design units
-
-        /// <summary>NAV DATA: 260 wide, its right edge and its bottom 24 in from the screen's, rows 18 apart; the caption shelf's line is 6 under the block's top and the first row's middle 24 under it (6 clear of the caption's glyphs), without the shelf 6.</summary>
-        public const float NavWidth = 260f, NavMargin = 24f, NavPitch = 18f, NavShelfToRow = 24f, NavRowOffset = 6f, NavShadeStep = 16f;
-
-        /// <summary>The NAV DATA block as laid out (design units from the screen's top-left, y down). <see cref="Top"/> is where the caption shelf is given (its line is 6 under it); a row's middle is <see cref="RowY"/>.</summary>
-        public struct NavPlan
-        {
-            public float Left, Top, Right, Bottom, FirstRowY;
-            public int Rows;
-            public bool Shelf;
-
-            public readonly bool Present => Rows > 0;
-            public readonly float Height => Bottom - Top;
-            public readonly float RowY(int i) => FirstRowY + NavPitch * i;
-        }
-
-        /// <summary>The block for <paramref name="rows"/> rows on a screen <paramref name="screenW"/> x <paramref name="screenH"/> design units; <paramref name="shelf"/> false (Lean) leaves the caption row out. Rows grow upwards from the bottom margin.</summary>
-        public static NavPlan Nav(float screenW, float screenH, int rows, bool shelf)
-        {
-            if (rows <= 0) return default;
-            float height = (shelf ? NavShelfToRow : NavRowOffset) + NavPitch * (rows - 1) + NavRowOffset, right = screenW - NavMargin, bottom = screenH - NavMargin;
-            return new NavPlan { Left = right - NavWidth, Right = right, Bottom = bottom, Top = bottom - height, FirstRowY = bottom - height + (shelf ? NavShelfToRow : NavRowOffset), Rows = rows, Shelf = shelf };
-        }
-
-        /// <summary>
-        /// The block's rectangle for the cloud behind it: as wide as the block, its height up to the next <see cref="NavShadeStep"/> so a row coming or going does not bake the field again each time, from the bottom margin up.
-        /// </summary>
-        public static BoardRect NavShade(in NavPlan p)
-        {
-            if (!p.Present) return default;
-            float h = MathF.Ceiling(p.Height / NavShadeStep) * NavShadeStep;
-            return new BoardRect(p.Left, p.Bottom - h, NavWidth, h);
-        }
     }
 }

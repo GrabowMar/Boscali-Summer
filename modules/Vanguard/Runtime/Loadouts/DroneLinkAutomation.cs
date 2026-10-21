@@ -14,8 +14,8 @@ namespace BoscaliSummer.Vanguard
     /// Drone link sim hook (tests/ingame/vg-dronelink.json): Step {action:"link", do:...}, driving the same DroneLinkService calls the C-menu,
     /// the UAV MFD and the UAV terminal make, then reading back both ends:
     ///   do=status (default)  count, linked, local mode, host mode of the linked drone (SteerOrders), hands (host HAND orders of this launcher),
-    ///                        headingGap (linked drone vs the pilot, degrees), feed, terminal, mfd
-    ///   do=link index | next | prev | hand | auto | feed | look | zoom | terminal | close | mfd | unmap
+    ///                        headingGap (linked drone vs the pilot, degrees), courseGap (vs its HAND course), feed, terminal, mfd
+    ///   do=link index | next | prev | hand | nose | turn deg | steer x y | auto | feed | look | zoom | terminal | close | mfd | unmap
     ///   do=wpt  east, north (metres from the linked drone): WPT for it there
     /// </summary>
     public static partial class VanguardAutomation
@@ -30,6 +30,9 @@ namespace BoscaliSummer.Vanguard
                 case "next": link.Cycle(1); break;
                 case "prev": link.Cycle(-1); break;
                 case "hand": link.ToggleHand(); break;
+                case "nose": link.MatchNose(); break;
+                case "turn": link.Turn(Number(args, "deg", 45f)); break;
+                case "steer": link.SteerAt(new Vector2(Number(args, "x", 0.5f), Number(args, "y", 0.5f))); break;
                 case "auto": link.Release(); break;
                 case "feed": link.ToggleFeed(); break;
                 case "look": link.ToggleLook(); break;
@@ -79,6 +82,8 @@ namespace BoscaliSummer.Vanguard
                 ["hostMode"] = hostMode,
                 ["hands"] = hands,
                 ["headingGap"] = gap,
+                // HAND: how far the drone's heading is off its commanded course (-1 off HAND).
+                ["courseGap"] = v != null && v.Mode == DroneMode.Hand ? Mathf.Abs(Mathf.DeltaAngle(v.HeadingDeg, v.Point.x)) : -1f,
                 ["quality"] = v != null ? v.Quality : 0f,
                 ["rangeKm"] = v != null ? v.RangeM / 1000f : 0f,
                 ["speed"] = v != null && v.Missile != null ? v.Missile.speed : 0f,

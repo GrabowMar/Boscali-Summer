@@ -473,7 +473,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             qrfLine = FrontKit.Mono(b, "QrfLine", colX, 204f, ColW - SweepW - 6f, 26f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
             sweep = Button(b, "SWEEP", colX + ColW - SweepW, 204f, SweepW, 26f, AvButtonStyle.Danger, () => Do(() => actions.Sweep()),
                 "Send a QRF after every hostile team detected near our sites: it reaches them " + (int)SofRules.SweepSeconds + " s after the press, costs " + SofRules.SweepCost +
-                " CR and hunts them for " + (int)SofRules.HuntSeconds + " s (their exposure climbs), then " + (int)SofRules.SweepCooldownSeconds + " s to refit.");
+                " AP and hunts them for " + (int)SofRules.HuntSeconds + " s (their exposure climbs), then " + (int)SofRules.SweepCooldownSeconds + " s to refit.");
             sweep.Interactable = false;
             for (int i = 0; i < MaxTeams; i++)
             {

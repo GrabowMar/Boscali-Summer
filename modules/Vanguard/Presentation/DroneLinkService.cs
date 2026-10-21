@@ -17,7 +17,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         public VanguardRole Role;
         public string Callsign = "", Type = "", Job = "", State = "";
         public DroneMode Mode;
-        /// <summary>The WPT point (global), valid while <see cref="Mode"/> is WPT.</summary>
+        /// <summary>WPT: the point (global). HAND: x = commanded course (degrees), y = commanded altitude (<see cref="DroneLink.HandPoint"/>).</summary>
         public Vector3 Point;
         /// <summary>Global position.</summary>
         public Vector3 Position;
@@ -161,9 +161,19 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             return v.Missile != null && RemoraBoard.Views.TryGetValue(v.Missile.persistentID.Id, out view);
         }
 
+        // A burst of the same kind of order (twelve WPT SET clicks, a string of course changes) is one line, the newest.
         private void Note(string text)
         {
-            Log.Add(DroneLink.Clock(Time.timeSinceLevelLoad) + "  " + text);
+            string line = DroneLink.Clock(Time.timeSinceLevelLoad) + "  " + text;
+            int dot = text.IndexOf(" · ");
+            int space = dot < 0 ? -1 : text.IndexOf(' ', dot + 3);
+            string kind = space > 0 ? text.Substring(0, space) : text;    // "REMORA 2 · CRS", "REMORA 2 · WPT"
+            if (Log.Count > 0)
+            {
+                string last = Log[Log.Count - 1];
+                if (last.Substring(last.IndexOf("  ") + 2).StartsWith(kind)) { Log[Log.Count - 1] = line; return; }
+            }
+            Log.Add(line);
             if (Log.Count > LogLines) Log.RemoveAt(0);
         }
 
@@ -212,14 +222,54 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         {
             bool hand = HandFlying;
             Link(DroneLink.Step(Count, LinkedIndex, step));
-            if (hand && Linked != null && Linked.Mode != DroneMode.Hand) Order(Linked, DroneMode.Hand, Vector3.zero); // the stick follows the link
+            if (hand && Linked != null && Linked.Mode != DroneMode.Hand) Order(Linked, DroneMode.Hand, Hold(Linked)); // the stick follows the link
         }
 
+        /// <summary>Hand control starts on the drone's own course and height: taking the stick never throws it into a turn.</summary>
         public void ToggleHand()
         {
             if (Linked == null) Link(0);
             DroneView v = Linked;
-            if (v != null) Order(v, v.Mode == DroneMode.Hand ? DroneMode.Auto : DroneMode.Hand, Vector3.zero);
+            if (v != null) Order(v, v.Mode == DroneMode.Hand ? DroneMode.Auto : DroneMode.Hand, Hold(v));
+        }
+
+        private static Vector3 Hold(DroneView v) => DroneLink.HandPoint(v.HeadingDeg, v.AltM);
+
+        /// <summary>Click-to-steer on the feed (<paramref name="viewport"/> 0..1 from the bottom left): the linked drone turns to the
+        /// clicked bearing and climbs or dives by how far above or below the cross the click is. Takes hand control.</summary>
+        public void SteerAt(Vector2 viewport)
+        {
+            DroneView v = Linked;
+            if (v == null || v.Missile == null || lensOn != v.Missile) return;
+            Vector3 dir = DroneLink.LookDirection(lens, FieldOfView, 16f / 9f, viewport);
+            Order(v, DroneMode.Hand, DroneLink.SteerTo(dir, lens * Vector3.forward, v.Mode == DroneMode.Hand ? v.Point.y : v.AltM));
+        }
+
+        /// <summary>Raises (or lowers) the hand-flown drone's commanded height; takes hand control on the present course first.</summary>
+        public void Climb(float metres)
+        {
+            DroneView v = Linked;
+            if (v == null) return;
+            Vector3 p = v.Mode == DroneMode.Hand ? v.Point : Hold(v);
+            Order(v, DroneMode.Hand, DroneLink.HandPoint(p.x, p.y + metres));
+        }
+
+        /// <summary>Turns the hand-flown drone (or takes hand control) by <paramref name="degrees"/>.</summary>
+        public void Turn(float degrees)
+        {
+            DroneView v = Linked;
+            if (v == null) return;
+            Vector3 p = v.Mode == DroneMode.Hand ? v.Point : Hold(v);
+            Order(v, DroneMode.Hand, DroneLink.HandPoint(p.x + degrees, p.y));
+        }
+
+        /// <summary>MATCH MY NOSE: the linked drone takes your heading and your height (the C-menu's way to steer it from the cockpit).</summary>
+        public void MatchNose()
+        {
+            if (Linked == null) Link(0);
+            DroneView v = Linked;
+            if (v == null || owner == null) return;
+            Order(v, DroneMode.Hand, DroneLink.HandPoint(SelfHeading, owner.GlobalPosition().y));
         }
 
         public void ToggleFeed()
@@ -276,11 +326,15 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             }
             if (mode == DroneMode.Auto) mirror.Remove(v.Missile);
             else mirror[v.Missile] = new SteerOrders.Order { Mode = mode, Point = new GlobalPosition(point) };
+            bool steer = mode == DroneMode.Hand && v.Mode == DroneMode.Hand; // a new course for a drone already in hand
             net?.SendLink(v.Missile, mode, new GlobalPosition(point));
-            Note(v.Callsign + " · " + (mode == DroneMode.Hand ? "HAND CONTROL" : mode == DroneMode.Auto ? "BACK ON TASK" : "WPT SET"));
-            AvUiSound.Play(mode == DroneMode.Hand ? AvUiCue.Engage : mode == DroneMode.Auto ? AvUiCue.Release : AvUiCue.Confirm);
+            Note(v.Callsign + " · " + (mode == DroneMode.Auto ? "BACK ON TASK" : mode == DroneMode.Waypoint ? "WPT SET"
+                : (steer ? "CRS " : "HAND · CRS ") + Three(point.x) + "° · ALT " + AvNum.Fixed(point.y, 0) + " M"));
+            AvUiSound.Play(steer ? AvUiCue.Press : mode == DroneMode.Hand ? AvUiCue.Engage : mode == DroneMode.Auto ? AvUiCue.Release : AvUiCue.Confirm);
             Refresh();
         }
+
+        private static string Three(float deg) => AvNum.Fixed(Mathf.Repeat(deg, 360f), 0).PadLeft(3, '0');
 
         // ---- lifecycle -------------------------------------------------------------------------------------------------------
 

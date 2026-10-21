@@ -100,6 +100,7 @@
     <Reference Include="UnityEngine.ParticleSystemModule"><HintPath>$(ManagedDir)\UnityEngine.ParticleSystemModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(ManagedDir)\UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.AudioModule"><HintPath>$(ManagedDir)\UnityEngine.AudioModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.VideoModule"><HintPath>$(ManagedDir)\UnityEngine.VideoModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.JSONSerializeModule"><HintPath>$(ManagedDir)\UnityEngine.JSONSerializeModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.UI"><HintPath>$(ManagedDir)\UnityEngine.UI.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.UIModule"><HintPath>$(ManagedDir)\UnityEngine.UIModule.dll</HintPath><Private>false</Private></Reference>
@@ -246,7 +247,7 @@
       <LogicalName>BoscaliSummer.Chatter.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
     <!-- The built-in mission scripts (docs/SCENARIOS.md); ScenarioLibrary loads every BoscaliSummer.Scenario.*.scenario. -->
-    <EmbeddedResource Include="modules\Scenario\Assets\*.scenario;modules\Scenario\Assets\*.mp3;modules\Scenario\Assets\*.ogg">
+    <EmbeddedResource Include="modules\Scenario\Assets\*.scenario;modules\Scenario\Assets\*.mp3;modules\Scenario\Assets\*.ogg;modules\Scenario\Assets\*.webm">
       <LogicalName>BoscaliSummer.Scenario.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
   </ItemGroup>

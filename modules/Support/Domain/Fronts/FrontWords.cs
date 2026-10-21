@@ -45,7 +45,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                 case FrontOutcome.CampsMax: return "CAMPS AT MAX";
                 case FrontOutcome.NoHeldBuilding: return "HOLD A BUILDING FIRST";
                 case FrontOutcome.NoSamNet: return "NO SAM NET REVEALED YET, SWEEP FOR ONE";
-                case FrontOutcome.NoSite: return "NO LEGAL SITE YET · HOLD AN AIRBASE";
+                case FrontOutcome.NoSite: return "NO HELD AIRBASE"; // an uplink site needs one; short so the FRONTS card line holds it whole
                 default: return "";
             }
         }

@@ -1004,6 +1004,8 @@ RequireMetadataSignature(Path.Combine(managedDir, "Mirage.dll"), "Mirage.ServerO
 };
 foreach (var seam in operationFields)
     RequireMetadataField(operationAssembly, seam.Type, seam.Field, seam.FieldType);
+// Pmc's radar sweep of the extra sides reads this private field through FieldRefAccess; a rename would empty the sweep silently.
+RequireMetadataField(operationAssembly, "Radar", "radarCone", "System.Single", publicOnly: false);
 // Intel (S1) reads each faction's own tracking through public seams only; it has no patch
 // targets. The discover/forget events, the tracking database, a missile's owner and weapon,
 // the weapon-station envelope and the radar-carrier test are its whole surface.
@@ -1635,7 +1637,7 @@ static void RequireMetadataSignature(string assemblyPath, string typeName, strin
     throw new MissingMethodException(typeName, methodName + ": " + expected);
 }
 
-static void RequireMetadataField(string assemblyPath, string typeName, string fieldName, string expected)
+static void RequireMetadataField(string assemblyPath, string typeName, string fieldName, string expected, bool publicOnly = true)
 {
     using var stream = File.OpenRead(assemblyPath);
     using var pe = new PEReader(stream);
@@ -1646,7 +1648,7 @@ static void RequireMetadataField(string assemblyPath, string typeName, string fi
         foreach (FieldDefinitionHandle fieldHandle in metadata.GetTypeDefinition(handle).GetFields())
         {
             FieldDefinition field = metadata.GetFieldDefinition(fieldHandle);
-            if (metadata.GetString(field.Name) == fieldName && (field.Attributes & FieldAttributes.Public) != 0 &&
+            if (metadata.GetString(field.Name) == fieldName && (!publicOnly || (field.Attributes & FieldAttributes.Public) != 0) &&
                 field.DecodeSignature(new ProbeSignatureNames(), (object)null) == expected) return;
         }
     }

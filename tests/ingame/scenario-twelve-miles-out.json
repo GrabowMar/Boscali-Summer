@@ -1,0 +1,459 @@
+{
+  "name": "scenario-twelve-miles-out",
+  "description": "Boscali Summer chapter 1, Twelve Miles Out. The sim plugin wants the mission name to equal the launch argument, so first copy modules/Scenario/Assets/twelve-miles-out.scenario to <game>/BepInEx/config/BoscaliSummer/scenarios/tmo-sim.scenario with the id tmo-sim, the title scenario:tmo-sim and the campaign tmo-sim, and delete progress.txt there. The private install needs Blueprinter (the convoy is the addon BS_ContainerFeeder). Captures every intro shot, then the PMC and Pirates HQs, peace (no side at peace tracks the other), the seated A-19, the convoy, and walks the waves by knocking out each one through ScenarioAutomation.Disable.",
+  "mission": "scenario:tmo-sim",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 640,
+  "environment": {
+    "config": {
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Scenario.Runtime.ScenarioAutomation.State",
+      "store": "intro"
+    },
+    {
+      "op": "wait",
+      "seconds": 2.8
+    },
+    {
+      "op": "capture",
+      "name": "01-dawn",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 9.8
+    },
+    {
+      "op": "capture",
+      "name": "02-markets",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 8.6
+    },
+    {
+      "op": "capture",
+      "name": "03-debt",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 7.2
+    },
+    {
+      "op": "capture",
+      "name": "04-herald",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 6.8
+    },
+    {
+      "op": "capture",
+      "name": "05-unpaid",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 6.8
+    },
+    {
+      "op": "capture",
+      "name": "06-blackout",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 6.6
+    },
+    {
+      "op": "capture",
+      "name": "07-riots",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 7.4
+    },
+    {
+      "op": "capture",
+      "name": "08-signal",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 6.9
+    },
+    {
+      "op": "capture",
+      "name": "09-tv",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 5.6
+    },
+    {
+      "op": "capture",
+      "name": "10-column",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 4.6
+    },
+    {
+      "op": "capture",
+      "name": "11-apron",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 6.1
+    },
+    {
+      "op": "capture",
+      "name": "12-flight",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 7.7
+    },
+    {
+      "op": "capture",
+      "name": "13-exodus",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 7.5
+    },
+    {
+      "op": "capture",
+      "name": "14-map",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 6.4
+    },
+    {
+      "op": "capture",
+      "name": "15-sat",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 6.3
+    },
+    {
+      "op": "capture",
+      "name": "16-dossier",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 7.3
+    },
+    {
+      "op": "capture",
+      "name": "17-chapter",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 12
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Scenario.Runtime.ScenarioAutomation.State",
+      "store": "joined"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Scenario.Runtime.ScenarioAutomation.World",
+      "args": {
+        "units": "calder_spirit,calder_grace,calder_vale,summer_two,bdf_constance,bdf_halberd,gunship_1,strike_1,lancer_1,coup_1,coup_3,hold_1,hold_2"
+      },
+      "store": "world_seat"
+    },
+    {
+      "op": "capture",
+      "name": "18-seated",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 14
+    },
+    {
+      "op": "capture",
+      "name": "19-hints",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 35
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Scenario.Runtime.ScenarioAutomation.World",
+      "args": {
+        "units": "calder_spirit,summer_two,bdf_constance,bdf_halberd,bdf_p31,gunship_1,gunship_2,strike_1,strike_2,lancer_1,coup_1,hold_1"
+      },
+      "store": "world_enroute"
+    },
+    {
+      "op": "capture",
+      "name": "20-enroute",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 60
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Scenario.Runtime.ScenarioAutomation.State",
+      "store": "found"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Scenario.Runtime.ScenarioAutomation.World",
+      "args": {
+        "units": "calder_spirit,calder_grace,calder_vale,summer_two,boat_1,boat_2,boat_3,boat_4,bdf_constance"
+      },
+      "store": "world_boats"
+    },
+    {
+      "op": "capture",
+      "name": "21-convoy",
+      "hide_ui": false
+    },
+    {
+      "op": "wait",
+      "seconds": 25
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Scenario.Runtime.ScenarioAutomation.World",
+      "args": {
+        "units": "calder_spirit,calder_grace,calder_vale,summer_two,boat_1,boat_2,boat_3,boat_4"
+      },
+      "store": "world_boats_late"
+    },
+    {
+      "op": "capture",
+      "name": "22-boats",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Scenario.Runtime.ScenarioAutomation.Disable",
+      "args": {
+        "units": "boat_1,boat_2,boat_3,boat_4"
+      },
+      "store": "kill_boats"
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Scenario.Runtime.ScenarioAutomation.World",
+      "args": {
+        "units": "calder_spirit,ardent,summer_two"
+      },
+      "store": "world_ardent"
+    },
+    {
+      "op": "capture",
+      "name": "23-ardent",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Scenario.Runtime.ScenarioAutomation.Disable",
+      "args": {
+        "units": "ardent"
+      },
+      "store": "kill_ardent"
+    },
+    {
+      "op": "wait",
+      "seconds": 25
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Scenario.Runtime.ScenarioAutomation.World",
+      "args": {
+        "units": "calder_spirit,raider_1,raider_2,raider_helo,summer_two"
+      },
+      "store": "world_air"
+    },
+    {
+      "op": "capture",
+      "name": "24-air",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Scenario.Runtime.ScenarioAutomation.Disable",
+      "args": {
+        "units": "raider_1,raider_2,raider_helo"
+      },
+      "store": "kill_air"
+    },
+    {
+      "op": "wait",
+      "seconds": 35
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Scenario.Runtime.ScenarioAutomation.State",
+      "store": "end"
+    },
+    {
+      "op": "capture",
+      "name": "25-end",
+      "hide_ui": false
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_equals",
+      "path": "intro.script",
+      "value": "tmo-sim"
+    },
+    {
+      "check": "result_equals",
+      "path": "joined.side",
+      "value": "Pmc"
+    },
+    {
+      "check": "result_equals",
+      "path": "joined.flight_controls_enabled",
+      "value": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "joined.join_menu_open",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "world_seat.peace",
+      "value": 1
+    },
+    {
+      "check": "result_below",
+      "path": "world_enroute.tracks_Boscali_PMC",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "world_enroute.tracks_Primeva_PMC",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "world_enroute.tracks_PMC_Boscali",
+      "max": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "world_enroute.tracks_PMC_Primeva",
+      "max": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "world_enroute.tracks_Primeva_Boscali",
+      "min": 0.5
+    },
+    {
+      "check": "result_above",
+      "path": "world_boats_late.tracks_PMC_Pirates",
+      "min": 0.5
+    },
+    {
+      "check": "result_below",
+      "path": "world_boats_late.tracks_Pirates_Boscali",
+      "max": 0.5
+    },
+    {
+      "check": "log_match",
+      "pattern": "\\[Pmc\\] HQ made",
+      "min": 1
+    },
+    {
+      "check": "log_match",
+      "pattern": "\\[Pmc\\] Pirates HQ made",
+      "min": 1
+    },
+    {
+      "check": "log_match",
+      "pattern": "\\[Scenario\\] the pilot is seated in a",
+      "min": 1
+    },
+    {
+      "check": "log_match",
+      "pattern": "\\[Pmc\\] .*(no FactionHQ|HQ could not|HQ spawn failed)",
+      "max": 0
+    },
+    {
+      "check": "log_match",
+      "pattern": "Exception.*(FactionHQ|FactionRegistry|MissionStatsTracker|Pmc|Radar|TargetDetector|Scenario)|(FactionHQ|FactionRegistry|MissionStatsTracker|Pmc|Radar|TargetDetector|Scenario).*Exception",
+      "max": 0
+    },
+    {
+      "check": "log_match",
+      "pattern": "was not found in lookup|MissionLoadException|Failed to load mission",
+      "max": 0
+    },
+    {
+      "check": "log_match",
+      "pattern": "\\[Scenario\\] (no aircraft|this mission has no|.*could not be (decoded|read))|screen clip:",
+      "max": 0
+    },
+    {
+      "check": "log_match",
+      "pattern": "NullReferenceException",
+      "max": 12
+    },
+    {
+      "check": "result_equals",
+      "path": "kill_ardent.threw",
+      "value": ""
+    },
+    {
+      "check": "result_equals",
+      "path": "end.finished",
+      "value": 1
+    }
+  ]
+}

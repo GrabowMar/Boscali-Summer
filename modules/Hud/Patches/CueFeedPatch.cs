@@ -24,6 +24,19 @@ namespace BoscaliSummer.Modules.Hud.Patches
         /// A notice the TAC BOARD's ticker was about to take from the "sys" channel (the radio module sends the game's centre notices there, in capitals, and keeps them off the game's own box): while the action report's cues are
         /// drawn they take it instead, so a message is shown once. The tone says what the game's colour did (its alert colour arrives as a caution). False leaves it to the ticker.
         /// </summary>
+        /// <summary>How long a mission's task line stays up.</summary>
+        public const float TaskSeconds = 12f;
+
+        /// <summary>
+        /// A mission script's hint (the board's "task" notice channel), as an AMBER cue under the class word MSN, the way the game's ARMED and DISARMED come up. Only while the action report's cues are drawn; false leaves it to
+        /// the ticker.
+        /// </summary>
+        public static bool TakeTask(string text)
+        {
+            if ((Charge >> (int)CueSource.Action & 1) == 0 || string.IsNullOrEmpty(text)) return false;
+            return Log.Add(CueSource.Action, text, CueSeverity.Caution, Time.timeSinceLevelLoad, TaskSeconds, CueClass.Msn) != null;
+        }
+
         public static bool TakeNotice(string text, HudTone tone)
         {
             if ((Charge >> (int)CueSource.Action & 1) == 0 || string.IsNullOrEmpty(text)) return false;

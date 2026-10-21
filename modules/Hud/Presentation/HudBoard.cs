@@ -64,7 +64,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The pilot's options as of the last 10 Hz tick (the defaults until the module configures the board); what later features of the board read.</summary>
         private BoardOptions options = BoardOptions.Default;
 
-        // The selected target's range and closure (10 Hz reads of the same target): the third-person card's and the cockpit's NAV DATA block's.
+        // The selected target's range and closure (10 Hz reads of the same target): the third-person TGT card's.
         private readonly TargetReadout targetReadout = new TargetReadout();
 
         private void Awake()
@@ -117,6 +117,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             // The radio module sends the game's centre notices ("Weapon safety lock Disabled") to the ticker's "sys" channel and keeps them off the game's own box: while the CUE stack is drawing that box they are its cues instead, shown once.
             if (channel == "sys" && CueFeed.TakeNotice(text, tone)) return;
+            // A mission's hints ("task") are task lines on the CUE stack while it is drawn.
+            if (channel == "task" && CueFeed.TakeTask(text)) return;
             store.Notice(channel, tone, text, detail);
         }
 
@@ -130,7 +132,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private static readonly string[] ReadSites =
         {
             "Hud.Read.Missiles", "Hud.Read.Shots", "Hud.Read.Systems", "Hud.Read.Threats", "Hud.Read.Countermeasures", "Hud.Read.Fuel", "Hud.Read.Damage",
-            "Hud.Read.SystemsFeed", "Hud.Read.Stores", "Hud.Read.Nav", "Hud.Read.CombatFeeds", "Hud.Read.Cargo",
+            "Hud.Read.SystemsFeed", "Hud.Read.Stores", "Hud.Read.CombatFeeds", "Hud.Read.Cargo",
         };
 
         private void LateUpdate()
@@ -239,8 +241,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                         case 6: damageWatch.Read(hudAircraft, frame); break;
                         case 7: systemsFeed.Update(hudAircraft, frame, damageWatch.Rotary); break;
                         case 8: storesFeed.Update(hudAircraft, frame, combat); break;
-                        case 9: NavReader.Read(hudAircraft, frame, !viewingOwnExternally && !viewingMissile, targetReadout); break;      // after the fuel watch: HOME and FUEL come from it
-                        case 11: cargoFeed.Update(hudAircraft); break;
+                        case 10: cargoFeed.Update(hudAircraft); break;
                         default:
                             threatFeed.Update(hudAircraft, frame);
                             shotFeed.Update(hudAircraft);
@@ -266,12 +267,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 camera.targetTexture != null && camera.targetTexture.IsCreated())
             {
                 cameraTexture = camera.targetTexture;
-                cameraCode = mode;
-                ReadTarget(ownAircraft, out range, out closure);
+                // The card's header names what the pod looks at (the camera mode only with no target).
+                cameraCode = targetReadout.Read(ownAircraft, out Unit seen, out range, out closure) && seen != null ? targetReadout.NameOf(seen) : mode;
             }
+            if (ownAircraft != null) TargetCamLook.SetOverlay(ownAircraft.targetCam, cameraTexture == null);
 
-            // In the cockpit NAV DATA has the bottom-right corner: the card stays one slot up there.
-            cluster.SetMissileFeed(missileFeed.Texture, missileFeed.Name, missileFeed.RangeM, missileFeed.Lost, raised: !thirdPerson);
+            // The feed column holds the bottom-right corner in every view (NAV DATA is gone, 2026-10-21).
+            cluster.SetMissileFeed(missileFeed.Texture, missileFeed.Name, missileFeed.RangeM, missileFeed.Lost);
             if (thirdPerson && ownAircraft != null)
             {
                 Rigidbody rb = ownAircraft.rb;
@@ -329,8 +331,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         /// <summary>Range to the first selected target and its closure rate (positive = closing).</summary>
-        private void ReadTarget(Aircraft aircraft, out float range, out float closure) => targetReadout.Read(aircraft, out _, out range, out closure);
-
         private static NOAvionics.AvUnits AvUnitsOf(int unitSystem) =>
             unitSystem == (int)NOAvionics.AvUnits.Imperial ? NOAvionics.AvUnits.Imperial : NOAvionics.AvUnits.Metric;
 

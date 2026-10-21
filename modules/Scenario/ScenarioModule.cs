@@ -3,6 +3,7 @@ using System.IO;
 using BepInEx;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Modules;
+using BoscaliSummer.Core.Scenario;
 using BoscaliSummer.Modules.Scenario.Patches;
 using BoscaliSummer.Modules.Scenario.Runtime;
 using UnityEngine;
@@ -27,11 +28,13 @@ namespace BoscaliSummer.Modules.Scenario
             var missions = new ScenarioMissions(library, context.Logger);
             BoscaliMission.ExtraGroups = missions.Groups;
             BoscaliMission.ScriptedModulesOff = mission => missions.ScriptOf(mission)?.Without.ToArray();
+            BoscaliMission.ScriptedPeace = mission => FactionPeace.Of(missions.ScriptOf(mission));
             LaunchMissionPatch.Resolve = missions.Launch;
             context.OnTeardown(() =>
             {
                 BoscaliMission.ExtraGroups = null;
                 BoscaliMission.ScriptedModulesOff = null;
+                BoscaliMission.ScriptedPeace = null;
                 LaunchMissionPatch.Resolve = null;
             });
             // A dedicated server builds and hosts the scripted mission; the story is each player's own screen.

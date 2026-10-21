@@ -13,7 +13,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     // line, with its rich text and the game's removal time, into EventFeed.Log, the newest six); this paints them. A captioned shelf on top, up to six rows under it, oldest first: a DIM mission-clock stamp, a DIM class word and the
     // line in the HUD's mono face and capitals (names INK, or BRIGHT when they are the pilot's own, each with a small square in the colour the game gave it; the verb between them DIM; chat and radio words INK), with a thin
     // DIM spine and a tick per row at the left. A row is BRIGHT for its first 1.5 s, wipes in over 180 ms, fades over its last second and goes when the game takes the line off its own feed. The block hangs from the native feed
-    // box's top-left corner, follows Opacity (a group of its own, like NAV DATA's), the sway (PlaceCornerRoots), the device pixel grid and the declutter level (Lean and Minimal: no shelf, spine or stamps; Minimal: only the pilot's
+    // box's top-left corner, follows Opacity (a group of its own), the sway (PlaceCornerRoots), the device pixel grid and the declutter level (Lean and Minimal: no shelf, spine or stamps; Minimal: only the pilot's
     // KILL rows and COMM); the soft shade behind it is StatusPanel.Corners.cs's (the band and the cloud, over this block's rectangle). The game's own feed text is hidden through NativeScreenCorners while this is drawn
     // and left whole while the chat input is open (the base game's chat works as ever), and whenever the capture cannot be trusted (EventLog.Healthy). Text is written only when it changes (ScopeText); the surface is drawn again only when
     // EventLog.Signature moves (a row coming or going, a wipe or fade step, BRIGHT ending), not every frame.

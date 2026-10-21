@@ -44,7 +44,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             new MenuSwitch("pages", "TACTICAL PAGES", "THE MANUALLY SELECTED PAGE PANELS"),
             new MenuSwitch("status", "LAMPS + GAUGES", "STATUS LAMPS AND GAUGE ROW; SYSTEMS ALWAYS SHOWS"),
             new MenuSwitch("notices", "NOTICES", "THE NOTICE LINE AT THE FOOT OF THE BOARD"),
-            new MenuSwitch("navdata", "NAV DATA", "WAY HOME, TARGET, FUEL AND MISSION CLOCK"),
             new MenuSwitch("corners", "MAP + FEED", "MAP FRAME AND KILL FEED, ALSO WITH BOARD OFF"),
         };
         public static readonly MenuSwitch[] FeelSwitches =
@@ -254,8 +253,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         }
 
         /// <summary>
-        /// DRONE LINK: the VANGUARD drones flying, one of them linked. TAKE CONTROL flies the linked drone by hand (it goes where the
-        /// pilot's nose points), NEXT / PREV move the link and a hand-flown link hands the stick over, the HUD feed card, the UAV
+        /// DRONE LINK: the VANGUARD drones flying, one of them linked. TAKE CONTROL holds the linked drone's course and height, MATCH MY
+        /// NOSE gives it the pilot's, TURN LEFT/RIGHT 45 steer it while hand-flown, NEXT / PREV move the link and a hand-flown link hands the stick over, the HUD feed card, the UAV
         /// terminal and a pick list. Only while a linkable drone is in the air.
         /// </summary>
         private static MenuRow DroneLink(MenuWorld w)
@@ -266,10 +265,17 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             string name = linked >= 0 ? w.DroneNames[linked] : w.DroneNames[0];
             var kids = new List<MenuRow>();
             MenuRow hand = MenuRow.Toggle("weapons/drones/hand", "drone-strike", w.DroneHand,
-                F("TAKE CONTROL", "LINK: " + name, "FLY THE DRONE BY HAND: IT GOES WHERE YOUR NOSE POINTS", "HAND CONTROL: " + name),
+                F("TAKE CONTROL", "LINK: " + name, "HOLD ITS COURSE AND HEIGHT; STEER IT FROM HERE OR THE UAV TERMINAL", "HAND CONTROL: " + name),
                 F("RELEASE CONTROL", "HAND: " + name, "THE DRONE GOES BACK TO ITS OWN JOB", "BACK ON TASK: " + name, MenuTone.Caution), checkbox: false);
             hand.IconOn = "drone-screen";
             kids.Add(hand);
+            kids.Add(MenuRow.Action("weapons/drones/nose", "drone-strike", "MATCH MY NOSE", w.DroneHand ? "HAND: " + name : "LINK: " + name,
+                "THE DRONE TAKES YOUR HEADING AND HEIGHT", "COURSE SET: " + name));
+            if (w.DroneHand)
+            {
+                kids.Add(MenuRow.Action("weapons/drones/left", "station-prev", "TURN LEFT 45°", "HAND: " + name, "THE DRONE TURNS 45° LEFT AND HOLDS IT", "LEFT 45: " + name));
+                kids.Add(MenuRow.Action("weapons/drones/right", "station-next", "TURN RIGHT 45°", "HAND: " + name, "THE DRONE TURNS 45° RIGHT AND HOLDS IT", "RIGHT 45: " + name));
+            }
             if (n > 1)
             {
                 int next = linked < 0 ? 0 : (linked + 1) % n, prev = linked < 0 ? n - 1 : (linked + n - 1) % n;

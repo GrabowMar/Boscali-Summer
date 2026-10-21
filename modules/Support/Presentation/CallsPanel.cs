@@ -305,7 +305,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private string KeyName(int slot)
         {
             ConfigEntry<KeyboardShortcut> key = FavouriteKey(slot);
-            if (key == null || key.Value.MainKey == KeyCode.None) return "CLICK";
+            if (key == null || key.Value.MainKey == KeyCode.None) return ""; // unbound: the slot shows only its perk (the help says how to bind one)
             return key.Value.ToString().Replace("Alpha", "").Replace("Keypad", "NUM ").ToUpperInvariant();
         }
 
@@ -394,7 +394,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             metrics[0].Set(v.Allocation.ToString(), "AP", Mathf.Clamp01(v.Allocation / 100f), v.Allocation > 0 ? AvState.Ready : AvState.Caution);
             metrics[1].Set(v.PerksReady + "/" + v.PerksTotal, "READY", v.PerksTotal > 0 ? v.PerksReady / (float)v.PerksTotal : 0f, v.PerksReady > 0 ? AvState.Ready : AvState.Caution);
             metrics[2].Set(v.FrontsAhead + "/" + FrontRules.FrontCount, "AHEAD", v.FrontsAhead / (float)FrontRules.FrontCount, v.FrontsAhead > 0 ? AvState.Ready : AvState.Caution);
-            metrics[3].Set(v.Alerts.ToString(), v.Alerts == 1 ? "ALERT" : "ALERTS", Mathf.Clamp01(v.Alerts / 3f), v.Alerts > 0 ? AvState.Danger : AvState.Ready);
+            metrics[3].Set(v.Alerts.ToString(), v.Alerts == 0 ? "CLEAR" : "ACTIVE", Mathf.Clamp01(v.Alerts / 3f), v.Alerts > 0 ? AvState.Danger : AvState.Ready);
 
             // Only the open page is painted; OnPage forces a refresh the moment another one is picked, so it repaints then.
             if (tab == OpsTab.Fronts)
@@ -416,13 +416,13 @@ namespace BoscaliSummer.Modules.Support.Presentation
                     string key = KeyName(i);
                     if (t.HasValue)
                     {
-                        OpsKit.Label(quick[i], "[" + key + "] " + t.Value.Label);
+                        OpsKit.Label(quick[i], (key.Length > 0 ? "[" + key + "] " : "") + t.Value.Label);
                         OpsKit.Enable(quick[i], t.Value.Enabled);
                         quick[i].Armed = t.Value.State == CallState.Armed;
                     }
                     else
                     {
-                        OpsKit.Label(quick[i], "[" + key + "] EMPTY");
+                        OpsKit.Label(quick[i], (key.Length > 0 ? "[" + key + "] " : "") + "EMPTY");
                         OpsKit.Enable(quick[i], false);
                         quick[i].Armed = false;
                     }

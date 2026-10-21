@@ -7,6 +7,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.UI;
+using UnityEngine.Video;
 
 namespace BoscaliSummer.Modules.Scenario.Presentation
 {
@@ -65,6 +66,10 @@ namespace BoscaliSummer.Modules.Scenario.Presentation
         // Title and chapter
         private TextMeshProUGUI titleDate, titleBig, chapterNumber, chapterBig, chapterLine;
         private Image titleRule, chapterRule;
+        // Screen: a motion clip rendered outside the game (tools/MotionScreens), played into a texture.
+        private RawImage screenImage;
+        private VideoPlayer screenPlayer;
+        private RenderTexture screenTexture;
         // The washed picture under news and satellite boards.
         private GameObject lookHolder;
         private Volume look;
@@ -74,7 +79,7 @@ namespace BoscaliSummer.Modules.Scenario.Presentation
         private ChromaticAberration lookFringe;
 
         /// <summary>Puts up the cut's board. True when it is paper the viewer should hear land (a front page, a file).</summary>
-        private bool ShowBoard(ScenarioCut cutWords, Texture picture)
+        private bool ShowBoard(ScenarioCut cutWords, Texture picture, string video)
         {
             // The next shot of the same story (same board, same headline) carries its graphics over the cut instead of building them again.
             string key = cutWords.Board + "|" + cutWords.Word("headline") + "|" + cutWords.Word("masthead") + "|" + cutWords.Word("heading");
@@ -100,6 +105,7 @@ namespace BoscaliSummer.Modules.Scenario.Presentation
                 case "map": SetMap(cutWords); break;
                 case "sat": SetSat(cutWords); break;
                 case "dossier": SetDossier(cutWords, picture); break;
+                case "screen": SetScreen(video); break;
                 case "title":
                     titleBig.text = (cutWords.Title ?? "").ToUpperInvariant();
                     titleDate.text = cutWords.Word("date", "");
@@ -117,6 +123,7 @@ namespace BoscaliSummer.Modules.Scenario.Presentation
         {
             foreach (CanvasGroup group in boards.Values)
                 if (group.gameObject.activeSelf) group.gameObject.SetActive(false);
+            if (screenPlayer != null) screenPlayer.Stop();
             board = null;
         }
 
@@ -127,7 +134,9 @@ namespace BoscaliSummer.Modules.Scenario.Presentation
         {
             if (boards.TryGetValue(name, out CanvasGroup existing)) return existing;
             RectTransform area = AvLay.Child(root, "Board." + name);
-            Anchor(area, new Vector2(0f, BarShare), new Vector2(1f, 1f - BarShare), Middle, Vector2.zero, Vector2.zero);
+            // A screen clip is the whole picture, over the letterbox bars; every other board stays between them.
+            bool full = name == "screen";
+            Anchor(area, full ? Vector2.zero : new Vector2(0f, BarShare), full ? Vector2.one : new Vector2(1f, 1f - BarShare), Middle, Vector2.zero, Vector2.zero);
             CanvasGroup group = area.gameObject.AddComponent<CanvasGroup>();
             group.blocksRaycasts = group.interactable = false;
             // A board stays between the bars, however its pieces move.
@@ -141,6 +150,7 @@ namespace BoscaliSummer.Modules.Scenario.Presentation
                 case "dossier": BuildDossier(area); break;
                 case "title": BuildTitle(area); break;
                 case "chapter": BuildChapter(area); break;
+                case "screen": BuildScreen(area); break;
             }
             boards[name] = group;
             return group;
@@ -159,6 +169,48 @@ namespace BoscaliSummer.Modules.Scenario.Presentation
             Anchor(shadow.rectTransform, BottomLeft, Vector2.one, Middle, offset, new Vector2(spread, spread));
             shadow.color = new Color(0f, 0f, 0f, strength);
             return shadow;
+        }
+
+        // ---- Screen: a rendered clip filling the picture, on black. ----
+
+        private void BuildScreen(RectTransform area)
+        {
+            Image black = AvLay.Solid(area, "Black", Color.black);
+            AvLay.Fill(black.rectTransform);
+            // The clips are 1920x1080: a full-screen picture should not be upscaled from less.
+            screenTexture = new RenderTexture(1920, 1080, 0) { name = "ScenarioScreen" };
+            screenImage = Raw(area, "Clip", screenTexture);
+            screenImage.color = Color.white;
+            AvLay.Fill(screenImage.rectTransform);
+            AspectRatioFitter fit = screenImage.gameObject.AddComponent<AspectRatioFitter>();
+            // Fills the screen; a wider screen crops a little off the top and bottom of the clip, never shows bars.
+            fit.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+            fit.aspectRatio = 16f / 9f;
+            screenPlayer = area.gameObject.AddComponent<VideoPlayer>();
+            screenPlayer.playOnAwake = false;
+            screenPlayer.source = VideoSource.Url;
+            screenPlayer.renderMode = VideoRenderMode.RenderTexture;
+            screenPlayer.targetTexture = screenTexture;
+            screenPlayer.audioOutputMode = VideoAudioOutputMode.None;
+            screenPlayer.isLooping = false;
+            screenPlayer.skipOnDrop = true;
+            screenPlayer.waitForFirstFrame = true;
+            screenPlayer.timeUpdateMode = VideoTimeUpdateMode.UnscaledGameTime;
+            screenPlayer.prepareCompleted += player => player.Play();
+            screenPlayer.errorReceived += (player, message) => Debug.LogWarning("[Scenario] screen clip: " + message);
+        }
+
+        /// <summary>Plays the clip from its first frame; the texture is black until it has one (the clips open on black).</summary>
+        private void SetScreen(string video)
+        {
+            screenPlayer.Stop();
+            RenderTexture before = RenderTexture.active;
+            RenderTexture.active = screenTexture;
+            GL.Clear(true, true, Color.black);
+            RenderTexture.active = before;
+            if (string.IsNullOrEmpty(video)) return;
+            screenPlayer.url = video;
+            screenPlayer.Prepare();
         }
 
         // ---- News: a TV picture with the channel's own graphics. ----

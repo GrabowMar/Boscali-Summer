@@ -21,6 +21,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public float WindFromDeg, WindMps;
         /// <summary>The aircraft is between a cloud deck's base and top (<see cref="HasCloud"/> false: no weather sample).</summary>
         public bool HasCloud, InCloud;
+        /// <summary>The mission clock in seconds, under the wind (2026-10-21, moved here from NAV DATA); negative or NaN: none.</summary>
+        public float ClockS;
         public AvUnits Units;
         /// <summary>Load factor and the airframe's G limit (0 = unknown) for the G gauge.</summary>
         public float G, GLimit;

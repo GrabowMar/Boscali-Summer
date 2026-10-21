@@ -50,6 +50,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 cache.WindFromDeg = (Mathf.Atan2(wind.x, wind.z) * Mathf.Rad2Deg + 180f + 360f) % 360f;   // the wind vector is where it blows TO
             }
 
+            cache.ClockS = BoscaliSummer.Core.Game.MissionTimeSource.Now();
             cache.HasCloud = cache.InCloud = false;
             if (ModuleServices.TryGet(out IWeatherView view) && !(view is Object lost && lost == null))
             {

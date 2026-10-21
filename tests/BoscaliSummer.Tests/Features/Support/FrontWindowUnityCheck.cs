@@ -202,10 +202,23 @@ public static class FrontWindowUnityCheck
         FrontViews.Airbases(list, Bases, new MapFrame(TheatreW, TheatreH));
         Check(list.Count == Bases.Length && list[0].Name == "KESTREL" && list[3].Name == "KARSK" && list[4].Name == "DUNE", "Airbase short names.");
         Check(Mathf.Abs(list[0].U - 0.12f) < 0.001f && Mathf.Abs(list[0].V - 0.30f) < 0.001f && list[3].Side == AirbaseSide.Enemy, "Airbase u/v and side survive the mapping.");
-        FrontMap.AxisLabels(FrontMap.GridSource, new Vector2(TheatreW, TheatreH), 6, 4, out string[] c, out string[] r);
-        Check(c != null && c[0] == "A" && c[5] == "F" && r[0] == "1" && r[3] == "4", "Axis labels read the grid's own letters across and digits down.");
-        FrontMap.AxisLabels((x, z) => "12.4 / -3.1 KM", new Vector2(TheatreW, TheatreH), 6, 4, out c, out r);
-        Check(c == null && r == null, "A kilometre-only grid falls back to the numeric labels.");
+        bool named = FrontMap.Axes(FrontMap.GridSource, new Vector2(TheatreW, TheatreH), out GridAxis c, out GridAxis r);
+        Check(named && c.Count == Mathf.CeilToInt(TheatreW / 15000f) && c.Names[0] == "A" && c.Names[1] == "B" && r.Names[0] == "1" && r.Names[1] == "2",
+            "Axis labels read the grid's own letters across and digits down, one name per square.");
+        Check(named && Mathf.Abs(c.Edges[1] - 15000f / TheatreW) < 0.001f && Mathf.Abs(r.Edges[1] - 15000f / TheatreH) < 0.001f,
+            "Plate grid lines sit on the grid's own square edges.");
+        // The game's own naming (GridLabels.GetGridPosition, upper-cased by OpsKit.Grid): row letter + 1 km minor letter, column number + 1 km minor digit, 10 km squares.
+        System.Func<float, float, string> vanilla = (x, z) =>
+        {
+            float gx = 80000f + x, gz = 80000f - z;
+            int mx = Mathf.FloorToInt(gx / 10000f), nx = Mathf.FloorToInt((gx - 10000f * mx) / 1000f), mz = Mathf.FloorToInt(gz / 10000f), nz = Mathf.FloorToInt((gz - 10000f * mz) / 1000f);
+            return ((char)('A' + mz) + "" + (char)('a' + nz) + mx + nx).ToUpperInvariant();
+        };
+        named = FrontMap.Axes(vanilla, new Vector2(TheatreW, TheatreH), out c, out r);
+        Check(named && c.Count >= 3 && r.Count >= 3 && Mathf.Abs(c.Edges[2] - c.Edges[1] - 10000f / TheatreW) < 0.001f && Mathf.Abs(r.Edges[2] - r.Edges[1] - 10000f / TheatreH) < 0.001f
+              && int.Parse(c.Names[1]) == int.Parse(c.Names[0]) + 1 && r.Names[1][0] == r.Names[0][0] + 1,
+            "The game's grid names resolve to its 10 km squares (the 1 km minor letter and digit are dropped).");
+        Check(!FrontMap.Axes((x, z) => "12.4 / -3.1 KM", new Vector2(TheatreW, TheatreH), out c, out r), "A kilometre-only grid falls back to the even lattice.");
     }
 
     private static FrontLogRow LogRow(FrontLogCode code, int a, int b, float ago) => new FrontLogRow { Code = (byte)code, A = (short)a, B = (short)b, Time = ClockNow - ago };

@@ -159,8 +159,6 @@ namespace BoscaliSummer.Tests.Features.Hud
             RectF over = ThirdPersonHudLayout.MissileCard(width, height, overTarget: true), low = ThirdPersonHudLayout.MissileCard(width, height, overTarget: false);
             TestAssert.That(Inside(over, screen) && !ThirdPersonHudLayout.Overlaps(over, card) && over.Bottom > card.Top, "The missile card stacks above the target card, on screen, at aspect " + aspect);
             TestAssert.That(low.CenterY == card.CenterY && low.Height == card.Height, "With no target card the missile card takes its place");
-            RectF cockpit = ThirdPersonHudLayout.MissileCard(width, height, overTarget: false, raised: true);
-            TestAssert.That(cockpit.CenterY == over.CenterY, "In the cockpit (NAV DATA in the corner) the missile card stays one slot up");
 
             // The feed column (user: "uav on bottom, missile and target on top"): the 368 x 253 UAV card on the bottom-right margin.
             var uav = new RectF(width * 0.5f - 24f - 184f, -height * 0.5f + 24f + 126.5f, 368f, 253f);
@@ -168,9 +166,9 @@ namespace BoscaliSummer.Tests.Features.Hud
             RectF topMost = ThirdPersonHudLayout.MissileCard(width, height, overTarget: true, uav: uav);
             TestAssert.That(onUav.Bottom >= uav.Top + ThirdPersonHudLayout.CardGap - 0.5f && topMost.Bottom >= onUav.Top + ThirdPersonHudLayout.CardGap - 0.5f &&
                 onUav.Right == card.Right && Inside(topMost, screen), "UAV at the bottom, the target card on it, the missile card on top, at aspect " + aspect);
-            RectF alone = ThirdPersonHudLayout.MissileCard(width, height, overTarget: false, raised: true, uav: uav);
+            RectF alone = ThirdPersonHudLayout.MissileCard(width, height, overTarget: false, uav: uav);
             TestAssert.That(alone.Bottom >= uav.Top + ThirdPersonHudLayout.CardGap - 0.5f && alone.Bottom < uav.Top + ThirdPersonHudLayout.CardGap + 0.5f,
-                "With no target card the missile card stands straight on the UAV card (cockpit too)");
+                "With no target card the missile card stands straight on the UAV card");
 
             // A TAC BOARD reaching down to just above the target card: the missile card goes left of the target card, clear of both.
             var board = new RectF(width * 0.5f - 220f, onUav.Top + 6f + 200f, 440f, 400f);

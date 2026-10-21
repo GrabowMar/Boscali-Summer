@@ -60,16 +60,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private Texture missileFeed;
         private string missileName;
         private float missileRangeM;
-        private bool missileLost, missileRaised;
+        private bool missileLost;
 
         private bool builtActive, flightShown;
         private AvVector symbols;
         private int lastSymbols;
         private const float Bracket = 9f, Stroke = 1.5f;
-        /// <summary>The target card's corner brackets: arm 10, hung on the card's own corners.</summary>
-        private const float CardArm = 10f;
-        /// <summary>The soft shade behind the card stands this far outside it (its feathered edge is HudSprites.FeatherEdge wide, so the card's edge is under the full part) at this alpha.</summary>
-        private const float CardShadeMargin = 44f, CardShadeAlpha = 0.45f;
         private float lastScale = 1f;
 
         private struct Box
@@ -94,7 +90,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private struct TargetCardWidgets
         {
             public RectTransform Root;
-            public Image Backing;
             public Image Tag;
             public TextMeshProUGUI TagText;
             public TextMeshProUGUI Header;
@@ -111,15 +106,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The flight boxes are on screen (the board asks so that it can take them down the frame third person ends while the missile card stays).</summary>
         public bool FlightShown => builtActive && flightShown;
 
-        /// <summary>The missile feed card for the next <see cref="Present"/>: null <paramref name="feed"/> is no card. <paramref name="raised"/> (the cockpit: NAV DATA has the corner)
-        /// puts it one slot up even with no target card under it.</summary>
-        public void SetMissileFeed(Texture feed, string name, float rangeM, bool lost, bool raised)
+        /// <summary>The missile feed card for the next <see cref="Present"/>: null <paramref name="feed"/> is no card.</summary>
+        public void SetMissileFeed(Texture feed, string name, float rangeM, bool lost)
         {
             missileFeed = feed;
             missileName = name;
             missileRangeM = rangeM;
             missileLost = lost;
-            missileRaised = raised;
         }
 
         /// <summary>The TAC BOARD's box on the screen (centre-origin, y up, canvas units; no size: no board): the boxes of the cluster keep clear of it (<see cref="ThirdPersonHudLayout.KeepClearOf"/>). Set by the board before <see cref="Present"/>.</summary>
@@ -250,17 +243,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             };
         }
 
-        private static Texture2D scanTexture;
-
-        private static Texture2D ScanTexture()
-        {
-            if (scanTexture != null) return scanTexture;
-            scanTexture = new Texture2D(1, 3, TextureFormat.RGBA32, false) { name = "BoscaliFeedScanlines", wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Point };
-            scanTexture.SetPixels(new[] { Color.white, Color.clear, Color.clear });
-            scanTexture.Apply(false, true);
-            return scanTexture;
-        }
-
         private TargetCardWidgets BuildTargetCard(string name, string tagWord)
         {
             const float header = ThirdPersonHudLayout.TargetCardHeaderHeight;
@@ -268,34 +250,18 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             RectTransform rect = (RectTransform)cardObject.transform;
             rect.SetParent(root, false);
             rect.pivot = new Vector2(0.5f, 0.5f);
-            // No slab: a feathered patch of shade a little larger than the card, under everything of it (first child), in the board's shade colour.
-            Image backing = HudSprites.Child(rect, "Shade", HudSprites.Feather, sliced: true);
-            backing.rectTransform.offsetMin = new Vector2(-CardShadeMargin, -CardShadeMargin);
-            backing.rectTransform.offsetMax = new Vector2(CardShadeMargin, CardShadeMargin);
-            backing.color = new Color(HudSprites.ShadeTint.r, HudSprites.ShadeTint.g, HudSprites.ShadeTint.b, CardShadeAlpha);
+            // Feed stack (2026-10-20 rework, user: "still fugly"): no plate. The MSL, TGT and UAV cards share one chrome in the HUD's own ink,
+            // drawn in PaintSymbols (FeedFrame): a TAC BOARD style header rule and a thin frame with corner ticks round the picture.
 
             var feedObject = new GameObject("Feed", typeof(RectTransform), typeof(RawImage));
             RectTransform feedRect = (RectTransform)feedObject.transform;
             feedRect.SetParent(rect, false);
             feedRect.anchorMin = new Vector2(0f, 0f);
             feedRect.anchorMax = new Vector2(1f, 1f);
-            feedRect.offsetMin = new Vector2(4f, 4f);
-            feedRect.offsetMax = new Vector2(-4f, -header);
+            feedRect.offsetMin = Vector2.zero;
+            feedRect.offsetMax = new Vector2(0f, -header);
             RawImage feed = feedObject.GetComponent<RawImage>();
             feed.raycastTarget = false;
-
-            // Video-link scanlines over the picture (one shared 1x3 texture, repeated per 3 px); the missile's seeker link is the rougher of the two.
-            var scanObject = new GameObject("Scanlines", typeof(RectTransform), typeof(RawImage));
-            RectTransform scanRect = (RectTransform)scanObject.transform;
-            scanRect.SetParent(feedRect, false);
-            scanRect.anchorMin = Vector2.zero;
-            scanRect.anchorMax = Vector2.one;
-            scanRect.offsetMin = scanRect.offsetMax = Vector2.zero;
-            RawImage scan = scanObject.GetComponent<RawImage>();
-            scan.raycastTarget = false;
-            scan.texture = ScanTexture();
-            scan.color = new Color(0f, 0f, 0f, tagWord == "MSL" ? 0.4f : 0.3f);
-            scan.uvRect = new Rect(0f, 0f, 1f, 60f);
 
             // Centre reticle: four short ticks around a gap, the RWR's plane-cross idiom.
             var reticle = new Image[4];
@@ -317,40 +283,41 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             TextMeshProUGUI closure = Label(feedRect, "Closure", TextAlignmentOptions.BottomRight, 12f,
                 new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(6f, 4f), new Vector2(-6f, 20f));
 
-            // Outlined "TGT" tag (outline drawn in PaintSymbols), then the target name, then its range right-aligned.
+            // Header like the TAC BOARD's section titles: the tag word, the name, the range at the right end, over a hairline (FeedFrame).
             var tagObject = new GameObject("Tag", typeof(RectTransform), typeof(Image));
             RectTransform tagRect = (RectTransform)tagObject.transform;
             tagRect.SetParent(rect, false);
             tagRect.anchorMin = tagRect.anchorMax = tagRect.pivot = new Vector2(0f, 1f);
-            tagRect.anchoredPosition = new Vector2(5f, -4f);
-            tagRect.sizeDelta = new Vector2(34f, header - 7f);
+            tagRect.anchoredPosition = new Vector2(6f, 0f);
+            tagRect.sizeDelta = new Vector2(30f, header - 3f);
             Image tag = tagObject.GetComponent<Image>();
             tag.raycastTarget = false;
             tag.sprite = AvSprites.White;
             tag.color = Color.clear;
-            TextMeshProUGUI tagText = Label(tagRect, "TagText", TextAlignmentOptions.Center, 11f,
+            TextMeshProUGUI tagText = Label(tagRect, "TagText", TextAlignmentOptions.MidlineLeft, 12f,
                 Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
             tagText.text = tagWord;
+            tagText.fontStyle = FontStyles.Bold;
 
-            TextMeshProUGUI title = HudText.Make(rect, "Header", font, fontMaterial, TextAlignmentOptions.MidlineLeft, 13f,
+            TextMeshProUGUI title = HudText.Make(rect, "Header", font, fontMaterial, TextAlignmentOptions.MidlineLeft, 12f,
                 TextOverflowModes.Ellipsis);
             title.rectTransform.anchorMin = new Vector2(0f, 1f);
             title.rectTransform.anchorMax = new Vector2(1f, 1f);
             title.rectTransform.pivot = new Vector2(0f, 1f);
-            title.rectTransform.anchoredPosition = new Vector2(45f, -1f);
-            title.rectTransform.sizeDelta = new Vector2(-45f - 70f, header - 2f);
+            title.rectTransform.anchoredPosition = new Vector2(38f, 0f);
+            title.rectTransform.sizeDelta = new Vector2(-38f - 64f, header - 3f);
 
-            TextMeshProUGUI range = HudText.Make(rect, "Range", font, fontMaterial, TextAlignmentOptions.MidlineRight, 13f);
+            TextMeshProUGUI range = HudText.Make(rect, "Range", font, fontMaterial, TextAlignmentOptions.MidlineRight, 12f);
             range.rectTransform.anchorMin = new Vector2(1f, 1f);
             range.rectTransform.anchorMax = new Vector2(1f, 1f);
             range.rectTransform.pivot = new Vector2(1f, 1f);
-            range.rectTransform.anchoredPosition = new Vector2(-7f, -1f);
-            range.rectTransform.sizeDelta = new Vector2(66f, header - 2f);
+            range.rectTransform.anchoredPosition = new Vector2(-2f, 0f);
+            range.rectTransform.sizeDelta = new Vector2(62f, header - 3f);
 
             cardObject.SetActive(false);
             return new TargetCardWidgets
             {
-                Root = rect, Backing = backing, Tag = tag, TagText = tagText, Header = title, Range = range,
+                Root = rect, Tag = tag, TagText = tagText, Header = title, Range = range,
                 Closure = closure, Feed = feed, Reticle = reticle, Active = false, LastRange = float.NaN, LastClosure = float.NaN
             };
         }
@@ -441,7 +408,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // The feed column: the UAV card (VANGUARD's, FeedCorner) at the bottom, the target card on it, the missile card on top.
             RectF uav = UavCard(screenW, screenH);
             RectF targetRect = ThirdPersonHudLayout.TargetCard(screenW, screenH, true, uav);
-            RectF missileRect = ThirdPersonHudLayout.MissileCard(screenW, screenH, cameraTexture != null, missileRaised, uav, avoid,
+            RectF missileRect = ThirdPersonHudLayout.MissileCard(screenW, screenH, cameraTexture != null, uav, avoid,
                 active ? ThirdPersonHudLayout.AltitudeBlock(screenW, screenH, avoid) : default);
             PaintSymbols(screenW, screenH, ink, spdLit, altLit, fuelColor, cameraTexture != null ? targetRect : default, pullUpFlash,
                 f.BankDeg, f.SlipDeg, active, missileFeed != null ? missileRect : default);
@@ -511,22 +478,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 Scale(b, ThirdPersonHudLayout.SideBar(altRect, outwardIsLeft: false), fuel.ToRgba());
                 BankAndSlip(b, ThirdPersonHudLayout.HeadingBox(screenW, screenH, avoid), bankDeg, slipDeg, ink.ToRgba());
             }
-            Rgba line = ink.ToRgba().WithAlpha(0.9f);
-            if (targetCard.Height > 0f) CardFrame(b, targetCard, line);
-            if (missileCard.Height > 0f) CardFrame(b, missileCard, line);
+            if (targetCard.Height > 0f) FeedCorner.Frame(b, targetCard.Left, targetCard.Bottom, targetCard.Right, targetCard.Top, ink.ToRgba());
+            if (missileCard.Height > 0f) FeedCorner.Frame(b, missileCard.Left, missileCard.Bottom, missileCard.Right, missileCard.Top, ink.ToRgba());
             BufferGuard.Check(b, "third-person cluster");
             symbols.Commit();
-        }
-
-        /// <summary>A feed card's ink: corner brackets, the open tag (a tick on its left edge and a hairline under it, not a box) and the hairline under the header.</summary>
-        private static void CardFrame(AvQuadBuffer b, RectF card, Rgba line)
-        {
-            CornerBrackets(b, card.Left, card.Bottom, card.Right, card.Top, CardArm, Stroke, line);
-            float tagTop = card.Top - 4f, tagLeft = card.Left + 5f, tagBottom = tagTop - (ThirdPersonHudLayout.TargetCardHeaderHeight - 7f);
-            AvStrokes.Line(b, tagLeft, tagBottom, tagLeft, tagTop, 2f, line);
-            AvStrokes.Line(b, tagLeft, tagBottom, tagLeft + 34f, tagBottom, 1f, line.WithAlpha(0.55f));
-            AvStrokes.Line(b, card.Left, card.Top - ThirdPersonHudLayout.TargetCardHeaderHeight + 2f,
-                card.Right, card.Top - ThirdPersonHudLayout.TargetCardHeaderHeight + 2f, 1f, line.WithAlpha(0.5f));
         }
 
         private static readonly float[] BankTicks = { -45f, -30f, -20f, -10f, 0f, 10f, 20f, 30f, 45f };
@@ -723,7 +678,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void PresentTargetCard(Texture cameraTexture, string code, float rangeM, float closureMps,
             RectF rect, Color ink, AvUnits units)
         {
-            if (!PresentCard(ref card, rect, cameraTexture, code, rangeM, ink, units)) return;
+            if (!PresentCard(ref card, rect, cameraTexture, code, rangeM, ink, ink, units)) return;
 
             // Closing reads in ink, opening dimmer; under 5 m/s either way is "steady".
             float closureKey = float.IsFinite(closureMps) ? Mathf.Round(AvUnitTable.Speed(closureMps, units) / 5f) : float.NaN;
@@ -746,18 +701,19 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The missile feed card: the weapon's name, the range to what it guides on, SIGNAL LOST over the held last picture.</summary>
         private void PresentMissileCard(RectF rect, Color ink, AvUnits units)
         {
-            if (!PresentCard(ref missile, rect, missileFeed, missileName, missileRangeM, ink, units)) return;
+            Color alert = ThemeManager.Active.ColorTheme.Alert;
+            if (!PresentCard(ref missile, rect, missileFeed, missileName, missileRangeM, ink, missileLost ? alert : ink, units)) return;
             float key = missileLost ? 1f : 0f;
             if (missile.LastClosure != key)
             {
                 missile.Closure.text = missileLost ? "SIGNAL LOST" : "";
                 missile.LastClosure = key;
             }
-            missile.Closure.color = ink;
+            missile.Closure.color = alert;
         }
 
         /// <summary>What both feed cards share: shown while there is a picture, placed, its feed, header and range written on change. False while hidden.</summary>
-        private bool PresentCard(ref TargetCardWidgets c, RectF rect, Texture feed, string header, float rangeM, Color ink, AvUnits units)
+        private bool PresentCard(ref TargetCardWidgets c, RectF rect, Texture feed, string header, float rangeM, Color ink, Color tone, AvUnits units)
         {
             bool show = feed != null;
             if (c.Active != show)
@@ -768,7 +724,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!show) return false;
 
             PositionRect(c.Root, rect);
-            c.TagText.color = ink;
+            c.TagText.color = tone;
             for (int i = 0; i < c.Reticle.Length; i++) c.Reticle[i].color = WithAlpha(ink, 0.7f);
             if (!ReferenceEquals(c.Feed.texture, feed)) c.Feed.texture = feed;
 
